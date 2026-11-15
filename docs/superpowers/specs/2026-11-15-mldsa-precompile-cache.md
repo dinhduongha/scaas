@@ -6,7 +6,8 @@
 (`MD-n`); the build round turns them into Changes of CTR-UA-23 / CTR-UA-39 and NET-EVM-06 / -11 and a `decisions.md`
 entry with §0 verbatim. **Scope: EVM.** A grep of every other family (soroban, solana, near, algorand, move, ton, cosmos)
 and of `scaas-node/src` finds no 66 % rule and no ML-DSA cap (ML-DSA appears only in Soroban's `spike/` and `runs/`):
-no other family changes in this round; the EVM node and clients do (MD-14); a family that gets ML-DSA takes the same rules in its own round. TODO item 3zh.
+no other family changes in this round; the EVM node and clients are SPECIFIED here (MD-14) and built in the `ua-rs-sign`
+port round; a family that gets ML-DSA takes the same rules in its own round. TODO item 3zh.
 
 ## 0. Owner rulings this spec implements (2026-11-15)
 
@@ -20,8 +21,9 @@ no other family changes in this round; the EVM node and clients do (MD-14); a fa
 5. `verifyCached` trusts its pointers: "Ghi docs." (documented, not restricted in code) (MD-10).
 6. "Ok, dùng pre-compiler cho 0x0131"; then option B: "Theo tôi thì option cho mldsa trên scaas testnet: dùng
    precompiler hoặc không, để còn biết so với các mạng khác." "Ok, theo B" (MD-6, MD-7, MD-8).
-7. On the Fable review (2026-11-15): "F-3: làm đợt này. Còn lại như đề xuất." — F-1: the PQZ debit bound for every
-   holder kind (MD-13); F-3: the node and the clients send the cache parts in this round (MD-14); F-7: a probe call that fails
+7. On the Fable review (2026-11-15): "Còn lại như đề xuất", then "F-3: như đề xuất." — F-1: the PQZ debit bound for every
+   holder kind (MD-13); F-3: the contracts in this round, the node job and the client builders SPECIFIED here and built in
+   the `ua-rs-sign` port round after 3zh (MD-14); F-7: a probe call that fails
    refuses the deploy by name (MD-15); the other findings as proposed (§7).
 8. "Dời baseline": `UARegistryCoreLib`'s size baseline moves with this round's reason (MD-12). "Giữ như hiện tại" on the
    funds-before-register question: the build round answers it (§6).
@@ -125,7 +127,8 @@ that can receive PQZ credits can always spend them. Arithmetic at cap 8.8 M: 16.
 n2816-kmax65536** (and within 0.6 % at n2560): stated in CTR-UA-16 / CTR-PQZ-12. Tests per set: the cheapest debit and a
 `ROLL_MAX` rollover with a cached mldsa87 holder and a cached ML-DSA fee signer, measured; the refusal where it does not fit.
 
-**MD-14 (who sends the cache parts; F-3, owner "làm đợt này").** In this round: the node sends them on its submit lane, as
+**MD-14 (who sends the cache parts; F-3, owner "như đề xuất") — SPECIFIED, built in the `ua-rs-sign` port round after 3zh,
+not in this round.** The node sends them on its submit lane, as
 a job of its own (`docs/node/job-api.md`: named fields `kind`, `pk`, `part`; the node builds the calldata; an explicit gas
 limit per NET-EVM-11; allow-lists equal to the contract's in both directions: `guard.rs`, `CALL_TABLE`, `typed.rs`), before
 the `register` job of the same key, and maps `UAKeyNotCached` to a named node error; the guarantee is the node's (open
@@ -201,7 +204,7 @@ this section wins.
 |---|---|
 | F-1 (P1) cached mldsa87 PQZ holder cannot debit within 2^24 | MD-13 (owner) |
 | F-2 (P1) cap from one signature | MD-11 measured over the **worst accepting input**: least working gas cold (3 pointers for 87) over every valid ACVP case of the level, the `pq_kat.json` rows and a generated batch including a signature with exactly ω hints (75 / 55 / 80 for 87 / 65 / 44); `PqGas.t.sol` asserts `max + 30,000 <= cap` for 44, 65, 87; the cap and the max stated in MD-11 / accounts.md |
-| F-3 (P2) nobody sends `cacheExpandedKey` | MD-14 (owner: this round) |
+| F-3 (P2) nobody sends `cacheExpandedKey` | MD-14, SPECIFIED; built in the `ua-rs-sign` port round (owner "F-3: như đề xuất"); until then a subject caches with its own gas or anyone sends the parts (open call) |
 | F-4 (P2) `UAStore.expanded` dropped its kind check | the kind check comes back, as a per-kind part count (1 / 2 / 3) — one shared function used by `MldsaVerifier.expandedKeyParts`, `UARegistryAuxLib._ekParts` and `UAStore.expanded`, or a test that the three agree per kind (F-12) |
 | F-5 (P2) MD-5 gate not built, measures used gas, deploy-time snapshot | built in `DeployBase`; it compares each part's **least working gas limit** (regular and total) with 2^24 and the block gas limit read from the chain; documented as a deploy-time check (a later block-limit cut is the chain operator's change, named in the runbook) |
 | F-6 (P2) handed-in verifier trusted on two getters; precompile caps placeholders | `DeployBase` recomputes each env verifier's CREATE2 address from `DEPLOY_SALT` and the init code with its arguments and requires equality (beside `KIND` / `PRECOMPILE`); precompile caps from T-GAS (MD-11), placeholders refused by a test once measured |
