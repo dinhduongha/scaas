@@ -1076,6 +1076,8 @@ fn compute_z34(
         if crate::cheat() == 4 && tries == 1 {
             continue;
         }
+        #[cfg(feature = "test-hooks")]
+        crate::z34_tries_add(tries as u64);
         break cseed;
     };
     crate::wipe(core::slice::from_mut(&mut rbits)); // P6-D3: secret signs (C explicit_bzero)

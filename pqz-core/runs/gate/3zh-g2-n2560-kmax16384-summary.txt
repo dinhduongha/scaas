@@ -1,0 +1,29 @@
+# gate 3zh-g2-n2560-kmax16384 (set n2560-kmax16384): aaa1aff905b13a6d06bf2b2e2440265575d159ea, 2026-11-15T16:43Z
+set n2560-kmax16384
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== ct
+   ok
+== ub
+   ok
+== diff
+   ok
+== fnv
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   FAILED (rc=1)
+== cargo
+   ok
+== xcheck
+   ok
+== fuzz
+   ok
+gate 3zh-g2-n2560-kmax16384 (set n2560-kmax16384): FAIL
