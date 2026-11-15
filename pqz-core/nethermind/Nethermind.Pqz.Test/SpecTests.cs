@@ -272,6 +272,22 @@ public class SpecTests
         Assert.Throws<ArgumentException>(() => P(Schedule(T1)).CheckIds(T1, [PqzSetIds.PqzlId[..62] + "00"]), "another library");
     }
 
+    /// <summary>Review 3w-delta U3h-1: the supplied provisional schedule of this build's set
+    /// (<c>chain/engine-pqz-provisional-&lt;n…&gt;.json</c>, provisional-rows.py) passes the start-up id check of a fresh
+    /// chain (head = genesis 0), so the node it configures starts. <c>run-tests.sh</c> with <c>PQZ_TEST_FILTER</c> runs it
+    /// at every set (one plugin build per set).</summary>
+    [Test]
+    public void Provisional_schedule_of_this_set_passes_the_id_check()
+    {
+        string f = Repo.Path_("pqz-core", "nethermind", "chain", $"engine-pqz-provisional-{Repo.Set.Split('-')[0]}.json");
+        JsonObject sched = JsonNode.Parse(File.ReadAllText(f))!.AsObject();
+        PqzChainSpecEngineParameters p = Load(g => g["engine"]!["Pqz"] = sched).EngineChainSpecParametersProvider
+            .GetChainSpecParameters<PqzChainSpecEngineParameters>();
+        string[] lib = PqzSetIds.PqzhId == "" ? [PqzSetIds.PqzlId] : [PqzSetIds.PqzlId, PqzSetIds.PqzhId];
+        Assert.That(p.Schedules.Sum(s => s.Pqz.Count), Is.GreaterThan(0), f);
+        Assert.DoesNotThrow(() => p.CheckIds(0, lib), f);
+    }
+
     /// <summary>Plan 5h Task 8d part 2b: the head timestamp the id check reads (and <c>PQZ-START</c> logs) is the block
     /// tree head's when there is one, else the genesis timestamp (empty database), else 0.</summary>
     [Test]
