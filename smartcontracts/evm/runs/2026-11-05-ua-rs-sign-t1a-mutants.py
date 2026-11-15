@@ -57,7 +57,7 @@ M = [
      "...types[primary].map((f) => encodeValue(f.type, (['relayer', 'feeRecipient'].includes(f.name) && data && 'mode' in data"
      " && !(BigInt(data.mode) & (f.name === 'relayer' ? 1n : 2n))) ? '0x' + '00'.repeat(20) : data?.[f.name], types)),"),
     ("unknown field accepted by the hasher", EVM, "if (!types[primary].some((f) => f.name === k)) throw new Error(`EIP-712: ${k} is not a field of ${primary}`);", ""),
-    ("int two's complement wrong", EVM, "return word(v < 0n ? (1n << 256n) + v : v);", "return word(v < 0n ? -v : v);"),
+    ("int two's complement wrong", EVM, "return word(BigInt.asUintN(256, v));", "return word(v < 0n ? -v : v);"),
     ("policy check skipped (Payment)", EVM, "  Payment: (td, x) => checkPayment(td, x).digest,", "  Payment: (td) => digestOf(td),"),
     ("Any without its marker", EVM, "Any: (td, x) => (x.allowAnyTypedData === true ? digestOf(td)", "Any: (td, x) => (true ? digestOf(td)"),
     # transactions

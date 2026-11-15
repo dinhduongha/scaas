@@ -39,7 +39,7 @@ M = [
     # the UA structs
     ("payment: the address MetaTransfer", [(P, '    if td.primary_type() != "UAMetaTransfer" {', '    if td.primary_type() != "MetaTransfer" {')],
      WT("sign_json_policy_rows")),
-    ("receiver fee: the address ReceiverFee", [(P, '    if td.primary_type() != "UAReceiverFee" {', '    if td.primary_type() != "ReceiverFee" {')],
+    ("receiver fee: the address ReceiverFee", [(P, '    if td.primary_type() != "UAPayeeFee" {', '    if td.primary_type() != "PayeeFee" {')],
      WT("sign_json_policy_rows")),
     ("trade order: ua off by default", [(P, '                    ua: if x.0.contains_key("ua") { x.flag("ua")? } else { !outside },',
                                          '                    ua: x.flag("ua")?,')], WT("trade_order_takes_the_ua_struct")),

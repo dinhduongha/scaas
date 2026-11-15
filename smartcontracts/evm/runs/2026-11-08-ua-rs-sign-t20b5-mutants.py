@@ -29,10 +29,10 @@ RULE = "an msig never holds a KEM key, PQ-eligible or not"
 
 M = [
     # the purpose
-    ("ua-rs: pqz-verdict not in PURPOSES", [(LIB, '"membership", "pqz-verdict",', '"membership",')], WT),
-    ("clientkeys: pqz-verdict not in PURPOSES", [("clients/clientkeys/src/ua.js", "'membership', 'pqz-verdict']", "'membership']")], CK),
-    ("ua-py: pqz-verdict not in PURPOSES", [("clients/ua-py/scaas_ua/__init__.py", "'membership', 'pqz-verdict')", "'membership')")], PY),
-    ("ua-go: pqz-verdict not in Purposes", [("clients/ua-go/ua.go", '"membership", "pqz-verdict"}', '"membership"}')], GO),
+    ("ua-rs: pqz-verdict not in PURPOSES", [(LIB, '"msig-update", "pqz-verdict",', '"msig-update",')], WT),
+    ("clientkeys: pqz-verdict not in PURPOSES", [("clients/clientkeys/src/ua.js", "'msig-update', 'pqz-verdict']", "'msig-update']")], CK),
+    ("ua-py: pqz-verdict not in PURPOSES", [("clients/ua-py/scaas_ua/__init__.py", "'msig-update', 'pqz-verdict')", "'msig-update')")], PY),
+    ("ua-go: pqz-verdict not in Purposes", [("clients/ua-go/ua.go", '"msig-update", "pqz-verdict"}', '"msig-update"}')], GO),
     # the PqzVerdict builder
     ("pqz_verdict_typed_data: the token check skipped",
      [(E, 'if field("token", "address")? != encode_atom("address", Some(&to_hex(contract).into()))?\n        || field',
@@ -45,13 +45,13 @@ M = [
      [(E, 'let d = Def { primary, own: own.to_string(), domains: &[P], default_name: Some(P),',
        'let d = Def { primary, own: own.to_string(), domains: &[M], default_name: Some(M),')], WT),
     # the router's verifier rows
-    ("UAPqzSetVerifier without next", [(E, 'op("UAPqzSetVerifier", "address target,bytes32 next",', 'op("UAPqzSetVerifier", "address target",')], WT),
-    ("UAPqzRevokeVerifier in the PQZ token's domain", [(E, 'op("UAPqzRevokeVerifier", "address target", &[ROUTER], None),',
-                                                       'op("UAPqzRevokeVerifier", "address target", &[P], None),')], WT),
-    ("UAPqzCancelVerifier dropped", [(E, '    op("UAPqzCancelVerifier", "address target", &[ROUTER], None),\n', "")], WT),
+    ("UAPqzSetVerifier without next", [(E, 'op("UAPqzSetVerifier", "address target,bytes32 next,', 'op("UAPqzSetVerifier", "address target,')], WT),
+    ("UAPqzRevokeVerifier in the PQZ token's domain", [(E, 'op("UAPqzRevokeVerifier", "address target,bytes32 chainUid", &[ROUTER], None),',
+                                                       'op("UAPqzRevokeVerifier", "address target,bytes32 chainUid", &[P], None),')], WT),
+    ("UAPqzCancelVerifier dropped", [(E, '    op("UAPqzCancelVerifier", "address target,bytes32 chainUid", &[ROUTER], None),\n', "")], WT),
     # zether-prover's rows it does not build
     ("zether-prover: UAPqzSetVerifier not listed", [(ZP + "tests/typed_ops.rs",
-                                                     'const NOT_ZETHER: [&str; 59] = [', 'const NOT_ZETHER: [&str; 58] = [')
+                                                     'const NOT_ZETHER: [&str; 83] = [', 'const NOT_ZETHER: [&str; 82] = [')
                                                     , (ZP + "tests/typed_ops.rs", '    "UAPqzSetVerifier", "UAPqzCancelVerifier",',
                                                        '    "UAPqzCancelVerifier",')], ZT),
     # the C header's holder rule (source and the generated header, so only the rule check can see it)

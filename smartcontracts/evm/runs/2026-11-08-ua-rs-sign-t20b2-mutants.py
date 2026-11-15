@@ -35,14 +35,14 @@ FZT = (R, CT + ["--test", "facade_zether", "ua_envelope_through_the_facade"])
 
 M = [
     # T15m2: pqz-read's R5 on T67's record
-    ("pqz-read: R5 reads the record's word 0", [(B, "let rec = r.word(&a.factory, &add(&keccak256(&[addr_word(&a.token), be(REC_SLOT)].concat()), 2))?;",
+    ("pqz-read: R5 reads the record's word 0", [(B, "let rec = r.word(&a.factory, &add(&keccak256(&[addr_word(&a.token), be(REC_SLOT)].concat()), 1))?;",
                                                  "let rec = r.word(&a.factory, &keccak256(&[addr_word(&a.token), be(REC_SLOT)].concat()))?;")], PR),
     ("pqz-read: the class not checked", [(B, "    class == CLASS_TOKEN && PQZ_KINDS", "    let _ = class;\n    PQZ_KINDS")], PIN),
     ("pqz-read: the kind's low byte only", [(B, "    let kind = u16::from_be_bytes([rec[28], rec[29]]);\n    class == CLASS_TOKEN && PQZ",
                                              "    let kind = u16::from(rec[29]);\n    class == CLASS_TOKEN && PQZ")], PIN),
     ("pqz-read: the record one slot off", [(B, "const REC_SLOT: u64 = 8;", "const REC_SLOT: u64 = 9;")], PIN),
     # T15m2: zether-read-balance's R5, its registry slots
-    ("zether-read-balance: R5 reads the record's word 0", [(ZB, "let rec = r.word(factory, &add(&keccak256(&[key, be(REC_SLOT)].concat()), 2))?;",
+    ("zether-read-balance: R5 reads the record's word 0", [(ZB, "let rec = r.word(factory, &add(&keccak256(&[key, be(REC_SLOT)].concat()), 1))?;",
                                                             "let rec = r.word(factory, &keccak256(&[key, be(REC_SLOT)].concat()))?;")], RB),
     ("zether-read-balance: the class not checked", [(ZB, "    class == CLASS_TOKEN && ZETHER_KINDS", "    let _ = class;\n    ZETHER_KINDS")],
      ZPIN("factory_record_is_the_layout_pin")),

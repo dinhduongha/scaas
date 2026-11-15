@@ -40,7 +40,7 @@ M = [
     ("tail: its n ignored", [(R + "src/facade/pqz_path.rs", "let at = d.len().checked_sub(33 + 8 * n)", "let at = d.len().checked_sub(33)")], FSV),
     # the typed rows
     ("PqzBurnArgs without ownTag", [(E, "bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom", "bytes32 beneficiaryUA,bytes u,bytes vFrom")], WT),
-    ("UASetProofStore dropped", [(E, '    op("UASetProofStore", "address target,uint8 next", &[ROUTER], None),\n', "")], WT),
+    ("UASetProofStore dropped", [(E, '    op("UASetProofStore", "address target,uint8 next,bytes32 chainUid", &[ROUTER], None),\n', "")], WT),
     # bit 24 in the native tables
     ("ua-py: bit 24 not in GOVERNANCE_BITS", [("clients/ua-py/scaas_ua/__init__.py", "('TAX', 'power'), ('PQZ_PROOF', 'power'),", "('TAX', 'power'),")], PY),
     ("ua-go: bit 24 not in GovernanceBits", [("clients/ua-go/ua.go", '{"TAX", "power"}, {"PQZ_PROOF", "power"},', '{"TAX", "power"},')], GO),
