@@ -270,6 +270,16 @@ allowlist) for `-f Dockerfile`; the default build sends 16 MB (`runs/2026-10-22-
 `e2e.py burst` / `fill` pick the largest input under the calldata floor and size `tx.gas` by `intrinsic()` (M2; not
 run: Task 13 drills). Not done (owner's go): the 200 M block load rehearsal (M3), timing / gas calibration.
 
+<a id="prices-calibrated-2026-11-15"></a>
+## Prices (calibrated 2026-11-15, the three-key ids)
+
+`chain/engine-pqz.json` = `runs/2026-11-15-3zh-calib-engine-pqz.json` (3zh-core, owner 2026-11-15): the 26
+`n2304-kmax4096` rows under the three-key ids (PQZH v4, PQZL v6), calibrated in the image `2.2.0-pqz10-calib` (library
+`f397d9c1…0f31`) by the method and rule below, unchanged: two runs in slices, one ecMul baseline 0.016 ms,
+`min(provisional, max(run 1, run 2))`; `selftestGas` 2,012,000. Rows and the three kept at the provisional price:
+`runs/2026-11-15-3zh-calib-rows.md`. It passes the start-up id check (`chain/check-provisional-ids.py`). Live on the
+SCaaS testnet from reset 5; until then the testnet runs `engine-pqz-provisional-n2304.json`.
+
 <a id="prices-calibrated-2026-10-31"></a>
 ## Prices (calibrated 2026-10-31)
 
