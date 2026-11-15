@@ -444,6 +444,26 @@ pub fn fs_trace_take() -> Vec<fstrace::Rec> {
     fstrace::T.with(|t| t.borrow_mut().replace(Vec::new()).unwrap_or_default())
 }
 
+/// Test hook (review 3w-delta U1h-1, `tests/wipe.rs`): `f(address)` on this thread for each heap buffer of a
+/// rejection try's secret z3 / z4 and R s3 / R' s4 (`tbox::compute_z34`) when it is filled; the test's allocator then
+/// checks that each is cleared when it is freed, a rejected try's included. Off (None) unless a test sets it.
+#[cfg(feature = "test-hooks")]
+pub fn set_secret_buf_hook(f: Option<fn(usize)>) {
+    SECRET_BUF.with(|h| h.set(f))
+}
+
+#[cfg(feature = "test-hooks")]
+std::thread_local! {
+    static SECRET_BUF: core::cell::Cell<Option<fn(usize)>> = const { core::cell::Cell::new(None) };
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn secret_buf(p: *const i64) {
+    if let Some(f) = SECRET_BUF.with(|h| h.get()) {
+        f(p as usize)
+    }
+}
+
 #[cfg(feature = "test-hooks")]
 pub mod fstrace {
     use alloc::vec::Vec;
@@ -472,7 +492,11 @@ pub mod fstrace {
 
 /// Review A's cheating prover (A-1 = review B's B-1; the regression fixture `tests/cheat_b1.rs`, test hook): this
 /// thread's `prove` calls, with `mode` 0 honest, 1 `z4[0][0] += 1` cancelled through g, 2 `z3 = y3` (no `β3·R·s3`)
-/// cancelled through g, 3 `z4[0][0] += 1` not cancelled (control). The cancellation folds the z3 / z4 error with the V
+/// cancelled through g, 3 `z4[0][0] += 1` not cancelled (control); 4 (review 3w-delta U1h-1, `tests/wipe.rs`) the first z3 /
+/// z4 try rejected, an honest proof from the second (the retry path on every prove); 5 (review 3w-delta U1h-2,
+/// `tests/split.rs`) none of the prover's own relation checks (`__check_coeff0` of the evaluation equations and the
+/// accumulators, the h_i asserts): a false statement is proved anyway and reaches the verifiers; an honest one gives
+/// the honest proof. The cancellation folds the z3 / z4 error with the V
 /// the cheater can know before `tg`, i.e. V seeded from hz (`tbox::prove`); since B-1 V is drawn after `tg`, so the
 /// proofs of modes 1 and 2 no longer verify. Never set in a production build (no `test-hooks`: always 0).
 #[cfg(feature = "test-hooks")]

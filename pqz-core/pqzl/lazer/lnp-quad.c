@@ -323,6 +323,13 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
 
   /* cleanup */
   explicit_bzero (yseed, sizeof (yseed)); /* PQZ (review round 2, Q-B): the seed of every mask y1, y2 */
+  /* PQZ (review 3w-delta U1h-1, the class of T-06): the stack coefficient arrays behind y1, y2 (the masks, then z = y +
+     c s: a rejected try's on PQZ_ERR_REJECT) and c s1, c s2, and the last norm; the arena wipe does not reach the stack */
+  explicit_bzero (z1coeffsbytes__, sizeof (z1coeffsbytes__));
+  explicit_bzero (z2coeffsbytes__, sizeof (z2coeffsbytes__));
+  explicit_bzero (cs1coeffsbytes__, sizeof (cs1coeffsbytes__));
+  explicit_bzero (cs2coeffsbytes__, sizeof (cs2coeffsbytes__));
+  explicit_bzero (normbytes__, sizeof (normbytes__));
   shake128_clear (hstate);
   rng_clear (rngstate);
   polyvec_free (R2y);
