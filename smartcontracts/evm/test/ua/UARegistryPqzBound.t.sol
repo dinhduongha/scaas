@@ -87,16 +87,36 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         return abi.encode(s);
     }
 
-    /// `{fndsa512 x 4, slhdsa128s}, t = 5` (worst case about 11.6 M, over the 12 M budget minus nothing: it registers
-    /// without a key) and `{fndsa512 x 4}, t = 4` (10.2 M): with 6.8 M+ of debit neither fits 2^24.
+    /// Over the bound at EVERY set (owner 2026-11-15, 3zh-core group 2: the fixture moved when `{fndsa512 x 4}, t = 4` began to
+    /// fit at `n2304-kmax4096`): `{fndsa512 x 4, slhdsa128s}, t = 5` (worst case about 11.6 M, inside the 12 M budget: it
+    /// registers without a key) and 2-of-2 `fndsa1024` at `DeployBase`'s cap 5,250,000 (about 10.67 M; bound 16.97 M at the
+    /// set with the least debit, `n2304-kmax4096`): neither fits 2^24 with a PQZ key.
     function test_register_msigHolderOverBound() public {
         UARegistry r = _regs(address(0x5CA7001), [uint16(0x0131), 0x0132, 0x0133], [uint64(200_000), 2_500_000, 1_400_000]);
         (bytes memory d, bytes32 ua,,) = _members(r, 0x0132, 4, true, 5);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
         UACall.register(r, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 900)), hex"01", hex"01");
-        (d, ua,,) = _members(r, 0x0132, 4, false, 4);
+        uint256 b = _bound(5_250_000, 2 * (192 + 1_280));
+        emit log_named_uint(string.concat("MD-13 ", PqzSet.NAME, ": 2-of-2 fndsa1024 at 5,250,000, bound"), b);
+        assertGt(b, LIM, "over 2^24 at this set");
+        UARegistry r2 = _regs(address(0x5CA700B), [uint16(0x0135), 0x0132, 0x0133], [uint64(5_250_000), 2_500_000, 1_400_000]);
+        (d, ua,,) = _members(r2, 0x0135, 2, false, 2);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
-        UACall.register(r, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 901)), hex"01", hex"01");
+        UACall.register(r2, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 901)), hex"01", hex"01");
+    }
+
+    /// The per-set boundary of `{fndsa512 x 4}, t = 4` (about 10.2 M; owner 2026-11-15, 3zh-core group 2): a PQZ holder at
+    /// `n2304-kmax4096` (`PQZ_DEBIT_MIN_GAS` 6,074,000 with its calibrated rows leaves about 10.70 M), `UAPqzHolder` at the
+    /// three other sets (7.36 / 7.79 / 8.03 M of debit).
+    function test_register_msigHolder_fndsa512x4_perSet() public {
+        UARegistry r = _regs(address(0x5CA700C), [uint16(0x0131), 0x0132, 0x0133], [uint64(200_000), 2_500_000, 1_400_000]);
+        (bytes memory d, bytes32 ua, bytes[] memory keys, uint16[] memory ks) = _members(r, 0x0132, 4, false, 4);
+        if (keccak256(bytes(PqzSet.NAME)) == keccak256("n2304-kmax4096")) {
+            _holder(r, d, ua, keys, ks);
+        } else {
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
+            UACall.register(r, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 906)), hex"01", hex"01");
+        }
     }
 
     /// 2-of-2 `mldsa65` registers at PQZL with a PQZ key.

@@ -133,8 +133,11 @@ largest single mldsa87 cap that fits 9,185,109 / 10,454,953 / 8,762,812 / 8,526,
 the 44 / 65 cached caps 11.73 / 13.47 M at n2048 … 12.40 / 14.14 M at n2816. **What fits per single kind is unchanged**: a
 cached mldsa87 is a PQZ holder at n2048-kmax1024 and n2304-kmax4096, not at n2560-kmax16384 / n2816-kmax65536. **One `msig`
 verdict changes at n2304-kmax4096**: the room for a holder's worst authorization grows from ≈ 9.26 M to ≈ 10.70 M, so
-`{fndsa512 × 4}, t = 4` (≈ 10.2 M) now fits there (`test_register_msigHolderOverBound` red at n2304 only: `UAPoP` instead of
-`UAPqzHolder`; the rule is not changed, the owner decides the test). Tests per set: the cheapest debit and a
+`{fndsa512 × 4}, t = 4` (≈ 10.2 M) now fits there. Owner 2026-11-15 ("Ok, theo đề xuất"): the rule stays; the negative
+`test_register_msigHolderOverBound` takes a holder over the bound at every set (2-of-2 `fndsa1024` at 5,250,000: bound
+18,255,960 / 16,965,960 / 18,684,960 / 18,924,960, beside `{fndsa512 × 4, slhdsa128s}, t = 5`), its `UAPqzHolder` assertion
+unchanged; the new `test_register_msigHolder_fndsa512x4_perSet` states the per-set boundary: a PQZ holder at n2304-kmax4096,
+`UAPqzHolder` at the three other sets. Tests per set: the cheapest debit and a
 `ROLL_MAX` rollover with a cached mldsa87 holder and a cached ML-DSA fee signer, measured; the refusal where it does not fit.
 
 **MD-14 (who sends the cache parts; F-3, owner "như đề xuất") — SPECIFIED, built in the `ua-rs-sign` port round after 3zh,
