@@ -23,6 +23,12 @@
 //! scheme 1 with fixed randomness (`encaps` as ua-rs `wallet/kem.rs`); ML-KEM's implicit rejection and a small-order
 //! X25519 point both end in the same outcome. Timing: the check stops at the first failing step (local work only; the
 //! wallet reports nothing but the outcome).
+//!
+//! Wiping (best effort, as `pqzl::clear`): the explicit secrets are cleared on every exit; the ML-KEM decapsulation key,
+//! the KEK's AES-256 key schedule, the GHASH key and the X25519 types clear on drop (their crates' `zeroize` features).
+//! Not reached: the SHA3-256 / SHAKE256 / Keccak / HKDF-SHA256 states that absorbed `ss_M`, `ss_X`, `seed_leg` or
+//! `seed_enc` (`combine`, `coins`, `kek`, the `Sealer` key; the `sha3` / `sha2` / `hkdf` crates give no hook), copies
+//! passed by value, and register spills (3zh Fable F-5).
 use crate::pqzl::{self as pl, PK_BYTES};
 use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
@@ -250,12 +256,16 @@ pub enum SealError {
     SeedReused,
     /// the table holds [`SEALER_CAP`] seeds: it refuses, it never evicts
     Full,
-    /// [`seal`]'s own refusal (`kemPk` not scheme 1, wrong length, ek >= q, small-order `pk_X`), or no auditor copy
-    /// for [`Role::Auditor`]
+    /// [`seal`]'s own refusal (`kemPk` not scheme 1, wrong length, ek >= q, small-order `pk_X`), no auditor copy for
+    /// [`Role::Auditor`], or a `seed_enc` whose leg expansion does not give the credit's `u` (K3-7 step 6's check: the
+    /// recipient would skip that credit; 3zh Fable F-8)
     Refused,
 }
 
-/// The most `seed_enc` values one [`Sealer`] remembers.
+/// The most `seed_enc` values one [`Sealer`] remembers. **Caller rule** (3zh Fable F-8): one `Sealer` per wallet
+/// process, kept for the process's life and used for every opening it builds; `Full` after 4,096 distinct seeds is
+/// permanent for that `Sealer` (the wallet then ends the process; a new `Sealer` inside the same process would forget
+/// every seed); across processes CTR-PQZ-19's fresh salt per build is the guarantee.
 pub const SEALER_CAP: usize = 4096;
 
 /// The sender's sealer with the `seed_enc` repeat guard: one `seed_enc` seals one credit only (its recipient's and
@@ -275,9 +285,16 @@ impl Sealer {
     }
 
     /// The opening of the leg of `c` for `role` (its recipient `c.to`, or its auditor), with `seed_leg` derived here
-    /// from `seed_enc` (K3-4), so it cannot drift from the credit's recipient and key. Fail closed: no opening on any
-    /// error.
-    pub fn seal_leg(&mut self, seed_enc: &[u8; 32], role: Role, c: &Credit) -> Result<Vec<u8>, SealError> {
+    /// from `seed_enc` (K3-4), so it cannot drift from the credit's recipient and key; `own_u`, `own_v` are the sender's
+    /// own `u_f`, `v_f` of the same build (from `seed_enc` too). Fail closed: no opening on any error.
+    pub fn seal_leg(
+        &mut self,
+        seed_enc: &[u8; 32],
+        role: Role,
+        c: &Credit,
+        own_u: &[u8; PK_BYTES],
+        own_v: &[u8; 128],
+    ) -> Result<Vec<u8>, SealError> {
         let p = match role {
             Role::Recipient => c.to,
             Role::Auditor => c.auditor.ok_or(SealError::Refused)?,
@@ -286,14 +303,21 @@ impl Sealer {
         Digest::update(&mut h, b"SCAAS-PQZ-SEAL-GUARD-SEED-V1");
         Digest::update(&mut h, seed_enc);
         let key: [u8; 32] = h.finalize().into();
-        let fp = credit_fingerprint(c);
+        let fp = credit_fingerprint(c, own_u, own_v);
         match self.seen.get(&key) {
             Some(f) if *f != fp => return Err(SealError::SeedReused),
             None if self.seen.len() >= SEALER_CAP => return Err(SealError::Full),
             _ => {}
         }
         let mut seed_leg = leg_seed(seed_enc, c.to.ua, c.to.pk);
-        let out = seal(role, c, &p, &seed_leg);
+        // F-8: the seed must give the credit's u (K3-7 step 6), else the recipient skips the credit
+        let pks: Vec<&[u8; PK_BYTES]> = std::iter::once(c.to.pk).chain(c.auditor.map(|a| a.pk)).collect();
+        let gives_u = pl::enc(&pks, &vec![[0u8; 16]; pks.len()], &seed_leg).is_some_and(|mut e| {
+            let ok = e.u[..] == c.u[..];
+            e.vs.iter_mut().for_each(|v| pl::clear(v)); // the credit's masks (U2-1)
+            ok
+        });
+        let out = if gives_u { seal(role, c, &p, &seed_leg) } else { None };
         pl::clear(&mut seed_leg);
         let out = out.ok_or(SealError::Refused)?;
         self.seen.insert(key, fp);
@@ -301,10 +325,14 @@ impl Sealer {
     }
 }
 
-/// `keccak256("SCAAS-PQZ-SEAL-GUARD-V1" ‖ chainUid ‖ token ‖ toUA ‖ keccak256(pk_t) ‖ P(u) ‖ P(v_t) ‖ [P(v_a)])`
-fn credit_fingerprint(c: &Credit) -> [u8; 32] {
-    let va = c.auditor.map(|a| pack(&a.v[..])).unwrap_or_default();
-    keccak(&[b"SCAAS-PQZ-SEAL-GUARD-V1", c.chain_uid, c.token, c.to.ua, &keccak(&[&c.to.pk[..]]), &pack(&c.u[..]), &pack(&c.to.v[..]), &va])
+/// The credit's fingerprint (3zh Fable F-2): every input of the build `seed_enc` fixes, so its reuse with any other is
+/// a repeat: `keccak256("SCAAS-PQZ-SEAL-GUARD-V1" ‖ chainUid ‖ token ‖ P(u) ‖ party(to) ‖ [party(auditor)] ‖ P(u_f) ‖
+/// P(v_f))`, `party(p) = ua ‖ be8(keyVersion) ‖ keccak256(pk) ‖ keccak256(kemPk) ‖ P(v)` (each reader's AAD inputs and
+/// its key). Both roles of one credit share it.
+fn credit_fingerprint(c: &Credit, own_u: &[u8; PK_BYTES], own_v: &[u8; 128]) -> [u8; 32] {
+    let party = |p: &Party| [&p.ua[..], &p.key_version.to_be_bytes(), &keccak(&[&p.pk[..]]), &keccak(&[p.kem_pk]), &pack(&p.v[..])].concat();
+    let aud = c.auditor.map(|a| party(&a)).unwrap_or_default();
+    keccak(&[b"SCAAS-PQZ-SEAL-GUARD-V1", c.chain_uid, c.token, &pack(&c.u[..]), &party(&c.to), &aud, &pack(&own_u[..]), &pack(&own_v[..])])
 }
 
 /// K3-7 steps 3–4: decapsulate `p.opening` with the opening KEM seed and open the sealed seed.

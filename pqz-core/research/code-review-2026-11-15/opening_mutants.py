@@ -20,6 +20,14 @@ M = [
   "            None if self.seen.len() >= SEALER_CAP => return Err(SealError::Full),", "            None if self.seen.len() >= SEALER_CAP => self.seen.clear(),"),
  ("Se3 Sealer: seed_leg not the credit's (another UA)",
   "        let mut seed_leg = leg_seed(seed_enc, c.to.ua, c.to.pk);", "        let mut seed_leg = leg_seed(seed_enc, &[0u8; 32], c.to.pk);"),
+ ("Se4 fingerprint without the sender's own u_f, v_f (F-2)",
+  "&aud, &pack(&own_u[..]), &pack(&own_v[..])])", "&aud])"),
+ ("Se5 fingerprint without the key versions (F-2)",
+  "[&p.ua[..], &p.key_version.to_be_bytes(), &keccak", "[&p.ua[..], &keccak"),
+ ("Se6 fingerprint with the recipient's UA for the auditor's (F-2)",
+  "let aud = c.auditor.map(|a| party(&a)).unwrap_or_default();", "let aud = c.auditor.map(|a| party(&Party { ua: c.to.ua, ..a })).unwrap_or_default();"),
+ ("Se7 no check that seed_enc gives the credit's u (F-8)",
+  "        let out = if gives_u { seal(role, c, &p, &seed_leg) } else { None };", "        let out = if gives_u || true { seal(role, c, &p, &seed_leg) } else { None };"),
 ]
 out = []
 for name, a, b in M:
