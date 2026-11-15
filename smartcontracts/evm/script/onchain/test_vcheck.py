@@ -19,6 +19,15 @@ assert v.classify(CODE, {"is_verified": True, "is_partially_verified": True})[0]
 assert v.classify(CODE, {"is_verified": True, "is_fully_verified": False})[0] == "unverified"
 assert v.classify(CODE, {})[0] == "unverified"
 assert v.classify(CODE, {"is_verified": True}, genesis=True)[0] == "genesis"
+# NET-EVM-14: a genesis account of ours passes only verified or with its expected runtime byte for byte
+VER = {"is_verified": True, "is_partially_verified": False, "is_fully_verified": True}
+assert v.classify(CODE, {}, genesis=True, ours=CODE)[0] == v.GENESIS_OURS  # control: the expected code
+assert v.classify(CODE, VER, genesis=True, ours=CODE)[0] == v.GENESIS_OURS
+assert v.classify(CODE, {}, genesis=True, ours=CODE[:-1] + "1")[0] == "unverified"  # mutant: a wrong expected code
+assert v.classify(CODE, VER, genesis=True, ours="0x6080")[0] == v.GENESIS_OURS  # verified passes whatever the bytes
+assert v.classify(CODE, {"is_verified": True, "is_partially_verified": True}, genesis=True, ours="0x6080")[0] == "unverified"
+rv = v.ours_at_genesis(7622)
+assert list(rv) == ["0xd33d17991f57befb4ccbb3e57c477c10bde5b465"] and v.ours_at_genesis(22776) == {} == v.ours_at_genesis(31337)
 assert v.classify("0x", {})[0] == "no code"
 assert v.classify("0x00" + "ff" * 40, {})[0] == "data"
 assert v.classify("0x363d3d37363d34f0", {})[0] == "create3 proxy"

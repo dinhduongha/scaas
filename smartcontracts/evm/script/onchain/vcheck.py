@@ -52,7 +52,16 @@ import deploybook  # noqa: E402
 CLONE_HEAD, CLONE_TAIL = "363d3d373d3d3d363d73", "5af43d82803e903d91602b57fd5bf3"
 DEPLOYER = "0x4e59b44847b379578588920ca78fbf26c0b4956c"  # the deterministic CREATE2 deployer (NET-EVM-05)
 CREATE3_PROXY = "0x363d3d37363d34f0"  # src/factory/Create3.sol: the proxy that CREATEs its calldata
-STATES = ("verified", "verified (partial, harness)", "linked clone", "linked (clone, appended data)", "data", "create3 proxy", "genesis", "no code", "unverified")
+GENESIS_OURS = "genesis alloc (ours, NET-EVM-14)"
+STATES = ("verified", "verified (partial, harness)", "linked clone", "linked (clone, appended data)", "data", "create3 proxy", GENESIS_OURS, "genesis", "no code", "unverified")
+
+
+def ours_at_genesis(chain):
+    """NET-EVM-14: the genesis accounts that are ours, {address: expected runtime code}: the RescueVault of a test network's
+    alloc (vectors/governance/rescue_vault_testnet_alloc.json, whose code test_testnetGenesisAlloc proves equal to the
+    CREATE2 deploy of the committed init code), on the chain the vector names; nothing elsewhere."""
+    v = json.load(open(os.path.join(EVM, "../vectors/governance/rescue_vault_testnet_alloc.json")))
+    return {v["address"].lower(): v["account"]["code"].lower()} if int(chain) == v["chainId"] else {}
 SEL = {  # cast sig
     "puller": "2b1826ea", "EXECUTOR": "630dc7cb", "modules": "f7e80e98", "latestDexVersion": "aca84f05",
     "latestVersion": "7f4782bd", "implementationOf": "c45d1620", "dexImplementationOf": "c4c41b19",
@@ -110,12 +119,19 @@ def harness(hit, sc):
     return bool(hit) and hit[2].startswith("script/") and sc.get("name") == hit[3]
 
 
-def classify(code, sc, impl_verified=False, genesis=False, harness=False):
+def classify(code, sc, impl_verified=False, genesis=False, harness=False, ours=None):
     """(state, note) of one address from its code, Blockscout's smart-contracts answer, for a clone whether its
-    implementation is verified, and whether it is a harness contract (harness())."""
+    implementation is verified, and whether it is a harness contract (harness()). `ours`: for a genesis account that is
+    ours (ours_at_genesis), its expected runtime code: it passes only verified on the explorer or equal byte for byte."""
     c = (code or "0x").lower()
     if c in ("0x", "0x0", ""):
         return "no code", ""
+    if genesis and ours is not None:
+        if full(sc):
+            return GENESIS_OURS, "verified on the explorer"
+        if c == ours.lower():
+            return GENESIS_OURS, "not verified on the explorer; runtime = the alloc vector's byte for byte"
+        return "unverified", "genesis alloc of ours (NET-EVM-14): the code differs from the alloc vector's"
     if genesis:
         return "genesis", "code at block 0 (a predeploy, not ours)"
     if c.startswith("0x00"):
@@ -573,13 +589,18 @@ def main():
         sys.exit(1)
     st = scan(chain, genesis, head) if CFG["scan"] else {"creates": {}, "seen": {}}
     code, listed, inits, hint, first = discover(chain, books, NET, head, st)
+    for a in ours_at_genesis(chain):  # NET-EVM-14: ours at block 0 is listed even before any transaction touches it
+        code.setdefault(a, rpc("eth_getCode", [a, "latest"]))
+        listed.add(a)
+        hint.setdefault(a, "RescueVault (genesis alloc)")
     contracts = sorted(a for a, c in code.items() if c not in ("0x", "0x0") and not c.startswith("0x00"))
     gen = {a for a, c in zip(contracts, batch([("eth_getCode", [a, "0x0"]) for a in contracts])) if c not in (None, "0x", "0x0")}
+    ours = ours_at_genesis(chain)
     say(f"discovery done: {len(code)} addresses, {len(contracts)} contracts with code ({len(gen)} at genesis)")
 
     sc, rows, t0 = {}, {}, time.time()
     for k, a in enumerate(contracts):
-        if a not in gen:
+        if a not in gen or a.lower() in ours:
             sc[a] = lookup(a, code[a], chain)
         if k % 50 == 49:
             say(f"explorer lookups {k + 1}/{len(contracts)} ({int(time.time() - t0)}s)")
@@ -591,7 +612,7 @@ def main():
         impl = clone_impl(code[a])
         iv = full(sc.get(impl) or lookup(impl, code.get(impl, ""), chain)) if impl else False
         j = sc.get(a, {})
-        return classify(code[a], j, iv, a in gen, harness(idx.get(cbor(code[a])), j))
+        return classify(code[a], j, iv, a in gen, harness(idx.get(cbor(code[a])), j), ours.get(a.lower()) if a in gen else None)
 
     for a, c in code.items():
         if c in ("0x", "0x0"):
