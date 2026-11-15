@@ -668,9 +668,64 @@ impl Submitter {
         }
         let gas = match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
             Ok(g) => g,
+            // NODE-JOB-29: an ML-DSA registration on a registry without the precompile needs its cache parts first
+            Err(SimError::Revert(reason)) if reason.starts_with("UAKeyNotCached") && w.meta.is_none() => {
+                return match guard::mldsa_register(&w.data) {
+                    Some((kind, pk)) => self.cache_parts(w, kind, pk, reason).await,
+                    None => self.refused(&w, reason).await,
+                };
+            }
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => return self.requeue(&w, format!("simulate: {reason}")).await,
         };
+        self.dispatch(w, guard, gas).await
+    }
+
+    /// NODE-JOB-29: the `register` of an ML-DSA key whose simulation reverted `UAKeyNotCached` (the registry reverts it only when
+    /// its verifier of the kind has no precompile, CTR-UA-23). Each part `expandedKeyOf` shows missing is sent as the node's own
+    /// `cacheExpandedKey` job (named fields, explicit gas, once node-wide while in flight); the `register` waits `queued` under
+    /// `UA_KEY_NOT_CACHED` and is sent only once its simulation passes, i.e. after every part landed. A part the chain refuses
+    /// (it can never land) makes the registration `dead` by name.
+    async fn cache_parts(&mut self, w: Work, kind: u16, pk: Bytes, reason: String) {
+        use crate::abi::IUARegistry::{expandedKeyOfCall, uaOfCall};
+        let parts = guard::mldsa_cache(kind).map_or(0, |(_, n)| n);
+        let stored = match self.chain.call_view(w.to, uaOfCall { kind, keyData: pk.clone() }).await {
+            Ok(ua) => self.chain.call_view(w.to, expandedKeyOfCall { ua }).await,
+            Err(e) => Err(e),
+        };
+        let stored = match stored {
+            Ok(s) => s,
+            Err(SimError::Revert(e) | SimError::Transport(e)) => {
+                return self.requeue(&w, format!("{}: expandedKeyOf unread: {e}; {reason}", guard::UA_KEY_NOT_CACHED)).await;
+            }
+        };
+        let mut sent = Vec::new();
+        for part in (0..parts).filter(|p| stored[*p as usize] == Address::ZERO) {
+            let op = guard::cache_part_op(w.to, kind, &pk, part, w.valid_until);
+            let p = match work_of_op(None, &op, None) {
+                Ok((p, _)) => p,
+                Err(e) => return self.fail(&w, format!("{}: part {part}: {e:#}", guard::UA_KEY_NOT_CACHED)).await,
+            };
+            // in flight on this or another lane: its receipt comes, the register's next simulation tells
+            let Some(g) = self.digests.try_acquire(p.call_key()) else { continue };
+            let gas = match guard::gas(&self.chain, &p, self.cfg.max_gas_per_tx).await {
+                Ok(gas) => gas,
+                Err(SimError::Revert(r)) => {
+                    return self.fail(&w, format!("{}: part {part} refused: {r}; {reason}", guard::UA_KEY_NOT_CACHED)).await;
+                }
+                Err(SimError::Transport(r)) => {
+                    return self.requeue(&w, format!("{}: part {part}: simulate: {r}; {reason}", guard::UA_KEY_NOT_CACHED)).await;
+                }
+            };
+            self.dispatch(p, Some(g), gas).await;
+            sent.push(part);
+        }
+        self.requeue(&w, format!("{}: {reason}; parts sent now {sent:?} of {parts}; the register waits for every part",
+            guard::UA_KEY_NOT_CACHED)).await
+    }
+
+    /// Sign and send `w` at `gas` (sized by [`guard::gas`]); `guard` follows it into `Sent`.
+    async fn dispatch(&mut self, w: Work, guard: Option<InflightGuard>, gas: u64) {
         let fees = match self.chain.fees().await {
             Ok(f) => f,
             Err(e) => return self.requeue(&w, format!("fees: {e:#}")).await,
@@ -995,7 +1050,17 @@ impl Submitter {
         match (rc.status(), consumed, w.job_id) {
             (false, true, _) => self.report_consumed(&w).await,
             (true, _, Some(id)) => _ = self.report(id, "mined", Some(h), None, None).await,
-            (false, false, Some(id)) => _ = self.report(id, "reverted", None, None, None).await,
+            (false, false, Some(id)) => {
+                // NODE-JOB-29: an ML-DSA registration that reverted for its cache (a part dropped by a reorg) waits for the parts
+                if guard::mldsa_register(&w.data).is_some() {
+                    if let Err(SimError::Revert(r)) = self.chain.simulate(w.to, w.data.clone()).await {
+                        if r.starts_with("UAKeyNotCached") {
+                            return self.requeue(&w, format!("{}: the receipt reverted; {r}", guard::UA_KEY_NOT_CACHED)).await;
+                        }
+                    }
+                }
+                _ = self.report(id, "reverted", None, None, None).await
+            }
             _ => {}
         }
     }
@@ -1178,6 +1243,11 @@ pub(crate) mod tests {
         scoped_none: bool,
         /// The scopes `pqzScopedKeyOf` / `pqzScopedKeyLatest` / `pqzScopedKeyAt` were asked for, in order.
         scopes_asked: Vec<Address>,
+        /// NODE-JOB-29: a registry whose ML-DSA verifiers have no precompile, with these cache parts stored (`expandedKeyOf`):
+        /// `register` reverts `UAKeyNotCached` until its kind's parts are all stored. `None`: the precompile path (no cache).
+        ek: Option<[bool; 3]>,
+        /// `cacheExpandedKey` reverts (the chain refuses the part).
+        ek_refuse: bool,
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -1354,6 +1424,19 @@ pub(crate) mod tests {
                         e.proof_store.map(|m| word(U256::from(m))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
                     } else if sel == crate::abi::IPqzToken::auditorUACall::SELECTOR {
                         Ok(json!(format!("{:#x}", B256::repeat_byte(0xa7))))
+                    } else if sel == crate::abi::IUARegistry::uaOfCall::SELECTOR {
+                        Ok(json!(format!("{:#x}", B256::repeat_byte(0xaa))))
+                    } else if sel == crate::abi::IUARegistry::expandedKeyOfCall::SELECTOR {
+                        let ek = e.ek.unwrap_or_default().map(|on| if on { Address::repeat_byte(0xee) } else { Address::ZERO });
+                        Ok(json!(format!("0x{}", alloy::hex::encode(ek.abi_encode()))))
+                    } else if sel == crate::abi::IUARegistry::cacheExpandedKeyCall::SELECTOR && e.ek_refuse {
+                        Err(err(3, "execution reverted", Some("0xdeadbeef".into())))
+                    } else if sel == crate::abi::IUARegistry::registerCall::SELECTOR && e.ek.is_some_and(|ek| {
+                        let kind = crate::abi::IUARegistry::registerCall::abi_decode(&alloy::hex::decode(&input[2..]).unwrap()).unwrap().kind;
+                        !ek[..guard::mldsa_cache(kind).map_or(0, |(_, n)| n as usize)].iter().all(|x| *x)
+                    }) {
+                        let data = crate::abi::IUARegistry::UAKeyNotCached { ua: B256::repeat_byte(0xaa) };
+                        Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(alloy::sol_types::SolError::abi_encode(&data))))))
                     } else if sel == crate::abi::IUALedger::registryCall::SELECTOR {
                         Ok(word(U256::from(if e.ua_off { 0 } else { 0x5ca0_0001u64 })))
                     } else if sel == crate::abi::IMtxIds::mtxNonceCall::SELECTOR {
@@ -2735,6 +2818,108 @@ pub(crate) mod tests {
         let store = ua8_writes(0).remove(2);
         let (r, _) = outcomes(Evm { estimate: Some(64_000_001), ..ok() }, vec![call_job(9, reg, store)], tn).await;
         assert!(r[0].0 == "dead" && !r[0].1.contains("UA_REGISTER_SPLIT"), "{r:?}");
+    }
+
+    /// NODE-JOB-29: an ML-DSA-65 `register` (`ua8_writes`' bare one: 1,952-byte key) on a registry without the precompile, its
+    /// cache empty: the lane sends both parts first, as the named `cacheExpandedKey` op's calldata, each at its estimate × 1.05
+    /// (NET-EVM-11), and the `register` waits `queued` under `UA_KEY_NOT_CACHED`; the parts in flight are not sent again; once
+    /// both landed the `register` goes.
+    #[tokio::test]
+    async fn mldsa_register_sends_its_cache_parts_first() {
+        use crate::abi::IUARegistry::cacheExpandedKeyCall;
+        let reg = Address::repeat_byte(0x5e);
+        let bare = ua8_writes(0).remove(0);
+        let pk = crate::abi::IUARegistry::registerCall::abi_decode(&bare).unwrap().keyData;
+        let part = |p: u64| cacheExpandedKeyCall { kind: 0x0131, pk: pk.clone(), part: U256::from(p) }.abi_encode();
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, bare.clone())], tokens: toks(), repeat: true, ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; })
+            .await.unwrap();
+        s.poll_outbox().await;
+        let last = |o: &Shared| { let r = o.lock().unwrap().reports.last().cloned().unwrap();
+            (r["chain_state"].as_str().unwrap().to_string(), r["error"].as_str().unwrap_or_default().to_string()) };
+        let (st, why) = last(&o);
+        assert!(st == "queued" && why.starts_with("UA_KEY_NOT_CACHED: UAKeyNotCached") && why.contains("parts sent now [0, 1] of 2"), "{st} {why}");
+        let sent: Vec<(Address, Vec<u8>)> = rpc.lock().unwrap().sent.iter().map(|(_, to, d)| (*to, d.to_vec())).collect();
+        assert_eq!(sent, [(reg, part(0)), (reg, part(1))], "both parts, from the named fields, before the register");
+        assert_eq!(rpc.lock().unwrap().gas, [42_000_000, 42_000_000], "estimate 40 M x 1.05");
+        // the parts are in flight: not sent again, the register still waits
+        s.poll_outbox().await;
+        assert_eq!(last(&o).0, "queued");
+        assert_eq!(rpc.lock().unwrap().sent.len(), 2, "no part twice while in flight");
+        // both landed: the register goes
+        rpc.lock().unwrap().ek = Some([true, true, false]);
+        s.poll_outbox().await;
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert_eq!((sent.len(), sent[2].2.to_vec()), (3, bare), "then the register");
+        assert_eq!(states(&o)[2..], ["signed", "broadcast"]);
+    }
+
+    /// NODE-JOB-29, one change at a time against the positive above: a part already stored is skipped; a `UAKeyNotCached` of a call
+    /// the node cannot cache (a key of the wrong length) waits by name and sends nothing; a part the chain refuses makes the
+    /// registration `dead` by name; on a precompile registry (no `UAKeyNotCached`) the register goes at once with no part; a cache
+    /// part over the block is refused `TX_EXCEEDS_CHAIN_LIMIT`.
+    #[tokio::test]
+    async fn mldsa_register_cache_refusals_by_name() {
+        use crate::abi::IUARegistry::{cacheExpandedKeyCall, registerCall};
+        let reg = Address::repeat_byte(0x5e);
+        let tn = move |c: &mut ChainCfg| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; };
+        let bare = ua8_writes(0).remove(0);
+        let pk = registerCall::abi_decode(&bare).unwrap().keyData;
+        let ok = || Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ..Default::default() };
+        // part 0 stored: only part 1 goes
+        let (r, rpc) = outcomes(Evm { ek: Some([true, false, false]), ..ok() }, vec![call_job(9, reg, bare.clone())], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.contains("parts sent now [1] of 2"), "{r:?}");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert_eq!((sent.len(), sent[0].2.to_vec()), (1, cacheExpandedKeyCall { kind: 0x0131, pk: pk.clone(), part: U256::from(1) }.abi_encode()));
+        // a key of the wrong length: no part, the job waits by name
+        let mut c = registerCall::abi_decode(&bare).unwrap();
+        c.keyData = Bytes::from(vec![1u8; 1951]);
+        let (r, rpc) = outcomes(Evm { ek: Some([false; 3]), ..ok() }, vec![call_job(9, reg, c.abi_encode())], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("UA_KEY_NOT_CACHED: UAKeyNotCached"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        // the chain refuses the part: dead by name, nothing sent
+        let (r, rpc) = outcomes(Evm { ek: Some([false; 3]), ek_refuse: true, ..ok() }, vec![call_job(9, reg, bare.clone())], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("UA_KEY_NOT_CACHED: part 0 refused"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        // the precompile path: the register at once, no part
+        let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, bare.clone())], tn).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        assert_eq!(rpc.lock().unwrap().sent[0].2.to_vec(), bare);
+        // a part over the block: 58 M x 1.05 > 60 M
+        let (r, rpc) = outcomes(Evm { ek: Some([false; 3]), estimate: Some(58_000_000), block_gas: Some(60_000_000), ..ok() },
+            vec![call_job(9, reg, bare.clone())], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.contains("TX_EXCEEDS_CHAIN_LIMIT: cache part gas 60900000"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        // a consumer's own `cacheExpandedKey` job: the same row and the same explicit gas
+        let p0 = cacheExpandedKeyCall { kind: 0x0131, pk, part: U256::ZERO }.abi_encode();
+        let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, p0.clone())], tn).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        let e = rpc.lock().unwrap();
+        assert_eq!((e.sent[0].2.to_vec(), e.gas[0]), (p0, 42_000_000));
+    }
+
+    /// NODE-JOB-29: a registration whose receipt reverted while its cache is incomplete (a part dropped by a reorg) waits `queued`
+    /// under `UA_KEY_NOT_CACHED`, never `reverted`; with the cache complete a reverted receipt stays `reverted`.
+    #[tokio::test]
+    async fn mldsa_register_reverted_for_its_cache_waits() {
+        let reg = Address::repeat_byte(0x5e);
+        let bare = ua8_writes(0).remove(0);
+        for (ek, want) in [([false, true, false], "queued"), ([true, true, false], "reverted")] {
+            let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ek: Some([true, true, false]), ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, bare.clone())], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; })
+                .await.unwrap();
+            s.poll_outbox().await;
+            assert_eq!(states(&o), ["signed", "broadcast"]);
+            let h = rpc.lock().unwrap().sent[0].0;
+            rpc.lock().unwrap().receipts.insert(h, false);
+            rpc.lock().unwrap().ek = Some(ek);
+            s.track().await;
+            let r = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(r["chain_state"].as_str(), Some(want), "{r}");
+            assert_eq!(want == "queued", r["error"].as_str().is_some_and(|e| e.starts_with("UA_KEY_NOT_CACHED: the receipt reverted")), "{r}");
+        }
     }
 
     /// A PQZ op 1 job (group 3g) from typed_ops.json's `UAPqzTransferSingle` row, its subject a derived UA (no local signature

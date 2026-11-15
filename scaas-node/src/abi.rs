@@ -400,6 +400,12 @@ sol! {
         /// A derived id's authorization under a purpose (CTR-UA-07): reverts `UAUnauthorized(ua)` when it is not one; the venue
         /// asks it for a derived seller's order, as the token's `authorize` does.
         function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig auth) external view;
+        /// NODE-JOB-29 (CTR-UA-23, owner 2026-11-15): one part of an ML-DSA key's expanded-key cache, derived on chain from `pk`;
+        /// open to anyone (PERMISSIONLESS). Without a precompile `register` needs every part first, else `UAKeyNotCached(ua)`.
+        function cacheExpandedKey(uint16 kind, bytes pk, uint256 part) external returns (bytes32);
+        function expandedKeyOf(bytes32 ua) external view returns (address[3] memory);
+        function uaOf(uint16 kind, bytes keyData) external pure returns (bytes32);
+        error UAKeyNotCached(bytes32 ua);
     }
 
     /// A PQZ token's key-version surface (group 3g, spec 2026-11-06-pqz-key-versions §3, §7.3): the errors the node names
@@ -856,6 +862,9 @@ pub fn decode_revert(data: &[u8]) -> String {
         return format!("{e:?}");
     }
     if let Ok(e) = IPqzToken::IPqzTokenErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = IUARegistry::IUARegistryErrors::abi_decode(data) {
         return format!("{e:?}");
     }
     format!("revert 0x{}", alloy::hex::encode(data))
