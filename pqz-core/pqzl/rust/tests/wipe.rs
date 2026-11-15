@@ -63,8 +63,9 @@ unsafe impl GlobalAlloc for Watch {
 #[global_allocator]
 static A: Watch = Watch;
 
-/// (cheat mode, buffers named) per prove of `(op, stmt, wit)`, each verified, every named buffer freed and clean
-fn run(name: &str, op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Vec<(u32, u64)> {
+/// (cheat mode, buffers named, z3 / z4 tries) per prove of `(op, stmt, wit)`, each verified, every named buffer freed
+/// and clean
+fn run(name: &str, op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Vec<(u32, u64, u64)> {
     let mut ctx = Ctx::new();
     let mut named_per_prove = Vec::new();
     pqzl::set_secret_buf_hook(Some(named));
@@ -74,18 +75,20 @@ fn run(name: &str, op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Vec<(u3
         for c in [&NAMED, &FREED, &DIRTY, &LOST] {
             c.with(|c| c.set(0));
         }
+        let _ = pqzl::take_z34_tries();
         pqzl::set_cheat(mode);
         let p = ctx.prove(op, stmt, wit, &rnd);
         pqzl::set_cheat(0);
+        let tries = pqzl::take_z34_tries();
         let p = p.unwrap_or_else(|e| panic!("{name}: honest prove {e:?}"));
         let (n, f, d, lost) = (NAMED.with(Cell::get), FREED.with(Cell::get), DIRTY.with(Cell::get), LOST.with(Cell::get));
         assert!(ctx.verify(op, stmt, &p), "{name} rnd {k} mode {mode}: honest proof rejected");
         assert_eq!((lost, f), (0, n), "{name} rnd {k} mode {mode}: every named block tracked and freed");
         assert_eq!(d, 0, "{name} rnd {k} mode {mode}: {d} of {f} secret buffers freed without being cleared");
-        named_per_prove.push((mode, n));
+        named_per_prove.push((mode, n, tries));
     }
     pqzl::set_secret_buf_hook(None);
-    println!("{name}: (cheat mode, secret buffers named) per prove: {named_per_prove:?}");
+    println!("{name}: (cheat mode, secret buffers named, z3 / z4 tries) per prove: {named_per_prove:?}");
     named_per_prove
 }
 
@@ -93,9 +96,11 @@ fn run(name: &str, op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Vec<(u3
 fn rejected_z34_cleared_before_free() {
     let r = common::pqzl_rows().into_iter().find(|r| r.code == 3).expect("an R_REG row");
     let n = run("R_REG", r.op, &r.stmt, &r.wit, &r.rnd32);
-    // mode 4 repeats one compute_z34 try: at least z3, R s3, z4, R' s4, s3c, s4c and the four intvec copies more
-    let (lo, hi) = (n.iter().filter(|x| x.0 == 0).map(|x| x.1).max().unwrap(), n.iter().filter(|x| x.0 == 4).map(|x| x.1).min().unwrap());
-    assert!(lo >= 20 && hi >= lo + 10, "the retry path was not exercised (mode 0 {lo}, mode 4 {hi})");
+    // the retry path, counted directly (owner 2026-11-16: the buffer-count margin `mode 4 >= mode 0 + 10` failed at
+    // n2560-kmax16384, mode 0 61 / mode 4 57, as honest proves retry on their own): every mode-4 prove made a rejected
+    // try (2 or more tries), and every prove named its buffers; the rejected tries' buffers are in the clean asserts above
+    assert!(n.iter().all(|x| x.1 >= 20 && x.2 >= 1), "{n:?}");
+    assert!(n.iter().filter(|x| x.0 == 4).all(|x| x.2 >= 2), "the retry path was not exercised: {n:?}");
 }
 
 /// the same on a split transfer (R_TXS, the auditor on): its second randomness group and v_f's rows
@@ -105,5 +110,5 @@ fn split_row_cleared_before_free() {
     let (st, w) = (split_fx::honest_stmt(&x, true), split_fx::wit(&x, true, &x.own));
     // (the counts vary with the lower protocol's own retries; the forced compute_z34 retry is asserted on R_REG)
     let n = run("R_TXS", split_fx::OP_TRANSFER, &st, &w, &[9; 32]);
-    assert!(n.iter().all(|x| x.1 >= 20), "{n:?}");
+    assert!(n.iter().all(|x| x.1 >= 20 && x.2 >= 1), "{n:?}");
 }
