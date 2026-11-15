@@ -20,6 +20,15 @@ library PqUA {
 
     error PqUAUnknownKind(uint16 kind);
 
+    /// The parts of an ML-DSA kind's expanded-key cache (owner 2026-11-15, CTR-UA-23 / CTR-UA-39 Q1): `mldsa44` 1 (20,544 B),
+    /// `mldsa65` 2 (`Â` rows 0–2 | rows 3–5 ‖ tr ‖ t̂1: 15,360 / 21,568 B), `mldsa87` 3 (rows 0–2 | 3–5 | 6–7 ‖ tr ‖ t̂1:
+    /// 21,504 / 21,504 / 22,592 B), each one SSTORE2 blob under EIP-170 and one transaction under 2^24; 0 for every other
+    /// kind (no cache). The one source of the count: `MldsaVerifier.expandedKeyParts`, the registry's `cacheExpandedKey` and
+    /// `UAStore.expanded` read it here.
+    function mldsaParts(uint16 kind) internal pure returns (uint256) {
+        return kind == MLDSA44 ? 1 : kind == MLDSA65 ? 2 : kind == MLDSA87 ? 3 : 0;
+    }
+
     /// `TAG(kind) = keccak256(kind_tag)`, `kind_tag = "scaas.ua.<name>.v1"` (accounts.md §1.6).
     function tag(uint16 kind) internal pure returns (bytes32) {
         if (kind == MLDSA44) return keccak256("scaas.ua.mldsa44.v1");

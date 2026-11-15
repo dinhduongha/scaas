@@ -4,9 +4,10 @@ to `test/vectors/pqz-gas/<set>.json` (forge cannot read the multi-MB vector file
 
   per proof system and form: `proof` = the bytes the table sends (PQZL: the set's vector proof, the larger of the form's
   rows; PQZH: the crate's proof bound `max_proof_len`, the worst case a client can be handed, with the vector proof as
-  `honest`), `input` = the precompile input 5 + statement + proof, and `row` = the provisional testnet price of that
-  (op, id, stmtLen[, legs, auditorOn]) in `pqz-core/nethermind/chain/engine-pqz-provisional-<n>.json` (Task 9 replaces
-  them; the precompile charges row + 3 * ceil(input / 32), CTR-PQZ-11).
+  `honest`), `input` = the precompile input 5 + statement + proof, and `row` = the testnet price of that
+  (op, id, stmtLen[, legs, auditorOn]): the calibrated `pqz-core/nethermind/chain/engine-pqz.json` for the set it was
+  calibrated at (n2304-kmax4096, 3zh-core 2026-11-15; reset 5 runs it; owner, TODO 3zh group 2), else the provisional
+  `chain/engine-pqz-provisional-<n>.json` (the precompile charges row + 3 * ceil(input / 32), CTR-PQZ-11).
 
   python3 -I smartcontracts/evm/script/pqz/gas-inputs.py [--check]
 """
@@ -18,6 +19,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "..", "..", "..", ".."))
 SETS = os.path.join(REPO, "pqz-core", "params", "sets")
 OUT = os.path.join(REPO, "smartcontracts", "evm", "test", "vectors", "pqz-gas")
+# the set chain/engine-pqz.json is calibrated at (its ids are this set's: check-provisional-ids.py)
+CALIBRATED, CALIBRATED_SET = "engine-pqz.json", "n2304-kmax4096"
 OP = {"TRANSFER": 1, "TRANSFER0": 1, "BURN": 2, "REFRESH": 2, "REGISTER": 3, "DISCLOSE-SENDER": 4,
       "DISCLOSE-RECEIVER": 5, "DISCLOSE-AUDITOR": 5}
 
@@ -25,10 +28,11 @@ OP = {"TRANSFER": 1, "TRANSFER0": 1, "BURN": 2, "REFRESH": 2, "REGISTER": 3, "DI
 def table(name):
     sj = json.load(open(os.path.join(SETS, name, "set.json")))
     vec = os.path.join(REPO, "smartcontracts", "vectors", "pqz", "" if name == "n2048-kmax1024" else name)
-    eng = json.load(open(os.path.join(REPO, "pqz-core", "nethermind", "chain",
-                                      f"engine-pqz-provisional-{name.split('-')[0]}.json")))["schedules"][-1]["pqz"]
+    src = (CALIBRATED, "calibrated rows, 2026-11-15") if name == CALIBRATED_SET else \
+        (f"engine-pqz-provisional-{name.split('-')[0]}.json", "provisional rows, testnet only until calibrated")
+    eng = json.load(open(os.path.join(REPO, "pqz-core", "nethermind", "chain", src[0])))["schedules"][-1]["pqz"]
     out = {"set": name, "source": "smartcontracts/evm/script/pqz/gas-inputs.py: the set's vectors (proof_pqz*.json), "
-           f"chain/engine-pqz-provisional-{name.split('-')[0]}.json (provisional rows, testnet only until Task 9)"}
+           f"chain/{src[0]} ({src[1]})"}
     for sys_ in ("pqzl", "pqzh") if sj["pqzh"] else ("pqzl",):
         pid = "0x" + sj[f"{sys_}_id"]
         rows = {}

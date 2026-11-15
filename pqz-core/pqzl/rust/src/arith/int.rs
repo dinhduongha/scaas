@@ -398,6 +398,13 @@ impl crate::Wipe for IntVec {
 }
 
 impl IntVec {
+    /// its heap buffer, for the wipe test hook (`crate::name_buf`)
+    pub(crate) fn buf(&self) -> &alloc::vec::Vec<u64> {
+        &self.w
+    }
+}
+
+impl IntVec {
     /// zero vector; `Error::Memory` if the allocation fails
     pub(crate) fn new(len: usize, nlimbs: usize) -> Result<IntVec, Error> {
         assert!((1..=MAXL).contains(&nlimbs));

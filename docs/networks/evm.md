@@ -161,7 +161,7 @@ so a transaction priced at 1 wei is never mined; clients price at least `baseFee
   `PQZ` `0x000000000000000000000000000000005caa0f01` (PQZL and PQZH proofs, per-row gas 1.721–6.242 M + 3 per word,
   calibrated 2026-10-31), `MLDSA44` `0x000000000000000000000000000000005caa0012` (59,000 + 6 per message word, calibrated 2026-11-15; the SCaaS
   testnet's chainspec of reset 1 carries 49,000 until reset 4), `MLDSA65`
-  `0x000000000000000000000000000000005caa0013` (68,000 + 6 per word) and `MLDSA87` `0x000000000000000000000000000000005caa0014`
+  `0x000000000000000000000000000000005caa0013` (100,000 + 6 per word, calibrated 2026-11-15, TODO 3zg; the SCaaS testnet's chainspec carries 68,000 until reset 5) and `MLDSA87` `0x000000000000000000000000000000005caa0014`
   (135,000 + 6 per word, calibrated 2026-11-15; the SCaaS testnet's chainspec of reset 1 of 2026-11-04 carries the provisional
   102,000 until reset 4; active only under a schedule that carries `mldsa87Gas`, on the SCaaS testnet from the second schedule, [CTR-UA-39](../contracts/accounts.md#CTR-UA-39)), EIP-8355
   layout, empty context; prices frozen in the chainspec's `engine.Pqz`
@@ -339,12 +339,13 @@ implementation as DEX version 1 (a DEX is a `createDex` clone) and `SmartKeyAcco
 kind-`NORMAL` demo tokens; the v1 line left the deploy in P5 (`legacy/p5/`) ([deploy](../contracts/README.md#build-ci-and-pins)).
 Since UA-3 it also deploys the UA registry generation 1 with its verifiers on every chain (first, since UA-4: the token implementations take its address; `_deployUARegistry`; budget
 12 M, Hedera 10.5 M): the EIP-2537 kinds and `bls-bn254-minsig` only where `script/UAPrecompileProbe.sol`, asked
-through an `eth_call` with no `to` (the node's own precompiles), passes (the Zether kind `zether-bls12381` among them, on every chain but Hedera); no chain-id lock for any kind (owner ruling 2026-10-31); the PQ signing kinds (P6c, unaudited) wherever the kind's cap is ≤ 66 % of the budget (owner ruling 2026-10-31; all four at 12 M and on Hedera's 10.5 M), ML-DSA in
+through an `eth_call` with no `to` (the node's own precompiles), passes (the Zether kind `zether-bls12381` among them, on every chain but Hedera); no chain-id lock for any kind (owner ruling 2026-10-31); the PQ signing kinds (P6c, unaudited) wherever the kind's cap is ≤ 75 % of the budget (owner 2026-11-15; 66 % by the ruling of 2026-10-31; all four at 12 M and on Hedera's 10.5 M), ML-DSA on the chain's precompile or (`MLDSA_PRECOMPILE`, [CTR-UA-23](../contracts/accounts.md#CTR-UA-23)'s Change) in
 Solidity on the registry's expanded-key cache: an ML-DSA UA's cache parts (`cacheExpandedKey`, one transaction each,
-≤ 13.5 M gas) come before its `register` ([accounts.md §1.9](../contracts/accounts.md#verifiers)). `mldsa87` (0x0134) only where
-an ML-DSA-87 precompile answers its EIP-8355 probe (`0x14`, or the SCaaS testnet's `0x…5caa0014`): elsewhere it has no verifier and
-is not registrable ([CTR-UA-39](../contracts/accounts.md#CTR-UA-39); BUILT on branch `mldsa87`; the cap 250,000 is a provisional
-estimate). `fndsa1024` (0x0135) on every chain whose budget holds its cap 5,250,000 at ≤ 66 % (every EVM budget ≥ 7,954,546;
+each under 2^24 regular gas, `UAKeyNotCached` otherwise) come before its `register` ([accounts.md §1.9](../contracts/accounts.md#verifiers)). `mldsa87` (0x0134) only where
+an ML-DSA-87 precompile answers its EIP-8355 probe (`0x14`, or the SCaaS testnet's `0x…5caa0014`), the cap 250,000 a provisional
+estimate; elsewhere, since 2026-11-15, on the registry's three-part expanded-key cache at 8,850,000 where the 75 % rule and the
+parts' block check pass (every 12 M budget; not Hedera) ([CTR-UA-39](../contracts/accounts.md#CTR-UA-39)'s Change; BUILT on
+`3zh-mldsa`). `fndsa1024` (0x0135) on every chain whose budget holds its cap 5,250,000 at ≤ 75 % (every EVM budget ≥ 7,000,000;
 pure Solidity, no precompile; [CTR-UA-40](../contracts/accounts.md#CTR-UA-40); BUILT on branch `mldsa87`; the cap is provisional until
 T-GAS). The other families refuse `0x0135` until their own round; Algorand's `falcon_verify` is deterministic Falcon-1024 (a fixed
 salt) and cannot verify this kind's randomized round-3 signatures.
@@ -415,7 +416,13 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   `RELEASE_GAS_GATE`; under `public`, `eth_estimateGas` stands for the measured run and the regular part is bounded above by the
   estimate less the code deposit, runtime × 1,530), skipped by name where
   the precompile does not answer; `DEPLOY_PQZ=1` adds the PQZ releases 4, 5, 12, 13 to the plan
-  ([gen-1 kind gate](../contracts/accounts.md#gen1-kind-gate)). Every line of the run on stdout is short (`[deploy] …`, one
+  ([gen-1 kind gate](../contracts/accounts.md#gen1-kind-gate)). Change (owner 2026-11-15, TODO 3zh; BUILT on `3zh-mldsa`):
+  with `MLDSA_PRECOMPILE=on` (the default) the same step builds `MldsaVerifier` 0x0130 / 0x0131 / 0x0134 on the chain's ML-DSA
+  precompiles where each probe passes (EIP-8355's `0x12` / `0x13` / `0x14`, then `0x…5caa0012` / `13` / `14`), each checked by
+  `verify` of its `pq_kat.json` row within `cap + cap / 63` gas, and hands them over as `MLDSA44_VERIFIER` / `MLDSA65_VERIFIER`
+  / `MLDSA87_VERIFIER`; `MLDSA_PRECOMPILE=off` builds none and every ML-DSA kind is on the registry's expanded-key cache. The
+  cache's part transactions are gated at deploy time as this rule's inclusion check
+  ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)'s Change, MD-5; `script/DeployGas.sol`). Every line of the run on stdout is short (`[deploy] …`, one
   per transaction); forge's output goes to a git-ignored log. Change (reset 4b, 2026-11-15): DeploySend reads a send plan
   `deploy.sh` writes from forge's dry-run file, one array per field (`from`, `to`, `value`, `input`; a CREATE's `to` the zero
   address, a missing value 0, both refused or checked by index in `DeploySend.plan`), in four cheatcode calls: `forge script`

@@ -15,6 +15,7 @@ on 4, 5, 12, 13), events = pre-split, errors = pre-split + the three module erro
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -234,8 +235,11 @@ def build():
                             "smartcontracts/evm/foundry.toml"], check=True, capture_output=True).stdout
         subprocess.run(["tar", "-x", "-C", pre], input=a, check=True)
         subprocess.run(["cp", "-al", os.path.join(EVM, "lib"), os.path.join(pre, "smartcontracts/evm/lib")], check=True)
-        subprocess.run([os.path.join(ROOT, "scripts/capped"), os.path.expanduser("~/.foundry/bin/forge"), "build", "src"],
-                       cwd=os.path.join(pre, "smartcontracts/evm"), check=True, stdout=subprocess.DEVNULL)
+        # forge from PATH (else ~/.foundry/bin); under scripts/capped locally, plain on CI (no systemd user scope there)
+        forge = shutil.which("forge") or os.path.expanduser("~/.foundry/bin/forge")
+        cap = [] if os.environ.get("CI") else [os.path.join(ROOT, "scripts/capped")]
+        subprocess.run(cap + [forge, "build", "src"], cwd=os.path.join(pre, "smartcontracts/evm"), check=True,
+                       stdout=subprocess.DEVNULL)
     write_json(os.path.join(pre, "smartcontracts/evm/out"))
 
 

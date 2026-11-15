@@ -154,7 +154,7 @@ contract PqzStatePinGasTest is PqzSlots {
             alice, uint256(8), uint256(0)), salt, r, _blob(99, _outLen(8, true)))), hex"c0de", _pqAuth(), "", noVerdict());
         meter = new GasMeter();
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
-        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
+        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000);
         k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), 12_000_000);
         regL = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
         verL = pqv;
@@ -255,12 +255,12 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     /// Plan 5h Task 8d part 2b fix round (review I1): `_fullTx` on either relay path, `ua` = `uaExecute` (`_envelopeVia`),
-    /// with ML-DSA-65 at 68,006 [estimate] (`GasBurner`, as the gas table): its mocks are cleared, so the precompile is
+    /// with ML-DSA-65 at 100,006 [estimate] (`GasBurner`, as the gas table): its mocks are cleared, so the precompile is
     /// not available in the call (a rollover or a prepare does not use it).
     function _fullTxVia(bool ua, bytes memory data, uint256 fee) internal returns (uint256 reg, uint256 st) {
         if (ua) {
             vm.clearMockedCalls();
-            vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+            vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         }
         bytes memory call = _envelopeVia(ua, data, fee);
         uint256 zeros;
@@ -454,15 +454,15 @@ contract PqzStatePinGasTest is PqzSlots {
     /// Task 7b: op 1 (auditor, fee) relayed as a full transaction with a `PQZ_PROOF_TX`-byte proof (default 52,624: the
     /// 16k `R_TX` codegen size), fresh ref and the materialised `acc` without a hint (the op 1 worst case).
     /// Task 7b: unless `PQZ_PRECOMPILE=0`, `PQZ` and `ML65` become code that burns their price (`pqzGas` [estimate]:
-    /// today's row × 1.25; ML-DSA-65 68,000 + 6 per message word, unchanged) less the cold-account difference
+    /// today's row × 1.25; ML-DSA-65 100,000 + 6 per message word, calibrated 2026-11-15, TODO 3zg) less the cold-account difference
     /// (3,000 here, 100 for a precompile on chain): the transaction then counts the verification as execution, as on
     /// chain, and the EIP-7976 floor is compared with the whole of it. Loop granularity ≈ ±40 gas.
     function _precompiles(uint256 pqzGas) internal {
         if (vm.envOr("PQZ_PRECOMPILE", uint256(1)) == 0) return;
-        console2.log("  [estimate] precompile gas PQZ / ML65 (burnt by stand-ins)", pqzGas, uint256(68_006));
+        console2.log("  [estimate] precompile gas PQZ / ML65 (burnt by stand-ins)", pqzGas, uint256(100_006));
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new GasBurner(pqzGas - 2_900)).code);
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
     }
 
     function test_gas_op1_relayedFullTx_freshRef() public {
@@ -629,7 +629,7 @@ contract PqzStatePinGasTest is PqzSlots {
     /// outer fee 7) for every `mtx*` write, a direct call for `UARegistry.register`, the verifier's `verifyPop` and the
     /// disclosure view (an `eth_call`, priced as a transaction). The proof is pseudo-random bytes of the set's length
     /// (`test/vectors/pqz-gas/<set>.json`: PQZL the vector proof, PQZH its bound); the `PQZ` precompile burns its
-    /// provisional row + 3 · ⌈input / 32⌉ (`RowBurner`, `chain/engine-pqz-provisional-<n>.json`), ML-DSA-65 68,006
+    /// provisional row + 3 · ⌈input / 32⌉ (`RowBurner`, `chain/engine-pqz-provisional-<n>.json`), ML-DSA-65 100,006
     /// ([estimate], `GasBurner`). Columns: calldata bytes (zero bytes), standard calldata gas (4 / 16), the EIP-7976 floor
     /// (15,000 + 64 per byte), the precompile, execution (`GasMeter`: the call less the precompile and the state gas, the
     /// callee warm as a transaction's `to`; ML-DSA included), the transaction's regular gas (forge: max(15,000 + calldata + execution +
@@ -971,7 +971,7 @@ contract PqzStatePinGasTest is PqzSlots {
         uint256 pqzGas = row + 3 * ((vm.parseJsonUint(gj, string.concat(k, ".input")) + 31) / 32);
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new RowBurner(row)).code);
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         if (relay) data = _envelopeVia(viaUA, data, 7);
         uint256 snap = vm.snapshotState();
         vm.prank(RELAYER);

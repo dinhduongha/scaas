@@ -16,7 +16,7 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 /// envelope's `data` size. For each accepted fee-UA kind (ECDSA address path, `mldsa65` and `fndsa512` on `uaExecute`) the
 /// relayed transaction's regular gas is measured for the smallest envelope (`mtxRollOver(alice, 1)`, 68 B of data) and the
 /// largest built one (PQZL op 7 M = 8 with the auditor; at a PQZH set also the largest PQZH debit, op 7 M = 4), exactly as
-/// `PqzStateGas.t.sol`'s gas table does (the precompile at the set's row price, ML-DSA-65 68,006, `fndsa512` 2.3 M
+/// `PqzStateGas.t.sol`'s gas table does (the precompile at the set's row price, ML-DSA-65 100,006, `fndsa512` 2.3 M
 /// stand-ins). The pre-split figures are the same test run on 2ceda92d (`test/vectors/metatx-overhead-presplit.json`).
 /// Asserted: (largest − pre-split) − (smallest − pre-split) <= 9,000 per kind on PQZL, <= 14,000 on PQZH (owner 2026-11-01: the
 /// relayed path's per-byte cost on PQZH's larger envelope, measured 8,938–9,807; owner 2026-11-08: raised for group 3f's
@@ -103,7 +103,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
     function _direct(bytes memory data, uint256 row) internal returns (uint256 inner) {
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new RowBurner(row)).code);
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         uint256 snap = vm.snapshotState();
         _gasTo(address(tok), data);
         uint256 st = lastState;
@@ -118,7 +118,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
     function _meas(bytes memory data, uint256 row) internal returns (uint256 inner) {
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new RowBurner(row)).code);
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         bytes memory call = _envelopeVia(viaUA, data, 7);
         uint256 snap = vm.snapshotState();
         vm.prank(RELAYER);

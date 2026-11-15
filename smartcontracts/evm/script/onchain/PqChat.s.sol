@@ -226,8 +226,10 @@ contract PqChatOnchain is OnchainBase {
             bytes32 rd = UAKinds.registrationDigest(ua, ML65, 0, UAKinds.kemRecordHash(ua, 0, UAKinds.kemPk(a.kem)), 0);
             bytes memory pop = _mlRaw(seed, reg.uaMessage(ML65, UAKinds.PURPOSE_POP_V2, rd));
             vm.startBroadcast(k1);
-            reg.cacheExpandedKey{gas: REGISTER_GAS}(ML65, pk, 0);
-            reg.cacheExpandedKey{gas: REGISTER_GAS}(ML65, pk, 1);
+            if (_mldsaCache(ML65)) { // 3zh: the cache path only (a precompile verifier refuses the cache)
+                reg.cacheExpandedKey{gas: REGISTER_GAS}(ML65, pk, 0);
+                reg.cacheExpandedKey{gas: REGISTER_GAS}(ML65, pk, 1);
+            }
             require(reg.register{gas: REGISTER_GAS}(ML65, pk, a, pop, "") == ua, "ML-DSA UA");
             vm.stopBroadcast();
             (IUARegistry.KemKey memory k,) = reg.kemKeyAt(ua, 0);

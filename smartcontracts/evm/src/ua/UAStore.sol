@@ -5,6 +5,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {IUARegistry} from "./IUARegistry.sol";
 import {UAKinds} from "./UAKinds.sol";
+import {PqUA} from "./PqUA.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 
@@ -42,7 +43,9 @@ library UAStore {
         mapping(bytes32 ua => IUARegistry.Record) records; // 0
         mapping(bytes32 keyHash => bytes32) keyOwner; // 1
         mapping(bytes32 ua => mapping(uint64 version => PqzKey)) pqzKey; // 2 (3g: per version)
-        mapping(bytes32 ua => address[2]) ekPtr; // 3: ML-DSA expanded-key parts (SSTORE2), written once each
+        // 3: ML-DSA expanded-key parts (SSTORE2), written once each; `address[3]` since 3zh (mldsa87's third part at base + 2;
+        // base + 0 and + 1 where they were, owner 2026-11-15)
+        mapping(bytes32 ua => address[3]) ekPtr;
         mapping(uint16 kind => uint256) uaCount; // 4: per-kind list length (single-key kinds)
         mapping(uint16 kind => mapping(uint256 i => bytes32 ua)) uaAt; // 5
         /// 6. The registration blob (UA8-D7): `abi.encode(bytes keyRest, bytes pop)`, `keyRest` = the key data after the
@@ -245,14 +248,41 @@ library UAStore {
         (kem.mlkemEk, kem.x25519) = (ek, x);
     }
 
-    /// The part pointers of a complete ML-DSA cache (20 bytes each, in order), else empty.
-    function expanded(bytes32 ua, uint16 kind) internal view returns (bytes memory) {
-        if (kind != UAKinds.MLDSA44 && kind != UAKinds.MLDSA65) return "";
-        address a = layout().ekPtr[ua][0];
-        if (a == address(0)) return "";
-        if (kind == UAKinds.MLDSA44) return abi.encodePacked(a);
-        address b = layout().ekPtr[ua][1];
-        return b == address(0) ? bytes("") : abi.encodePacked(a, b);
+    /// The part pointers of a complete ML-DSA cache (20 bytes each, in order), else empty: `PqUA.mldsaParts(kind)` of them
+    /// (none for another kind, whose id holds no cache).
+    function expanded(bytes32 ua, uint16 kind) internal view returns (bytes memory ek) {
+        // `PqUA.mldsaParts(kind)`, inline on this hot path (`mldsa65` first: the common holder; `UAStoreLayout.t.sol` pins that the
+        // two agree for every kind)
+        uint256 n;
+        if (kind == UAKinds.MLDSA65) n = 2;
+        else if (kind == UAKinds.MLDSA44) n = 1;
+        else if (kind == UAKinds.MLDSA87) n = 3;
+        else return ek;
+        address[3] storage p = layout().ekPtr[ua];
+        address a = p[0];
+        if (a == address(0)) return ek; // no cache (or a precompile kind): one read, nothing allocated
+        ek = new bytes(20 * n + 12); // each pointer written as a word: 12 bytes of room after the last
+        for (uint256 i; i < n; ++i) {
+            if (i != 0) a = p[i];
+            if (a == address(0)) return "";
+            assembly ("memory-safe") {
+                mstore(add(add(ek, 32), mul(i, 20)), shl(96, a))
+            }
+        }
+        assembly ("memory-safe") {
+            mstore(ek, mul(n, 20))
+        }
+    }
+
+    /// CTR-UA-23 (owner 2026-11-15): true iff the ML-DSA kind's verifier `v` reports no precompile (`MldsaVerifier.PRECOMPILE()`
+    /// = 0): there the registry verifies on the complete expanded-key cache only (the caller checked the kind is ML-DSA). A
+    /// verifier without that getter (a test stand-in) keeps its own verdict.
+    function noPrecompile(address v) internal view returns (bool r) {
+        assembly ("memory-safe") {
+            mstore(0, 0x0709d0b1) // PRECOMPILE()
+            let ok := staticcall(gas(), v, 28, 4, 0, 32)
+            r := and(and(ok, eq(returndatasize(), 32)), iszero(mload(0)))
+        }
     }
 
     // ----- signature checks -----

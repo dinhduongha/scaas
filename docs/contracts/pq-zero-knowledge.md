@@ -657,23 +657,29 @@ are drawn from.
 
 <a id="authorization"></a>
 <a id="CTR-PQZ-12"></a>**CTR-PQZ-12** — **Only a PQ signing UA carries a PQZ key; it authorizes every spend** (owner). The holders are
-a registered single-key `mldsa65` / `mldsa44` / `mldsa87` UA (`mldsa87` where a precompile enables it, owner 2026-11-04,
-[CTR-UA-39](accounts.md#CTR-UA-39); `fndsa512` and `fndsa1024` where the registry enables them, the Falcon round-3 specification, owner 2026-11-04 for
+a registered single-key `mldsa65` / `mldsa44` / `mldsa87` UA (`mldsa87` on a precompile, or on the cache where MD-13's bound fits
+the set: `n2048-kmax1024` and `n2304-kmax4096`, owner 2026-11-04 and 2026-11-15, [CTR-UA-39](accounts.md#CTR-UA-39); `fndsa512` and `fndsa1024` where the registry enables them, the Falcon round-3 specification, owner 2026-11-04 for
 `fndsa1024`, [CTR-UA-40](accounts.md#CTR-UA-40)), or a UA `msig`
 whose non-PQ members' total weight is **below** its threshold — so no classical-only subset can authorize. That `msig`
 rule is the hybrid (e.g. `mldsa65` w 1 + `p256` w 1, threshold 2) and the t-of-n ML-DSA form; the weight is summed over
 members whose kind is not 0x0130–0x0135 and that are not an `msig` PQ-eligible itself: a forger of every classical key cannot reach such an inner's threshold, so a classical-dominant inner counts its whole outer weight as classical ([CTR-UA-38](accounts.md#CTR-UA-38)) (`slhdsa128s` counts as PQ weight in an `msig` but is not a direct holder: a
 7,856-byte signature and a ≈ 1.4 M gas cap on every spend). Every other kind — classical signers, `slhdsa128s`, Zether,
 a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (review2 C0-5, controller proposal, owner may
-override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
+override; for every holder kind since 2026-11-15, owner, MD-13: a single key counts its kind's cap as `w` and
+`192 + ⌈sig / 32⌉ × 32` bytes, [CTR-UA-16](accounts.md#CTR-UA-16)'s Change):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
 (register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one; `setPqzKey` on a gen-2 host counts the native slots of a record gen 1 holds at 400 k, gen 1's clone cap, as a gen-1 inner's) plus
 `PqzSet.PQZ_DEBIT_MIN_GAS` plus 16 gas per byte of the authorization's calldata is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit), and so is `PQZ_DEBIT_MIN_GAS` + 64 per byte, the EIP-7976 floor. The bytes `a` are the largest `MemberSig[]` a quorum signs, both levels: a signing slot `192 + ⌈sig / 32⌉ × 32`, an `msig` slot 192 and its leaves, each `128 + ⌈sig / 32⌉ × 32`, a PQ signature at its size, every classical kind and native at 1,024 B. The debit figure holds one holder signature, which is counted again, on the safe side.
 <a id="debit-min-gas"></a>`PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: **at least** the full relayed transaction of the
-cheapest PQZL debit (burn 1 under LOG) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]),
+cheapest PQZL debit (burn 1 under LOG) on the costlier relay path (`uaExecute`, the holder's and the ML-DSA-65 fee UA's
+verification at 100,006 gas each, calibrated 2026-11-15; the `PQZ` precompile at the set's testnet row, `test/vectors/pqz-gas`:
+the calibrated `chain/engine-pqz.json` at `n2304-kmax4096`, the provisional rows elsewhere),
 **rounded up to the next multiple of 1,000** (owner 2026-11-12 option (b), [CTR-PQZ-12](#CTR-PQZ-12)'s Change;
 `test_debitMinGas_isTheCheapestLogDebit` holds `set >= measured`, a multiple of 1,000, less than 1,000 above; BUILT) —
-7,300,000 at `n2048-kmax1024`, 7,516,000 at `n2304-kmax4096`, 7,729,000 at `n2560-kmax16384`, 7,970,000 at
-`n2816-kmax65536` (owner 2026-11-14, [CTR-PQZ-12](#CTR-PQZ-12)'s Change: measured 7,299,953 / 7,515,239 / 7,728,088 / 7,969,882
+7,364,000 at `n2048-kmax1024`, 6,074,000 at `n2304-kmax4096`, 7,793,000 at `n2560-kmax16384`, 8,033,000 at
+`n2816-kmax65536` (owner 2026-11-15, 3zh-core group 2, [CTR-PQZ-12](#CTR-PQZ-12)'s Change: measured 7,363,504 / 6,073,179 /
+7,792,377 / 8,032,724 with ML-DSA-65 at 100,006 (+64,000: two verifications) and, at `n2304-kmax4096`, the calibrated
+`BURN` row 3,335,000 instead of the provisional 4,840,000 (−1,505,000); the pins were 7,300,000 / 7,516,000 / 7,729,000 /
+7,970,000, owner 2026-11-14, [CTR-PQZ-12](#CTR-PQZ-12)'s Change: measured 7,299,953 / 7,515,239 / 7,728,088 / 7,969,882
 after the three-key build, +511 at each set; before that measured 7,299,442 / 7,514,728 / 7,727,577 / 7,969,371 on branch `ua-mtx-fix2-contracts`, +44 at each
 set: the face selectors `renounceAdmin(bytes32)` and `transferAdmin(bytes32,bytes32)`, the payee-fee rename, the DEX merge;
 the pins were 7,299,398 / 7,514,684 / 7,727,533 / 7,969,327, equal to the measurement), measured before that
@@ -681,8 +687,10 @@ on the body-module build ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30); owner 2026
 `test_debitMinGas_isTheCheapestLogDebit` at each set; before it 7,258,188 / 7,468,120 / 7,675,561 / 7,910,855: the stub to
 P and the self-call's stub to Q add two frames; moved +963 / +972 / +980 / +989 after rounds 3r + 3s + 3t, owner
 2026-11-11, from 7,298,111 / 7,513,388 / 7,726,229 / 7,968,014; moved +324 at each set after the Fable review fixes,
-owner ruling 2026-11-11 "move the pin", from 7,299,074 / 7,514,360 / 7,727,209 / 7,969,003). So the worst-case authorization may not exceed about 9.48 M / 9.26 M / 9.05 M /
-8.81 M, less its calldata term (112,640 gas for two ML-DSA-65 slots; `test_register_msigHolderBoundary`); `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
+owner ruling 2026-11-11 "move the pin", from 7,299,074 / 7,514,360 / 7,727,209 / 7,969,003). So the worst-case authorization may not exceed about 9.41 M / 10.70 M / 8.98 M /
+8.74 M (before 3zh-core group 2: 9.48 M / 9.26 M / 9.05 M / 8.81 M), less its calldata term (112,640 gas for two ML-DSA-65 slots; `test_register_msigHolderBoundary`); `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused (since 3zh-core group 2
+the second fits at `n2304-kmax4096`, room ≈ 10.70 M: `test_register_msigHolder_fndsa512x4_perSet`; a 2-of-2 `fndsa1024` at
+5,250,000 is over the bound at every set, owner 2026-11-15), a 2-of-2
 `mldsa65` quorum on the precompile is not. Single-key holders are unaffected (their cap is ≤ 2.5 M). A PQ-eligible `msig` registers with its m-of-n `pop`, so nobody
 can fix it without a key. One key = one purpose: the PQZ key decrypts and proves, the signer's key authorizes; the UA's
 PQ signing kinds ([CTR-UA-23](accounts.md#CTR-UA-23)) invite exactly this hybrid. A leaked PQZ key is a read-only breach
@@ -1231,8 +1239,8 @@ directly or through a relayer. **`ROLL_MAX` per set** (plan 5h Task 8d part 2b; 
 transaction on both relay paths** (`mtxExecute`, the ECDSA envelope, and `uaExecute`, an `mldsa65` fee UA; outer fee FIXED)
 on a prepared account with every entry from its own cold blob (every coefficient `q − 1`), fits `0.75 · 2^24 = 12,582,912`
 regular gas; the largest fitting multiple of 16 is measured and reported, not required. The costlier path, `uaExecute`,
-binds (3,360 B more calldata, the ML-DSA-65 verification at 68,006 [estimate], the fee UA's record and ledger: about
-159,000 gas more per rollover). `PqzStatePinGasTest.test_gas_rollMax_relayedFullTx` asserts the fit on both paths and logs
+binds (3,360 B more calldata, the ML-DSA-65 verification, the fee UA's record and ledger: about
+159,000 gas more per rollover, measured with ML-DSA-65 at 68,006; at the calibrated 100,006 of 2026-11-15, TODO 3zg, about 191,000). `PqzStatePinGasTest.test_gas_rollMax_relayedFullTx` asserts the fit on both paths and logs
 the largest fitting multiple of 16 (the linear fit through a `ROLL_MAX / 2` rollover; a larger value needs a build with a
 larger constant, since the token refuses `n > ROLL_MAX`) and the headroom; it stays red-capable: a build at
 `n2304-kmax4096` with `ROLL_MAX` 112 fails it (`mtxExecute` 13,483,008). The values 96 / 80 / 64 / 32 stood (owner
@@ -2106,7 +2114,16 @@ plus a `PQZ-INPUT-PANIC keccak(input)` warning (a panic in either verifier, PQZL
 other ⇒ `PQZ-NODE-FAULT` (critical) and the process exits with code 120 — the block in progress is never sealed or
 imported and nothing is marked invalid; a restart re-processes it. The same exit for a managed exception in the
 plugin's `PQZ` path outside the library's statuses and, in an ML-DSA call, any exception but `CryptographicException`
-(which is `…00`, ruling W-R) (review 3w u4-1). **v1 runs only on our Nethermind chain** (owner). Other chains (customer-run Besu/geth/reth, public chains)
+(which is `…00`, ruling W-R) (review 3w u4-1). **Termination is bounded** (review 3w-delta U3h-2 and its review, owner 2026-11-15; BUILT on branch `3zh-core`,
+UNAUDITED): on a fault the **exit watchdog** starts first (`pqz-exit-watchdog`, a dedicated thread; bound 10,000 ms,
+`PQZ_EXIT_WATCHDOG_MS` overrides it per node, consensus-irrelevant), then `Environment.FailFast` if the process still
+runs; the whole ML-DSA operation (output allocation included) is inside the fault boundary; the `PQZ-NODE-FAULT` line is
+built and written inside a `try`, a failure there writes one fixed fallback line; `Environment.Exit(120)` runs from a
+`finally`. So a diagnostic or a shutdown handler that throws or blocks cannot keep the node running. **Exit code:** 120
+normally; when the watchdog fires, the runtime's abort status (134 on Linux) with the line `PQZ-NODE-FAULT exit
+watchdog: …; FailFast`, never a word and never a failed call. A FailFast can write a core dump: keep core dumps off on
+a sealer (the dump would hold its signer key). A logger that throws on the `CryptographicException` or the input-panic
+(status 3) path is swallowed: the word stays `…00` (W-R kept). **v1 runs only on our Nethermind chain** (owner). Other chains (customer-run Besu/geth/reth, public chains)
 run PQZ without a client port in `OFFCHAIN` mode ([CTR-PQZ-27](#CTR-PQZ-27)); **no client ports in v1**. **Determinism and probing:** integer-only code, no threads in the computation (`pqz-ffi` runs every core
 call serially on one worker thread, only for a fixed stack), no floating point, no CPU-feature-dependent
 results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed check ⇒
@@ -2231,7 +2248,7 @@ on the execution-bound PQZL rows (every PQZL form still fits 2^24, the largest o
 `n2048-kmax1024`), +215,040 (3,360 × 64, the floor) on the PQZH debits. Proofs: PQZL the set's vector proof length, PQZH the
 crate's bound; the `PQZ` precompile at its **provisional** testnet row + 3 per input word
 (`pqz-core/nethermind/chain/engine-pqz-provisional-<n>.json`; Task 9's calibration replaces them), ML-DSA-65 at 68,006
-[estimate]. Cells: regular gas / EIP-8037 state gas, in M; ✗ = over EIP-7825's 2^24 (= 16.78 M). Regular gas =
+[estimate] (the calibrated 100,000 of 2026-11-15, TODO 3zg, adds 32,000 per ML-DSA-65 verification; this table was measured before it). Cells: regular gas / EIP-8037 state gas, in M; ✗ = over EIP-7825's 2^24 (= 16.78 M). Regular gas =
 max(15,000 + standard calldata (4 / 16) + precompile + execution, EIP-7976 floor 15,000 + 64 per calldata byte); every
 PQZL row is execution-bound, every PQZH debit floor-bound. The per-row split into calldata (standard and floor),
 precompile and execution: `smartcontracts/evm/runs/2026-10-26-t8d2b-gas-<set>.txt` (test
@@ -2316,7 +2333,9 @@ covers the three levels.
 set; valid = the vectors + 20 fresh proofs per form; adversarial = 1,000 distinct proof bit flips, the form's
 `negative.json` rows and (PQZH) the statement's last word changed. `t_ecMul` = **17 µs** (Nethermind's own BN254 mul,
 median of 10,000) ⇒ **0.359 M gas per ms** (not the ≈ 0.12 M estimated above). Log `pqz-core/nethermind/runs/2026-10-15-calib.txt`;
-chainspec section `pqz-core/nethermind/chain/engine-pqz.json`.
+chainspec section of that calibration `pqz-core/nethermind/chain/engine-pqz.json` (its ids are retired: until the next
+calibration, owner's go, a chain starts on `chain/engine-pqz-provisional-<n>.json`, checked by
+`chain/check-provisional-ids.py`).
 
 | op | Form | id | `stmtLen` | p99 valid ms | p99 adversarial ms | `G_op` (gas) | Direct tx, largest honest input |
 |---|---|---|---|---|---|---|---|
@@ -2346,7 +2365,7 @@ estimates below predate this table.
 0.358 / 0.328 ms ⇒ 135,000 / 123,000 (9.8 % apart, inside the 15 %); `mldsa87Gas` = the larger, **135,000** (was the
 provisional 102,000). The p50 ratio to ML-DSA-65 is 1.52, the estimate's 1.5; the price is above it by the p99 tail, which
 the same passes show for 44 / 65 too. ML-DSA-44: p99 0.156 / 0.154 ms ⇒ 59,000 / 58,000, `mldsa44Gas` **59,000** (was
-49,000; owner 2026-11-15, the higher pass). ML-DSA-65 measured 88,000–100,000 in the same passes (over the 15 % bound against 68,000) and stays 68,000: deferred by the owner (2026-11-15) to the next pqz-core / set-parameter change and its full gate, because at 100,000 it passes the 100,000 fixture cap of the 65 precompile path and moves `debit_min_gas` at all four sets. Summary `pqz-core/nethermind/runs/2026-11-15-mldsa87-calib.txt`.
+49,000; owner 2026-11-15, the higher pass). ML-DSA-65: 100,000 / 88,000 in the same passes (over the 15 % bound against 68,000), `mldsa65Gas` **100,000** (was 68,000; owner 2026-11-15, TODO 3zg, the higher pass), moved with the next set-parameter change and its full gate (3zh-core group 2): the forge fixture caps of the 65 precompile path 100,000 → 200,000 (`DeployBase`'s `CAP_MLDSA65_PRECOMPILE`) and `debit_min_gas` at all four sets ([debit-min-gas](#debit-min-gas)). Summary `pqz-core/nethermind/runs/2026-11-15-mldsa87-calib.txt`.
 
 **Measured on the SCaaS testnet (P6g e2e, 2026-10-16, before plan 5h: hashes in state, `acc` and `inline` in calldata; real PQZL proofs, `gasUsed` of the transaction; log
 `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`).** Proofs from `pqz-ffi` (`examples/pqz_prove.rs`): transfer
@@ -2648,6 +2667,15 @@ refuses lands (shields carry no proof) and stays undebitable until the key passe
 
 **Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** Every current and historical key read of a token uses the token's scope ([CTR-UA-43](accounts.md#CTR-UA-43)): `registry` `pqzKeyOf` / `pqzKeyAt`; `offchain-shared` scope `address(0)`; `offchain-token` scope `address(this)`; one internal function takes the scope and no site reads the registry views directly. The verifier's duties above apply per scope: a scoped `R_REG` proof is over `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, digest(ua, keyClass, chainUid, token, version, pqzKeyHash))` and is checked under `PQZL_ID`, never the token's id; the proof bytes are stored for both scoped classes.
 
+**Change (owner 2026-11-15, Codex U4h-1; BUILT on branch `3zh-mldsa`, UNAUDITED).** A scoped key of **another set** than the
+registry's `0x0142` verifier checks (its length other than this build's `PqzSet.PK`): `storePqzScopedPop` stores the proof bytes
+**unproven** even where the verifier is enabled — `proven` false, `UAPqzScopedPopStored` with `CHECKED_NONE`, no `keyOwner` — for
+the off-chain check above (the verifier checks its own set only; before this Change the store reverted `UAPoP` and an
+`OFFCHAIN` token of another set could never get its proof bytes). Every on-chain use knows the mark: a `PRECOMPILE` read requires
+`proven`, an `OFFCHAIN` read takes the stored key by length and leaves `R_REG` to its verifier, which must not treat the record as
+checked on chain (`CHECKED_NONE`). A key of the verifier's set still verifies on chain (`UAPoP` on a wrong proof). Tests
+`test/ua/PqzScopedKeys.t.sol` `test_u4h1_*` (verifier enabled; at all four sets).
+
 **The PQZ verifier (off-chain)** is a separately operated trust role, not a node module: [ops.md](../node/ops.md#pqz-verifier)
 (BUILT, T48). It verifies public statements and proofs with `pqz-ffi` and signs; it decrypts nothing and holds no PQZ secret
 ([ARCH-POS-13](../decisions.md#ARCH-POS-13)). Open (owner): who assembles the k member signatures of an `msig` verifier's one
@@ -2853,6 +2881,21 @@ transfers move for every class.
   `PqzAuth`, so no relayer can swap one. `sealedMemo` is unchanged.
 - The verifier cannot check an opening. A wrong `O_t`, or with the auditor on a wrong `O_a`, makes the credit unspendable for an
   honest wallet: the sender's loss (the debit stands, the units stay in `totalShielded`).
+- **Seal-side repeat guard** (review 3w-delta U2 point 2 and its review, owner 2026-11-15; BUILT on branch `3zh-core`,
+  `pqz-ffi` `opening::Sealer`, UNAUDITED): one `seed_enc` seals one credit only; a second credit under it is
+  `SeedReused`, since its GCM key and nonce and its PQZ randomness (`u`, `u_f`, `v_f`) would repeat. The credit is its
+  fingerprint `keccak256("SCAAS-PQZ-SEAL-GUARD-V1" ‖ chainUid ‖ token ‖ P(u) ‖ party(to) ‖ [party(auditor)] ‖ P(u_f) ‖
+  P(v_f))`, `party = ua ‖ be8(keyVersion) ‖ keccak256(pk) ‖ keccak256(kemPk) ‖ P(v)`: every input the build's `seed_enc`
+  fixes; both openings of one credit share it. A `seed_enc` whose leg expansion does not give the credit's `u` is
+  `Refused` (K3-7 step 6), as are `seal`'s own refusals. In memory and caller-owned, at most 4,096 seeds, then `Full`
+  (never evicts); every error gives no opening; it keeps a SHA3-256 hash of `seed_enc` only. Caller rule: one `Sealer`
+  per wallet process, for its life. Limit: one process; a restart forgets, and across processes
+  [CTR-PQZ-19](#CTR-PQZ-19)'s fresh salt stays the guarantee: a repeat needs the same counter and the same 16 random
+  salt bytes (about 2^-128 with a working RNG). No deterministic per-credit `seed_enc` (owner 2026-11-15): it is already
+  per credit and randomized; without the salt a re-proof at one counter with another amount would reuse `r`, and the
+  amount in `info` would make the sender remember amounts. Openings are byte-identical to `seal`'s, which the holder
+  check keeps using. **Library API only: no wallet builder uses it yet** (clientkeys `sealOpening`, ua-rs: the
+  clients' round).
 
 <a id="CTR-PQZ-41"></a>**CTR-PQZ-41** — **On an opening token only the holder rolls, and the holder marks bad credits** (owner
 2026-11-13; spec K3-8). SPECIFIED.
@@ -2883,7 +2926,7 @@ transfers move for every class.
 - **`ROLL_MAX`** (decision 2026-11-14, controller under the owner's standing go; measured, `test/pqz/PqzRollSignedGas.t.sol`):
   the one code bound of the set (`set.toml` `roll_max`), now sized by the signed rollover: the largest multiple of 16 whose
   relayed full transaction, worst case `n` entries + `n` skip marks each from its own cold blob, an `mldsa65` holder or a
-  2-of-2 `mldsa65` `msig` with ML-DSA through its precompile (68,006 [estimate]), stays within `0.75 · 2^24 = 12,582,912`
+  2-of-2 `mldsa65` `msig` with ML-DSA through its precompile (100,006 since 2026-11-15, TODO 3zg; the table below measured at 68,006 [estimate]), stays within `0.75 · 2^24 = 12,582,912`
   regular gas on both relay paths (`mtxExecute`; `uaExecute` with an `mldsa65` fee UA; fee 7). The test asserts the fit at
   `ROLL_MAX` on all four precompile cases.
 
@@ -2903,7 +2946,7 @@ transfers move for every class.
 
 **Cost** (measured 2026-11-14, `test/pqz/PqzThreeKeysGas.t.sol` per set; each row ONE transaction, regular | state | sum;
 op 1 and the refresh relayed with fee 7 on `uaExecute`, the costlier path, proof bytes of the set's vectors, ML-DSA-65 at
-68,006 [estimate]; a record's `R_REG` check at the set's provisional op 3 row; UNAUDITED):
+68,006 [estimate], before the calibrated 100,000 of 2026-11-15 (TODO 3zg: +32,000 per ML-DSA-65 verification); a record's `R_REG` check at the set's provisional op 3 row; UNAUDITED):
 
 | Set | op 1, opening token, auditor off | op 1, opening token, auditor on | op 1, `offchain-token` without the opening, auditor on | refresh, opening token | `setPqzScopedKey` with `openKem` | `storePqzScopedPop` |
 |---|---|---|---|---|---|---|

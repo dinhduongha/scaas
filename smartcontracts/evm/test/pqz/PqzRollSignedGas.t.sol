@@ -53,6 +53,11 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
     /// The verifiers at their measured prices, after the mocks are cleared (subclass).
     function _burners() internal virtual;
 
+    /// A single-key holder (default `mldsa65`) and its auth bytes (the filler signature).
+    function _holderOne(uint8 seed) internal virtual returns (bytes32, bytes memory) {
+        return (_mldsaUA(seed), _single(ML65_SIG));
+    }
+
     function _single(uint256 sigLen) internal pure returns (bytes memory) {
         return abi.encode(bytes(""), new bytes(sigLen));
     }
@@ -147,7 +152,7 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
             if (msig_) {
                 (h[i], a[i]) = _msig(2);
             } else {
-                (h[i], a[i]) = (_mldsaUA(nextSeed++), _single(ML65_SIG));
+                (h[i], a[i]) = _holderOne(nextSeed++);
             }
             _record(h[i], a[i]);
             _seed(h[i], PRE + 2 * step * (i + 1), code);
@@ -179,7 +184,7 @@ abstract contract PqzRollSignedGasBase is PqzSlots {
     }
 }
 
-/// @notice The holder's ML-DSA-65 signature through its precompile at the gas table's 68,006 [estimate] (a `GasBurner`; its fee UA on
+/// @notice The holder's ML-DSA-65 signature through its precompile at the gas table's 100,006 [estimate] (a `GasBurner`; its fee UA on
 ///         `uaExecute` the same kind), for a single `mldsa65` holder and a 2-of-2 `mldsa65` `msig`.
 contract PqzRollSignedGasTest is PqzRollSignedGasBase {
     function setUp() public {
@@ -194,7 +199,7 @@ contract PqzRollSignedGasTest is PqzRollSignedGasBase {
     }
 
     function _burners() internal override {
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
     }
 
     function test_rollSigned_mldsa65_mtxExecute() public { _pinned("mldsa65 (precompile)", false, false, ML65_SIG); }
@@ -251,4 +256,79 @@ contract PqzRollSignedGasSolTest is PqzRollSignedGasBase {
     function test_rollSignedSol_mldsa65_uaExecute() public {
         _points("mldsa65 (Solidity, cached 5.81 M), fndsa512 fee UA", false, true, FN_SIG, 1, 16);
     }
+}
+
+/// @notice MD-13 (owner 2026-11-15, F-1): a chain without the ML-DSA precompile, `mldsa87` on the registry's three-part cache: the
+///         holder a single `mldsa87` UA standing in at the worst accepting `verifyCached`'s least working gas 8,772,934
+///         (`PqGas.t.sol`) under its cap 8,850,000; the `uaExecute` fee UA a cached `mldsa65` at its worst, 5,910,464 (cap 5,950,000).
+///         Where the debit bound refuses the holder (n2560-kmax16384, n2816-kmax65536) its scoped record is `UAPqzHolder`: no
+///         credit can reach a key that could not be spent. Where it is admitted, every `n` from 1 to 16 is measured and reported
+///         (the client rule of CTR-PQZ-41: the holder signs the largest `n` that fits); `ROLL_MAX` itself does not fit there (it
+///         is sized with precompile-priced signers). A cached ML-DSA fee signer does not fit with a cached `mldsa87` holder at all
+///         (8.77 M + 5.91 M + the rollover > 12.6 M): reported, the `mtxExecute` (ECDSA) path is the holder's.
+contract PqzRollSignedGasSol87Test is PqzRollSignedGasBase {
+    uint256 internal constant ML87_SOL = 8_772_934;
+    uint256 internal constant ML65_SOL = 5_910_464;
+    uint256 internal constant ML87_SIG = 4_627;
+    address internal ml87;
+    address internal ml65;
+
+    function setUp() public {
+        vm.pauseGasMetering();
+        _stack();
+        (ml87, ml65) = (address(new SlhStandIn(0)), address(new SlhStandIn(0)));
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](3);
+        k[0] = UARegistry.KindConfig(UAKinds.MLDSA87, ml87, 8_850_000);
+        k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), CAP_PQZ);
+        k[2] = UARegistry.KindConfig(UAKinds.MLDSA65, ml65, 5_950_000);
+        reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
+        OpenFactory f2 = new OpenFactory(nid(registrar));
+        EnvKit.configure(f2, PQZ_UID, 0, address(0));
+        Catalogue.release(f2, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f2), PQZ_UID, address(reg), address(pqv)),
+            type(NormalPqzToken).creationCode);
+        vm.prank(registrar);
+        f2.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f2)));
+        (vMode, vUA, vOwnKey, vOpening, aMode) = (PqzCore.OFFCHAIN, nid(vm.addr(0xA77E57)), true, true, 0);
+        tok = NormalPqzToken(f2.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), "rollsig-sol87"));
+        (vMode, vUA, vOwnKey, vOpening) = (0, bytes32(0), false, false);
+        fee = _mldsaUA(52);
+        _fund(fee);
+        vm.resumeGasMetering();
+    }
+
+    function _burners() internal override {
+        vm.etch(ml87, address(new SlhStandIn(ML87_SOL)).code);
+        vm.etch(ml65, address(new SlhStandIn(ML65_SOL)).code);
+    }
+
+    /// An `mldsa87` UA with the filler key `0x87 ‖ seed ‖ 0…`.
+    function _holderOne(uint8 seed) internal override returns (bytes32, bytes memory) {
+        bytes memory pk = new bytes(2_592);
+        (pk[0], pk[1]) = (0x87, bytes1(seed));
+        return (UACall.register(reg, UAKinds.MLDSA87, pk, UACall.attrs("", 0, ""), new bytes(ML87_SIG), ""), _single(ML87_SIG));
+    }
+
+    /// This set's MD-13 verdict on a cached `mldsa87` holder (`UARegistryCoreLib._pqzHolder`'s single-key bound).
+    function _admitted() internal pure returns (bool) {
+        return 8_850_000 + uint256(8_850_000) / 63 + 5_000 + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * (192 + 4_640) <= 1 << 24;
+    }
+
+    function _run(bool ua, string memory name) internal {
+        if (!_admitted()) {
+            (bytes32 h, bytes memory a) = _holderOne(nextSeed++);
+            IUARegistry.KemKey memory k;
+            (k.scheme, k.mlkemEk, k.x25519) = (1, _blob(uint256(h), 1568), keccak256(abi.encode(h)));
+            vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, h));
+            reg.setPqzScopedKey(h, address(tok), 0, _spk(++keySeed), keccak256(hex"aa"), k, type(uint64).max, UACall.auth(h, a));
+            console2.log(string.concat("ROLLSIG ", PqzSet.NAME, " | ", name, " | not a PQZ holder here (MD-13): UAPqzHolder"));
+            return;
+        }
+        uint256 fit = _points(name, false, ua, ML65_SIG, 1, 16);
+        if (ua) assertEq(fit, 0, "a cached ML-DSA fee signer with a cached mldsa87 holder fits no rollover");
+        else assertLt(fit, RM, "ROLL_MAX is sized with precompile-priced signers");
+    }
+
+    function test_rollSignedSol87_mtxExecute() public { _run(false, "mldsa87 (Solidity, cached 8.77 M)"); }
+
+    function test_rollSignedSol87_uaExecute() public { _run(true, "mldsa87 (Solidity, cached 8.77 M), cached mldsa65 fee UA"); }
 }

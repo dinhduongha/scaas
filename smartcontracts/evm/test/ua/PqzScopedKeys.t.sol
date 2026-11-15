@@ -43,6 +43,14 @@ contract MockScopeToken {
     }
 }
 
+/// A `PqzKeyVerifier` stand-in as it answers at one set: `verifyPop` refuses a key of any other length (the real verifier's
+/// `pk.length == PqzSet.PK` check), else the base mock's rule (the signature is `keccak256(abi.encode(key, message))`).
+contract SetVerifierStandIn {
+    function verifyPop(bytes calldata key, bytes32 message, bytes calldata sig) external pure returns (bool) {
+        return key.length == PqzSet.PK && sig.length == 32 && bytes32(sig) == keccak256(abi.encode(key, message));
+    }
+}
+
 /// The PQZ three-key model, step 3 (spec 2026-11-13-pqz-three-keys K3-3, §14 items 3, 6, 17 — the registry parts): the scoped
 /// PQZ key records `(ua, scope, version)`, scope 0 class `offchain-shared`, a token class `offchain-token`. The stand-in
 /// verifier answers exactly `keccak256(abi.encode(key, message))` (`UARegistryBase`), so every message the registry builds is
@@ -667,5 +675,104 @@ contract PqzScopedKeysTest is UARegistryBase {
         assertEq(pv.pqzKeyLatest(ua), 0);
         assertEq(pv.pqzScopedKeyLatest(ua, address(0)), 1);
         assertEq(pv.pqzScopedKeyLatest(ua, address(tOn)), 0);
+    }
+
+    // ----- Codex U4h-1 (owner 2026-11-15, CTR-PQZ-30's Change): another set's scoped proof with the verifier enabled -----
+
+    /// A registry whose 0x0142 verifier checks this set only (`SetVerifierStandIn`, the real verifier's length rule).
+    function _setReg() internal returns (UARegistry r) {
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
+        c[0] = UARegistry.KindConfig(ML, address(mock), 400_000);
+        c[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(new SetVerifierStandIn()), 1_000_000);
+        r = _deploy(address(0x5ca0000000000000000000000000000000000043), chainUidA, address(0), false, BUDGET, address(0), true, c);
+    }
+
+    /// The test's own message check (`_sig` is the base mock's `keccak256(abi.encode(key, message))`).
+    function _verifierRule(R memory x) internal pure returns (bool) {
+        return keccak256(x.proof) == keccak256(_sig(x.key, _proofMsg(x)));
+    }
+
+    /// U4h-1: with the verifier enabled, a class-3 key of another set registers and rotates: each proof stored UNPROVEN
+    /// (`CHECKED_NONE`, `proven` false, no `keyOwner`), the version current (the token's set), listed once. Before the fix the
+    /// verifier's refusal made `storePqzScopedPop` revert `UAPoP`.
+    function test_u4h1_otherSet_withVerifier_storedUnproven() public {
+        UARegistry r = _setReg();
+        bytes32 ua = _single(r, ml1);
+        for (uint64 v; v < 2; ++v) {
+            R memory x = _rec(ua, address(tOn), v, _pkOther(v), true);
+            assertTrue(_verifierRule(x), "a valid proof of its own set");
+            _set(r, ml1, x);
+            vm.expectEmit(address(r));
+            emit IUARegistry.UAPqzScopedPopStored(ua, address(tOn), v, UAKinds.CHECKED_NONE, x.proof);
+            r.storePqzScopedPop(ua, address(tOn), v, x.proof);
+            (uint64 cur,,, bool pr) = r.pqzScopedKeyOf(ua, address(tOn));
+            assertEq(cur, v, "current: the token's set");
+            assertFalse(pr, "stored unproven: never taken as checked on chain");
+            (,, bool prAt) = r.pqzScopedKeyAt(ua, address(tOn), v);
+            assertFalse(prAt);
+            assertEq(r.pqzScopedPopOf(ua, address(tOn), v), x.proof, "the bytes kept for the off-chain check");
+            assertEq(r.keyOwner(x.h), bytes32(0), "no owner without an on-chain check");
+        }
+        assertEq(r.pqzScopedCount(address(tOn)), 1, "listed once");
+    }
+
+    /// U4h-1 control: the same set still verifies on chain with the verifier enabled (`CHECKED_CHAIN`, proven, `keyOwner`).
+    function test_u4h1_sameSet_withVerifier_provenOnChain() public {
+        UARegistry r = _setReg();
+        bytes32 ua = _single(r, ml1);
+        R memory x = _rec(ua, address(tOn), 0, _pk(0), true);
+        _set(r, ml1, x);
+        vm.expectEmit(address(r));
+        emit IUARegistry.UAPqzScopedPopStored(ua, address(tOn), 0, UAKinds.CHECKED_CHAIN, x.proof);
+        r.storePqzScopedPop(ua, address(tOn), 0, x.proof);
+        (,,, bool pr) = r.pqzScopedKeyOf(ua, address(tOn));
+        assertTrue(pr);
+        assertEq(r.keyOwner(x.h), ua);
+    }
+
+    /// U4h-1 control: a wrong proof of the same set still refuses (`UAPoP`): the record's hash is of a proof over another message.
+    function test_u4h1_sameSet_wrongProof_refused() public {
+        UARegistry r = _setReg();
+        bytes32 ua = _single(r, ml1);
+        R memory x = _rec(ua, address(tOn), 0, _pk(0), true);
+        x.proof = _sig(x.key, keccak256("another message"));
+        x.ph = keccak256(x.proof);
+        _set(r, ml1, x);
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        r.storePqzScopedPop(ua, address(tOn), 0, x.proof);
+    }
+
+    /// U4h-1: scope 0 (class 2) keeps the class-1 rule with the verifier enabled: another set's proof stored unproven, the key
+    /// not listed (control of `_scopedCurrent`'s set-length rule).
+    function test_u4h1_otherSet_scope0_storedUnproven_notListed() public {
+        UARegistry r = _setReg();
+        bytes32 ua = _single(r, ml1);
+        R memory x = _rec(ua, address(0), 0, _pkOther(7), true);
+        _set(r, ml1, x);
+        vm.expectEmit(address(r));
+        emit IUARegistry.UAPqzScopedPopStored(ua, address(0), 0, UAKinds.CHECKED_NONE, x.proof);
+        r.storePqzScopedPop(ua, address(0), 0, x.proof);
+        assertEq(r.pqzScopedCount(address(0)), 0);
+    }
+
+    // ----- Codex U4h-2 (owner 2026-11-15): a successor's scoped holder list shows the predecessor's holders -----
+
+    /// A holder registered on gen 1 (`pv`, slot 0x0142 with the verifier) with a proven scope-0 key; gen 2 in front of it without
+    /// 0x0142: its scoped key read forwards (as before), and so does its holder list now (count, entry, the index past the end).
+    function test_u4h2_successorListsInheritedHolders() public {
+        bytes32 ua = _single(pv, ml1);
+        R memory x = _rec(ua, address(0), 0, _pk(0), true);
+        _set(pv, ml1, x);
+        pv.storePqzScopedPop(ua, address(0), 0, x.proof);
+        UARegistry g2 = _deploy(address(0x5Ca0000000000000000000000000000000000044), chainUidA, address(pv), false, BUDGET,
+            address(0), true, new UARegistry.KindConfig[](0));
+        (uint64 v, address ptr,, bool pr) = g2.pqzScopedKeyOf(ua, address(0));
+        assertEq(abi.encode(v, SSTORE2.read(ptr), pr), abi.encode(uint64(0), x.key, true), "the key read forwards (control)");
+        assertEq(pv.pqzScopedCount(address(0)), 1);
+        assertEq(g2.pqzScopedCount(address(0)), 1, "the inherited holder is listed");
+        assertEq(g2.pqzScopedAt(address(0), 0), ua);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAIndex.selector, UAKinds.PQZ_MLWE, uint256(1)));
+        g2.pqzScopedAt(address(0), 1);
+        assertEq(g2.pqzScopedCount(address(tOn)), 0, "another scope: none");
     }
 }

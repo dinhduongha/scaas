@@ -1,0 +1,9 @@
+# 3zh-core: per-set libpqz_ffi.so pins after group 1's pqz-core fixes (U1h-1/2, U2-1, Sealer seed_enc guard, Fable F-1..F-11)
+# n2304-kmax4096 re-pinned in 2fe8f49e0; the other three in group 2 (2026-11-15), the same build command as
+# runs/2026-11-13-three-keys-pins.txt:
+# scripts/capped docker build -f Dockerfile --resource memory=4g --build-arg PQZ_SET=<set> --target ffi-export -o bin/ffi-out-<set> <repo root>
+set | tree | rc | libpqz_ffi.so sha256 (was)
+n2048-kmax1024 | 3zh-core 61948b250 + group 2 edits (no library source) | 0 | 16b4b0cb054fbca3845e47d174c47452f140993f4e20555f662904494b80e0ef (45f6a4f7…65f2)
+n2304-kmax4096 | same | 0 | f397d9c172fb4c4381b360fb094c7b0e105a6d2f86ffbc0993c5e5c9453f0f31 (unchanged: rebuilt, equal to 2fe8f49e0's pin)
+n2560-kmax16384 | same | 0 | a5c1a70601c02995dcd5b05de33a970d298fad7eaa4887f80bbe35101ee953ff (8521e49d…6aef)
+n2816-kmax65536 | same | 0 | 911818ecab322607145c55f81142ef7936a8ed7dedd84024a82fb6f26500e904 (f4d4890b…9edf)

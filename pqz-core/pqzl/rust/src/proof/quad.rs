@@ -232,6 +232,9 @@ fn prove(
     let (mut r2y, mut tmp, mut tmp2) = (Wiped(PolyVec::new(n)?), Wiped(PolyVec::new(n)?), Wiped(PolyVec::new(l)?));
     let (mut y, mut s) = (Wiped(PolyVec::new(n)?), Wiped(PolyVec::new(n)?));
     let (mut wv, mut w1, mut w0) = (Wiped(PolyVec::new(km)?), Wiped(PolyVec::new(km)?), Wiped(PolyVec::new(km)?));
+    for v in [&y1, &y2, &cs1, &cs2, &r2y, &tmp, &tmp2, &y, &s, &wv, &w1, &w0] {
+        crate::name_buf(&v.0.0); // the wipe test hook (3zh Fable F-10)
+    }
 
     // s = (<s1>, <m>)
     polyvec::set(&mut s.sub(0, m1, 2), &**s1);
@@ -275,7 +278,8 @@ fn prove(
         polyvec::fromcrt(&mut *y);
 
         // g1
-        let mut g1 = polyvec::dot2(r1, &mut *y);
+        // (Wiped: the masked garbage term before it is committed, cleared at the end of the try; 3zh Fable F-4)
+        let mut g1 = Wiped(polyvec::dot2(r1, &mut *y));
         polyvec::mulsparse(&mut *r2y, r2, &mut *y);
         polyvec::fromcrt(&mut *r2y);
         polyvec::adddot(&mut g1, &mut *s, &mut *r2y, false);
@@ -286,7 +290,7 @@ fn prove(
 
         // t
         let mut t = f.t_b.sub(l, lext, 1);
-        t.at(0).clone_from(&g1);
+        t.at(0).clone_from(&*g1);
         polyvec::addmul(&mut t, &mut bp.sub(l, 0, lext, m2r, 1, 1), &mut s2.sub(0, m2r, 1), false);
         polyvec::fromcrt(&mut t);
 
@@ -324,7 +328,10 @@ fn prove(
         if p.rej1 != 0 {
             polyvec::fromcrt(&mut *y1);
             polyvec::fromcrt(&mut *cs1);
-            let rej = rej_standard(&mut st, &Wiped(coeffvec(&y1)?), &Wiped(coeffvec(&cs1)?), &p.scm1, &p.stdev1sqr)?;
+            let (zc, cc) = (Wiped(coeffvec(&y1)?), Wiped(coeffvec(&cs1)?));
+            crate::name_buf(zc.0.buf());
+            crate::name_buf(cc.0.buf());
+            let rej = rej_standard(&mut st, &zc, &cc, &p.scm1, &p.stdev1sqr)?;
             let rej = crate::ct::verdict(rej); // review E: the verdict is public
             if rej {
                 continue;
@@ -334,6 +341,8 @@ fn prove(
             polyvec::fromcrt(&mut *y2);
             polyvec::fromcrt(&mut *cs2);
             let (z2, c2) = (Wiped(coeffvec(&y2)?), Wiped(coeffvec(&cs2)?));
+            crate::name_buf(z2.0.buf());
+            crate::name_buf(c2.0.buf());
             // rej2 is 1 or 2 (C's ASSERT; 2 in every relation): 2 is Rej1 with sigma2 (P6-D2; upstream rej_bimodal with
             // stdev1sqr, review D-2)
             let rej = if p.rej2 == 1 {

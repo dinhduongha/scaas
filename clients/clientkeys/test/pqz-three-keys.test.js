@@ -211,9 +211,68 @@ test('pqzKeyHandle: the planted probe never loads the secret; a mark lets the wi
     else assert.ok(r().skip, 'class 2 serves every token; the aad binds the token: another token is a skip');
     assert.equal(h.withSecretKeygen((s) => s.length), 32);
     assert.equal(h.keygens, 1);
+    // U4h-4: after wipe the honest credit that was accepted above is refused locally, never a (markable) skip
     h.wipe();
     assert.throws(() => h.withSecretKeygen(() => 0), /wiped/);
+    assert.throws(() => h.check(credit(0, good), never), /wiped/, 'a wiped handle refuses the check');
   }
+});
+
+test('U2-2: opening.json rejects: a malformed opening opens to null, O_a under role 0\'s coins is not K3-6\'s, a malformed kemPk is refused', () => {
+  const r1 = K.rows.find((r) => r.auditorOn);
+  const reader = (ua) => openKemKey(openKemSeed(SEED, { ua, chainUid: CU[0], version: 0 }));
+  const T = reader('0x' + '11'.repeat(32));
+  const A = reader('0x' + 'a0'.repeat(32));
+  const open = (R, opening, aad) => openOpening({ opening, kemPk: R.kemPk, dk: R.dk, x25519Secret: R.x25519Secret, aad });
+  // controls: the honest openings open to seed_leg and are K3-6's
+  assert.equal(hex(open(T, h0(r1.opening_t), h0(r1.aad_t))), h0(r1.seed_leg));
+  assert.equal(hex(open(A, h0(r1.opening_a), h0(r1.aad_a))), h0(r1.seed_leg));
+  assert.equal(hex(sealOpening({ seedLeg: fromHex(h0(r1.seed_leg)), role: 0, kemPk: T.kemPk, aad: h0(r1.aad_t) }).bytes), h0(r1.opening_t));
+  assert.ok(K.rejects.length >= 15);
+  const seen = new Set();
+  for (const x of K.rejects) {
+    seen.add(x.field);
+    assert.equal(x.recipient, 'skip', x.case);
+    if (x.field === 'to.kemPk') {
+      assert.equal(x.seal, 'refused', x.case);
+      assert.throws(() => sealOpening({ seedLeg: fromHex(h0(r1.seed_leg)), role: 0, kemPk: h0(x.value), aad: h0(r1.aad_t) }), undefined, x.case);
+      continue;
+    }
+    const to = x.field === 'to.opening';
+    assert.ok(to || x.field === 'auditor.opening', x.field);
+    const got = open(to ? T : A, h0(x.value), h0(to ? r1.aad_t : r1.aad_a));
+    if (x.open === 'none') {
+      assert.equal(got, null, x.case);
+    } else {
+      // the auditor's Unreadable branch after its opening authenticates: opens to seed_leg, but is not K3-6's opening of role 1
+      assert.equal(hex(got), h0(x.open), x.case);
+      assert.equal(x.auditor, 'unreadable', x.case);
+      const k36 = hex(sealOpening({ seedLeg: got, role: to ? 0 : 1, kemPk: (to ? T : A).kemPk, aad: h0(to ? r1.aad_t : r1.aad_a) }).bytes);
+      assert.equal(k36, h0(to ? r1.opening_t : r1.opening_a));
+      assert.notEqual(k36, h0(x.value), x.case);
+    }
+  }
+  assert.deepEqual([...seen].sort(), ['auditor.opening', 'to.kemPk', 'to.opening']);
+});
+
+test('U4h-3: malformed hex and out-of-range integers are refused, never changed; valid controls', () => {
+  const r = K.rows[0];
+  const ok = hex(legSeedOfKeyHash(h0(r.seed_enc), h0(r.toUA), h0(r.pk_t_keccak)));
+  assert.equal(ok, h0(r.seed_leg), 'control');
+  assert.equal(hex(legSeedOfKeyHash(h0(r.seed_enc).toUpperCase().replace('0X', '0x'), h0(r.toUA), h0(r.pk_t_keccak))), ok, 'upper-case hex');
+  assert.throws(() => legSeedOfKeyHash(h0(r.seed_enc) + '0', h0(r.toUA), h0(r.pk_t_keccak)), /seed_enc: not hex/, 'one extra nibble');
+  assert.throws(() => legSeedOfKeyHash('0x' + 'zz' + h0(r.seed_enc).slice(4), h0(r.toUA), h0(r.pk_t_keccak)), /seed_enc: not hex/, 'a non-hex pair');
+  assert.throws(() => legSeedOfKeyHash(h0(r.seed_enc).slice(0, -2), h0(r.toUA), h0(r.pk_t_keccak)), /seed_enc: 32 bytes/, 'one byte short');
+  const at = { ua: '0x' + '11'.repeat(32), chainUid: CU[0], version: 0, layout: L };
+  const c0 = pqzKeyHandle(SEED, { ...at, account: 0 }).seedCommitment();
+  assert.notEqual(pqzKeyHandle(SEED, { ...at, account: 0xffffffff }).seedCommitment(), c0, 'control: the largest account');
+  for (const bad of [2 ** 32, -1, 1.5, NaN, '0']) {
+    assert.throws(() => pqzKeyHandle(SEED, { ...at, account: bad }), /account must be an integer/, `account ${bad}`);
+    assert.throws(() => pqzKeyHandle(SEED, { ...at, index: bad }), /index must be an integer/, `index ${bad}`);
+  }
+  assert.equal(hex(pqzEntryHash(0, SLOT, '0x00')), hex(pqzEntryHash(0n, SLOT, '0x00')), 'control: index 0');
+  for (const bad of [-1, 1n << 256n]) assert.throws(() => pqzEntryHash(bad, SLOT, '0x00'), /uint256/, `entry index ${bad}`);
+  assert.throws(() => pqzEntryHash(0, SLOT, '0x0'), /code: not hex/, 'an odd code');
 });
 
 test('P2-1: an audited credit checked against the auditor\'s key of another version is a skip that a single read cannot mark', () => {

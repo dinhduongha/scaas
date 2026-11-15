@@ -1,49 +1,49 @@
 {
  "pqzh": {
   "BURN": {
-   "honest": 248504,
+   "honest": 248696,
    "input": 307805,
    "proof": 251608,
-   "row": 4859000
+   "row": 4303000
   },
   "DISCLOSE-AUDITOR": {
-   "honest": 204680,
+   "honest": 204776,
    "input": 244973,
    "proof": 207688,
-   "row": 3745000
+   "row": 3525000
   },
   "DISCLOSE-RECEIVER": {
-   "honest": 204968,
+   "honest": 204744,
    "input": 244973,
    "proof": 207688,
-   "row": 3745000
+   "row": 3525000
   },
   "DISCLOSE-SENDER": {
-   "honest": 204872,
+   "honest": 203846,
    "input": 244973,
    "proof": 207688,
-   "row": 4268000
+   "row": 3757000
   },
   "M1-off": {
-   "honest": 246984,
+   "honest": 248504,
    "input": 326365,
    "proof": 251608,
-   "row": 5608000
+   "row": 4709000
   },
   "M1-on": {
-   "honest": 249400,
+   "honest": 247000,
    "input": 344925,
    "proof": 251608,
-   "row": 5023000
+   "row": 4745000
   },
   "M2-off": {
-   "honest": 248440,
+   "honest": 248024,
    "input": 344925,
    "proof": 251608,
-   "row": 5740000
+   "row": 4632000
   },
   "M2-on": {
-   "honest": 248872,
+   "honest": 248402,
    "input": 364333,
    "proof": 252328,
    "row": 5201000
@@ -52,121 +52,121 @@
    "honest": 249512,
    "input": 382765,
    "proof": 252328,
-   "row": 6360000
+   "row": 5344000
   },
   "M4-on": {
-   "honest": 293112,
+   "honest": 292824,
    "input": 464061,
    "proof": 296248,
-   "row": 6416000
+   "row": 6075000
   },
   "REFRESH": {
-   "honest": 248728,
+   "honest": 248568,
    "input": 307805,
    "proof": 251608,
-   "row": 4859000
+   "row": 4303000
   },
   "REGISTER": {
-   "honest": 204872,
+   "honest": 204616,
    "input": 226221,
    "proof": 207688,
-   "row": 4319000
+   "row": 3313000
   },
   "TRANSFER": {
-   "honest": 248120,
+   "honest": 247896,
    "input": 344925,
    "proof": 251608,
    "row": 5492000
   },
   "TRANSFER0": {
-   "honest": 247240,
+   "honest": 248632,
    "input": 326365,
    "proof": 251608,
-   "row": 5227000
+   "row": 4598000
   }
  },
  "pqzl": {
   "BURN": {
-   "input": 102032,
-   "proof": 45835,
-   "row": 4840000
+   "input": 102011,
+   "proof": 45814,
+   "row": 3335000
   },
   "DISCLOSE-AUDITOR": {
-   "input": 68843,
-   "proof": 31558,
-   "row": 3337000
+   "input": 68823,
+   "proof": 31538,
+   "row": 2012000
   },
   "DISCLOSE-RECEIVER": {
-   "input": 68831,
-   "proof": 31546,
-   "row": 3337000
+   "input": 68844,
+   "proof": 31559,
+   "row": 2012000
   },
   "DISCLOSE-SENDER": {
-   "input": 68099,
-   "proof": 30814,
-   "row": 3381000
+   "input": 68092,
+   "proof": 30807,
+   "row": 2438000
   },
   "M1-off": {
-   "input": 121099,
-   "proof": 46342,
-   "row": 5139000
+   "input": 121078,
+   "proof": 46321,
+   "row": 3246000
   },
   "M1-on": {
    "input": 139995,
    "proof": 46678,
-   "row": 4712000
+   "row": 3171000
   },
   "M2-off": {
-   "input": 140174,
-   "proof": 46857,
-   "row": 4975000
+   "input": 140158,
+   "proof": 46841,
+   "row": 3205000
   },
   "M2-on": {
-   "input": 159508,
-   "proof": 47503,
-   "row": 4823000
+   "input": 159502,
+   "proof": 47497,
+   "row": 3376000
   },
   "M4-off": {
-   "input": 178258,
-   "proof": 47821,
-   "row": 5164000
+   "input": 178288,
+   "proof": 47851,
+   "row": 3436000
   },
   "M4-on": {
-   "input": 231698,
-   "proof": 63885,
-   "row": 5357000
+   "input": 231706,
+   "proof": 63893,
+   "row": 5035000
   },
   "M8-off": {
    "input": 287716,
    "proof": 64607,
-   "row": 6941000
+   "row": 6375000
   },
   "M8-on": {
-   "input": 341287,
-   "proof": 80290,
+   "input": 341285,
+   "proof": 80288,
    "row": 8030000
   },
   "REFRESH": {
-   "input": 102016,
-   "proof": 45819,
-   "row": 4840000
+   "input": 102030,
+   "proof": 45833,
+   "row": 3335000
   },
   "REGISTER": {
-   "input": 48914,
-   "proof": 30381,
-   "row": 3504000
+   "input": 48912,
+   "proof": 30379,
+   "row": 2093000
   },
   "TRANSFER": {
-   "input": 139979,
-   "proof": 46662,
-   "row": 7032000
+   "input": 139977,
+   "proof": 46660,
+   "row": 3302000
   },
   "TRANSFER0": {
-   "input": 121086,
-   "proof": 46329,
-   "row": 6790000
+   "input": 121069,
+   "proof": 46312,
+   "row": 3143000
   }
  },
  "set": "n2304-kmax4096",
- "source": "smartcontracts/evm/script/pqz/gas-inputs.py: the set's vectors (proof_pqz*.json), chain/engine-pqz-provisional-n2304.json (provisional rows, testnet only until Task 9)"
+ "source": "smartcontracts/evm/script/pqz/gas-inputs.py: the set's vectors (proof_pqz*.json), chain/engine-pqz.json (calibrated rows, 2026-11-15)"
 }

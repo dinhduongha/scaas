@@ -901,6 +901,13 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr
    [CTR-UA-33](contracts/accounts.md#CTR-UA-33); an `msig`: the `pop` from its `UAMemberSig` events, checked against `memberSigHashOf` / `popOf`,
    [CTR-UA-33](contracts/accounts.md#CTR-UA-33) A; [CTR-UA-31](contracts/accounts.md#CTR-UA-31)); later KEM versions come by `setKemKey`
    ([CTR-UA-32](contracts/accounts.md#CTR-UA-32)), a PQZ key by `setPqzKey` — ordinary `call` jobs, no fee.
+   **ML-DSA without a precompile** (owner 2026-11-15; contracts BUILT on `3zh-mldsa`; the node and client side SPECIFIED,
+   [NODE-JOB-29](node/job-api.md#NODE-JOB-29), built in the ua-rs-sign port round): on a registry whose `mldsa44` / `mldsa65` /
+   `mldsa87` verifier has no precompile (the deploy JSON's `mldsa<x>_path` = `cache`), `register` needs the key's expanded-key cache
+   first: `cacheExpandedKey(kind, pk, part)` for each of its 1 / 2 / 3 parts (anyone, no signature, one 40–48 M-gas transaction
+   each, idempotent), else it reverts `UAKeyNotCached(ua)`. Cache, then register, on each chain where the key is used. Until
+   NODE-JOB-29 is built the node does not send the parts: a relayed registration of such a key needs them sent first by the subject
+   or a sponsor. A UA id can receive no tokens before it is registered (`UANotRegistered`), so the order costs no funds.
 4. On the finalized `UARegistered` event the client reads `registrationOf(ua)` (the stored arguments equal what it sent; an `msig`'s `pop`
    there is `keccak256(pop)`, [CTR-UA-33](contracts/accounts.md#CTR-UA-33) A),
    `pqzKeyOf(ua).proven` and `checkedOf(ua)`, and only then marks the account usable on that chain.

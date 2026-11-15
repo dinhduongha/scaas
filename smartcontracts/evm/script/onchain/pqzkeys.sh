@@ -4,16 +4,16 @@
 # then, after ROLL_AGE + 1 blocks, `PqzKeysRoll.roll()` (its signed rollovers bind the pending slots as they are on chain).
 # Each run's negatives checked by `coverage.py neg` against the chain at its end; both runs' transactions recorded for the
 # matrix's table (records-<net>-pqzkeys.jsonl in matrix.sh's run dir). From smartcontracts/evm, under matrix.sh (local only:
-# the blocks between the runs are mined by anvil). Short lines on stdout; forge's output in the git-ignored log.
+# anvil mines the blocks between the runs; a remote chain makes them: the run waits for them, bounded). Short lines on stdout; forge's output in the git-ignored log.
 # PQZW=1: the group `pqzwallet` the same way (PqzWallet.s.sol, PqzWalletSetup.setup() then PqzWalletRoll.roll()).
 set -eu
+# --slow (one transaction per receipt) on a local chain only; a remote target sends each forge run at once (owner 2026-11-15:
+# a run is one unit, the groups stay sequential)
+SLOW=--slow; [ "${ONCHAIN_REMOTE:-0}" != 1 ] || SLOW=
+. script/onchain/fee.sh
 : "${NET:?}" "${RPC:?}" "${ONCHAIN_K1:?}"
 GN=pqzkeys SCR=PqzKeys TS=PqzKeysSetup TR=PqzKeysRoll
 [ -z "${PQZW:-}" ] || GN=pqzwallet SCR=PqzWallet TS=PqzWalletSetup TR=PqzWalletRoll
-if [ "$NET" != local ]; then
-  echo "not run: $GN on $NET (local only: the run mines the blocks its rollovers wait for)"
-  exit 0
-fi
 OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix}
 CHAIN=$(cast chain-id --rpc-url "$RPC")
 B=broadcast/$SCR.s.sol/$CHAIN
@@ -25,11 +25,32 @@ trap 'rm -rf "$T"' EXIT INT TERM
 mkdir -p "$OUTD"
 : > "$L"
 rm -f "$R"
+# remote: the 30 s heartbeat counts the transactions on chain by the senders' nonce deltas (no --slow, runs never silent)
+SENT_A=
+if [ "${ONCHAIN_REMOTE:-0}" = 1 ]; then
+  for k in "${PRIVATE_KEY:-}" "${ONCHAIN_K1:-}" "${ONCHAIN_K2:-}" "${ONCHAIN_K3:-}"; do
+    [ -n "$k" ] && SENT_A="$SENT_A $(cast wallet address --private-key "$k")"
+  done
+  SENT_A=$(printf '%s\n' $SENT_A | sort -u | tr '\n' ' ')
+fi
+nonces() { for a in $SENT_A; do cast nonce --rpc-url "$RPC" "$a" 2> /dev/null || echo 0; done | paste -sd+ | bc 2> /dev/null || echo 0; }
+SENT0=$( [ -n "$SENT_A" ] && nonces || echo 0)
+sent() { [ -n "$SENT_A" ] && echo ", $(( $(nonces) - SENT0 )) tx on chain" || true; }
 rc=0 runs=
 for p in setup roll; do
   if [ "$p" = roll ]; then
-    for i in 1 2 3 4 5 6; do cast rpc --rpc-url "$RPC" evm_mine > /dev/null; done
-  else
+    if [ "$NET" = local ]; then
+      for i in 1 2 3 4 5 6; do cast rpc --rpc-url "$RPC" evm_mine > /dev/null; done
+    else
+      # a remote chain: wait for 6 new blocks (ROLL_AGE + 1), at most 20 tries of 10 s (Clique period 5 s: ~30 s)
+      h0=$(cast block-number --rpc-url "$RPC"); w=0
+      while [ "$(cast block-number --rpc-url "$RPC")" -lt $((h0 + 6)) ]; do
+        w=$((w + 1)); [ "$w" -le 20 ] || { echo "[$NET/$GN] FAIL roll: 6 blocks did not come in 200 s"; exit 1; }
+        sleep 10
+      done
+      echo "[$NET/$GN] 6 blocks past setup ($h0 -> $(cast block-number --rpc-url "$RPC"))"
+    fi
+  elif [ "$NET" = local ]; then
     # a fresh head: anvil mines on demand, so after a long group before this one (pq on the copy: ~40 min) the latest
     # block's timestamp is stale, and the simulation's `block.timestamp + 1 hours` (a pause's end) is already past on chain
     cast rpc --rpc-url "$RPC" evm_mine > /dev/null
@@ -39,9 +60,10 @@ for p in setup roll; do
   echo "[$NET/$GN] $p: forge $tc …"
   t0=$(date +%s)
   rm -f "$B/$p-latest.json"
+  remote_fee "$RPC" # a remote target: a fee with headroom (fee.sh)
   # the simulation runs the whole script as one call: its ML-DSA verifications and ~600 ops pass foundry.toml's 2^33 budget
   # (a late CREATE starved); the transactions sent still ask each its own estimate
-  FOUNDRY_GAS_LIMIT=${PQZKEYS_SIM_GAS:-40000000000} ONCHAIN_NET=$NET forge script script/onchain/$SCR.s.sol --tc "$tc" --sig "$p()" --rpc-url "$RPC" --broadcast --slow \
+  FOUNDRY_GAS_LIMIT=${PQZKEYS_SIM_GAS:-40000000000} ONCHAIN_NET=$NET forge script script/onchain/$SCR.s.sol --tc "$tc" --sig "$p()" --rpc-url "$RPC" --broadcast $SLOW \
     --ffi --sender "$SENDER" --disable-code-size-limit --gas-estimate-multiplier "${ONCHAIN_GAS_MULTIPLIER:-200}" \
     --out out/onchain-pqzkeys --cache-path cache/onchain-pqzkeys > "$T/$p.log" 2>&1 &
   F=$!
@@ -49,7 +71,7 @@ for p in setup roll; do
   while kill -0 "$F" 2> /dev/null; do
     sleep 1
     i=$((i + 1))
-    [ $((i % 30)) != 0 ] || echo "[$NET/$GN] … $p, $(($(date +%s) - t0))s"
+    [ $((i % 30)) != 0 ] || echo "[$NET/$GN] … $p, $(($(date +%s) - t0))s$(sent)"
   done
   wait "$F" || rc=$?
   cat "$T/$p.log" >> "$L"

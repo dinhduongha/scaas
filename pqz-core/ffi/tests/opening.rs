@@ -7,7 +7,7 @@
 //! key handle (no function here takes the PQZ secret `s`: the check's inputs are public bytes and the opening KEM seed).
 use pqz_ffi::opening::{
     self, check_auditor, check_recipient, coins, enc_split, leg_seed, open_kem_pk, open_kem_seed, seal, taken,
-    AuditorOutcome as Ao, Credit, Party, Role, OPENING,
+    AuditorOutcome as Ao, Credit, Party, Role, SealError, Sealer, OPENING, SEALER_CAP,
 };
 use pqz_ffi::pqzl::{self, PK_BYTES};
 use pqz_ffi::stmt::{DELTA, Q};
@@ -41,18 +41,45 @@ struct Fx {
     to: [u8; 32],
     d: [u8; 16],
     seed_leg: [u8; 32],
+    /// the sender's own u_f, v_f of the same build; the readers' key versions and the auditor's UA (3zh Fable F-2)
+    own_u: Box<[u8; PK_BYTES]>,
+    own_v: [u8; 128],
+    kv_t: u64,
+    kv_a: u64,
+    aud_ua: [u8; 32],
+}
+
+/// (pk_f, pk_t, pk_a, kem_t, kem_a), built once (the Sealer's `Full` case builds 4,097 credits)
+fn keys() -> &'static (Box<[u8; PK_BYTES]>, Box<[u8; PK_BYTES]>, Box<[u8; PK_BYTES]>, Vec<u8>, Vec<u8>) {
+    static K: std::sync::OnceLock<(Box<[u8; PK_BYTES]>, Box<[u8; PK_BYTES]>, Box<[u8; PK_BYTES]>, Vec<u8>, Vec<u8>)> = std::sync::OnceLock::new();
+    K.get_or_init(|| {
+        let kt = open_kem_pk(&open_kem_seed(&MNEMONIC_SEED, &TO, &CHAIN, None, 0));
+        let ka = open_kem_pk(&open_kem_seed(&[0x43; 64], &AUD, &CHAIN, None, 0));
+        (pk(1), pk(2), pk(3), kt, ka)
+    })
 }
 
 impl Fx {
     fn new(aud: bool) -> Fx {
-        let (pk_f, pk_t, pk_a) = (pk(1), pk(2), pk(3));
+        Fx::build(aud, &[9; 32], [1; 16])
+    }
+
+    /// the leg and the sender's own part from `seed_enc`, the new balance's digits `d_f`
+    fn build(aud: bool, seed_enc: &[u8; 32], d_f: [u8; 16]) -> Fx {
+        let (pk_f, pk_t, pk_a, kem_t, kem_a) = keys();
+        let (pk_t, pk_a) = (pk_t.clone(), pk_a.clone());
         let seed_t = open_kem_seed(&MNEMONIC_SEED, &TO, &CHAIN, None, 0);
         let seed_a = open_kem_seed(&[0x43; 64], &AUD, &CHAIN, None, 0);
         let d: [u8; 16] = core::array::from_fn(|i| (i as u8 * 7 + 3) % 16);
-        let s = enc_split(&pk_f, [1; 16], &TO, &pk_t, d, aud.then_some(&*pk_a), &[9; 32]).expect("enc_split");
+        let s = enc_split(pk_f, d_f, &TO, &pk_t, d, aud.then_some(&*pk_a), seed_enc).expect("enc_split");
         let mut f = Fx {
-            kem_t: open_kem_pk(&seed_t),
-            kem_a: open_kem_pk(&seed_a),
+            kem_t: kem_t.clone(),
+            kem_a: kem_a.clone(),
+            own_u: s.own.u.clone(),
+            own_v: s.own.vs[0],
+            kv_t: 0,
+            kv_a: 0,
+            aud_ua: AUD,
             pk_t,
             pk_a,
             seed_t,
@@ -72,8 +99,8 @@ impl Fx {
         f
     }
 
-    fn party<'a>(&'a self, ua: &'a [u8; 32], pk: &'a [u8; PK_BYTES], kem: &'a [u8], v: &'a [u8; 128], o: &'a [u8]) -> Party<'a> {
-        Party { ua, key_version: 0, pk, kem_pk: kem, v, opening: o }
+    fn party<'a>(&'a self, ua: &'a [u8; 32], kv: u64, pk: &'a [u8; PK_BYTES], kem: &'a [u8], v: &'a [u8; 128], o: &'a [u8]) -> Party<'a> {
+        Party { ua, key_version: kv, pk, kem_pk: kem, v, opening: o }
     }
 
     fn credit(&self) -> Credit<'_> {
@@ -81,8 +108,8 @@ impl Fx {
             chain_uid: &CHAIN,
             token: &self.token,
             u: &self.u,
-            to: self.party(&self.to, &self.pk_t, &self.kem_t, &self.v_t, &self.o_t),
-            auditor: self.aud.then(|| self.party(&AUD, &self.pk_a, &self.kem_a, &self.v_a, &self.o_a)),
+            to: self.party(&self.to, self.kv_t, &self.pk_t, &self.kem_t, &self.v_t, &self.o_t),
+            auditor: self.aud.then(|| self.party(&self.aud_ua, self.kv_a, &self.pk_a, &self.kem_a, &self.v_a, &self.o_a)),
         }
     }
 
@@ -246,6 +273,127 @@ fn auditor_outcomes() {
     let c = g.credit();
     g.o_t = seal(Role::Recipient, &c, &Party { kem_pk: &other, ..c.to }, &g.seed_leg).unwrap();
     assert_eq!(g.recipient(), None);
+}
+
+/// Review 3w-delta U2-2: the auditor's last outcome, `Unreadable` after its own opening authenticated and the leg failed
+/// (each fixture's `O_a` opens; the leg check decides): `O_a` with other coins than K3-6's, `u` off by one, `v_a` off by
+/// one e2, each resealed honestly; with the recipient's outcome beside it. Control: the honest fixture is `Read`.
+#[test]
+fn auditor_unreadable_after_opening() {
+    let f = Fx::new(true);
+    assert_eq!((f.recipient(), f.auditor()), (Some(f.d), Ao::Read(f.d))); // control
+    // O_a: a valid opening of the right seed under role 0's coins, not byte-equal to K3-6's
+    let mut g = f.clone();
+    let c = g.credit();
+    g.o_a = seal(Role::Recipient, &c, &c.auditor.unwrap(), &g.seed_leg).unwrap();
+    assert_eq!((g.recipient(), g.auditor()), (None, Ao::Unreadable), "O_a other coins");
+    // u off by one coefficient (both openings resealed over it): the expansion's u differs (step 6)
+    let mut g = f.clone();
+    set_be8(&mut g.u[..], 0, (be8(&f.u[..], 0) + 1) % Q);
+    g.reseal();
+    assert_eq!((g.recipient(), g.auditor()), (None, Ao::Unreadable), "u off by one");
+    // v_a off by one e2 (resealed): the auditor's digits fail (step 7 on v_a)
+    let mut g = f.clone();
+    set_be8(&mut g.v_a, 0, (be8(&f.v_a, 0) + 1) % Q);
+    g.reseal();
+    assert_eq!((g.recipient(), g.auditor()), (None, Ao::Unreadable), "v_a off by one e2");
+}
+
+/// Review 3w-delta U2-2: openings and opening KEM keys of the wrong shape, each against the honest fixture (control
+/// first): `None` for the recipient, `Unreadable` for the auditor, never a panic; `seal` refuses a malformed `kemPk`.
+#[test]
+fn malformed_opening_and_kem_key() {
+    let f = Fx::new(true);
+    assert_eq!((f.recipient(), f.auditor()), (Some(f.d), Ao::Read(f.d))); // control
+    for (name, len) in [("empty", 0usize), ("ct only", 1568), ("one byte short", OPENING - 1), ("one byte long", OPENING + 1)] {
+        let mut g = f.clone();
+        g.o_t.resize(len, 0);
+        assert_eq!(g.recipient(), None, "O_t {name}");
+        let mut g = f.clone();
+        g.o_a.resize(len, 0);
+        assert_eq!(g.auditor(), Ao::Unreadable, "O_a {name}");
+    }
+    let mut short = f.kem_t.clone();
+    short.truncate(100);
+    let mut scheme = f.kem_t.clone();
+    scheme[0] = 2;
+    let mut ek_q = f.kem_t.clone();
+    ek_q[1..3].fill(0xff); // the first 12-bit ek coefficient 0xfff >= q
+    let mut long = f.kem_t.clone();
+    long.push(0);
+    for (name, kem) in [("100 bytes", &short), ("scheme 2", &scheme), ("ek coefficient >= q", &ek_q), ("one byte long", &long)] {
+        let mut g = f.clone();
+        g.kem_t = kem.clone();
+        assert_eq!(g.recipient(), None, "recipient kemPk {name}");
+        let c = f.credit();
+        assert!(seal(Role::Recipient, &c, &Party { kem_pk: kem, ..c.to }, &f.seed_leg).is_none(), "seal to kemPk {name}");
+    }
+    let c = f.credit();
+    assert!(seal(Role::Recipient, &c, &c.to, &f.seed_leg).is_some()); // control
+}
+
+/// The seal-side `seed_enc` repeat guard (owner 2026-11-15; 3zh Fable F-2, F-8): the fixture's `seed_enc` ([9; 32],
+/// `Fx::new`) seals its credit's two openings (control: byte-equal to `seal`'s), again (same bytes), and nothing else:
+/// another amount, recipient UA, token, new balance (the sender's own v_f), recipient or auditor key version, or
+/// auditor UA under it is `SeedReused`; a missing auditor copy, a malformed key or a `seed_enc` that does not give the
+/// credit's `u` is `Refused`; the 4,097th distinct seed is `Full`. Each refusal leaves the table as it was.
+#[test]
+fn sealer_refuses_a_repeated_seed_enc() {
+    const SEED_ENC: [u8; 32] = [9; 32];
+    let f = Fx::new(true);
+    let mut s = Sealer::new();
+    let seal_leg = |s: &mut Sealer, g: &Fx, role| s.seal_leg(&SEED_ENC, role, &g.credit(), &g.own_u, &g.own_v);
+    assert_eq!(seal_leg(&mut s, &f, Role::Recipient), Ok(f.o_t.clone()), "control: O_t");
+    assert_eq!(seal_leg(&mut s, &f, Role::Auditor), Ok(f.o_a.clone()), "control: O_a");
+    assert_eq!(seal_leg(&mut s, &f, Role::Recipient), Ok(f.o_t.clone()), "the same opening again");
+    let i = f.d.iter().position(|&x| x < 15).unwrap();
+    let cases: Vec<(&str, Fx)> = vec![
+        ("another amount", { let mut g = f.clone(); set_be8(&mut g.v_t, i, (be8(&f.v_t, i) + DELTA as u64) % Q); g }),
+        ("another recipient UA", { let mut g = f.clone(); g.to = [0x12; 32]; g }),
+        ("another token", { let mut g = f.clone(); g.token = [0x71; 20]; g }),
+        ("another new balance (v_f)", Fx::build(true, &SEED_ENC, [2; 16])),
+        ("another recipient key version", { let mut g = f.clone(); g.kv_t = 1; g }),
+        ("another auditor key version", { let mut g = f.clone(); g.kv_a = 1; g }),
+        ("another auditor UA", { let mut g = f.clone(); g.aud_ua = [0xA1; 32]; g }),
+    ];
+    for (name, g) in &cases {
+        for role in [Role::Recipient, Role::Auditor] {
+            assert_eq!(seal_leg(&mut s, g, role), Err(SealError::SeedReused), "{name} ({role:?})");
+        }
+    }
+    assert_ne!(cases[3].1.own_v, f.own_v, "the new balance changes v_f");
+    assert_eq!(cases[3].1.u, f.u, "... and not the leg");
+    assert_eq!(seal_leg(&mut s, &f, Role::Recipient), Ok(f.o_t.clone()), "the first credit still seals");
+    // Refused: no auditor copy; a malformed key; another seed_enc than the credit's (a fresh table each, so the guard is
+    // not what refuses)
+    let g = Fx::new(false);
+    assert_eq!(seal_leg(&mut Sealer::new(), &g, Role::Auditor), Err(SealError::Refused), "no auditor copy");
+    let mut g = f.clone();
+    g.kem_t[0] = 2;
+    assert_eq!(seal_leg(&mut Sealer::new(), &g, Role::Recipient), Err(SealError::Refused), "scheme 2");
+    let mut s2 = Sealer::new();
+    assert_eq!(s2.seal_leg(&[8; 32], Role::Recipient, &f.credit(), &f.own_u, &f.own_v), Err(SealError::Refused), "seed_enc not the credit's");
+    assert_eq!(seal_leg(&mut s2, &f, Role::Recipient), Ok(f.o_t.clone()), "... and the refusal took no slot");
+    // Full: SEALER_CAP distinct seeds (each with its own credit) fit, the next one is refused, a known one still seals
+    let mut s = Sealer::new();
+    let seed = |k: u32| {
+        let mut e = [0u8; 32];
+        e[..4].copy_from_slice(&k.to_be_bytes());
+        e[4] = 1;
+        e
+    };
+    for k in 0..=SEALER_CAP as u32 {
+        let e = seed(k);
+        let g = Fx::build(false, &e, [1; 16]);
+        let r = s.seal_leg(&e, Role::Recipient, &g.credit(), &g.own_u, &g.own_v);
+        if k < SEALER_CAP as u32 {
+            assert_eq!(r, Ok(g.o_t.clone()), "seed {k}");
+        } else {
+            assert_eq!(r, Err(SealError::Full), "the 4,097th seed");
+        }
+    }
+    let g = Fx::build(false, &seed(0), [1; 16]);
+    assert_eq!(s.seal_leg(&seed(0), Role::Recipient, &g.credit(), &g.own_u, &g.own_v), Ok(g.o_t.clone()), "a known seed when full");
 }
 
 /// A small-order X25519 point as E: skipped (the same outcome), and refused as a recipient key by seal.
