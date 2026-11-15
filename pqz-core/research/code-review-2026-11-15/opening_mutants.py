@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# opening.rs mutants (review 3w-delta U2-2): each applied alone, the opening test run, the source restored
+# opening.rs mutants (review 3w-delta U2-2; Se*: the seal-side seed_enc guard): each applied alone, the opening test run, the source restored
 # usage (from the repo root, under scripts/capped): python3 -I <this> pqz-core/ffi <log>; restores the source after each run
 import subprocess, sys, pathlib
 root = pathlib.Path(sys.argv[1])  # pqz-core/ffi
@@ -14,6 +14,12 @@ M = [
   "    let (ct, rest)"),
  ("Mc seal: kemPk length check removed", "    if kem_pk.len() != KEM_PK || kem_pk[0] != 1 {", "    if kem_pk[0] != 1 {"),
  ("Md seal: scheme check removed", "    if kem_pk.len() != KEM_PK || kem_pk[0] != 1 {", "    if kem_pk.len() != KEM_PK {"),
+ ("Se1 Sealer: fingerprint comparison removed",
+  "            Some(f) if *f != fp => return Err(SealError::SeedReused),", "            Some(f) if false && *f != fp => return Err(SealError::SeedReused),"),
+ ("Se2 Sealer: evicts when full instead of refusing",
+  "            None if self.seen.len() >= SEALER_CAP => return Err(SealError::Full),", "            None if self.seen.len() >= SEALER_CAP => self.seen.clear(),"),
+ ("Se3 Sealer: seed_leg not the credit's (another UA)",
+  "        let mut seed_leg = leg_seed(seed_enc, c.to.ua, c.to.pk);", "        let mut seed_leg = leg_seed(seed_enc, &[0u8; 32], c.to.pk);"),
 ]
 out = []
 for name, a, b in M:

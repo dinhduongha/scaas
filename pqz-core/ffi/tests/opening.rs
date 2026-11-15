@@ -7,7 +7,7 @@
 //! key handle (no function here takes the PQZ secret `s`: the check's inputs are public bytes and the opening KEM seed).
 use pqz_ffi::opening::{
     self, check_auditor, check_recipient, coins, enc_split, leg_seed, open_kem_pk, open_kem_seed, seal, taken,
-    AuditorOutcome as Ao, Credit, Party, Role, OPENING,
+    AuditorOutcome as Ao, Credit, Party, Role, SealError, Sealer, OPENING, SEALER_CAP,
 };
 use pqz_ffi::pqzl::{self, PK_BYTES};
 use pqz_ffi::stmt::{DELTA, Q};
@@ -303,6 +303,50 @@ fn malformed_opening_and_kem_key() {
     }
     let c = f.credit();
     assert!(seal(Role::Recipient, &c, &c.to, &f.seed_leg).is_some()); // control
+}
+
+/// The seal-side `seed_enc` repeat guard (owner 2026-11-15): the fixture's `seed_enc` ([9; 32], `Fx::new`) seals its
+/// credit's two openings (control: byte-equal to `seal`'s), again (same bytes), and nothing else: another amount,
+/// recipient UA or token under it is `SeedReused`; a missing auditor copy or a malformed key is `Refused`; the
+/// 4,097th distinct seed is `Full`. Each refusal leaves the table as it was.
+#[test]
+fn sealer_refuses_a_repeated_seed_enc() {
+    const SEED_ENC: [u8; 32] = [9; 32];
+    let f = Fx::new(true);
+    let mut s = Sealer::new();
+    let c = f.credit();
+    assert_eq!(s.seal_leg(&SEED_ENC, Role::Recipient, &c), Ok(f.o_t.clone()), "control: O_t");
+    assert_eq!(s.seal_leg(&SEED_ENC, Role::Auditor, &c), Ok(f.o_a.clone()), "control: O_a");
+    assert_eq!(s.seal_leg(&SEED_ENC, Role::Recipient, &c), Ok(f.o_t.clone()), "the same opening again");
+    let mut g = f.clone();
+    let i = f.d.iter().position(|&x| x < 15).unwrap();
+    set_be8(&mut g.v_t, i, (be8(&f.v_t, i) + DELTA as u64) % Q); // another amount
+    assert_eq!(s.seal_leg(&SEED_ENC, Role::Recipient, &g.credit()), Err(SealError::SeedReused), "another amount");
+    let mut g = f.clone();
+    g.to = [0x12; 32];
+    assert_eq!(s.seal_leg(&SEED_ENC, Role::Recipient, &g.credit()), Err(SealError::SeedReused), "another recipient UA");
+    let mut g = f.clone();
+    g.token = [0x71; 20];
+    assert_eq!(s.seal_leg(&SEED_ENC, Role::Auditor, &g.credit()), Err(SealError::SeedReused), "another token");
+    assert_eq!(s.seal_leg(&SEED_ENC, Role::Recipient, &c), Ok(f.o_t.clone()), "the first credit still seals");
+    // Refused: no auditor copy; a malformed key (a fresh seed, so the guard is not what refuses)
+    let g = Fx::new(false);
+    assert_eq!(Sealer::new().seal_leg(&SEED_ENC, Role::Auditor, &g.credit()), Err(SealError::Refused), "no auditor copy");
+    let mut g = f.clone();
+    g.kem_t[0] = 2;
+    assert_eq!(Sealer::new().seal_leg(&SEED_ENC, Role::Recipient, &g.credit()), Err(SealError::Refused), "scheme 2");
+    // Full: SEALER_CAP distinct seeds fit, the next one is refused, a known one still seals
+    let mut s = Sealer::new();
+    for k in 0..SEALER_CAP as u32 {
+        let mut e = [0u8; 32];
+        e[..4].copy_from_slice(&k.to_be_bytes());
+        e[4] = 1;
+        assert!(s.seal_leg(&e, Role::Recipient, &c).is_ok(), "seed {k}");
+    }
+    assert_eq!(s.seal_leg(&SEED_ENC, Role::Recipient, &c), Err(SealError::Full), "the 4,097th seed");
+    let mut e = [0u8; 32];
+    e[4] = 1;
+    assert!(s.seal_leg(&e, Role::Recipient, &c).is_ok(), "a known seed when full");
 }
 
 /// A small-order X25519 point as E: skipped (the same outcome), and refused as a recipient key by seal.
