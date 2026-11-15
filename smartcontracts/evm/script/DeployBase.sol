@@ -79,6 +79,7 @@ import {PqzBurnLib} from "../src/pqz/PqzBurnLib.sol";
 import {PqzViewLib} from "../src/pqz/PqzViewLib.sol";
 import {PqzWrappedLib} from "../src/pqz/PqzWrappedLib.sol";
 import {PqPrecompileProbe} from "./PqPrecompileProbe.sol";
+import {DeployGas} from "./DeployGas.sol";
 
 /// @notice The public-chain gate's probe (Q4): one CREATE2 of `code`, so a release that is not a call (the UA registry, its
 ///         library) is measured as its own transaction. Deployed only inside the gate's snapshot, never sent.
@@ -116,13 +117,24 @@ abstract contract DeployBase is DeployBook {
     /// @notice `DEPLOY_PQZ` env (default false; on for the SCaaS testnet, owner 2026-11-15): also the PQZ releases 4, 5, 12, 13
     ///         on this factory (`_deployPqz`), their one dependency `PQZ_KEY_VERIFIER`.
     bool internal deployPqz;
-    /// @notice `PQZ_KEY_VERIFIER` / `MLDSA87_VERIFIER` env (default 0): the verifiers whose constructors probe the chain's own
-    ///         precompiles, so forge's EVM cannot build them; `deploy.sh evm`'s first step (`script/pq_verifiers.py`, e2e.py's
-    ///         builders) deploys each by CREATE2 with `DEPLOY_SALT` on the real chain after its probe passed. The gen-1 registry
-    ///         lists `pqz-mlwe` 0x0142 and `mldsa87` 0x0134 on them; `_checkGen1Kinds` refuses a registry that misses a kind
-    ///         whose precompile the chain answers (`_pqPrecompiles`).
+    /// @notice `PQZ_KEY_VERIFIER` / `MLDSA44_VERIFIER` / `MLDSA65_VERIFIER` / `MLDSA87_VERIFIER` env (default 0): the verifiers
+    ///         whose constructors probe the chain's own precompiles, so forge's EVM cannot build them; `deploy.sh evm`'s first
+    ///         step (`script/pq_verifiers.py`, e2e.py's builders) deploys each by CREATE2 with `DEPLOY_SALT` on the real chain
+    ///         after its probe passed. The gen-1 registry lists `pqz-mlwe` 0x0142 and, with `MLDSA_PRECOMPILE=on`, the ML-DSA
+    ///         kinds 0x0130 / 0x0131 / 0x0134 on them; a registry that misses a kind whose precompile the chain answers is
+    ///         refused by name (`_pqPrecompiles`, `_mldsaVerifier`, `_checkGen1Kinds`).
     address internal pqzKeyVerifier;
+    address internal mldsa44Verifier;
+    address internal mldsa65Verifier;
     address internal mldsa87Verifier;
+    /// @notice `MLDSA_PRECOMPILE` env, `on` (default) or `off` (owner 2026-11-15, CTR-UA-23 / CTR-UA-39; a runtime flag, no
+    ///         codegen). The ML-DSA kinds have two paths only: `on` = the chain's EIP-8355 precompile where its probe passes
+    ///         (the verifier from `MLDSA<x>_VERIFIER`, or one this run's EVM probes), else, where no precompile answers, pure
+    ///         Solidity on the registry's expanded-key cache; `off` = pure Solidity with the cache on every ML-DSA kind, as on
+    ///         a chain without a precompile (the `MLDSA<x>_VERIFIER` env refused). `on` is the safe default: on a chain without
+    ///         an ML-DSA precompile it deploys what `off` does, and on one with it the gate below refuses a registry that would
+    ///         miss it. The SCaaS testnet's main registry deploys `on`; the matrix's `mldsaalt` group deploys the opposite.
+    bool internal mldsaPrecompile;
     /// @notice `COMPLIANCE_ADMIN` env, a UA id (`bytes32`), required with `DEPLOY_REGULATED`, no default (round 3r, spec §6):
     ///         the canonical `ComplianceRegistry`'s first admin, native or derived (the router is its constructor argument;
     ///         CTR-AS-07, regulated-kinds spec §6.1, F-21); the registry's constructor refuses 0 (`AdminZero`).
@@ -172,27 +184,40 @@ abstract contract DeployBase is DeployBook {
     ///         1/64, so the least working caps are 4,174,074 / 5,893,303 warm, ~5 k more cold, and the caps leave ~73 k (~1.7 %) /
     ///         ~52 k (~0.9 %) over the cold minimum, pinned by `PqGas.t.sol`; ML-DSA-65's
     ///         cap keeps the treasury {mldsa65 ×3} t=2 over the budget), FN-DSA (2.27–2.35 M measured) + ~6 %,
-    ///         SLH-DSA above its 1.32 M worst case. Each ≤ 50 % of the 12 M budget (the deploy rule is ≤ 66 %, `_pqKindFits`).
+    ///         SLH-DSA above its 1.32 M worst case. Each ≤ 50 % of the 12 M budget (the deploy rule is ≤ 75 %, `_pqKindFits`).
+    ///         The margin policy of the ML-DSA caps: the least multiple of 50,000 at least 30,000 above the least working gas of
+    ///         the worst accepting input, cold pointers (round 3zh F-2, `PqGas.t.sol` asserts `max + 30,000 <= cap` over the
+    ///         `pq_kat.json` row, the `pq_signatures.json` PoP and signatures, `mldsa_cache.json`'s 16-signature batch and its
+    ///         exactly-ω-hint signature): 4,187,757 (44) and 5,910,464 (65, the ω row) measured 2026-11-15, under their caps.
     uint64 internal constant CAP_MLDSA44 = 4_250_000;
     uint64 internal constant CAP_MLDSA65 = 5_950_000;
+    /// @notice `mldsa87` without a precompile (CTR-UA-39 Q1 as rewritten by the owner 2026-11-15): `verifyCached` on its
+    ///         three-part cache; the worst accepting input (the exactly-ω-hint signature, three cold pointers) least working
+    ///         8,772,934 ± 1,000 (`PqGas.t.sol`, 2026-11-15) plus the margin policy above: 8,850,000 (spec MD-11's 8,800,000 came
+    ///         from one signature, F-2). 73.75 % of the 12 M budget (≤ 75 %, `_pqKindFits`): enabled on every EIP-7825 chain, not
+    ///         on Hedera's 10.5 M (7,875,000 at 75 %).
+    uint64 internal constant CAP_MLDSA87 = 8_850_000;
+    /// @notice The ML-DSA caps of the precompile path (`MLDSA_PRECOMPILE=on` where the probe passes): `mldsa44` / `mldsa65`
+    ///         200,000, the cap of `script/pqz/e2e.py` (`CAP_ML`, P6g; `requireAuthorized` measured 301,776 on the SCaaS
+    ///         testnet with the transaction's intrinsic and calldata); `mldsa87` 250,000, PROVISIONAL (spec 2026-11-04-mldsa87
+    ///         §4; reset 4's T-GAS on the SCaaS testnet measured ~140,360 execution, `runs/2026-11-15-scaas-testnet-reset4/tgas.py`).
+    uint64 internal constant CAP_MLDSA44_PRECOMPILE = 200_000;
+    uint64 internal constant CAP_MLDSA65_PRECOMPILE = 200_000;
     uint64 internal constant CAP_FNDSA512 = 2_500_000;
     uint64 internal constant CAP_SLHDSA128S = 1_400_000;
     /// @notice `fndsa1024` (CTR-UA-40, owner 2026-11-04): pure Solidity on every chain whose budget holds the cap at ≤ 66 % (every
     ///         budget ≥ 7,954,546). PROVISIONAL until T-GAS: the largest NIST KAT verify measured (4,932,967) + 6.4 %, the margin of
     ///         `fndsa512`'s cap (spec 2026-11-04-fndsa1024 F6).
     uint64 internal constant CAP_FNDSA1024 = 5_250_000;
-    /// @notice `mldsa87` (CTR-UA-39, owner 2026-11-04): enabled only through an ML-DSA-87 precompile in the EIP-8355 layout,
-    ///         probed at `0x14` (EIP-8355) and then at the SCaaS testnet's `MLDSA87`; without one it gets no verifier (Q1: the
-    ///         Solidity verify, ≈ 8.8 M on a cached key, fails the 66 % rule). The cap of the precompile path is a PROVISIONAL
-    ///         ESTIMATE (spec 2026-11-04-mldsa87 §4: 0.2–0.3 M; the `mldsa65` precompile path measured ≈ 236 k), measured by T-GAS on
-    ///         a chain before it is final. The probe runs in this script's EVM: forge's has no such precompile, so the SCaaS
-    ///         testnet deploys its `mldsa87` verifier the way it deploys `mldsa65`'s, outside `forge script` (P6g D15, `e2e.py`).
-    uint64 internal constant CAP_MLDSA87 = 250_000;
+    uint64 internal constant CAP_MLDSA87_PRECOMPILE = 250_000;
     /// @notice `pqz-mlwe` 0x0142 (CTR-PQZ-13): `PqzKeyVerifier`'s R_REG PoP through the `PQZ` precompile, the cap of
     ///         `script/pqz/e2e.py` (`CAP_PQZ`, the P6g gen-1 registry of the SCaaS testnet).
     uint64 internal constant CAP_PQZ_MLWE = 4_500_000;
-    address internal constant MLDSA87_EIP8355 = address(0x14);
-    address internal constant MLDSA87_SCAAS_TESTNET = 0x000000000000000000000000000000005caA0014;
+    /// @notice The ML-DSA precompile candidates, probed in order (CTR-UA-23 / CTR-UA-39): EIP-8355's `0x12` / `0x13` / `0x14`,
+    ///         then the SCaaS testnet's `MLDSA44` / `MLDSA65` / `MLDSA87` `0x…5caa0012` / `…0013` / `…0014`; `i` 0, 1, 2 = 44, 65, 87.
+    function _mldsaCandidates(uint256 i) internal pure returns (address[2] memory) {
+        return [address(uint160(0x12 + i)), address(uint160(0x5caa0012 + i))];
+    }
 
     /// @notice C5-1, NET-EVM-06. A release is one CREATE2 of the whole implementation in the registrar's transaction.
     ///         Under EIP-8037 the code deposit is state gas, `STATE_GAS_PER_BYTE` per byte of runtime, on top of the
@@ -332,7 +357,12 @@ abstract contract DeployBase is DeployBook {
         deployPqChat = vm.envOr("DEPLOY_PQCHAT", false);
         deployPqz = vm.envOr("DEPLOY_PQZ", false);
         pqzKeyVerifier = vm.envOr("PQZ_KEY_VERIFIER", address(0));
+        mldsa44Verifier = vm.envOr("MLDSA44_VERIFIER", address(0));
+        mldsa65Verifier = vm.envOr("MLDSA65_VERIFIER", address(0));
         mldsa87Verifier = vm.envOr("MLDSA87_VERIFIER", address(0));
+        bytes32 mp = keccak256(bytes(vm.envOr("MLDSA_PRECOMPILE", string("on"))));
+        require(mp == keccak256("on") || mp == keccak256("off"), "MLDSA_PRECOMPILE: on or off");
+        mldsaPrecompile = mp == keccak256("on");
         complianceAdmin = vm.envOr("COMPLIANCE_ADMIN", bytes32(0));
         require(!deployRegulated || complianceAdmin != bytes32(0), "COMPLIANCE_ADMIN: a UA id (bytes32), required with DEPLOY_REGULATED");
         factoryAdminNext = vm.envOr("FACTORY_ADMIN_NEXT", bytes32(0));
@@ -794,21 +824,91 @@ abstract contract DeployBase is DeployBook {
     ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` where
     ///         it passes the bn254 G2 check (no chain-id lock, owner ruling 2026-10-31); `zether-bls12381` with
     ///         EIP-2537 on every chain but Hedera (owner ruling 2026-10-31; `zether-bn254` is in `legacy/ua6/`, UA-6 U10); the PQ
-    ///         signing kinds (P6c; unaudited, CTR-UA-23) on every chain where the kind's cap is at most 66 % of the chain's
-    ///         verify budget (`_pqKindFits`; owner rulings 2026-10-31: no chain-id lock, 66 % instead of 50 %) — ML-DSA
-    ///         in Solidity on the registry's cached expanded key (no chain has an ML-DSA precompile yet; P6g passes chain
-    ///         7622's to the verifier's probe); `pqz-mlwe` nowhere (its verifier is P6g's). Caps: the gen-1 defaults measured in
+    ///         signing kinds (P6c; unaudited, CTR-UA-23) on every chain where the kind's cap is at most 75 % of the chain's
+    ///         verify budget (`_pqKindFits`; owner rulings 2026-10-31: no chain-id lock; 2026-11-15: 75 % instead of 66 %) —
+    ///         ML-DSA on the chain's precompile or on the registry's cached expanded key (`MLDSA_PRECOMPILE`, `_mldsaVerifier`);
+    ///         `pqz-mlwe` on `PQZ_KEY_VERIFIER` only. Caps: the gen-1 defaults measured in
     ///         `test/ua/UAGas.t.sol` and `test/ua/PqGas.t.sol` (accounts.md §1.15). A disabled kind gets no verifier
     ///         (never "registrable but unusable", CTR-UA-23). JSON `ua_registry`. **UNAUDITED.**
-    /// @notice The PQ signing kinds' deploy rule (owner ruling 2026-10-31, CTR-UA-23): the kind's cap is at most 66 % of the
-    ///         chain's verify budget, integer-exact as `cap * 100 <= budget * 66` (12 M: 7.92 M; Hedera 10.5 M: 6.93 M). The
-    ///         registry's own `cap <= budget` check is separate and unchanged.
+    /// @notice The PQ signing kinds' deploy rule (CTR-UA-23; owner ruling 2026-10-31, threshold 66 % -> 75 % by the owner
+    ///         2026-11-15): the kind's cap is at most 75 % of the chain's verify budget, integer-exact as
+    ///         `cap * 100 <= budget * 75` (12 M: 9.0 M; Hedera 10.5 M: 7,875,000). One rule on every chain, no exception: Hedera's
+    ///         budget disables the cached `mldsa87` by itself. The registry's own `cap <= budget` check is separate and unchanged.
     function _pqKindFits(uint64 cap, uint64 budget) internal pure returns (bool) {
-        return uint256(cap) * 100 <= uint256(budget) * 66;
+        return uint256(cap) * 100 <= uint256(budget) * 75;
+    }
+
+    /// @notice The verifier and cap of ML-DSA kind `i` (0, 1, 2 = `mldsa44`, `mldsa65`, `mldsa87`; owner 2026-11-15, two paths
+    ///         only). `MLDSA_PRECOMPILE=on`: the `MLDSA<x>_VERIFIER` the first step built (an `MldsaVerifier` of the kind with a
+    ///         precompile, else refused by name), or one built here when a candidate answers the probe in this run's EVM, at the
+    ///         precompile cap; a chain whose own probe passes (`answers`, `_pqPrecompiles`) with neither is refused by name
+    ///         (the gen-1 kind rule). Otherwise, and always with `off` (where `MLDSA<x>_VERIFIER` is refused), the pure-Solidity
+    ///         verifier at the cached cap: the registry verifies on its expanded-key cache only. A cap `_pqKindFits` refuses on
+    ///         `budget`: no verifier (0), the kind disabled.
+    function _mldsaVerifier(uint256 i, bool answers, uint64 budget) internal returns (address v, uint64 cap) {
+        uint16 kind = [UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.MLDSA87][i];
+        address given = [mldsa44Verifier, mldsa65Verifier, mldsa87Verifier][i];
+        string memory env = ["MLDSA44_VERIFIER", "MLDSA65_VERIFIER", "MLDSA87_VERIFIER"][i];
+        string memory hex4 = vm.toString(abi.encodePacked(kind));
+        if (!mldsaPrecompile) {
+            require(given == address(0), string.concat(env, ": set with MLDSA_PRECOMPILE=off (pure Solidity with the cache)"));
+        } else if (given != address(0)) {
+            require(given.code.length != 0 && MldsaVerifier(given).KIND() == kind && MldsaVerifier(given).PRECOMPILE() != address(0),
+                string.concat(env, ": not an MldsaVerifier(", hex4, ") with a precompile on this chain"));
+            require(given == _mldsaCreate2(i, MldsaVerifier(given).PRECOMPILE()), string.concat(env,
+                ": not this build's CREATE2 address of MldsaVerifier(", hex4, ", its precompile, pq_kat.json's probe) with DEPLOY_SALT (F-6)"));
+            cap = [CAP_MLDSA44_PRECOMPILE, CAP_MLDSA65_PRECOMPILE, CAP_MLDSA87_PRECOMPILE][i];
+            return (_pqKindFits(cap, budget) ? given : address(0), cap);
+        } else {
+            (address p, bytes memory ok, bytes memory bad) = _mldsaPrecompile(i);
+            if (p != address(0)) {
+                cap = [CAP_MLDSA44_PRECOMPILE, CAP_MLDSA65_PRECOMPILE, CAP_MLDSA87_PRECOMPILE][i];
+                if (_pqKindFits(cap, budget)) v = address(new MldsaVerifier{salt: salt}(kind, p, ok, bad));
+                return (v, cap);
+            }
+            require(!answers, string.concat("gen-1 registry: PQ precompile kind ", hex4, " the probe passes is missing (", env,
+                ": deploy.sh evm's pq-verifiers step)"));
+        }
+        cap = [CAP_MLDSA44, CAP_MLDSA65, CAP_MLDSA87][i];
+        if (_pqKindFits(cap, budget) && _cacheFits(i)) v = address(new MldsaVerifier{salt: salt}(kind, address(0), "", ""));
+    }
+
+    /// @notice F-6 (owner 2026-11-15): the CREATE2 address (`DEPLOY_SALT`, the deterministic deployer) of
+    ///         `MldsaVerifier(kind i, precompile p, pq_kat.json's EIP-8355 probe valid, invalid)` as `script/pq_verifiers.py` builds
+    ///         it; `_mldsaVerifier` requires a handed-in verifier to be exactly it (a contract that only answers the two getters is
+    ///         refused). The candidate is the one the verifier names (`PRECOMPILE()`), so both candidates are covered.
+    function _mldsaCreate2(uint256 i, address p) internal view returns (address) {
+        (bytes memory valid, bytes memory invalid) = _mldsaProbe(i);
+        bytes memory init = abi.encodePacked(type(MldsaVerifier).creationCode,
+            abi.encode([UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.MLDSA87][i], p, valid, invalid));
+        return vm.computeCreate2Address(salt, keccak256(init), CREATE2_FACTORY);
+    }
+
+    /// @notice MD-5 (owner 2026-11-15, F-5): an ML-DSA kind on the cache is enabled only if every part transaction fits this chain:
+    ///         the least working regular gas x 1.05 < 2^24 (EIP-7825) and (regular + state) x 1.05 <= the block gas limit
+    ///         (EIP-8037 inclusion, NET-EVM-06), from `DeployGas` (measured). A deploy-time check of the chain's limit as it is now:
+    ///         a later cut under it stops new keys of that kind from being cached (fail closed: no registration, so no funds), the
+    ///         chain operator's change, named in the runbook. A part that does not fit: the kind is disabled (no verifier), by name.
+    function _cacheFits(uint256 i) internal view returns (bool) {
+        uint64[3][3] memory r = DeployGas.regular();
+        uint64[3][3] memory st = DeployGas.state();
+        uint256 limit = _blockGasLimit();
+        for (uint256 p; p < PqUA.mldsaParts([UAKinds.MLDSA44, UAKinds.MLDSA65, UAKinds.MLDSA87][i]); ++p) {
+            uint256 reg = r[i][p];
+            uint256 total = (reg + st[i][p]) * 105 / 100;
+            if (reg * 105 / 100 >= TX_REGULAR_GAS_CAP || total > limit) {
+                console.log(string.concat("ML-DSA kind ", ["mldsa44", "mldsa65", "mldsa87"][i], " disabled (MD-5): cache part ",
+                    vm.toString(p), " asks regular ", vm.toString(reg), " + state ", vm.toString(uint256(st[i][p])), " x 1.05 = ",
+                    vm.toString(total), " (2^24 on the regular, block gas limit ", vm.toString(limit), ")"));
+                return false;
+            }
+        }
+        return true;
     }
 
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
         (bool bls, bool bnG2) = _precompiles();
+        (bool pqz, bool[3] memory ml) = _pqPrecompiles();
         uint64 budget = isHedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](22);
         uint256 n;
@@ -842,16 +942,11 @@ abstract contract DeployBase is DeployBook {
                 UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
             );
         }
-        // the PQ signing kinds (CTR-UA-23): wherever the kind's cap is at most 66 % of the chain's verify budget
-        if (_pqKindFits(CAP_MLDSA44, budget)) {
-            k[n++] = UARegistry.KindConfig(
-                UAKinds.MLDSA44, address(new MldsaVerifier{salt: salt}(UAKinds.MLDSA44, address(0), "", "")), CAP_MLDSA44
-            );
-        }
-        if (_pqKindFits(CAP_MLDSA65, budget)) {
-            k[n++] = UARegistry.KindConfig(
-                UAKinds.MLDSA65, address(new MldsaVerifier{salt: salt}(UAKinds.MLDSA65, address(0), "", "")), CAP_MLDSA65
-            );
+        // the PQ signing kinds (CTR-UA-23): wherever the kind's cap is at most 75 % of the chain's verify budget; ML-DSA on
+        // the chain's precompile or on the registry's cache (`MLDSA_PRECOMPILE`)
+        for (uint256 i; i < 2; ++i) {
+            (address v, uint64 cap) = _mldsaVerifier(i, ml[i], budget);
+            if (v != address(0)) k[n++] = UARegistry.KindConfig([UAKinds.MLDSA44, UAKinds.MLDSA65][i], v, cap);
         }
         if (_pqKindFits(CAP_FNDSA512, budget)) {
             k[n++] = UARegistry.KindConfig(
@@ -866,17 +961,9 @@ abstract contract DeployBase is DeployBook {
                 UAKinds.FNDSA1024, address(new FndsaVerifier{salt: salt}(UAKinds.FNDSA1024)), CAP_FNDSA1024
             );
         }
-        (address p87, bytes memory v87, bytes memory i87) = _mldsa87Precompile();
-        if (p87 != address(0) && _pqKindFits(CAP_MLDSA87, budget)) {
-            k[n++] = UARegistry.KindConfig(
-                UAKinds.MLDSA87, address(new MldsaVerifier{salt: salt}(UAKinds.MLDSA87, p87, v87, i87)), CAP_MLDSA87
-            );
-        } else if (mldsa87Verifier != address(0) && _pqKindFits(CAP_MLDSA87, budget)) {
-            // built on the chain by deploy.sh evm's first step (forge's EVM has no ML-DSA-87 precompile, P6g D15)
-            require(mldsa87Verifier.code.length != 0 && MldsaVerifier(mldsa87Verifier).KIND() == UAKinds.MLDSA87
-                && MldsaVerifier(mldsa87Verifier).PRECOMPILE() != address(0),
-                "MLDSA87_VERIFIER: not an MldsaVerifier(0x0134) with a precompile on this chain");
-            k[n++] = UARegistry.KindConfig(UAKinds.MLDSA87, mldsa87Verifier, CAP_MLDSA87);
+        { // `mldsa87` after the FN-DSA kinds, as before (the kind table's order moves the registry's address)
+            (address v, uint64 cap) = _mldsaVerifier(2, ml[2], budget);
+            if (v != address(0)) k[n++] = UARegistry.KindConfig(UAKinds.MLDSA87, v, cap);
         }
         if (pqzKeyVerifier != address(0) && _pqKindFits(CAP_PQZ_MLWE, budget)) {
             require(pqzKeyVerifier.code.length != 0 && PqzKeyVerifier(pqzKeyVerifier).PRECOMPILE() == PqzSafety.PQZ
@@ -893,12 +980,22 @@ abstract contract DeployBase is DeployBook {
         // same gate.
         _requireRegistryGas(isHedera, budget, smartKeyAccountImpl, k);
         reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, smartKeyAccountImpl, true, k);
-        (bool pqz, bool ml87) = _pqPrecompiles();
-        _checkGen1Kinds(reg, bls, isHedera, pqz, ml87);
+        _checkGen1Kinds(reg, bls, isHedera, pqz, ml[2] && mldsaPrecompile);
         _gate(address(reg));
         vm.serializeAddress("deploy", "ua_registry", address(reg));
         if (reg.kindEnabled(UAKinds.PQZ_MLWE)) vm.serializeAddress("deploy", "pqz_key_verifier", pqzKeyVerifier);
-        if (reg.kindEnabled(UAKinds.MLDSA87)) vm.serializeAddress("deploy", "mldsa87_verifier", mldsa87Verifier);
+        // the ML-DSA verifiers the registry lists (the matrix's `verifiers` group reads them) and the flag it was built with
+        for (uint256 i; i < k.length; ++i) {
+            uint16 kk = k[i].kind;
+            if (kk == UAKinds.MLDSA44 || kk == UAKinds.MLDSA65 || kk == UAKinds.MLDSA87) {
+                string memory lv = kk == UAKinds.MLDSA44 ? "44" : kk == UAKinds.MLDSA65 ? "65" : "87";
+                vm.serializeAddress("deploy", string.concat("mldsa", lv, "_verifier"), k[i].verifier);
+                address pc = MldsaVerifier(k[i].verifier).PRECOMPILE();
+                vm.serializeString("deploy", string.concat("mldsa", lv, "_path"), // MD-15: the path each kind took
+                    pc == address(0) ? "cache" : string.concat("precompile ", vm.toString(pc)));
+            }
+        }
+        vm.serializeString("deploy", "mldsa_precompile", mldsaPrecompile ? "on" : "off");
         vm.serializeAddress("deploy", "ua_registry_core_lib", address(UARegistryCoreLib));
         vm.serializeAddress("deploy", "ua_registry_aux_lib", address(UARegistryAuxLib));
     }
@@ -918,7 +1015,8 @@ abstract contract DeployBase is DeployBook {
     ///         `ZetherLayer`), `zether-bls12381` 0x0141; otherwise the deploy reverts before anything is sent. No
     ///         `UARegistry` change. A probe that fails (the RPC refuses the call) requires nothing (`_precompiles`).
     ///         Owner 2026-11-15: the same for the chain's own PQ precompiles (`_pqPrecompiles`): `pqz` (the `PQZ` self-test
-    ///         answers) requires `pqz-mlwe` 0x0142, `ml87` (an ML-DSA-87 precompile answers the KAT probe) `mldsa87` 0x0134.
+    ///         answers) requires `pqz-mlwe` 0x0142, `ml87` (an ML-DSA-87 precompile answers the KAT probe, with
+    ///         `MLDSA_PRECOMPILE=on`) `mldsa87` 0x0134; that the ML-DSA kinds are on the precompile is `_mldsaVerifier`'s check.
     function _checkGen1Kinds(IUARegistry reg, bool bls, bool isHedera, bool pqz, bool ml87) internal view {
         require(reg.generation() == 1, "gen-1 registry: not generation 1");
         require(!pqz || reg.kindEnabled(UAKinds.PQZ_MLWE),
@@ -934,26 +1032,50 @@ abstract contract DeployBase is DeployBook {
         }
     }
 
-    /// @notice CTR-UA-39: the first candidate (`0x14`, then the SCaaS testnet's address) that answers the `mldsa87` probe of
-    ///         `pq_kat.json` exactly (valid ⇒ the word 1, flipped ⇒ 0), with the probe inputs the verifier checks again; else 0.
-    function _mldsa87Precompile() internal view returns (address p, bytes memory valid, bytes memory invalid) {
-        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
-        valid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
-        invalid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid");
-        if (PqUA.probe(MLDSA87_EIP8355, valid, invalid)) p = MLDSA87_EIP8355;
-        else if (PqUA.probe(MLDSA87_SCAAS_TESTNET, valid, invalid)) p = MLDSA87_SCAAS_TESTNET;
+    /// @notice `PqPrecompileProbe`'s init code with the three levels' probe inputs.
+    function _pqProbeInit() internal view returns (bytes memory) {
+        (bytes memory v44, bytes memory b44) = _mldsaProbe(0);
+        (bytes memory v65, bytes memory b65) = _mldsaProbe(1);
+        (bytes memory v87, bytes memory b87) = _mldsaProbe(2);
+        return abi.encodePacked(type(PqPrecompileProbe).creationCode, abi.encode(v44, b44, v65, b65, v87, b87));
     }
 
-    /// @notice The chain's own verdict on its PQ precompiles (`PqPrecompileProbe`: the `PQZ` self-test; the `mldsa87` KAT probe
-    ///         at `0x14` or the SCaaS testnet's address), by `eth_call` with no `to` as `_precompiles`. An RPC that refuses the
-    ///         call (anvil answers, both false) requires neither kind. Tests override it.
-    function _pqPrecompiles() internal virtual returns (bool pqz, bool ml87) {
+    /// @notice The `pq_kat.json` EIP-8355 probe inputs of ML-DSA kind `i` (0, 1, 2 = 44, 65, 87): valid ⇒ the word 1, flipped ⇒ 0.
+    function _mldsaProbe(uint256 i) internal view returns (bytes memory valid, bytes memory invalid) {
         string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
-        bytes memory init = abi.encodePacked(type(PqPrecompileProbe).creationCode, abi.encode(
-            vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid"), vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid")));
-        try vm.rpc("eth_call", string.concat('[{"data":"', vm.toString(init), '","gas":"0x1c9c380"},"latest"]')) returns (bytes memory out) {
-            if (out.length == 64) (pqz, ml87) = abi.decode(out, (bool, bool));
+        string memory k = string.concat(".kinds.mldsa", ["44", "65", "87"][i]);
+        valid = vm.parseJsonBytes(kat, string.concat(k, ".eip8355_probe_valid"));
+        invalid = vm.parseJsonBytes(kat, string.concat(k, ".eip8355_probe_invalid"));
+    }
+
+    /// @notice CTR-UA-23 / CTR-UA-39: the first candidate (`_mldsaCandidates`) that answers ML-DSA kind `i`'s probe exactly in
+    ///         this run's EVM, with the probe inputs the verifier checks again; else 0 (forge's EVM: none, unless a test mocks one).
+    function _mldsaPrecompile(uint256 i) internal view returns (address p, bytes memory valid, bytes memory invalid) {
+        (valid, invalid) = _mldsaProbe(i);
+        address[2] memory c = _mldsaCandidates(i);
+        if (PqUA.probe(c[0], valid, invalid)) p = c[0];
+        else if (PqUA.probe(c[1], valid, invalid)) p = c[1];
+    }
+
+    /// @notice The chain's own verdict on its PQ precompiles (`PqPrecompileProbe`: the `PQZ` self-test; each ML-DSA kind's KAT
+    ///         probe at its candidates, `ml` = 44, 65, 87), by `eth_call` with no `to` as `_precompiles` (anvil answers: all
+    ///         false). With `MLDSA_PRECOMPILE=on` a call that fails or answers no 128 bytes refuses the deploy by name (MD-15);
+    ///         with `off` it requires no kind. Tests override it.
+    function _pqPrecompiles() internal virtual returns (bool pqz, bool[3] memory ml) {
+        bytes memory init = _pqProbeInit();
+        bool answered;
+        // gas 2^24: EIP-7825's cap, which Nethermind applies to eth_call too (F-7)
+        bytes memory out;
+        try vm.rpc("eth_call", string.concat('[{"data":"', vm.toString(init), '","gas":"0x1000000"},"latest"]')) returns (bytes memory o) {
+            out = o;
         } catch {}
+        if (out.length == 128) {
+            answered = true;
+            (pqz, ml[0], ml[1], ml[2]) = abi.decode(out, (bool, bool, bool, bool));
+        }
+        // MD-15 (owner 2026-11-15, F-7): with `on`, only an answered "no" selects the cache, never a failed probe
+        require(answered || !mldsaPrecompile,
+            "MLDSA_PRECOMPILE=on: the chain's PQ precompile probe (PqPrecompileProbe by eth_call) failed or answered no 128 bytes: refused (MD-15)");
     }
 
     /// @notice The chain's own verdict on its pairing precompiles (`UAPrecompileProbe`), asked through `eth_call` with

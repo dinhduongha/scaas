@@ -14,6 +14,7 @@ contract UAStoreProbe {
         s.keyOwner[u] = bytes32(uint256(0x72)); // 1
         s.pqzKey[u][5] = UAStore.PqzKey(address(0x73), true, true); // 2
         s.ekPtr[u][1] = address(0x74); // 3
+        s.ekPtr[u][2] = address(0x86); // 3, base + 2 since 3zh (address[3], mldsa87's third part; owner 2026-11-15)
         s.uaCount[0x75] = 0x76; // 4
         s.uaAt[0x75][7] = u; // 5
         s.reg[u].push(address(0x77)); // 6
@@ -76,6 +77,7 @@ contract UAStoreLayoutTest is Test {
         assertEq(_at(a, _m(U, 1)), 0x72, "1 keyOwner");
         assertEq(_at(a, _mm(U, 5, 2)), uint256(0x73) | 1 << 160 | 1 << 168, "2 pqzKey[ua][version]: ptr, proven, added");
         assertEq(_at(a, bytes32(uint256(_m(U, 3)) + 1)), 0x74, "3 ekPtr");
+        assertEq(_at(a, bytes32(uint256(_m(U, 3)) + 2)), 0x86, "3 ekPtr[u][2] (3zh: address[3], base + 0 and + 1 unmoved)");
         assertEq(_at(a, keccak256(abi.encode(uint256(0x75), uint256(4)))), 0x76, "4 uaCount");
         assertEq(_at(a, keccak256(abi.encode(uint256(7), keccak256(abi.encode(uint256(0x75), uint256(5)))))), uint256(U), "5 uaAt");
         assertEq(_at(a, _m(U, 6)), 1, "6 reg (length)");

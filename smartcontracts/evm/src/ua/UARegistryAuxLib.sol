@@ -6,6 +6,7 @@ import {IUARegistry} from "./IUARegistry.sol";
 import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
 import {MldsaVerifier} from "./MlDsa.sol";
+import {PqUA} from "./PqUA.sol";
 import {UARegistryCoreLib} from "./UARegistryCoreLib.sol";
 import {IUAPopVerifier} from "./IUAVerifier.sol";
 import {PqzSet} from "../pqz/PqzSet.sol";
@@ -94,25 +95,22 @@ library UARegistryAuxLib {
     /// Stores part `part` of the expanded key of `pk` under `uaOf(kind, pk)`, computed by the kind's verifier
     /// (`expandedKeyPart`) from the authenticated `pk` — never accepted from a caller (a caller-supplied expanded key
     /// allows universal forgery). Anyone may call it, before or after `register`; a part already stored is left as it
-    /// is (a front-runner stored the same bytes). Each part is one transaction (ML-DSA-65 part 1: ≈ 13.4 M gas).
+    /// is (a front-runner stored the same bytes). Each part is one transaction under EIP-7825's 2^24 regular gas (ML-DSA-44
+    /// one part, ML-DSA-65 two, ML-DSA-87 three: `PqUA.mldsaParts`; `UARegistryPq.t.sol` pins each). Without a precompile `register` needs every part
+    /// first (`UAKeyNotCached`, CTR-UA-23).
     /// Reverts `UAKeyCache(kind)` for a kind other than ML-DSA, a disabled kind, a part past the last, or a verifier
     /// that uses a precompile; `UAKeyData` for a key of the wrong length.
     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua) {
         UAStore.Layout storage s = UAStore.layout();
         address v = address(uint160(UARegistryCoreLib._cfgKind()));
-        if (
-            (kind != UAKinds.MLDSA44 && kind != UAKinds.MLDSA65) || v == address(0) || part >= _ekParts(kind)
-                || MldsaVerifier(v).PRECOMPILE() != address(0)
-        ) revert IUARegistry.UAKeyCache(kind);
+        if (part >= PqUA.mldsaParts(kind) || v == address(0) || MldsaVerifier(v).PRECOMPILE() != address(0)) {
+            revert IUARegistry.UAKeyCache(kind);
+        }
         ua = abi.decode(_core(abi.encodeWithSelector(UARegistryCoreLib.keyUa.selector, kind, pk)), (bytes32));
         if (s.ekPtr[ua][part] != address(0)) return ua;
         address ptr = SSTORE2.write(MldsaVerifier(v).expandedKeyPart(pk, part));
         s.ekPtr[ua][part] = ptr;
         emit IUARegistry.UAKeyCached(ua, kind, part, ptr);
-    }
-
-    function _ekParts(uint16 kind) private pure returns (uint256) {
-        return kind == UAKinds.MLDSA44 ? 1 : 2;
     }
 
     // ----- the PQZ proof later (UA8-D8, P8) and the PQZ key versions later (ruling A1-I1; group 3g) -----

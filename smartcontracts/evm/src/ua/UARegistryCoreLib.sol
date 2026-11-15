@@ -7,6 +7,7 @@ import {IUARegistry} from "./IUARegistry.sol";
 import {IUAPopVerifier} from "./IUAVerifier.sol";
 import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
+import {PqUA} from "./PqUA.sol";
 import {PqzSet} from "../pqz/PqzSet.sol";
 import {MldsaVerifier} from "./MlDsa.sol";
 
@@ -386,20 +387,24 @@ library UARegistryCoreLib {
             revert IUARegistry.UAKindDisabled(UAKinds.PQZ_MLWE);
         }
         if (!_holder(kind, d)) revert IUARegistry.UAPqzHolder(ua);
+        // MD-13 (owner 2026-11-15, F-1): every holder kind, a single key with its own cap (gen 1's for a record gen 1 holds)
+        if (kind != UAKinds.MSIG) {
+            return _msigDebit(gen1 ? IUARegistry(g1).verifyCap(kind) : _cfgKind() >> 160, 192 + _slotBytes(kind, 0), ua);
+        }
         // CTR-PQZ-12 (review2 C0-5, controller proposal, owner may override): an `msig` holder's worst-case
         // authorization plus the set's cheapest PQZL debit (its full relayed transaction, fee signer included) must fit
         // one transaction at the EIP-7825 cap 2^24, else every credit to it could be locked. Not the chain's own limit.
         // UA8-D12: the PQZ key only, not the KEM record. The authorization's own calldata counts too, 16 gas a byte and the EIP-7976 floor of
         // 64: `PQZ_DEBIT_MIN_GAS` holds one holder signature, which is counted again here, on the safe side.
         // CTR-UA-44 MM-14: a member that grew a level since is left out, never a revert (the key write still runs)
-        if (kind == UAKinds.MSIG) _msigDebit(_membersWorst(d, gen1 ? UAStore.SMART_KEY_1271_GAS : _nativeCap(), true), d, ua);
+        _msigDebit(_membersWorst(d, gen1 ? UAStore.SMART_KEY_1271_GAS : _nativeCap(), true), _authBytes(d, 192), ua);
     }
 
-    /// The `msig` debit bound of `_pqzHolder` on `d` (its enabled slots), `w` its `_membersWorst`: a gen-2 registry in front forwards
-    /// the whole authorization to the one that holds the record (`UAStore.via`) and holds 1/63 of it again plus the margin: counted
-    /// here. `UAPqzHolder`.
-    function _msigDebit(uint256 w, bytes memory d, bytes32 ua) internal view {
-        uint256 a = _authBytes(d, 192);
+    /// The debit bound of `_pqzHolder`: `w` the holder's worst authorization (an `msig`: its `_membersWorst` over its enabled slots;
+    /// a single key: its kind's cap), `a` its calldata bytes. A gen-2 registry in front forwards the whole authorization to the one
+    /// that holds the record (`UAStore.via`) and holds 1/63 of it again plus the margin: counted here (a single key's verifier
+    /// call holds the same, `UAStore.capped`). `UAPqzHolder`.
+    function _msigDebit(uint256 w, uint256 a, bytes32 ua) internal pure {
         uint256 debit = PqzSet.PQZ_DEBIT_MIN_GAS;
         if (w + w / 63 + SigCheck.GAS_MARGIN + debit + 16 * a > TX_GAS_CAP || debit + 64 * a > TX_GAS_CAP) revert IUARegistry.UAPqzHolder(ua);
     }
@@ -531,7 +536,7 @@ library UARegistryCoreLib {
     /// gas measured a slot and the rounding of `MSIG_UPDATE_SLOT_GAS`).
     function msigBound(bytes32 ua, bytes memory t, bytes memory stored) external {
         uint256 w = _membersWorst(t, _nativeCap(), true);
-        if (_pqEligible(t, false)) _msigDebit(w, t, ua);
+        if (_pqEligible(t, false)) _msigDebit(w, _authBytes(t, 192), ua);
         else if (_pqEligible(stored, false)) revert IUARegistry.UAPqzHolder(ua);
         uint256 n = UAStore.u16(t, 2);
         uint256 a = _authBytes(t, 192);
@@ -648,6 +653,11 @@ library UARegistryCoreLib {
         if (uint160(cfg) == 0) return UAStore.via(_pred(), ua, purpose, digest, IUARegistry.UASig("", sig, members));
         bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
         bytes memory ek = UAStore.expanded(ua, kind); // ML-DSA: a complete cache is the key the PoP verifies on
+        // CTR-UA-23 (owner 2026-11-15): without a precompile only the complete cache (the FIPS-key verify of ML-DSA-65 / -87
+        // is over EIP-7825's 2^24): every part by `cacheExpandedKey` first
+        if (ek.length == 0 && PqUA.mldsaParts(kind) != 0 && UAStore.noPrecompile(address(uint160(cfg)))) {
+            revert IUARegistry.UAKeyNotCached(ua);
+        }
         bytes memory data = ek.length != 0
             ? abi.encodeWithSelector(MldsaVerifier.verifyCached.selector, ek, message, sig)
             : abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, d, message, sig);

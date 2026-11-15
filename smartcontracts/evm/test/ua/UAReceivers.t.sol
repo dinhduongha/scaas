@@ -104,6 +104,22 @@ contract UAReceiversTest is UALedgerBase {
         assertEq(hm.totalSupply(), 1);
     }
 
+    /// Round 3zh (owner 2026-11-15, spec §6.3 "funds before register"): an ML-DSA id whose key is cached or not, but not
+    /// registered, receives nothing (`UANotRegistered`), so "cache, then register" can lock no tokens: the id exists for the
+    /// ledger only once `register` wrote its record. (PQZ and Zether credits need the receiver's registered key too:
+    /// `PqzShared.t.sol`, `ZetherUA5c.t.sol`.)
+    function test_noFundsBeforeRegister_mldsa() public {
+        bytes memory pk = new bytes(2_592);
+        pk[0] = 0x87;
+        bytes32[3] memory ids = [UAKinds.uaOf(UAKinds.MLDSA44, new bytes(1_312)), UAKinds.uaOf(UAKinds.MLDSA65, new bytes(1_952)),
+            UAKinds.uaOf(UAKinds.MLDSA87, pk)];
+        for (uint256 i; i < 3; ++i) {
+            vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, ids[i]));
+            hm.mintUA(ids[i], 1);
+        }
+        assertEq(hm.totalSupply(), 0);
+    }
+
     function test_uaMint_ledgerOff() public {
         UAMintHarness off = _harness(address(0));
         vm.expectRevert(IUALedger.UALedgerOff.selector);

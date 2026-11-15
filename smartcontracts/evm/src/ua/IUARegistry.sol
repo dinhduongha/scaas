@@ -182,7 +182,10 @@ interface IUARegistry is IERC5267 {
     error UAPqzHolder(bytes32 ua); // UA-6 U3: this UA's kind / structure may not hold a PQZ key
     error UAPoP();
     error UAUnauthorized(bytes32 ua); // also: ua is unregistered
-    error UAKeyCache(uint16 kind); // not ML-DSA, disabled, part past the last, or the verifier uses a precompile
+    error UAKeyCache(uint16 kind); // not ML-DSA, disabled, part past the last (`PqUA.mldsaParts`), or the verifier uses a precompile
+    // ML-DSA without a precompile, a check (the registration's PoP, `requireAuthorized`) before every part of the id's cache is
+    // stored: `cacheExpandedKey` each part first (CTR-UA-23, owner 2026-11-15)
+    error UAKeyNotCached(bytes32 ua);
     error UAIndex(uint16 kind, uint256 i); // uaAt past the kind's count
     error UANotIndexed(bytes32 ua); // uaIndex of an unregistered id
     error UAKemHolder(bytes32 ua); // kind / structure may not hold a KEM key (UA8-D12)
@@ -518,12 +521,14 @@ interface IUARegistry is IERC5267 {
     function uaPage(uint16 kind, uint256 start, uint256 n) external view returns (bytes32[] memory);
     function uaIndex(bytes32 ua) external view returns (uint256); // UANotIndexed if unregistered
 
-    /// ML-DSA without a precompile (P6c): stores part `part` (ML-DSA-44: 0; ML-DSA-65: 0, 1; one transaction each) of
-    /// the EIP-8051 expanded key the registry derives from `pk` under `uaOf(kind, pk)`; PoP and verify use it once
-    /// every part is stored. Anyone may call it, before or after `register`; a stored part is never rewritten.
+    /// ML-DSA without a precompile (P6c): stores part `part` (ML-DSA-44: 0; ML-DSA-65: 0, 1; ML-DSA-87: 0, 1, 2; one
+    /// transaction each) of the EIP-8051 expanded key the registry derives from `pk` under `uaOf(kind, pk)`; PoP and verify use it once
+    /// every part is stored, and `register` needs it complete (`UAKeyNotCached`, CTR-UA-23, owner 2026-11-15). Anyone may
+    /// call it; a stored part is never rewritten.
     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua);
-    /// The stored part pointers (0 = not yet), this generation only.
-    function expandedKeyOf(bytes32 ua) external view returns (address[2] memory);
+    /// The stored part pointers (0 = not yet), this generation only; three since 3zh (ML-DSA-87's third part; the selector is
+    /// the same, the return 96 bytes instead of 64: a caller decoding two words never sees part 2).
+    function expandedKeyOf(bytes32 ua) external view returns (address[3] memory);
 
     /// UA-7 O1 (owner 2026-11-04; plan T66a): the portable check, chain-free. Reverts `UAUnauthorized(ua)` unless `auth` is the UA's
     /// portable signature over `uaMessage(kind, purposeTag, typedDigest)`, `typedDigest` a portable record's typed digest: a single key

@@ -6,6 +6,7 @@ import {envClosure} from "../helpers/ProbeModules.sol";
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {DeployHarness} from "../helpers/DeployHarness.sol";
+import {MldsaKit} from "../helpers/MldsaKit.sol";
 import {Create2Probe} from "../zether/ZetherDeploy.t.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -57,7 +58,8 @@ contract PqzKeyVerifierStandIn {
     bytes32 public constant PROOF_SYSTEM_ID = PqzSafety.PQZL_ID;
 }
 
-/// The getters `DeployBase` checks on `MLDSA87_VERIFIER` (a real one reverts `UAMldsaNoPrecompile` without one).
+/// The two getters of an `MldsaVerifier(0x0134)` on the SCaaS testnet's precompile, at an address no deploy built: since 3zh (F-6)
+/// `DeployBase` refuses it (`test_deployPqzRefusals`).
 contract Mldsa87VerifierStandIn {
     uint16 public constant KIND = 0x0134;
     address public constant PRECOMPILE = 0x000000000000000000000000000000005caA0014;
@@ -250,7 +252,7 @@ contract GovDeployTest is Test {
         h.setRegulated(true);
         h.setComplianceAdmin(address(this));
         address pqv = address(new PqzKeyVerifierStandIn());
-        address v87 = address(new Mldsa87VerifierStandIn());
+        address v87 = MldsaKit.onChain(2, 0x000000000000000000000000000000005caA0014, keccak256("scaas.deploy.v1")); // F-6
         h.setPqz(true, pqv, v87);
         h.forcePq(true, true);
         (OpenFactory f, string memory json) = h.deploy(ZUID, true, ska);
@@ -299,6 +301,12 @@ contract GovDeployTest is Test {
         h = new DeployHarness();
         h.forcePq(false, true);
         vm.expectRevert(bytes("gen-1 registry: PQ precompile kind 0x0134 the probe passes is missing (MLDSA87_VERIFIER: deploy.sh evm's pq-verifiers step)"));
+        h.deploy(ZUID, false, ska);
+        // F-6 (3zh): a verifier answering KIND and PRECOMPILE, not at this build's CREATE2 address, is refused by name
+        h = new DeployHarness();
+        h.setPqz(false, address(0), address(new Mldsa87VerifierStandIn()));
+        h.forcePq(false, true);
+        vm.expectRevert(bytes("MLDSA87_VERIFIER: not this build's CREATE2 address of MldsaVerifier(0x0134, its precompile, pq_kat.json's probe) with DEPLOY_SALT (F-6)"));
         h.deploy(ZUID, false, ska);
     }
 
@@ -649,8 +657,10 @@ contract GovDeployTest is Test {
         // 0xcc4746baCAFfD3605D7745AB8fE18CA44501f445; Fable fix2 V-1 (the vault's ERC-5267 fields 0x0b moved the constant):
         // 0xBbc8A5561C5d1877a3Cb0Bac6Ca80446BA100F5F; pqz-three-keys step 3 (the metadata hash: `IUARegistry` gains the
         // scoped PQZ key records, K3-3; its code unchanged): 0x7f00524c2b24014C7db703d89c1b16B49B3aEfeF; CTR-UA-44 (TODO 3ze; the
-        // metadata hash: `IUARegistry` gains `updateMsig`, `msigStateOf`; its code unchanged): -> this
-        assertEq(rf, 0x3a77CAC88eeFa96E89CA64154D20dc8efcaE082C, "RelayFeeRouter");
+        // metadata hash: `IUARegistry` gains `updateMsig`, `msigStateOf`; its code unchanged): 0x3a77CAC88eeFa96E89CA64154D20dc8efcaE082C;
+        // 3zh-mldsa (the metadata hash: `IUARegistry`'s `UAKeyNotCached` and `expandedKeyOf` returning `address[3]`, owner
+        // 2026-11-15; its code unchanged): -> this
+        assertEq(rf, 0x93690B9A678b7D37221D41625563fe3f2939c1be, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -724,8 +734,10 @@ contract GovDeployTest is Test {
         // 0x454bdF0b754A318ebA96d50689FB14762a255Aeb; burner-wrap-caps (round 3zb + 3zc: the chain word on 25 holder ops,
         // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply`, CTR-GOV-28 Change, CTR-GOV-30): 0xA243e3F1a8bBc3659ac69b5AE0A571b1CF0a5E1D;
         // msig-members, CTR-UA-44 (TODO 3ze; the metadata hash: `IUARegistry` gains `updateMsig`, `msigStateOf`; its code
-        // unchanged): 0x25e38E5af7B8aeF469B92cc357f56F46898FCe70. The merge pre-reset4 (both; the metadata hash): -> this
-        assertEq(router, 0xEf29EBaCe18B161338a8a0f8cF34839b233127F9, "GovernanceRouter");
+        // unchanged): 0x25e38E5af7B8aeF469B92cc357f56F46898FCe70. The merge pre-reset4 (both; the metadata hash):
+        // 0xEf29EBaCe18B161338a8a0f8cF34839b233127F9; 3zh-mldsa (the metadata hash: `IUARegistry`, `UAStore`, `PqUA`; owner
+        // 2026-11-15; its code unchanged): -> this
+        assertEq(router, 0xFf149718D2757d1afD4435AdD5c8bA80A14C2Fa4, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

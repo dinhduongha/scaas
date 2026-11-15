@@ -27,7 +27,8 @@ contract UARegistryPqzBoundTest is UARegistryBase {
     }
 
     function _pk(uint16 kind, uint256 salt) internal pure returns (bytes memory pk) {
-        uint256 len = kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32 : kind == 0x0134 ? 2592 : kind == 0x0135 ? 1793 : 16384;
+        uint256 len = kind == 0x0130 ? 1312 : kind == 0x0131 ? 1952 : kind == 0x0132 ? 897 : kind == 0x0133 ? 32 : kind == 0x0134 ? 2592
+            : kind == 0x0135 ? 1793 : 16384;
         pk = new bytes(len);
         for (uint256 i; i < len; i += 32) {
             bytes32 w = keccak256(abi.encode(kind, salt, i));
@@ -177,5 +178,70 @@ contract UARegistryPqzBoundTest is UARegistryBase {
         (d, ua, keys, ks) = _members(r2, 0x0131, 2, false, 2);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
         UACall.register(r2, UAKinds.MSIG, d, _pqzOnly(_pk(0x0142, 902)), hex"01", hex"01");
+    }
+
+    // ----- MD-13 (owner 2026-11-15, F-1): the debit bound for every holder kind -----
+
+    /// A single-key PQZ holder of `kind` on `r` with its R_REG stand-in; reverts as the registry does.
+    function _singleHolder(UARegistry r, uint16 kind) internal returns (bytes32 ua) {
+        bytes memory pk = _pk(kind, ++n);
+        ua = r.uaOf(kind, pk);
+        bytes memory pqz = _pk(0x0142, ++n);
+        bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, pqz);
+        bytes memory rReg = _sig(pqz, UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP_V2,
+            UAKinds.portableRecordDigest(ua, kind, h, UAKinds.kemRecordHash(ua, 0, ""))));
+        IUARegistry.UAAttrs memory a = UACall.attrs(pqz, keccak256(rReg), "");
+        bytes memory pop = _sig(pk, UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP_V2, _regDigest(ua, kind, a)));
+        assertEq(UACall.register(r, kind, pk, a, pop, rReg), ua);
+    }
+
+    /// The single-key bound: the kind's cap `c` with the verifier call's hold (`c / 63 + margin`), the set's cheapest debit and the
+    /// signature's calldata (192 + the signature padded to words, as an `msig` slot counts it).
+    function _singleBound(uint256 c, uint256 sigBytes) internal pure returns (uint256) {
+        return c + c / 63 + SigCheck.GAS_MARGIN + PqzSet.PQZ_DEBIT_MIN_GAS + 16 * (192 + (sigBytes + 31) / 32 * 32);
+    }
+
+    /// MD-13: a single `mldsa87` holder registers with a PQZ key at the largest cap the bound admits on this set, one gas more is
+    /// `UAPqzHolder` (before MD-13 a single key had no bound: the `msig` holders only).
+    function test_register_singleHolderBoundary_mldsa87() public {
+        uint256 lo = 400_000;
+        uint256 hi = 16_000_000;
+        while (hi - lo > 1) {
+            uint256 mid = (lo + hi) / 2;
+            if (_singleBound(mid, 4_627) <= LIM) lo = mid;
+            else hi = mid;
+        }
+        UARegistry r = _regs(address(0x5CA7009), [uint16(0x0134), 0x0132, 0x0133], [uint64(lo), 2_500_000, 1_400_000]);
+        _singleHolder(r, 0x0134);
+        UARegistry r2 = _regs(address(0x5CA700A), [uint16(0x0134), 0x0132, 0x0133], [uint64(lo + 1), 2_500_000, 1_400_000]);
+        bytes memory pk = _pk(0x0134, ++n);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, r2.uaOf(0x0134, pk)));
+        UACall.register(r2, 0x0134, pk, _pqzOnly(_pk(0x0142, 904)), hex"01", hex"01");
+        emit log_named_uint(string.concat("MD-13 ", PqzSet.NAME, ": the largest single mldsa87 holder cap"), lo);
+    }
+
+    /// MD-13 at `DeployBase`'s cached `mldsa87` cap 8,850,000: a PQZ holder only where the bound fits this set (arithmetic,
+    /// 2026-11-15: n2048-kmax1024 and n2304-kmax4096 fit, n2560-kmax16384 and n2816-kmax65536 do not: there the cached `mldsa87` is
+    /// a signing kind but not a PQZ holder, CTR-UA-16 / CTR-PQZ-12); the 65 / 44 cached caps fit every set. Same rule for a KEM
+    /// record (a KEM key alone needs no debit: registers either way).
+    function test_register_cachedHolders_thisSet() public {
+        uint64[3] memory caps = [uint64(4_250_000), 5_950_000, 8_850_000];
+        uint16[3] memory ks = [uint16(0x0130), 0x0131, 0x0134];
+        uint256[3] memory sigs = [uint256(2_420), 3_309, 4_627];
+        for (uint256 i; i < 3; ++i) {
+            UARegistry r = _regs(address(uint160(0x5CA7010 + i)), [ks[i], 0x0132, 0x0133], [caps[i], 2_500_000, 1_400_000]);
+            uint256 b = _singleBound(caps[i], sigs[i]);
+            emit log_named_uint(string.concat("MD-13 ", PqzSet.NAME, " bound kind ", vm.toString(abi.encodePacked(ks[i]))), b);
+            if (b <= LIM) {
+                _singleHolder(r, ks[i]);
+            } else {
+                bytes memory pk = _pk(ks[i], ++n);
+                vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, r.uaOf(ks[i], pk)));
+                UACall.register(r, ks[i], pk, _pqzOnly(_pk(0x0142, 905 + i)), hex"01", hex"01");
+            }
+        }
+        bool big = keccak256(bytes(PqzSet.NAME)) == keccak256("n2560-kmax16384") || keccak256(bytes(PqzSet.NAME)) == keccak256("n2816-kmax65536");
+        assertEq(_singleBound(8_850_000, 4_627) > LIM, big, "the cached mldsa87 holds a PQZ key at n2048 / n2304 only");
+        assertLe(_singleBound(5_950_000, 3_309), LIM, "the cached mldsa65 holds one at every set");
     }
 }
