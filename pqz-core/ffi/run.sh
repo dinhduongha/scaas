@@ -4,7 +4,8 @@
 #   PQZL=rust|c scripts/capped pqz-core/ffi/run.sh <label>    the PQZL backend (CTR-PQZ-09) explicitly, alone
 #                                                           (--no-default-features --features pqzl-<backend>)
 # tests (native, release, feature prove; the crate's unit tests without it), the verify-only cdylib and its symbol
-# scans, the C smoke test against pqz_ffi.h, the wasm32 builds and the native = wasm32 digest diff, the bench.
+# scans, the C smoke test against pqz_ffi.h, the wasm32 builds and the native = wasm32 digest diff, the browser wallet's
+# module (wallet-wasm/run.sh at this set: wasm = native on opening.json, its ABI and loader negatives, TODO 3zf), the bench.
 # Exit 1 if any part fails (review 3w u3-1): every command's status counts, the counts that must be 0 are checked, a
 # native != wasm32 digest diff fails.
 set -u
@@ -104,6 +105,12 @@ return $f
 }
 part ffi/wasm ffi_wasm || fail=1
 
+ffi_wallet() {
+  # its own cargo target (wallet-wasm/target/<set>, per set as PQZ_BUILD_TAG's), not this run's CARGO_TARGET_DIR
+  (unset CARGO_TARGET_DIR; wallet-wasm/run.sh "$S") > "$L-wallet.txt" 2>&1
+}
+part ffi/wallet ffi_wallet || fail=1
+
 ffi_bench() {
 /usr/bin/time -v cargo run --release --offline $BF --features prove,test-hooks --example ffi_bench "${N:-200}" > "$L-bench.jsonl" 2> "$L-bench-time.txt"
 r=$?; echo "bench rc=$r" >> "$L-bench-time.txt"; return $r
@@ -113,6 +120,7 @@ part ffi/bench ffi_bench || fail=1
 grep -hE "^# PQZL backend|^test result|FAILED|panicked|^test .* (ok|FAILED)$|rejection cases|differential:|op 7 largest|abort-freedom:|selftest hash|node faults:|verify-only |fill determinism:" "$L-test.txt"
 grep -hE "^c_abi|symbols ok|forbidden|C core in this build|NEEDED|/gmp|libm-style|\[rc=[1-9]" "$L-native.txt"
 grep -hE "native|wasm bytes|wasm run|\[rc=[1-9]" "$L-wasm.txt"
+grep -hE "cases|ℹ (tests|pass|fail)|FAIL|wallet-wasm/run.sh" "$L-wallet.txt"
 tail -2 "$L-bench.jsonl"; grep -E "bench rc|Maximum resident" "$L-bench-time.txt"
 echo "ffi/run.sh $1: $([ $fail = 0 ] && echo ok || echo FAILED)"
 exit $fail

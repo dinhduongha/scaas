@@ -154,7 +154,10 @@ inject the faults (`tests/fault.rs`, in its own process, with a denying allocato
 
 **Integration.** The C ABI needs no lock from the caller and at most 1 MiB of the caller's stack. A wasm32 wallet that
 embeds the `prove` feature must link with an 8 MiB stack (`-zstack-size=8388608`, as in `wasm/.cargo/config.toml`):
-wasm32 has no worker thread, so the core runs on the module's own stack.
+wasm32 has no worker thread, so the core runs on the module's own stack. The browser wallet's holder check is its own crate,
+`wallet-wasm/` (TODO 3zf; `opening::check_recipient` / `check_auditor` behind safe exports, loaded by `clientkeys`
+`src/pqzopenWasm.js`; [signers-clientkeys.md](../../docs/clients/signers-clientkeys.md#pqz-wallet-wasm)); `wasm/` stays the
+test harness for a trusted caller.
 
 **Self-test (P6e D13).** Op 6 (`OP_SELFTEST`, input exactly `06 00000000`) returns
 

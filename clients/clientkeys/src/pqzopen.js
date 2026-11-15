@@ -2,8 +2,8 @@
 // The PQZ three-key model on the client (spec 2026-11-13 pqz-three-keys; CLI-SGN-50, CLI-SGN-51, CTR-PQZ-38, CTR-PQZ-40):
 // the key seeds of the classes `offchain-shared` and `offchain-token` (K3-2), the opening KEM key (K3-6b), the leg seed
 // (K3-4), the opening coins and the sealed opening (K3-6), the `memoHash` that covers the openings. The holder check of K3-7
-// re-encrypts from the leg seed with PQZ arithmetic this package does not carry: it runs in pqz-ffi / ua-rs; here the opening
-// is sealed and opened, every failure the one outcome `null`. UNAUDITED.
+// re-encrypts from the leg seed with PQZ arithmetic this file does not carry: pqz-ffi runs it, natively or in the wallet
+// module (src/pqzopenWasm.js, TODO 3zf); here the opening is sealed and opened, every failure the one outcome `null`. UNAUDITED.
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { keccak_256, shake256 } from '@noble/hashes/sha3.js';
@@ -14,6 +14,7 @@ import { concatBytes, utf8ToBytes } from './bytes.js';
 import { encaps, combine, checkKemPk, kemKey } from './pqchat.js';
 import { pqzOwnTag } from './evm.js';
 import { uaMessage, portableDomainSeparator } from './ua.js';
+import { isPqzWallet, pqzUnpack } from './pqzopenWasm.js';
 
 const asBytes = (x, n, what) => {
   const b = typeof x === 'string' ? Uint8Array.from((x.startsWith('0x') ? x.slice(2) : x).match(/../g) ?? [], (h) => parseInt(h, 16)) : x;
@@ -226,7 +227,11 @@ const ACCEPTED = new WeakMap(); // acceptance object -> { handle, index, content
  *  `check(credit, verify)` runs K3-7 steps 2-4, 8 and the auditor's opening of step 9 here (the blob read, `aad`s built from the
  *  blob's own bytes, open `O_t`, `O_t` and `O_a` recomputed from `seed_leg`), then hands `seed_leg` to the binding's `verify`
  *  for the PQZ arithmetic of steps 5-7 and `v_a` (pqz-ffi `check_recipient`); `{ accepted, value }` or `{ skip }`, one outcome.
- *  `credit = { token, index, slot, code, auditor?: { ua, pk, kemPk }, reads: { block, finalized, strictMajority } }`. UNAUDITED. */
+ *  `verify` may be a wallet of `loadPqzWallet` (src/pqzopenWasm.js; TODO 3zf): the handle then hands its opening KEM seed and
+ *  the credit read from the blob (`u`, `v` unpacked, `credit.pk` the holder's own PQZ key of this version) to the module's
+ *  `check_recipient`, which runs K3-7 steps 3-9 again; `value` = `{ digits, amount }`. The seed goes to no other `verify`.
+ *  `credit = { token, index, slot, code, pk?, auditor?: { ua, pk, kemPk }, reads: { block, finalized, strictMajority } }`.
+ *  UNAUDITED. */
 export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua, version, layout }) {
   const kind = token === undefined ? 'offchain-shared' : 'offchain-token';
   const scope = token === undefined ? ZERO20 : asBytes(token, 20, 'token');
@@ -236,7 +241,8 @@ export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua
   if (!layout || !layout.pkp || !layout.vp) refuse('the set layout (pqzLayout(n, packBits)) is needed');
   const id = keccak_256(concatBytes(utf8ToBytes('scaas.pqz3k.handle.v1'), cu, scope, uaB, be64(v)));
   let pqzSeed = scopedKeySeed(seed, { account, index, chainUid: cu, token: token === undefined ? undefined : scope, version: v });
-  const k = openKemKey(openKemSeed(seed, { ua: uaB, chainUid: cu, token: token === undefined ? undefined : scope, version: v }));
+  const okSeed = openKemSeed(seed, { ua: uaB, chainUid: cu, token: token === undefined ? undefined : scope, version: v });
+  const k = openKemKey(okSeed);
   const kemPk = k.kemPk;
   const kem = { dk: k.dk, x25519Secret: k.x25519Secret };
   let loads = 0;
@@ -252,6 +258,10 @@ export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua
     const tok = asBytes(credit.token, 20, 'token');
     if (!tokenOk(tok) || !eq(b.toUA, uaB) || b.kv[0] !== v) refuse(`the credit is not this ${kind} handle's (token, recipient or key version)`);
     if (b.n === 2 && !credit.auditor) refuse('an audited leg without the auditor\'s keys (a read error, not a skip)');
+    const wallet = isPqzWallet(verify);
+    const lanes = (p) => pqzUnpack(p, layout.vp / 2);
+    if (wallet && lanes(b.pu).length !== verify.pkBytes) refuse('the wallet module is of another parameter set than the layout');
+    if (wallet && (!credit.pk || (b.n === 2 && !credit.auditor.pk))) refuse('the PQZ keys of the leg (credit.pk, auditor.pk) are needed');
     const aadT = pqzOpeningAad({ chainUid: cu, token: tok, ua: uaB, keyVersion: v, pu: b.pu, pv: b.pvt });
     const aadA = b.n === 2 ? pqzOpeningAad({ chainUid: cu, token: tok, ua: credit.auditor.ua, keyVersion: b.kv[1], pu: b.pu, pv: b.pva }) : null;
     const content = pqzEntryHash(credit.index, slot, code);
@@ -264,7 +274,12 @@ export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua
       try { oA = sealOpening({ seedLeg, role: 1, kemPk: credit.auditor.kemPk, aad: aadA }).bytes; } catch { return skip(); }
       if (!eq(oA, b.oA)) return skip(); // step 9, the auditor's opening
     }
-    const value = verify(seedLeg, { blob: b, aadT, aadA, auditor: credit.auditor ?? null }) ?? null;
+    const value = wallet
+      ? verify.checkRecipient(okSeed, { chainUid: cu, token: tok, u: lanes(b.pu),
+        to: { ua: uaB, keyVersion: v, pk: credit.pk, kemPk, v: lanes(b.pvt), opening: b.oT },
+        auditor: b.n === 2 ? { ua: credit.auditor.ua, keyVersion: b.kv[1], pk: credit.auditor.pk, kemPk: credit.auditor.kemPk,
+          v: lanes(b.pva), opening: b.oA } : null })
+      : verify(seedLeg, { blob: b, aadT, aadA, auditor: credit.auditor ?? null }) ?? null;
     if (value === null) return skip();
     const accepted = Object.freeze({ index: BigInt(credit.index), entryHash: hexOf(content) });
     ACCEPTED.set(accepted, { handle: id, index: BigInt(credit.index), content });
@@ -307,7 +322,7 @@ export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua
       return f(s);
     },
     /** Wipes both secrets; the handle refuses every entry afterwards. */
-    wipe() { if (pqzSeed) pqzSeed.fill(0); pqzSeed = null; kem.dk.fill(0); kem.x25519Secret.fill(0); },
+    wipe() { if (pqzSeed) pqzSeed.fill(0); pqzSeed = null; kem.dk.fill(0); kem.x25519Secret.fill(0); okSeed.fill(0); },
   });
 }
 

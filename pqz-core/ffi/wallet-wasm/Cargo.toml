@@ -1,0 +1,40 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+[package]
+name = "pqz-wallet-wasm"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../../LICENSE"
+publish = false
+
+# The browser wallet's K3-7 holder check (CLI-SGN-51, TODO 3zf): pqz-ffi `opening::check_recipient` / `check_auditor`
+# behind safe wasm32 exports (lib.rs states the ABI), loaded by clients/clientkeys/src/pqzopenWasm.js. Not the test
+# harness ../wasm (review P-E). No built .wasm in git: ./build.sh. UNAUDITED.
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "lib.rs"
+
+[dependencies]
+# the PQZL backend is the Rust crate (the C core is an oracle, never in a wallet)
+pqz-ffi = { path = "..", default-features = false, features = ["prove", "pqzl-rust"] }
+
+# the native case generator of the wasm = native differential (./run.sh)
+[[example]]
+name = "cases"
+path = "cases.rs"
+
+# the parameter set, forwarded to pqz-ffi (exactly one; ./build.sh: PQZ_SET)
+[features]
+default = ["set-n2304-kmax4096"]
+# BEGIN gen_set.py sets
+set-n2048-kmax1024 = ["pqz-ffi/set-n2048-kmax1024"]
+set-n2304-kmax4096 = ["pqz-ffi/set-n2304-kmax4096"]
+set-n2560-kmax16384 = ["pqz-ffi/set-n2560-kmax16384"]
+set-n2816-kmax65536 = ["pqz-ffi/set-n2816-kmax65536"]
+# END gen_set.py sets
+
+# no panic setting: native keeps unwind (pqz-ffi requires it), wasm32-unknown-unknown aborts (its default): a panic traps
+# and the loader re-instantiates the module
+[profile.release]
+codegen-units = 1
+
+[workspace]

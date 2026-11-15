@@ -647,6 +647,8 @@ def wiring():
                              for s in rs])
     p = os.path.join(CORE, "ffi", "wasm", "Cargo.toml")
     out[p] = cargo_block(p, [f'{f(s)} = ["pqz-ffi/{f(s)}"]' for s in rs])
+    p = os.path.join(CORE, "ffi", "wallet-wasm", "Cargo.toml")  # the browser wallet's module (TODO 3zf)
+    out[p] = cargo_block(p, [f'{f(s)} = ["pqz-ffi/{f(s)}"]' for s in rs])
     p = os.path.join(CORE, "fuzz", "Cargo.toml")
     out[p] = cargo_block(p, [f'{f(s)} = ["pqz-ffi/{f(s)}"]' for s in rs])
     # at most one set-<set>; none = the frozen set (a plain `cargo test` of pqz-stmt or pqzh-ligero; pqz-ffi, pqzh-ligero's
