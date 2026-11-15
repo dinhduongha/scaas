@@ -563,3 +563,5 @@ pub mod pqzfee;
 pub mod admin;
 /// The PQZ three-key model: the scoped seeds, the opening KEM seed, the leg seed, `memoHash`, `PqzRollOver` (CTR-PQZ-37 .. -41).
 pub mod pqz3k;
+/// NODE-JOB-29 (CTR-UA-23): an ML-DSA key's `cacheExpandedKey` part transactions and the cache-then-register order.
+pub mod mldsa_cache;
