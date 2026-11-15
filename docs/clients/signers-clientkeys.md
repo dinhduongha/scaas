@@ -1069,8 +1069,9 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
     to no other `verify`. A module of another set than the handle's layout, or a missing `pk`, is an error before the check.
   - **Tests** (`pqz-core/ffi/wallet-wasm/run.sh`, `mutants.py`; summary `pqz-core/ffi/runs/2026-11-15-wallet-wasm.txt`): at the
     four sets, `opening.json`'s rows rebuilt natively and checked field by field, every case (the rows and their one-change
-    variants) wasm = native, the raw ABI's and the loader's malformed inputs, the handle with a planted `u*`; 13 mutants of the
-    wrapper, loader and handle, each red. `clientkeys` `test/pqz-wallet-wasm.test.js` is skipped without the built modules
+    variants) wasm = native, the raw ABI's and the loader's malformed inputs, a trapped instance replaced, the handle with a
+    planted `u*`; 14 mutants of the wrapper, loader and handle, each red. `pqz-core/ffi/run.sh` runs it as its part
+    `ffi/wallet` at the run's set, so every gate covers it; the set lines of its `Cargo.toml` are `gen_set.py`'s. `clientkeys` `test/pqz-wallet-wasm.test.js` is skipped without the built modules
     (`PQZ_WALLET_DIR`).
 - **A skip is no reason to mark on one read** (Fable P2-1): a mark is irreversible, and the auditor's key and opening KEM key that
   decide step 9 are bound by nothing the holder signs. A wallet signs a skip mark only for a skip reproduced with the registry

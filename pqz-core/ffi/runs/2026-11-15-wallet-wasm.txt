@@ -18,3 +18,17 @@ gate ffi/run.sh ffi/test + ffi/wasm, n2560-kmax16384 | ffba31815 | 0 | 30 tests 
 gate ffi/run.sh ffi/test + ffi/wasm, n2816-kmax65536 | ffba31815 | 0 | 30 tests ok, 0 failed; native = wasm32 15 lines (no PQZH at this set)
 gate docs_check check / test_docs_check | ffba31815 | 0 | 0 errors, 7 warnings (budgets; signers-clientkeys.md was over budget before), test ok
 # ffi/native and ffi/bench were not run (resume state marked them): nothing they read changed.
+# Leftovers (owner 2026-11-15), same branch
+6 gen_set.py writes wallet-wasm/Cargo.toml's set block (output only) | 889a2dc8d | 0 | generated = hand-written byte for byte; --all --check rc 0 (94 files, 93 before); hand-edited set line rc 1; restored rc 0; no other generated file changed
+7 trap test (first instance wrapped to throw WebAssembly.RuntimeError; re-instantiated, next calls right) + mutant J6 | f33dc5e72 | 0 | -
+gate wallet-wasm/run.sh, four sets | f33dc5e72 | 0 | 26/26 tests (the trap test at each set)
+gate wallet-wasm/mutants.py | f33dc5e72 | 0 | control ok before and after; 14/14 killed (R1-R8 wrapper, J1-J3 + J5 + J6 loader, J4 handle); R1 still by the raw ABI trap, J6 by the trap test
+8 ffi/run.sh part ffi/wallet (wallet-wasm/run.sh at the run's set) | 4e9cb32b1 | 0 | -
+gate ffi/run.sh shell control, n2304-kmax4096, other parts resumed, R8 planted in lib.rs | 4e9cb32b1 | 1 | ffi/wallet FAILED (4/8 red), ffi/run.sh FAILED; lib.rs restored
+gate ffi/run.sh, n2304-kmax4096, ffi/wallet part alone (other parts resumed) | 4e9cb32b1 | 0 | 8/8, 103 cases wasm = native
+# ffi/run.sh not re-run at four sets for step 8 (owner 2026-11-15: the existing parts are unaffected). No full gate; the gate
+# of record stays 3fa153e4 plus gate-reds.
+# Mutants: R1 n <= cap dropped | R2 auditor outcomes swapped | R3 trailing bytes accepted | R4 fixed length word unchecked |
+# R5 output not zeroed | R6 input not wiped | R7 auditorOn not 0/1 taken as on | R8 skip reported accepted | J1 loader export
+# check dropped | J2 loader auditor outcomes swapped | J3 isPqzWallet true for any object | J4 handle set check dropped |
+# J5 digits not read on code 1 | J6 no re-instantiate after a trap. Each killed.
