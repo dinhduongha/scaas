@@ -31,6 +31,13 @@
 #                            the fork, capped at the RPC's block gas limit; one that needs more than that limit refuses
 #                            the plan by name (TxGasOverBlockLimit) before anything is sent. No forge estimate, no
 #                            multiplier. The PQZ kinds 4, 5, 12, 13 are deployed by script/pqz/e2e.py, not here.
+#                            Progress (owner 2026-11-15, runs never silent): short [deploy] lines on stdout: simulate
+#                            start / ok <N> txs, est gas; one line per transaction as its receipt lands (send <i>/<N>
+#                            <phase> <contract> gas <used> <address> tx <hash>; the phase from the plan: libraries,
+#                            verifiers, registry, router, factory, configureChain, releases, pqchat, zether, …); a 30 s
+#                            heartbeat; ok <N> txs <s>s book <path>; FAIL <phase> tx <i>/<N> <contract> rc <rc> <address>
+#                            tx <hash> (the transaction without a good receipt; the hash when forge recorded one). Forge's
+#                            full output in DEPLOY_LOG (default runs/<date>-deploy-<key>.log, git-ignored). Never a key.
 #                            DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether stack. DEPLOY_PQCHAT=1 adds PqChat
 #                            (plan 3c T92: its body module PqChatTopics by CREATE2, class env (3, 0) with the module in libs,
 #                            release 1, the switch on; one instance when NOTICE_PERIOD=0; JSON pqchat_topics,
@@ -84,11 +91,89 @@ case "$FAMILY" in
            J="deployments/$K.json"; [ -f "$J" ] && cp "$J" "$J.prev"
            # NET-EVM-11: Deploy.s.sol simulated on the RPC's fork, nothing sent (the JSON, the release list, the plan in
            # forge's dry-run file), then DeploySend.s.sol sends that plan, each transaction with an explicit gas limit
-           rm -f "broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" # never a stale plan
-           if forge script script/Deploy.s.sol --rpc-url "$NET" "${Z[@]}" --sender "$S" "$@" &&
-              forge script script/DeploySend.s.sol --sig 'run(string)' "broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" \
-                --rpc-url "$NET" --broadcast --slow "${Z[@]}" --sender "$S" "$@"; then rm -f "$J.prev"
-           else [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; fi
+           P="broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" B="broadcast/DeploySend.s.sol/$C/run-latest.json"
+           rm -f "$P" "$B" # never a stale plan, never a previous run's receipts
+           DL="${DEPLOY_LOG:-runs/$(date -u +%F)-deploy-$K.log}"; mkdir -p "$(dirname "$DL")"; : > "$DL"
+           W="$(mktemp)"; trap 'rm -f "$W"' EXIT
+           say() { echo "[deploy] $*"; }
+           fail() { say "FAIL $1 rc $2 (forge's output: $DL)"; [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; }
+           # prog <plan> <receipts> <state> [fail <rc>]: one line per receipt not yet seen; with fail, the line of the
+           # transaction that failed (the first status 0, else the next one)
+           prog() { python3 -I - "$@" 2>> "$DL" <<'PY2'
+import json, os, sys, time
+plan, rec, state = sys.argv[1:4]
+t = json.load(open(plan))["transactions"]
+def phase(x):
+    n, f = x.get("contractName") or "", (x.get("function") or "").split("(")[0]
+    if f == "configureChain": return "configureChain"
+    if f == "setChainEntries": return "directory entries"
+    if f in ("createToken", "transfer"): return "demo tokens"
+    if f in ("publishClassEnv", "deployImplementation", "setClassKindEnabled", "createInstance") or n.startswith("PqChat"): return "pqchat"
+    if f or "Token" in n or n.startswith("SCaaSDex"):
+        z = "Zether" in n or any("Zether" in (a.get("contractName") or "") for a in x.get("additionalContracts") or [])
+        if not z and f and phase.last in ("releases", "zether releases"):
+            return phase.last  # publishTokenEnv / setTokenKindEnabled: the release they belong to
+        return "zether releases" if z else "releases"
+    if n.endswith("Lib"): return "libraries"
+    if n.endswith("Verifier"): return "verifiers"  # the UA kind verifiers, ZetherSchnorrBls12381Verifier included
+    if n.startswith("Zether"): return "zether"
+    return {"SmartKeyAccountFactory": "SKA factory", "RelayFeeRouter": "relay fee router", "UARegistry": "registry",
+            "GovernanceRouter": "router", "ComplianceRegistry": "compliance registry", "OpenFactory": "factory"}.get(n, n or "other")
+phase.last = None
+ph = []
+for x in t:
+    ph.append(phase(x)); phase.last = ph[-1]
+st = json.load(open(state)) if os.path.getsize(state) else {"n": 0, "t": time.time(), "gas": 0}
+try:
+    r = json.load(open(rec)).get("receipts", []) if os.path.exists(rec) else []
+except ValueError:  # forge is writing it
+    r = []
+by = {x.get("hash"): x for x in t}
+for i in range(st["n"], len(r)):
+    x, tx = r[i], by.get(r[i]["transactionHash"], t[i] if i < len(t) else {})
+    a = x.get("contractAddress") or tx.get("contractAddress") or tx.get("transaction", {}).get("to")
+    name = tx.get("contractName") or (tx.get("function") or "call").split("(")[0]
+    bad = "" if x.get("status") == "0x1" else f" STATUS {x.get('status')}"
+    print(f"[deploy] send {i + 1}/{len(t)} {ph[i]} {name} gas {int(x['gasUsed'], 16)}{bad} {a} tx {x['transactionHash']}")
+    st["n"] = i + 1
+if len(sys.argv) > 5:
+    i = next((j for j, x in enumerate(r) if x.get("status") != "0x1"), len(r))
+    tx = t[i] if i < len(t) else {}
+    a = (r[i].get("contractAddress") if i < len(r) else None) or tx.get("contractAddress") or tx.get("transaction", {}).get("to") or ""
+    h = r[i]["transactionHash"] if i < len(r) else tx.get("hash")
+    name = tx.get("contractName") or (tx.get("function") or "?").split("(")[0]
+    print(f"[deploy] FAIL {ph[i] if i < len(t) else 'send'} tx {i + 1}/{len(t)} {name} rc {sys.argv[5]} {a}" + (f" tx {h}" if h else ""))
+else:
+    print(f"#{st['n']}/{len(t)}")
+json.dump(st, open(state, "w"))
+PY2
+           }
+           # follow <pid> [plan]: wait for forge, a heartbeat every 30 s; with the plan, a line per receipt as it lands
+           follow() {
+             local t0=$SECONDS h=$SECONDS c=
+             while kill -0 "$1" 2> /dev/null; do
+               sleep 2
+               [ -z "${2:-}" ] || { c="$(DL="$DL" prog "$P" "$B" "$W")"; printf '%s\n' "$c" | grep -v '^#' | grep . || true; }
+               [ $((SECONDS - h)) -lt 30 ] || { h=$SECONDS; say "… ${c:+$(printf '%s\n' "$c" | sed -n 's/^#//p'), }$((SECONDS - t0))s"; }
+             done
+             wait "$1"
+           }
+           T0=$SECONDS
+           say "simulate start chain $C $K"
+           forge script script/Deploy.s.sol --rpc-url "$NET" "${Z[@]}" --sender "$S" "$@" >> "$DL" 2>&1 &
+           follow $! || fail simulate $?
+           [ -f "$P" ] || fail simulate "1 (no plan $P)"
+           say "simulate ok $(python3 -I -c 'import json,sys; t=json.load(open(sys.argv[1]))["transactions"]; print(len(t), "txs, est gas", format(sum(int(x["transaction"].get("gas") or "0x0", 16) for x in t), ","))' "$P")"
+           forge script script/DeploySend.s.sol --sig 'run(string)' "$P" \
+             --rpc-url "$NET" --broadcast --slow "${Z[@]}" --sender "$S" "$@" >> "$DL" 2>&1 &
+           rc=0; follow $! plan || rc=$?
+           if [ "$rc" != 0 ]; then
+             DL="$DL" prog "$P" "$B" "$W" fail $rc | grep -v '^#'
+             [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; say "forge's output: $DL"; exit 1
+           fi
+           DL="$DL" prog "$P" "$B" "$W" | grep -v '^#' || true
+           rm -f "$J.prev"
+           say "ok $(python3 -I -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["receipts"]))' "$B") txs $((SECONDS - T0))s book $J"
            # NET-EVM-12: a remote deploy is source-verified on the chain's explorer, VERIFY_TARGET naming its config
            # (scaas-testnet, or VERIFY_EXPLORER / VERIFY_URL / VERIFY_API_KEY_ENV); chain 31337 or VERIFY_TARGET=local
            # is local; VERIFY=none needs VERIFY_REASON; an unconfigured target fails VERIFY_NOT_CONFIGURED (exit 1)
