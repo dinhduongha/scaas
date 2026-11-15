@@ -691,6 +691,9 @@ new with the reason. Gas pins old → new.
 ops). The factory's `noticePeriod()` of the chain decides the two-call rows: the run uses a chain with a non-zero notice for them,
 or records them as one call where it is 0. Rows that need time to pass (a window's end, the decay at H/2 and H) run on the local
 target, which advances its own clock (`evm_increaseTime`); on the SCaaS testnet the decay is checked at day 0 by the views.
+The group `wraplimits` (`script/onchain/wraplimits.sh`) also runs on a remote target in real time with a short profile set by
+the script's parameters only (owner 2026-11-15): notice 5 min, windows 5 min / 15 min, `decayDays` 1, the run waiting for
+the chain's clock between its runs; H/2 and H come 12 h and 24 h after the decay row's wrap, so those two runs follow later.
 
 | Group | Rows |
 |---|---|

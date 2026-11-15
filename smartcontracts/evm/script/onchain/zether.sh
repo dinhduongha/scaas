@@ -15,6 +15,7 @@ set -eu
 # --slow (one transaction per receipt) on a local chain only; a remote target sends each forge run at once (owner 2026-11-15:
 # a run is one unit, the groups stay sequential)
 SLOW=--slow; [ "${ONCHAIN_REMOTE:-0}" != 1 ] || SLOW=
+. script/onchain/fee.sh  # a remote target: a fee with headroom, before each forge run (fee.sh)
 command -v anvil > /dev/null || PATH=$HOME/.foundry/bin:$PATH
 : "${RPC:?}" "${NET:?}" "${PRIVATE_KEY:?}"
 export FOUNDRY_OUT=out/onchain-zether FOUNDRY_CACHE_PATH=cache/onchain-zether
@@ -30,6 +31,7 @@ has() { case "$PARTS" in *" $1 "*) return 0 ;; esac; return 1; }
 python3 -I script/onchain/zether_reg.py gen
 if has plain; then
   rm -f "broadcast/ZetherE2E.s.sol/$CHAIN/run-latest.json"
+  remote_fee "$RPC"
   RPC=$RPC ../../scripts/e2e-zether.sh > "$OUTD/zether-$NET.log" 2>&1 || rc=1
   tail -5 "$OUTD/zether-$NET.log"
 fi
@@ -38,6 +40,7 @@ fs() {
   f=$1 l=$2
   shift 2
   n0=$(grep -c 'No files changed, compilation skipped' "$l" || true) c0=$(grep -c '^Compiling' "$l" || true)
+  remote_fee "$RPC"
   forge script "$f" --rpc-url "$RPC" --ffi --disable-code-size-limit "$@" >> "$l" 2>&1 &
   p=$!
   # a remote target (ONCHAIN_REMOTE=1, matrix.sh): compiled under scripts/capped first; a recompile here is killed

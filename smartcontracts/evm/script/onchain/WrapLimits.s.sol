@@ -32,9 +32,12 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice Group `wraplimits` (group 3l T104; spec 2026-11-10-wrap-limits.md §11): the wrap and unwrap limits on hybrids of
 ///         kinds 1, 5 and 13 (the PQZ kinds in the `OFFCHAIN` verify mode: no PQZ precompile on the local chain), released by
-///         this group's own factory with `noticePeriod()` = 1 hour, so the two-call rows run. Seven forge runs on one node
-///         (`wraplimits.sh`: `setup()` here, then `p1()`..`p6()` of `WrapLimits`), the chain's clock moved between them to the
-///         time each run writes (a forge script's `vm.warp` moves only its simulation). Every transaction asks an explicit
+///         this group's own factory with a non-zero `noticePeriod()`, so the two-call rows run. Two profiles (env
+///         `WRAPLIMITS_PROFILE`, read at `setup()` and kept in the state file; owner 2026-11-15): `full` (the default, the local
+///         anvil) notice 1 hour, windows 1 hour / 1 day, decay 2 days; `short` (the SCaaS testnet, real time) notice 5 min,
+///         windows 5 min / 15 min, decay 1 day. Seven forge runs on one node (`wraplimits.sh`: `setup()` here, then
+///         `p1()`..`p6()` of `WrapLimits`), each started at or after the time the previous one wrote (anvil: the clock set to
+///         it; a remote chain: waited for; a forge script's `vm.warp` moves only its simulation). Every transaction asks an explicit
 ///         gas limit, measured first on the run's fork (`_tx`), at most 60 M. Each run's negatives are checked by
 ///         `coverage.py neg` (eth_call) against the chain at its end; each run reads the previous one's state back through
 ///         the views. Signers: test key 1 (owner, minter, lister, relayed signer), 2 (depositor, relayer), 3 (merchant and
@@ -42,7 +45,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 ///         only are printed. UNAUDITED.
 abstract contract WrapLimitsKit is OnchainBase {
     uint256 internal constant Q = 1e4; // one quantum of the 6-decimal leg (unitExp 4), in raw units
-    uint64 internal constant NOTICE = 3600; // this group's factory's noticePeriod()
     uint256 internal constant MAX_ASK = 60_000_000;
     uint256 internal constant N_K1 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
     address internal constant A5 = address(0xA5A5); // a holder with units by transfer only, no key
@@ -72,6 +74,14 @@ abstract contract WrapLimitsKit is OnchainBase {
     uint256 internal k4;
     address internal a4;
     string internal ph;
+    // the profile (`_profile`): this group's factory's noticePeriod(), the short and long windows' periods, the decay, and
+    // the margin each run adds to the time it writes for the next
+    bool internal short_;
+    uint64 internal NOTICE;
+    uint32 internal SHORT;
+    uint32 internal LONG;
+    uint16 internal DECAY;
+    uint256 internal MARGIN;
 
     function _start(string memory p, bool load) internal {
         _init("wraplimits");
@@ -80,12 +90,37 @@ abstract contract WrapLimitsKit is OnchainBase {
         k4 = uint256(keccak256(abi.encode("scaas.onchain.wraplimits.k4", k1))) % (N_K1 - 1) + 1;
         a4 = vm.addr(k4);
         if (vm.exists(_file("rows.txt"))) vm.removeFile(_file("rows.txt"));
-        if (!load) return;
+        string memory env = vm.envOr("WRAPLIMITS_PROFILE", string("full"));
+        if (!load) {
+            _profile(env);
+            return;
+        }
         string memory j = vm.readFile(_file("state.json"));
+        string memory kept = vm.parseJsonString(j, ".profile");
+        require(keccak256(bytes(vm.envOr("WRAPLIMITS_PROFILE", kept))) == keccak256(bytes(kept)),
+            string.concat("WRAPLIMITS_PROFILE differs from the setup's: ", kept));
+        _profile(kept);
         (fw, usd) = (OpenFactory(vm.parseJsonAddress(j, ".fw")), MockERC20(vm.parseJsonAddress(j, ".usd")));
         if (vm.keyExistsJson(j, ".t0")) {
             for (uint256 i; i < 3; ++i) tk[i] = vm.parseJsonAddress(j, string.concat(".t", vm.toString(i)));
         }
+    }
+
+    /// @dev The profile's values (see the kit's notice); a name other than `full` or `short` is refused by name.
+    function _profile(string memory p) internal {
+        short_ = keccak256(bytes(p)) == keccak256("short");
+        require(short_ || keccak256(bytes(p)) == keccak256("full"), string.concat("WRAPLIMITS_PROFILE: full or short, not ", p));
+        if (short_) (NOTICE, SHORT, LONG, DECAY, MARGIN) = (300, 300, 900, 1, 30);
+        else (NOTICE, SHORT, LONG, DECAY, MARGIN) = (3600, 3600, 86_400, 2, 300);
+    }
+
+    /// @dev The next run's start after a run that proposed (or released) something: the notice passed and the short windows
+    ///      this run opened ended (a window lasts at most its period + 60 s, the minute's rounding), plus the margin.
+    ///      `wraplimits.sh` adds the time its broadcast took (the transactions land after this simulation's time).
+    function _afterNotice() internal view returns (uint256) {
+        uint256 n = NOTICE;
+        uint256 w = uint256(SHORT) + 60;
+        return block.timestamp + (n > w ? n : w) + MARGIN;
     }
 
     /// @dev `deployments/wraplimits-<net>-<name>` (git-ignored): the state, this run's rows, the time of the next run.
@@ -96,6 +131,7 @@ abstract contract WrapLimitsKit is OnchainBase {
 
     /// @dev The state for the next run, the book, and `next` (0: none) the timestamp the next run starts at.
     function _save(uint256 next) internal {
+        vm.serializeString("wls", "profile", short_ ? "short" : "full");
         vm.serializeAddress("wls", "fw", address(fw));
         string memory j = vm.serializeAddress("wls", "usd", address(usd));
         _book(address(fw), "OpenFactory");
@@ -166,8 +202,20 @@ abstract contract WrapLimitsKit is OnchainBase {
         }
         uint256 need = uint256(g.gasTotalUsed) * 64 / 63 + (g.gasRefunded > 0 ? uint256(int256(g.gasRefunded)) : 0)
             + (g.gasStateUsed > 0 ? uint256(int256(g.gasStateUsed)) : 0);
+        // a plain value transfer: also the node's own estimate (forge's EVM charges a transfer to a fresh account 21,000;
+        // the SCaaS testnet's EIP-8037 state gas for the new account made it 207,391, and the ask of 130,032 ran out,
+        // 2026-11-15). Estimated with 1 wei: the amount does not change the cost, and nothing else of this run is needed.
+        if (data.length == 0 && !deploy && value != 0) {
+            uint256 node = _nodeTransferGas(from, to);
+            if (node > need) need = node;
+        }
         ask = deploy ? need * 105 / 100 : need * 130 / 100 + 100_000;
         require(ask <= MAX_ASK, string.concat(row, ": asks ", vm.toString(ask), " > 60 M"));
+    }
+
+    function _nodeTransferGas(address from, address to) internal returns (uint256) {
+        return vm.parseJsonUint(vm.rpcJson("eth_estimateGas", string.concat('[{"from":"', vm.toString(from), '","to":"',
+            vm.toString(to), '","value":"0x1"}]')), "$");
     }
 
     function _row(string memory kind, uint256 i, string memory detail) internal pure returns (string memory) {
@@ -220,21 +268,23 @@ abstract contract WrapLimitsKit is OnchainBase {
         return IWrappedToken.WrapLimit(perUser, tokenWide, period);
     }
 
-    /// @dev The configurations in the order they are set: 0 the first (the wrap side: short 100 Q per user, 200 Q
-    ///      token-wide, 1 hour; long 150 Q, 1 day), 1 + the unwrap side (30 Q / 50 Q per hour, 40 Q per day), the net rule
-    ///      and the decay over 2 days (an unwrap tightening: waits the notice), 2 + the wrapper list (a wrap tightening: at
-    ///      once), 3 the unwrap side relaxed (100 Q / 200 Q per hour, 200 Q per day: at once), 4 the wrap side relaxed (200 Q /
-    ///      400 Q per hour, 400 Q per day) + the unwrapper list (waits the notice, once for both).
+    /// @dev The configurations in the order they are set (S, L the profile's short and long periods: 1 hour, 1 day or 5 min,
+    ///      15 min): 0 the first (the wrap side: short 100 Q per user, 200 Q token-wide, per S; long 150 Q per L), 1 + the
+    ///      unwrap side (30 Q / 50 Q per S, 40 Q per L), the net rule and the decay over DECAY days (an unwrap tightening:
+    ///      waits the notice), 2 + the wrapper list (a wrap tightening: at once), 3 the unwrap side relaxed (100 Q / 200 Q per
+    ///      S, 200 Q per L: at once), 4 the wrap side relaxed (200 Q / 400 Q per S, 400 Q per L) + the unwrapper list (waits
+    ///      the notice, once for both).
     function _cfg(uint256 which)
         internal view returns (IWrappedToken.WrapLegLimits[] memory r, bool net_, bool wlist, bool ulist)
     {
         r = new IWrappedToken.WrapLegLimits[](1);
         IWrappedToken.WrapLegLimits memory l = r[0];
-        (l.underlying, l.unitExp, l.wrapShort, l.wrapLong) = (address(usd), 4, _L(100, 200, 3600), _L(150, 0, 86_400));
-        if (which >= 1) (l.decayDays, l.unwrapShort, l.unwrapLong, net_) = (2, _L(30, 50, 3600), _L(40, 0, 86_400), true);
+        (uint32 s, uint32 g) = (SHORT, LONG);
+        (l.underlying, l.unitExp, l.wrapShort, l.wrapLong) = (address(usd), 4, _L(100, 200, s), _L(150, 0, g));
+        if (which >= 1) (l.decayDays, l.unwrapShort, l.unwrapLong, net_) = (DECAY, _L(30, 50, s), _L(40, 0, g), true);
         if (which >= 2) wlist = true;
-        if (which >= 3) (l.unwrapShort, l.unwrapLong) = (_L(100, 200, 3600), _L(200, 0, 86_400));
-        if (which >= 4) (l.wrapShort, l.wrapLong, ulist) = (_L(200, 400, 3600), _L(400, 0, 86_400), true);
+        if (which >= 3) (l.unwrapShort, l.unwrapLong) = (_L(100, 200, s), _L(200, 0, g));
+        if (which >= 4) (l.wrapShort, l.wrapLong, ulist) = (_L(200, 400, s), _L(400, 0, g), true);
     }
 
     function _limHash(IWrappedToken.WrapLimit memory x) internal pure returns (bytes32) {
@@ -353,7 +403,7 @@ abstract contract WrapLimitsKit is OnchainBase {
     }
 }
 
-/// @notice Run 0 (`setup()`): this group's factory (registrar test key 1, `noticePeriod()` 1 hour, the Step 5 router), the
+/// @notice Run 0 (`setup()`): this group's factory (registrar test key 1, `noticePeriod()` the profile's, the Step 5 router), the
 ///         body modules, envs and releases of kinds 1, 5 and 13 on the Step 5 registry, the libraries forge links for this
 ///         contract (the kinds' link closures), and the leg, a 6-decimal MockERC20. The releases are usable after the notice.
 contract WrapLimitsSetup is WrapLimitsKit {
@@ -363,14 +413,15 @@ contract WrapLimitsSetup is WrapLimitsKit {
         bytes memory init = abi.encodePacked(vm.getCode("OpenFactory.sol:OpenFactory"), abi.encode(_pad(a1)));
         fw = OpenFactory(_create2(init, "fw", "factory: this group's OpenFactory"));
         _tx(k1, address(fw), 0, abi.encodeCall(OpenFactory.configureChain, (vm.parseJsonBytes32(dj, ".chain_uid"), NOTICE,
-            address(gr), address(gr).codehash, 0, bytes32(0))), false, "factory | configureChain, noticePeriod 3600 s");
+            address(gr), address(gr).codehash, 0, bytes32(0))), false,
+            string.concat("factory | configureChain, noticePeriod ", vm.toString(NOTICE), " s"));
         init = abi.encodePacked(type(MockERC20).creationCode, abi.encode("Onchain WL USD", "oWLUSD", uint8(6)));
         usd = MockERC20(_create2(init, "usd", "leg | MockERC20, 6 decimals"));
         IFactoryToken.Env memory e5 = f5.tokenEnvOf(IOpenFactory.TokenKind.WRAPPED, 1);
         for (uint256 i; i < 3; ++i) _release(i, e5);
         console2.log(string.concat("wl setup factory ", vm.toString(address(fw)), " leg ", vm.toString(address(usd)),
-            " notice ", vm.toString(fw.noticePeriod())));
-        _save(block.timestamp + NOTICE + 300);
+            " notice ", vm.toString(fw.noticePeriod()), " profile ", short_ ? "short" : "full"));
+        _save(_afterNotice());
     }
 
     function _create2(bytes memory init, string memory what, string memory row) internal returns (address a) {
@@ -434,7 +485,8 @@ contract WrapLimitsSetup is WrapLimitsKit {
 contract WrapLimits is WrapLimitsKit {
     /// p1 (the releases usable): the three hybrids, the pure-wrap refusals of bits 25-27, the first configuration
     /// (direct), the short window per user and token-wide, a relayed wrap counted on its signer, units paid away, an
-    /// unwrap tracked with no rule on, the redeemer's budgeted grant, the unwrap tightening proposed.
+    /// unwrap tracked with no rule on, the redeemer's budgeted grant, the unwrap tightening proposed (the three proposals
+    /// last and together, so their etas lie a few blocks apart: p2 confirms each in `[eta, eta + notice]`).
     function p1() external {
         _start("p1", true);
         for (uint256 i; i < 3; ++i) {
@@ -461,9 +513,10 @@ contract WrapLimits is WrapLimitsKit {
             }
         }
         for (uint256 i; i < 3; ++i) _p1(i);
+        for (uint256 i; i < 3; ++i) _propose1(i);
         // the router's negatives last: each signs the router's next nonce of key 1 at this run's end
         for (uint256 i; i < 3; ++i) _ready(i, "the unwrap tightening confirmed before the notice: GrantNotReady");
-        _save(block.timestamp + NOTICE + 300);
+        _save(_afterNotice());
     }
 
     function _p1(uint256 i) internal {
@@ -482,24 +535,35 @@ contract WrapLimits is WrapLimitsKit {
         _tx(k2, t, 0, abi.encodeWithSelector(TRANSFER, A5, 10 * Q), false, _row("transfer", i, "10 Q to A5"));
         _unwrap(k2, i, 10, "unwrap (tracked, no rule)");
         _redeemer(i, a3, 18);
-        _setLimits(i, 1, "router mtxSetWrapLimits (unwrap tighter: proposed)");
-        (, bool net_,,,, uint64 eta, bool live, uint64 delay) = IWrappedToken(t).wrapLimits();
-        require(!net_ && live && delay == NOTICE && eta >= block.timestamp + NOTICE, "p1: proposed, nothing applied");
         require(_qt(i, a2).netWrapped == 90 * Q && _qt(i, a3).redeemer && _qt(i, a3).netWrapped == 0, "p1: net and role");
-        _log(i, string.concat("proposed, eta ", vm.toString(eta)));
         _nx(a2, i, _wrapData(1), _over(0, a2, 1, 0), "a wrap over the short per-user cap: WrapLimitExceeded");
         _nx(a3, i, _wrapData(1), _capOver(0, 1, 0), "a wrap over the short token-wide cap: WrapCapExceeded");
     }
 
-    /// p2 (after the notice; the short windows ended): the tightening confirmed, the long window, the unwrap windows per
-    /// user and token-wide, the net rule, the redeemer within and over its budget, the decay row's wrap, the lister.
-    function p2() external {
-        _start("p2", true);
-        for (uint256 i; i < 3; ++i) _p2(i);
-        _save(block.timestamp + 3600 + 300);
+    function _propose1(uint256 i) internal {
+        _setLimits(i, 1, "router mtxSetWrapLimits (unwrap tighter: proposed)");
+        (, bool net_,,,, uint64 eta, bool live, uint64 delay) = IWrappedToken(tk[i]).wrapLimits();
+        require(!net_ && live && delay == NOTICE && eta >= block.timestamp + NOTICE, "p1: proposed, nothing applied");
+        _log(i, string.concat("proposed, eta ", vm.toString(eta)));
     }
 
-    function _p2(uint256 i) internal {
+    /// p2 (after the notice; the short windows ended): the tightening confirmed, the long window, the unwrap windows per
+    /// user and token-wide, the net rule, the redeemer within and over its budget, the decay row's wrap, the lister. The
+    /// three confirmations first (each in `[eta, eta + notice]`). Next: the short windows ended; the short profile also
+    /// waits for a2's long window of p1 to end (15 min: p3 reads it ended; the full profile's 1 day is still open there).
+    function p2() external {
+        _start("p2", true);
+        for (uint256 i; i < 3; ++i) _confirm1(i);
+        for (uint256 i; i < 3; ++i) _p2(i);
+        uint256 next = block.timestamp + SHORT + MARGIN;
+        for (uint256 i; short_ && i < 3; ++i) {
+            uint256 r = _qt(i, a2).wrapLong.resetAt;
+            if (r + MARGIN > next) next = r + MARGIN;
+        }
+        _save(next);
+    }
+
+    function _confirm1(uint256 i) internal {
         address t = tk[i];
         (, bool net_,,,,, bool live,) = IWrappedToken(t).wrapLimits();
         require(!net_ && live, "p2: still pending");
@@ -509,7 +573,11 @@ contract WrapLimits is WrapLimitsKit {
         _log(i, "read back: b(a2) 90 Q, b(a1) 100 Q, b(A5) 0, a2's long window 50 Q left, the token-wide short window over, pending live");
         _setLimits(i, 1, "router mtxSetWrapLimits (unwrap tighter: confirmed)");
         (IWrappedToken.WrapLegLimits[] memory legs, bool n2,,,,, bool live2,) = IWrappedToken(t).wrapLimits();
-        require(n2 && !live2 && legs[0].decayDays == 2 && legs[0].unwrapShort.perUser == 30, "p2: applied");
+        require(n2 && !live2 && legs[0].decayDays == DECAY && legs[0].unwrapShort.perUser == 30, "p2: applied");
+    }
+
+    function _p2(uint256 i) internal {
+        address t = tk[i];
         _wrap(k2, i, 50, "wrap (tracked)");
         _unwrap(k2, i, 30, "unwrap (tracked, net rule and decay)");
         _unwrap(k3, i, 15, "unwrap by the redeemer (past E, its budget)");
@@ -531,21 +599,28 @@ contract WrapLimits is WrapLimitsKit {
     }
 
     /// p3 (the windows ended): the wrapper list at once, members direct and by the router, a listed wrap, the unwrap side
-    /// relaxed at once, a relayed unwrap counted on its signer, the wrap side relaxed with the unwrapper list proposed.
+    /// relaxed at once, a relayed unwrap counted on its signer, the wrap side relaxed with the unwrapper list proposed (the
+    /// three proposals last and together, as in p1).
     function p3() external {
         _start("p3", true);
         for (uint256 i; i < 3; ++i) _p3(i);
+        for (uint256 i; i < 3; ++i) _setLimits(i, 4, "router mtxSetWrapLimits (wrap looser + unwrapper list: proposed)");
         for (uint256 i; i < 3; ++i) _ready(i, "the wrap relaxation confirmed before the notice: GrantNotReady");
-        _save(block.timestamp + NOTICE + 300);
+        _save(_afterNotice());
     }
 
     function _p3(uint256 i) internal {
         address t = tk[i];
         IWrappedToken.WrapQuota memory q = _qt(i, a4);
+        // E < b one minute after the wrap; >= 95 Q while the age is <= 5 % of H (72 min short, 144 min full): p3 runs
+        // ~1 h (full) or ~10 min (short) after a4's wrap in p2
         require(q.netWrapped == 100 * Q && q.entitlement < 100 * Q && q.entitlement >= 95 * Q, "p3: a4's line decays");
-        require(_qt(i, a2).wrapLong.left == 0 && _qt(i, a3).redeemer, "p3: p2's state read back");
-        _log(i, "read back: b(a4) 100 Q, a2's long window full, the merchant a redeemer");
-        _log(i, string.concat("a4 E after ~1 h ", vm.toString(q.entitlement)));
+        // a2's long window of p1 (150 Q, filled in p2): full (1 day) still open and full; short (15 min) ended, all left
+        IWrappedToken.WindowView memory lw = _qt(i, a2).wrapLong;
+        require((short_ ? lw.left == 150 * Q && lw.resetAt == 0 : lw.left == 0) && _qt(i, a3).redeemer, "p3: p2's state read back");
+        _log(i, string.concat("read back: b(a4) 100 Q, a2's long window ", short_ ? "ended (150 Q left)" : "full",
+            ", the merchant a redeemer"));
+        _log(i, string.concat("a4 E at p3 ", vm.toString(q.entitlement)));
         _setLimits(i, 2, "router mtxSetWrapLimits (wrap tighter: at once)");
         (, , bool wl2,,,,,) = IWrappedToken(t).wrapLimits();
         require(wl2, "p3: the wrapper list on");
@@ -566,7 +641,6 @@ contract WrapLimits is WrapLimitsKit {
         _tx(k2, t, 0, abi.encodeCall(IWrappedToken.mtxUnwrapLeg, (e, address(usd), 10 * Q, a1, 0, s)), false,
             _row("mtxUnwrapLeg relayed (tracked)", i, string.concat("signed by ", vm.toString(a1), ", 10 Q")));
         require(_qt(i, a1).unwrapShort.left == 90 * Q, "p3: the signer counted");
-        _setLimits(i, 4, "router mtxSetWrapLimits (wrap looser + unwrapper list: proposed)");
         _nx(a3, i, _wrapData(1), abi.encodeWithSelector(IWrappedToken.WrapperNotListed.selector, _pad(a3)),
             "a wrap by an id not on the wrapper list: WrapperNotListed");
         _nx(a1, i, abi.encodeCall(IGovernance.disableFeature, (WLIST, IMetaTx(tk[i]).chainUid())),
@@ -583,7 +657,7 @@ contract WrapLimits is WrapLimitsKit {
             uint256 z = _qt(i, a4).entitlementZeroAt;
             if (z > zero) zero = z;
         }
-        _save(zero - 1 days + 30); // H = 2 days: E at H/2
+        _save(zero - uint256(DECAY) * 1 days / 2 + 30); // H = DECAY days: E at H/2
     }
 
     function _p4(uint256 i) internal {

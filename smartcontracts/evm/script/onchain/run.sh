@@ -68,6 +68,8 @@ t0=$(date +%s)
 # --slow (one transaction per receipt) on a local chain only; a remote target sends each forge run at once (owner 2026-11-15:
 # a run is one unit, the groups stay sequential)
 SLOW=--slow; [ "${ONCHAIN_REMOTE:-0}" != 1 ] || SLOW=
+. script/onchain/fee.sh  # a remote target: a fee with headroom (fee.sh)
+remote_fee "$RPC"
 ONCHAIN_NET=$net forge script "script/onchain/$g.s.sol" --rpc-url "$RPC" --broadcast $SLOW \
   --out "out/onchain-$lg" --cache-path "cache/onchain-$lg" --gas-estimate-multiplier "${ONCHAIN_GAS_MULTIPLIER:-130}" "$@" \
   > "$L" 2>&1 &
