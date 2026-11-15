@@ -52,9 +52,23 @@ L=$OUTD/$lg-$net.log
 rm -f "$B"
 rc=0
 # stdout: short lines only ([net/group] start, a heartbeat every 30 s, ok / FAIL); forge's output in $L
+# remote: the 30 s heartbeat counts the transactions on chain by the senders' nonce deltas (no --slow, runs never silent)
+SENT_A=
+if [ "${ONCHAIN_REMOTE:-0}" = 1 ]; then
+  for k in "${PRIVATE_KEY:-}" "${ONCHAIN_K1:-}" "${ONCHAIN_K2:-}" "${ONCHAIN_K3:-}"; do
+    [ -n "$k" ] && SENT_A="$SENT_A $(cast wallet address --private-key "$k")"
+  done
+  SENT_A=$(printf '%s\n' $SENT_A | sort -u | tr '\n' ' ')
+fi
+nonces() { for a in $SENT_A; do cast nonce --rpc-url "$RPC" "$a" 2> /dev/null || echo 0; done | paste -sd+ | bc 2> /dev/null || echo 0; }
+SENT0=$( [ -n "$SENT_A" ] && nonces || echo 0)
+sent() { [ -n "$SENT_A" ] && echo ", $(( $(nonces) - SENT0 )) tx on chain" || true; }
 echo "[$net/$lg] forge $g.s.sol on chain $CHAIN …"
 t0=$(date +%s)
-ONCHAIN_NET=$net forge script "script/onchain/$g.s.sol" --rpc-url "$RPC" --broadcast --slow \
+# --slow (one transaction per receipt) on a local chain only; a remote target sends each forge run at once (owner 2026-11-15:
+# a run is one unit, the groups stay sequential)
+SLOW=--slow; [ "${ONCHAIN_REMOTE:-0}" != 1 ] || SLOW=
+ONCHAIN_NET=$net forge script "script/onchain/$g.s.sol" --rpc-url "$RPC" --broadcast $SLOW \
   --out "out/onchain-$lg" --cache-path "cache/onchain-$lg" --gas-estimate-multiplier "${ONCHAIN_GAS_MULTIPLIER:-130}" "$@" \
   > "$L" 2>&1 &
 F=$!
@@ -62,7 +76,7 @@ i=0
 while kill -0 "$F" 2> /dev/null; do
   sleep 1
   i=$((i + 1))
-  [ $((i % 30)) != 0 ] || echo "[$net/$lg] … forge, $(($(date +%s) - t0))s"
+  [ $((i % 30)) != 0 ] || echo "[$net/$lg] … forge, $(($(date +%s) - t0))s$(sent)"
   # a remote target (ONCHAIN_REMOTE=1, matrix.sh: compiled under scripts/capped first): no compile here, fail closed
   if [ "${ONCHAIN_REMOTE:-0}" = 1 ] && grep -q '^Compiling' "$L"; then
     kill "$F" 2> /dev/null

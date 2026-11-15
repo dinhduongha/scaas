@@ -282,6 +282,9 @@ if [ -n "$SCOPE" ]; then
     pq|pqoff)  # e2e.py's prover, pqz-ffi's example pqz_prove (feature prove; cargo does nothing when it is current)
       step "/$g" "" "" ../../scripts/capped sh -c "cd ../../pqz-core/ffi && cargo build --release --offline -j 2 --features prove --example pqz_prove" \
         || fail "cargo build pqz_prove"
+      # e2e.py's artifacts at the default set in EVM_OUT (README "Before any target"; the forwarder is pqoff's kind-13 issuer)
+      step "/$g" "" "" ../../scripts/capped env FOUNDRY_OUT="${EVM_OUT:-out/t66b-e2e}" FOUNDRY_CACHE_PATH=cache/t66b-e2e \
+        forge build src test/helpers/Mocks.sol script/onchain/OnchainForwarder.sol || fail "forge build of e2e.py's artifacts"
       say "/$g" "compiled (${SECS}s)" ;;
     rescue)
       step "/$g" "" "" ../../scripts/capped forge build src script/onchain/Rescue.s.sol --out out/onchain-rescue \
@@ -305,6 +308,7 @@ if [ -n "$SCOPE" ]; then
 fi
 python3 -I script/onchain/basebook.py "$tgt" >> "$LOG"
 rc=0
+PQZK_WHY="local only: forge's EVM has no PQZ precompile, so this chain's PqzKeyVerifier (0x0142) cannot be simulated; the precompile path runs in group pq (e2e.py); moves to e2e.py after 3zh-core group 2 (TODO 3zh)"
 STAGE=groups
 for g in $GROUPS; do
   r=0 res=ok SECS=0 why=
@@ -347,17 +351,22 @@ for g in $GROUPS; do
       step "/$g" "$RPC" "$ADDRS" env ONCHAIN_GAS_MULTIPLIER="${ONCHAIN_GAS_MULTIPLIER:-130}" sh script/onchain/rescue.sh "$tgt" || r=1
     fi ;;
   views) step "/$g" "$RPC" "" python3 -I script/onchain/coverage.py views "$tgt" "$RPC" || r=1 ;;
-  # the PQZ three-key model (spec 2026-11-13-pqz-three-keys §15.2): two forge runs, the blocks between mined (local only)
+  # the PQZ three-key model (spec 2026-11-13-pqz-three-keys §15.2): two forge runs, ROLL_AGE + 1 blocks between them (mined
+  # on anvil; pqzkeys.sh waits for them on a remote chain). Local only for now: a forge script simulates every call in
+  # forge's EVM first, which has no PQZ precompile, so a chain whose registry verifies 0x0142 on its precompile (the SCaaS
+  # testnet: PqzKeyVerifier from pq_verifiers.py) refuses in the simulation (UAPoP), nothing sent (reset 4b, 2026-11-15).
+  # The precompile path runs on such a chain in group pq (e2e.py, no simulation); pqzkeys / pqzwallet move to e2e.py after
+  # 3zh-core's group 2 (TODO 3zh, owner 2026-11-15).
   pqzkeys)
     if [ "$tgt" != local ]; then
-      res="not run" why="local only: the run mines the blocks its rollovers wait for"
+      res="not run" why="$PQZK_WHY"
     else
       step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" sh script/onchain/pqzkeys.sh || r=1
     fi ;;
-  # the wallet-side rows of the three-key model (after pqzkeys: its factory and holders), two forge runs, local only
+  # the wallet-side rows of the three-key model (after pqzkeys: its factory and holders), two forge runs
   pqzwallet)
     if [ "$tgt" != local ]; then
-      res="not run" why="local only: the run mines the blocks its rollovers wait for"
+      res="not run" why="$PQZK_WHY"
     else
       # the wallet simulator first (a remote target's compile stage builds it; a local --one runs inside scripts/capped
       # already, else through it)
