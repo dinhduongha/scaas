@@ -812,7 +812,9 @@ Below it the node refuses the job before it sends anything: `LIQUIDITY_TOO_LARGE
   this limit: it reads the block gas limit from the chain); the chainspec carries `engine.Pqz`. Health after any start: the log line `PQZ-START`
   (library SHA-256 = the image label `scaas.pqz.ffi.sha256`, self-test hash `d6c01fbc…6f68d` (images `2.2.0-pqz5` / `2.2.0-pqz6` / `2.2.0-pqz7`, set `n2304-kmax4096`; `23d7a1db…c97c0` on `2.2.0-pqz4`, `ed910a2c…d205` before), the schedules, the
   addresses), no `PQZ-REFUSE`. A node fault (D4: arena, worker) logs `PQZ-NODE-FAULT` and **exits with code 120**: the
-  block in progress is never sealed, nothing is marked invalid, and a restart re-processes it; `PQZ-INPUT-PANIC` is an
+  block in progress is never sealed, nothing is marked invalid, and a restart re-processes it; if a shutdown handler
+  blocks, the exit watchdog ends the process after 10 s with the runtime's abort status (134) and the line `PQZ-NODE-FAULT
+  exit watchdog …` instead ([CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10); branch `3zh-core`); `PQZ-INPUT-PANIC` is an
   input-caused panic answered `…00` (should never appear). `pqz-core/nethermind/chain/watch.sh <container> <rpc>
   [since]` prints the head (height, age, `gasLimit`), the container state and last exit code and counts those tags; run
   it from cron or by hand. Since 2026-10-31 every SCaaS testnet service runs `restart: unless-stopped` (owner ruling, NET-EVM-10): Docker

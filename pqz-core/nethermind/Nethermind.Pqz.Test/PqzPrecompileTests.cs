@@ -221,4 +221,30 @@ public class PqzPrecompileTests
         Assert.That(p.ExitCode, Is.EqualTo(120));
         Assert.That(err, Does.Contain("PQZ-NODE-FAULT status=4"));
     }
+
+    /// <summary>Review 3w-delta U3h-2 on the PQZ seam (the fault-hook library): a throwing logger or stderr on the worker
+    /// fault (status 4), and an exception with a throwing <c>Message</c> from the input-panic warning (Run's catch):
+    /// each exit 120, never a word; a child past its bound is killed and fails this test.</summary>
+    [TestCase("logger")]
+    [TestCase("stderr")]
+    [TestCase("message")]
+    public void A_failing_diagnostic_on_the_pqz_path_still_exits_120(string variant)
+    {
+        Assert.That(File.Exists(Path.Combine(Repo.HooksDir, "libpqz_ffi.so")), "fault-hooks build");
+        string harness = Path.Combine(AppContext.BaseDirectory, "Harness.dll");
+        ProcessStartInfo psi = new("dotnet", [harness, "fault", Repo.HooksDir, Repo.CorpusPath, variant]) { RedirectStandardError = true, RedirectStandardOutput = true };
+        using Process p = Process.Start(psi)!;
+        System.Threading.Tasks.Task<string> err = p.StandardError.ReadToEndAsync(), outp = p.StandardOutput.ReadToEndAsync();
+        if (!p.WaitForExit(120_000))
+        {
+            p.Kill(entireProcessTree: true);
+            Assert.Fail($"fault child {variant}: still running after 120 s (killed)");
+        }
+        p.WaitForExit();
+        TestContext.Progress.WriteLine($"fault child {variant}: exit {p.ExitCode}; stdout: {outp.Result.Trim()}; stderr: {err.Result.Trim()}");
+        Assert.That(p.ExitCode, Is.EqualTo(PqzPrecompile.ExitCode), variant);
+        Assert.That(outp.Result, Does.Not.Contain("must not happen"), variant);
+        if (variant == "logger") Assert.That(err.Result, Does.Contain("PQZ-NODE-FAULT status=4"));
+        if (variant == "message") Assert.That(err.Result, Does.Contain(PqzPrecompile.FallbackLine));
+    }
 }

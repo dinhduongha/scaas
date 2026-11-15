@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
-# Plugin fault-boundary mutants (review 3w-delta U3h-2 + the exit watchdog): each applied alone, the ML-DSA tests run
+# Plugin fault-boundary mutants (review 3w-delta U3h-2 + the exit watchdog): each applied alone, the ML-DSA tests and
+# the PQZ-seam children run
 # through run-tests.sh (PQZ_TEST_FILTER), the source restored.
 # usage (from the repo root, under scripts/capped): python3 -I <this> pqz-core/nethermind <log>
 import os, pathlib, subprocess, sys
@@ -30,9 +31,20 @@ MUT = [
             // the word is the zero word regardless
         }""",
   """        if (PqzPrecompile.Log.IsWarn) PqzPrecompile.Log.Warn($"MLDSA-CRYPTO-EXCEPTION {alg.Name} len={len}: {e.Message}: …00");"""),
+ ("P1 PqzPrecompile.Run without its catch", P,
+  """        try
+        {
+            return RunUnguarded(input, s);
+        }
+        catch (Exception e) when (e is not DllNotFoundException)
+        {
+            NodeFault("", e, input); // the cause is built inside the fault boundary (review 3w-delta U3h-2)
+            throw; // not reached (NodeFault exits)
+        }""",
+  """        return RunUnguarded(input, s);"""),
 ]
 out = []
-env = dict(os.environ, PQZ_TEST_FILTER="FullyQualifiedName~MlDsaTests")
+env = dict(os.environ, PQZ_TEST_FILTER="FullyQualifiedName~MlDsaTests|FullyQualifiedName~A_failing_diagnostic_on_the_pqz_path")
 for name, f, a, b in MUT:
     p = root / f
     src = p.read_text()

@@ -18,7 +18,8 @@ using Nethermind.Serialization.Json;
 // P6f Task 4: the P/Invoke boundary harness (CTR-PQZ-10 "P/Invoke harness under the .NET host"), through
 // PqzPrecompile.Run / MlDsa*Precompile.Run, never the C ABI directly.
 //   Harness run   <ffiDir> <corpus.jsonl> <repoRoot> [--minutes N] [--threads 8] [--seed S]
-//   Harness fault <hooksDir> <corpus.jsonl>        (test child: status 4 through PqzPrecompile.Run ⇒ exit 120)
+//   Harness fault <hooksDir> <corpus.jsonl> [variant] (test child: status 4 through PqzPrecompile.Run ⇒ exit 120;
+//                                                   variants logger | stderr | message, review 3w-delta U3h-2)
 //   Harness panic <hooksDir> <corpus.jsonl>        (test child: status 3 through PqzPrecompile.Run ⇒ …00, exit 0)
 //   Harness mldsa-fault [variant]                  (test child: a non-crypto exception in MlDsa.Verify ⇒ exit 120;
 //                                                   variants logger | stderr | message | blocking-exit | crypto-logger,
@@ -64,13 +65,14 @@ static class MlDsaFault
 }
 
 /// <summary>A logger whose every write throws (U3h-2 controls).</summary>
-sealed class ThrowingLogger : InterfaceLogger
+sealed class ThrowingLogger(Func<Exception>? make = null) : InterfaceLogger
 {
-    public void Info(string text) => throw new IOException("logger");
-    public void Warn(string text) => throw new IOException("logger");
-    public void Debug(string text) => throw new IOException("logger");
-    public void Trace(string text) => throw new IOException("logger");
-    public void Error(string text, Exception? ex = null) => throw new IOException("logger");
+    private Exception X() => make?.Invoke() ?? new IOException("logger");
+    public void Info(string text) => throw X();
+    public void Warn(string text) => throw X();
+    public void Debug(string text) => throw X();
+    public void Trace(string text) => throw X();
+    public void Error(string text, Exception? ex = null) => throw X();
     public bool IsInfo => true;
     public bool IsWarn => true;
     public bool IsDebug => true;
@@ -137,13 +139,24 @@ static class Fault
         PqzSchedule s = Shared.Schedule(corpus);
         byte[] input = corpus.First(r => r.kind == "honest" && r.id == "pqzl").input;
         Console.WriteLine($"fault child: before the hook {Convert.ToHexStringLower(PqzPrecompile.Run(input, s).Data!)}");
+        // review 3w-delta U3h-2: logger = the worker fault with a throwing logger; stderr = with a throwing stderr;
+        // message = the input-panic status, whose Warn throws an exception with a throwing Message (Run's catch)
+        string variant = a.Length > 3 ? a[3] : "";
+        switch (variant)
+        {
+            case "": break;
+            case "logger": PqzPrecompile.Log = new ILogger(new ThrowingLogger()); break;
+            case "stderr": Console.SetError(new ThrowingWriter()); break;
+            case "message": PqzPrecompile.Log = new ILogger(new ThrowingLogger(() => new MessageThrows())); break;
+            default: Console.WriteLine($"fault child: unknown variant {variant}"); return 2;
+        }
         IntPtr lib = NativeLibrary.Load(PqzNative.LibraryPath);
         unsafe
         {
-            var fail = (delegate* unmanaged<byte, void>)NativeLibrary.GetExport(lib, "pqz_test_fail_worker");
-            fail(1);
+            var hook = (delegate* unmanaged<byte, void>)NativeLibrary.GetExport(lib, variant == "message" ? "pqz_test_panic" : "pqz_test_fail_worker");
+            hook(1);
         }
-        Console.WriteLine("fault child: TEST_FAIL_WORKER on");
+        Console.WriteLine($"fault child ({(variant == "" ? "plain" : variant)}): {(variant == "message" ? "TEST_PANIC" : "TEST_FAIL_WORKER")} on");
         PqzPrecompile.Run(input, s);
         Console.WriteLine("fault child: returned (must not happen)");
         return 1;

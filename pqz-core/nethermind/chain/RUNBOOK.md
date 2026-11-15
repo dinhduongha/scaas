@@ -300,7 +300,9 @@ Success: the head hash equals the rollback head written down in step 1. Then rep
 - `OP_SELFTEST` (op 6) = `d6c01fbc…6f68d` (images `2.2.0-pqz5` / `2.2.0-pqz6` / `2.2.0-pqz7`, set `n2304-kmax4096`; `23d7a1db…c97c0` on `2.2.0-pqz4`, `ed910a2c…d205` before).
 
 A node fault (plan D4) stops the node with exit code 120 and the tag `PQZ-NODE-FAULT` in its log. The block in
-progress is never sealed; a restart re-processes it. **Restart policy (owner ruling 2026-10-31): `restart:
+progress is never sealed; a restart re-processes it. If a shutdown handler blocks after the fault (branch `3zh-core`,
+review 3w-delta U3h-2), the exit watchdog ends the process after 10 s with the runtime's abort status (134, not 120)
+and the line `PQZ-NODE-FAULT exit watchdog: …; FailFast`; treat 134 with that line exactly as 120. **Restart policy (owner ruling 2026-10-31): `restart:
 unless-stopped` on every service of the stack, the sealer included**, so Docker restarts a node after exit 120 or any
 other crash by itself (by hand: `docker compose up -d sealer` or `rpc`). A deterministic fault caused by a pooled
 transaction can loop on the sealer: it restarts, `rpc` gossips the same transaction to it again, it faults again. So

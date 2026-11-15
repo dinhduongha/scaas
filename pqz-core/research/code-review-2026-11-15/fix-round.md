@@ -166,7 +166,16 @@ test fails by that bound): `A_failing_diagnostic_still_exits_120` — `logger`, 
 stderr): exit 120 after 40–52 ms, no word; `A_blocking_shutdown_handler_is_ended_by_the_watchdog` — a ProcessExit
 handler that sleeps forever: ended after 10,253 ms (bound 30 s), `WatchdogLine` on stderr, exit 134;
 `A_crypto_exception_with_a_throwing_logger_is_the_zero_word` — exit 0, the zero word; the earlier
-`Another_exception_is_a_node_fault` control stays green. Full suite (`run-tests.sh`, n2304-kmax4096): 63 / 63.
+`Another_exception_is_a_node_fault` control stays green. The PQZ seam (owner 2026-11-15, fault-hook library
+`bin/test-hooks`, `Harness fault <hooks> <corpus> <variant>`): `A_failing_diagnostic_on_the_pqz_path_still_exits_120` —
+`logger` and `stderr` on the worker fault (status 4), `message` = the input-panic warning throwing an exception whose
+`Message` throws (Run's catch, then the fallback line): each exit 120, beside the earlier
+`Node_fault_exits_120_with_the_tag` control. Full suite (`run-tests.sh`, n2304-kmax4096): 66 / 66.
+
+**Docs** (owner 2026-11-15): decisions.md Changes under CTR-PQZ-10 (the fault boundary, watchdog, exit code) and
+CTR-PQZ-40 (the `Sealer`); the exit-code note (120 normally, the runtime's abort status 134 when the watchdog fires) in
+pq-zero-knowledge.md §9.1 (CTR-PQZ-10's status mapping), `docs/node/ops.md` and `chain/RUNBOOK.md`; the `Sealer` in
+CTR-PQZ-40's normative text. `docs_check.py check`: 0 errors.
 
 **Mutants** (`plugin_mutants.py`): see the gate table. The output allocation before the `try` has no injection point; it
 is closed by structure.
@@ -195,6 +204,9 @@ Affected steps only (owner: the full gate runs once, later, on the final core tr
 | Sealer mutants | 34871de6 | 0 | Se1–Se3 3 / 3 red; Ma–Md re-run 4 / 4 red |
 | plugin full suite (`run-tests.sh`) | 98a3ec51 | 0 | 63 / 63 at n2304-kmax4096 (the 6 new fault-boundary children and the provisional check included) |
 | plugin mutants (`plugin_mutants.py`, ML-DSA tests) | 98a3ec51 | 0 | W1 watchdog not started: red, the blocking child killed by the test's own 30 s bound; F1 the pre-fix NodeFault order: red (logger, stderr, message: 3 failed); C1 the zero word's warning unguarded: red (exit 120, not 0); 3 / 3 |
+| plugin full suite, with the PQZ-seam children | this commit | 0 | 66 / 66 at n2304-kmax4096 |
+| plugin mutants (ML-DSA tests + PQZ-seam children) | this commit | 0 | W1 red (30 s bound); F1 red (6 failed: 3 ML-DSA, 3 PQZ); C1 red; P1 `PqzPrecompile.Run` without its catch: red (`message`: the exception escapes); 4 / 4 |
+| docs_check | this commit | 0 | 0 errors (7 warnings, 16 notes, unchanged); test_docs_check ok |
 
 Not run here (not touched, or the full gate's): ct, ub, diff, cargo (pqz-stmt, Ligero), xcheck, the other three sets
 (the plugin's full suite at n2304-kmax4096 only).
