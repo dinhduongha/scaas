@@ -670,11 +670,16 @@ override; for every holder kind since 2026-11-15, owner, MD-13: a single key cou
 (register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one; `setPqzKey` on a gen-2 host counts the native slots of a record gen 1 holds at 400 k, gen 1's clone cap, as a gen-1 inner's) plus
 `PqzSet.PQZ_DEBIT_MIN_GAS` plus 16 gas per byte of the authorization's calldata is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit), and so is `PQZ_DEBIT_MIN_GAS` + 64 per byte, the EIP-7976 floor. The bytes `a` are the largest `MemberSig[]` a quorum signs, both levels: a signing slot `192 + ⌈sig / 32⌉ × 32`, an `msig` slot 192 and its leaves, each `128 + ⌈sig / 32⌉ × 32`, a PQ signature at its size, every classical kind and native at 1,024 B. The debit figure holds one holder signature, which is counted again, on the safe side.
 <a id="debit-min-gas"></a>`PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: **at least** the full relayed transaction of the
-cheapest PQZL debit (burn 1 under LOG) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]),
+cheapest PQZL debit (burn 1 under LOG) on the costlier relay path (`uaExecute`, the holder's and the ML-DSA-65 fee UA's
+verification at 100,006 gas each, calibrated 2026-11-15; the `PQZ` precompile at the set's testnet row, `test/vectors/pqz-gas`:
+the calibrated `chain/engine-pqz.json` at `n2304-kmax4096`, the provisional rows elsewhere),
 **rounded up to the next multiple of 1,000** (owner 2026-11-12 option (b), [CTR-PQZ-12](#CTR-PQZ-12)'s Change;
 `test_debitMinGas_isTheCheapestLogDebit` holds `set >= measured`, a multiple of 1,000, less than 1,000 above; BUILT) —
-7,300,000 at `n2048-kmax1024`, 7,516,000 at `n2304-kmax4096`, 7,729,000 at `n2560-kmax16384`, 7,970,000 at
-`n2816-kmax65536` (owner 2026-11-14, [CTR-PQZ-12](#CTR-PQZ-12)'s Change: measured 7,299,953 / 7,515,239 / 7,728,088 / 7,969,882
+7,364,000 at `n2048-kmax1024`, 6,074,000 at `n2304-kmax4096`, 7,793,000 at `n2560-kmax16384`, 8,033,000 at
+`n2816-kmax65536` (owner 2026-11-15, 3zh-core group 2, [CTR-PQZ-12](#CTR-PQZ-12)'s Change: measured 7,363,504 / 6,073,179 /
+7,792,377 / 8,032,724 with ML-DSA-65 at 100,006 (+64,000: two verifications) and, at `n2304-kmax4096`, the calibrated
+`BURN` row 3,335,000 instead of the provisional 4,840,000 (−1,505,000); the pins were 7,300,000 / 7,516,000 / 7,729,000 /
+7,970,000, owner 2026-11-14, [CTR-PQZ-12](#CTR-PQZ-12)'s Change: measured 7,299,953 / 7,515,239 / 7,728,088 / 7,969,882
 after the three-key build, +511 at each set; before that measured 7,299,442 / 7,514,728 / 7,727,577 / 7,969,371 on branch `ua-mtx-fix2-contracts`, +44 at each
 set: the face selectors `renounceAdmin(bytes32)` and `transferAdmin(bytes32,bytes32)`, the payee-fee rename, the DEX merge;
 the pins were 7,299,398 / 7,514,684 / 7,727,533 / 7,969,327, equal to the measurement), measured before that
@@ -682,8 +687,8 @@ on the body-module build ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30); owner 2026
 `test_debitMinGas_isTheCheapestLogDebit` at each set; before it 7,258,188 / 7,468,120 / 7,675,561 / 7,910,855: the stub to
 P and the self-call's stub to Q add two frames; moved +963 / +972 / +980 / +989 after rounds 3r + 3s + 3t, owner
 2026-11-11, from 7,298,111 / 7,513,388 / 7,726,229 / 7,968,014; moved +324 at each set after the Fable review fixes,
-owner ruling 2026-11-11 "move the pin", from 7,299,074 / 7,514,360 / 7,727,209 / 7,969,003). So the worst-case authorization may not exceed about 9.48 M / 9.26 M / 9.05 M /
-8.81 M, less its calldata term (112,640 gas for two ML-DSA-65 slots; `test_register_msigHolderBoundary`); `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
+owner ruling 2026-11-11 "move the pin", from 7,299,074 / 7,514,360 / 7,727,209 / 7,969,003). So the worst-case authorization may not exceed about 9.41 M / 10.70 M / 8.98 M /
+8.74 M (before 3zh-core group 2: 9.48 M / 9.26 M / 9.05 M / 8.81 M), less its calldata term (112,640 gas for two ML-DSA-65 slots; `test_register_msigHolderBoundary`); `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
 `mldsa65` quorum on the precompile is not. Single-key holders are unaffected (their cap is ≤ 2.5 M). A PQ-eligible `msig` registers with its m-of-n `pop`, so nobody
 can fix it without a key. One key = one purpose: the PQZ key decrypts and proves, the signer's key authorizes; the UA's
 PQ signing kinds ([CTR-UA-23](accounts.md#CTR-UA-23)) invite exactly this hybrid. A leaked PQZ key is a read-only breach
