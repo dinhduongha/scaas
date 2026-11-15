@@ -193,7 +193,7 @@ contract UARegistryPairTest is UARegistryBase {
     /// The reads off the hot path run in their library inside the view; the hot views run in no library.
     function test_b_readsRunInTheirLibrary() public {
         (address k, address r, bytes32 ua) = (address(UARegistryAuxLib), address(UARegistryCoreLib), bytes32(uint256(7)));
-        _routed(r, k, UARegistryCoreLib.registrationOf.selector);
+        _routed(k, r, UARegistryAuxLib.registrationOf.selector); // D1 (owner 2026-11-15): moved from the core library
         reg.registrationOf(ua);
         _routed(r, k, UARegistryCoreLib.uaCount.selector);
         reg.uaCount(0x0103);

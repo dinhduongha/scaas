@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {DeployHarness} from "../helpers/DeployHarness.sol";
+import {MldsaKit} from "../helpers/MldsaKit.sol";
 import {UAPrecompileProbe} from "../../script/UAPrecompileProbe.sol";
 import {Bls12381} from "../../src/common/Bls12381.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
@@ -68,12 +69,15 @@ contract UADeployTest is Test {
         assertEq(reg.verifyCap(UAKinds.ZETHER_BLS12381), 70_000);
         assertFalse(reg.kindEnabled(UAKinds.PQZ_MLWE));
         _pq(reg, true);
-        assertFalse(reg.kindEnabled(0x0134), "mldsa87: no precompile here (CTR-UA-39 Q1)");
+        assertTrue(reg.kindEnabled(0x0134), "mldsa87: on the cache without a precompile (CTR-UA-39 Q1, owner 2026-11-15)");
+        assertEq(reg.verifyCap(0x0134), 8_850_000, "the cached cap");
     }
 
-    /// CTR-UA-39: `mldsa87` is enabled exactly where a candidate answers its EIP-8355 probe (`0x14`, then the SCaaS testnet's
-    /// `0x…5caa0014`), with the precompile path's cap; a candidate that answers 1 to everything does not count.
-    function test_mldsa87OnlyWithAPrecompile() public {
+    /// CTR-UA-39 as changed by the owner 2026-11-15 (MD-2, MD-6): `mldsa87` on the precompile path (cap 250,000, provisional)
+    /// where a candidate (`0x14`, then the SCaaS testnet's `0x…5caa0014`) answers its EIP-8355 probe in this EVM, else on the
+    /// cache (8,850,000); a candidate that answers 1 to everything does not count; on Hedera's 10.5 M budget the cached cap fails
+    /// the 75 % rule (7,875,000), so there only the precompile path enables it.
+    function test_mldsa87_precompileOrCache() public {
         string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
         bytes memory valid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
         bytes memory invalid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid");
@@ -87,29 +91,94 @@ contract UADeployTest is Test {
             vm.clearMockedCalls();
         }
         vm.mockCall(at[1], bytes(""), abi.encode(uint256(1))); // the word 1 to every input
-        assertFalse(_registry(31337, false).kindEnabled(0x0134));
+        assertEq(_registry(31337, false).verifyCap(0x0134), 8_850_000, "no precompile counts: the cache");
         vm.clearMockedCalls();
-        assertFalse(_registry(7622, false).kindEnabled(0x0134), "no precompile in this EVM");
+        assertEq(_registry(7622, false).verifyCap(0x0134), 8_850_000, "no precompile in this EVM: the cache");
+        assertFalse(_registry(298, true).kindEnabled(0x0134), "Hedera: 8,850,000 > 75 % of 10.5 M");
     }
 
-    /// P6c: the PQ signing kinds with the gen-1 caps on every chain whose budget holds them at ≤ 66 % (owner rulings
-    /// 2026-10-31: no chain-id lock, 66 % instead of 50 %); the ML-DSA verifiers in Solidity (the expanded-key cache).
+    /// MD-6 (owner 2026-11-15): `MLDSA_PRECOMPILE=off` builds every ML-DSA kind on the cache even where the chain answers the
+    /// probe, and refuses any `MLDSA<x>_VERIFIER`; `on` where the chain answers and no verifier is handed in refuses by name;
+    /// `on` with the CREATE2 verifier takes it (the deploy JSON records each kind's path, MD-15).
+    function test_mldsaPrecompileFlag() public {
+        vm.chainId(7622);
+        DeployHarness h = new DeployHarness();
+        h.setMldsa(false, address(0), address(0));
+        h.forceMl(true, true);
+        h.forcePq(false, true);
+        (, string memory json) = h.deploy(UID, false, ska);
+        IUARegistry reg = IUARegistry(vm.parseJsonAddress(json, ".ua_registry"));
+        assertEq(reg.verifyCap(0x0130), 4_250_000);
+        assertEq(reg.verifyCap(0x0131), 5_950_000);
+        assertEq(reg.verifyCap(0x0134), 8_850_000);
+        assertEq(vm.parseJsonString(json, ".mldsa_precompile"), "off");
+        assertEq(vm.parseJsonString(json, ".mldsa65_path"), "cache");
+        address v65 = MldsaKit.onChain(1, 0x000000000000000000000000000000005CAa0013, keccak256("scaas.deploy.v1"));
+        h = new DeployHarness();
+        h.setMldsa(false, address(0), v65);
+        vm.expectRevert(bytes("MLDSA65_VERIFIER: set with MLDSA_PRECOMPILE=off (pure Solidity with the cache)"));
+        h.deploy(UID, false, ska);
+        h = new DeployHarness(); // on: the chain answers 0x0131's probe, no verifier handed in
+        h.forceMl(false, true);
+        vm.expectRevert(bytes("gen-1 registry: PQ precompile kind 0x0131 the probe passes is missing (MLDSA65_VERIFIER: deploy.sh evm's pq-verifiers step)"));
+        h.deploy(UID, false, ska);
+        h = new DeployHarness();
+        h.setMldsa(true, address(0), v65);
+        h.forceMl(false, true);
+        (, json) = h.deploy(UID, false, ska);
+        reg = IUARegistry(vm.parseJsonAddress(json, ".ua_registry"));
+        assertEq(reg.verifyCap(0x0131), 200_000, "the precompile path's cap");
+        assertEq(vm.parseJsonAddress(json, ".mldsa65_verifier"), v65);
+        assertEq(vm.parseJsonString(json, ".mldsa65_path"), "precompile 0x000000000000000000000000000000005CAa0013");
+        assertEq(vm.parseJsonString(json, ".mldsa44_path"), "cache");
+        assertEq(vm.parseJsonString(json, ".mldsa_precompile"), "on");
+    }
+
+    /// MD-15 (owner 2026-11-15, F-7): with `on`, a probe call that fails (no RPC here) refuses the deploy by name; with `off` it
+    /// requires no kind.
+    function test_mldsaProbeFailureRefuses() public {
+        DeployHarness h = new DeployHarness();
+        vm.expectRevert(bytes("MLDSA_PRECOMPILE=on: the chain's PQ precompile probe (PqPrecompileProbe by eth_call) failed or answered no 128 bytes: refused (MD-15)"));
+        h.realPq();
+        h.setMldsa(false, address(0), address(0));
+        (bool pqz, bool[3] memory ml) = h.realPq();
+        assertFalse(pqz || ml[0] || ml[1] || ml[2]);
+    }
+
+    /// MD-5 (owner 2026-11-15, F-5): an ML-DSA kind on the cache is enabled only where each part transaction fits the block
+    /// (`DeployGas`, measured): `mldsa87`'s part 2 asks (10,730,000 + 34,848,810) x 1.05 = 47,857,750, so a block of one less
+    /// disables it and one of exactly that enables it; `mldsa65` (45,687,694) and `mldsa44` (43,528,138) fit both; 200 M holds all.
+    function test_mldsaCacheBlockGate() public {
+        DeployHarness h = new DeployHarness();
+        h.limitBlockGas(47_857_749);
+        assertFalse(h.cacheFits(2), "mldsa87 under its largest part");
+        assertTrue(h.cacheFits(1) && h.cacheFits(0));
+        h.limitBlockGas(47_857_750);
+        assertTrue(h.cacheFits(2), "mldsa87 at its largest part");
+        h.limitBlockGas(45_687_693);
+        assertFalse(h.cacheFits(1), "mldsa65 under its largest part");
+        h.limitBlockGas(200_000_000);
+        assertTrue(h.cacheFits(0) && h.cacheFits(1) && h.cacheFits(2));
+    }
+
+    /// P6c: the PQ signing kinds with the gen-1 caps on every chain whose budget holds them at ≤ 75 % (owner rulings
+    /// 2026-10-31: no chain-id lock; 2026-11-15: 75 % instead of 66 %); the ML-DSA verifiers in Solidity (the expanded-key cache).
     function _pq(IUARegistry reg, bool on) internal view {
         uint64[4] memory caps = [uint64(4_250_000), 5_950_000, 2_500_000, 1_400_000];
         for (uint16 k = UAKinds.MLDSA44; k <= UAKinds.SLHDSA128S; ++k) {
             assertEq(reg.kindEnabled(k), on);
             assertEq(reg.verifyCap(k), on ? caps[k - UAKinds.MLDSA44] : 0);
-            assertLe(uint256(reg.verifyCap(k)) * 100, uint256(reg.verifyBudget()) * 66);
+            assertLe(uint256(reg.verifyCap(k)) * 100, uint256(reg.verifyBudget()) * 75);
         }
         // fndsa1024 (CTR-UA-40): pure Solidity wherever its cap fits, the provisional 5,250,000
         assertEq(reg.kindEnabled(UAKinds.FNDSA1024), on, "fndsa1024");
         assertEq(reg.verifyCap(UAKinds.FNDSA1024), on ? 5_250_000 : 0);
-        assertLe(uint256(reg.verifyCap(UAKinds.FNDSA1024)) * 100, uint256(reg.verifyBudget()) * 66);
+        assertLe(uint256(reg.verifyCap(UAKinds.FNDSA1024)) * 100, uint256(reg.verifyBudget()) * 75);
     }
 
     /// Owner ruling 2026-10-31: no chain-id lock for any kind. Chain 7622, the mainnet 22776, the e2e's 31901 and an
     /// arbitrary id get every kind whose requirement the chain meets (here: the probe passes, the budget is 12 M).
-    /// Hedera 298: `hederaNative`, budget 10.5 M, all four PQ kinds (66 % = 6.93 M ≥ `mldsa65`'s 5.95 M); no
+    /// Hedera 298: `hederaNative`, budget 10.5 M, all four PQ kinds (75 % = 7.875 M ≥ `mldsa65`'s 5.95 M; not the cached `mldsa87`); no
     /// `zether-bls12381` (no Zether token on Hedera).
     function test_otherChains() public {
         IUARegistry r7622 = _registry(7622, false);
@@ -131,17 +200,20 @@ contract UADeployTest is Test {
         _pq(h, true);
     }
 
-    /// The 66 % rule at its boundary (owner ruling 2026-10-31), integer-exact: 12 M allows 7,920,000, not one more;
-    /// Hedera's 10.5 M allows 6,930,000.
-    function test_pqKindThreshold66() public {
+    /// The 75 % rule at its boundary (CTR-UA-23; owner 2026-11-15, was 66 % by the ruling of 2026-10-31: 7,920,000 at 12 M),
+    /// integer-exact: 12 M allows 9,000,000, not one more; Hedera's 10.5 M allows 7,875,000 (so not the cached `mldsa87`'s
+    /// 8,850,000). A threshold of 74 refuses 9,000,000, one of 76 admits 9,000,001: both caught here.
+    function test_pqKindThreshold75() public {
         DeployHarness h = new DeployHarness();
-        assertTrue(h.pqKindFits(7_920_000, 12_000_000));
-        assertFalse(h.pqKindFits(7_920_001, 12_000_000));
-        assertTrue(h.pqKindFits(6_930_000, 10_500_000));
-        assertFalse(h.pqKindFits(6_930_001, 10_500_000));
+        assertTrue(h.pqKindFits(9_000_000, 12_000_000));
+        assertFalse(h.pqKindFits(9_000_001, 12_000_000));
+        assertTrue(h.pqKindFits(7_875_000, 10_500_000));
+        assertFalse(h.pqKindFits(7_875_001, 10_500_000));
+        assertTrue(h.pqKindFits(8_850_000, 12_000_000), "mldsa87 cached at 12 M");
+        assertFalse(h.pqKindFits(8_850_000, 10_500_000), "mldsa87 cached on Hedera");
         assertTrue(h.pqKindFits(5_950_000, 10_500_000), "mldsa65 on Hedera");
-        assertTrue(h.pqKindFits(5_250_000, 7_954_546), "fndsa1024: the least budget that holds it");
-        assertFalse(h.pqKindFits(5_250_000, 7_954_545));
+        assertTrue(h.pqKindFits(5_250_000, 7_000_000), "fndsa1024: the least budget that holds it");
+        assertFalse(h.pqKindFits(5_250_000, 6_999_999));
     }
 
     /// A chain whose precompiles fail the probe gets none of the kinds that need them (never registrable but unusable).

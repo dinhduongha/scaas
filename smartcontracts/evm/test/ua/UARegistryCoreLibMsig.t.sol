@@ -95,7 +95,10 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         (uint16[] memory k,) = _rows();
         c = new UARegistry.KindConfig[](k.length);
         for (uint256 i; i < k.length; ++i) {
-            address v = k[i] == ML44 || k[i] == ML65 ? address(new CacheVerifier(address(0))) : address(new MockVerifier(0, 0));
+            // 3zh (owner 2026-11-15, two paths): the ML-DSA rows on a precompile stand-in (`PRECOMPILE` != 0), so the FIPS-key
+            // `verify` is their path; without one `register` would need the cache first (`UAKeyNotCached`)
+            address v = k[i] == ML44 || k[i] == ML65 || k[i] == 0x0134 ? address(new CacheVerifier(address(0x14)))
+                : address(new MockVerifier(0, 0));
             c[i] = UARegistry.KindConfig(k[i], v, k[i] >= 0x0110 ? PQ : _cap(k[i]));
         }
     }
@@ -319,7 +322,10 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         if (kind == 305) return 24005;
         if (kind == 306) return 20960;
         if (kind == 307) return 20249;
-        if (kind == 308) return 22197; // mldsa87 (CTR-UA-39), added on its branch (mock verifier)
+        // mldsa87 (CTR-UA-39), added on its branch (mock verifier). 3zh (owner 2026-11-15): 22,197 -> 24,456, the row now reads its
+        // first cache pointer (a cold SLOAD: three parts since 3zh, `UAStore.expanded`); its stand-in a `CacheVerifier` on a
+        // precompile, as the 0x0130 / 0x0131 rows'
+        if (kind == 308) return 24456;
         if (kind == 309) return 21562; // fndsa1024 (CTR-UA-40), added on its branch (mock verifier)
         if (kind == 321) return 19661;
         return 0;

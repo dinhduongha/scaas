@@ -42,7 +42,7 @@ library MlDsa {
     }
 
     /// FIPS 204 Table 1, ML-DSA-87: k 8, l 7, η 2, τ 60, β 120, γ1 2^19, γ2 (q − 1)/32, ω 75, λ 256 ⇒ c~ 64 B. The UA kind
-    /// `mldsa87` verifies through a precompile only (CTR-UA-39); these parameters serve the emulator tests and any later use.
+    /// `mldsa87` (CTR-UA-39): the precompile where one is probed, else the registry's expanded-key cache (owner 2026-11-15).
     function params87() internal pure returns (Params memory) {
         return Params(8, 7, 60, 120, 1 << 19, (Q - 1) / 32, 75, 64, 20, 4, 2592, 4627);
     }
@@ -78,8 +78,30 @@ library MlDsa {
         return expandKeyRows(P, pk, 0, P.k, true);
     }
 
+    /// `chunks` (20-byte pointers, in order; each pointer's code `0x00 ‖ part`, as SSTORE2 writes it) read back by EXTCODECOPY
+    /// into the expanded key of `P`: `ok` false unless there are exactly `parts` pointers, each with code, and their parts
+    /// add up to `expandedLen(P)` exactly. `MldsaVerifier.verifyCached`'s read (and the tests'), one copy.
+    function readParts(Params memory P, bytes calldata chunks, uint256 parts)
+        internal view returns (bytes memory ek, bool ok)
+    {
+        uint256 len = expandedLen(P);
+        if (chunks.length != 20 * parts) return (ek, false);
+        ek = new bytes(len);
+        uint256 o;
+        for (uint256 i; i < chunks.length; i += 20) {
+            address ptr = address(bytes20(chunks[i:i + 20]));
+            uint256 n = ptr.code.length;
+            if (n < 2 || o + n - 1 > len) return (ek, false);
+            assembly ("memory-safe") {
+                extcodecopy(ptr, add(add(ek, 32), o), 1, sub(n, 1))
+            }
+            o += n - 1;
+        }
+        ok = o == len;
+    }
+
     /// Bytes `[r0·l·1024, …)` of `expandKey(pk)`: rows `r0 … r1 − 1` of `Â`, then (iff `tail`) `tr ‖ NTT(t1·2^d)`. The
-    /// UA registry stores the expanded key in parts under EIP-170, each computed in its own transaction (P6c).
+    /// UA registry stores the expanded key in parts, each computed in its own transaction under 2^24 regular gas (P6c).
     function expandKeyRows(Params memory P, bytes calldata pk, uint256 r0, uint256 r1, bool tail)
         internal pure returns (bytes memory ek)
     {
@@ -452,10 +474,11 @@ library MlDsa {
 /// @title `mldsa44` / `mldsa65` / `mldsa87` UA verifier (accounts.md CTR-UA-23, CTR-UA-39, kinds 0x0130 / 0x0131 / 0x0134): FIPS 204
 ///        ML-DSA over `pq_msg` with the empty context, on the FIPS 204 public key (`keyData`). An EIP-8355 precompile is used
 ///        when the constructor's probe of `candidate` passes (`pk ‖ sig ‖ pq_msg` ⇒ exactly the word 1, a flipped
-///        signature ⇒ exactly 0), else pure Solidity. Without a precompile the UA registry verifies ML-DSA-44 / -65 on the
-///        EIP-8051 expanded key it derived itself and stored in parts (`expandedKeyPart`, `verifyCached`; P6c).
-///        `mldsa87` exists only with a precompile (CTR-UA-39 Q1: its Solidity cost fails the 66 % rule): without one the
-///        constructor reverts `UAMldsaNoPrecompile`, so the kind gets no verifier there; it has no cache parts. **UNAUDITED.**
+///        signature ⇒ exactly 0), else pure Solidity. Two paths only (owner 2026-11-15, CTR-UA-23): the precompile, or, without
+///        one, the EIP-8051 expanded key the UA registry derived itself and stored in parts (`expandedKeyPart`, `verifyCached`;
+///        P6c), the registry's only path there: the uncached FIPS-key verify of ML-DSA-65 / -87 is over EIP-7825's 2^24.
+///        `mldsa87` too (CTR-UA-39 Q1 as rewritten 2026-11-15; before it, the constructor refused it without a precompile,
+///        `legacy/3zh-mldsa/`). `verify` stays the precompile path for outside callers. **UNAUDITED.**
 contract MldsaVerifier is IUAPopVerifier {
     uint16 public immutable KIND;
     bytes32 public immutable KIND_TAG;
@@ -463,7 +486,6 @@ contract MldsaVerifier is IUAPopVerifier {
 
     error UAMldsaKind(uint16 kind);
     error UAMldsaPart(uint256 part);
-    error UAMldsaNoPrecompile();
 
     /// @param probeValid an input `pk ‖ sig ‖ msg` in the EIP-8355 layout that verifies; `probeInvalid` one that does not.
     ///        Both must be exactly `pkLen + sigLen + 32` bytes of this level (the split `verify` sends), else pure Solidity.
@@ -474,9 +496,7 @@ contract MldsaVerifier is IUAPopVerifier {
         MlDsa.Params memory P = _params(kind_);
         uint256 len = P.pkLen + P.sigLen + 32;
         bool exact = probeValid.length == len && probeInvalid.length == len;
-        address pc = exact && PqUA.probe(candidate, probeValid, probeInvalid) ? candidate : address(0);
-        if (pc == address(0) && kind_ == PqUA.MLDSA87) revert UAMldsaNoPrecompile();
-        PRECOMPILE = pc;
+        PRECOMPILE = exact && PqUA.probe(candidate, probeValid, probeInvalid) ? candidate : address(0);
     }
 
     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
@@ -499,42 +519,34 @@ contract MldsaVerifier is IUAPopVerifier {
         return MlDsa.expandKey(_params(), pk);
     }
 
-    /// Number of parts the registry stores the expanded key in: one under EIP-170 for ML-DSA-44 (20,544 B), two for
-    /// ML-DSA-65 (36,928 B: `Â` rows 0–2, then rows 3–5 ‖ tr ‖ t̂1), none for ML-DSA-87 (no cache, CTR-UA-39 Q1).
+    /// Number of parts the registry stores the expanded key in (`PqUA.mldsaParts`: 1 / 2 / 3 for ML-DSA-44 / -65 / -87;
+    /// owner 2026-11-15), each one transaction under EIP-7825's 2^24 regular gas.
     function expandedKeyParts() public view returns (uint256) {
-        return KIND == PqUA.MLDSA44 ? 1 : KIND == PqUA.MLDSA65 ? 2 : 0;
+        return PqUA.mldsaParts(KIND);
     }
 
-    /// Part `part` of `expandedKey(pk)`; the parts in order concatenate to it. Reverts `UAMldsaPart` past the last.
+    /// Part `part` of `expandedKey(pk)`; the parts in order concatenate to it. Part `p` is `Â` rows `3p … min(3p + 3, k) − 1`,
+    /// the last part (rows up to `k`) with `tr ‖ t̂1` (ML-DSA-44: its one part is rows 0–3 and the tail). Reverts
+    /// `UAMldsaPart` past the last.
     function expandedKeyPart(bytes calldata pk, uint256 part) external view returns (bytes memory) {
         Shake.reserve();
         MlDsa.Params memory P = _params();
-        if (part >= expandedKeyParts()) revert UAMldsaPart(part);
-        if (KIND == PqUA.MLDSA44) return MlDsa.expandKeyRows(P, pk, 0, P.k, true);
-        return part == 0 ? MlDsa.expandKeyRows(P, pk, 0, 3, false) : MlDsa.expandKeyRows(P, pk, 3, P.k, true);
+        uint256 parts = expandedKeyParts();
+        if (part >= parts) revert UAMldsaPart(part);
+        bool last = part + 1 == parts;
+        return MlDsa.expandKeyRows(P, pk, 3 * part, last ? P.k : 3 * part + 3, last);
     }
 
-    /// The registry's cached path: `chunks` = the 20-byte SSTORE2 pointers of the parts, in order (code = `0x00 ‖ part`).
-    /// Reads them by EXTCODECOPY and verifies on the result. **Trusts the pointers**: only the registry, which wrote the
-    /// parts from `expandedKeyPart` of an authenticated `pk`, may call this for a verdict (`MlDsa.verifyExpanded`).
-    /// The self-call to `verifyExpanded` loses 1/64 of the gas, so the least working cap is above the measured cost:
-    /// 5,893,303 (ML-DSA-65) and 4,174,074 (ML-DSA-44) with warm pointers, ~5 k more cold (`PqGas.t.sol` pins it).
+    /// The registry's cached path: `chunks` = the 20-byte SSTORE2 pointers of the parts, in order (code = `0x00 ‖ part`), an
+    /// internal verifier interface (packed pointers the registry wrote, not caller data). Reads them by `MlDsa.readParts`
+    /// and verifies on the result. **`verifyCached` trusts its pointers: only the registry may
+    /// rely on its verdict** (owner 2026-11-15; documented, not restricted in code): the registry wrote the parts from
+    /// `expandedKeyPart` of an authenticated `pk` (`MlDsa.verifyExpanded`); anyone else's pointers can hold any key.
+    /// The self-call to `verifyExpanded` loses 1/64 of the gas, so the least working cap is above the measured cost
+    /// (`PqGas.t.sol` pins it, cold pointers).
     function verifyCached(bytes calldata chunks, bytes32 message, bytes calldata sig) external view returns (bool) {
-        uint256 len = MlDsa.expandedLen(_params());
-        if (chunks.length != 20 * expandedKeyParts()) return false;
-        bytes memory ek = new bytes(len);
-        uint256 o;
-        for (uint256 i; i < chunks.length; i += 20) {
-            address ptr = address(bytes20(chunks[i:i + 20]));
-            uint256 n = ptr.code.length;
-            if (n < 2 || o + n - 1 > len) return false;
-            assembly ("memory-safe") {
-                extcodecopy(ptr, add(add(ek, 32), o), 1, sub(n, 1))
-            }
-            o += n - 1;
-        }
-        if (o != len) return false;
-        return this.verifyExpanded(ek, message, sig);
+        (bytes memory ek, bool ok) = MlDsa.readParts(_params(), chunks, expandedKeyParts());
+        return ok && this.verifyExpanded(ek, message, sig);
     }
 
     /// Verify on an expanded key. **Only on a key derived by `expandedKey` / `expandedKeyPart` from an authenticated

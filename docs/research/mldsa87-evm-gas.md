@@ -2,6 +2,10 @@
 
 # ML-DSA-87 on the EVM: verification gas, measured (2026-11-04)
 
+Update (2026-11-15, TODO 3zh): the cache is now built in three parts (rows 0–2 | 3–5 | 6–7 ‖ tr ‖ t̂1) at the cap 8,850,000 under
+the 75 % rule; the figures of record are in [accounts.md CTR-UA-39](../contracts/accounts.md#CTR-UA-39)'s Change. This note stays
+as the 2026-11-04 measurement.
+
 The measurement behind [spec 2026-11-04-mldsa87](../superpowers/specs/2026-11-04-mldsa87.md) (owner 2026-11-04: add ML-DSA-87,
 FIPS 204 NIST level V, as a UA kind; spec and measurement first). All figures are `UNAUDITED` research code, forge, not a chain.
 

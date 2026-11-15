@@ -6,14 +6,17 @@ real chain BEFORE Deploy.s.sol, with script/pqz/e2e.py's builders and probes (P6
   - `PqzKeyVerifier` (`pqz-mlwe` 0x0142) on the `PQZ` precompile, the set's PQZL id and its self-test R_REG vector
     (statement_register.json row 0, proof_pqzl.json row 4: the constructor's probe), when the precompile answers its
     OP_SELFTEST with the set's hash; after the deploy `isSupportedOnThisChain()` must be true;
-  - `MldsaVerifier(0x0134, candidate, probe valid, probe invalid)` (`mldsa87`) on the first candidate (0x14, then the SCaaS
-    testnet's 0x...5caa0014, DeployBase._mldsa87Precompile's) that answers pq_kat.json's mldsa87 EIP-8355 probe exactly
-    (valid => the word 1, flipped => 0); after the deploy `PRECOMPILE()` must be that candidate.
+  - with `MLDSA_PRECOMPILE=on` (the default; owner 2026-11-15, MD-6 / MD-7): `MldsaVerifier(kind, candidate, probe valid, probe
+    invalid)` for `mldsa44` 0x0130, `mldsa65` 0x0131 and `mldsa87` 0x0134, each on the first candidate (EIP-8355's 0x12 / 0x13 /
+    0x14, then the SCaaS testnet's 0x...5caa0012 / 13 / 14, DeployBase._mldsaCandidates) that answers that level's pq_kat.json
+    EIP-8355 probe exactly (valid => the word 1, flipped => 0); after the deploy `PRECOMPILE()` must be that candidate, and
+    `verify` of the level's pq_kat.json row with gas cap + cap / 63 (DeployBase's precompile-path cap, the registry's hold)
+    must answer true, its flipped message false (F-6); `MLDSA_PRECOMPILE=off`: none of them (DeployBase builds the cache path).
 Each by CREATE2 through the deterministic deployer with DEPLOY_SALT (e2e.py's Deployer.deploy2 = DeployBase's `new X{salt}`,
 NET-EVM-05): the address follows from the init code and the salt; code already there is reused. A precompile that does not
 answer: that verifier is skipped by name (a chain without it: anvil), and DeployBase's gate requires nothing of it.
   PRIVATE_KEY=<deployer> [DEPLOY_SALT=…] [FOUNDRY_OUT=out] python3 -I script/pq_verifiers.py <rpc>
-stdout: `PQZ_KEY_VERIFIER=<address>` / `MLDSA87_VERIFIER=<address>` lines for deploy.sh, and `[deploy] pq-verifiers …` progress
+stdout: `PQZ_KEY_VERIFIER=<address>` / `MLDSA44_VERIFIER=<address>` / `MLDSA65_VERIFIER=` / `MLDSA87_VERIFIER=` lines for deploy.sh, and `[deploy] pq-verifiers …` progress
 lines; e2e.py's own check lines go to stderr. Never a key. Exit 1 on a failed deploy or check."""
 import json
 import os
@@ -25,7 +28,12 @@ import e2e as E  # noqa: E402
 
 E.log = lambda s: (print(s, file=sys.stderr, flush=True), E.LOG.append(s))  # e2e.py's lines off stdout
 E.OUT_DIR = os.environ.get("FOUNDRY_OUT", "out")
-ML87_CANDIDATES = ("0x0000000000000000000000000000000000000014", "0x000000000000000000000000000000005caa0014")
+# kind, name, candidates (DeployBase._mldsaCandidates), the precompile-path cap (DeployBase.CAP_MLDSA<x>_PRECOMPILE)
+MLDSA = ((0x0130, "mldsa44", 200_000), (0x0131, "mldsa65", 200_000), (0x0134, "mldsa87", 250_000))
+
+
+def candidates(i):
+    return ("0x" + f"{0x12 + i:040x}", "0x" + f"{0x5caa0012 + i:040x}")
 
 
 def say(s):
@@ -72,12 +80,15 @@ def main(rpc):
     sd = E.Sender(int(os.environ["PRIVATE_KEY"], 16))
     D = E.Deployer(sd)
     out = {}
+    only_ml = os.environ.get("PQ_VERIFIERS") == "mldsa"  # the matrix's `mldsaalt` group: the ML-DSA verifiers only
     want = json.load(open(os.path.join(E.K.VEC_DIR, "selftest.json")))["hash"]
     try:
         st = E.call(E.PQZ, bytes.fromhex("0600000000"))
     except RuntimeError:
         st = "0x"
-    if st[2:] != want:
+    if only_ml:
+        pass
+    elif st[2:] != want:
         say(f"skip PqzKeyVerifier: no PQZ precompile at {E.PQZ} (OP_SELFTEST {st[:18]}, want {want[:16]}...)")
     else:
         reg_stmt = bytes.fromhex(json.load(open(os.path.join(E.K.VEC_DIR, "statement_register.json")))["rows"][0]["stmt"])
@@ -91,29 +102,51 @@ def main(rpc):
             raise SystemExit(1)
         out["PQZ_KEY_VERIFIER"] = a
         say(f"PqzKeyVerifier ok {a} (PQZ {E.PQZ}, PQZL {E.PQZL_ID.hex()[:16]}...)")
-    k = json.load(open(os.path.join(E.EVM, "../vectors/ua/pq_kat.json")))["kinds"]["mldsa87"]
-    valid, bad = bytes.fromhex(k["eip8355_probe_valid"][2:]), bytes.fromhex(k["eip8355_probe_invalid"][2:])
+    mode = os.environ.get("MLDSA_PRECOMPILE", "on")
+    if mode not in ("on", "off"):
+        raise SystemExit("[deploy] pq-verifiers FAIL MLDSA_PRECOMPILE: on or off")
+    kat = json.load(open(os.path.join(E.EVM, "../vectors/ua/pq_kat.json")))["kinds"]
+    for i, (kind, name, cap) in enumerate(MLDSA):
+        if mode == "off":
+            say(f"skip MldsaVerifier({kind:#06x}): MLDSA_PRECOMPILE=off (the registry's expanded-key cache)")
+            continue
+        k = kat[name]
+        valid, bad = bytes.fromhex(k["eip8355_probe_valid"][2:]), bytes.fromhex(k["eip8355_probe_invalid"][2:])
 
-    def answers(at):
-        try:
-            return E.call(at, valid) == "0x" + "00" * 31 + "01" and E.call(at, bad) == "0x" + "00" * 32
-        except RuntimeError:
-            return False
+        def answers(at):
+            try:
+                return E.call(at, valid) == "0x" + "00" * 31 + "01" and E.call(at, bad) == "0x" + "00" * 32
+            except RuntimeError:
+                return False
 
-    cand = next((c for c in ML87_CANDIDATES if answers(c)), None)
-    if cand is None:
-        say(f"skip MldsaVerifier(0x0134): no ML-DSA-87 precompile answers the KAT probe at {', '.join(ML87_CANDIDATES)}")
-    else:
-        args = E.encs(["w", "w", "b", "b"], [0x0134, cand, valid, bad])
+        cs = candidates(i)
+        cand = next((c for c in cs if answers(c)), None)
+        if cand is None:
+            say(f"skip MldsaVerifier({kind:#06x}): no {name} precompile answers the KAT probe at {', '.join(cs)}")
+            continue
+        args = E.encs(["w", "w", "b", "b"], [kind, cand, valid, bad])
         gate(D, "MldsaVerifier", args, src="MlDsa")
-        a = D.deploy2("MldsaVerifier", args, "mldsa87_verifier", src="MlDsa")
+        a = D.deploy2("MldsaVerifier", args, f"{name}_verifier", src="MlDsa")
         got = "0x" + E.words(E.call(a, E.cd("PRECOMPILE()", [])))[0][12:].hex()
         ok = got == cand.lower()
-        E.check(ok, f"MldsaVerifier(0x0134) {a}: PRECOMPILE() = {got}")
+        E.check(ok, f"MldsaVerifier({kind:#06x}) {a}: PRECOMPILE() = {got}")
+        # F-6: the precompile path verifies the level's KAT row within the registry's hold of its cap, and refuses it flipped
+        msg = bytes.fromhex(k["ua_msg"][2:])
+        for m, want in ((msg, 1), (bytes(b ^ 0xFF for b in msg), 0)):
+            data = E.cd("verify(bytes,bytes32,bytes)", ["b", "w", "b"], bytes.fromhex(k["pk"][2:]), m, bytes.fromhex(k["sig"][2:]))
+            try:
+                r = E.rpc("eth_call", [{"to": a, "data": "0x" + data.hex(), "gas": hex(cap + cap // 63)}, "latest"])
+                verdict = int(r, 16) if r not in ("0x", None) else -1
+            except RuntimeError:
+                verdict = -1
+            good = verdict == want
+            ok = ok and good
+            E.check(good, f"MldsaVerifier({kind:#06x}) {a}: verify of the KAT row{' flipped' if not want else ''} within "
+                    f"{cap + cap // 63:,} gas = {verdict} (want {want})")
         if not ok:
             raise SystemExit(1)
-        out["MLDSA87_VERIFIER"] = a
-        say(f"MldsaVerifier(0x0134) ok {a} (precompile {cand})")
+        out[f"MLDSA{name[5:]}_VERIFIER"] = a
+        say(f"MldsaVerifier({kind:#06x}) ok {a} (precompile {cand})")
     if E.FAILS:
         raise SystemExit(f"[deploy] pq-verifiers FAIL {E.FAILS[0]}")
     for n, a in out.items():

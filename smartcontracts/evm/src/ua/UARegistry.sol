@@ -12,6 +12,7 @@ import {UAStore} from "./UAStore.sol";
 import {UARegistryCoreLib} from "./UARegistryCoreLib.sol";
 import {UARegistryAuxLib} from "./UARegistryAuxLib.sol";
 import {MldsaVerifier} from "./MlDsa.sol";
+import {PqUA} from "./PqUA.sol";
 
 /// @title UA registry, UA-2a/2c/3, P6c and UA-6 scope (accounts.md §1.8): the single-key kinds 0x0100–0x0108, the
 ///        group kinds 0x0110–0x0113 (MuSig2/FROST, stored), the structure `msig`, the Zether kind 0x0141
@@ -45,10 +46,11 @@ import {MldsaVerifier} from "./MlDsa.sol";
 ///
 ///         PQ kinds (P6c; CTR-UA-17, CTR-UA-23): `pk` stored with SSTORE2 like a group key, `auth.keyData` empty. ML-DSA
 ///         without a precompile verifies on the EIP-8051 expanded key the registry derives itself — never one from a
-///         caller — with `cacheExpandedKey(kind, pk, part)`: one part per transaction (ML-DSA-44 one, ML-DSA-65 two),
-///         each `MldsaVerifier.expandedKeyPart(pk, part)` stored once with SSTORE2 under its id (`uaOf(kind, pk)`,
-///         before or after `register`); once every part is there, PoP and verify go through `verifyCached` with the part
-///         pointers. Refused where the verifier uses a precompile (a cached Solidity path would exceed its cap).
+///         caller — with `cacheExpandedKey(kind, pk, part)`: one part per transaction (ML-DSA-44 one, ML-DSA-65 and
+///         ML-DSA-87 two), each `MldsaVerifier.expandedKeyPart(pk, part)` stored once with SSTORE2 under its id
+///         (`uaOf(kind, pk)`); once every part is there, PoP and verify go through `verifyCached` with the part pointers,
+///         and `register` needs them all first (`UAKeyNotCached`; CTR-UA-23, owner 2026-11-15: two paths only, the
+///         precompile or the cache). Refused where the verifier uses a precompile (a cached Solidity path would exceed its cap).
 ///         KEM key (CTR-UA-32): the single PQ kinds only; an `msig` holds none (plan T66a), `UAKemHolder` at `register` and `setKemKey`.
 ///         PQZ key (UA-6, CTR-UA-30, CTR-PQZ-12/13): an attribute of a holder — `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`, or an
 ///         `msig` whose members of kinds outside 0x0130–0x0135 weigh less than its threshold (PQ-eligible) — given in
@@ -88,7 +90,7 @@ import {MldsaVerifier} from "./MlDsa.sol";
 ///         `UARegistryAuxLib` the key writes after registration (`setPqzKey`, `storePqzPop`, `setKemKey`, `cacheExpandedKey`).
 ///         One DELEGATECALL per operation from here; an auxiliary writer runs the core's shared helpers by one nested
 ///         DELEGATECALL each (T66b 3.1c). The reads off the hot path run there too, inside the view (`_libView`):
-///         `registrationOf`, `uaCount` in the core library; `popOf`, `popSlotsOf`, `webAuthnKeyOf`, `pqzPopOf`, `pqzKeySigOf`,
+///         `uaCount` in the core library; `registrationOf` (owner 2026-11-15, D1), `popOf`, `popSlotsOf`, `webAuthnKeyOf`, `pqzPopOf`, `pqzKeySigOf`,
 ///         `uaAt`, `uaPage`, `uaIndex` in the auxiliary library. The hot views (`requireAuthorized`, `kindOf`, `recordOf`,
 ///         `checkedOf`, the key and member readers), `uaAuthDigest` and the immutables' getters stay here; `muSig2KeyOf` and
 ///         `frostKeyOf` stay too (their typed return does not compile in a library: stack too deep). Both libraries'
@@ -344,7 +346,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         view
         returns (uint16 kind, bytes memory keyData, UAAttrs memory attrs, bytes memory pop, bytes memory pqzPop)
     {
-        _libView(address(UARegistryCoreLib), UARegistryCoreLib.registrationOf.selector, kind);
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.registrationOf.selector, kind); // D1 (owner 2026-11-15)
     }
 
     function popOf(bytes32 ua) external view returns (bytes memory pop) {
@@ -600,9 +602,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (owner == 0 && predecessor != address(0)) owner = IUARegistry(predecessor).keyOwner(keyHash);
     }
 
-    /// The ML-DSA expanded-key parts stored for `ua` (0 = not yet; ML-DSA-44 uses the first only). This generation's
-    /// cache only.
-    function expandedKeyOf(bytes32 ua) external view returns (address[2] memory) {
+    /// The ML-DSA expanded-key parts stored for `ua` (0 = not yet; ML-DSA-44 uses the first only, ML-DSA-65 two, ML-DSA-87
+    /// three). This generation's cache only.
+    function expandedKeyOf(bytes32 ua) external view returns (address[3] memory) {
         return _s.ekPtr[ua];
     }
 
@@ -731,7 +733,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     // ----- requireAuthorized -----
 
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig calldata auth) external view {
-        if (!_authorized(ua, purposeTag, digest, auth)) revert UAUnauthorized(ua);
+        if (!_authorized(ua, purposeTag, digest, auth)) {
+            // owner 2026-11-15, F-8: an ML-DSA record without its complete cache on a verifier without a precompile gets the named
+            // refusal (CTR-UA-23), asked only after a refused check, so an accepted one pays nothing for it
+            uint16 kind = _s.records[ua].kind;
+            uint256 cfg = _cfg(kind);
+            if (PqUA.mldsaParts(kind) != 0 && uint160(cfg) != 0 && UAStore.expanded(ua, kind).length == 0
+                && UAStore.noPrecompile(address(uint160(cfg)))) revert UAKeyNotCached(ua);
+            revert UAUnauthorized(ua);
+        }
     }
 
     /// TS-D12: native — `signature` only; `msig` — `members` only (the structure from the record); other derived ids —

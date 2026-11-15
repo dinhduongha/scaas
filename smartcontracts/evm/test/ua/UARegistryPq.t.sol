@@ -15,6 +15,7 @@ import {console2} from "forge-std/Test.sol";
 import {MockVerifier, UARegistryBase} from "./UARegistryBase.sol";
 import {BurnAll, GasProbe} from "./UAGas.t.sol";
 import {UACall} from "./UACall.sol";
+import {DeployGas} from "../../script/DeployGas.sol";
 
 /// P6c: the PQ kinds in registry generation 1 (accounts.md CTR-UA-17, CTR-UA-23, §1.8, §1.9; pq-zero-knowledge.md CTR-PQZ-12,
 /// CTR-PQZ-13). Mock verifiers for the slots, the stored keys and the cache refusals; the
@@ -23,6 +24,7 @@ import {UACall} from "./UACall.sol";
 contract UARegistryPqTest is UARegistryBase {
     uint64 internal constant CAP_MLDSA44 = 4_250_000;
     uint64 internal constant CAP_MLDSA65 = 5_950_000;
+    uint64 internal constant CAP_MLDSA87 = 8_850_000; // DeployBase.CAP_MLDSA87: the cached path (owner 2026-11-15)
     uint64 internal constant CAP_FNDSA = 2_500_000;
     uint64 internal constant CAP_SLHDSA = 1_400_000;
     uint256 internal constant TX_CAP = 16_777_216; // EIP-7825
@@ -137,7 +139,7 @@ contract UARegistryPqTest is UARegistryBase {
         (two[0], two[1]) = (UARegistry.KindConfig(0x0134, address(mock), 250_000), UARegistry.KindConfig(0x0134, address(mock), 1));
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0x0134)));
         new UARegistry(chainUidA, address(0), false, BUDGET, address(0), true, two);
-        // without a verifier for it (no precompile, CTR-UA-39 Q1): not registrable
+        // a registry configured without it (e.g. a budget it does not fit, CTR-UA-23): not registrable
         UARegistry off = _deploy(address(0x5ca5), chainUidA, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
         assertFalse(off.kindEnabled(0x0134));
         bytes memory pk = _pk(0x0134, 2);
@@ -172,7 +174,8 @@ contract UARegistryPqTest is UARegistryBase {
         UARegistry.KindConfig[] memory c = _realPq();
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
         bytes memory pk44 = _pk(0x0130, 1);
-        uint16[5] memory others = [uint16(0x0132), 0x0133, 0x0134, 0x0135, 0x0101]; // 0x0134, 0x0135: no cache (CTR-UA-39 Q1, -40 Q4)
+        // 0x0134 here is on a precompile (`_realPq`), 0x0135 has no cache (CTR-UA-40 Q4)
+        uint16[5] memory others = [uint16(0x0132), 0x0133, 0x0134, 0x0135, 0x0101];
         for (uint256 i; i < 5; ++i) {
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyCache.selector, others[i]));
             r.cacheExpandedKey(others[i], pk44, 0);
@@ -219,7 +222,7 @@ contract UARegistryPqTest is UARegistryBase {
     /// logged apart: 30.4 M to 40.4 M in all, a 2^24 limit would not hold it).
     function _cache(UARegistry r, uint16 kind, bytes memory pk, string memory name) internal {
         bytes32 ua = r.uaOf(kind, pk);
-        for (uint256 p; p < (kind == 0x0130 ? 1 : 2); ++p) {
+        for (uint256 p; p < PqUA.mldsaParts(kind); ++p) {
             vm.expectEmit(true, true, false, false, address(r));
             emit IUARegistry.UAKeyCached(ua, kind, p, address(0));
             assertEq(r.cacheExpandedKey(kind, pk, p), ua);
@@ -266,7 +269,7 @@ contract UARegistryPqTest is UARegistryBase {
         assertEq(r.portableRecordDigest(ua, kind, 0, r.kemRecordHash(ua, 0, UACall.kem(""))), vm.parseJsonBytes32(pj, _row(i, "pop.popDigest")));
         bytes memory pop = vm.parseJsonBytes(pj, _row(i, "pop.sig"));
         if (kind == 0x0130 || kind == 0x0131) {
-            _popRefused(r, kind, pk, pop); // no cache yet: the FIPS 204 key exceeds the cap
+            _notCached(r, kind, pk, pop, ua); // no cache yet: refused by name (CTR-UA-23, owner 2026-11-15)
             _cache(r, kind, pk, name);
         }
         assertEq(vm.parseJsonBytes(pj, _row(i, "popOther.sig")), pop, "UA-8: the PoP is the same in every context");
@@ -391,6 +394,213 @@ contract UARegistryPqTest is UARegistryBase {
     function _popRefused(UARegistry r, uint16 kind, bytes memory pk, bytes memory sig) internal {
         vm.expectRevert(IUARegistry.UAPoP.selector);
         UACall.register(r, kind, pk, _none(), sig, "");
+    }
+
+    /// CTR-UA-23 (owner 2026-11-15): an ML-DSA `register` without a precompile before every part is cached.
+    function _notCached(UARegistry r, uint16 kind, bytes memory pk, bytes memory sig, bytes32 ua) internal {
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyNotCached.selector, ua));
+        UACall.register(r, kind, pk, _none(), sig, "");
+    }
+
+    // ----- the ML-DSA cache without a precompile (owner 2026-11-15, CTR-UA-23 / CTR-UA-39 Q1) -----
+
+    /// `mldsa44` / `mldsa65` / `mldsa87` in pure Solidity on the registry's cache, at `DeployBase`'s cached caps.
+    function _cachedMl() internal returns (UARegistry.KindConfig[] memory c) {
+        c = new UARegistry.KindConfig[](3);
+        c[0] = UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44);
+        c[1] = UARegistry.KindConfig(0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), CAP_MLDSA65);
+        c[2] = UARegistry.KindConfig(0x0134, address(new MldsaVerifier(0x0134, address(0), "", "")), CAP_MLDSA87);
+    }
+
+    /// The regular gas of the test's last call, its own transaction under `isolate` (intrinsic and calldata included),
+    /// x 64/63 as `DeployBase._measuredGas` / `GovDeploy.t.sol` measure; logged with its EIP-8037 state gas.
+    function _regular(string memory what) internal returns (uint256 regular) {
+        Vm.Gas memory g = vm.lastCallGas();
+        regular = g.gasTotalUsed * 64 / 63;
+        emit log_named_uint(string.concat(what, " regular"), regular);
+        emit log_named_uint(string.concat(what, " state (EIP-8037)"), uint256(int256(g.gasStateUsed)));
+    }
+
+    /// c1 (owner 2026-11-15; forge and anvil do not enforce EIP-7825's 2^24, Nethermind does, so it is asserted): `regular x 1.05
+    /// < 2^24` for every part transaction, `register` after the cache, and `verifyCached` as its own transaction.
+    function _under2p24(string memory what) internal returns (uint256 regular) {
+        regular = _regular(what);
+        assertLt(regular * 105 / 100, TX_CAP, string.concat(what, ": regular gas x 1.05 < 2^24 (EIP-7825)"));
+    }
+
+    /// The c1 run of `pq_signatures.json` row `i` on `r` (`_cachedMl`): `register` refused by name before the cache and with
+    /// part 0 only; each part; `register`; then `_c1Verify`.
+    function _c1(UARegistry r, MldsaVerifier v, string memory pj, uint256 i) internal returns (uint256 raw) {
+        uint16 kind = uint16(vm.parseJsonUint(pj, _row(i, "kind")));
+        assertEq(v.KIND(), kind);
+        string memory name = vm.parseJsonString(pj, _row(i, "name"));
+        bytes memory pk = vm.parseJsonBytes(pj, _row(i, "keyData"));
+        bytes memory pop = vm.parseJsonBytes(pj, _row(i, "pop.sig"));
+        bytes32 ua = r.uaOf(kind, pk);
+        _notCached(r, kind, pk, pop, ua);
+        uint256 parts = v.expandedKeyParts();
+        assertEq(parts, kind == 0x0130 ? 1 : kind == 0x0131 ? 2 : 3, "parts");
+        assertEq(parts, PqUA.mldsaParts(kind), "the one count (F-12)");
+        for (uint256 p; p < parts; ++p) {
+            assertEq(r.cacheExpandedKey(kind, pk, p), ua);
+            _under2p24(string.concat("cacheExpandedKey ", name, " part ", vm.toString(p)));
+            if (p + 1 < parts) _notCached(r, kind, pk, pop, ua); // a part missing
+        }
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyCache.selector, kind));
+        r.cacheExpandedKey(kind, pk, parts); // past the last
+        assertEq(UACall.register(r, kind, pk, _none(), pop, ""), ua);
+        _under2p24(string.concat("register ", name, " (verifyCached inside)"));
+        raw = _c1Verify(r, v, pj, i, ua);
+    }
+
+    /// `verifyCached` of row `i`'s PoP on the stored pointers as its own transaction (under 2^24), the
+    /// uncached FIPS-key verify (returned), the row's signatures through `requireAuthorized` on the cache.
+    function _c1Verify(UARegistry r, MldsaVerifier v, string memory pj, uint256 i, bytes32 ua) internal returns (uint256 raw) {
+        string memory name = vm.parseJsonString(pj, _row(i, "name"));
+        bytes memory pop = vm.parseJsonBytes(pj, _row(i, "pop.sig"));
+        bytes32 m = vm.parseJsonBytes32(pj, _row(i, "pop.message"));
+        _call(address(v), abi.encodeCall(v.verifyCached, (_chunks(r, v, ua), m, pop)), "verifyCached");
+        _under2p24(string.concat("verifyCached ", name)); // with the transaction's intrinsic and calldata: the cap is PqGas.t.sol's
+        _call(address(v), abi.encodeCall(v.verify, (vm.parseJsonBytes(pj, _row(i, "keyData")), m, pop)), "FIPS-key verify");
+        raw = _regular(string.concat("uncached FIPS-key verify ", name));
+        _pqSigs(r, pj, i, ua); // the vector's signatures through `requireAuthorized`, on the cache
+    }
+
+    /// A top-level call (its own transaction under `isolate`) that must answer true.
+    function _call(address to, bytes memory data, string memory what) internal {
+        (bool ok, bytes memory ret) = to.call(data);
+        assertTrue(ok && abi.decode(ret, (bool)), what);
+    }
+
+    /// The stored part pointers of `ua`, in order, as `verifyCached` takes them.
+    function _chunks(UARegistry r, MldsaVerifier v, bytes32 ua) internal view returns (bytes memory) {
+        address[3] memory e = r.expandedKeyOf(ua);
+        uint256 n = v.expandedKeyParts();
+        return n == 1 ? abi.encodePacked(e[0]) : n == 2 ? abi.encodePacked(e[0], e[1]) : abi.encodePacked(e[0], e[1], e[2]);
+    }
+
+    /// c1 for the three ML-DSA kinds without a precompile (owner 2026-11-15): every part transaction, `register` and
+    /// `verifyCached` fit 2^24 with 5 % to spare; the uncached FIPS-key verify of ML-DSA-65 and ML-DSA-87 is OVER 2^24 (the
+    /// reason the cache is the only path there; ML-DSA-44's is under it, still over its cap); `register` before the cache is
+    /// complete is `UAKeyNotCached`.
+    function test_mldsaCache_c1_under2p24() public {
+        string memory pj = _pj();
+        UARegistry.KindConfig[] memory c = _cachedMl();
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        uint256[3] memory rows = [uint256(0), 1, 4];
+        uint256[3] memory raw;
+        for (uint256 j; j < 3; ++j) raw[j] = _c1(r, MldsaVerifier(c[j].verifier), pj, rows[j]);
+        assertLt(raw[0], TX_CAP, "mldsa44 FIPS-key verify: under 2^24");
+        assertGt(raw[0], CAP_MLDSA44, "mldsa44 FIPS-key verify: over its cap");
+        assertGt(raw[1], TX_CAP, "mldsa65 FIPS-key verify: over 2^24 (EIP-7825)");
+        assertGt(raw[2], TX_CAP, "mldsa87 FIPS-key verify: over 2^24 (EIP-7825)");
+    }
+
+    /// MD-4 / F-14 (owner 2026-11-15): an `mldsa87` id with only parts 0 + 1, or only 0 + 2, stored is not cached: `register` is
+    /// `UAKeyNotCached` (the third `ekPtr` slot counts); with the three, it registers.
+    function test_mldsa87_twoOfThreePartsNotCached() public {
+        string memory pj = _pj();
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _cachedMl());
+        bytes memory pk = vm.parseJsonBytes(pj, _row(4, "keyData"));
+        bytes memory pop = vm.parseJsonBytes(pj, _row(4, "pop.sig"));
+        bytes32 ua = r.uaOf(0x0134, pk);
+        r.cacheExpandedKey(0x0134, pk, 0);
+        r.cacheExpandedKey(0x0134, pk, 1);
+        _notCached(r, 0x0134, pk, pop, ua); // 0 + 1
+        uint256 s = vm.snapshotState();
+        bytes32 slot1 = bytes32(uint256(_ekBase(r, ua)) + 1);
+        r.cacheExpandedKey(0x0134, pk, 2);
+        vm.store(address(r), slot1, bytes32(0)); // 0 + 2 only (a part is never deleted: a storage write stands for it)
+        assertEq(r.expandedKeyOf(ua)[1], address(0));
+        _notCached(r, 0x0134, pk, pop, ua);
+        vm.revertToState(s);
+        r.cacheExpandedKey(0x0134, pk, 2);
+        assertEq(UACall.register(r, 0x0134, pk, _none(), pop, ""), ua);
+    }
+
+    /// `UAStore.ekPtr[ua]`'s first slot (layout slot 3 at root 0, `UAStoreLayout.t.sol`), checked against the stored part 0.
+    function _ekBase(UARegistry r, bytes32 ua) internal view returns (bytes32 b) {
+        b = keccak256(abi.encode(ua, uint256(3)));
+        assertEq(address(uint160(uint256(vm.load(address(r), b)))), r.expandedKeyOf(ua)[0], "the ekPtr base");
+    }
+
+    /// F-8 (owner 2026-11-15): `requireAuthorized` of an ML-DSA record whose cache is gone (only by a storage write here: parts are
+    /// never deleted) reverts `UAKeyNotCached` in code, never the uncached FIPS-key call.
+    function test_requireAuthorized_uncachedIsNamed() public {
+        string memory pj = _pj();
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _cachedMl());
+        bytes memory pk = vm.parseJsonBytes(pj, _row(1, "keyData"));
+        _cache(r, 0x0131, pk, "mldsa65");
+        bytes32 ua = UACall.register(r, 0x0131, pk, _none(), vm.parseJsonBytes(pj, _row(1, "pop.sig")), "");
+        _pqSigs(r, pj, 1, ua); // positive control: on the cache
+        vm.store(address(r), bytes32(uint256(_ekBase(r, ua)) + 1), bytes32(0)); // part 1 gone
+        bytes32 digest = vm.parseJsonBytes32(pj, ".digest");
+        string memory sr = _row(1, "sigs[0].");
+        bytes32 p = keccak256(bytes(string.concat("scaas.ua.purpose.", vm.parseJsonString(pj, string.concat(sr, "purpose")), ".v1")));
+        IUARegistry.UASig memory au = UACall.auth(ua, abi.encode(bytes(""), vm.parseJsonBytes(pj, string.concat(sr, "sig"))));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyNotCached.selector, ua));
+        r.requireAuthorized(ua, p, digest, au);
+    }
+
+    /// MD-5 / F-5 (owner 2026-11-15): each cache part transaction's least working gas limit, bisected (cold, a snapshot reverted
+    /// around each try), with its regular share and EIP-8037 state gas: the figures `DeployGas` carries for `DeployBase`'s
+    /// deploy-time gate (the regular share + 100,000 rounded up to 10,000; the state gas exactly), and the regular share x 1.05
+    /// < 2^24 (EIP-7825).
+    function test_mldsaCache_partLeastWorkingGas() public {
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _cachedMl());
+        string memory pj = _pj();
+        uint256[3] memory rows = [uint256(0), 1, 4];
+        uint64[3][3] memory reg = DeployGas.regular();
+        uint64[3][3] memory st = DeployGas.state();
+        for (uint256 j; j < 3; ++j) {
+            uint16 kind = uint16(vm.parseJsonUint(pj, _row(rows[j], "kind")));
+            bytes memory pk = vm.parseJsonBytes(pj, _row(rows[j], "keyData"));
+            for (uint256 p; p < PqUA.mldsaParts(kind); ++p) {
+                (uint256 least, uint256 state) = _leastPart(r, kind, pk, p);
+                string memory w = string.concat("cache part least working ", vm.parseJsonString(pj, _row(rows[j], "name")), " part ", vm.toString(p));
+                // forge charges a nested call's EIP-8037 state gas to its gas limit: the regular share is the rest
+                emit log_named_uint(string.concat(w, " (gas limit of the call, regular + state)"), least);
+                emit log_named_uint(string.concat(w, " regular share"), least - state);
+                emit log_named_uint(string.concat(w, " state (EIP-8037)"), state);
+                assertLt((least - state) * 105 / 100, TX_CAP, "least working regular x 1.05 < 2^24");
+                assertLe(least - state + 100_000, reg[j][p], "DeployGas.regular holds it with the intrinsic and calldata");
+                assertLt(reg[j][p] - (least - state + 100_000), 10_000, "DeployGas.regular: the measurement rounded up");
+                assertEq(state, st[j][p], "DeployGas.state");
+                r.cacheExpandedKey(kind, pk, p); // on to the next part
+            }
+        }
+    }
+
+    function _leastPart(UARegistry r, uint16 kind, bytes memory pk, uint256 p) internal returns (uint256 hi, uint256 state) {
+        uint256 snap = vm.snapshotState();
+        r.cacheExpandedKey(kind, pk, p);
+        Vm.Gas memory g = vm.lastCallGas();
+        state = uint256(int256(g.gasStateUsed));
+        vm.revertToState(snap);
+        hi = (g.gasTotalUsed + state) * 2;
+        uint256 lo = g.gasTotalUsed / 2;
+        snap = vm.snapshotState();
+        r.cacheExpandedKey{gas: hi}(kind, pk, p); // the upper end works
+        vm.revertToState(snap);
+        while (hi - lo > 1000) {
+            uint256 mid = (lo + hi) / 2;
+            snap = vm.snapshotState();
+            try r.cacheExpandedKey{gas: mid}(kind, pk, p) {
+                hi = mid;
+            } catch {
+                lo = mid;
+            }
+            vm.revertToState(snap);
+        }
+    }
+
+    /// The `mldsa87` cache's refusals: part 3 past the last; a precompile verifier refuses the cache (`test_cacheRefusedWithPrecompile`).
+    function test_mldsa87CacheRefusals() public {
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _cachedMl());
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyCache.selector, uint16(0x0134)));
+        r.cacheExpandedKey(0x0134, _pk(0x0134, 1), 3);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, uint16(0x0134)));
+        r.cacheExpandedKey(0x0134, _pk(0x0131, 1), 0);
     }
 
     /// Registers the three `mldsa65` keys (cache + PoP) and signatures.json's `p256` key on `r`.
@@ -569,13 +779,14 @@ contract UARegistryPqTest is UARegistryBase {
         }
     }
 
-    /// Half of an `mldsa65` expanded key (part 0 of 2) does not satisfy the registry: the PoP is refused.
+    /// Half of an `mldsa65` expanded key (part 0 of 2) does not satisfy the registry: refused by name (`UAKeyNotCached`,
+    /// CTR-UA-23, owner 2026-11-15; before it the PoP failed as `UAPoP`).
     function test_halfCacheRefusesPop() public {
         string memory pj = _pj();
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _realPq());
         bytes memory pk = vm.parseJsonBytes(pj, _row(1, "keyData"));
         r.cacheExpandedKey(0x0131, pk, 0);
-        _popRefused(r, 0x0131, pk, vm.parseJsonBytes(pj, _row(1, "pop.sig")));
+        _notCached(r, 0x0131, pk, vm.parseJsonBytes(pj, _row(1, "pop.sig")), r.uaOf(0x0131, pk));
     }
 
     /// Gen 2 hands PQ records to gen 1: it authorizes with gen 1's cache; it has no cache of its own.
@@ -589,9 +800,10 @@ contract UARegistryPqTest is UARegistryBase {
         _cache(r, 0x0130, pk, "mldsa44");
         bytes32 ua = UACall.register(r, 0x0130, pk, _none(), vm.parseJsonBytes(pj, _row(0, "pop.sig")), "");
         _pqSigs(g2, pj, 0, ua);
-        address[2] memory z = g2.expandedKeyOf(ua);
+        address[3] memory z = g2.expandedKeyOf(ua);
         assertEq(z[0], address(0));
         assertEq(z[1], address(0));
+        assertEq(z[2], address(0));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyCache.selector, uint16(0x0130)));
         g2.cacheExpandedKey(0x0130, pk, 0);
     }

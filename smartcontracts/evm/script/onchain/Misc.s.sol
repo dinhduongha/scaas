@@ -273,8 +273,13 @@ contract Misc is OnchainBase {
                 break;
             }
         }
-        vm.broadcast(k1);
-        reg.cacheExpandedKey(UAKinds.MLDSA44, pk, 0);
+        if (_mldsaCache(UAKinds.MLDSA44)) {
+            vm.broadcast(k1);
+            reg.cacheExpandedKey(UAKinds.MLDSA44, pk, 0);
+        } else { // 3zh: the precompile path refuses the cache
+            _neg(a1, address(reg), abi.encodeCall(IUARegistry.cacheExpandedKey, (UAKinds.MLDSA44, pk, 0)),
+                IUARegistry.UAKeyCache.selector, "registry: cacheExpandedKey of mldsa44 on the precompile path");
+        }
         _neg(a1, address(reg), abi.encodeCall(IUARegistry.cacheExpandedKey, (UAKinds.SECP256K1, pk, 0)),
             IUARegistry.UAKeyCache.selector, "registry: cacheExpandedKey of a kind without a cache");
     }

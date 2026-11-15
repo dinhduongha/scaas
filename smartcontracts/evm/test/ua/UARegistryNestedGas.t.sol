@@ -10,8 +10,17 @@ import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
 import {BurnAll} from "./UAGas.t.sol";
+import {PqUA} from "../../src/ua/PqUA.sol";
 
 /// Calls `target` giving its frame exactly `gas`; returns the outcome and the revert data.
+/// `BurnAll` as an ML-DSA verifier on a precompile (`PRECOMPILE()` != 0): its FIPS-key `verify` is the registry's path (3zh, owner
+/// 2026-11-15: without a precompile only the expanded-key cache is, `UAKeyNotCached`).
+contract BurnAllPrecompile is BurnAll {
+    function PRECOMPILE() external pure returns (address) {
+        return address(0x13);
+    }
+}
+
 contract FrameProbe {
     function probe(address target, bytes calldata data, uint256 gas) external returns (bool ok, bytes memory ret) {
         (ok, ret) = target.call{gas: gas}(data);
@@ -75,7 +84,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
     function _none256() internal pure returns (uint256[] memory r) {}
 
     function _config(Case memory c) internal returns (UARegistry.KindConfig[] memory k, address burn) {
-        burn = address(new BurnAll());
+        burn = PqUA.mldsaParts(c.kind) != 0 ? address(new BurnAllPrecompile()) : address(new BurnAll());
         k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(c.kind, burn, c.cap);
     }
