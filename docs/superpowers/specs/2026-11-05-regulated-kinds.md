@@ -1,6 +1,8 @@
 # Regulated token kinds 8–13: one regulated implementation per kind — design (draft for the owner)
 
-**Status:** revised after the Fable and Codex reviews (2026-11-05). SPECIFIED; nothing is built. Work order item 3b. **Owner
+**Status:** revised after the Fable and Codex reviews (2026-11-05). **BUILT** on branch `ua-mtx-merge`, T24–T36 (UNAUDITED);
+the normative home is [asset-suite.md §2](../../contracts/asset-suite.md#2-regulated-controls), RK-1…RK-11 are
+CTR-AS-20…CTR-AS-30 (T19). The section tags below are the design's. Work order item 3b. **Owner
 2026-11-05:** all six regulated kinds are built **inside branch `ua-mtx-merge`**, as task group T24–T36 after T18 and before T19
 (docs) and T22 (review), so the round's docs, review and PR cover them; before the EVM freeze, so the audit covers them; no
 governance or voting token. The reviews: [Fable](../../research/regulated-kinds-fable-review.md) (0 P0, 5 P1, 14 P2, 18 P3),
@@ -19,7 +21,7 @@ governance or voting token. The reviews: [Fable](../../research/regulated-kinds-
 asset-suite [CTR-AS-02](../../contracts/asset-suite.md#CTR-AS-02)…[CTR-AS-09](../../contracts/asset-suite.md#CTR-AS-09),
 [CTR-AS-16](../../contracts/asset-suite.md#CTR-AS-16), [CTR-AS-17](../../contracts/asset-suite.md#CTR-AS-17); the governance
 spec [§1.2, §4.2–§4.4, §7.7](2026-11-02-governance.md); the merge spec's entry form and §8
-([2026-11-04-ua-mtx-merge.md](2026-11-04-ua-mtx-merge.md), [CTR-MTX-30](../../decisions.md#CTR-MTX-30)). Where asset-suite §2
+([2026-11-04-ua-mtx-merge.md](2026-11-04-ua-mtx-merge.md), [CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30)). Where asset-suite §2
 writes `address`, this spec writes the `bytes32` id (CTR-AS-07's UA constraint, CTR-GOV-01's identity by UA); nothing else in
 those rules changes.
 
@@ -519,7 +521,7 @@ and pins it (`SigCheck._erc1271` and `SCaaSDex._bal` are the pattern). The cap i
 ### 6.1 Releases and kind enabling
 
 No factory change (governance spec §4.2): per kind `publishEnv(kind, envVersion, env)` with `RegulatedLib` in `Env.libs` and
-`libCodeHashes`, `deployImplementation(kind, version, envVersion, initcode, implArgs)` (`implArgs` carries `REGISTRY_CODEHASH`),
+`libCodeHashes`, `deployTokenImplementation(kind, version, envVersion, initcode, implArgs)` (`implArgs` carries `REGISTRY_CODEHASH`),
 `noticePeriod`, then `setKindEnabled(kind, true)`. `_checkImplementation` compares `kind()`. A regulated token is
 `isRegisteredToken`, `KIND_SCAAS` to the DEX, and a wrapped kind's leg check refuses it as a leg when bit 6 or 21 is set
 (CTR-GOV-05, built). `createTokenUnregistered` keeps refusing ids ≥ 2. Since every release is new at reset 2, **one**

@@ -82,18 +82,26 @@ _BY = {k[0]: k for k in KINDS}
 _SCHEME = {s[0]: s for s in SCHEMES}
 GROUPS = ('p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
           'fndsa512', 'slhdsa128s', 'mldsa87', 'fndsa1024', 'pqz-mlwe')
-PURPOSES = ('pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee',
-            'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'pqz-verdict')
+PURPOSES = ('pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'payee-fee',
+            'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update', 'pqz-verdict')
 
 
-# The governance bits 0-24 (spec 2026-11-02-governance 1.2): (name, type) by bit. The disclosure sentences are read by the app
-# from smartcontracts/vectors/governance/governance_bits.json; bits 25-127 are free, 128-255 the application's bitLabel(bit).
+# The governance bits 0-31 (spec 2026-11-02-governance 1.2): (name, type) by bit. The disclosure sentences are read by the app
+# from smartcontracts/vectors/governance/governance_bits.json; bits 32-127 are free, 128-255 the application's bitLabel(bit).
 GOVERNANCE_BITS = (
     ('PAYABLE', 'capability'), ('MINTABLE', 'power'), ('BURNABLE', 'capability'), ('RATE_ADJUSTABLE', 'power'),
-    ('WRAP_DISABLEABLE', 'power'), ('FREEZE', 'power'), ('FORCE', 'power'), ('PAUSE', 'power'), ('ALLOWLIST', 'capability'),
-    ('DENYLIST', 'capability'), ('RECORD', 'power'), ('LISTING', 'power'), ('FEE_ROUTING', 'power'), ('', 'unused'), ('', 'unused'),
+    ('WRAP_DISABLEABLE', 'power'), ('FREEZE', 'power'), ('FORCE', 'power'), ('PAUSE', 'power'), ('ALLOWLIST', 'power'),
+    ('DENYLIST', 'power'), ('RECORD', 'power'), ('LISTING', 'power'), ('FEE_ROUTING', 'power'), ('', 'unused'), ('', 'unused'),
     ('ARBITRATE', 'reserved'), ('CORRECT', 'reserved'), ('RESCUABLE', 'capability'), ('PUBLISH', 'power'), ('DEPRECATE', 'power'),
     ('ENABLE_KIND', 'power'), ('MODERATE', 'power'), ('OPERATOR_TRANSFER', 'power'), ('TAX', 'power'), ('PQZ_PROOF', 'power'),
+    # group 3l (wrap limits spec 2026-11-10 §2): the hybrids' wrap controls
+    ('WRAP_LIMIT', 'capability'), ('WRAP_LIST', 'power'), ('REDEEMER', 'power'),
+    # round 3s (CTR-GOV-24): 8, 9 the token's lists (powers), 28 the compliance registry check
+    ('KYC', 'capability'),
+    # CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
+    ('CLOSED_MARKETS', 'capability'),
+    # round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
+    ('BURNER', 'power'), ('SUPPLY_CAP_ADJUSTABLE', 'capability'),
 )
 
 
@@ -263,6 +271,10 @@ PORTABLE_TYPES = {
     'UAPqzKeyVersion': _PQZ_KEY_VERSION_TYPE,
     'UAPqzKeyVersionRecord': 'UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)' + _PQZ_KEY_VERSION_TYPE,
     'UAMembership': 'UAMembership(bytes32 ua,bytes32 member)',
+    # CTR-UA-44 (TODO 3ze): an msig's structure update on one registry
+    'UAMsigUpdate': 'UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,'
+                    'uint256 enabled,uint64 validUntilBlock)UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
+    'UAMsigMember': 'UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
 }
 
 
@@ -414,6 +426,15 @@ def membership_digest(ua, member):
     """The typed ``UAMembership{ua, member}``: what ``member`` signs to accept its slot in the ``msig`` ``ua`` (CTR-UA-37): a native
     member this digest itself, a derived member ``member_digest(ua, ua_message(MSIG, PURPOSE_MEMBERSHIP, ·))`` under ``member``."""
     return _typed(hash_struct('UAMembership', ua, member))
+
+
+def msig_update_digest(ua, chain_uid, registry, version, threshold, members, enabled, valid_until_block):
+    """CTR-UA-44: the typed ``UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}``, ``members``
+    ``(kind, id, weight)`` tuples hashed as an EIP-712 array of ``UAMsigMember``, ``enabled`` the uint256 bitmap (bit i = slot i): what a
+    quorum of the stored structure signs for ``updateMsig`` on that one registry, under ``ua_message(MSIG, PURPOSE_MSIG_UPDATE, ·)``."""
+    hs = b''.join(hash_struct('UAMsigMember', _word(k), i, _word(w)) for k, i, w in members)
+    return _typed(hash_struct('UAMsigUpdate', ua, chain_uid, _address_word(registry), _word(version), _word(threshold), keccak256(hs),
+                              _word(enabled), _word(valid_until_block)))
 
 
 PqzKeyRecord = namedtuple('PqzKeyRecord', 'pqz_key_hash pqz_pop_hash pqz_key_digest record_digest message pqz_reg_message '

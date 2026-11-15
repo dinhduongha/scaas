@@ -14,7 +14,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
-import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
+import {PqzKeyVerifier} from "../../src/pqz/PqzKeyVerifier.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {Catalogue, pqzEnv, pinned, withModules} from "../helpers/Catalogue.sol";
@@ -403,7 +403,8 @@ contract PqzNormalTest is PqzFixture {
     function test_factoryGate() public {
         bytes memory code = type(NormalPqzToken).creationCode;
         vm.prank(registrar);
-        (bool ok,) = address(factory).call(abi.encodeWithSelector(factory.deployImplementation.selector, uint8(6), 1, 1, code, ""));
+        (bool ok,) = address(factory).call(abi.encodeWithSelector(factory.deployTokenImplementation.selector, uint8(6), 1, 1, code, "",
+            EnvKit.uidOf(address(factory))));
         assertFalse(ok, "kind 6 (dropped, D21) fails ABI decoding");
         // an unregistered PQZ implementation cannot be cloned at all (owner 2026-10-19)
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
@@ -416,7 +417,7 @@ contract PqzNormalTest is PqzFixture {
         _mockSelfTest();
         // the factory's generic gate: the kind disabled
         vm.prank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, false);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, false, EnvKit.uidOf(address(factory)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, IOpenFactory.TokenKind.NORMAL_PQZ));
         factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(1 << 40)), "g4");
         assertEq(tok.kind(), 4);
@@ -424,17 +425,17 @@ contract PqzNormalTest is PqzFixture {
         assertEq(tok.precompile(), PQZ);
     }
 
-    /// Plan 5h Task 8d part 2 (D23 [Z2]): a new `UAPqzVerifier` (a new set or id) reaches tokens only through the next
+    /// Plan 5h Task 8d part 2 (D23 [Z2]): a new `PqzKeyVerifier` (a new set or id) reaches tokens only through the next
     /// `Env` version of the kind and a new release on it; tokens of the old release keep their verifier, the old release
     /// keeps its env, and the new release's tokens run on the new instance.
     function test_newVerifierNewEnvNewRelease() public {
-        UAPqzVerifier old = pqv;
-        UAPqzVerifier fresh = _newPqzVerifier(PQZL_ID);
+        PqzKeyVerifier old = pqv;
+        PqzKeyVerifier fresh = _newPqzVerifier(PQZL_ID);
         assertTrue(address(fresh) != address(old));
-        uint16 v1 = factory.latestEnvVersion(IOpenFactory.TokenKind.NORMAL_PQZ);
+        uint16 v1 = factory.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL_PQZ);
         address impl2 = Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 2,
             pqzEnv(address(factory), PQZ_UID, address(reg), address(fresh)), type(NormalPqzToken).creationCode);
-        assertEq(factory.latestEnvVersion(IOpenFactory.TokenKind.NORMAL_PQZ), v1 + 1, "the next env version");
+        assertEq(factory.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL_PQZ), v1 + 1, "the next env version");
         assertEq(factory.releaseOf(IOpenFactory.TokenKind.NORMAL_PQZ, 2).envVersion, v1 + 1);
         assertEq(factory.releaseOf(IOpenFactory.TokenKind.NORMAL_PQZ, 1).envVersion, v1, "release 1 keeps its env");
         NormalPqzToken t2 = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 2, abi.encode(_cfg(1 << 40)), "r2"));
@@ -447,9 +448,9 @@ contract PqzNormalTest is PqzFixture {
         assertEq(t2.pqzAccount(bob, 0).pendingCount, 1, "the new release works");
     }
 
-    /// Review 5g-Z2 P2-3: the release env (`deps = [UAPqzVerifier]` with code, never Hedera) is checked by the
+    /// Review 5g-Z2 P2-3: the release env (`deps = [PqzKeyVerifier]` with code, never Hedera) is checked by the
     /// release's `validateEnv` (chain-neutral releases, plan T72: the constructor's checks moved there), which
-    /// `deployImplementation` calls and bubbles.
+    /// `deployTokenImplementation` calls and bubbles.
     function test_constructorChecksTheEnv() public {
         bytes memory code = type(NormalPqzToken).creationCode;
         IFactoryToken.Env[6] memory bad;
@@ -473,14 +474,14 @@ contract PqzNormalTest is PqzFixture {
                 withModules(pinned(bad[i], IOpenFactory.TokenKind.NORMAL_PQZ), ms));
             vm.prank(registrar);
             vm.expectRevert(IPqzToken.BadInit.selector);
-            factory.deployImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args);
+            factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 2, ev, code, args, EnvKit.uidOf(address(factory)));
         }
     }
 
     /// Owner ruling 2026-10-31 (no chain lock; capability only): with the kind enabled, `createToken` works at any chain
     /// id where the precompile's self-test passes (22776, the mainnet; an arbitrary id) and is refused where it fails.
     function test_createToken_anyChainId_selfTestDecides() public {
-        assertTrue(factory.kindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ));
+        assertTrue(factory.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ));
         uint256[2] memory ids = [uint256(22776), 987654321];
         for (uint256 i; i < ids.length; ++i) {
             vm.chainId(ids[i]);
@@ -592,7 +593,7 @@ contract PqzNormalTest is PqzFixture {
     /// verifier gets tokens whose verdicts come from `PqzSafety.PQZ` only, for PQZL or PQZH only, after the self-test
     /// (the init check is the second line).
     function test_initPinsThePrecompile() public {
-        assertEq(factory.envOf(IOpenFactory.TokenKind.NORMAL_PQZ, 1).deps[0], address(pqv));
+        assertEq(factory.tokenEnvOf(IOpenFactory.TokenKind.NORMAL_PQZ, 1).deps[0], address(pqv));
         address fake = address(0xFA4E);
         bytes32 other = keccak256("another proof system");
         address[3] memory pre = [fake, PQZ, PQZ];
@@ -603,7 +604,7 @@ contract PqzNormalTest is PqzFixture {
             Catalogue.release(g, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(g), PQZ_UID, address(reg), fv),
                 type(NormalPqzToken).creationCode);
             vm.prank(registrar);
-            g.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+            g.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(g)));
             if (i == 2) vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0))); // the real pair, self-test failing
             vm.expectRevert(i == 2 ? abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ)
                 : abi.encodeWithSelector(PqzSafety.NotPqz.selector, pre[i], ids[i]));

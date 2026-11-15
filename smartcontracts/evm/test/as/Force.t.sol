@@ -9,6 +9,7 @@ import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan T28 (regulated-kinds spec §3.3 "forceTransfer", CTR-AS-04, F-08): the issuer moves a frozen subject's public
 /// balance to the record's beneficiary on `_poolMove`, within `maxAmount`, while `RECORD` is active; kinds 8 and 9.
@@ -35,19 +36,19 @@ contract ForceTest is RegFixture {
             vm.expectEmit(t);
             emit IRegulatedToken.ForcedTransfer(r, a, b, 60);
             vm.prank(issuer);
-            _r(t).forceTransfer(r, 60);
+            _r(t).forceTransfer(r, 60, EnvKit.codeUidOf(t));
             assertEq(IERC20(t).balanceOf(bob), 60);
             assertEq(IERC20(t).balanceOf(alice), SUPPLY - 60);
             assertEq(_r(t).order(r).executed, 60);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderExceeded.selector, 40));
-            _r(t).forceTransfer(r, 41);
+            _r(t).forceTransfer(r, 41, EnvKit.codeUidOf(t));
             vm.prank(issuer);
-            _r(t).forceTransfer(r, 40);
+            _r(t).forceTransfer(r, 40, EnvKit.codeUidOf(t));
             assertEq(_r(t).order(r).executed, 100);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderExceeded.selector, 0));
-            _r(t).forceTransfer(r, 1);
+            _r(t).forceTransfer(r, 1, EnvKit.codeUidOf(t));
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.Frozen.selector, a));
             IERC20(t).transfer(bob, 1);
@@ -61,9 +62,9 @@ contract ForceTest is RegFixture {
             bytes32 r = _seized(t, 100);
             vm.prank(issuer);
             vm.expectRevert(IRegulatedToken.AmountZero.selector);
-            _r(t).forceTransfer(r, 0);
+            _r(t).forceTransfer(r, 0, EnvKit.codeUidOf(t));
             vm.prank(issuer);
-            _r(t).forceTransfer(r, 1);
+            _r(t).forceTransfer(r, 1, EnvKit.codeUidOf(t));
         }
     }
 
@@ -74,14 +75,14 @@ contract ForceTest is RegFixture {
             bytes32 r = _order(t, "o1", a, b, 100, _now() + 90 days);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.SubjectNotFrozen.selector, a));
-            _r(t).forceTransfer(r, 1);
+            _r(t).forceTransfer(r, 1, EnvKit.codeUidOf(t));
             _freeze(t, a); // issuer-only counts too: F(subject)
             vm.prank(issuer);
-            _r(t).forceTransfer(r, 1);
+            _r(t).forceTransfer(r, 1, EnvKit.codeUidOf(t));
             _unfreeze(t, a);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.SubjectNotFrozen.selector, a));
-            _r(t).forceTransfer(r, 1);
+            _r(t).forceTransfer(r, 1, EnvKit.codeUidOf(t));
         }
     }
 
@@ -93,10 +94,10 @@ contract ForceTest is RegFixture {
             _freeze(t, b);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.Frozen.selector, b));
-            _r(t).forceTransfer(r, 1);
+            _r(t).forceTransfer(r, 1, EnvKit.codeUidOf(t));
             _unfreeze(t, b);
             vm.prank(issuer);
-            _r(t).forceTransfer(r, 1);
+            _r(t).forceTransfer(r, 1, EnvKit.codeUidOf(t));
         }
     }
 
@@ -107,12 +108,12 @@ contract ForceTest is RegFixture {
             address t = _ks()[i];
             bytes32 r = _seized(t, 100);
             vm.prank(issuer);
-            _r(t).forceTransfer(r, 1);
+            _r(t).forceTransfer(r, 1, EnvKit.codeUidOf(t));
             vm.prank(compliance);
-            NormalToken(t).renounceRole(10);
+            NormalToken(t).renounceRole(10, EnvKit.codeUidOf(t));
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderInactive.selector, r));
-            _r(t).forceTransfer(r, 1);
+            _r(t).forceTransfer(r, 1, EnvKit.codeUidOf(t));
         }
     }
 
@@ -123,15 +124,15 @@ contract ForceTest is RegFixture {
             bytes32 r = _seized(t, 100);
             vm.prank(compliance);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(6), nid(compliance)));
-            _r(t).forceTransfer(r, 1);
+            _r(t).forceTransfer(r, 1, EnvKit.codeUidOf(t));
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderUnknown.selector, bytes32("nope")));
-            _r(t).forceTransfer("nope", 1);
+            _r(t).forceTransfer("nope", 1, EnvKit.codeUidOf(t));
             vm.prank(compliance);
-            _r(t).revokeOrder(r, "why"); // also ends the record-backed freeze; the record check comes first
+            _r(t).revokeOrder(r, "why", EnvKit.codeUidOf(t)); // also ends the record-backed freeze; the record check comes first
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.OrderInactive.selector, r));
-            _r(t).forceTransfer(r, 1);
+            _r(t).forceTransfer(r, 1, EnvKit.codeUidOf(t));
         }
     }
 
@@ -146,7 +147,7 @@ contract ForceTest is RegFixture {
             bytes32 r = _order(t, "o1", ux, uy, 100, _now() + 90 days);
             _freezeRecord(t, ux, r);
             vm.prank(issuer);
-            _r(t).forceTransfer(r, 100);
+            _r(t).forceTransfer(r, 100, EnvKit.codeUidOf(t));
             assertEq(NormalToken(t).balanceOfUA(ux), 400);
             assertEq(NormalToken(t).balanceOfUA(uy), 100);
         }

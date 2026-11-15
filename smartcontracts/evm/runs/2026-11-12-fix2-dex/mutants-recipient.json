@@ -1,0 +1,33 @@
+[
+ {
+  "id": "R1 recipient check dropped",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_exchange_receiveOnlyFeeToken_recipientDelta() (gas: 1787039)"
+ },
+ {
+  "id": "R2 exchange payout not measured",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_exchange_receiveOnlyFeeToken_recipientDelta() (gas: 1782473)"
+ },
+ {
+  "id": "R3 derived id read as an address",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: InsufficientOutput(0x38F0B58c354e41AFF944800d17E13968b6255507)] test_open_derivedReceiverOfAnUnlistedToken() (gas: 700482)"
+ },
+ {
+  "id": "R4 the surplus counted in the minimum",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: InsufficientOutput(0x69f636dA61420133f13B80E5AE6D9C1243a1E60E)] test_exchange_receiveOnlyFeeToken_recipientDelta() (gas: 2088537)"
+ },
+ {
+  "id": "R5 the fee not netted",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: InsufficientOutput(0xe52f409677478A32DD749f3d264E3f1376E23e46)] test_exchange_recipientDelta_netOfTheFee() (gas: 923709)",
+  "note": "re-run after test_exchange_recipientDelta_netOfTheFee was added (first run: survived, every test had fee 0)"
+ }
+]

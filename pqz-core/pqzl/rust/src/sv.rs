@@ -1,4 +1,5 @@
-//! `pqz_sv.c`: the specialised verifier (`pqz_verify_fast`) for R_REG, R_TX, R_TX0, R_BURN, R_DS, R_DR and R_TXM
+//! `pqz_sv.c`: the specialised verifier (`pqz_verify_fast`) for R_REG, R_TX, R_TX0, R_TXS, R_TXS0, R_BURN, R_DS, R_DR
+//! and R_TXM
 //! (spike P6-SV, docs/research/pqz-specialised-verifier.md).
 //!
 //! It accepts exactly the proofs the generic verifier accepts: the same decoder (with the cap and the reductions of
@@ -650,6 +651,9 @@ const SVZ: usize = 3 + 2 * SVG + 2 * SVL;
 const SVPR: usize = 2 + 2 * SVL;
 /// binary polys
 const SVBIN: usize = (BITS_BURN + 64 * SVL).div_ceil(64);
+// the evaluation sum (SVPR + SVBIN products of 64 terms, c up to 2^9) stays < 2^(2L + 22), gen_set.py's NP rule's
+// assumption (C pqz_sv.c's third assertion; review 3w u1-4, R1-C6 / R2-C6)
+const _: () = assert!((SVPR + SVBIN) * 64 * 512 <= 1 << 22);
 const MB: usize = set::MBITS as usize;
 const CB: usize = set::CBITS as usize;
 const EB: usize = set::EBITS as usize;
@@ -699,6 +703,8 @@ pub(crate) struct SvRel {
     aud: usize,
     burn: bool,
     txm: bool,
+    /// R_TXS / R_TXS0: group 1 the sender's (r_f, e1_f) of u_f and v_f (rel.rs `Shape::split`)
+    split: bool,
     /// statement vectors held (stmt_t.vec)
     nvec: usize,
     /// Es selections: s1 slots [bstart, bstart + blen) (pqz_rel.c new_sel)
@@ -796,6 +802,7 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
         aud: 0,
         burn: false,
         txm: false,
+        split: false,
         nvec: NVEC,
         nblk: 0,
         bstart: [0; SVZ],
@@ -855,8 +862,9 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
             let (m, a) = (r.legs, r.aud);
             s.burn = r.code == crate::OP_BURN;
             s.txm = r.op == crate::OP_TRANSFER_MULTI;
+            s.split = r.op == crate::OP_TRANSFER && r.code & rel::CODE_SPLIT != 0; // K3-4: the leg's group 0, the sender's group 1
             let lpg = rel::lpg(a); // legs per group (R0-1)
-            let g = if s.burn { 1 } else { rel::groups(m, a) };
+            let g = if s.burn { 1 } else if s.split { 2 } else { rel::groups(m, a) };
             let (e, e2f) = (2 * NPK + 2 * NPK * g, 2 * NPK + 2 * NPK * g + m);
             (s.debit, s.legs, s.groups, s.aud) = (true, m, g, a);
             s.nvec = NVEC + m.saturating_sub(1) + (g - 1);
@@ -879,7 +887,7 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
                 s.pr[k] = Pr { v: s.v_pk(j), ox: 2 * NPK + 2 * NPK * (j / lpg), win: 0, e2: Some(e + j) };
                 k += 1;
             }
-            s.pr[k] = Pr { v: V_PKF, ox: 2 * NPK, win: 0, e2: Some(e2f) };
+            s.pr[k] = Pr { v: V_PKF, ox: 2 * NPK + 2 * NPK * usize::from(s.split), win: 0, e2: Some(e2f) };
             k += 1;
             for j in 0..a * m {
                 s.pr[k] = Pr { v: V_PKA, ox: 2 * NPK + 2 * NPK * (j / lpg), win: j % lpg, e2: Some(e2f + 1 + j) };
@@ -929,7 +937,8 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
     s.inv4 = int_modq(&p.inv4);
     ok &= mulq(s.inv2, 2) == 1 && mulq(s.inv4, 4) == 1 && s.qm1 == Q - 1;
     // lnp_quad_verify: ||z1||^2 <= floor(2 m1 d 962 2^(2 log2stdev1) / 400) = floor(t 2^(2 log2stdev1 - 4) / 25)
-    // (400 = 2^4 25; exact); the 2^-4 keeps t 2^(2 log2stdev1 - 4) < 2^63 at log2stdev1 19 (R_TXM M = 8, 16)
+    // (400 = 2^4 25; exact); the 2^-4 keeps t 2^(2 log2stdev1 - 4) < 2^63 up to log2stdev1 20 (R_TXM M = 16 at
+    // n2048-kmax1024, the bench-only shape; 19 in every production shape), the limit `setup` accepts
     let t = 2 * s.mq as u64 * DEG as u64 * 962;
     let l1 = qm.log2stdev1;
     ok &= (2..=20).contains(&l1) && t < 1 << (67 - 2 * l1);
@@ -1015,6 +1024,8 @@ fn parse_stmt(t: &mut Stmt, s: &SvRel, code: u8, stmt: &[u8]) -> bool {
             crate::OP_BURN => rel::BURN_STMT,
             crate::OP_TRANSFER => rel::TX_STMT,
             0x81 => rel::TX0_STMT,
+            0x41 => rel::TXS_STMT,
+            0xc1 => rel::TXS0_STMT,
             _ => rel::txm_stmt(m, a),
         };
         if len != want {
@@ -1055,7 +1066,7 @@ fn parse_stmt(t: &mut Stmt, s: &SvRel, code: u8, stmt: &[u8]) -> bool {
         p += POLYVEC_BYTES;
         ok &= rd_coeffs(&mut t.vt, &stmt[p..]);
         p += V_BYTES;
-        for g in 0..s.groups {
+        for g in 0..if s.split { 1 } else { s.groups } {
             ok &= rd_vec(&mut t.vec[s.v_u(g)], &stmt[p..]);
             p += POLYVEC_BYTES;
         }
@@ -1068,6 +1079,10 @@ fn parse_stmt(t: &mut Stmt, s: &SvRel, code: u8, stmt: &[u8]) -> bool {
         for j in 0..a * m {
             ok &= rd_coeffs(&mut t.va[j], &stmt[p..]);
             p += V_BYTES;
+        }
+        if s.split {
+            // R_TXS / R_TXS0: u_f = u_1 after the last v
+            ok &= rd_vec(&mut t.vec[s.v_u(1)], &stmt[p..]);
         }
         return ok;
     }
@@ -1530,7 +1545,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         jl_fold(&mut vr, s.nex * DEG, v3, &hash0, 0, &mut rows)?;
         for k in 0..LAMBDA {
             let mut col = 0;
-            let mut acc = ACC0; // nex <= 426 terms (R_TXM, 16 legs, X-1 blocks): |.| < 426 2^90
+            let mut acc = ACC0; // nex terms (R_TXM M = 16 audited: up to 690, pqz_txm16_params.h): |.| < 2^10 2^90
             let mut w3mac = |sl: usize, acc: &mut Acc| {
                 let mut a = [0i64; DEG];
                 for j in 0..DEG {
@@ -1718,7 +1733,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     acc_mul(&mut qa, &wc2, &ar.fwd(&ar.red(&ra)), pr);
     let v = ar.red(&qa); // |.| < 2^97
 
-    // ---- w = A1 z1 + A2' z21 - c 2^D tA1 (|.| < (mq + m2r + 1) 2^90 <= 472 2^90), w1 = UseHint (hint, w) ----
+    // ---- w = A1 z1 + A2' z21 - c 2^D tA1 (|.| < (mq + m2r + 1) 2^90 < 2^10 2^90: 736 at n2048-kmax1024 M = 16), w1 = UseHint (hint, w) ----
     let mut w1 = vz(DEG * km, 0i64)?;
     let mut wl = vz(DEG * km, 0i64)?;
     lz_get(&mut ta1, &f.t_a1);

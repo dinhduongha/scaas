@@ -113,8 +113,10 @@ contract MsgSenderLintTest is Test {
         // ua-mtx-merge T2: 7 -> 6, the address `_executeTransfer` (its event relayer) left for legacy/ua-mtx-merge/
         // ua-mtx-merge T6 (R12): 6 -> 4, the address `mtxTrade(TradeOrder, …)` and `restorePulled(TradeOrder, …)` left
         // for legacy/ua-mtx-merge/ (the merged `mtxTrade` and the one `restorePulled` keep their direct caller reads)
-        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 4,
-            "ERC20MetaTx: event relayer x2 (_settle, _uaExecuteTransfer), mtxTrade caller (CTR-DEX-15, -25), restorePulled caller (DX7)");
+        // ua-mtx-liquidity L2 (b99da37b; pinned at the merge, merge3k): 4 -> 5, `_mtxLiquidityPullBody` reads its caller as
+        // the DEX (CTR-DEX-30: the digest under `verifyingContract = msg.sender`, T1 and T7), a direct read, never allowlisted
+        assertEq(_count("src/metatx/ERC20MetaTx.sol", "msg.sender", false), 5,
+            "ERC20MetaTx: event relayer x2 (_settle, _uaExecuteTransfer), mtxTrade caller (CTR-DEX-15, -25), restorePulled caller (DX7), mtxLiquidityPull caller (CTR-DEX-30)");
         // ua-mtx-merge T1 (Q2): 1 -> 2, the ordered `mtxCancelNonce` emits its own `UAMetaTransactionExecuted` (no self-call)
         assertEq(_count("src/metatx/UAMetaTxBase.sol", "msg.sender", false), 2,
             "UAMetaTxBase: event relayer (_uaSettle, mtxCancelNonce)");

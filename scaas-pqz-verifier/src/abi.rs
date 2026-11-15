@@ -15,11 +15,25 @@ alloy::sol! {
         bytes32 toUA;
         bytes32 beneficiaryUA;
         bytes16 salt;
+        // group 3h (PP-3): the holder's tag of its own `(u, v_f)`, at the contract's position (`IPqzToken.sol`)
+        bytes32 ownTag;
         bytes u;
         bytes vTo;
         bytes vFrom;
         bytes vAuditor;
+        // the three-key model (CTR-PQZ-38, -40): the sender's `u_f` and the sealed openings (all empty without the opening)
+        bytes uFrom;
         bytes sealedMemo;
+        PqzOpening openingTo;
+        PqzOpening openingAuditor;
+    }
+
+    #[derive(Debug, Default, serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct PqzOpening {
+        bytes mlkemCt;
+        bytes32 x25519Eph;
+        bytes sealedSeed;
     }
 
     #[derive(Debug, serde::Deserialize)]
@@ -41,6 +55,7 @@ alloy::sol! {
         bytes32 beneficiaryUA;
         uint256 decoyFee;
         bytes16 salt;
+        bytes32 ownTag;
         bytes[] u;
         PqzLeg[] legs;
         bytes vFrom;
@@ -56,9 +71,11 @@ alloy::sol! {
         bytes32 fromUA;
         uint64 keyVersion;
         bytes32 beneficiaryUA;
+        bytes32 ownTag;
         bytes u;
         bytes vFrom;
     }
+
 
     #[derive(Debug, serde::Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -80,6 +97,15 @@ alloy::sol! {
         uint64 validUntil;
     }
 
+    /// `UAKinds.UAAUTH_TYPEHASH`'s struct: what a native EOA UA signs, in the registry's domain. Built here from configured
+    /// values only; the registry's `uaAuthDigest` view is never read (a hash an RPC returns is never signed).
+    #[derive(Debug)]
+    struct UAAuth {
+        bytes32 ua;
+        bytes32 purpose;
+        bytes32 digest;
+    }
+
     #[derive(Debug)]
     struct PqzVerifyConfig {
         uint8 pqzVerifyMode;
@@ -89,6 +115,14 @@ alloy::sol! {
         bytes32 pending;
         uint64 eta;
         uint64 noticePeriod;
+        // round 3t (CTR-PQZ-36): the verifier fee, its cap, a live pending increase and its `eta`
+        uint64 verifierFee;
+        uint64 verifierFeeMax;
+        uint64 verifierFeePending;
+        uint64 verifierFeeEta;
+        // the three-key model (CTR-PQZ-37): the key class
+        bool pqzOwnKey;
+        bool pqzOpening;
     }
 
     #[derive(Debug)]
@@ -134,6 +168,15 @@ alloy::sol! {
         function pqzKeyDigest(bytes32 ua, bytes32 pqzKeyHash) external pure returns (bytes32);
         function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32);
         function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
-        function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
+        function generation() external view returns (uint8);
+        function chainUid() external view returns (bytes32);
+        // K3-3 (CTR-UA-43): the scoped records an OFFCHAIN token reads (scope 0 class 2, the token class 3)
+        function pqzScopedKeyOf(bytes32 ua, address scope) external view
+            returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
+        function pqzScopedKeyAt(bytes32 ua, address scope, uint64 version) external view
+            returns (address ptr, bytes32 pqzPopHash, bool proven);
+        function pqzScopedPopOf(bytes32 ua, address scope, uint64 version) external view returns (bytes);
+        function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
+            bytes32 pqzKeyHash) external pure returns (bytes32);
     }
 }

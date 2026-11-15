@@ -515,7 +515,7 @@ contract UARegistryTest is UARegistryBase {
 
     function test_T_AUTH_1_kindsByPurpose() public {
         bytes32[4] memory purposes =
-            [UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL, UAKinds.PURPOSE_KEYOP, UAKinds.PURPOSE_RECEIVER_FEE];
+            [UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL, UAKinds.PURPOSE_KEYOP, UAKinds.PURPOSE_PAYEE_FEE];
         for (uint256 i; i < KINDS.length; ++i) {
             bytes32 ua = _register(reg, KINDS[i], _key(KINDS[i]));
             for (uint256 p; p < purposes.length; ++p) {

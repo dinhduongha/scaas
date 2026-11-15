@@ -20,6 +20,8 @@ import {PqzCore} from "../../../src/pqz/PqzCore.sol";
 import {PqzSet} from "../../../src/pqz/PqzSet.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
+import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
+import {UARegistry} from "../../../src/ua/UARegistry.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {Catalogue, pqzEnv} from "../../helpers/Catalogue.sol";
 import {nid} from "../../helpers/Ids.sol";
@@ -57,6 +59,12 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     bool internal vFixed;
     // group 3h (pqz-proof-path spec §4.1): the next token's `proofStore` (0 `NONE` by default, 1 `LOG`)
     uint8 internal pStore;
+    // round 3t (CTR-PQZ-36): the next token's `verifierFee` and `verifierFeeMax` (`OFFCHAIN` only; 0 by default)
+    uint64 internal vFee;
+    uint64 internal vFeeMax;
+    // the three-key model (CTR-PQZ-37): the next token's `pqzOwnKey` and `pqzOpening` (`OFFCHAIN` only)
+    bool internal vOwnKey;
+    bool internal vOpening;
 
     /// the client's view of each account: `acc` and every entry ever appended (TRIVIAL amounts in `triv`)
     mapping(bytes32 => bytes) internal accOf;
@@ -73,8 +81,8 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         normalImpl = NormalPqzToken(Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
             pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode));
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         for (uint8 op = 1; op <= 5; ++op) if (op != 3) _mockOp(op, 1);
         txStmt = _vecHex("statement_transfer.json", ".rows[0].stmt");
@@ -94,12 +102,36 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         c.lockedFeatures = 1 << GovernanceBits.MINTABLE; // no owner: the minter survives creation on a locked bit (B-06, GD-14)
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
-            withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, minDecoy, vMode, vUA, vFixed, pStore
+            withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, minDecoy, vMode, vUA, vFixed, pStore, vFee, vFeeMax,
+            vOwnKey || (vMode == PqzCore.OFFCHAIN && !vOpening), vOpening
         );
     }
 
-    function _newToken(bytes32 s) internal returns (NormalPqzToken) {
-        return NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), s));
+    /// A `NORMAL_PQZ` token of the fixture's factory with the next token's settings. `OFFCHAIN` without either flag set:
+    /// class `offchain-token` without the opening (CTR-PQZ-37: the registry-key form cannot be created), and the four
+    /// holders' records of its scope registered (scope 0 once for `offchain-shared`).
+    function _newToken(bytes32 s) internal returns (NormalPqzToken t) {
+        if (vMode == PqzCore.OFFCHAIN && !vOwnKey && vOpening) _shared(); // the auditor's record is read at init
+        t = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), s));
+        _holders(address(t));
+    }
+
+    bool internal sharedDone; // the four holders' `offchain-shared` records (scope 0) registered
+
+    /// The records `t`'s holders need by its class (none for `registry`).
+    function _holders(address t) internal {
+        if (t.code.length == 0) return; // an expected refusal of the creation returned no token
+        IPqzToken.PqzVerifyConfig memory c = IPqzToken(t).pqzVerifyConfig();
+        if (c.pqzVerifyMode != PqzCore.OFFCHAIN) return;
+        if (c.pqzOwnKey) _scopedAll(t, c.pqzOpening);
+        else _shared();
+    }
+
+    /// The four holders' `offchain-shared` records (scope 0, with the opening KEM key), once.
+    function _shared() internal {
+        if (sharedDone) return;
+        sharedDone = true;
+        _scopedAll(address(0), true);
     }
 
     function _releaseWrapped() internal {
@@ -115,7 +147,9 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
-        return WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), s)));
+        WrappedPqzToken w = WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), s)));
+        _holders(address(w));
+        return w;
     }
 
     // ------------------------------------------------------------------ ciphertexts
@@ -228,7 +262,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     }
 
     function _public(NormalPqzToken t, address to, uint256 units) internal {
-        NormalPqzToken(address(t)).mint(to, units);
+        NormalPqzToken(address(t)).mint(to, units, EnvKit.codeUidOf(address(t)));
         minted += units;
     }
 
@@ -303,6 +337,43 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         return keccak256(bytes.concat(
             abi.encode(keccak256("SCAAS-PQZ-ENVELOPE-V1"), block.chainid, t.chainUid(), address(t), m.from, m.batch),
             abi.encode(m.nonce, m.validUntil, m.mode, r, m.fee, f)));
+    }
+
+    // ------------------------------------------------------------------ the three-key model (CTR-PQZ-37, CTR-UA-43)
+
+    /// the next scoped version of `(ua, scope)` the fixture registers
+    mapping(bytes32 => mapping(address => uint64)) internal scopedNext;
+
+    /// A scoped PQZ record of `ua` at its next version on the fixture's registry: `pk`, the filler proof `0xaa` stored too
+    /// (op 3 mocked, so it is proven), the opening KEM key when `kem` (scheme 1, filler bytes); the holder's filler ML-DSA
+    /// signature (mocked) over the record.
+    function _scoped(bytes32 ua, address scope, bytes memory pk, bool kem) internal returns (uint64 v) {
+        return _scopedOn(reg, ua, scope, pk, kem, true);
+    }
+
+    /// `_scoped` on registry `r`, its proof stored only when `pop`.
+    function _scopedOn(UARegistry r, bytes32 ua, address scope, bytes memory pk, bool kem, bool pop) internal returns (uint64 v) {
+        v = scopedNext[ua][scope]++;
+        IUARegistry.KemKey memory k;
+        if (kem) (k.scheme, k.mlkemEk, k.x25519) = (1, _blob(uint256(ua) ^ v, 1568), keccak256(abi.encode(ua, scope, v)));
+        r.setPqzScopedKey(ua, scope, v, pk, keccak256(hex"aa"), k, type(uint64).max, _pqAuth());
+        if (pop) r.storePqzScopedPop(ua, scope, v, hex"aa");
+    }
+
+    /// A key of the scoped space: `PK` canonical bytes, coefficient 1 = `seed` (never a fixture's registry key).
+    function _spk(uint256 seed) internal pure returns (bytes memory k) {
+        k = new bytes(PqzCt.PK);
+        (k[14], k[15]) = (bytes1(uint8(seed >> 8)), bytes1(uint8(seed)));
+    }
+
+    uint256 internal keySeed; // distinct key bytes for every record the fixture registers (UAKeyInUse spans every scope)
+
+    /// The fixture's four holders' scoped records for `scope`, each with fresh key bytes, the opening KEM key when `kem`.
+    function _scopedAll(address scope, bool kem) internal {
+        _scoped(alice, scope, _spk(++keySeed), kem);
+        _scoped(bob, scope, _spk(++keySeed), kem);
+        _scoped(carol, scope, _spk(++keySeed), kem);
+        _scoped(aud, scope, _spk(++keySeed), kem);
     }
 
     function _cut(bytes memory b, uint256 off, uint256 len) internal pure returns (bytes memory) {

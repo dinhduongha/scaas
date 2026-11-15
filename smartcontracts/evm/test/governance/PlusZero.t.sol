@@ -46,7 +46,7 @@ import {WrappedTokenP, WrappedTokenT, WrappedTokenA, WrappedTokenW} from "../../
 import {NormalZetherTokenP, NormalZetherTokenT, NormalZetherTokenA, NormalZetherTokenZ} from "../../src/zether/NormalZetherTokenModules.sol";
 import {WrappedZetherTokenP, WrappedZetherTokenT, WrappedZetherTokenA, WrappedZetherTokenW, WrappedZetherTokenZ} from "../../src/zether/WrappedZetherTokenModules.sol";
 import {NormalPqzTokenP, NormalPqzTokenT, NormalPqzTokenA, NormalPqzTokenQ} from "../../src/pqz/NormalPqzTokenModules.sol";
-import {WrappedPqzTokenP, WrappedPqzTokenT, WrappedPqzTokenA, WrappedPqzTokenW, WrappedPqzTokenQ, WrappedPqzTokenQ2} from "../../src/pqz/WrappedPqzTokenModules.sol";
+import {WrappedPqzTokenP, WrappedPqzTokenT, WrappedPqzTokenA, WrappedPqzTokenW, WrappedPqzTokenQ, WrappedPqzTokenS} from "../../src/pqz/WrappedPqzTokenModules.sol";
 import {probeArgs, probeRelease} from "../helpers/ProbeModules.sol";
 
 /// @notice "+0" (CTR-GOV-11, spec §10.2, B-33): on every kind, `transfer`, `mtxTransfer`, `transferToUA`
@@ -219,7 +219,7 @@ contract PlusZeroZetherTest is PlusZeroRows, ZetherFixture {
         _stack();
         _users();
         nz = address(_newToken(false, "pz"));
-        NormalZetherToken(nz).mint(_pzSigner(), 1_000_000);
+        NormalZetherToken(nz).mint(_pzSigner(), 1_000_000, EnvKit.codeUidOf(address(nz)));
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, _zenv(), type(WrappedZetherToken).creationCode);
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
@@ -268,7 +268,7 @@ contract PlusZeroPqzTest is PlusZeroRows, PqzFixture {
     function setUp() public {
         _stack();
         np = address(_newToken("pz"));
-        NormalPqzToken(np).mint(_pzSigner(), 1_000_000);
+        NormalPqzToken(np).mint(_pzSigner(), 1_000_000, EnvKit.codeUidOf(address(np)));
         _releaseWrapped();
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
@@ -931,9 +931,9 @@ contract WrappedPqzProbeQ is WrappedPqzTokenQ {
     function _regReceiver(bytes32 a) internal view override { _seat(H_RECEIVER, a, 0, 0); }
 }
 
-/// `WrappedPqzProbe`'s overrides in its kind's module Q2 (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
-contract WrappedPqzProbeQ2 is WrappedPqzTokenQ2 {
-    constructor(address f_, bytes memory a) WrappedPqzTokenQ2(f_, a) {}
+/// `WrappedPqzProbe`'s overrides in its kind's module S (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
+contract WrappedPqzProbeS is WrappedPqzTokenS {
+    constructor(address f_, bytes memory a) WrappedPqzTokenS(f_, a) {}
 
     function _regPre(bytes32 f, bytes4 s, uint32 m) internal view override { _seat(H_PRE, f, bytes32(s), m); }
 
@@ -1026,12 +1026,12 @@ contract HookSeatsPlainTest is UALedgerBase, SeatExpect {
         _expect(address(np), H_FEE, _pad(FEE_TO), 0, 5);
         vm.prank(alice);
         np.payWithFeeToUA(uaP, 1000, FeeMode.FIXED, 5, FEE_TO, PayMetaKit.ref(bytes32(0)), PayMetaKit.meta(bytes32(0)));
-        // mtxPayReceiverFee: the fee recipient, before the payer's transfer
+        // mtxPayWithPayeeFee: the fee recipient, before the payer's transfer
         MetaTxLib.UAMetaTransfer memory t = _t(_pad(alice), _pad(bob), 100);
         (t.entryRef, t.nonce) = (PayMetaKit.ref(bytes32(uint256(9))), 0);
         t.batch = np.payLane(t.entryRef);
         _expect(address(np), H_FEE, _pad(FEE_TO), 0, 3);
-        np.mtxPayReceiverFee(t, _noSig(), 3, FEE_TO, block.timestamp + 60, _noSig(), PayMetaKit.meta(bytes32(uint256(9))));
+        np.mtxPayWithPayeeFee(t, _noSig(), 3, FEE_TO, block.timestamp + 60, _noSig(), PayMetaKit.meta(bytes32(uint256(9))));
         // mtxRelayFee: the relay's payee and value
         _expect(address(np), H_FEE, uaB, 0, 7);
         np.mtxRelayFee(_pad(alice), address(0x1234), bytes32(0), uaB, 7, 2, 0, block.timestamp + 60, _noSig());
@@ -1039,7 +1039,7 @@ contract HookSeatsPlainTest is UALedgerBase, SeatExpect {
         _expect(address(wp), H_PAYER, _pad(address(this)), 0, 0);
         wp.wrapToUA(address(tok), 1, uaP);
         _arm(address(wp), H_PAYER);
-        tok.mint(address(this), 10);
+        tok.mint(address(this), 10, EnvKit.codeUidOf(address(tok)));
         tok.approve(address(wp), 10);
         wp.wrap(address(tok), 10);
         // mtxWrapOrder: o.from when the destination is another id, before the pull; the submitter's fee after it

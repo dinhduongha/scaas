@@ -18,6 +18,7 @@ import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IPqzToken, IPqzWrappedToken} from "../../src/pqz/IPqzToken.sol";
 import {IConfidentialToken, IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// The merged PQZ entries of ua-mtx-merge T5 (R36), called by their own signatures: this file compiles on the tree before
 /// T5 too, so each test is red there on its own (plan T5 step 3).
@@ -120,7 +121,7 @@ contract PqzPairsTest is PqzNamedBase {
         _public(tok, signer, 100 * SCALE);
         nId = MetaTxLib.pad(signer);
         dId = _mldsaUA(9);
-        NormalPqzToken(address(tok)).mintToUA(dId, 40 * SCALE);
+        NormalPqzToken(address(tok)).mintToUA(dId, 40 * SCALE, EnvKit.codeUidOf(address(tok)));
         minted += 40 * SCALE;
         _mockOp(1, 0);
         _mockOp(2, 0);
@@ -472,8 +473,14 @@ contract PqzPairsTest is PqzNamedBase {
         // group 3f T45: the verdict on the five direct proof entries, the three verifier ops and `pqzVerifyConfig`:
         // IPqzToken 0xd37edfc5 -> 0x4c91dc6a; IPqzWrappedToken moves with its `mtxUnshieldUnwrap`'s selector
         // group 3h T58: `pqzDebitRecord`: IPqzToken 0x4c91dc6a -> 0x5037795c; T59: `ownTag` in the three args structs (the six
-        // proof-carrying selectors): -> 0xd8bbf337; T60: `proofStore()`: -> 0x191d0352; T61: `setProofStore`: -> 0x3fef18ca
-        assertEq(type(IPqzToken).interfaceId, bytes4(0x3fef18ca), "IPqzToken");
+        // proof-carrying selectors): -> 0xd8bbf337; T60: `proofStore()`: -> 0x191d0352; T61: `setProofStore`: -> 0x3fef18ca; round 3t
+        // (CTR-PQZ-36): `setVerifierFee(uint64)` 0xe790fb8f: -> 0xd87fe345 (= 0x3fef18ca ^ 0xe790fb8f; `pqzVerifyConfig()`'s return
+        // does not enter the id); fix3 CTR-GOV-28: the four verifier setters take `chainUid_` (`pqzSetVerifier(bytes32,bytes32)`,
+        // `pqzCancelVerifier(bytes32)`, `pqzRevokeVerifier(bytes32)`, `setVerifierFee(uint64,bytes32)`): -> 0x757d0753; the
+        // three-key model (CTR-PQZ-38, -40, -41): `PqzTransferArgs` + `uFrom` and the openings (the two single-transfer
+        // selectors), `mtxRollOverSigned`, `pqzSkipped`: -> 0x0eb5f5eb
+        // round 3zb + 3zc (CTR-GOV-28 Change, CTR-GOV-30: setProofStore with the holder's chain word): 0x0eb5f5eb -> 0x7c82cf40
+        assertEq(type(IPqzToken).interfaceId, bytes4(0x7c82cf40), "IPqzToken");
         assertEq(type(IConfidentialToken).interfaceId, IConfidentialToken.mtxShield.selector, "IConfidentialToken");
         assertEq(type(IPqzWrappedToken).interfaceId, IPqzWrappedToken.mtxUnshieldUnwrap.selector, "IPqzWrappedToken");
     }

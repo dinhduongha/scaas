@@ -5,8 +5,10 @@
 #                            DEMO_HOLDER?, CHAIN_UID? (genesis hash from evm/chain-uids.json; defaults to blockhash(0),
 #                            which is 0 past block 256, so a long-running chain needs it), DEPLOY_SALT? (CREATE2 salt);
 #                            FOUNDRY_PROFILE=scaas-testnet|gnosis|celo|bsc|polygon|base (all osaka). Needs the deterministic
-#                            CREATE2 deployer on the chain (NET-EVM-05). Writes evm/deployments/<chainid>.json (the
-#                            previous file is put back if the broadcast fails). Every chain gets the UA registry
+#                            CREATE2 deployer on the chain (NET-EVM-05). Writes evm/deployments/<key>.json (NET-EVM-13:
+#                            the key from evm/chain-uids.json by (chain id, genesis hash); a chain not in it needs
+#                            DEPLOY_NAME=<name>-testnet | <name>-mainnet, else DEPLOY_NAME_REQUIRED before anything is
+#                            sent; the book's header first; the previous file is put back if the broadcast fails). Every chain gets the UA registry
 #                            (`ua_registry`; its EIP-2537 / bn254-G2 kinds by an eth_call precompile probe, the Zether
 #                            kind on every chain with EIP-2537, the PQ kinds
 #                            wherever their cap fits half the verify budget: unaudited, P6c; no chain-id lock).
@@ -18,15 +20,36 @@
 #                            GD-4); the SCaaS testnet after the reset of pqz-core/nethermind/chain/RUNBOOK.md ("Code size
 #                            128 KiB"): 131072. DEPLOY_WRAPPED=1 adds the WRAPPED release (GD-12); DEPLOY_REGULATED=1 the regulated releases 8, 9, enabled (10, 11 come with
 #                            DEPLOY_ZETHER, 12, 13 with script/pqz/e2e.py) and the canonical ComplianceRegistry by CREATE2, its
-#                            admin COMPLIANCE_ADMIN (an address with code, CTR-AS-07; none or an EOA refused AdminNotContract):
-#                            JSON compliance_registry, compliance_registry_codehash (every regulated release's REGISTRY_CODEHASH).
-#                            The admin then attests each DEX venue (createDex) and its puller() ELIGIBLE_CONTRACT, validUntil
+#                            admin COMPLIANCE_ADMIN (a UA id, bytes32, required; 0 refused AdminZero), its router the
+#                            chain's: JSON compliance_registry, compliance_registry_codehash (every regulated release's
+#                            COMPLIANCE_REGISTRY_CODEHASH). The admin then writes each DEX venue (createDex) and its puller()
+#                            ELIGIBLE_CONTRACT (setCompliance), validUntil
 #                            2^64-1, before an ALLOWLIST token trades there: its own call, this script holds no admin key.
-#                            Always --gas-estimate-multiplier 105: forge's default x1.30 on
-#                            the BLS inner-product verifier (~14 M, DEPLOY_ZETHER) exceeds the 2^24 per-transaction cap
-#                            (EIP-7825); the largest implementation, WrappedPqzToken (13,319,335 gas measured), is
-#                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether
-#                            stack. --slow always (one tx per block: anvil automine can strand a large tx).
+#                            Two forge runs (NET-EVM-11): Deploy.s.sol simulated on the RPC's fork, nothing sent, then
+#                            script/DeploySend.s.sol sends its plan (forge's dry-run file, the linked libraries first)
+#                            in order, each transaction with an explicit gas limit, (regular + state) x 1.05 measured on
+#                            the fork, capped at the RPC's block gas limit; one that needs more than that limit refuses
+#                            the plan by name (TxGasOverBlockLimit) before anything is sent. No forge estimate, no
+#                            multiplier. First (owner 2026-11-15) script/pq_verifiers.py deploys on the real chain the
+#                            verifiers whose constructors probe its own precompiles (PqzKeyVerifier for pqz-mlwe 0x0142,
+#                            MldsaVerifier(0x0134) for mldsa87; forge's EVM has neither precompile), by CREATE2 with
+#                            DEPLOY_SALT after each probe passes, and hands them to Deploy.s.sol (PQZ_KEY_VERIFIER,
+#                            MLDSA87_VERIFIER): the gen-1 registry lists both kinds, and its gate refuses a registry that
+#                            misses a kind whose precompile the chain answers; a chain without them (anvil): skipped by
+#                            name. DEPLOY_PQZ=1 publishes the PQZ releases 4, 5, 12, 13 on this factory (on for the SCaaS
+#                            testnet; script/pqz/e2e.py keeps its own factory for its harness runs).
+#                            Progress (owner 2026-11-15, runs never silent): short [deploy] lines on stdout: simulate
+#                            start / ok <N> txs, est gas; one line per transaction as its receipt lands (send <i>/<N>
+#                            <phase> <contract> gas <used> <address> tx <hash>; the phase from the plan: libraries,
+#                            verifiers, registry, router, factory, configureChain, releases, pqchat, zether, …); a 30 s
+#                            heartbeat; ok <N> txs <s>s book <path>; FAIL <phase> tx <i>/<N> <contract> rc <rc> <address>
+#                            tx <hash> (the transaction without a good receipt; the hash when forge recorded one). Forge's
+#                            full output in DEPLOY_LOG (default runs/<date>-deploy-<key>.log, git-ignored). Never a key.
+#                            DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether stack. DEPLOY_PQCHAT=1 adds PqChat
+#                            (plan 3c T92: its body module PqChatTopics by CREATE2, class env (3, 0) with the module in libs,
+#                            release 1, the switch on; one instance when NOTICE_PERIOD=0; JSON pqchat_topics,
+#                            pqchat_implementation, pqchat_instance), replayed by DeploySend.s.sol like every other transaction. --slow always (one tx per
+#                            block: anvil automine can strand a large tx).
 #                            T66b: each token release and the DEX come with their body modules (P, T, A, W, Z, Q; the
 #                            DEX's D), each its own CREATE2 transaction through the deterministic deployer with DEPLOY_SALT
 #                            (the same address on every chain) and its own gate, pinned in the release's env after the
@@ -37,7 +60,7 @@
 #                            run once in the simulation on the RPC's fork, (regular + state) x 1.05 within the block gas
 #                            limit and regular x 1.05 < 2^24, refused by name before anything is sent; the figures are the
 #                            script's "release gas |" log lines). Any other value refuses.
-#   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
+#   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/<key>.json: a Hedera chain's only deploy)
 #   aptos   <cli-profile>    aptos move deploy-object --address-name scaas; Move.toml upgrade_policy = "immutable"
 #                            (NET-APT-20, owner ruling 2026-10-28): check the package registry reports policy 2
 #   sui     <client-env>     sui client --client.env <env> publish, then in the same run
@@ -68,12 +91,123 @@ SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shift 2
 case "$FAMILY" in
   evm)     cd "$SC/evm"; Z=(--disable-code-size-limit) # forge 1.8.5: EIP-3860 on the script contract itself (Deploy.s.sol initcode > 48 KiB); the chain enforces 64 KiB
-           Z+=(--gas-estimate-multiplier 105) # the BLS inner-product verifier (~14 M) must stay under the 2^24 tx cap
+           # The scripts' own gas budget (forge's gas_limit, foundry.toml 2^33), not a chain figure: the simulations run every
+           # transaction twice (DeploySend: measured, then sent; Deploy.s.sol's public gate: each release measured, then
+           # deployed) and a snapshot's revert returns no gas; at reset 4b (153 transactions) DeploySend spent 2^33 by tx
+           # 108 and its call ran short of gas. block.gaslimit stays the chain's (the fork's block).
+           export FOUNDRY_GAS_LIMIT="${FOUNDRY_GAS_LIMIT:-68719476736}"
+           C="$(cast chain-id --rpc-url "$NET")"; S="$(cast wallet address --private-key "$PRIVATE_KEY")"
+           # NET-EVM-13: the book by the chain's key (DEPLOY_NAME for a chain not in chain-uids.json), a named fail first
+           K="$(python3 -I script/deploybook.py key "$C" "$(cast block 0 --field hash --rpc-url "$NET")")"
            # forge writes the JSON in the simulation, before the broadcast: keep the previous one until it succeeds
-           J="deployments/$(cast chain-id --rpc-url "$NET").json"; [ -f "$J" ] && cp "$J" "$J.prev"
-           if forge script script/Deploy.s.sol --rpc-url "$NET" --broadcast --slow "${Z[@]}" \
-               --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@"; then rm -f "$J.prev"
-           else [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; fi ;;
+           J="deployments/$K.json"; [ -f "$J" ] && cp "$J" "$J.prev"
+           # NET-EVM-11: Deploy.s.sol simulated on the RPC's fork, nothing sent (the JSON, the release list, the plan in
+           # forge's dry-run file), then DeploySend.s.sol sends that plan, each transaction with an explicit gas limit
+           P="broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" B="broadcast/DeploySend.s.sol/$C/run-latest.json"
+           Q="broadcast/Deploy.s.sol/$C/dry-run/send-plan.json" # DeploySend.plan's arrays, written from $P
+           rm -f "$P" "$Q" "$B" # never a stale plan, never a previous run's receipts
+           DL="${DEPLOY_LOG:-runs/$(date -u +%F)-deploy-$K.log}"; mkdir -p "$(dirname "$DL")"; : > "$DL"
+           W="$(mktemp)"; trap 'rm -f "$W"' EXIT
+           say() { echo "[deploy] $*"; }
+           fail() { say "FAIL $1 rc $2 (forge's output: $DL)"; [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; }
+           # prog <plan> <receipts> <state> [fail <rc>]: one line per receipt not yet seen; with fail, the line of the
+           # transaction that failed (the first status 0, else the next one)
+           prog() { python3 -I - "$@" 2>> "$DL" <<'PY2'
+import json, os, sys, time
+plan, rec, state = sys.argv[1:4]
+t = json.load(open(plan))["transactions"]
+def phase(x):
+    n, f = x.get("contractName") or "", (x.get("function") or "").split("(")[0]
+    if f == "configureChain": return "configureChain"
+    if f == "setChainEntries": return "directory entries"
+    if f in ("createToken", "transfer"): return "demo tokens"
+    if f in ("publishClassEnv", "deployImplementation", "setClassKindEnabled", "createInstance") or n.startswith("PqChat"): return "pqchat"
+    if f or "Token" in n or n.startswith("SCaaSDex"):
+        z = "Zether" in n or any("Zether" in (a.get("contractName") or "") for a in x.get("additionalContracts") or [])
+        if not z and f and phase.last in ("releases", "zether releases"):
+            return phase.last  # publishTokenEnv / setTokenKindEnabled: the release they belong to
+        return "zether releases" if z else "releases"
+    if n.endswith("Lib"): return "libraries"
+    if n.endswith("Verifier"): return "verifiers"  # the UA kind verifiers, ZetherSchnorrBls12381Verifier included
+    if n.startswith("Zether"): return "zether"
+    return {"SmartKeyAccountFactory": "SKA factory", "RelayFeeRouter": "relay fee router", "UARegistry": "registry",
+            "GovernanceRouter": "router", "ComplianceRegistry": "compliance registry", "OpenFactory": "factory"}.get(n, n or "other")
+phase.last = None
+ph = []
+for x in t:
+    ph.append(phase(x)); phase.last = ph[-1]
+st = json.load(open(state)) if os.path.getsize(state) else {"n": 0, "t": time.time(), "gas": 0}
+try:
+    r = json.load(open(rec)).get("receipts", []) if os.path.exists(rec) else []
+except ValueError:  # forge is writing it
+    r = []
+by = {x.get("hash"): x for x in t}
+for i in range(st["n"], len(r)):
+    x, tx = r[i], by.get(r[i]["transactionHash"], t[i] if i < len(t) else {})
+    a = x.get("contractAddress") or tx.get("contractAddress") or tx.get("transaction", {}).get("to")
+    name = tx.get("contractName") or (tx.get("function") or "call").split("(")[0]
+    bad = "" if x.get("status") == "0x1" else f" STATUS {x.get('status')}"
+    print(f"[deploy] send {i + 1}/{len(t)} {ph[i]} {name} gas {int(x['gasUsed'], 16)}{bad} {a} tx {x['transactionHash']}")
+    st["n"] = i + 1
+if len(sys.argv) > 5:
+    i = next((j for j, x in enumerate(r) if x.get("status") != "0x1"), len(r))
+    tx = t[i] if i < len(t) else {}
+    a = (r[i].get("contractAddress") if i < len(r) else None) or tx.get("contractAddress") or tx.get("transaction", {}).get("to") or ""
+    h = r[i]["transactionHash"] if i < len(r) else tx.get("hash")
+    name = tx.get("contractName") or (tx.get("function") or "?").split("(")[0]
+    print(f"[deploy] FAIL {ph[i] if i < len(t) else 'send'} tx {i + 1}/{len(t)} {name} rc {sys.argv[5]} {a}" + (f" tx {h}" if h else ""))
+else:
+    print(f"#{st['n']}/{len(t)}")
+json.dump(st, open(state, "w"))
+PY2
+           }
+           # follow <pid> [plan]: wait for forge, a heartbeat every 30 s; with the plan, a line per receipt as it lands
+           follow() {
+             local t0=$SECONDS h=$SECONDS c=
+             while kill -0 "$1" 2> /dev/null; do
+               sleep 2
+               [ -z "${2:-}" ] || { c="$(DL="$DL" prog "$P" "$B" "$W")"; printf '%s\n' "$c" | grep -v '^#' | grep . || true; }
+               [ $((SECONDS - h)) -lt 30 ] || { h=$SECONDS; say "… ${c:+$(printf '%s\n' "$c" | sed -n 's/^#//p'), }$((SECONDS - t0))s"; }
+             done
+             wait "$1"
+           }
+           T0=$SECONDS
+           # owner 2026-11-15: the verifiers whose constructors probe the chain's own precompiles (PqzKeyVerifier 0x0142, the
+           # mldsa87 MldsaVerifier 0x0134), on the real chain before the simulation (forge's EVM has no such precompile),
+           # by CREATE2 with DEPLOY_SALT (script/pq_verifiers.py, e2e.py's builders); their addresses reach Deploy.s.sol by
+           # env. A precompile the chain lacks: that verifier is skipped by name (DeployBase's gate then requires nothing).
+           say "pq-verifiers start"
+           forge build src/pqz/PqzKeyVerifier.sol src/ua/MlDsa.sol >> "$DL" 2>&1 || fail pq-verifiers $?
+           PV="$(python3 -I script/pq_verifiers.py "$NET" 2>> "$DL")" || { printf '%s\n' "$PV" | grep '^\[deploy\]' || true; tail -n 3 "$DL" | sed 's/^/[deploy] pq-verifiers: /'; fail pq-verifiers 1; }
+           printf '%s\n' "$PV" | grep '^\[deploy\]' || true
+           for kv in $(printf '%s\n' "$PV" | grep -E '^(PQZ_KEY_VERIFIER|MLDSA87_VERIFIER)=0x[0-9a-fA-F]{40}$'); do export "${kv?}"; done
+           say "simulate start chain $C $K"
+           forge script script/Deploy.s.sol --rpc-url "$NET" "${Z[@]}" --sender "$S" "$@" >> "$DL" 2>&1 &
+           follow $! || fail simulate $?
+           [ -f "$P" ] || fail simulate "1 (no plan $P)"
+           say "simulate ok $(python3 -I -c 'import json,sys; t=json.load(open(sys.argv[1]))["transactions"]; print(len(t), "txs, est gas", format(sum(int(x["transaction"].get("gas") or "0x0", 16) for x in t), ","))' "$P")"
+           # one array per field (DeploySend.plan: four cheatcode calls, not five per transaction); a CREATE's `to` is the
+           # zero address and a missing value 0, both checked there; nothing else is changed or dropped
+           python3 -I -c 'import json, sys
+t = [x["transaction"] for x in json.load(open(sys.argv[1]))["transactions"]]
+json.dump({"from": [x["from"] for x in t], "to": [x.get("to") or "0x" + "00" * 20 for x in t],
+           "value": [x.get("value") or "0x0" for x in t], "input": [x.get("input") or "0x" for x in t]}, open(sys.argv[2], "w"))' "$P" "$Q" \
+             || fail plan $?
+           forge script script/DeploySend.s.sol --sig 'run(string)' "$Q" \
+             --rpc-url "$NET" --broadcast --slow "${Z[@]}" --sender "$S" "$@" >> "$DL" 2>&1 &
+           rc=0; follow $! plan || rc=$?
+           if [ "$rc" != 0 ]; then
+             DL="$DL" prog "$P" "$B" "$W" fail $rc | grep -v '^#'
+             [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; say "forge's output: $DL"; exit 1
+           fi
+           DL="$DL" prog "$P" "$B" "$W" | grep -v '^#' || true
+           rm -f "$J.prev"
+           say "ok $(python3 -I -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["receipts"]))' "$B") txs $((SECONDS - T0))s book $J"
+           # NET-EVM-12: a remote deploy is source-verified on the chain's explorer, VERIFY_TARGET naming its config
+           # (scaas-testnet, or VERIFY_EXPLORER / VERIFY_URL / VERIFY_API_KEY_ENV); chain 31337 or VERIFY_TARGET=local
+           # is local; VERIFY=none needs VERIFY_REASON; an unconfigured target fails VERIFY_NOT_CONFIGURED (exit 1)
+           if [ "$C" = 31337 ] || [ "${VERIFY_TARGET:-}" = local ]; then echo "[local/verify] local, not verified (no explorer)"
+           else VERIFY_RPC="$NET" sh script/onchain/verify.sh "${VERIFY_TARGET:-chain-$C}"; fi ;;
   hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --disable-code-size-limit \
              --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
   aptos)   exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;

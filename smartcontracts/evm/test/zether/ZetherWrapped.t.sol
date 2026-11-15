@@ -31,6 +31,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A leg that calls back into the token when the token pays it out or pulls it (an ERC-777-style hook).
 contract HookLeg is MockERC20 {
@@ -111,7 +112,7 @@ contract ZetherWrappedTest is ZetherFixture {
         c.symbol = "zW";
         c.decimals = 6;
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.RATE_ADJUSTABLE) | (1 << GovernanceBits.WRAP_DISABLEABLE);
-        c.owner = nid(address(this));
+        c.admin = nid(address(this));
         c.roles.rateAdmin = nid(address(this));
         c.roles.guardian = nid(address(this));
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
@@ -120,7 +121,7 @@ contract ZetherWrappedTest is ZetherFixture {
         c.conf = IFactoryToken.ConfidentialConfig(
             auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, uint256(1) << 40, FEE, dMode,
             auditor ? aMode : 0, 0
-        , 0, bytes32(0), false, 0);
+        , 0, bytes32(0), false, 0, 0, 0, false, false);
         return WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), salt)));
     }
 
@@ -176,6 +177,8 @@ contract ZetherWrappedTest is ZetherFixture {
         assertTrue(_holds(tok, bob, 10, false));
         assertEq(w.totalShielded(), 40);
         assertEq(w.collateralValue(), 40 * SCALE);
+        // round 3zc (CTR-GOV-30): each shield-wrap counted, a pure wrap's counter is its supply
+        assertEq(IWrappedToken(address(w)).totalWrapped(), w.totalSupply());
         _assertConservation(tok, 100);
     }
 
@@ -192,15 +195,15 @@ contract ZetherWrappedTest is ZetherFixture {
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.NativeValueMismatch.selector, 1, 0));
         w.mtxWrapShield{value: 1}(address(usd), SCALE, ZetherTypes.UA.unwrap(alice.ua));
         // a disabled leg (guardian, one-way) and a pending rate change pause the inflow
-        w.disableWrap(address(eur), "depeg");
+        w.disableWrap(address(eur), "depeg", EnvKit.codeUidOf(address(w)));
         eur.mint(address(this), SCALE);
         eur.approve(address(w), SCALE);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapDisabledFor.selector, address(eur)));
         w.mtxWrapShield(address(eur), SCALE, ZetherTypes.UA.unwrap(alice.ua));
-        w.proposeRate(address(usd), 11, 10);
+        w.proposeRate(address(usd), 11, 10, EnvKit.codeUidOf(address(w)));
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapPausedForRateChange.selector, address(usd)));
         w.mtxWrapShield(address(usd), SCALE, ZetherTypes.UA.unwrap(alice.ua));
-        w.cancelRate();
+        w.cancelRate(EnvKit.codeUidOf(address(w)));
         // the cap
         WrappedZetherToken small = _small();
         usd.mint(address(this), 101 * SCALE);
@@ -221,7 +224,7 @@ contract ZetherWrappedTest is ZetherFixture {
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0, 0, bytes32(0), false, 0);
+        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
         z = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "small")));
     }
 
@@ -271,6 +274,8 @@ contract ZetherWrappedTest is ZetherFixture {
         assertEq(eur.balanceOf(address(0xD00D)), 20 * SCALE, "40 units at 2 per raw EUR");
         assertEq(_reserve(address(eur)), 20 * SCALE);
         assertEq(w.totalSupply(), 100 * SCALE, "40 units burnt from the pool, D19");
+        // round 3zc (CTR-GOV-30): the unshield-unwrap's burn (all of `amount·shieldScale`) leaves the counter
+        assertEq(IWrappedToken(address(w)).totalWrapped(), 100 * SCALE, "the counter follows the burn");
         assertEq(w.balanceOf(SHIELD_POOL_), 100 * SCALE);
         assertEq(w.totalShielded(), 100);
         assertTrue(_holds(tok, alice, 100, true));
@@ -373,20 +378,20 @@ contract ZetherWrappedTest is ZetherFixture {
         usd.approve(address(z), 100 * SCALE);
         z.mtxWrapShield(address(usd), 100 * SCALE, ZetherTypes.UA.unwrap(alice.ua));
         assertEq(z.totalSupply(), 100 * SCALE, "minted to SHIELD_POOL (D19)");
-        z.proposeRate(address(usd), 9, 10);
+        z.proposeRate(address(usd), 9, 10, EnvKit.codeUidOf(address(z)));
         vm.warp(block.timestamp + 2 days);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.RateChangeUndercollateralized.selector, 90 * SCALE,
             100 * SCALE));
-        z.executeRate();
+        z.executeRate(EnvKit.codeUidOf(address(z)));
     }
 
     /// The kind's own flag rules (CTR-ZTH-47) and `disableFeature(RATE_ADJUSTABLE)` cancelling a pending change
     /// (CTR-TOK-06), restated on this kind.
     function test_kindFlags_andDisableFeatureCancelsAPendingRate() public {
-        w.proposeRate(address(usd), 11, 10);
+        w.proposeRate(address(usd), 11, 10, EnvKit.codeUidOf(address(w)));
         (address pu,,,) = w.pendingRate();
         assertEq(pu, address(usd));
-        w.disableFeature(GovernanceBits.RATE_ADJUSTABLE);
+        w.disableFeature(GovernanceBits.RATE_ADJUSTABLE, EnvKit.codeUidOf(address(w)));
         (pu,,,) = w.pendingRate();
         assertEq(pu, address(0), "the pending change is gone");
         assertFalse(w.rateAdjustable());
@@ -394,7 +399,7 @@ contract ZetherWrappedTest is ZetherFixture {
         (c.name, c.symbol, c.decimals, c.features) = ("F", "F", 6, 1 << GovernanceBits.FREEZE);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0, 0, bytes32(0), false, 0);
+        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, GovernanceBits.FREEZE));
         factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "freeze");
         c.features = 1 << GovernanceBits.MINTABLE; // a hybrid's bit (spec §5.2, governance T9): only with `maxSupply`
@@ -528,7 +533,7 @@ contract ZetherWrappedTest is ZetherFixture {
         hook.mint(address(this), SCALE);
         hook.approve(address(z), SCALE);
         bytes[2] memory calls =
-            [abi.encodeCall(z.disableFeature, (GovernanceBits.RATE_ADJUSTABLE)), abi.encodeCall(z.executeRate, ())];
+            [abi.encodeCall(z.disableFeature, (GovernanceBits.RATE_ADJUSTABLE, EnvKit.codeUidOf(address(z)))), abi.encodeCall(z.executeRate, (EnvKit.codeUidOf(address(z))))];
         for (uint256 i; i < 2; ++i) {
             hook.arm(address(z), calls[i]);
             vm.expectRevert(IMetaTx.Reentrancy.selector);
@@ -596,10 +601,10 @@ contract ZetherWrappedTest is ZetherFixture {
     function test_allowlistRefusals_wrappedZether() public {
         bytes[6] memory refused = [
             abi.encodeWithSignature("unwrap(uint256,address)", 1, payer),
-            abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(usd), 1, 1),
-            abi.encodeWithSignature("cancelRate()"),
-            abi.encodeWithSignature("executeRate()"),
-            abi.encodeWithSignature("disableWrap(address,bytes32)", address(usd), bytes32(0)),
+            abi.encodeWithSignature("proposeRate(address,uint96,uint96,bytes32)", address(usd), 1, 1, EnvKit.codeUidOf(address(w))),
+            abi.encodeWithSignature("cancelRate(bytes32)", EnvKit.codeUidOf(address(w))),
+            abi.encodeWithSignature("executeRate(bytes32)", EnvKit.codeUidOf(address(w))),
+            abi.encodeWithSignature("disableWrap(address,bytes32,bytes32)", address(usd), bytes32(0), EnvKit.codeUidOf(address(w))),
             abi.encodeWithSelector(IWrappedToken.mtxWrapOrder.selector)
         ];
         for (uint256 i; i < refused.length; ++i) {
@@ -620,7 +625,7 @@ contract ZetherWrappedTest is ZetherFixture {
     function test_normalZether_burnUnderUA() public {
         signer = _signingUA();
         NormalZetherToken nz = _newToken(false, "nz");
-        NormalZetherToken(address(nz)).mint(address(this), 100);
+        NormalZetherToken(address(nz)).mint(address(this), 100, EnvKit.codeUidOf(address(nz)));
         nz.transferToUA(signer, 100);
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
             from: signer, data: abi.encodeCall(NormalToken.burn, (40)), batch: 1, nonce: 0,
@@ -724,7 +729,7 @@ contract ZetherWrappedTest is ZetherFixture {
     /// reverts `UALegNotLedger` (after the proof, atomically).
     function test_unshieldUnwrap_toUA_ledgerLeg() public {
         NormalZetherToken legTok = _newToken(false, "leg");
-        NormalZetherToken(address(legTok)).mint(address(this), 100 * SCALE);
+        NormalZetherToken(address(legTok)).mint(address(this), 100 * SCALE, EnvKit.codeUidOf(address(legTok)));
         address[] memory one = new address[](1);
         one[0] = address(legTok);
         WrappedZetherToken z = _wrapper(one, _ones(1), _ones(1), "zl", true);

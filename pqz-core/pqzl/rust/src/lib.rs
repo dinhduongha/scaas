@@ -100,6 +100,10 @@ pub const WASM_MAX_LEGS: usize = if cfg!(feature = "wasm-m8") { TXM_MAX_LEGS } e
 /// the set's PQZL proofSystemId: keccak256 of its set.toml label `pqzl_id` (gen_set.py, rust/set.rs; plan 5h Task 8d:
 /// one id per set, `.../mlwe-d64k<k>-q<log2q>l4/v4`; v3 and v2 are retired, CTR-PQZ-09). The core only hashes it
 pub const PROOF_SYSTEM_ID: [u8; 32] = params::set::PQZL_ID;
+/// the set's PQZL proofSystemId of opening tokens (three-key spec K3-4): keccak256 of set.toml's `pqzl_split_id`; its op 1
+/// is R_TXS / R_TXS0 (the statement's length picks the relation; pqz-stmt ties the forms to the id). The core only
+/// hashes it
+pub const PROOF_SYSTEM_SPLIT_ID: [u8; 32] = params::set::PQZL_SPLIT_ID;
 
 /// The C core's return codes (`pqz_rt.h`, D3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,9 +129,9 @@ pub enum Error {
 /// randomness (`keys::keypair_from_secret`, `encrypt_raw` with each pk^T r, `decrypt_raw`'s key and plaintext, the
 /// rejected samples of `keygen` / `enc_seed` on their error exits: C clears its output buffers there since the R0 review
 /// fix, R2-C10) and the witness parsing's values (`rel::dec_w`,
-/// `debit_witness`, `dr_witness`, `set_upsilon`). Not cleared (C clears them since Q-B with its arena,
-/// `pqz_arena_wipe_release`; a gap of this crate): the masks y / y3 / y4 and the z vectors built from them, `r_times`'
-/// products R·s3 / R'·s4, and the `coeffvec` copies inside the rejection step.
+/// `debit_witness`, `dr_witness`, `set_upsilon`), and since review 3w u1-3 (C clears them since Q-B with its arena,
+/// `pqz_arena_wipe_release`) the masks y1 / y2 / y3 / y4, their copy y and the z vectors built from them, the products
+/// R2·y, R2·s, B·y21, w, `r_times`' R·s3 / R'·s4, and the `coeffvec` / `intvec` copies inside the rejection steps.
 pub(crate) fn wipe<T: Default>(x: &mut [T]) {
     x.iter_mut().for_each(|e| *e = T::default());
     core::hint::black_box(&*x);
@@ -363,6 +367,12 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
     keys::enc_group_seed(seed_enc, g)
 }
 
+/// `pqz_enc_leg_seed`: an opening token's leg seed (spec K3-4), SHAKE256("SCAAS-PQZ-ENC-LEG-V1" || seed_enc || be4(0) ||
+/// toUA || keccak256(pk_t))[0..32); `pkt_hash` = keccak256(pk_t).
+pub fn enc_leg_seed(seed_enc: &[u8; 32], to_ua: &[u8; 32], pkt_hash: &[u8; 32]) -> [u8; 32] {
+    keys::enc_leg_seed(seed_enc, to_ua, pkt_hash)
+}
+
 /// `pqz_encrypt`: encryption with chosen short vectors (no norm check).
 pub fn encrypt(
     pks: &[&[u8; POLYVEC_BYTES]],
@@ -414,10 +424,19 @@ pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result
     coder::test_mutate(rel, proof, kind, r1, r2)
 }
 
+/// tB's length and the index of the quadratic proof's t in it, of relation `code` (test hook: `tests/fs_bind.rs`)
+#[cfg(feature = "test-hooks")]
+pub fn test_tb_layout(code: u8) -> Option<(usize, usize)> {
+    let p = rel::tbox_by_code(code)?;
+    Some(((p.tbox.l + p.tbox.lext) as usize, p.quad_eval.quad_many.l as usize))
+}
+
 /// The P6-FS trace (test hook, lazer#28; = the C core's `pqz_sz_trace_fn` kinds under `PQZ_SZ_TRACE`): which seed
 /// each Fiat–Shamir challenge of this thread's `prove` / `verify` / `verify_fast` calls was derived from, as
 /// `(kind, seed, dom)`: 2 / 3 = seed and dom of the z4 / z3 matrix V4 / V3, 5 = the seed of mu (and, in the generic
-/// code, of the final challenge), dom 0; the specialised verifier (`sv.rs`) records kind + 10. Returns the records since the last call and clears them. Off until this
+/// code, of the final challenge), dom 0; the specialised verifier (`sv.rs`) records kind + 10. The generic verifier
+/// only (review 3w Codex u1-2, dom 0): 6 = the transcript after the commitment (tA1, tB_), 4 = the seed of R, R' (after
+/// ty3, ty4, tbeta; C's kind 4 records each JL row), 8 = the final challenge's seed (after t, v, w1). Returns the records since the last call and clears them. Off until this
 /// thread's first call (which returns nothing): other test-hooks builds (pqz-ffi `fuzz`, the fault hooks) never call
 /// it, so they never record.
 #[cfg(feature = "test-hooks")]

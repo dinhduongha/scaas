@@ -1,13 +1,16 @@
 # Payment metadata, free pay lanes and tax on the regulated kinds (group 3e) — design
 
-**Status:** **approved by the owner 2026-11-06; build after T36.** SPECIFIED; nothing is built. Revised after the Codex and Fable reviews of the first draft
+**Status:** **approved by the owner 2026-11-06.** **BUILT** on branch `ua-mtx-merge`, T37–T43 (UNAUDITED; `payNo` as
+`bytes32`, `save` and the pay records by plan T83). PT-1 is CTR-MTX-31, PT-4 CTR-AS-18, PT-5 CTR-AS-19, PT-6 CTR-GOV-21, PT-7
+ARCH-POS-17 (the proposed ARCH-POS-13 is taken), PT-2 / PT-3 Changes of CTR-MTX-26 / -27 (T19). The section tags below are the
+design's. Revised after the Codex and Fable reviews of the first draft
 ([Codex](../../research/paytax-codex-review.md): 4 medium, 3 low, 1 info; [Fable](../../research/paytax-fable-review.md): 0 P0,
 3 P1, 14 P2, 12 P3, addendum A-1, B-1…B-6) and the owner's rulings O8–O18 of 2026-11-05 and 2026-11-06; every finding's outcome is in §17.
 Work-order group **3e** of branch `ua-mtx-merge`: tasks **T37–T43** after T36 (regulated kinds) and before 3c (`PqChat` and the
 registry generation), so the round's docs (T19), review (T22) and PR (T23) cover it and the EVM freeze and audit include it.
 `payNo` is confirmed (O15); P-1 and P-2 were accepted (O13) and P-3 rejected (O12); every question is answered (O16, O17, §11).
 
-**Rules this spec applies, not reopens:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30) (one signed entry per operation, `UASig`
+**Rules this spec applies, not reopens:** [CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30) (one signed entry per operation, `UASig`
 last, the merged `mtx*` names), [CTR-MTX-29](../../decisions.md#ctr-mtx-29--every-parameter-is-explicit) (explicit
 parameters), [CTR-MTX-23](../../contracts/metatx.md#CTR-MTX-23) (the typed path `UAMetaTransfer`),
 [CTR-MTX-13](../../contracts/metatx.md#CTR-MTX-13) (fee modes, ppm, 1 % cap), [CTR-MTX-08](../../contracts/metatx.md#CTR-MTX-08)
@@ -618,7 +621,7 @@ NEAR ≠ Algorand: separate rounds, separate caps. NODE-STO-01 (`max_valid_for_s
 | O3 | [CTR-MTX-10](../../contracts/metatx.md#CTR-MTX-10): "the lane is derived on chain … at most once through `mtxPay`" | no derivation; the key sums amounts (§5.4 for taxed rows) |
 | O3 | [CTR-MTX-06](../../contracts/metatx.md#CTR-MTX-06): receiver-fee shape `batch = payLane(entryRef)`, `nonce = 0` | the two terms go (§2.5) |
 | O2, O11, O7(3), C1 | [CTR-MTX-26](../../contracts/metatx.md#CTR-MTX-26): two entries `mtxPayMeta` / `uaPayMeta`; "Off chain: plain `mtxPay` with `payId = metaPayId(salt, meta)` … nothing is published"; `meta = abi.encode(uint16 schema, bytes body)`; schema 2 with `invoiceNo`; the tag `scaas.pay.meta`; "`payId` stays unlinkable" | one required `PayMeta` last on every pay entry; the off-chain path is gone (O11); the v2 formula with `payNo` (O15); schema 2 without `invoiceNo`; the three privacy properties (§3.3) |
-| O2 | [CTR-MTX-09](../../contracts/metatx.md#CTR-MTX-09), [CTR-MTX-30](../../decisions.md#CTR-MTX-30) rows R1 and R27 | `mtxPay` takes `UAMetaTransfer t` as a struct; `mtxPayMeta` to legacy |
+| O2 | [CTR-MTX-09](../../contracts/metatx.md#CTR-MTX-09), [CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30) rows R1 and R27 | `mtxPay` takes `UAMetaTransfer t` as a struct; `mtxPayMeta` to legacy |
 | O4 | [CTR-MTX-27](../../contracts/metatx.md#CTR-MTX-27): "lane `payLane(ref)`, nonce 0"; "Atomic and pay-once"; conformance "a second `relay` with the same `ref` fails"; the `UARelayFee` typehash (TS-D19); T20's wallet-display row | new typehash; §4's wording; T20 signs the new row if it has not run yet |
 | O6, O7(2) | [CTR-MTX-11](../../contracts/metatx.md#CTR-MTX-11): "one type per intent means one wallet display" | `UAPayWithTax` is a second payment type signed by the payer (precedent: `UARelayFee`, TS-D19) |
 | O8 | regulated spec §2.1, §7: "No user-facing entry is added or changes form" on 8–13; "kinds 8–13 take their base kind's token rows unchanged" | `mtxPayWithTax` and `payWithTax` (O13) are added on 8–13; the node rows of 8–13 gain them |

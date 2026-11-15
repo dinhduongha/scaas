@@ -1,0 +1,25 @@
+# ua-mtx-merge T66b follow-up, fix 3: ROLL_MAX fit asserted, maximum reported (owner 2026-11-10: keep the values, make the
+# test not red). ROLL_MAX stays 96 / 80 / 64 / 32. Rule: an owner-set multiple of 16 whose relayed full rollover fits
+# 0.75 * 2^24 = 12,582,912 regular gas on both relay paths (mtxExecute, uaExecute); the largest fitting multiple of 16 is
+# measured and reported, not required. PqzStatePinGasTest.test_gas_rollMax_relayedFullTx keeps the fit assertion on both
+# paths, drops "ROLL_MAX + 16 does not fit" and logs the largest fitting multiple of 16 (the linear fit through the ROLL_MAX / 2
+# rollover, the smaller of the two paths) and the headroom at ROLL_MAX on the costlier path. Forge 1.8.5, Amsterdam;
+# full output in the git-ignored .log files of the same name (-<set>, -mutant-n2304-112).
+# Run per set, one at a time (PqzSet.sol restored after each, checked against HEAD):
+#   scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set> test --skip PqChat --match-path
+#     'test/{pqz/PqzStateGas,pqz/MtxSplitOverhead,research/PqzPackGas,research/PqzProofStoreGas}.t.sol'
+#     --match-test test_gas_rollMax_relayedFullTx -vv
+#   (the four suites that run the test; --skip PqChat: another task's new files in the work tree did not compile yet, and
+#   n2048 to n2560 ran before they appeared)
+set | rc | suites | ROLL_MAX | full relayed tx at ROLL_MAX, regular: mtxExecute; uaExecute (state 195,840) | per entry | headroom (uaExecute) | largest fitting multiple of 16
+n2048-kmax1024 | 0 | 4 passed | 96 | 10,697,626; 10,856,706 | 62,256 | 1,726,206 | 112
+n2304-kmax4096 | 0 | 4 passed | 80 | 11,269,324; 11,428,404 | 69,178 | 1,154,508 | 96
+n2560-kmax16384 | 0 | 4 passed | 64 | 11,733,066; 11,892,146 | 76,127 | 690,766 | 64
+n2816-kmax65536 | 0 | 4 passed | 32 | 10,732,998; 10,892,078 | 83,097 | 1,690,834 | 48
+# Red-capable (mutant): n2304-kmax4096's PqzSet.sol with ROLL_MAX 112 (the largest fitting 96 + 16), built into that set's
+# out / cache, test/pqz/PqzStateGas.t.sol alone; PqzSet.sol restored after:
+mutant ROLL_MAX 112 at n2304-kmax4096 | 1 | 1 failed | [FAIL: mtxExecute: the full relayed transaction's regular gas under 0.75 * 2^24: 13483008 > 12582912]
+# The fit predicted 11,269,324 + 32 x 69,178 = 13,483,020 at 112 on mtxExecute; measured 13,483,008.
+# The whole suite after the last comment edits: at-set.sh n2304-kmax4096 test --skip PqChat --match-path
+# test/pqz/PqzStateGas.t.sol --match-contract PqzStatePinGasTest
+PqzStatePinGasTest at n2304-kmax4096 | 0 | 37 passed, 0 failed, 1 skipped (the four-set gate had it red on ROLL_MAX only)

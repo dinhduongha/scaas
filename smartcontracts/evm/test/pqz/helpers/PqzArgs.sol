@@ -10,7 +10,7 @@ import {PqzSet} from "../../../src/pqz/PqzSet.sol";
 /// @notice The client's side of the explicit PQZ parameters (Appendix X.2), for the fixture and the invariant handlers.
 abstract contract PqzArgs {
     bytes32 internal constant TH_TRANSFER_ARGS = keccak256(
-        "PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)"
+        "PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor)PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)"
     );
     bytes32 internal constant TH_LEG = keccak256("PqzLeg(bytes32 ua,bytes v,bytes vAuditor)");
     bytes32 internal constant TH_MULTI_ARGS = keccak256(
@@ -125,8 +125,15 @@ abstract contract PqzArgs {
         return keccak256(bytes.concat(
             abi.encode(TH_TRANSFER_ARGS, t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.toUA, t.beneficiaryUA, t.salt,
                 t.ownTag),
-            abi.encode(keccak256(t.u), keccak256(t.vTo), keccak256(t.vFrom), keccak256(t.vAuditor), keccak256(t.sealedMemo))
+            abi.encode(keccak256(t.u), keccak256(t.vTo), keccak256(t.vFrom), keccak256(t.vAuditor), keccak256(t.uFrom),
+                keccak256(t.sealedMemo), _hashO(t.openingTo), _hashO(t.openingAuditor))
         ));
+    }
+
+    bytes32 internal constant TH_OPENING = keccak256("PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)");
+
+    function _hashO(IPqzToken.PqzOpening memory o) internal pure returns (bytes32) {
+        return keccak256(abi.encode(TH_OPENING, keccak256(o.mlkemCt), o.x25519Eph, keccak256(o.sealedSeed)));
     }
 
     function _hashM(IPqzToken.PqzMultiArgs memory t) internal pure returns (bytes32) {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {Test} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {LegacyMetaTransfer} from "../helpers/LegacyMetaTransfer.sol";
@@ -8,8 +9,11 @@ import {LegacyMetaTransfer} from "../helpers/LegacyMetaTransfer.sol";
 /// CTR-MTX-15: the generic `MetaTransaction` and its pinned typehash; canonical zeroing; `data` hashed.
 contract MetaTxLibTest is Test {
     using MetaTxLib for MetaTxLib.MetaTransaction;
+    using MtxHash for MetaTxLib.MetaTransaction;
     using MetaTxLib for MetaTxLib.UAMetaTransaction;
+    using MtxHash for MetaTxLib.UAMetaTransaction;
     using MetaTxLib for MetaTxLib.UAMetaTransfer;
+    using MtxHash for MetaTxLib.UAMetaTransfer;
 
     function _m(uint32 mode) internal pure returns (MetaTxLib.MetaTransaction memory) {
         return MetaTxLib.MetaTransaction({

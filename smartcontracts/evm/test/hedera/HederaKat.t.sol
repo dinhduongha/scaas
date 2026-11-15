@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {kindArgs} from "../../script/KindModules.sol";
 
 import {Test} from "forge-std/Test.sol";
@@ -26,6 +27,7 @@ import {nid} from "../helpers/Ids.sol";
 /// replaced is in `test/vectors/legacy/ua-mtx-merge/`; the v1 vector in `legacy/p5/`.
 contract HederaKatTest is Test {
     using MetaTxLib for MetaTxLib.UAMetaTransfer;
+    using MtxHash for MetaTxLib.UAMetaTransfer;
 
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     address internal constant NATIVE = address(uint160(1_234_567)); // 0.0.1234567, long-zero
@@ -110,7 +112,7 @@ contract HederaKatTest is Test {
 
         vm.etch(HAS, type(MockHederaAccountService).runtimeCode);
         MockHederaAccountService(HAS).setEdKey(NATIVE, vm.addr(ED_KEY));
-        tok.mint(NATIVE, t.value);
+        tok.mint(NATIVE, t.value, EnvKit.codeUidOf(address(tok)));
         (bytes32 r, bytes32 vs) = vm.signCompact(ED_KEY, digest);
         IUARegistry.UASig memory a;
         a.signature = abi.encodePacked(r, vs);

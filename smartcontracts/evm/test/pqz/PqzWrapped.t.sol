@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 
 import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {console2, Vm} from "forge-std/Test.sol";
+import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -73,6 +75,9 @@ contract PqzWrappedTest is PqzFixture {
         console2.log("mtxUnshieldUnwrap (mocked proof) gas", g - gasleft());
         assertEq(usd.balanceOf(address(0xD00D)), 400 * SCALE);
         assertEq(w.totalShielded(), 600);
+        // round 3zc (CTR-GOV-30): the shield-wrap counted, the unshield-unwrap's burn left the counter (a pure wrap)
+        assertEq(IWrappedToken(address(w)).totalWrapped(), w.totalSupply(), "the counter is the supply");
+        assertEq(IWrappedToken(address(w)).totalWrapped(), 600 * SCALE);
         assertGe(usd.balanceOf(address(w)), w.totalSupply(), "reserve invariant (the pool is in totalSupply)");
         // minOut above the quote
         pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(22, PqzCt.CT));
@@ -100,7 +105,7 @@ contract PqzWrappedTest is PqzFixture {
         hook.mint(address(this), SCALE);
         hook.approve(address(z), SCALE);
         bytes[2] memory calls =
-            [abi.encodeCall(z.disableFeature, (GovernanceBits.RATE_ADJUSTABLE)), abi.encodeCall(z.executeRate, ())];
+            [abi.encodeCall(z.disableFeature, (GovernanceBits.RATE_ADJUSTABLE, EnvKit.codeUidOf(address(z)))), abi.encodeCall(z.executeRate, (EnvKit.codeUidOf(address(z))))];
         for (uint256 i; i < 2; ++i) {
             hook.arm(address(z), calls[i]);
             vm.expectRevert(IMetaTx.Reentrancy.selector);
@@ -128,23 +133,23 @@ contract PqzWrappedTest is PqzFixture {
     /// sends a deploy (gas limit = forge's estimate × `--gas-estimate-multiplier 105`; forge's estimate ran ~1.05× the
     /// measured CREATE2 + intrinsic + calldata, ZetherDeploy.t; Osaka: the limit itself, ×1.30 did not fit). Init code over EIP-3860's 49,152
     /// fits 7622 / anvil (131,072 with `--code-size-limit 65536`).
-    /// Plan 5g-Z2: measured through `OpenFactory.deployImplementation` itself (the env appended, the release's checks),
+    /// Plan 5g-Z2: measured through `OpenFactory.deployTokenImplementation` itself (the env appended, the release's checks),
     /// as the registrar's transaction: intrinsic + calldata + the call.
     function test_largestImplementationFitsOneOsakaTx() public {
         bytes memory code = type(WrappedPqzToken).creationCode;
         bytes memory args = Catalogue.argsOn(factory, IOpenFactory.TokenKind.WRAPPED_PQZ, 1, ""); // T66b: env 1's modules
         vm.prank(registrar);
-        address a = factory.deployImplementation(IOpenFactory.TokenKind.WRAPPED_PQZ, 2, 1, code, args);
+        address a = factory.deployTokenImplementation(IOpenFactory.TokenKind.WRAPPED_PQZ, 2, 1, code, args, EnvKit.uidOf(address(factory)));
         // F185: the call is its own transaction (`isolate`); under Amsterdam EIP-7825's 2^24 caps the REGULAR gas, which
         // `lastCallGas` reports with the intrinsic and the calldata (or the EIP-7976 floor), and EIP-8037 state gas (the
         // 64 KiB of code, the new slots) comes apart: it needs a limit above 2^24, which a transaction may have.
         Vm.Gas memory vg = vm.lastCallGas();
         uint256 txGas = vg.gasTotalUsed;
-        emit log_named_uint("WrappedPqzToken deployImplementation state gas (EIP-8037)", uint256(int256(vg.gasStateUsed)));
+        emit log_named_uint("WrappedPqzToken deployTokenImplementation state gas (EIP-8037)", uint256(int256(vg.gasStateUsed)));
         uint256 init = code.length + abi.encode(address(factory), args).length; // chain-neutral: no env appended
         emit log_named_uint("WrappedPqzToken init code bytes (with the factory's append)", init);
         emit log_named_uint("WrappedPqzToken runtime bytes", a.code.length);
-        emit log_named_uint("WrappedPqzToken deployImplementation tx gas", txGas);
+        emit log_named_uint("WrappedPqzToken deployTokenImplementation tx gas", txGas);
         // T66b (controller 2026-11-09: a migration, old -> new): the face's init code fell from 63,531 B (+ the factory's
         // append; d142b57c) to 28,126 B, under EIP-3860's 49,152: the largest implementation fits every chain now
         assertLe(init, 49_152, "T66b: within EIP-3860");

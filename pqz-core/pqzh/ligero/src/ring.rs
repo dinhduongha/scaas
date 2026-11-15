@@ -9,9 +9,9 @@ use crate::Wiped;
 
 pub use crate::fq::Q;
 pub use pqz_stmt::{D, K};
-/// floor(q / 2^(MBITS + 2)), the plaintext digits' scale (v3 2^26 - 1)
+/// floor(q / 2^(MBITS + 2)), the plaintext digits' scale (n2048-kmax1024 2^26 - 1)
 pub const DELTA: i64 = crate::set::DELTA;
-/// ring dimension k d (v3 2048)
+/// ring dimension k d (n2048-kmax1024 2048)
 pub const N: usize = K * D;
 
 // pqz-stmt is built for the same parameter set (feature set-<set> forwarded)
@@ -24,7 +24,7 @@ pub fn centre(v: u64) -> i64 {
     if v > (Q - 1) / 2 { v as i64 - Q as i64 } else { v as i64 }
 }
 
-/// A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)): 8-byte BE words, low LOG2Q bits (v3 42), accept if < q,
+/// A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)): 8-byte BE words, low LOG2Q bits (n2048-kmax1024 42), accept if < q,
 /// centred (pqz_rel.c expand_A, pqzl/rust keys.rs).
 pub fn a_matrix() -> &'static Vec<Poly> {
     static A: OnceLock<Vec<Poly>> = OnceLock::new();

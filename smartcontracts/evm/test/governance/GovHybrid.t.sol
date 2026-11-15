@@ -56,7 +56,7 @@ contract GovHybridTest is UALedgerBase {
     /// `PAYABLE` plus `extra`, owner `OWNER`; a hybrid (`MINTABLE`, minter `MINTER`) iff `cap != 0`; the test is the rate admin
     /// (a contract), `GUARD` the guardian.
     function _cfg(address[] memory legs, uint256 cap, uint256 extra) internal pure returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.owner, c.maxSupply) = ("H", "H", 6, nid(OWNER), cap);
+        (c.name, c.symbol, c.decimals, c.admin, c.maxSupply) = ("H", "H", 6, nid(OWNER), cap);
         c.features = 1 | extra | (cap != 0 ? uint256(1) << MINT : 0);
         if (cap != 0) c.roles.minter = nid(MINTER);
         if (extra & RATE != 0) (c.roles.rateAdmin, c.rate) = (nid(address(1)), IFactoryToken.RateConfig(2 days, 1000)); // _make: this
@@ -166,22 +166,22 @@ contract GovHybridTest is UALedgerBase {
     function test_capHolds_mint() public {
         WrappedToken w = _hybrid(address(und), CAP);
         vm.prank(MINTER);
-        w.mint(alice, CAP);
+        w.mint(alice, CAP, EnvKit.codeUidOf(address(w)));
         assertEq(w.balanceOf(alice), CAP);
         assertEq(_reserve(w, address(und)), 0, "a mint adds no reserve");
         vm.expectRevert(_over(CAP + 1));
         vm.prank(MINTER);
-        w.mint(alice, 1);
+        w.mint(alice, 1, EnvKit.codeUidOf(address(w)));
     }
 
     function test_capHolds_mintToUA() public {
         WrappedToken w = _hybrid(address(und), CAP);
         vm.prank(MINTER);
-        w.mintToUA(uaP, CAP);
+        w.mintToUA(uaP, CAP, EnvKit.codeUidOf(address(w)));
         assertEq(w.balanceOfUA(uaP), CAP);
         vm.expectRevert(_over(CAP + 1));
         vm.prank(MINTER);
-        w.mintToUA(uaP, 1);
+        w.mintToUA(uaP, 1, EnvKit.codeUidOf(address(w)));
     }
 
     /// Minted to the cap, deposits stop (spec §5.4: an issuer can shut them first); an unwrap makes room again.
@@ -189,7 +189,7 @@ contract GovHybridTest is UALedgerBase {
         WrappedToken w = _hybrid(address(und), CAP);
         _wrapUnd(w, bob, 500);
         vm.prank(MINTER);
-        w.mint(alice, 500);
+        w.mint(alice, 500, EnvKit.codeUidOf(address(w)));
         _give(w, bob, 100);
         vm.expectRevert(_over(CAP + 1));
         vm.prank(bob);
@@ -207,7 +207,7 @@ contract GovHybridTest is UALedgerBase {
         w = _hybrid(address(und), 2 * CAP);
         _wrapUnd(w, bob, 500);
         vm.prank(MINTER);
-        w.mint(alice, CAP);
+        w.mint(alice, CAP, EnvKit.codeUidOf(address(w)));
         vm.prank(alice); // the issuer's own units drain the reserve: first come
         w.unwrap(address(und), 500, alice, 0);
         assertEq(und.balanceOf(alice), 500);
@@ -233,16 +233,16 @@ contract GovHybridTest is UALedgerBase {
     // ------------------------------------------------------------------ rates (spec §5.3, C1)
 
     function _execute(WrappedToken w, address leg, uint96 num, uint96 den) internal {
-        w.proposeRate(leg, num, den);
+        w.proposeRate(leg, num, den, EnvKit.codeUidOf(address(w)));
         vm.warp(block.timestamp + 2 days);
-        w.executeRate();
+        w.executeRate(EnvKit.codeUidOf(address(w)));
     }
 
     function test_executeRateOnAHybridShortOfSupply() public {
         WrappedToken w = _make(_cfg(_legs(address(und)), 10 * CAP, RATE));
         _wrapUnd(w, bob, 100);
         vm.prank(MINTER);
-        w.mint(alice, 900);
+        w.mint(alice, 900, EnvKit.codeUidOf(address(w)));
         _execute(w, address(und), 101, 100); // collateral 101 against a supply of 1000
         (uint96 num,,,,) = w.legOf(address(und));
         assertEq(num, 101);
@@ -259,13 +259,13 @@ contract GovHybridTest is UALedgerBase {
     function test_executeRateNonHybridStillChecksSupply() public {
         WrappedToken w = _make(_cfg(_legs(address(und)), 0, RATE));
         _wrapUnd(w, bob, CAP);
-        w.proposeRate(address(und), 99, 100);
+        w.proposeRate(address(und), 99, 100, EnvKit.codeUidOf(address(w)));
         vm.warp(block.timestamp + 2 days);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.RateChangeUndercollateralized.selector, 990, CAP));
-        w.executeRate();
+        w.executeRate(EnvKit.codeUidOf(address(w)));
         _give(w, address(this), 11);
         w.addReserve(address(und), 11); // positive control: ⌊1011·0.99⌋ = 1000
-        w.executeRate();
+        w.executeRate(EnvKit.codeUidOf(address(w)));
     }
 
     function test_rateFallWithDisabledLegStillRefusedOnAHybrid() public {
@@ -275,12 +275,12 @@ contract GovHybridTest is UALedgerBase {
         WrappedToken w = _make(_cfg(two, 10 * CAP, RATE | DISABLE));
         _wrapUnd(w, bob, CAP);
         vm.prank(GUARD);
-        w.disableWrap(address(und2), "depeg");
-        w.proposeRate(address(und), 99, 100);
+        w.disableWrap(address(und2), "depeg", EnvKit.codeUidOf(address(w)));
+        w.proposeRate(address(und), 99, 100, EnvKit.codeUidOf(address(w)));
         vm.warp(block.timestamp + 2 days);
         vm.expectRevert(IWrappedToken.RateDecreaseWithDisabledLeg.selector);
-        w.executeRate();
-        w.cancelRate();
+        w.executeRate(EnvKit.codeUidOf(address(w)));
+        w.cancelRate(EnvKit.codeUidOf(address(w)));
         _execute(w, address(und), 101, 100); // positive control: a rise
     }
 
@@ -289,14 +289,14 @@ contract GovHybridTest is UALedgerBase {
     function test_disableMintableLeavesAHybrid() public {
         WrappedToken w = _hybrid(address(und), CAP);
         vm.prank(OWNER);
-        w.disableFeature(MINT);
+        w.disableFeature(MINT, EnvKit.codeUidOf(address(w)));
         assertEq(w.features() & (uint256(1) << MINT), 0);
         assertEq(w.maxSupply(), CAP);
         bytes32 slotA = keccak256(abi.encode(uint256(0), NS));
         assertEq((uint256(vm.load(address(w), slotA)) >> (8 * 23)) & 0xff, 1, "leg 0 keeps capped");
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, MINT));
         vm.prank(MINTER);
-        w.mint(alice, 1);
+        w.mint(alice, 1, EnvKit.codeUidOf(address(w)));
         _wrapUnd(w, bob, CAP); // the cap binds wraps still
         _give(w, bob, 1);
         vm.expectRevert(_over(CAP + 1));
@@ -309,7 +309,7 @@ contract GovHybridTest is UALedgerBase {
         _give(w, address(this), 2);
         w.addReserve(address(und), 1); // positive control
         vm.prank(GUARD);
-        w.disableWrap(address(und), "closed");
+        w.disableWrap(address(und), "closed", EnvKit.codeUidOf(address(w)));
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapDisabledFor.selector, address(und)));
         w.addReserve(address(und), 1);
     }
@@ -320,19 +320,19 @@ contract GovHybridTest is UALedgerBase {
         IGovernance.GrantTerms memory g;
         (g.max, g.total, g.perWindow, g.window) = (type(uint128).max, 100, 50, 1 days);
         vm.prank(OWNER);
-        w.setGrant(MINT, nid(MINTER2), g);
+        w.setGrant(MINT, nid(MINTER2), g, EnvKit.codeUidOf(address(w)));
         vm.prank(MINTER2);
-        w.mint(alice, 50);
+        w.mint(alice, 50, EnvKit.codeUidOf(address(w)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(3)));
         vm.prank(MINTER2);
-        w.mint(alice, 1);
+        w.mint(alice, 1, EnvKit.codeUidOf(address(w)));
         vm.warp(block.timestamp + 1 days);
         vm.prank(MINTER2);
-        w.mint(alice, 50);
+        w.mint(alice, 50, EnvKit.codeUidOf(address(w)));
         vm.warp(block.timestamp + 1 days);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExhausted.selector, uint8(2)));
         vm.prank(MINTER2);
-        w.mint(alice, 1);
+        w.mint(alice, 1, EnvKit.codeUidOf(address(w)));
     }
 
     // ------------------------------------------------------------------ no new slot off the hybrid (C2)
@@ -412,7 +412,7 @@ contract GovHybridZetherTest is ZetherFixture {
     /// proof behind it gets `InsufficientReserve` on an empty leg, and the proof's refusal once the leg holds enough.
     function test_unshieldUnwrapShortReserveRevertsBeforeTheProofZether() public {
         WrappedZetherToken w = _token(1000 * SCALE, "h");
-        w.mint(address(this), 100 * SCALE);
+        w.mint(address(this), 100 * SCALE, EnvKit.codeUidOf(address(w)));
         (bool ok, bytes memory ret) = _unshieldUnwrap(w);
         assertFalse(ok);
         assertEq(ret, abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(usd), 10 * SCALE, 0));
@@ -427,11 +427,11 @@ contract GovHybridZetherTest is ZetherFixture {
     function test_minterNeverMintsIntoAShieldedBalance() public {
         WrappedZetherToken w = _token(1000 * SCALE, "h");
         vm.expectRevert(IUALedger.ShieldPoolNotPayable.selector);
-        w.mint(SHIELD_POOL_, SCALE);
+        w.mint(SHIELD_POOL_, SCALE, EnvKit.codeUidOf(address(w)));
         bytes32 pool = MetaTxLib.pad(SHIELD_POOL_);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, pool));
-        w.mintToUA(pool, SCALE);
-        w.mint(alice.evm, SCALE); // positive control: a public balance
+        w.mintToUA(pool, SCALE, EnvKit.codeUidOf(address(w)));
+        w.mint(alice.evm, SCALE, EnvKit.codeUidOf(address(w))); // positive control: a public balance
         assertEq(w.balanceOf(alice.evm), SCALE);
         assertEq(w.totalShielded(), 0);
         assertEq(w.balanceOf(SHIELD_POOL_), 0);
@@ -483,7 +483,7 @@ contract GovHybridPqzTest is PqzFixture {
 
     function test_unshieldUnwrapShortReserveRevertsBeforeTheProofPqz() public {
         WrappedPqzToken w = _token(1000 * SCALE, "h");
-        w.mint(address(this), 100 * SCALE);
+        w.mint(address(this), 100 * SCALE, EnvKit.codeUidOf(address(w)));
         (bool ok, bytes memory ret) = _unshieldUnwrap(w);
         assertFalse(ok);
         assertEq(ret, abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(usd), 10 * SCALE, 0));
@@ -498,11 +498,11 @@ contract GovHybridPqzTest is PqzFixture {
     function test_minterNeverMintsIntoAShieldedBalance() public {
         WrappedPqzToken w = _token(1000 * SCALE, "h");
         vm.expectRevert(IUALedger.ShieldPoolNotPayable.selector);
-        w.mint(POOL_, SCALE);
+        w.mint(POOL_, SCALE, EnvKit.codeUidOf(address(w)));
         bytes32 pool = MetaTxLib.pad(POOL_);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, pool));
-        w.mintToUA(pool, SCALE);
-        w.mint(address(0xA11CE), SCALE); // positive control: a public balance
+        w.mintToUA(pool, SCALE, EnvKit.codeUidOf(address(w)));
+        w.mint(address(0xA11CE), SCALE, EnvKit.codeUidOf(address(w))); // positive control: a public balance
         assertEq(w.balanceOf(address(0xA11CE)), SCALE);
         assertEq(w.totalShielded(), 0);
         assertEq(w.balanceOf(POOL_), 0);

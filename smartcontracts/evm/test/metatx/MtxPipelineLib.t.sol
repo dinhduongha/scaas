@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
@@ -537,20 +538,20 @@ contract MtxPipelineLibTest is Test {
         MtxPipelineLib.Envelope memory e = MtxPipelineLib.Envelope(MetaTxLib.pad(m.from), keccak256(m.data), m.batch,
             m.nonce, m.validUntil, m.mode, m.relayer, m.fee, m.feeRecipient);
         assertEq(h.callDigest(DS, MetaTxLib.METATX_TYPEHASH, e),
-            MessageHashUtils.toTypedDataHash(DS, MetaTxLib.hashStruct(m)));
+            MessageHashUtils.toTypedDataHash(DS, MtxHash.hashStruct(m)));
 
         e.from = ua;
         MetaTxLib.UAMetaTransaction memory um = MetaTxLib.UAMetaTransaction(ua, m.data, m.batch, m.nonce, m.validUntil,
             m.mode, m.relayer, m.fee, m.feeRecipient);
         assertEq(h.callDigest(DS, MetaTxLib.UAMETATX_TYPEHASH, e),
-            MessageHashUtils.toTypedDataHash(DS, MetaTxLib.hashStruct(um)));
+            MessageHashUtils.toTypedDataHash(DS, MtxHash.hashStruct(um)));
 
         MetaTxLib.UAMetaTransfer memory ut = MetaTxLib.UAMetaTransfer(MetaTxLib.pad(t.from), MetaTxLib.pad(t.to),
             t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, t.relayer, t.fee, t.feeRecipient);
-        assertEq(h.transferDigest(DS, ut), MessageHashUtils.toTypedDataHash(DS, MetaTxLib.hashStruct(ut)));
+        assertEq(h.transferDigest(DS, ut), MessageHashUtils.toTypedDataHash(DS, MtxHash.hashStruct(ut)));
         assertTrue(h.transferDigest(DS, ut) != MessageHashUtils.toTypedDataHash(DS, LegacyMetaTransfer.hashStruct(t)));
 
         ut.from = ua;
-        assertEq(h.transferDigest(DS, ut), MessageHashUtils.toTypedDataHash(DS, MetaTxLib.hashStruct(ut)));
+        assertEq(h.transferDigest(DS, ut), MessageHashUtils.toTypedDataHash(DS, MtxHash.hashStruct(ut)));
     }
 }

@@ -266,6 +266,17 @@ TestCase {
         }
     }
 
+    function test_msigUpdateRows() {
+        const rows = vectors.load("portable.json").msigUpdates
+        compare(rows.length, 4)
+        for (const r of rows) {
+            const o = JSON.parse(UaKinds.msigUpdate(JSON.stringify({ ua: r.ua, chainUid: r.chainUid, registry: r.registry, version: r.version,
+                threshold: r.threshold, members: r.members, enabled: r.enabled, validUntilBlock: r.validUntilBlock, sigs: r.args.sigs })))
+            compare([o.digest, o.message, o.memberDigest], [r.digest, r.message, r.memberDigest], r.name)
+            compare(o.args, r.args, r.name)
+        }
+    }
+
     function test_portablePurposes() {
         const pp = vectors.load("portable.json")
         verify(UaKinds.isPortablePurpose(pp.tags.PURPOSE_POP_V2.hash) && UaKinds.isPortablePurpose(pp.tags.PURPOSE_KEM.hash)
@@ -801,15 +812,15 @@ TestCase {
         compare(UaKinds.lastError, "UAArgument")
     }
 
-    // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 24 "" and UAArgument
+    // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 31 "" and UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
     function test_governance_bits_rows() {
         const v = vectors.load("../governance/governance_bits.json")
-        compare(v.bits.length, 25)
+        compare(v.bits.length, 32) // round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS; round 3zb + 3zc: bits 30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE
         for (const r of v.bits) {
             compare(JSON.parse(UaKinds.governanceBit(r.bit)), r, "bit " + r.bit)
             compare(UaKinds.lastError, "")
         }
-        for (const bit of [25, 127, 128, 255, 256, -1]) {
+        for (const bit of [32, 127, 128, 255, 256, -1]) {
             compare(UaKinds.governanceBit(bit), "", bit)
             compare(UaKinds.lastError, "UAArgument", bit)
         }
@@ -817,7 +828,9 @@ TestCase {
 
     // pay-meta-tax T41, T83: paymeta.json v3 rows (save without a payNo refused; the UUIDv7 shown) and paytax.json's UAPayWithTax digest row
     function test_pay_rows() {
-        for (const r of vectors.load("../metatx/paymeta.json")) {
+        const pm = vectors.load("../metatx/paymeta.json")
+        verify(pm.some((r) => !r.accepted), "a refused row")
+        for (const r of pm) {
             const o = UaKinds.metaPayIdV3(JSON.stringify({ salt: r.salt, payNo: r.payNo, save: r.save, schema: r.schema, body: r.body }))
             if (r.accepted) {
                 const g = JSON.parse(o)

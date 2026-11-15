@@ -191,11 +191,13 @@ fn pqz_key_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
 
 /// Group 3f (spec §11.1): the topics of [`pqz_verifier_event`]: the PQZ verifier mode's events and the op events a `PqzVerified`
 /// joins; group 3h: `ProofStoreSet` (never `PqzDebitProof`).
-pub const PQZ_VERIFIER_TOPICS: [B256; 9] = [
+pub const PQZ_VERIFIER_TOPICS: [B256; 11] = [
     IPqzToken::PqzVerified::SIGNATURE_HASH, IPqzToken::PqzVerifierProposed::SIGNATURE_HASH, IPqzToken::PqzVerifierSet::SIGNATURE_HASH,
     IPqzToken::PqzVerifierCancelled::SIGNATURE_HASH, IPqzEvents::PqzVerifierRevoked::SIGNATURE_HASH,
     IPqzEvents::ConfidentialTransfer::SIGNATURE_HASH, IPqzEvents::ConfidentialTransferMulti::SIGNATURE_HASH,
     IPqzEvents::Unshielded::SIGNATURE_HASH, IPqzToken::ProofStoreSet::SIGNATURE_HASH,
+    // round 3t (CTR-PQZ-36): the verifier fee's proposal (an alert: the hostage notice, T29) and its change
+    IPqzToken::VerifierFeeProposed::SIGNATURE_HASH, IPqzToken::VerifierFeeSet::SIGNATURE_HASH,
 ];
 
 /// Group 3f: a PQZ verifier mode event or a confidential op event into `v`, ids as `bytes32` hex (never `from` / `to`, which the
@@ -222,6 +224,16 @@ fn pqz_verifier_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
         // group 3h (spec §10): bit 24's change of what each later debit leaves in history; an alert (no PqzDebitProof is indexed)
         let Ok(e) = log.log_decode::<P::ProofStoreSet>() else { return false };
         (v["event"], v["previous"], v["next"]) = (json!("ProofStoreSet"), json!(e.inner.data.previous), json!(e.inner.data.next));
+    } else if topic0 == P::VerifierFeeProposed::SIGNATURE_HASH {
+        // round 3t (spec §10, T29): an increase proposed, confirmable from `eta`: an alert
+        let Ok(e) = log.log_decode::<P::VerifierFeeProposed>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["current"], v["next"], v["eta"]) = (json!("VerifierFeeProposed"), json!(e.current), json!(e.next), json!(e.eta));
+    } else if topic0 == P::VerifierFeeSet::SIGNATURE_HASH {
+        // round 3t: the fee written; `previous == next` is the cancel of a pending increase (spec §7.1). Operator note (Fable
+        // P3-6): a `ConfidentialTransfer*.fee` is the whole word, three payees; the split is in the pool moves of the transaction
+        let Ok(e) = log.log_decode::<P::VerifierFeeSet>() else { return false };
+        (v["event"], v["previous"], v["next"]) = (json!("VerifierFeeSet"), json!(e.inner.data.previous), json!(e.inner.data.next));
     } else if topic0 == P::PqzVerifierCancelled::SIGNATURE_HASH {
         let Ok(e) = log.log_decode::<P::PqzVerifierCancelled>() else { return false };
         (v["event"], v["next"]) = (json!("PqzVerifierCancelled"), h(e.inner.data.next));
@@ -251,7 +263,7 @@ fn pqz_verifier_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
         return false;
     }
     v["tx_index"] = json!(log.transaction_index);
-    if matches!(v["event"].as_str(), Some("PqzVerifierProposed" | "PqzVerifierRevoked" | "ProofStoreSet")) {
+    if matches!(v["event"].as_str(), Some("PqzVerifierProposed" | "PqzVerifierRevoked" | "ProofStoreSet" | "VerifierFeeProposed")) {
         v["alert"] = json!(true);
     }
     true
@@ -287,20 +299,27 @@ pub type PqzHealth = std::collections::HashMap<String, Value>;
 
 /// Group 3f (spec §11.1, C8): the health signal. Per token, from its rows in order: `pqz_last_verdict_at` (the block of the last
 /// joined `PqzVerified`), `pqz_verifier_epoch` (the last verdict's, a transfer's or a revocation's) and `pqz_verifier_revoked`;
+/// round 3t (CTR-PQZ-36, spec §10): `pqz_verifier_fee`, the fee the last `VerifierFeeSet` wrote (`null` until one is seen);
 /// stamped on the token's verified op rows and verifier rows, kept in `state` for the next range.
 pub fn pqz_health(state: &mut PqzHealth, rows: &mut [Value]) {
-    const KEYS: [&str; 3] = ["pqz_last_verdict_at", "pqz_verifier_epoch", "pqz_verifier_revoked"];
+    const KEYS: [&str; 4] = ["pqz_last_verdict_at", "pqz_verifier_epoch", "pqz_verifier_revoked", "pqz_verifier_fee"];
     for r in rows.iter_mut() {
         let ev = r["event"].as_str().unwrap_or_default().to_string();
         let verified = !r["pqz_verified"].is_null();
-        let (Some(c), true) = (r["contract"].as_str().map(str::to_string), verified || ev.starts_with("PqzVerifier")) else { continue };
-        let s = state.entry(c).or_insert_with(|| json!({"pqz_last_verdict_at": null, "pqz_verifier_epoch": null, "pqz_verifier_revoked": false}));
+        let (Some(c), true) = (r["contract"].as_str().map(str::to_string), verified || ev.starts_with("PqzVerifier") || ev.starts_with("VerifierFee"))
+        else { continue };
+        // Fable E N-9: unknown until seen (this state lives in memory: after a restart a revoked verifier is never "not revoked")
+        let s = state.entry(c).or_insert_with(|| json!({"pqz_last_verdict_at": null, "pqz_verifier_epoch": null, "pqz_verifier_revoked": null,
+            "pqz_verifier_fee": null}));
         if verified {
-            (s["pqz_last_verdict_at"], s["pqz_verifier_epoch"]) = (r["block_number"].clone(), r["pqz_verified"]["pqz_verifier_epoch"].clone());
+            // a verdict was checked: its verifier was not revoked then
+            (s["pqz_last_verdict_at"], s["pqz_verifier_epoch"], s["pqz_verifier_revoked"]) =
+                (r["block_number"].clone(), r["pqz_verified"]["pqz_verifier_epoch"].clone(), json!(false));
         }
         match ev.as_str() {
             "PqzVerifierRevoked" => (s["pqz_verifier_revoked"], s["pqz_verifier_epoch"]) = (json!(true), r["pqz_verifier_epoch"].clone()),
             "PqzVerifierSet" => (s["pqz_verifier_revoked"], s["pqz_verifier_epoch"]) = (json!(false), r["pqz_verifier_epoch"].clone()),
+            "VerifierFeeSet" => s["pqz_verifier_fee"] = r["next"].clone(),
             _ => {}
         }
         for k in KEYS {
@@ -311,15 +330,19 @@ pub fn pqz_health(state: &mut PqzHealth, rows: &mut [Value]) {
 
 /// The events an alert goes out on (regulated-kinds spec §7, M-08; asset-suite A2: a compromised `compliance` records fake
 /// orders, so every record is shown).
-pub const ALERTS: [&str; 4] = ["OrderRecorded", "RelaxProposed", "AccountFrozen", "Paused"];
+/// Round 3s (spec 2026-11-10-token-lists.md §5.4): + `FeatureEnabled` and the restricting list edits (`DeniedSet` with `on`,
+/// `AllowedSet` without), alerted in [`regulated_event`].
+pub const ALERTS: [&str; 5] = ["OrderRecorded", "RelaxProposed", "AccountFrozen", "Paused", "FeatureEnabled"];
 
 /// The topics of [`regulated_event`]: the regulated kinds' §3.1 events and the governance events the indexer derives from.
-pub const REGULATED_TOPICS: [B256; 11] = [
+pub const REGULATED_TOPICS: [B256; 14] = [
     IRegulatedToken::AccountFrozen::SIGNATURE_HASH, IRegulatedToken::AccountUnfrozen::SIGNATURE_HASH,
     IRegulatedToken::ForcedTransfer::SIGNATURE_HASH, IRegulatedToken::Paused::SIGNATURE_HASH, IRegulatedToken::Unpaused::SIGNATURE_HASH,
     IRegulatedToken::OrderRecorded::SIGNATURE_HASH, IRegulatedToken::OrderRevoked::SIGNATURE_HASH,
     IRegulatedToken::OperatorTransfer::SIGNATURE_HASH, IGovernance::RelaxProposed::SIGNATURE_HASH,
     IGovernance::FeatureDisabled::SIGNATURE_HASH, IGovernance::RoleRevoked::SIGNATURE_HASH,
+    // round 3s (CTR-GOV-24): the lists and the enable
+    IGovernance::FeatureEnabled::SIGNATURE_HASH, IRegulatedToken::AllowedSet::SIGNATURE_HASH, IRegulatedToken::DeniedSet::SIGNATURE_HASH,
 ];
 
 /// A regulated kind's event (spec §3.1) or a governance one into `v`, ids as `bytes32` hex but `from` / `to`, which the client's
@@ -378,7 +401,31 @@ fn regulated_event(log: &Log, topic0: B256, v: &mut Value) -> bool {
         match e.bit {
             5 => v["derived"] = json!("every_freeze_ended"),
             10 => v["derived"] = json!("every_record_backed_freeze_ended"),
+            28 => v["derived"] = json!("kyc_off"),
             _ => {}
+        }
+    } else if topic0 == IGovernance::FeatureEnabled::SIGNATURE_HASH {
+        let Ok(e) = log.log_decode::<IGovernance::FeatureEnabled>() else { return false };
+        let e = e.inner.data;
+        (v["event"], v["bit"], v["by"]) = (json!("FeatureEnabled"), json!(e.bit), h(e.by));
+        match e.bit {
+            8 => v["derived"] = json!("allow_list_on"),
+            9 => v["derived"] = json!("deny_list_on"),
+            28 => v["derived"] = json!("kyc_on"),
+            _ => {}
+        }
+    } else if topic0 == R::AllowedSet::SIGNATURE_HASH || topic0 == R::DeniedSet::SIGNATURE_HASH {
+        let allow = topic0 == R::AllowedSet::SIGNATURE_HASH;
+        let (account, by, on) = if allow {
+            let Ok(e) = log.log_decode::<R::AllowedSet>() else { return false };
+            (e.inner.data.account, e.inner.data.by, e.inner.data.on)
+        } else {
+            let Ok(e) = log.log_decode::<R::DeniedSet>() else { return false };
+            (e.inner.data.account, e.inner.data.by, e.inner.data.on)
+        };
+        (v["event"], v["account"], v["by"], v["on"]) = (json!(if allow { "AllowedSet" } else { "DeniedSet" }), h(account), h(by), json!(on));
+        if on != allow {
+            v["alert"] = json!(true); // a restricting edit: denied, or taken off the allow list
         }
     } else if topic0 == IGovernance::RoleRevoked::SIGNATURE_HASH {
         let Ok(e) = log.log_decode::<IGovernance::RoleRevoked>() else { return false };
@@ -571,6 +618,7 @@ pub async fn step_health(chain: &Chain, odoo: &Odoo, router: Option<Address>, re
     }
     let mode = if nc.finality_mode == "tag" { Mode::Tag } else { Mode::Depth(nc.finality_depth) };
     let latest = chain.primary().get_block_number().await?;
+    chain.saw_block(latest); // Fable recheck 3 R3-1: the first endpoint's head feeds the chain's shared head
     let finalized = if mode == Mode::Tag { chain.finalized_number().await? } else { None };
     let Some(safe) = safe_head(&mode, latest, finalized) else { return Ok(false) };
     let Some((from, to)) = next_range(nc.indexed_block, safe, MAX_SPAN) else { return Ok(false) };
@@ -694,6 +742,30 @@ mod tests {
         assert!(encode_event(&pending).is_none());
         let foreign = log_of(LogData::new_unchecked(vec![B256::repeat_byte(7)], Default::default()));
         assert!(encode_event(&foreign).is_none());
+    }
+
+    /// Round 3s (spec 2026-11-10-token-lists.md §5.4): `FeatureEnabled` alerts and names the bit's derived state (8
+    /// `allow_list_on`, 9 `deny_list_on`, 28 `kyc_on`), `FeatureDisabled(28)` `kyc_off`; a restricting list edit
+    /// (`DeniedSet` on, `AllowedSet` off) alerts, the reverse edits do not.
+    #[test]
+    fn lists_and_enable_rows() {
+        use crate::abi::{IGovernance as G, IRegulatedToken as R};
+        let (a, r) = (B256::repeat_byte(0xa1), B256::repeat_byte(0x7e));
+        let enc = |d: LogData| pay_events(&[log_of(d)], None).pop().unwrap_or_else(|| panic!("not read"));
+        for (bit, d) in [(8u8, "allow_list_on"), (9, "deny_list_on"), (28, "kyc_on")] {
+            let v = enc(G::FeatureEnabled { bit, by: r }.encode_log_data());
+            assert_eq!((v["event"].as_str(), v["alert"].as_bool(), v["derived"].as_str()), (Some("FeatureEnabled"), Some(true), Some(d)));
+        }
+        let v = enc(G::FeatureDisabled { bit: 28, by: r }.encode_log_data());
+        assert_eq!(v["derived"].as_str(), Some("kyc_off"));
+        let alert = |d: LogData| enc(d)["alert"].as_bool();
+        assert_eq!(alert(R::DeniedSet { account: a, by: r, on: true }.encode_log_data()), Some(true));
+        assert_eq!(alert(R::AllowedSet { account: a, by: r, on: false }.encode_log_data()), Some(true));
+        assert_eq!(alert(R::DeniedSet { account: a, by: r, on: false }.encode_log_data()), None);
+        assert_eq!(alert(R::AllowedSet { account: a, by: r, on: true }.encode_log_data()), None);
+        let v = enc(R::DeniedSet { account: a, by: r, on: true }.encode_log_data());
+        assert_eq!((v["event"].as_str(), v["account"].as_str(), v["on"].as_bool()), (Some("DeniedSet"), Some(format!("{a:#x}").as_str()), Some(true)));
+        assert!(REGULATED_TOPICS.contains(&R::DeniedSet::SIGNATURE_HASH) && REGULATED_TOPICS.contains(&G::FeatureEnabled::SIGNATURE_HASH));
     }
 
     /// Regulated-kinds spec §7 (M-08): the §3.1 events and `RelaxProposed` are rows of the range with ids as `bytes32` hex; an
@@ -992,6 +1064,25 @@ mod tests {
         assert_eq!(o.lock().unwrap().ingests, 0, "cursor not advanced");
     }
 
+    /// Fable recheck 3 R3-1: the head the indexer reads from the first endpoint feeds the chain's shared head (what a failover
+    /// endpoint is checked against), for every `Chain` of the table. Control: a fresh `Chain` has seen nothing.
+    #[tokio::test]
+    async fn the_indexer_head_feeds_the_shared_head() {
+        use crate::adapter::tests::{fake_odoo, Fake};
+        let (odoo, _) = fake_odoo(Fake { tokens: json!([{"address": format!("{:#x}", Address::repeat_byte(1)), "decimals": 6}]),
+            ..Default::default() }).await;
+        let (url, _) = crate::chain::tests::fake_rpc(|r| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x64"}),
+            _ => json!({"error": {"code": -32000, "message": "busy"}}),
+        }).await;
+        let cfg = crate::config::ChainCfg { evm_chain_number: 296, rpc_urls: vec![url], ..Default::default() };
+        let (chain, lane) = (Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap(),
+            Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap());
+        assert_eq!(lane.seen_head(), 0, "control");
+        let _ = step(&chain, &odoo, None).await;
+        assert_eq!((chain.seen_head(), lane.seen_head()), (0x64, 0x64));
+    }
+
     /// Group 3h (pqz-proof-path spec §10, C11): `ProofStoreSet(previous, next)` is a row and an alert (as 3e's tax recipient: a
     /// holder of bit 24 changed what each later debit leaves in history); a `PqzDebitProof` is no row (no proof data indexed, no
     /// archive); the filter asks for the one, not the other.
@@ -1011,6 +1102,51 @@ mod tests {
             (Some("ProofStoreSet"), Some(0), Some(1), Some(true)), "{}", rows[0]);
         assert!(PQZ_VERIFIER_TOPICS.contains(&P::ProofStoreSet::SIGNATURE_HASH));
         assert!(!PQZ_VERIFIER_TOPICS.contains(&P::PqzDebitProof::SIGNATURE_HASH), "no PqzDebitProof data indexed");
+    }
+
+    /// Round 3t (spec §10): `VerifierFeeProposed` a row with `alert` (the hostage notice, T29), `VerifierFeeSet` a row without
+    /// (`previous == next`: a cancel); both topics followed.
+    #[test]
+    fn verifier_fee_rows() {
+        use crate::abi::IPqzToken as P;
+        let t = Address::repeat_byte(0x7a);
+        let logs = vec![log_at(t, 1, 0, P::VerifierFeeProposed { current: 2, next: 5, eta: 1_800_000_000 }.encode_log_data()),
+            log_at(t, 2, 0, P::VerifierFeeSet { previous: 2, next: 2 }.encode_log_data())];
+        let rows = pay_events(&logs, None);
+        assert!(rows.iter().all(client_ingest_accepts));
+        assert_eq!(rows.len(), 2, "{rows:?}");
+        assert_eq!((rows[0]["event"].as_str(), rows[0]["next"].as_u64(), rows[0]["eta"].as_u64(), rows[0]["alert"].as_bool()),
+            (Some("VerifierFeeProposed"), Some(5), Some(1_800_000_000), Some(true)), "{}", rows[0]);
+        assert_eq!((rows[1]["event"].as_str(), rows[1]["previous"].as_u64(), rows[1]["next"].as_u64(), rows[1]["alert"].as_bool()),
+            (Some("VerifierFeeSet"), Some(2), Some(2), None), "{}", rows[1]);
+        assert!(PQZ_VERIFIER_TOPICS.contains(&P::VerifierFeeProposed::SIGNATURE_HASH));
+        assert!(PQZ_VERIFIER_TOPICS.contains(&P::VerifierFeeSet::SIGNATURE_HASH));
+        // the health stamp `pqz_verifier_fee`: unknown before the first `VerifierFeeSet`, its `next` after, kept across ranges
+        let (mut rows, mut state) = (rows, PqzHealth::default());
+        pqz_health(&mut state, &mut rows);
+        assert_eq!((rows[0]["pqz_verifier_fee"].is_null(), rows[1]["pqz_verifier_fee"].as_u64()), (true, Some(2)), "{rows:?}");
+        let mut later = pay_events(&[log_at(t, 3, 0, P::VerifierFeeSet { previous: 2, next: 0 }.encode_log_data()),
+            log_at(t, 4, 0, P::VerifierFeeProposed { current: 0, next: 4, eta: 1 }.encode_log_data())], None);
+        pqz_health(&mut state, &mut later);
+        assert_eq!((later[0]["pqz_verifier_fee"].as_u64(), later[1]["pqz_verifier_fee"].as_u64()), (Some(0), Some(0)), "{later:?}");
+    }
+
+    /// Fable E N-9: a fresh state (a restart) knows nothing: a token's first verifier rows before anything that sets them are stamped
+    /// `pqz_verifier_revoked: null` and epoch `null`, never "not revoked"; a revocation, a new verifier and a verified op set them.
+    #[test]
+    fn pqz_health_is_unknown_until_seen() {
+        use crate::abi::{IPqzEvents as C, IPqzToken as P};
+        let tok = Address::repeat_byte(0x70);
+        let (ver, next) = (B256::repeat_byte(0x0e), B256::repeat_byte(0x0f));
+        let mut rows = pay_events(&[log_at(tok, 1, 0, P::PqzVerifierProposed { current: ver, next, eta: 1 }.encode_log_data()),
+            log_at(tok, 2, 0, P::PqzVerifierCancelled { next }.encode_log_data()),
+            log_at(tok, 3, 0, C::PqzVerifierRevoked { previous: ver, pqzVerifierEpoch: 3 }.encode_log_data()),
+            log_at(tok, 4, 0, P::PqzVerifierSet { previous: B256::ZERO, next, pqzVerifierEpoch: 4 }.encode_log_data())], None);
+        pqz_health(&mut PqzHealth::default(), &mut rows);
+        let st = |r: &Value| (r["pqz_verifier_revoked"].as_bool(), r["pqz_verifier_epoch"].as_u64());
+        assert_eq!(rows.iter().map(st).collect::<Vec<_>>(), [(None, None), (None, None), (Some(true), Some(3)), (Some(false), Some(4))]);
+        assert!(rows[0]["pqz_verifier_revoked"].is_null(), "unknown is null, not absent");
+        assert!(rows.iter().all(client_ingest_accepts));
     }
 
     /// Group 3f (spec §11.1, Codex #10): a `PqzVerified` joins the op event after it of the same token and transaction

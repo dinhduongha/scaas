@@ -14,6 +14,7 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan T28 (regulated-kinds spec §3.2, §3.3 T1-T3, T5, T7; RK-4, RK-8): the issuer-only freeze on kinds 8 and 9. Every
 /// refusal has its positive control: the same call on an unfrozen account passes.
@@ -56,17 +57,17 @@ contract FreezeTest is RegFixture {
             address t = _ks()[i];
             vm.prank(issuer);
             vm.expectRevert(IRegulatedToken.RefRequired.selector);
-            _r(t).freeze(a, 0, 0);
+            _r(t).freeze(a, 0, 0, EnvKit.codeUidOf(t));
             vm.prank(bob);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(5), nid(bob)));
-            _r(t).freeze(a, REF, 0);
+            _r(t).freeze(a, REF, 0, EnvKit.codeUidOf(t));
             _freeze(t, a);
             _unfreeze(t, a);
             uint64 cool = _now() + 30 days;
             assertEq(_r(t).freezeOf(a).issuerCooldownUntil, cool, "T5: the cooldown from now");
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FreezeCooldown.selector, cool));
-            _r(t).freeze(a, REF, 0);
+            _r(t).freeze(a, REF, 0, EnvKit.codeUidOf(t));
             vm.warp(cool);
             _freeze(t, a); // at the cooldown's end
             assertTrue(_r(t).isFrozen(a));
@@ -82,7 +83,7 @@ contract FreezeTest is RegFixture {
             for (uint256 k; k < 4; ++k) {
                 vm.prank(issuer);
                 vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FreezeTargetRefused.selector, bad[k]));
-                _r(t).freeze(bad[k], REF, 0);
+                _r(t).freeze(bad[k], REF, 0, EnvKit.codeUidOf(t));
             }
             _freeze(t, nid(bob));
             assertTrue(_r(t).isFrozen(nid(bob)));
@@ -98,7 +99,7 @@ contract FreezeTest is RegFixture {
             _freeze(t, a);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FreezeTooLong.selector, start + 60 days));
-            _r(t).freeze(a, REF, 0); // the same second: n == until
+            _r(t).freeze(a, REF, 0, EnvKit.codeUidOf(t)); // the same second: n == until
             vm.warp(start + 20 days);
             _freeze(t, a);
             assertEq(_r(t).freezeOf(a).until, start + 50 days);
@@ -110,7 +111,7 @@ contract FreezeTest is RegFixture {
             vm.warp(start + 50 days);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.FreezeTooLong.selector, start + 60 days));
-            _r(t).freeze(a, REF, 0);
+            _r(t).freeze(a, REF, 0, EnvKit.codeUidOf(t));
             vm.warp(1_800_000_000);
         }
     }
@@ -123,7 +124,7 @@ contract FreezeTest is RegFixture {
             _freezeRecord(t, a, r);
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.AlreadyRecordFrozen.selector, a));
-            _r(t).freeze(a, REF, 0);
+            _r(t).freeze(a, REF, 0, EnvKit.codeUidOf(t));
             _freeze(t, nid(bob)); // the control: bob is not frozen yet
         }
     }
@@ -135,11 +136,11 @@ contract FreezeTest is RegFixture {
             address t = _ks()[i];
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotFrozen.selector, a));
-            _r(t).unfreeze(a, REF);
+            _r(t).unfreeze(a, REF, EnvKit.codeUidOf(t));
             _freeze(t, a);
             vm.prank(issuer);
             vm.expectRevert(IRegulatedToken.RefRequired.selector);
-            _r(t).unfreeze(a, 0);
+            _r(t).unfreeze(a, 0, EnvKit.codeUidOf(t));
             vm.warp(block.timestamp + 5 days);
             vm.expectEmit(t);
             emit IRegulatedToken.AccountUnfrozen(a, REF);
@@ -178,11 +179,11 @@ contract FreezeTest is RegFixture {
             address t = _ks()[i];
             _freeze(t, a);
             vm.prank(ownerA);
-            NormalToken(t).revokeRole(5, nid(issuer)); // proposes
+            NormalToken(t).revokeRole(5, nid(issuer), EnvKit.codeUidOf(address(NormalToken(t)))); // proposes
             assertTrue(_r(t).isFrozen(a), "a proposal changes nothing");
             vm.warp(block.timestamp + GD);
             vm.prank(ownerA);
-            NormalToken(t).revokeRole(5, nid(issuer));
+            NormalToken(t).revokeRole(5, nid(issuer), EnvKit.codeUidOf(address(NormalToken(t))));
             assertFalse(_r(t).isFrozen(a), "no root of bit 5");
             vm.prank(alice);
             IERC20(t).transfer(bob, 1);

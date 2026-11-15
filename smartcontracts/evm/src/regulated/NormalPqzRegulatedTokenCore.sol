@@ -25,7 +25,7 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 ///         balance only (`_poolMove`); `acc`, pending and `totalShielded` are never touched (I8). `ALLOWLIST` (8) is outside
 ///         the kind's mask (CTR-GOV-17).
 abstract contract NormalPqzRegulatedTokenCore is NormalPqzTokenCore, RegulatedBase {
-    /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
+    /// @dev `implArgs = abi.encode(COMPLIANCE_REGISTRY_CODEHASH)` (plan T29).
     constructor(address factory_, bytes memory implArgs)
         NormalPqzTokenCore(factory_, implArgs)
         RegulatedBase(implArgs)
@@ -45,7 +45,7 @@ abstract contract NormalPqzRegulatedTokenCore is NormalPqzTokenCore, RegulatedBa
     }
 
     function _roleBits() internal pure override(MetaTokenBase, NormalPqzTokenCore) returns (uint256) {
-        return GovernanceBits.NORMAL_ROLES | REG_ROLES | GovernanceBits.PQZ_KIND_BITS;
+        return GovernanceBits.NORMAL_ROLES | REG_ROLES_CONFIDENTIAL | GovernanceBits.PQZ_KIND_BITS;
     }
 
     function _contractOnlyBits() internal pure override returns (uint256) {

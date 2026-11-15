@@ -195,9 +195,9 @@ Nethermind plugin `Nethermind.Pqz` ([nethermind/README.md](nethermind/README.md)
 | Precompile | Address | Gas (calibrated, plan 5h Task 9 / fs3 Task 13, 2026-10-31) |
 |---|---|---|
 | `PQZ` (ops 1–7, both systems) | `0x000000000000000000000000000000005caa0f01` | per (op, `proofSystemId`, statement length) row: 1,721,000–4,634,000 + 3 per input word; the multi-recipient transfer (op 7) per (`proofSystemId`, M, auditorOn): 3,158,000–6,242,000; `OP_SELFTEST` 1,721,000; an input without a row pays the smallest row and gets `…00` without calling `pqz-ffi` |
-| `MLDSA44` (EIP-8355 layout) | `0x000000000000000000000000000000005caa0012` | 49,000 + 6 per message word |
-| `MLDSA65` (EIP-8355 layout) | `0x000000000000000000000000000000005caa0013` | 68,000 + 6 per message word |
-| `MLDSA87` (EIP-8355 layout; CTR-UA-39, plugin built, not on the SCaaS testnet yet) | `0x000000000000000000000000000000005caa0014` | `mldsa87Gas`, **provisional** ≈ 102,000 (not calibrated) + 6 per message word; inactive under a schedule without the key |
+| `MLDSA44` (EIP-8355 layout) | `0x000000000000000000000000000000005caa0012` | 59,000 + 6 per message word (calibrated 2026-11-15; was 49,000) |
+| `MLDSA65` (EIP-8355 layout) | `0x000000000000000000000000000000005caa0013` | 68,000 + 6 per message word (measured 88,000–100,000 on 2026-11-15; deferred by the owner to the next pqz-core / set-parameter change) |
+| `MLDSA87` (EIP-8355 layout; CTR-UA-39, plugin built, not on the SCaaS testnet yet) | `0x000000000000000000000000000000005caa0014` | `mldsa87Gas` 135,000 (calibrated 2026-11-15; was the provisional ≈ 102,000) + 6 per message word; inactive under a schedule without the key |
 
 The `PQZ` rows are provisional: the retired calibration's row of the same rank × 1.3, because the new sets' larger n
 and q verify more slowly (`nethermind/chain/engine-pqz-provisional-n2304.json`, log
@@ -590,7 +590,7 @@ The rejected backends' code and runs are kept in `pqzh/stark-backup/` as the rec
 
 | Want to… | Run |
 |---|---|
-| run the full gate A / B checklist at one set (KAT, fix checks, differential, C = Rust = wasm32, vectors, `pqz-ffi`, the Rust PQZL core's tests with the C oracle, cargo tests, PQZH cross-checks, fuzz smoke) | `[PQZ_SET=<set>] scripts/capped pqz-core/gate.sh [<label>]` (resumes an interrupted run; `--last` re-runs the latest) |
+| run the full gate A / B checklist at one set (KAT, fix checks, the provers' constant-time check `ct` and the C core's sanitizer run `ub`, differential, C = Rust = wasm32, vectors, `pqz-ffi`, the Rust PQZL core's tests with the C oracle, cargo tests, PQZH cross-checks, fuzz smoke; `sh pqz-core/gate-controls.sh`: the negative controls of its scripts) | `[PQZ_SET=<set>] scripts/capped pqz-core/gate.sh [<label>]` (resumes an interrupted run; `--last` re-runs the latest) |
 | build PQZL (native + wasm) | `[PQZ_SET=<set>] pqzl/build.sh all` |
 | check the PQZL arithmetic against upstream LaZer | `pqzl/build/native/kat_dump > pqzl/build/native/kat-pqz.json`, then `python3 -I pqzl/kat/check.py params/sets/<set>/lazer-3330e48-kat.json pqzl/build/native/kat-pqz.json` (must print 19/19) |
 | test PQZH | `(cd pqzh/ligero && cargo test --release --offline [--features set-<set>])` |

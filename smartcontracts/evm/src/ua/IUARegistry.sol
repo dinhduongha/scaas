@@ -18,7 +18,9 @@ interface IUARegistry is IERC5267 {
     struct Record {
         uint16 kind;
         uint40 registeredAt;
-        address keyPtr; // ≠ 0 only for stored kinds (UA-2c MuSig2/FROST, UA-3 Zether, P6c PQ)
+        /// ≠ 0 for stored kinds (UA-2c MuSig2/FROST, UA-3 Zether, P6c PQ); an `msig` after its first `updateMsig` (CTR-UA-44
+        /// MM-7): the pointer of its current structure blob, never key data (0: never updated)
+        address keyPtr;
         uint40 index; // the UA's position in its kind's list (`uaAt`)
     }
 
@@ -154,6 +156,22 @@ interface IUARegistry is IERC5267 {
     /// `PURPOSE_MEMBERSHIP`, an acceptance. `sig`: the exact bytes whose `keccak256` `memberSigHashOf(ua, index)` returns, the slot's `sig`
     /// or an `msig` member's `abi.encode(InnerSig[])`. State keeps the hashes only: a copy rebuilds the `pop` from these events.
     event UAMemberSig(bytes32 indexed ua, bytes32 indexed member, uint16 index, bytes32 purpose, bytes sig);
+    /// K3-3: scoped PQZ key version `version` of `(ua, scope)` added by `setPqzScopedKey`, with the call's bytes (the record is
+    /// copyable from the log: key, opening KEM key or the empty one, `validUntilBlock`, `sig` as `setPqzKey` stores it).
+    event UAPqzScopedKeyAdded(
+        bytes32 indexed ua, address indexed scope, uint64 indexed version, bytes32 pqzKeyHash, bytes32 pqzPopHash,
+        bytes pqzKey, KemKey openKem, uint64 validUntilBlock, bytes sig
+    );
+    /// K3-3: the `R_REG` proof of scoped version `version` stored (`storePqzScopedPop`), `checkedPqzPop` as `UAPqzPopStored`'s.
+    event UAPqzScopedPopStored(
+        bytes32 indexed ua, address indexed scope, uint64 indexed version, uint8 checkedPqzPop, bytes pqzPop
+    );
+    /// K3-3: version `version` became the current scoped key of `(ua, scope)` (CTR-UA-42's eligibility, per scope).
+    event UAPqzScopedKeyCurrent(bytes32 indexed ua, address indexed scope, uint64 indexed version);
+
+    /// CTR-UA-44: the `msig` `ua`'s structure on this registry is now version `version` (`count` slots, `enabled` the bitmap).
+    /// Convenience only: state is complete without it (`msigOf`, `msigStateOf`).
+    event UAMsigUpdated(bytes32 indexed ua, uint64 indexed version, uint16 threshold, uint16 count, uint256 enabled);
 
     error UAKindDisabled(uint16 kind); // not enabled in this generation (incl. kinds a predecessor offers)
     error UAKeyData(uint16 kind); // non-canonical, curve, subgroup, identity, ordering, threshold, cap bound
@@ -184,6 +202,25 @@ interface IUARegistry is IERC5267 {
     /// Group 3g (KV-1): `setPqzKey` of a version v ≥ 1 without version 0, or other than `latest + 1` (a gap, a stored
     /// version); on a gen-2 host `latest` is the larger of both generations'.
     error UAPqzKeyVersion(bytes32 ua, uint64 version);
+    /// K3-3: a scoped record's opening KEM key against its scope: absent on a class-2 record (scope 0), present for a
+    /// class-3 token whose `pqzOpening` is off or absent for one whose `pqzOpening` is on, or a scope that does not answer
+    /// `pqzVerifyConfig()`.
+    error UAPqzOpenKem(address scope);
+    /// K3-3: `setPqzScopedKey` after the record's `validUntilBlock`.
+    error UAPqzRecordExpired(bytes32 ua);
+    /// CTR-GOV-28: a call's `chainUid_` is not this registry's chain word (`updateMsig`).
+    error ChainUidMismatch(bytes32 expected, bytes32 got);
+    /// CTR-UA-44: `updateMsig` after its `validUntilBlock`.
+    error UAMsigExpired(bytes32 ua);
+    /// CTR-UA-44: `updateMsig` of a version other than the stored one + 1 (`stored`: the stored version, 0 never updated).
+    error UAMsigVersion(bytes32 ua, uint64 stored);
+    /// CTR-UA-44: a target with fewer slots than stored, more than 256, an enabled bit past its slots, more than 16 enabled
+    /// slots, or whose next update would not fit one transaction.
+    error UAMsigSlots(uint256 count);
+    /// CTR-UA-44: a stored slot's `kind` or `id` changed in the target.
+    error UAMsigSlotChanged(uint16 index);
+    /// CTR-UA-44: a target threshold of 0, or above the weight of its enabled and accepted slots.
+    error UAMsigThreshold(bytes32 ua);
 
     function generation() external view returns (uint8); // 1 or 2
     function predecessor() external view returns (address);
@@ -316,6 +353,58 @@ interface IUARegistry is IERC5267 {
     /// not committed (`UAKemVersion`) → the key: scheme 1 (`UAKemScheme`), 1,601 B assembled (`UAKemKeyLength`) →
     /// signature (`UAUnauthorized`; version 0: a non-empty `sig`) / version 0 the committed hash (`UAKemKeyHash`).
     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external;
+    /// Anyone, no fee (the PQZ three-key model, K3-3): scoped PQZ key version `version` of `(ua, scope)`, written once; `scope`
+    /// 0 is class `offchain-shared` (one key per holder per chain), a token address class `offchain-token` (one key per holder
+    /// and token). `sig` (`signature`, or `members` for an `msig`; never `keyData`) over `uaMessage(kind, PURPOSE_PQZ_SCOPED_KEY,
+    /// pqzScopedKeyRecordDigest(ua, keyClass, chainUid(), scope, version, pqzKeyHash, pqzPopHash, openKemHash,
+    /// validUntilBlock))`, `keyClass` 2 for scope 0 else 3, `openKemHash = keccak256(kemPk)` of `openKem` or 0 without one.
+    /// The record space is apart from `setPqzKey`'s; the per-UA marker `pqzKeyUsed` and `keyOwner` span both. Check order:
+    /// past `validUntilBlock` (`UAPqzRecordExpired`) → an id this registry does not hold (`UAUnauthorized`, as `setPqzKey`) →
+    /// holder (`UAKindDisabled(0x0142)`, `UAPqzHolder` with the `msig` debit bound; an `msig` on scope 0: `UAPqzHolder`) →
+    /// `version == pqzScopedKeyLatest(ua, scope) + 1`, the first 0 (`UAPqzKeyVersion`) → the key's length, a set's, and every
+    /// version of a scope version 0's (`UAKeyData(0x0142)`) → the key repeated in any record space of the UA (`UAKeyInUse(h,
+    /// ua)`) → a zero or `keccak256("")` `pqzPopHash` (`UAPqzPopHash`) → `openKem` present iff the scope's tokens have the
+    /// opening on (scope 0 always; a token by one static call of its `pqzVerifyConfig()`, its `pqzOpening`) (`UAPqzOpenKem`),
+    /// then scheme 1 and 1,601 B (`UAKemScheme`, `UAKemKeyLength`) → signature (`UAUnauthorized`; another chain's record
+    /// fails here). The key is stored unproven; its `R_REG` comes by `storePqzScopedPop`. `UAPqzScopedKeyAdded`.
+    function setPqzScopedKey(bytes32 ua, address scope, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash,
+        KemKey calldata openKem, uint64 validUntilBlock, UASig calldata sig) external;
+    /// Anyone (K3-3, as `storePqzPop`): the `R_REG` proof of scoped version `version`; `UAPqzPopHash` for empty bytes or bytes
+    /// that do not hash to the record's `pqzPopHash` (also no record); a no-op once stored. The bytes are stored (CTR-PQZ-30)
+    /// and, where slot 0x0142 has a verifier, checked over `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, pqzScopedKeyDigest(ua,
+    /// keyClass, chainUid(), scope, version, pqzKeyHash))` (`UAPoP`), then one owner per proven key across every record space
+    /// (`UAKeyInUse`), `keyOwner`, `proven`. Eligible as CTR-UA-42 (proven, or without the verifier this build's set length):
+    /// the version becomes current when it is at or above `current` (`UAPqzScopedKeyCurrent`), and the UA joins the scope's
+    /// holder list at its first eligible version. `UAPqzScopedPopStored`.
+    function storePqzScopedPop(bytes32 ua, address scope, uint64 version, bytes calldata pqzPop) external;
+    /// K3-3: the current scoped version of `(ua, scope)` (0 when none is eligible), its key pointer, proof hash and `proven`;
+    /// what a class-2 (scope 0) or class-3 (scope = the token) PQZ token reads instead of `pqzKeyOf`. Gen 2 forwards a gen-1
+    /// record unless it is the PQZ host (as `pqzKeyOf`).
+    function pqzScopedKeyOf(bytes32 ua, address scope)
+        external
+        view
+        returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
+    /// Any stored scoped version (zero for none); `pqzKeyAt`'s shape.
+    function pqzScopedKeyAt(bytes32 ua, address scope, uint64 version)
+        external
+        view
+        returns (address ptr, bytes32 pqzPopHash, bool proven);
+    /// The highest stored scoped version (clients sign `latest + 1`; 0 also when none: `pqzScopedKeyAt(ua, scope, 0)` tells).
+    function pqzScopedKeyLatest(bytes32 ua, address scope) external view returns (uint64);
+    /// Scoped version `version`'s stored `R_REG` proof bytes ("" none).
+    function pqzScopedPopOf(bytes32 ua, address scope, uint64 version) external view returns (bytes memory);
+    /// The opening KEM key of scoped version `version` (K3-3, K3-6b): the empty `KemKey` when the record has none.
+    function pqzOpenKemAt(bytes32 ua, address scope, uint64 version) external view returns (KemKey memory);
+    /// The per-scope holder list (as CTR-UA-29): the number of UAs with an eligible scoped key of `scope` in this
+    /// generation, and the `i`-th (`UAIndex(0x0142, i)` past the end).
+    function pqzScopedCount(address scope) external view returns (uint256);
+    function pqzScopedAt(address scope, uint256 i) external view returns (bytes32);
+    /// typed(`UAPqzScopedKey`): what a scoped key's `R_REG` proves over (K3-3).
+    function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
+        bytes32 pqzKeyHash) external pure returns (bytes32);
+    /// typed(`UAPqzScopedKeyRecord`): what `setPqzScopedKey`'s `sig` signs (K3-3).
+    function pqzScopedKeyRecordDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
+        bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes32 openKemHash, uint64 validUntilBlock) external pure returns (bytes32);
     /// CTR-UA-37. Anyone submits, the member signs: slot `memberSig.index` of the `msig` `ua` accepts its place. A native member
     /// signs the typed `UAMembership{ua, member}` itself (`eth_signTypedData_v4`) or answers ERC-1271 over it; a derived member signs
     /// `memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, typed))` under `member`; an `msig` member by a threshold of its own
@@ -336,12 +425,32 @@ interface IUARegistry is IERC5267 {
     /// 2026-11-03: the slots are in `UAMemberSig`; `msigOf` for the typed structure). A hash-committed KEM key stays in its committed form (`kem` = scheme only, `kemPkHash`), filled or not.
     function registrationOf(bytes32 ua) external view returns (uint16 kind, bytes memory keyData, UAAttrs memory attrs,
         bytes memory pop, bytes memory pqzPop);
-    /// The typed structure of an `msig` (TS-D10); empty (threshold 0, no members) for any other id.
+    /// The typed **current** structure of an `msig` (TS-D10; CTR-UA-44: every slot, disabled ones included, `msigStateOf` says
+    /// which are enabled); empty (threshold 0, no members) for any other id. The id is the first structure's (`registrationOf`),
+    /// never this one's after an update. Gen 2 forwards gen-1 records.
     function msigOf(bytes32 ua) external view returns (MsigStructure memory);
-    /// Has member slot `index` of `ua` agreed (CTR-UA-37: it signed the `pop` here, or `acceptMembership`)? False for a slot
-    /// that is only listed in `msigOf`, for any other id and past the members. Only accepted slots count at verify. Gen 2
-    /// forwards gen-1 records.
+    /// Does member slot `index` of `ua` count at verify: **enabled and accepted** (CTR-UA-37: it signed the `pop` here, or
+    /// `acceptMembership`; CTR-UA-44: and the slot is enabled)? Changed meaning (CTR-UA-44, was: accepted): a tool that copies
+    /// acceptances to another registry reads `msigStateOf(ua).accepted` and `memberSigHashOf`, never this view. False for a
+    /// slot only listed in `msigOf`, a disabled slot, any other id and past the members. Gen 2 forwards gen-1 records.
     function memberAccepted(bytes32 ua, uint256 index) external view returns (bool);
+    /// CTR-UA-44: the raw words of the `msig` `ua` here: `version` (0 never updated), `enabled` (bit i = slot i), `accepted`
+    /// (CTR-UA-37's bits, never cleared). Zeroes for any other id. Gen 2 forwards gen-1 records.
+    function msigStateOf(bytes32 ua) external view returns (uint64 version, uint256 enabled, uint256 accepted);
+    /// CTR-UA-44 (TODO 3ze, owner 2026-11-14): the `msig` `ua` on this registry becomes `structure` (every slot, disabled ones
+    /// included: stored slots keep `kind` and `id`, new members are appended slots), `enabled` its bitmap, `version` the stored
+    /// one + 1. Anyone submits (fee 0, a `call` job); `sigs` is a threshold of the **stored** structure's enabled and accepted
+    /// slots, minimal, over typed(`UAMsigUpdate{ua, chainUid, registry = this, version, threshold, members, enabled,
+    /// validUntilBlock}`) as `requirePortable`'s `msig` arm signs (native members the typed digest, derived members
+    /// `memberDigest` under `member`, purpose `PURPOSE_MSIG_UPDATE`). The id never changes (the first structure's). Check
+    /// order: `chainUid_` (`ChainUidMismatch`) → `validUntilBlock` (`UAMsigExpired`) → an `msig` held here (`UAUnauthorized`) →
+    /// `version == stored + 1` (`UAMsigVersion`) → slot count, enabled bits, ≤ 16 enabled (`UAMsigSlots`) → stored slots
+    /// unchanged (`UAMsigSlotChanged`) → weights, appended members, one slot per id, no self-slot (`UAKeyData(0x0120)`) →
+    /// threshold ≤ enabled ∧ accepted weight (`UAMsigThreshold`) → signatures (`UAUnauthorized`) → appended or re-enabled
+    /// members registered, an `msig` member flat (`UAMemberUnknown`) → the registration bound (`UAKeyData(0x0120)`) → the PQZ
+    /// holder rule (`UAPqzHolder`) → the next update fits (`UAMsigSlots`). `UAMsigUpdated`.
+    function updateMsig(bytes32 ua, uint64 version, MsigStructure calldata structure, uint256 enabled,
+        uint64 validUntilBlock, MemberSig[] calldata sigs, bytes32 chainUid_) external;
     /// `keccak256` of the signature object of the `msig` `ua`'s slot `index` (CTR-UA-33, CTR-UA-37, owner 2026-11-03): of `sig`, or of an
     /// `msig` member's `abi.encode(InnerSig[])`, the slot's kind says which (`msigOf`): a slot of the `pop` from registration, a slot that
     /// accepted later from `acceptMembership`. The bytes are in that slot's `UAMemberSig`; a copy checks them against this hash. Zero for a slot

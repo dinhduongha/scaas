@@ -23,16 +23,22 @@ const elementType = (t) => t.replace(/\[\]$/, '');
 /** The struct or atom under any array suffix: `T[]`, `T[k]`, `T[k][]` → `T`. */
 const baseType = (t) => t.replace(/(\[\d*\])+$/, '');
 
-/** EIP-712 `encodeType`: the primary type, then every struct it references, sorted by name. */
-export function encodeType(types, primary) {
+/** Every struct type `primary` references (not itself), sorted by name. */
+function structDeps(types, primary) {
   const deps = new Set();
   const walk = (t) => types[t].forEach((f) => {
     const e = baseType(f.type);
     if (types[e] && e !== primary && !deps.has(e)) { deps.add(e); walk(e); }
   });
   walk(primary);
-  const one = (t) => `${t}(${types[t].map((f) => `${f.type} ${f.name}`).join(',')})`;
-  return [primary, ...[...deps].sort()].map(one).join('');
+  return [...deps].sort();
+}
+
+const encodeOne = (types, t) => `${t}(${types[t].map((f) => `${f.type} ${f.name}`).join(',')})`;
+
+/** EIP-712 `encodeType`: the primary type, then every struct it references, sorted by name. */
+export function encodeType(types, primary) {
+  return [primary, ...structDeps(types, primary)].map((t) => encodeOne(types, t)).join('');
 }
 
 /** EIP-712 `encodeData` of one value, faithful: the value supplied, never rewritten (no canonical zeroing here: that is a
@@ -53,15 +59,19 @@ function encodeValue(type, value, types) {
   if (type === 'bytes32') return bytes32(value ?? new Uint8Array(32));
   if (/^bytes\d+$/.test(type)) return abiEncode([type], [value ?? new Uint8Array(Number(type.slice(5)))]);
   if (/^uint\d+$/.test(type)) return word(value ?? 0);
-  const int = /^int(\d+)$/.exec(type);
-  if (int) {
-    const v = BigInt(value ?? 0);
-    const half = 1n << BigInt(Number(int[1]) - 1);
+  if (/^int\d+$/.test(type)) {
     if (typeof value === 'string' && value.trim() === '') throw new Error('not a number: the empty string');
-    if (v < -half || v >= half) throw new Error(`${type} out of range`);
-    return word(v < 0n ? (1n << 256n) + v : v);
+    return intWord(type, value ?? 0);
   }
   throw new Error(`EIP-712 type ${type} is not supported here`);
+}
+
+/** `intN` (EIP-712, as `abi.encode`): the sign-extended 32-byte word, refused outside the type's range. */
+export function intWord(type, value) {
+  const bits = BigInt(type.slice(3));
+  const v = BigInt(value);
+  if (v < -(1n << (bits - 1n)) || v >= 1n << (bits - 1n)) throw new Error(`${type} out of range: ${value}`);
+  return word(BigInt.asUintN(256, v));
 }
 
 export function hashStruct(types, primary, data) {
@@ -117,6 +127,41 @@ export function predictAccount(implementation, salt, factory) {
 /** `abi.encode(keyIndex, proof, sig)` — what `SmartKeyAccount.isValidSignature` decodes (CTR-ACC-02). */
 export function accountSignature(keyIndex, proof, inner) {
   return abiEncode(['uint256', 'bytes32[]', 'bytes'], [keyIndex, proof, inner]);
+}
+
+// ------------------------------------------------------------------ ERC-7739 (CTR-ACC-02, B P3-2)
+
+/** ERC-7739 `TypedDataSign`: what a key of a `SmartKeyAccount`, or a `MandateWallet`'s native owner, signs for the
+ *  wallet's ERC-1271 answer over the app's typed data `td`: `td`'s message nested as `contents` (its fields stay readable),
+ *  the wallet's own domain fields beside it, in the app's domain. `wallet`: `SmartKeyAccount` or `MandateWallet`
+ *  (`HederaMandateWallet` too); `address`: the wallet's. Its `hashTypedData` is the message the key signs (in a batch,
+ *  the leaf's digest); `erc7739Signature` wraps the result. */
+export function erc7739TypedData(td, { wallet, address, chainId, chainUid }) {
+  if (wallet !== 'SmartKeyAccount' && wallet !== 'MandateWallet') throw new Error(`no ERC-7739 answer from ${wallet}`);
+  if (td.types.TypedDataSign) throw new Error('the contents already define TypedDataSign');
+  // the wallet refuses a contentsName that is empty, starts a-z, or holds `, ()` space or NUL (ERC7739Lib, EIP-7739)
+  if (!/^[^a-z, ()\0][^, ()\0]*$/.test(td.primaryType ?? '')) throw new Error(`ERC-7739 refuses the contents name ${td.primaryType}`);
+  return {
+    types: { ...td.types, TypedDataSign: [{ name: 'contents', type: td.primaryType }, { name: 'name', type: 'string' },
+      { name: 'version', type: 'string' }, { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' },
+      { name: 'salt', type: 'bytes32' }] },
+    primaryType: 'TypedDataSign',
+    domain: td.domain,
+    message: { contents: td.message, name: DOMAIN_OF[wallet], version: '1', chainId, verifyingContract: address, salt: chainUid },
+  };
+}
+
+/** The signature the wallet's `isValidSignature(hashTypedData(td), ·)` takes: `inner ‖ APP_DOMAIN_SEPARATOR ‖
+ *  hashStruct(contents) ‖ contentsDescription ‖ uint16(contentsDescription.length)`. `contentsDescription` is the contents'
+ *  types sorted by name (as `TypedDataSign`'s `encodeType` lists them): implicit mode when `td.primaryType` sorts first,
+ *  else explicit (`contentsType ‖ contentsName`). `inner`: the key's signature (`accountSignature(…)` for an account). */
+export function erc7739Signature(inner, td) {
+  const names = [td.primaryType, ...structDeps(td.types, td.primaryType)].sort();
+  const contentsType = names.map((t) => encodeOne(td.types, t)).join('');
+  const descr = utf8ToBytes(names[0] === td.primaryType ? contentsType : contentsType + td.primaryType);
+  if (descr.length > 0xffff) throw new Error('contents description too long');
+  return concatBytes(inner instanceof Uint8Array ? inner : fromHex(inner), hashStruct(td.types, 'EIP712Domain', td.domain),
+    hashStruct(td.types, td.primaryType, td.message), descr, new Uint8Array([descr.length >> 8, descr.length & 0xff]));
 }
 
 // ------------------------------------------------------------------ Merkle batch (review S26)
@@ -175,7 +220,7 @@ const wrapOrderOf = (id) => `${id} from,address wrappedToken,uint256 amount,uint
 const transferOf = (id) => `${id} from,${id} to,uint256 value,bytes32 entryRef,${E}`;
 const relayFeeOf = (id) => `${id} from,address target,bytes32 callDataHash,${id} payee,uint256 value,uint256 batch,uint256 nonce,`
   + 'uint256 validUntil,address relayer';
-const RECEIVER_FEE = 'uint256 fee,address feeRecipient,uint256 validUntil';
+const PAYEE_FEE = 'uint256 fee,address feeRecipient,uint256 validUntil';
 
 // Every struct a signed type nests or an entry takes (Appendix X.2). The last group is calldata only, never signed.
 const STRUCTS = Object.fromEntries(Object.entries({
@@ -188,8 +233,11 @@ const STRUCTS = Object.fromEntries(Object.entries({
   UAMetaTransfer: transferOf('bytes32'),
   // group 3g (KV-8): `keyVersion`, the debited key version of `fromUA`, after it in the three args structs; group 3h (pqz-proof-path
   // spec §3.2, PP-3): `ownTag` after `salt` (op 1, op 7) and after `beneficiaryUA` (the burn forms), `pqzOwnTag` below
+  // the three-key model (CTR-PQZ-38, -40): `uFrom` (the sender's own `u_f`) after `vAuditor`, the two sealed openings last; all
+  // three empty on a token without the opening
   PqzTransferArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,'
-    + 'bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo',
+    + 'bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor',
+  PqzOpening: 'bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed',
   PqzLeg: 'bytes32 ua,bytes v,bytes vAuditor',
   PqzMultiArgs: 'uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,'
     + 'bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo',
@@ -210,6 +258,17 @@ const STRUCTS = Object.fromEntries(Object.entries({
   PayMeta: 'bytes32 salt,bytes32 payNo,bool save,uint16 schema,bytes body',
   // a holder's terms, nested in the router's `SetGrant` / `UASetGrant` (governance spec §3.2: `hashStruct` signed, the struct the argument)
   GrantTerms: 'uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope',
+  // group 3l (wrap limits spec 2026-11-10 §6, §9): a leg's limits, nested in the router's `UASetWrapLimits` as an array
+  WrapLimit: 'uint24 perUser,uint64 tokenWide,uint32 period',
+  WrapLegLimits: 'address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong',
+  // round 3r (spec 2026-11-10-admin-not-owner.md §5.4): a release env, nested in the router's three publishes (EIP-712: each
+  // array the keccak256 of its 32-byte words); `ReleaseApproval` the class approval entry's one static struct (calldata only:
+  // the struct `UAApproveRelease` signs its words flat)
+  Env: 'address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes',
+  // CTR-GOV-27: `setChainEntries`'s named struct, nested in the router's `UASetChainEntries`
+  ChainEntries: 'address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash',
+  ReleaseApproval: 'uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,'
+    + 'bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until',
   // group 3f (PQZ verifier mode spec §5.1, §5.3): what a PQZ verifier UA signs in the token's domain (purpose `pqz-verdict`), and
   // the pair every proof-carrying PQZ entry takes last, outside every `UA*` struct (unbound, like `relayer`)
   PqzVerdict: 'address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil',
@@ -336,7 +395,7 @@ const OPS = {
     args: (m, x) => [['bytes32', m.ua], ['uint8', m.rollOverMode], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(x.ownerSig, 'ownerSig')]] },
   UARollOverBatch: { fields: 'bytes32[] uas', on: ZETHER },
   // TS-D19: `x.payerSig` is the payer's signature of the nested `UAMetaTransfer`
-  UAReceiverFee: { raw: `UAMetaTransfer payment,${RECEIVER_FEE}`, on: TOKENS, entry: 'mtxPayReceiverFee', call: (m, sig, x) => [['UAMetaTransfer', m.payment],
+  UAPayeeFee: { raw: `UAMetaTransfer payment,${PAYEE_FEE}`, on: TOKENS, entry: 'mtxPayWithPayeeFee', call: (m, sig, x) => [['UAMetaTransfer', m.payment],
     ['UASig', uaSigOf(x.payerSig, 'payerSig')], ['uint256', m.fee], ['address', m.feeRecipient], ['uint256', m.validUntil], ['UASig', uaSigOf(sig)],
     ...payMetaTail(m, x)] },
   // pay-meta-tax spec §5.2: the payer signs the payment with its tax (kinds 8-13); `x.meta` the `PayMeta`
@@ -357,29 +416,36 @@ const OPS = {
   // The owner's own signature (purpose `zether-owner`), `ownerSig` of the direct ops and of `UARollOverSigned` / `UASetRollOverMode`.
   ZetherRollOver: { raw: 'bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock', on: ZETHER, entry: 'mtxRollOverSigned',
     call: (m, sig) => [['bytes32', m.ua], ['uint64', m.expectedPendingSeq], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
+  // CTR-PQZ-41: the holder's rollover with skip marks on an opening token (purpose `zether-auth`, as `PqzAuth`); `rollSeq` and
+  // `rolled` from `pqzAccount(ua, keyVersion)`, `entriesHash` over the entries' contents; the call takes neither
+  PqzRollOver: { raw: 'bytes32 ua,uint64 keyVersion,uint64 rollSeq,uint64 rolled,uint64 n,uint64[] skip,bytes32 entriesHash,uint64 validUntilBlock,'
+    + 'bytes32 chainUid', on: PQZ, entry: 'mtxRollOverSigned', call: (m, sig) => [['bytes32', m.ua], ['uint64', m.keyVersion], ['uint64', m.n],
+    ['uint64[]', m.skip], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
   ZetherSetRollOverMode: { raw: 'bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock', on: ZETHER, entry: 'mtxSetRollOverMode',
     call: (m, sig) => [['bytes32', m.ua], ['uint8', m.mode], ['uint64', m.validUntilBlock], ['UASig', uaSigOf(sig)]] },
   // GovernanceRouter, one per chain (governance spec §3.2, CTR-GOV-15 Change; R14): the closed table, each op `mtx<Op>` over
   // `UA<Op>`, `target` (the governed contract) the first op word, identities `bytes32`, fee mode NONE; no generic path.
-  UAGrantRole: { fields: 'address target,uint8 bit,bytes32 account', on: ROUTER },
-  UARevokeRole: { fields: 'address target,uint8 bit,bytes32 account', on: ROUTER },
-  UASetGrant: { fields: 'address target,uint8 bit,bytes32 holder,GrantTerms terms', on: ROUTER },
-  UACancelGrant: { fields: 'address target,uint8 bit,bytes32 account', on: ROUTER },
-  UADisableFeature: { fields: 'address target,uint8 bit', on: ROUTER },
-  UATransferOwnership: { fields: 'address target,bytes32 newOwner', on: ROUTER },
-  UAAcceptOwnership: { fields: 'address target', on: ROUTER },
-  UARenounceOwnership: { fields: 'address target', on: ROUTER },
-  UARenounceRole: { fields: 'address target,uint8 bit', on: ROUTER },
-  UAMint: { fields: 'address target,address to,uint256 amount', on: ROUTER },
-  UAMintToUA: { fields: 'address target,bytes32 to,uint256 amount', on: ROUTER },
-  UADisableWrap: { fields: 'address target,address leg,bytes32 reason', on: ROUTER },
-  UAProposeRate: { fields: 'address target,address leg,uint96 num,uint96 den', on: ROUTER },
-  UACancelRate: { fields: 'address target', on: ROUTER },
-  UAExecuteRate: { fields: 'address target', on: ROUTER },
-  UASetMarket: { fields: 'address target,address base,address quote,bool listed', on: ROUTER },
-  UASetExchangeTarget: { fields: 'address target,address exchangeTarget,bool listed', on: ROUTER },
-  UASetListedOnly: { fields: 'address target,bool on', on: ROUTER },
-  UASetFeeSplit: { fields: 'address target,uint32 relayerSharePpm,address treasury', on: ROUTER },
+  // CTR-GOV-28 (owner 2026-11-13): every admin op names the target's chain word last (`chainUid`), signed and forwarded;
+  // its Change in round 3zb + 3zc (O5, O6): every op of a role holder, `UASetWrapLimits` and the two cap setters too
+  UAGrantRole: { fields: 'address target,uint8 bit,bytes32 account,bytes32 chainUid', on: ROUTER },
+  UARevokeRole: { fields: 'address target,uint8 bit,bytes32 account,bytes32 chainUid', on: ROUTER },
+  UASetGrant: { fields: 'address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid', on: ROUTER },
+  UACancelGrant: { fields: 'address target,uint8 bit,bytes32 account,bytes32 chainUid', on: ROUTER },
+  UADisableFeature: { fields: 'address target,uint8 bit,bytes32 chainUid', on: ROUTER },
+  UATransferAdmin: { fields: 'address target,bytes32 newAdmin,bytes32 chainUid', on: ROUTER },
+  UAAcceptAdmin: { fields: 'address target', on: ROUTER },
+  UARenounceAdmin: { fields: 'address target,bytes32 chainUid', on: ROUTER },
+  UARenounceRole: { fields: 'address target,uint8 bit,bytes32 chainUid', on: ROUTER }, // the holder's own (owner 2026-11-13)
+  UAMint: { fields: 'address target,address to,uint256 amount,bytes32 chainUid', on: ROUTER },
+  UAMintToUA: { fields: 'address target,bytes32 to,uint256 amount,bytes32 chainUid', on: ROUTER },
+  UADisableWrap: { fields: 'address target,address leg,bytes32 reason,bytes32 chainUid', on: ROUTER },
+  UAProposeRate: { fields: 'address target,address leg,uint96 num,uint96 den,bytes32 chainUid', on: ROUTER },
+  UACancelRate: { fields: 'address target,bytes32 chainUid', on: ROUTER },
+  UAExecuteRate: { fields: 'address target,bytes32 chainUid', on: ROUTER },
+  UASetMarket: { fields: 'address target,address base,address quote,bool listed,bytes32 chainUid', on: ROUTER },
+  UASetExchangeTarget: { fields: 'address target,address exchangeTarget,bool listed,bytes32 chainUid', on: ROUTER },
+  UASetListedOnly: { fields: 'address target,bool on,bytes32 chainUid', on: ROUTER },
+  UASetFeeSplit: { fields: 'address target,uint32 relayerSharePpm,address treasury,bytes32 chainUid', on: ROUTER },
   // The factory's creations (chain-neutral spec §4.4, S3; ua-mtx-merge T76): `target` the chain's `OpenFactory`, the signing
   // UA the creator; `initHash = keccak256(initArgs)` (`initCall` for an instance) is signed, the bytes go in `extra`.
   UACreateToken: { fields: 'address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt', on: ROUTER,
@@ -392,24 +458,67 @@ const OPS = {
       ['bytes', initOf(m, x, 'initCall')], ['bytes32', m.salt]] },
   // The regulated kinds' controls (regulated-kinds spec §3.1, ua-mtx-merge T32 / T34): the direct entry's params after
   // `target`; in `UAOperatorTransfer` the moved account is `account`, `from` the signer (CTR-GOV-20 Change, owner 2026-11-06).
-  UAFreeze: { fields: 'address target,bytes32 account,bytes32 ref,bytes32 recordId', on: ROUTER },
-  UAUnfreeze: { fields: 'address target,bytes32 account,bytes32 ref', on: ROUTER },
-  UAForceTransfer: { fields: 'address target,bytes32 recordId,uint256 amount', on: ROUTER },
-  UAPause: { fields: 'address target,bytes32 ref,uint64 until', on: ROUTER },
-  UAUnpause: { fields: 'address target,bytes32 ref', on: ROUTER },
+  UAFreeze: { fields: 'address target,bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid', on: ROUTER },
+  UAUnfreeze: { fields: 'address target,bytes32 account,bytes32 ref,bytes32 chainUid', on: ROUTER },
+  UAForceTransfer: { fields: 'address target,bytes32 recordId,uint256 amount,bytes32 chainUid', on: ROUTER },
+  UAPause: { fields: 'address target,bytes32 ref,uint64 until,bytes32 chainUid', on: ROUTER },
+  UAUnpause: { fields: 'address target,bytes32 ref,bytes32 chainUid', on: ROUTER },
   UARecordOrder: { fields: 'address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,'
-    + 'uint256 maxAmount,uint64 freezeUntil', on: ROUTER },
-  UARevokeOrder: { fields: 'address target,bytes32 recordId,bytes32 reasonRef', on: ROUTER },
-  UAOperatorTransfer: { fields: 'address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref', on: ROUTER },
+    + 'uint256 maxAmount,uint64 freezeUntil,bytes32 chainUid', on: ROUTER },
+  UARevokeOrder: { fields: 'address target,bytes32 recordId,bytes32 reasonRef,bytes32 chainUid', on: ROUTER },
+  UAOperatorTransfer: { fields: 'address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid', on: ROUTER },
   // bit 23 `TAX` (pay-meta-tax spec §6.2): the one PERCENT rate, the recipient
-  UASetTaxRate: { fields: 'address target,uint32 ratePpm', on: ROUTER },
-  UASetTaxRecipient: { fields: 'address target,bytes32 taxRecipient', on: ROUTER },
+  UASetTaxRate: { fields: 'address target,uint32 ratePpm,bytes32 chainUid', on: ROUTER },
+  UASetTaxRecipient: { fields: 'address target,bytes32 taxRecipient,bytes32 chainUid', on: ROUTER },
   // the PQZ verifier UA of the PQZ kinds 4, 5, 12, 13 (group 3f, PQZ verifier mode spec §4.2, §4.3): the owner's, no bit
-  UAPqzSetVerifier: { fields: 'address target,bytes32 next', on: ROUTER },
-  UAPqzCancelVerifier: { fields: 'address target', on: ROUTER },
-  UAPqzRevokeVerifier: { fields: 'address target', on: ROUTER },
+  UAPqzSetVerifier: { fields: 'address target,bytes32 next,bytes32 chainUid', on: ROUTER },
+  UAPqzCancelVerifier: { fields: 'address target,bytes32 chainUid', on: ROUTER },
+  UAPqzRevokeVerifier: { fields: 'address target,bytes32 chainUid', on: ROUTER },
+  // round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit (a decrease at once, an increase after
+  // the notice)
+  UASetVerifierFee: { fields: 'address target,uint64 next,bytes32 chainUid', on: ROUTER },
   // bit 24 `PQZ_PROOF` of the PQZ kinds 4, 5, 12, 13 (group 3h, PQZ proof path spec §5): `NONE` or `LOG` from the next debit
-  UASetProofStore: { fields: 'address target,uint8 next', on: ROUTER },
+  UASetProofStore: { fields: 'address target,uint8 next,bytes32 chainUid', on: ROUTER },
+  // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds (two calls when it relaxes the wrap side
+  // or tightens the unwrap side) and bit 26's membership
+  UASetWrapLimits: { fields: 'address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid',
+    on: ROUTER },
+  UASetWrapMember: { fields: 'address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid', on: ROUTER },
+  // round 3zc (CTR-GOV-30): the admin's two supply caps of the wrapped kinds (bit 31), the propose and the apply the same op
+  // sent twice (two nonces); fee mode NONE
+  UASetMaxSupply: { fields: 'address target,uint256 maxSupply,bytes32 chainUid', on: ROUTER },
+  UASetMaxWrapSupply: { fields: 'address target,uint256 maxWrapSupply,bytes32 chainUid', on: ROUTER },
+  // round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §5.3, §6.2): the lists of the regulated kinds 8-13 (bit 8's holder, bit
+  // 9's; 1-256 accounts, signed as the keccak256 of their words) and the admin's enableFeature of 8, 9 or 28
+  UASetAllowed: { fields: 'address target,bytes32[] accounts,bool on,bytes32 chainUid', on: ROUTER },
+  UASetDenied: { fields: 'address target,bytes32[] accounts,bool on,bytes32 chainUid', on: ROUTER },
+  UAEnableFeature: { fields: 'address target,uint8 bit,bytes32 chainUid', on: ROUTER },
+  // round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its
+  // envs, the release approvals of §5.6, the revoke, the deprecations, the kind switches, the directory of §13.3) and of a
+  // `ComplianceRegistry` (its KYC providers; the rows by the admin or a provider); `target` the factory or the registry, the
+  // ids flat; the class approval's entry takes its words as one static struct (`ReleaseApproval`, the same calldata).
+  UAPublishTokenEnv: { fields: 'address target,uint8 kind,uint16 envVersion,bytes32 chainUid,Env env', on: ROUTER },
+  UAPublishDexEnv: { fields: 'address target,uint16 envVersion,bytes32 chainUid,Env env', on: ROUTER },
+  UAPublishClassEnv: { fields: 'address target,uint16 contractClass,uint16 kind,uint16 envVersion,bytes32 chainUid,Env env',
+    on: ROUTER },
+  UAApproveTokenRelease: { fields: 'address target,uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,'
+    + 'bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until', on: ROUTER },
+  UAApproveDexRelease: { fields: 'address target,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,'
+    + 'bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until', on: ROUTER },
+  UAApproveRelease: { fields: 'address target,uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,'
+    + 'bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until',
+    on: ROUTER, args: (m) => [['address', m.target], ['ReleaseApproval', m]] },
+  UARevokeApproval: { fields: 'address target,bytes32 key,bytes32 chainUid', on: ROUTER },
+  UADeprecateToken: { fields: 'address target,uint8 kind,uint64 version,bytes32 chainUid,string reason', on: ROUTER },
+  UADeprecateDex: { fields: 'address target,uint64 version,bytes32 chainUid,string reason', on: ROUTER },
+  UADeprecateRelease: { fields: 'address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason',
+    on: ROUTER },
+  UASetTokenKindEnabled: { fields: 'address target,uint8 kind,bool on,bytes32 chainUid', on: ROUTER },
+  UASetClassKindEnabled: { fields: 'address target,uint16 contractClass,uint16 kind,bool on,bytes32 chainUid', on: ROUTER },
+  UASetKycProvider: { fields: 'address target,bytes32 provider,bool enabled,bytes32 chainUid', on: ROUTER },
+  UASetCompliance: { fields: 'address target,bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid', on: ROUTER },
+  // CTR-GOV-27: the entries one named struct (`ChainEntries`, nested EIP-712), then the factory's chain word
+  UASetChainEntries: { fields: 'address target,ChainEntries entries,bytes32 chainUid', on: ROUTER },
   // The statement's header words verbatim (purpose `zether-auth`); signed into `pqzAuth`, no entry of its own.
   PqzAuth: { raw: 'uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,'
     + 'uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,'
@@ -474,6 +583,85 @@ const PQZ_DEBITS = Object.freeze({ UAPqzTransferSingle: 'single', UAPqzTransferS
 // ------------------------------------------------------------------ the PQZ verdict (group 3f, spec §5)
 
 const VERDICT_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, PqzVerdict: STRUCTS.PqzVerdict };
+/// A table of named errors by selector: `[sig, argument names, liftable]` rows.
+const errorTable = (rows) => Object.freeze(Object.fromEntries(rows.map(([sig, names, liftable]) => ['0x'
+  + hex(keccak_256(utf8ToBytes(sig))).replace(/^0x/, '').slice(0, 8), Object.freeze({ name: sig.slice(0, sig.indexOf('(')), sig, names,
+  liftable })])));
+/// Group 3l (wrap limits spec §7, §9): the wrapped hybrids' wrap-limit errors, by selector. `liftable`: a later block may lift it
+/// (a window ends, a member is added, a redeemer is granted, a later wrap raises the entitlement): the node keeps the job `queued`
+/// with `WRAP_LIMIT_REFUSED`; the creation refusal and the subject check are not. Every argument is one static word.
+export const WRAP_LIMIT_ERRORS = errorTable([
+  ['WrapLimitExceeded(address,uint8,bytes32,uint256,uint256)', ['underlying', 'limit', 'account', 'amount', 'remaining'], true],
+  ['WrapCapExceeded(address,uint8,uint256,uint256)', ['underlying', 'limit', 'amount', 'remaining'], true],
+  ['UnwrapAboveNetWrapped(address,bytes32,uint256,uint256)', ['underlying', 'account', 'amount', 'entitlement'], true],
+  ['WrapperNotListed(bytes32)', ['account'], true],
+  ['UnwrapperNotListed(bytes32)', ['account'], true],
+  ['WrapControlNeedsHybrid(uint8)', ['bit'], false],
+  ['WrapSubjectZero()', [], false],
+]);
+
+/// `revertData` (hex) decoded as one of `WRAP_LIMIT_ERRORS`, or null: `{ name, liftable, args }`, `args` by name (an address
+/// lower-case hex, a `bytes32` hex, a number a decimal string).
+export const wrapLimitError = (revertData) => decodeError(WRAP_LIMIT_ERRORS, revertData);
+
+/// Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §3.4-§3.6, §4): the supply-cap errors of the wrapped kinds, by
+/// selector. `liftable`: an unwrap, a cap change or more supply may lift it (a wrap or a mint above a cap, a setter's floor at
+/// its apply): the node keeps the job `queued` with `SUPPLY_CAP_REFUSED`; the shape refusals are not. A setter's
+/// `GrantNotReady(31, 0, eta)` is the governance layer's error, lifted at `eta`.
+export const SUPPLY_CAP_ERRORS = errorTable([
+  ['MaxWrapSupplyExceeded(uint256,uint256)', ['totalWrapped', 'maxWrapSupply'], true],
+  ['MaxSupplyExceeded(uint256,uint256)', ['supply', 'maxSupply'], true],
+  ['MaxSupplyBelowSupply(uint256,uint256)', ['maxSupply', 'totalSupply'], true],
+  ['MaxSupplyBelowWrapCap(uint256,uint256)', ['maxSupply', 'maxWrapSupply'], true],
+  ['MaxWrapSupplyBelowWrapped(uint256,uint256)', ['maxWrapSupply', 'totalWrapped'], true],
+  ['MaxWrapSupplyAboveMaxSupply(uint256,uint256)', ['maxWrapSupply', 'maxSupply'], true],
+  ['MaxSupplyInvalid()', [], false],
+  ['MaxWrapSupplyInvalid()', [], false],
+]);
+
+/// `revertData` (hex) decoded as one of `SUPPLY_CAP_ERRORS`, or null, as `wrapLimitError`.
+export const supplyCapError = (revertData) => decodeError(SUPPLY_CAP_ERRORS, revertData);
+
+function decodeError(table, revertData) {
+  const d = String(revertData).toLowerCase().replace(/^0x/, '');
+  const e = table['0x' + d.slice(0, 8)];
+  if (!e || d.length !== 8 + 64 * e.names.length) return null;
+  const types = e.sig.slice(e.sig.indexOf('(') + 1, -1).split(',').filter(Boolean);
+  const args = Object.fromEntries(e.names.map((n, i) => {
+    const w = d.slice(8 + 64 * i, 8 + 64 * (i + 1));
+    const v = types[i] === 'address' ? '0x' + w.slice(24) : types[i] === 'bytes32' ? '0x' + w : BigInt('0x' + w).toString();
+    return [n, v];
+  }));
+  return { name: e.name, liftable: e.liftable, args };
+}
+
+/// Group 3l (wrap limits spec §2.1, R23, R24, R26): an id's net-wrapped line on one leg, `{ base, startMin }` (quanta, an
+/// absolute minute; BigInt), as the contract computes it: the entitlement at `nowMin`, a wrap's credit of `a = ⌊received/unit⌋`
+/// quanta, an unwrap's debit of `q = ⌈out/unit⌉`. `decayDays` 0: no decay. A wallet's preview; the contract decides.
+const MAX32 = (1n << 32n) - 1n;
+function lineEnt({ base, startMin }, decayDays, nowMin) {
+  let g = nowMin > startMin ? nowMin - startMin : 0n;
+  const h = BigInt(decayDays) * 1440n;
+  if (h === 0n) return [base, g, h];
+  if (g > h) g = h;
+  return [base * (h - g) / h, g, h];
+}
+export const wrapEntitlement = (line, decayDays, nowMin) => lineEnt(line, decayDays, BigInt(nowMin))[0];
+export function wrapCredit(line, a, decayDays, nowMin) {
+  a = BigInt(a); nowMin = BigInt(nowMin);
+  if (a === 0n) return { ...line };
+  const [e, g, h] = lineEnt(line, decayDays, nowMin);
+  const g2 = (e * g + e + a - 1n) / (e + a);
+  let b2 = line.base + a;
+  if (h !== 0n) { const r = (e + a) * h / (h - g2); if (r < b2) b2 = r; }
+  return { base: b2 < MAX32 ? b2 : MAX32, startMin: nowMin - g2 };
+}
+export function wrapDebit(line, q, decayDays, nowMin) {
+  q = BigInt(q);
+  const [e] = lineEnt(line, decayDays, BigInt(nowMin));
+  return { base: q >= e ? 0n : line.base * (e - q) / e, startMin: line.startMin };
+}
+
 export const PQZ_VERDICT_TYPEHASH = hex(keccak_256(utf8ToBytes(encodeType(VERDICT_TYPES, 'PqzVerdict'))));
 /** The verdict of a `PRECOMPILE` token: every field 0 and an empty `UASig` (spec §5.1). */
 export const EMPTY_PQZ_VERDICT = Object.freeze({
@@ -495,6 +683,31 @@ export function pqzVerdictTypedData({ contract, chainId, chainUid, message }) {
   return { types: VERDICT_TYPES, primaryType: 'PqzVerdict', domain: salted({ name: 'SCaaS PqzToken', contract, chainId, chainUid }), message: m };
 }
 export const pqzVerdictDigest = (o) => hashTypedData(pqzVerdictTypedData(o));
+
+/** Round 3t (CTR-PQZ-36, verifier fee spec §5.1): a debit's public fee word, header word 256, `txFee + verifierFee + M·d`
+ *  (`txFee = confidentialFee` with a beneficiary, else 0; `legs`, `decoyFee` op 7's, 0 otherwise; `verifierFee` the token's
+ *  in force on `OFFCHAIN`, 0 on `PRECOMPILE`), for display and the node / verifier parity: a wallet's witness takes word
+ *  256 of the statement view, never this sum. `< 2^64` or refused, as the token refuses it. */
+export function pqzFeeWord({ confidentialFee = 0, beneficiaryUA = ZERO_ID, verifierFee = 0, legs = 0, decoyFee = 0 }) {
+  const ben = BigInt(beneficiaryUA) !== 0n;
+  const w = (ben ? BigInt(confidentialFee) : 0n) + BigInt(verifierFee) + BigInt(legs) * BigInt(decoyFee);
+  if (w >= 2n ** 64n) refuse('the fee word is 2^64 or more');
+  return w;
+}
+
+/** `pqzVerifyConfig()`'s return data (13 static words: round 3t's four appended, then the three-key model's two): the mode, the
+ *  verifier, fixed, its epoch, a live pending transfer and its `eta`, the notice period, the verifier fee, its immutable cap, a
+ *  live pending increase and its `eta` (a dead one reads 0, 0), `pqzOwnKey`, `pqzOpening` (CTR-PQZ-37: the token's key class).
+ *  Wallets show `verifierFeeMax` as the headline price (Fable P2-2). */
+export function decodePqzVerifyConfig(data) {
+  const b = asBytes(data);
+  if (b.length !== 13 * 32) refuse('pqzVerifyConfig: 13 words');
+  const w = (i) => BigInt(hex(b.subarray(32 * i, 32 * i + 32)));
+  const id = (i) => hex(b.subarray(32 * i, 32 * i + 32));
+  return { pqzVerifyMode: Number(w(0)), verifier: id(1), fixed: w(2) !== 0n, pqzVerifierEpoch: Number(w(3)), pending: id(4),
+    eta: w(5), noticePeriod: w(6), verifierFee: w(7), verifierFeeMax: w(8), verifierFeePending: w(9), verifierFeeEta: w(10),
+    pqzOwnKey: w(11) !== 0n, pqzOpening: w(12) !== 0n };
+}
 
 /** `x.pqzVerdict = {pqzVerdict, sig}` as the entry takes it: required; a verdict needs its signature, an empty one has none. */
 function pqzSignedVerdictOf(v) {
@@ -529,6 +742,11 @@ function canonical(type, v, types) {
     return v ?? false;
   }
   if (type === 'bytes') return hex(asBytes(v ?? '0x'));
+  // round 3r: a `string` (a deprecation's `reason`) is text, signed as keccak256 of its UTF-8 bytes
+  if (type === 'string') {
+    if (v !== undefined && typeof v !== 'string') refuse(`${v} is not a string`);
+    return v ?? '';
+  }
   const fixed = /^bytes(\d+)$/.exec(type);
   if (fixed) {
     const b = v === undefined ? new Uint8Array(Number(fixed[1])) : asBytes(v);
@@ -612,7 +830,7 @@ export const {
   uaExecuteTypedData, uaExecuteCalldata,
   addKeyTypedData, addKeyCalldata, removeKeyTypedData, removeKeyCalldata, rotateKeyTypedData, rotateKeyCalldata,
   setGuardianTypedData, setGuardianCalldata, cancelRecoveryTypedData, cancelRecoveryCalldata, executeTypedData, executeCalldata,
-  uaReceiverFeeTypedData, uaReceiverFeeCalldata, uaRelayFeeTypedData, uaRelayFeeCalldata, uaWrapOrderTypedData, uaWrapOrderCalldata,
+  uaPayeeFeeTypedData, uaPayeeFeeCalldata, uaRelayFeeTypedData, uaRelayFeeCalldata, uaWrapOrderTypedData, uaWrapOrderCalldata,
   uaPayWithTaxTypedData, uaPayWithTaxCalldata,
   cancelUAOrderTypedData, cancelUAOrderCalldata, cancelUAWrapOrderTypedData, cancelUAWrapOrderCalldata,
   cancelDexOrderTypedData, cancelDexOrderCalldata,
@@ -821,16 +1039,16 @@ export function checkPayment(td, { account, chainId, chainUid, amount, decimals,
   return { digest, payee, token: expectedToken, entryRef, ...fee };
 }
 
-/** The payee's side of receiver-pays (CTR-MTX-05/06): `td` is the `UAReceiverFee` (`mtxPayReceiverFee`; `payee` a 32-byte
- *  id, `padId` for a native one; ua-mtx-merge: the address `ReceiverFee` left) to co-sign, nesting the payer's payment (TS-D19). The payment must be the one the payee expects, as `checkPayment` checks it for the payer: to `payee`,
+/** The payee's side of payee fee (CTR-MTX-05/06): `td` is the `UAPayeeFee` (`mtxPayWithPayeeFee`; `payee` a 32-byte
+ *  id, `padId` for a native one; ua-mtx-merge: the address `ReceiverFee` left; owner 2026-11-12: was `UAReceiverFee`) to co-sign, nesting the payer's payment (TS-D19). The payment must be the one the payee expects, as `checkPayment` checks it for the payer: to `payee`,
  *  `amount` (× 10^`decimals`) with the request's `entryRef` on lane `payLane(entryRef)` nonce 0, the contract's shape (fee
  *  NONE, relayer bound: mode 1), in `expectedToken`'s domain salted with `chainUid`. The fee is the payee's own: non-zero, at
  *  most the amount and `maxFee` (default 0), to the `feeRecipient` it named, with a near deadline. The server supplies only
  *  the payment's `from` / `validUntil` / `relayer` and the fee's `validUntil`. Returns {digest, paymentDigest (what the
  *  payer signs), payer, fee, feeRecipient}. */
-export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimals, entryRef, expectedToken, maxFee = 0, feeRecipient,
+export function checkPayeeFee(td, { payee, chainId, chainUid, amount, decimals, entryRef, expectedToken, maxFee = 0, feeRecipient,
   now = Math.floor(Date.now() / 1000), maxWindow = 86400 }) {
-  if (!td || td.primaryType !== 'UAReceiverFee') refuse('this is not a receiver fee');
+  if (!td || td.primaryType !== 'UAPayeeFee') refuse('this is not a payee fee');
   if ([payee, amount, entryRef, expectedToken, feeRecipient].some((v) => v == null)) {
     refuse('the payee, amount, reference, token and fee recipient are required');
   }
@@ -845,7 +1063,7 @@ export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimal
   if (!same(p.entryRef, entryRef)) refuse('the payment reference differs from the request');
   const batch = payLane(entryRef);
   if (uint(p.batch, 'the lane') !== batch || uint(p.nonce, 'the nonce') !== 0n) refuse('a payment is signed once, on its request lane');
-  if (uint(p.mode, 'the fee mode') !== 1n || uint(p.fee, 'the payer fee') !== 0n) refuse('the payment is not in the receiver-pays shape');
+  if (uint(p.mode, 'the fee mode') !== 1n || uint(p.fee, 'the payer fee') !== 0n) refuse('the payment is not in the payee fee shape');
   const fee = uint(m.fee, 'the fee');
   if (fee === 0n) refuse('no fee to co-sign');
   if (fee > value) refuse('the fee is more than the payment');
@@ -854,9 +1072,9 @@ export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimal
   const validUntil = deadline(m.validUntil, now, maxWindow);
   const payment = { ...p, to: payee, value, entryRef, batch, nonce: 0 };
   const paymentDigest = digestOf(uaMetaTransferTypedData({ name: d.name, contract: expectedToken, chainId, chainUid, message: payment }));
-  const digest = digestOf(uaReceiverFeeTypedData({ name: d.name, contract: expectedToken, chainId, chainUid,
+  const digest = digestOf(uaPayeeFeeTypedData({ name: d.name, contract: expectedToken, chainId, chainUid,
     message: { payment, fee, feeRecipient, validUntil } }));
-  if (hex(digestOf(td)) !== hex(digest)) refuse('unexpected receiver fee fields');
+  if (hex(digestOf(td)) !== hex(digest)) refuse('unexpected payee fee fields');
   return { digest, paymentDigest, payer: p.from, fee, feeRecipient };
 }
 
@@ -1017,15 +1235,15 @@ export function buildPay({ name, token, chainId, chainUid, from, to, amount, met
   return { typedData, digest: digestOf(typedData), payId: p.payId, meta: p.meta, shown: p.shown, calldata };
 }
 
-/** Receiver-pays (spec §2.5): the payer's payment (`buildPay`, fee NONE, relayer bound: mode 1) and the payee's
- *  `UAReceiverFee` over it; `calldata(payerAuth, payeeAuth)` is `mtxPayReceiverFee(t, payerAuth, fee, feeRecipient,
- *  rfValidUntil, payeeAuth, meta)`. */
-export function buildPayReceiverFee({ fee, feeRecipient, rfValidUntil, ...pay }) {
+/** Payee fee (spec §2.5): the payer's payment (`buildPay`, fee NONE, relayer bound: mode 1) and the payee's
+ *  `UAPayeeFee` over it; `calldata(payerAuth, payeeAuth)` is `mtxPayWithPayeeFee(t, payerAuth, fee, feeRecipient,
+ *  pfValidUntil, payeeAuth, meta)`. */
+export function buildPayWithPayeeFee({ fee, feeRecipient, pfValidUntil, ...pay }) {
   const payer = buildPay({ ...pay, mode: 1, fee: 0, feeRecipient: ZERO_ADDRESS });
   const at = { name: pay.name ?? 'SCaaS MetaToken', contract: pay.token, chainId: pay.chainId, chainUid: pay.chainUid };
-  const typedData = uaReceiverFeeTypedData({ ...at, message: { payment: payer.typedData.message, fee, feeRecipient, validUntil: rfValidUntil } });
+  const typedData = uaPayeeFeeTypedData({ ...at, message: { payment: payer.typedData.message, fee, feeRecipient, validUntil: pfValidUntil } });
   return { payment: payer, typedData, digest: digestOf(typedData), payId: payer.payId, meta: payer.meta, shown: payer.shown,
-    calldata: (payerAuth, payeeAuth) => uaReceiverFeeCalldata(typedData, payeeAuth, { payerSig: payerAuth, meta: payer.meta }) };
+    calldata: (payerAuth, payeeAuth) => uaPayeeFeeCalldata(typedData, payeeAuth, { payerSig: payerAuth, meta: payer.meta }) };
 }
 
 /** The tax of a PERCENT payment, `floor(value × ratePpm / 10^6)` (PT-6), from `regulatedConfig().tax.effectivePpm`. */
@@ -1227,8 +1445,12 @@ export function checkOp(td, { op, contract, chainId, chainUid, message, maxFee, 
 /** Group 3h (pqz-proof-path spec §3.1, PP-3, C4): a holder's tag of its own debit. `K = HKDF-SHA256(ikm = seed32, salt = "", info =
  *  "PQZ/owntag/v1", 32)`, `seed32` the PQZ key seed of the version debited (`pqzKeySeed`); `ownTag = HMAC-SHA256(K, chainUid(32) ‖
  *  token(20) ‖ fromUA(32) ‖ be32(sendCounter) ‖ keccak256(P(u) ‖ P(v_f)))`, `P` the stored packed form and `u` the debit's `u_0`
- *  (op 1, op 7) or `u'` (burn, refresh, unwrap); `ctHash` may be given for `keccak256(P(u) ‖ P(v_f))`. Authorship, not inclusion:
- *  a match says this seed wrote the bytes, never that they are the latest state. Returns `{ key, message, ownTag }` (hex). */
+ *  (op 1, op 7) or `u'` (burn, refresh, unwrap), and on a token with the sealed opening op 1's `u_f` (spec K3-2: the ciphertext the
+ *  holder later decrypts; `pqzKeyHandle` in src/pqzopen.js checks it before the secret is used); `ctHash` may be given for
+ *  `keccak256(P(u) ‖ P(v_f))`. Authorship, not inclusion:
+ *  a match says this seed wrote the bytes, never that they are the latest state. Returns `{ key, message, ownTag }`: `message`
+ *  and `ownTag` hex; `key` a fresh `Uint8Array`, SECRET (it recognises every own-tag of this seed version, so whoever holds it
+ *  links the holder's debits): never log or store it, wipe it (`key.fill(0)`) when done; only the vector generator reads it. */
 export function pqzOwnTag({ seed32, chainUid, token, fromUA, sendCounter, pu, pvf, ctHash }) {
   const n = BigInt(sendCounter);
   if (n < 0n || n >= 1n << 32n) refuse('sendCounter: be32, below 2^32');
@@ -1238,7 +1460,7 @@ export function pqzOwnTag({ seed32, chainUid, token, fromUA, sendCounter, pu, pv
   const be32 = new Uint8Array(4);
   new DataView(be32.buffer).setUint32(0, Number(n));
   const message = concatBytes(bytes32(chainUid), fromHex(token), bytes32(fromUA), be32, ct);
-  return { key: hex(key), message: hex(message), ownTag: hex(hmac(sha256, key, message)) };
+  return { key, message: hex(message), ownTag: hex(hmac(sha256, key, message)) };
 }
 
 /** Group 3h (spec §3.3, C3): a PQZ debit's `memoHash` (statement header word 608): `keccak256(memo ‖ ownTag)`, `memo = salt ‖
@@ -1268,16 +1490,20 @@ export function pqzDebitRecordOf(w0, w1, counter) {
 }
 
 /** Group 3h (spec §3.2): the tail of a PQZ op blob, read from its last byte: `… ‖ P(v_f) ‖ ownTag(32) ‖ be64 kv[0..n) ‖ u8(n)`.
- *  `code` is the SSTORE2 pointer's code (a STOP byte, then the data); `R` is the data before `P(v_f)`. */
-export function pqzBlobTailOf(code) {
+ *  `code` is the SSTORE2 pointer's code (a STOP byte, then the data); `R` is the data before `P(v_f)`. On a token with the
+ *  sealed opening (`opening: true`, CTR-PQZ-40) an op blob is `R ‖ P(u_f) ‖ P(v_f) ‖ O_t ‖ [O_a] ‖ tail`: the `n` openings of
+ *  1,648 B sit between `P(v_f)` and the tail (Fable P2-2). `vfEnd` is where `P(v_f)` ends in either form; `pqzOpeningBlobOf`
+ *  (src/pqzopen.js) reads every field of an opening blob. */
+export function pqzBlobTailOf(code, { opening = false } = {}) {
   const d = asBytes(code).subarray(1);
   const n = d.length ? d[d.length - 1] : 0;
   const tailLen = 33 + 8 * n;
-  if (!d.length || n > 9 || d.length < tailLen) refuse('not a PQZ op blob of release 3h: its tail does not fit');
+  const openingsLen = opening ? 1648 * n : 0;
+  if (!d.length || n > 9 || d.length < tailLen + openingsLen) refuse('not a PQZ op blob of release 3h: its tail does not fit');
   const at = d.length - tailLen;
   const kv = [];
   for (let i = 0; i < n; i++) kv.push(new DataView(d.buffer, d.byteOffset + at + 32 + 8 * i, 8).getBigUint64(0));
-  return { ownTag: hex(d.subarray(at, at + 32)), kv, n, tailLen, dataLen: d.length };
+  return { ownTag: hex(d.subarray(at, at + 32)), kv, n, tailLen, openingsLen, vfEnd: at - openingsLen, dataLen: d.length };
 }
 
 const PQZ_DEBIT_PROOF = hex(keccak_256(utf8ToBytes('PqzDebitProof(address,bytes32,uint64,bytes,bytes)')));
@@ -1317,6 +1543,19 @@ export function checkPqzDebit(td, { current }) {
     return { ...debit, kind: 'refresh', show: `refreshes version ${v}` };
   }
   return refuse(`StaleKeyVersion: version ${v} is stale (current ${cur}): migrate it first`);
+}
+
+/** T-13 (KV-9, the contract's `_distinct`): the keys one PQZ statement names, in its order (`pk_f`, then `pk_t` or every leg's,
+ *  then `pk_a` with the auditor on), pairwise distinct before anything is encrypted: equal keys under one randomness cancel the
+ *  masks, and the contract refuses only after the ciphertexts are public. `entries` = [{ ua, key }] (key: the PQZ key bytes).
+ *  Refuses `KeyReused` naming the UA of the later key of the pair, as the contract. */
+export function pqzKeysDistinct(entries) {
+  const seen = new Set();
+  for (const { ua, key } of entries) {
+    const h = hex(keccak_256(fromHex(key)));
+    if (seen.has(h)) refuse(`KeyReused: ${ua} names a key already in this statement`);
+    seen.add(h);
+  }
 }
 
 /** A self-call `MetaTransaction` (CTR-MTX-17), the generic path (TS-D14: a mixed batch, an op with no named entry), that is exactly the call the client built, `call = {contract, data}`:
@@ -1501,15 +1740,23 @@ export function bidMinBase(minFill, amount, receiveAmount) {
   return (uint(minFill, 'minFill') * uint(receiveAmount, 'the price') + a - 1n) / a;
 }
 
-// The governance bits 0-24 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1; bit 24 PQZ proof path §5): name and type. The disclosure sentences are the file's,
+// The governance bits 0-31 (spec 2026-11-02-governance §1.2; bit 22 CTR-GOV-20; bit 23 pay-meta-tax §6.1; bit 24 PQZ proof path §5; bits 25-27 wrap limits §2; bits 8, 9 the token's lists and 28 KYC, CTR-GOV-24; 29 CLOSED_MARKETS, CTR-DEX-32; 30 BURNER, CTR-GOV-29; 31 SUPPLY_CAP_ADJUSTABLE, CTR-GOV-30): name and type. The disclosure sentences are the file's,
 // smartcontracts/vectors/governance/governance_bits.json, which the app reads; test/governance-bits.test.js holds this table to it.
-// Bits 25-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
+// Bits 32-127 are free; bits 128-255 are the application contract's own, the word is its bitLabel(bit) (CTR-GOV-10's Change).
 export const GOVERNANCE_BITS = Object.freeze([
   ['PAYABLE', 'capability'], ['MINTABLE', 'power'], ['BURNABLE', 'capability'], ['RATE_ADJUSTABLE', 'power'],
-  ['WRAP_DISABLEABLE', 'power'], ['FREEZE', 'power'], ['FORCE', 'power'], ['PAUSE', 'power'], ['ALLOWLIST', 'capability'],
-  ['DENYLIST', 'capability'], ['RECORD', 'power'], ['LISTING', 'power'], ['FEE_ROUTING', 'power'], ['', 'unused'], ['', 'unused'],
+  ['WRAP_DISABLEABLE', 'power'], ['FREEZE', 'power'], ['FORCE', 'power'], ['PAUSE', 'power'], ['ALLOWLIST', 'power'],
+  ['DENYLIST', 'power'], ['RECORD', 'power'], ['LISTING', 'power'], ['FEE_ROUTING', 'power'], ['', 'unused'], ['', 'unused'],
   ['ARBITRATE', 'reserved'], ['CORRECT', 'reserved'], ['RESCUABLE', 'capability'], ['PUBLISH', 'power'], ['DEPRECATE', 'power'],
   ['ENABLE_KIND', 'power'], ['MODERATE', 'power'], ['OPERATOR_TRANSFER', 'power'], ['TAX', 'power'], ['PQZ_PROOF', 'power'],
+  // group 3l (wrap limits spec §2): the hybrids' wrap controls
+  ['WRAP_LIMIT', 'capability'], ['WRAP_LIST', 'power'], ['REDEEMER', 'power'],
+  // round 3s (CTR-GOV-24): the compliance registry check
+  ['KYC', 'capability'],
+  // CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
+  ['CLOSED_MARKETS', 'capability'],
+  // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
+  ['BURNER', 'power'], ['SUPPLY_CAP_ADJUSTABLE', 'capability'],
 ].map(([name, type], bit) => Object.freeze({ bit, name, type })));
 
 // ------------------------------------------------------------------ the signing policy in front of every typed signature
@@ -1519,7 +1766,7 @@ export const GOVERNANCE_BITS = Object.freeze([
  *  standard EIP-712 digest of the values as supplied (no canonical step, spec §5.3): the general EVM wallet's opt-in. */
 const EXPECT = {
   Payment: (td, x) => checkPayment(td, x).digest,
-  ReceiverFee: (td, x) => checkReceiverFee(td, x).digest,
+  PayeeFee: (td, x) => checkPayeeFee(td, x).digest,
   PayMeta: (td, x) => checkPayMeta(td, x).digest,
   Op: (td, x) => checkOp(td, x).digest,
   Call: (td, x) => checkCall(td, x).digest,
@@ -1626,4 +1873,142 @@ export function signedTransaction(t, { yParity, r, s }) {
   const sig = [BigInt(hex(r)), BigInt(hex(s))].map(minimal);
   if (t.type === 0) return rlp([...t.list.slice(1), minimal(BigInt(t.fields.chainId) * 2n + 35n + BigInt(yParity)), ...sig]);
   return concatBytes(Uint8Array.of(t.type), rlp([...t.list, minimal(BigInt(yParity)), ...sig]));
+}
+
+// ------------------------------------------------------------------ liquidity orders (CTR-DEX-30, -31; CLI-SGN-49 proposed)
+
+const LIQUIDITY_TOKEN = fields('address token,uint256 amount');
+const LIQUIDITY_ORDER = fields('bytes32 from,LiquidityToken[] inputs,LiquidityToken[] outputs,address positionManager,'
+  + 'address positionReader,uint256 positionIn,bytes32 positionPool,int24 tickLower,int24 tickUpper,uint128 minLiquidity,'
+  + 'bytes32 recipient,uint256 fee,address relayer,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil');
+const LIQUIDITY_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, LiquidityOrder: LIQUIDITY_ORDER, LiquidityToken: LIQUIDITY_TOKEN };
+const isNativeId = (id) => /^0x0{24}[0-9a-fA-F]{40}$/.test(hex(bytes32(id)));
+
+/** A `LiquidityOrder` in its DEX's salted domain (`"SCaaS Dex"`, the DEX clone, `chain_uid`): ids 32 bytes (a native address
+ *  zero-padded, `padId`); every field signed (no unbound field to zero); unset fields 0. */
+export function liquidityOrderTypedData({ dex, chainId, chainUid, order }) {
+  const o = { inputs: [], outputs: [], positionManager: ZERO_ADDRESS, positionReader: ZERO_ADDRESS, positionIn: '0',
+    positionPool: ZERO_ID, tickLower: 0, tickUpper: 0, minLiquidity: '0', recipient: ZERO_ID, fee: '0', relayer: ZERO_ADDRESS,
+    flags: 0, batch: '0', nonce: '0', ...order };
+  const tok = (t) => ({ token: t.token, amount: String(t.amount) });
+  const message = Object.fromEntries(LIQUIDITY_ORDER.map((f) => [f.name,
+    f.type === 'LiquidityToken[]' ? o[f.name].map(tok) : f.type === 'bytes32' ? hex(bytes32(o[f.name]))
+      : f.type === 'address' || f.type === 'uint8' || f.type === 'int24' ? o[f.name] : String(o[f.name])]));
+  return { types: LIQUIDITY_TYPES, primaryType: 'LiquidityOrder', domain: salted({ name: 'SCaaS Dex', contract: dex, chainId, chainUid }),
+    message };
+}
+
+/** The order a client builds from the user's input, with a short deadline by default (no per-order cancel, spec §4.4). */
+export function buildLiquidityOrder({ dex, chainId, chainUid, order, now = Math.floor(Date.now() / 1000), window = 300 }) {
+  return liquidityOrderTypedData({ dex, chainId, chainUid, order: { validUntil: String(now + window), ...order } });
+}
+
+/** A liquidity order that is exactly the one the client built (spec 2026-11-10-dex-liquidity.md §12; CLI-SGN-49 proposed):
+ *  the DEX on the profile's DEX list and liquidity-capable (`liquidityDexes`), the reader on the profile's list for its manager
+ *  (`readers`: `{manager: [reader, ...]}`), nonce < 2^128, at most eight inputs, outputs and extra tokens, no repeated or
+ *  shared token, no outside input or position under a derived `from` (`scaasTokens`: the profile's SCaaS tokens with the ledger
+ *  on), no outside output or position for a derived recipient, a recipient that is no plan token and not the manager, fee at
+ *  most 1 %, `tickLower < tickUpper`, the position fields consistent, no partial withdraw or fee collect without the received
+ *  position (`partial`), no `RelayFeeRouter` wrap (C10). Returns {digest, warnings, display}; `display.givesWholePosition`
+ *  when a position is given and none received back. */
+export function checkLiquidityOrder(td, { account, chainId, chainUid, order, dexes = [], liquidityDexes = [], readers = {},
+  scaasTokens = [], extraTokens = [], partial = false, routerWrap = false, now = Math.floor(Date.now() / 1000),
+  maxWindow = 3600 }) {
+  if (routerWrap) refuse('a RelayFeeRouter wrap of mtxLiquidity is not offered (C10): relay it directly');
+  if (!td || td.primaryType !== 'LiquidityOrder') refuse('this is not the liquidity order you asked for');
+  const dex = (td.domain || {}).verifyingContract;
+  if (!dexes.some((x) => same(x, dex))) refuse('the order names a DEX that is not on your chain profile');
+  if (!liquidityDexes.some((x) => same(x, dex))) refuse('this DEX is not liquidity-capable on your chain profile');
+  const got = td.message || {};
+  const o = { inputs: [], outputs: [], positionManager: ZERO_ADDRESS, positionReader: ZERO_ADDRESS, positionIn: '0',
+    positionPool: ZERO_ID, tickLower: 0, tickUpper: 0, minLiquidity: '0', recipient: ZERO_ID, fee: '0', relayer: ZERO_ADDRESS,
+    flags: 0, batch: '0', ...order, from: account, nonce: uint(got.nonce, 'the nonce'),
+    validUntil: (order || {}).validUntil ?? got.validUntil };
+  if (o.nonce >= 2n ** 128n) refuse('the order nonce is at or above 2^128; the chain refuses it');
+  if (uint(o.fee, 'the fee') > 10000n) refuse('the fee is above 1 %');
+  if (uint(o.flags, 'the flags') & ~4n) refuse('unknown order flags');
+  if (o.inputs.length > 8 || o.outputs.length > 8 || extraTokens.length > 8) refuse('more than eight tokens in a list');
+  const all = [...o.inputs.map((t) => t.token), ...o.outputs.map((t) => t.token), ...extraTokens];
+  if (new Set(all.map((x) => String(x).toLowerCase())).size !== all.length) refuse('a token is repeated or shared between lists');
+  if (o.inputs.some((t) => uint(t.amount, 'an input maximum') === 0n)) refuse('an input maximum is zero');
+  const pm = o.positionManager;
+  const received = hex(bytes32(o.positionPool)) !== ZERO_ID;
+  const given = uint(o.positionIn, 'the position given') !== 0n;
+  if (all.some((x) => same(x, ZERO_ADDRESS) || same(x, pm))) refuse('a zero token, or the position manager as a token');
+  if (same(pm, ZERO_ADDRESS) && (given || received)) refuse('a position without its manager');
+  if (received) {
+    if (BigInt(o.tickLower) >= BigInt(o.tickUpper)) refuse('tickLower is not below tickUpper');
+    if (uint(o.minLiquidity, 'the minimum liquidity') === 0n) refuse('a received position needs a minimum liquidity');
+    if (!(readers[String(pm).toLowerCase()] || []).some((r) => same(r, o.positionReader))) {
+      refuse('the position reader is not on your chain profile for its manager');
+    }
+  } else if (!same(o.positionReader, ZERO_ADDRESS) || BigInt(o.tickLower) !== 0n || BigInt(o.tickUpper) !== 0n
+    || uint(o.minLiquidity, 'the minimum liquidity') !== 0n) refuse('position fields without a received position');
+  if (partial && given && !received) refuse('a partial withdraw or a fee collect must receive the position back');
+  const recipient = hex(bytes32(o.recipient)) === ZERO_ID ? hex(bytes32(account)) : hex(bytes32(o.recipient));
+  if ([...all, pm, dex].some((x) => recipient === padId(x))) refuse('the recipient is a plan token, the manager or the DEX');
+  const ledger = (t) => scaasTokens.some((x) => same(x, t));
+  if (!isNativeId(account) && (given || o.inputs.some((t) => !ledger(t.token)))) {
+    refuse('a derived UA gives only SCaaS tokens with the UA ledger on, and no position');
+  }
+  if (!isNativeId(recipient) && (received || o.outputs.some((t) => !ledger(t.token)))) {
+    refuse('a derived recipient receives only SCaaS tokens with the UA ledger on, and no position');
+  }
+  deadline(o.validUntil, now, maxWindow);
+  const digest = digestOf(liquidityOrderTypedData({ dex, chainId, chainUid, order: o }));
+  if (hex(digestOf(td)) !== hex(digest)) refuse('this is not the liquidity order you asked for');
+  const warnings = [];
+  if (recipient !== hex(bytes32(account))) warnings.push('someone else receives the outputs');
+  if (same(o.relayer, ZERO_ADDRESS)) warnings.push('any submitter may execute this order and take the slack above your bounds');
+  if (!isNativeId(account)) warnings.push('a derived signer cancels on a token lane only (mtxInvalidateNonces of an input token)');
+  return { digest, warnings, display: { givesWholePosition: given && !received } };
+}
+
+/** `LiquiditySettled` against the signed order, without trusting the submitter: each pull at most its maximum, each output
+ *  at least its minimum; a refund may exceed its pull (fees a position collected, spec §6 step 7), so none is bounded. */
+export function checkLiquiditySettled(order, ev) {
+  order.inputs.forEach((t, i) => { if (BigInt(ev.pulled[i]) > BigInt(t.amount)) refuse('a pull above its maximum'); });
+  order.outputs.forEach((t, i) => { if (BigInt(ev.received[i]) < BigInt(t.amount)) refuse('an output below its minimum'); });
+  return true;
+}
+
+// ------------------------------------------------------------------ RescueVault (CTR-GOV-25; spec 2026-11-12-rescue-vault.md)
+
+const RESCUE_VAULT_DOMAIN_TYPE = [
+  { name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'verifyingContract', type: 'address' },
+];
+
+function rescueVaultSeq(seq) {
+  const s = BigInt(seq);
+  if (s < 1n || s >= 1n << 64n) throw new Error('seq: a uint64 from 1');
+  return s;
+}
+
+function rescueVaultTypedData(vault, primaryType, fields, message) {
+  return {
+    types: { EIP712Domain: RESCUE_VAULT_DOMAIN_TYPE, [primaryType]: fields },
+    primaryType,
+    domain: { name: 'SCaaS RescueVault', version: '1', verifyingContract: vault },
+    message,
+  };
+}
+
+/** `setRescuer`, signed by the vault's admin (`eth_signTypedData_v4`): chain-neutral (no chainId, no salt), so one signature
+ *  applies to the vault at `vault` on every chain, in the shared `seq` order. KAT: vectors/governance/rescue_vault_kat.json. */
+export function rescueVaultSetRescuerTypedData({ vault, seq, newRescuer }) {
+  const s = rescueVaultSeq(seq);
+  if (BigInt(newRescuer) === 0n) throw new Error('newRescuer: not the zero address');
+  return rescueVaultTypedData(vault, 'SetRescuer', [{ name: 'seq', type: 'uint64' }, { name: 'newRescuer', type: 'address' }],
+    { seq: s.toString(), newRescuer });
+}
+
+/** `rotateAdmin`, signed by the vault's admin: `newAdmin` a native UA (bytes32, an EOA address in the low 160 bits, not 0),
+ *  the only kind the chain-neutral vault can check. Same domain and shared `seq` as `setRescuer`. */
+export function rescueVaultRotateAdminTypedData({ vault, seq, newAdmin }) {
+  const s = rescueVaultSeq(seq);
+  if (!/^0x[0-9a-fA-F]{64}$/.test(newAdmin)) throw new Error('newAdmin: a bytes32');
+  const a = BigInt(newAdmin);
+  if (a === 0n || a >> 160n !== 0n) throw new Error('newAdmin: a native UA (high 96 bits 0, not 0)');
+  return rescueVaultTypedData(vault, 'RotateAdmin', [{ name: 'seq', type: 'uint64' }, { name: 'newAdmin', type: 'bytes32' }],
+    { seq: s.toString(), newAdmin });
 }

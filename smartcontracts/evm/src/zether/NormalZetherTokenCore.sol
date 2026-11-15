@@ -25,7 +25,7 @@ import {IZetherToken} from "./IZetherToken.sol";
 ///         (the regulated flags are refused, CTR-ZTH-47). Built by `OpenFactory.createToken` with `conf` set and `legs`,
 ///         `rate` empty. Never on Hedera (`ZetherLayer` refuses a Hedera env).
 abstract contract NormalZetherTokenCore is NormalTokenCore, ZetherLayer {
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; no
+    /// @dev The factory's append (`OpenFactory.deployTokenImplementation`, chain-neutral spec §2.1): its address; no
     ///      `implArgs`. The env (Hedera off) is checked by `validateEnv` (`ZetherLib`).
     constructor(address factory_, bytes memory implArgs) NormalTokenCore(factory_, implArgs) {}
 
@@ -44,9 +44,9 @@ abstract contract NormalZetherTokenCore is NormalTokenCore, ZetherLayer {
     ///      stays here. In `NormalToken`'s order: the unused fields and the metadata, `GovernanceLib.init`, the Zether config,
     ///      the initial mint.
     function _initRaw(bytes calldata initArgs) internal virtual override {
-        (uint256 features_, uint256 locked, bytes32 owner_, uint64 delay, address rescueTo_, GovernanceLib.Roles memory roles) =
+        (uint256 features_, uint256 locked, bytes32 admin_, uint64 delay, address rescueTo_, GovernanceLib.Roles memory roles) =
             ZetherLib.initNormal(initArgs, kind());
-        GovernanceLib.init(features_, locked, owner_, delay, rescueTo_, roles, _validBits(), _roleBits(), _contractOnlyBits(),
+        GovernanceLib.init(features_, locked, admin_, delay, rescueTo_, roles, _validBits(), _roleBits(), _contractOnlyBits(),
             _registry());
         (address holder, uint256 supply) = ZetherLib.initNormalConf(initArgs, _transferVerifier());
         if (supply != 0) _mint(holder, supply);

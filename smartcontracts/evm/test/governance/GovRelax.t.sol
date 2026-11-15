@@ -3,11 +3,13 @@ pragma solidity ^0.8.24;
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// `kindOf` from a table the test writes: an `msig` id, a single-key id, an unregistered one (0).
 contract KindTable {
@@ -22,12 +24,13 @@ contract Holder {}
 
 /// The regulated masks a kind 8-13 passes (regulated-kinds spec §2.1, §3.6): roles 1, 3, 5, 6, 7, 10, 21; contract-only 3,
 /// 5, 6, 7, 10, 21 (3 a native id only, RK-1); 22 `OPERATOR_TRANSFER` any holder (CTR-GOV-20); scalar 1, 6, 21, 22;
-/// relaxation of 5, 6, 7 delayed. Through `GovernanceBase`'s own
+/// relaxation of 5, 6, 7 delayed. Round 3s (CTR-GOV-24): 8 and 9 are the lists, roles any holder (the issuer seat takes
+/// them while they can be enabled). Through `GovernanceBase`'s own
 /// wrappers, so the masks and the registry reach the library as a token passes them.
 contract RelaxApp is GovernanceBase {
     uint256 internal constant ROLES =
-        (1 << 1) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 10) | (1 << 21) | (1 << 22);
-    uint256 internal constant VALID = ROLES | (1 << 8) | (1 << 9);
+        (1 << 1) | (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9) | (1 << 10) | (1 << 21) | (1 << 22);
+    uint256 internal constant VALID = ROLES;
     uint256 internal constant ONLY = (1 << 3) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 10) | (1 << 21);
     uint256 internal constant SCALAR = (1 << 1) | (1 << 6) | (1 << 21) | (1 << 22);
     uint256 internal constant DELAYED = (1 << 5) | (1 << 6) | (1 << 7);
@@ -59,6 +62,8 @@ contract RelaxApp is GovernanceBase {
     function _guardIn() internal pure override returns (bool) { return false; }
     function _guardOut(bool) internal pure override {}
     function _caller() internal view override returns (address) { return msg.sender; }
+    /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
+    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
     function _validBits() internal pure override returns (uint256) { return VALID; }
     function _roleBits() internal pure override returns (uint256) { return ROLES; }
     function _contractOnlyBits() internal pure override returns (uint256) { return ONLY; }
@@ -138,15 +143,18 @@ contract GovRelaxTest is Test {
         assertEq(a.holderCount(FREEZE), 1);
     }
 
-    /// Positive control beside it: the issuer takes only the set bits of 5-7.
+    /// Positive control beside it: the issuer takes only the set bits of 5-7 (round 3s: and the list bits 8, 9 while they can
+    /// be enabled, spec §6.3).
     function test_initIssuerTakesOnlySetBits() public {
         RelaxApp x = _app(D, _roles(nid(issuer), 0), (1 << 5) | (1 << 7));
         assertTrue(x.hasRole(FREEZE, nid(issuer)));
         assertTrue(x.hasRole(PAUSE, nid(issuer)));
         assertFalse(x.hasRole(FORCE, nid(issuer)));
+        assertTrue(x.hasRole(8, nid(issuer)) && x.hasRole(9, nid(issuer)), "round 3s: the list bits, off and enableable");
         x = new RelaxApp(address(reg));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, FREEZE));
-        x.init(1 << 1, nid(OWNER), D, _roles(nid(issuer), 0));
+        x.init(1 << 1, nid(OWNER), D, _roles(nid(issuer), 0)); // round 3s: a seat of the list bits alone (was RoleWithoutFeature)
+        assertFalse(x.hasRole(FREEZE, nid(issuer)));
+        assertTrue(x.hasRole(8, nid(issuer)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, RECORD));
         x.init(1 << 5, nid(OWNER), D, _roles(0, nid(compliance)));
     }
@@ -155,7 +163,7 @@ contract GovRelaxTest is Test {
 
     function test_relaxRevokeTakesTwoCalls() public {
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FREEZE, nid(issuer)), "proposal: still a holder");
         (uint64 eta, bytes32 proposer, bytes32 commit, bool live) = a.pendingGrant(FREEZE, nid(issuer));
         assertEq(eta, block.timestamp + D);
@@ -164,10 +172,10 @@ contract GovRelaxTest is Test {
         assertTrue(live);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotReady.selector, FREEZE, nid(issuer), eta));
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         vm.warp(eta);
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FREEZE, nid(issuer)), "confirm: gone");
         assertTrue(a.barred(FREEZE, nid(issuer)), "the owner's revoke bars at the confirm");
         assertFalse(_live(FREEZE, nid(issuer)));
@@ -175,27 +183,27 @@ contract GovRelaxTest is Test {
 
     function test_relaxRenounceTakesTwoCalls() public {
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FORCE, nid(issuer)));
         (,, bytes32 commit,) = a.pendingGrant(FORCE, nid(issuer));
         assertEq(commit, _commit(RENOUNCE, FORCE, nid(issuer)));
         vm.warp(block.timestamp + D);
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FORCE, nid(issuer)));
         assertFalse(a.barred(FORCE, nid(issuer)), "a renounce bars nothing");
     }
 
     function test_relaxDisableTakesTwoCalls() public {
         vm.prank(OWNER);
-        a.disableFeature(PAUSE);
+        a.disableFeature(PAUSE, EnvKit.codeUidOf(address(a)));
         assertTrue(a.features() & (1 << PAUSE) != 0, "proposal: the feature stays");
         (,, bytes32 commit, bool live) = a.pendingGrant(PAUSE, 0);
         assertEq(commit, _commit(DISABLE, PAUSE, 0));
         assertTrue(live, "keyed (bit, 0)");
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        a.disableFeature(PAUSE);
+        a.disableFeature(PAUSE, EnvKit.codeUidOf(address(a)));
         assertEq(a.features() & (1 << PAUSE), 0);
     }
 
@@ -218,52 +226,52 @@ contract GovRelaxTest is Test {
     function test_relaxSetGrantShortValidUntilTakesTwoCalls() public {
         uint64 cut = uint64(block.timestamp + D - 1);
         vm.prank(OWNER);
-        a.setGrant(PAUSE, nid(issuer), _t(cut, 0, false));
+        a.setGrant(PAUSE, nid(issuer), _t(cut, 0, false), EnvKit.codeUidOf(address(a)));
         assertEq(a.grantOf(PAUSE, nid(issuer)).validUntil, 0, "owner path, proposal: nothing written");
         assertTrue(_live(PAUSE, nid(issuer)));
         vm.prank(issuer);
         a.act(PAUSE, 0); // still acts
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        a.setGrant(PAUSE, nid(issuer), _t(cut, 0, false));
+        a.setGrant(PAUSE, nid(issuer), _t(cut, 0, false), EnvKit.codeUidOf(address(a)));
         assertEq(a.grantOf(PAUSE, nid(issuer)).validUntil, cut, "owner path, confirm: written");
         // positive control: a cut past `now + grantDelay` is a narrowing, one call
         uint64 far = uint64(block.timestamp + D + 1);
         vm.prank(OWNER);
-        a.setGrant(FREEZE, nid(issuer), _t(far, 0, false));
+        a.setGrant(FREEZE, nid(issuer), _t(far, 0, false), EnvKit.codeUidOf(address(a)));
         assertEq(a.grantOf(FREEZE, nid(issuer)).validUntil, far, "narrowing past the delay: at once");
 
         // leaf path: the issuer's delegable grant on 5 (owner, two calls), then a leaf with a short validUntil
         vm.prank(OWNER);
-        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true));
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true), EnvKit.codeUidOf(address(a)));
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true));
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true), EnvKit.codeUidOf(address(a)));
         uint64 leafCut = uint64(block.timestamp + D - 1);
         vm.prank(issuer);
-        a.setGrant(FREEZE, nid(other), _t(leafCut, 1, false));
+        a.setGrant(FREEZE, nid(other), _t(leafCut, 1, false), EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FREEZE, nid(other)), "leaf path, proposal: no leaf yet");
         (, bytes32 proposer,,) = a.pendingGrant(FREEZE, nid(other));
         assertEq(proposer, nid(issuer));
         vm.warp(block.timestamp + D);
         vm.prank(issuer);
-        a.setGrant(FREEZE, nid(other), _t(leafCut, 1, false));
+        a.setGrant(FREEZE, nid(other), _t(leafCut, 1, false), EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FREEZE, nid(other)), "leaf path, confirm: the leaf");
         // positive control: a leaf whose validUntil is past the delay is set at once
         address leaf2 = address(new Holder());
         vm.prank(issuer);
-        a.setGrant(FREEZE, nid(leaf2), _t(uint64(block.timestamp + D + 1), 1, false));
+        a.setGrant(FREEZE, nid(leaf2), _t(uint64(block.timestamp + D + 1), 1, false), EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FREEZE, nid(leaf2)));
     }
 
     /// RK-3: a proposal of each relaxation changes nothing: the role acts, `features` and `barred` stay.
     function test_proposeChangesNothing() public {
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
-        a.disableFeature(PAUSE);
+        a.disableFeature(PAUSE, EnvKit.codeUidOf(address(a)));
         assertEq(a.features(), FEATURES, "features unchanged");
         assertFalse(a.barred(FREEZE, nid(issuer)), "not barred");
         for (uint8 b = FREEZE; b <= PAUSE; ++b) {
@@ -278,153 +286,296 @@ contract GovRelaxTest is Test {
 
     function test_grantThenRevokeExclude() public {
         vm.prank(OWNER);
-        a.grantRole(FREEZE, nid(other));
+        a.grantRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, FREEZE, nid(other)));
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(other));
+        a.revokeRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
         vm.warp(block.timestamp + D);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, FREEZE, nid(other)));
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(other));
+        a.revokeRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
         // positive control: the grant confirms
         vm.prank(OWNER);
-        a.grantRole(FREEZE, nid(other));
+        a.grantRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FREEZE, nid(other)));
     }
 
     function test_revokeThenGrantExclude() public {
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(other)); // a non-holder: the bar at the confirm
+        a.revokeRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a))); // a non-holder: the bar at the confirm
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, FREEZE, nid(other)));
         vm.prank(OWNER);
-        a.grantRole(FREEZE, nid(other));
+        a.grantRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
-        a.revokeRole(PAUSE, nid(issuer));
+        a.revokeRole(PAUSE, nid(issuer), EnvKit.codeUidOf(address(a)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, PAUSE, nid(issuer)));
         vm.prank(OWNER);
-        a.setGrant(PAUSE, nid(issuer), _t(0, 5, true)); // a widening: a pure narrowing applies at once (spec §1.6)
+        a.setGrant(PAUSE, nid(issuer), _t(0, 5, true), EnvKit.codeUidOf(address(a))); // a widening: a pure narrowing applies at once (spec §1.6)
         // positive control: cancel, then the grant proposes
         vm.prank(OWNER);
-        a.cancelGrant(FREEZE, nid(other));
+        a.cancelGrant(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
-        a.grantRole(FREEZE, nid(other));
+        a.grantRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
         assertTrue(_live(FREEZE, nid(other)));
     }
 
-    function test_ownerCannotConfirmHolderRenounce() public {
+    /// Fable D P2-1: a holder's live pending does not block the owner. The owner's revoke proposes over the issuer's
+    /// renounce (it does not confirm it); the issuer can neither confirm nor replace nor cancel the owner's proposal; the
+    /// owner confirms after `grantDelay` and bars. Negative control: the holder over the owner's live pending still reverts.
+    function test_ownerProposesOverHolderPending() public {
         vm.prank(issuer);
-        a.renounceRole(FREEZE);
-        vm.warp(block.timestamp + D);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, FREEZE, nid(issuer)));
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
-        assertTrue(a.hasRole(FREEZE, nid(issuer)));
-        assertFalse(a.barred(FREEZE, nid(issuer)));
-        // positive control: the holder confirms its own
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a))); // proposes over the renounce
+        assertTrue(a.hasRole(FREEZE, nid(issuer)), "proposal only");
+        (uint64 eta, bytes32 proposer, bytes32 commit, bool live) = a.pendingGrant(FREEZE, nid(issuer));
+        assertEq(proposer, nid(OWNER));
+        assertEq(commit, _commit(REVOKE, FREEZE, nid(issuer)));
+        assertEq(eta, block.timestamp + D);
+        assertTrue(live);
         vm.prank(issuer);
-        a.renounceRole(FREEZE);
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, FREEZE, nid(issuer)));
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a))); // the squat: refused over the owner's proposal
+        vm.prank(issuer);
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(issuer)));
+        a.cancelGrant(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
+        vm.warp(eta);
+        vm.prank(OWNER);
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FREEZE, nid(issuer)));
+        assertTrue(a.barred(FREEZE, nid(issuer)));
+
+        // a delegable holder's leaf proposal at `(bit, X)` does not block the owner's grant to X either
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(0, 10, true), EnvKit.codeUidOf(address(a)));
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(0, 10, true), EnvKit.codeUidOf(address(a)));
+        vm.prank(issuer);
+        a.setGrant(PAUSE, nid(other), _t(uint64(block.timestamp + D - 1), 1, false), EnvKit.codeUidOf(address(a))); // a leaf proposal at (7, other)
+        (, proposer,,) = a.pendingGrant(PAUSE, nid(other));
+        assertEq(proposer, nid(issuer));
+        vm.prank(OWNER);
+        a.grantRole(PAUSE, nid(other), EnvKit.codeUidOf(address(a)));
+        (, proposer, commit,) = a.pendingGrant(PAUSE, nid(other));
+        assertEq(proposer, nid(OWNER));
+        assertEq(commit, _commit(1, PAUSE, nid(other)));
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.grantRole(PAUSE, nid(other), EnvKit.codeUidOf(address(a)));
+        assertTrue(a.hasRole(PAUSE, nid(other)));
+    }
+
+    /// The other proposer may still confirm its own pending when the owner does not propose over it (positive control).
+    function test_holderConfirmsOwnRenounce() public {
+        vm.prank(issuer);
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a)));
+        vm.warp(block.timestamp + D);
+        vm.prank(issuer);
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a)));
+        assertFalse(a.hasRole(FREEZE, nid(issuer)));
+        assertFalse(a.barred(FREEZE, nid(issuer)));
+    }
+
+    /// Fable re-check C1, C2: every word that narrows a delayed bit's holder is a cut. FORCE (scalar) rows: a `total`, a
+    /// `perWindow` and a raised `min` on the `WHOLE` issuer only propose (the issuer keeps forcing); a `LIMITED` root whose
+    /// `delegable` is dropped (its leaves would die at once) only proposes. Control: the same terms confirm after the delay.
+    function test_relaxSetGrantEveryNarrowingIsACut() public {
+        IGovernance.GrantTerms[3] memory f;
+        (f[0].max, f[0].total) = (NONE, 1);
+        (f[1].max, f[1].perWindow, f[1].window) = (NONE, 1, 1 days);
+        (f[2].max, f[2].min) = (NONE, 5);
+        for (uint256 i; i < 3; ++i) {
+            vm.prank(OWNER);
+            a.setGrant(FORCE, nid(issuer), f[i], EnvKit.codeUidOf(address(a)));
+            assertTrue(_live(FORCE, nid(issuer)), "FORCE narrowing: proposed");
+            assertTrue(a.hasRole(FORCE, nid(issuer)));
+            vm.prank(issuer);
+            a.act(FORCE, 10); // still WHOLE: 10 > total 1, perWindow 1, and below min 5 would fail if written
+            vm.prank(OWNER);
+            a.cancelGrant(FORCE, nid(issuer), EnvKit.codeUidOf(address(a)));
+        }
+        vm.prank(OWNER);
+        a.setGrant(FORCE, nid(issuer), f[0], EnvKit.codeUidOf(address(a)));
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(FORCE, nid(issuer), f[0], EnvKit.codeUidOf(address(a)));
+        assertEq(a.grantOf(FORCE, nid(issuer)).total, 1, "control: confirmed after the delay");
+
+        // C2: a LIMITED delegable root on FREEZE; dropping `delegable` is a cut
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true), EnvKit.codeUidOf(address(a)));
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true), EnvKit.codeUidOf(address(a)));
+        vm.prank(issuer);
+        a.setGrant(FREEZE, nid(other), _t(uint64(block.timestamp + D + 1), 1, false), EnvKit.codeUidOf(address(a))); // a leaf, at once
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, false), EnvKit.codeUidOf(address(a)));
+        assertTrue(a.grantOf(FREEZE, nid(issuer)).delegable, "delegable dropped: proposed only");
+        assertTrue(_live(FREEZE, nid(issuer)));
+        vm.prank(other);
+        a.act(FREEZE, 0); // the leaf lives until the confirm
+    }
+
+    /// Fable D P2-2, A-4: on a delayed bit a new or lower `maxUses`, or a lower `max`, is a cut like a `validUntil` cut: the
+    /// owner's call only proposes, the holder keeps acting until the confirm; the grantor's on its leaf likewise. Positive
+    /// controls: the same terms apply at once on an unmasked bit, and a delayed-bit narrowing of neither word applies at once.
+    function test_relaxSetGrantMaxUsesAndMaxAreCuts() public {
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 1, false), EnvKit.codeUidOf(address(a))); // WHOLE -> maxUses 1
+        assertEq(a.grantOf(FREEZE, nid(issuer)).maxUses, 0, "proposal: nothing written");
+        (, bytes32 proposer,, bool live) = a.pendingGrant(FREEZE, nid(issuer));
+        assertTrue(live);
+        assertEq(proposer, nid(OWNER));
+        for (uint256 i; i < 3; ++i) {
+            vm.prank(issuer);
+            a.act(FREEZE, 0); // still unbounded
+        }
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(FREEZE, nid(issuer), _t(0, 1, false), EnvKit.codeUidOf(address(a)));
+        assertEq(a.grantOf(FREEZE, nid(issuer)).maxUses, 1, "confirm: written");
+
+        // FORCE (scalar): a lower `max` waits
+        IGovernance.GrantTerms memory f;
+        f.max = 0;
+        vm.prank(OWNER);
+        a.setGrant(FORCE, nid(issuer), f, EnvKit.codeUidOf(address(a)));
+        assertTrue(_live(FORCE, nid(issuer)), "max cut: proposed");
+        vm.prank(issuer);
+        a.act(FORCE, 5);
+
+        // a LIMITED holder: a lower maxUses waits, an equal one is no cut
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(0, 10, true), EnvKit.codeUidOf(address(a)));
+        vm.warp(block.timestamp + D);
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(0, 10, true), EnvKit.codeUidOf(address(a)));
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(0, 9, true), EnvKit.codeUidOf(address(a)));
+        assertEq(a.grantOf(PAUSE, nid(issuer)).maxUses, 10, "LIMITED, lower maxUses: proposed");
+        vm.prank(OWNER);
+        a.cancelGrant(PAUSE, nid(issuer), EnvKit.codeUidOf(address(a)));
+        uint64 far = uint64(block.timestamp + D + 1);
+        vm.prank(OWNER);
+        a.setGrant(PAUSE, nid(issuer), _t(far, 10, true), EnvKit.codeUidOf(address(a))); // control: a narrowing of validUntil alone, past the delay
+        assertEq(a.grantOf(PAUSE, nid(issuer)).validUntil, far, "no cut: at once");
+
+        // leaf path: the grantor lowers its leaf's maxUses
+        vm.prank(issuer);
+        a.setGrant(PAUSE, nid(other), _t(far, 5, false), EnvKit.codeUidOf(address(a))); // a new leaf: at once
+        assertEq(a.grantOf(PAUSE, nid(other)).maxUses, 5);
+        vm.prank(issuer);
+        a.setGrant(PAUSE, nid(other), _t(far, 1, false), EnvKit.codeUidOf(address(a)));
+        assertEq(a.grantOf(PAUSE, nid(other)).maxUses, 5, "leaf cut: proposed");
+        assertTrue(_live(PAUSE, nid(other)));
+
+        // control: an unmasked bit (RECORD) takes the same cut at once
+        vm.prank(OWNER);
+        a.setGrant(RECORD, nid(compliance), _t(0, 1, false), EnvKit.codeUidOf(address(a)));
+        assertEq(a.grantOf(RECORD, nid(compliance)).maxUses, 1, "unmasked: at once");
     }
 
     /// The holder cannot turn the owner's revoke into its renounce; a grantor cannot confirm the owner's revoke of its leaf
     /// (same action, another proposer: `NotProposer`).
     function test_holderCannotConfirmOwnerRevoke() public {
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         vm.warp(block.timestamp + D);
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantTermsMismatch.selector, FREEZE, nid(issuer)));
-        a.renounceRole(FREEZE);
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
-        a.cancelGrant(FREEZE, nid(issuer));
+        a.cancelGrant(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
 
         // a leaf of the issuer on 5
         vm.prank(OWNER);
-        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true));
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true), EnvKit.codeUidOf(address(a)));
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true));
+        a.setGrant(FREEZE, nid(issuer), _t(0, 10, true), EnvKit.codeUidOf(address(a)));
         vm.prank(issuer);
-        a.setGrant(FREEZE, nid(other), _t(0, 1, false));
+        a.setGrant(FREEZE, nid(other), _t(0, 1, false), EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(other));
+        a.revokeRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
         vm.warp(block.timestamp + D);
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NotProposer.selector, FREEZE, nid(other), nid(OWNER)));
-        a.revokeRole(FREEZE, nid(other));
+        a.revokeRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FREEZE, nid(other)));
         assertFalse(a.barred(FREEZE, nid(other)));
         // positive control: the owner confirms its own, and bars
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(other));
+        a.revokeRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FREEZE, nid(other)));
         assertTrue(a.barred(FREEZE, nid(other)));
     }
 
-    function test_acceptOwnershipKillsPendingRelax() public {
+    function test_acceptAdminKillsPendingRelax() public {
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
-        a.disableFeature(PAUSE);
+        a.disableFeature(PAUSE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
-        a.transferOwnership(nid(NEXT));
+        a.transferAdmin(nid(NEXT), bytes32(0)); // a test app: no chain word
         assertTrue(_live(FREEZE, nid(issuer)), "control: live before the accept");
         vm.prank(NEXT);
-        a.acceptOwnership();
+        a.acceptAdmin();
         assertFalse(_live(FREEZE, nid(issuer)));
         assertFalse(_live(FORCE, nid(issuer)), "a holder's renounce dies too");
         assertFalse(_live(PAUSE, 0));
         vm.warp(block.timestamp + D);
         vm.prank(NEXT);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FREEZE, nid(issuer)), "the new owner proposes anew");
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FORCE, nid(issuer)), "the holder proposes anew");
         vm.prank(NEXT);
-        a.disableFeature(PAUSE);
+        a.disableFeature(PAUSE, EnvKit.codeUidOf(address(a)));
         assertTrue(a.features() & (1 << PAUSE) != 0);
     }
 
     function test_confirmAfterWindowProposesAgain() public {
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         vm.warp(block.timestamp + 2 * D + 1);
         assertFalse(_live(FREEZE, nid(issuer)));
         vm.expectEmit(true, true, false, true, address(a));
         emit IGovernance.RelaxProposed(FREEZE, nid(issuer), REVOKE, nid(OWNER), uint64(block.timestamp + D));
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FREEZE, nid(issuer)), "a late confirm only proposes");
         // positive control: in the new window it applies
         vm.warp(block.timestamp + 2 * D);
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FREEZE, nid(issuer)));
     }
 
     function test_cancelByProposer() public {
         vm.prank(issuer);
-        a.renounceRole(FREEZE);
+        a.renounceRole(FREEZE, EnvKit.codeUidOf(address(a)));
         vm.prank(STRANGER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, nid(STRANGER)));
-        a.cancelGrant(FREEZE, nid(issuer));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(STRANGER)));
+        a.cancelGrant(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         vm.prank(compliance); // a holder of another bit, not the proposer
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, nid(compliance)));
-        a.cancelGrant(FREEZE, nid(issuer));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(compliance)));
+        a.cancelGrant(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         vm.expectEmit(true, true, true, true, address(a));
         emit IGovernance.GrantCancelled(FREEZE, nid(issuer), nid(issuer));
         vm.prank(issuer);
-        a.cancelGrant(FREEZE, nid(issuer));
+        a.cancelGrant(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         (uint64 eta,,,) = a.pendingGrant(FREEZE, nid(issuer));
         assertEq(eta, 0);
         // positive control: the owner cancels any pending
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
-        a.cancelGrant(FORCE, nid(issuer));
+        a.cancelGrant(FORCE, nid(issuer), EnvKit.codeUidOf(address(a)));
         assertFalse(_live(FORCE, nid(issuer)));
     }
 
@@ -432,25 +583,25 @@ contract GovRelaxTest is Test {
 
     function test_unmaskedBitsOneCallAsToday() public {
         vm.prank(OWNER);
-        a.revokeRole(RECORD, nid(compliance));
+        a.revokeRole(RECORD, nid(compliance), EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(RECORD, nid(compliance)), "bit 10 is not delayed (runbook)");
         assertTrue(a.barred(RECORD, nid(compliance)));
         vm.prank(OWNER);
-        a.disableFeature(RECORD);
+        a.disableFeature(RECORD, EnvKit.codeUidOf(address(a)));
         assertEq(a.features() & (1 << RECORD), 0);
         // a grant keeps its two calls on every bit
         vm.prank(OWNER);
-        a.grantRole(1, nid(other));
+        a.grantRole(1, nid(other), EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(1, nid(other)));
     }
 
     function test_grantDelayZeroOneCall() public {
         a = _app(0, _roles(nid(issuer), nid(compliance)), FEATURES);
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FREEZE, nid(issuer)));
         vm.prank(issuer);
-        a.renounceRole(FORCE);
+        a.renounceRole(FORCE, EnvKit.codeUidOf(address(a)));
         assertFalse(a.hasRole(FORCE, nid(issuer)));
         vm.prank(OWNER);
         assertTrue(a.disableApplied(PAUSE));
@@ -460,10 +611,10 @@ contract GovRelaxTest is Test {
 
     function test_msigIssuerGranted() public {
         vm.prank(OWNER);
-        a.grantRole(FREEZE, MSIG);
+        a.grantRole(FREEZE, MSIG, EnvKit.codeUidOf(address(a)));
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        a.grantRole(FREEZE, MSIG);
+        a.grantRole(FREEZE, MSIG, EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FREEZE, MSIG));
         RelaxApp x = _app(D, _roles(MSIG, 0), FEATURES);
         assertTrue(x.hasRole(FORCE, MSIG), "init: an msig issuer");
@@ -475,30 +626,30 @@ contract GovRelaxTest is Test {
     function test_singleKeyDerivedIssuerRefused() public {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, FREEZE, SINGLE));
         vm.prank(OWNER);
-        a.grantRole(FREEZE, SINGLE);
+        a.grantRole(FREEZE, SINGLE, EnvKit.codeUidOf(address(a)));
         bytes32 unknown = keccak256("not registered");
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, RECORD, unknown));
         vm.prank(OWNER);
-        a.grantRole(RECORD, unknown);
+        a.grantRole(RECORD, unknown, EnvKit.codeUidOf(address(a)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, FREEZE, nid(STRANGER)));
         vm.prank(OWNER);
-        a.grantRole(FREEZE, nid(STRANGER)); // a native id without code
+        a.grantRole(FREEZE, nid(STRANGER), EnvKit.codeUidOf(address(a))); // a native id without code
         RelaxApp x = new RelaxApp(address(reg));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, FREEZE, SINGLE));
         x.init(FEATURES, nid(OWNER), D, _roles(SINGLE, 0));
         // positive control: the msig proposes
         vm.prank(OWNER);
-        a.grantRole(FREEZE, MSIG);
+        a.grantRole(FREEZE, MSIG, EnvKit.codeUidOf(address(a)));
         assertTrue(_live(FREEZE, MSIG));
     }
 
     function test_msigRefusedForRateAdmin() public {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, RATE, MSIG));
         vm.prank(OWNER);
-        a.grantRole(RATE, MSIG);
+        a.grantRole(RATE, MSIG, EnvKit.codeUidOf(address(a)));
         // positive control: a native id with code
         vm.prank(OWNER);
-        a.grantRole(RATE, nid(other));
+        a.grantRole(RATE, nid(other), EnvKit.codeUidOf(address(a)));
         assertTrue(_live(RATE, nid(other)));
     }
 
@@ -506,15 +657,15 @@ contract GovRelaxTest is Test {
         bytes32 self = nid(address(a));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, FREEZE, self));
         vm.prank(OWNER);
-        a.grantRole(FREEZE, self);
+        a.grantRole(FREEZE, self, EnvKit.codeUidOf(address(a)));
         RelaxApp x = new RelaxApp(address(reg));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, FREEZE, nid(address(x))));
         x.init(FEATURES, nid(OWNER), D, _roles(nid(address(x)), 0));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.OwnerAccountPool.selector, nid(address(x))));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminAccountPool.selector, nid(address(x))));
         x.init(FEATURES, nid(address(x)), D, _roles(0, 0));
         // positive control
         vm.prank(OWNER);
-        a.grantRole(FREEZE, nid(other));
+        a.grantRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
     }
 
     /// CTR-GOV-20 (owner 2026-11-05): bit 22 `OPERATOR_TRANSFER` takes any holder. An EOA (a clerk at the point of sale)
@@ -527,10 +678,10 @@ contract GovRelaxTest is Test {
         bytes32[2] memory ids = [nid(clerk), SINGLE];
         for (uint256 i; i < 2; ++i) {
             vm.prank(OWNER);
-            a.setGrant(OPERATOR, ids[i], t);
+            a.setGrant(OPERATOR, ids[i], t, EnvKit.codeUidOf(address(a)));
             vm.warp(block.timestamp + D);
             vm.prank(OWNER);
-            a.setGrant(OPERATOR, ids[i], t);
+            a.setGrant(OPERATOR, ids[i], t, EnvKit.codeUidOf(address(a)));
             assertTrue(a.hasRole(OPERATOR, ids[i]), "any holder of bit 22");
         }
         uint256 day = block.timestamp - block.timestamp % 1 days;
@@ -551,10 +702,10 @@ contract GovRelaxTest is Test {
         for (uint256 i; i < 5; ++i) {
             vm.prank(OWNER);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, only[i], nid(clerk)));
-            a.grantRole(only[i], nid(clerk));
+            a.grantRole(only[i], nid(clerk), EnvKit.codeUidOf(address(a)));
             vm.prank(OWNER);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleNotContract.selector, only[i], SINGLE));
-            a.grantRole(only[i], SINGLE);
+            a.grantRole(only[i], SINGLE, EnvKit.codeUidOf(address(a)));
         }
     }
 
@@ -564,10 +715,10 @@ contract GovRelaxTest is Test {
         bytes32[2] memory ids = [nid(op), SINGLE];
         for (uint256 i; i < 2; ++i) {
             vm.prank(OWNER);
-            a.grantRole(OPERATOR, ids[i]);
+            a.grantRole(OPERATOR, ids[i], EnvKit.codeUidOf(address(a)));
             vm.warp(block.timestamp + D);
             vm.prank(OWNER);
-            a.grantRole(OPERATOR, ids[i]);
+            a.grantRole(OPERATOR, ids[i], EnvKit.codeUidOf(address(a)));
             assertTrue(a.hasRole(OPERATOR, ids[i]));
         }
         vm.prank(op);
@@ -593,12 +744,12 @@ contract GovRelaxTest is Test {
     function test_roleConflictForceRecord_grant() public {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleConflict.selector, RECORD, nid(issuer)));
         vm.prank(OWNER);
-        a.grantRole(RECORD, nid(issuer));
+        a.grantRole(RECORD, nid(issuer), EnvKit.codeUidOf(address(a)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleConflict.selector, FORCE, nid(compliance)));
         vm.prank(OWNER);
-        a.grantRole(FORCE, nid(compliance));
+        a.grantRole(FORCE, nid(compliance), EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
-        a.grantRole(RECORD, nid(other)); // positive control
+        a.grantRole(RECORD, nid(other), EnvKit.codeUidOf(address(a))); // positive control
         assertTrue(_live(RECORD, nid(other)));
     }
 
@@ -607,9 +758,9 @@ contract GovRelaxTest is Test {
         (t.max, t.total) = (100, 100);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleConflict.selector, FORCE, nid(compliance)));
         vm.prank(OWNER);
-        a.setGrant(FORCE, nid(compliance), t);
+        a.setGrant(FORCE, nid(compliance), t, EnvKit.codeUidOf(address(a)));
         vm.prank(OWNER);
-        a.setGrant(FORCE, nid(other), t); // positive control
+        a.setGrant(FORCE, nid(other), t, EnvKit.codeUidOf(address(a))); // positive control
         assertTrue(_live(FORCE, nid(other)));
     }
 
@@ -617,16 +768,16 @@ contract GovRelaxTest is Test {
         IGovernance.GrantTerms memory t;
         (t.max, t.total, t.delegable) = (100, 100, true);
         vm.prank(OWNER);
-        a.setGrant(FORCE, nid(issuer), t);
+        a.setGrant(FORCE, nid(issuer), t, EnvKit.codeUidOf(address(a)));
         vm.warp(block.timestamp + D);
         vm.prank(OWNER);
-        a.setGrant(FORCE, nid(issuer), t);
+        a.setGrant(FORCE, nid(issuer), t, EnvKit.codeUidOf(address(a)));
         (t.total, t.delegable) = (10, false);
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleConflict.selector, FORCE, nid(compliance)));
-        a.setGrant(FORCE, nid(compliance), t);
+        a.setGrant(FORCE, nid(compliance), t, EnvKit.codeUidOf(address(a)));
         vm.prank(issuer); // positive control: a leaf on an id without RECORD
-        a.setGrant(FORCE, nid(other), t);
+        a.setGrant(FORCE, nid(other), t, EnvKit.codeUidOf(address(a)));
         assertTrue(a.hasRole(FORCE, nid(other)));
     }
 
@@ -635,7 +786,7 @@ contract GovRelaxTest is Test {
     function test_relaxProposedTopics() public {
         vm.recordLogs();
         vm.prank(OWNER);
-        a.revokeRole(FREEZE, nid(issuer));
+        a.revokeRole(FREEZE, nid(issuer), EnvKit.codeUidOf(address(a)));
         Vm.Log[] memory l = vm.getRecordedLogs();
         assertEq(l.length, 1);
         assertEq(l[0].topics.length, 3, "bit and account indexed");
@@ -646,7 +797,7 @@ contract GovRelaxTest is Test {
         // positive control: a grant still emits `GrantProposed`
         vm.recordLogs();
         vm.prank(OWNER);
-        a.grantRole(FREEZE, nid(other));
+        a.grantRole(FREEZE, nid(other), EnvKit.codeUidOf(address(a)));
         l = vm.getRecordedLogs();
         assertEq(l[0].topics[0], IGovernance.GrantProposed.selector);
     }

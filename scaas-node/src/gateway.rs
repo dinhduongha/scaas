@@ -128,8 +128,27 @@ pub struct MarketQuery {
 
 type Reply = (StatusCode, Json<Value>);
 
+/// Fable E N-8: every gateway error text is free of endpoint URLs ([`crate::chain::redact_urls`]).
 fn bad(msg: impl ToString) -> Reply {
-    (StatusCode::BAD_REQUEST, Json(json!({"error": msg.to_string()})))
+    (StatusCode::BAD_REQUEST, Json(json!({"error": crate::chain::redact_urls(&msg.to_string())})))
+}
+
+/// A PQZ fill's refusal as a reply: `PQZ_FEE_MISMATCH` is the job's own, 422 (job-api.md; Fable E N-11), though the lane keeps
+/// such a job queued (a decrease may restore the word); another rule 400, the chain 503.
+fn fill_reply(e: crate::guard::Refusal) -> Reply {
+    match e {
+        crate::guard::Refusal::Transport(r) if r.starts_with("PQZ_FEE_MISMATCH") => {
+            (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error": crate::chain::redact_urls(&r)})))
+        }
+        e => match SimError::from(e) {
+            SimError::Revert(r) => bad(r),
+            t => sim_reply(t),
+        },
+    }
+}
+
+fn unavailable(msg: impl ToString) -> Reply {
+    (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": crate::chain::redact_urls(&msg.to_string())})))
 }
 
 pub fn router(state: AppState) -> Router {
@@ -172,7 +191,7 @@ fn sig_bytes(s: &str) -> Result<Bytes, Reply> {
 fn sim_reply(e: SimError) -> Reply {
     match e {
         SimError::Revert(r) => bad(format!("simulation: {r}")),
-        SimError::Transport(r) => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": format!("rpc: {r}")}))),
+        SimError::Transport(r) => unavailable(format!("rpc: {r}")),
     }
 }
 
@@ -205,19 +224,28 @@ fn fresh(valid_until: U256) -> Result<u64, Reply> {
 
 /// The guard (the same one the lane runs again): a refusal is the client's 400 before any simulation, never a 202; then the
 /// simulation; G2: the typed digest computed here keeps one intent sent twice from being two outer transactions.
-async fn relay(c: &GwChain, mut w: Work) -> Reply {
+///
+/// Fable recheck 5 R5-4: a refusal (4xx) read while a failover endpoint answered is no verdict: 503, the client retries.
+async fn relay(c: &GwChain, w: Work) -> Reply {
+    let mark = c.chain.failover_answers();
+    let r = relay_checked(c, w).await;
+    if r.0.is_client_error() && c.chain.failover_answers() != mark {
+        return unavailable(crate::adapters::evm::failover_answer(r.1["error"].as_str().unwrap_or_default()));
+    }
+    r
+}
+
+async fn relay_checked(c: &GwChain, mut w: Work) -> Reply {
     if let Err(e) = c.guard.check(&c.chain, &w).await {
         return match SimError::from(e) {
             SimError::Revert(r) => bad(r),
             t => sim_reply(t),
         };
     }
-    // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt as on the lane (which reuses it), before the simulation
+    // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt as on the lane (which reuses it), before the simulation; round 3t: a
+    // `PQZ_FEE_MISMATCH` is the job's own (422 here), though the lane keeps such a job queued (a decrease may restore the word)
     if let Err(e) = c.guard.pqz_fill(&c.chain, &mut w).await {
-        return match SimError::from(e) {
-            SimError::Revert(r) => bad(r),
-            t => sim_reply(t),
-        };
+        return fill_reply(e);
     }
     if let Err(e) = c.chain.simulate(w.to, w.data.clone()).await {
         return sim_reply(e);
@@ -298,7 +326,7 @@ fn venue(s: &AppState, chain: u64) -> Result<Arc<Venue>, Reply> {
 fn venue_err(e: VenueError) -> Reply {
     match e {
         VenueError::Bad(m) => bad(m),
-        VenueError::Unavailable(m) => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error": m}))),
+        VenueError::Unavailable(m) => unavailable(m),
     }
 }
 
@@ -392,6 +420,24 @@ mod tests {
     use axum::body::Body;
     use axum::http::Request;
     use crate::abi::UAMetaTransfer;
+
+    /// Fable E N-8: a gateway error carries no endpoint URL (an RPC's host, a key in its path).
+    #[test]
+    fn gateway_errors_carry_no_endpoint_url() {
+        assert_eq!(bad("simulation: http://10.0.0.7:8545/KEY down").1 .0["error"], "simulation: <url> down");
+        assert_eq!(sim_reply(SimError::Transport("x https://h/k".into())).1 .0["error"], "rpc: x <url>");
+        assert_eq!(venue_err(VenueError::Unavailable("y (http://h)".into())).1 .0["error"], "y (<url>)");
+    }
+
+    /// Fable E N-11: a PQZ fill's `PQZ_FEE_MISMATCH` answers 422 as job-api.md documents; another transport error 503, a rule 400.
+    #[test]
+    fn pqz_fee_mismatch_is_422() {
+        use crate::guard::Refusal;
+        let m = crate::pqz::fee_mismatch(1, alloy::primitives::U256::from(2), alloy::primitives::U256::ZERO, 2, alloy::primitives::U256::ZERO);
+        assert_eq!(fill_reply(Refusal::Transport(m)).0, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(fill_reply(Refusal::Transport("proofSystemId(): timeout".into())).0, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(fill_reply(Refusal::Policy("BAD_PAYLOAD: no pqz_fee".into())).0, StatusCode::BAD_REQUEST);
+    }
     use crate::metatx::{Domain, UaMtx, MODE_RESTRICT_FEE_RECIPIENT, MODE_RESTRICT_RELAYER};
     use alloy::primitives::B256;
     use alloy::signers::SignerSync;
@@ -462,6 +508,48 @@ mod tests {
         assert_eq!(r.status(), StatusCode::BAD_REQUEST);
         let b = axum::body::to_bytes(r.into_body(), 4096).await.unwrap();
         assert!(String::from_utf8_lossy(&b).contains("CHAIN_UID_MISMATCH"), "{}", String::from_utf8_lossy(&b));
+        assert!(rx.try_recv().is_err(), "nothing queued");
+    }
+
+    /// Fable recheck 5 R5-4: the same refusal read on a failover endpoint (the first down) is no verdict: 503 with
+    /// `FAILOVER_ANSWER`, nothing queued. Control: `the_guard_refuses_before_the_simulation` (400 on the first endpoint).
+    #[tokio::test]
+    async fn a_refusal_on_a_failover_answer_is_503() {
+        let app = axum::Router::new().route("/", post(|Json(r): Json<Value>| async move {
+            let mut block: Value = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+            block["hash"] = json!(format!("{:#x}", B256::repeat_byte(0x24)));
+            Json(match r["method"].as_str().unwrap() {
+                "eth_chainId" => json!({"jsonrpc": "2.0", "id": r["id"], "result": "0x7"}),
+                "eth_blockNumber" => json!({"jsonrpc": "2.0", "id": r["id"], "result": "0x10"}),
+                "eth_getBlockByNumber" => json!({"jsonrpc": "2.0", "id": r["id"], "result": block}),
+                "eth_call" => json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("0x{:064x}", 1)}),
+                _ => json!({"jsonrpc": "2.0", "id": r["id"], "error": {"code": -32603, "message": "no simulation here"}}),
+            })
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let cfg = crate::config::ChainCfg { evm_chain_number: 7, rpc_urls: vec!["http://127.0.0.1:9".into(), url],
+            chain_uid: Some(B256::repeat_byte(0x24)), ..Default::default() };
+        let token = Address::repeat_byte(0xcd);
+        let tokens = Arc::new(RwLock::new(vec![token]));
+        let (tx, mut rx) = mpsc::channel(1);
+        let gw = GwChain { chain: Arc::new(Chain::with_signer(&cfg, alloy::signers::local::PrivateKeySigner::random()).unwrap()),
+            tx, tokens: tokens.clone(), dex: None, breaker: None, fee_recipient: None,
+            guard: Arc::new(crate::guard::Guard::new(&cfg, tokens).unwrap()) };
+        let app = router(AppState { chains: Arc::new([(7, gw)].into_iter().collect()) });
+        let body = json!({"chain": 7, "token": format!("{token:#x}"), "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)),
+            "members": []}, "m": {
+            "from": format!("{:#x}", Address::repeat_byte(1).into_word()), "to": format!("{:#x}", Address::repeat_byte(2).into_word()), "value": "1",
+            "entryRef": format!("{:#x}", B256::ZERO), "batch": "0", "nonce": "0", "validUntil": "99999999999", "mode": 0,
+            "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)}});
+        let req = Request::builder().method("POST").uri("/v1/ua-metatx").header("content-type", "application/json")
+            .body(Body::from(body.to_string())).unwrap();
+        let r = app.oneshot(req).await.unwrap();
+        assert_eq!(r.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let b = axum::body::to_bytes(r.into_body(), 4096).await.unwrap();
+        let b = String::from_utf8_lossy(&b);
+        assert!(b.contains("FAILOVER_ANSWER") && b.contains("CHAIN_UID_MISMATCH"), "{b}");
         assert!(rx.try_recv().is_err(), "nothing queued");
     }
 
@@ -562,6 +650,9 @@ mod tests {
                 Json(match m.as_str() {
                     "eth_getBlockByNumber" => json!({"jsonrpc": "2.0", "id": r["id"], "result": null}),
                     "eth_call" if input.starts_with(&reg) => json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("{:#x}", B256::ZERO)}),
+                    "eth_call" if crate::typed::testkit::domain_answer(&input, r["params"][0]["to"].as_str().unwrap_or_default().parse().unwrap_or_default()).is_some() =>
+                        json!({"jsonrpc": "2.0", "id": r["id"], "result": crate::typed::testkit::domain_answer(&input,
+                            r["params"][0]["to"].as_str().unwrap_or_default().parse().unwrap_or_default())}),
                     "eth_call" => json!({"jsonrpc": "2.0", "id": r["id"], "result": uid}),
                     "eth_getCode" => json!({"jsonrpc": "2.0", "id": r["id"], "result": code}),
                     "eth_estimateGas" => json!({"jsonrpc": "2.0", "id": r["id"], "result": "0x5208"}),
@@ -831,15 +922,15 @@ mod tests {
         assert!(body.contains("BAD_SIGNATURE"), "{body}");
         assert!(rx.try_recv().is_err(), "nothing queued");
         let calls = |m: &str| log.lock().unwrap().iter().filter(|x| *x == m).count();
-        assert_eq!((calls("eth_estimateGas"), calls("eth_call")), (0, 1), "nothing simulated: the one eth_call is the guard's chainUid()");
+        assert_eq!((calls("eth_estimateGas"), calls("eth_call")), (0, 2), "nothing simulated: the two eth_calls are the guard's chainUid() and eip712Domain()");
         let (app, mut rx, _) = gateway("0x60", vec![token]).await;
         let (st, body) = post_op_body(app, chain, &bad_op).await;
         assert_eq!(st, StatusCode::ACCEPTED, "a contract signer: {body}");
         assert!(rx.try_recv().is_ok());
-        // a wrong kind claim changes the digest: the same refusal
+        // a wrong kind claim would change the digest: refused by name before the signature (Fable E N-6)
         let mut lie = op.clone();
         lie["contract"] = json!("zether");
         let (app, _, _) = gateway("0x", vec![token]).await;
-        assert!(post_op_body(app, chain, &lie).await.1.contains("BAD_SIGNATURE"));
+        assert!(post_op_body(app, chain, &lie).await.1.contains("CONTRACT_KIND_MISMATCH"));
     }
 }

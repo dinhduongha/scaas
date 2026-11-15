@@ -15,6 +15,7 @@ import {RegulatedLib} from "../../src/regulated/RegulatedLib.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {ZetherLib} from "../../src/zether/ZetherLib.sol";
+import {UAAdmin} from "../../src/governance/UAAdmin.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IZetherVerifier} from "../../src/zether/IZetherVerifier.sol";
 
@@ -46,9 +47,9 @@ contract NamespaceProbe is UAMetaTxBase {
         (t.name, t.symbol) = ("N", "S");
         GovernanceLib.GovernanceStorage storage g = GovernanceLib.$();
         // every governance identity a UA id (CTR-GOV-01 Change): the owner words and the mapping keys are `bytes32`
-        (g.features, g.lockedFeatures, g.owner) = (0x81, 0x82, U);
-        (g.grantDelay, g.ownerGeneration) = (0x83, 0x84);
-        (g.pendingOwner, g.lastProposedAt, g.rescueTo) = (V, 0x85, B);
+        (g.features, g.lockedFeatures, g.admin) = (0x81, 0x82, U);
+        (g.grantDelay, g.adminGeneration) = (0x83, 0x84);
+        (g.pendingAdmin, g.lastProposedAt, g.rescueTo) = (V, 0x85, B);
         g.roles[1][U] = 2;
         (g.counts[1].holders, g.counts[1].roots) = (0x86, 0x87);
         (g.grants[1][U].grantorEpoch, g.grants[1][U].barred, g.grants[1][U].grantor) = (0x8c, true, V);
@@ -61,6 +62,12 @@ contract NamespaceProbe is UAMetaTxBase {
         w.legIndex[A] = 0x95;
         w.pending = WrappedLib.PendingRate(0x96, 0x97, 0x98, 0x99);
         (w.legCount, w.rateDelay, w.maxRateStepBps, w.maxSupply) = (0x9a, 0x9b, 0x9c, 0x9d);
+        l.ctl = 0x9e; // group 3l (wrap limits spec §5): byte 24 of slot a
+        // round 3zc (CTR-GOV-30): the wrap cap, the counter and the two pending caps, appended
+        (w.maxWrapSupply, w.totalWrapped) = (0x9f, 0xa0);
+        w.pendingMaxSupply = WrappedLib.CapChange(0xa4, 0xa5, 0xa6);
+        w.pendingMaxWrapSupply = WrappedLib.CapChange(0xa7, 0xa8, 0xa9);
+        _pokeWrapLimit();
         _ua().balance[bytes32(uint256(0xa1))] = 0xa2;
         _ua().cancelUsed[bytes32(uint256(0xa3))] = true;
         MtxPipelineLib._mtxStorage().nonce[bytes32(uint256(0xb1))][2] = 0xb2;
@@ -75,6 +82,7 @@ contract NamespaceProbe is UAMetaTxBase {
         r.orders[U] = IRegulatedToken.OrderRecord(V, U, 0xca, true, 0xcb, 0xcc);
         // pay-meta-tax T39 (spec §6.2): +5 `taxRecipient`, +6 `TaxRate`
         (r.taxRecipient, r.taxRate) = (bytes32(uint256(0xc0)), IRegulatedToken.TaxRate(0xbd, 0xbe, 0xbf));
+        r.listFlags[U] = 0xce; // round 3s (spec 2026-11-10-token-lists.md §4.1, §8): +7 `listFlags`, appended
         // plan T19c (no-decryption-oracle spec §4.4, §4.7): `scaas.pqz` and `scaas.zether`, read by `ua-rs` from the pin
         PqzCore.PqzStorage storage q = PqzCore.$();
         (q.pqz, q.disclosureMode, q.auditorMode, q.verifier) =
@@ -95,6 +103,10 @@ contract NamespaceProbe is UAMetaTxBase {
         // group 3h T58 (pqz-proof-path spec §2.2, §6): the account's `lastDebit`, the debit record appended
         (qa.lastDebit, q.debitRec[U][7]) = (0xdd, PqzCore.DebitRecord(0xde, 0xdf));
         q.proofStore = 1; // group 3h T60: byte 23 of slot 0
+        (q.pqzOwnKey, q.pqzOpening, qa.rollSeq) = (true, true, 0xb7); // the three-key model: bytes 24, 25 of slot 0; beside lastDebit
+        // round 3t (CTR-PQZ-36, verifier fee spec §4): slots 20-22 appended
+        (q.verifierFee, q.verifierFeeMax, q.verifierFeePending, q.verifierFeeEta) = (0xb1, 0xb2, 0xb3, 0xb4);
+        (q.verifierFeeProposer, q.verifierFeeProposerGeneration) = (bytes32(uint256(0xb5)), 0xb6);
         q.entryPtr[V] = A;
         (q.memos[V], q.memos[U]) = (NamespaceProbeIds.blob(58), NamespaceProbeIds.blob(21));
         ZetherLib.ZetherStorage storage z = ZetherLib.$();
@@ -110,6 +122,36 @@ contract NamespaceProbe is UAMetaTxBase {
         z.entries[V] = NamespaceProbeIds.blob(200);
         z.entryPtrs[V] = B;
         (z.memos[V], z.memos[U]) = (NamespaceProbeIds.blob(33), NamespaceProbeIds.blob(20));
+    }
+
+    /// Group 3l (wrap limits spec §5, R26): `scaas.wraplimit`, leg 1's two config words and two token-wide window words by
+    /// field, `U`'s quota word on leg 1, its member byte, the pending.
+    function _pokeWrapLimit() internal {
+        WrappedLib.WrapLimitStorage storage x = WrappedLib.wl();
+        WrappedLib.LegConfig storage c = x.config[1];
+        (c.wrapShortPerUser, c.wrapShortTokenWide, c.wrapShortPeriodMin, c.wrapLongPerUser) = (0x101, 0x102, 0x103, 0x104);
+        (c.wrapLongTokenWide, c.wrapLongPeriodMin, c.unitExp, c.decayDays) = (0x105, 0x106, 0x07, 0x108);
+        (c.unwrapShortPerUser, c.unwrapShortTokenWide, c.unwrapShortPeriodMin, c.unwrapLongPerUser) = (0x109, 0x10a, 0x10b, 0x10c);
+        (c.unwrapLongTokenWide, c.unwrapLongPeriodMin, c.unitExpCopy, c.decayDaysCopy) = (0x10d, 0x10e, 0x0f, 0x110);
+        WrappedLib.TokenWindow storage t = x.total[1][0];
+        (t.shortStart, t.shortUsed, t.longStart, t.longUsed) = (0x111, 0x112, 0x113, 0x114);
+        t = x.total[1][1];
+        (t.shortStart, t.shortUsed, t.longStart, t.longUsed) = (0x115, 0x116, 0x117, 0x118);
+        x.quota[U][1] = 0x119;
+        x.member[U] = 3;
+        (x.pendingCommit, x.pendingEta, x.pendingGeneration) = (bytes32(uint256(0x11a)), 0x11b, 0x11c);
+    }
+}
+
+/// Round 3r T5 (admin-not-owner spec §5.1): writes `scaas.admin` through `UAAdmin`'s own accessor.
+contract AdminProbe is UAAdmin {
+    function _adminRouter() internal pure override returns (address) {}
+
+    function _requireChainWord(bytes32) internal pure override {}
+
+    function poke() external {
+        AdminStorage storage s = _adminStorage();
+        (s.admin, s.pendingAdmin, s.adminGeneration) = (NamespaceProbeIds.U, NamespaceProbeIds.V, 0x12345678);
     }
 }
 
@@ -143,6 +185,7 @@ contract LayoutTest is V2Fixture {
         _pin("NormalPqzToken", "NormalPqzToken"); // the PQZ layer lives in `scaas.pqz`
         _pin("WrappedPqzToken", "WrappedPqzToken");
         _pin("SCaaSDex", "SCaaSDex"); // its state lives in `scaas.dex`
+        _pin("SCaaSDexLiquidityModule", "SCaaSDexLiquidityModule"); // the DEX's layout (M6): none of its own
         _pin("GovernanceRouter", "GovernanceRouter"); // no state of its own: nonces in `scaas.metatx`, the pair transient
     }
 
@@ -177,10 +220,10 @@ contract LayoutTest is V2Fixture {
         f = new F[](19);
         f[0] = F("features", 0, 0, 0x81, 32);
         f[1] = F("lockedFeatures", 0, 0, 0x82, 32);
-        f[2] = F("owner", 0, 0, u, 32);
-        f[3] = F("pendingOwner", 0, 0, v, 32);
+        f[2] = F("admin", 0, 0, u, 32);
+        f[3] = F("pendingAdmin", 0, 0, v, 32);
         f[4] = F("grantDelay", 0, 0, 0x83, 8);
-        f[5] = F("ownerGeneration", 0, 0, 0x84, 4);
+        f[5] = F("adminGeneration", 0, 0, 0x84, 4);
         f[6] = F("lastProposedAt", 0, 0, 0x85, 8);
         f[7] = F("roles[1][A]", 1, u, 2, 1);
         f[8] = F("counts[1].holders", 1, 0, 0x86, 16);
@@ -213,7 +256,18 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("maxRateStepBps", 0, 0, 0x9c, 2));
         f = _more(f, F("legs[1].capped", 1, 0, 1, 1)); // governance T9 (spec §5.2): appended, `reserve` unmoved
         f = _more(f, F("maxSupply", 0, 0, 0x9d, 32));
+        f = _more(f, F("legs[1].ctl", 1, 0, 0x9e, 1)); // group 3l: appended, slots b and c unmoved
+        // round 3zc (CTR-GOV-30): appended after `maxSupply`, nothing before them moved
+        f = _more(f, F("maxWrapSupply", 0, 0, 0x9f, 32));
+        f = _more(f, F("totalWrapped", 0, 0, 0xa0, 32));
+        f = _more(f, F("pendingMaxSupply.value", 0, 0, 0xa4, 32));
+        f = _more(f, F("pendingMaxSupply.eta", 0, 0, 0xa5, 8));
+        f = _more(f, F("pendingMaxSupply.generation", 0, 0, 0xa6, 4));
+        f = _more(f, F("pendingMaxWrapSupply.value", 0, 0, 0xa7, 32));
+        f = _more(f, F("pendingMaxWrapSupply.eta", 0, 0, 0xa8, 8));
+        f = _more(f, F("pendingMaxWrapSupply.generation", 0, 0, 0xa9, 4));
         _ns(address(p), "underlying", "scaas.underlying", f);
+        _wrapLimitPinned(address(p), u);
         f = new F[](2);
         f[0] = F("balance[0xa1]", 0xa1, 0, 0xa2, 32);
         f[1] = F("cancelUsed[0xa3]", 0xa3, 0, 1, 1);
@@ -245,6 +299,7 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("taxRate.ratePpm", 0, 0, 0xbd, 4));
         f = _more(f, F("taxRate.pendingPpm", 0, 0, 0xbe, 4));
         f = _more(f, F("taxRate.eta", 0, 0, 0xbf, 8));
+        f = _more(f, F("listFlags[A]", u, 0, 0xce, 1)); // round 3s: appended, slots +0..+6 unmoved
         _ns(address(p), "regulated", "scaas.regulated", f);
         // plan T19c: a `bytes` row's value is its length; a `mapping` row's `k2` is the key of the struct member's mapping
         f = new F[](29);
@@ -290,6 +345,15 @@ contract LayoutTest is V2Fixture {
         f = _more(f, F("debitRec[U][7].w0", u, 0, 0xde, 32));
         f = _more(f, F("debitRec[U][7].w1", u, 0, 0xdf, 32));
         f = _more(f, F("proofStore", 0, 0, 1, 1));
+        f = _more(f, F("verifierFee", 0, 0, 0xb1, 8));
+        f = _more(f, F("verifierFeeMax", 0, 0, 0xb2, 8));
+        f = _more(f, F("verifierFeePending", 0, 0, 0xb3, 8));
+        f = _more(f, F("verifierFeeEta", 0, 0, 0xb4, 8));
+        f = _more(f, F("verifierFeeProposer", 0, 0, 0xb5, 32));
+        f = _more(f, F("verifierFeeProposerGeneration", 0, 0, 0xb6, 4));
+        f = _more(f, F("pqzOwnKey", 0, 0, 1, 1));
+        f = _more(f, F("pqzOpening", 0, 0, 1, 1));
+        f = _more(f, F("acct[U][7].rollSeq", u, 0, 0xb7, 8));
         _ns(address(p), "pqz", "scaas.pqz", f);
         f = new F[](25);
         f[0] = F("verifier", 0, 0, a, 20);
@@ -318,6 +382,13 @@ contract LayoutTest is V2Fixture {
         f[23] = F("memos[U]", u, 0, 20, 32);
         f[24] = F("minDecoyFee", 0, 0, 0xf7, 32);
         _ns(address(p), "zether", "scaas.zether", f);
+        AdminProbe ap = new AdminProbe();
+        ap.poke();
+        f = new F[](3);
+        f[0] = F("admin", 0, 0, u, 32);
+        f[1] = F("pendingAdmin", 0, 0, v, 32);
+        f[2] = F("adminGeneration", 0, 0, 0x12345678, 4);
+        _ns(address(ap), "admin", "scaas.admin", f);
     }
 
     /// Plan T83: `scaas.pay.records` (`payRecords` in the pin): the root is ERC-7201 of its id and `PAY_RECORDS_SLOT`;
@@ -350,6 +421,29 @@ contract LayoutTest is V2Fixture {
                 + pin.readUintArray(".payRecords.inner")[i];
         uint256 mask = width == 32 ? type(uint256).max : (uint256(1) << (8 * width)) - 1;
         return (uint256(vm.load(p, bytes32(s))) >> (8 * pin.readUintArray(".payRecords.bytes")[i])) & mask;
+    }
+
+    /// Group 3l (wrap limits spec §5, R26): `scaas.wraplimit` at the probe's keys (leg 1, `U`).
+    function _wrapLimitPinned(address p, uint256 u) internal {
+        string[16] memory cfg = ["wrapShortPerUser", "wrapShortTokenWide", "wrapShortPeriodMin", "wrapLongPerUser",
+            "wrapLongTokenWide", "wrapLongPeriodMin", "unitExp", "decayDays", "unwrapShortPerUser", "unwrapShortTokenWide",
+            "unwrapShortPeriodMin", "unwrapLongPerUser", "unwrapLongTokenWide", "unwrapLongPeriodMin", "unitExpCopy", "decayDaysCopy"];
+        uint8[8] memory cw = [3, 8, 3, 3, 8, 3, 1, 2];
+        string[8] memory tot = ["[0].shortStart", "[0].shortUsed", "[0].longStart", "[0].longUsed", "[1].shortStart",
+            "[1].shortUsed", "[1].longStart", "[1].longUsed"];
+        uint8[4] memory tw = [3, 8, 3, 8];
+        F[] memory f = new F[](29);
+        for (uint256 i; i < 16; ++i) {
+            uint256 v = i % 8 == 6 ? 0x07 + 8 * (i / 8) : 0x101 + i;
+            f[i] = F(string.concat("config[1].", cfg[i]), 1, 0, v, cw[i % 8]);
+        }
+        for (uint256 i; i < 8; ++i) f[16 + i] = F(string.concat("total[1]", tot[i]), 1, 0, 0x111 + i, tw[i % 4]);
+        f[24] = F("quota[U][1]", u, 1, 0x119, 32);
+        f[25] = F("member[U]", u, 0, 3, 1);
+        f[26] = F("pendingCommit", 0, 0, 0x11a, 32);
+        f[27] = F("pendingEta", 0, 0, 0x11b, 8);
+        f[28] = F("pendingGeneration", 0, 0, 0x11c, 4);
+        _ns(p, "wrapLimit", "scaas.wraplimit", f);
     }
 
     function _more(F[] memory f, F memory x) internal pure returns (F[] memory g) {

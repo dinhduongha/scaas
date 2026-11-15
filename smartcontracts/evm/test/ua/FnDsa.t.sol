@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {PqVectors} from "./PqVectors.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
 import {Shake} from "../../src/ua/Shake.sol";
-import {Falcon, UAFndsaVerifier} from "../../src/ua/FnDsa.sol";
+import {Falcon, FndsaVerifier} from "../../src/ua/FnDsa.sol";
 
 /// `Falcon` at one `logn` (9: Falcon-512, 10: Falcon-1024).
 contract FnHarness {
@@ -68,31 +68,31 @@ contract FnDsaTest is PqVectors {
     }
 
     function test_kat_fndsa512() public {
-        _uaVector("fndsa512", address(new UAFndsaVerifier(PqUA.FNDSA512)), PqUA.FNDSA512);
+        _uaVector("fndsa512", address(new FndsaVerifier(PqUA.FNDSA512)), PqUA.FNDSA512);
     }
 
     /// CTR-UA-40: the `fndsa1024` row of pq_kat.json (clientkeys, noble 0.7.1) and its mutations through the verifier.
     function test_kat_fndsa1024() public {
-        _uaVector("fndsa1024", address(new UAFndsaVerifier(PqUA.FNDSA1024)), PqUA.FNDSA1024);
+        _uaVector("fndsa1024", address(new FndsaVerifier(PqUA.FNDSA1024)), PqUA.FNDSA1024);
     }
 
     /// The verifier's kind picks its parameters: one deployment per Falcon kind; any other kind is refused at construction, and
     /// neither size accepts the other's key or signature.
     function test_fndsaVerifier_kind() public {
         string memory kat = _kat();
-        UAFndsaVerifier v512 = new UAFndsaVerifier(PqUA.FNDSA512);
-        UAFndsaVerifier v1024 = new UAFndsaVerifier(PqUA.FNDSA1024);
+        FndsaVerifier v512 = new FndsaVerifier(PqUA.FNDSA512);
+        FndsaVerifier v1024 = new FndsaVerifier(PqUA.FNDSA1024);
         assertEq(v512.KIND(), PqUA.FNDSA512);
         assertEq(v1024.KIND(), PqUA.FNDSA1024);
         uint16[4] memory others = [uint16(0x0131), 0x0133, 0x0134, 0x0136];
         for (uint256 i; i < 4; ++i) {
             // through an external call: an expected revert of a CREATE made by the test itself ends the test as a pass (Foundry
             // 1.8.5), so nothing after it would run
-            vm.expectRevert(abi.encodeWithSelector(UAFndsaVerifier.UAFndsaKind.selector, others[i]));
+            vm.expectRevert(abi.encodeWithSelector(FndsaVerifier.UAFndsaKind.selector, others[i]));
             this.deployVerifier(others[i]);
         }
         string[2] memory names = ["fndsa512", "fndsa1024"];
-        UAFndsaVerifier[2] memory vs = [v512, v1024];
+        FndsaVerifier[2] memory vs = [v512, v1024];
         for (uint256 i; i < 2; ++i) {
             bytes memory pk = _k(kat, names[i], "pk");
             bytes memory sig = _k(kat, names[i], "sig");
@@ -126,7 +126,7 @@ contract FnDsaTest is PqVectors {
     }
 
     function deployVerifier(uint16 kind) external returns (address) {
-        return address(new UAFndsaVerifier(kind));
+        return address(new FndsaVerifier(kind));
     }
 
     /// CTR-UA-40: the NIST round-3 Falcon-1024 KATs (falcon1024-KAT.rsp of Falcon-Round3.zip, both SHA-256 pinned by
@@ -171,7 +171,7 @@ contract FnDsaTest is PqVectors {
     /// a 898-byte pk, "−0", a set unused bit, the unpadded form.
     function test_malformed_fndsa() public {
         string memory kat = _kat();
-        UAFndsaVerifier v = new UAFndsaVerifier(PqUA.FNDSA512);
+        FndsaVerifier v = new FndsaVerifier(PqUA.FNDSA512);
         bytes memory pk = _k(kat, "fndsa512", "pk");
         bytes memory sig = _k(kat, "fndsa512", "sig");
         bytes32 m = bytes32(_k(kat, "fndsa512", "ua_msg"));
@@ -193,7 +193,7 @@ contract FnDsaTest is PqVectors {
     /// The same for `fndsa1024` (pq_kat.json's row): headers `0x0A` / `0x3A`, 1,793 / 1,280 B, every pinned check.
     function test_malformed_fndsa1024() public {
         string memory kat = _kat();
-        UAFndsaVerifier v = new UAFndsaVerifier(PqUA.FNDSA1024);
+        FndsaVerifier v = new FndsaVerifier(PqUA.FNDSA1024);
         bytes memory pk = _k(kat, "fndsa1024", "pk");
         bytes memory sig = _k(kat, "fndsa1024", "sig");
         bytes32 m = bytes32(_k(kat, "fndsa1024", "ua_msg"));

@@ -81,6 +81,16 @@
    || d' (16 x u8) */
 #define PQZ_TX0_WIT_BYTES (6 * PQZ_N + 2 * 32 + 16 + 16)
 
+/* R_TXS / R_TXS0 (op 1 under PQZL_SPLIT_ID, three-key spec K3-4, CTR-PQZ-04's split randomness): R_TX / R_TX0 with
+   out = u || v_t || v_f || [v_a] || u_f, u_f appended (earlier offsets unchanged). The leg's (r, e1) give u, v_t, [v_a];
+   the sender's own (r_f, e1_f) give u_f = A^T r_f + e1_f and v_f. No length of op 1 equals another's. Witness: s_f
+   (int8) || e_f (int16) || r (int8) || e1 (int16) || r_f (int8) || e1_f (int16) || e2_t, e2_f, [e2_a] (16 x int16 each)
+   || d (16 x u8) || d' (16 x u8) */
+#define PQZ_TXS_STMT_BYTES (PQZ_TX_STMT_BYTES + PQZ_POLYVEC_BYTES)
+#define PQZ_TXS0_STMT_BYTES (PQZ_TX0_STMT_BYTES + PQZ_POLYVEC_BYTES)
+#define PQZ_TXS_WIT_BYTES (PQZ_TX_WIT_BYTES + 3 * PQZ_N)
+#define PQZ_TXS0_WIT_BYTES (PQZ_TX0_WIT_BYTES + 3 * PQZ_N)
+
 /* R_TXM (op 7, OP_TRANSFER_MULTI; P6-ANON plan §3, §4): M legs (a decoy is a leg of amount 0), G randomness groups of
    s legs (leg j in group j / s, v_f in group 0), auditor on (A = 1, one copy v_{a,j} per leg) or off; s = PQZ_S_AUD with
    the auditor (owner 2026-10-25, R0-1: the set's pqz_set.h), 4 without, G = ceil(M / s). The auditor copy of leg j uses
@@ -185,6 +195,10 @@ int pqz_enc_seed_win (const uint8_t *const pks[], unsigned int npk, const uint8_
    (PQZ_TXM_LPG (A) legs per group), then (group 0) pk_f, then the group's auditor copies at windows 0, 1, ... (the
    leg's position in its group), in that order. Pure hashing: no pqz_init needed. */
 void pqz_enc_group_seed (const uint8_t seed_enc[32], unsigned g, uint8_t out[32]);
+/* Opening tokens (spec K3-4, split randomness): the leg seed SHAKE256("SCAAS-PQZ-ENC-LEG-V1" || seed_enc || be4(0) ||
+   to_ua || pkt_hash)[0..32), pkt_hash = keccak256(pk_t); pqz_enc_seed with recipients pk_t, then pk_a encrypts the
+   leg from it, pqz_enc_seed of pk_f alone from seed_enc the sender's own v_f. Pure hashing: no pqz_init needed. */
+void pqz_enc_leg_seed (const uint8_t seed_enc[32], const uint8_t to_ua[32], const uint8_t pkt_hash[32], uint8_t out[32]);
 /* Dec of ct = u || v: M_i = round(w_i / Delta), noise_i = w_i - Delta M_i; value = sum M_i 16^i (the caller's) */
 int pqz_dec (const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16],
              int64_t noise[16]);

@@ -182,9 +182,10 @@ This reruns E-S0 (`estimator.txt`). Run from the repository root; it needs docke
 clone.
 
 ```sh
-git clone https://github.com/malb/lattice-estimator /tmp/le && git -C /tmp/le checkout 53da598
-pqz-core/pqzl/params/run.sh /tmp/le > /tmp/estimator.txt     # one container, no network inside
-diff pqz-core/pqzl/params/estimator.txt /tmp/estimator.txt   # must be empty
+T=$(mktemp -d)
+git clone https://github.com/malb/lattice-estimator "$T"/le && git -C "$T"/le checkout 53da598
+pqz-core/pqzl/params/run.sh "$T"/le > "$T"/estimator.txt     # one container, no network inside
+diff pqz-core/pqzl/params/estimator.txt "$T"/estimator.txt   # must be empty
 ```
 
 - `run.sh` refuses any other estimator commit and runs the pinned image with `--network none` and both mounts

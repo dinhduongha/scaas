@@ -48,8 +48,9 @@ contract RegulatedInitTest is RegFixture {
         }
     }
 
-    /// Spec §2.4: `FORCE ⇒ FREEZE ∧ RECORD`, `RECORD ⇒ FREEZE`, `termsHash ≠ 0 ⇔` any of 5-10, 21, the flags and the
-    /// registry with their bits; each `RegulatedConfigInvalid`. `MODERATE` alone (with terms) creates.
+    /// Spec §2.4: `FORCE ⇒ FREEZE ∧ RECORD`, `RECORD ⇒ FREEZE`, `termsHash ≠ 0 ⇔` any of 5-10, 21, 28 or a bit that can
+    /// still be enabled (round 3s, §5.5), a registry iff a mask; each `RegulatedConfigInvalid`. `MODERATE` alone (with
+    /// terms) creates; `ALLOWLIST` needs no flag and no registry (the token's own list).
     function test_regulatedConfigInvalid() public {
         bytes memory bad = abi.encodeWithSelector(IRegulatedToken.RegulatedConfigInvalid.selector);
         for (uint256 i; i < 2; ++i) {
@@ -67,20 +68,24 @@ contract RegulatedInitTest is RegFixture {
             c = _cfg(i);
             c.features &= ~REG_FEATURES; // no regulated bit, terms set
             (c.roles.issuer, c.roles.compliance) = (0, 0);
+            c.lockedFeatures = (1 << 8) | (1 << 9); // round 3s: and no list that could be enabled (§5.5)
             _refused(k, c, bad);
             c.reg.termsHash = 0;
             _create(k, c); // the control: a regulated kind with no control
-            c.reg.requiredFlags = 1; // flags without ALLOWLIST
+            c.reg.requiredFlags = 1; // a mask without a registry
             _refused(k, c, bad);
             c.reg.requiredFlags = 0;
             c.reg.deniedFlags = 1;
             _refused(k, c, bad);
             c.reg.deniedFlags = 0;
-            c.reg.complianceRegistry = address(0xC0FFEE); // a registry with neither list
+            c.reg.complianceRegistry = address(0xC0FFEE); // a registry with no mask
             _refused(k, c, bad);
             c = _cfg(i);
-            c.features |= 1 << 8; // ALLOWLIST without requiredFlags
+            c.features |= 1 << 28; // KYC without a registry
             _refused(k, c, bad);
+            c = _cfg(i);
+            c.features |= 1 << 8; // round 3s: ALLOWLIST is the token's list, no flag and no registry
+            _create(k, c);
             c = _cfg(i);
             c.features |= 1 << 21; // MODERATE with the other controls: allowed
             _create(k, c);
@@ -90,7 +95,7 @@ contract RegulatedInitTest is RegFixture {
         }
     }
 
-    /// A list on with its flags and a registry that is not the canonical code: refused `RegistryCodeMismatch` (plan T29;
+    /// A list on with its flags and a registry that is not the canonical code: refused `ComplianceRegistryCodeMismatch` (plan T29;
     /// T28 refused it `RegulatedNotBuilt`). The canonical registry: `Registry.t.sol`.
     function test_registryOfOtherCodeRefused() public {
         for (uint256 i; i < 2; ++i) {
@@ -98,7 +103,7 @@ contract RegulatedInitTest is RegFixture {
             c.features |= 1 << 9;
             (c.reg.deniedFlags, c.reg.complianceRegistry) = (4, address(0xC0FFEE));
             _refused(i == 0 ? K8 : K9, c,
-                abi.encodeWithSelector(IRegulatedToken.RegistryCodeMismatch.selector, address(0xC0FFEE), bytes32(0)));
+                abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryCodeMismatch.selector, address(0xC0FFEE), bytes32(0)));
         }
     }
 
@@ -112,7 +117,7 @@ contract RegulatedInitTest is RegFixture {
     }
 
     /// The holders (spec §2.4, RK-1, CTR-AS-03): `roles.issuer` / `roles.compliance` contracts (an EOA `RoleNotContract`),
-    /// never one id for `FORCE` and `RECORD` (`RoleConflict`); with no owner and the role bits unlocked, `OwnerHasHolders`.
+    /// never one id for `FORCE` and `RECORD` (`RoleConflict`); with no owner and the role bits unlocked, `AdminHasHolders`.
     function test_holderRules() public {
         for (uint256 i; i < 2; ++i) {
             IOpenFactory.TokenKind k = i == 0 ? K8 : K9;
@@ -126,9 +131,9 @@ contract RegulatedInitTest is RegFixture {
             c.roles.compliance = nid(issuer);
             _refused(k, c, abi.encodeWithSelector(IGovernance.RoleConflict.selector, uint8(10), nid(issuer)));
             c = _cfg(i);
-            c.owner = 0;
+            c.admin = 0;
             if (i == 0) c.roles.minter = 0;
-            _refused(k, c, abi.encodeWithSelector(IGovernance.OwnerHasHolders.selector, uint8(5)));
+            _refused(k, c, abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, uint8(5)));
             c.lockedFeatures = c.features & ~uint256(1); // locked: the holders survive (the control)
             _create(k, c);
         }

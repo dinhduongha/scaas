@@ -1591,8 +1591,8 @@ In `.github/workflows/ci.yml`, job `contracts`, after "forge test (default profi
       - name: size gate (CTR-TOK-24, ratchet)
         run: |
           python3 ../../scripts/size_gate.py --self-test
-          forge build src --sizes --json > /tmp/sizes.json || true
-          python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
+          forge build src --sizes --json > "$RUNNER_TEMP"/sizes.json || true
+          python3 ../../scripts/size_gate.py "$RUNNER_TEMP"/sizes.json size-baseline.json
 ```
 
 Update the comment block at the top of `ci.yml` with the size-gate command.

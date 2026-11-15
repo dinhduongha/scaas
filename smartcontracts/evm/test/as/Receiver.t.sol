@@ -19,6 +19,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan T29 (regulated-kinds spec §3.1 `canReceive`, §3.2 the receiver rows, §5 the call budget; CTR-AS-07): `canReceive`'s
 /// reasons 1-4 agree with `hasFlags`; each receiver row checks its receiver (transfer, mint, wrap, a fee leg's recipient,
@@ -39,7 +40,7 @@ contract ReceiverTest is RegFixture {
         assertEq(o, creg.hasFlags(a, req, den), string.concat(what, ": agrees with hasFlags"));
     }
 
-    /// Reasons (spec §3.1): 1 not attested or flags missing, 2 expired, 3 attester disabled, 4 denied; 0 when it may
+    /// Reasons (spec §3.1): 1 not attested or flags missing, 2 expired, 3 KYC provider disabled, 4 denied; 0 when it may
     /// receive. Both lists, `DENYLIST` alone, both off (no call).
     function test_canReceiveReasons() public {
         for (uint256 i; i < 2; ++i) {
@@ -57,10 +58,10 @@ contract ReceiverTest is RegFixture {
             _reason(t, b, false, 2, KYC, SANCTIONED, "expired");
             _attest(b, KYC, MAX);
             vm.prank(cadmin);
-            creg.setAttester(attester, false);
-            _reason(t, b, false, 3, KYC, SANCTIONED, "attester disabled");
+            creg.setKycProvider(nid(attester), false, EnvKit.regUidOf(address(creg)));
+            _reason(t, b, false, 3, KYC, SANCTIONED, "KYC provider disabled");
             vm.prank(cadmin);
-            creg.setAttester(attester, true);
+            creg.setKycProvider(nid(attester), true, EnvKit.regUidOf(address(creg)));
             _attest(b, KYC | SANCTIONED, MAX);
             _reason(t, b, false, 4, KYC, SANCTIONED, "denied");
             _attestAs(cadmin, b, ELIGIBLE, MAX);
@@ -99,7 +100,7 @@ contract ReceiverTest is RegFixture {
             bytes memory neBob = abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0));
             if (i == 0) {
                 vm.expectRevert(neBob);
-                NormalToken(t).mint(bob, 1);
+                NormalToken(t).mint(bob, 1, EnvKit.codeUidOf(address(t)));
             } else {
                 usd.mint(bob, 5);
                 vm.startPrank(bob);
@@ -120,10 +121,10 @@ contract ReceiverTest is RegFixture {
             _freeze(t, nid(alice));
             vm.prank(issuer);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(address(0xBE11)), uint8(0)));
-            IRegulatedToken(t).forceTransfer(rid, 5);
+            IRegulatedToken(t).forceTransfer(rid, 5, EnvKit.codeUidOf(address(t)));
             _attest(nid(address(0xBE11)), KYC, MAX);
             vm.prank(issuer);
-            IRegulatedToken(t).forceTransfer(rid, 5);
+            IRegulatedToken(t).forceTransfer(rid, 5, EnvKit.codeUidOf(address(t)));
             assertEq(IERC20(t).balanceOf(address(0xBE11)), 5);
             _unfreeze(t, nid(alice));
 
@@ -160,7 +161,7 @@ contract ReceiverTest is RegFixture {
             _budget(1, "direct transfer");
             if (i == 0) {
                 _countStart();
-                NormalToken(t).mint(bob, 1);
+                NormalToken(t).mint(bob, 1, EnvKit.codeUidOf(address(t)));
                 _budget(1, "mint");
             } else {
                 usd.mint(bob, 5);
@@ -175,7 +176,7 @@ contract ReceiverTest is RegFixture {
             _freeze(t, nid(alice));
             _countStart();
             vm.prank(issuer);
-            IRegulatedToken(t).forceTransfer(rid, 5);
+            IRegulatedToken(t).forceTransfer(rid, 5, EnvKit.codeUidOf(address(t)));
             _budget(1, "forceTransfer");
             _unfreeze(t, nid(alice));
             _countStart();
@@ -186,7 +187,7 @@ contract ReceiverTest is RegFixture {
         }
     }
 
-    /// A relayed typed transfer at a `FIXED` fee, `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`: three calls each
+    /// A relayed typed transfer at a `FIXED` fee, `payWithFee`, `payWithFeeToUA`, `mtxPayWithPayeeFee`: three calls each
     /// (the receiver; the fee recipient at its seat and at its move).
     function test_callBudgetFeePaths() public {
         for (uint256 i; i < 2; ++i) {
@@ -218,22 +219,22 @@ contract ReceiverTest is RegFixture {
             IUARegistry.UASig memory rs;
             (v, r, s) = vm.sign(ALICE_PK, NormalToken(t).mtxTransferDigest(p));
             ps.signature = abi.encodePacked(r, s, v);
-            (v, r, s) = vm.sign(BOB_PK, NormalToken(t).receiverFeeDigest(p, 3, feeTo, block.timestamp + 300));
+            (v, r, s) = vm.sign(BOB_PK, NormalToken(t).payeeFeeDigest(p, 3, feeTo, block.timestamp + 300));
             rs.signature = abi.encodePacked(r, s, v);
             _countStart();
             vm.prank(relayer);
-            NormalToken(t).mtxPayReceiverFee(p, ps, 3, feeTo, block.timestamp + 300, rs, PayMetaKit.meta("request-3"));
-            _budget(3, "mtxPayReceiverFee");
+            NormalToken(t).mtxPayWithPayeeFee(p, ps, 3, feeTo, block.timestamp + 300, rs, PayMetaKit.meta("request-3"));
+            _budget(3, "mtxPayWithPayeeFee");
         }
     }
 
-    /// `mtxWrapOrder` with a fee (kind 9 over a kind-0 underlying, `ALLOWLIST` on): three calls (the destination's mint, the
+    /// `mtxWrapOrder` with a fee (kind 9 over a kind-0 underlying, `KYC` on): three calls (the destination's mint, the
     /// submitter at the seat and at its mint).
     function test_callBudgetWrapOrder() public {
         address u = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("U", "U", 0, SUPPLY, alice,
             address(0))), "u");
         IFactoryToken.TokenConfig memory c = _cfg9();
-        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.FREEZE) | (1 << GovernanceBits.ALLOWLIST);
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.FREEZE) | (1 << GovernanceBits.KYC);
         (c.roles.compliance, c.reg.complianceRegistry, c.reg.requiredFlags) = (0, address(creg), KYC);
         c.legs[0] = IFactoryToken.Leg(u, 3, 1);
         address w = f.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(c), "w");

@@ -11,8 +11,10 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
+import {IComplianceRegistry} from "./IComplianceRegistry.sol";
 
 /// @title The bodies of the regulated controls (CTR-AS-02's shape, regulated-kinds spec §3.1, §3.3, §3.4), reached by
 ///        `DELEGATECALL` from the thin stubs of `RegulatedBase`: storage is the token's `scaas.regulated` namespace,
@@ -22,19 +24,27 @@ import {IOpenFactory} from "../factory/IOpenFactory.sol";
 /// @notice **UNAUDITED.** In the release's link closure of every regulated kind 8-13 (`Env.libs`, `libCodeHashes`); it
 ///         links `GovernanceLib` (`GovernanceUse.use`'s `useLimited`).
 library RegulatedLib {
-    /// @dev `controls` holds bits 5-10 of `features`, shifted down by 5 (I12).
+    /// @dev `controls` holds bits 5-10 of `features`, shifted down by 5, and bit 28 `KYC` in byte bit 6 (I12, round 3s):
+    ///      `controls == ((features >> 5) & 0x3F) | (((features >> 28) & 1) << 6)`.
     uint8 internal constant C_FREEZE = 1;
     uint8 internal constant C_PAUSE = 1 << 2;
     uint8 internal constant C_ALLOW = 1 << 3;
     uint8 internal constant C_DENY = 1 << 4;
     uint8 internal constant C_LISTS = C_ALLOW | C_DENY;
     uint8 internal constant C_RECORD = 1 << 5;
+    uint8 internal constant C_KYC = 1 << 6;
+    /// @dev Round 3s (spec §4.1): an account's byte in `listFlags`, both lists in one slot.
+    uint8 internal constant ALLOWED = 1;
+    uint8 internal constant DENIED = 2;
+    /// @dev The longest `setAllowed` / `setDenied` batch (spec §6.1): 3r's row bound, the node's decode bound.
+    uint256 internal constant MAX_LIST_BATCH = 256;
     /// @dev CTR-AS-05, CTR-AS-06 (spec §3.5).
     uint64 internal constant FREEZE_SPAN = 30 days;
     uint64 internal constant EPISODE_SPAN = 60 days;
     uint64 internal constant FREEZE_COOLDOWN = 30 days;
     uint64 internal constant PAUSE_SPAN = 7 days;
-    /// @dev The bits whose token carries `termsHash` (spec §2.4): 5-9, 10, 21.
+    /// @dev The bits whose token carries `termsHash` (spec §2.4): 5-9, 10, 21, 28; and each of 8, 9, 28 that can still be
+    ///      enabled (round 3s, spec §5.5).
     uint256 internal constant TERMS_BITS =
         GovernanceBits.REGULATED | (1 << GovernanceBits.RECORD) | (1 << GovernanceBits.MODERATE);
 
@@ -52,6 +62,7 @@ library RegulatedLib {
         mapping(bytes32 recordId => IRegulatedToken.OrderRecord) orders;  // +4
         bytes32 taxRecipient;                                             // +5 (pay-meta-tax spec §6.2)
         IRegulatedToken.TaxRate taxRate;                                  // +6
+        mapping(bytes32 account => uint8) listFlags;                      // +7 (round 3s, spec §4.1): ALLOWED | DENIED
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.regulated")) - 1)) & ~bytes32(uint256(0xff))
@@ -86,12 +97,19 @@ library RegulatedLib {
 
     // ------------------------------------------------------------------ init (spec §2.4)
 
-    /// @notice The checks of spec §2.4 on the factory's raw `initArgs`, before the kind's own init and any mint, and the
+    /// @notice The checks of spec §2.4 (round 3s: §3's rows) on the factory's raw `initArgs`, before the kind's own init and any mint, and the
     ///         namespace written from them. `valid` is the kind's `_validBits()`: a bit outside it is refused first, as
     ///         `GovernanceLib.init` would (bit 8 on 10-13). The roles' holder rules, `RoleConflict` and the owner-0 rule are
-    ///         `GovernanceLib.init`'s; the initial-supply recipient's `R` is the mint's own `_regMove`. A registry must
-    ///         carry `registryCodehash`, the release's `REGISTRY_CODEHASH` (F-11), and is written in slot +0.
-    function init(bytes calldata initArgs, uint256 valid, bytes32 registryCodehash, address uaRegistry) public {
+    ///         `GovernanceLib.init`'s; the initial-supply recipient's `R` is the mint's own `_regMove`. A compliance
+    ///         registry must carry `complianceRegistryCodehash`, the release's `COMPLIANCE_REGISTRY_CODEHASH` (F-11), and its
+    ///         `govRouter()` must be 0 or `govRouter`, the token's own `ChainEnv.govRouter` (round 3r, spec
+    ///         2026-11-10-admin-not-owner.md §5.3, Fable P1-1: the code hash pins the code, not the router, so another
+    ///         router could answer `subject() = admin`); it is written in slot +0. The `govRouter()` read is a plain call
+    ///         made only after the code-hash check: on the canonical runtime it is a storage read, and any failure reverts
+    ///         the creation (fail closed).
+    function init(bytes calldata initArgs, uint256 valid, bytes32 complianceRegistryCodehash, address uaRegistry,
+        address govRouter) public
+    {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         uint256 f = cfg.features;
         if (f & ~valid != 0) {
@@ -100,25 +118,67 @@ library RegulatedLib {
             revert IGovernance.FeatureInvalidForKind(b);
         }
         IFactoryToken.RegulatedParams memory p = cfg.reg;
+        address reg = p.complianceRegistry;
         bool freeze_ = f & (1 << GovernanceBits.FREEZE) != 0;
         bool record = f & (1 << GovernanceBits.RECORD) != 0;
-        bool allow = f & (1 << GovernanceBits.ALLOWLIST) != 0;
-        bool deny = f & (1 << GovernanceBits.DENYLIST) != 0;
+        // round 3s (spec §3): `KYC ⇒ registry`; `registry ⇔ masks` (the registry may be set while `KYC` is off, to enable
+        // later); no required mask where bit 8 is not valid (10-13: a shielded receiver cannot be checked, I9); `termsHash`
+        // for each bit of `TERMS_BITS` set or of 8, 9, 28 that can still be enabled (§5.5)
         if ((f & (1 << GovernanceBits.FORCE) != 0 && !record) || (record && !freeze_)
-            || allow != (p.requiredFlags != 0) || deny != (p.deniedFlags != 0)
-            || (p.complianceRegistry != address(0)) != (allow || deny) || (p.termsHash != 0) != (f & TERMS_BITS != 0)
+            || (f & (1 << GovernanceBits.KYC) != 0 && reg == address(0))
+            || (reg != address(0)) != ((p.requiredFlags | p.deniedFlags) != 0)
+            || (valid & (1 << GovernanceBits.ALLOWLIST) == 0 && p.requiredFlags != 0)
+            || (p.termsHash != 0) != (f & TERMS_BITS != 0
+                || GovernanceBits.enableable(f, cfg.lockedFeatures, valid, cfg.admin, reg != address(0)) != 0)
             || (p.taxRecipient != 0) != (f & (1 << GovernanceBits.TAX) != 0))
         {
             revert IRegulatedToken.RegulatedConfigInvalid();
         }
-        address reg = p.complianceRegistry;
-        if (reg != address(0) && reg.codehash != registryCodehash) {
-            revert IRegulatedToken.RegistryCodeMismatch(reg, reg.codehash);
+        if (reg != address(0)) {
+            if (reg.codehash != complianceRegistryCodehash) {
+                revert IRegulatedToken.ComplianceRegistryCodeMismatch(reg, reg.codehash);
+            }
+            address got = IComplianceRegistry(reg).govRouter();
+            if (got != address(0) && got != govRouter) revert IRegulatedToken.ComplianceRegistryRouterMismatch(reg, got);
         }
         RegulatedStorage storage s = $();
-        (s.complianceRegistry, s.controls) = (reg, uint8(f >> GovernanceBits.FREEZE) & 0x3F);
+        (s.complianceRegistry, s.controls) = (reg, mirror(f));
         (s.requiredFlags, s.deniedFlags, s.termsHash) = (p.requiredFlags, p.deniedFlags, p.termsHash);
         if (p.taxRecipient != 0) _taxRecipient(s, p.taxRecipient, uaRegistry); // the rate starts at 0
+        // round 3s (spec §3, §6.3, Fable P1-2): under `ALLOWLIST` the initial supply's holder is listed before its mint
+        if (f & (1 << GovernanceBits.ALLOWLIST) != 0 && cfg.initialSupply != 0) {
+            bytes32 h = MetaTxLib.pad(cfg.initialHolder);
+            s.listFlags[h] = ALLOWED;
+            emit IRegulatedToken.AllowedSet(h, 0, true);
+        }
+    }
+
+    /// @notice I12: the `controls` byte of `features` (bits 5-10 shifted down by 5, `KYC` in byte bit 6).
+    function mirror(uint256 f) internal pure returns (uint8) {
+        return uint8(f >> GovernanceBits.FREEZE) & 0x3F | uint8((f >> GovernanceBits.KYC) & 1) << 6;
+    }
+
+    // ------------------------------------------------------------------ the lists (round 3s, spec §6.1, §6.3)
+
+    /// @notice `setAllowed` (`bit` 8, `flag` `ALLOWED`) and `setDenied` (9, `DENIED`), at once both ways: the role as
+    ///         `GovernanceUse.use` checks it, without its feature test (a holder writes a dormant list, §6.3), then `1 ≤
+    ///         length ≤ MAX_LIST_BATCH`, each account not 0; the other flag never touched; one event per account, `by` the
+    ///         subject.
+    function setList(uint8 bit, uint8 flag, bytes32[] calldata accounts, bool on, bytes32 subject) public {
+        uint8 role = GovernanceLib.$().roles[bit][subject];
+        if (role == 0) revert IGovernance.MissingRole(bit, subject);
+        if (role == GovernanceLib.LIMITED) GovernanceLib.useLimited(bit, subject, 0);
+        uint256 n = accounts.length;
+        if (n == 0 || n > MAX_LIST_BATCH) revert IRegulatedToken.ListBatchInvalid(n);
+        mapping(bytes32 => uint8) storage m = $().listFlags;
+        for (uint256 i; i < n; ++i) {
+            bytes32 a = accounts[i];
+            if (a == 0) revert IRegulatedToken.ListAccountZero();
+            uint8 fl = m[a];
+            m[a] = on ? fl | flag : fl & ~flag;
+            if (flag == ALLOWED) emit IRegulatedToken.AllowedSet(a, subject, on);
+            else emit IRegulatedToken.DeniedSet(a, subject, on);
+        }
     }
 
     // ------------------------------------------------------------------ TAX (pay-meta-tax spec §6, bit 23)
@@ -341,7 +401,8 @@ library RegulatedLib {
     // ------------------------------------------------------------------ OPERATOR_TRANSFER (spec §3.4, CTR-GOV-20)
 
     /// @notice Bit 22 by `use` with the amount (any holder; `LIMITED` debits its window), then the refusals of CTR-GOV-08:
-    ///         `amount` 0, `ref` 0, `from == to`, 0, either pool or the token on either side, a native `from` with code, an
+    ///         `amount` 0, `ref` 0, `from == to`, 0, either pool or the token on either side, a native `from` with code
+    ///         (`SigCheck.isContract`: an EIP-7702 designator account is an EOA, CTR-UA-24; Fable A-2), an
     ///         unregistered or non-SIGNING derived `to` (`_checkTo`). The token then moves on `_uaMove` (hooked: `P`,
     ///         `F(from)`, `R(to)`): public balances only (CTR-GOV-13), never a confidential slot.
     function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref, bytes32 subject, address uaRegistry)
@@ -351,7 +412,7 @@ library RegulatedLib {
         if (amount == 0) revert IRegulatedToken.AmountZero();
         if (ref == 0) revert IRegulatedToken.RefRequired();
         if (from == 0 || from == to || _pool(from)
-            || (UAKinds.inNativeSpace(from) && address(uint160(uint256(from))).code.length != 0))
+            || (UAKinds.inNativeSpace(from) && SigCheck.isContract(address(uint160(uint256(from))))))
         {
             revert IRegulatedToken.OperatorTargetRefused(from);
         }

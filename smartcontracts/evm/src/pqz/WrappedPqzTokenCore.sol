@@ -41,8 +41,8 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
         "UAPqzUnshieldUnwrap(bytes32 from,PqzBurnArgs args,Unwrap unwrap,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom)Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"
     );
 
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; no
-    ///      `implArgs`. The env (`deps[ENV_PQZ_VERIFIER]` the release's `UAPqzVerifier`, CTR-ZTH-20 / CTR-PQZ-10; a
+    /// @dev The factory's append (`OpenFactory.deployTokenImplementation`, chain-neutral spec §2.1): its address; no
+    ///      `implArgs`. The env (`deps[ENV_PQZ_VERIFIER]` the release's `PqzKeyVerifier`, CTR-ZTH-20 / CTR-PQZ-10; a
     ///      registry) is checked by `validateEnv` (`PqzStateLib`).
     constructor(address factory_, bytes memory implArgs) WrappedTokenCore(factory_, implArgs) {}
 
@@ -68,6 +68,11 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
         return GovernanceBits.WRAPPED_CONTRACT_ONLY;
     }
 
+    /// @dev `WrappedToken`'s scalars (bit 27, group 3l R27), restated for the second base.
+    function _scalarBits() internal pure virtual override(MetaTokenBase, WrappedTokenCore) returns (uint256) {
+        return WrappedTokenCore._scalarBits();
+    }
+
     /// @dev Never reached: `_initRaw` is the kind's init.
     function _init(IFactoryToken.TokenConfig memory) internal override(MetaTokenBase, WrappedTokenCore) {}
 
@@ -84,7 +89,7 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
     function _mtxWrapShieldBody(address underlying, uint256 amountIn, bytes32 toUA) internal {
         _regPayer();
         address m = _msgSender();
-        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply());
+        (,, uint256 minted) = WrappedLib.wrap(WrappedLib.indexOf(underlying), amountIn, m, msg.value, totalSupply(), toUA);
         uint256 scale = PqzCore.$().shieldScale;
         if (minted % scale != 0) revert IPqzToken.AmountNotScaled(minted, scale);
         PqzStateLib.shield(toUA, minted / scale, m, _registry());
@@ -106,10 +111,10 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
         IUARegistry.UASig calldata pqzAuth, bytes calldata accHint, IPqzToken.PqzSignedVerdict calldata pqzVerdict) internal {
         uint256 i = WrappedLib.indexOf(x.underlying);
         uint256 wrapped = x.amount * PqzCore.$().shieldScale;
-        WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut); // before the proof (spec §5.4)
+        WrappedLib.quoteTo(i, x.recipient, wrapped, x.minOut, b.fromUA); // before the proof (spec §5.4); 3l: the proof's sender
         _burn(_envUnwrap(x, _ticketBinding()), b, proof, pqzAuth, accHint, pqzVerdict);
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped);
-        WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut);
+        WrappedLib.payOutTo(i, x.recipient, wrapped, x.minOut, b.fromUA);
     }
 
     /// @notice The signed form over `UAPqzUnshieldUnwrap` (R36: native and derived ids), the `Unwrap` leg a nested struct.
@@ -155,13 +160,14 @@ abstract contract WrappedPqzTokenCore is WrappedTokenCore, PqzLayer {
 
     /// @notice As `WrappedToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
     function _disableFeatureBody(uint8 bit) internal virtual override(GovernanceBaseCore, WrappedTokenCore) {
+        _wrapControlsOff(bit); // group 3l
         bool applied = GovernanceLib.disableFeature(bit, _govSubject(), _delayedRelaxBits());
         if (applied && bit == GovernanceBits.RATE_ADJUSTABLE) WrappedLib.dropPending();
     }
 
     /// @notice The collateral check of a rate change: `totalSupply()` (the shielded value sits in `SHIELD_POOL`, D19).
-    function _executeRateBody() internal override {
-        WrappedLib.executeRate(_govSubject(), totalSupply());
+    function _executeRateBody(bytes32 chainUid_) internal override {
+        WrappedLib.executeRate(_holderOnChain(GovernanceBits.RATE_ADJUSTABLE, chainUid_), totalSupply());
     }
 
     // ------------------------------------------------------------------ the layer's hooks

@@ -1,0 +1,74 @@
+[
+ {
+  "id": "lib-no-hash-rebuild",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: the hash is not app || contents: 0x1626ba7e00000000000000000000000000000000000000000000000000000000 != 0xffffffff0000000000000000000000000000000000000000"
+ },
+ {
+  "id": "lib-typed-no-wallet-domain",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: positive control: TypedDataSign, implicit: 0xffffffff00000000000000000000000000000000000000000000000000000000 != 0x1626ba7e000000000000000000000000000000"
+ },
+ {
+  "id": "lib-personal-no-domain",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: positive control: PersonalSign: 0xffffffff00000000000000000000000000000000000000000000000000000000 != 0x1626ba7e00000000000000000000000000000000000000000"
+ },
+ {
+  "id": "lib-lowercase-allowed",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: contentsName starting a-z: 0x1626ba7e00000000000000000000000000000000000000000000000000000000 != 0xffffffff0000000000000000000000000000000000000000000000"
+ },
+ {
+  "id": "lib-explicit-name-wrong",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: positive control: TypedDataSign, explicit: 0xffffffff00000000000000000000000000000000000000000000000000000000 != 0x1626ba7e000000000000000000000000000000"
+ },
+ {
+  "id": "lib-implicit-type-truncated",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: positive control: TypedDataSign, implicit: 0xffffffff00000000000000000000000000000000000000000000000000000000 != 0x1626ba7e000000000000000000000000000000"
+ },
+ {
+  "id": "lib-forbidden-off",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: contentsName holding a comma: 0x1626ba7e00000000000000000000000000000000000000000000000000000000 != 0xffffffff0000000000000000000000000000000000000000000"
+ },
+ {
+  "id": "lib-length-guard-off",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: panic: arithmetic underflow or overflow (0x11)] test_nativeOwnerTypedDataSignBoundToTheWallet() (gas: 2867252)"
+ },
+ {
+  "id": "ska-raw-fallback",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: the raw hash: 0x1626ba7e00000000000000000000000000000000000000000000000000000000 != 0xffffffff00000000000000000000000000000000000000000000000000000000] t"
+ },
+ {
+  "id": "ska-detect-removed",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: EvmError: Revert] test_erc7739IsBoundToTheAccount() (gas: 175650)"
+ },
+ {
+  "id": "mw-raw",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: positive control: a native owner's ECDSA, PersonalSign: 0xffffffff00000000000000000000000000000000000000000000000000000000 != 0x1626ba7e00000000000000000"
+ },
+ {
+  "id": "mw-detect-for-derived",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: derived owner: no detection answer: 0x7739000100000000000000000000000000000000000000000000000000000000 != 0xffffffff0000000000000000000000000000000000000"
+ }
+]

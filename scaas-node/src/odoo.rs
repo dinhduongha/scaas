@@ -101,8 +101,12 @@ pub struct Job {
     /// domain name. An `op` names its own.
     #[serde(default)]
     pub contract: Option<String>,
-    /// Receiver-pays (job-api.md): not built in the node, so a job carrying it is refused (`work_from_job`), never
+    /// Payee fee (job-api.md): not built in the node, so a job carrying it is refused (`work_from_job`), never
     /// relayed as a plain transfer that drops the payee's fee authorization (review T2 m5).
+    #[serde(default)]
+    pub payee_fee: Option<Value>,
+    /// The name of `payee_fee` before the payee-fee rename (owner 2026-11-12, CTR-MTX-86), read only to refuse it by name
+    /// (`RECEIVER_FEE_REFUSED`), never relayed and never silently `dead`.
     #[serde(default)]
     pub receiver_fee: Option<Value>,
     /// A pay-meta `metatx` job (CTR-MTX-26, `struct = transfer`): `salt` (bytes32) and `meta` (hex) the payment id
@@ -211,7 +215,12 @@ impl Odoo {
     }
 
     pub async fn relay_report(&self, r: &Report) -> Result<()> {
-        let _: Value = self.call("blockchain.relay.job", "relay_report", serde_json::to_value(r)?).await?;
+        let mut v = serde_json::to_value(r)?;
+        // Fable E N-8: no endpoint URL in a job's error (the one sink of every runner's report)
+        if let Some(e) = r.error.as_deref() {
+            v["error"] = json!(crate::chain::redact_urls(e));
+        }
+        let _: Value = self.call("blockchain.relay.job", "relay_report", v).await?;
         Ok(())
     }
 

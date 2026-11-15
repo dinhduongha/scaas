@@ -27,7 +27,7 @@ export RUSTFLAGS="-C passes=sancov-module -C llvm-args=-sanitizer-coverage-level
 -C llvm-args=-sanitizer-coverage-trace-compares"
 cargo build --release --offline --target $TRIPLE $F
 LIB=$CARGO_TARGET_DIR/$TRIPLE/release/libpqz_fuzz.a
-for t in precompile mutate codec; do
+for t in precompile mutate codec offchain; do
   clang-18 -g -O1 -fsanitize=fuzzer,address,undefined -o "$B/$t$S" "targets/$t.c" "$LIB" -lpthread -ldl -lm -lrt -lgcc_s
 done
-ls -l "$B/precompile$S" "$B/mutate$S" "$B/codec$S"
+ls -l "$B/precompile$S" "$B/mutate$S" "$B/codec$S" "$B/offchain$S"

@@ -106,14 +106,15 @@ export function msigPqzEligible(keyData, inner) {
   let classical = 0;
   for (let o = 4; o < d.length; o += 36) {
     const k = u16(d, o);
-    if ((k < 0x0130 || k > 0x0135) && !(k === 0x0120 && innerPqEligible(d.subarray(o + 2, o + 34), inner))) classical += u16(d, o + 34);
+    // CTR-UA-44 MM-14: at a member's own level (`inner` null) its `msig` slots are classical weight, never followed
+    if ((k < 0x0130 || k > 0x0135) && !(k === 0x0120 && inner !== null && innerPqEligible(d.subarray(o + 2, o + 34), inner))) classical += u16(d, o + 34);
   }
   return classical < u16(d, 0);
 }
 function innerPqEligible(id, inner) {
   const kd = inner?.(hex(id));
   if (!kd) fail('UAMemberUnknown', hex(id));
-  return msigPqzEligible(kd);
+  return msigPqzEligible(kd, null);
 }
 /** The minimal form of a stored `msig` signature (`pop` v2, KEM record, PQZ key record; owner 2026-10-31): with T = the
  *  signing slots' total weight and N the threshold, T >= N and T − weight(i) < N for every slot (each slot necessary), i.e.
@@ -160,7 +161,7 @@ export const groupTagString = (group) => {
 export const GROUP = (group) => tagHash(groupTagString(group));
 export const MSG_TAG = tagHash('scaas.ua.msg.v1');
 export const PURPOSES = Object.freeze(['pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner',
-  'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'pqz-verdict']);
+  'keyop', 'payee-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update', 'pqz-verdict']);
 /** `keccak256("scaas.ua.purpose.<p>.v<version>")`; every purpose has v1, `pop` also v2 (the portable PoP, UA-8 P1). */
 export const purposeTagString = (p, version = 1) => {
   if (!PURPOSES.includes(p) || !(version === 1 || (version === 2 && p === 'pop'))) fail('UAPurposeUnknown', `${p} v${version}`);
@@ -182,6 +183,8 @@ export const PQZ_KEY_TAG = purposeTag('pqz-key');
 export const PQZ_VERDICT_TAG = purposeTag('pqz-verdict');
 /** A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): its purpose. */
 export const MEMBERSHIP_TAG = purposeTag('membership');
+/** An `msig`'s structure update (`updateMsig`, CTR-UA-44): its purpose. Not a `requirePortable` purpose. */
+export const MSIG_UPDATE_TAG = purposeTag('msig-update');
 /** The KEM scheme byte, `kemPk[0]` (CTR-UA-32): 1 = ML-KEM-1024 + X25519 (X-Wing order), `kemPk = 0x01 ‖ ek (1,568 B) ‖
  *  X25519 pk (32 B)`; 2 = ML-KEM-1024 + HQC + X25519, reserved (after FIPS 207), refused today (`UAKemScheme`). */
 export const KEM_SCHEME = Object.freeze({ mlkem1024X25519: 1, mlkem1024HqcX25519: 2 });
@@ -240,7 +243,7 @@ const present = (v) => v !== undefined && v !== null && bytes(v).length > 0;
 const orEmpty = (v) => (v === undefined || v === null ? new Uint8Array(0) : bytes(v));
 
 /** `keyHash(0x0142, pqzKey)`; a key of no parameter set's length is `UAKeyData`. */
-function pqzKeyHashOf(pqzKey) {
+export function pqzKeyHashOf(pqzKey) {
   const k = orEmpty(pqzKey);
   if (!PQZ_KEY_LENGTHS.includes(k.length)) fail('UAKeyData', `PQZ key length ${k.length}`);
   return keyHashOf(0x0142, k);
@@ -277,6 +280,11 @@ export const PORTABLE_TYPES = Object.freeze({
   UAPqzKeyVersion: Object.freeze([field('ua', 'bytes32'), field('version', 'uint64'), field('pqzKeyHash', 'bytes32')]),
   UAPqzKeyVersionRecord: Object.freeze([field('key', 'UAPqzKeyVersion'), field('pqzPopHash', 'bytes32')]),
   UAMembership: Object.freeze([field('ua', 'bytes32'), field('member', 'bytes32')]),
+  // CTR-UA-44 (TODO 3ze): an `msig`'s structure update on one registry (`chainUid`, `registry`), version = stored + 1
+  UAMsigUpdate: Object.freeze([field('ua', 'bytes32'), field('chainUid', 'bytes32'), field('registry', 'address'),
+    field('version', 'uint64'), field('threshold', 'uint16'), field('members', 'UAMsigMember[]'), field('enabled', 'uint256'),
+    field('validUntilBlock', 'uint64')]),
+  UAMsigMember: Object.freeze([field('kind', 'uint16'), field('id', 'bytes32'), field('weight', 'uint16')]),
 });
 /** `keccak256(encodeType(T))` per struct (primary type, then the referenced types sorted by name). */
 export const PORTABLE_TYPEHASH = Object.freeze(Object.fromEntries(Object.keys(PORTABLE_TYPES)
@@ -367,7 +375,10 @@ export function portableTypedData(primaryType, message) {
   const types = { EIP712Domain: PORTABLE_TYPES.EIP712Domain.map((f) => ({ ...f })) };
   const walk = (t) => {
     types[t] = PORTABLE_TYPES[t].map((f) => ({ ...f }));
-    for (const f of PORTABLE_TYPES[t]) if (PORTABLE_TYPES[f.type] && !types[f.type]) walk(f.type);
+    for (const f of PORTABLE_TYPES[t]) {
+      const e = f.type.replace(/\[\]$/, ''); // an array of structs references its element type
+      if (PORTABLE_TYPES[e] && !types[e]) walk(e);
+    }
   };
   walk(primaryType);
   return { domain: { ...PORTABLE_DOMAIN }, types, primaryType, message };
@@ -535,6 +546,34 @@ export function membershipMessage({ ua, member }) {
   const message = uaMessage(0x0120, MEMBERSHIP_TAG, digest);
   const typedData = portableTypedData('UAMembership', { ua: h32(ua, 'ua'), member: h32(member, 'member') });
   return { digest, message, memberDigest: memberDigest(ua, message), typedData };
+}
+
+/**
+ * What a quorum of the **stored** structure of the `msig` `ua` on one registry signs to change it (`updateMsig`, CTR-UA-44):
+ * typed(`UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}`), `members` every slot of the
+ * target (disabled ones included; stored slots keep `kind` and `id`), `enabled` bit i = slot i, `version` the stored one + 1.
+ * `{ digest, message, memberDigest, typedData, args }`: a native member signs `digest` itself (or ERC-1271 over it), a derived
+ * member `memberDigest` under `member`, `message = uaMessage(MSIG, PURPOSE_MSIG_UPDATE, digest)`; `args` the named JSON of
+ * `updateMsig` without `sigs`. One registry per signature: sign it again for every `(chainUid, registry)` that holds the `msig`.
+ */
+export function msigUpdateMessage({ ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock }) {
+  const v = u64(version, 'version');
+  const until = u64(validUntilBlock, 'validUntilBlock');
+  const t = u16w(threshold);
+  const en = BigInt(enabled);
+  if (en < 0n || en >= 1n << 256n) throw new Error('enabled must be a uint256');
+  if (members.length > 256) throw new Error('at most 256 slots');
+  const m = members.map((x) => ({ kind: u16w(x.kind), id: h32(x.id, 'id'), weight: u16w(x.weight) }));
+  const mh = m.map((x) => keccak_256(concatBytes(TH.UAMsigMember, word(x.kind), fromHex(x.id), word(x.weight))));
+  const sh = keccak_256(concatBytes(TH.UAMsigUpdate, sized(ua, 32, 'ua'), sized(chainUid, 32, 'chainUid'), addressWord(registry),
+    word(v), word(t), keccak_256(concatBytes(...mh)), word(en), word(until)));
+  const digest = typed(sh);
+  const message = uaMessage(0x0120, MSIG_UPDATE_TAG, digest);
+  const msg = { ua: h32(ua, 'ua'), chainUid: h32(chainUid, 'chainUid'), registry: checksumAddress(hex(sized(registry, 20, 'registry'))),
+    version: num(v), threshold: t, members: m, enabled: en.toString(10), validUntilBlock: num(until) };
+  const args = { ua: msg.ua, version: num(v), structure: { threshold: t, members: m }, enabled: msg.enabled,
+    validUntilBlock: num(until), chainUid: msg.chainUid };
+  return { digest, message, memberDigest: memberDigest(ua, message), typedData: portableTypedData('UAMsigUpdate', msg), args };
 }
 
 /** The portable purposes (POP_V2, KEM, PQZ_KEY, MEMBERSHIP): the only ones where a code-less native msig member signs the record's typed

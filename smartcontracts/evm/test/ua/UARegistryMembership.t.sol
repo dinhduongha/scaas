@@ -647,8 +647,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         (uint256 cold, uint256 warm) = new AcceptedProbe().cost(r, ua, i);
         emit log_named_uint("gen 1 memberAccepted, first slot (cold)", cold);
         emit log_named_uint("gen 1 memberAccepted, next slot (warm)", warm);
-        assertLt(cold, 6_500, "measured 6,055");
-        assertLt(warm, 1_500, "measured 1,146");
+        // CTR-UA-44 (TODO 3ze): 6,055 -> 8,572 (+2,517: the record's slot, read cold, for an updated msig's enabled word)
+        assertLt(cold, 9_000, "measured 8,572");
+        assertLt(warm, 2_000, "measured 1,663 (3ze: 1,146 before, + the record's slot warm and the trailer's code read)");
         assertTrue(g.memberAccepted(ua, i));
     }
 

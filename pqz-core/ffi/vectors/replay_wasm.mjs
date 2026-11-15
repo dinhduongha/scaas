@@ -1,9 +1,12 @@
 // wasm32 replay of the vectors (P6e Task 11): every proof of proof_pqzl.json, proof_pqzh.json and
 // worstcase_noise.json proved again in wasm32 (pqz-ffi's prove feature, ../wasm: the C core freestanding, Ligero)
 // from the same statement, witness and rnd32 must give the same bytes and be valid through pqz_ffi::precompile.
-// Op 7 rows (P6-ANON S4, statement_transfer_multi.json): the same. The C backend (opt-in) does not prove PQZL M > 4
-// in wasm32 (pqzl::WASM_PQZL_MAX_LEGS, one 512 MiB arena; S3): there the native proof is verified through the wasm32
-// precompile. The Rust backend (default) proves M = 8 too (port plan Task 12); the module's m8_refused() tells which.
+// Op 7 rows (P6-ANON S4, statement_transfer_multi.json): the same. proof_pqzl_split.json (three-key spec K3-4,
+// PQZL_SPLIT_ID's op 1, statement and witness in the row): the same bytes, refused by the precompile (it never serves
+// the split id) and valid through pqz_ffi::verify_offchain (the off-chain verifier's entry). The C backend (opt-in) does not prove PQZL M above
+// its per-set limit in wasm32 (pqzl::WASM_PQZL_MAX_LEGS = C_WASM_MAX_LEGS, 1 or 2; one 512 MiB arena): there the native
+// proof is verified through the wasm32 precompile and the prover must refuse (proof length 0). The Rust backend
+// (default) proves M = 8 too (port plan Task 12). The module's pqzl_max_legs() gives the limit (review 3w Codex u3-2).
 // Prints JSON lines; exit 1 on any difference.
 //   [PQZ_SET=<set>] node replay_wasm.mjs <pqz_ffi_wasm.wasm> [vector dir]
 // default dir: the set's vectors, PQZ_SET default n2304-kmax4096 (the builds' default, plan 5h Task 8d; n2048-kmax1024:
@@ -37,6 +40,11 @@ for (const id of IDS)
     cases.push({ id, form: r.case ? `${r.form} ${r.case}` : r.form, op: r.op, stmt: withId(m ? m.stmt : stmts[r.case || r.form], id),
       wit: hex(r.wit), rnd: hex(r.rnd32), proof: r.proof, pqzlM: m && id === 'pqzl' ? m.M : 0 });
   }
+// the split transfer (K3-4): its own statement under its own id
+const SPLIT = existsSync(`${dir}/proof_pqzl_split.json`) ? J('proof_pqzl_split.json').rows : [];
+for (const r of SPLIT)
+  cases.push({ id: 'pqzl_split', form: r.form, op: r.op, stmt: hex(r.stmt), wit: hex(r.wit), rnd: hex(r.rnd32), proof: r.proof,
+    split: true });
 const w = J('worstcase_noise.json');
 // the register statement: opTag || id || message || pk; pk comes from the receiver's R_REG witness only in C, so take
 // it from the bound debit's statement (pk_f at 640)
@@ -53,13 +61,18 @@ add('illustrative debit', 1, w.illustrative.debit.stmt, w.illustrative.debit.wit
 
 for (const r of J('fee0.json').rows) add(`fee 0 ${r.form}`, r.op, r.stmt, r.wit, r.rnd32, r);
 
-const x = (await WebAssembly.instantiate(readFileSync(file), {})).instance.exports;
-const m8Refused = x.m8_refused() === 1; // the C backend
-for (const c of cases) c.verifyOnly = c.pqzlM > 4 && m8Refused;
+const mod = await WebAssembly.compile(readFileSync(file));
+let x = new WebAssembly.Instance(mod, {}).exports;
+const maxLegs = x.pqzl_max_legs();
+// the C backend keeps every loaded relation's keys in its one 512 MiB arena (pqz-ffi pqzl/c.rs): a fresh instance per
+// case, so a case's arena is the one the per-set limit was measured with, not the sum over every relation replayed
+const fresh = maxLegs < 8;
+for (const c of cases) c.verifyOnly = c.pqzlM > maxLegs;
 const put = (bytes) => { const p = x.alloc(bytes.length); new Uint8Array(x.memory.buffer, p, bytes.length).set(bytes); return p; };
 let fails = 0;
 let verifyOnly = 0;
 for (const c of cases) {
+  if (fresh) x = new WebAssembly.Instance(mod, {}).exports;
   const t = performance.now();
   const n = c.verifyOnly ? c.proof.length / 2
     : x.prove_v(c.op, put(c.stmt), c.stmt.length, put(c.wit), c.wit.length, put(c.rnd));
@@ -71,11 +84,17 @@ for (const c of cases) {
   new DataView(inp.buffer).setUint32(1, c.stmt.length);
   inp.set(c.stmt, 5);
   inp.set(p, 5 + c.stmt.length);
-  const ok = x.precompile_v(put(inp), inp.length);
+  const pre = x.precompile_v(put(inp), inp.length);
+  // the split transfer: the precompile refuses it, the off-chain entry accepts it
+  const off = x.offchain_v(put(inp), inp.length);
+  const ok = c.split ? (pre === 0 && off === 1 ? 1 : 0) : pre;
   const equal = n > 0 && got === c.proof;
-  fails += !equal || ok !== 1;
+  // above the limit the prover must refuse before any core work
+  const refused = c.verifyOnly ? x.prove_v(c.op, put(c.stmt), c.stmt.length, put(c.wit), c.wit.length, put(c.rnd)) === 0 : true;
+  fails += (!c.verifyOnly && !equal) || ok !== 1 || !refused;
   out({ id: c.id, form: c.form, proof_bytes: n, wasm_equal_native: c.verifyOnly ? 'native proof (verify only)' : equal,
-        wasm_precompile: ok, ms: Math.round(performance.now() - t) });
+        ...(c.verifyOnly && { wasm_prover_refused: refused }), wasm_precompile: pre, ...(c.split && { wasm_offchain: off }),
+        ms: Math.round(performance.now() - t) });
 }
-out({ cases: cases.length, verify_only: verifyOnly, fails, node: process.version });
+out({ cases: cases.length, split: SPLIT.length, verify_only: verifyOnly, pqzl_max_legs: maxLegs, fails, node: process.version });
 process.exit(fails ? 1 : 0);

@@ -157,7 +157,7 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
     }
 
     function _rCfg(bool wrapped, uint256 features) internal override returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.features, c.owner) = ("R", "R", 18, features, nid(OWNER));
+        (c.name, c.symbol, c.decimals, c.features, c.admin) = ("R", "R", 18, features, nid(OWNER));
         if (wrapped) {
             c.legs = new IFactoryToken.Leg[](1);
             c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
@@ -213,11 +213,11 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         // T66b: the stand-in's bodies run in kind 0's modules (the face checks them against kind 0), its hook there too
         (address[] memory ms, bytes memory implArgs) = probeModules("GovRegulatedBits.t.sol:MockNormalRegulated", 0, address(f), "");
         uint16 ev = Catalogue.env(f, k8, withModules(pinned(plainEnv(address(f), address(0), UID, address(0), false), k8), ms));
-        vm.prank(f.registrar());
-        f.deployImplementation(k8, 1, ev, type(MockNormalRegulated).creationCode, implArgs);
+        vm.prank(address(uint160(uint256(f.admin()))));
+        f.deployTokenImplementation(k8, 1, ev, type(MockNormalRegulated).creationCode, implArgs, EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, k8));
         f.createToken(k8, 1, args, "r");
-        f.setKindEnabled(k8, true);
+        f.setTokenKindEnabled(k8, true, EnvKit.uidOf(address(f)));
         address t = f.createToken(k8, 1, args, "r");
         assertTrue(f.isRegisteredToken(t));
         assertEq(NormalToken(t).kind(), 8);
@@ -226,10 +226,10 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         assertEq(req, 3);
         assertEq(den, 4);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         address n = _rCreate(false, _rCfg(false, 1), "n");
         vm.prank(OWNER);
-        d.setMarket(t, n, true);
+        d.setMarket(t, n, true, EnvKit.codeUidOf(address(d)));
         assertEq(d.tokenKind(t), 1, "KIND_SCAAS");
         assertEq(d.tokenKind(n), 1, "control: a NORMAL token");
     }
@@ -240,11 +240,11 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         NormalToken n = NormalToken(_rCreate(false, _rCfg(false, 1), "n"));
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(3)));
-        n.grantRole(3, nid(holder));
+        n.grantRole(3, nid(holder), EnvKit.codeUidOf(address(n)));
         WrappedToken w = WrappedToken(payable(_rCreate(true, _rCfg(true, 1), "w")));
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, uint8(3)));
-        w.grantRole(3, nid(holder));
+        w.grantRole(3, nid(holder), EnvKit.codeUidOf(address(w)));
     }
 }
 

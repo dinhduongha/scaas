@@ -19,14 +19,15 @@ production set `n2816-kmax65536` has `kmlwe_min = 42` (dual_hybrid 462 / 463, `p
 ## Rerun
 
 ```sh
-git clone https://github.com/lducas/leaky-LWE-Estimator /tmp/lk && git -C /tmp/lk checkout 0a9caf8
-git clone https://github.com/malb/lattice-estimator /tmp/le && git -C /tmp/le checkout 53da598
-git clone https://github.com/lazer-crypto/lazer /tmp/lz && git -C /tmp/lz checkout 3330e48
+T=$(mktemp -d)
+git clone https://github.com/lducas/leaky-LWE-Estimator "$T"/lk && git -C "$T"/lk checkout 0a9caf8
+git clone https://github.com/malb/lattice-estimator "$T"/le && git -C "$T"/le checkout 53da598
+git clone https://github.com/lazer-crypto/lazer "$T"/lz && git -C "$T"/lz checkout 3330e48
 # one DDGR20 instance at n ~ 2800 needs ~ 4 GB: run the candidates in parts (the container has --memory 5g)
-ONLY=0,1,2,3 PARTS=2 scripts/capped pqz-core/pqzl/params/aprime/run.sh /tmp/lk /tmp/le
-ONLY=4 PARTS=2       scripts/capped pqz-core/pqzl/params/aprime/run.sh /tmp/lk /tmp/le
-ONLY=0,1,3,4 PARTS=3 scripts/capped pqz-core/pqzl/params/aprime/run.sh /tmp/lk /tmp/le
-scripts/capped pqz-core/pqzl/params/aprime/run_proof.sh /tmp/lz /tmp/le ap2816_tx ap2816_burn ap2816_reg ap2816_txm8 \
+ONLY=0,1,2,3 PARTS=2 scripts/capped pqz-core/pqzl/params/aprime/run.sh "$T"/lk "$T"/le
+ONLY=4 PARTS=2       scripts/capped pqz-core/pqzl/params/aprime/run.sh "$T"/lk "$T"/le
+ONLY=0,1,3,4 PARTS=3 scripts/capped pqz-core/pqzl/params/aprime/run.sh "$T"/lk "$T"/le
+scripts/capped pqz-core/pqzl/params/aprime/run_proof.sh "$T"/lz "$T"/le ap2816_tx ap2816_burn ap2816_reg ap2816_txm8 \
   ap2688_tx ap2688_burn ap2688_reg ap2688_txm8
 ```
 

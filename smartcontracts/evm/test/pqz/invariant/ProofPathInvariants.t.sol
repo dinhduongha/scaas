@@ -31,7 +31,7 @@ contract ProofPathInvariantsTest is PqzFixture {
         h = new ProofPathHandler(reg, u);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features |= uint256(1) << GovernanceBits.PQZ_PROOF;
-        (c.owner, c.roles.issuer, c.lockedFeatures) = (nid(address(h)), nid(address(h)), 0);
+        (c.admin, c.roles.issuer, c.lockedFeatures) = (nid(address(h)), nid(address(h)), 0);
         tok = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "proof-path-inv"));
         h.setToken(tok);
         _public(tok, address(h), 1_000_000 * SCALE);
@@ -171,13 +171,32 @@ contract ProofPathInvariantsTest is PqzFixture {
     /// P7: no Zether gas pin moved in 3h (the plus-zero rows as at 7558a364; layout and selectors are the Zether suite's).
     /// The rows moved since, each with its task's old -> new (plus_zero_gas.json): T83 (ba280ade, the pay records) 86,106 /
     /// 86,084 / 69,133 / 69,133 / 46,434 / 46,456 / 142,438 / 142,450 -> 86,128 / 86,106 / 69,133 / 69,155 / 46,434 / 46,478 /
-    /// 142,389 / 142,468; T66b (the body modules) -> the values below. The test keeps P7's claim as: these rows are the pins.
+    /// 142,389 / 142,468; T66b (the body modules) -> 83,689 / 83,667 / 69,104 / 69,104 / 46,440 / 46,462 / 139,389 / 139,446;
+    /// group 3l (7ba002dc, the faces' selector dispatch) mtxTransfer_wrappedZether 83,667 -> 83,645; merge3k (the merged faces'
+    /// dispatch, 1bb15eac) uaExecuteTransfer_normalZether 139,389 -> 139,434, uaExecuteTransfer_wrappedZether 139,446 ->
+    /// 139,424; round 3r T2 (the admin names in each face's dispatch) mtxTransfer_normalZether 83,689 -> 83,711,
+    /// mtxTransfer_wrappedZether 83,645 -> 83,667. Fable review fixes 2026-11-11 (B P3-1: `_poolMove`'s native `UA_POOL`
+    /// refusal, `transferToUA`'s `_subject()`): mtxTransfer 83,711 / 83,667 -> 83,825 / 83,781, transferToUA 69,104 / 69,104
+    /// -> 69,307 / 69,307, uaExecuteTransfer 139,434 / 139,424 -> 139,496 / 139,486; fix2 CTR-GOV-26 (the registry's dispatch: `rescue`)
+    /// uaExecuteTransfer -> 139,518 / 139,508; fix2 recheck-2 P3-1 (CTR-GOV-27, the faces' `renounceAdmin(bytes32)` in the
+    /// dispatch) uaExecuteTransfer 139,518 / 139,508 -> 139,473 / 139,530; fix2 CTR-MTX-86 (the payee-fee names: the
+    /// faces' and P modules' dispatch order) mtxTransfer 83,825 / 83,781 -> 83,781 / 83,737; fix3 CTR-GOV-28 (the faces' admin
+    /// entries take `chainUid_`: the dispatch order) mtxTransfer 83,781 / 83,737 -> 83,803 / 83,759, transferToUA 69,307 /
+    /// 69,307 -> 69,262 / 69,240, transfer 46,440 / 46,462 -> 46,417 / 46,418, uaExecuteTransfer 139,473 / 139,530 -> 139,517 /
+    /// 139,574; fix3 owner 2026-11-13 (`renounceRole(uint8,bytes32)`: the dispatch order) mtxTransfer 83,803 / 83,759 ->
+    /// 83,781 / 83,737, transferToUA 69,262 / 69,240 -> 69,240 / 69,329, transfer 46,417 / 46,418 -> 46,484 / 46,506,
+    /// uaExecuteTransfer 139,517 / 139,574 -> 139,495 / 139,552; pqz-three-keys step 3 (K3-3: the registry face dispatches
+    /// eleven more selectors, `requireAuthorized` among them) uaExecuteTransfer 139,495 / 139,552 -> 139,537 / 139,594; round
+    /// 3zb + 3zc (the wrapped Zether face's dispatch order: six supply-cap entries, the holder entries' chain word; no slot,
+    /// no call moved, measured against 3fa153e4) mtxTransfer wrapped 83,737 -> 83,846, transferToUA wrapped 69,329 -> 69,239,
+    /// transfer wrapped 46,506 -> 46,484, uaExecuteTransfer wrapped 139,594 -> 139,550. The test keeps P7's claim as: these
+    /// rows are the pins.
     function test_P7_zetherPinsUnchanged() public view {
         string memory j = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/plus_zero_gas.json"));
         string[8] memory k = ["mtxTransfer_normalZether", "mtxTransfer_wrappedZether", "transferToUA_normalZether",
             "transferToUA_wrappedZether", "transfer_normalZether", "transfer_wrappedZether", "uaExecuteTransfer_normalZether",
             "uaExecuteTransfer_wrappedZether"];
-        uint256[8] memory at7558 = [uint256(83689), 83667, 69104, 69104, 46440, 46462, 139389, 139446]; // T66b
+        uint256[8] memory at7558 = [uint256(83781), 83846, 69240, 69239, 46484, 46484, 139537, 139550]; // + B P3-1, CTR-GOV-26, -27, -28, CTR-MTX-86, K3-3, 3zb + 3zc
         for (uint256 i; i < 8; ++i) assertEq(vm.parseJsonUint(j, string.concat(".", k[i])), at7558[i], k[i]);
     }
 }

@@ -1,0 +1,11 @@
+# three-key round step 2 (spec K3-4): vectors regenerated under PQZL v6 / PQZH v4 / PQZL_SPLIT_ID, with
+# proof_pqzl_split.json (R_TXS / R_TXS0) and opening.json. scripts/capped pqz-core/ffi/vectors/run.sh <label> write
+# per set (PQZ_SET=<set>); full logs local only. Tree: 19155246 + the vectors step's files.
+set | rc | pqz-vectors --check | pqz_kat --check | tamper | ffi tests | wasm replay | R_TXS / R_TXS0 proof (B)
+n2048-kmax1024 | 0 | 18 files ok | ok | 213 / 225 (12 partial) ok | 10 ok, 0 failed | 61 cases, 0 fails | 55,691 / 53,326
+n2304-kmax4096 | 1 -> 0 | 18 files ok | ok (first run FAIL: check_split's MAX_PROOF / negative.json form list; fixed, re-run ok) | 212 / 225 (13 partial) ok | 10 ok, 0 failed | 61 cases, 0 fails | 61,276 / 60,957
+n2560-kmax16384 | 0 | 18 files ok | ok | 208 / 213 (5 partial) ok | 10 ok, 0 failed | 61 cases, 0 fails | 66,592 / 66,203
+n2816-kmax65536 | 0 | 17 files ok | ok | 195 / 200 (5 partial) ok | 10 ok, 0 failed | 32 cases, 0 fails | 73,046 / 72,696
+proof_pqzl_split.json tamper: 12 / 12 changes caught at n2304-kmax4096.
+Then: gen_set.py --all (SELFTEST, PROBE_*, SET_DIGEST final), gen_set.py --all --check ok (4 sets, 93 files);
+PQZ_SOL_INSTALL=1 make.sh n2304-kmax4096 sol (forge build ok, installed). selftest.json hashes unchanged at every set.

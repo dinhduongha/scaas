@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {UAMetaTxBase, UAMetaTxBaseCore} from "../../src/metatx/UAMetaTxBase.sol";
@@ -92,7 +93,7 @@ contract MergeInvariantsTest is MergeBase {
         MetaTxLib.UAMetaTransaction memory m = _burn(_pad(alice), 0);
         (m.mode, m.fee) = (MODE_FIX, 10);
         m.feeRecipient = FEE_TO;
-        bytes32 d = _callDigest(address(tok), m); // `MetaTxLib.hashStruct` zeroes both unbound fields
+        bytes32 d = _callDigest(address(tok), m); // `MtxPipelineLib._structHash` zeroes both unbound fields
         MetaTxLib.UAMetaTransaction memory canonical = _copy(m);
         (canonical.relayer, canonical.feeRecipient) = (address(0), address(0));
         assertEq(d, _callDigest(address(tok), canonical), "both unbound");
@@ -157,7 +158,7 @@ contract MergeInvariantsTest is MergeBase {
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
             data: abi.encodeCall(IMetaTx.cancelNonce, (5)), batch: 1, nonce: 0, validUntil: block.timestamp + 600, mode: 0,
             relayer: address(0), fee: 0, feeRecipient: address(0)});
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, _dig(address(tok), MetaTxLib.hashStruct(m)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ALICE_PK, _dig(address(tok), MtxHash.hashStruct(m)));
         bytes memory sig = abi.encodePacked(r, s, v);
         uint256 snap = vm.snapshotState();
         vm.prank(RELAYER);
@@ -304,12 +305,14 @@ contract MergeInvariantsTest is MergeBase {
     /// keccak256 of the deployed code without its CBOR metadata tail, deployed at a fixed address (the immutables hold
     /// `address(this)`), recorded at `ref/pre-ua-mtx-merge` (9a4b8c5a). ua-mtx-merge T3b: the `MandateWallet` and
     /// `HederaMandateWallet` rows left (Q6 builds them in the merged form; `MandateWalletMerged.t.sol`). T66b (controller
-    /// 2026-11-09): the `<X>Core` + flat-face split moved it, 21,003 -> 21,085 B: 0xd201866a…5876 -> this.
+    /// 2026-11-09): the `<X>Core` + flat-face split moved it, 21,003 -> 21,085 B: 0xd201866a…5876 -> 0xbede204d…3962. B P3-2
+    /// (ua-mtx-fix2-contracts): ERC-1271 over `erc1271Digest(hash)`, the self-call through `isValidOwnDigest`:
+    /// 0x4d73f626…33e1; ERC-7739 only (owner 2026-11-12; `erc1271Digest` to legacy): -> this.
     function test_walletsByteIdentical() public {
         bytes32 uid = keccak256("wallet-uid");
         address b = address(0xA002);
         deployCodeTo("SmartKeyAccount.sol:SmartKeyAccount", abi.encode(uid), b);
-        assertEq(_codeHash(b), 0xbede204d12566a090b8389385fe356d6a6ae25485cad9869454d73f367473962, "SmartKeyAccount");
+        assertEq(_codeHash(b), 0xfb57bbfbdc8f91765feef8ff715e18a0a6284274f74de4f469ef6cb8b0b842da, "SmartKeyAccount");
         // the artifact `deployCodeTo` reads is this contract's (compiled into this test)
         assertGt(type(SmartKeyAccount).creationCode.length, 0);
     }

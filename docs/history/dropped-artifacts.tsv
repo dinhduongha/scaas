@@ -1201,3 +1201,72 @@ soroban.rs:313	internal-path	line reference of 2026-10-03, `job_tx` and `tx_dead
 1337	obsolete	chain id of the Zether dev-chain allowlist, removed by zether-ungate; no current rule names a chain
 UNAUDITED — dev chains only	obsolete	label replaced by "UNAUDITED" (owner 2026-10-31); the dev-chain limit went with the allowlist (zether-ungate)
 1.90	obsolete	the node's Rust version in the mesh-gossip spec; one toolchain for the repository, 1.97.1 since 2026-11-05: decisions.md#ARCH-POS-12
+mtxTransfer(from, to, amount, batch, nonce, validUntil, mode, relayer, sig)	obsolete	the address form, merged into the bytes32 / UASig form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-30
+mtxBatch(MetaTransaction[] ms, bytes[] sigs)	obsolete	the address generic batch, on SmartKeyAccount only since the ua* / mtx* merge (MetaTxAddressBase): contracts/metatx.md#CTR-MTX-30
+mtxTransferWithFee(…, mode, relayer, fee, feeRecipient, sig)	obsolete	the address form, merged into the bytes32 / UASig form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-30
+mtxPayReceiverFee(m, payerSig, fee, feeRecipient, rfValidUntil, payeeSig)	obsolete	the address form over MetaTransfer, merged into the UAMetaTransfer / UASig / PayMeta form by the ua* / mtx* merge: contracts/metatx.md#CTR-MTX-05
+token.pay…	obsolete	the ED25519 owner's by-hand pay inside the flat owner call; since the ua* / mtx* merge through the wallet's signed mtxExecute(UAEnvelope, …): networks/hedera.md#NET-HED-03
+trade(address,uint256,address)	obsolete	the v1 MetaOp op encoding of a trade; a Hedera trade is a UATradeOrder checked by the token: networks/hedera.md#payload, contracts/dex.md#CTR-DEX-25
+batch = keccak(entryRef)	obsolete	the v1 pay lane derived on chain; lanes are free since pay-meta-tax O3, payLane(entryRef) a client convention: contracts/metatx.md#CTR-MTX-10
+smartcontracts/src/common/MetaTxLib.sol	renamed	smartcontracts/evm/src/common/MetaTxLib.sol; the mesh digest of a token body is the UA struct hash: node/mesh.md#NODE-MESH-08
+ERC20MetaTx.executeMetaTransaction	obsolete	the mesh digest of a token is the merged UA entries' (UAMetaTransactionExecuted.digest); executeMetaTransaction is the address alias of MetaTxBase: node/mesh.md#NODE-MESH-07, contracts/metatx.md#CTR-MTX-21
+_hashTypedDataV4(m.hashStruct())	obsolete	the address struct hash of the pre-merge token path; a token intent hashes its UAMetaTransfer / UAMetaTransaction: node/mesh.md#NODE-MESH-07
+scaas-node/tests/vectors/mesh-envelope-v1.2.json	renamed	scaas-node/tests/vectors/mesh-envelope-v1.3.json since the UA body (ua-mtx-merge R45): node/mesh.md#NODE-MESH-16
+meta_tx.data	obsolete	the selector of a UAMetaTransaction's data (ua_meta_tx) or a SmartKeyAccount's address meta_tx: node/mesh.md#NODE-MESH-21
+evm.ua_meta_tx = {token, m: UAMetaTransaction (hex fields), auth}	obsolete	the UA body as built: evm.ua_meta_tx = the wire UAMetaTransfer or UAMetaTransaction with evm.auth: node/mesh.md#NODE-MESH-18
+token.features ∋ ua	obsolete	the UA-ledger gate of a ua_metatx job; since ua-mtx-merge only a derived from or to needs registry() != 0: node/job-api.md#intake
+features ∋ ua	obsolete	the /v1/ua-metatx gate; since ua-mtx-merge only a derived from or to needs registry() != 0: node/gateway.md#routes
+issuer()	obsolete	the single-issuer view of the asset-suite draft; holders per bit by hasRole and regulatedConfig(): contracts/asset-suite.md#CTR-AS-03
+compliance()	obsolete	the single-compliance view of the asset-suite draft; holders per bit by hasRole: contracts/asset-suite.md#CTR-AS-03
+_checkOp	obsolete	the shape-step override of the draft; the built hook is _regPre before MtxPipelineLib.pre*: contracts/asset-suite.md#CTR-AS-08
+_regIsContract	obsolete	the draft's code-check hook; holders are checked by GovernanceLib._check (code or an msig UA): contracts/asset-suite.md#CTR-AS-20
+RoleNotContract(a)	renamed	RoleNotContract(bit, account): contracts/asset-suite.md#22-configuration-and-init
+NotEligible(creator, reason)	renamed	NotEligible(account, reason) on the initial-supply recipient: contracts/asset-suite.md#22-configuration-and-init
+requiredFlags u64 ‖ cooldownUntil u64	obsolete	the slot before DENYLIST; slot +1 is requiredFlags ‖ deniedFlags ‖ pauseCooldownUntil: contracts/asset-suite.md#22-configuration-and-init
+mapping(address ⇒ FreezeState)	renamed	mapping(bytes32 account ⇒ FreezeState), ids as bytes32: contracts/asset-suite.md#22-configuration-and-init
+ (the hot path reads slot a only); 	extraction-artifact	contracts/asset-suite.md#22-configuration-and-init (the storage table)
+m.feeRecipient == 0 ? msg.sender : m.feeRecipient	obsolete	the draft's shape-step fee resolution; the fee row is _regFeeTo after pre*: contracts/asset-suite.md#CTR-AS-25
+super._checkOp(m)	obsolete	the draft's shape-step placement; built as _regPre / _regFeeTo / _regMove: contracts/asset-suite.md#CTR-AS-08
+mtxPay(…, payId, …)	obsolete	the flat mtxPay with an on-chain lane; since pay-meta-tax O2 / O3 mtxPay(UAMetaTransfer, UASig, PayMeta) on any lane: contracts/metatx.md#CTR-MTX-10
+batch = payLane(payId) = uint256(keccak256("scaas.pay.lane" ‖ payId))	obsolete	the lane mtxPay derived on chain; a client convention since pay-meta-tax O3: contracts/metatx.md#CTR-MTX-10
+smartcontracts/evm/deployments/<chainid>.json	renamed	the books are named by chain key, deployments/<key>.json: networks/evm.md#NET-EVM-13
+deployments/<chain>.json	renamed	deployments/<key>.json, the key from chain-uids.json: networks/evm.md#NET-EVM-13
+publishEnv	renamed	owner naming 2026-11-11 (the token member of each token / DEX / class triple names Token; spec 2026-11-10-admin-not-owner.md §4.1): OpenFactory.publishTokenEnv: contracts/token-wrappers.md#CTR-TOK-29
+deprecate	renamed	owner naming 2026-11-11 (the token member of each token / DEX / class triple names Token; spec 2026-11-10-admin-not-owner.md §4.1): OpenFactory.deprecateToken: contracts/token-wrappers.md#CTR-TOK-29
+setKindEnabled	renamed	owner naming 2026-11-11 (the token member of each token / DEX / class triple names Token; spec 2026-11-10-admin-not-owner.md §4.1): OpenFactory.setTokenKindEnabled: contracts/token-wrappers.md#CTR-TOK-29
+envOf	renamed	owner naming 2026-11-11 (the token member of each token / DEX / class triple names Token; spec 2026-11-10-admin-not-owner.md §4.1): OpenFactory.tokenEnvOf: contracts/token-wrappers.md#CTR-TOK-29
+latestEnvVersion	renamed	owner naming 2026-11-11 (the token member of each token / DEX / class triple names Token; spec 2026-11-10-admin-not-owner.md §4.1): OpenFactory.latestTokenEnvVersion: contracts/token-wrappers.md#CTR-TOK-29
+isDeprecated	renamed	owner naming 2026-11-11 (the token member of each token / DEX / class triple names Token; spec 2026-11-10-admin-not-owner.md §4.1): OpenFactory.isTokenDeprecated: contracts/token-wrappers.md#CTR-TOK-29
+ImplementationDeprecated	renamed	owner naming 2026-11-11 (the token member of each token / DEX / class triple names Token; spec 2026-11-10-admin-not-owner.md §4.1): OpenFactory.TokenImplementationDeprecated: contracts/token-wrappers.md#CTR-TOK-29
+KindEnabled	renamed	owner naming 2026-11-11 (the token member of each token / DEX / class triple names Token; spec 2026-11-10-admin-not-owner.md §4.1): OpenFactory.TokenKindEnabled: contracts/token-wrappers.md#CTR-TOK-29
+kindEnabled	renamed	owner naming 2026-11-11 (the token member of each token / DEX / class triple names Token; spec 2026-11-10-admin-not-owner.md §4.1): OpenFactory.tokenKindEnabled (the UA registry keeps its own kindEnabled(uint16)): contracts/token-wrappers.md#CTR-TOK-29
+!isDeprecated	renamed	owner naming 2026-11-11 (the token member of each token / DEX / class triple names Token; spec 2026-11-10-admin-not-owner.md §4.1): !isTokenDeprecated: contracts/token-wrappers.md#CTR-TOK-29
+deprecate()	renamed	owner naming 2026-11-11 (the token member of each token / DEX / class triple names Token; spec 2026-11-10-admin-not-owner.md §4.1): deprecateToken(): contracts/token-wrappers.md#CTR-TOK-29
+ in one slot; an immutable 	superseded	CTR-GOV-23 (spec 2026-11-10-admin-not-owner.md §5.3): the ComplianceRegistry admin is a UA id that moves by the two-step transfer, no longer an immutable contract: contracts/asset-suite.md#CTR-AS-07
+setAttester	renamed	owner 2026-11-10, group 3r (CTR-GOV-23; spec 2026-11-10-admin-not-owner.md §4.1): the ComplianceRegistry attester is a KYC provider, a UA id; setKycProvider(bytes32,bool): contracts/asset-suite.md (§2.6 ComplianceRegistry)
+attesterId	renamed	owner 2026-11-10, group 3r (CTR-GOV-23; spec 2026-11-10-admin-not-owner.md §4.1): the ComplianceRegistry attester is a KYC provider, a UA id; kycProviderId(bytes32): contracts/asset-suite.md (§2.6 ComplianceRegistry)
+attesterEnabled	renamed	owner 2026-11-10, group 3r (CTR-GOV-23; spec 2026-11-10-admin-not-owner.md §4.1): the ComplianceRegistry attester is a KYC provider, a UA id; kycProviderEnabled(uint32): contracts/asset-suite.md (§2.6 ComplianceRegistry)
+attestationOf	renamed	owner 2026-11-10, group 3r (CTR-GOV-23; spec 2026-11-10-admin-not-owner.md §4.1): the ComplianceRegistry attester is a KYC provider, a UA id; complianceOf(bytes32) (flags, validUntil, providerId): contracts/asset-suite.md (§2.6 ComplianceRegistry)
+ModeUnknownBits	obsolete	Fable review B P3-3 (2026-11-11): `validateMode` moved to legacy/ua-mtx-fix-contracts/; the one mode check is MtxPipelineLib._checkEnvelope, error MetaTxUnknownMode: contracts/metatx.md (mode)
+validateMode(m.mode)	obsolete	Fable review B P3-3 (2026-11-11): moved to legacy/ua-mtx-fix-contracts/; step 1 refuses an unknown mode flag bit or fee value (MetaTxUnknownMode): contracts/metatx.md (pipeline step 1)
+receiver_fee: {fee, feeRecipient, validUntil, signature}	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): the job field is payee_fee: node/job-api.md (§7a kind rules)
+token.features ∋ receiver_fee	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): token.features ∋ payee_fee: node/job-api.md (§7a kind rules)
+valid_until = min(m.validUntil, receiver_fee.validUntil)	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): valid_until = min(m.validUntil, payee_fee.validUntil): node/job-api.md (§7a kind rules)
+ReceiverFeeShape	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): PayeeFeeShape: contracts/metatx.md#CTR-MTX-86
+block.timestamp ≤ rfValidUntil	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): block.timestamp ≤ pfValidUntil (PayeeFeeExpired): contracts/metatx.md#CTR-MTX-06
+fee_paid_by_receiver	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): fee_paid_by_payee: integration.md (payee fee, client side)
+receiver_fee_amount	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): payee_fee_amount: integration.md (payee fee, client side)
+ReceiverFeeLib	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): PayeeFeeLib: node/sponsorship.md#payee-fee
+disableControls	renamed	`disableControls(bits)` is the governance `disableFeature(bit, chainUid_)` of every kind (CTR-TOK-22; the word CTR-GOV-28): contracts/asset-suite.md#CTR-AS-17, decisions.md#CTR-GOV-28
+RECEIVER_FEE_TYPEHASH	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently) after the ua* / mtx* merge: UA_PAYEE_FEE_TYPEHASH (MtxPipelineLib), the payee's UAPayeeFee nesting the payer's UAMetaTransfer: contracts/metatx.md#CTR-MTX-05
+rfValidUntil	renamed	owner 2026-11-12 (CTR-MTX-86, "payee" consistently): pfValidUntil of mtxPayWithPayeeFee (PayeeFeeExpired): contracts/metatx.md#CTR-MTX-05
+payerSig	renamed	the ua* / mtx* merge (CTR-MTX-30): the payer's signature is a UASig, payerAuth of mtxPayWithPayeeFee: contracts/metatx.md#CTR-MTX-05
+payeeSig	renamed	the ua* / mtx* merge (CTR-MTX-30): the payee's co-signature is a UASig, payeeAuth of mtxPayWithPayeeFee: contracts/metatx.md#CTR-MTX-05
+Each payment request is payable at most once	obsolete	withdrawn by owner O3, O11 (pay-meta-tax, 2026-11-10): one entryRef takes several payments, the lane a client convention: decisions.md#CTR-MTX-03 (its Change of 2026-11-10), contracts/metatx.md#CTR-MTX-31
+1.39	obsolete	the SCaaS testnet client version of 2026-10-07 (Nethermind 1.39); the current client is in the SCaaS testnet table: networks/evm.md
+disableWrap(underlying, reason)	renamed	the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc): the guardian's entry takes the chain word, `disableWrap(underlying, reason, chainUid_)`: contracts/token-wrappers.md#CTR-TOK-07
+mint(to, amount)	renamed	the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc): the minter's entry takes the chain word, `mint(to, amount, chainUid_)`: contracts/token-wrappers.md#CTR-TOK-09
+disableWrap(address u, bytes32 reason)	renamed	the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc): `disableWrap(address u, bytes32 reason, bytes32 chainUid_)`: contracts/token-wrappers.md#CTR-TOK-07
+disableWrap(u, reason)	renamed	the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc): the guardian passes the token's chain word, `disableWrap(u, reason, chainUid_)`: node/runbooks.md#rb-11-wrapper-shortfall-or-depeg
+recordOrder(orderId, docHash, subject, beneficiary, maxAmount)	renamed	the regulated build added freezeUntil, the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc) the chain word: contracts/asset-suite.md#23-interface
+freeze(subject, ref)	renamed	the regulated build added recordId, the Change of CTR-GOV-28 (owner 2026-11-13, build 3zb + 3zc) the chain word, `freeze(subject, ref, recordId, chainUid_)`: contracts/asset-suite.md#23-interface

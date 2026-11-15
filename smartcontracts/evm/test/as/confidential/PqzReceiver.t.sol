@@ -15,6 +15,8 @@ import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 /// denied beneficiary is refused; a denied or frozen leg and a shield's `toUA` still receive (no leg, `toUA` or entry is
 /// read). `ALLOWLIST` (8) is outside both kinds' masks.
 abstract contract PqzReceiverSuite is PqzRegFixture {
+    address internal constant PAYER = address(0xFA1);
+
     function _denylist() internal pure override returns (bool) { return true; }
 
     function setUp() public override {
@@ -33,7 +35,7 @@ abstract contract PqzReceiverSuite is PqzRegFixture {
         _attestDenied(r);
         (bool ok2, bytes memory ret,) = _try(cd);
         assertFalse(ok2);
-        assertEq(ret, abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, r, uint8(0)));
+        assertEq(ret, _deniedErr(r));
     }
 
     /// A refresh (amount 0, recipient 0, no beneficiary) makes no registry call; control: the unshield of 5 makes one (its
@@ -43,7 +45,7 @@ abstract contract PqzReceiverSuite is PqzRegFixture {
         vm.startStateDiffRecording();
         (bool ok,,) = _try(_opCall(4, 0, 0));
         assertTrue(ok);
-        assertEq(_registryCalls(), 1, "control: the unshield asks R of its recipient");
+        assertEq(_registryCalls(), _lists() ? 0 : 1, "control: the unshield asks R of its recipient (the list: no call)");
         vm.revertToState(snap);
         vm.startStateDiffRecording();
         (bool ok2,,) = _try(abi.encodeWithSelector(IPqzToken.mtxUnshield.selector, _burnArgs(0, 0, 92), 0, bytes32(0), PROOF,
@@ -63,7 +65,7 @@ abstract contract PqzReceiverSuite is PqzRegFixture {
             _attestDenied(carol);
             (bool ok2, bytes memory ret,) = _try(cd);
             assertFalse(ok2);
-            assertEq(ret, abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, carol, uint8(0)));
+            assertEq(ret, _deniedErr(carol));
             vm.revertToState(snap);
         }
     }
@@ -92,6 +94,30 @@ abstract contract PqzReceiverSuite is PqzRegFixture {
         assertEq(tok.totalShielded(), BAL + 3, "credited");
     }
 
+    /// Round 3s (spec §4.3, M5): the proof's sender (`_regSender(fromUA)`) is checked by the deny list before the proof; the
+    /// registry's check is receiver-only (CTR-AS-07). The `shieldIn` payer too (`_regPayer`). Controls: not denied, it passes.
+    function test_deniedSenderAndShieldInPayer() public {
+        bytes32 p = MetaTxLib.pad(PAYER);
+        for (uint256 k; k < 5; ++k) {
+            bytes memory cd = _opCall(k, 0, 0);
+            uint256 snap = vm.snapshotState();
+            (bool ok,,) = _try(cd);
+            assertTrue(ok, "control: the sender not denied");
+            vm.revertToState(snap);
+            _attestDenied(alice);
+            (bool ok2, bytes memory ret,) = _try(cd);
+            if (_lists()) assertEq(ret, _deniedErr(alice), "the list checks the sender");
+            else assertTrue(ok2, "the registry checks receivers only");
+            vm.revertToState(snap);
+            cd = _opCall(k, 0, 1);
+            _attestDenied(p);
+            vm.prank(PAYER);
+            (, ret) = address(tok).call(cd);
+            if (_lists()) assertEq(ret, _deniedErr(p), "the list checks the shieldIn payer, before the pull");
+            vm.revertToState(snap);
+        }
+    }
+
     /// CTR-GOV-17: `ALLOWLIST` (8) is refused at creation on the confidential kinds (`FeatureInvalidForKind(8)`); the
     /// control creates.
     function test_allowlistOutsideMask() public {
@@ -109,4 +135,13 @@ contract PqzReceiver12Test is PqzReceiverSuite {
 
 contract PqzReceiver13Test is PqzReceiverSuite {
     function _isWrapped() internal pure override returns (bool) { return true; }
+}
+
+/// Round 3s (spec 2026-11-10-token-lists.md §4.3, §13 (2)): the same suite with `DENYLIST` as the token's own list.
+contract PqzLists12Test is PqzReceiver12Test {
+    function _lists() internal pure override returns (bool) { return true; }
+}
+
+contract PqzLists13Test is PqzReceiver13Test {
+    function _lists() internal pure override returns (bool) { return true; }
 }

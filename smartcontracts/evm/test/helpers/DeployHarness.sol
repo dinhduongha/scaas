@@ -12,6 +12,8 @@ contract DeployHarness is DeployBase {
     bool internal forced;
     bool internal forcedBls;
     bool internal forcedBnG2;
+    bool internal forcedPqz;
+    bool internal forcedMl87;
     uint256 internal gateLimit;
     uint256 internal codeLimit;
     uint8 internal gate; // 0 = `RELEASE_GAS_GATE` (env, or its default), 1 = testnet, 2 = public
@@ -48,8 +50,17 @@ contract DeployHarness is DeployBase {
     /// `DEPLOY_REGULATED` for the next `deploy`.
     function setRegulated(bool r) external { deployRegulated = r; }
 
+    /// `DEPLOY_PQCHAT` for the next `deploy` (plan 3c T92).
+    function setPqChat(bool on) external { deployPqChat = on; }
+
+    /// `NOTICE_PERIOD` for the next `deploy` (0: a release is usable at once).
+    function setNotice(uint64 n) external { noticePeriod = n; }
+
     /// `COMPLIANCE_ADMIN` for the next `deploy` (plan T33).
-    function setComplianceAdmin(address a) external { complianceAdmin = a; }
+    function setComplianceAdmin(address a) external { complianceAdmin = bytes32(uint256(uint160(a))); }
+    function setComplianceAdminId(bytes32 a) external { complianceAdmin = a; }
+    function setFactoryAdminNext(bytes32 n) external { factoryAdminNext = n; }
+    function setAccountFactory(address a) external { accountFactory = a; }
 
     function deploy(bytes32 uid_, bool zether, address ska) external returns (OpenFactory f, string memory json) {
         return deploy(uid_, zether, ska, false);
@@ -78,6 +89,9 @@ contract DeployHarness is DeployBase {
 
     function writeReleases() external { _writeReleases(); }
 
+    /// NET-EVM-13: a test chain is not in `chain-uids.json`; its books' name stands for `DEPLOY_NAME` (no env in a test).
+    function _deployName() internal pure override returns (string memory) { return "local-testnet"; }
+
     function checkGas(string calldata name, uint256 limit) external view { _checkReleaseGas(name, limit); }
 
     function requireGas(string calldata name) external view { _requireReleaseGas(name); }
@@ -88,7 +102,23 @@ contract DeployHarness is DeployBase {
 
     function pqKindFits(uint64 cap, uint64 budget) external pure returns (bool) { return _pqKindFits(cap, budget); }
 
-    function checkGen1Kinds(IUARegistry reg, bool bls, bool hedera) external view { _checkGen1Kinds(reg, bls, hedera); }
+    function checkGen1Kinds(IUARegistry reg, bool bls, bool hedera) external view {
+        _checkGen1Kinds(reg, bls, hedera, false, false);
+    }
+
+    function checkGen1Kinds(IUARegistry reg, bool bls, bool hedera, bool pqz, bool ml87) external view {
+        _checkGen1Kinds(reg, bls, hedera, pqz, ml87);
+    }
+
+    /// The chain's PQ precompile verdict (`_pqPrecompiles`: no RPC in a test), default none.
+    function forcePq(bool pqz, bool ml87) external { (forcedPqz, forcedMl87) = (pqz, ml87); }
+
+    /// `DEPLOY_PQZ`, `PQZ_KEY_VERIFIER`, `MLDSA87_VERIFIER` for the next `deploy` (owner 2026-11-15).
+    function setPqz(bool on, address pqzVerifier, address ml87Verifier) external {
+        (deployPqz, pqzKeyVerifier, mldsa87Verifier) = (on, pqzVerifier, ml87Verifier);
+    }
+
+    function _pqPrecompiles() internal view override returns (bool, bool) { return (forcedPqz, forcedMl87); }
 
     function defaultNotice(uint256 chainId) external pure returns (uint256) { return _defaultNotice(chainId); }
 

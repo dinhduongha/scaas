@@ -82,7 +82,7 @@ var Groups = []string{"p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1",
 	"mldsa65", "fndsa512", "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe"}
 
 var Purposes = []string{"pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop",
-	"receiver-fee", "vp", "vc-anchor", "trade", "kem", "pqz-key", "membership", "pqz-verdict"}
+	"payee-fee", "vp", "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update", "pqz-verdict"}
 
 const (
 	DomainType   = "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
@@ -101,17 +101,25 @@ func Keccak256(parts ...[]byte) (out [32]byte) {
 
 var MsgTag = Keccak256([]byte("scaas.ua.msg.v1"))
 
-// GovernanceBit is a row of the governance bits 0-24 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
-// smartcontracts/vectors/governance/governance_bits.json; bits 25-127 are free, 128-255 the application's bitLabel(bit).
+// GovernanceBit is a row of the governance bits 0-31 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
+// smartcontracts/vectors/governance/governance_bits.json; bits 32-127 are free, 128-255 the application's bitLabel(bit).
 type GovernanceBit struct{ Name, Type string }
 
 // GovernanceBits is indexed by bit.
 var GovernanceBits = []GovernanceBit{
 	{"PAYABLE", "capability"}, {"MINTABLE", "power"}, {"BURNABLE", "capability"}, {"RATE_ADJUSTABLE", "power"},
-	{"WRAP_DISABLEABLE", "power"}, {"FREEZE", "power"}, {"FORCE", "power"}, {"PAUSE", "power"}, {"ALLOWLIST", "capability"},
-	{"DENYLIST", "capability"}, {"RECORD", "power"}, {"LISTING", "power"}, {"FEE_ROUTING", "power"}, {"", "unused"}, {"", "unused"},
+	{"WRAP_DISABLEABLE", "power"}, {"FREEZE", "power"}, {"FORCE", "power"}, {"PAUSE", "power"}, {"ALLOWLIST", "power"},
+	{"DENYLIST", "power"}, {"RECORD", "power"}, {"LISTING", "power"}, {"FEE_ROUTING", "power"}, {"", "unused"}, {"", "unused"},
 	{"ARBITRATE", "reserved"}, {"CORRECT", "reserved"}, {"RESCUABLE", "capability"}, {"PUBLISH", "power"}, {"DEPRECATE", "power"},
 	{"ENABLE_KIND", "power"}, {"MODERATE", "power"}, {"OPERATOR_TRANSFER", "power"}, {"TAX", "power"}, {"PQZ_PROOF", "power"},
+	// group 3l (wrap limits spec 2026-11-10 §2): the hybrids' wrap controls
+	{"WRAP_LIMIT", "capability"}, {"WRAP_LIST", "power"}, {"REDEEMER", "power"},
+	// round 3s (CTR-GOV-24): 8, 9 the token's lists (powers), 28 the compliance registry check
+	{"KYC", "capability"},
+	// CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
+	{"CLOSED_MARKETS", "capability"},
+	// round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
+	{"BURNER", "power"}, {"SUPPLY_CAP_ADJUSTABLE", "capability"},
 }
 
 func KindInfo(kind uint16) (*Kind, error) {
@@ -321,6 +329,7 @@ var (
 	kemPurpose, _        = PurposeTag("kem")
 	pqzKeyPurpose, _     = PurposeTag("pqz-key")
 	membershipPurpose, _ = PurposeTag("membership")
+	msigUpdatePurpose, _ = PurposeTag("msig-update")
 )
 
 // KemSchemeMlkem1024X25519 is kemPk[0] of the one enabled KEM scheme (CTR-UA-32); 2 (ML-KEM-1024 + HQC + X25519, after
@@ -361,6 +370,10 @@ var (
 		"UAPqzKeyVersion":       pqzKeyVersionType,
 		"UAPqzKeyVersionRecord": "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)" + pqzKeyVersionType,
 		"UAMembership":          "UAMembership(bytes32 ua,bytes32 member)",
+		// CTR-UA-44 (TODO 3ze): an msig's structure update on one registry
+		"UAMsigUpdate": "UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members," +
+			"uint256 enabled,uint64 validUntilBlock)" + msigMemberType,
+		"UAMsigMember": msigMemberType,
 	}
 )
 
@@ -599,6 +612,27 @@ func PqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash [32]byte) [32]byte {
 // native member this digest itself, a derived member MemberDigest(ua, UAMessage(MSIG, PURPOSE_MEMBERSHIP, ·)) under member.
 func MembershipDigest(ua, member [32]byte) [32]byte {
 	return typed(HashStruct("UAMembership", ua, member))
+}
+
+const msigMemberType = "UAMsigMember(uint16 kind,bytes32 id,uint16 weight)"
+
+// MsigUpdateDigest (CTR-UA-44) is the typed UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled,
+// validUntilBlock}, members an EIP-712 array of UAMsigMember{kind, id, weight}, enabled the uint256 bitmap (bit i = slot i): what a
+// quorum of the stored structure of the msig ua signs for updateMsig on that one registry, under UAMessage(MSIG, PURPOSE_MSIG_UPDATE, ·)
+// (a native member this digest itself).
+func MsigUpdateDigest(ua, chainUID [32]byte, registry [20]byte, version uint64, threshold uint16, members []MsigMember, enabled [32]byte,
+	validUntilBlock uint64) [32]byte {
+	hs := make([][]byte, len(members))
+	for i, m := range members { // MsigMember (registry.go): ID is the 32-byte id
+		var id [32]byte
+		copy(id[:], m.ID)
+		h := HashStruct("UAMsigMember", w32(uint64(m.Kind)), id, w32(uint64(m.Weight)))
+		hs[i] = h[:]
+	}
+	var reg [32]byte
+	copy(reg[12:], registry[:])
+	return typed(HashStruct("UAMsigUpdate", ua, chainUID, reg, w32(version), w32(uint64(threshold)), Keccak256(hs...), enabled,
+		w32(validUntilBlock)))
 }
 
 const pqzKeyVersionType = "UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"

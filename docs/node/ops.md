@@ -22,6 +22,7 @@ own. Status: the metrics marked BUILT exist; everything else **SPECIFIED**. Inci
 11. [FinOps](#finops)
 12. [Capacity](#capacity)
 13. [Post-quantum Zether chains](#13-post-quantum-zether-chains)
+14. [Operator notes, branch `ua-mtx-merge`](#operator-notes)
 
 ## 1. Scope
 
@@ -209,6 +210,7 @@ Existing (BUILT, `admin.rs` `render()`, `submit.rs`; first-release forms `scaas_
 | `scaas_indexer_lag_blocks` | gauge | `chain` | final head − indexed block |
 | `scaas_relayer_balance` | gauge | `chain`, `lane` | smallest gas-coin unit; the account that pays, so on a chain with `fee_bump_lane` every lane reports the fee account |
 | `scaas_breaker_open` | gauge | `chain`, `lane`, `breaker` | + `revert_streak`, reported on every lane of the chain |
+| `scaas_rpc_failover_answers_total` | counter | `chain` | chain reads answered by an `rpc_urls` endpoint other than the first (the first did not answer); no job is `dead` or order `invalid` on them (`FAILOVER_ANSWER`, [submit-lanes.md](submit-lanes.md#rpc-failover)); 0 on families with no EVM `Chain`. BUILT (Fable recheck 5 R5-5) |
 | `scaas_fee_unread_total` | counter | `chain`, `lane` | landed transactions (mined or reverted) whose fee `tx_fee` could not read, so the gas budget missed that fee; each is also a warning in the log naming the job. BUILT (ua8-soroban B9a) |
 | `scaas_submit_bump_skipped_consumed_total` | counter | none today; `chain`, `lane` added with the metrics core | consumption check |
 | `scaas_config_toml_drift` | gauge | — | [NODE-STO-03](store.md#NODE-STO-03) |
@@ -279,7 +281,7 @@ Node, chains, jobs, lanes, RPC, store (SPECIFIED):
 Watched events (`event`): asset suite `OrderRecorded`, `OrderRevoked`, `ForcedTransfer`, `AccountFrozen`,
 `AccountUnfrozen`, `Paused`, `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `AttesterSet`; token wrappers
 `WrapDisabled`, `GuardianRenounced`, `MinterRenounced`, `RateChangeProposed`, `RateChanged`, `RateChangeCancelled`,
-`RateAdminRenounced`; factory `EnvPublished`, `ImplementationDeployed`, `ImplementationDeprecated`, `KindEnabled` (`IOpenFactory.sol`, plan 5g-Z2). Only
+`RateAdminRenounced`; factory `EnvPublished`, `ImplementationDeployed`, `TokenImplementationDeprecated`, `TokenKindEnabled` (`IOpenFactory.sol`, plan 5g-Z2). Only
 registered tokens and configured factories. (`MetaNonceCancelled` is a subject's own action, handled by the
 consumption check; not an ops event.)
 
@@ -473,6 +475,7 @@ groups:
   - {alert: ScaasLaneHeadStuck, expr: 'scaas_lane_head_stuck_seconds > 300', labels: {severity: P2, runbook: rb-03-stuck-lane}}
   - {alert: ScaasFeeCapReached, expr: 'increase(scaas_submit_fee_cap_reached_total[15m]) > 0', labels: {severity: P2, runbook: rb-03-stuck-lane}}
   - {alert: ScaasFeeUnread, expr: 'increase(scaas_fee_unread_total[15m]) > 0', labels: {severity: P2, runbook: rb-02-breaker-open}}
+  - {alert: ScaasRpcFailover, expr: 'increase(scaas_rpc_failover_answers_total[15m]) > 0', for: 15m, labels: {severity: P2, runbook: rb-01-node-down-or-not-ready}}  # the first rpc_urls endpoint keeps failing: jobs wait as FAILOVER_ANSWER
   - alert: ScaasLaneRunwayLow
     expr: |
       (scaas_relayer_balance{chain!~"$FEE_BUMP_CHAINS"} - on (chain, lane) scaas_relayer_balance_floor)
@@ -732,13 +735,26 @@ figures are estimates to be **measured** by a load test run alone.
 
 Above the rated load: a second node on **different chains**, not a bigger store.
 
+**Lane gas cap for post-quantum signers.** A lane's `max_gas_per_tx` defaults to 3,000,000 (`config.rs`), enough for classical
+signers only. Each SCaaS input of a job verifies its signer's signature once, at the kind's verify cap
+([CTR-DEX-26](../contracts/dex.md#CTR-DEX-26): `mldsa65` 5,950,000), so a lane that serves PQ signers needs a higher cap: an
+`mldsa65`-signed liquidity order with two SCaaS inputs measured 12,143,505 regular gas, plus 979,200 EIP-8037 state gas
+(`smartcontracts/evm/runs/2026-11-10-ua-mtx-liquidity/summary.txt`). Set the cap to at least the largest job the lane accepts
+(regular + state gas under Amsterdam; regular stays ≤ 2^24, [submit-lanes.md#amsterdam-gas](submit-lanes.md#amsterdam-gas)).
+Below it the node refuses the job before it sends anything: `LIQUIDITY_TOO_LARGE` for a liquidity plan
+([NODE-DEX-19](dex-venue.md#NODE-DEX-19)), a gas refusal for any other job. `node.example.toml` carries the same note.
+
 ## 13. Post-quantum Zether chains
 
 <a id="pqz"></a>Operator recommendations for a chain that runs post-quantum Zether tokens
 ([contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md)):
 
 - Chain profile flag `pqz = { genesis_hash = "0x…", registry = "0x…", tokens = ["0x…"] }`; a start-up probe
-  `has_pqz_precompile` (genesis hash first) — a chain that fails it refuses PQZ jobs. The node checks RPC genesis hash
+  `has_pqz_precompile` (genesis hash first; SPECIFIED, not built: the node has no such probe today) — on a chain that fails it
+  the node refuses the jobs of its `PRECOMPILE` PQZ tokens only. An `OFFCHAIN` token
+  ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)) never calls the precompile and its jobs are never refused for a
+  missing one (owner O1, 2026-11-06); BUILT: the node never reads the precompile for an `OFFCHAIN` job
+  (`offchain_job_not_refused_without_precompile`). The node checks RPC genesis hash
   `==` profile `genesis_hash` `==` `registry.chainUid()` `==` each token's `chainUid` and refuses a mismatch (the node
   chain binding, [gateway.md#chain-binding](gateway.md#chain-binding)): the chain id 7622 (formerly 9000) alone does not identify our
   chain.
@@ -768,7 +784,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   ciphertexts from logs (anyone may; it is harmless). A proof in flight chose `p ≥` every credit older than its own
   state read, so the keeper never pushes `rolled` more than 16 past it. Clients prove at `p = pendingCount` and, on
   `InlineTooFar`, refresh state and re-prove once. *Since plan 5h (docs sync 2026-10-20) the contract enforces `ROLL_AGE = 5`
-  blocks per rolled entry and `mtxRollOver(ua, n)` (`n ≤ ROLL_MAX`, the set's: 96 / 80 / 64 / 32 at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`, plan 5h Task 8d part 2b) reads the entries from state, with no ciphertexts from logs
+  blocks per rolled entry and `mtxRollOver(ua, n)` (`n ≤ ROLL_MAX`, the set's: 80 / 64 / 48 / 32 since the three-key round, 96 / 80 / 64 / 32 before, at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`, plan 5h Task 8d part 2b) reads the entries from state, with no ciphertexts from logs
   and no 16-credit batch; the keeper policy and its numbers above are to be updated in the node task that follows part A
   ([CTR-PQZ-08](../contracts/pq-zero-knowledge.md#CTR-PQZ-08)).*
 - **P6i, multi-recipient transfer (op 7, P6-ANON; SPECIFIED):**
@@ -803,8 +819,167 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   restarts the node after exit 120; a fault caused by a pooled transaction can loop (the RPC node gossips it again), so
   `watch.sh` prints `restarts=` and warns when it is not 0, and the operator stops the sealer and drops the transaction. Clients price transactions at least `baseFee + 1` ([evm.md](../networks/evm.md#private-chain)).
 - The node never holds a PQZ secret or an ML-DSA key of a user (as for classical Zether: "the node never needs the
-  confidential key"); it holds no envelope key either — envelopes arrive signed.
+  confidential key"); it holds no envelope key either — envelopes arrive signed — nor a PQZ verifier key: it carries or fetches
+  verdicts and never signs one ([NODE-JOB-22](job-api.md#NODE-JOB-22)).
 - Indexer: `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and `UATransfer` of a PQZ token are
   normalized like any meta token's, beside the `Pqz*` events.
 - Not on the mesh, exactly as classical Zether: the bus never exports a `metatx` or `ua_metatx` intent naming a PQZ
   token, and the SCaaS testnet is private anyway.
+
+- <a id="pqz-verifier"></a>**The PQZ verifier (off-chain) is a separately operated trust role, never this node** (group 3f;
+  node side **BUILT**, T47 `75ddccc4`…`062133b6`; the reference service `scaas-pqz-verifier` **BUILT**, T48 `06e11d23`,
+  `5d4a2780`; [CTR-PQZ-27…30](../contracts/pq-zero-knowledge.md#pqz-verifier-mode)). A token in `OFFCHAIN` mode names a verifier UA
+  whose signature makes its proofs valid; whoever holds that key can approve a false proof up to the token's maximum loss. It is
+  its own process, operator, key custody and resource limits (`scaas-pqz-verifier` is its own crate and binary, never linked into
+  `scaas-node`; anyone may run another that keeps this contract). It **decrypts nothing**: it verifies public statements and proofs
+  and reads chain state, holds no PQZ secret and no ciphertext of anyone ([ARCH-POS-13](../decisions.md#ARCH-POS-13)); its keystore
+  is named in its own config, never a lane key; a k-of-n `msig` of derived keys held by separate parties is recommended (who
+  collects the member signatures of one verdict is not specified yet). **UNAUDITED.**
+
+```toml
+[pqz_verifier]
+endpoints = ["https://pqz-verifier.example.org"]   # asked in order; URLs only, no secret
+refuse_shield_when_unserved = false                # opt-in
+# timeout_ms = 5000            # one endpoint's whole request; one that does not answer (or a 5xx) rests max(10 s, 4 x timeout_ms); set it above the verifier's normal verdict time with a margin: a slow answer rests nothing and costs that long per job (submit-lanes.md)
+# max_response_bytes = 262144  # read in chunks, a longer answer is no answer
+# valid_margin_secs = 30       # a verdict expiring sooner is re-fetched
+```
+
+  - **Request** `POST <endpoint>/v1/pqz-verdict`, JSON, named fields only: `{token, chainId (a number), op: {entry, args, binding,
+    amount?, recipient?, unwrap?}, statement, proof, pqzVerifierEpoch}`; `op.args` the entry's argument struct (uints up to 64 bits
+    as numbers, wider ones decimal strings, bytes hex), `amount` / `recipient` for `mtxUnshield`, `unwrap` for
+    `mtxUnshieldUnwrap`, `binding` the envelope binding the token gave; `statement` and `proof` hex as the node rebuilt them.
+    `op.args` repeats the ciphertext parts the statement carries, so the body is up to about twice the statement plus the proof.
+  - **Answer**: a 2xx JSON `{pqzVerdict: {…}, pqzVerdictSig: {keyData, signature, members}}`; the node reads only
+    `pqzVerdict.pqzVerifierEpoch`, `pqzVerdict.validUntil` and the signature, and rebuilds the rest. A non-2xx (a named refusal), a
+    body above `max_response_bytes`, a timeout, a decode failure or a `UASig` past the bound is no answer.
+  - **The verifier's own duties** (T48): release address → set; the statement's length one of the set's `STMT_*`, its word 32 the
+    set's PQZL id; `pqz-ffi`'s `pqz_precompile`; the statement rebuilt from the token's state and compared; every key named passes
+    [CTR-PQZ-30](../contracts/pq-zero-knowledge.md#CTR-PQZ-30)'s checks; signs only a valid proof, `validUntil` short (minutes),
+    the token's current epoch, every signature logged with `token`, `statementHash`, `proofHash`; a refusal is a named JSON error,
+    never a signature; a bounded queue, concurrency and per-client rate limits. Group 3t
+    ([CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36); BUILT, `tests/service.rs` `refuses_stale_fee_word`): after the
+    view call and before the byte compare, the request's statement word 256 must equal the view's (one source), else
+    `FEE_WORD_MISMATCH` with its three terms (`confidentialFee()`, `pqzVerifyConfig().verifierFee`, `M·d`); the fee is the token's,
+    not the service's policy. A fee change between the config read and the view call gives `STATEMENT_MISMATCH` or
+    `FEE_WORD_MISMATCH`, never a wrong signature (the verdict binds the statement's hash).
+  - **The reference service's configuration and refusals** (`scaas-pqz-verifier`, Fable C-1…C-6 on branch
+    `ua-mtx-fix-verifier`; [pqz-verifier.example.toml](../../scaas-pqz-verifier/pqz-verifier.example.toml), names and paths
+    only, no secret): `rpc_urls` (one or more, asked in order; one request's reads from one node at one block, the next node
+    only when one does not answer within 10 s or answers an error that is not a revert,
+    [ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover; **every endpoint must be a node the verifier's operator trusts,
+    until the strict-majority option exists (`scaas-rpc`)**, owner ruling 2026-11-11 ([decisions.md](../decisions.md)
+    CTR-PQZ-29 Change): the option is deferred to the shared `scaas-rpc` crate (TODO 8b), the block is pinned by number not
+    hash (R-6, deferred with it), and a lying RPC could pass a key check (§6, CTR-PQZ-30: the key record, its stored `pqzPop` bytes, `keyOwner`) that `OFFCHAIN` tokens trust the verifier for), `chain_id` (required; every endpoint must answer it at start or
+    the service does not start), `chain_uid`, `registry` and `registry_generation` (1 or 2; at start the registry's
+    `chainUid()` and `generation()` on every endpoint must equal them): the one chain and registry it serves, and the only inputs of the `UAAuth` digest it signs (never a hash read from the
+    chain). New refusals: `FOREIGN_REGISTRY` and `FOREIGN_CHAIN_UID` (the token's code names another registry or `chainUid`),
+    `BODY_TIMEOUT` (408: the body not read within 15 s; read before a queue place is taken), `KEY_RECORD_FULL` (503: the
+    in-memory key ownership record holds 2^18 keys; a restart empties it).
+  - **Paid on the token** (group 3t): an `OFFCHAIN` token with `verifierFee ≠ 0` pays the verifier UA `verifierFee ·
+    shieldScale` per debit from `SHIELD_POOL`: a native verifier's ERC-20 balance, a derived one's UA-ledger balance (its first
+    payout creates the slot); the verifier spends it with its own key, as any holder. An operator's price floor is not specified. Open (owner): the request body limit (built
+    1,244,672 B against the spec formula's 722,688 B), how JSON depth is counted, whether the key-ownership record persists across
+    restarts.
+  - **Served**, for the shield switch: some endpoint answers 2xx to the probe `POST <endpoint>/v1/pqz-verdict/probe {token,
+    chainId}` (a fixed probe statement; the reference service answers it only for an `OFFCHAIN` token naming it); one probe per
+    shield job. The check before a verifier transfer is proposed asks the proposed `next` with `proposal: true`, answered while
+    the token still names another verifier or none. With
+    `refuse_shield_when_unserved = true`, shield and wrap-shield jobs (`UAShield`, `WrapShield` on a PQZ token) into an `OFFCHAIN`
+    token whose verifier is revoked (`pqzVerifyConfig().verifier == 0`) or that no endpoint serves (none configured counts as
+    unserved) are refused `PQZ_VERIFIER_UNREACHABLE`, for every consumer; a probe that does not get through while none serves
+    is `PQZ_VERIFIER_PROBE_UNREAD`, back in the queue.
+- **`OFFCHAIN` token health** (BUILT, T47; the token view SPECIFIED): per `OFFCHAIN` token the indexer keeps
+  `pqz_last_verdict_at`, the epoch, the revoked state and (group 3t) `pqz_verifier_fee` ([indexer-feeds.md](indexer-feeds.md#pqz-verifier-rows)). Alerts:
+  `PqzVerifierProposed` (with `eta`), `PqzVerifierRevoked` and `VerifierFeeProposed` (with `eta`) are feed rows with `alert: true`;
+  no metric yet. **Operator note** (group 3t): a `ConfidentialTransfer*.fee` is the whole fee word, `txFee + verifierFee + M·d`.
+
+## <a id="operator-notes"></a>14. Operator notes, branch `ua-mtx-merge`
+
+Status: each row names its own status. One note per job-shape or config change of the round (AGENTS.md: a consumer on an old shape
+must be told, never left to go `dead` silently); an old shape is refused by name. Nothing is live with value: every chain is test
+only. **UNAUDITED.**
+
+| Change | Who acts | What to do |
+|---|---|---|
+| The `ua*` / `mtx*` merge (BUILT, [CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30)): one signed entry per operation, `mtx<Op>` on ids with `UASig`; the address token forms and the `ua<Op>` names are gone. A token transfer or payment is a `ua_metatx` job (`{op}` with `auth`, or `{token, struct: "transfer", m, auth}`); a `metatx` job's `MetaTransfer` is refused `OP_KIND_MISMATCH` by name ([job-api.md](job-api.md#named-entries)) | EVM job producers, clients | build the merged entries; ids as `bytes32` (a native address zero-padded); an old shape is refused by name, never silently `dead` |
+| The gateway's token doors: `/v1/op` takes the merged entries with `auth`, `/v1/ua-metatx` a `UAMetaTransfer`, `/v1/metatx` refuses a token or a mandate wallet by name (BUILT, [gateway.md](gateway.md#routes)) | wallets, partners on door A | move to `/v1/op` or `/v1/ua-metatx` |
+| The DEX: a SCaaS token's order is a `UATradeOrder` (shape 1) signed in `auth`, an outside token's a `TradeOrder` (shape 0); the cancels are `CancelUAOrder` / `CancelUAWrapOrder` on a token (BUILT, [CTR-DEX-26](../contracts/dex.md#CTR-DEX-26)); the other form is `LEG_SHAPE` | DEX clients, the public DEX API | sign the shape of the sell token's kind |
+| The mesh's EVM token body is `evm.ua_meta_tx` + `auth` under `scaas-intent/1.3`, for a native `from` (BUILT, [NODE-MESH-18](mesh.md#NODE-MESH-18)); a derived `from` is `DERIVED_FROM_UNSUPPORTED` | mesh peers | upgrade the node; a 1.2-only peer ignores the 1.3 envelopes |
+| A derived signer of a cancel (`mtxCancelNonce`) signs the named purpose of every named operation (MD-5) | wallets, `clientkeys` / `ua-rs` | re-sign old cancel signatures |
+| The mandate wallets take the merged form: owner and delegate ids, the named entries as `ua_metatx` jobs, the flat builders and `mtxExecuteAsOwner(Raw)` gone (MD-11; new CREATE2 addresses, [mandates.md](../contracts/mandates.md#mandatewallet)) | wallet owners, deployers | redeploy; move the jobs to the named entries |
+| Every PQZ proof-carrying entry ends with `PqzSignedVerdict pqzVerdict` (BUILT, T45): new selectors on kinds 4, 5, 12, 13, direct and signed | clients building PQZ calldata, node operators | update `clientkeys` / `ua-rs` and the node together; the token refuses the old selectors |
+| PQZ jobs gain `args.pqz_verdict: {pqzVerifierEpoch, validUntil, auth}` (BUILT, [NODE-JOB-22](job-api.md#NODE-JOB-22)) | PQZ job producers | `OFFCHAIN` token: send it, or let the node fetch it; `PRECOMPILE` token: leave it out (`PQZ_VERDICT_NOT_EXPECTED`) |
+| `ConfidentialConfig` gained `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed` (group 3f) and `proofStore` (group 3h); the `TokenConfig` encoding moved for every kind (BUILT) | token creators, the wizard | every kind sends the fields; non-PQZ kinds leave them 0 / false (`ConfigFieldForOtherKind(4)`); a PQZ creation states the mode and, for `OFFCHAIN`, the verifier and fixed or transferable, after showing the maximum loss |
+| `[pqz_verifier] endpoints`, `refuse_shield_when_unserved` (BUILT, [above](#pqz-verifier)) | node operators | configure endpoints for the `OFFCHAIN` tokens served; the node signs nothing and holds no verifier key |
+| The router's creations are rows (BUILT, [NODE-JOB-26](job-api.md#NODE-JOB-26), [NODE-JOB-27](job-api.md#NODE-JOB-27)): `mtxCreateToken` / `mtxCreateDex` with a named `config`; `mtxCreateInstance` with `init_call` bytes (at most 4,096) or a known class's named `config` (`PqChat`: `{owner}`, 0 or the creator), never both; refused by name `RELEASE_UNKNOWN`, `RELEASE_DEPRECATED`, `INSTANCE_CONFIG_UNKNOWN`, `INIT_CALL_TOO_LONG` | creators, wallets, job producers | send the struct's fields by name, never `initHash`; list the chain's router in `governance_routers` |
+| Chain reads per `[[chains]]` table (BUILT, Fable recheck 3, [submit-lanes.md](submit-lanes.md#rpc-failover)): `rpc_timeout_ms` (30 s) bounds each request (reads, each log span, the lane's nonce, fee, send, receipt), `rpc_simulate_timeout_ms` (120 s, unmeasured) each request of a simulation, 0 refused at start; a failover endpoint (the second `rpc_urls` entry onward) is used only on the chain's id and block 0, at or above the head the first endpoint gave, and none of its answers (a revert or a value) makes a job `dead` or an order `invalid` (`FAILOVER_ANSWER`, requeued; 503 at the gateway, DEX intake and cancels); no job goes `dead` on an unread chain or on a failover endpoint's answer, and an expiry is `dead` only after the first endpoint said the op did not land (the three expiry verdicts (`expired before submit`, `expired while stuck; nonce gap-filled`, `expired before inclusion`); a first endpoint's revert stays `dead` by design); a tracked job refused on a failover answer, or a tracked transaction that cannot be read, at a restart makes the node process exit (its supervisor restarts it; every chain and the gateway down meanwhile); `scaas_rpc_failover_answers_total` counts the reads failover endpoints answered (alert `ScaasRpcFailover`); an RPC that caps `eth_getLogs` below 500 blocks is given up for the PQZ log reads | node operators | raise `rpc_simulate_timeout_ms` if a PQZ or Zether simulation's error is the HTTP client's timeout (`simulate: … operation timed out`); repair the first endpoint when `FAILOVER_ANSWER` jobs pile up or the failover counter climbs; pin `chain_uid` so a failover endpoint can be checked while the first is down; list one endpoint with an `eth_getLogs` cap of at least 500 blocks |
+| The PQZ verifier (off-chain) is a separate trust role (BUILT, T48) | whoever a token names as verifier | run `scaas-pqz-verifier` (or another implementation of its contract) apart from the node, its key in its own keystore |
+| Alerts `PqzVerifierProposed`, `PqzVerifierRevoked`; per-token `pqz_last_verdict_at` (BUILT) | operators, wallets | watch a proposal before its `eta`; a revocation freezes the token's confidential balances until a new verifier is set |
+| The verdict-less `verifyTransferAmount` reverts `PqzVerdictRequired()` on an `OFFCHAIN` token (BUILT, T45) | ERP reconciliation | use the verdict form, or `pqz-ffi` on `disclosureStatement` |
+| `GovernanceRouter` gained `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier` (3f) and `mtxSetProofStore` (3h) (BUILT); its CREATE2 address moved | deployers, node call tables | redeploy the router; the new address in the deployments JSON |
+| PQZ gas pins moved: every `PRECOMPILE` debit carries the empty verdict (480 B, at most +30,720 gas at the EIP-7976 floor); at `n2048-kmax1024` a PQZH op 7 commit-reveal M = 4 without the auditor paid by an `mldsa65` UA no longer fits (M ≤ 3) | relayers quoting PQZ jobs | re-read the figures; the node reads gas from the chain |
+| PQZ debit jobs name `ownTag` (`bytes32` hex) in `args` (BUILT, T63 `39fa296c`); the old shape is `BAD_PAYLOAD: args.args.ownTag: missing` | PQZ job producers | send `ownTag` ([job-api.md](job-api.md#pqz-owntag)); probe a token's release with `proofStore()` (answers from 3h) |
+| A LOG token can hold a large debit under `PROOF_STORE_OVER_LANE_CAP` (BUILT, [NODE-JOB-24](submit-lanes.md#NODE-JOB-24)) until the issuer sets NONE or the job's `validUntil` passes | PQZ job producers, issuers | read the status; it is queued, never `dead` early |
+| PQZ debits, rollovers and prepares name `keyVersion`; the registry's `setPqzKey` / `storePqzPop` take a version (BUILT, T55, [NODE-JOB-23](job-api.md#NODE-JOB-23)) | PQZ job producers, wallets | rotate a key on an operator change or a share holder leaving; in-flight credits to a rotating UA are refused by name (`PQZ_KEY_ROTATION_PENDING`, `PQZ_KEY_ROTATED`) and re-proved; a 60 M chain at `n2816-kmax65536` cannot rotate (spec KV-2) |
+| A new contract kind `service` (BUILT, T79, [NODE-JOB-25](job-api.md#NODE-JOB-25)): `[[chains.services]] address, entries = [{entry, op_type}]` after every key of its `[[chains]]` table (`node.example.toml`); the lane stops on `SERVICE_ENTRIES_MISMATCH`; new `params.max_service_op_bytes` (default 2,048) | node operators, service payers | jobs `{kind: "ua_metatx", op: {entry, contract: "service", token: <service>, args: {op, pullToken, t, auth}}}`; in `t`, `mode` may be a JSON number, every other `uint` a decimal string; new refusals `SERVICE_ENTRIES_MISMATCH`, `SERVICE_PULL_SHAPE` (code 1–4 or `fee nonce`), `SERVICE_TOKEN_MISMATCH`; the gateway takes no service job |
+| `meta.payNo` is a `0x` + 64-hex `bytes32` (absent = 0, none), no longer text (BUILT, plan T83 `ba280ade`): a text `payNo` is `BAD_PAYLOAD: meta.payNo: not 0x-hex`, a short one `not bytes32`; `PAY_NO_TOO_LONG` is gone. New `meta.save` (JSON bool, absent = false; with `payNo` 0 `PAY_META_SHAPE`; inside the commitment, so a differing `save` is `PAY_META_MISMATCH`); `max_pay_meta_bytes` (default 2,048) counts `body` only | pay job producers, ERPs | send `payNo` as `bytes32` (recommended a right-aligned UUIDv7, `clientkeys` `payNoFromUuid`); read the records with `paymentCount(payNo)` / `paymentsOf(payNo, offset, limit)` by `eth_call` (no node API) |
+| `PaymentMeta(bytes32 indexed payId, bytes32 indexed payNo, bool save, uint16 schema, bytes body)` (topic 0 changed); the indexer's `PaymentSettled` row carries `pay_no` as 0x-hex 32 bytes (was text; all zero = none) and a new `meta_save` (BUILT) | feed consumers | change a text `pay_no` column or decode the hex |
+| Pay selectors changed with the `PayMeta` tuple: `mtxPay`, `mtxPayWithPayeeFee`, `payWithFee`, `payWithFeeToUA`, `mtxPayWithTax`, `payWithTax`, `MandateWallet.payUnderMandate`, `mtxPayUnderMandate` (BUILT) | anyone hand-building calldata | build from named fields; the old tuple reaches no function |
+| A taxed pay is the named entry `mtxPayWithTax` on kinds 8–13 (BUILT, T40, T42, [CTR-AS-18](../contracts/asset-suite.md#CTR-AS-18)); a PERCENT payment in flight across a rate change reverts `TaxMismatch(expected, got)`, refused at the simulation by name (a node pre-check from `taxConfig()` is SPECIFIED) | ERPs, issuers | ERPs use AMOUNT; issuers announce a rate change and drain PERCENT queues across its `eta`; the client re-signs a refused job |
+| `UARelayFee` gained `batch` and `nonce` (new typehash, BUILT T38 `e273978e`, [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27)): a relay-fee job names `args.batch`, `args.nonce` on the payer's own lane; an old-typehash signature is refused; the router's CREATE2 address moved | relay-fee job producers, deployers | sign the new struct (a lane may be dedicated to relay fees); redeploy the router, the new address in the deployments JSON |
+| Pay lanes are free (BUILT T37 `3740b85e`, [CTR-MTX-31](../contracts/metatx.md#CTR-MTX-31)): the node no longer checks `batch == payLane(entryRef)`, nonce 0 on a pay; one `entryRef` may be paid several times | ERPs, reconcilers | add the amounts of one key; keep `payLane` only as an own convention |
+| An `msig` registered with a KEM key is refused `UAKemHolder` (BUILT, T66a, [CTR-UA-32](../contracts/accounts.md#CTR-UA-32)) | clients on the old builders | register the `msig` without a KEM key; senders seal to each accepted member's own key |
+| A factory creator is a 32-byte UA id (canonical; a native id still in its 20-byte form) in a feed, job field or export (PLANNED: the node decodes no `TokenCreated` / `DexCreated` today, so no node shape moves) | feed consumers | read creators as `bytes32` ids ([CTR-TOK-27](../contracts/token-wrappers.md#CTR-TOK-27)) |
+| The regulated kinds 8–13 and `ComplianceRegistry` (BUILT, T24–T36, [asset-suite §2](../contracts/asset-suite.md#2-regulated-controls)); `TokenConfig` gained field 6 `reg` for every kind (a plain kind sends it zero, else `ConfigFieldForOtherKind(6)`); the plain kinds refuse bits 5–10, 21, 22 with `FeatureInvalidForKind` | token creators, the wizard, deployers | encode `reg` on every kind; deploy the regulated releases and the registry with the release set (deployments JSON `compliance_registry`, `compliance_registry_codehash`) |
+| The `GovernanceRouter` gained the eight control ops `mtxFreeze`, `mtxUnfreeze`, `mtxForceTransfer`, `mtxPause`, `mtxUnpause`, `mtxRecordOrder`, `mtxRevokeOrder`, `mtxOperatorTransfer` (BUILT, T32); the token has no `mtx` twin | issuers, compliance holders, node call tables | relay a holder's control as a router job (`gov_router`), fee 0; a contract holder signs by ERC-1271, an `msig` holder through the registry |
+| Regulated refusals by name at the node and the venue (`Frozen`, `TokenPaused`, `NotEligible`, `FeeRecipientFrozen`, `RegistryUnavailable`, `RegistryGasStarved`), regulated legs and alerts (BUILT, T35, [regulated legs](#regulated-legs)) | node operators, venues, wallets | set the registry keys for a venue; watch the alerts; use the runbook below |
+
+**Regulated kinds: emergency runbook** (regulated-kinds spec §3.6, F-06, M-06; [CTR-GOV-09](../decisions.md#ctr-gov-09--delayed-relaxing-and-record-later-with-the-asset-suite),
+[CTR-AS-21](../contracts/asset-suite.md#CTR-AS-21)): who stops what at once, who only after `grantDelay` (≤ 30 d).
+
+| Threat | At once | After `grantDelay` |
+|---|---|---|
+| Compromised issuer (bits 5–7) | its harm is bounded: ≤ 30 d per issuer-only freeze (≤ 60 d per episode), ≤ 7 d pause, then cooldowns; `unfreeze` and `unpause` by another issuer root | owner `revokeRole(5/6/7)` or `disableFeature`, confirmed by the proposer |
+| Compromised `FORCE` holder | compliance `revokeOrder` of each live record; or owner `revokeRole(10, ·)` of every compliance root; or `disableFeature(RECORD)`; each stops `FORCE` | owner `revokeRole(6)` |
+| Compromised compliance (bit 10) | owner `revokeRole(10, holder)` (not delayed); `FORCE` still needs a frozen subject and the issuer | — |
+| Registry hostile, unavailable or gas-starving | admin `disableFeature(28)` (`KYC`, group 3s) when not locked: two calls with `grantDelay`; `enableFeature(28)` again, at once, once the registry is trusted; a locked bit has no recovery, as disclosed | — |
+| Compromised list holder (bits 8, 9, group 3s, [CTR-AS-31](../contracts/asset-suite.md#CTR-AS-31)) | it denies or unlists any account at once; the bits are never switched off, so relief is a holder's list edit | admin `revokeRole(8 / 9)`, at once (not delayed); a second holder granted ahead avoids the `grantDelay` of a new grant |
+| Before `enableFeature(8)` (an allow list) | list, `ALLOWED`, every party first: the holders, the DEX and its `puller()`, `RelayFeeRouter`, the tax recipient and every fee recipient, wrappers holding the token, the clones and escrows; check the issuer seat (or a granted lister) holds bit 8 (`ListHolderMissing` otherwise). A contract holding a denied or unlisted party's units cannot pay it out until a holder edits the list; a payout to several recipients reverts as a whole when one is blocked | — |
+| Owner proposes a relaxation | `RelaxProposed` is public for `grantDelay`; the node alerts | the proposer confirms in the window |
+| Branch `ua-mtx-fix2-contracts` (BUILT, Fable review D P3-2): the router ops `mtxDeprecateToken`, `mtxDeprecateDex`, `mtxDeprecateRelease`, `mtxSetTokenKindEnabled`, `mtxSetClassKindEnabled` take a named field `chainUid` (the chain's `chain_uid`, signed in the struct; [token-wrappers.md](../contracts/token-wrappers.md#factory)) | router job producers, clients | send `chainUid`; a job without it is refused by name (`BAD_PAYLOAD` on the missing field), never silently `dead` |
+| Branch `ua-mtx-fix2-contracts` (BUILT, merge of `ua-mtx-fix2-dex`, [CTR-DEX-32](../decisions.md#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them)): a `mtxCreateDex` job's `args.config` (`ISCaaSDex.DexConfig`) has two more named fields, `features` and `lockedFeatures` (bit 29 `CLOSED_MARKETS`; `"0"` for the default open DEX) | creation job producers, clients | send both fields; a config without them is refused by name (`BAD_PAYLOAD: args.config.features: missing`), never silently `dead` |
+| Branch `ua-mtx-fix2-contracts` (BUILT, owner 2026-11-12, [CTR-DEX-32](../decisions.md#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them)): the DEX venue serves every client market of an open DEX (bit 29 `CLOSED_MARKETS` clear, the default), listed or not, and on a closed DEX only the listed pairs; each token's order form is the factory's answer (`versionOf`), no longer the DEX's `tokenKind`; a `FeatureDisabled(29)` of the DEX opens the waiting markets without a restart, with the client's resting orders on them ([NODE-DEX-20](dex-venue.md#NODE-DEX-20)); a market whose check is unread at start is read again each round, not served meanwhile; an unreadable `features()` stops the venue at start (fail closed) | DEX venue operators, market configuration in the client | configure the markets you want served; on a closed DEX `setMarket` them first; an unlisted market of a closed DEX is logged "not served until it opens" |
+| Branch `ua-mtx-fix2-contracts` (BUILT, owner 2026-11-12, [CTR-GOV-27](../decisions.md#CTR-GOV-27)'s Change): the router ops `mtxTransferAdmin`, `mtxPublishTokenEnv`, `mtxPublishDexEnv`, `mtxPublishClassEnv` take a named field `chainUid` (the target's `chainUid()`: a token's, the DEX's, the factory's, a `ComplianceRegistry`'s), and `mtxSetChainEntries` takes `entries` (a named `ChainEntries` object) and `chainUid`; the direct `transferAdmin(newAdmin, chainUid_)`, the three env publishes, `revokeApproval(key, chainUid_)` and `setChainEntries(entries, chainUid_)` take the word too; a `ComplianceRegistry` is deployed with `(admin, govRouter, chainUid)` | router job producers, clients, deploy scripts | send `chainUid` (and `entries` as one object); a job without it is refused by name (`BAD_PAYLOAD` on the missing field), never silently `dead`; a direct call with another chain's word reverts `ChainUidMismatch` |
+| Branch `ua-mtx-fix2-contracts` (BUILT, Fable recheck-2 P3-1, [CTR-GOV-27](../decisions.md#CTR-GOV-27)): the router op `mtxRenounceAdmin` takes a named field `chainUid` (the target's `chainUid()`: a token's, the DEX's, the factory's), signed in `UARenounceAdmin`; the direct `renounceAdmin(chainUid_)` and the three release deploys (`…, chainUid_`) take it too | router job producers, clients, deploy scripts | send `chainUid`; a job without it is refused by name (`BAD_PAYLOAD` on the missing field), never silently `dead`; a direct call with another chain's word reverts `ChainUidMismatch` |
+| Branch `ua-mtx-fix2-contracts` (BUILT, B P3-2, owner 2026-11-12): a `SmartKeyAccount` or `MandateWallet` signer (`from` = the wallet on a token, the DEX, the router, the registry) answers ERC-1271 by ERC-7739 only ([accounts.md CTR-ACC-02](../contracts/accounts.md#erc1271-wrap)); a raw-digest signature fails `MetaTxBadSignature` in simulation and the job goes `dead` | clients signing for a contract wallet | sign `erc7739TypedData(td, wallet)` and send `erc7739Signature(inner, td)` (clientkeys); the account's own entries are unchanged |
+| Branch `ua-mtx-fix2-contracts` (BUILT, owner 2026-11-12, [CTR-GOV-25](../decisions.md#CTR-GOV-25)): a token created with bit 17 and `rescueTo` 0, and every DEX and puller created with `rescueTo` 0, rescue to the constant dev address `0xd33d17991f57BefB4CcBb3E57c477c10BdE5B465` (a `RescueVault`: first rescuer, who receives, the dev EOA `0x0389f77E846ff687d44db57bcC9DCB55dd6f4131`; first admin, who only sets the rescuer, the native UA `0xAb92b0E9bD2E18F7003c30dAFE93Ef9bc3e1248C`; branch `ua-mtx-rescue-vault`); `rescueTo()` returns it; `RescueOff` is gone | token and DEX creators, indexers | pass a `rescueTo` to keep your own destination; an indexer reading `rescueTo()` sees the constant, never 0, on those contracts |
+| Branch `ua-mtx-fix2-contracts` (BUILT, owner 2026-11-12, [CTR-MTX-86](../contracts/metatx.md#CTR-MTX-86)): the payee-fee rename. The token entry `mtxPayReceiverFee` is `mtxPayWithPayeeFee` (op `UAPayeeFee`, a new typehash: the payee signs the new struct name), the view `receiverFeeDigest` is `payeeFeeDigest`, the event `UAReceiverFeePaid` is `UAPayeeFeePaid`, the errors `ReceiverFee*` are `PayeeFee*`, the UA purpose `receiver-fee` is `payee-fee` (a new purpose tag: a derived payee signs under it), the job field `receiver_fee` is `payee_fee` | job producers, clients signing the payee's co-signature, indexers | send the op `UAPayeeFee` and the field `payee_fee`; a job with `receiver_fee` is refused by name (`RECEIVER_FEE_REFUSED`), never silently `dead`; a job carrying `payee_fee` is refused `PAYEE_FEE_REFUSED` on every family (the payee fee goes only as the EVM op; the other families have no such entry); an op naming `mtxPayReceiverFee` or `UAReceiverFee` is refused `UNKNOWN_ENTRY`; a co-signature over `UAReceiverFee` or under `receiver-fee` fails `MetaTxBadSignature`; index `UAPayeeFeePaid` (topic `0x99d49c28…`), no longer `UAReceiverFeePaid` |
+| Branch `ua-mtx-fix3-chainuid` (BUILT, owner 2026-11-13, [CTR-GOV-28](../decisions.md#CTR-GOV-28)): the router ops `mtxGrantRole`, `mtxRevokeRole`, `mtxSetGrant`, `mtxCancelGrant`, `mtxDisableFeature`, `mtxEnableFeature`, `mtxPqzSetVerifier`, `mtxPqzCancelVerifier`, `mtxPqzRevokeVerifier`, `mtxSetVerifierFee`, `mtxSetKycProvider`, `mtxSetCompliance` and (owner 2026-11-13, second ruling) `mtxRenounceRole` take a named field `chainUid` (the target's `chainUid()`: a token's, the DEX's, a `ComplianceRegistry`'s), the last op field, signed in the struct (thirteen new typehashes); the direct `grantRole`, `renounceRole`, `setGrant`, `cancelGrant`, `revokeRole`, `disableFeature`, `enableFeature`, `pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier`, `setVerifierFee`, `setKycProvider` and `setCompliance` take a trailing `chainUid_` | router job producers, clients, deploy scripts, admins and role holders calling directly | send `chainUid`; a job without it is refused by name (`BAD_PAYLOAD` on the missing field), never silently `dead`; a direct call with another chain's word reverts `ChainUidMismatch`; a signature over the old struct fails `MetaTxBadSignature` |
+| Branch `burner-wrap-caps` (BUILT, build 3zb + 3zc; owner 2026-11-13, [CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change): 25 more router ops take a named field `chainUid` (the target's `chainUid()`), the last op field, signed in the struct: the 24 holder ops (`mtxMint`, `mtxMintToUA`, `mtxDisableWrap`, the three rate ops, `mtxSetWrapMember`, the eight regulated controls, the two list writes, the two tax setters, `mtxSetProofStore`, the DEX's four) and `mtxSetWrapLimits` ([job-api.md](job-api.md#holder-chain-word)); every direct entry of a role holder (and the admin's `setWrapLimits`) takes a trailing `chainUid_` | router job producers, clients, role-holder contracts (an issuer's minter contract, a rate-admin timelock, a guardian, a Safe), deploy scripts | send `chainUid`; a job without it is `BAD_PAYLOAD: args.chainUid: missing`, never silently `dead`; old calldata on a router is `CALL_TARGET_REFUSED`; rebuild a role-holder contract against the new ABI and have it read `chainUid()` ([integration.md](../integration.md#holder-chain-word)); a holder's direct call with another chain's word reverts `ChainUidMismatch` |
+| Branch `burner-wrap-caps` (BUILT, build 3zb + 3zc; [CTR-GOV-29](../decisions.md#CTR-GOV-29), [CTR-GOV-30](../decisions.md#CTR-GOV-30)): a `mtxCreateToken` job's `args.config` has two more named fields, `roles.burner` (`bytes32`) and `maxWrapSupply` (`uint256`, after `maxSupply`); the `TokenConfig` encoding moved for every kind | token creators, the wizard, `create` job producers | send both (0 = none); a job of the old shape is refused by name (`BAD_PAYLOAD: args.config.roles.burner: missing`, `…maxWrapSupply: missing`), never filled with a default |
+| Branch `burner-wrap-caps` (BUILT, build 3zb + 3zc; [CTR-GOV-30](../decisions.md#CTR-GOV-30)): new router ops `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` (fee mode `NONE`); with a non-zero `grantDelay` the first landed op is a **proposal** (`MaxSupplyProposed` / `MaxWrapSupplyProposed`, `eta`), the same op again in `[eta, eta + grantDelay]` applies (`…Set`); a send past the window proposes again | admins of wrapped tokens, operators reading `landed` | read the event, not `landed`; supply-cap verdicts ([submit-lanes.md](submit-lanes.md#supply-cap-verdicts)): a wrap or a mint above a cap and a setter before its `eta` or under a floor wait `queued` (`SUPPLY_CAP_REFUSED`) until they land, expire or reach the attempt cap |
+| Branch `burner-wrap-caps` (BUILT, build 3zb + 3zc; [CTR-GOV-29](../decisions.md#CTR-GOV-29)): on a `BURNER` token `mtxBurn` is role-checked; a burner's spent window waits `queued` (`GRANT_WINDOW_REFUSED`, also a minter's `mtxMint` / `mtxMintToUA`), every other grant refusal of the job's own subject is `dead` by name | burn job producers, issuers | grant the burner, or widen its window; this is a node rule change: before the round a mint whose window was spent went `dead` |
+
+<a id="supply-caps"></a>**Lowering a supply cap** (BUILT, build 3zb + 3zc; [CTR-GOV-30](../decisions.md#CTR-GOV-30),
+[supply caps](../contracts/token-wrappers.md#supply-caps)). A pending lower `maxSupply` or `maxWrapSupply` binds nothing before
+its apply (owner O4), and its floors are checked at the apply: anyone who wraps above the pending value before `eta` and holds
+through the window makes the apply revert (`MaxSupplyBelowSupply` / `MaxWrapSupplyBelowWrapped`), and the minter's mint does the
+same to `maxSupply`. The admin's remedies, before or during the delay:
+A cap setter's job that waits `queued` (`GrantNotReady(31, …)` before `eta`, or a floor at the apply) is the admin's own
+signed op and still lands later: if the admin meanwhile proposes another value, the held op then lands as a new proposal of
+its own value and replaces it, restarting the clock. Before proposing another value, cancel the held op's nonce
+(`mtxCancelNonce` on the router's lane).
+
+| Token | At once |
+|---|---|
+| a hybrid with bit 25 `WRAP_LIMIT` | a token-wide wrap limit (tightening the wrap side applies at once, [CTR-TOK-31](../contracts/token-wrappers.md#CTR-TOK-31)) |
+| a hybrid with bit 26 `WRAP_LIST` | turn the wrapper list on (applies at once) |
+| a hybrid with a minter | `revokeRole(1, minter, chainUid_)` or narrow its grant (at once), or `disableFeature(1, chainUid_)` |
+| any wrapped kind with bit 4 `WRAP_DISABLEABLE` | the guardian's `disableWrap(u, reason, chainUid_)` of a leg: one-way; a pure wrap has no bits 25 / 26, so this is its only answer |
+
+To lower `maxSupply` under the current `maxWrapSupply`, lower `maxWrapSupply` first (both may be pending together); a raise of
+both applies `maxSupply` first. No cancel entry: propose the current value to replace an unwanted pending.
+
+Alerts: the indexer marks `alert` on `OrderRecorded`, `RelaxProposed`, `AccountFrozen` and `Paused` (BUILT, T35,
+`scaas-node/src/indexer.rs` `ALERTS`); an alert on `FeatureDisabled` is SPECIFIED.

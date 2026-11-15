@@ -1,0 +1,24 @@
+pqz-three-keys step 4 (token and factory), n2304-kmax4096, per-directory forge gate (gate.sh, capped, -j 1)
+dir | rc | counts
+test/pqz | 1 | 404 passed, 7 failed (stale vectors, step 5: typed_ops UAPqzTransferSingle row, state.json noneHeaders, verdict.json set, PQZH register_proof.hex probe x4), 2 skipped
+test/pqz/PqzThreeKeys.t.sol | 0 | 30 passed
+test/modules | 0 | 35 passed
+test/v2 | 0 | 635 passed
+test/as | 0 | 357 passed
+test/merge | 0 | 119 passed
+test/governance | 0 | 525 passed
+test/metatx | 0 | 400 passed
+test/ua | 0 | 670 passed
+test/zether | 0 | 336 passed, 4 skipped
+test/wrap | 0 | 72 passed
+test/pqchat | 0 | 99 passed
+test/account | 0 | 58 passed
+test/wallet | 0 | 100 passed
+test/liquidity | 0 | 82 passed, 1 skipped
+test/hedera | 0 | 20 passed
+test/pqzh | 0 | 42 passed
+test/research | 1 | 8 passed, 2 failed (the same PQZH register_proof.hex probe, step 5), 4 skipped
+test/confidential | 0 | green
+test/factory | 1 | CreateConfigKat: create_config.json token initArgs (TokenConfig moves, step 5 vector)
+isolate test/ua/{UAGas,UARegistryGroups} | 0 | 22 passed
+size gate | 0 | 0 errors, 170 contracts; NormalPqzTokenQ 33,244 B (notice 33,780 B)

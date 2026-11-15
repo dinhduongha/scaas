@@ -2,11 +2,11 @@
 pragma solidity ^0.8.24;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {SlhDsaSha2128s, UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
+import {SlhDsaSha2128s, SlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
 import {Shake} from "../../src/ua/Shake.sol";
-import {UAFndsaVerifier} from "../../src/ua/FnDsa.sol";
+import {FndsaVerifier} from "../../src/ua/FnDsa.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
-import {MlDsa, UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {MlDsa, MldsaVerifier} from "../../src/ua/MlDsa.sol";
 
 /// SLH-DSA with every hypertree layer's WOTS+ message forced to 0: 510 chain steps per layer, the most work any input
 /// can force (a valid signature reaching it needs seven 2^-128 events). Same code as `verify` otherwise.
@@ -66,7 +66,7 @@ contract PqGasTest is Test {
 
     function test_gas_slhdsa() public {
         string memory kat = _kat();
-        uint256 valid = _one(kat, "slhdsa128s", address(new UASlhdsaVerifier()));
+        uint256 valid = _one(kat, "slhdsa128s", address(new SlhdsaVerifier()));
         SlhWorstCase w = new SlhWorstCase();
         bytes memory pk = vm.parseJsonBytes(kat, ".kinds.slhdsa128s.pk");
         bytes memory sig = vm.parseJsonBytes(kat, ".kinds.slhdsa128s.sig");
@@ -87,8 +87,8 @@ contract PqGasTest is Test {
         uint256 g1 = gasleft();
         p.run(11);
         uint256 perm = ((g1 - gasleft()) - (g0 - g1)) / 10;
-        uint256 fn = _one(_kat(), "fndsa512", address(new UAFndsaVerifier(PqUA.FNDSA512)));
-        uint256 fn1024 = _one(_kat(), "fndsa1024", address(new UAFndsaVerifier(PqUA.FNDSA1024)));
+        uint256 fn = _one(_kat(), "fndsa512", address(new FndsaVerifier(PqUA.FNDSA512)));
+        uint256 fn1024 = _one(_kat(), "fndsa1024", address(new FndsaVerifier(PqUA.FNDSA1024)));
         console2.log("keccak-f[1600] permutation", perm);
         console2.log("fndsa512 verify (valid)", fn);
         console2.log("fndsa1024 verify (valid)", fn1024);
@@ -118,7 +118,7 @@ contract PqGasTest is Test {
         uint16[2] memory kinds = [PqUA.MLDSA44, PqUA.MLDSA65];
         uint256[2] memory bound = [uint256(4_250_000), 5_950_000];
         for (uint256 i; i < 2; ++i) {
-            UAMldsaVerifier v = new UAMldsaVerifier(kinds[i], address(0), "", "");
+            MldsaVerifier v = new MldsaVerifier(kinds[i], address(0), "", "");
             string memory k = string.concat(".kinds.", names[i]);
             bytes memory pk = vm.parseJsonBytes(kat, string.concat(k, ".pk"));
             bytes memory chunks;
@@ -164,8 +164,8 @@ contract PqGasTest is Test {
 
     function test_gas_mldsa() public {
         string memory kat = _kat();
-        uint256 c44 = _one(kat, "mldsa44", address(new UAMldsaVerifier(PqUA.MLDSA44, address(0), "", "")));
-        uint256 c65 = _one(kat, "mldsa65", address(new UAMldsaVerifier(PqUA.MLDSA65, address(0), "", "")));
+        uint256 c44 = _one(kat, "mldsa44", address(new MldsaVerifier(PqUA.MLDSA44, address(0), "", "")));
+        uint256 c65 = _one(kat, "mldsa65", address(new MldsaVerifier(PqUA.MLDSA65, address(0), "", "")));
         uint256 e44 = _expanded(kat, "mldsa44", 44);
         uint256 e65 = _expanded(kat, "mldsa65", 65);
         console2.log("mldsa44 verify (valid, FIPS 204 key)", c44);

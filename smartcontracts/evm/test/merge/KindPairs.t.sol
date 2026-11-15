@@ -304,7 +304,7 @@ contract KindPairsTest is UALedgerBase {
     /// CTR-GOV-12: the hybrid's one cap holds on the merged entry.
     function test_wrapOrderCapStillHolds() public {
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.owner, c.maxSupply) = ("H", "H", 6, nid(address(0x0A)), CAP);
+        (c.name, c.symbol, c.decimals, c.admin, c.maxSupply) = ("H", "H", 6, nid(address(0x0A)), CAP);
         c.features = 1 | (uint256(1) << GovernanceBits.MINTABLE);
         c.roles.minter = nid(address(0x313));
         c.legs = new IFactoryToken.Leg[](1);
@@ -396,7 +396,10 @@ contract KindPairsTest is UALedgerBase {
     /// ITradeToken 0x0b4d9a5c (unchanged). ua-mtx-merge T6 (R12, R38): ITradeToken 0x0b4d9a5c -> 0xe393854e, its 9
     /// selectors (the address `TradeOrder` entries and views out, the `ua*` ones under the `mtx` / plain names).
     function test_kindPairInterfaceIdsArePinned() public pure {
-        assertEq(type(IWrappedToken).interfaceId, bytes4(0xa84f2937), "IWrappedToken");
+        // group 3l (wrap limits spec §7): + setWrapLimits, setWrapMember, wrapLimits, wrapQuotaOf, wrapQuotaTotal:
+        // 0xa84f2937 -> 0x24c296a1 (the XOR of the five selectors)
+        // round 3zb + 3zc (CTR-GOV-28 Change, CTR-GOV-30: the chain word on mint, mintToUA, disableWrap, the rate entries, setWrapLimits, setWrapMember; setMaxSupply, setMaxWrapSupply and the four views): 0x24c296a1 -> 0xab54992e
+        assertEq(type(IWrappedToken).interfaceId, bytes4(0xab54992e), "IWrappedToken");
         assertEq(type(ITradeToken).interfaceId, bytes4(0xe393854e), "ITradeToken");
     }
 }

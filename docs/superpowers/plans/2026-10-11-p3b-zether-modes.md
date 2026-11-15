@@ -3406,8 +3406,8 @@ for f in clients/zether-prover/vectors/*.json; do b=$(basename "$f")
   [ -f smartcontracts/evm/test/vectors/zether/s3/$b ] && cp "$f" smartcontracts/evm/test/vectors/zether/s3/$b; done
 ```
 
-  `forge test` → **1018 passed**, 0 failed (77 + 1 suites); `forge build src --sizes --json > /tmp/sizes.json` then
-  `python3 scripts/size_gate.py /tmp/sizes.json smartcontracts/evm/size-baseline.json` → `0 error(s)`
+  `forge test` → **1018 passed**, 0 failed (77 + 1 suites); `T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json` then
+  `python3 scripts/size_gate.py "$T"/sizes.json smartcontracts/evm/size-baseline.json` → `0 error(s)`
   (`NormalToken` 23,042, `WrappedToken` 30,142, `NormalZetherToken` 31,162, `WrappedZetherToken`
   40,706; `ZetherLib` 17,247, `ZetherStatements` 8,671, `ZetherDisclosure` 5,063, `UniversalAccountRegistry` 15,026).
 

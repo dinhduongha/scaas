@@ -16,8 +16,7 @@ pqzh-ligero's `set-<set>` feature and `src/set.rs` branch, the ligero wasm featu
 | `n2560-kmax16384` | 2560, 40 | 2^50 − 42,310,535 | 16,384 | approved 2026-10-20 as the Task 8 set, superseded as the default by `n2304-kmax4096` 2026-10-21: shippable for customer chains; full vectors + gate | [SET.md](n2560-kmax16384/SET.md) |
 | `n2816-kmax65536` | 2816, 44 | 2^54 − 327 | 65,536 | research record `pqzl/params/aprime/`, owner 2026-10-21 core only; **owner 2026-10-24: a full PQZL set for customers** (pqz-stmt, precompile, vectors, gate since plan 5h Task 8d part 1b; contracts in 8d part 2); **no PQZH** (none of the current Ligero radices divides q − 1; a radix-1,789 preset is unexplored, not in scope) | [SET.md](n2816-kmax65536/SET.md) |
 
-Older notes and plans use short names for these sets: "the v3 set" / "the frozen set" = `n2048-kmax1024`, "set (a)" = `n2304-kmax4096`, "16k" = `n2560-kmax16384`,
-"A′" = `n2816-kmax65536`; new text uses the directory names only.
+Older notes and plans may name a set by a plan or study label; text uses the directory names only.
 
 ## What a set fixes: cryptography first, cost follows (owner question 2026-10-23)
 
@@ -333,6 +332,23 @@ fits only a gap of a few KB; the per-set raise always works but changes the chai
 an owner decision recorded in `docs/decisions.md` (CTR-PQZ-10) and in the set's `PQZH.md`; it is written into
 the set's `set.toml` `[pqzh_preset]` (preset, `max_proof`).
 
+## Minimum block gas limit per set (owner 2026-11-14)
+
+Owner ruling 2026-11-14: n2560 and n2816 are only for customer chains with larger blocks (verbatim in `docs/decisions.md`,
+CTR-PQZ-37). Under EIP-8037 a transaction fits only if its regular + state gas is at most the block gas limit; the worst
+single transaction of the three-key build per set (`smartcontracts/evm/test/pqz/PqzThreeKeysGas.t.sol`, measured 2026-11-14;
+the table in `docs/contracts/pq-zero-knowledge.md` CTR-PQZ-37 "Cost"):
+
+| Set | worst single transaction (regular + state) | minimum block gas limit |
+|---|---|---|
+| `n2048-kmax1024` | `storePqzScopedPop` 49,128,102 (op 1 on an opening token with the auditor 46,049,748) | fits 60 M |
+| `n2304-kmax4096` | op 1 on an opening token with the auditor, 54,342,724 | fits 60 M |
+| `n2560-kmax16384` | op 1 on an opening token with the auditor, 63,402,676 | **63.40 M** |
+| `n2816-kmax65536` | op 1 on an opening token with the auditor, 73,319,716; `storePqzScopedPop` 61,057,539 (every scoped class) | **73.32 M** (61.06 M for a scoped key record alone) |
+
+No factory refuses a set by block size; the node refuses by name what the connected chain cannot include
+(`TX_EXCEEDS_CHAIN_LIMIT`).
+
 ## Selecting a set
 
 | Build | How |
@@ -356,8 +372,8 @@ Each build checks that exactly one set is chosen (C: `pqz_set.h` from one direct
 | `set.json` | every derived constant the Python tools read (`pqz_kat.py`, `e_s0_set.py`, `ligero_params.py`, the tests' `core_only`; the limits and the PQZH preset) | `gen_set.py` |
 | `pqzh_set.rs` | a set with PQZH: q − 1's factors, generator, F_q^4 non-residue, radices, the Ligero preset (n, k, t) | `gen_set.py` |
 | `pqzh_set_fallback.rs`, `pqzh_set_spike_b.rs` | `n2304-kmax4096` only, hand-written research files kept as they are (plan 5h Task 8c part 1b): THE preset for fallback A (pqzh-ligero feature `fallback-retry`, never in production) and the superseded t = 119 spike (not compiled) | by hand |
-| `PqzSet.sol` | the set's Solidity constants, **read by every PQZ contract since plan 5h Task 8d part 2** (`PqzCt`, `PqzCore`, `PqzSafety`, `UAPqzVerifier`): sizes, q, Δ, `K_MAX`, `PACK_BITS` (P46), `ROLL_MAX` (`set.toml` `roll_max`, plan 5h Task 8d part 2b), `PQZL_ID`, `HAS_PQZH` / `PQZH_ID` (the zero word without PQZH), `ZERO_HASH` (the packed `Trivial(0)`), from the set's vectors (zero words until the set has them) the precompile's `SELFTEST` hash and `UAPqzVerifier`'s `PROBE_PQZL` / `PROBE_PQZH`, and the file-level `PQZ_ACC_WORDS` (the packed `acc` slots; Solidity takes no library member as an array length); `PQZ_SOL_INSTALL=1 make.sh <set> sol` copies it to `smartcontracts/evm/src/pqz/` (committed: `n2304-kmax4096`) | `gen_set.py` (reads the set's `selftest.json`, `statement_register.json`, `proof_*.json`) |
-| `<rel>_params.sage` | LaZer codegen specs of the 14 relations (reg, tx, tx0, burn, ds, dr, txm2 / 20 / 4 / 40 / 8 / 80, bench-only txm16 / 160) | `gen_set.py` (`n2048-kmax1024`'s have the shapes of `pqzl/params/*.sage`, the record) |
+| `PqzSet.sol` | the set's Solidity constants, **read by every PQZ contract since plan 5h Task 8d part 2** (`PqzCt`, `PqzCore`, `PqzSafety`, `PqzKeyVerifier`): sizes, q, Δ, `K_MAX`, `PACK_BITS` (P46), `ROLL_MAX` (`set.toml` `roll_max`, plan 5h Task 8d part 2b), `PQZL_ID`, `HAS_PQZH` / `PQZH_ID` (the zero word without PQZH), `ZERO_HASH` (the packed `Trivial(0)`), from the set's vectors (zero words until the set has them) the precompile's `SELFTEST` hash and `PqzKeyVerifier`'s `PROBE_PQZL` / `PROBE_PQZH`, and the file-level `PQZ_ACC_WORDS` (the packed `acc` slots; Solidity takes no library member as an array length); `PQZ_SOL_INSTALL=1 make.sh <set> sol` copies it to `smartcontracts/evm/src/pqz/` (committed: `n2304-kmax4096`) | `gen_set.py` (reads the set's `selftest.json`, `statement_register.json`, `proof_*.json`) |
+| `<rel>_params.sage` | LaZer codegen specs of the 16 relations (reg, tx, tx0, txs, txs0 (the split transfer of `PQZL_SPLIT_ID`, three-key spec K3-4), burn, ds, dr, txm2 / 20 / 4 / 40 / 8 / 80, bench-only txm16 / 160) | `gen_set.py` (`n2048-kmax1024`'s have the shapes of `pqzl/params/*.sage`, the record) |
 | `pqz_<rel>_params.h`, `codegen.txt` | LaZer codegen headers and the codegen log (`codegen-check.txt` for a set with `frozen = true`: the regenerated headers byte-identical; none since 2026-10-25, was `n2048-kmax1024`) | `make.sh <set> codegen` (LaZer 3330e48, pinned Sage image) |
 | `rust/<rel>.rs`, `rust/mod.rs` | the headers' Rust form | `pqzl/params/to_rust.py` (`make.sh <set> rust`) |
 | `e-s1.txt` | lattice-estimator check of every spec (MSIS β, hiding MLWE uSVP and dual_hybrid ≥ 450) | `pqzl/params/n-study/e_s1_n.sage` |
@@ -365,7 +381,17 @@ Each build checks that exactly one set is chosen (C: `pqz_set.h` from one direct
 | `lazer-3330e48-kat.json` | upstream LaZer golden arithmetic KAT at the set's q (the gate's `kat` step: pqz-core = upstream) | `pqzl/kat/build-lazer-dump.sh` |
 | `SET.md`, `PQZH.md` | the set's numbers, approval, conditions; PQZH's preset, sizes and the conditions for a chain to run it | by hand |
 
-`gen_set.py --all --check` (the gate's `rust` step) fails on a file in a set directory that is not in this table.
+`gen_set.py --all --check` (the gate's `rust` step) fails on a file in a set directory that is not in this table. It
+also binds the records the generator does not write (review 3w): each header's comment block to its spec (q, `m1`,
+exact-l2 dimensions and bounds, `nbin`, `Bprime`, MLWE dimension = `kmlwe_min`, MSIS root Hermite factor ≤ `pqz_delta`)
+and every `log2stdev` < 24 (also `to_rust.py`), the `=>` lines of `e-s1.txt` to `set.toml` and the headers (kmsis, m2,
+D, gamma, λ, proof size; β ≥ 450), and `codegen.txt`'s sizes and sha256 prefixes to the headers. `[pqzh_preset]` must
+reach the proven regime's floor (n ≥ 4k, t ≥ the exact minimum: 121 / 119 / 121 at the three PQZH sets).
+
+[`id-digests.json`](id-digests.json) maps each `proofSystemId` label to a sha256 of what it fixes (PQZL: the set
+constants, `pqz_delta`, `kmlwe_min`, the 16 headers; PQZH: the set constants and the preset). `gen_set.py` adds a row
+when a label first appears with consistent records and never rewrites one: when the parameters move under a label in
+the table, a write refuses and `--check` fails ("parameters changed under label X: bump the version").
 
 Vectors: `smartcontracts/vectors/pqz/` for `n2048-kmax1024`,
 `smartcontracts/vectors/pqz/<set>/` for every other set (`pqz-ffi/vectors/run.sh`, `PQZ_SET=<set>`).

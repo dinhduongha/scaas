@@ -3,6 +3,8 @@ pragma solidity ^0.8.24;
 
 import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {MtxHash} from "../helpers/MtxHash.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 import {UACall} from "../ua/UACall.sol";
 import {console2} from "forge-std/Test.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
@@ -18,6 +20,7 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Relaying (CTR-PQZ-15 / -21, P6g plan D4): the address path binds the envelope into the statement (header word 17), the
 /// UA path with an `mldsa65` fee UA likewise with its own tag, PQZ selectors are never batched, `PERCENT` is refused.
@@ -59,6 +62,32 @@ contract PqzRelayTest is PqzFixture {
             0x3333333333333333333333333333333333333333);
         assertEq(NormalPqzToken(at).chainUid(), PQZ_UID);
         assertEq(NormalPqzToken(at).envelopeBinding(m), 0x2bf9ed02f291a24e973d7013c788d50aae3bb9844c40c4c3ca5e9a37419abd33);
+    }
+
+    /// recheck2 P2-2 (CTR-ACC-02): real wallets, a `SmartKeyAccount` clone and a `MandateWallet`, relay a PQZ shield in
+    /// ERC-7739 `TypedDataSign` over the token's `MetaTransaction`; the raw digest is refused.
+    function test_erc7739RealWallets_relayShield() public {
+        (address ska, address mw) = Erc7739Kit.wallets(0x7739, PQZ_UID);
+        _shield7739(ska);
+        _shield7739(mw);
+    }
+
+    function _shield7739(address w) internal {
+        _public(tok, w, 10 * SCALE);
+        MetaTxLib.MetaTransaction memory m = _m(abi.encodeCall(IConfidentialToken.mtxShield, (alice, 10)), 0, 0);
+        m.from = w;
+        bytes32 c = MtxHash.hashStruct(m);
+        bytes32 h = MtxDigest.metaTx(address(tok), m);
+        assertEq(keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(tok)), c)), h, "the kit rebuilds it");
+        bytes memory raw = Erc7739Kit.raw(0x7739, w, h);
+        bytes memory sig = Erc7739Kit.sign(0x7739, w, address(tok), "MetaTransaction", Erc7739Kit.METATX_TYPE,
+            Erc7739Kit.METATX_TYPE, c);
+        vm.prank(relayer);
+        vm.expectRevert(IMetaTx.MetaTxBadSignature.selector);
+        tok.executeMetaTransaction(m, raw);
+        vm.prank(relayer);
+        tok.executeMetaTransaction(m, sig);
+        assertEq(tok.balanceOf(w), 0, "positive control: the ERC-7739 shield ran");
     }
 
     function test_v1BindingAndFee() public {
@@ -133,7 +162,7 @@ contract PqzRelayTest is PqzFixture {
 
     function test_v3FeeUA() public {
         bytes32 fee = _mldsaUA(9);
-        NormalPqzToken(address(tok)).mintToUA(fee, 20 * SCALE + 5);
+        NormalPqzToken(address(tok)).mintToUA(fee, 20 * SCALE + 5, EnvKit.codeUidOf(address(tok)));
         minted += 20 * SCALE + 5;
         MetaTxLib.UAMetaTransaction memory m;
         m.from = fee;
@@ -149,7 +178,7 @@ contract PqzRelayTest is PqzFixture {
         _assertConservation(tok);
 
         // a v3 transfer: the UA binding (its own tag) in the statement; `shieldIn` 2 from the fee UA's own balance
-        NormalPqzToken(address(tok)).mintToUA(fee, 2 * SCALE);
+        NormalPqzToken(address(tok)).mintToUA(fee, 2 * SCALE, EnvKit.codeUidOf(address(tok)));
         minted += 2 * SCALE;
         bytes memory pl = _payload(1, 2, alice, bob, bytes32(0), _out(2, false), "");
         m.data = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(pl), hex"c0de", _pqAuth(), bytes(""), noVerdict()));
@@ -177,7 +206,7 @@ contract PqzRelayTest is PqzFixture {
         tok.mtxBatch(ms, UACall.auths(ms, auths));
         // UA-6: a holder is a signing UA, so alice (registered with her PQZ key in one call) signs an envelope herself;
         // the same envelope under a signature the `mldsa65` precompile rejects is refused (no `authRef`, no foreign signer)
-        NormalPqzToken(address(tok)).mintToUA(alice, 3 * SCALE);
+        NormalPqzToken(address(tok)).mintToUA(alice, 3 * SCALE, EnvKit.codeUidOf(address(tok)));
         minted += 3 * SCALE;
         MetaTxLib.UAMetaTransaction memory h;
         h.from = alice;

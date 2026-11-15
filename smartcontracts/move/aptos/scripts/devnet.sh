@@ -4,12 +4,12 @@
 #   devnet.sh up        — `aptos node run-localnet --with-indexer-api` (Docker: postgres + hasura), chờ ready
 #   devnet.sh publish   — tạo profile deployer (faucet), `deploy-object` package scaas + một bản SAO, publish testfa
 #   devnet.sh down      — dừng localnet và container của nó
-# Thư mục trạng thái: $APTOS_LOCALNET_DIR (mặc định /tmp/scaas-aptos-localnet). Địa chỉ ghi vào đó:
+# Thư mục trạng thái: $APTOS_LOCALNET_DIR (mặc định <tmp>/scaas-aptos-localnet, <tmp> = thư mục tạm của hệ thống, như std::env::temp_dir). Địa chỉ ghi vào đó:
 #   package.txt (scaas), copy.txt (bản sao phát event giả — L2), deployer.txt (testfa = deployer).
 # Chạy dưới `capped` cùng với e2e (một việc nặng mỗi lúc); `pgrep -f run-localnet` rỗng sau `down`.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DIR="${APTOS_LOCALNET_DIR:-/tmp/scaas-aptos-localnet}"
+DIR="${APTOS_LOCALNET_DIR:-$(dirname "$(mktemp -u)")/scaas-aptos-localnet}"
 REST=32010 FAUCET=32011 READY=32012 STREAM=32013 PG=32014 GQL=32015
 CFG="$DIR/cli"   # thư mục .aptos/config.yaml của deployer
 

@@ -50,11 +50,12 @@ abstract contract PqzOffchainBase is PqzFixture {
         vB = nid(vm.addr(VKEY2));
     }
 
-    /// An `OFFCHAIN` `NORMAL_PQZ` token of the fixture's factory with verifier `v`.
+    /// An `OFFCHAIN` `NORMAL_PQZ` token of the fixture's factory with verifier `v`: class `offchain-token` without the
+    ///         opening (CTR-PQZ-37; the old registry-key form cannot be created), its four holders' records registered.
     function _offToken(bytes32 s, bytes32 v, bool fixed_) internal returns (NormalPqzToken t) {
-        (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, v, fixed_);
+        (vMode, vUA, vFixed, vOwnKey) = (PqzCore.OFFCHAIN, v, fixed_, true);
         t = _newToken(s);
-        (vMode, vUA, vFixed) = (0, bytes32(0), false);
+        (vMode, vUA, vFixed, vOwnKey) = (0, bytes32(0), false, false);
     }
 
     /// The token's EIP-712 domain separator from its ERC-5267 view.
@@ -126,17 +127,17 @@ abstract contract PqzOffchainBase is PqzFixture {
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
         r2 = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
-        OpenFactory f2 = new OpenFactory(registrar);
+        OpenFactory f2 = new OpenFactory(nid(registrar));
         EnvKit.configure(f2, PQZ_UID, 0, address(0));
         Catalogue.release(f2, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f2), PQZ_UID, address(r2), address(0)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        f2.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
-        (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, v, false);
+        f2.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f2)));
+        (vMode, vUA, vFixed, vOwnKey) = (PqzCore.OFFCHAIN, v, false, true);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.conf.auditorKey = "";
         c.conf.auditorMode = 0;
-        (vMode, vUA, vFixed) = (0, bytes32(0), false);
+        (vMode, vUA, vFixed, vOwnKey) = (0, bytes32(0), false, false);
         t = NormalPqzToken(f2.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "noverifier"));
     }
 }

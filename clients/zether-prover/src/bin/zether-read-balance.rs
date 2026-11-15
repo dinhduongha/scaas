@@ -79,8 +79,8 @@ use zether_prover::keys::ZetherKey;
 use zether_prover::state;
 
 const TABLE_BITS_CLI: std::ops::RangeInclusive<u32> = 20..=27;
-/// `OpenFactory._rec` (the factory index, ua-mtx-merge T67; slot 8, where `_info` was): three words `creatorId`, `ownerUA`,
-/// `contractClass(16) ‖ kind(16) ‖ version(64) ‖ createdBlock(64) ‖ createdAt(64)` from the low end; held to its pin,
+/// `OpenFactory._rec` (the factory index, ua-mtx-merge T67; slot 8, where `_info` was): two words since round 3r R1 (no owner),
+/// `creatorId`, `contractClass(16) ‖ kind(16) ‖ version(64) ‖ createdBlock(64) ‖ createdAt(64)` from the low end; held to its pin,
 /// `test/zether/ZetherStateVectors.t.sol`, by `factory_record_is_the_layout_pin`. The Zether kinds (`IOpenFactory.TokenKind`
 /// NORMAL_ZETHER, WRAPPED_ZETHER, NORMAL_ZETHER_REGULATED, WRAPPED_ZETHER_REGULATED).
 const REC_SLOT: u64 = 8;
@@ -332,8 +332,8 @@ fn open<'u>(a: &Args, url: &'u str, at: Option<u64>) -> Result<Reader<'u>, Strin
     let t: [u8; 20] = unhex(token)?.try_into().map_err(|_| "--token: 20 bytes")?;
     let mut key = [0u8; 32];
     key[12..].copy_from_slice(&t);
-    // `_rec[token]`'s word 2
-    let rec = r.word(factory, &add(&keccak256(&[key, be(REC_SLOT)].concat()), 2))?;
+    // `_rec[token]`'s word 1 (round 3r R1: two words, no `ownerUA`)
+    let rec = r.word(factory, &add(&keccak256(&[key, be(REC_SLOT)].concat()), 1))?;
     if !catalogued(&rec) {
         return Err("R5: the token is not a Zether token catalogued by this factory".into());
     }
@@ -363,7 +363,7 @@ fn clone_registry(code: &[u8]) -> Option<[u8; 20]> {
     code.get(77..97)?.try_into().ok()
 }
 
-/// `_rec[token]` word 2 names a token (class TOKEN; 0 is "not made here") of a Zether kind: `contractClass` the low 16 bits,
+/// `_rec[token]` word 1 names a token (class TOKEN; 0 is "not made here") of a Zether kind: `contractClass` the low 16 bits,
 /// `kind` the next 16.
 fn catalogued(rec: &[u8; 32]) -> bool {
     let class = u16::from_be_bytes([rec[30], rec[31]]);
@@ -693,7 +693,7 @@ mod tests {
         let c = curl_config("https://node/x?key=a\"b", r#"{"a":"\\"}"#);
         assert!(c.contains(r#"url = "https://node/x?key=a\"b""#), "{c}");
         assert!(c.contains(r#"data-binary = "{\"a\":\"\\\\\"}""#), "{c}");
-        assert!(!curl_config("-o /tmp/x", "{}\nurl = \"evil\"").contains("\nurl = \"evil"), "no injected lines");
+        assert!(!curl_config("-o out/x", "{}\nurl = \"evil\"").contains("\nurl = \"evil"), "no injected lines");
         let mut v: Value = serde_json::from_str(r#"{"key":{"x":"0x1234","n":[ "ab" ]}}"#).unwrap();
         wipe(&mut v);
         assert_eq!(v["key"]["x"], json!(""));
@@ -702,7 +702,7 @@ mod tests {
     }
 
     /// T20b second sync (T15m2): `OpenFactory._rec[token]` (the factory index, ua-mtx-merge T67) is read where its pin puts it,
-    /// `test/zether/ZetherStateVectors.t.sol`: slot `REC`, word 2 (`base + 2`), from the low end `contractClass(16) ‖ kind(16) ‖
+    /// `test/zether/ZetherStateVectors.t.sol`: slot `REC`, word 1 (`base + 1`, round 3r R1), from the low end `contractClass(16) ‖ kind(16) ‖
     /// version(64)`; R5 takes class TOKEN with one of this reader's kinds, never the old one-word `_info` packing.
     #[test]
     fn factory_record_is_the_layout_pin() {
@@ -711,10 +711,11 @@ mod tests {
         for a in [
             &format!("uint256 internal constant REC = {REC_SLOT};")[..],
             "uint256 base = uint256(keccak256(abi.encode(address(tok), REC)));",
-            "vm.load(address(factory), bytes32(base + 2)));",
-            r#"assertEq(uint16(uint256(r2)), 1, "_rec[token].contractClass (TOKEN)");"#,
-            "assertEq(uint16(uint256(r2) >> 16), ",
-            r#"assertEq(uint64(uint256(r2) >> 32), 1, "_rec[token].version");"#,
+            "vm.load(address(factory), bytes32(base + 1)),",
+            r#"assertEq(uint16(uint256(r1)), 1, "_rec[token].contractClass (TOKEN)");"#,
+            "assertEq(uint16(uint256(r1) >> 16), ",
+            r#"assertEq(uint64(uint256(r1) >> 32), 1, "_rec[token].version");"#,
+            r#"assertEq(r2, bytes32(0), "no third word");"#,
         ] {
             assert!(pin.contains(a), "the pin moved: {a}");
         }

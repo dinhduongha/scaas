@@ -90,11 +90,11 @@ contract AllowlistTest is Test {
             EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(UID, address(stub), address(0), false)));
         one[0] = address(pts);
         ledgered.initialize(nid(address(this)), 1, abi.encode(wrappedInit(one, r1, r1, 6, cfg, address(0), address(0))));
-        pts.mint(address(this), 10e6); // this fixture is a contract, so it may approve (CTR-TOK-01)
+        pts.mint(address(this), 10e6, EnvKit.codeUidOf(address(pts))); // this fixture is a contract, so it may approve (CTR-TOK-01)
         pts.approve(address(ledgered), 10e6);
         ledgered.wrap(10e6);
         ledgered.transfer(alice, 10e6);
-        none.mint(alice, 1_000e6);
+        none.mint(alice, 1_000e6, EnvKit.codeUidOf(address(none)));
         u.mint(alice, 1_000e6);
         u2.mint(alice, 1_000e6);
         vm.startPrank(alice);
@@ -288,24 +288,24 @@ contract AllowlistTest is Test {
             _refused(t, abi.encodeWithSelector(NormalToken.mtxPay.selector));
             _refused(t, abi.encodeWithSelector(IERC20MetaTx.mtxExecuteTransfer.selector));
             _refused(t, abi.encodeWithSelector(IERC20MetaTx.mtxBatchTransfer.selector));
-            _refused(t, abi.encodeWithSelector(NormalToken.mtxPayReceiverFee.selector));
+            _refused(t, abi.encodeWithSelector(NormalToken.mtxPayWithPayeeFee.selector));
             _refused(t, abi.encodeWithSelector(NormalToken.payWithFeeToUA.selector));
         }
-        _refused(address(none), abi.encodeCall(NormalToken.mint, (alice, 1)));
-        _refused(address(none), abi.encodeCall(NormalToken.mintToUA, (UA, 1)));
-        _refused(address(none), abi.encodeCall(IGovernance.renounceRole, (1)));
+        _refused(address(none), abi.encodeCall(NormalToken.mint, (alice, 1, EnvKit.codeUidOf(address(none)))));
+        _refused(address(none), abi.encodeCall(NormalToken.mintToUA, (UA, 1, EnvKit.codeUidOf(address(none)))));
+        _refused(address(none), abi.encodeCall(IGovernance.renounceRole, (1, EnvKit.codeUidOf(address(none)))));
         _refused(address(single), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
-        _refused(address(single), abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(u), 1, 1));
-        _refused(address(single), abi.encodeWithSignature("cancelRate()"));
-        _refused(address(single), abi.encodeWithSignature("executeRate()"));
-        _refused(address(single), abi.encodeCall(IGovernance.renounceRole, (3)));
+        _refused(address(single), abi.encodeWithSignature("proposeRate(address,uint96,uint96,bytes32)", address(u), 1, 1, EnvKit.codeUidOf(address(single))));
+        _refused(address(single), abi.encodeWithSignature("cancelRate(bytes32)", EnvKit.codeUidOf(address(single))));
+        _refused(address(single), abi.encodeWithSignature("executeRate(bytes32)", EnvKit.codeUidOf(address(single))));
+        _refused(address(single), abi.encodeCall(IGovernance.renounceRole, (3, EnvKit.codeUidOf(address(single)))));
         _refused(address(multi), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
-        _refused(address(multi), abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(u), 1, 1));
-        _refused(address(multi), abi.encodeWithSignature("cancelRate()"));
-        _refused(address(multi), abi.encodeWithSignature("executeRate()"));
-        _refused(address(multi), abi.encodeCall(IGovernance.renounceRole, (3)));
-        _refused(address(multi), abi.encodeWithSignature("disableWrap(address,bytes32)", address(u), bytes32(0)));
-        _refused(address(multi), abi.encodeCall(IGovernance.renounceRole, (4)));
+        _refused(address(multi), abi.encodeWithSignature("proposeRate(address,uint96,uint96,bytes32)", address(u), 1, 1, EnvKit.codeUidOf(address(multi))));
+        _refused(address(multi), abi.encodeWithSignature("cancelRate(bytes32)", EnvKit.codeUidOf(address(multi))));
+        _refused(address(multi), abi.encodeWithSignature("executeRate(bytes32)", EnvKit.codeUidOf(address(multi))));
+        _refused(address(multi), abi.encodeCall(IGovernance.renounceRole, (3, EnvKit.codeUidOf(address(multi)))));
+        _refused(address(multi), abi.encodeWithSignature("disableWrap(address,bytes32,bytes32)", address(u), bytes32(0), EnvKit.codeUidOf(address(multi))));
+        _refused(address(multi), abi.encodeCall(IGovernance.renounceRole, (4, EnvKit.codeUidOf(address(multi)))));
     }
 
     function test_wrongStaticLength_refused() public {

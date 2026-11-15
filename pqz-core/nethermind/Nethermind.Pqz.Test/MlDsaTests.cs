@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -173,11 +174,27 @@ public class MlDsaTests
             byte[] good = UaRows().First(r => r.valid && r.input.Length == pk + sig + 32).input;
             Assert.That(MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => throw new CryptographicException("seam")), Is.EqualTo(Word(false)));
             Assert.That(MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => true), Is.EqualTo(Word(true)), "the seam decides the word");
-            Assert.Throws<InvalidOperationException>(() => MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => throw new InvalidOperationException("seam")),
-                "only CryptographicException is caught");
             byte[] ff = [.. Enumerable.Repeat((byte)0xff, pk + sig), .. new byte[32]];
             Assert.That(run(ff), Is.EqualTo(Word(false)), "all-0xff pk and signature: false");
         }
+    }
+
+    /// <summary>Review 3w T-16 (D4): any other exception in the verify (here <see cref="InvalidOperationException"/>
+    /// through the seam) is a fault of this node: <c>PQZ-NODE-FAULT</c> and exit 120 in a child process, never a word and
+    /// never Nethermind's failed call.</summary>
+    [Test]
+    public void Another_exception_is_a_node_fault()
+    {
+        string harness = Path.Combine(AppContext.BaseDirectory, "Harness.dll");
+        ProcessStartInfo psi = new("dotnet", [harness, "mldsa-fault"]) { RedirectStandardError = true, RedirectStandardOutput = true };
+        using Process p = Process.Start(psi)!;
+        string err = p.StandardError.ReadToEnd();
+        string outp = p.StandardOutput.ReadToEnd();
+        p.WaitForExit();
+        TestContext.Progress.WriteLine($"mldsa fault child: exit {p.ExitCode}; stdout: {outp.Trim()}; stderr: {err.Trim()}");
+        Assert.That(p.ExitCode, Is.EqualTo(PqzPrecompile.ExitCode));
+        Assert.That(err, Does.Contain("PQZ-NODE-FAULT ").And.Contain("InvalidOperationException: seam"));
+        Assert.That(outp, Does.Not.Contain("must not happen"));
     }
 
     /// <summary>Review R4-C4: the start-up known-answer set gives (1, then seven 0) per level through the precompile
@@ -213,9 +230,19 @@ public class MlDsaTests
         Assert.That(MlDsa44Precompile.Instance.DataGasCost(new byte[MlDsa.Pk44 + MlDsa.Sig44 + 32], spec.Spec), Is.EqualTo(s.MlDsa44Gas + 6));
     }
 
+    /// <summary>TODO 3zd (owner 2026-11-15): the calibrated ML-DSA-44 price, written by <c>add-schedule.py --mldsa</c>,
+    /// prices the address at its own value + 6 per word above the split.</summary>
+    [Test]
+    public void Calibrated_mldsa44_price()
+    {
+        Assert.That(MlDsa.Calibrated44Gas, Is.EqualTo(59_000).And.GreaterThanOrEqualTo(MlDsa.Base44));
+        IReleaseSpecStub spec = new(PqzPrecompileTests.Schedule(mldsa44Gas: MlDsa.Calibrated44Gas));
+        Assert.That(MlDsa44Precompile.Instance.DataGasCost(new byte[MlDsa.Pk44 + MlDsa.Sig44 + 32], spec.Spec), Is.EqualTo(59_006));
+    }
+
     /// <summary>CTR-UA-39 Q4: EIP-8355's ML-DSA-87 base 13,500 + 6 per word above the split; a schedule without
     /// <c>mldsa87Gas</c> prices the address as no schedule does (it is not in that schedule's precompile set either:
-    /// SpecTests), a schedule with it at its own value. The PROVISIONAL value is the spec's estimate, above the base.</summary>
+    /// SpecTests), a schedule with it at its own value. The calibrated value (2026-11-15) is above the base.</summary>
     [Test]
     public void Mldsa87_gas_needs_its_schedule_key()
     {
@@ -224,9 +251,9 @@ public class MlDsaTests
         PqzSchedule without = PqzPrecompileTests.Schedule();
         Assert.That(without.MlDsa87Gas, Is.Null);
         Assert.That(MlDsa87Precompile.Instance.DataGasCost(input, new IReleaseSpecStub(without).Spec), Is.EqualTo(ulong.MaxValue));
-        PqzSchedule with = PqzPrecompileTests.Schedule(mldsa87Gas: MlDsa.Provisional87Gas);
-        Assert.That(MlDsa87Precompile.Instance.DataGasCost(input, new IReleaseSpecStub(with).Spec), Is.EqualTo(MlDsa.Provisional87Gas + 6));
-        Assert.That(MlDsa.Provisional87Gas, Is.EqualTo(102_000).And.GreaterThanOrEqualTo(MlDsa.Base87));
+        PqzSchedule with = PqzPrecompileTests.Schedule(mldsa87Gas: MlDsa.Calibrated87Gas);
+        Assert.That(MlDsa87Precompile.Instance.DataGasCost(input, new IReleaseSpecStub(with).Spec), Is.EqualTo(MlDsa.Calibrated87Gas + 6));
+        Assert.That(MlDsa.Calibrated87Gas, Is.EqualTo(135_000).And.GreaterThanOrEqualTo(MlDsa.Base87));
         Assert.That(PqzAddresses.MlDsa87, Is.EqualTo(new Address("0x000000000000000000000000000000005caa0014")));
     }
 }

@@ -12,8 +12,8 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
 import { schnorrVerify as zetherVerify } from '../src/zether.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, abiEncode, concatBytes } from '../src/bytes.js';
-import { hashTypedData, hashStruct, padId, uaMetaTxTypedData, uaMetaTransferTypedData, uaReceiverFeeTypedData, unwrapToUACall,
-  checkReceiverFee, TYPED_OPS } from '../src/evm.js';
+import { hashTypedData, hashStruct, padId, uaMetaTxTypedData, uaMetaTransferTypedData, uaPayeeFeeTypedData, unwrapToUACall,
+  checkPayeeFee, TYPED_OPS } from '../src/evm.js';
 
 import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('metatx3.json', dir)));
@@ -51,7 +51,7 @@ test('the native rows are ECDSA over the v3 digest itself (CTR-UA-24), not the U
   }
 });
 
-// --- UA-5a: burn, unwrapToUA, receiverFee (accounts.md CTR-UA-26/28, metatx.md CTR-MTX-05/06) ---
+// --- UA-5a: burn, unwrapToUA, payeeFee (accounts.md CTR-UA-26/28, metatx.md CTR-MTX-05/06) ---
 const recover = (sig, digest) => {
   const s = fromHex(sig);
   const rec = secp256k1.Signature.fromBytes(s.subarray(0, 64), 'compact').addRecoveryBit(s[64] - 27);
@@ -102,48 +102,49 @@ test('burn and unwrapToUA rows: one per signer of call, the same envelope, data 
     + '0'.repeat(59) + 'f1b30');
 });
 
-test('receiverFee rows: native payer x every derived payee and p256 x bip340; payer under metatx, payee under receiver-fee', () => {
-  assert.deepEqual(V.receiverFee.map((r) => `${r.payer}>${r.payee}`),
+test('payeeFee rows: native payer x every derived payee and p256 x bip340; payer under metatx, payee under payee-fee', () => {
+  assert.deepEqual(V.payeeFee.map((r) => `${r.payer}>${r.payee}`),
     [...S.derived.map((d) => `native>${d.name}`), 'p256>bip340']);
   let nobled = 0;
-  for (const r of V.receiverFee) {
+  for (const r of V.payeeFee) {
     const t = r.transfer.message;
     assert.equal(hex(hashTypedData(r.transfer)), r.paymentDigest);
     assert.deepEqual(uaMetaTransferTypedData({ ...domain, message: t }), r.transfer);
     assert.deepEqual([t.mode, t.fee, t.nonce], [1, '0', '0'], 'CTR-MTX-06 shape: fee NONE, relayer bound, nonce 0');
-    const rf = r.receiverFee.message;
+    const rf = r.payeeFee.message;
     assert.deepEqual(rf.payment, t);
-    assert.deepEqual(uaReceiverFeeTypedData({ ...domain, message: rf }), r.receiverFee);
-    assert.equal(hex(hashTypedData(r.receiverFee)), r.receiverFeeDigest);
+    assert.deepEqual(uaPayeeFeeTypedData({ ...domain, message: rf }), r.payeeFee);
+    assert.equal(hex(hashTypedData(r.payeeFee)), r.payeeFeeDigest);
     for (const [id, purpose, digest, auth] of [[t.from, 'metatx', r.paymentDigest, r.payerAuth],
-      [t.to, 'receiver-fee', r.receiverFeeDigest, r.payeeAuth]]) {
+      [t.to, 'payee-fee', r.payeeFeeDigest, r.payeeAuth]]) {
       const v = authOk(id, purpose, digest, auth);
       assert.notEqual(v, false, `${r.payer}>${r.payee} ${purpose}`);
       if (v === true) nobled++;
       if (id !== S.native.ua && v === true) {   // the purpose binds: the same signature under the other purpose fails
-        assert.equal(authOk(id, purpose === 'metatx' ? 'receiver-fee' : 'metatx', digest, auth), false);
+        assert.equal(authOk(id, purpose === 'metatx' ? 'payee-fee' : 'metatx', digest, auth), false);
       }
     }
   }
   assert.equal(nobled, 10 + 1 + 6, 'the native payer x10 (ECDSA), the p256 payer, the p256 / bip340 x2 / ed25519 / secp256k1 / zether payees');
 });
 
-test('UAReceiverFee nests the row\'s payment: the payee checks it on ids, the payment digest is the payer\'s', () => {
-  for (const r of V.receiverFee) {
+test('UAPayeeFee nests the row\'s payment: the payee checks it on ids, the payment digest is the payer\'s', () => {
+  for (const r of V.payeeFee) {
     const t = r.transfer.message;
-    const rf = r.receiverFee.message;
-    const td = r.receiverFee;
+    const rf = r.payeeFee.message;
+    const td = r.payeeFee;
     assert.equal(hex(hashStruct(td.types, 'UAMetaTransfer', td.message.payment)),
       hex(hashStruct(r.transfer.types, 'UAMetaTransfer', t)), 'the nested struct is the payment as signed');
-    assert.equal(hex(hashStruct(td.types, 'UAReceiverFee', td.message)), hex(keccak_256(concatBytes(fromHex(TYPED_OPS.UAReceiverFee.typehash),
+    assert.equal(hex(hashStruct(td.types, 'UAPayeeFee', td.message)), hex(keccak_256(concatBytes(fromHex(TYPED_OPS.UAPayeeFee.typehash),
       hashStruct(td.types, 'UAMetaTransfer', td.message.payment), abiEncode(['uint256', 'address', 'uint256'], [rf.fee, rf.feeRecipient, rf.validUntil])))));
     const want = { payee: t.to, chainId: V.chainId, chainUid: V.chainUid, amount: t.value, decimals: 0, entryRef: t.entryRef,
       expectedToken: V.token, maxFee: rf.fee, feeRecipient: rf.feeRecipient, now: Number(rf.validUntil) - 60 };
-    const ok = checkReceiverFee(td, want);
-    assert.deepEqual([hex(ok.digest), hex(ok.paymentDigest), ok.payer], [r.receiverFeeDigest, r.paymentDigest, t.from]);
-    assert.throws(() => checkReceiverFee(td, { ...want, payee: padId('0x' + '5e'.repeat(20)) }), /does not pay you/);
-    assert.throws(() => checkReceiverFee(td, { ...want, maxFee: BigInt(rf.fee) - 1n }), /above your limit/);
-    // ua-mtx-merge T11: the address `ReceiverFee` is refused by name (was: by its digest)
-    assert.throws(() => checkReceiverFee({ ...td, primaryType: 'ReceiverFee' }, want), /not a receiver fee/);
+    const ok = checkPayeeFee(td, want);
+    assert.deepEqual([hex(ok.digest), hex(ok.paymentDigest), ok.payer], [r.payeeFeeDigest, r.paymentDigest, t.from]);
+    assert.throws(() => checkPayeeFee(td, { ...want, payee: padId('0x' + '5e'.repeat(20)) }), /does not pay you/);
+    assert.throws(() => checkPayeeFee(td, { ...want, maxFee: BigInt(rf.fee) - 1n }), /above your limit/);
+    // ua-mtx-merge T11: the address `ReceiverFee` is refused by name (was: by its digest); so is `UAReceiverFee` (owner 2026-11-12)
+    assert.throws(() => checkPayeeFee({ ...td, primaryType: 'ReceiverFee' }, want), /not a payee fee/);
+    assert.throws(() => checkPayeeFee({ ...td, primaryType: 'UAReceiverFee' }, want), /not a payee fee/);
   }
 });

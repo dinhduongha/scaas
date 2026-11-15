@@ -62,7 +62,7 @@ contract ZetherDeployTest is Test {
         for (uint8 k = 2; k <= 3; ++k) {
             IOpenFactory.Release memory rel = f.releaseOf(IOpenFactory.TokenKind(k), c + 1);
             assertEq(rel.envVersion, c + 1);
-            IFactoryToken.Env memory e = f.envOf(IOpenFactory.TokenKind(k), c + 1);
+            IFactoryToken.Env memory e = f.tokenEnvOf(IOpenFactory.TokenKind(k), c + 1);
             assertEq(rel.envHash, keccak256(abi.encode(e)));
             assertEq(e.deps[0], tv);
             assertEq(e.deps[1], bv);
@@ -91,8 +91,8 @@ contract ZetherDeployTest is Test {
     function test_devChain_registersBothConfidentialKinds() public {
         DeployHarness h = new DeployHarness();
         (OpenFactory f, string memory json) = h.deploy(ZUID, true, ska);
-        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
-        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER));
+        assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
+        assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER));
         NormalZetherToken none = NormalZetherToken(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1));
         WrappedZetherToken und =
             WrappedZetherToken(payable(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1)));
@@ -109,10 +109,10 @@ contract ZetherDeployTest is Test {
         address dis = _at(h, type(ZetherDisclosure).creationCode);
         // chain-neutral releases (plan T72): the releases carry no env; the published envs name them, every clone reads them
         assertEq(none.registry(), address(0), "a release carries no env");
-        assertEq(f.envOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1).registry, reg);
-        assertEq(f.envOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1).deps[3], dis);
-        assertEq(f.envOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1).smartKeyAccountImpl, ska);
-        assertEq(f.envOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1).smartKeyAccountImpl, ska);
+        assertEq(f.tokenEnvOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1).registry, reg);
+        assertEq(f.tokenEnvOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1).deps[3], dis);
+        assertEq(f.tokenEnvOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1).smartKeyAccountImpl, ska);
+        assertEq(f.tokenEnvOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1).smartKeyAccountImpl, ska);
         assertEq(address(und.disclosure()), address(0));
         // the JSON keys the node and Odoo read
         assertEq(vm.parseJsonAddress(json, ".zether_disclosure"), dis);
@@ -121,7 +121,7 @@ contract ZetherDeployTest is Test {
         // a token from the deployed catalogue, on the deployed verifier
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << GovernanceBits.PAYABLE);
-        c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0);
+        c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
         NormalZetherToken t = NormalZetherToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z"));
         assertEq(address(t.verifier()), tv);
         assertEq(t.curve(), "bls12-381");
@@ -135,7 +135,7 @@ contract ZetherDeployTest is Test {
     }
 
     /// Q4 (CTR-MTX-30, R40), ua-mtx-merge T10: on a chain that declares the public gate the two Zether releases are each
-    /// measured as their own transaction through `deployImplementation` and asked below their testnet formula.
+    /// measured as their own transaction through `deployTokenImplementation` and asked below their testnet formula.
     function test_publicGateMeasuresBothZetherReleases() public {
         DeployHarness h = new DeployHarness();
         h.setGate(2);
@@ -159,7 +159,7 @@ contract ZetherDeployTest is Test {
             vm.chainId(ids[i]);
             DeployHarness h = new DeployHarness();
             (OpenFactory f,) = h.deploy(ZUID, false, ska);
-            assertFalse(f.kindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
+            assertFalse(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL_ZETHER, 1), address(0));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1), address(0));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.NORMAL, 1) == address(0), false, "the public kinds still");
@@ -176,13 +176,13 @@ contract ZetherDeployTest is Test {
             vm.chainId(ids[i]);
             DeployHarness h = new DeployHarness();
             (OpenFactory f, string memory json) = h.deploy(ZUID, true, ska);
-            assertTrue(f.kindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
-            assertTrue(f.kindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER));
+            assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER));
+            assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER));
             _checkCurve(f, h, json);
             assertTrue(IUARegistry(vm.parseJsonAddress(json, ".ua_registry")).kindEnabled(UAKinds.ZETHER_BLS12381));
             IFactoryToken.TokenConfig memory c;
             (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << GovernanceBits.PAYABLE);
-            c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0);
+            c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
             assertTrue(f.isRegisteredToken(f.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(c), "z")));
         }
     }
@@ -209,7 +209,7 @@ contract ZetherDeployTest is Test {
     }
 
     /// Each Zether-stack deploy fits one Osaka transaction as `deploy.sh` sends it (the verifiers through the CREATE2
-    /// deployer, the releases through `OpenFactory.deployImplementation`, a few k more; gas limit = forge's estimate ×
+    /// deployer, the releases through `OpenFactory.deployTokenImplementation`, a few k more; gas limit = forge's estimate ×
     /// `--gas-estimate-multiplier 105`) and the anvil's 64 KiB code limit. Tx gas ≈ 21,000 +
     /// calldata + the CREATE2 measured here + the 1/64 the deployer's call holds back; forge's estimate was 1.047× this
     /// figure on anvil (BLS verifier: 14,963,261 vs 14,296,783; 14,083,070 used), hence the first ×1.05.

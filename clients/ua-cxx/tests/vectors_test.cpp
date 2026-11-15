@@ -88,7 +88,7 @@ static void table_groups_purposes_constants() {
         CHECK(hx(*groupTag(g)) == r["GROUP"].get<std::string>(), g);
     }
     CHECK(!groupTag("nope") && !groupTagString("nope"), "unknown group");
-    CHECK(k["purposes"].size() == 16, "purposes size");  // 15 purposes (pqz-verdict: group 3f), `pop` has v1 and v2
+    CHECK(k["purposes"].size() == 17, "purposes size");  // 16 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44), `pop` has v1 and v2
     for (auto& r : k["purposes"]) {
         CHECK(hx(purposeTag(r["purpose"], r["version"].get<uint32_t>())) == r["purposeTag"].get<std::string>(), r["purpose"].get<std::string>());
         if (r["version"] == 1) CHECK(hx(purposeTag(r["purpose"])) == r["purposeTag"].get<std::string>(), r["purpose"].get<std::string>());
@@ -374,6 +374,21 @@ static void membership_rows() {
         Bytes m = uaMessage(0x0120, purposeTag("membership"), d);
         CHECK(m == bytes(r["message"]), "membership message");
         CHECK(memberDigest(u, m) == bytes(r["memberDigest"]), "membership memberDigest");
+    }
+}
+
+// CTR-UA-44: every updateMsig row: digest, message, memberDigest and the named arguments
+static void msig_update_rows() {
+    json p = load("portable.json");
+    CHECK(p["msigUpdates"].size() == 4, "msigUpdates");
+    for (auto& r : p["msigUpdates"]) {
+        json i;
+        for (auto k : {"ua", "chainUid", "registry", "version", "threshold", "members", "enabled", "validUntilBlock"}) i[k] = r[k];
+        i["sigs"] = r["args"]["sigs"];
+        json o = json::parse(msigUpdate(i.dump()));
+        std::string name = r["name"];
+        CHECK(o["digest"] == r["digest"] && o["message"] == r["message"] && o["memberDigest"] == r["memberDigest"], name);
+        CHECK(o["args"] == r["args"], name);
     }
 }
 
@@ -815,14 +830,14 @@ static void set_key_args() {
         CHECK(code_of([&] { setPqzKeyArgs(bad.first); }) == bad.second, bad.first);
 }
 
-// governance T14: governanceBit against governance_bits.json on disk, every row; past bit 24 UAArgument
+// governance T14: governanceBit against governance_bits.json on disk, every row; past bit 31 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
 static void governance_bits_rows() {
     std::ifstream f(std::string(SCAAS_UA_VECTORS_DIR) + "/../governance/governance_bits.json");
     if (!f) { std::fprintf(stderr, "cannot open governance_bits.json\n"); std::exit(2); }
     json v = json::parse(f);
-    CHECK(v["bits"].size() == 25, "rows 0-24");
+    CHECK(v["bits"].size() == 32, "rows 0-31"); // round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS; round 3zb + 3zc: bits 30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE
     for (auto& r : v["bits"]) CHECK(json::parse(governanceBit(r["bit"].get<uint8_t>())) == r, std::to_string(r["bit"].get<int>()));
-    for (int bit : {25, 127, 128, 255}) CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
+    for (int bit : {32, 127, 128, 255}) CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
 }
 
 // pay-meta-tax T41, T83: paymeta.json v3 rows (save without a payNo refused; the UUIDv7 shown) and paytax.json's UAPayWithTax digest row
@@ -832,14 +847,17 @@ static void pay_rows() {
         if (!f) { std::fprintf(stderr, "cannot open %s\n", n.c_str()); std::exit(2); }
         return json::parse(f);
     };
+    int refused = 0;
     for (auto& r : read("paymeta.json")) {
         json i = {{"salt", r["salt"]}, {"payNo", r["payNo"]}, {"save", r["save"]}, {"schema", r["schema"]}, {"body", r["body"]}};
+        refused += !r["accepted"].get<bool>();
         if (r["accepted"].get<bool>()) {
             json o = json::parse(metaPayId(i.dump()));
             CHECK(o["payId"] == r["payId"] && o["save"] == r["save"], r["name"].get<std::string>());
             CHECK(o["payNoUuid"] == (r.contains("payNoUuid") ? r["payNoUuid"] : json()), r["name"].get<std::string>());
         } else CHECK(code_of([&] { metaPayId(i.dump()); }) == "UAArgument", r["name"].get<std::string>());
     }
+    CHECK(refused > 0, "a refused paymeta row");
     for (auto& r : read("paytax.json")) {
         if (r["name"] != "digest_unbound_relayer_fee_recipient") continue;
         json p;
@@ -879,7 +897,7 @@ int main(int argc, char** argv) {
         {"table_groups_purposes_constants", table_groups_purposes_constants}, {"valid_rows", valid_rows},
         {"invalid_rows", invalid_rows}, {"natives_native_space_canonical_ids", natives_native_space_canonical_ids},
         {"messages", messages}, {"structures", structures}, {"portable", portable}, {"kem_record", kem_record},
-        {"pqz_key_record", pqz_key_record}, {"membership_rows", membership_rows}, {"portable_purposes", portable_purposes},
+        {"pqz_key_record", pqz_key_record}, {"membership_rows", membership_rows}, {"msig_update_rows", msig_update_rows}, {"portable_purposes", portable_purposes},
         {"holder_refusals", holder_refusals}, {"registration_args", registration_args}, {"nested_rows", nested_rows}, {"nested_inner", nested_inner}, {"set_key_args", set_key_args}, {"pay_rows", pay_rows},
         {"member_sig_hashes", member_sig_hashes}, {"governance_bits_rows", governance_bits_rows}, {"id_display_rows", id_display_rows}};
     if (argc != 2 || !tests.count(argv[1])) { std::fprintf(stderr, "usage: vectors_test <name>\n"); return 2; }

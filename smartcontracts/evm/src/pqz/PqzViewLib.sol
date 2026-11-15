@@ -8,7 +8,7 @@ import {IPqzToken} from "./IPqzToken.sol";
 import {IConfidentialWrappedToken} from "../confidential/IConfidentialToken.sol";
 import {PqzCt} from "./PqzCt.sol";
 import {PqzSafety} from "./PqzSafety.sol";
-import {UAPqzVerifier} from "./UAPqzVerifier.sol";
+import {PqzKeyVerifier} from "./PqzKeyVerifier.sol";
 import {PqzCore} from "./PqzCore.sol";
 
 /// @title statement views and disclosure (D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
@@ -16,7 +16,7 @@ import {PqzCore} from "./PqzCore.sol";
 /// @notice **UNAUDITED.** `address(this)` is the token.
 library PqzViewLib {
     bytes32 private constant TH_TRANSFER_ARGS = keccak256(
-        "PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)"
+        "PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor)PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)"
     );
     bytes32 private constant TH_LEG = keccak256("PqzLeg(bytes32 ua,bytes v,bytes vAuditor)");
     bytes32 private constant TH_MULTI_ARGS = keccak256(
@@ -55,8 +55,15 @@ library PqzViewLib {
         return keccak256(bytes.concat(
             abi.encode(TH_TRANSFER_ARGS, t.p, t.validUntilBlock, t.shieldIn, t.fromUA, t.keyVersion, t.toUA, t.beneficiaryUA, t.salt,
                 t.ownTag),
-            abi.encode(keccak256(t.u), keccak256(t.vTo), keccak256(t.vFrom), keccak256(t.vAuditor), keccak256(t.sealedMemo))
+            abi.encode(keccak256(t.u), keccak256(t.vTo), keccak256(t.vFrom), keccak256(t.vAuditor), keccak256(t.uFrom),
+                keccak256(t.sealedMemo), _hashOpening(t.openingTo), _hashOpening(t.openingAuditor))
         ));
+    }
+
+    bytes32 private constant TH_OPENING = keccak256("PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)");
+
+    function _hashOpening(IPqzToken.PqzOpening calldata x) private pure returns (bytes32) {
+        return keccak256(abi.encode(TH_OPENING, keccak256(x.mlkemCt), x.x25519Eph, keccak256(x.sealedSeed)));
     }
 
     function hashMulti(IPqzToken.PqzMultiArgs calldata t) public pure returns (bytes32) {

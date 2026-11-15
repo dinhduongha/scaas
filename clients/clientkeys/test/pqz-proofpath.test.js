@@ -17,7 +17,7 @@ import { hex, fromHex, utf8ToBytes, concatBytes } from '../src/bytes.js';
 const KAT = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/ua/pq_kat.json', import.meta.url), 'utf8'));
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/typed/typed_ops.json', import.meta.url), 'utf8'));
 // T62: the forge state vectors of the default set and n2048-kmax1024 (PqzStateVectors.t.sol, STATE_VECTORS=1)
-const STATES = ['n2304-kmax4096/state.json', 'state.json'].map((f) =>
+const STATES = ['state.json', 'n2304-kmax4096/state.json', 'n2560-kmax16384/state.json', 'n2816-kmax65536/state.json'].map((f) =>
   JSON.parse(readFileSync(new URL(`../../../smartcontracts/vectors/pqz/${f}`, import.meta.url), 'utf8')));
 
 test('ownTag: the KAT rows, recomputed here with HKDF-SHA256 then HMAC-SHA256 (label PQZ/owntag/v1, empty salt)', () => {
@@ -31,7 +31,9 @@ test('ownTag: the KAT rows, recomputed here with HKDF-SHA256 then HMAC-SHA256 (l
     const msg = concatBytes(fromHex(r.chainUid), fromHex(r.token), fromHex(r.fromUA), be32, fromHex(r.ctHash));
     assert.equal(msg.length, 32 + 20 + 32 + 4 + 32);
     assert.deepEqual([r.key, r.message, r.ownTag], [hex(key), hex(msg), hex(hmac(sha256, key, msg))], `v${r.version} c${r.sendCounter}`);
-    assert.deepEqual(pqzOwnTag(r), { key: r.key, message: r.message, ownTag: r.ownTag });
+    const t = pqzOwnTag(r);
+    assert.ok(t.key instanceof Uint8Array, 'the secret key as bytes the caller can wipe, not an immutable hex string');
+    assert.deepEqual({ ...t, key: hex(t.key) }, { key: r.key, message: r.message, ownTag: r.ownTag });
   }
   // the key is counter-free (one per seed version); the counter and the ciphertext are in the message
   assert.equal(KAT.ownTag[0].key, KAT.ownTag[1].key);
@@ -65,9 +67,11 @@ test('memoHash: keccak256(memo ‖ ownTag), the HASH memo salt ‖ sealedMemo, e
 });
 
 test('the six PQZ debit rows of release 3h: ownTag in the args struct, signed, the relayer and fee recipient unbound at fee 0', () => {
-  const three = Object.entries(V.ops).filter(([, r]) => r.release === '3h').map(([n]) => n);
+  // The two single rows moved to release three-keys with the PqzTransferArgs typehash (uFrom, the openings).
+  const three = Object.entries(V.ops).filter(([n, r]) => r.release === '3h' || (r.release === 'three-keys' && n.startsWith('UAPqz'))).map(([n]) => n);
   assert.deepEqual(three.sort(), ['UAPqzTransfer', 'UAPqzTransferCompact', 'UAPqzTransferSingle', 'UAPqzTransferSingleCompact',
     'UAPqzUnshield', 'UAPqzUnshieldUnwrap']);
+  assert.deepEqual(['UAPqzTransferSingle', 'UAPqzTransferSingleCompact'].map((n) => V.ops[n].release), ['three-keys', 'three-keys']);
   for (const n of three) {
     const r = V.ops[n];
     assert.match(r.typeString, /bytes32 ownTag,bytes(\[\])? u,/, n);
@@ -79,9 +83,9 @@ test('the six PQZ debit rows of release 3h: ownTag in the args struct, signed, t
 });
 
 // Group 3h, plan T62 (spec §2.2, §3.2, §4.2, §9.3; C-PP-1): the record words, the op blob tails and the logged P of the forge state
-// vectors at two sets, read here from the bytes alone and equal to what the contract's own views answered (`pqzDebitRecord`, the
+// vectors at the four sets (T-41), read here from the bytes alone and equal to what the contract's own views answered (`pqzDebitRecord`, the
 // statement's key versions, the event as emitted).
-test('state.json (two sets): release 3h; every debit record decodes from its two words to pqzDebitRecord\'s view', () => {
+test('state.json (four sets, T-41): release 3h; every debit record decodes from its two words to pqzDebitRecord\'s view', () => {
   for (const st of STATES) {
     assert.equal(st.release, '3h', st.set);
     const forms = new Set();
@@ -101,7 +105,7 @@ test('state.json (two sets): release 3h; every debit record decodes from its two
   }
 });
 
-test('state.json (two sets): every op blob\'s tail ownTag ‖ kv ‖ u8(n), read from the last byte, and R before P(v_f)', () => {
+test('state.json (four sets, T-41): every op blob\'s tail ownTag ‖ kv ‖ u8(n), read from the last byte, and R before P(v_f)', () => {
   for (const st of STATES) {
     const ns = new Set();
     for (const t of st.tails) {
@@ -116,7 +120,7 @@ test('state.json (two sets): every op blob\'s tail ownTag ‖ kv ‖ u8(n), read
   }
 });
 
-test('state.json (two sets): the logged P, PqzDebitProof(blob, ua, sendCounter, header, proof), decodes from its log', () => {
+test('state.json (four sets, T-41): the logged P, PqzDebitProof(blob, ua, sendCounter, header, proof), decodes from its log', () => {
   for (const st of STATES) {
     assert.ok(st.proofLogs.length > 0, st.set);
     for (const l of st.proofLogs) {

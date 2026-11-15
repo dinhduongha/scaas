@@ -57,6 +57,9 @@ abstract contract RegInvBase is Test {
     function invariant_I10_refusalGas() public view { _ok(10); }
     function invariant_I12_controlsMirror() public view { _ok(12); }
     function invariant_I13_pendings() public view { _ok(13); }
+    /// Round 3s (spec 2026-11-10-token-lists.md §4.5): the lists' parties (from the logs) and the lists' ratchet.
+    function invariant_I14_listParties() public view { _ok(14); }
+    function invariant_I15_listRatchet() public view { _ok(15); }
 
     /// The family's scripted ledger calls between the record (`_force`) and the relaxation (`_end`), and the invariants it
     /// must reach.
@@ -68,6 +71,8 @@ abstract contract RegInvBase is Test {
     /// and its end (I4), an operator transfer (I6, on 10-13 I8).
     function _force(uint256 s, uint256 b) internal {
         RegCore c = RegCore(address(h));
+        c.enableList(true); // round 3s: the deny list on (I6, I14), an edit of no one listed (I15)
+        c.listEdit(5, true, false);
         c.recordOrder(s, b, 500, 30, 3);
         c.forceTransfer(0, 50);
         c.freeze(2, 0, false);
@@ -85,15 +90,15 @@ abstract contract RegInvBase is Test {
     function test_everyCheckReached() public {
         _script();
         uint256 r = _reached();
-        for (uint256 k = 1; k <= 13; ++k) {
+        for (uint256 k = 1; k <= 15; ++k) {
             if (r & (1 << k) != 0) assertGt(h.hits(k), 0, string.concat("I", vm.toString(k), " reached"));
         }
-        for (uint256 i = 1; i <= 13; ++i) assertEq(h.vio(i), 0, h.why());
+        for (uint256 i = 1; i <= 15; ++i) assertEq(h.vio(i), 0, h.why());
     }
 
     function afterInvariant() public view {
         string memory s = "hits";
-        for (uint256 i = 1; i <= 13; ++i) if (i != 11) s = string.concat(s, " I", vm.toString(i), "=", vm.toString(h.hits(i)));
+        for (uint256 i = 1; i <= 15; ++i) if (i != 11) s = string.concat(s, " I", vm.toString(i), "=", vm.toString(h.hits(i)));
         console.log(s);
         string memory c = "calls ok/tried";
         for (uint256 k; k < 8; ++k) c = string.concat(c, " k", vm.toString(k), "=", vm.toString(h.calls(k + 10)), "/",
@@ -122,7 +127,7 @@ abstract contract RegInvPublic is RegInvBase {
 
     /// Every check but I8 and I9 (no shielded state, no legs).
     function _reached() internal pure override returns (uint256) {
-        return 0x34FE; // I1-I7, I10, I12, I13
+        return 0xF4FE; // I1-I7, I10, I12-I15
     }
 
     function setUp() public {
@@ -132,8 +137,9 @@ abstract contract RegInvPublic is RegInvBase {
     }
 
     function _sel() internal pure override returns (bytes4[] memory s) {
-        s = new bytes4[](20);
+        s = new bytes4[](22);
         _core(s);
+        (s[20], s[21]) = (RegCore.listEdit.selector, RegCore.enableList.selector); // round 3s
         (s[18], s[19]) = (RegCore.forceTransfer.selector, RegCore.recordOrder.selector);
         (s[12], s[13], s[14]) = (RegPublicHandler.pubTransfer.selector, RegPublicHandler.pubRelayed.selector,
             RegPublicHandler.pubPay.selector);
@@ -169,12 +175,13 @@ abstract contract RegInvZether is RegInvBase {
     }
 
     function _reached() internal pure override returns (uint256) {
-        return 0x37FE; // I1-I10, I12, I13
+        return 0xF7FE; // I1-I10, I12-I15
     }
 
     function _sel() internal pure override returns (bytes4[] memory s) {
-        s = new bytes4[](21);
+        s = new bytes4[](23);
         _core(s);
+        (s[21], s[22]) = (RegCore.listEdit.selector, RegCore.enableList.selector); // round 3s
         (s[12], s[13], s[14]) = (RegZetherHandler.zShield.selector, RegZetherHandler.zWrapShield.selector,
             RegZetherHandler.zRoll.selector);
         (s[15], s[16], s[17]) = (RegZetherHandler.zTransfer.selector, RegZetherHandler.zMulti.selector,
@@ -220,12 +227,13 @@ abstract contract RegInvPqz is RegInvBase {
     }
 
     function _reached() internal pure override returns (uint256) {
-        return 0x37FE; // I1-I10, I12, I13
+        return 0xF7FE; // I1-I10, I12-I15
     }
 
     function _sel() internal pure override returns (bytes4[] memory s) {
-        s = new bytes4[](21);
+        s = new bytes4[](23);
         _core(s);
+        (s[21], s[22]) = (RegCore.listEdit.selector, RegCore.enableList.selector); // round 3s
         (s[12], s[13], s[14]) = (RegPqzHandler.pqShield.selector, RegPqzHandler.pqWrapShield.selector,
             RegPqzHandler.pqTransfer.selector);
         (s[15], s[16], s[17]) = (RegPqzHandler.pqUnshield.selector, RegPqzHandler.pqRefresh.selector,

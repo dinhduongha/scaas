@@ -11,8 +11,10 @@
 # runs/gate/last-<set> is each set's latest run, `gate.sh --last <set>` re-runs that one (concurrent gates).
 # PQZ_SET: the parameter set (owner 2026-10-21: pqz-core/params/sets/<set>/, one set per library build; default
 # n2304-kmax4096, the frozen v3 set is n2048-kmax1024); named in the summary.
-# Steps: KAT 19/19 (against the set's upstream LaZer golden file), check_tbox_fixes, check_sv_fixes, the PQZL
-# differential (SV vs generic, z21), C = Rust = wasm32 on the bench proofs (fnv), the vectors job (pqz-vectors --check,
+# Steps: KAT 19/19 (against the set's upstream LaZer golden file), check_tbox_fixes, check_sv_fixes, ct (the
+# constant-time check of both provers under valgrind, pqzl/test/ct.sh: the 16 bench relations once each and one round of
+# KeyGen / Enc / Dec, 0 secret-dependent reports; review 3w u1-1), ub (the C core under UBSan + ASan,
+# pqzl/test/ub_test.sh, parts a .. h), the PQZL differential (SV vs generic, z21), C = Rust = wasm32 on the bench proofs (fnv), the vectors job (pqz-vectors --check,
 # pqz_kat.py --check, tamper, pqz-ffi selftest vectors, wasm32 replay), the pqz-ffi job (tests, symbol scans, native =
 # wasm32 digests), cargo test of pqz-stmt and Ligero, the PQZH cross-checks (C = Rust statement / witness bytes: the
 # STARK backup's at n2048-kmax1024, Ligero's at every set with PQZH), the fuzz targets (build, then
@@ -130,25 +132,25 @@ for l in sys.stdin:
     if j.get("reason") == "compiler-artifact" and j.get("executable") and j["profile"]["test"]:
         print(j["target"]["kind"][0] + "-" + j["target"]["name"], j["executable"])'
 # C = Rust = wasm32 on the bench proofs: the C core's pqz_bench, the Rust bench and the Rust bench in wasm32 (node) print
-# the same proofs_fnv per relation (2 proofs of each of the 14 relations, mask 16383); a core_only set and n2816-kmax65536 also the C core
+# the same proofs_fnv per relation (2 proofs of each of the 16 relations, R_TXS / R_TXS0 included, mask 65535); a core_only set and n2816-kmax65536 also the C core
 # in wasm32 (cwasm)
-fnv() { (cd pqzl && part fnv/c sh -c "./build.sh native > /dev/null && PQZ_ARENA_MB=2048 $PB/native/pqz_bench 2 1 16383 > '../$R-fnv-c.jsonl'" &&
+fnv() { (cd pqzl && part fnv/c sh -c "./build.sh native > /dev/null && PQZ_ARENA_MB=2048 $PB/native/pqz_bench 2 1 65535 > '../$R-fnv-c.jsonl'" &&
   cd rust && part fnv/rust sh -c "CARGO_TARGET_DIR=target/$PQZ_SET cargo build -j2 --release --offline $NODEF --features '${FEAT}bench' --bin bench &&
-    target/$PQZ_SET/release/bench 2 1 16383 > '../../$R-fnv-rust.jsonl'" &&
+    target/$PQZ_SET/release/bench 2 1 65535 > '../../$R-fnv-rust.jsonl'" &&
   part fnv/wasm sh -c "(cd wasm && CARGO_TARGET_DIR=target/$PQZ_SET cargo build -j2 --release --offline --target wasm32-unknown-unknown \
      --no-default-features --features 'set-$PQZ_SET') &&
-    PQZL_WASM_FILE=wasm/target/$PQZ_SET/wasm32-unknown-unknown/release/pqzl_wasm.wasm node wasm/run_wasm.mjs 2 1 16383 > '../../$R-fnv-wasm.jsonl'" &&
+    PQZL_WASM_FILE=wasm/target/$PQZ_SET/wasm32-unknown-unknown/release/pqzl_wasm.wasm node wasm/run_wasm.mjs 2 1 65535 > '../../$R-fnv-wasm.jsonl'" &&
   cd ../.. && for x in c rust wasm; do python3 -I -c "$FNVX" "$R-fnv-$x.jsonl" > "$R-fnv-$x.txt" || return 1; done &&
-  test "$(wc -l < "$R-fnv-c.txt")" = 14 && cmp "$R-fnv-c.txt" "$R-fnv-rust.txt" && cmp "$R-fnv-c.txt" "$R-fnv-wasm.txt" &&
+  test "$(wc -l < "$R-fnv-c.txt")" = 16 && cmp "$R-fnv-c.txt" "$R-fnv-rust.txt" && cmp "$R-fnv-c.txt" "$R-fnv-wasm.txt" &&
   cat "$R-fnv-c.txt" && if [ "$CORE_ONLY" = True ] || [ "$(json log2q)" -gt 50 ]; then cwasm; fi); }
 # a core_only set, and a set with log2 q > 50 (n2816-kmax65536, 54: the closest to the C core's PQZ_LOG2Q <= 56 limb
 # bound; it kept this part when it stopped being core_only, plan 5h Task 8d part 1b; pqz-ffi's wasm32 build runs the
 # Rust core): the C core's wasm32 build (its limb path, PQZ_MUL128 0) in its own build directory (not the native build's) must print
 # the native C run's proofs_fnv (8b review I4)
 cwasm() { (cd pqzl && part fnv/cwasm sh -c "B=$PB/cwasm ./build.sh wasm > /dev/null &&
-    PQZ_WASM_FILE=$PB/cwasm/wasm/pqz.wasm PQZ_ARENA_MB=2048 node test/run_wasm.mjs 2 1 16383 \
+    PQZ_WASM_FILE=$PB/cwasm/wasm/pqz.wasm PQZ_ARENA_MB=2048 node test/run_wasm.mjs 2 1 65535 \
     > '../$R-fnv-cwasm.jsonl'") && python3 -I -c "$FNVX" "$R-fnv-cwasm.jsonl" > "$R-fnv-cwasm.txt" &&
-  cmp "$R-fnv-c.txt" "$R-fnv-cwasm.txt" && echo "C core wasm32 = C core native (14 relations)"; }
+  cmp "$R-fnv-c.txt" "$R-fnv-cwasm.txt" && echo "C core wasm32 = C core native (16 relations)"; }
 # one "<rel> <proofs_fnv>" line per relation of a bench's JSON lines (the C / Rust benches print '": ', the wasm32 one
 # '":'); exit 1 if any line reports fails > 0
 FNVX='import json, sys
@@ -161,6 +163,9 @@ for l in open(sys.argv[1]):
             print(j["rel"], j["proofs_fnv"])
 sys.exit(1 if bad else 0)'
 sv() { (cd pqzl && sv/check_sv_fixes.sh); }
+# the guards of fix E (G-1) and of the round-2 memory-safety fixes, at the set (review 3w u1-1)
+ctg() { (cd pqzl && PQZ_ARENA_MB=2048 test/ct.sh "gate-$L" 65535 1 1); } # the C side: fnv's arena (every R_TXM shape)
+ubg() { (cd pqzl && test/ub_test.sh "gate-$L"); }
 # pqz-stmt at the set; Ligero's tests at the set where it has PQZH (per-set target, plan 5h Task 8c part 2);
 # --no-fail-fast: one failing test binary must not hide the others (R0 fix round I1)
 cargo_tests() { (cd stmt && part cargo/stmt env CARGO_TARGET_DIR="target/$PQZ_SET" cargo test --release --offline --no-fail-fast --no-default-features --features "set-$PQZ_SET") &&
@@ -170,12 +175,14 @@ cargo_tests() { (cd stmt && part cargo/stmt env CARGO_TARGET_DIR="target/$PQZ_SE
 xcheck() { if [ "$PQZ_SET" = $V3 ]; then part xcheck/stark pqzh/xcheck/run.sh || return 1; fi; part xcheck/ligero pqzh/xcheck/ligero.sh; }
 # a smoke run is too short to merge into the committed corpora (the 2 h campaigns'): with PQZ_BUILD_TAG, run.sh merges
 # into build/fuzz-<set>/corpus/ and only reads fuzz/corpus/
-fuzz() { fuzz/build.sh && for t in precompile mutate codec; do part "fuzz/$t" fuzz/run.sh "$t" "$FZ" "gate-$L" || return 1; done; }
+fuzz() { fuzz/build.sh && for t in precompile mutate codec offchain; do part "fuzz/$t" fuzz/run.sh "$t" "$FZ" "gate-$L" || return 1; done; }
 
 say "set $PQZ_SET"
 step kat kat
 step tbox tbox
 step sv sv
+step ct ctg
+step ub ubg
 step diff diffs
 step fnv fnv
 if [ "$CORE_ONLY" = True ]; then

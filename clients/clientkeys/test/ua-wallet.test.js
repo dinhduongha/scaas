@@ -260,7 +260,7 @@ test('nonce map is the 512-bit map', () => {
 
 test('unbound relayer / feeRecipient hashed as zero in every mode struct', () => {
   // ua-mtx-merge (CTR-MTX-30, R46): the token's address `MetaTransfer` and `ReceiverFee` left; `UABurn` is the op struct
-  const want = new Set(['MetaTransaction', 'UAMetaTransaction', 'UAMetaTransfer', 'UABurn', 'UAReceiverFee']);
+  const want = new Set(['MetaTransaction', 'UAMetaTransaction', 'UAMetaTransfer', 'UABurn', 'UAPayeeFee']);
   const have = new Set();
   for (const r of S.typed.canon) {
     const td = (evm.OP_BUILDERS[r.builder] ?? evm[r.builder])(r.input);
@@ -297,7 +297,7 @@ test('typed rows with arrays and a negative int; missing field is zero, unknown 
 
 test('policy rows: accepted and refused, from the check* functions', () => {
   const checks = new Set(S.policy.map((p) => p.expect.check));
-  for (const c of ['Payment', 'ReceiverFee', 'PayMeta', 'Op', 'Call', 'OwnerCall', 'Cancel', 'TradeOrder', 'WrapOrder', 'Any']) {
+  for (const c of ['Payment', 'PayeeFee', 'PayMeta', 'Op', 'Call', 'OwnerCall', 'Cancel', 'TradeOrder', 'WrapOrder', 'Any']) {
     assert.ok(checks.has(c), c);
     assert.ok(S.policy.some((p) => p.expect.check === c && p.digest), `${c} accepted`);
     if (c !== 'Any') assert.ok(S.policy.some((p) => p.expect.check === c && p.refused), `${c} refused`);

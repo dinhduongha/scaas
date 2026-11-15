@@ -70,7 +70,7 @@ is always the hard value. Gas is never assumed: Zether-sized transactions do not
 <a id="private-chain"></a><a id="private-7622"></a>
 
 <a id="NET-EVM-02"></a>**NET-EVM-02** — **The private reference chain is chain id 7622; its identity is the pair
-(chain id 7622, genesis hash `0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164` since the 2026-10-31 reset (fs3 Task 13: the CREATE2 deployer in the genesis alloc, EIP-7702 off; `0xa17faef4…2ac2` from 2026-10-22, genesis gas limit 200 M); the client test vectors keep
+(chain id 7622, genesis hash `0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13` since reset 4 (2026-11-15: the RescueVault in the genesis alloc, [NET-EVM-14](#NET-EVM-14); `0xf1f491ab…3164` from the 2026-10-31 reset, fs3 Task 13: the CREATE2 deployer in the genesis alloc, EIP-7702 off; `0xa17faef4…2ac2` from 2026-10-22, genesis gas limit 200 M); the client test vectors keep
 the earlier `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` as a fixed constant), profile
 `scaas-testnet`.** Owner ruling 2026-10-07; the name `scaas-testnet` is owner ruling 2026-10-31 (it replaces the
 2026-10-07 name). Chain id `0x1dc6`; the chain was reset with a new genesis when it moved
@@ -101,7 +101,7 @@ Parameters:
 | Block gas limit | 200,000,000 from genesis (`0xbebc200`, reset 2026-10-22, owner; `TargetBlockGasLimit` 200 M); 16,777,216 before. Per tx: regular gas ≤ 2^24 (EIP-7825), node `max_gas_per_tx` 64 M (owner 2026-10-22) |
 | Finality | depth 1, quorum 1 (single-provider trust, reported as such) |
 | Classical Zether | open (EIP-2537 live, [CTR-ZTH-52](../contracts/zether.md#CTR-ZTH-52), owner ruling 2026-10-31); **deployed 2026-10-31** with `DEPLOY_ZETHER=1` as part of the salt-v2 set (`DEPLOY_SALT` = `keccak256("scaas.deploy.v2")`: UA registry with `zether-bls12381`, OpenFactory with `NORMAL_ZETHER` / `WRAPPED_ZETHER` enabled), e2e passed; addresses and re-run steps in the [RUNBOOK](../../pqz-core/nethermind/chain/RUNBOOK.md#zether-on-the-scaas-testnet-executed-2026-10-31). The phase C set of the same day (salt v1, registry without `zether-bls12381`) is superseded, kept on chain |
-| Post-quantum Zether | the only PQZ chain: `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012`, `MLDSA65` `…0013` from the plugin in image `scaas/nethermind-pqz:1.39.0-pqz1` (local, never pushed), chainspec `engine.Pqz` ([chain integration](../contracts/pq-zero-knowledge.md#chain-integration), [§3](#precompiles)) |
+| PQZ | Since reset 4 (2026-11-15): the main factory carries the PQZ releases 4, 5, 12, 13 (`DEPLOY_PQZ=1`) and the gen-1 registry `pqz-mlwe` 0x0142 and `mldsa87` 0x0134 on the verifiers `deploy.sh evm`'s first step built on the chain. `PRECOMPILE` tokens: the only chain with the `PQZ`, `MLDSA44` and `MLDSA65` precompiles, from the plugin `Nethermind.Pqz`, chainspec `engine.Pqz` (addresses and image: [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10), [chain integration](../contracts/pq-zero-knowledge.md#chain-integration), [§3](#precompiles)). `OFFCHAIN` tokens ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)) need no precompile and run here as on any EVM chain |
 
 Operator trap, measured on the earlier chain: **a Nethermind chainspec silently ignores Geth-style keys.** With
 `pragueBlock: 0` (and `londonBlock`, `cancunBlock`) in Geth form, the chain ran pre-London without a warning: the
@@ -158,12 +158,16 @@ so a transaction priced at 1 wei is never mined; clients price at least `baseFee
   a token's `initialize` refuses such a chain, and one pricing G1MSM above the cap. The SCaaS testnet's Nethermind 2.2.0 answers
   all four as required at that gas, the two failures as subgroup errors (read-only `eth_call`, 2026-11-01).
 - **PQ precompiles on the SCaaS testnet** (P6f, plugin `Nethermind.Pqz`, [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)):
-  `PQZ` `0x5caa500000000000000000000000000000000f01` (PQZL and PQZH proofs, per-row gas 2.57–5.41 M + 3 per word),
-  `MLDSA44` `0x5caa500000000000000000000000000000000012` (49,000 + 6 per message word) and `MLDSA65`
-  `0x5caa500000000000000000000000000000000013` (68,000 + 6 per word), EIP-8355 layout, empty context; prices frozen in
-  the chainspec's `engine.Pqz` ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)). The next image moves them to the
-  32-bit form `0x000000000000000000000000000000005caa0f01` / `…5caa0012` / `…5caa0013` (spec 2026-10-20 §12 item 9; plugin built in plan 5h
-  Task 8d part 1, not yet rolled out). A stock Nethermind image ignores
+  `PQZ` `0x000000000000000000000000000000005caa0f01` (PQZL and PQZH proofs, per-row gas 1.721–6.242 M + 3 per word,
+  calibrated 2026-10-31), `MLDSA44` `0x000000000000000000000000000000005caa0012` (59,000 + 6 per message word, calibrated 2026-11-15; the SCaaS
+  testnet's chainspec of reset 1 carries 49,000 until reset 4), `MLDSA65`
+  `0x000000000000000000000000000000005caa0013` (68,000 + 6 per word) and `MLDSA87` `0x000000000000000000000000000000005caa0014`
+  (135,000 + 6 per word, calibrated 2026-11-15; the SCaaS testnet's chainspec of reset 1 of 2026-11-04 carries the provisional
+  102,000 until reset 4; active only under a schedule that carries `mldsa87Gas`, on the SCaaS testnet from the second schedule, [CTR-UA-39](../contracts/accounts.md#CTR-UA-39)), EIP-8355
+  layout, empty context; prices frozen in the chainspec's `engine.Pqz`
+  ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11); the rows: the plugin README,
+  [Prices](../../pqz-core/nethermind/README.md#prices-calibrated-2026-10-31)). Image `2.2.0-pqz7`; images up to
+  `2.2.0-pqz3` served P6f D3's `0x5caa5000…0f01` / `…0012` / `…0013`. A stock Nethermind image ignores
   that section and the addresses stay empty accounts (shown on the copy), so contracts self-test and nodes probe.
   Runbook: `pqz-core/nethermind/chain/RUNBOOK.md`.
 - **P-256** (RIP-7212 / EIP-7951 at `0x100`): present on the SCaaS testnet; probed per chain (`has_p256_precompile`); without it
@@ -187,7 +191,7 @@ Before the
 run passes, the deploy gate requires, for each deployed contract, `chainUid()` = the RPC's genesis hash = the chain
 profile's `chain_uid`; refuses a genesis hash already present in another chain profile
 ([NET-ALL-25](README.md#NET-ALL-25)); and requires the factory to have registered only implementations whose
-`chainUid()` equals its own. The run writes `chain_uid` and the DEX list into `deployments/<chainid>.json`, which seeds
+`chainUid()` equals its own. The run writes `chain_uid` and the DEX list into `deployments/<key>.json` ([NET-EVM-13](#NET-EVM-13)), which seeds
 the chain profiles of the node and the clients ([NET-ALL-24](README.md#NET-ALL-24)). Why: a CREATE address depends on
 the deployer's nonce, so the same contract lands at unrelated addresses on each chain and a missed transaction shifts
 every later address; with CREATE2 the address follows from what was deployed. Cost: a fixed-salt deployer must exist on
@@ -197,6 +201,46 @@ version needs a new salt or new code). On the SCaaS testnet the deployer is in t
 `0x4e59b44847b379578588920cA78FbF26c0B4956C` from its 2026-10-31 reset (its keyless pre-EIP-155 deploy transaction, a
 fixed 100,000 gas, cannot pay Amsterdam's code-deposit state gas). The same alloc is proposed for mainnet 22776; the
 owner decides at the 22776 launch.
+
+**Change (2026-11-07, owner; chain-neutral releases, [CTR-TOK-29](../contracts/token-wrappers.md#CTR-TOK-29),
+[NET-ALL-22](README.md#NET-ALL-22)):** the deterministic deployer is a requirement of every chain (the SCaaS mainnet's genesis
+alloc included). The factory (constructor `(bytes32 admin)` only, the first admin's native id; `configureChain` writes its `chain_uid` once), its libraries,
+the body modules and the releases are chain-neutral and land at the same address on every chain; only contracts with a
+`chain_uid` constructor (the UA registry, the governance router, `SmartKeyAccountFactory`, mandate wallets) differ per chain.
+The release list `releases.json` (`RELEASES_JSON`; `RELEASES_WRITE=true` writes it from the first chain) pins every factory,
+library, module, release and the first admin (row `admin`) by address and code hash: a later chain's deploy refuses any row that differs,
+and on a chain id that `chain-uids.json` lists more than once the admin's run stops after `configureChain` until the
+siblings are configured. Status: **BUILT** on branch `ua-mtx-merge` (T71–T74, `test/v2/ChainNeutral.t.sol`,
+`ChainNeutralFactory.t.sol`; `DeployBase` writes and checks the list).
+
+<a id="NET-EVM-14"></a>**NET-EVM-14** — **Only test networks get the `RescueVault` in the genesis `alloc`; mainnet 22776
+(`scaas-mainnet`) and every `*-mainnet` chain never do.** Owner ruling 2026-11-14; status **BUILT** (vector, patch tool and
+their tests; the SCaaS testnet's reset 4 is the first chain made with it). On the SCaaS testnet the genesis carries the
+`RescueVault` ([CTR-GOV-25](../decisions.md#CTR-GOV-25)) at `RescueLib.SCAAS_DEV_RESCUE`
+`0xd33d17991f57BefB4CcBb3E57c477c10BdE5B465`: its runtime code exactly as the CREATE2 deploy of the committed
+`rescue-vault-init.hex` leaves it (nonce 1), and the storage its constructor would write for admin = the native UA of test key
+`0x…01` (slot 0) and rescuer = test key `0x…02` (slot 1, `seq` 0 in its upper bytes). The account is the vector
+`smartcontracts/vectors/governance/rescue_vault_testnet_alloc.json` (`test_testnetGenesisAlloc` makes and checks it);
+`pqz-core/nethermind/chain/patch-chainspec.py --testnet-reset --rescue-vault-alloc <vector>` adds it and nothing else to the
+accounts. **On `scaas-mainnet` and every `*-mainnet` chain there is no alloc:** the vault comes through the public CREATE2
+deployer `0x4e59b44847b379578588920cA78FbF26c0B4956C` (`script/DeployRescueVault.s.sol`) with the real dev admin of the
+committed init code, counterfactual until needed. The patch tool refuses an alloc for chain id 22776 or for an alloc file
+whose chain key ends in `-mainnet` (`RESCUE_VAULT_ALLOC_MAINNET_REFUSED`, before any other check). The real dev admin never
+signs a `setRescuer` or `rotateAdmin` toward a test key: the vault's signatures are chain-neutral and replay on the vault of
+every chain, mainnet included. Why: the testnet matrix runs the vault's admin rows with test keys only, without the real
+admin's key and without `anvil_setStorageAt`. Cost: the testnet vault is not the other chains' (its admin is a public test
+key, so anyone can take it there; the testnet holds no value), and the alloc moves the testnet's genesis hash.
+
+<a id="pqz-offchain-releases"></a>**PQZ releases for `OFFCHAIN` tokens** (group 3f; contracts and the deploy form BUILT, T44 +
+T45 `2cce490d`). On a chain where `PqzKeyVerifier` cannot be deployed (no `PQZ` precompile, so its constructor self-test
+fails) a PQZ release takes `env.deps = [0]`: only `OFFCHAIN` tokens initialize on it, a `PRECOMPILE` one refuses
+`SelfTestFailed(address(0))` ([CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)). The PQZ releases are deployed by
+`script/pqz/e2e.py`, whose zero-dep form is `--zero-dep` (the registry's `PqzKeyVerifier` is still deployed for the
+registration proofs). The chain must still take the code and the deploy gas of the PQZ kinds and their body modules
+([NET-EVM-06](#NET-EVM-06), the [module releases](#body-module-releases)), so a public chain runs them only after its own
+Glamsterdam fork. Hedera is refused in both modes. A PQZ key rotation ([CTR-UA-42](../contracts/accounts.md#CTR-UA-42)) stores
+the new version's proof by `storePqzPop`, which at `n2816-kmax65536` sits at the 60 M ceiling: a chain at that set with a 60 M
+block cannot rotate (a 60 M chain is in practice an `n2304-kmax4096` chain).
 
 <a id="NET-EVM-06"></a>**NET-EVM-06** — **Every Foundry profile compiles for the `amsterdam` EVM: every chain that runs these contracts
 requires Glamsterdam, and a public chain is deployed only after its own fork.** Owner ruling 2026-10-21; status **BUILT**.
@@ -221,7 +265,7 @@ release's creation as one transaction, not real receipts, measured on branch `go
 `smartcontracts/evm/runs/2026-11-03-governance-deploy-gas.txt`, `test/governance/GovDeploy.t.sol`
 `test_releaseGasPerKind`, `test_everyKindsReleaseFitsTwoHundredMillion`): regular gas (the frame's `gasTotalUsed` × 64/63) and
 EIP-8037 state gas (the code deposit at 1,530 per byte and the new account), their total, and that total × 1.05
-(`--gas-estimate-multiplier 105`, `deploy.sh`), the gas the transaction asks of the block. The factory's `deployImplementation`
+(the explicit gas limit `deploy.sh` sends, [NET-EVM-11](#NET-EVM-11)), the gas the transaction asks of the block. The factory's `deployTokenImplementation`
 adds its own frame and a slot or two. A kind fits when regular × 1.05 < 2^24 (EIP-7825) and total × 1.05 ≤ 200,000,000. Anvil's
 own `gasUsed` does not charge EIP-8037, so it says nothing here; the one run over a real client (7622, Nethermind, the pre-round
 sizes, `runs/2026-10-31-fs3-t13-pqz-7622-public-rpc.txt`) gave `UARegistry` 58.1 M, `NormalToken` 61.1 M, `WrappedPqzToken` 96.5 M.
@@ -259,7 +303,7 @@ anything is sent. The limit is declared, never derived from a chain id: one rule
 runbook sets 131,072 after the next reset. A chain's own limit stays the last word: a deploy it refuses fails closed.
 
 **What the block limit bounds (EIP-8037).** A transaction is included only if its `tx.gas`, which covers regular plus state gas, fits the block gas limit; EIP-7825's 2^24 caps only the regular part. The block's `gas_used` is `max(Σ regular, Σ state)` and is accounting, not an inclusion test. The sender pays `max(total, floor)` where `total` is execution plus state gas and `floor` the EIP-7976 calldata floor; below the floor the sum of the two gas columns overstates the charge. A deployment such as `storePqzPop` at `n2816-kmax65536` (60.11 M regular + state in the registry-split measurement) therefore does not fit a 60 M block.
-**Deploy gate:** `DeployBase._requireReleaseGas(contract)` (called before the `UARegistry` creation and each `deployImplementation` /
+**Deploy gate:** `DeployBase._requireReleaseGas(contract)` (called before the `UARegistry` creation and each `deployTokenImplementation` /
 `deployDexImplementation`) and `script/pqz/e2e.py` read `block.gaslimit` (`eth_getBlockByNumber`) and refuse before
 sending when it is below the kind's need; the sizes come from the baseline file at run time, so the figures follow the
 ratchet. The deploy tests assert regular + state gas against the same budget next to the 2^24 check.
@@ -284,7 +328,7 @@ dev chains, so 22776, Hedera 295 and an unknown chain too — defaults to and ma
 minutes, the other listed test / dev chains to 0; at most 30 days, the factory's `MAX_NOTICE_PERIOD`; `DEMO_SUPPLY`
 needs 0), first the `GovernanceRouter` (CREATE2, after the UA registry and before every release, JSON `governance_router`;
 every release's `Env.govRouter` names it, [CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)), and, when
-the deployer is the registrar, publishes env 1 of `NORMAL` and of the DEX (the factory, `chain_uid`, the UA registry, the
+the deployer is the factory's first admin (`REGISTRAR`, default the deployer), publishes env 1 of `NORMAL` and of the DEX (the factory, `chain_uid`, the UA registry, the
 `SmartKeyAccount` implementation, Hedera, the linked libraries with their code hashes) and has the factory deploy
 (plan 5g-Z2, [CTR-TOK-03](../contracts/token-wrappers.md#release-env)) `NormalToken` as
 version 1 of `NORMAL` on the UA registry (since UA-4 every token implementation carries the UA ledger and is over
@@ -306,10 +350,24 @@ T-GAS). The other families refuse `0x0135` until their own round; Algorand's `fa
 salt) and cannot verify this kind's randomized round-3 signatures.
 
 It writes
-`deployments/<chainid>.json` (`token_factory`, `implementation_normal`, `implementation_wrapped` (with `DEPLOY_WRAPPED`), `dex_implementation`, `ua_registry`, `governance_router`, `chain_uid`, `smart_key_account_factory`,
+`deployments/<key>.json` ([NET-EVM-13](#NET-EVM-13): its header first; `token_factory`, `implementation_normal`, `implementation_wrapped` (with `DEPLOY_WRAPPED`), `dex_implementation`, `ua_registry`, `governance_router`, `chain_uid`, `smart_key_account_factory`,
 `smart_key_account_implementation`, `demo_token`, `demo_token_2`; `factory`, `implementation`, `dex`, `scaas_dex` are gone with v1),
 which seeds the client and the node configuration. forge writes it during the simulation, before the broadcast; `deploy.sh` puts the previous file back (or removes the new one) when the broadcast fails.
-Zether (built, P3; UNAUDITED; any chain with EIP-2537, owner ruling 2026-10-31): opt in with `DEPLOY_ZETHER=1` (default off; on Hedera, or where the precompile probe finds no EIP-2537, the script refuses before deploying anything). It deploys `ZetherStatements`, `ZetherDisclosure` and per curve the inner-product, transfer and burn verifiers; when the deployer is the registrar it publishes per curve an env of `NORMAL_ZETHER` and `WRAPPED_ZETHER` (the UA registry, whose Zether kinds it enables there; `deps` = transfer, burn, inner-product verifier, disclosure, [CTR-ZTH-20](../contracts/zether.md#CTR-ZTH-20); env 1, BLS12-381), has the factory deploy the two confidential implementations on it (BLS12-381 as version 1 of each kind; the curve is the release's `curve()`) and enables both kinds, with the keys `zether_registry` (= `ua_registry`), `zether_disclosure`, `zether_statements`, `zether_inner_product_verifier_<curve>`, `zether_verifier_<curve>` (transfer), `zether_burn_verifier_<curve>`, `implementation_normal_zether_<curve>`, `implementation_wrapped_zether_<curve>` (`<curve>` = `bls12381`; plan 5g-Z1). The implementations exceed 24,576 B and the BLS inner-product verifier's deploy (the generators) uses ~14 M gas, so `deploy.sh` always passes `--gas-estimate-multiplier 105` to `forge script` (the default ×1.30 exceeds the Osaka per-transaction cap of 16,777,216, EIP-7825; ×1.13 or more fails; the largest implementation, `WrappedPqzToken`, 13,467,833 gas measured through `deployImplementation` (plan 5g-Z2; 63,975 B of init code with the env), is deployed by `script/pqz/e2e.py`, which sets its own limit; at 72,160 B it needs `CHAIN_CODE_LIMIT=131072` and a chain without EIP-7954) and the anvil needs `--code-size-limit 131072` (`scripts/e2e-zether.sh`); `ZetherDeploy.t` checks each deploy fits. `scripts/e2e-zether.sh` runs the
+**Deploy order and the factory admin ([CTR-GOV-23](../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract), NET-EVM-05). BUILT (T10).**
+`SmartKeyAccountFactory` → the relay pair (`RelayFeeRouter` and its executor) under the constant `RELAY_SALT =
+keccak256("scaas.deploy.v1")`, reused when its code is there (one address on every chain and stack; `DEPLOY_SALT` moves only
+the rest) → the UA registry → the router → `ComplianceRegistry(COMPLIANCE_ADMIN, router, chainUid)` with `DEPLOY_REGULATED`
+(`COMPLIANCE_ADMIN` a UA id, `bytes32`, required) → `ZetherStatements` with `DEPLOY_ZETHER` → `OpenFactory(pad(admin))`, whose
+address depends on none of them → `configureChain` → `setChainEntries` (the relay pair, the registry, the account factory,
+`ZetherStatements`; 0 leaves an entry open), then the gate compares `directory()` with what the run deployed → envs and
+releases (the admin's own deploys: its own approval) → `transferAdmin(FACTORY_ADMIN_NEXT, chainUid)` when set (optional `bytes32`;
+`FACTORY_ADMIN_NEXT` accepts by its own signed `mtxAcceptAdmin`, a separate step). The book gains `factory_admin` and
+`factory_pending_admin`; the gate reads `admin()` and `pendingAdmin()` against them. The sending run (`DeploySend.s.sol`)
+counts a release deploy whose `CREATE2` address already has code as done and sends nothing for it (the release deploys are
+open to anyone once approved, so a front-runner cannot fail the plan). Each release transaction stays at most 60 M asked
+(NET-EVM-11).
+
+Zether (built, P3; UNAUDITED; any chain with EIP-2537, owner ruling 2026-10-31): opt in with `DEPLOY_ZETHER=1` (default off; on Hedera, or where the precompile probe finds no EIP-2537, the script refuses before deploying anything). It deploys `ZetherStatements`, `ZetherDisclosure` and per curve the inner-product, transfer and burn verifiers; when the deployer is the registrar it publishes per curve an env of `NORMAL_ZETHER` and `WRAPPED_ZETHER` (the UA registry, whose Zether kinds it enables there; `deps` = transfer, burn, inner-product verifier, disclosure, [CTR-ZTH-20](../contracts/zether.md#CTR-ZTH-20); env 1, BLS12-381), has the factory deploy the two confidential implementations on it (BLS12-381 as version 1 of each kind; the curve is the release's `curve()`) and enables both kinds, with the keys `zether_registry` (= `ua_registry`), `zether_disclosure`, `zether_statements`, `zether_inner_product_verifier_<curve>`, `zether_verifier_<curve>` (transfer), `zether_burn_verifier_<curve>`, `implementation_normal_zether_<curve>`, `implementation_wrapped_zether_<curve>` (`<curve>` = `bls12381`; plan 5g-Z1). The implementations exceed 24,576 B and the BLS inner-product verifier's deploy (the generators) uses ~14 M gas, so each of its transactions carries an explicit gas limit ([NET-EVM-11](#NET-EVM-11); forge's default estimate ×1.30 exceeded the Osaka per-transaction cap of 16,777,216, EIP-7825; the largest implementation, `WrappedPqzToken`, 13,467,833 gas measured through `deployTokenImplementation` (plan 5g-Z2; 63,975 B of init code with the env), is deployed by `script/pqz/e2e.py`, which sets its own limit; at 72,160 B it needs `CHAIN_CODE_LIMIT=131072` and a chain without EIP-7954) and the anvil needs `--code-size-limit 131072` (`scripts/e2e-zether.sh`); `ZetherDeploy.t` checks each deploy fits. `scripts/e2e-zether.sh` runs the
 e2e (UA-3, rewritten for UA-8; the full lifecycle since 2026-10-31): by default a fresh anvil 31337 (200 M gas: the
 `WRAPPED_ZETHER` release asks about 105 M) and this deploy, or with `RPC` + `PRIVATE_KEY` a chain already deployed (the SCaaS
 testnet); `script/ZetherE2E.s.sol` through `--ffi` registers six BLS12-381 Zether UAs with the clientkeys portable PoP (no
@@ -326,7 +384,7 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
 - **Deploy order.** The registry trio first: `UARegistryCoreLib`, then `UARegistryAuxLib` (it links the core), then
   `UARegistry` (it names both). Then per release: its libraries, its body modules, each its own CREATE2 transaction through
   the deterministic deployer with `DEPLOY_SALT` and its own gate (a module already at its address is reused), the env with
-  the modules pinned after the libraries, then the implementation through `deployImplementation`; the DEX the same, its
+  the modules pinned after the libraries, then the implementation through `deployTokenImplementation`; the DEX the same, its
   admin module D first, then `deployDexImplementation`. `DeployBase`, `deploy.sh evm` and `script/pqz/e2e.py` follow it.
 - **`releases.json`** gets a row per module: class 0 (no factory class), the token kind (0 for the DEX's D), version 1, its
   address, the init-code hash and the hash of its constructor arguments. A module holds no chain value and has no
@@ -335,6 +393,83 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   regular × 1.05 < 2^24): the largest are `UARegistryCoreLib` 56.64 M, `SCaaSDex` 55.70 M and the module `NormalPqzRegulatedTokenQ`
   54.76 M; a token release asks 23.53–47.02 M plus the factory frame of 0.31 M (93 contracts in all, the table in
   `smartcontracts/evm/runs/2026-11-09-ua-mtx-merge-t66b-build/summary.txt`).
+- **Modules by function (owner 2026-11-10, group 3p, [CTR-TOK-30](../contracts/token-wrappers.md#CTR-TOK-30)).** A release of
+  kind 9, 11 or 13 deploys one more module (W and R, each its own CREATE2 transaction and gate); 8, 10, 12 deploy R where W
+  was, 5 and 13 S where Q2 was; `releases.json` names the rows so (`WrappedPqzRegulatedTokenR`, …). Measured asked gas
+  (`(regular + state) × 1.05`, `smartcontracts/evm/runs/2026-11-10-ua-mtx-3p/summary.txt`): R 20.17–20.62 M, W of 9, 11, 13
+  46.07 / 47.73 / 48.05 M, S 30.95 / 32.34 M, the faces of 9, 11, 13 39.52 / 45.80 / 50.51 M plus the factory frame; every
+  module of every kind within 60 M, regular × 1.05 < 2^24.
+- **Kind 12 splits Q (owner 2026-11-13, [CTR-TOK-30](../contracts/token-wrappers.md#CTR-TOK-30)).** A release of kind 12 deploys
+  one more module, S (the PQZ state, setters and views), beside Q, as kind 13 does. Measured asked gas (probe
+  `smartcontracts/evm/runs/2026-11-10-ua-mtx-3p/probe/Probe3p.t.sol`): Q 40.67 M, S 32.92 M, the face 40.03 M plus the
+  factory frame; regular × 1.05 < 2^24.
+- <a id="NET-EVM-11"></a>**NET-EVM-11 — Every deploy transaction carries an explicit gas limit within the block.** `deploy.sh evm`
+  simulates `Deploy.s.sol` (nothing sent), then `script/DeploySend.s.sol` sends its plan in order, each transaction's limit
+  `(regular + state) × 1.05` measured on the RPC's fork and capped at the RPC's block gas limit; one that needs more refuses
+  the plan by name (`TxGasOverBlockLimit`) before anything is sent. Forge's estimate × 1.05 had sent `UARegistryCoreLib` with
+  61,800,392 (52,317,793 used on 7622), over a 60 M block; now 56,629,029, and the full deploy (104 transactions) runs on a
+  60 M anvil (`smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-followup-gas.txt`). Change (owner 2026-11-15): before the
+  simulation, `deploy.sh evm` deploys on the real chain the verifiers whose constructors probe its own precompiles
+  (`script/pq_verifiers.py`: `PqzKeyVerifier`, `MldsaVerifier(0x0134)`; by CREATE2 with `DEPLOY_SALT`, each transaction's
+  limit e2e.py's estimate × 1.15 + 50,000 within the block gas limit, each release gated as NET-EVM-06 by the declared
+  `RELEASE_GAS_GATE`; under `public`, `eth_estimateGas` stands for the measured run and the regular part is bounded above by the
+  estimate less the code deposit, runtime × 1,530), skipped by name where
+  the precompile does not answer; `DEPLOY_PQZ=1` adds the PQZ releases 4, 5, 12, 13 to the plan
+  ([gen-1 kind gate](../contracts/accounts.md#gen1-kind-gate)). Every line of the run on stdout is short (`[deploy] …`, one
+  per transaction); forge's output goes to a git-ignored log. Change (reset 4b, 2026-11-15): DeploySend reads a send plan
+  `deploy.sh` writes from forge's dry-run file, one array per field (`from`, `to`, `value`, `input`; a CREATE's `to` the zero
+  address, a missing value 0, both refused or checked by index in `DeploySend.plan`), in four cheatcode calls: `forge script`
+  keeps every cheatcode call's input, and reading the dry-run file field by field per transaction held transactions × plan
+  size (153 transactions, a 6.8 MB plan: past the 4 GB cap; now 377 MB peak). The scripts' own gas budget
+  (`FOUNDRY_GAS_LIMIT`, default 2^36 in `deploy.sh`; not a chain figure, `block.gaslimit` stays the fork's) covers each
+  transaction run twice, measured then sent: at 2^33 DeploySend ran short at the 108th transaction.
+- <a id="NET-EVM-12"></a>**NET-EVM-12 — Every contract a remote deploy leaves on a chain is source-verified on that chain's
+  explorer** (owner ruling 2026-11-10; BUILT on branch `ua-mtx-merge`: `smartcontracts/evm/script/onchain/verify.sh` and
+  `vcheck.py`, offline tests in `test_vcheck.py`; the Etherscan and Sourcify request shapes are tested offline only, no public
+  explorer has been called). `deploy.sh evm` runs the step after a remote deploy (`VERIFY_TARGET` names the target; chain
+  31337 or `VERIFY_TARGET=local` is local, not verified) and `matrix.sh` after each group of a remote target. The explorer
+  comes from the environment, never from a chain id: `VERIFY_EXPLORER` `blockscout`, `etherscan` (the v2 API, the chain by
+  `chainid`) or `sourcify`, `VERIFY_URL` its API, `VERIFY_RPC` the chain's RPC and `VERIFY_API_KEY_ENV`, the **name** of the
+  env var that holds the API key (required for Etherscan; the key reaches forge in its environment only, never in a file or
+  an argument). A remote target without an explorer fails by name, `VERIFY_NOT_CONFIGURED`; only `VERIFY=none` with a
+  `VERIFY_REASON` skips the step, and the run prints the reason. Discovery: the deployment books, every broadcast of the
+  chain and the getters that name a child (an EIP-1167 clone's implementation, `puller()`, `EXECUTOR()`, `modules()`, a
+  factory's releases, envs and `contractsPage`); on a chain of ours (`VERIFY_SCAN=1`) also a block scan of the whole
+  chain (every creation, every transaction's `to`, every log's emitter and address words). Each address with code ends
+  **verified** (a full match), a **linked clone** (on Blockscout its proxy link to the verified implementation; Etherscan
+  and Sourcify have no link this check can read, so there the clone's own code is the link), SSTORE2 **data** or the
+  8-byte **CREATE3 proxy** of `Create3.sol`; anything else is a fail row and the step exits 1. A contract's name comes from
+  the metadata hash at the end of its runtime code, matched against the artifacts of source snapshots (`git archive` of a
+  commit plus the pinned `lib/`, compiled once under `scripts/capped` with the deploy's profile), never from a broadcast
+  label; each `forge verify-contract` runs in its snapshot outside `capped` in a 1 GiB scope, one at a time, bounded by
+  `VERIFY_TIMEOUT`, and a forge run that compiles aborts the step. The explorer's own answer decides, never forge's exit
+  code: forge 1.8.5 exits 0 on Blockscout's `Fail - Unable to verify`, so such a contract is submitted once more. The SCaaS testnet's explorer and its first full run:
+  [NET-EVM-09](#NET-EVM-09).
+- <a id="NET-EVM-13"></a>**NET-EVM-13 — An EVM chain is named `<chain>-mainnet` / `<chain>-testnet`, and its deployment book
+  by that name** (owner rulings 2026-11-10). **Keys (BUILT, branch `ua-mtx-3q`):** every row of
+  [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json) has the key `<chain>-mainnet` or `<chain>-testnet`
+  (`ethereum-mainnet`, `ethereum-testnet` = Sepolia, `polygon-testnet` = Amoy, `avalanche-testnet` = Fuji, …); a second testnet
+  keeps its own name (`ethereum-hoodi`); the full name stays in `name` ("Polygon Amoy"); every row carries
+  `"network": "mainnet" | "testnet"`; `scaas-testnet` stays and 22776 will be `scaas-mainnet`. `src/chains/<key>/` uses the
+  same keys. **Books (BUILT, branch `ua-mtx-3q`):** `deployments/<key>.json` replaces `deployments/<chainid>.json`: `<key>.json` is the chain's
+  book and a companion is `<key>-<what>.json` (`scaas-testnet.json`, `scaas-testnet-t66b-releases.json`,
+  `scaas-testnet-zether-e2e.json`, `scaas-testnet-pqz.json`); a Hedera chain's book is its `<key>.json` too
+  (`hedera-testnet.json`), written by `DeployHedera.s.sol`, its only deploy ([NET-HED-04](hedera.md#NET-HED-04);
+  `Deploy.s.sol` refuses chain ids 295–298). The key resolved from `chain-uids.json` by (chainId, chain_uid) ([NET-ALL-22](README.md#NET-ALL-22)); a chain not in the table
+  (a listed chain id with another genesis too) needs `DEPLOY_NAME` = `<name>-mainnet` | `<name>-testnet` (`[a-z0-9-]`),
+  else `DEPLOY_NAME_REQUIRED`, never a chain-id fallback; `DEPLOY_NAME_INVALID`, `DEPLOY_NAME_TAKEN` (another chain's key)
+  and `DEPLOY_NAME_MISMATCH` (a listed chain under another name) are named fails too. A deploy resolves the key before it
+  sends anything. Every book starts with `key`, `name`, `chainId`, `chainUid` and `network`, then the rest as forge writes it
+  (`vm.serialize*` sorts the keys), in the form of `json.dumps(…, indent=2)` (the header put first by hand after forge's pretty write), and a reader checks `network` against the key's suffix (a key without one, `ethereum-hoodi`: its
+  table row's) and fails `BOOK_NETWORK_MISMATCH`, `BOOK_HEADER_MISSING` or `BOOK_KEY_INVALID`; a book still named by chain
+  id with none by the key stops the reader with `BOOK_OLD_NAME` (rename it; no fallback). One rule in two places:
+  [`script/DeployBook.sol`](../../smartcontracts/evm/script/DeployBook.sol) for the forge scripts (`Deploy`, `DeployHedera`,
+  `ZetherE2E`, the `script/onchain/` groups, the release list) and
+  [`script/deploybook.py`](../../smartcontracts/evm/script/deploybook.py) for Python and shell (`deploy.sh`, `matrix.sh`,
+  `zether.sh`, `basebook.py`, `vcheck.py`, `zether_reg.py`, `pqz/e2e.py`); tests `script/test_deploybook.py`,
+  `test/governance/DeployBook.t.sol`, `test/governance/ReleaseList.t.sol`. A local anvil is named by the script that starts
+  it, `local-<chain id>-testnet` (`matrix.sh local`, `e2e-zether.sh`, the node e2e). forge's own
+  `broadcast/<Script>/<chainid>/` stays.
 - **The relayer's gas share.** A relayed op crosses more call frames (a PQZ op: clone, implementation, P, the self-call,
   clone, implementation, Q, its library, the precompile: 7 frames against 5), and each frame keeps 1/64 of the gas it passes
   on, about 10.4 % of the gas sent against 7.6 % before. A relayer that sets its limit from `eth_estimateGas` changes nothing;
@@ -392,10 +527,30 @@ by digest; one-line stop in the RUNBOOK. Since the node split ([NET-EVM-10](#NET
 node, and neither the code backfill nor the coin-balance cleanup is needed. Contract verification (owner ruling 2026-10-31): a local
 `smart-contract-verifier` (v1.11.1, 768 MiB since 2026-10-31: the patched 31-contract run hit 512 MiB; 1 CPU, `mba-net` only, Solidity only, solc from
 binaries.soliditylang.org, never Blockscout's hosted service) backs the backend, and
-`smartcontracts/evm/script/verify-blockscout.sh` verifies every `Deploy.s.sol` contract after each reset or deploy;
+every contract on the chain is verified by the step of [NET-EVM-12](#NET-EVM-12), `sh script/onchain/verify.sh
+scaas-testnet` (this Blockscout's API `http://127.0.0.1:4000/api` and the RPC `http://127.0.0.1:8545`, both on the host's
+loopback: the earlier LAN address is gone; the whole-chain scan on; the older per-broadcast `verify-blockscout.sh` stays);
 upstream v1.11.1 rejects `evmVersion` `amsterdam` (NET-EVM-06), so the live stack uses a locally patched verifier
 image (built outside the repo, `~dockers/mba-chain-nethermind/sc-verifier/`), temporary until upstream supports
 Amsterdam (owner ruling 2026-10-31 option (a)): the 31 `Deploy.s.sol` contracts and the PQZ e2e contracts verified, full match; the e2e tokens are EIP-1167 clones Blockscout links to their verified implementations (RUNBOOK § Contract verification).
+First whole-chain run, 2026-11-10 (BUILT, after the T66b Step 5 deploy had only its 7 linked libraries verified): of 345
+contracts with code, 255 verified (full match), 8 linked clones, 35 CREATE3 proxies, 1 genesis predeploy, plus 90 SSTORE2 data
+contracts; sources from four snapshots (`6df89135`: Step 5, PqChat, the tokens harness; `11349728`: the dex harness;
+`bf6f3d04`: the 2026-11-04 reset's PQZ e2e `GovernanceRouter`); **46 open, closed by the owner's rulings of 2026-11-10**
+(BUILT): 43 EIP-1167 clones carrying 95–175 bytes of appended data (the chain values `IFactoryToken.ChainEnv` the factory appends;
+PqChat instances), which Blockscout 9.0.2 does not link (`proxy_type` `unknown`) although each implementation is verified:
+`script/onchain/vcheck.py` links them itself, state `linked (clone, appended data)`, when the first 45 bytes are exactly the
+EIP-1167 proxy naming a fully verified implementation (Blockscout's own link stays `linked clone`); and the 3 tokens-group
+`OnchainFwd` harness contracts, which `sc-verifier` refused (`Fail - Unable to verify`) while their init and runtime code match the
+snapshot byte for byte (bar the immutable): their standard JSON was 1.72 MB, above every verified one (largest 1.26 MB), and a
+flattened file was refused too, the whole `Tokens.s.sol` (1.65 MB) and the forwarder alone (1,011 B; the single-file form carries
+no `experimental` setting, which Amsterdam needs: likely, not confirmed). A standard JSON of the forwarder's source alone
+(1,784 B) verified all 3, a partial match (only the metadata hash differs): state `verified (partial, harness)`, a partial match
+accepted only where the code's metadata hash names a `script/` artifact of a source snapshot and the explorer's name matches.
+Later deploys get a full match: the forwarder is `OnchainForwarder` (`forwardCall(address,bytes)`, was `OnchainFwd.exec`) in
+`script/onchain/OnchainForwarder.sol`, no imports, a 2,048 B standard JSON. Read-only pass after: 255 verified, 3 verified
+(partial, harness), 8 linked clones, 43 linked (clone, appended data), 35 CREATE3 proxies, 1 genesis, 90 data, 0 unverified.
+Rows: `smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-step5b/verify-scaas-testnet.txt`.
 
 <a id="NET-EVM-10"></a>**NET-EVM-10** — **The SCaaS testnet runs two nodes: a `sealer` and a public `rpc`** (owner
 ruling 2026-10-31): in the stack's one `docker-compose.yml`, both on the PQZ image. `sealer` holds the Clique key
@@ -428,6 +583,8 @@ state a pruned node lacks. Topology, enodes, start / stop order and recovery: [R
 - Public profiles stay `draft` until their finality gate is measured and an RPC quorum ≥ 2 is configured.
 - The SCaaS testnet has one signer and one RPC provider (the node's quorum is 1); its threat profile is in
   [NET-EVM-04](#NET-EVM-04).
+- PQZ `PRECOMPILE` tokens run only on the SCaaS testnet; `OFFCHAIN` tokens run wherever the code and deploy gas fit, under the
+  trust model of [CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27).
 
 ## <a id="paymeta-relayfee"></a>Pay-meta and relay fee (metatx split)
 

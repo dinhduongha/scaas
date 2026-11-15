@@ -297,7 +297,7 @@ fn eip712_domain_order() {
     assert_eq!(digest(&none).unwrap(), digest(&v).unwrap());
 }
 
-/// `sign.json` `typed.canon`: each SCaaS builder (clientkeys `metaTxTypedData` … `uaReceiverFeeTypedData`, here
+/// `sign.json` `typed.canon`: each SCaaS builder (clientkeys `metaTxTypedData` … `uaPayeeFeeTypedData`, here
 /// `scaas_typed_data`) zeroes an unbound `relayer` / `feeRecipient` (`mode & 1`, `mode & 2`), nested ones too; its digest is the
 /// row's, its message the row's `zeroed`; the faithful hash of the unzeroed typed data is another digest.
 #[test]
@@ -323,7 +323,7 @@ fn sign_json_canon_rows() {
     assert_eq!(n, 6);
 }
 
-/// The builders zero a nested `UAMetaTransfer`'s unbound `relayer` and `feeRecipient` inside a `UAReceiverFee`; the outer struct (no
+/// The builders zero a nested `UAMetaTransfer`'s unbound `relayer` and `feeRecipient` inside a `UAPayeeFee`; the outer struct (no
 /// `mode`) keeps its `feeRecipient`; with `mode = 3` the nested pair is bound and kept.
 #[test]
 fn nested_metatransfer_zeroed() {
@@ -334,7 +334,7 @@ fn nested_metatransfer_zeroed() {
             "fee": "10", "feeRecipient": "0x0000000000000000000000000000000000000fee", "validUntil": "1800000000"})
     };
     let zero = "0x0000000000000000000000000000000000000000";
-    let build = |m: &Value| scaas_typed_data("UAReceiverFee", Some("SCaaS MetaToken"), &[0x5c; 20], 7622, &[1; 32], m).unwrap();
+    let build = |m: &Value| scaas_typed_data("UAPayeeFee", Some("SCaaS MetaToken"), &[0x5c; 20], 7622, &[1; 32], m).unwrap();
     let z = build(&pay(0)).to_value();
     assert_eq!((z["message"]["payment"]["relayer"].as_str(), z["message"]["payment"]["feeRecipient"].as_str()), (Some(zero), Some(zero)));
     assert_eq!(z["message"]["feeRecipient"], "0x0000000000000000000000000000000000000fee");

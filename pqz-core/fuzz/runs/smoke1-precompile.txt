@@ -643,7 +643,7 @@ INFO: Running with entropic power schedule (0xFF, 100).
 INFO: Seed: 688749820
 INFO: Loaded 1 modules   (27142 inline 8-bit counters): 27142 [0x592a8f5d5488, 0x592a8f5dbe8e), 
 INFO: Loaded 1 PC tables (27142 PCs): 27142 [0x592a8f5dbe90,0x592a8f645ef0), 
-MERGE-INNER: using the control file '/tmp/libFuzzerTemp.Merge3324034.txt'
+MERGE-INNER: using the control file '<tmp>/libFuzzerTemp.Merge3324034.txt'
 MERGE-INNER: 247 total files; 0 processed earlier; will process 247 files now
 #1	pulse  cov: 122 ft: 122 exec/s: 0 rss: 208Mb
 #2	pulse  cov: 134 ft: 134 exec/s: 0 rss: 208Mb

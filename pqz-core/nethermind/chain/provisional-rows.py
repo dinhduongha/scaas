@@ -13,10 +13,17 @@ a testnet, an under-estimate is not). A key without such a row takes the largest
 `factor`. `selftestGas` is scaled the same way; the ML-DSA prices are kept. Output: one schedule at timestamp 0x0 (the
 testnet reset, path B) with only the new rows — the library refuses the retired ids, so their rows would be dead."""
 import json
+import os
 import sys
 
 PQZL_V3 = "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef"
 PQZH_V1 = "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4"
+# the live schedule's ids by system; env LIVE_IDS="pqzl:<hex>,pqzh:<hex>,…" adds those of a later live schedule (the
+# three-key round's rows are derived from n2304-kmax4096's provisional rows of PQZL v5 / PQZH v3)
+LIVE = {PQZL_V3: "pqzl", PQZH_V1: "pqzh"}
+for _kv in filter(None, os.environ.get("LIVE_IDS", "").split(",")):
+    _sys, _id = _kv.split(":")
+    LIVE[_id.lower().removeprefix("0x")] = _sys
 
 
 def small_word(b):
@@ -35,7 +42,7 @@ def main(corpus, engine, out, factor="1.3"):
     live = json.load(open(engine))["schedules"][-1]
     old = {}  # (op, system, legs, aud) -> [(stmtLen, gas)] sorted
     for r in live["pqz"]:
-        sysname = {PQZL_V3: "pqzl", PQZH_V1: "pqzh"}.get(r["id"].lower().removeprefix("0x"))
+        sysname = LIVE.get(r["id"].lower().removeprefix("0x"))
         if sysname:
             old.setdefault((r["op"], sysname, r.get("legs", 0), r.get("auditorOn", 0)), []).append((r["stmtLen"], r["gas"]))
     for v in old.values():

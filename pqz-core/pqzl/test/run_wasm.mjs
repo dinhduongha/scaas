@@ -9,13 +9,15 @@ import { readFileSync } from 'node:fs';
 
 const [np = 3, nv = 3, rels = 63] = process.argv.slice(2).map(Number);
 const ALL = ['R_REG', 'R_TX', 'R_BURN', 'R_DS', 'R_DR', 'R_TX0', 'R_TXM1', 'R_TXM2', 'R_TXM4', 'R_TXM8', 'R_TXM1_0',
-  'R_TXM2_0', 'R_TXM4_0', 'R_TXM8_0', 'R_TXM16', 'R_TXM16_0']; // pqz_bench's order (TXB; the last two: oversize builds)
+  'R_TXM2_0', 'R_TXM4_0', 'R_TXM8_0']; // pqz_bench's order (TXB), then the oversize shapes (oversize builds) and R_TXS, R_TXS0
 const NKIND = 6; // tamper kinds of step_verify_bad
 const ARENA = Number(process.env.PQZ_ARENA_MB || 768) * 2 ** 20; // as ARENA_BYTES / PQZ_ARENA_MB in pqz_bench.c
 const wasm = readFileSync(process.env.PQZ_WASM_FILE || new URL('../build/wasm/pqz.wasm', import.meta.url));
 const { instance } = await WebAssembly.instantiate(wasm, {});
 const x = instance.exports;
-const NAMES = ALL.slice(0, x.step_nrel());
+const OVER = x.step_nrel() > ALL.length + 2 ? ['R_TXM16', 'R_TXM16_0'] : [];
+const NAMES = [...ALL, ...OVER, 'R_TXS', 'R_TXS0'];
+if (NAMES.length !== x.step_nrel()) throw new Error(`step_nrel ${x.step_nrel()} != ${NAMES.length} names`);
 const heap = x.__heap_base.value;
 const grow = Math.ceil((heap + ARENA - x.memory.buffer.byteLength) / 65536);
 if (grow > 0) x.memory.grow(grow);

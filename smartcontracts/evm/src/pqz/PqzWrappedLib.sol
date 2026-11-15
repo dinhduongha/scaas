@@ -36,9 +36,9 @@ library PqzWrappedLib {
     /// @notice `mtxSelectors()` of the kind: `WrappedToken`'s eight, then the PQZ ops and the two leg paths, each `ABSOLUTE`
     ///         (incl. the rollover and `mtxPrepareAcc`).
     function selectors() public pure returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a) {
-        s = new bytes4[](18);
-        c = new uint8[](18);
-        a = new uint8[](18);
+        s = new bytes4[](19);
+        c = new uint8[](19);
+        a = new uint8[](19);
         (s[0], c[0]) = (IMetaTx.cancelNonce.selector, ABSOLUTE);
         (s[1], c[1]) = (bytes4(keccak256("wrap(uint256)")), ABSOLUTE);
         (s[2], c[2]) = (bytes4(keccak256("unwrap(uint256,address,uint256)")), AMOUNT);
@@ -57,5 +57,6 @@ library PqzWrappedLib {
         (s[15], c[15]) = (IPqzToken.mtxConfidentialTransferSingleCompact.selector, ABSOLUTE);
         (s[16], c[16]) = (IPqzToken.mtxRollOver.selector, ABSOLUTE);
         (s[17], c[17]) = (IPqzToken.mtxPrepareAcc.selector, ABSOLUTE);
+        (s[18], c[18]) = (IPqzToken.mtxRollOverSigned.selector, ABSOLUTE); // CTR-PQZ-41
     }
 }

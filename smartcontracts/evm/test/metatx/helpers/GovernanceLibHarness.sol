@@ -46,14 +46,14 @@ contract GovernanceLibHarness {
     function revokeRole(uint8 bit, bytes32 account) external { GovernanceLib.revokeRole(bit, account, nid(msg.sender), 0); }
     function renounceRole(uint8 bit) external { GovernanceLib.renounceRole(bit, nid(msg.sender), 0); }
     function disableFeature(uint8 bit) external { GovernanceLib.disableFeature(bit, nid(msg.sender), 0); }
-    function transferOwnership(bytes32 o) external { GovernanceLib.transferOwnership(o, nid(msg.sender)); }
-    function acceptOwnership() external { GovernanceLib.acceptOwnership(nid(msg.sender)); }
-    function renounceOwnership() external { GovernanceLib.renounceOwnership(nid(msg.sender), _roles()); }
+    function transferAdmin(bytes32 o) external { GovernanceLib.transferAdmin(o, nid(msg.sender)); }
+    function acceptAdmin() external { GovernanceLib.acceptAdmin(nid(msg.sender)); }
+    function renounceAdmin() external { GovernanceLib.renounceAdmin(nid(msg.sender), _roles()); }
     function use(uint8 bit, bytes32 a) external returns (bytes32) { return GovernanceUse.use(bit, a, 0); }
 
     function features() external view returns (uint256) { return GovernanceLib.$().features; }
     function lockedFeatures() external view returns (uint256) { return GovernanceLib.$().lockedFeatures; }
-    function owner() external view returns (bytes32) { return GovernanceLib.$().owner; }
-    function pendingOwner() external view returns (bytes32) { return GovernanceLib.$().pendingOwner; }
+    function admin() external view returns (bytes32) { return GovernanceLib.$().admin; }
+    function pendingAdmin() external view returns (bytes32) { return GovernanceLib.$().pendingAdmin; }
     function hasRole(uint8 bit, bytes32 a) external view returns (bool) { return GovernanceLib.hasRole(bit, a); }
 }

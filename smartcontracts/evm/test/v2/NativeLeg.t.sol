@@ -39,17 +39,17 @@ contract CoinReentersEveryEntry {
             abi.encodeWithSelector(t.payWithFee.selector, address(1), 1, 0, 0, address(0), bytes32(0), PayMetaKit.meta(0)),
             abi.encodeWithSelector(t.payWithFeeToUA.selector, bytes32(uint256(1) << 160), 1, 0, 0, address(0), bytes32(0),
                 PayMetaKit.meta(0)),
-            abi.encodeWithSelector(t.grantRole.selector, uint8(1), address(1)),
-            abi.encodeWithSelector(t.revokeRole.selector, uint8(1), address(1)),
-            abi.encodeWithSelector(t.renounceRole.selector, uint8(1)),
-            abi.encodeWithSelector(t.disableFeature.selector, uint8(1)),
-            abi.encodeWithSelector(t.transferOwnership.selector, address(1)),
-            abi.encodeWithSelector(t.acceptOwnership.selector),
-            abi.encodeWithSelector(t.renounceOwnership.selector),
-            abi.encodeWithSelector(t.disableWrap.selector, address(0), bytes32(0)),
-            abi.encodeWithSelector(t.proposeRate.selector, address(0), uint96(1), uint96(1)),
-            abi.encodeWithSelector(t.cancelRate.selector),
-            abi.encodeWithSelector(t.executeRate.selector)
+            abi.encodeWithSelector(t.grantRole.selector, uint8(1), address(1), bytes32(0)),
+            abi.encodeWithSelector(t.revokeRole.selector, uint8(1), address(1), bytes32(0)),
+            abi.encodeWithSelector(t.renounceRole.selector, uint8(1), bytes32(0)),
+            abi.encodeWithSelector(t.disableFeature.selector, uint8(1), bytes32(0)),
+            abi.encodeWithSelector(t.transferAdmin.selector, address(1), bytes32(0)),
+            abi.encodeWithSelector(t.acceptAdmin.selector),
+            abi.encodeWithSelector(t.renounceAdmin.selector, bytes32(0)),
+            abi.encodeWithSelector(t.disableWrap.selector, address(0), bytes32(0), EnvKit.codeUidOf(address(t))),
+            abi.encodeWithSelector(t.proposeRate.selector, address(0), uint96(1), uint96(1), EnvKit.codeUidOf(address(t))),
+            abi.encodeWithSelector(t.cancelRate.selector, EnvKit.codeUidOf(address(t))),
+            abi.encodeWithSelector(t.executeRate.selector, EnvKit.codeUidOf(address(t)))
         ];
         for (uint256 i; i < calls.length; ++i) {
             (bool ok, bytes memory r) = address(t).call(calls[i]);
@@ -257,14 +257,14 @@ contract NativeLegTest is V2Fixture {
         RateAdminForwarder adm = new RateAdminForwarder();
         WrappedToken t = _single(address(0), 18, 1, 1, _adjustable(address(adm)));
         _wrapNative(t, alice, 1 ether);
-        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(0), 101, 100)));
+        adm.exec(address(t), abi.encodeCall(t.proposeRate, (address(0), 101, 100, EnvKit.codeUidOf(address(t)))));
         vm.warp(block.timestamp + 7 days);
         vm.deal(address(t), 0.5 ether);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.ReserveShortfall.selector, address(0), 0.5 ether,
             1 ether));
-        adm.exec(address(t), abi.encodeCall(t.executeRate, ()));
+        adm.exec(address(t), abi.encodeCall(t.executeRate, (EnvKit.codeUidOf(address(t)))));
         vm.deal(address(t), 1 ether);
-        adm.exec(address(t), abi.encodeCall(t.executeRate, ()));
+        adm.exec(address(t), abi.encodeCall(t.executeRate, (EnvKit.codeUidOf(address(t)))));
         (uint96 n, uint96 d,,,) = t.legOf(address(0));
         assertEq(abi.encode(n, d), abi.encode(uint96(101), uint96(100)));
     }

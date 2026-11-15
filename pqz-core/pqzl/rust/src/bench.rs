@@ -4,6 +4,7 @@
 //! negative-case knobs of `txm_check`, which is not ported).
 use crate::rel::{DISC_AMOUNT, DISC_PK, HDR_AMOUNT, HDR_AUDITOR_ON, HDR_FEE, HDR_LEGS};
 use crate::{encrypt, keypair_from_secret, Ctx, Error, HEADER_BYTES, PREFIX_BYTES, PROOF_SYSTEM_ID, TXM_MAX_LEGS};
+use crate::PROOF_SYSTEM_SPLIT_ID;
 use crate::{POLYVEC_BYTES as PV, V_BYTES};
 use alloc::boxed::Box;
 use alloc::vec;
@@ -30,8 +31,11 @@ const TXB: &[(usize, usize)] = &[
     (16, 0),
 ];
 
-/// bench relations: R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0, then the R_TXM shapes
-pub const NREL: usize = 6 + TXB.len();
+/// bench relations: R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0, then the R_TXM shapes, then R_TXS, R_TXS0 (op 1 under
+/// PQZL_SPLIT_ID, three-key spec K3-4)
+pub const NREL: usize = 8 + TXB.len();
+/// R_TXS's bench index (R_TXS0 the next)
+pub const TXS_REL: usize = 6 + TXB.len();
 
 /// the relations' names as the C bench prints them
 pub const NAMES: [&str; NREL] = [
@@ -41,6 +45,7 @@ pub const NAMES: [&str; NREL] = [
     "R_TXM16",
     #[cfg(feature = "oversize")]
     "R_TXM16_0",
+    "R_TXS", "R_TXS0",
 ];
 
 /// adversarial verify kinds (`step_verify_bad`)
@@ -299,6 +304,38 @@ impl Bench {
             stmt.push(st);
             wit.push(wt);
         }
+        // setup_txs (K3-4): R_TX's / R_TX0's statement under PQZL_SPLIT_ID with the sender's own v_f and u_f under fresh
+        // (r_f, e1_f, e2_f) from the test RNG reseeded here (state saved and restored); the leg is R_TX's
+        let xs0 = xs.0;
+        xs.0 = 0x7E57AB1E5B117001;
+        let (rf, e1f, e2fs) = (xs.r8(), xs.e16(), xs.e2());
+        xs.0 = xs0;
+        let own = encrypt(&[&kf.pk], &[digits(bp)], &rf, &e1f, &[e2fs])?;
+        let w6 = 6 * crate::N;
+        for a in [true, false] {
+            let base = if a { &stmt[1] } else { &stmt[5] };
+            let mut st = base.clone();
+            st[32..64].copy_from_slice(&PROOF_SYSTEM_SPLIT_ID);
+            let vf = HEADER_BYTES + 4 * PV + V_BYTES + PV + V_BYTES - if a { 0 } else { PV };
+            st[vf..vf + V_BYTES].copy_from_slice(&own.vs[0]);
+            st.extend_from_slice(&own.u[..]);
+            let tw = &wit[1];
+            let mut wt = tw[..w6].to_vec();
+            i8s(&mut wt, &rf[..]);
+            le16s(&mut wt, &e1f[..]);
+            wt.extend_from_slice(&tw[w6..w6 + 32]);
+            le16s(&mut wt, &e2fs);
+            if a {
+                wt.extend_from_slice(&tw[w6 + 64..w6 + 96]);
+            }
+            wt.extend_from_slice(&tw[w6 + 96..w6 + 128]);
+            stmt.push(st);
+            wit.push(wt);
+        }
+        ops[TXS_REL] = crate::OP_TRANSFER;
+        ops[TXS_REL + 1] = crate::OP_TRANSFER;
+        seedmul[TXS_REL] = 43;
+        seedmul[TXS_REL + 1] = 47;
         Ok(Bench { ctx: Ctx::new(), fast: false, xs, ops, stmt, wit, seedmul, keyoff, scaloff, proofs: vec![Vec::new(); NREL] })
     }
 
@@ -338,6 +375,8 @@ impl Bench {
         const CODES: [u8; 6] = [3, 1, 2, 4, 5, 0x81];
         let code = if rel < 6 {
             CODES[rel]
+        } else if rel >= TXS_REL {
+            [0x41, 0xc1][rel - TXS_REL]
         } else {
             let (m, a) = TXB[rel - 6];
             0x70 | (a as u8) << 3 | m.trailing_zeros() as u8

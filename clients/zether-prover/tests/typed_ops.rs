@@ -5,7 +5,7 @@ use zether_prover::api::call;
 
 /// Rows of the vector the Zether prover does not build, each with its reason: another contract kind's domain (the row has no
 /// `zether` domain), so a Zether key never signs it. Any other row without a `zether` domain fails the test.
-const NOT_ZETHER: [&str; 59] = [
+const NOT_ZETHER: [&str; 83] = [
     // the token kind's own (non-Zether) accounts: UA prepare is a NormalToken / WrappedToken entry
     "UAPrepareAcc",
     // SmartKeyAccount: signed by its owner's keys, not by a Zether key
@@ -15,12 +15,14 @@ const NOT_ZETHER: [&str; 59] = [
     // PQZ tokens: no PQZ builder in this package (PqzAuth is built by clientkeys, e2e.py and the node)
     "UAPqzTransferSingle", "UAPqzTransferSingleCompact", "UAPqzTransfer", "UAPqzTransferCompact", "UAPqzUnshield",
     "UAPqzUnshieldUnwrap", "PqzAuth", "UAPqzRollOver",
+    // the three-key model (CTR-PQZ-41): the PQZ holder's raw signed rollover, the PQZ token's domain
+    "PqzRollOver",
     // the DEX's domain
     "CancelDexOrder",
-    // the GovernanceRouter's domain (governance spec §3.2): the closed table on its merged entries; signed by an owner's or
+    // the GovernanceRouter's domain (governance spec §3.2): the closed table on its merged entries; signed by an admin's or
     // holder's key through the router, never by a Zether key
-    "UAGrantRole", "UARevokeRole", "UASetGrant", "UACancelGrant", "UADisableFeature", "UATransferOwnership",
-    "UAAcceptOwnership", "UARenounceOwnership", "UARenounceRole", "UAMint", "UAMintToUA", "UADisableWrap", "UAProposeRate",
+    "UAGrantRole", "UARevokeRole", "UASetGrant", "UACancelGrant", "UADisableFeature", "UATransferAdmin",
+    "UAAcceptAdmin", "UARenounceAdmin", "UARenounceRole", "UAMint", "UAMintToUA", "UADisableWrap", "UAProposeRate",
     "UACancelRate", "UAExecuteRate", "UASetMarket", "UASetExchangeTarget", "UASetListedOnly", "UASetFeeSplit",
     // ua-mtx-merge T34: the regulated kinds' controls on the router (regulated-kinds spec §3.1); public balances only
     "UAFreeze", "UAUnfreeze", "UAForceTransfer", "UAPause", "UAUnpause", "UARecordOrder", "UARevokeOrder", "UAOperatorTransfer",
@@ -32,6 +34,17 @@ const NOT_ZETHER: [&str; 59] = [
     "UAPqzSetVerifier", "UAPqzCancelVerifier", "UAPqzRevokeVerifier",
     // group 3h T61: bit 24's router op
     "UASetProofStore",
+    "UASetVerifierFee", // round 3t (CTR-PQZ-36): the PQZ verifier fee router op
+    // group 3l: the two wrap-limit router ops (bit 26 and the wrapped kinds' admin); no Zether key signs them
+    "UASetWrapLimits", "UASetWrapMember",
+    // round 3r (CTR-GOV-23): the factory's and a compliance registry's admin ops on the router; signed by that admin's key
+    "UAPublishTokenEnv", "UAPublishDexEnv", "UAPublishClassEnv", "UADeprecateToken", "UADeprecateDex", "UADeprecateRelease",
+    "UASetTokenKindEnabled", "UASetClassKindEnabled", "UASetKycProvider", "UASetCompliance", "UASetChainEntries",
+    "UAApproveTokenRelease", "UAApproveDexRelease", "UAApproveRelease", "UARevokeApproval",
+    // round 3s (CTR-GOV-24): the router's list edits and enableFeature, no Zether statement
+    "UASetAllowed", "UASetDenied", "UAEnableFeature",
+    // round 3zc (CTR-GOV-30): the admin's two supply caps on the router
+    "UASetMaxSupply", "UASetMaxWrapSupply",
 ];
 
 fn vector() -> Value {
@@ -105,11 +118,11 @@ fn unbound_relayer_and_fee_recipient_hash_as_zero() {
         assert_ne!(bound, digest("UABurn", &|m| set(m, 19, field, &zero)), "{field} bound is hashed");
     }
 
-    // a nested payment: `UAReceiverFee`'s mode 1 binds the relayer only
-    let row = &v["ops"]["UAReceiverFee"]["domains"]["zether"]["digest"];
-    assert_eq!(&digest("UAReceiverFee", &|m| m["payment"]["feeRecipient"] = json!(other)), row, "nested fee recipient unbound");
-    let bound = digest("UAReceiverFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &other));
-    assert_ne!(bound, digest("UAReceiverFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &zero)), "nested, bound");
+    // a nested payment: `UAPayeeFee`'s mode 1 binds the relayer only
+    let row = &v["ops"]["UAPayeeFee"]["domains"]["zether"]["digest"];
+    assert_eq!(&digest("UAPayeeFee", &|m| m["payment"]["feeRecipient"] = json!(other)), row, "nested fee recipient unbound");
+    let bound = digest("UAPayeeFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &other));
+    assert_ne!(bound, digest("UAPayeeFee", &|m| set(&mut m["payment"], 3, "feeRecipient", &zero)), "nested, bound");
 }
 
 #[test]
@@ -227,6 +240,27 @@ fn named_call_equals_the_vector_calldata() {
     for op in ["UABurn", "ZetherTransferSingle"] {
         let r = json!({"op": op, "env": {}, "payload": "0x", "proof": "0x", "beneficiary": "0x"});
         assert!(call("namedCall", &r.to_string()).is_err(), "{op}");
+    }
+}
+
+/// Review E C-3: a corrupted leg count `M` in a multi payload is refused by name, never wrapped into a short length or a panic.
+#[test]
+fn named_call_refuses_a_corrupted_leg_count() {
+    let v = vector();
+    for op in ["UAZetherTransfer", "UAZetherTransferCompact"] {
+        let good = named_req(&v, op, Value::Null);
+        assert!(call("namedCall", &good.to_string()).is_ok(), "{op} positive control");
+        let p = h(&good["payload"]);
+        // M = 2^55: 512 · M wraps to 0 in 64 bits; M = 2^64 - 1; M one more than the legs given
+        let legs = u64::from_be_bytes(p[136..144].try_into().unwrap());
+        for m in [1u64 << 55, u64::MAX, legs + 1] {
+            let mut q = p.clone();
+            q[136..144].copy_from_slice(&m.to_be_bytes());
+            let mut r = good.clone();
+            r["payload"] = json!(format!("0x{}", hex::encode(&q)));
+            let e = call("namedCall", &r.to_string()).unwrap_err();
+            assert!(e.contains("not a multi transfer's"), "{op} M = {m}: {e}");
+        }
     }
 }
 

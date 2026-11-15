@@ -276,6 +276,12 @@ pub(crate) fn enc_seed(
     if msgs.len() != pks.len() || win.is_some_and(|w| w.len() != pks.len() || w.iter().any(|&x| x >= 4)) {
         return Err(Error::Input);
     }
+    // review 3w u3-4 (the contract's KV-9 `_distinct`): two recipients with the same key at the same window under one
+    // randomness give v_j - v_k = Delta (m_j - m_k) + noise in public: refused (keys and windows are public)
+    let w = |j: usize| win.map_or(0, |w| w[j]);
+    if (1..pks.len()).any(|k| (0..k).any(|j| w(j) == w(k) && pks[j] == pks[k])) {
+        return Err(Error::Input);
+    }
     let mut bad = false;
     for (pk, m) in pks.iter().zip(msgs) {
         if !canonical(&pk[..]) {
@@ -312,6 +318,16 @@ pub(crate) fn enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
     }
     let mut out = [0u8; 32];
     Stream::keys(b"SCAAS-PQZ-ENC-GROUP-V1", seed_enc, g).squeeze(&mut out);
+    out
+}
+
+/// `pqz_enc_leg_seed` (opening tokens, spec K3-4): the leg's seed, SHAKE256("SCAAS-PQZ-ENC-LEG-V1" || seed_enc || be4(0) ||
+/// toUA || keccak256(pk_t))[0..32). Enc from it ([`enc_seed`] with recipients pk_t, then pk_a) draws the leg's r, e1,
+/// e2_t, e2_a; the sender's own v_f stays under Enc from seed_enc (split randomness). One-way: it reveals nothing of
+/// seed_enc. `pkt_hash` = keccak256 of pk_t's bytes (the caller's: no keccak in this crate).
+pub(crate) fn enc_leg_seed(seed_enc: &[u8; 32], to_ua: &[u8; 32], pkt_hash: &[u8; 32]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    Stream::new(&[b"SCAAS-PQZ-ENC-LEG-V1", seed_enc, &0u32.to_be_bytes(), to_ua, pkt_hash]).squeeze(&mut out);
     out
 }
 

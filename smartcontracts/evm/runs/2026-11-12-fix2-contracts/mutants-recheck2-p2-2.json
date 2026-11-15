@@ -1,0 +1,62 @@
+[
+ {
+  "id": "ska-raw-fallback/dex",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_erc7739RealWallets_outsideMaker() (gas: 3634682)"
+ },
+ {
+  "id": "mw-raw-fallback/dex",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_erc7739RealWallets_outsideMaker() (gas: 4402946)"
+ },
+ {
+  "id": "ska-raw-fallback/router-registry",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_erc7739RealWallets_registryUAAuth() (gas: 3218819)"
+ },
+ {
+  "id": "mw-raw-fallback/router-registry",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_erc7739RealWallets_registryUAAuth() (gas: 3329362)"
+ },
+ {
+  "id": "ska-raw-fallback/receiver-fee",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_erc7739RealWallets_receiverFee() (gas: 3554828)"
+ },
+ {
+  "id": "mw-raw-fallback/receiver-fee",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_erc7739RealWallets_receiverFee() (gas: 4152067)"
+ },
+ {
+  "id": "ska-raw-fallback/zether",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_erc7739RealWallets_relayShield() (gas: 3600733)"
+ },
+ {
+  "id": "mw-raw-fallback/zether",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_erc7739RealWallets_relayShield() (gas: 4095777)"
+ },
+ {
+  "id": "ska-raw-fallback/pqz",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_erc7739RealWallets_relayShield() (gas: 3502786)"
+ },
+ {
+  "id": "mw-raw-fallback/pqz",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_erc7739RealWallets_relayShield() (gas: 3899334)"
+ }
+]

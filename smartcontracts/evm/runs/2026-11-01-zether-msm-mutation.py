@@ -172,7 +172,7 @@ def run(pat):
     return (f'RED ({ran} ran): ' + ', '.join(fail), True) if fail else (f'still GREEN ({ran} ran)', False)
 
 
-lock = open('/tmp/zether-msm-mutation.lock', 'w')
+lock = open(__file__)  # this script is the lock: one mutation run per work tree
 try:
     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 except BlockingIOError:

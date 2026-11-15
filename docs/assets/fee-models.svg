@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="440" viewBox="0 0 960 440" role="img" aria-labelledby="t d">
   <title id="t">Who pays the fee</title>
-  <desc id="d">One signed intent, eight ways to pay for it, grouped by who bears the cost. Subject: self-paid (built), fee in the token capped at 1 percent (built). Company: sponsored by a company relayer with fee 0 (built, portal default), enterprise inbound gateway (built on EVM). Payee: direct settlement by payee self-relay (built on EVM), receiver pays the fee (specified). Sponsor or service company: gas sponsorship policy (specified; on-chain pool planned), sponsored call of a non-token contract (specified).</desc>
+  <desc id="d">One signed intent, eight ways to pay for it, grouped by who bears the cost. Subject: self-paid (built), fee in the token capped at 1 percent (built). Company: sponsored by a company relayer with fee 0 (built, portal default), enterprise inbound gateway (built on EVM). Payee: direct settlement by payee self-relay (built on EVM), the payee pays the fee (specified). Sponsor or service company: gas sponsorship policy (specified; on-chain pool planned), sponsored call of a non-token contract (specified).</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -74,7 +74,7 @@
   <rect x="500" y="268" width="96" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="548" y="281" text-anchor="middle" fill="#1a7f37">BUILT on EVM</text>
 
   <rect class="card" x="486" y="304" width="219" height="96" rx="8"/>
-  <text class="b" x="500" y="327">Receiver pays the fee</text>
+  <text class="b" x="500" y="327">Payee fee</text>
   <text class="s" x="500" y="347">the payee co-signs a fee from its</text>
   <text class="s" x="500" y="363">own balance; one transaction</text>
   <rect x="500" y="374" width="96" height="18" rx="9" fill="#dafbe1"/><text class="chip" x="548" y="387" text-anchor="middle" fill="#1a7f37">BUILT on EVM</text>

@@ -17,6 +17,7 @@ import {PqzRegFixture} from "../confidential/PqzRegFixture.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {IGovernance} from "../../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../../src/governance/IAdmin.sol";
 import {GovernanceBits} from "../../../src/governance/GovernanceBits.sol";
 import {MetaTokenBase} from "../../../src/metatx/MetaTokenBase.sol";
 import {ERC20MetaTx} from "../../../src/metatx/ERC20MetaTx.sol";
@@ -36,6 +37,7 @@ import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {WrappedPqzToken} from "../../../src/pqz/WrappedPqzToken.sol";
 import {ZetherLayer} from "../../../src/zether/ZetherLayer.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 interface IShielded {
     function totalShielded() external view returns (uint256);
@@ -60,12 +62,17 @@ abstract contract RegCore is Test {
     uint8 internal constant K_OPER = 5;
     uint8 internal constant K_GOV = 6;
     uint8 internal constant K_REG = 7;
+    /// Round 3s (spec 2026-11-10-token-lists.md §4.5): a list edit (`setAllowed` / `setDenied`), an `enableFeature(8 | 9)`.
+    uint8 internal constant K_LIST = 8;
+    uint8 internal constant K_ENABLE = 9;
+    uint8 internal constant C_LIST_BITS = (1 << 3) | (1 << 4);
+    uint8 internal constant C_ENABLEABLE = (1 << 3) | (1 << 4) | (1 << 6);
 
     bytes32 internal constant UAP = bytes32(uint256(uint160(MetaTxLib.UA_POOL)));
     bytes32 internal constant SHP = bytes32(uint256(uint160(MetaTxLib.SHIELD_POOL)));
     // keccak256(abi.encode(uint256(keccak256("scaas.governance")) - 1)) & ~bytes32(uint256(0xff)) (GovernanceLib._STORAGE)
     uint256 internal constant GOV_SLOT = 0x0a3a361961b35589cdb03530b6f9e23a4db6ca9a0dad5ddf5d7761c7fabc8700;
-    uint256 internal constant REG_GAS = 50_000; // RegulatedBase.REGISTRY_GAS
+    uint256 internal constant REG_GAS = 50_000; // RegulatedBase.COMPLIANCE_REGISTRY_GAS
     bytes32 internal constant CREF = bytes32(uint256(0xC0FFEE));
 
     address internal cT;
@@ -105,6 +112,7 @@ abstract contract RegCore is Test {
     bool internal pP;
     uint8 internal pCtl;
     uint256 internal pFeat;
+    uint8[] internal pList; // I15: each id's `listFlagsOf` before the call
     uint256 internal pSupply;
     bytes32 internal pLegs;
     bool internal pMint;
@@ -154,7 +162,7 @@ abstract contract RegCore is Test {
         // bit 22 to the operator: the owner's two calls (grantRole keeps two calls on every bit, spec §3.6)
         for (uint256 i; i < 2; ++i) {
             vm.prank(gov[0]);
-            NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(gov[4]));
+            NormalToken(t).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(gov[4]), EnvKit.codeUidOf(address(NormalToken(t))));
             if (i == 0) vm.warp(block.timestamp + cGd);
         }
     }
@@ -179,6 +187,13 @@ abstract contract RegCore is Test {
         return IRegulatedToken(cT).isFrozen(a);
     }
 
+    /// A sender or payer the token lets act: not frozen, and (round 3s) not refused by a list that is on (`L`).
+    function _free(bytes32 a) internal view returns (bool) {
+        uint8 c = IRegulatedToken(cT).regulatedConfig().controls;
+        uint8 fl = IRegulatedToken(cT).listFlagsOf(a);
+        return !_fz(a) && !(c & (1 << 3) != 0 && fl & 1 == 0) && !(c & (1 << 4) != 0 && fl & 2 != 0);
+    }
+
     function _canRecv(bytes32 a) internal view returns (bool ok) {
         (ok,) = IRegulatedToken(cT).canReceive(a);
     }
@@ -201,6 +216,8 @@ abstract contract RegCore is Test {
             pFz.push(_fz(cIds[k]));
         }
         pP = _paused();
+        delete pList;
+        for (uint256 k; k < cIds.length; ++k) pList.push(IRegulatedToken(cT).listFlagsOf(cIds[k]));
         pCtl = IRegulatedToken(cT).regulatedConfig().controls;
         pFeat = NormalToken(cT).features();
         pSupply = IERC20(cT).totalSupply();
@@ -255,13 +272,38 @@ abstract contract RegCore is Test {
     }
 
     /// I2, I4 (pause bounds), I13 from the call's events; returns each tracked id's forced debit.
+    bytes32 internal constant TRANSFER = keccak256("Transfer(address,address,uint256)");
+
+    /// I14 (round 3s, spec §4.5): every party a balance change of the call names, read from its `Transfer` / `UATransfer` logs
+    /// (not from what the handler meant to call): `ALLOWED` while the allow list was on, not `DENIED` while the deny list was
+    /// on; but 0 (a mint or a burn), the two pools, a forced transfer's subject and a confidential leg's `decoyFee` (I9).
+    bytes32 internal gForcedFrom; // the call's forced transfer's subject (I14 skips it)
+
+    function _i14(bytes32 from, bytes32 to) internal {
+        if (pCtl & C_LIST_BITS == 0) return;
+        bytes32[2] memory ps = [from, to];
+        for (uint256 i; i < 2; ++i) {
+            bytes32 a = ps[i];
+            if (a == 0 || a == MetaTxLib.pad(MetaTxLib.UA_POOL) || a == MetaTxLib.pad(MetaTxLib.SHIELD_POOL)) continue;
+            if ((i == 0 && a == gForcedFrom) || (i == 1 && pDecoy[a])) continue;
+            ++hits[14];
+            uint8 fl = IRegulatedToken(cT).listFlagsOf(a);
+            if (pCtl & (1 << 3) != 0 && fl & 1 == 0) _flag(14, string.concat("a party not on the allow list: ", vm.toString(a)));
+            if (pCtl & (1 << 4) != 0 && fl & 2 != 0) _flag(14, string.concat("a party on the deny list: ", vm.toString(a)));
+        }
+    }
+
     function _logs(Vm.Log[] memory logs) internal returns (uint256[] memory out) {
         out = new uint256[](cIds.length);
+        gForcedFrom = 0;
         for (uint256 i; i < logs.length; ++i) {
             Vm.Log memory l = logs[i];
             if (l.emitter != cT || l.topics.length == 0) continue;
             bytes32 s = l.topics[0];
-            if (s == IRegulatedToken.ForcedTransfer.selector) {
+            if (s == TRANSFER || s == IUALedger.UATransfer.selector) {
+                _i14(l.topics[1], l.topics[2]);
+            } else if (s == IRegulatedToken.ForcedTransfer.selector) {
+                gForcedFrom = l.topics[2];
                 _i2(l.topics[1], l.topics[2], l.topics[3], abi.decode(l.data, (uint256)));
                 for (uint256 k; k < cIds.length; ++k) if (cIds[k] == l.topics[2]) out[k] += abi.decode(l.data, (uint256));
             } else if (s == IRegulatedToken.Paused.selector) {
@@ -272,7 +314,7 @@ abstract contract RegCore is Test {
                 gPauseEnd = until;
             } else if (s == IRegulatedToken.Unpaused.selector) {
                 gPauseEnd = uint64(block.timestamp);
-            } else if (s == IGovernance.OwnershipTransferred.selector) {
+            } else if (s == IAdmin.AdminTransferred.selector) {
                 ++cGen;
             } else if (s == IGovernance.RelaxProposed.selector) {
                 (uint8 action, bytes32 proposer, uint64 eta) = abi.decode(l.data, (uint8, bytes32, uint64));
@@ -370,15 +412,28 @@ abstract contract RegCore is Test {
         uint8 c = IRegulatedToken(cT).regulatedConfig().controls;
         uint256 f = NormalToken(cT).features();
         ++hits[12];
-        if (c != uint8((f >> 5) & 0x3F)) _flag(12, "controls != (features >> 5) & 0x3F");
+        if (c != uint8((f >> 5) & 0x3F) | uint8((f >> 28) & 1) << 6) _flag(12, "controls != mirror(features)");
         ++hits[6];
-        if (c & ~pCtl != 0) _flag(6, "controls gained a bit");
+        _i15(kind, c, f);
         if (kind >= K_CTRL && kind <= K_GOV) {
             if (_legsHash() != pLegs) _flag(6, "a regulated call moved a leg's reserve, rate or wrapEnabled");
             if (cMinter != 0 && NormalToken(cT).hasRole(GovernanceBits.MINTABLE, cMinter) != pMint) _flag(6, "the minter moved");
         }
         // I7
         for (uint256 k; k < cIds.length; ++k) _i7(cIds[k], k);
+    }
+
+    /// I6's round-3s rows (8, 9, 28 come back only by `enableFeature`; 8 and 9 never leave) and I15 (spec §4.5): `listFlags`
+    /// changes only by a list edit; 8, 9 never leave `features`; a locked bit never changes.
+    function _i15(uint8 kind, uint8 c, uint256 f) internal {
+        if (c & ~pCtl != 0 && (kind != K_ENABLE || c & ~pCtl & ~C_ENABLEABLE != 0)) _flag(6, "controls gained a bit");
+        if (pCtl & ~c & C_LIST_BITS != 0) _flag(6, "controls lost a list bit");
+        ++hits[15];
+        for (uint256 k; k < cIds.length; ++k) {
+            if (kind != K_LIST && IRegulatedToken(cT).listFlagsOf(cIds[k]) != pList[k]) _flag(15, "listFlags moved off a list edit");
+        }
+        if (pFeat & ~f & (3 << 8) != 0) _flag(15, "a list bit left features");
+        if ((pFeat ^ f) & NormalToken(cT).lockedFeatures() != 0) _flag(15, "a locked bit changed");
     }
 
     function _i7(bytes32 a, uint256 k) internal {
@@ -462,18 +517,33 @@ abstract contract RegCore is Test {
         return cIds[i % cIds.length];
     }
 
+    // ------------------------------------------------------------------ the lists (round 3s, spec §6)
+
+    /// The issuer seat (bits 8, 9 while they can be enabled) writes id `i`'s flag of the allow (`deny` false) or the deny list.
+    function listEdit(uint256 i, bool deny, bool on) external {
+        bytes32[] memory one = new bytes32[](1);
+        one[0] = _id(i);
+        _op(K_LIST, cGov[2], deny ? abi.encodeCall(IRegulatedToken.setDenied, (one, on, EnvKit.codeUidOf(cT)))
+            : abi.encodeCall(IRegulatedToken.setAllowed, (one, on, EnvKit.codeUidOf(cT))));
+    }
+
+    /// The admin switches a list on, at once (bit 8 on 10-13: `FeatureInvalidForKind`).
+    function enableList(bool deny) external {
+        _op(K_ENABLE, cGov[0], abi.encodeCall(IRegulatedToken.enableFeature, (deny ? uint8(9) : uint8(8), EnvKit.codeUidOf(cT))));
+    }
+
     // ------------------------------------------------------------------ the controls (spec §3.1)
 
     function freeze(uint256 i, uint256 r, bool backed) external {
         bytes32 a = _id(i);
         bytes32 rec = backed && cRecs.length != 0 ? cRecs[r % cRecs.length] : bytes32(0);
         if (rec != 0) a = IRegulatedToken(cT).order(rec).subject;
-        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.freeze, (a, CREF, rec)));
+        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.freeze, (a, CREF, rec, EnvKit.codeUidOf(cT))));
     }
 
     function unfreeze(uint256 i) external {
         pLower = _id(i);
-        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.unfreeze, (_id(i), CREF)));
+        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.unfreeze, (_id(i), CREF, EnvKit.codeUidOf(cT))));
     }
 
     /// A record of `s` for `b` (a pool or the token now and then, which `recordOrder` refuses: spec §3.3).
@@ -485,7 +555,7 @@ abstract contract RegCore is Test {
         max = bound(max, 0, 1000);
         uint64 fu = uint64(block.timestamp + bound(days_, 0, 90) * 1 days);
         bytes32 orderId = keccak256(abi.encode(cRecs.length, odd));
-        if (_op(K_CTRL, cGov[3], abi.encodeCall(IRegulatedToken.recordOrder, (orderId, keccak256("doc"), sub, ben, max, fu)))) {
+        if (_op(K_CTRL, cGov[3], abi.encodeCall(IRegulatedToken.recordOrder, (orderId, keccak256("doc"), sub, ben, max, fu, EnvKit.codeUidOf(cT))))) {
             cRecs.push(keccak256(abi.encode(orderId, sub, ben)));
         }
     }
@@ -494,7 +564,7 @@ abstract contract RegCore is Test {
         if (cRecs.length == 0) return;
         bytes32 rec = cRecs[r % cRecs.length];
         pLower = IRegulatedToken(cT).order(rec).subject;
-        _op(K_CTRL, cGov[3], abi.encodeCall(IRegulatedToken.revokeOrder, (rec, CREF)));
+        _op(K_CTRL, cGov[3], abi.encodeCall(IRegulatedToken.revokeOrder, (rec, CREF, EnvKit.codeUidOf(cT))));
     }
 
     function forceTransfer(uint256 r, uint256 amount) external {
@@ -502,25 +572,25 @@ abstract contract RegCore is Test {
         bytes32 rec = cRecs[r % cRecs.length];
         // half the time the record-backed freeze first (T4), so a force has a frozen subject to act on
         bytes32 sub = IRegulatedToken(cT).order(rec).subject;
-        if (r % 2 == 0 && !_fz(sub)) _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.freeze, (sub, CREF, rec)));
+        if (r % 2 == 0 && !_fz(sub)) _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.freeze, (sub, CREF, rec, EnvKit.codeUidOf(cT))));
         pRec = rec;
         pOrder = IRegulatedToken(cT).order(rec);
         pRecActive = IRegulatedToken(cT).regulatedConfig().controls & 32 != 0 && _roots(10) != 0;
         pDiff = cConf;
-        _op(K_FORCE, cGov[2], abi.encodeCall(IRegulatedToken.forceTransfer, (rec, bound(amount, 0, 300))));
+        _op(K_FORCE, cGov[2], abi.encodeCall(IRegulatedToken.forceTransfer, (rec, bound(amount, 0, 300), EnvKit.codeUidOf(cT))));
     }
 
     function pause(uint256 secs) external {
-        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.pause, (CREF, uint64(block.timestamp + bound(secs, 0, 8 days)))));
+        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.pause, (CREF, uint64(block.timestamp + bound(secs, 0, 8 days)), EnvKit.codeUidOf(cT))));
     }
 
     function unpause() external {
-        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.unpause, (CREF)));
+        _op(K_CTRL, cGov[2], abi.encodeCall(IRegulatedToken.unpause, (CREF, EnvKit.codeUidOf(cT))));
     }
 
     function operatorTransfer(uint256 i, uint256 j, uint256 amount) external {
         pDiff = cConf;
-        _op(K_OPER, cGov[4], abi.encodeCall(IRegulatedToken.operatorTransfer, (_id(i), _id(j), bound(amount, 0, 300), CREF)));
+        _op(K_OPER, cGov[4], abi.encodeCall(IRegulatedToken.operatorTransfer, (_id(i), _id(j), bound(amount, 0, 300), CREF, EnvKit.codeUidOf(cT))));
     }
 
     // ------------------------------------------------------------------ the relaxation calls (spec §3.6)
@@ -535,11 +605,12 @@ abstract contract RegCore is Test {
         bytes32 holder = nid(hAddr);
         act %= 5;
         address who = w % 4 == 0 ? cGov[w % 6] : act == 1 ? hAddr : _owner();
-        bytes memory cd = act == 0 ? abi.encodeCall(IGovernance.revokeRole, (bit, holder))
-            : act == 1 ? abi.encodeCall(IGovernance.renounceRole, (bit))
-            : act == 2 ? abi.encodeCall(IGovernance.disableFeature, (bit))
-            : act == 3 ? abi.encodeCall(IGovernance.cancelGrant, (bit, act == 3 && w % 2 == 0 ? bytes32(0) : holder))
-            : abi.encodeCall(IGovernance.grantRole, (22, nid(cGov[4])));
+        bytes32 u = EnvKit.codeUidOf(cT);
+        bytes memory cd = act == 0 ? abi.encodeCall(IGovernance.revokeRole, (bit, holder, u))
+            : act == 1 ? abi.encodeCall(IGovernance.renounceRole, (bit, u))
+            : act == 2 ? abi.encodeCall(IGovernance.disableFeature, (bit, u))
+            : act == 3 ? abi.encodeCall(IGovernance.cancelGrant, (bit, act == 3 && w % 2 == 0 ? bytes32(0) : holder, u))
+            : abi.encodeCall(IGovernance.grantRole, (22, nid(cGov[4]), u));
         _op(K_GOV, who, cd);
         if (twice % 2 == 0) {
             uint256 j = twice % 7;
@@ -548,11 +619,11 @@ abstract contract RegCore is Test {
         }
     }
 
-    /// The owner hands over to the other owner (`acceptOwnership` kills every pending, Codex 2).
+    /// The owner hands over to the other owner (`acceptAdmin` kills every pending, Codex 2).
     function handover() external {
         address next = cGov[1 - cOwner];
-        _op(K_GOV, _owner(), abi.encodeCall(IGovernance.transferOwnership, (nid(next))));
-        if (_op(K_GOV, next, abi.encodeCall(IGovernance.acceptOwnership, ()))) cOwner = 1 - cOwner;
+        _op(K_GOV, _owner(), abi.encodeCall(IAdmin.transferAdmin, (nid(next), EnvKit.codeUidOf(cT))));
+        if (_op(K_GOV, next, abi.encodeCall(IAdmin.acceptAdmin, ()))) cOwner = 1 - cOwner;
     }
 
     function attest(uint256 i, uint256 how) external {
@@ -566,7 +637,7 @@ abstract contract RegCore is Test {
         (as_[0], f_[0], v_[0]) = (a, fl, vu);
         _pre();
         vm.prank(how == 3 ? cAdmin : cAttester); // ELIGIBLE_CONTRACT: the admin's, a contract's only (CTR-AS-16)
-        (bool ok, bytes memory ret) = address(cReg).call(abi.encodeCall(ComplianceRegistry.attest, (as_, f_, v_)));
+        (bool ok, bytes memory ret) = address(cReg).call(abi.encodeCall(ComplianceRegistry.setCompliance, (as_, f_, v_, EnvKit.regUidOf(address(cReg)))));
         _post(K_REG, ok, ret, 0);
     }
 
@@ -578,8 +649,8 @@ abstract contract RegCore is Test {
     }
 }
 
-/// Kinds 8 and 9 (`which` 0 or 1): `RegFixture`'s factory and registry, one token with every control, `ALLOWLIST`
-/// (`KYC`) and `DENYLIST` (`SANCTIONED`) on `creg`, bit 22 granted to an operator EOA. Ids: `alice`, `bob`, `carol` (EOAs
+/// Kinds 8 and 9 (`which` 0 or 1): `RegFixture`'s factory and registry, one token with every control, the registry
+/// check `KYC` (bit 28; masks `KYC` and `SANCTIONED`) on `creg`, bit 22 granted to an operator EOA. Ids: `alice`, `bob`, `carol` (EOAs
 /// with keys), `UA_X` (a derived SIGNING UA), this handler (the minter or the wrapper) and `relayer`. The ledger paths:
 /// `transfer`, `transferToUA` (`_update`, `_uaMove`), the generic `mtxExecute` with a fee to the relayer (the pre row, the
 /// fee leg), `payWithFee`, mint / burn (8), wrap / unwrap (9), the pause-open set at fee `NONE` and fee-bearing.
@@ -600,7 +671,7 @@ contract RegPublicHandler is RegFixture, RegCore {
         _attest(UA_X, KYC, type(uint64).max);
         _attest(nid(relayer), KYC, type(uint64).max);
         IFactoryToken.TokenConfig memory c = which == 0 ? _cfg8() : _cfg9();
-        c.features |= (1 << GovernanceBits.ALLOWLIST) | (1 << GovernanceBits.DENYLIST) | (1 << GovernanceBits.OPERATOR_TRANSFER);
+        c.features |= (1 << GovernanceBits.KYC) | (1 << GovernanceBits.OPERATOR_TRANSFER); // round 3s: both masks under KYC
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.deniedFlags) = (address(creg), KYC, SANCTIONED);
         _attest(nid(alice), KYC, type(uint64).max);
         address t = f.createToken(which == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED,
@@ -678,7 +749,7 @@ contract RegPublicHandler is RegFixture, RegCore {
         if (which == 0) {
             bytes32 to = _id(j);
             if (uint256(to) >> 160 != 0) to = nid(carol);
-            _op(K_MOVE, address(this), abi.encodeCall(NormalToken.mint, (address(uint160(uint256(to))), amount)));
+            _op(K_MOVE, address(this), abi.encodeCall(NormalToken.mint, (address(uint160(uint256(to))), amount, EnvKit.codeUidOf(cT))));
         } else {
             usd.mint(address(this), amount);
             _op(K_MOVE, address(this), abi.encodeWithSignature("wrap(uint256)", amount));
@@ -770,7 +841,7 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
 
     function pqShield(uint256 j, uint256 a) external {
         bytes32 to = cIds[j % 5];
-        pExpect = !_paused() && !_fz(nid(address(this)));
+        pExpect = !_paused() && _free(nid(address(this)));
         _conf();
         _op(K_MOVE, address(this), abi.encodeCall(IConfidentialToken.mtxShield, (to, bound(a, 1, 1000))));
     }
@@ -779,7 +850,7 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
         if (!_isWrapped()) return;
         a = bound(a, 1, 1000) * SCALE;
         usd.mint(address(this), a);
-        pExpect = !_paused() && !_fz(nid(address(this)));
+        pExpect = !_paused() && _free(nid(address(this)));
         _conf();
         _op(K_MOVE, address(this), abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), a, cIds[j % 5])));
     }
@@ -806,7 +877,7 @@ abstract contract RegPqzHandler is PqzRegFixture, RegCore {
                 : IPqzToken.mtxConfidentialTransferSingleCompact.selector, _single(form == 3, bob, ben, top, ++seed), PROOF,
                 _pqAuth(), "", noVerdict());
         }
-        pExpect = !_paused() && !_fz(alice) && (top == 0 || !_fz(nid(address(this)))) && _benOk(ben);
+        pExpect = !_paused() && _free(alice) && (top == 0 || _free(nid(address(this)))) && _benOk(ben);
         _conf();
         _op(K_MOVE, address(this), cd);
         decoy = 0;
@@ -928,7 +999,7 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
     function zShield(uint256 i, uint256 a) external {
         i %= 3;
         a = bound(a, 1, 40);
-        pExpect = !_paused() && !_fz(nid(address(this)));
+        pExpect = !_paused() && _free(nid(address(this)));
         _conf();
         if (_op(K_MOVE, address(this), abi.encodeCall(IConfidentialToken.mtxShield, (_zid(i), a)))) zpend[i] += a;
     }
@@ -938,7 +1009,7 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         i %= 3;
         a = bound(a, 1, 40);
         usd.mint(address(this), a * SCALE);
-        pExpect = !_paused() && !_fz(nid(address(this)));
+        pExpect = !_paused() && _free(nid(address(this)));
         _conf();
         if (_op(K_MOVE, address(this), abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), a * SCALE,
             _zid(i))))) zpend[i] += a;
@@ -959,7 +1030,7 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         if (zacc[i] == 0) return;
         v = bound(v, 1, zacc[i]);
         Tx memory x = _proveTransfer(tok, us[i], us[j], v, zacc[i], _none(), 0);
-        pExpect = !_paused() && !_fz(_zid(i));
+        pExpect = !_paused() && _free(_zid(i));
         _conf();
         if (_op(K_MOVE, address(this), abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle,
             (_zSingle(x.payload, _none()), x.proof))))
@@ -988,7 +1059,7 @@ abstract contract RegZetherHandler is ZetherRegFixture, RegCore {
         (pDecoy[_zid(j)], pDecoy[_zid(o)]) = (true, true);
         pDecoys.push(_zid(j));
         pDecoys.push(_zid(o));
-        pExpect = !_paused() && !_fz(_zid(i));
+        pExpect = !_paused() && _free(_zid(i));
         _conf();
         if (_op(K_MOVE, address(this), abi.encodeWithSelector(compact ? IZetherToken.mtxConfidentialTransferCompact.selector
             : IZetherToken.mtxConfidentialTransfer.selector, _zMulti(x.payload, _none()), x.proof)))

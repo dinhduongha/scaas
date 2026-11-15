@@ -12,7 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
-import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
+import {PqzKeyVerifier} from "../../src/pqz/PqzKeyVerifier.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -22,6 +22,7 @@ import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialTok
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {TYPED_OPS, domainOf} from "../metatx/NamedEntry.t.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Task 7b: a stand-in for a precompile with a known price: burns `B` gas, answers 1 (`_precompiles`).
 contract GasBurner {
@@ -135,7 +136,7 @@ contract PqzStatePinGasTest is PqzSlots {
         _fund(tok, _pqzUA(_pk(12), 12), 100); // D19: the pool holds the fees the measured debits pay out
         _public(tok, vm.addr(RKEY), 1000); // the relayed envelopes' signer pays the outer fee (full-tx pins)
         feeUA = _mldsaUA(50); // the ML-DSA relay path's signer (8d2b fix round, review I1 / I2)
-        NormalPqzToken(address(tok)).mintToUA(feeUA, 1000);
+        NormalPqzToken(address(tok)).mintToUA(feeUA, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         _tableSetUp();
         vm.resumeGasMetering();
@@ -204,7 +205,7 @@ contract PqzStatePinGasTest is PqzSlots {
 
     // ------------------------------------------------------------------ ROLL_MAX and prepare (Review Focus 5, 6)
 
-    /// `ROLL_MAX` = the largest multiple of 16 under `0.75 · 2^24`: `ROLL_MAX` fits; `ROLL_MAX + 16` is the linear fit
+    /// `ROLL_MAX` (owner-set, a multiple of 16) fits under `0.75 · 2^24`; `ROLL_MAX + 16` is the linear fit
     /// through a `LO`-entry rollover of another account (logged; the binding rule is the relayed full transaction,
     /// `test_gas_rollMax_relayedFullTx`). The `LO`-entry call runs first under a snapshot that
     /// is reverted (`vm.revertToState` restores cold access too: `gMax` equals its value as the test's only call), so
@@ -308,34 +309,41 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     /// Fix round 1 (I1): the `ROLL_MAX` rollover as a full relayed transaction with an outer fee: the binding convention
-    /// for `ROLL_MAX` (the whole transaction <= 0.75 · 2^24). Plan 5h Task 8d part 2b: and `ROLL_MAX` is the LARGEST such
-    /// multiple of 16 — `ROLL_MAX + 16` (the linear fit through a `LO`-entry relayed rollover of `dave`, measured cold
-    /// under a snapshot first) is over the cap. The token refuses `n > ROLL_MAX`, so `ROLL_MAX + 16` itself is measured
-    /// by a build with a larger constant (`test/research/PqzPackGas.t.sol` `test_pack_scanRoll`,
-    /// `runs/2026-10-26-t8d2b-fix-rollscan-<set>.txt`: per-entry steps equal within 0.01 %, so the fit is exact enough).
-    /// 8d2b fix round (review I1): on BOTH relay paths, `mtxExecute` (ECDSA) and `uaExecute` (the ML-DSA-65 fee UA):
-    /// `ROLL_MAX` fits on each, and `ROLL_MAX + 16` is over the cap on the costlier one.
+    /// for `ROLL_MAX` (the whole transaction <= 0.75 · 2^24), on BOTH relay paths (8d2b fix round, review I1),
+    /// `mtxExecute` (ECDSA) and `uaExecute` (the ML-DSA-65 fee UA). Owner 2026-11-10: `ROLL_MAX` is an owner-set multiple
+    /// of 16 whose relayed full rollover fits on both paths (asserted); the largest fitting multiple of 16 is measured and
+    /// reported, not required: the linear fit through a `LO`-entry relayed rollover of `dave` (measured cold under a
+    /// snapshot first) on each path, the smaller of the two, and the headroom at `ROLL_MAX` on the costlier path (logged).
+    /// The token refuses `n > ROLL_MAX`, so a larger value is measured by a build with a larger constant
+    /// (`test/research/PqzPackGas.t.sol` `test_pack_scanRoll`: per-entry steps equal within 0.01 %, so the fit is exact enough).
     function test_gas_rollMax_relayedFullTx() public {
-        (uint256 e, uint256 en) = _rollMaxVia(false);
-        (uint256 u, uint256 un) = _rollMaxVia(true);
+        (uint256 e, uint256 el) = _rollMaxVia(false);
+        (uint256 u, uint256 ul) = _rollMaxVia(true);
         assertLe(e, CAP, "mtxExecute: the full relayed transaction's regular gas under 0.75 * 2^24");
         assertLe(u, CAP, "uaExecute: the full relayed transaction's regular gas under 0.75 * 2^24");
-        assertGt(en > un ? en : un, CAP, "ROLL_MAX + 16 would fit too: ROLL_MAX is not the largest multiple of 16");
+        (uint256 fe, uint256 fu) = (_largestFit(e, el), _largestFit(u, ul));
+        console2.log("ROLL_MAX / the largest multiple of 16 that fits on both paths (linear fit; reported, not required) / "
+            "headroom at ROLL_MAX on the costlier path", PqzCore.ROLL_MAX, fe < fu ? fe : fu, CAP - (e > u ? e : u));
     }
 
-    /// The `ROLL_MAX` relayed rollover on one path and its `ROLL_MAX + 16` fit (state restored afterwards).
-    function _rollMaxVia(bool ua) internal returns (uint256 reg, uint256 next) {
+    /// The largest multiple of 16 whose relayed full rollover fits `CAP` on one path: the line through `lo` (`LO` entries)
+    /// and `reg` (`ROLL_MAX` entries, `reg <= CAP`).
+    function _largestFit(uint256 reg, uint256 lo) internal pure returns (uint256) {
+        return (PqzCore.ROLL_MAX + (CAP - reg) * (PqzCore.ROLL_MAX - LO) / (reg - lo)) / 16 * 16;
+    }
+
+    /// The `ROLL_MAX` relayed rollover on one path and the `LO`-entry one of the fit (state restored afterwards).
+    function _rollMaxVia(bool ua) internal returns (uint256 reg, uint256 lo) {
         string memory p = ua ? "uaExecute" : "mtxExecute";
         uint256 snap = vm.snapshotState();
         console2.log(string.concat("relayed mtxRollOver (", p, "), full transaction, fee 7, entries (fit point)"), LO);
-        (uint256 lo,) = _fullTxVia(ua, abi.encodeCall(IPqzToken.mtxRollOver, (dave, uint64(0), LO)), 7);
+        (lo,) = _fullTxVia(ua, abi.encodeCall(IPqzToken.mtxRollOver, (dave, uint64(0), LO)), 7);
         vm.revertToState(snap);
         console2.log(string.concat("relayed mtxRollOver (", p, "), full transaction, fee 7, entries"), PqzCore.ROLL_MAX);
         (reg,) = _fullTxVia(ua, abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), PqzCore.ROLL_MAX)), 7);
         vm.revertToState(snap);
-        next = reg + (reg - lo) * 16 / (PqzCore.ROLL_MAX - LO);
-        console2.log(string.concat("ROLL_MAX + 16, relayed full transaction (", p, ", linear fit) / per entry"), next,
-            (reg - lo) / (PqzCore.ROLL_MAX - LO));
+        console2.log(string.concat("ROLL_MAX + 16, relayed full transaction (", p, ", linear fit) / per entry"),
+            reg + (reg - lo) * 16 / (PqzCore.ROLL_MAX - LO), (reg - lo) / (PqzCore.ROLL_MAX - LO));
     }
 
     /// Fix round 1 (I1): each `mtxPrepareAcc` half as a full relayed transaction with an outer fee, on both relay paths
@@ -361,7 +369,7 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     /// The same `ROLL_MAX` rollover relayed (owner rule 2026-10-20: every mtx* write is relayable). Plan 5h Task 7:
-    /// `ROLL_MAX` is the largest multiple of 16 when this fails at `ROLL_MAX + 16` (built with that constant).
+    /// `ROLL_MAX` fits (the largest fitting multiple of 16 is reported by `test_gas_rollMax_relayedFullTx`, not required).
     function test_gas_rollMax_relayed() public {
         uint256 g = _relayed(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), PqzCore.ROLL_MAX)));
         _log("relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0)", g);
@@ -612,8 +620,8 @@ contract PqzStatePinGasTest is PqzSlots {
     bytes32[8] internal ys;
     UARegistry internal regL; // the register rows: PQZ verify cap 12 M, the PQZL / PQZH verifier
     UARegistry internal regH;
-    UAPqzVerifier internal verL;
-    UAPqzVerifier internal verH;
+    PqzKeyVerifier internal verL;
+    PqzKeyVerifier internal verH;
     string internal gj; // test/vectors/pqz-gas/<set>.json (script/pqz/gas-inputs.py)
 
     /// One row per relation and form at the build's set and proof system, each its own transaction after `setUp` under
@@ -881,12 +889,12 @@ contract PqzStatePinGasTest is PqzSlots {
         (hm[0], ha[0]) = _msigHolder(2, 150);
         (hm[1], ha[1]) = _msigHolder(3, 160);
         slhFee = UACall.register(reg, UAKinds.SLHDSA128S, abi.encodePacked(keccak256("slh fee")), UACall.attrs("", 0, ""), new bytes(7_856), "");
-        NormalPqzToken(address(tok)).mintToUA(slhFee, 1000);
+        NormalPqzToken(address(tok)).mintToUA(slhFee, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
         fpk[0] = 0x09;
         fnFee = UACall.register(reg, UAKinds.FNDSA512, fpk, UACall.attrs("", 0, ""), new bytes(666), "");
-        NormalPqzToken(address(tok)).mintToUA(fnFee, 1000);
+        NormalPqzToken(address(tok)).mintToUA(fnFee, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         _holderSys("pqzl", false);
@@ -950,7 +958,7 @@ contract PqzStatePinGasTest is PqzSlots {
         IUARegistry.UAAttrs memory a = UACall.attrs(_pk(60), keccak256(proof), "");
         bytes memory d = abi.encodeCall(r.register, (UAKinds.MLDSA65, _mlPk(60), a, new bytes(ML65_SIG), proof));
         _row(sys, "REGISTER", "register (UARegistry.register: mldsa65 UA with a PQZ key)", address(r), d, false);
-        UAPqzVerifier v = h ? verH : verL;
+        PqzKeyVerifier v = h ? verH : verL;
         d = abi.encodeCall(v.verifyPop, (_pk(60), bytes32(uint256(1)), proof));
         _row(sys, "REGISTER", "register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover)", address(v), d, false);
     }

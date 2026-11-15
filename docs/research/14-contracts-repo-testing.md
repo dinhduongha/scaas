@@ -223,15 +223,16 @@ Cái giá của `"none"` thì có thật: **Sourcify không thể cho full match
 
 ```bash
 # CI job: determinism (chạy mọi PR chạm src/ hoặc lib/)
-for d in /tmp/build-a /tmp/build-b; do
+T=$(mktemp -d)
+for d in "$T"/build-a "$T"/build-b; do
   rm -rf "$d" && git worktree add "$d" HEAD
   docker run --rm -v "$d":/w -w /w/evm ghcr.io/foundry-rs/foundry:$FOUNDRY_TAG \
     sh -c 'forge build --force && jq -r ".bytecode.object" out/*/*.json | sha256sum' > "$d.hash"
 done
-diff /tmp/build-a.hash /tmp/build-b.hash || { echo "BUILD KHONG TAI LAP"; exit 1; }
+diff "$T"/build-a.hash "$T"/build-b.hash || { echo "BUILD KHONG TAI LAP"; exit 1; }
 ```
 
-Hai worktree ở hai đường dẫn khác nhau (`/tmp/build-a` vs `/tmp/build-b`) là chủ ý: nếu metadata có nhét đường dẫn tuyệt đối vào, gate này bắt được ngay. Đây là **test duy nhất bảo vệ toàn bộ mục CREATE2 của §01.4** và nó rẻ (2 lần build).
+Hai worktree ở hai đường dẫn khác nhau (`"$T"/build-a` vs `"$T"/build-b`) là chủ ý: nếu metadata có nhét đường dẫn tuyệt đối vào, gate này bắt được ngay. Đây là **test duy nhất bảo vệ toàn bộ mục CREATE2 của §01.4** và nó rẻ (2 lần build).
 
 **`evm_version = "cancun"` là một quả mìn cross-section.** §08.10 khai genesis Besu là `"shanghaiTime": 0`, **không** có `cancunTime`. Một contract compile ở `cancun` có thể sinh `TSTORE`/`TLOAD` (OZ `ReentrancyGuardTransient` dùng nó) hoặc `MCOPY` (solc ≥ 0.8.25 tự sinh cho copy memory). Trên Besu shanghai, đó là `INVALID` opcode ⇒ **revert sau khi mọi test đã pass**. Gate cụ thể, 15 dòng bash, chạy mọi PR:
 
@@ -665,8 +666,9 @@ forge snapshot --check --tolerance 1 --snap snapshots/.gas-snapshot    # gate CI
 
 - **Bulk regression**: `forge snapshot` cho toàn bộ test, gate bằng một script `bash` tự so hai file với ngưỡng, **không** phụ thuộc cờ `--tolerance` tồn tại:
   ```bash
-  forge snapshot --snap /tmp/new.txt
-  python3 tools/gas_diff.py snapshots/.gas-snapshot /tmp/new.txt --max-pct 1 --max-abs 5000
+  T=$(mktemp -d)
+  forge snapshot --snap "$T"/new.txt
+  python3 tools/gas_diff.py snapshots/.gas-snapshot "$T"/new.txt --max-pct 1 --max-abs 5000
   ```
   30 dòng Python, sở hữu bởi ta, không bao giờ bị deprecate. Nó cũng cho ta thứ `--tolerance` không cho: **ngưỡng tuyệt đối** — 1% của 1.88M là 18,800 gas, quá rộng để bắt regression thật; `--max-abs 5000` mới là gate có ích cho hàm đắt.
 - **Ngân sách theo hàm**, khai báo trong test chứ không trong tài liệu:

@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
@@ -21,6 +22,7 @@ import {EnvKit} from "../helpers/EnvKit.sol";
 import {nid} from "../helpers/Ids.sol";
 import {ChainEnvCode} from "../../src/factory/ChainEnvCode.sol";
 import {StubUARegistry} from "../helpers/Mocks.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 
 /// Answers nothing the factory asks.
 contract Muted {}
@@ -45,7 +47,7 @@ contract SelfDestructImpl {
     function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
     function features() external pure returns (uint256) { return 0; }
     function lockedFeatures() external pure returns (uint256) { return 0; }
-    function owner() external pure returns (address) { return address(0); }
+    function admin() external pure returns (address) { return address(0); }
     function underlyings() external pure returns (address[] memory) {}
 
     function initialize(bytes32, uint64, bytes calldata) external {
@@ -78,7 +80,7 @@ contract LyingChainImpl {
     function initialize(bytes32, uint64, bytes calldata) external {}
 }
 
-/// A constructor that reverts with a known error (bubbled by `deployImplementation`).
+/// A constructor that reverts with a known error (bubbled by `deployTokenImplementation`).
 contract BadConstructor {
     constructor() { revert IOpenFactory.EnvInvalid(); }
 }
@@ -128,82 +130,82 @@ contract FactoryTest is Test {
     /// Chain-neutral spec §3.1 (plan T71): the registrar is the only constructor argument; `chain_uid` 0 is refused by
     /// `configureChain` (the constructor's check before).
     function test_constructor_refusesZeroChainUid() public {
-        OpenFactory g = new OpenFactory(registrar);
+        OpenFactory g = new OpenFactory(nid(registrar));
         assertEq(g.chainUid(), bytes32(0));
         vm.prank(registrar);
         vm.expectRevert(IOpenFactory.ChainUidZero.selector);
-        g.configureChain(bytes32(0), 0, address(0), 0, bytes32(0));
+        g.configureChain(bytes32(0), 0, address(0), bytes32(0), 0, bytes32(0));
         assertEq(f.chainUid(), UID_);
-        assertEq(f.registrar(), registrar);
+        assertEq(address(uint160(uint256(f.admin()))), registrar);
     }
 
     /// Plan 5g-Z2: envs are published per kind, versioned, never changed; the factory's own and well-formed.
     function test_publishEnv() public {
         IFactoryToken.Env memory e = plainEnv(address(f), address(0), UID_, address(0), false);
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.publishEnv(NORMAL, 2, e);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
+        f.publishTokenEnv(NORMAL, 2, EnvKit.uidOf(address(f)), e);
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvAlreadyPublished.selector, 0, 1));
-        f.publishEnv(NORMAL, 1, e);
+        f.publishTokenEnv(NORMAL, 1, EnvKit.uidOf(address(f)), e);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 0, 0));
-        f.publishEnv(NORMAL, 0, e);
+        f.publishTokenEnv(NORMAL, 0, EnvKit.uidOf(address(f)), e);
         // chain-neutral releases (plan T71): the env carries neither the factory nor `chain_uid` (the factory fills them);
         // a registry must name this chain, at most 4 deps and 2 params
         IFactoryToken.Env memory bad = plainEnv(address(f), address(0), UID_, address(new StubUARegistry(keccak256("other"))),
             false);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("other")));
-        f.publishEnv(NORMAL, 2, bad);
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID_, keccak256("other")));
+        f.publishTokenEnv(NORMAL, 2, EnvKit.uidOf(address(f)), bad);
         bad = plainEnv(address(f), address(0), UID_, address(0x1234), false);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, bytes32(0)));
-        f.publishEnv(NORMAL, 2, bad); // a registry that answers nothing
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID_, bytes32(0)));
+        f.publishTokenEnv(NORMAL, 2, EnvKit.uidOf(address(f)), bad); // a registry that answers nothing
         bad = plainEnv(address(f), address(0), UID_, address(0), false);
         bad.deps = new address[](5);
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
-        f.publishEnv(NORMAL, 2, bad);
+        f.publishTokenEnv(NORMAL, 2, EnvKit.uidOf(address(f)), bad);
         bad.deps = new address[](4);
         bad.params = new bytes32[](3);
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
-        f.publishEnv(NORMAL, 2, bad);
+        f.publishTokenEnv(NORMAL, 2, EnvKit.uidOf(address(f)), bad);
         bad = plainEnv(address(f), address(0), UID_, address(0), false);
         bad.libs = new address[](1);
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
-        f.publishEnv(NORMAL, 2, bad);
+        f.publishTokenEnv(NORMAL, 2, EnvKit.uidOf(address(f)), bad);
         // a pin that pins nothing (review 5g-Z2 P2-1): 0 (no account) or keccak256("") (no code)
         (bad.libs[0], bad.libCodeHashes) = (address(GovernanceLib), new bytes32[](1));
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
-        f.publishEnv(NORMAL, 2, bad);
+        f.publishTokenEnv(NORMAL, 2, EnvKit.uidOf(address(f)), bad);
         bad.libCodeHashes[0] = keccak256("");
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
-        f.publishEnv(NORMAL, 2, bad);
+        f.publishTokenEnv(NORMAL, 2, EnvKit.uidOf(address(f)), bad);
         address stub = address(new StubUARegistry(UID_));
         e.registry = stub;
         vm.expectEmit(true, true, false, true, address(f));
         emit IOpenFactory.EnvPublished(0, 5, keccak256(abi.encode(e)));
-        f.publishEnv(NORMAL, 5, e); // gaps allowed; the latest is the highest
+        f.publishTokenEnv(NORMAL, 5, EnvKit.uidOf(address(f)), e); // gaps allowed; the latest is the highest
         vm.stopPrank();
-        assertEq(f.latestEnvVersion(NORMAL), 5);
-        assertEq(f.envOf(NORMAL, 5).registry, stub);
-        assertEq(f.latestEnvVersion(IOpenFactory.TokenKind.NORMAL_PQZ), 0);
+        assertEq(f.latestTokenEnvVersion(NORMAL), 5);
+        assertEq(f.tokenEnvOf(NORMAL, 5).registry, stub);
+        assertEq(f.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL_PQZ), 0);
         // a release names a published env of its kind (owner 2026-10-20: explicit, never implied by the latest)
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 4, 1));
-        f.deployImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 1, 1, type(NormalToken).creationCode, "");
+        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_PQZ, 1, 1, type(NormalToken).creationCode, "", EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 0, 3)); // a gap
-        f.deployImplementation(NORMAL, 2, 3, type(NormalToken).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, 3, type(NormalToken).creationCode, "", EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 0, 0));
-        f.deployImplementation(NORMAL, 2, 0, type(NormalToken).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, 0, type(NormalToken).creationCode, "", EnvKit.uidOf(address(f)));
         // an older env stays usable for a new release: the registrar's choice, recorded in the release
-        address v2 = f.deployImplementation(NORMAL, 2, 1, type(NormalToken).creationCode, Catalogue.argsOn(f, NORMAL, 1, ""));
+        address v2 = f.deployTokenImplementation(NORMAL, 2, 1, type(NormalToken).creationCode, Catalogue.argsOn(f, NORMAL, 1, ""), EnvKit.uidOf(address(f)));
         vm.stopPrank();
         assertEq(f.releaseOf(NORMAL, 2).envVersion, 1);
-        assertEq(f.releaseOf(NORMAL, 2).envHash, keccak256(abi.encode(f.envOf(NORMAL, 1))));
+        assertEq(f.releaseOf(NORMAL, 2).envHash, keccak256(abi.encode(f.tokenEnvOf(NORMAL, 1))));
         assertEq(NormalToken(v2).registry(), address(0), "a release carries no env");
         address t2 = f.createToken(NORMAL, 2, abi.encode(_normal(alice)), "v2");
         assertEq(NormalToken(t2).registry(), address(0), "env 1's registry, not env 5's");
     }
 
     /// The linked libraries of the env are checked by code hash at every release deployment (plan 5g-Z2).
-    function test_deployImplementation_checksLibraryCodeHashes() public {
+    function test_deployTokenImplementation_checksLibraryCodeHashes() public {
         IFactoryToken.Env memory e = plainEnv(address(f), address(0), UID_, address(0), false);
         e.libs = new address[](2);
         e.libCodeHashes = new bytes32[](2);
@@ -213,7 +215,7 @@ contract FactoryTest is Test {
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.LibraryCodeHashMismatch.selector, address(usdc),
             keccak256("not the code"), address(usdc).codehash));
-        f.deployImplementation(NORMAL, 2, ev, type(NormalToken).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, ev, type(NormalToken).creationCode, "", EnvKit.uidOf(address(f)));
         e.libCodeHashes[1] = address(usdc).codehash;
         address v2 = Catalogue.release(f, NORMAL, 2, e, type(NormalToken).creationCode);
         assertEq(f.releaseOf(NORMAL, 2).envVersion, 3);
@@ -225,35 +227,35 @@ contract FactoryTest is Test {
     /// releases: no `chainUid()` on a release); a constructor's
     /// revert is bubbled, an empty failure is `DeployFailed`; the release hashes in the event; the same init code again as
     /// a later version on a newer env.
-    function test_deployImplementation_checksKindFactoryAndChainUid() public {
+    function test_deployTokenImplementation_checksKindFactoryAndChainUid() public {
         bytes memory code = type(NormalToken).creationCode;
         bytes memory args = Catalogue.argsOn(f, NORMAL, 1, ""); // env 1's modules (T66b): NORMAL's release constructs
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, WRAPPED, 0));
-        f.deployImplementation(WRAPPED, 2, 1, code, args);
+        f.deployTokenImplementation(WRAPPED, 2, 1, code, args, EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, NORMAL, type(uint256).max));
-        f.deployImplementation(NORMAL, 2, 1, type(Muted).creationCode, ""); // no kind()
+        f.deployTokenImplementation(NORMAL, 2, 1, type(Muted).creationCode, "", EnvKit.uidOf(address(f))); // no kind()
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector,
             Catalogue.predict(f, NORMAL, 2, type(KindOnly).creationCode)));
-        f.deployImplementation(NORMAL, 2, 1, type(KindOnly).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, 1, type(KindOnly).creationCode, "", EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvRefused.selector,
             Catalogue.predict(f, NORMAL, 2, type(OtherChainImpl).creationCode)));
-        f.deployImplementation(NORMAL, 2, 1, type(OtherChainImpl).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, 1, type(OtherChainImpl).creationCode, "", EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector,
             Catalogue.predict(f, NORMAL, 2, "")));
-        f.deployImplementation(NORMAL, 2, 1, "", ""); // an empty init code makes an account without code
+        f.deployTokenImplementation(NORMAL, 2, 1, "", "", EnvKit.uidOf(address(f))); // an empty init code makes an account without code
         vm.expectRevert(IOpenFactory.DeployFailed.selector);
-        f.deployImplementation(NORMAL, 2, 1, hex"fe", ""); // INVALID: no revert data
+        f.deployTokenImplementation(NORMAL, 2, 1, hex"fe", "", EnvKit.uidOf(address(f))); // INVALID: no revert data
         vm.expectRevert(IOpenFactory.EnvInvalid.selector); // a constructor's error is bubbled
-        f.deployImplementation(NORMAL, 2, 1, type(BadConstructor).creationCode, "");
+        f.deployTokenImplementation(NORMAL, 2, 1, type(BadConstructor).creationCode, "", EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NORMAL, 0));
-        f.deployImplementation(NORMAL, 0, 1, code, "");
+        f.deployTokenImplementation(NORMAL, 0, 1, code, "", EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionAlreadyRegistered.selector, NORMAL, 1, address(normalImpl)));
-        f.deployImplementation(NORMAL, 1, 1, code, "");
+        f.deployTokenImplementation(NORMAL, 1, 1, code, "", EnvKit.uidOf(address(f)));
         vm.stopPrank();
         vm.prank(alice);
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.deployImplementation(NORMAL, 3, 1, code, "");
+        vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
+        f.deployTokenImplementation(NORMAL, 3, 1, code, "", EnvKit.uidOf(address(f)));
         assertEq(f.latestVersion(NORMAL), 1);
         assertEq(f.implementationOf(WRAPPED, 1), address(wrappedImpl));
         // the same init code on a newer env as version 2 (no recompile): a new address, the hashes in the event
@@ -264,7 +266,7 @@ contract FactoryTest is Test {
         address predicted = Catalogue.predict(f, NORMAL, 2, code, args); // env 1's modules, pinned in env 2 too
         vm.recordLogs();
         vm.prank(registrar);
-        address v2 = f.deployImplementation(NORMAL, 2, ev, code, args);
+        address v2 = f.deployTokenImplementation(NORMAL, 2, ev, code, args, EnvKit.uidOf(address(f)));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         Vm.Log memory l = logs[logs.length - 1];
         assertEq(l.topics[0], IOpenFactory.ImplementationDeployed.selector);
@@ -288,11 +290,11 @@ contract FactoryTest is Test {
     function test_noticePeriod() public {
         // the period is written once (configureChain), capped at 30 days (review 5g-Z2 P2-4: near 2^64 `usableFrom`
         // would overflow)
-        OpenFactory g0 = new OpenFactory(registrar);
+        OpenFactory g0 = new OpenFactory(nid(registrar));
         EnvKit.genesis(UID_);
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.NoticePeriodTooLong.selector, 30 days + 1));
-        g0.configureChain(UID_, 30 days + 1, address(0), 0, bytes32(0));
+        g0.configureChain(UID_, 30 days + 1, address(0), bytes32(0), 0, bytes32(0));
         assertEq(EnvKit.factory(registrar, UID_, 30 days).noticePeriod(), f.MAX_NOTICE_PERIOD());
         OpenFactory g = EnvKit.factory(registrar, UID_, 10 minutes);
         assertEq(g.noticePeriod(), 10 minutes);
@@ -310,10 +312,10 @@ contract FactoryTest is Test {
         vm.etch(registrar, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, registrar));
-        f.setKindEnabled(NORMAL, false);
+        f.setTokenKindEnabled(NORMAL, false, EnvKit.uidOf(address(f)));
         vm.etch(registrar, "");
         vm.prank(registrar);
-        f.setKindEnabled(NORMAL, false);
+        f.setTokenKindEnabled(NORMAL, false, EnvKit.uidOf(address(f)));
     }
 
     /// Owner ruling 2026-10-30 (D5): an EIP-7702 designator is not an implementation (it could redelegate under every
@@ -327,24 +329,157 @@ contract FactoryTest is Test {
 
     /// The factory's generic gate (plan 5g-Z2): the plain kinds start on, the confidential ones off; registrar only.
     function test_kindEnabled() public {
-        assertTrue(f.kindEnabled(NORMAL));
-        assertTrue(f.kindEnabled(WRAPPED));
-        for (uint8 k = 2; k <= 13; ++k) assertFalse(f.kindEnabled(IOpenFactory.TokenKind(k)));
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.setKindEnabled(NORMAL, false);
+        assertTrue(f.tokenKindEnabled(NORMAL));
+        assertTrue(f.tokenKindEnabled(WRAPPED));
+        for (uint8 k = 2; k <= 13; ++k) assertFalse(f.tokenKindEnabled(IOpenFactory.TokenKind(k)));
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
+        f.setTokenKindEnabled(NORMAL, false, EnvKit.uidOf(address(f)));
         vm.prank(registrar);
         vm.expectEmit(true, false, false, true, address(f));
-        emit IOpenFactory.KindEnabled(NORMAL, false);
-        f.setKindEnabled(NORMAL, false);
+        emit IOpenFactory.TokenKindEnabled(NORMAL, false);
+        f.setTokenKindEnabled(NORMAL, false, EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NORMAL));
         f.createToken(NORMAL, 1, abi.encode(_normal(alice)), "off");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NORMAL));
         f.createTokenUnregistered(NORMAL, address(normalImpl), abi.encode(_normal(alice)), "off");
         vm.prank(registrar);
-        _kindOutOfRange(abi.encodeWithSelector(f.setKindEnabled.selector, uint8(14), true));
+        _kindOutOfRange(abi.encodeWithSelector(f.setTokenKindEnabled.selector, uint8(14), true, UID_));
     }
 
     /// @dev Past the last member (13) the ABI decoder reverts with no data, as the registrar.
+    /// Fable D P3-2: the deprecations and kind switches carry the factory's `chainUid` word, so a native admin's direct
+    /// transaction made for a sibling with the same chain id (another genesis, the same nonce) is void here: each of the five
+    /// with the sibling's word is refused by name, nothing written; the same calls with this factory's word pass (the
+    /// control); before `configureChain` nothing passes, not even with a zero word (its `chainUid` is still 0).
+    function test_siblingReplay_chainBound() public {
+        bytes32 sib = keccak256("a sibling with the same chain id");
+        bytes[5] memory cds = _chainBoundOps(sib);
+        for (uint256 i; i < 5; ++i) {
+            vm.prank(registrar);
+            (bool ok, bytes memory ret) = address(f).call(cds[i]);
+            assertFalse(ok, "a sibling's word accepted");
+            assertEq(ret, abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID_, sib));
+        }
+        assertTrue(f.tokenKindEnabled(WRAPPED) && !f.isTokenDeprecated(NORMAL, 1), "nothing written");
+        vm.startPrank(registrar);
+        f.setTokenKindEnabled(WRAPPED, false, UID_); // the control: this factory's own word
+        f.deprecateToken(NORMAL, 1, UID_, "bug");
+        f.setClassKindEnabled(4, 0, true, UID_);
+        vm.stopPrank();
+        assertTrue(!f.tokenKindEnabled(WRAPPED) && f.isTokenDeprecated(NORMAL, 1) && f.classKindEnabled(4, 0));
+        OpenFactory g = new OpenFactory(nid(registrar));
+        cds = _chainBoundOps(bytes32(0));
+        for (uint256 i; i < 5; ++i) {
+            vm.prank(registrar);
+            (bool ok, bytes memory ret) = address(g).call(cds[i]);
+            assertFalse(ok, "an unconfigured factory accepted");
+            assertEq(ret, abi.encodeWithSelector(IOpenFactory.ChainNotConfigured.selector));
+        }
+        assertEq(EnvKit.uidOf(address(f)), f.chainUid(), "EnvKit.uidOf reads the chainUid slot");
+    }
+
+    /// Fable recheck-2 P3-1: the three deploys (the native admin's own call is its own approval, so no approval key binds the
+    /// chain) and `renounceAdmin` carry the factory's word the same way: with a sibling's word each is refused by name before
+    /// anything (no release, the admin kept); the controls with this factory's word pass the check (the token release lands,
+    /// the DEX and class deploys reach the env check, the renounce ends the admin); before `configureChain` all four
+    /// `ChainNotConfigured`.
+    function test_siblingReplay_deploysAndRenounce() public {
+        bytes32 sib = keccak256("a sibling with the same chain id");
+        bytes[4] memory cds = _deployAndRenounceOps(sib);
+        for (uint256 i; i < 4; ++i) {
+            vm.prank(registrar);
+            (bool ok, bytes memory ret) = address(f).call(cds[i]);
+            assertFalse(ok, "a sibling's word accepted");
+            assertEq(ret, abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID_, sib));
+        }
+        assertEq(f.implementationOf(NORMAL, 2), address(0), "no release written");
+        assertEq(f.admin(), nid(registrar), "the admin kept");
+        vm.startPrank(registrar); // the controls: this factory's own word
+        f.deployTokenImplementation(NORMAL, 2, 1, type(NormalToken).creationCode, Catalogue.argsOn(f, NORMAL, 1, ""), UID_);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 255, 7)); // DEX_DOMAIN
+        f.deployDexImplementation(3, 7, type(SCaaSDex).creationCode, "", UID_);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, uint32(4) << 16, 7)); // class 4, kind 0
+        f.deployImplementation(IOpenFactory.ReleaseId(4, 0, 1), 7, bytes4(0x01020304), bytes4(0x05060708), hex"00", "", UID_);
+        f.renounceAdmin(UID_);
+        vm.stopPrank();
+        assertTrue(f.implementationOf(NORMAL, 2) != address(0) && f.admin() == bytes32(0));
+        OpenFactory g = new OpenFactory(nid(registrar));
+        cds = _deployAndRenounceOps(bytes32(0));
+        for (uint256 i; i < 4; ++i) {
+            vm.prank(registrar);
+            (bool ok, bytes memory ret) = address(g).call(cds[i]);
+            assertFalse(ok, "an unconfigured factory accepted");
+            assertEq(ret, abi.encodeWithSelector(IOpenFactory.ChainNotConfigured.selector));
+        }
+    }
+
+    /// CTR-GOV-27: `transferAdmin`, the three env publishes and `revokeApproval` carry the factory's word the same way: with a
+    /// sibling's word each is refused by name before anything (no pending admin, no env); a stranger meets `NotAdmin` first;
+    /// the controls with this factory's word pass the check (the pending admin set, the envs published, the revoke reaches
+    /// `ApprovalNotRevocable`); before `configureChain` all five `ChainNotConfigured`.
+    function test_siblingReplay_adminEntries() public {
+        bytes32 sib = keccak256("a sibling with the same chain id");
+        bytes[5] memory cds = _adminWordOps(sib);
+        for (uint256 i; i < 5; ++i) {
+            vm.prank(registrar);
+            (bool ok, bytes memory ret) = address(f).call(cds[i]);
+            assertFalse(ok, "a sibling's word accepted");
+            assertEq(ret, abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID_, sib));
+            vm.prank(alice);
+            (ok, ret) = address(f).call(cds[i]);
+            assertEq(ret, abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(alice)), "the admin before the word");
+        }
+        assertEq(f.pendingAdmin(), bytes32(0), "no pending admin");
+        assertEq(f.tokenEnvOf(NORMAL, 9).registry, address(0), "no env written");
+        assertEq(f.latestDexEnvVersion() == 9 || f.latestTokenEnvVersion(NORMAL) == 9, false, "no env written");
+        cds = _adminWordOps(UID_);
+        for (uint256 i; i < 4; ++i) {
+            vm.prank(registrar);
+            (bool ok,) = address(f).call(cds[i]); // the controls: this factory's own word
+            assertTrue(ok, "the control");
+        }
+        assertEq(f.pendingAdmin(), nid(bob));
+        assertEq(f.latestTokenEnvVersion(NORMAL), 9);
+        assertEq(f.latestDexEnvVersion(), 9);
+        vm.prank(registrar);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ApprovalNotRevocable.selector, bytes32(uint256(1))));
+        f.revokeApproval(bytes32(uint256(1)), UID_);
+        OpenFactory g = new OpenFactory(nid(registrar));
+        cds = _adminWordOps(bytes32(0));
+        for (uint256 i; i < 5; ++i) {
+            vm.prank(registrar);
+            (bool ok, bytes memory ret) = address(g).call(cds[i]);
+            assertFalse(ok, "an unconfigured factory accepted");
+            assertEq(ret, abi.encodeWithSelector(IOpenFactory.ChainNotConfigured.selector));
+        }
+    }
+
+    function _adminWordOps(bytes32 u) internal view returns (bytes[5] memory c) {
+        IFactoryToken.Env memory e;
+        c[0] = abi.encodeCall(IAdmin.transferAdmin, (nid(bob), u));
+        c[1] = abi.encodeCall(OpenFactory.publishTokenEnv, (NORMAL, 9, u, e));
+        c[2] = abi.encodeCall(OpenFactory.publishDexEnv, (9, u, e));
+        c[3] = abi.encodeCall(OpenFactory.publishClassEnv, (4, 0, 9, u, e));
+        c[4] = abi.encodeCall(OpenFactory.revokeApproval, (bytes32(uint256(1)), u));
+    }
+
+    function _deployAndRenounceOps(bytes32 u) internal view returns (bytes[4] memory c) {
+        c[0] = abi.encodeCall(OpenFactory.deployTokenImplementation,
+            (NORMAL, 2, 1, type(NormalToken).creationCode, Catalogue.argsOn(f, NORMAL, 1, ""), u));
+        c[1] = abi.encodeCall(OpenFactory.deployDexImplementation, (3, 1, type(SCaaSDex).creationCode, "", u));
+        c[2] = abi.encodeCall(OpenFactory.deployImplementation,
+            (IOpenFactory.ReleaseId(4, 0, 1), 1, bytes4(0x01020304), bytes4(0x05060708), hex"00", "", u));
+        c[3] = abi.encodeCall(OpenFactory.renounceAdmin, (u));
+    }
+
+    function _chainBoundOps(bytes32 u) internal pure returns (bytes[5] memory c) {
+        c[0] = abi.encodeCall(OpenFactory.deprecateToken, (NORMAL, 1, u, "bug"));
+        c[1] = abi.encodeCall(OpenFactory.deprecateDex, (1, u, "bug"));
+        c[2] = abi.encodeCall(OpenFactory.deprecateRelease, (IOpenFactory.ReleaseId(4, 0, 1), u, "bug"));
+        c[3] = abi.encodeCall(OpenFactory.setTokenKindEnabled, (WRAPPED, false, u));
+        c[4] = abi.encodeCall(OpenFactory.setClassKindEnabled, (4, 0, true, u));
+    }
+
     function _kindOutOfRange(bytes memory callData) internal {
         (bool ok, bytes memory ret) = address(f).call(callData);
         assertFalse(ok, "kind past 13 accepted");
@@ -356,7 +491,7 @@ contract FactoryTest is Test {
     /// Every id 0-13 decodes on every entry that takes a kind; 14 does not.
     function test_everyKindIdDecodes() public {
         for (uint8 k; k <= 13; ++k) {
-            (bool ok,) = address(f).staticcall(abi.encodeWithSelector(f.kindEnabled.selector, k));
+            (bool ok,) = address(f).staticcall(abi.encodeWithSelector(f.tokenKindEnabled.selector, k));
             assertTrue(ok, "kindEnabled decodes");
             (ok,) = address(f).staticcall(abi.encodeWithSelector(f.latestVersion.selector, k));
             assertTrue(ok, "latestVersion decodes");
@@ -365,22 +500,22 @@ contract FactoryTest is Test {
             assertFalse(c);
             assertEq(bytes4(ret), IOpenFactory.VersionUnknown.selector, "a named refusal, not a decode failure");
         }
-        _kindOutOfRange(abi.encodeWithSelector(f.kindEnabled.selector, uint8(14)));
+        _kindOutOfRange(abi.encodeWithSelector(f.tokenKindEnabled.selector, uint8(14)));
         _kindOutOfRange(abi.encodeWithSelector(f.createToken.selector, uint8(14), uint64(1), abi.encode(_normal(alice)), bytes32(0)));
     }
 
     /// 6 and 7, the dropped `*_ZETHER_PQZ` ids, are never reused: no release can exist, so `createToken` is `VersionUnknown`.
-    function test_retiredKindsRefusedAtDeployImplementation() public {
+    function test_retiredKindsRefusedAtDeployTokenImplementation() public {
         bytes memory code = type(NormalToken).creationCode;
         for (uint8 k = 6; k <= 7; ++k) {
             IOpenFactory.TokenKind kind = IOpenFactory.TokenKind(k);
             vm.prank(registrar);
-            f.publishEnv(kind, 1, plainEnv(address(f), address(0), UID_, address(0), false)); // an env alone is no release
+            f.publishTokenEnv(kind, 1, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0), UID_, address(0), false)); // an env alone is no release
             vm.prank(registrar);
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindRetired.selector, kind));
-            f.deployImplementation(kind, 1, 1, code, "");
+            f.deployTokenImplementation(kind, 1, 1, code, "", EnvKit.uidOf(address(f)));
             vm.prank(registrar);
-            f.setKindEnabled(kind, true);
+            f.setTokenKindEnabled(kind, true, EnvKit.uidOf(address(f)));
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, kind, 1));
             f.createToken(kind, 1, abi.encode(_normal(alice)), "r");
         }
@@ -390,7 +525,7 @@ contract FactoryTest is Test {
     function test_regulatedKindsOffUntilPublished() public {
         for (uint8 k = 8; k <= 13; ++k) {
             IOpenFactory.TokenKind kind = IOpenFactory.TokenKind(k);
-            assertFalse(f.kindEnabled(kind));
+            assertFalse(f.tokenKindEnabled(kind));
             assertEq(f.latestVersion(kind), 0);
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, kind, 1));
             f.createToken(kind, 1, abi.encode(_normal(alice)), "r");
@@ -407,20 +542,20 @@ contract FactoryTest is Test {
         f.createTokenUnregistered(NORMAL, address(normalImpl), abi.encode(_normal(alice)), "u"); // control
     }
 
-    /// `deprecate` is immediate and refuses new tokens of that version (owner 2026-10-20); tokens already made keep
+    /// `deprecateToken` is immediate and refuses new tokens of that version (owner 2026-10-20); tokens already made keep
     /// working and the other versions stay creatable.
     function test_deprecate_refusesNewTokensOfThatVersion() public {
         vm.prank(alice);
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.deprecate(NORMAL, 1, "x");
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
+        f.deprecateToken(NORMAL, 1, EnvKit.uidOf(address(f)), "x");
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NORMAL, 9));
-        f.deprecate(NORMAL, 9, "x");
+        f.deprecateToken(NORMAL, 9, EnvKit.uidOf(address(f)), "x");
         vm.prank(alice);
         address before = f.createToken(NORMAL, 1, abi.encode(_normal(alice)), "before");
         vm.prank(registrar);
-        f.deprecate(NORMAL, 1, "bug");
-        assertTrue(f.isDeprecated(NORMAL, 1));
+        f.deprecateToken(NORMAL, 1, EnvKit.uidOf(address(f)), "bug");
+        assertTrue(f.isTokenDeprecated(NORMAL, 1));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionDeprecated.selector, NORMAL, 1));
         f.createToken(NORMAL, 1, abi.encode(_normal(alice)), "after");
@@ -447,10 +582,10 @@ contract FactoryTest is Test {
                 assertEq(address(uint160(uint256(logs[i].topics[1]))), t);
                 assertEq(address(uint160(uint256(logs[i].topics[2]))), alice);
                 assertEq(uint256(logs[i].topics[3]), uint256(NORMAL));
-                (uint64 v, address impl, uint256 feat, uint256 locked, address owner, address[] memory us) =
-                    abi.decode(logs[i].data, (uint64, address, uint256, uint256, address, address[]));
-                assertEq(abi.encode(v, impl, feat, locked, owner, us.length),
-                    abi.encode(uint64(1), address(normalImpl), uint256(7), uint256(5), address(0), uint256(0)));
+                (uint64 v, address impl, uint256 feat, uint256 locked, address[] memory us) =
+                    abi.decode(logs[i].data, (uint64, address, uint256, uint256, address[])); // no owner (3r R1)
+                assertEq(abi.encode(v, impl, feat, locked, us.length),
+                    abi.encode(uint64(1), address(normalImpl), uint256(7), uint256(5), uint256(0)));
                 // not `cfg.lockedFeatures` (0): the token stores `locked | (features & ALWAYS_LOCKED)`
                 assertEq(locked, NormalToken(t).lockedFeatures());
             }
@@ -559,7 +694,7 @@ contract FactoryTest is Test {
         }
         // its clone's `chain_uid` must be this factory's after `initialize` (chain-neutral spec §3.2: unvetted code)
         LyingChainImpl other = new LyingChainImpl(address(f));
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("x")));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.ChainUidMismatch.selector, UID_, keccak256("x")));
         f.createTokenUnregistered(NORMAL, address(other), abi.encode(_normal(alice)), "u2");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, WRAPPED, 0));
         f.createTokenUnregistered(WRAPPED, address(mine), abi.encode(_wrapper(_two())), "u3");

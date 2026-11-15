@@ -7,7 +7,9 @@ both proof systems), the precompile boundary `pqz-ffi` and the frozen vectors ar
 [serialization v1](#serialization)), and the token contracts are built on the test chains, including the state redesign of plan 5h
 part A (ciphertexts in state, unbounded ordered queue, proof-free shield, `SHIELD_POOL`, `mtx*` names; today's parameters, §7);
 the 16k parameters and their one `proofSystemId` bump (part B), node integration and clients are not (classical Zether is BUILT,
-unaudited, [CTR-ZTH-52](zether.md#CTR-ZTH-52)). Every size, proof length and gas figure below marked *estimate* is replaced by
+unaudited, [CTR-ZTH-52](zether.md#CTR-ZTH-52)). The PQZ verifier mode (group 3f, [§9.5](#pqz-verifier-mode)) is BUILT in the contracts
+(`OFFCHAIN` tokens on chains without the precompile), and its node rows, `clientkeys` and the PQZ verifier (off-chain) are BUILT
+(T46–T48). Every size, proof length and gas figure below marked *estimate* is replaced by
 measurement before the parameters freeze. Notation: `R = Z[X]/(X^64 + 1)`, `R_q = R/qR`; `s`, `r`, `e` are vectors in
 `R^32` (2048 integer coefficients); `a^T b` for vectors in `R_q^32` is `Σ_j a_j·b_j ∈ R_q`; `x[i]` is coefficient `i`
 of a ring element; `‖·‖` is the ℓ2 norm over all integer coefficients (centred representatives); `be8(x)` = 8-byte
@@ -38,6 +40,7 @@ big-endian; everything else as in [zether.md](zether.md) (`‖`, `be32`, `u8`, A
    - 7.9 [Disclosure](#disclosure)
    - 7.10 [Authorization check](#authorization-check)
    - 7.11 [Meta-transactions](#711-meta-transactions)
+   - 7.12 [PQZ proof path](#pqz-proof-path)
 8. [Proof engine `pqz-core`](#8-proof-engine-pqz-core)
    - 8.1 [Serialization v1](#serialization)
 9. [On-chain verifier](#9-on-chain-verifier)
@@ -45,6 +48,7 @@ big-endian; everything else as in [zether.md](zether.md) (`‖`, `be32`, `u8`, A
    - 9.2 [Precompiles `MLDSA44` and `MLDSA65`](#92-precompiles-mldsa44-and-mldsa65)
    - 9.3 [Gas model](#93-gas-model)
    - 9.4 [Contracts](#94-contracts)
+   - 9.5 [PQZ verifier mode (OFFCHAIN)](#pqz-verifier-mode)
 10. [Chain integration (Nethermind precompile on the SCaaS testnet)](#10-chain-integration-nethermind-precompile-on-the-scaas-testnet)
 11. [Provers](#11-provers)
 12. [Threats](#threats)
@@ -64,12 +68,12 @@ module-lattice assumptions:
 |---|---|---|
 | Balance encryption | lifted ElGamal on bn254 / BLS12-381 G1 | additive module-LWE, BFV-style scaling `Δ`, digit-packed plaintext ([encryption](#encryption)) |
 | Validity proofs | Σ-protocol + 2 Bulletproofs (`n_v = n_b = 64`) | one LNP22 lattice proof per op ([proof engine](#proof-engine)): key, encryption, decryption and integer-carry relations with exact norms |
-| Verification | Solidity + bn254/BLS precompiles | native precompile on the SCaaS testnet (`PQZ`, `0x5caa5…0f01`), same PQZL core as the prover: the C core today, the byte-equal Rust crate `pqzl` once its port is verified (owner 2026-10-18) ([CTR-PQZ-09](#CTR-PQZ-09), [CTR-PQZ-10](#CTR-PQZ-10)) |
+| Verification | Solidity + bn254/BLS precompiles | per token at creation ([CTR-PQZ-27](#CTR-PQZ-27)): `PRECOMPILE`, a native precompile on the SCaaS testnet (`PQZ`, `0x5caa5…0f01`), same PQZL core as the prover: the C core today, the byte-equal Rust crate `pqzl` once its port is verified (owner 2026-10-18) ([CTR-PQZ-09](#CTR-PQZ-09), [CTR-PQZ-10](#CTR-PQZ-10)); or `OFFCHAIN`, a verdict signed by the token's verifier UA, which replaces soundness by trust in that UA ([§9.5](#pqz-verifier-mode), threat T27); confidentiality on an `OFFCHAIN` token depends on its key class ([CTR-PQZ-37](#CTR-PQZ-37)): `offchain-shared` and an `offchain-token` with the sealed opening expose no key if the wallet follows the holder check, an `offchain-token` without it exposes that token's key to its verifier (accepted, [ARCH-POS-13](../decisions.md#ARCH-POS-13)'s Change) |
 | Authorization | the key is the UA; its spends need the proof alone (the legacy registry's 8 `AuthScheme`s are in `legacy/ua3/`) | the PQ signing UA that carries the PQZ key: `mldsa65` (default), `mldsa44`, `fndsa512` or a PQ-dominant `msig` (hybrid, t-of-n), signing `authDigest` through `requireAuthorized` ([CTR-PQZ-12](#CTR-PQZ-12)) |
 | Relaying | ERC-20 on the one base `ERC20MetaTx`: allowlisted self-calls through `mtxExecute`, outer fee `NONE`/`FIXED` from the public balance, `envelopeBinding` in the statement ([CTR-ZTH-34](zether.md#CTR-ZTH-34); built: `ZetherMetaTx` with `OP_ZTRANSFER`/`OP_ZBURN`) | the same base, self-call and rules ([CTR-PQZ-15](#CTR-PQZ-15), [CTR-PQZ-21](#CTR-PQZ-21)), plus the UA path's `UAMetaTransaction` so a PQ UA pays the outer fee |
 | Decryption | BSGS discrete log, device cache, `zether-read-balance` | direct rounding, microseconds, exact; no BSGS, no cache needed ([CTR-PQZ-16](#CTR-PQZ-16)) |
 | State | points in storage | every ciphertext in contract state (one SSTORE2 op blob per debit, one slot per pending entry, a materialised `acc`), an unbounded ordered pending queue; public amounts (`mtxShield`) as TRIVIAL queue entries, value held in `SHIELD_POOL`; public keys in SSTORE2 ([CTR-PQZ-07](#CTR-PQZ-07), [CTR-PQZ-06](#CTR-PQZ-06)) |
-| Chains | any chain with the BLS12-381 precompiles ([CTR-ZTH-52](zether.md#CTR-ZTH-52)) | no chain-id allowlist (owner ruling 2026-10-31): a constructor self-test through the precompile **and** the registry's `chain_uid` in every statement ([CTR-PQZ-01](#CTR-PQZ-01), [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
+| Chains | any chain with the BLS12-381 precompiles ([CTR-ZTH-52](zether.md#CTR-ZTH-52)) | no chain-id allowlist (owner ruling 2026-10-31): `PRECOMPILE` tokens need the constructor self-test through the precompile, `OFFCHAIN` tokens run on any EVM chain (never Hedera); both carry the registry's `chain_uid` in every statement ([CTR-PQZ-01](#CTR-PQZ-01), [CTR-PQZ-27](#CTR-PQZ-27), [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
 
 **Cost.** Ciphertext 16,512 B, public key 16,384 B at `n2048-kmax1024` (18,432 / 20,480 / 22,528 B at the other sets), transfer proof 42,762 B in PQZL and ≈ 231 KB in PQZH (the
 frozen vectors, [sizes](#44-sizes)). A PQZL transfer is ≈ 77 KB of
@@ -95,29 +99,32 @@ and nonces).
 <a id="CTR-PQZ-01"></a>**CTR-PQZ-01** — **Scope and gate** (owner). PQZ is a separate token class (`PqzToken`, plus kind
 `0x0142` in the [UA registry](accounts.md#registry)), never an upgrade of `ZetherToken`.
 No chain-id allowlist (owner ruling 2026-10-31: PQZ is open on every chain that meets the requirements): the gate is
-capability only — every constructor/`initialize` runs the precompile self-test ([self-test](#self-test)), whatever the
+capability only — every `PRECOMPILE` token's `initialize` runs the precompile self-test ([self-test](#self-test)), whatever the
 chain id; a chain without the precompile (today every chain but the SCaaS testnet), or with one built for another set,
-fails it. **And** the chain is identified by `(chainid, chain_uid)` ([NET-ALL-22](../networks/README.md#NET-ALL-22)):
+fails it. An `OFFCHAIN` token ([CTR-PQZ-27](#CTR-PQZ-27)) runs no self-test and never calls the precompile, on any chain: its
+proofs are accepted on its verifier UA's signed verdict, with the trust model stated there. **And** the chain is identified by `(chainid, chain_uid)` ([NET-ALL-22](../networks/README.md#NET-ALL-22)):
 `PqzToken.initialize` copies `registry.chainUid()` (the genesis hash, a registry constructor immutable, `≠ 0`) into an
 immutable `chainUid`, which enters every statement and `entryRef`, so no proof, authorization or disclosure verifies on
 another chain with the same chain id; the UA registration PoP is portable and carries no chain (UA-8, [CTR-UA-07](accounts.md#CTR-UA-07)); the chain binding lives in the statements and tokens above and in the registry's `UAAuth` domain.
 
 The node binds registry, `chainUid()` and the RPC genesis hash per chain profile and refuses a mismatch.
-`OpenFactory.kindEnabled(NORMAL_PQZ / WRAPPED_PQZ)` starts `false` (`setKindEnabled`, plan 5g-Z2; was `pqzEnabled`). NatSpec and docs: **UNAUDITED**. The SCaaS testnet is
+`OpenFactory.tokenKindEnabled(NORMAL_PQZ / WRAPPED_PQZ)` starts `false` (`setTokenKindEnabled`, plan 5g-Z2; was `pqzEnabled`). NatSpec and docs: **UNAUDITED**. The SCaaS testnet is
 the owner's named target and runs our client. The owner moved the private chain off its former id 9000 because 9000
 is also Evmos Testnet, a public chain; 7622 is not assumed unique either, hence `chain_uid`. The self-test is what
-keeps PQZ off chains whose client is not ours. **Public chains** (owner, 2026-10-08): PQZ is meant for public
-chains too, and the route there is a lattice-verification precompile **on that chain**, which SCaaS waits for — no
+keeps `PRECOMPILE` tokens off chains whose client is not ours. **Public chains** (owner, 2026-10-08; 2026-11-06, O1): PQZ is
+meant for public chains too, and the route there is a lattice-verification precompile **on that chain**, which SCaaS waits
+for, **or `OFFCHAIN` mode** with [CTR-PQZ-27](#CTR-PQZ-27)'s trust model — no
 Solidity verifier split over transactions, no STARK-wrapped proof and no SCaaS appchain is planned. Once a chain
 offers such a precompile and passes the self-test, PQZ runs there with no code change; the price calibration of its
 precompile ([CTR-PQZ-11](#CTR-PQZ-11)) is that chain's part.
 
 **Release gates before any production or commercial use** (owner): **licence/patent clearance**, gate **G-LIC** (LaZer is MIT without
 an explicit patent grant; LNP22-family techniques come from IBM Research; GMP/MPFR are LGPL and must be absent from
-every shipped artifact after the engine rewrite; plus the chosen ML-DSA implementations' licences) **and** an
-independent cryptographic audit. Development and research continue without them; nothing holds real funds until both are
-recorded as passed. Classical Zether is a separate item with its own rule
-([CTR-ZTH-52](zether.md#CTR-ZTH-52)).
+every shipped artifact after the engine rewrite; plus the chosen ML-DSA implementations' licences) **and** a
+cryptographic audit ([ARCH-POS-14](../decisions.md#ARCH-POS-14)). Development and research continue without them; nothing holds
+real funds until both are recorded as passed. Classical Zether is a separate item with its own rule
+([CTR-ZTH-52](zether.md#CTR-ZTH-52)). `OFFCHAIN` mode discharges neither gate: G-LIC and the cryptographic audit apply to it as
+to `PRECOMPILE` (the PQZ verifier (off-chain) runs the same `pqz-ffi` verifier).
 
 The licence gate **G-LIC**: legal review of LaZer (MIT, no patent grant) and any code retained from it; LNP22-family IP (IBM
 Research); GMP (LGPLv3/GPLv2) and MPFR (LGPLv3): confirm from link maps that no shipped artifact (`libpqz.so`, WASM
@@ -515,6 +522,8 @@ ring rotation `X^c·pk_a` under another UA passes it and can meet an auditor cop
 register one (the `R_REG` proof of possession needs `s_a`), and what it opens the auditor already decrypts, so related
 keys are out of scope (review of fix part b, M-3). If the estimate misses the target, the fallback is **split randomness**: `(r, e1)` shared by `v_t` and `v_a` only, and the sender's `v_f` under its own `(r_f, e1_f)` and `u_f` (+16,384 B, ≈ +0.5 M gas per transfer), so hints only open ciphertexts of amounts the hinting parties already know.
 
+**Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** On an **opening token** (`pqzOpening = true`) split randomness is the rule, not the fallback: the sender's `v_f` under its own `(r_f, e1_f)` and `u_f`, the legs under `seed_leg`, relation `R_TXS` and `PQZL_SPLIT_ID` ([CTR-PQZ-38](#CTR-PQZ-38)); the hint assumption above is not used there. Tokens without the opening (`registry`, `offchain-token` with the opening off) keep the shared `(r, e1)` as stated.
+
 KKPP-style mKEM security holds for honestly generated keys. `R_REG` proves only the ℓ2 norms of `(s, e)`, not their
 distribution, and every recipient learns its own decryption-noise term. For a registered `pk = A s + e` the recipient
 decrypts `d` and computes, per plaintext coefficient `i < 16`, the **integer** (centred, `|·| ≤ B_FRESH`)
@@ -601,7 +610,8 @@ change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the
   - **PQZH Ligero v1** (`pqz-core/pqzh/ligero/src/transcript.rs`): a Keccak-256 chain, `state =
     keccak256("SCAAS-PQZH-LIGERO-V1" ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt)`; `absorb(x)`: `state = keccak256(state ‖ x)`;
     squeeze: `keccak256(state ‖ 0xff ‖ be64(ctr))` (`ctr` from 0 after each absorb) gives four 8-byte big-endian
-    words, first word first; an `F_q` element is a word masked to 42 bits, drawn again if `≥ q`; an index in
+    words, first word first; an `F_q` element is a word masked to the set's `LOG2Q` bits (42 at `n2048-kmax1024`, 46 at
+    `n2304-kmax4096`, 50 at `n2560-kmax16384`), drawn again if `≥ q`; an index in
     `[0, n)` is a word masked to `2^⌈log2 n⌉ − 1`, drawn again if `≥ n`. Order: absorb the Merkle root; draw `a_i`,
     `b_i` (one `F_{q^4}` per witness row each), `c_lin`, `c_quad`, `ρ`, `r_t` (one per multiplication triple); absorb
     the bytes of `w ‖ q ‖ h`; grinding: `keccak256(state ‖ "PoW" ‖ be64(nonce))` must start with 16 zero bits; absorb
@@ -636,10 +646,10 @@ Zether worker and `pqz-cli` open (`sealPqKey` / `openPqKey`). PQZ adds no signin
 
 | No. | Name (tag `scaas.ua.<name>.v1`) | Key | keyHash group | Proof | Verifier (EVM) | Chains |
 |---|---|---|---|---|---|---|
-| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(signerUA, kind, pqzKeyHash, kemRecordHash))` (`PURPOSE_PQZ_KEY` and `pqzKeyDigest` for a key added by `setPqzKey`) | `UAPqzVerifier` → precompile `0x…0F01` op 3 | SCaaS testnet ([CTR-PQZ-01](#CTR-PQZ-01)) |
+| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(signerUA, kind, pqzKeyHash, kemRecordHash))` (`PURPOSE_PQZ_KEY` and `pqzKeyDigest` for a key added by `setPqzKey`) | `PqzKeyVerifier` → precompile `0x…0F01` op 3 | SCaaS testnet ([CTR-PQZ-01](#CTR-PQZ-01)) |
 
 **Record storage.** The signer's UA `Record` is unchanged; the PQZ key is a second SSTORE2 pointer beside it
-(`recordOf(ua)` returns it, 0 = none; `UAPqzVerifier` refuses any key that is not exactly `PqzCt.PK` bytes with every
+(`recordOf(ua)` returns it, 0 = none; `PqzKeyVerifier` refuses any key that is not exactly `PqzCt.PK` bytes with every
 coefficient `< q`, so the registry hard-codes no length). `UARegistered` carries the pointer, not the key (≈ 0.13 M gas of
 log data saved). Registration total: [gas](#gas). Wallets read the key with `eth_getCode(pointer)` minus the leading
 `STOP` byte. The holder is also in the registry's list `0x0142` ([CTR-UA-29](accounts.md#CTR-UA-29)), the set PQZ decoys
@@ -658,12 +668,20 @@ a classical-dominant `msig` — reverts `UAPqzHolder`. **Authorization bound (re
 override):** an `msig` holder must also be usable — `register` reverts `UAPqzHolder` unless its worst-case authorization
 (register step 4's bound `w`: the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` + `MSIG_ACCEPTED_GAS` + the caller's hold; plus `w / 63 + SigCheck.GAS_MARGIN`, the hold of a gen-2 registry that forwards the authorization to this one; `setPqzKey` on a gen-2 host counts the native slots of a record gen 1 holds at 400 k, gen 1's clone cap, as a gen-1 inner's) plus
 `PqzSet.PQZ_DEBIT_MIN_GAS` plus 16 gas per byte of the authorization's calldata is at most 2^24 (the per-transaction cap of EIP-7825, not a chain's own block limit), and so is `PQZ_DEBIT_MIN_GAS` + 64 per byte, the EIP-7976 floor. The bytes `a` are the largest `MemberSig[]` a quorum signs, both levels: a signing slot `192 + ⌈sig / 32⌉ × 32`, an `msig` slot 192 and its leaves, each `128 + ⌈sig / 32⌉ × 32`, a PQ signature at its size, every classical kind and native at 1,024 B. The debit figure holds one holder signature, which is counted again, on the safe side.
-`PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: the full relayed transaction of the cheapest PQZL debit
-(burn 1 under LOG) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]) — 7,298,111 at
-`n2048-kmax1024`, 7,513,388 at `n2304-kmax4096`, 7,726,229 at `n2560-kmax16384`, 7,968,014 at `n2816-kmax65536`, measured
+<a id="debit-min-gas"></a>`PQZ_DEBIT_MIN_GAS` is generated from `set.toml` `debit_min_gas`: **at least** the full relayed transaction of the
+cheapest PQZL debit (burn 1 under LOG) on the costlier relay path (`uaExecute`, ML-DSA-65 fee UA at 68,006 gas [estimate]),
+**rounded up to the next multiple of 1,000** (owner 2026-11-12 option (b), [CTR-PQZ-12](#CTR-PQZ-12)'s Change;
+`test_debitMinGas_isTheCheapestLogDebit` holds `set >= measured`, a multiple of 1,000, less than 1,000 above; BUILT) —
+7,300,000 at `n2048-kmax1024`, 7,516,000 at `n2304-kmax4096`, 7,729,000 at `n2560-kmax16384`, 7,970,000 at
+`n2816-kmax65536` (owner 2026-11-14, [CTR-PQZ-12](#CTR-PQZ-12)'s Change: measured 7,299,953 / 7,515,239 / 7,728,088 / 7,969,882
+after the three-key build, +511 at each set; before that measured 7,299,442 / 7,514,728 / 7,727,577 / 7,969,371 on branch `ua-mtx-fix2-contracts`, +44 at each
+set: the face selectors `renounceAdmin(bytes32)` and `transferAdmin(bytes32,bytes32)`, the payee-fee rename, the DEX merge;
+the pins were 7,299,398 / 7,514,684 / 7,727,533 / 7,969,327, equal to the measurement), measured before that
 on the body-module build ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30); owner 2026-11-09, T66b spec §11 (j):
 `test_debitMinGas_isTheCheapestLogDebit` at each set; before it 7,258,188 / 7,468,120 / 7,675,561 / 7,910,855: the stub to
-P and the self-call's stub to Q add two frames). So the worst-case authorization may not exceed about 9.48 M / 9.26 M / 9.05 M /
+P and the self-call's stub to Q add two frames; moved +963 / +972 / +980 / +989 after rounds 3r + 3s + 3t, owner
+2026-11-11, from 7,298,111 / 7,513,388 / 7,726,229 / 7,968,014; moved +324 at each set after the Fable review fixes,
+owner ruling 2026-11-11 "move the pin", from 7,299,074 / 7,514,360 / 7,727,209 / 7,969,003). So the worst-case authorization may not exceed about 9.48 M / 9.26 M / 9.05 M /
 8.81 M, less its calldata term (112,640 gas for two ML-DSA-65 slots; `test_register_msigHolderBoundary`); `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
 `mldsa65` quorum on the precompile is not. Single-key holders are unaffected (their cap is ≤ 2.5 M). A PQ-eligible `msig` registers with its m-of-n `pop`, so nobody
 can fix it without a key. One key = one purpose: the PQZ key decrypts and proves, the signer's key authorizes; the UA's
@@ -714,19 +732,23 @@ with the kind tag in `info` instead of a `kindNo'` level, because PQ seeds are n
 State layout of plan 5h (spec [`2026-10-20-pqz-state-redesign.md`](../superpowers/specs/2026-10-20-pqz-state-redesign.md) §5.1,
 built in `src/pqz/PqzCore.sol`, ERC-7201 namespace `scaas.pqz`, decisions D1–D9, D18, D24 in [decisions.md](../decisions.md)).
 All ciphertext bytes an account needs are in contract state; logs and calldata are a convenience
-([CTR-PQZ-07](#CTR-PQZ-07)).
+([CTR-PQZ-07](#CTR-PQZ-07)). Since 3g the state below is kept per `(UA, key version, token)` and `sendCounter` per UA
+([CTR-PQZ-31](#CTR-PQZ-31)).
 
 | Slot | Type | Changed by | Role |
 |---|---|---|---|
 | `pendingCount` | uint64 | every credit and every appended shield entry (+1) | length of the ordered queue; **unbounded** |
 | `rolled` | uint64 | rollover (+n′), debit (→ `p`) | entries `< rolled` are inside `acc` |
 | `floor` | uint64 | debit (→ `p`), rollover (raised together with `cleared`) | entries `< floor` were consumed by the last debit; a debit needs `floor ≤ p` |
-| `cleared` | uint64 | debit, rollover | pending slots `< cleared` are deleted (`cleared ≤ floor ≤ rolled ≤ pendingCount`) |
-| `pending[i]` | one slot: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` | credit, shield; deleted below `rolled − INLINE_MAX` | where the credit's `u` and `v_j` sit inside the op blob (byte offsets) and the block it was made in; **TRIVIAL entry** (a shield): `blob = 0`, `vOff = 0`, the amount in the low 64 bits of the blob field |
+| `cleared` | uint64 | debit, rollover | pending slots `< cleared` are consumed (`cleared ≤ floor ≤ rolled ≤ pendingCount`); since 3h no slot is deleted ([CTR-PQZ-33](#CTR-PQZ-33)) |
+| `pending[i]` | one slot: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` | credit, shield; kept for good since 3h ([CTR-PQZ-33](#CTR-PQZ-33); before 3h deleted below `rolled − INLINE_MAX`) | where the credit's `u` and `v_j` sit inside the op blob (byte offsets) and the block it was made in; **TRIVIAL entry** (a shield): `blob = 0`, `vOff = 0`, the amount in the low 64 bits of the blob field |
 | `acc` | `accBlob(160)`, the offsets of `u_0` and `v_f` in it, `accUnits` (uint32), `flags` | debit (→ a reference to the debit's blob, `accUnits = 1`), rollover (→ materialised) | the account's encrypted balance; flags `1` MATERIALISED, `2` / `4` the two prepared halves of `accWords` |
 | `accWords[ACC_WORDS]` | `⌈CTP / 32⌉` slots (339 / 417 / 504 / 598 per set, [stored form](#stored-form)) | `mtxPrepareAcc` (placeholder), rollover (the sum) | the materialised `acc`, packed: each slot `not(stream word)`, so no slot is ever 0 (a full window holds at least one whole `PACK_BITS`-bit field and `2^PACK_BITS − 1 ≥ q`; the last slot's slack, `CTP mod 32` bytes, is less than one field at `n2560-kmax16384` and is stored as ones, `not` of the zero padding); overwritten in place |
 | `accHash` | bytes32 | rollover | `keccak256` of the materialised `acc`'s packed stream (`CTP` bytes); the check of the optional calldata hint (that stream), meaningful only while `flags & 1` |
 | `sendCounter` | uint64 | debit (+1) | in the statement; replay protection; [CTR-PQZ-19](#CTR-PQZ-19) |
+| `lastDebit` | uint64 (account inner slot 2; `accHash` 3, pending 4, `accWords` 5) | debit | the `sendCounter` of the account's last debit (3h, [CTR-PQZ-33](#CTR-PQZ-33)) |
+| `debitRec[ua][k]` | `PqzStorage` slot 19, `w0`, and `w1` at +1 when wide | debit | one record per debit `k`: `w0 = prevBlob(160) ‖ p(64) ‖ Δp(16) ‖ proofStore(8) ‖ flags(8)` (RECORD = 1, WIDE = 2), `w1 = shieldIn(64) ‖ keyVersion(64) ‖ prevCounter(64) ‖ 0` only when wide (a `shieldIn`, a key version other than 0, or a predecessor other than `k − 1`) ([CTR-PQZ-33](#CTR-PQZ-33)) |
+| `proofStore` | uint8, slot 0 byte 23 (beside `pqzVerifyMode` at 22) | `init`, `setProofStore` | NONE (0) or LOG (1) ([CTR-PQZ-35](#CTR-PQZ-35)) |
 | `entryPtr[entryRef]`, `memos[entryRef]` | address, bytes | transfer | the **op blob** of the transfer (both storage modes) and, on commit-reveal, the sender memo ([CTR-PQZ-23](#CTR-PQZ-23)) |
 
 An account that never debited has `acc = Trivial(0)` (no blob, `accUnits = 0`). The op blob is one SSTORE2 per debit,
@@ -766,7 +788,8 @@ unwraps, `Σ balanceOf == totalSupply`, escrow `underlying.balanceOf(this) ≥ t
 
 <a id="credit-cap"></a>
 <a id="CTR-PQZ-06"></a>**CTR-PQZ-06** — **No credit is refused: an unbounded ordered queue, a capped `acc`, public amounts as
-TRIVIAL entries, two fees.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; built in part A on today's parameters.)
+TRIVIAL entries, two fees and the verifier fee.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; built in part A on today's
+parameters; the verifier fee: owner 2026-11-11, [CTR-PQZ-36](#CTR-PQZ-36), group 3t.)
 
 - **Credits.** An op 1 or op 7 credit appends one pending slot (≈ 26 k gas, ≈ 46 k for an account's first) and never reverts
   for the receiver's state: `RefreshRequired` and every cap check on a credit are gone, `pendingCount` is unbounded.
@@ -778,7 +801,7 @@ TRIVIAL entries, two fees.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; 
 - **Cap on `acc`.** A rollover takes `n′ = min(n, K_MAX − 1 − accUnits)` entries and reverts `CapReached(ua)` when
   `n′ = 0`; a debit re-encrypts the balance fresh and resets `accUnits` to 1, so a refresh (a burn of 0, [§7.5](#75-burn-and-refresh))
   frees a full account, which can always refresh with `p = rolled`. Head-of-line: a real credit behind `x` decoys becomes
-  spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 80` at `n2304-kmax4096`: 10,000 queued decoys take 125 rollovers, run by keepers,
+  spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 64` at `n2304-kmax4096`: 10,000 queued decoys take 157 rollovers, run by keepers,
   the owner or a relayer).
 - **Public amounts never become ciphertexts.** `mtxShield` appends (or merges into) a **TRIVIAL entry** of the receiver's
   queue ([§7.3](#73-shield)); a TRIVIAL entry is the ciphertext `u = 0, v = Δ·digits(amount)`: one `K_MAX` unit, zero noise,
@@ -788,10 +811,13 @@ TRIVIAL entries, two fees.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; 
   queue (`plainPending`, removed) is rejected for the same reason: a rollover between prove and submit would make the
   contract's `T` differ from the proof's. `shieldIn` (formerly `plainUsed`) is the same-call top-up: public units moved from
   the signer into `SHIELD_POOL` and added as one `Trivial(digits(shieldIn))` term of `T`; the relation is unchanged.
-- **Fees (owner 2026-10-20), both paid out of `SHIELD_POOL` to public UA-ledger balances.** `txFee` = `confidentialFee`,
-  per transaction on any op that names a beneficiary, to that beneficiary. `decoyFee`, op 7 only: an explicit
+- **Fees (owner 2026-10-20; group 3t), all paid out of `SHIELD_POOL` to public balances.** `txFee` = `confidentialFee`,
+  per transaction on any op that names a beneficiary, to that beneficiary. `verifierFee`, `OFFCHAIN` tokens of kinds 4, 5,
+  12, 13 only ([CTR-PQZ-36](#CTR-PQZ-36)): the token's current fee, once per proof-carrying debit (op 1, op 7, burn,
+  refresh, unwrap), to the current verifier UA. `decoyFee`, op 7 only: an explicit
   sender-chosen payload word `d ≥ minDecoyFee`, the same `d` to **every** leg (the real recipient included, so it reveals
-  no decoy); the statement's `fee` word is `txFee + M·d`, so the proof binds `d`. `minDecoyFee` is immutable at
+  no decoy); the statement's `fee` word is `txFee + verifierFee + M·d`; the proof binds `d` with the envelope's signature
+  relayed and the binding word's `verifierFee` direct ([CTR-PQZ-25](#CTR-PQZ-25)), so the word's split is bound on both forms. `minDecoyFee` is immutable at
   `initialize`, may be 0, has no chain floor (`ConfidentialConfig.multiLegFee` is renamed `minDecoyFee`; the Zether
   kinds take the same rule on their multi-recipient format, [zether.md §7](zether.md#CTR-ZTH-37)). `d < minDecoyFee` or `d ≥ 2^64` reverts `DecoyFeeOutOfRange(d, min)`. Op 1 never pays a decoy fee
   and **shields are free** (gas only; a tx fee only when relayed). A fee needs a registered beneficiary with a UA-ledger
@@ -828,8 +854,9 @@ the 5h Task 3 fix; the earlier 4 KiB margin target was dropped by the owner, the
 
 <a id="limits"></a>
 <a id="CTR-PQZ-17"></a>**CTR-PQZ-17** — **Limits.** `MAX_TOTAL_SHIELDED = 2^62`; transfer and burn amounts `< 2^64` (16
-base-16 digits); `confidentialFee < 2^64`, `d < 2^64` and `confidentialFee + 8·minDecoyFee < 2^64` and `< maxShielded` at
-`initialize` (`BadInit`); `totalShielded ≤ maxShielded` (it equals `balanceOf(SHIELD_POOL) / shieldScale`); `shieldScale`
+base-16 digits); `confidentialFee < 2^64`, `d < 2^64` and `confidentialFee + verifierFeeMax + 8·minDecoyFee < 2^64` and
+`< maxShielded` at `initialize` (`BadInit`; `verifierFeeMax` 0 on every token but an `OFFCHAIN` one, group 3t,
+[CTR-PQZ-36](#CTR-PQZ-36); the cap, so every value the setter can write keeps the row); `totalShielded ≤ maxShielded` (it equals `balanceOf(SHIELD_POOL) / shieldScale`); `shieldScale`
 as classical ([CTR-ZTH-04](zether.md#CTR-ZTH-04)). No BSGS bound any more; 2^62 keeps `b' + v + fee < 2^64` for honest
 states and values in signed 64-bit for clients. The classical 2^54 rationale (the BSGS decryption bound,
 [CTR-ZTH-26](zether.md#CTR-ZTH-26)) does not carry over.
@@ -839,7 +866,7 @@ states and values in signed 64-bit for clients. The classical 2^54 rationale (th
 `register(kind, keyData, attrs, pop, pqzPop)` of a PQ signer follows the UA register steps
 ([registry](accounts.md#registry)); PQZ-specific content of each step (only when `attrs.pqzKey` is given):
 
-1. Verifier slot: a generation deployed with `UAPqzVerifier` in slot `0x0142` ([CTR-UA-05](accounts.md#CTR-UA-05),
+1. Verifier slot: a generation deployed with `PqzKeyVerifier` in slot `0x0142` ([CTR-UA-05](accounts.md#CTR-UA-05),
    [CTR-UA-23](accounts.md#CTR-UA-23)) checks the proof; with the slot empty the key is accepted unproven (`proven = false`). A gen 2 whose
    gen 1 enables `0x0142` refuses a PQZ key (`UAKindDisabled(0x0142)`, before the holder check). A generation enables `0x0142` for at most one generation per chain.
 2. Key data of the signer as for its kind (`UAKeyData`). The PQZ key's length is one of the four sets' `PqzCt.PK` (`UAKeyData(0x0142)`, step 5); every coefficient `< q` is checked by the verifier in step 7.
@@ -847,9 +874,9 @@ states and values in signed 64-bit for clients. The classical 2^54 rationale (th
 4. `keyHash = keccak256(GROUP("pqz-mlwe") ‖ pqzKey)`; free here and in the predecessor (`UAKeyInUse`) only when the key becomes proven (step 7 or `storePqzPop`).
 5. Holder rule of [CTR-PQZ-12](#CTR-PQZ-12) (`UAPqzHolder`); `attrs.pqzPopHash` ≠ 0 and not the hash of an empty proof (`UAPqzPopHash`); `pqzPop`, if given, hashes to it.
 6. The signer's PoP over `registrationDigest(ua, kind, pqzKeyHash, kemRecordHash, pqzPopHash)` with its kind's verifier; a PQ-eligible `msig` signs with its m-of-n.
-7. PoP of the PQZ key: `UAPqzVerifier.verifyPop(pk, message, pqzPop)` = `PQZ(OP_REGISTER, stmt ‖ pop) == 1` with
+7. PoP of the PQZ key: `PqzKeyVerifier.verifyPop(pk, message, pqzPop)` = `PQZ(OP_REGISTER, stmt ‖ pop) == 1` with
    `stmt = opTag(REGISTER) ‖ proofSystemId ‖ message ‖ pk` (prefix as [encodings](#encodings); `proofSystemId` is an
-   immutable of `UAPqzVerifier`) and `message = uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash))` — relation
+   immutable of `PqzKeyVerifier`) and `message = uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash))` — relation
    `R_REG`: `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`, the message absorbed into the statement. `portableRecordDigest` is
    the typed `UAPortableRecord{ua, kind, pqzKeyHash, kem}` ([CTR-UA-07](accounts.md#CTR-UA-07)): it binds the signer's id and
    the attributes, not a chain, a registry or the caller, so anyone may submit on any chain, nobody can strip or swap the key,
@@ -866,7 +893,43 @@ transaction's calldata commits the KEM key by hash ([CTR-UA-32](accounts.md#CTR-
 
 The signer's `register` without a PQZ key is the plain UA registration; it may add the key later, once, by the signed `setPqzKey` ([CTR-UA-16](accounts.md#CTR-UA-16); the PQZ key is not in the id).
 
-No rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): a new key is a new UA plus a confidential transfer to it.
+<a id="key-versions"></a>**Key versions** (group 3g, spec [`2026-11-06-pqz-key-versions.md`](../superpowers/specs/2026-11-06-pqz-key-versions.md);
+contracts BUILT on branch `ua-mtx-merge`: T51 `3f80f072`, T52 `7e8e2e6f`, `612971bd`, T53 `455f3e04`, T54; invariants J1–J6, J9,
+J10 in `test/pqz/invariant/PqzVer{Handler,Invariants}.t.sol`, T56 `e1336e60`, 48 mutants killed; tests
+`test/pqz/PqzKeyVersionsToken.t.sol`, `PqzKeyVersionsDisclosure.t.sol`, `test/as/confidential/PqzKeyVersionsKinds.t.sol`).
+**UNAUDITED.** A UA rotates its PQZ key by adding a version: the registry keeps every version
+([CTR-UA-42](accounts.md#CTR-UA-42)), and the token keeps its state per `(UA, version)`. Version 0 is the key `register` or
+`setPqzKey` stored, unchanged and write-once.
+
+<a id="CTR-PQZ-31"></a>**CTR-PQZ-31** — **PQZ state per `(ua, version)`; credits to `current`; a stale version only migrates**
+(owner 2026-11-06, spec 3g). The account state of [§7.1](#71-state-per-ua-token) is kept per `(ua, keyVersion)`; `sendCounter`
+is per UA (slot 12), so one counter spans every version. A credit (a leg, a shield) goes to the recipient's `current` version,
+read once per op (KV-7). Every debit names its `keyVersion` after `fromUA` (captured once): above `current` it reverts
+`KeyVersionUnknown(ua, keyVersion)`; a stale version (below `current`) may only migrate (op 1 to the UA itself, at `current`) or
+refresh, anything else reverts `StaleKeyVersion(ua, keyVersion, current)`; a transfer to oneself at `current` reverts
+`SelfTransfer()`; two parties of one op holding the same key bytes revert `KeyReused(ua)`. Rollover and prepare name the version:
+`mtxRollOver(bytes32 ua, uint64 keyVersion, uint256 n)`, `mtxPrepareAcc(bytes32 ua, uint64 keyVersion, uint256 half)` (100 bytes
+static; the rollover reads no key, the prepare's key check covers it; `ROLL_MAX` at `n2560-kmax16384` 12,581,335 gas, 1,577 under
+0.75 · 2^24); events `PqzRolledOver(ua, keyVersion, rolled, accUnits, accHash)`, `Credited` / `Debited` with the version; the
+disclosure ([§7.9](#disclosure)) takes `keyVersion`, which selects the key checked and does not attest which version a leg was for
+(KV-11). Restore over versions: the wallet reads `pqzKeyLatest(ua)` and every version's state; additive sender recovery over
+versions is BUILT as a reference test (`pqz-core/ffi/tests/recover_versions.rs`, trials `n + 2·m·n`); the wallet's own is
+`ua-rs`'s round (SPECIFIED). PQZ no longer answers Zether's 68-byte forms: `mtxRollOver(bytes32,uint256)` moved to `IZetherToken`
+(interface ids `IPqzToken` 0xd37edfc5 at 3g, `IZetherToken` 0xe65bc5f0).
+
+<a id="CTR-PQZ-32"></a>**CTR-PQZ-32** — **No version word in a statement or a transcript** (owner 2026-11-06, spec 3g). BUILT by
+absence: the statement binds the key bytes, not their version number; the `proofSystemId` is unchanged and the pqz vectors'
+statements are unchanged (J8). Migration confidentiality assumes honest, independent keys.
+
+**Rotation runbook** (operator note): read `pqzKeyLatest(ua)` and the `UAPqzKeyAdded` events on every chain the UA uses, replay an
+existing `v + 1` record where it is missing, and generate a new key only for a number no chain holds; sign the
+`UAPqzKeyVersionRecord` (an `msig` by its m-of-n), `setPqzKey(ua, v + 1, …)` and `storePqzPop(ua, v + 1, …)` on every chain in one
+sitting (until its proof is stored the version is pending: decoys skip it, the node refuses debits to it by name); for an `msig`,
+fresh shares of `v + 1` to the current members only; then migrate: op 1 from `(ua, v)` to the UA itself (drain a long queue by
+rollovers or refreshes on `v` first), and unshield only after the migration. A 60 M chain at `n2816-kmax65536` cannot rotate
+(KV-2). Rotate on an operator change or when a share holder leaves. A version's seed is `seed32_v`: HKDF with `be64(version)`
+appended for `v ≥ 1`, version 0 unchanged (CLI-SGN-49; `pq_kat.json` `pqzSeeds`).
+
 
 ### 7.3 Shield
 
@@ -936,7 +999,7 @@ The `shieldIn` term is added even when `shieldIn = 0`; `+ 1` counts it either wa
 op blob      = SSTORE2(R ‖ v_f)                        (one write; R = salt ‖ u ‖ v_t ‖ [v_a] ‖ toUA)
 acc[from]    = reference (blob, u_0, v_f);  accUnits = 1;  flags &= ~MAT
                rolled = floor = p                      (p < rolled un-rolls [p, rolled): those entries are pending again)
-               delete pending[cleared .. p); cleared = p    (≤ 2·INLINE_MAX slots)
+               debitRec[from][k] = (prevBlob, p, Δp, proofStore, …); lastDebit = k    (3h: no pending slot is deleted)
 sendCounter[from]++
 pending[to]  ← (blob, uOff of u, vOff of v_t, block.number)      (pendingCount++)
 entryPtr[entryRef] = blob                (both storage modes); memos[entryRef] = memo   (commit-reveal)
@@ -946,8 +1009,8 @@ totalShielded  = totalShielded + shieldIn − fee − amount     (checked; amoun
 and the token pays, from `SHIELD_POOL`, exactly what the library debited (`PqzCore.Paid`): `shieldIn` units from the signer
 into the pool, the `txFee` to the beneficiary's public balance (and op 7's `decoyFee` to each leg, [CTR-PQZ-25](#CTR-PQZ-25)); and
 emits `Debited(from, rolled, floor, blob)`, `ConfidentialTransfer(entryRef, fromUA, toUA, beneficiary, fee, sendCounter, blob)` and `Credited(toUA, index, entryRef)`. After a debit the stored `accHash` is stale and the MAT flag is clear; the hint path checks the flag first.
-Deleting dead pending slots is nearly free on floor-bound transactions (the refund comes off execution gas) and keeps state
-from growing by 32 B per credit forever; slots `< floor` are never read again.
+Since 3h no pending slot is deleted ([CTR-PQZ-33](#CTR-PQZ-33)): with the debit's record they let a holder or an auditor rebuild
+any past debit's statement ([proof path](#pqz-proof-path)); slots `< floor` are never read again by the contract.
 
 `txFee = confidentialFee` if `beneficiary ≠ 0`, else 0 (never a function of `v`). `entryRef =
 keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), chainid, chainUid, token, fromUA, sendCounter))` (counter before
@@ -982,11 +1045,17 @@ in another form.
 <a id="derived-randomness"></a>
 <a id="CTR-PQZ-19"></a>**CTR-PQZ-19** — **Encryption randomness is derived from the seed and a published salt**, so the sender can re-create it for disclosure (owner 2026-10-11: the classical salt rule, [CTR-ZTH-30](zether.md#CTR-ZTH-30), applies to PQZ): `seed_enc = HKDF-SHA256(ikm = pqzKeySeed, salt = "SCAAS-PQZ-ENC-V2" (controller ruling, pending the owner), info = chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt)`, with `salt` = 16 fresh random bytes per build, carried in the payload and the statement header, hence in `ConfidentialTransfer`, the stored bundle, the commitment and the no-bundle calldata; the contract does not check it. A fresh salt per build means a re-proof at the same counter never reuses `r` (reusing `r` across two messages leaks `Δ·(m − m')` up to small noise), and the sender remembers no amount. Masking randomness *inside* the proof is hedged (`H(secret ‖ statement ‖ 32 B CSPRNG)`), as implemented (P6e D6): PQZL seeds the commitment randomness from `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ wh ‖ hash0)[0..32)` and every mask from the same with `"SCAAS-PQZ-PROVER-SUB-V2"`, `wh = SHAKE128("SCAAS-PQZ-PROVER-WIT-V2" ‖ wit)[0..32)`, `hash0` the statement digest ([transcript](#transcript)); PQZH draws all prover randomness from `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ wit)` (`wit` the prover-API witness bytes, [serialization v1](#serialization)); a repeated `rnd32` with another witness or statement gives unrelated masks, equal inputs give equal proofs. **Burn and refresh are outside this derivation** (owner 2026-10-13): their encryption randomness `r, e1, e2_f` is fresh CSPRNG output (hedging it with `pqzKeySeed` is allowed), never `seed_enc` or any other value fixed by the counter. Their header salt is 0 ([statement](#statement)), so a counter-derived seed would give two burns or refreshes built at one `sendCounter` for different balances `b' ≠ b''` (a re-proof after `InlineTooFar`, another `shieldIn`) the same `r` and `e2_f`, and `v_f − v_f'` would be `Δ·(b' − b'')` exactly. No disclosure re-derives them: the burned amount is public and `v_f` is the sender's own balance. Replaces the message-bound form (`info = be32(chainId) ‖ token ‖ fromUA ‖ be8(sendCounter) ‖ toUA ‖ be8(v) ‖ be8(b') ‖ u8(auditorOn)`, never built). **Op 7 groups** (P6-ANON D13): group 0 uses `seed_enc`; group `g ≥ 1` uses `seed_enc_g = SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" ‖ seed_enc ‖ be4(g))[0..32)`; inside a group `Enc` draws `r_g, e1_g`, then `e2` for the group's legs, then (group 0) `e2_f`, then the group's auditor copies.
 
+**Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** On an opening token the legs of op 1 take their randomness from `seed_leg = SHAKE256("SCAAS-PQZ-ENC-LEG-V1" ‖ seed_enc ‖ be4(0) ‖ toUA ‖ keccak256(pk_t))[0..32)` (recipient and key inside, so a salt reused by a wallet fault never hands one recipient another's leg); `Enc` draws `r, e1`, then `e2_t`, then `e2_a` from it. `(r_f, e1_f, e2_f)` stay derived from `seed_enc`. `seed_leg` is one-way and reveals nothing of `seed_enc`, `v_f` or another transfer; the sender still re-derives everything from its seed and the published salt; release builds take no caller-supplied salt ([CTR-PQZ-38](#CTR-PQZ-38)).
+
 <a id="pqz-storage-modes"></a>
 <a id="CTR-PQZ-23"></a>**CTR-PQZ-23** — **Storage modes and the sender memo** (owner, 2026-10-11; built in plan 5h part A): `disclosureMode ∈ {BUNDLE, COMPACT}` at `initialize`, immutable ([CTR-ZTH-48](zether.md#CTR-ZTH-48)). The bundle is `R = salt ‖ P(u ‖ v_t) ‖ [P(v_a)] ‖ toUA`, with `P` the [stored form](#stored-form) (P46: every coefficient in `PACK_BITS` bits, `u` and each `v` packed apart; `P(v_a)` only with the auditor): 13,480 B with the auditor, 13,388 B without at the committed `n2304-kmax4096` (`n2048-kmax1024` 10,968 / 10,884 B, `n2560-kmax16384` 16,248 / 16,148 B, `n2816-kmax65536` 19,272 / 19,164 B; `16 + PKP + 2·VP + 32` / `16 + PKP + VP + 32`, [§4.4](#stored-form)). **Every transfer stores its op blob `R ‖ P(v_f)`** (one SSTORE2, [CTR-PQZ-07](#CTR-PQZ-07)); the mode decides only what else the entry holds. `entryPtr[entryRef]` = the op blob in both modes. `mtxConfidentialTransfer*` is the token's default mode: on a BUNDLE token `entryRef` resolves to `R` (the blob minus its trailing `PqzCt.VP` bytes of `P(v_f)`, `transferEntry(entryRef) = R`, packed as stored); on a COMPACT token it is commit-reveal and the entry is `keccak256(R) ‖ memo` (HASH). `…Compact` is commit-reveal on both. `transferCiphertextHash(entryRef) = keccak256(R)`, over the packed `R`, is read from the blob. **The NONE mode is retired on PQZ** (owner 2026-10-20, O5): `…NoBundle` (op 1 and op 7) and `TransferEntryDisabled`-on-NONE are gone, since the blob is written for the credits anyway and NONE saved nothing; Zether retired `mtxConfidentialTransferNoBundle` too (2026-10-27, C0-3). Salt and memo travel inside `payload`. The memo is [CTR-ZTH-50](zether.md#CTR-ZTH-50) with `pqzKeySeed` and `info = "PQZ/memo/v1" ‖ chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt`: op 1 uses op 7's encoding with M = 1 (owner 2026-11-06, one encoder and one decoder, `pqz-core/ffi/src/memo.rs` `seal` / `open`): `ks = HKDF-Expand-SHA256(key, "PQZ/memo/ks/v1", 2 + 40·M)`, `memo = salt ‖ ((flags ‖ u8(M) ‖ (be8(a_j) ‖ toUA_j)_{j<M}) XOR ks)` (`flags` bit0 = `auditorOn`), 18 + 40·M B: 58 B for op 1's one recipient, of which `sealedMemo` is the 42 B after the clear salt (`PqzCore.SEALED = 2 + 40·1`; the old 57-byte form, 41 B sealed, is refused) (owner 2026-10-13: `be32` counter, as classical Zether — it only enters the off-chain HKDF, so it costs nothing; `be8` amount, because amounts are `< 2^64` by the plaintext encoding and a wider field would only add calldata) (labels `"PQZ/memo/v1"`, `"PQZ/memo/ks/v1"` and `"SCAAS-PQZ-ENC-V2"`: owner-approved 2026-11-06, CTR-PQZ-23 and [CTR-PQZ-19](#CTR-PQZ-19)), `memoHash` in the statement header. The sender recovers from storage alone: `sendCounter` → `entryRef` → memo → `seed_enc` → `r, e1, e2_t, e2_a` → `u ‖ v_t ‖ v_a` with `pk_t` from the registry → packed (`P`, as stored) into `R` → the hash check against `transferCiphertextHash` (over the packed `R`, never the `be8` form) → a `SENDER_S` proof. Receiver and auditor read `R` from the blob (`pqzEntryBlob`). Disclosure reads `R` from the blob, so `disclosureStatement(entryRef, leg, amount, kind)` has no bundle argument and `verifyTransferAmount(entryRef, leg, amount, kind, proof)` takes the proof alone as the opening (the W-I canonical-opening check is moot: nothing is decoded).
 
+**Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** The op blob of an op 1 on an opening token is `R ‖ P(u_f) ‖ P(v_f) ‖ O_t ‖ [O_a] ‖ ownTag(32) ‖ kv(8·n) ‖ u8(n)` ([CTR-PQZ-40](#CTR-PQZ-40)); `R` is unchanged, so `transferEntry` and `transferCiphertextHash` keep their values. `sealedMemo` is unchanged and apart from the opening.
+
 <a id="pqz-auditor-mode"></a>
 <a id="CTR-PQZ-24"></a>**CTR-PQZ-24** — **Auditor modes as classical** (owner, 2026-10-11; spec only): `auditorMode ∈ {NONE, FULL, OPTIONAL}` at `initialize`, immutable ([CTR-ZTH-49](zether.md#CTR-ZTH-49)), with `auditorUA`. NONE: `auditorUA = 0`, `auditorOn = 0` and no `v_a`. FULL: `auditorOn = 1` on every transfer, else `AuditorRequired`; the auditor reads every transfer from creation and can rebuild balances by bookkeeping. OPTIONAL: the sender's per-transfer choice, publicly visible as `auditorOn = 0` (no `v_a`), statement row 5 skipped. The auditor-off transfer is its own relation `R_TX0` (P6e D8): `R_TX` without `pk_a`, `v_a`, `e2_a`, every other row and norm kept; op 1 with a 66,560-byte statement, and the `auditorOn` word must be what the length says (1 for 83,072 B, 0 for 66,560 B; [serialization v1](#serialization)). The factory refuses FULL or OPTIONAL without `auditorUA`, NONE with one and unknown values (`BadAuditorMode`).
+
+**Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** On an opening token the auditor holds a key of the token's class and scope and an opening KEM key in that scoped record ([CTR-UA-43](accounts.md#CTR-UA-43)); it reads `v_a` from its opening `O_a`, never by applying its PQZ secret, and its outcomes per credit are public and named (`read`, `recipient-unreadable`, `unreadable`, `unreadable, taken`; [CLI-SGN-51](../clients/signers-clientkeys.md#CLI-SGN-51)). The stated guarantee of `FULL` there: an honest recipient cannot spend a credit the auditor cannot read (owner 2026-11-13). On an `offchain-token` the auditor's key is not checked at `init` (the token address does not exist before creation): a transfer with the auditor on reverts `AccountNotRegistered(auditorUA)` until the auditor registers its key for that token.
 
 #### <a id="multi-transfer"></a>7.4.1 Multi-recipient transfer (op 7)
 
@@ -1006,17 +1075,23 @@ credit), indistinguishable on chain from a real leg; 7 real recipients ⇒ `M = 
 Decoys are the wallet's choice (D16): no on-chain consent or decoy rule. **`decoyFee`** (owner 2026-10-20, replacing the
 earlier `multiLegFee`): op 7 carries an explicit payload word `d` (after `M`, before the salt: `… ‖ be32(M) ‖ d ‖ salt(16) ‖ UA_0 …`);
 `d ≥ minDecoyFee` (the token's immutable `ConfidentialConfig.minDecoyFee`, default 0; the Zether kinds take it too) and `d < 2^64`, else
-`DecoyFeeOutOfRange(d, minDecoyFee)`. The statement's public `fee` word is `txFee + M·d` (`txFee = confidentialFee` with a
-beneficiary; `≥ 2^64` ⇒ `AmountOutOfRange`), so the proof binds `d`. The beneficiary gets the `txFee` part and **every**
+`DecoyFeeOutOfRange(d, minDecoyFee)`. The statement's public `fee` word is `txFee + verifierFee + M·d` (`txFee =
+confidentialFee` with a beneficiary; `verifierFee` on `OFFCHAIN` only, [CTR-PQZ-36](#CTR-PQZ-36); `≥ 2^64` ⇒
+`AmountOutOfRange`), so the proof binds `d` (relayed by the envelope's signature over `decoyFee`, direct by the binding
+word's `verifierFee` below). The beneficiary gets the `txFee` part and **every**
 listed leg, real recipient included, gets `d` — the same for every leg, so it reveals nothing, and listing a victim as a
 decoy costs the sender `d` paid to the victim (T22); all of it is paid out of `SHIELD_POOL` to the public UA-ledger
-balances, from the amount the library debited. `confidentialFee + 8 · minDecoyFee < 2^64` and `< maxShielded`
-(`BadInit`). Op 1 never charges `d`. The storage mode is the user's per
+balances, from the amount the library debited; the verifier fee goes to the verifier UA. `confidentialFee + verifierFeeMax +
+8 · minDecoyFee < 2^64` and `< maxShielded` (`BadInit`). Op 1 never charges `d`. The storage mode is the user's per
 transfer through the entry they call: the contract never switches it, and nobody else can. A relayed call is bound by
 the envelope signature over `data`, selector included, **and the mode is folded into the statement binding** (plan 5h D15,
 review L1): `binding = keccak256(abi.encode(envelopeBinding, uint8(mode)))`; a **direct call** uses
 `keccak256(abi.encode(keccak256("SCAAS-PQZ-DIRECT-MODE-V1"), uint8(mode)))` with mode HASH 0 (`…Compact`,
-`mtxConfidentialTransfer*` on a COMPACT token) and BUNDLE 1 (NONE, 2, is retired). A proof built for one mode therefore does
+`mtxConfidentialTransfer*` on a COMPACT token) and BUNDLE 1 (NONE, 2, is retired); on an `OFFCHAIN` token (group 3t,
+[CTR-PQZ-36](#CTR-PQZ-36), Fable P1-1) the direct binding also binds the verifier fee in force,
+`keccak256(abi.encode(TAG_DIRECT_MODE_VF, uint8(mode), uint256(verifierFee)))` with `TAG_DIRECT_MODE_VF =
+keccak256("SCAAS-PQZ-DIRECT-MODE-VF-V1")` = `0x822f04ee…76a8` (pinned), so a fee change of `M·k` met by `d ∓ k` on a built op
+refuses; `PRECOMPILE` bindings and every relayed binding are unchanged. A proof built for one mode therefore does
 not verify through the other entry, relayed or direct (review W-A, 2026-10-19; classical Zether puts the mode in `opTag`). An
 unwrap's binding folds the leg and `minOut` the same way (`keccak256(abi.encode(envelopeBinding, unwrapBinding(u, minOut)))`
 relayed; direct unchanged); burns and refreshes have no mode and keep the envelope binding. The statement views take `binding` 0
@@ -1087,8 +1162,8 @@ leg from storage alone.
 *Auditor* (CTR-PQZ-24): FULL = a copy `v_{a,j}` for every leg (the auditor reads every leg, decoys included);
 OPTIONAL = the whole transfer in or out (`auditorOn` 0 / 1; per-leg mixes are unrepresentable); NONE = no copies.
 
-*Disclosure by leg* (CTR-PQZ-14): `verifyTransferAmount(entryRef, j, amount, kind, proof)` and
-`disclosureStatement(entryRef, j, amount, kind)` (both read `R` from the op blob; a leg past `M`, or `AUDITOR` without the copies: false); `SENDER_S` re-derives
+*Disclosure by leg* (CTR-PQZ-14): `verifyTransferAmount(entryRef, j, amount, kind, keyVersion, proof)` and
+`disclosureStatement(entryRef, j, amount, kind, keyVersion)` (both read `R` from the op blob; a leg past `M`, or `AUDITOR` without the copies: false); `SENDER_S` re-derives
 `r_{g(j)}, e1_{g(j)}, e2_j` from the seeds, `RECEIVER_X` and `AUDITOR` open leg `j`, with `R_DS` / `R_DR` and the
 §7.9 statement (`(pk_j, v_j)` identifies the leg; for `AUDITOR` the kind word carries the copy's window,
 `OpeningKind + 256·(j mod s_aud)`, and `R_DR` decrypts at coefficients `16·w + i`, R0-1). A disclosure reveals that leg's recipient and amount,
@@ -1100,7 +1175,17 @@ are never refused); they can bury real credits behind junk (head-of-line delay, 
 decoys ahead); the owner can always spend `acc` with `p = rolled`, keepers roll, the victim is paid `decoyFee` per decoy leg,
 and the amplification over zero-amount single transfers is at most `M − 1` victims per transfer (P6-ANON plan §5.2).
 
+**Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** Op 7 is not available on an opening token: `mtxConfidentialTransfer` (multi) reverts `OpUnsupported()` there ([CTR-PQZ-39](#CTR-PQZ-39)). Tokens without the opening keep op 7 as stated.
+
 ### 7.5 Burn and refresh
+
+**An unshield is not a burn** (owner O1, [CTR-GOV-29](../decisions.md#CTR-GOV-29); BUILT, build 3zb + 3zc, branch
+`burner-wrap-caps`): the `R_BURN` path (`mtxUnshield`, and the refresh) moves units from `SHIELD_POOL`
+to a recipient, `totalSupply()` does not move, and it is not gated by bit 30 `BURNER`; on a `BURNER` token a shielded holder
+that wants to destroy units unshields to itself and burns under the role check. The flags valid on the PQZ kinds follow
+[CTR-TOK-22](token-wrappers.md#CTR-TOK-22): `MINTABLE` / `BURNABLE` or `BURNER` on `NORMAL_PQZ` (4, 12), `SUPPLY_CAP_ADJUSTABLE`
+on `WRAPPED_PQZ` (5, 13), whose `mtxWrapShield` and `mtxUnshieldUnwrap` move `totalWrapped()` like any wrap and unwrap
+([supply caps](token-wrappers.md#supply-caps)).
 
 `mtxUnshield(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint, uint256 amount, bytes32 recipient)` — the
 same signature as Zether's ([CTR-ZTH-45](zether.md#CTR-ZTH-45)); `beneficiary` must equal the payload's — with `payload = be32(p) ‖
@@ -1126,8 +1211,9 @@ leg pays the underlying (a UA recipient: a SCaaS ledger leg through `transferToU
 <a id="rollover-op"></a>
 
 `mtxRollOver(bytes32 ua, uint256 n)` (shared with Zether, [CTR-ZTH-45](zether.md#CTR-ZTH-45); PQZ and Zether differ only in what `n`
-means): anyone; `1 ≤ n ≤ ROLL_MAX` (the set's `PqzSet.ROLL_MAX`: 96 / 80 / 64 / 32 at `n2048-kmax1024` /
-`n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`) (`RollOverRange`); `AccNotPrepared(ua)` until `mtxPrepareAcc` wrote both halves of the
+means): anyone; `1 ≤ n ≤ ROLL_MAX` (the set's `PqzSet.ROLL_MAX`: 80 / 64 / 48 / 32 at `n2048-kmax1024` /
+`n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536` since the three-key round, sized by the holder's signed rollover,
+[CTR-PQZ-41](#CTR-PQZ-41); 96 / 80 / 64 / 32 before) (`RollOverRange`); `AccNotPrepared(ua)` until `mtxPrepareAcc` wrote both halves of the
 account's `acc` words; `CapReached(ua)` when `accUnits ≥ K_MAX − 1`; `n′ = min(n, K_MAX − 1 − accUnits)`; `rolled + n′ ≤
 pendingCount` (`RollOverRange`, no clamp to what is pending); every rolled entry must be at least `ROLL_AGE = 5` blocks old
 (`RollTooYoung(index)`, TRIVIAL entries too). The entries `[rolled, rolled + n′)` are read **from state** (a credit's `u ‖ v`
@@ -1137,17 +1223,33 @@ gap above each field and spread once per rollover; every lane stays below 2^64 w
 up to 2^(64 − PACK_BITS) − 1 terms: 1,023 at `n2816-kmax65536`), and the packed sum is rewritten into the `ACC_WORDS`
 slots in place, each stored as `not(stream word)` ([stored form](#stored-form)), so no slot is ever zeroed — not even by a
 TRIVIAL-only first rollover, whose `u` is 0 (final review I1; its slots are all ones); `accHash = keccak256(packed
-stream)` is updated, `flags |= MAT`, `rolled += n′`, `accUnits += n′`; the pending slots below `rolled − INLINE_MAX`
-are deleted (`cleared` and, when passed, `floor` follow); emit `RolledOver(ua, rolled, accUnits, accHash)`. No calldata besides
+stream)` is updated, `flags |= MAT`, `rolled += n′`, `accUnits += n′`; `cleared` and, when passed, `floor` move to
+`rolled − INLINE_MAX` and no slot is deleted (3h, [CTR-PQZ-33](#CTR-PQZ-33)); emit `RolledOver(ua, rolled, accUnits, accHash)`. No calldata besides
 `(ua, n)`, no proof, no signature: rollover cannot hurt anyone. It is also an allowlisted envelope op on both paths (Task R, owner 2026-10-20, [CTR-PQZ-21](#CTR-PQZ-21)): anyone calls it
 directly or through a relayer. **`ROLL_MAX` per set** (plan 5h Task 8d part 2b; `set.toml` `roll_max` → `gen_set.py` →
-`PqzSet.ROLL_MAX`): the largest multiple of 16 whose rollover, as a **relayed full transaction on either relay path**
-(`mtxExecute`, the ECDSA envelope, and `uaExecute`, an `mldsa65` fee UA; outer fee FIXED) on a prepared account with
-every entry from its own cold blob (every coefficient `q − 1`), stays under `0.75 · 2^24 = 12,582,912` regular gas; the
-costlier path, `uaExecute`, binds (3,360 B more calldata, the ML-DSA-65 verification at 68,006 [estimate], the fee UA's
-record and ledger: 157,115–157,139 gas more per rollover). Pinned by `PqzStatePinGasTest` (`ROLL_MAX` fits on both paths,
-`ROLL_MAX + 16` does not on the costlier), measured by a build with a larger constant
-(`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-<set>.txt`, Foundry 1.8.5, Amsterdam):
+`PqzSet.ROLL_MAX`; rule of owner 2026-11-10): an **owner-set multiple of 16** whose rollover, as a **relayed full
+transaction on both relay paths** (`mtxExecute`, the ECDSA envelope, and `uaExecute`, an `mldsa65` fee UA; outer fee FIXED)
+on a prepared account with every entry from its own cold blob (every coefficient `q − 1`), fits `0.75 · 2^24 = 12,582,912`
+regular gas; the largest fitting multiple of 16 is measured and reported, not required. The costlier path, `uaExecute`,
+binds (3,360 B more calldata, the ML-DSA-65 verification at 68,006 [estimate], the fee UA's record and ledger: about
+159,000 gas more per rollover). `PqzStatePinGasTest.test_gas_rollMax_relayedFullTx` asserts the fit on both paths and logs
+the largest fitting multiple of 16 (the linear fit through a `ROLL_MAX / 2` rollover; a larger value needs a build with a
+larger constant, since the token refuses `n > ROLL_MAX`) and the headroom; it stays red-capable: a build at
+`n2304-kmax4096` with `ROLL_MAX` 112 fails it (`mtxExecute` 13,483,008). The values 96 / 80 / 64 / 32 stood (owner
+2026-11-10) until the three-key round: the signed rollover of an opening token is costlier (one UA signature, the
+`entriesHash` reads, up to `ROLL_MAX` skip marks), and the one `ROLL_MAX` of a set is now sized by it (80 / 64 / 48 / 32,
+[CTR-PQZ-41](#CTR-PQZ-41)); the tables below are the public rollover's at the values of their dates. Today (T66b tree, Foundry 1.8.5, Amsterdam; `smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-followup-rollmax.txt`):
+
+| Set | `ROLL_MAX` | relayed full tx at `ROLL_MAX`, regular: `mtxExecute`; `uaExecute` | per entry | headroom (`uaExecute`) | largest fitting multiple of 16 |
+|---|---|---|---|---|---|
+| `n2048-kmax1024` | 96 | 10,697,626; 10,856,706 | 62,256 | 1,726,206 | 112 |
+| `n2304-kmax4096` | 80 | 11,269,324; 11,428,404 | 69,178 | 1,154,508 | 96 |
+| `n2560-kmax16384` | 64 | 11,733,066; 11,892,146 | 76,127 | 690,766 | 64 |
+| `n2816-kmax65536` | 32 | 10,732,998; 10,892,078 | 83,097 | 1,690,834 | 48 |
+
+The 8d2b measurement (2026-10-26, before the metatx split and T66b; the rule was then "the largest multiple of 16"),
+with `ROLL_MAX + 16` measured by a build with a larger constant
+(`smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-<set>.txt`):
 
 | Set | `ROLL_MAX` | relayed full tx at `ROLL_MAX` / at `ROLL_MAX + 16`: `mtxExecute`; `uaExecute` | direct: fixed + per entry (fit) | 1 / 16 entries (direct) | after a TRIVIAL-only rollover | `mtxPrepareAcc` half 0 / half 1 (relayed full tx, regular: `mtxExecute`; `uaExecute`; state) |
 |---|---|---|---|---|---|---|
@@ -1159,8 +1261,7 @@ record and ledger: 157,115–157,139 gas more per rollover). Pinned by `PqzState
 The fixed part is the `ACC_WORDS` cold rewrites (EIP-8038: 2,100 + 10,000 each); a rollover writes no new slot, so its
 state gas is only the envelope's (195,840). `n2816-kmax65536`'s `ROLL_MAX` is 32 since the review fix round of 2026-10-26
 (48 held on `mtxExecute` alone, 7,296 gas under the cap, but not on `uaExecute`: 12,732,731; controller proposal, owner
-may override). Margins under the rule on the binding `uaExecute` path: 712,704 / 305,390 / **6,032** / 1,334,868 gas (re-measured on the metatx split bytecode, `runs/2026-10-27-metatx-split-gas-<set>.txt` and `...-rollscan-n2560-kmax16384.txt`; the `ROLL_MAX + 16` column is measured at every set on the split bytecode, a linear fit from `ROLL_MAX` (the gas logs' `ROLL_MAX + 16, relayed full transaction (…, linear fit)` lines);
-`n2560-kmax16384`'s is tight (any contract change re-runs the scan). The halves of `mtxPrepareAcc` are far under
+may override). Margins on the binding `uaExecute` path on the metatx split bytecode: 712,704 / 305,390 / 6,032 / 1,334,868 gas (`runs/2026-10-27-metatx-split-gas-<set>.txt` and `...-rollscan-n2560-kmax16384.txt`); today's headroom is in the first table. The halves of `mtxPrepareAcc` are far under
 `0.75 · 2^24` in regular gas on both paths; their new slots are EIP-8037 state gas (≈ 97,920 per slot), which counts
 in the transaction's `tx.gas` (regular plus state), and that must fit the block gas limit for inclusion (both halves of `n2816-kmax65536` ≈ 59 M, so one half per transaction). Logs
 `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-gas-<set>.txt`.
@@ -1177,8 +1278,7 @@ Anyone may roll pending entries into `acc`. A debit proves over `T = acc ± Σ p
 invalidates a proof. With `acc` and every pending ciphertext in state ([CTR-PQZ-07](#CTR-PQZ-07)) no calldata can go stale,
 so W-E's base (`baseHash`, `baseRolled`, `baseUnits`, the base branch of `_total`) is **removed**; its "rolled moves
 backwards" behaviour survives only as the **un-roll**: a debit with `p < rolled` sets `rolled = floor = p`, the entries
-`[p, rolled)` (credits and TRIVIAL entries) are pending again — their slots still exist, since rollovers delete only below
-`rolled − INLINE_MAX` — and are rolled again later; nothing is lost or skipped, the price is re-rolling at most `INLINE_MAX`
+`[p, rolled)` (credits and TRIVIAL entries) are pending again — their slots still exist (since 3h no slot is ever deleted) — and are rolled again later; nothing is lost or skipped, the price is re-rolling at most `INLINE_MAX`
 entries. The one race left needs entries newer than the proof: **`ROLL_AGE = 5` blocks** (owner 2026-10-20, was 24 in the
 first design; ≈ 25 s at 5 s blocks), enforced per rolled entry from the entry's own creation block (not from the proof), means entries `≥ p` made after the proof cannot be rolled for
 `ROLL_AGE` blocks, so within that time `rolled ≤ p` at submission; after it the debit still settles while `rolled − p ≤
@@ -1188,6 +1288,8 @@ entry of its own block can be made to revert by a merge before it ([§7.3](#73-s
 re-prove of a debit submitted within `ROLL_AGE` blocks of the entries it adds; a debit still in flight after that can be killed by (a). Clients prove at `p = pendingCount` (or the largest `p` the window allows)
 and retry once on `InlineTooFar` or `ProofRejected`; the W-E race tests are regressions ("a rollover between prove and
 submit still settles", `PqzStateTest`). No `OWNER_ONLY` mode, no `accSeq`.
+
+**Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** The public rollover holds on tokens without the opening only. On an opening token `mtxRollOver` reverts `RollOverSignedOnly()`; only the holder rolls, by the signed rollover with skip marks ([CTR-PQZ-41](#CTR-PQZ-41)); `mtxPrepareAcc` stays permissionless.
 
 ### 7.7 Statement layout
 
@@ -1205,7 +1307,7 @@ Header (640 bytes; `salt` and `memoHash` per [CTR-PQZ-23](#CTR-PQZ-23)):
 | 160 | `fromUA` |
 | 192 | `toUA` (0 for burn/refresh) |
 | 224 | `beneficiaryUA` (0 if none) |
-| 256 | `fee` |
+| 256 | `fee`: `txFee + verifierFee (+ M·d)` (`verifierFee` on `OFFCHAIN`, [CTR-PQZ-36](#CTR-PQZ-36)) |
 | 288 | `amount` (burn; else 0) |
 | 320 | `recipient` (burn; else 0) |
 | 352 | `sendCounter` |
@@ -1214,9 +1316,9 @@ Header (640 bytes; `salt` and `memoHash` per [CTR-PQZ-23](#CTR-PQZ-23)):
 | 448 | `auditorOn` (0/1) |
 | 480 | `shieldIn` ([CTR-PQZ-06](#CTR-PQZ-06); named `plainUsed` before plan 5h, same word, same relation) |
 | 512 | `chainUid` (the token's copy of `registry.chainUid()`, [CTR-PQZ-01](#CTR-PQZ-01)) |
-| 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)), per op and path. **Transfer** (op 1, op 7): `keccak256(abi.encode(b, mode))` with `b` = `TAG_DIRECT_MODE` direct, the envelope's v1 or v3 binding relayed (`_bindMode`, [CTR-PQZ-25](#CTR-PQZ-25)). **Burn / refresh** (`mtxUnshield`): 0 direct, the raw envelope binding relayed (`prepareBurn` never folds the mode). **`mtxUnshieldUnwrap`**: `unwrapBinding(leg, minOut)` direct, `keccak256(abi.encode(envelope, unwrapBinding(leg, minOut)))` relayed. A prover that uses the raw envelope binding for a relayed transfer gets `ProofRejected` |
+| 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)), per op and path. **Transfer** (op 1, op 7): `keccak256(abi.encode(b, mode))` with `b` = `TAG_DIRECT_MODE` direct, the envelope's v1 or v3 binding relayed (`_bindMode`, [CTR-PQZ-25](#CTR-PQZ-25)); direct on an `OFFCHAIN` token `keccak256(abi.encode(TAG_DIRECT_MODE_VF, mode, verifierFee))` (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)). **Burn / refresh** (`mtxUnshield`): 0 direct, the raw envelope binding relayed (`prepareBurn` never folds the mode). **`mtxUnshieldUnwrap`**: `unwrapBinding(leg, minOut)` direct, `keccak256(abi.encode(envelope, unwrapBinding(leg, minOut)))` relayed. A prover that uses the raw envelope binding for a relayed transfer gets `ProofRejected` |
 | 576 | `salt` (16 zero bytes ‖ the build salt, [CTR-PQZ-19](#CTR-PQZ-19); burn/refresh 0, their randomness is fresh CSPRNG output) |
-| 608 | `memoHash` (`keccak256(memo)` on commit-reveal, else 0) |
+| 608 | `memoHash`: since 3h `keccak256(memo ‖ ownTag)` ([CTR-PQZ-34](#CTR-PQZ-34); HASH `memo = salt ‖ sealedMemo`, every other debit `keccak256(ownTag)`); before 3h `keccak256(memo)` on commit-reveal, else 0 |
 
 Body: `pk_f ‖ [pk_t] ‖ [pk_a] ‖ T ‖ out` (`T` already includes the plain term). Transfer with auditor:
 640 + 3·16,384 + 16,512 + 16,768 = **83,072 B**; without auditor: 640 + 2·16,384 + 16,512 + 16,640 = **66,560 B**;
@@ -1237,7 +1339,7 @@ blob of `entryRef`), `Debited(bytes32 indexed ua, uint64 rolled, uint64 floor, a
 `rolled` move; `acc` now references `blob`), `ConfidentialTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32
 indexed toUA, bytes32 beneficiary, uint256 fee, uint64 sendCounter, address blob)` and `ConfidentialTransferMulti(bytes32 indexed
 entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee, uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob)`
-(as built in `IConfidentialToken`; `fee` = the proven fee word, op 7: txFee + M·decoyFee; the blob is the op blob, the salt its first 16 bytes; `recipients` replaces the
+(as built in `IConfidentialToken`; `fee` = the proven fee word, `txFee + verifierFee + M·decoyFee` (`verifierFee` on `OFFCHAIN` only, group 3t; the word's three payees are split in the same transaction's pool moves, `Transfer` / `UATransfer` from `SHIELD_POOL`); the blob is the op blob, the salt its first 16 bytes; `recipients` replaces the
 earlier `recipientsHash, legs`, both derivable from it),
 `RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash)`, `Unshielded(bytes32 indexed ua, uint256 amount,
 bytes32 indexed recipient, address blob)` (burn or refresh, `amount = 0`; the as-built PQZ event of plan 5h Task 3 had an `address`
@@ -1247,6 +1349,13 @@ recipient, widened with the UA recipient in Task 3b). There is no `PqzRegistered
 `Unwrap(address underlying, bytes32 recipient, uint256 amount, uint256 minOut)`, pays through `WrappedLib.payOutTo` (native id: `quoteUnwrap` + `payOut`;
 derived UA: `quoteUnwrapToUA` + `payOutToUA`, `UALegNotLedger` for an outside leg) after the debit and the pool burn. A `beneficiary` that differs from the payload's word
 reverts `BeneficiaryMismatch(payload, given)`.
+
+**Since 3h** (BUILT, [CTR-PQZ-33](#CTR-PQZ-33)–[CTR-PQZ-35](#CTR-PQZ-35)): `pqzDebitRecord(ua, k)` → `DebitRecordView(prevBlob, p, deltaP,
+proofStore, shieldIn, keyVersion, prevCounter, hasPrev)` (a narrow record with a predecessor reads `prevCounter = k − 1`);
+`pqzAccount` gains its tenth field `lastDebit`; `proofStore()`; `setProofStore(uint8)` (`setProofStore(uint8 next, bytes32 chainUid_)` from build 3zb + 3zc, SPECIFIED, [CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change); events `PqzDebitProof(address indexed
+blob, bytes32 indexed ua, uint64 indexed sendCounter, bytes header, bytes proof)` (LOG only: `header` = the verified
+statement[0:640], `proof` = the calldata proof) and `ProofStoreSet(uint8 previous, uint8 next)`. Interface id 0x4c91dc6a →
+0x3fef18ca.
 
 **Views** (names unchanged by the `mtx*` rename; [CTR-ZTH-45](zether.md#CTR-ZTH-45) is about entry points):
 `pqzAccount(ua)` → `AccountState{pendingCount, rolled, floor, cleared, accBlob, accUnits, flags, sendCounter, accHash}`
@@ -1274,7 +1383,7 @@ the opening is the proof alone (D11 / D13). The bundle bytes are read from state
 `transferCiphertextHash(entryRef)` is the stored `R`'s hash. Shared randomness and decryption noise must not leak
 ([CTR-PQZ-04](#CTR-PQZ-04)).
 
-`verifyTransferAmount(entryRef, leg, amount, kind, proof)` (leg 0 for a single entry; leg `j` of an op 7 entry,
+`verifyTransferAmount(entryRef, leg, amount, kind, keyVersion, proof)` (`keyVersion` since 3g, [CTR-PQZ-31](#CTR-PQZ-31); leg 0 for a single entry; leg `j` of an op 7 entry,
 [CTR-PQZ-26](#CTR-PQZ-26)) reads `R` ([CTR-PQZ-23](#CTR-PQZ-23)) from the entry's op blob and expands it into the
 statement, `amount < 2^64`; statement
 (33,184 B, every scalar a 32-byte word as [encodings](#encodings), so `pk` starts word-aligned; owner 2026-10-13):
@@ -1310,6 +1419,17 @@ itself). `transferCiphertextHash(entryRef)` returns the hash of the stored (pack
 state (`pqzEntryBlob`) and the disclosure statement expands them. Nothing reveals `r` (which would open `v_f`, the sender's balance) or
 decryption noise. Client systems see PQZ like classical Zether: amounts known from their own documents, checked with
 the `verifyTransferAmount` view ([integration.md](../integration.md#confidential-payments)).
+
+**`OFFCHAIN` tokens** ([CTR-PQZ-29](#CTR-PQZ-29), BUILT, T45): the verdict-less `verifyTransferAmount(entryRef, leg, amount, kind,
+keyVersion, proof)` reverts `PqzVerdictRequired()` — "cannot verify", never `false`, which would read "the amount is wrong"
+(C2-6). The form with `PqzSignedVerdict pqzVerdict` last answers on a `PRECOMPILE` token as the precompile does (the verdict is
+ignored); on an `OFFCHAIN` token it is `true` iff the verdict passes [§9.5](#pqz-verifier-mode)'s checks against
+`disclosureStatement(…)` and the proof, `false` on a field mismatch, a refused signature, a revoked or changed verifier, an empty
+proof or a statement shape error; `KeyVersionUnknown` and a starved check (`UAVerifyGas`) revert. It records nothing. It tells
+only what the verifier signed: the check that needs no trust in the verifier runs `pqz-ffi` on `disclosureStatement(…)` and the
+proof ([integration.md](../integration.md#pqz-offchain-checks)).
+
+**Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** **Disclosures per key class.** `registry`: unchanged. Every opening token (`offchain-shared`, `offchain-token` with the opening): **one kind**, `SENDER_S` (relation `R_DS`, knowledge of `r, e1, e2_t`), proven by any party that holds `seed_leg` (the sender by re-derivation, the recipient or the auditor from its opening); `RECEIVER_X` and `AUDITOR` revert `OpUnsupported()`, so no disclosure path applies a PQZ secret to a leg there. The kind identifies no party, and a disclosure proves the **encrypted amount, not receipt**: a sender that sealed a junk opening still proves the amount of a credit nobody can spend. Receipt is "not marked and spent": `pqzSkipped(ua, keyVersion, index)` false and a later debit of the recipient whose window holds the entry; with an auditor, the auditor's outcome `read` also says the opening was good. The verdict form is required as on every `OFFCHAIN` token ([CTR-PQZ-29](#CTR-PQZ-29)); the statement carries `PQZL_SPLIT_ID`. `offchain-token` without the opening: as an `OFFCHAIN` token today; a proving attempt on a crafted leg is part of the accepted exposure of that token's key. All classes: T-09 (one opaque prover error in `pqz-ffi`) is fixed in the same build.
 
 ### <a id="authorization-check"></a>7.10 Authorization check
 
@@ -1354,7 +1474,7 @@ pays; every fee from a hidden balance (`txFee`, `decoyFee`) moves from the pool 
 `totalSupply()` never moves on shield, unshield or fee, stays the true total, `Σ balanceOf == totalSupply` holds,
 `balanceOf(SHIELD_POOL) == totalShielded·shieldScale` and the escrow invariant is `reserve ≥ totalSupply()` on a non-hybrid (a hybrid claims none, [CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)). The pool guard lives in
 the shared base, `ERC20MetaTx._uaMove` (a native `SHIELD_POOL` side of a ledger move reverts, which covers outer fees,
-`uaExecute` fee calls and receiver fees); the confidential layers move the pool only through the **internal `_poolMove`**.
+`uaExecute` fee calls and payee fees); the confidential layers move the pool only through the **internal `_poolMove`**.
 `_poolMove` is deliberately unguarded and is the inheritance trust boundary of the token tree: only layer code (`PqzLayer`,
 `ZetherLayer`, the underlying variants) may call it, and any contract that inherits `ERC20MetaTx` and calls it can move the
 pool. Relations and proofs are unchanged by the pool.
@@ -1376,8 +1496,8 @@ confidential balances move only on the PQ `authSig` over the statement plus the 
 from its own public balance, its nonce, and for `mtxShield` the public amount it shields from that balance.
 
 **PQ-complete
-path:** the same selectors through `uaExecute` with a `UAMetaTransaction` ([CTR-UA-26](accounts.md#CTR-UA-26)) on
-`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`; plus `mtxUnshieldUnwrap` on `WRAPPED_PQZ`; `mtxWrapShield` is not on it, the pool holds no leg: a UA source wraps with `uaWrap`, then relays `uaExecute(mtxShield)`, [accounts.md](accounts.md#CTR-UA-18)), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
+path:** the same selectors through the merged `mtxExecute(UAMetaTransaction, UASig)` ([CTR-MTX-30](metatx.md#CTR-MTX-30)) ([CTR-UA-26](accounts.md#CTR-UA-26)) on
+`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`; plus `mtxUnshieldUnwrap` on `WRAPPED_PQZ`; `mtxWrapShield` is not on it, the pool holds no leg: a UA source wraps with `mtxWrapOrder` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)), then relays `mtxShield` through `mtxExecute` or its signed entry, [accounts.md](accounts.md#CTR-UA-18)), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
 classical key signs anything on the op path. Envelopes are not carried on the mesh, exactly as classical Zether
 ([NODE-MESH-01](../node/mesh.md#NODE-MESH-01)). Relayers, the node, the indexer and client systems handle PQZ with the
 existing meta-tx path. An address-path envelope signer is ECDSA/1271, hence the UA path. A broken envelope key can
@@ -1494,6 +1614,83 @@ a PQZ token. Node limits and the rollover keeper: [node/ops.md](../node/ops.md#p
 as ordinary `metatx`/`ua_metatx` jobs (`m.data` is opaque to them) and book the outer fee from
 `MetaTransactionExecuted`/`UAMetaTransactionExecuted` like any token's.
 
+### <a id="pqz-proof-path"></a>7.12 PQZ proof path
+
+Status: **BUILT** (group 3h, branch `ua-mtx-merge`: T58 `201d4c95`, `e35d1d16`; T59 `2a1f9d5e`, `0cc72669`, `90d857af`; T60
+`6dbb5d3d`, `c9e9575c`; T61 `6fb7a845`, `d4ae676d`; vectors T62 `77e9ddf4`; node T63 `39fa296c`, `a6040f9a`; invariants T64
+`f2bd37ba`; the integration gate with real proofs T65 `7d653925`). **UNAUDITED.** Design: spec
+[`2026-11-06-pqz-proof-path.md`](../superpowers/specs/2026-11-06-pqz-proof-path.md).
+
+<a id="CTR-PQZ-33"></a>**CTR-PQZ-33** — **Debit record: every pending slot kept, one record per debit** (owner 2026-11-07, spec
+3h PP-1). No debit, rollover or clear deletes a pending slot ([CTR-PQZ-07](#CTR-PQZ-07)'s ciphertexts stay in state). Each debit
+`(ua, k)` writes one record (`w0`, and `w1` when wide, [§7.1](#71-state-per-ua-token)) naming its predecessor blob, `p`, `Δp`, the
+`proofStore` mode it ran under, and when wide `shieldIn`, `keyVersion`, `prevCounter`; the account's `lastDebit` is `k`. `T_k`
+is rebuilt from the one record: `T = prevBlob's (u, v_f) + Σ pending[p − Δp, p) + Trivial(shieldIn)`. Readings (controller
+2026-11-09): `lastDebit` sits in the account slot 3g's `sendCounter` left (inner slot 2), which moves `accHash` / pending /
+`accWords` back by one; `deltaP`'s build check is `K_MAX − 1 ≤ 65,535` (`PqzSet.DELTA_P_MAX`): a first debit's `p` reaches
+`K_MAX − 1` by the units rule. **`ROLL_MAX` is open (owner):** a rollover deletes nothing since 3h, so it is cheaper, and
+`ROLL_MAX` (96 / 80 / 64 / 32 at `n2048-kmax1024` / `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536` then; 80 / 64 / 48 /
+32 since the three-key round, [CTR-PQZ-41](#CTR-PQZ-41)) is no longer the
+largest multiple of 16 under 0.75 · 2^24 for a relayed full transaction (the 2026-10-27 rule would give 112 / 96 / 64 / 48); the
+owner ruled the move and reversed it on 2026-11-09, so the values stay until the owner decides. `test_gas_rollMax_relayedFullTx`
+is the one known red at `n2048-kmax1024`, `n2304-kmax4096` and `n2816-kmax65536`.
+
+<a id="CTR-PQZ-34"></a>**CTR-PQZ-34** — **`ownTag` and the key-version tail on every own debit, bound by `memoHash`** (owner
+2026-11-07, spec 3h PP-3). Every own debit carries `ownTag` (the holder's HMAC, `K = HKDF-SHA256(pqzKeySeed_v, "", "PQZ/owntag/v1",
+32)`, `HMAC(K, chainUid ‖ token ‖ fromUA ‖ be32(sendCounter) ‖ keccak256(P(u) ‖ P(v_f)))`; the contract checks no value). The
+blob tail of every own op blob is `… ‖ P(v_f) ‖ ownTag(32) ‖ kv(8·n) ‖ u8(n)`; `rOf` reads `n` from the last byte (a burn's
+`n = 0`; op 1 `n = 1` + auditor; op 7 `n = M` + auditor, the legs then the auditor); `transferEntry` and
+`transferCiphertextHash` keep their values. `memoHash = keccak256(memo ‖ ownTag)`: HASH (commit-reveal) `memo = salt ‖
+sealedMemo`; BUNDLE, burn, refresh and unwrap `memo` empty, so `keccak256(ownTag)` (they were 0 before 3h; a pre-3h release keeps
+the old formula: clients probe `proofStore()`). Vectors: `typed_ops.json`'s six PQZ debit rows `release: "3h"` (typehashes
+moved), `pq_kat.json`'s `ownTag` and `memoHash` rows.
+
+**Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** On an opening token `ownTag` on op 1 covers `u_f`: `HMAC(K, chainUid ‖ token ‖ fromUA ‖ be32(sendCounter) ‖ keccak256(P(u_f) ‖ P(v_f)))`, the ciphertext the holder later decrypts; burn, refresh and unwrap keep `u′`. `memoHash = keccak256(memo ‖ ownTag ‖ keccak256(O_t ‖ [O_a]))` there, so the sender's signature and the verdict cover the openings ([CTR-PQZ-40](#CTR-PQZ-40)). Tokens without the opening keep the formulas above.
+
+<a id="CTR-PQZ-35"></a>**CTR-PQZ-35** — **`proofStore`: NONE or LOG** (owner 2026-11-07). `ConfidentialConfig.proofStore` (after
+`pqzVerifierFixed`): 0 NONE, 1 LOG, 2 and above `ProofStoreInvalid(uint8)`; stored at slot 0 byte 23. The record keeps the mode
+its debit ran under. Under LOG every debit (op 1, op 7, burn, refresh, unwrap; PQZL and PQZH; `PRECOMPILE` and `OFFCHAIN`) emits
+one `PqzDebitProof` (the verified header and the calldata proof). A non-PQZ kind refuses a set value (`ConfigFieldForOtherKind(4)`;
+on the Zether kinds a one-condition check, +37 B of `ZetherLib`, the Zether statement, vectors and gas pins unchanged). The
+issuer changes it by `setProofStore(uint8 next, bytes32 chainUid_)` under governance bit 24 `PQZ_PROOF` (the holder's chain word: BUILT, build 3zb + 3zc; the router's `UASetProofStore` signs `bytes32 chainUid`)
+(CTR-GOV-22 in [decisions.md](../decisions.md)), from the next debit; through the router `mtxSetProofStore` over `UASetProofStore`, fee mode NONE. SSTORE2 for proofs was
+dropped (owner 2026-11-07). `PQZ_DEBIT_MIN_GAS` is measured on the LOG form ([CTR-PQZ-12](#CTR-PQZ-12)).
+
+**Rebuilding a past debit's statement** (spec §9; proven by T65 with real proofs at `n2304-kmax4096` and `n2048-kmax1024`):
+the record (`pqzDebitRecord`); `T` as in CTR-PQZ-33; the op blob (a transfer's `pqzEntryBlob(entryRef)`; a burn's the next
+same-version record's `prevBlob`, else the account's `accBlob`); the keys by version (`pqzKeyAt(ua, kv)` for every `kv` of the
+tail, the sender's at the record's `keyVersion`); the header (LOG: from the log; NONE: rebuilt from the transaction's calldata,
+the record and the token: `sendCounter = k`, the record's `p` and `shieldIn`, the token's psid, chain, registry, `chainUid` and
+fee); P (LOG: the log; NONE: the calldata's `proof`). The direct `envelopeBinding`: a transfer `keccak256(abi.encode(TAG_DIRECT_MODE,
+uint8(mode)))` with `mode` the `TransferMode` (HASH = 0 with a sealed memo or on a COMPACT token, else BUNDLE = 1; not the
+`disclosureMode` value), an unwrap `unwrapBinding(underlying, minOut)`, a burn 0. The reference rebuild is `script/pqz/e2e.py`'s
+`rebuild` (test code). Tests: `test/pqz/invariant/ProofPath{Handler,Invariants}.t.sol` (P1–P7, P1′ at the four sets),
+`test/pqz/PqzProofStore.t.sol`.
+
+<a id="pqz-unsupported"></a>**Unsupported combinations** (owner 2026-11-07, spec 3h O13; the wizard refuses them; source
+`smartcontracts/evm/runs/2026-11-08-ua-mtx-merge-proofpath-matrix.txt`, forge gas at the four sets; regular = the transaction's
+regular gas, state = EIP-8037 state gas; limits regular ≤ 2^24, regular + state ≤ 60 M, ≤ 200 M (the SCaaS testnet block), ≤ 64 M
+(its node's `max_gas_per_tx`); same verdict under NONE unless marked):
+
+| Set | System | Form | Over | Note |
+|---|---|---|---|---|
+| n2048-kmax1024 | PQZH | op 7 M = 4, auditor (every path) | 2^24 | 20.45–20.70 M regular |
+| n2048-kmax1024 | PQZH | op 7 M = 4, no auditor, `uaExecute` | 2^24 | 16,784,280 regular |
+| n2048-kmax1024 | PQZL | op 7 M = 8, auditor (every path) | 60 M, 64 M | 84.2–85.0 M |
+| n2304-kmax4096 | PQZH | every form (op 1, op 7 M = 1, 2, 4, burn, refresh, kind 13 unwrap) | 2^24 | 17.6–22.0 M regular |
+| n2304-kmax4096 | PQZH | op 7 M = 4, auditor | also 60 M, 64 M | 65.1–65.5 M |
+| n2304-kmax4096 | PQZL | op 7 M = 8, auditor | 60 M, 64 M | 79.0–79.7 M |
+| n2560-kmax16384 | PQZH | every form | 2^24 | 21.0–21.5 M regular |
+| n2560-kmax16384 | PQZL | op 7 M = 8, auditor | 60 M, 64 M | 66.8–67.5 M |
+| n2560-kmax16384 | PQZL | op 7 M = 8, no auditor, `mtxExecute` / `uaExecute` | 60 M, 64 M | 64.8 / 64.9 M |
+| n2560-kmax16384 | PQZL | op 7 M = 8, no auditor, **direct** | **LOG: 60 M, 64 M; NONE: 60 M only** | LOG 64,285,883; NONE 63,577,647 |
+| n2816-kmax65536 | PQZL | op 7 M = 8, auditor / no auditor | 60 M, 64 M | 74.0–77.3 M |
+
+Nothing is over 200 M. LOG − NONE regular: PQZL 380 k to 874 k (`n2048-kmax1024`), 419 k to 825 k (`n2304-kmax4096`), 456 k to
+745 k (`n2560-kmax16384`), 501 k to 826 k (`n2816-kmax65536`); PQZH 0 at every set and form (the EIP-7976 floor hides it). LOG
+changes exactly one verdict, the bold row: the spec's §5 claim "NONE and LOG fit wherever today's forms fit" holds for 281 of the
+282 pairs and is refuted for that one (controller 2026-11-09); 2^24 holds for every PQZL row under LOG.
+
 ## 8. Proof engine `pqz-core`
 
 <a id="proof-engine"></a>
@@ -1542,7 +1739,7 @@ challenge before it fixes the message is not bound by the check, so **v2 proofs 
 LaZer's and was in all four verifiers (C generic and specialised, Rust generic and specialised) and in both provers
 (C, Rust). v3 adds the two rounds ([transcript](#transcript), rounds 3 and 5); the proof layout, the parameters and the
 relations are unchanged. **v2 is retired**: it leaves the accepted set and `pqz-stmt`, and the SCaaS testnet is reset from
-genesis at the v3 roll-out (owner 2026-10-19, path B), since the PQZ tokens and `UAPqzVerifier` hold their id
+genesis at the v3 roll-out (owner 2026-10-19, path B), since the PQZ tokens and `PqzKeyVerifier` hold their id
 immutably and are redeployed. v3 also carries the two prover-side fixes below (z2 rejection, β signs), which change
 honest proofs but no verifier rule. Regression check: `pqz-core/pqzl/check_tbox_fixes.sh` (P6-FS,
 `pqz-core/pqzl/sz/README.md`); analysis `docs/research/pqz-tbox-soundness.md` §8.
@@ -1731,7 +1928,7 @@ address as 12 zero bytes ‖ address).
 | Word | Offset | Field | Decoder rule |
 |---|---|---|---|
 | 0 | 0 | `opTag` | the op's (table above) |
-| 1 | 32 | `proofSystemId` | PQZL v3 or PQZH Ligero v1 |
+| 1 | 32 | `proofSystemId` | the set's PQZL or PQZH id ([proof systems](#serialization), per set) |
 | 2–5 | 64, 96, 128, 160 | `chainId`, `token`, `registry`, `fromUA` | hashed |
 | 6 | 192 | `toUA` | BURN, REFRESH: 0; transfers: hashed |
 | 7 | 224 | `beneficiaryUA` | hashed |
@@ -1838,8 +2035,9 @@ exactly the bytes consumed (no trailing byte); `≤ 98,304` B, which also keeps 
 **PQZH proof (Ligero v1)** (`ligero.rs`). Parameters fixed by the id (the set's preset, `set.json` `pqzh_preset`), never
 read from the proof: `n = 32,756`, `k = 817`, `ℓ = 695`, `t = 121` at `n2048-kmax1024`; 45,752 / 952 / 831 / 120 at
 `n2304-kmax4096`; 32,756 / 817 / 694 / 122 at `n2560-kmax16384`; 16 grinding bits (`Params::proven()`, every op); `m` witness rows per form
-(`cs::Layout`) plus 12 blinding rows. `F_q` element: 6 bytes, `< q`; `F_{q^4} = F_q[X]/(X^4 − 3)`: 4 `F_q` elements,
-`X^0` first (24 B).
+(`cs::Layout`) plus 12 blinding rows. `F_q` element: `EB = ⌈LOG2Q / 8⌉` bytes, `< q` (6 at `n2048-kmax1024` and
+`n2304-kmax4096`, 7 at `n2560-kmax16384`); `F_{q^4} = F_q[X]/(X^4 − 3)`: 4 `F_q` elements, `X^0` first (`4·EB` bytes:
+24 / 24 / 28).
 
 ```text
 proof = root (32)
@@ -1886,7 +2084,7 @@ directories → the one directory `smartcontracts/vectors/pqz/` (P6e D9).
 |---|---|---|---|
 | Solidity LNP22 verifier | `A` expansion with keccak instead of SHAKE ≈ 0.8 M; `A^T z` ≈ 65 k mulmods ≈ 1.5–2 M; commitment checks ≈ 5 M; NTTs, norms, transcript ≈ 1–3 M; plus calldata ⇒ **≈ 10–25 M (estimate)** | public | **No**: at or above the EIP-7825 16.78 M per-transaction cap; a second implementation of the verifier (Solidity + C) doubles audit surface and invites cross-language divergence |
 | **Native precompile (SCaaS testnet)** | ≈ 0.12 M per ms of p99 verify time + calldata | every full node re-executes | **Chosen** ([CTR-PQZ-10](#CTR-PQZ-10)) |
-| Off-chain co-processor (quorum of verifiers signs ML-DSA attestations; contract checks t-of-n) | ≈ 30–60 k verification + calldata | the quorum, not re-verifiable from chain data | The later path for customer-run private chains (owner); rejected on the SCaaS testnet, where the precompile gives the same latency with public verifiability |
+| Off-chain verifier UA (`OFFCHAIN` mode, [§9.5](#pqz-verifier-mode)) | the statement and proof hashes + the verdict's calldata (576 B, EOA verifier) + one signature check, no precompile (an EOA verifier: the debit less the precompile row and 38–53 k more, §9.5) | the token's verifier UA (one UA, usually a k-of-n `msig`, classical or post-quantum, disclosed); every acceptance re-verifiable from chain data by replay | **Built as a per-token mode** (owner 2026-11-06, O1, O2), open on every chain, the SCaaS testnet included; replaces the earlier "later path for customer-run chains" |
 | STARK proof of the lattice verifier | multi-M + prover minutes | public, PQ | Disproportionate |
 
 <a id="precompile"></a>
@@ -1895,8 +2093,8 @@ directories → the one directory `smartcontracts/vectors/pqz/` (P6e D9).
 `MLDSA44` at `0x000000000000000000000000000000005caa0012` and `MLDSA65` at `0x000000000000000000000000000000005caa0013`
 (EIP-8355's layout, empty context; [§9.2](#92-precompiles-mldsa44-and-mldsa65)), and `MLDSA87` at
 `0x000000000000000000000000000000005caa0014` from the first schedule that carries the optional `mldsa87Gas` (owner 2026-11-04,
-[CTR-UA-39](accounts.md#CTR-UA-39); plugin BUILT on branch `mldsa87`, price **provisional** ≈ 102,000 until a calibration run the
-owner allows; the roll-out to the SCaaS testnet is the owner's step). These are the 32-bit form (owner
+[CTR-UA-39](accounts.md#CTR-UA-39); plugin BUILT on branch `mldsa87`, price **135,000**, calibrated 2026-11-15 (was the provisional
+estimate ≈ 102,000); the roll-out to the SCaaS testnet is the owner's step). These are the 32-bit form (owner
 2026-10-21, spec `superpowers/specs/2026-10-20-pqz-state-redesign.md` §12 item 9; built in the node plugin and the
 scripts in plan 5h Task 8d part 1, the contracts in part 2); they replace P6f D3's `0x5caa500000000000000000000000000000000f01` / `…0012` /
 `…0013`, which the SCaaS testnet served until image `2.2.0-pqz4` replaced `2.2.0-pqz3` on 2026-10-25 (with provisional schedule rows until plan 5h Task 9). The addresses lie above `0xffff`
@@ -1904,11 +2102,12 @@ scripts in plan 5h Task 8d part 1, the contracts in part 2); they replace P6f D3
 on 22776 (P6f D3, controller proposal, owner may override). They come from a Nethermind **plugin** `Nethermind.Pqz`
 (no Nethermind patch: P6f D1) in the image `scaas/nethermind-pqz:1.39.0-pqz<n>` (built locally, never pushed: D13).
 **Status mapping (D4):** `pqz-ffi` status 0 ⇒ the 32 bytes; 1 ⇒ a failed call (all gas, the §9.1 revert); 3 ⇒ `…00`
-plus a `PQZ-INPUT-PANIC keccak(input)` warning; 2, 4 or any other ⇒ `PQZ-NODE-FAULT` (critical) and the process exits
-with code 120 — the block in progress is never sealed or imported and nothing is marked invalid; a restart
-re-processes it. **v1 runs only on our Nethermind chain** (owner). Other private chains (customer-run Besu/geth/reth)
-get the off-chain co-processor attestation seam later; **no client ports in v1**; the co-processor is rejected on chain
-the SCaaS testnet itself. **Determinism and probing:** integer-only code, no threads in the computation (`pqz-ffi` runs every core
+plus a `PQZ-INPUT-PANIC keccak(input)` warning (a panic in either verifier, PQZL or PQZH: review 3w u3-2); 2, 4 or any
+other ⇒ `PQZ-NODE-FAULT` (critical) and the process exits with code 120 — the block in progress is never sealed or
+imported and nothing is marked invalid; a restart re-processes it. The same exit for a managed exception in the
+plugin's `PQZ` path outside the library's statuses and, in an ML-DSA call, any exception but `CryptographicException`
+(which is `…00`, ruling W-R) (review 3w u4-1). **v1 runs only on our Nethermind chain** (owner). Other chains (customer-run Besu/geth/reth, public chains)
+run PQZ without a client port in `OFFCHAIN` mode ([CTR-PQZ-27](#CTR-PQZ-27)); **no client ports in v1**. **Determinism and probing:** integer-only code, no threads in the computation (`pqz-ffi` runs every core
 call serially on one worker thread, only for a fixed stack), no floating point, no CPU-feature-dependent
 results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed check ⇒
 output `0x00…00`; a fault of the node itself, not of the input (arena exhaustion, the worker or the core unavailable,
@@ -1981,7 +2180,7 @@ hint padding, hint count over ω, z out of range, t1 at its maximum, message bit
 constant, `PQZ-REFUSE` on a mismatch; code review 2026-10-25, precompile unit, finding C4) and logs the OpenSSL version in `PQZ-START` (the start-up
 proofSystemId check is in [§9.1](#91-precompile-pqz)). The low address bytes repeat EIP-8355's own `0x12` / `0x13`; the
 `0x5caa5` prefix keeps them off the contested `0x12`–`0x15` (EIP-8051 / EIP-8355). The UA `mldsa44` / `mldsa65`
-verifier for the SCaaS testnet (`UAMldsaVerifier`, an `IUAKindVerifier`) calls it; the address is an immutable constructor
+verifier for the SCaaS testnet (`MldsaVerifier`, an `IUAKindVerifier`) calls it; the address is an immutable constructor
 argument checked by self-test, so a later standard precompile means a new verifier in a new registry generation.
 Elsewhere the UA PQ kinds use a pure-Solidity verifier ([CTR-UA-23](accounts.md#CTR-UA-23)). Gas:
 [CTR-PQZ-11](#CTR-PQZ-11).
@@ -1998,6 +2197,17 @@ Operator change (P6f): Clique `TargetBlockGasLimit` **80,000,000** on the SCaaS 
 block then carried at most 8.0 MB of calldata, under EIP-7934's 8,388,608-byte RLP limit even for all-zero calldata. Since the
 reset of 2026-10-22 the SCaaS testnet runs **200,000,000** (genesis `gasLimit` `0xbebc200`, `TargetBlockGasLimit` 200,000,000), so that
 bound no longer follows from the gas limit (the producer's EIP-7934 check holds it).
+
+**Group 3f** (BUILT, T45 `2cce490d`): every proof-carrying entry takes the verdict last in both modes, so a `PRECOMPILE` debit
+pays its empty calldata (480 B: +7,680 gas at 16 per byte, +30,720 at the EIP-7976 floor); the pins moved old → new, each naming
+its mode. `OFFCHAIN` debits make no precompile call: with an EOA verifier, the same debit from the same state less the set's
+precompile row and less 52,871 (op 1 with the auditor copy) / 38,008 (an unshield) gas more; another verifier kind (`p256`,
+`webauthn-p256`, `mldsa44` / `mldsa65` on the precompile or cached in Solidity, a 2-of-3 `msig`) adds its `requireAuthorized` cost
+above the EOA's (not measured per kind in 3f). The empty verdict's 480 B moved two bounds (owner 2026-11-08): the split-overhead
+bounds PQZL 8,000 → 9,000 and PQZH 10,000 → 13,000 (raised again by T66b, [token-wrappers.md](token-wrappers.md#CTR-TOK-30)), and
+at `n2048-kmax1024` op 7 commit-reveal M = 4 without the auditor, fee paid by an `mldsa65` UA, no longer fits one transaction
+(16,786,328 > 2^24): M ≤ 3 for that combination there. `PQZ_DEBIT_MIN_GAS` and the `UAPqzHolder` bound keep the
+precompile-inclusive figure. A pure-Solidity `mldsa65` verifier costs more than the precompile it replaces.
 
 Node and client limits on the SCaaS testnet: Nethermind `TxPool.MaxTxSize`
 2,097,152 since the node split (owner ruling 2026-10-31, [NET-EVM-10](../networks/evm.md#NET-EVM-10); 1,048,576 before): it
@@ -2057,7 +2267,9 @@ test) **with an ML-DSA-65 (precompile) or ECDSA envelope and a single-key holder
 a transaction is included only if its `tx.gas` (regular plus state) fits the block gas limit, so such a transaction needs a block limit ≥ its regular plus state gas (the block's `gas_used`, max(Σ regular, Σ state), is accounting, not the inclusion test; the sender pays `max(total, floor)`) (the SCaaS
 testnet's limit is 200 M; a 60 M block does not hold it) (spec 2026-10-20 §12 item 3 left "the total against a 60 M
 block" to this measurement). **Client rule (C0-10, controller proposal, owner may override): `M ≤ 4` where the chain's block gas limit is 60 M**; the dependence on the block limit is accepted and there is no cutoff in code (a cutoff would hard-code one chain's block limit); (3) PQZH debits fit one transaction only at `n2048-kmax1024` (not op 7 M = 4 with the
-auditor, not with the hint), on both relay paths: 0.30–0.39 M of headroom on `mtxExecute`, 0.09–0.18 M (1,361–2,769 B)
+auditor, not with the hint, and — owner 2026-11-08, group 3f's verdict adds 480 B of calldata to every debit — not op 7 M = 4 in
+the commit-reveal form without the auditor when an `mldsa65` UA pays the fee: 16,786,328 > 2^24, so **M ≤ 3** for that
+combination at that set, asserted by `test_pqzhN2048FitsBothPaths`), on both relay paths: 0.30–0.39 M of headroom on `mtxExecute`, 0.09–0.18 M (1,361–2,769 B)
 on `uaExecute`, so any envelope growth must re-check it; (4) the register row's `R_REG` verification (the precompile row
 + the verifier's 0.11–0.69 M) is 3.62–5.03 M, above the 3,000,000 PQZ verify cap the e2e (`script/pqz/e2e.py`) used
 before 2026-10-26 (now 4,500,000, which covers PQZL only) and the 3,500,000 of the forge fixture at the provisional rows: a registry deployment needs a `PQZ_MLWE` cap above the
@@ -2096,7 +2308,7 @@ Contracts call it once at construction. Gas does not protect `eth_call`, which c
 so CPU spam through the RPC is bounded by the follower's rate limits, for every op, not only op 6. `MLDSA44` /
 `MLDSA65`: `max(EIP-8355 BASE, calibrated) + 6·⌈max(0, L − PK − SIG) / 32⌉`. `MLDSA87` (CTR-UA-39): the same form, base 13,500,
 `pk` 2,592 B, `sig` 4,627 B; `mldsa87Gas` optional per schedule (a schedule without it leaves the address inactive), its value
-**provisional** (≈ 102,000, `MlDsa.Provisional87Gas`, `add-schedule.py --mldsa87`), not calibrated; the start-up known-answer set
+**135,000**, calibrated 2026-11-15 (`MlDsa.Calibrated87Gas`, `add-schedule.py --mldsa87`; was the provisional ≈ 102,000); the start-up known-answer set
 covers the three levels.
 
 **Measured (P6f Task 6, 2026-10-15, one run, owner):** inside the built image on the chain host (AMD Ryzen 5 7235HS,
@@ -2128,6 +2340,14 @@ processes. ML-DSA p99 0.135 ms (44) / 0.189 ms (65) ⇒ `mldsa44Gas` **49,000**,
 6,500 / 9,000 is lower). Re-calibrate before chain 22776 or when a later measurement differs by more than 15 %. The
 estimates below predate this table.
 
+**Measured, `MLDSA87` (TODO 3zd, 2026-11-15, two passes, owner):** the same tool and method in the calib image of the
+`n2304-kmax4096` library `29c351ec…677c` (`--cpus 4`, no PQZ row, 1,000 calls over the 15 ACVP external inputs), host load
+1.4–2.7 on 8 CPUs, nothing heavy beside it. `t_ecMul` 0.016 ms in both passes. ML-DSA-87 p50 0.249 / 0.249 ms, p99
+0.358 / 0.328 ms ⇒ 135,000 / 123,000 (9.8 % apart, inside the 15 %); `mldsa87Gas` = the larger, **135,000** (was the
+provisional 102,000). The p50 ratio to ML-DSA-65 is 1.52, the estimate's 1.5; the price is above it by the p99 tail, which
+the same passes show for 44 / 65 too. ML-DSA-44: p99 0.156 / 0.154 ms ⇒ 59,000 / 58,000, `mldsa44Gas` **59,000** (was
+49,000; owner 2026-11-15, the higher pass). ML-DSA-65 measured 88,000–100,000 in the same passes (over the 15 % bound against 68,000) and stays 68,000: deferred by the owner (2026-11-15) to the next pqz-core / set-parameter change and its full gate, because at 100,000 it passes the 100,000 fixture cap of the 65 precompile path and moves `debit_min_gas` at all four sets. Summary `pqz-core/nethermind/runs/2026-11-15-mldsa87-calib.txt`.
+
 **Measured on the SCaaS testnet (P6g e2e, 2026-10-16, before plan 5h: hashes in state, `acc` and `inline` in calldata; real PQZL proofs, `gasUsed` of the transaction; log
 `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`).** Proofs from `pqz-ffi` (`examples/pqz_prove.rs`): transfer
 42.4–42.8 KB, burn / refresh 41.9 KB, `R_REG` 28.1 KB, disclosure 29.0 KB, each 0.3–1.9 s native.
@@ -2148,7 +2368,7 @@ estimates below predate this table.
 | `mtxUnshieldUnwrap` (leg payout) | 5,594,862 | |
 | `mtxRollOver` (1 credit) | 710,370 | |
 | `verifyTransferAmount` `SENDER_S` / `RECEIVER_X` / `AUDITOR` (`eth_estimateGas`) | 3,650,832 / 3,616,461 / 3,618,801 | views; op 4 / op 5 rows 2,601,000 / 2,567,000 |
-| `setPqzEnabled(true)` (self-test) / `createToken` `NORMAL_PQZ` / `WRAPPED_PQZ` | 2,612,253 / 3,022,079 / 3,192,615 | each creation runs the self-test; measured before plan 5g-Z2, whose `setKindEnabled` runs no self-test (the token's `initialize` does) |
+| `setPqzEnabled(true)` (self-test) / `createToken` `NORMAL_PQZ` / `WRAPPED_PQZ` | 2,612,253 / 3,022,079 / 3,192,615 | each creation runs the self-test; measured before plan 5g-Z2, whose `setTokenKindEnabled` runs no self-test (the token's `initialize` does) |
 
 A BUNDLE transfer with many inline credits approached the 16,777,216 cap (≈ +0.32 M per credit) before plan 5h; see below
 for the state redesign, where an inline credit costs ≈ 36 k.
@@ -2222,27 +2442,31 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 | Contract | Role | Notes |
 |---|---|---|
 | `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) self-test helper (no chain allowlist since the owner ruling of 2026-10-31) | BUILT (P6g D2): `selfTest` = op 6 answers exactly the build's set's hash (`PqzSet.SELFTEST`: `n2304-kmax4096` `0x23d7a1db…c97c0`, `n2048-kmax1024` `0xed910a2c…d205`, `n2560-kmax16384` `0x167c772e…45e7`, `n2816-kmax65536` `0x0aa1dfe2…1882`); the set's ids only, at `0x…5caa0f01` (plan 5h Task 8d part 2) |
-| `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3; plan 5h Task 8d part 2: the set's ids, sizes and probe hashes from `PqzSet`, so a new id or set is a new instance, hence a new `Env` version of `NORMAL_PQZ` / `WRAPPED_PQZ` and new releases): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a PQZ release's `verifier` (D9): an implementation constructor argument, one of `OpenFactory`'s canonical PQZ verifiers (5g-Z1, [CTR-ZTH-20](zether.md#CTR-ZTH-20)) |
-| `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
+| `PqzKeyVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3; plan 5h Task 8d part 2: the set's ids, sizes and probe hashes from `PqzSet`, so a new id or set is a new instance, hence a new `Env` version of `NORMAL_PQZ` / `WRAPPED_PQZ` and new releases): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a PQZ release's `verifier` (D9; may be 0: a release for `OFFCHAIN` tokens only, [CTR-PQZ-27](#CTR-PQZ-27)): an implementation constructor argument, one of `OpenFactory`'s canonical PQZ verifiers (5g-Z1, [CTR-ZTH-20](zether.md#CTR-ZTH-20)) |
+| `MldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
 | `ERC20MetaTx` (the one token base) | ERC20 + EIP712 + `IERC20MetaTx`, both structs, the address and UA paths, UA ledger | [CTR-MTX-07](metatx.md#CTR-MTX-07); `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
-| `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1, state redesign plan 5h part A) as the kinds `NORMAL_PQZ` (`NormalPqzToken`) and `WRAPPED_PQZ` (`WrappedPqzToken`): `PqzLayer` on `MetaTokenBase` + four external libraries in the one namespace `scaas.pqz` over the internal `PqzCore` (`PqzStateLib` init / shield / rollover / prepare, `PqzTransferLib` op 1 and op 7, `PqzBurnLib` burn / refresh / unwrap debit, `PqzViewLib` statement views and disclosure; they are the release's `Env.libs`, code hashes checked by `deployImplementation`, plan 5g-Z2); clones via `OpenFactory.createToken` behind the kind gate (`setKindEnabled`); disclosure `verifyTransferAmount` on the token (D11); op 7 entries and `minDecoyFee`. Sizes at the 5h Task 3 fix: `WrappedPqzToken` 60,907 B, `NormalPqzToken` 48,412 B (hard limit 65,536; the 4 KiB margin target was dropped), libraries 6,378 / 13,194 / 7,633 / 12,111 B (each < 24,576) |
+| `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1, state redesign plan 5h part A) as the kinds `NORMAL_PQZ` (`NormalPqzToken`) and `WRAPPED_PQZ` (`WrappedPqzToken`): `PqzLayer` on `MetaTokenBase` + four external libraries in the one namespace `scaas.pqz` over the internal `PqzCore` (`PqzStateLib` init / shield / rollover / prepare, `PqzTransferLib` op 1 and op 7, `PqzBurnLib` burn / refresh / unwrap debit, `PqzViewLib` statement views and disclosure; they are the release's `Env.libs`, code hashes checked by `deployTokenImplementation`, plan 5g-Z2); clones via `OpenFactory.createToken` behind the kind gate (`setTokenKindEnabled`); disclosure `verifyTransferAmount` on the token (D11); the verifier mode ([§9.5](#pqz-verifier-mode)): `pqzVerifyConfig()`, `pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier`, the verdict last on every proof-carrying entry; op 7 entries and `minDecoyFee`. Sizes at the 5h Task 3 fix: `WrappedPqzToken` 60,907 B, `NormalPqzToken` 48,412 B (hard limit 65,536; the 4 KiB margin target was dropped), libraries 6,378 / 13,194 / 7,633 / 12,111 B (each < 24,576) |
 | `PqzCt` (library) | `plus`/`minus` on 64-bit lanes, `addTrivial` for the `shieldIn` term and `subTrivial` / `addMem` / `subMem` / `loadBlob` / `isZero` for the queue, `reduce`, the `< q` check; the [stored form](#stored-form) (`packCd` / `packMem`, `expandAt`, `addBlob`, the rollover accumulators `addBlobEO` / `combineEO`) | BUILT (P6g; P46 and `PqzSet` in plan 5h Task 8d part 2): pure Solidity, no precompile; checked on the set's vectors (round trip, all `q − 1`, the bit layout) |
 | `Sstore2` | existing pattern (classical generator blob) | reused |
 
-Selectors (normative ABI; the proof-taking ones share the signature `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint[, …])`
-with Zether, [CTR-ZTH-45](zether.md#CTR-ZTH-45); as built in `src/confidential/IConfidentialToken.sol`, selectors pinned in
-`ConfidentialSelectors.t.sol`): `mtxShield(bytes32,uint256)`, `mtxWrapShield(address,uint256,bytes32)`,
-`mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)` (op 7, [CTR-PQZ-26](#CTR-PQZ-26)) and `…Compact`, `…Single`, `…SingleCompact`
-(op 1) with the same arguments, `mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)`, `mtxUnshieldUnwrap` (the same five, then
-the leg arguments), `mtxRollOver(bytes32,uint256)`, `mtxPrepareAcc(bytes32,uint256)`; views `pqzAccount(bytes32)` →
+Selectors (normative ABI, explicit parameters since typed-signing and the `ua*` / `mtx*` merge,
+[CTR-MTX-30](metatx.md#CTR-MTX-30); as built in `src/pqz/IPqzToken.sol` and `src/confidential/IConfidentialToken.sol`, selectors pinned in
+`ConfidentialSelectors.t.sol`): the direct `mtxShield(bytes32 toUA, uint256 amount)` and `mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA)`,
+their signed entries `mtxShield(UAEnvelope, bytes32, uint256, UASig)` and `mtxWrapShield(Envelope, address, uint256, bytes32, bytes sig)` (no twin, so
+`Envelope`); the proof-taking ones end in `(bytes proof, UASig pqzAuth, bytes accHint, PqzSignedVerdict pqzVerdict)`:
+`mtxConfidentialTransfer(PqzMultiArgs, …)` (op 7, [CTR-PQZ-26](#CTR-PQZ-26)) and `…Compact`, `mtxConfidentialTransferSingle(PqzTransferArgs, …)` and
+`…SingleCompact` (op 1), `mtxUnshield(PqzBurnArgs, uint256 amount, bytes32 recipient, …)`, `mtxUnshieldUnwrap(PqzBurnArgs, Unwrap, …)`;
+`mtxRollOver(bytes32,uint64,uint256)`, `mtxPrepareAcc(bytes32,uint64,uint256)` (the key version since 3g,
+[CTR-PQZ-31](#CTR-PQZ-31)); views `pqzAccount(bytes32)` →
 `AccountState{pendingCount, rolled, floor, cleared, accBlob, accUnits, flags, sendCounter, accHash}`, `pqzAcc(bytes32)`,
 `pqzPending(bytes32,uint64)` (the raw slot word), `pqzPendingCt(bytes32,uint64)`, `pqzEntryBlob(bytes32)`,
 `transferCiphertextHash(bytes32)`, `transferEntry(bytes32)`, `minDecoyFee()`, `confidentialFee()`;
 meta-tx: `executeMetaTransaction`, `metaTxDigest`, `metaNonce`, `cancelMetaNonce`, `supportedModes`, `envelopeBinding`,
 `uaExecute`, `uaDigest`, `uaNonce`, `uaCancelNonce`, `uaEnvelopeBinding`, `transferToUA`, `balanceOfUA`, `wrap(uint256)`,
 `unwrap(uint256,address)`, the `transferStatement` (op 7) / `transferSingleStatement` (op 1) / `burnStatement` views
-taking `binding`, `disclosureStatement(bytes32,uint256,uint256,uint8)`,
-`verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)`. There is no view `fallback`: views stay direct token functions (owner ruling).
+taking `binding`, `disclosureStatement(bytes32,uint256,uint256,uint8,uint64)`,
+`verifyTransferAmount(bytes32,uint256,uint256,uint8,uint64,bytes)` and its verdict form (3f). There is no view `fallback`: views stay direct token functions (owner ruling).
+Since group 3f every proof-carrying entry, direct and signed, ends with `PqzSignedVerdict pqzVerdict` ([CTR-PQZ-29](#CTR-PQZ-29)).
 
 Errors (plus
 `IERC20MetaTx`'s, the UA `UA*`, `PercentFeeForbiddenOnConfidential`, `MtxNotBatchable`, `ShieldPoolNotPayable`):
@@ -2250,7 +2474,461 @@ Errors (plus
 unreachable unless accounting is broken), `RollOverRange`, `CapReached`, `RollTooYoung`, `AccNotPrepared`, `ZeroU`,
 `DecoyFeeOutOfRange`, `UnknownEntry`, `Expired`, `ProofRejected`, `AuthRejected`, `AmountOutOfRange`, `AmountNotScaled`,
 `BadPayload`, and for op 7 `BadRecipientCount`, `DuplicateRecipient`. Gone with the old layout: `StaleSendCounter`, `AccMismatch`,
-`InlineMismatch`, `RefreshRequired`, `PlainOverdraw`, `CiphertextOffState`.
+`InlineMismatch`, `RefreshRequired`, `PlainOverdraw`, `CiphertextOffState`. Group 3f: `PqzVerifyModeInvalid`,
+`PqzVerifyConfigInvalid`, `PqzVerifierUnregistered`, `PqzVerifierKind`, `PqzVerifierFixed`, `PqzVerifierSame`,
+`PqzVerifierChanged`, `PqzVerifierRevoked`, `PqzVerifierNotReady`, `PqzVerifierPending`, `PqzVerdictRequired`,
+`PqzVerdictRejected`, `PqzVerdictMismatch` ([§9.5](#pqz-verifier-mode)). Round 3t ([CTR-PQZ-36](#CTR-PQZ-36)):
+`VerifierFeeAboveMax(fee, max)`, `VerifierFeePending(pending)`, `VerifierFeeSame()`, `VerifierFeeNotReady(eta)`; the entry
+`setVerifierFee(uint64, bytes32 chainUid_)` (kinds 4, 5, 12, 13: module Q on 4, 12, S on 5, 13; the word [CTR-GOV-28](../decisions.md#CTR-GOV-28)), the events `VerifierFeeProposed(current, next,
+eta)`, `VerifierFeeSet(previous, next)`, and `pqzVerifyConfig()`'s four appended fields `verifierFee`, `verifierFeeMax`,
+`verifierFeePending`, `verifierFeeEta` (0 on `PRECOMPILE`; a dead pending reads 0, 0); `type(IPqzToken).interfaceId` `0xd87fe345`, `0x757d0753` since the four verifier setters took `chainUid_` ([CTR-GOV-28](../decisions.md#CTR-GOV-28)).
+
+<a id="CTR-PQZ-42"></a>**CTR-PQZ-42** — **The set identity is `PqzSet.SET_DIGEST`, the keccak256 of the generated constant block of
+`PqzSet.sol`** (owner 2026-11-13, review finding T-26; SPECIFIED, built in the three-key build). `gen_set.py` writes
+`SET_DIGEST` = keccak256 of the generated constant block of the set's `PqzSet.sol` (every generated constant but `SET_DIGEST`
+itself); `pqzSet()` returns it, and the module checks of a PQZ kind (`ModuleMismatch(i)`) and every other set-identity
+comparison use it instead of `SELFTEST`, so two builds that share a self-test hash but differ in any set constant (an id,
+`ROLL_MAX`, a length) are told apart. `SELFTEST` stays the precompile's self-test answer. **UNAUDITED.**
+
+### <a id="pqz-verifier-mode"></a>9.5 PQZ verifier mode (OFFCHAIN)
+
+Status: contracts **BUILT** (group 3f, T44 + T45 `2cce490d`; kinds 4, 5, 12, 13); vectors writer BUILT
+(`test/pqz/PqzVerdictVectors.t.sol`); `clientkeys` (T46 `134560c1`, `e452b88f`, `8563eb78`), the node (T47 `75ddccc4`, `fd2dfb2f`,
+`e50251b4`, `b3b31560`, `062133b6`; the token view SPECIFIED) and the PQZ verifier (off-chain) (T48 `06e11d23`, `5d4a2780`)
+**BUILT**; invariants I1–I6 BUILT (T49 `9d7c2576`). **UNAUDITED.** Design history: [spec 3f](../superpowers/specs/2026-11-06-attested-verify.md).
+The *PQZ verifier* is a UA that signs a `PqzVerdict`; it is not `PqzKeyVerifier`, the registry's on-chain PoP verifier contract,
+which is unchanged.
+
+<a id="CTR-PQZ-27"></a>**CTR-PQZ-27** — **The mode: per token at creation, immutable; no chain detection** (owner rulings
+of 2026-11-06, spec 3f AV-1, AV-2). `IFactoryToken.ConfidentialConfig` carries three named fields:
+
+| Field | Type | `PRECOMPILE` (0, the default) | `OFFCHAIN` (1) |
+|---|---|---|---|
+| `pqzVerifyMode` | `uint8` | 0 | 1; any other value `PqzVerifyModeInvalid(uint8)` |
+| `pqzVerifierUA` | `bytes32` | 0 | the verifier UA ([CTR-PQZ-28](#CTR-PQZ-28)) |
+| `pqzVerifierFixed` | `bool` | false | true: fixed for ever; false: transferable |
+| `verifierFee` | `uint64` | 0, else `PqzVerifyConfigInvalid()` | the verifier fee per debit, shielded units ([CTR-PQZ-36](#CTR-PQZ-36), group 3t) |
+| `verifierFeeMax` | `uint64` | 0, else `PqzVerifyConfigInvalid()` | its immutable cap, `≥ verifierFee` (`VerifierFeeAboveMax`) |
+
+A field set against the mode reverts `PqzVerifyConfigInvalid()`. Every other kind, the Zether kinds included, refuses any of the
+five set (`ConfigFieldForOtherKind(4)`); the `TokenConfig` encoding moved for every kind. `pqzVerifyMode` is byte 22 of
+`scaas.pqz` slot 0, beside `pqz` and the two mode enums (a `PRECOMPILE` debit reads no new slot), written by `init` only; no entry
+or router op writes it. **Releases:** `validateEnv` admits `deps = [0]` (exactly one dep, never Hedera, a non-zero dep must be
+code). `PRECOMPILE` init on a zero-dep release refuses `SelfTestFailed(address(0))` before any call, then runs today's reads and
+self-test. `OFFCHAIN` init reads nothing from the release's verifier, sets `proofSystemId = PqzSet.PQZL_ID` (PQZL only; the set
+is the release's) and stores the factory's `noticePeriod()`. An `OFFCHAIN` token never calls `0x…5caa0f01`, on any chain, the
+SCaaS testnet included; the mode is never inferred from a missing dependency. `env.hedera` stays refused in both modes: a retained
+exception to O1's wording, for a later Hedera item.
+
+**Trust model** (AV-1; shown at creation, in wallets and before a shield into an `OFFCHAIN` token): soundness is replaced by trust
+in the verifier UA. A verifier that signs a false proof can create value that does not exist and spend it: unshield up to
+`totalShielded` and, on kinds 5 and 13, take the underlying in escrow. **Maximum loss: `min(totalShielded, maxShielded) ·
+shieldScale` public units.** Unchanged: every debit still needs the subject's `PqzAuth` signature ([CTR-PQZ-12](#CTR-PQZ-12)), so
+the verifier cannot spend a victim's balance; every ciphertext stays in contract state exactly as in `PRECOMPILE` mode
+([CTR-PQZ-07](#CTR-PQZ-07)). **Confidentiality depends on the token's key class ([CTR-PQZ-37](#CTR-PQZ-37)).** Shared-key
+token: a holder's keys are not exposed, provided its wallet follows the holder check ([CLI-SGN-51](../clients/signers-clientkeys.md#CLI-SGN-51));
+incoming amounts are as private as the holder's opening KEM key of that chain. Own-key token with the sealed opening: as a
+shared-key token, with the key and the opening KEM key of that token only. Own-key token without it: whoever controls the
+token's verifier can recover a key of that token from its holder's public reactions, and every observer learns it; the loss is
+stated in [ARCH-POS-13](../decisions.md#ARCH-POS-13)'s Change; no other key is touched (Change of 2026-11-13, SPECIFIED).
+**The verifier fee** (group 3t,
+[CTR-PQZ-36](#CTR-PQZ-36)): the token charges every debit up to `verifierFeeMax` for its verifier; the cap is the price a holder
+accepts at shield (wallets show it first, the current fee beside it); an increase waits the stored notice, which helps only
+while the verifier keeps answering; the maximum loss is unchanged (the verifier's fees leave the pool only as `totalShielded`
+falls, T28). Liveness, censorship and containment: threat T27
+([§12](#threats), [containment](#verifier-containment)).
+
+<a id="CTR-PQZ-28"></a>**CTR-PQZ-28** — **The verifier UA** (owner rulings of 2026-11-06, spec 3f AV-3, AV-4). Accepted at init and at a proposal
+only as one of:
+
+| Kind | Id | Verify path without SCaaS precompiles |
+|---|---|---|
+| native EOA | `0x0001` (a padded address) | `ecrecover`; no code other than the EIP-7702 designator (a native id with code reads as `EVM_CONTRACT` `0x0002`: `PqzVerifierKind(2)`) |
+| `secp256k1` | `0x0108` | `ecrecover` |
+| `p256` | `0x0101` | EIP-7951 where probed, else OpenZeppelin's Solidity verifier |
+| `webauthn-p256` | `0x0100` | as `p256`, plus SHA-256 |
+| `mldsa44`, `mldsa65` | `0x0130`, `0x0131` | the SCaaS ML-DSA precompile where probed, else pure Solidity on the cached expanded key (`expandKey` first, [CTR-UA-23](accounts.md#CTR-UA-23)) |
+| `msig` | `0x0120` | k-of-n of the kinds above, one level, within the registry's aggregate budget |
+
+A derived verifier must be registered on this chain first (`kindOf = 0`: `PqzVerifierUnregistered(bytes32)`; `pqzSetVerifier(0)`
+is refused the same way, so 0 is never a pending verifier); any other kind, an `msig` member included, reverts
+`PqzVerifierKind(uint16)` (`mldsa87`, the EIP-2537 and bn254 kinds, `zether-bls12381`, `pqz-mlwe`, a nested `msig`). A listed kind
+is no liveness guarantee: the registry's budget and the chain's gas limit still apply. Recommended: a transferable k-of-n `msig` of
+derived keys held by separate parties (for example 2-of-3 `secp256k1` / `p256`, or `mldsa65` members for the post-quantum horizon).
+
+- **Frozen shape.** At each assignment (init, confirm) the token stores `pqzVerifierShape = keccak256` of: a native id's code hash
+  (no code: `keccak256("")`); a derived single key's kind; an `msig`'s structure (threshold, each member's kind, id, weight) with
+  each slot's accepted flag and each native member's code hash. Every `OFFCHAIN` check recomputes it; a difference refuses
+  `PqzVerifierChanged()` until a transfer re-assigns.
+- **Fixed** (`pqzVerifierFixed = true`): `pqzSetVerifier`, `pqzCancelVerifier`, `pqzRevokeVerifier` revert `PqzVerifierFixed()`.
+- **Transfer** (transferable only): the governance owner (`_govSubject() == owner()`, identity by UA) calls
+  `pqzSetVerifier(next)`. A proposal checks the kinds (strict shape), `next ≠` the current (`PqzVerifierSame()`), no live pending
+  (another value while one is live: `PqzVerifierPending(pending)`), and sets `eta = now + noticePeriod`
+  (`PqzVerifierProposed(current, next, eta)`). The confirm is the same call with the same `next` by the **same proposer**, still the
+  owner, in the **same owner generation**, within `[eta, eta + noticePeriod]`: before `eta` `PqzVerifierNotReady(eta)`; a call on a
+  live pending by anyone but its proposer `IGovernance.NotProposer(0, next, proposer)` (checked before the owner check, so a
+  stranger learns the proposer). It writes the verifier, its shape and `pqzVerifierEpoch + 1` (`PqzVerifierSet(previous, next,
+  pqzVerifierEpoch)`). With `noticePeriod = 0` the proposal applies at once. An owner change or a passed window leaves the pending
+  dead. `pqzCancelVerifier()` deletes a live pending (`PqzVerifierCancelled(next)`; none live: nothing happens). Other refusals, in
+  order: a caller who is not the admin `IGovernance.NotAdmin(bytes32)`, then a `PRECOMPILE` token `PqzVerifyConfigInvalid()`, then
+  a fixed verifier `PqzVerifierFixed()`. **The chain word** ([CTR-GOV-28](../decisions.md#CTR-GOV-28), owner 2026-11-13; BUILT on
+  branch `ua-mtx-fix3-chainuid`, UNAUDITED): the three entries are `pqzSetVerifier(next, chainUid_)`,
+  `pqzCancelVerifier(chainUid_)`, `pqzRevokeVerifier(chainUid_)`; a word that is not the token's is `ChainUidMismatch(expected,
+  got)`, the admin's before any write (after `NotAdmin` on the cancel and the revocation; on the transfer a non-admin is refused
+  by the order above first), so a native admin's direct call made for a sibling with the same chain id is void.
+- **The period** is the factory's `noticePeriod()` (set once by `configureChain`, [CTR-TOK-29](token-wrappers.md#CTR-TOK-29)),
+  stored at init, so nothing later shortens it; never the creator's `grantDelay`. It may be 0 on a test chain; wallets show the
+  stored value. Off chain, the wizard and the node submit a proposal only with a probe verdict signed by `next` (a typo would
+  otherwise freeze the token for another notice).
+- **Revocation** (owner 2026-11-06): `pqzRevokeVerifier()`, owner, transferable verifier, **at once**: verifier and shape 0,
+  `pqzVerifierEpoch + 1`, any pending deleted, `PqzVerifierRevoked(previous, pqzVerifierEpoch)` (an event at file level of
+  `IPqzToken.sol`, since `IPqzToken`'s error has the same name). Every proof-carrying op then refuses `PqzVerifierRevoked()` and
+  the `OFFCHAIN` disclosure answers false, until a transfer through the notice sets a new verifier. A fixed verifier cannot be
+  revoked (Q1, owner 2026-11-06: no).
+- **No governance bit** (C4): moving the trust root is an ownership-level act. **Relayed** through the `GovernanceRouter`:
+  `mtxPqzSetVerifier(UAEnvelope e, address target, bytes32 next, bytes32 chainUid, UASig auth)`, `mtxPqzCancelVerifier(UAEnvelope
+  e, address target, bytes32 chainUid, UASig auth)`, `mtxPqzRevokeVerifier(UAEnvelope e, address target, bytes32 chainUid, UASig
+  auth)` over `UAPqzSetVerifier(bytes32 from,address target,bytes32 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256
+  validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)` and `UAPqzCancelVerifier` / `UAPqzRevokeVerifier`
+  (the same without `next`; the word signed and forwarded, CTR-GOV-28); fee mode `NONE`, relayable at fee 0.
+- **Storage** (`scaas.pqz`, appended slots 13–18, read on the `OFFCHAIN` branch only): `pqzVerifierUA`, `pqzVerifierShape`,
+  `{pqzVerifierEpoch uint32, pqzVerifierFixed bool, noticePeriod uint64, eta uint64}`, `pqzPendingVerifier`, `pqzProposer`,
+  `pqzProposerGeneration`. View `pqzVerifyConfig()` → `PqzVerifyConfig {pqzVerifyMode, verifier, fixed_, pqzVerifierEpoch,
+  pending, eta, noticePeriod}` (a dead pending reads as none). Layout pinned old → new.
+
+<a id="CTR-PQZ-29"></a>**CTR-PQZ-29** — **The inline verdict** (owner 2026-11-06, spec 3f AV-5). Typed EIP-712 in the token's own domain
+(`"SCaaS PqzToken"`, `"1"`, chainId, token, `chain_uid`), signed by the verifier through `IUARegistry.requireAuthorized(verifier,
+PURPOSE_PQZ_VERDICT, digest, sig)`, `PURPOSE_PQZ_VERDICT = keccak256("scaas.ua.purpose.pqz-verdict.v1")` (no registry change):
+
+```text
+PqzVerdict(address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil)
+```
+
+`statementHash = keccak256` of the statement exactly as the statement views return it (`transferStatement`,
+`transferSingleStatement`, `burnStatement`, `unshieldUnwrapStatement`, `disclosureStatement`: the bytes after the precompile's
+5-byte prefix, hashed in place); `proofHash = keccak256(proof)` of the calldata bytes; both recomputed by the token, never taken
+from the submitter. `validUntil` is unix seconds. The statement binds op, chain, token, parties, amounts, keys, `T`,
+`sendCounter`, `validUntilBlock`, `envelopeBinding` and the outputs ([§7.7](#77-statement-layout)), so a debit's verdict fits one
+transaction once; the verdict adds `proofHash` (a lying verifier is told apart from a swapped proof), the epoch, `validUntil`, and
+the domain and purpose. Typehash pinned (`PqzVerdictTypehashIsPinned`).
+
+- **Carried** as `PqzSignedVerdict { PqzVerdict pqzVerdict; UASig sig; }`, one parameter named `pqzVerdict` (one struct because the
+  legacy code generator ran out of stack: the spec's fallback, still explicit; the array form `PqzSignedVerdict[]` was considered
+  and withdrawn by the owner 2026-11-08), **last** on all twelve proof-carrying entries of kinds 5 and 13 (ten on 4 and 12, which
+  have no unwrap): direct `mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact`, `mtxUnshield` (burn and refresh),
+  `mtxUnshieldUnwrap`, and their signed `UAEnvelope` forms, where it follows `auth`, outside the `UA*` struct: no typehash moved,
+  `PqzAuth` untouched. Like `relayer` / `feeRecipient` it is unbound: a relayer may swap it for another valid verdict over the same
+  hashes, harmlessly. Empty verdict: every field 0 and an empty `UASig` (480 B of calldata).
+- **`PRECOMPILE`** tokens never read it: the precompile decides, as before.
+- **`OFFCHAIN` `_check`**, after the subject's authorization, in order: verifier 0 ⇒ `PqzVerifierRevoked()`; shape recomputed ≠
+  stored ⇒ `PqzVerifierChanged()`; then `PqzVerdictMismatch(uint8 field)`, `field` the index in `PqzVerdict`: 0 `token ≠ this`,
+  1 `chainId ≠ chainid`, 2 `proofSystemId ≠` the token's, 3 `statementHash`, 4 `proofHash`, 5 `pqzVerifierEpoch ≠` the current,
+  6 `validUntil < block.timestamp`; the signature refused ⇒ `PqzVerdictRejected()`; starved (the registry's `UAVerifyGas`, or its
+  frame out of gas: no data, under `g/63` left) ⇒ `UAVerifyGas()`, never a refusal. Success emits `PqzVerified(statementHash,
+  proofHash, verifier, pqzVerifierEpoch)`; the precompile is never called. Nothing is stored: no book, no record; a failed op
+  reverts its event.
+- **A fee change** (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)): the statement a verdict hashes carries the verifier fee in its `fee`
+  word (and, direct, in the binding word 544), so every statement built before a `VerifierFeeSet` is stale: the op refuses
+  `AuthRejected()` (and, with a re-signed `pqzAuth`, `PqzVerdictMismatch(3)`), and the holder re-proves; `PqzVerdict` and its
+  typehash are unchanged.
+- **Disclosure**: [§7.9](#disclosure).
+
+<a id="CTR-PQZ-30"></a>**CTR-PQZ-30** — **Keys in `OFFCHAIN` mode** (owner 2026-11-06, spec 3f AV-6; per version, 3g KV-12). Every key read of
+a PQZ op (sender, recipients, auditor, shields, op 7 legs, rollover and prepare: `_keyPtr`, `_creditKey`) and the auditor check at
+`init`: `PRECOMPILE` requires `proven` and this set's exact length (`PqzCt.PK + 1` bytes of code), `OFFCHAIN` the length only;
+otherwise `AccountNotRegistered(ua)`. Which version is current is the registry's (3g, [CTR-PQZ-31](#CTR-PQZ-31)). **The PQZ
+verifier's (off-chain) duties**, for every key the statement names: the registry holds that version's `pqzPop` **bytes** and they
+hash to its `pqzPopHash` (a hash-only record cannot be re-verified: no verdict); the `R_REG` proof verifies over that path's
+message (`register` key: `uaMessage(0x0142, PURPOSE_POP_V2, portableRecordDigest(…))`; `setPqzKey` key: `uaMessage(0x0142,
+PURPOSE_PQZ_KEY, pqzKeyDigest(…))`; version ≥ 1: `uaMessage(0x0142, PURPOSE_PQZ_KEY, typed(UAPqzKeyVersion))`; one path is never
+evidence for another); no other UA and no other version holds the same `pqzKeyHash`; results cached by `(ua, version,
+pqzKeyHash)`, never by `ua` alone. An op naming a key that fails gets no verdict. Given up: `keyOwner` uniqueness and the `0x0142`
+list are not chain-readable for these holders (wallets ask the verifier before a send); a shield into a UA whose key the verifier
+refuses lands (shields carry no proof) and stays undebitable until the key passes.
+
+**Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** Every current and historical key read of a token uses the token's scope ([CTR-UA-43](accounts.md#CTR-UA-43)): `registry` `pqzKeyOf` / `pqzKeyAt`; `offchain-shared` scope `address(0)`; `offchain-token` scope `address(this)`; one internal function takes the scope and no site reads the registry views directly. The verifier's duties above apply per scope: a scoped `R_REG` proof is over `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, digest(ua, keyClass, chainUid, token, version, pqzKeyHash))` and is checked under `PQZL_ID`, never the token's id; the proof bytes are stored for both scoped classes.
+
+**The PQZ verifier (off-chain)** is a separately operated trust role, not a node module: [ops.md](../node/ops.md#pqz-verifier)
+(BUILT, T48). It verifies public statements and proofs with `pqz-ffi` and signs; it decrypts nothing and holds no PQZ secret
+([ARCH-POS-13](../decisions.md#ARCH-POS-13)). Open (owner): who assembles the k member signatures of an `msig` verifier's one
+verdict within its `validUntil` (the node and the reference service take one complete `UASig` from one endpoint). **UNAUDITED.**
+
+**The reference verifier `scaas-pqz-verifier`** (BUILT, T48; Fable review C-1…C-6 fixed on branch `ua-mtx-fix-verifier`,
+`64e95c0d`…`81a60931`, controller calls under the owner's leave; [decisions.md](../decisions.md) CTR-PQZ-28, CTR-PQZ-29
+Changes). One process serves one chain, pinned in its configuration: `chain_id` (every RPC endpoint must answer it at
+start), `chain_uid`, the UA `registry` and its `registry_generation`. It signs only the `UAAuth` digest of a `PqzVerdict`
+(`UAKinds.uaAuthDigest` in the registry's domain: `"SCaaS UARegistry"`, the generation, the chain id, the registry, salt
+`chainUid`), built locally from those pinned values; a hash an RPC or a contract returns is never signed. A token is served
+only if it is an EIP-1167 proxy of a configured release whose code names the pinned registry and `chainUid` (else
+`FOREIGN_REGISTRY`, `FOREIGN_CHAIN_UID`), is `OFFCHAIN`, names this verifier and is at the request's epoch; then the statement
+length and word 32 (the token's own `proofSystemId`: `PQZL_SPLIT_ID` with the sealed opening, K3-4), the token's own view
+rebuilds the same bytes, `pqz-offchain` (pqz-ffi's verifiers plus `PQZL_SPLIT_ID`, which the precompile never serves)
+answers `…01`, and every named key passes [CTR-PQZ-30](#CTR-PQZ-30) on its scoped record (class 2 scope 0, class 3 the
+token; CTR-UA-43); the verdict carries the token's `proofSystemId`. The probe signs only the fixed 27-byte probe statement (every statement a token
+hashes is at least 640 bytes, so a real debit refuses it `PqzVerdictMismatch(3)`), for an `OFFCHAIN` token naming this verifier,
+or, as a `proposal` probe (§4.2's typo guard of `next`), naming another verifier or none. Reads follow
+[ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover (one node, one block per request, the block by number). **Operator
+rule (owner 2026-11-11): every `rpc_urls` endpoint must be a node the verifier's operator trusts, until the strict-majority
+option exists (`scaas-rpc`)**: the option is deferred to the shared `scaas-rpc` crate (TODO 8b), and a lying RPC could pass a key check (§6, CTR-PQZ-30: the key record, its stored `pqzPop` bytes, `keyOwner`) that `OFFCHAIN` tokens trust the verifier for. Known
+limits: the key ownership record is in memory (bounded, `KEY_RECORD_FULL`), no factory lookup, one registry
+generation per process ([README](../../scaas-pqz-verifier/README.md)). **UNAUDITED.**
+
+<a id="CTR-PQZ-36"></a>**CTR-PQZ-36** — **The verifier fee: an `OFFCHAIN` token pays its verifier UA from the fee word, capped,
+raised only with notice** (owner 2026-11-11; group 3t; register entry and rulings
+[decisions.md](../decisions.md) (CTR-PQZ-36); design [spec 3t](../superpowers/specs/2026-11-11-verifier-fee.md)). Status: **BUILT**
+on branch `ua-mtx-3t` (contracts, tests, vectors, clientkeys, ua-rs, the node, the PQZ verifier (off-chain), the matrix group
+`pqoff`, its local run in the stacked gate; `smartcontracts/evm/runs/2026-11-11-ua-mtx-3t/summary.txt`), **UNAUDITED**. PQZ kinds 4, 5, 12, 13 in `OFFCHAIN` mode
+only; `PRECOMPILE` tokens and every Zether kind keep their behaviour.
+
+- **Config.** `ConfidentialConfig` gains `uint64 verifierFee` and `uint64 verifierFeeMax` after `proofStore`, the cap immutable,
+  both in shielded units like `confidentialFee` and the fee word; the payout is `verifierFee · shieldScale` public units, so at
+  `shieldScale ≠ 1` a creator types the public price divided by `shieldScale` (controller call 1, an interpretation of the
+  ruling's "public units"). A `PRECOMPILE` token refuses either non-zero (`PqzVerifyConfigInvalid()`), every other kind
+  `ConfigFieldForOtherKind(4)`; `verifierFee = 0` is off, with no flag. Init checks, in order: the range row
+  `confidentialFee + verifierFeeMax + 8·minDecoyFee < 2^64` and `< maxShielded` (`BadInit()`; with the cap, controller call 2,
+  so the setter needs no range check), the mode rows, then `verifierFee ≤ verifierFeeMax` (`VerifierFeeAboveMax(fee, max)`).
+- **Payment.** Every proof-carrying debit (op 1, op 7, burn, refresh and a stale version's migration, the unwrap; direct and
+  envelope forms) adds the current `verifierFee` once to the statement's public `fee` word, `txFee + verifierFee + M·d`; the
+  relations and `proofSystemId` are unchanged (`fee` is a public input of every debit relation, so `verifierFee` comes out of
+  the sender's proved hidden balance and the same call's `shieldIn`, as `txFee` does). On an `OFFCHAIN` token the direct
+  transfer's binding word binds the fee in force ([CTR-PQZ-25](#CTR-PQZ-25), `TAG_DIRECT_MODE_VF`), so the word's split between
+  `verifierFee` and `d` is bound on both forms (Fable P1-1). `totalShielded` falls by the whole word and the token pays from
+  `SHIELD_POOL`, in order: `txFee` to the beneficiary, `verifierFee · shieldScale` to the current verifier UA's public balance
+  (a native id's ERC-20 balance, a derived UA's ledger balance, created by its first payout; no PQZ key needed), `d` to every
+  leg, then the amount; `balanceOf(SHIELD_POOL) == totalShielded · shieldScale` after every op. On 12, 13 the payee is checked
+  as a fee recipient before any effect (CTR-AS-25: frozen `FeeRecipientFrozen`, `R` under `KYC`, `L` under the lists) while the
+  fee is not 0: such a verifier halts every debit of the token, exits included, while shields keep landing; the relief is the
+  admin's `setVerifierFee(0)`, at once, or the cause lifted, and with admin 0 only the cause's own (T31). `verifyTransferAmount`
+  charges nothing (a view); `confidentialFee` is unchanged.
+- **Changing it.** The admin calls `setVerifierFee(uint64 next, bytes32 chainUid_)` (`governed`, `nonReentrant`; the token's
+  chain word, [CTR-GOV-28](../decisions.md#CTR-GOV-28)) or the router's `mtxSetVerifierFee(UAEnvelope e, address target, uint64
+  next, bytes32 chainUid, UASig auth)` over `UASetVerifierFee` (typehash `0x5f8c20d2…076e`, was `0xffa3baec…d14d` before
+  CTR-GOV-28; fee mode `NONE`, relayable at fee 0 by any submitter), within `[0, verifierFeeMax]`: a decrease, to 0
+  included, applies at once and cancels a pending increase (controller call 3); an increase proposes with `eta = now +
+  noticePeriod` (the factory's, stored at init; at once when it is 0, both events), and the same call by the same proposer in
+  the same admin generation within `[eta, eta + noticePeriod]` confirms, as the verifier transfer of
+  [CTR-PQZ-28](#CTR-PQZ-28); an admin change or a passed window leaves the pending dead; the current value with a live pending
+  cancels it without moving the fee (`VerifierFeeSet(cur, cur)`, Fable P3-1), without one `VerifierFeeSame()`. Refusals in
+  order: `NotProposer`, `NotAdmin`, `PqzVerifyConfigInvalid` (`PRECOMPILE`), `VerifierFeeNotReady(eta)`,
+  `VerifierFeeAboveMax`, `VerifierFeeSame`, `VerifierFeePending(pending)`. A fixed verifier fixes the verifier, not its fee;
+  admin 0 freezes the fee at its init value. Events `VerifierFeeProposed(current, next, eta)` (the indexer's alert) and
+  `VerifierFeeSet(previous, next)`; `pqzVerifyConfig()` shows the fee, the cap and a live pending increase with its `eta`.
+- **Built ops.** Every fee change, a decrease included, makes every op built at the old fee refuse (`AuthRejected`, then
+  `PqzVerdictMismatch(3)`), so relayers simulate first; the node keeps such a job queued, `PQZ_FEE_MISMATCH`
+  ([NODE-JOB-22](../node/job-api.md#NODE-JOB-22)), and the PQZ verifier (off-chain) refuses a request whose fee word is not the
+  view's (`FEE_WORD_MISMATCH`, [ops.md](../node/ops.md#pqz-verifier)). An immediate decrease is a stranding lever (T32).
+- **Storage.** `scaas.pqz` slots 20–22, appended (`verifierFee`, `verifierFeeMax`, the pending value and `eta` in slot 20; the
+  proposer and its admin generation after), read on the `OFFCHAIN` branch only; pinned in `test/v2/layout/`.
+
+**Measured at T45** (before the T66b body modules; current sizes under [CTR-TOK-30](token-wrappers.md#CTR-TOK-30);
+`smartcontracts/evm/runs/2026-11-08-ua-mtx-merge-pqz-verifier-sizes.txt`; runtime bytes before → with 3f): kind 13
+`WrappedPqzRegulatedToken` 70,437 → 72,402 (initcode 72,072 → 74,044), kind 12 56,487 → 58,361, kind 5 58,219 → 60,132, kind 4
+48,846 → 50,804; `PqzTransferLib` 19,724 → 22,604, `PqzBurnLib` 10,697 → 14,020, `PqzStateLib` 9,460 → 13,763, `PqzViewLib`
+19,886 → 23,319; `GovernanceRouter` 14,886 → 15,190. Release deploy gas (×1.05): kind 13 118.41 M → 121.70 M, 12 95.04 M →
+98.18 M, 5 97.93 M → 101.14 M, 4 82.23 M → 85.51 M, the router 25.22 M → 25.73 M. Calldata: the empty verdict 480 B, an EOA
+verifier's verdict 576 B. Gas (T50 probe, `smartcontracts/evm/runs/2026-11-08-ua-mtx-merge-pqz-verifier/PqzOffchainGas.t.sol`,
+`n2304-kmax4096`, the same direct debit from the same state, the precompile mocked): op 1 with the auditor copy 23,045,891
+(`PRECOMPILE`, less its precompile row) → 22,993,020 (`OFFCHAIN`, EOA verifier), an unshield 22,448,818 → 22,410,810 (both
+figures include the EIP-8037 state gas). The relayed path's split overhead at `n2304-kmax4096` (`MtxSplitOverhead.t.sol`,
+ecdsa / `mldsa65` / `fndsa512` fee payers): PQZL 5,909 / 6,013 / 6,027 → 7,579 / 7,689 / 7,699, PQZH 9,213 / 9,571 / 9,593 →
+12,673 / 13,039 / 13,055 (bounds raised by the owner 2026-11-08 to PQZL 9,000 and PQZH 13,000, then by T66b's body modules,
+owner 2026-11-09, to PQZL 99,000 and PQZH 335,000); at `n2048-kmax1024` PQZL 8,608 / 8,740 / 8,749, PQZH 11,879 / 12,217 / 12,233.
+
+**Known limit** (owner 2026-11-08): at `n2048-kmax1024` (not recommended, owner 2026-10-25) a PQZH op 7 in the commit-reveal form
+with M = 4 and no auditor copies, its fee paid by an `mldsa65` UA, needs 16,786,328 gas (the EIP-7976 floor of its 262,052 B) >
+2^24 and does not fit one transaction: **M ≤ 3** for that combination at that set; every other row fits
+(`test_pqzhN2048FitsBothPaths` asserts exactly this).
+
+### <a id="pqz-key-classes"></a>9.6 PQZ key classes (three-key model)
+
+Status: **SPECIFIED** (owner rulings of 2026-11-13; spec [2026-11-13-pqz-three-keys.md](../superpowers/specs/2026-11-13-pqz-three-keys.md)); nothing built.
+**UNAUDITED.** Scope: EVM; no other family has an `OFFCHAIN` PQZ token, and a family that gets one takes the same rules in its
+own build. The problem it closes: on an `OFFCHAIN` token a false verdict can plant a crafted credit, and a holder that decrypts
+it with its PQZ secret answers one question about that key by its next debit (T27's key recovery); with one registry key per
+holder this exposed the key across every token.
+
+<a id="CTR-PQZ-37"></a>**CTR-PQZ-37** — **Three key classes; a token's class is fixed at creation; the opening machinery is keyed
+on `pqzOpening`** (owner 2026-11-13; spec K3-1, K3-1b). SPECIFIED.
+
+| Class (name in ids) | Token | Key | Credit evidence | Rollover |
+|---|---|---|---|---|
+| `registry` | `PRECOMPILE` | the registry PQZ key, unchanged ([CTR-UA-16](accounts.md#CTR-UA-16), [CTR-UA-42](accounts.md#CTR-UA-42)) | the on-chain proof | public ([CTR-PQZ-08](#CTR-PQZ-08)) |
+| `offchain-shared` | `OFFCHAIN`, `pqzOwnKey = false` | one second PQZ key per holder per chain, common to all such tokens, never the registry key | a sealed opening on every credit ([CTR-PQZ-40](#CTR-PQZ-40)); the holder re-encrypts and compares, never decrypts a credit with `s` | holder-signed, with skip marks ([CTR-PQZ-41](#CTR-PQZ-41)) |
+| `offchain-token`, opening off | `OFFCHAIN`, `pqzOwnKey = true`, `pqzOpening = false` | one PQZ key per `(holder, token)` | none: as an `OFFCHAIN` token before | public |
+| `offchain-token`, opening on | `OFFCHAIN`, `pqzOwnKey = true`, `pqzOpening = true` | one PQZ key per `(holder, token)` | a sealed opening on every credit, as `offchain-shared` | holder-signed, with skip marks |
+
+- **Config.** `IFactoryToken.ConfidentialConfig` gains `bool pqzOwnKey` and `bool pqzOpening` after `verifierFeeMax`, both
+  immutable, written by `init` only and shown by `pqzVerifyConfig()`; the `TokenConfig` encoding moves for every kind. Valid:
+  `PRECOMPILE` with both `false`; `OFFCHAIN` with `pqzOwnKey = false` and `pqzOpening = true` (`offchain-shared` always has the
+  opening); `OFFCHAIN` with `pqzOwnKey = true` and `pqzOpening` either way. Anything else reverts `PqzVerifyConfigInvalid()`; a
+  non-PQZ kind refuses either set (`ConfigFieldForOtherKind(4)`). No `OFFCHAIN` token on the registry key can be created any
+  more; that path moves to `legacy/`. `init` sets `proofSystemId = PqzSet.PQZL_SPLIT_ID` with the opening on and `PQZL_ID` with
+  it off ([CTR-PQZ-38](#CTR-PQZ-38)).
+- **Opening token** = a token with `pqzOpening = true`: every `offchain-shared` token and an `offchain-token` created with it.
+  On every opening token and on no other: split randomness and `PQZL_SPLIT_ID` ([CTR-PQZ-38](#CTR-PQZ-38)), op 7 unsupported
+  ([CTR-PQZ-39](#CTR-PQZ-39)), the sealed openings and the deterministic auditor opening ([CTR-PQZ-40](#CTR-PQZ-40)), the
+  opening KEM key in the holder's scoped record ([CTR-UA-43](accounts.md#CTR-UA-43)), the holder check
+  ([CLI-SGN-51](../clients/signers-clientkeys.md#CLI-SGN-51)), the signed rollover with skip marks ([CTR-PQZ-41](#CTR-PQZ-41)),
+  the single disclosure kind ([CTR-PQZ-14](#CTR-PQZ-14)'s Change), `ownTag` over `u_f` and the `memoHash` that covers the
+  openings ([CTR-PQZ-34](#CTR-PQZ-34)'s Change). The token reads one flag; the key class only selects the scope of the key
+  record. An `offchain-token` with the opening differs from `offchain-shared` only in this: the key and the opening KEM key are
+  per `(holder, token)`; an `msig` may hold the record; the auditor's key is not checked at `init`.
+- **What each class guarantees.** `registry`: unchanged (provability does not depend on `s`). `offchain-shared`: no
+  decryption oracle **if the wallet follows the holder check**, which the contract cannot enforce. `offchain-token` with the
+  opening: as `offchain-shared`, and a wallet that breaks the check exposes that token's key only. `offchain-token` without the
+  opening: none against that token's verifier: a dishonest or compromised verifier recovers the holder's key **of that token**
+  from the holder's public reactions, and every chain observer learns it; the loss is the confidentiality of that holder's
+  amounts in that token, nothing else. A holder accepts this per token by registering the key; the token's auditor, once named,
+  has no such choice and its key of that token is exposed the same way ([ARCH-POS-13](../decisions.md#ARCH-POS-13)'s Change).
+  Funds: unchanged in every class (every debit needs `PqzAuth`, [CTR-PQZ-12](#CTR-PQZ-12)); T27's maximum loss is unchanged.
+- **Interim and roll-out.** No interim factory refusal (owner 2026-11-13). No migration: every chain is test-only; existing
+  `OFFCHAIN` test tokens on the registry key are abandoned at the next chain reset, and finding T-01 stays open on them until
+  then.
+
+<a id="CTR-PQZ-38"></a>**CTR-PQZ-38** — **Split randomness and `PQZL_SPLIT_ID` on opening tokens; the existing ids move in the same
+build** (owner 2026-11-13; spec K3-4, K3-4b). SPECIFIED.
+- **Op 1 on an opening token.** `(r_f, e1_f, e2_f)` from `seed_enc` ([CTR-PQZ-19](#CTR-PQZ-19)) give `u_f`, `v_f`; `seed_leg`
+  (CTR-PQZ-19's Change) gives `r, e1`, then `e2_t`, then `e2_a`, hence `u`, `v_t`, `[v_a]`. Relation `R_TXS` = `R_TX` plus the
+  rows for `u_f` ([CTR-PQZ-04](#CTR-PQZ-04)'s split fallback); `v_f` shares `(r, e1)` with no leg.
+- **Statement.** The 640-byte header unchanged (word 19 `memoHash` per [CTR-PQZ-34](#CTR-PQZ-34)'s Change); body
+  `pk_f ‖ pk_t ‖ [pk_a] ‖ T ‖ out` with `out = u ‖ v_t ‖ v_f ‖ [v_a] ‖ u_f` (`u_f` appended, earlier offsets unchanged). Calldata:
+  `PqzTransferArgs` gains `bytes uFrom` beside `u`, `vTo`, `vFrom`, `vAuditor` (opening on: exactly `PqzCt.PK` bytes, canonical
+  lanes, not zero, `ZeroU` applies; opening off: empty, else `BadPayload`); node JSON `u_from`. Size = today's + `PqzCt.PK`:
+  99,456 / 111,744 / 124,032 / 136,320 B with the auditor, 82,944 / 93,184 / 103,424 / 113,664 B without (`n2048-kmax1024` /
+  `n2304-kmax4096` / `n2560-kmax16384` / `n2816-kmax65536`).
+- **Ids.** A new id per set, `PqzSet.PQZL_SPLIT_ID = keccak256(set.toml pqzl_split_id)`, label
+  `scaas/pqz/lnp22/mlwe-d64k<k>-q<log2q>l4/split-v1` (controller naming, owner may override). Under it `pqz-stmt` accepts
+  `R_TXS`, `R_BURN` / refresh and `R_DS`, and refuses `R_TX`, `R_TXM`, `R_REG` and `R_DR`; `PQZL_ID` refuses `R_TXS`. The proof
+  must fit `MAX_PROOF` (98,304 B) and statement + proof `MAX_INPUT` (524,288 B), measured at the four sets. **The existing ids move
+  too** (owner 2026-11-13): T-36 (the disclosure `kind` low byte tied to the form) is in the shared statement codec (the decoder,
+  `pqz-stmt` `parse`, and `pqz_kat.py`; every production entry decodes with it first: `verify_input`, `verify_offchain`, the
+  plugin; the cores' `parse_disc`, Rust and C, and both specialised verifiers only hash the byte, so a caller of
+  `pqzl::verify_fast` alone does not get the tie: the same three-value check moves into `parse_disc` at the next id move,
+  Fable P3-5), so `PQZL_ID`
+  takes its next label (`…/v6`, controller naming); T-35 (one-byte role tags between Merkle nodes and transcript absorbs in PQZH's
+  Ligero code) moves `PQZH_ID` at every set that has PQZH. Retired labels join `gen_set.py`'s `RETIRED`. Tokens without the
+  opening run on the new `PQZL_ID`, and the precompile is rebuilt for it.
+- **Roll-out of ids** (owner 2026-11-13): until mainnet 22776 a `proofSystemId` is switched by chain reset only; no token,
+  registry or precompile serves an old and a new id side by side, and no migration path is built.
+- Burn, refresh, unshield, unwrap: unchanged statements under the new id; fresh randomness, no opening. Shield unchanged. Every
+  op 1 leg carries an opening, the migration to oneself ([CTR-PQZ-31](#CTR-PQZ-31)) included.
+
+<a id="CTR-PQZ-39"></a>**CTR-PQZ-39** — **Op 7 is unsupported on an opening token at first** (owner 2026-11-13; spec K3-5).
+SPECIFIED. `mtxConfidentialTransfer` (multi) on an opening token reverts `OpUnsupported()`, so there are no decoys on shared-key
+tokens. A group's seed goes to each of its recipients, so legs sharing a group would read each other's amounts and tell decoys
+from payments. The later form is one group per leg (each with its auditor copy), `M` extra `u` and a second new relation; not in
+this build. Tokens without the opening keep op 7.
+
+<a id="CTR-PQZ-40"></a>**CTR-PQZ-40** — **The sealed opening** (owner 2026-11-13; spec K3-6). SPECIFIED. One opening per reader
+of the leg seed: the recipient (`O_t`) and, when `v_a` exists, the auditor (`O_a`). Explicit parameters in `PqzTransferArgs`
+(empty with the opening off, else `BadPayload`):
+
+```text
+struct PqzOpening { bytes mlkemCt; bytes32 x25519Eph; bytes sealedSeed; }
+PqzOpening openingTo;        // to toUA's opening KEM key
+PqzOpening openingAuditor;   // to auditorUA's; empty when auditorOn = 0
+```
+
+`PqzTransferArgs` field order: `…, bytes vAuditor, bytes uFrom, bytes sealedMemo, PqzOpening openingTo, PqzOpening
+openingAuditor` (`uFrom` the sender's `u_f`, [CTR-PQZ-38](#CTR-PQZ-38)); an empty opening has every field empty or 0. Its typed
+form adds `PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)`, so its typehash and those of the signed single
+transfers move for every class.
+
+- **Deterministic from `seed_leg`**: `coins = SHAKE256("SCAAS-PQZ-OPEN-COINS-V1" ‖ seed_leg ‖ u8(role) ‖ keccak256(kemPk))[0..64)`,
+  `role` 0 recipient, 1 auditor, `kemPk` the reader's 1,601-byte opening KEM key from its scoped record of the token's scope at
+  the key version the leg is encrypted to; `m = coins[0..32)` is the ML-KEM-1024 encapsulation randomness, `e = coins[32..64)` the
+  X25519 ephemeral secret; `ss` by the combiner of [CTR-UA-32](accounts.md#CTR-UA-32) (`SHA3-256(ss_M ‖ ss_X ‖ E ‖ pk_X ‖
+  "scaas.kem.1")`). Each reader recomputes the other's opening byte for byte; no release build takes caller-supplied coins.
+- `mlkemCt` 1,568 B, `x25519Eph` 32 B, `sealedSeed` 48 B = `AES-256-GCM(kek, nonce = 0^96, seed_leg, aad)`,
+  `kek = HKDF-SHA256(ikm = ss, salt = ∅, info = "PQZ/opening/kek/v1")`, `aad = chainUid ‖ token(20) ‖ ua ‖ be8(keyVersion) ‖
+  keccak256(P(u) ‖ P(v))` with the reader's `ua`, `keyVersion` and `v`. `fromUA` and `sendCounter` are not bound (no state path
+  leads from a pending slot to them). The label `"PQZ/opening/kek/v1"` is used nowhere else, and no protocol outputs `ss` or a
+  `kek`.
+- **Contract checks**, nothing cryptographic: the lengths (1,568 / 48). No KEM lookup and no `kemVersion`: a recipient that
+  rotates its scoped key between proof and landing fails the statement's key check.
+- **In state.** Op blob `R ‖ P(u_f) ‖ P(v_f) ‖ O_t ‖ [O_a] ‖ ownTag(32) ‖ kv(8·n) ‖ u8(n)`, `O = mlkemCt ‖ x25519Eph ‖ sealedSeed`
+  (1,648 B); `acc` points at `(u_f, v_f)`; `rOf` reads `n` from the last byte. With the auditor 25,149 / 30,165 / 35,693 /
+  41,733 B at the four sets, under the 64 KiB ceiling, with a build assert beside `DELTA_P_MAX`'s.
+- **Binding.** `memoHash` covers the openings ([CTR-PQZ-34](#CTR-PQZ-34)'s Change); the word is in the statement and in
+  `PqzAuth`, so no relayer can swap one. `sealedMemo` is unchanged.
+- The verifier cannot check an opening. A wrong `O_t`, or with the auditor on a wrong `O_a`, makes the credit unspendable for an
+  honest wallet: the sender's loss (the debit stands, the units stay in `totalShielded`).
+
+<a id="CTR-PQZ-41"></a>**CTR-PQZ-41** — **On an opening token only the holder rolls, and the holder marks bad credits** (owner
+2026-11-13; spec K3-8). SPECIFIED.
+- `mtxRollOver(ua, keyVersion, n)` on an opening token reverts `RollOverSignedOnly()`; `mtxPrepareAcc` stays permissionless.
+  Tokens without the opening: unchanged, and the signed form reverts there.
+- Entry point (direct, and relayed on both paths `mtxExecute` / `uaExecute`, fee 0 allowed, in `mtxSelectors` and `_uaAllowed`):
+  `mtxRollOverSigned(bytes32 ua, uint64 keyVersion, uint64 n, uint64[] skip, uint64 validUntilBlock, IUARegistry.UASig ownerSig)`.
+- Typed data in the token's EIP-712 domain, signed by the UA through `requireAuthorized` (the purpose `PqzAuth` uses; an `msig`
+  by its m-of-n): `PqzRollOver(bytes32 ua,uint64 keyVersion,uint64 rollSeq,uint64 rolled,uint64 n,uint64[] skip,bytes32
+  entriesHash,uint64 validUntilBlock,bytes32 chainUid)`. `rollSeq` is a per-`(ua, keyVersion)` counter beside `lastDebit`, +1 per
+  accepted call; `rolled` the state value signed against; `entriesHash` binds contents, not positions:
+  `h(i) = keccak256(abi.encode(i, slot_i with the skip bit cleared, codehash of slot_i's blob or 0 for a TRIVIAL entry))`,
+  `entriesHash = keccak256(h(rolled) ‖ … ‖ h(rolled + n − 1) ‖ h(skip_0) ‖ …)`; the contract recomputes it from state and any
+  difference is `AuthRejected`. The typehash is pinned; the storage layout pin moves. A wallet reads `rollSeq` as the last
+  field of `pqzAccount(ua, keyVersion)` (`AccountState.rollSeq`); a signed rollover on a token without the opening reverts
+  `OpUnsupported()`, as op 7 and the `RECEIVER_X` / `AUDITOR` disclosures on an opening token do.
+- `skip`: strictly ascending absolute pending indices, length `≤ ROLL_MAX`, each in `[rolled, pendingCount)` and a credit
+  (`SkipRange(index)`, `SkipTrivial(index)`). Each named slot gets the **skip mark**, bit 63 of the slot's `block` field, never
+  cleared. One accessor returns `(block, skipped)` and every reader goes through it (`_window`'s `ROLL_AGE` test, `_trivial`'s
+  same-block merge test, the `pqzPending` view, every client); view `pqzSkipped(ua, keyVersion, index)`.
+- `0 ≤ n ≤ ROLL_MAX`; `n = 0` with a non-empty `skip` only marks; `n = 0` without one reverts `RollOverRange(0)`; for `n > 0`
+  today's rules (`AccNotPrepared`, `CapReached`, `RollTooYoung`, order). A marked slot contributes zero to `_total` and to a
+  rollover on every path, un-roll and re-roll included, and counts one unit (`unitsOf(T)` stays index arithmetic). The slot, its
+  blob and its ciphertext stay in state ([CTR-PQZ-33](#CTR-PQZ-33)). Events: `PqzSkipped(ua, keyVersion, index)` per mark
+  ascending, then `PqzRolledOver` when `n > 0`; an index already marked is accepted and emits nothing (Fable P3-3). Nothing
+  periodic: a cold wallet checks, marks and rolls when it next spends. `pqzPendingCt` returns a marked entry's ciphertext
+  unchanged (it stays in state); a reader that rebuilds `T` applies `pqzSkipped` (a marked slot adds zero), as `_window` does.
+- **`ROLL_MAX`** (decision 2026-11-14, controller under the owner's standing go; measured, `test/pqz/PqzRollSignedGas.t.sol`):
+  the one code bound of the set (`set.toml` `roll_max`), now sized by the signed rollover: the largest multiple of 16 whose
+  relayed full transaction, worst case `n` entries + `n` skip marks each from its own cold blob, an `mldsa65` holder or a
+  2-of-2 `mldsa65` `msig` with ML-DSA through its precompile (68,006 [estimate]), stays within `0.75 · 2^24 = 12,582,912`
+  regular gas on both relay paths (`mtxExecute`; `uaExecute` with an `mldsa65` fee UA; fee 7). The test asserts the fit at
+  `ROLL_MAX` on all four precompile cases.
+
+  | Set | `ROLL_MAX` (was) | costliest case at `ROLL_MAX` (`msig`, `uaExecute`) | at `ROLL_MAX + 16` | Solidity ML-DSA-65 holder (cached key, 5.81 M), `mtxExecute`: largest `n` |
+  |---|---|---|---|---|
+  | `n2048-kmax1024` | 80 (96) | 11,813,484 | 13,155,770 | ≥ 16 (11,942,925 at 16) |
+  | `n2304-kmax4096` | 64 (80) | 11,929,549 | 13,382,678 | 10 (12,523,377; 11: 12,614,149) |
+  | `n2560-kmax16384` | 48 (64) | 11,936,882 | 13,501,299 | none (12,839,303 at 1) |
+  | `n2816-kmax65536` | 32 (32) | 11,809,257 | over (the public rollover alone, 48) | none |
+
+  **Client rule.** On a chain without the ML-DSA precompile the holder's verification runs in Solidity, and `ROLL_MAX` is only
+  the upper bound: the holder's client signs the largest `n` (with its marks) whose relayed transaction fits `0.75 · 2^24`,
+  and where no `n ≥ 1` fits, marks only (`n = 0` rewrites no `acc` word; not measured). A Solidity-ML-DSA holder with a PQ fee UA cannot
+  relay a signed rollover through `uaExecute` at any set (an `fndsa512` fee UA: 14,035,181 at `n = 1`, `n2304-kmax4096`): it
+  uses `mtxExecute` or a direct call. Such a holder still advances: each debit takes a window of up to `INLINE_MAX` entries.
+  No client code picks `n` today (`ua-rs` `pqz3k`, `clientkeys` build the digest); a wallet that does follows this rule.
+
+**Cost** (measured 2026-11-14, `test/pqz/PqzThreeKeysGas.t.sol` per set; each row ONE transaction, regular | state | sum;
+op 1 and the refresh relayed with fee 7 on `uaExecute`, the costlier path, proof bytes of the set's vectors, ML-DSA-65 at
+68,006 [estimate]; a record's `R_REG` check at the set's provisional op 3 row; UNAUDITED):
+
+| Set | op 1, opening token, auditor off | op 1, opening token, auditor on | op 1, `offchain-token` without the opening, auditor on | refresh, opening token | `setPqzScopedKey` with `openKem` | `storePqzScopedPop` |
+|---|---|---|---|---|---|---|
+| `n2048-kmax1024` | 6.24 M \| 36.88 M \| 43.12 M | 6.51 M \| 39.54 M \| 46.05 M | 4.42 M \| 18.05 M \| 22.47 M | 4.31 M \| 17.40 M \| 21.71 M | 1.48 M \| 28.28 M \| 29.76 M | 5.34 M \| 43.79 M \| 49.13 M |
+| `n2304-kmax4096` | 6.99 M \| 44.54 M \| 51.54 M | 7.12 M \| 47.22 M \| 54.34 M | 4.80 M \| 21.91 M \| 26.71 M | 4.69 M \| 21.23 M \| 25.92 M | 1.62 M \| 31.41 M \| 33.03 M | 5.48 M \| 47.15 M \| 52.63 M |
+| `n2560-kmax16384` | 7.59 M \| 52.99 M \| **60.58 M** | 7.73 M \| 55.68 M \| **63.40 M** | 5.17 M \| 26.15 M \| 31.33 M | 5.06 M \| 25.46 M \| 30.52 M | 1.75 M \| 34.55 M \| 36.29 M | 5.62 M \| 50.46 M \| 56.08 M |
+| `n2816-kmax65536` | 8.27 M \| 62.22 M \| **70.49 M** | 8.40 M \| 64.92 M \| **73.32 M** | 5.59 M \| 30.79 M \| 36.38 M | 5.48 M \| 30.07 M \| 35.55 M | 1.88 M \| 37.68 M \| 39.56 M | 5.81 M \| 55.25 M \| **61.06 M** |
+
+Class 2 and class 3 with the opening cost the same bytes. Regular gas stays under 2^24 everywhere. **Inclusion requirement**
+(EIP-8037: a transaction fits only if regular + state ≤ the block gas limit; the budget reference is a 60 M Ethereum-like block):
+at `n2304-kmax4096` and `n2048-kmax1024` every row fits 60 M; an **opening token at `n2560-kmax16384` needs a chain whose block
+gas limit is at least 63.40 M** (op 1 with the auditor, 63,402,676); **at `n2816-kmax65536` an opening token needs at least
+73.32 M** (op 1 with the auditor, 73,319,716), and **every scoped key record (class 2 or 3, opening or not) needs at least
+61.06 M** for its stored `R_REG` proof (`storePqzScopedPop` 61,057,539). Owner ruling 2026-11-14 (verbatim in
+[decisions.md](../decisions.md#ctr-pqz-37--three-pqz-key-classes-registry-offchain-shared-offchain-token-fixed-at-creation-the-opening-machinery-keyed-on-pqzopening)): `n2560-kmax16384` and `n2816-kmax65536` are only for customer chains with larger blocks; no factory refusal, no design change. The node refuses by name what the connected chain cannot include
+([NODE-JOB-28](../node/job-api.md#NODE-JOB-28) `TX_EXCEEDS_CHAIN_LIMIT`). The signed rollover adds one UA signature check and
+up to `ROLL_MAX` skip marks ([CTR-PQZ-41](#CTR-PQZ-41)).
+
+**Residuals** (accepted by the owner's rulings; spec §10): an `offchain-shared` key rests on a wallet rule (a wallet that
+decrypts a credit with `s` is exposed as before, on the shared key, across that chain's shared-key tokens); incoming
+shared-key amounts are as private as the opening KEM key; auditor evasion needs two modified wallets (T34); a dishonest
+verifier can make holders pay gas to mark junk; anyone may credit a holder with junk on any shared-key token; a wrong opening
+is the sender's loss; a disclosure proves an amount, not receipt; no keeper rolls for a holder of an opening token (N pending
+entries cost ⌈N / ROLL_MAX⌉ signed rollovers); a signed scoped key record can be submitted by anyone until its
+`validUntilBlock`.
 
 ## 10. Chain integration (Nethermind precompile on the SCaaS testnet)
 
@@ -2309,24 +2987,26 @@ split, never a silent acceptance (fail closed).
    (`InvalidWithdrawalsRoot`), and without `maximumExtraDataSize` (default 32 B) it rejects every Clique header (97 B
    `extraData`); a follower needs `eip4895TransitionTimestamp` and `maximumExtraDataSize` `0xffff` in the chainspec.
 
-<a id="self-test"></a>**Contract self-test.** The constructor of `UAPqzVerifier` and
+<a id="self-test"></a>**Contract self-test.** The constructor of `PqzKeyVerifier` and
 `PqzToken.initialize` (`PqzStateLib.init`) require the precompile to be exactly `PqzSafety.PQZ` and the proof system to be
 the set's PQZL id or, where the set has PQZH, its PQZH id (`NotPqz`), then call `OP_SELFTEST` and require the expected
 hash (`PqzSet.SELFTEST`, the set's, compiled into the contract; it folds in the precompile's own valid and invalid
 `R_REG` verdicts for the set's ids). A token takes the precompile and the
-id from its `verifier` (a `UAPqzVerifier`) but never trusts that contract: a verifier naming another "precompile" that
+id from its `verifier` (a `PqzKeyVerifier`) but never trusts that contract: a verifier naming another "precompile" that
 answers 1 to everything is refused at creation (review W-B, 2026-10-19). Since plan 5g-Z1 the creator names no verifier
 at all (plan 5g-Z2: `ConfidentialConfig` has no verifier field): it is an immutable of the implementation release, the
 `deps[0]` of the env the factory deployed the release with (owner 2026-10-19 / 2026-10-20,
 [CTR-ZTH-20](zether.md#CTR-ZTH-20)), so the proof system is an attribute of the release (`proofSystemId()`); the init
-check stays as a second line. `UAPqzVerifier`'s
+check stays as a second line. `PqzKeyVerifier`'s
 constructor also takes the self-test's `R_REG` vector of its id (≈ 45 KB PQZL / ≈ 200 KB PQZH, too large to compile
 into code under EIP-170) as an argument, requires `keccak256(psid ‖ message ‖ pk ‖ proof) == SELFTEST_VECTOR_HASH`
 (`PROBE_PQZL` / `PROBE_PQZH`), requires `OP_REGISTER` on it to return 1, then flips one proof bit in memory and requires
 0 (`UAPqzProbe`). `PqzToken.initialize` takes no vector: bound to `PQZ`, whose self-test already covers those verdicts,
-the probe would add nothing (a 45–200 KB argument on every token creation). `UAMldsaVerifier` probes `MLDSA65` with one valid and one invalid vector and falls back to Solidity on a mismatch; the SCaaS testnet deploy requires the probe to pass. Any other mismatch ⇒ `SelfTestFailed`.
-This self-test, not the chain id, is what keeps PQZ off chains whose client is not ours (no chain allowlist since the
-owner ruling of 2026-10-31).
+the probe would add nothing (a 45–200 KB argument on every token creation). `MldsaVerifier` probes `MLDSA65` with one valid and one invalid vector and falls back to Solidity on a mismatch; the SCaaS testnet deploy requires the probe to pass. Any other mismatch ⇒ `SelfTestFailed`.
+This self-test, not the chain id, is what keeps `PRECOMPILE` PQZ tokens off chains whose client is not ours (no chain allowlist
+since the owner ruling of 2026-10-31). An `OFFCHAIN` token's release may have no verifier (`deps = [0]`) and its proofs are
+accepted on its verifier UA's verdict, a UA the creator names: W-B's drain by a named party, disclosed with
+[CTR-PQZ-27](#CTR-PQZ-27)'s maximum loss.
 
 The chain profile, the private-chain runbook and the node's `pqz` profile flag
 (`pqz = { genesis_hash = "0x…", registry = "0x…", tokens = ["0x…"] }`, probe `has_pqz_precompile`, genesis hash ==
@@ -2430,7 +3110,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | # | Threat | Control |
 |---|---|---|
 | T1 | **HNDL on ciphertexts** (archive the chain, decrypt in 2035+) | MLWE ciphertexts at β ≈ 476, core-SVP 139 / 126 (target ≥ Kyber-512 under classical and quantum core-SVP); no classical encryption of amounts in PQZ; transports already X25519MLKEM768 |
-| T2 | Quantum forgery of validity proofs (mint) | MSIS/MLWE-based LNP22; no pairing or DL anywhere in PQZ proofs; the verifier enforces the norm bounds the MSIS estimate assumes, incl. the whole `z2` (lazer#26, [parameters](#CTR-PQZ-03)) |
+| T2 | Quantum forgery of validity proofs (mint) | MSIS/MLWE-based LNP22; no pairing or DL anywhere in PQZ proofs; the verifier enforces the norm bounds the MSIS estimate assumes, incl. the whole `z2` (lazer#26, [parameters](#CTR-PQZ-03)); in `OFFCHAIN` mode validity rests on the verifier UA instead (T27) |
 | T3 | Quantum forgery of authorization | ML-DSA-65; a hybrid `msig` only adds a classical check, never replaces it |
 | T4 | Malformed ciphertexts (out-of-range coefficients, wrong lengths, huge noise) | `< q` checks in Solidity and precompile; every ciphertext comes with a proof of exact norms; the only trivial term (the plain term of `T`) is built by the contract |
 | T5 | Noise growth ⇒ wrong decryption or failure oracle | worst-case bound + `K_MAX`, enforced at credit **and** at debit (`unitsOf(T)`), 4.1× margin before soundness is at risk (per-block ℓ2 bounds, `proofSystemId` v2; v1 checked only their sum, ≈ 1.12×, [noise](#noise)); no bootstrapping needed; a failure is impossible, not merely unlikely ([2024/127](https://eprint.iacr.org/2024/127)) |
@@ -2447,7 +3127,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T13c | Chain-id collision (former id 9000 = Evmos Testnet; 7622 not assumed unique) | owner move to the SCaaS testnet; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and `UAAuth`; node binds genesis hash, registry `chainUid()` and token |
 | T14 | Rogue / stolen public key registration; claiming a victim's PQ signer for one's own PQZ key | `R_REG` PoP over the portable digest of the signer's UA and its attributes, beside the signer's own PoP over the `registrationDigest` that covers the proof's hash ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`, held only by proven keys, so listing a victim's key without a proof blocks nobody; front-running yields the identical record |
 | T15 | Leaked PQZ key | read-only breach (auth key separate, [CTR-PQZ-12](#CTR-PQZ-12)); move funds to a new UA |
-| T16 | Leaked ML-DSA key | cannot spend without the PQZ key's proof; no rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): move funds to a new UA |
+| T16 | Leaked ML-DSA key | cannot spend without the PQZ key's proof; since 3g the PQZ key rotates by versions ([CTR-PQZ-31](#CTR-PQZ-31)): add a version and migrate, or move funds to a new UA |
 | T17 | Implementation immaturity (research-grade LaZer, unaudited fork with six rewritten layers) | UNAUDITED label, allowlist, self-test, owner gates (licence clearance and independent audit) before any real funds |
 | T18 | Broken v1 envelope key (quantum ECDSA, leaked EOA) | authority split ([CTR-PQZ-15](#CTR-PQZ-15)): the envelope signer authorizes only its public balance and nonces; confidential value needs the PQ `authSig` + proof; bound ops cannot be re-pointed (their amounts, recipients and outputs). Residual: loss of that signer's public float and liveness of its own relayed ops; on a relayed op the storage mode (BUNDLE / HASH / NONE) and an unwrap's leg / `minOut` are bound by the envelope signature only (the PQ `authSig` covers `envelopeBinding`, which excludes `data`), so the key holder can re-sign the same op with another mode (`…NoBundle`), as `mtxUnshield` instead of `mtxUnshieldUnwrap`, or with another leg / `minOut`, and front-run: at worst no entry is stored or the payout takes another form, with no value lost beyond the public float above (review 5g L1, 2026-10-19). **Closed by plan 5h D15:** the mode is folded into every relayed binding (`keccak256(abi.encode(envelopeBinding, uint8(mode)))`) and an unwrap's leg / `minOut` likewise, so a re-signed envelope with another mode or leg no longer verifies against the proof; NONE is retired, so `…NoBundle` no longer exists; v3 path with an `mldsa65` fee UA removes the classical key |
 | T19 | Envelope stripping or re-wrapping (relayer takes the op out, or into an envelope with its own fee/recipient) | `envelopeBinding` in the statement (direct calls: 0, a transfer's mode binding, the unwrap binding), checked through the `authSig` before the precompile, as classical [CTR-ZTH-06](zether.md#CTR-ZTH-06) |
@@ -2458,6 +3138,22 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T24 | Decoy selection and intersection (inactive or fixed decoys, repeated payments with varying decoys, the real recipient's next activity, colluding decoys) | wallet policy (P6h): recently active candidates from the registry's per-kind list ([accounts CTR-UA-29](accounts.md#CTR-UA-29)), stable sets per payee and week, load spreading; anonymity set ≤ `M` minus colluders. The activity filter adds gas-level cost only (pending entries and rollovers are cheap and permissionless; a sybil picked once is credited by the honest op 7 for free), so the real sybil bound is the one-time PQ registration |
 | T25 | Op confusion (op 1 vs op 7, sizes, groupings, auditor on / off) | distinct `opTag`, the length bound to `(id, M, A)`, `M` and `recipientsHash` in the statement; negative vectors |
 | T26 | A disclosure reveals that its leg was a decoy (amount 0), narrowing the other recipients' set | by consent of the discloser, as classical |
+| T27 | **Dishonest, censoring or compromised verifier UA** (`OFFCHAIN` tokens, [CTR-PQZ-27](#CTR-PQZ-27)) | A false verdict fabricates a balance under a signing UA the verifier controls and drains the pool through it: **maximum loss `min(totalShielded, maxShielded) · shieldScale` public units** (the whole shielded pool; on kinds 5 and 13 that much underlying); it cannot spend a victim's balance (every debit needs the subject's `PqzAuth`, [CTR-PQZ-12](#CTR-PQZ-12)). Outputs of a dishonest verdict need not be valid encryptions, correct auditor copies or recoverable balances. The verifier sees every debit **before inclusion** and can refuse or delay any party selectively; a relayer is replaced at once, a verifier only after the notice (a revocation stops everyone). A verifier that stops signing freezes every confidential balance (debits, unshield, refresh) while shields still land (the node's opt-in refusal, [NODE-JOB-22](../node/job-api.md#NODE-JOB-22)); a lost **fixed** verifier freezes them for ever. With an auditor on, it learns which ops are audited (public on chain anyway). Controls: the containment below; every acceptance auditable (the proof and the verdict in calldata, `PqzVerified` naming the verifier, both hashes and the epoch; the replay at the exact transaction position, [integration.md](../integration.md#pqz-offchain-checks)); the frozen shape and the epoch ([CTR-PQZ-28](#CTR-PQZ-28), [CTR-PQZ-29](#CTR-PQZ-29)); a k-of-n `msig` of derived keys recommended; the reference verifier rebuilds the statement from state and binds release → set. Not slashable. **Key recovery (own-key tokens without the sealed opening only)** (2026-11-13, SPECIFIED, [CTR-PQZ-37](#CTR-PQZ-37)). A false verdict can plant a crafted credit; the holder's next debit, or its absence, answers one question about its key of that token; the auditor's key of that token is exposed the same way and opens every audited amount. Accepted by the owner for class `offchain-token` with the opening off ([ARCH-POS-13](../decisions.md#ARCH-POS-13) Change, with the loss as worded there). Controls: the per-token key ([CLI-SGN-50](../clients/signers-clientkeys.md#CLI-SGN-50)), registration per token as the holder's acceptance, the warning wallets show before it (the Change's loss sentence, word for word, [app.md](../clients/app.md#pqz-key-class-warnings)). Shared-key tokens: closed by [CTR-PQZ-40](#CTR-PQZ-40) and [CLI-SGN-51](../clients/signers-clientkeys.md#CLI-SGN-51); the control is the planted-probe test (spec `2026-11-13-pqz-three-keys.md` §14 item 1). **UNAUDITED.** |
+| T34 | (2026-11-13, [CTR-PQZ-37](#CTR-PQZ-37)) **Auditor evasion on shared-key tokens** | A sender can append a credit whose `O_a` is junk to anyone: the auditor reports it `unreadable`, and an honest recipient's wallet refuses it ([CLI-SGN-51](../clients/signers-clientkeys.md#CLI-SGN-51) step 9), so it is never spent. Only when the recipient's own rollover or debit takes such an entry unmarked (`unreadable, taken`) have both wallets been modified; that names both UAs: a compliance event for the issuer, no contract action (owner 2026-11-13). SPECIFIED. **UNAUDITED.** |
+| T28 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **Drain of `SHIELD_POOL`** by continuous confidential transfers (controller A3) | An honest proof cannot pay out more than a hidden balance lost ([CTR-PQZ-36](#CTR-PQZ-36)): `vf` is inside the proved `fee`, and `totalShielded` moves with the pool (A2), its subtraction checked. **A lying `OFFCHAIN` verifier is the only path to a drain** (on a `PRECOMPILE` token only a broken proof system, T2), bounded by CTR-PQZ-27's maximum loss `min(totalShielded, maxShielded) · shieldScale` public units; `verifierFee` does not widen it: every payout of a debit, the verifier's included, leaves the pool only as `totalShielded` falls, and the verifier's own fees count inside that bound, not beside it. `PRECOMPILE` tokens: `vf = 0`, unchanged |
+| T29 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **Admin raises the fee as a hostage** (Fable P2-2, controller call) | **The real bound is the immutable cap**: no op pays more than `verifierFeeMax` to the verifier, whoever acts. The notice protects only against an admin who does not control the verifier: `VerifierFeeProposed` (an indexer alert, [indexer-feeds.md](../node/indexer-feeds.md#pqz-verifier-rows)) gives holders `noticePeriod` to leave at the old fee, but every exit is a debit that needs a verdict, so a verifier that is the admin, or sides with it, can withhold verdicts in the window and leave nobody able to go (inside CTR-PQZ-27's trust, which already lets such a verifier take the pool). A confirm comes no earlier than `eta` and dies after `eta + noticePeriod` or at an admin change; a live pending past its `eta` is confirmable in one transaction, so wallets treat its value as the fee of any op not yet landed. With `noticePeriod = 0` there is no notice (disclosed). A transferable verifier lets the admin name itself the payee (with the verifier's own notice), still within the cap. A creator that wants no fee power sets `verifierFeeMax = 0` |
+| T30 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **Dust below the fee** | A hidden balance below `txFee + vf` (with `M·d` on op 7) cannot be debited at all, unshield, refresh and a stale version's migration included, unless the same call tops it up with `shieldIn` from the holder's public balance of the same token, or the admin lowers the fee (at once). A top-up is public: a wallet tops up a round amount, never the exact shortfall, which would publish `v + fee − balance` (Fable P3-5). The largest unshield is `T − fee`. With admin 0 the fee never moves: such dust stays until topped up. Wallets warn ([clients/app.md](../clients/app.md#pqz-verifier-display)) |
+| T31 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **The verifier as a payee fails a regulated check** (12, 13; Fable P2-1, controller call) | A frozen, `KYC`-lapsed (an expiry counts) or listed-out (3s) verifier halts every debit of the token while `vf ≠ 0`, transfers, unshields, refreshes and unwraps alike (CTR-AS-25 refuses the leg), while shields keep landing: a token-wide stop that is not the pause and has no `pausedUntil`, in the hands of the freezer, the registry's KYC providers or the list holders. Relief: the admin sets the fee to 0 at once, or the cause is lifted; **with admin 0 there is no relief** (the fee never moves, the verifier is never replaced) but the cause's own. Under `ALLOWLIST` a verifier not yet listed makes every debit fail from the first block. Wallets and the wizard warn ([clients/app.md](../clients/app.md#pqz-verifier-display)); the matrix runs the frozen case and its relief (matrix group `pqoff`); no new mechanism. With `vf = 0` nothing is checked. A verifier nobody can sign for (a pool address as a native id) passes no op, so no fee reaches it |
+| T32 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **A fee change strands built ops** | Every op proved and signed at the old fee refuses, op 7 in both forms included, and no fee change can move value between the legs and the verifier ([CTR-PQZ-25](#CTR-PQZ-25); Fable P1-1); funds are not at risk, the holder re-proves. Relayers simulate first; a queued job is `PQZ_FEE_MISMATCH`, back in the queue, never `dead` ([NODE-JOB-22](../node/job-api.md#NODE-JOB-22)). **The immediate decrease is a lever** (Fable P3-2): an admin can strand every in-flight debit by one-unit decreases, up to `verifierFee` times, on a fixed-verifier token too (a new admin power over debits there); liveness only, disclosed. A cancel (`setVerifierFee(cur)`) strands nothing. A wallet that sees a pending increase with `eta` before its op's deadline warns or waits |
+| T33 | (group 3t, [CTR-PQZ-36](#CTR-PQZ-36)) **Forced refreshes** | A full `acc` needs a debit (CTR-PQZ-06), which now costs `vf`. A griefer forces one refresh per `K_MAX − 2` credits into the victim, paying it at least `K_MAX − 2` units (shields) or `(K_MAX − 2)·minDecoyFee` (decoy legs) for each; the victim loses net only when `vf` exceeds that. Disclosed; the wizard shows the ratio for the chosen set |
+
+<a id="verifier-containment"></a>**Containment of a dishonest verifier, by configuration** (T27; Codex #11):
+
+| Configuration | On-chain answer |
+|---|---|
+| transferable, live owner | `pqzRevokeVerifier()` at once (freeze), then a new verifier after the notice period |
+| fixed, or owner renounced (`owner() = 0`) | **none** on the plain kinds 4, 5 (no `PAUSE`); on 12, 13 the issuer's `PAUSE` / `FREEZE` **only if** those features were set at creation and their roles are live |
+| regulated 12, 13 with live controls | `PAUSE` / `FREEZE` at once, in addition to the above |
 
 <a id="what-stays-classical"></a>**What stays classical (stated, not hidden).**
 
@@ -2468,6 +3164,9 @@ service is the user's (or the organization's key oracle), never a third party's 
   with a PQ fee UA has no classical key on the op path.
 - Classical Zether tokens on the same chain keep their HNDL exposure; migration moves pilots off them.
 - Metadata: identities and the transaction graph are visible (ring size 2), exactly as classical.
+- An `OFFCHAIN` token's validity with a classical verifier UA (EOA, `secp256k1`, `p256`, `webauthn-p256`): a quantum adversary
+  who forges its signature has T27's drain. An `mldsa44` / `mldsa65` verifier keeps it post-quantum; an `msig` is as strong as the
+  cheapest set of members that reaches its threshold.
 
 ## 13. Hybrid path and migration
 
@@ -2526,6 +3225,7 @@ Later phases add, in the same directory: `derive.json` (P6h), `register_pqz.json
 | `auth_{mldsa65,mldsa44,msig}.json` | `authDigest` → the UA `ua_msg` (with `MSG_TAG`, `TAG(authKind)`, `PURPOSE_ZETHER_AUTH`) → signature, for an `mldsa65`, an `mldsa44` and a hybrid `msig {mldsa65 w1, p256 w1} t=2` holder; each verifies through `UARegistry.requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, …)`; rows shared with the UA vectors |
 | `register_pqz.json` | the pre-UA-8 chain-bound form (`popDigest` with `chainKeyHash`, `chainUid`); UA-8 moved the registration rows to `smartcontracts/vectors/ua/portable.json` (`R_REG` message over `portableRecordDigest`, the signer's PoP over `registrationDigest`; the `pqzPop` bytes there are length-faithful filler, not proofs) |
 | `metatx_pqz.json` | per op and path: envelope fields → `metaTxDigest` (v1 domain, no salt) / `uaDigest` (v3, `salt = chainUid`), `envelopeBinding` / `uaEnvelopeBinding`, the bound statement and `authDigest`, the signature (ECDSA, `mldsa65` fee UA); the direct form with binding 0; typehashes pinned to the classical meta-tx vectors and the UA `metatx3.json` |
+| `verdict.json` (group 3f, BUILT) | `PqzVerdict` digests in a fixed token's domain (`SCaaS PqzToken`, the SCaaS testnet's chain id and `chain_uid`) over the `(stmt_keccak, proof_keccak)` pairs of the build's set's `proof_pqzl.json` (`REGISTER` left out), epochs 0–2, the typehash and `PURPOSE_PQZ_VERDICT`, and an EOA verifier's `UASig` over the registry's `uaAuthDigest`; written by `test/pqz/PqzVerdictVectors.t.sol` (`WRITE_VERDICT_VECTORS=true`), which otherwise recomputes every row as a pin (another set's build skips it); read by `clientkeys`, the node and `scaas-pqz-verifier` (T46–T48), and by `ua-rs` in its own round |
 
 The UA `smartcontracts/vectors/ua/kinds.json` gains the `pqz-mlwe` row (seed → pk, UA, keyHash).
 
@@ -2605,6 +3305,22 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
   identical output and gas (cache hit), and the cold first call stays within the calibrated `G_6`;
 - self-test: a precompile build whose valid-vector verify returns 0 (or whose invalid returns 1) fails `OP_SELFTEST`
   and the constructor check;
+- **verifier mode** (group 3f, BUILT: `test/pqz/PqzOffchainCore.t.sol`, `PqzOffchainEntries.t.sol`, `PqzVerifier.t.sol`,
+  `test/as/confidential/PqzVerdictKinds.t.sol`; positive control first, one change at a time): a verdict for another token, chain,
+  `proofSystemId`, statement (another `fee`, `beneficiary`, `p`, `salt`, `envelopeBinding`, key), proof or epoch ⇒
+  `PqzVerdictMismatch(field)`; `validUntil = now − 1` ⇒ field 6, `now` passes; a signature in another token's domain ⇒
+  `PqzVerdictRejected`; starved ⇒ `UAVerifyGas`; A → B → A with A's old signature ⇒ refused; revoked ⇒ `PqzVerifierRevoked`;
+  a native verifier or an `msig` native member that gains code, a slot accepted later ⇒ `PqzVerifierChanged`; the kinds
+  (`mldsa87`, `zether-bls12381`, `bls12381-minsig`, `schnorr-bn254`, a native id with code, a nested `msig` ⇒ `PqzVerifierKind`;
+  unregistered ⇒ `PqzVerifierUnregistered`; EOA, `secp256k1`, `p256`, `webauthn-p256`, `mldsa65` cached, 2-of-3 `msig` pass); the
+  transfer (before `eta`, at `eta`, not the proposer, owner changed, fixed, same, notice 0); revocation (immediate, pending
+  deleted, fixed refused); the mode (`PqzVerifyConfigInvalid`, `PqzVerifyModeInvalid(2)`, no setter); a zero-dep release
+  (`PRECOMPILE` ⇒ `SelfTestFailed(address(0))` before any call, `OFFCHAIN` initializes); an `OFFCHAIN` token with a reverting
+  precompile etched works; a garbage verdict on a `PRECOMPILE` token changes nothing; unproven keys (`PRECOMPILE` ⇒
+  `AccountNotRegistered`, `OFFCHAIN` passes, another set's length ⇒ `AccountNotRegistered` in both, the auditor at init alike); the
+  same ciphertexts in both modes; every entry direct and signed in both modes, the `UA*` typehashes unchanged, a relayer's verdict
+  swap harmless; the disclosure forms (`PqzVerdictRequired`, true, wrong amount false, revoked false); the router's three ops;
+  `mtxSelectors()` of 4, 5, 12, 13 with the verdict.
 - `estimator.txt` reproducible: CI reruns the pinned lattice-estimator commit on the recorded commands and diffs the
   output.
 
@@ -2614,13 +3330,27 @@ after every random sequence of shield/transfer/rollover/burn/refresh; (2) every 
 (a rollover never takes `accUnits` above `K_MAX − 1`); (3) `cleared ≤ floor ≤ rolled ≤ pendingCount`, and no
 deleted pending slot is ever read; (4) `balanceOf(SHIELD_POOL) = totalShielded·shieldScale`, escrow `underlying.balanceOf(token) ≥
 totalSupply()` and `balanceOf(UA_POOL) = Σ _uaBalance`, over random mixes of direct and envelope ops on both
-paths.
+paths. Group 3f (`test/pqz/invariant/PqzVerdict{Handler,Invariants}.t.sol`, T49, BUILT): (I1) `pqzVerifyMode` is written only by
+`init`; (I2) an `OFFCHAIN` debit lands only with a verdict by the current, non-revoked, unchanged-shape verifier over exactly
+`(this, chainid, psid, keccak256(statement), keccak256(proof), pqzVerifierEpoch)`, live at `now`; (I3) no verdict of an older epoch
+is accepted after a transfer or a revocation, A → B → A included; (I4) a debit's state writes are identical in both modes; (I5) a
+`PRECOMPILE` token never reads the verdict, an `OFFCHAIN` token never calls the precompile; (I6) public balances, `totalShielded`
+and the escrow invariant hold in both modes. Runs: 64 runs × 32 calls, 0 reverts, green at the four sets; mutants: 10 of 10
+killed on the final suite (`smartcontracts/evm/runs/2026-11-08-ua-mtx-merge-t49-summary.txt`).
+
+**The verifier fee** (group 3t, [CTR-PQZ-36](#CTR-PQZ-36); BUILT, UNAUDITED): `test/pqz/PqzVerifierFee.t.sol` (init rows and
+their order, the fee word of every form, the payouts, the setter and its refusals, the router op, a built op after a change,
+the split case of [CTR-PQZ-25](#CTR-PQZ-25), the disclosure moves nothing), `test/as/confidential/PqzVerifierFeeKinds.t.sol`
+(12, 13: a frozen, KYC-denied or list-denied verifier halts debits while the fee is set, shields land, fee 0 the relief, the
+check before `_pullShieldIn`), the invariants F1–F6 and I-V1–I-V3 (`test/pqz/invariant/PqzFeeInvariants.t.sol`: the pool
+equals `totalShielded · shieldScale`, payouts equal the debited words, no debit above a ghost balance, every landed word the fee
+in force), real proofs at `fee ± 1` (`pqz-core/ffi/tests/fee_word.rs`), the vectors `smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json` (the set's own directory, T-05);
+mutants: `smartcontracts/evm/runs/2026-11-11-ua-mtx-3t/mutants.txt`.
 
 Build order (serial heavy builds, one at a time): parameter and literature spike (estimator, leaky-LWE, per-round
 soundness) → engine rewrite and first measurements (incl. a WASM measurement of a toy relation) → relations, codegen and
 frozen vectors → Nethermind precompile → contracts → clients → retail WASM prover → node; the licence gate and reviews
-run beside them. Later: LaBRADOR aggregation, FN-DSA when FIPS 206 is final, the co-processor seam for customer-run
-chains, `pqz-cli serve` LAN mode.
+run beside them. Later: LaBRADOR aggregation, FN-DSA when FIPS 206 is final, `pqz-cli serve` LAN mode.
 
 ## 15. References
 

@@ -14,6 +14,7 @@ import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// T3: tầng 3 `WrappedToken` — any-of, reserve theo chân, guardian chỉ tắt wrap (TW2 §8, R136, R147).
 contract MultiTest is V2Fixture {
@@ -150,14 +151,14 @@ contract MultiTest is V2Fixture {
     function test_guardianDisablesWrapOneWay() public {
         _wrap(t, usdt, alice, 10e6);
         vm.expectRevert(IWrappedToken.NotGuardian.selector);
-        t.disableWrap(address(usdt), "depeg");
+        t.disableWrap(address(usdt), "depeg", EnvKit.codeUidOf(address(t)));
         vm.expectEmit(address(t));
         emit IWrappedToken.WrapDisabled(address(usdt), nid(guardian), "depeg");
         vm.prank(guardian);
-        t.disableWrap(address(usdt), "depeg");
+        t.disableWrap(address(usdt), "depeg", EnvKit.codeUidOf(address(t)));
         vm.prank(guardian);
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.WrapDisabledFor.selector, address(usdt)));
-        t.disableWrap(address(usdt), "again");
+        t.disableWrap(address(usdt), "again", EnvKit.codeUidOf(address(t)));
         (,,,, bool enabled) = t.legOf(address(usdt));
         assertFalse(enabled);
         // inflow refused, exit open
@@ -176,7 +177,7 @@ contract MultiTest is V2Fixture {
     function test_gaslessUnwrapWorksOnADisabledLeg() public {
         _wrap(t, usdt, alice, 10e6);
         vm.prank(guardian);
-        t.disableWrap(address(usdt), "depeg");
+        t.disableWrap(address(usdt), "depeg", EnvKit.codeUidOf(address(t)));
         bytes memory d = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(usdt), 3e18, bob, 3e6);
         _execCall(PK, address(t), _call(alice, d, 1, RR));
         assertEq(usdt.balanceOf(bob), 3e6);
@@ -186,14 +187,14 @@ contract MultiTest is V2Fixture {
         vm.expectEmit(address(t));
         emit IGovernance.RoleRevoked(4, nid(guardian), nid(guardian));
         vm.prank(guardian);
-        t.renounceRole(4);
+        t.renounceRole(4, EnvKit.codeUidOf(address(t)));
         assertFalse(t.hasRole(4, nid(guardian)));
         vm.prank(guardian);
         vm.expectRevert(IWrappedToken.NotGuardian.selector);
-        t.disableWrap(address(usdc), "x");
+        t.disableWrap(address(usdc), "x", EnvKit.codeUidOf(address(t)));
         vm.prank(guardian);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(4), guardian));
-        t.renounceRole(4);
+        t.renounceRole(4, EnvKit.codeUidOf(address(t)));
     }
 
     // ------------------------------------------------------------------ rates (R147)
@@ -206,16 +207,16 @@ contract MultiTest is V2Fixture {
         usdc.approve(address(a), 10e6);
         a.addReserve(address(usdc), 10e6); // collateral for the decrease
         vm.prank(guardian);
-        a.disableWrap(address(usdt), "depeg");
-        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 99e10, 1)));
+        a.disableWrap(address(usdt), "depeg", EnvKit.codeUidOf(address(a)));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 99e10, 1, EnvKit.codeUidOf(address(a)))));
         vm.warp(block.timestamp + 7 days);
         vm.expectRevert(IWrappedToken.RateDecreaseWithDisabledLeg.selector);
-        adm.exec(address(a), abi.encodeCall(WrappedToken.executeRate, ()));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.executeRate, (EnvKit.codeUidOf(address(a)))));
         // a raise is fine
-        adm.exec(address(a), abi.encodeCall(WrappedToken.cancelRate, ()));
-        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 101e10, 1)));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.cancelRate, (EnvKit.codeUidOf(address(a)))));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 101e10, 1, EnvKit.codeUidOf(address(a)))));
         vm.warp(block.timestamp + 7 days);
-        adm.exec(address(a), abi.encodeCall(WrappedToken.executeRate, ()));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.executeRate, (EnvKit.codeUidOf(address(a)))));
     }
 
     /// Review H1: thay đổi đang chờ (hạ leg i) ⇒ flash-wrap leg j bị dừng; bên thứ ba không thực thi được.
@@ -223,7 +224,7 @@ contract MultiTest is V2Fixture {
         WrappedToken a = _three(_adjustable(address(adm)));
         _wrap(a, usdc, alice, 100e6);
         _wrap(a, dai, alice, 100e18);
-        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 99e10, 1)));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 99e10, 1, EnvKit.codeUidOf(address(a)))));
         dai.mint(bob, 1_000e18);
         vm.startPrank(bob);
         dai.approve(address(a), 1_000e18);
@@ -233,7 +234,7 @@ contract MultiTest is V2Fixture {
         vm.warp(block.timestamp + 7 days);
         vm.prank(bob);
         vm.expectRevert(IWrappedToken.NotRateAdmin.selector);
-        a.executeRate();
+        a.executeRate(EnvKit.codeUidOf(address(a)));
         // unwrap stays open on every leg during the change
         vm.prank(alice);
         a.unwrap(address(usdc), 1e18, alice, 1e6);

@@ -71,14 +71,21 @@ ua-dart-frb export `keccak256(data)` (ua-rs `keccak256`; ua-qt hex in and out, `
 (keccak256 of the slot's `sig`, or of an `msig` member's `abi.encode(InnerSig[])`, encoded in the test) and every `memberships` row's
 `storedHash` = keccak256(`stored`). BUILT.
 
-**Metatx hashes (metatx split T18).** The Rust crate and QML also carry the three hashes a wallet needs for
-[CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) / [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27):
-`meta_pay_id(salt, meta)` (`keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`), `pay_lane(p)` (`keccak256("scaas.pay.lane"
-‖ p)`, 32 bytes) and `relay_ref(chain_id, target, call_data)` (the EVM router's `ref`; other families' forms differ, see
-[CLI-SGN-39](signers-clientkeys.md#CLI-SGN-39)); QML `UaKinds.metaPayId(saltHex, metaHex)`, `payLane(hex)`,
-`relayRef(chainId, targetHex, callDataHex)` (chain id exact to 2^53). Vectors: `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json`
-and `relayref.json` (written by forge); the JS twins are in `clientkeys` `evm.js`. The C, C++ and Dart bindings and the
-independent ports do not carry them yet.
+**Metatx hashes (metatx split T18; pay-meta-tax T41 / T83).** The Rust crate and QML also carry the hashes a wallet needs
+for [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) / [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27). EVM pay entries:
+`pay::meta_pay_id_v3(PayMeta {salt, pay_no, save, schema, body})` (`keccak256("scaas.pay.meta.v3" ‖ salt ‖
+keccak256(abi.encode(bytes32 payNo, bool save, uint16 schema, bytes body)))`, after the contract's shape checks), as JSON
+`json::meta_pay_id_json` `{salt, payNo, save, schema, body}` → `{payId, payNo, payNoUuid, save}` (below), exported by ua-c `scaas_ua_meta_pay_id`, ua-cxx and
+ua-dart-frb `metaPayId`, QML `UaKinds.metaPayIdV3`; vectors `smartcontracts/vectors/metatx/paymeta.json` (written by forge).
+The v2 form (`string payNo`, `scaas.pay.meta.v2`) is kept under each client's `legacy/ua-mtx-merge/` and in
+`clients/ua-rs/legacy/ua-rs-sign/pay_meta_v2.rs`, not built. The non-EVM
+families keep the v1 form until their own round: `meta_pay_id(salt, meta)` (`keccak256("scaas.pay.meta" ‖ salt ‖
+keccak256(meta))`), QML `UaKinds.metaPayId(saltHex, metaHex)`, vectors `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json`.
+Both: `pay_lane(p)` (`keccak256("scaas.pay.lane" ‖ p)`, 32 bytes) and `relay_ref(chain_id, target, call_data)` (the EVM
+router's `ref`; other families' forms differ, see [CLI-SGN-39](signers-clientkeys.md#CLI-SGN-39)); QML `payLane(hex)`,
+`relayRef(chainId, targetHex, callDataHex)` (chain id exact to 2^53); vectors `relayref.json`. The JS twins are in
+`clientkeys` `evm.js`. The C, C++ and Dart bindings carry `metaPayId` (v3) and `payDigest` only; the independent ports
+(ua-py, ua-go, ua-cs, ua-dart) carry none of them. BUILT.
 
 **`PayMeta` v3 (`ua-mtx-merge` T83; ua-rs-sign T20e1).** `scaas_ua::pay`: `PayMeta {salt, pay_no: [u8; 32], save, schema, body}`
 and `meta_pay_id_v3` (tag `scaas.pay.meta.v3` over `abi.encode(bytes32 payNo, bool save, uint16 schema, bytes body)`; `save`
@@ -335,11 +342,11 @@ not refused; installing it over newer state is. BUILT, clientkeys and `ua-rs`.
 <a id="CLI-UAL-13"></a>**CLI-UAL-13** — **The EIP-712 hasher is faithful; the canonical step belongs to checked SCaaS records.** The
 generic hasher hashes the values supplied and never rewrites a field. `scaas_typed_data` (the SCaaS builders) writes an unbound
 `relayer` / `feeRecipient` as zero, recursively, within a SCaaS domain and operation only. `sign_typed` with a checked `Expect` (one variant per
-clientkeys check: `Payment`, `ReceiverFee`, `PayMeta`, `Op`, `Call`, `OwnerCall`, `Cancel`, `TradeOrder`, `WrapOrder`) **refuses** a
+clientkeys check: `Payment`, `PayeeFee` (`ReceiverFee` before [CTR-MTX-86](../contracts/metatx.md#CTR-MTX-86)), `PayMeta`, `Op`, `Call`, `OwnerCall`, `Cancel`, `TradeOrder`, `WrapOrder`) **refuses** a
 non-zero unbound field (`PolicyRefused`), so what the user confirmed is what is hashed (owner 2026-11-05). `Expect::Any(AllowAnyTypedData)`, with its
 own C name `scaas_ua_sign_typed_any`, signs the standard digest of the values as supplied. An unrelated domain's struct with the
 same field names is untouched. Since the merge of `ua-mtx-merge` `aa898cf6` (T20b) the op table and the checks follow its merged-entry rows (`typed/typed_ops.json`, 80 structs; 83 since `4f6d8605`, with the router's `UACreateToken`, `UACreateDex`, `UACreateInstance`; 86 since
-`7558a364`, with 3f's `UAPqzSetVerifier`, `UAPqzCancelVerifier`, `UAPqzRevokeVerifier`, [CLI-UAL-59](../decisions.md#CLI-UAL-59)): a payment, a receiver fee, a SCaaS sell token's order, a wrap order and their cancels are the `UA` structs between 32-byte ids, `PayMeta` is v2 (`{salt, payNo, schema, body}`), the PQZ debits name `keyVersion` and the PQZ `UARollOver` is its own row (`UAPqzRollOver`). BUILT.
+`7558a364`, with 3f's `UAPqzSetVerifier`, `UAPqzCancelVerifier`, `UAPqzRevokeVerifier`, [CLI-UAL-59](../decisions.md#CLI-UAL-59)): a payment, a payee fee, a SCaaS sell token's order, a wrap order and their cancels are the `UA` structs between 32-byte ids, `PayMeta` is v2 (`{salt, payNo, schema, body}`), the PQZ debits name `keyVersion` and the PQZ `UARollOver` is its own row (`UAPqzRollOver`). BUILT.
 
 <a id="CLI-UAL-14"></a>**CLI-UAL-14** — **The KEM key comes through the UA key's own store.** `UaKey::kem_key(version)` has no wallet
 argument, so a handle cannot be combined with another wallet's seed and two wallets cannot make a second `(ek, pk_X)` for one
@@ -569,7 +576,7 @@ URL and body go to `curl` on its stdin; `--words` prints the request read withou
 against a local `anvil`, the words equal the forge rows byte for byte, the wallet rows and an audited op 1 decrypt with real
 keys, and each refusal of requirements 2, 3, 5 and 6 is named (mutants:
 `smartcontracts/evm/runs/2026-11-07-ua-rs-sign-t15m-mutants.txt`). Since T20b the factory record (`_rec[token]`, slot 8,
-word 2) and the registry's slots (`UAStore.Layout` 2, 4, 5, 17) are read where their pins put them, in both reference layers.
+word 1 since the factory record lost `ownerUA`, word 2 before) and the registry's slots (`UAStore.Layout` 2, 4, 5, 17) are read where their pins put them, in both reference layers.
 Since the owner's ruling of 2026-11-08 both reference layers refuse a token whose code is no clone with a `ChainEnv` and a
 `--registry` other than the one that env names (CLI-UAL-58). **Residuals:** requirement 4's `codeHash` check is not made (no `eth_getProof`); the
 other words commands (`proveDisclose`, `proveDiscloseSender`, `openMemo`, the debits) are not wired; a debit request is not
@@ -631,6 +638,28 @@ that to gas-level cost only (an observer keeps its UAs active), and it shrinks t
 decrypt path enable. It lands with the next pqz-core change; the four-set full gate is waived for this `cfg`-only change and replaced by a
 build at all four sets plus `kat`. Not built: pqz-core is unchanged in this round. Since `ua-rs` enables it, it is in every `ua-rs` + `pqz` binary; the
 command set is the boundary.
+
+**PQZ verifier mode and key versions** (groups 3f, 3g). A PQZ verifier is a UA like any other: `ua-rs` signs `PqzVerdict` under
+the `pqz-verdict` purpose, and the libraries carry the versioned PQZ key records (`UAPqzKeyVersionRecord`, `pqzKeyAt`,
+[CTR-UA-42](../contracts/accounts.md#CTR-UA-42)): **BUILT** on branch `ua-rs-sign` (T15o, T20b; the
+[wallet surface](#the-wallet-surface-of-ua-rs-built) table). The JS reference is `clientkeys`
+([CLI-SGN-49](signers-clientkeys.md#CLI-SGN-49), [verdict](signers-clientkeys.md#pqz-verdict-clients)).
+
+<a id="pqchat-clients"></a>**PqChat** (SPECIFIED; the contract is [pqchat.md](../contracts/pqchat.md), BUILT on EVM). Every
+client builds and signs the thirteen typed records exactly as [CTR-CHAT-03](../contracts/pqchat.md#CTR-CHAT-03) states (domain
+`"SCaaS PqChat"` without chain or contract, `uaMessage(kind, PURPOSE_PQCHAT, typed(record))`, a portable `UASig`, an `msig` in
+minimal form), fills `homeChain` / `homeChatContract` from an instance the factory lists as class 3, makes device ids by
+[CTR-CHAT-12](../contracts/pqchat.md#CTR-CHAT-12) (a restored device a new one), recovers from the views alone by
+[CTR-CHAT-14](../contracts/pqchat.md#CTR-CHAT-14), runs the key schedule, wraps, sealed info, sender chains, envelope and
+payload of the UA-7 spec ([§6](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#6-key-schedule),
+[§7](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#7-transports)), checks every record it reads (signature, membership
+by the home's order, nonce scope, dedupe by `messageId`, drop on failure), renders topic Markdown with raw HTML off and resolves a
+`ref` on its chain before showing it as verified, relays with named-field `call` jobs ([job-api.md](../node/job-api.md#pqchat-calls)),
+and reproduces every row of `smartcontracts/vectors/pqchat/` (`records.json`, `topics.json`, `keys.json`, `messages.json`). Test
+with every unbound field non-zero in some row (`via`, `device`, `parents`, `ref`). Built today: the JS vector generator
+`clientkeys/src/pqchat.js` (**BUILT**, 3c T84, `test/pqchat.test.js`); `ua-rs` first, then every `ua-*` (PLANNED, UA-7
+T11–T14, T17–T20). Which device-id version a client defaults to is open (a controller proposal: v4 for a device that posts on
+chain, since v7 puts its creation time on chain).
 
 **Not here.** Per-kind derivation and clientkeys' API ([signers-clientkeys](signers-clientkeys.md)), group vectors, the registry contract, the UA ledger.
 Not built yet: the FRB layer as a Flutter plugin and its Android and iOS builds (no web build: `SecretBytes` needs `dart:ffi`), the wasm-bindgen browser binding of `ua-rs` (the library compiles for wasm32), and Qt packaging for Windows and macOS.

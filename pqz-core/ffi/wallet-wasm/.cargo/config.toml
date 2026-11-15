@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+# the stack of ../wasm (8 MiB), placed first: an overflow traps instead of running into the data
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=-zstack-size=8388608", "-C", "link-arg=--stack-first"]

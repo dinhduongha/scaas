@@ -1,0 +1,13 @@
+step | commit | rc | counts
+node mutants (Fable fix-2 check, part node) | parent bd222858 + this commit's tree | 0 | 8/8 killed
+
+N1 no FeatureDisabled branch in encode_event  -> feature_disabled_29_opens_the_waiting_markets: "the DEX's FeatureDisabled(29): served"
+N2a no regulated load on reopen               -> feature_disabled_29_opens_the_waiting_markets: "N-2: the regulated leg loaded, its pause read"
+N2b no unmined fills on reopen                -> feature_disabled_29_opens_the_waiting_markets: "N-2: its unmined fill pending"
+N2c no client rows on reopen                  -> feature_disabled_29_opens_the_waiting_markets: "N-2: the client's row is back"
+N3 start drops an unread market               -> a_market_unread_at_start_is_read_again_each_round: "kept, never dropped until a restart"
+N3b unread market not read each round         -> a_market_unread_at_start_is_read_again_each_round: "read again with no event (closed false)"
+N4 no payee-fee refusal on a non-EVM adapter  -> payee_fee_fields_are_refused_on_every_family: chain_state "signed"
+N4b payee_fee refusal without its code        -> payee_fee_fields_are_refused_on_every_family
+
+harness: 2026-11-12-fix2-node-mutants.py (each file restored after its run; tests via scripts/capped cargo test --lib)

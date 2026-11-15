@@ -682,7 +682,7 @@ fn transfer_proven(
         let v_a = if aud { Some(part(r, 16 + PKP + VP, VP)?) } else { None };
         let form = if aud { Form::Transfer } else { Form::Transfer0 };
         let pk_t = pks.first().ok_or(Error::Argument)?;
-        Stmt::Debit(Debit { form, header: hd, pk_f, pk_t: Some(pk_t), pk_a, t, u: &u, v_t: Some(&v_t), v_f: &v_f, v_a: v_a.as_deref() }).encode()
+        Stmt::Debit(Debit { form, header: hd, pk_f, pk_t: Some(pk_t), pk_a, t, u: &u, v_t: Some(&v_t), v_f: &v_f, v_a: v_a.as_deref(), u_f: None }).encode()
     }
     .map_err(|_| Error::Argument)?;
     verify_p(if multi { pqz_ffi::stmt::OP_TRANSFER_MULTI } else { Form::Transfer.op() }, &stmt, proof)
@@ -1098,7 +1098,7 @@ fn own_proven(pk: &[u8], o: &Open, rec: &Record, k: u64, w: &OwnDebit, blobs: &m
             };
             known(o, &hd, &form.op_tag(), &o.ua, k, rec)?;
             let (u, v_f) = (part(&d, 0, PKP)?, part(&d, PKP, VP)?);
-            let stmt = Stmt::Debit(Debit { form, header: hd, pk_f: pk, pk_t: None, pk_a: None, t: &t, u: &u, v_t: None, v_f: &v_f, v_a: None })
+            let stmt = Stmt::Debit(Debit { form, header: hd, pk_f: pk, pk_t: None, pk_a: None, t: &t, u: &u, v_t: None, v_f: &v_f, v_a: None, u_f: None })
                 .encode()
                 .map_err(|_| Error::Argument)?;
             verify_p(form.op(), &stmt, &w.proof)

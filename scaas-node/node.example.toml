@@ -87,7 +87,7 @@ mnemonic = { keystore = "/etc/scaas/mnemonic.json", passphrase_env = "SCAAS_KEYS
 # (e.g. scaas-pqz-verifier), never this node. URLs only, no secret.
 [pqz_verifier]
 endpoints = []                                   # e.g. ["https://pqz-verifier.example.org"]
-refuse_shield_when_unserved = false              # true: refuse shields into an OFFCHAIN token whose verifier is revoked or unreachable
+refuse_shield_when_unserved = false              # true: refuse shields into an OFFCHAIN token whose verifier is revoked or unserved
 # timeout_ms = 5000                              # one endpoint's whole request
 # max_response_bytes = 262144                    # a longer answer is no answer
 # valid_margin_secs = 30                         # a verdict expiring sooner than this is not sent
@@ -99,22 +99,23 @@ rpc_urls = ["http://nethermind:8545"]            # >= finality.quorum independen
 lanes = [0, 1, 2, 3]                             # 4 relayer accounts: hold gas only, never user funds
 # private_key = { env = "SCAAS_RELAYER_KEY_7622" }   # alternative: one raw key = one lane
 finality = { mode = "depth", depth = 1, quorum = 1 }
-# dex = "0x..."                                  # SCaaSDex ("scaas_dex" in smartcontracts/evm/deployments/7622.json)
-chain_uid = "0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164"  # block 0 (evm/chain-uids.json):
+# dex = "0x..."                                  # SCaaSDex ("scaas_dex" in smartcontracts/evm/deployments/scaas-testnet.json)
+chain_uid = "0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13"  # block 0 (evm/chain-uids.json):
                                                  # a lane whose RPC block 0 differs never starts (NODE-GW-07)
 # account_factory = "0x..."                      # SmartKeyAccountFactory: the only `deploy` call target (unset: refused)
-# token_factory = "0x..."                        # the token factory: never a call target
+# token_factory = "0x..."                        # the token factory (OpenFactory): never a call target; its infoOf
+                                                 # lists the PqChat instances (class 3, version != 0) that pqchat jobs
+                                                 # run on (unset: every pqchat job refused, CALL_TARGET_REFUSED)
 # ua_registry = "0x..."                          # UARegistry: the only target of register / setKemKey / storePqzPop /
                                                  # setPqzKey call jobs (unset: refused); a relayed PQ register over
                                                  # max_gas_per_tx or the block gas limit is refused UA_REGISTER_SPLIT
-governance_routers = ["0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0", "0xFeC9586a1639152bfAbC9F7946321F5aC9Dc6F52"]
-                                                 # GovernanceRouter ("governance_router" in deployments/<id>.json): the only
+governance_routers = ["0xB6507C187BAc79eE48Bc55272Bf4aa6696555f70"]
+                                                 # GovernanceRouter ("governance_router" in deployments/<key>.json): the only
                                                  # targets of gov_router jobs, direct or relayed (empty: refused); on 7622
-                                                 # since reset 1 (2026-11-04): deployments/7622.json's and 7622-pqz.json's;
-                                                 # the ua*/mtx* merge moves the router's bytecode, so a deploy of it (reset 2)
-                                                 # lists new CREATE2 addresses here (GovDeploy.t.sol
-                                                 # test_routerAndRelayFeeRouterNewAddresses)
-# compliance_registry = "0x..."                  # ComplianceRegistry ("compliance_registry" in deployments/<id>.json,
+                                                 # since reset 2 (2026-11-10, NET-EVM-11): the Step 5 deploy's router
+                                                 # (GovDeploy.t.sol test_routerAndRelayFeeRouterNewAddresses); a PQZ e2e
+                                                 # run adds its own book's router here
+# compliance_registry = "0x..."                  # ComplianceRegistry ("compliance_registry" in deployments/<key>.json,
                                                  # DEPLOY_REGULATED=1): the canonical registry the regulated kinds 8-13
                                                  # pin; the DEX venue's pre-check reads it (NODE-DEX-11). An address, no
                                                  # secret (regulated-kinds spec §6.1, §7). Set with the next key, or neither.
@@ -127,19 +128,28 @@ governance_routers = ["0xB64D2D5f27D2d5eA951409773343D856e41Fb8E0", "0xFeC9586a1
                                                  # unbound (R84); never a lane key. Unset: the fee goes to the sending lane.
 # tokens = [{ address = "0x...", decimals = 6 }] # registered tokens, imported into the store (R95, MESH R86)
 # params = { relay_fee = { router = "0x...", min_amount = 1, min_wei_value = { "0x<token>" = "100000000000" } } }
-#                                                # RelayFeeRouter ("relay_fee_router" in deployments/<id>.json; one CREATE2
+#                                                # RelayFeeRouter ("relay_fee_router" in deployments/<key>.json; one CREATE2
 #                                                # address on every chain, new with the ua*/mtx* merge); min_wei_value:
 #                                                # wei per token base unit (or "<wei>/<10^k>" per 10^k units), the floor
 #                                                # price a relay fee must reach the quote at (gas limit x 2 x first max fee
 #                                                # per gas); required for a UA payer (relay). Rollups: l1_fee = "op-stack"
 #                                                # adds GasPriceOracle.getL1Fee (Base, Celo)
+#                                                # relay_unsigned_pqchat = true in the same params: relay PqChat's
+#                                                # unsigned storeMessage / addWraps at the lane's own gas (the operator's
+#                                                # lane policy); default false: only as a relay fee's call, else
+#                                                # UNSIGNED_WRITE_NOT_PAID (UA-7 P17)
 # profile = "private"                            # public | private (MESH R76); a private chain never gossips
 # gossip = false                                 # open-mesh gossip for this chain (public only)
 # exclusive_ms = 7000
+# rpc_timeout_ms = 30000                         # each RPC request (reads, log spans, nonce, fee, send, receipt); > 0
+# rpc_simulate_timeout_ms = 120000               # each request of a simulation (eth_call, eth_estimateGas; a PQZ or Zether proof check); > 0
 poll_ms = 1000
 stuck_after_secs = 60
 max_gas_per_tx = 64000000                        # regular + state gas (Amsterdam): PQZ op 1 ≈ 43 M (owner 2026-10-22);
                                                  # regular stays ≤ 2^24, and the block gas limit is read from the chain
+                                                 # PQ signers need a higher cap than the default 3000000: each SCaaS
+                                                 # input verifies its signer once (mldsa65 cap 5.95 M), and an mldsa65
+                                                 # two-input liquidity order is ≈ 12.1 M regular (docs/node/ops.md §12)
 max_fee_cap_gwei = 500
 max_index_lag = 100                              # /readyz fails when final head - indexed > this
 # Gas circuit breakers (R55), per lane; they pause NEW work only, signed txs are still tracked/replaced.

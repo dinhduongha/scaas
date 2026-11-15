@@ -18,7 +18,8 @@ const read = (path) => readFileSync(new URL(path, ROOT), 'utf8');
 const json = (path) => JSON.parse(read(path));
 const V = json('smartcontracts/vectors/typed/typed_ops.json');
 const PQZ = 'smartcontracts/vectors/pqz/';
-const VERDICT_FILE = new URL(`${PQZ}verdict.json`, ROOT);
+// T-05: the forge writer's file of the default build's set, in that set's directory
+const VERDICT_FILE = new URL(`${PQZ}n2304-kmax4096/verdict.json`, ROOT);
 const ZERO = '0x' + '00'.repeat(20);
 const Z32 = '0x' + '00'.repeat(32);
 const k = (s) => hex(keccak_256(utf8ToBytes(s)));
@@ -165,7 +166,9 @@ test('the six signed PQZ entries take PqzSignedVerdict last, after auth; the row
   }
   // the selectors of the contract's own signatures (IPqzToken / PqzLayer / WrappedPqzToken, spec §5.3)
   // group 3h (T59): `bytes32 ownTag` after `salt` (op 1, op 7) and after `beneficiaryUA` (the burn forms)
-  const PA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)';
+  // three keys (CTR-PQZ-40): `bytes uFrom` after vAuditor, the two PqzOpening (bytes mlkemCt, bytes32 x25519Eph, bytes sealedSeed) last
+  const PA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,'
+    + '(bytes,bytes32,bytes),(bytes,bytes32,bytes))';
   const MA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)';
   const BA = '(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)';
   const tail = `bytes,${UA_SIG},bytes,${UA_SIG},${SIGNED_VERDICT})`;
@@ -242,9 +245,10 @@ test('the verdict is required on every signed PQZ entry; a half verdict is refus
 
 // --- the router's three verifier ops (spec §4.2, §4.3)
 
-const ROUTER_OPS = { UAPqzSetVerifier: ['UA_PQZ_SET_VERIFIER', 'next', 'mtxPqzSetVerifier', `address,bytes32`],
-  UAPqzCancelVerifier: ['UA_PQZ_CANCEL_VERIFIER', '', 'mtxPqzCancelVerifier', 'address'],
-  UAPqzRevokeVerifier: ['UA_PQZ_REVOKE_VERIFIER', '', 'mtxPqzRevokeVerifier', 'address'] };
+// CTR-GOV-28: each signs the token's chain word last (`chainUid`)
+const ROUTER_OPS = { UAPqzSetVerifier: ['UA_PQZ_SET_VERIFIER', ['next', 'chainUid'], 'mtxPqzSetVerifier', `address,bytes32,bytes32`],
+  UAPqzCancelVerifier: ['UA_PQZ_CANCEL_VERIFIER', ['chainUid'], 'mtxPqzCancelVerifier', 'address,bytes32'],
+  UAPqzRevokeVerifier: ['UA_PQZ_REVOKE_VERIFIER', ['chainUid'], 'mtxPqzRevokeVerifier', 'address,bytes32'] };
 
 test('the router\'s PQZ verifier ops: the type strings of GovernanceRouterBase.sol, target first, fee mode NONE, the router domain', () => {
   for (const [name, [constant, own, entry, args]] of Object.entries(ROUTER_OPS)) {
@@ -253,7 +257,7 @@ test('the router\'s PQZ verifier ops: the type strings of GovernanceRouterBase.s
     assert.ok(op, `${name}: no row`);
     assert.equal(op.typeString, s, name);
     assert.equal(op.typehash, k(s), name);
-    assert.deepEqual(op.fields.map((f) => f.name).slice(0, -7), ['from', 'target', ...(own ? [own] : [])], name);
+    assert.deepEqual(op.fields.map((f) => f.name).slice(0, -7), ['from', 'target', ...own], name);
     assert.deepEqual([op.on, op.domains, op.envelope, op.ua, op.entry], [['GovernanceRouter'], ['SCaaS GovernanceRouter'], true, true, entry], name);
     const r = V.ops[name];
     assert.deepEqual(Object.keys(r.domains), ['gov_router'], name);
@@ -283,6 +287,7 @@ test('the router\'s PQZ verifier ops: a non-zero unbound relayer or feeRecipient
     assert.equal(hex(evm.hashTypedData(open)), hex(evm.hashTypedData(build({ ...r.message, mode: 0, relayer: ZERO, feeRecipient: ZERO }))), name);
     assert.notEqual(hex(evm.hashTypedData(open)), d.digest, `${name}: the mode is signed`);
     assert.notEqual(hex(evm.hashTypedData(build({ ...r.message, target: JUNK }))), d.digest, `${name}: target is signed`);
+    assert.notEqual(hex(evm.hashTypedData(build({ ...r.message, chainUid: Z32 }))), d.digest, `${name}: the chain word is signed`);
   }
   const r = V.ops.UAPqzSetVerifier;
   const where = { contract: r.domains.gov_router.domain.verifyingContract, chainId: r.domains.gov_router.domain.chainId,

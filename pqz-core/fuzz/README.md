@@ -111,7 +111,14 @@ start of every run. It is light: it uses `pqz_kat.py`'s helpers, and the fuzz pr
     is never built;
   - the op 7 disclosures of both ids (R0 review fix: `statement_transfer_multi.json` `disclosures`);
   - at `n2048-kmax1024` only, the files of `regress/valid/`.
-- **The `precompile` seeds:** those inputs, plus `06 00000000` and every row of the set's `negative.json`.
+- **The `precompile` seeds:** those inputs, plus `06 00000000` and every row of the set's `negative.json` `rows`. No
+  split transfer (`PQZL_SPLIT_ID`, which the precompile never serves).
+- **Target `offchain`** (three-key spec K3-4; UNAUDITED): raw bytes into `pqz_offchain::verify_offchain` (the off-chain
+  verifier's entry, `ffi/offchain`) twice; oracle: no panic, no node fault, the same result twice, `true` exactly for
+  the honest inputs above or an honest split input. Its honest split inputs: `<build>/honest_split.bin`, the set's
+  own `proof_pqzl_split.json` rows (2 at every set; the init checks each is valid off-chain and refused by the
+  precompile); its seeds: the honest inputs, the honest split inputs and `negative.json`'s `split_rows`.
+  `run.sh offchain <seconds>`.
 
 `regress/valid/` holds valid inputs from outside the vectors, which the oracle must know as honest. Today it holds one
 file, `fixture-disclose-receiver-rnd33`:
@@ -133,6 +140,9 @@ file, `fixture-disclose-receiver-rnd33`:
   (`runs/2026-10-23-t8d1-regress-valid.txt`). It is an input of that set only (`seeds.py` adds it there).
 - R0 review fix (2026-10-25): re-proved under that set's `…/v5` id, as `fixture::cases`' DISCLOSE-RECEIVER at the new
   keys (KeyGen V2 changed them, review R2-C3) with the same `rnd32` (`runs/2026-10-25-r01a-regress-valid.txt`).
+- Three-key round (2026-11-13): re-proved under that set's `…/v6` id (the v5 id retired), same statement but the id
+  word, same `rnd32` (`runs/2026-11-13-three-keys-regress-valid.txt`); the gate's fuzz step had stopped on it
+  (`cached honest input does not decode: ProofSystemId`).
 
 ## Build (D12)
 

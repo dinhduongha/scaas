@@ -1669,8 +1669,8 @@ index cb205b8..2fa3392 100644
   `test/ua/UAReceivers.t.sol` 19 passed; `test/hedera/HederaV2.t.sol` 14 passed; `test/v2/Allowlist.t.sol`
   13 passed; `test/zether/ZetherWrapped.t.sol` 16 passed; `'test/ua/**'` 24 suites, 251 passed. Logged by
   `-vv --match-test test_gas_receiversVsAddressTwins`: the table under **Spike findings**.
-- [ ] **Step 5: Size gate.** `../../scripts/capped forge build src --sizes --json > /tmp/ua5a-sizes.json; python3
-  ../../scripts/size_gate.py /tmp/ua5a-sizes.json size-baseline.json` — before the ratchet 5 errors (`NormalToken`
+- [ ] **Step 5: Size gate.** `T=$(mktemp -d); ../../scripts/capped forge build src --sizes --json > "$T"/ua5a-sizes.json; python3
+  ../../scripts/size_gate.py "$T"/ua5a-sizes.json size-baseline.json` — before the ratchet 5 errors (`NormalToken`
   32,150, `WrappedToken` 40,815, `NormalZetherToken` 40,383, `WrappedZetherToken` 51,327 / init 53,022;
   `WrappedLib` 12,560 fits); apply the ratchet, then `size gate: 0 error(s), 84 contracts`:
 

@@ -70,7 +70,7 @@ contract PayRecordsTest is PayRigBase {
     }
 
     /// T66b rule 4 (spec §4.1): module P runs the pay code of `MtxPipelineLib` compiled in (`metaPayId`, `payMeta`, the
-    /// typed transfer, `payRecord`, the receiver-fee digest and authorisation), module A the two payment views: no
+    /// typed transfer, `payRecord`, the payee-fee digest and authorisation), module A the two payment views: no
     /// DELEGATECALL to the library on any kind of the rigs; positive control: the library's own entry answers.
     function test_rule4_payCallsNoMtxPipelineLib() public {
         MtxPipelineLib.paymentCount(NO); // control: linked here, it answers
@@ -86,10 +86,10 @@ contract PayRecordsTest is PayRigBase {
                 MetaTxLib.MODE_RESTRICT_RELAYER, REL, 0, address(0));
             IUARegistry.UASig memory pa = _sigOf(t, x);
             IUARegistry.UASig memory qa = UACall.auth(x.to,
-                _ecdsa(PAYEE_PK, NormalToken(t).receiverFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
+                _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
             uint256 vu = block.timestamp + 300;
             vm.prank(REL);
-            NormalToken(t).mtxPayReceiverFee(x, pa, 10, RF_TO, vu, qa, m2);
+            NormalToken(t).mtxPayWithPayeeFee(x, pa, 10, RF_TO, vu, qa, m2);
             assertEq(NormalToken(t).paymentCount(NO), 2, kinds[i]);
             assertEq(NormalToken(t).paymentsOf(NO, 1, 1)[0].amount, AMOUNT - 10, kinds[i]);
         }
@@ -177,8 +177,8 @@ contract PayRecordsTest is PayRigBase {
         }
     }
 
-    /// Receiver-pays: the payee received `value` and paid `fee` out of it; the record is the net `value - fee`.
-    function test_records_receiverFeeNet() public {
+    /// Payee fee: the payee received `value` and paid `fee` out of it; the record is the net `value - fee`.
+    function test_records_payeeFeeNet() public {
         for (uint256 i; i < toks.length; ++i) {
             address t = toks[i];
             MetaTxLib.PayMeta memory m = _saved(50 + i, NO);
@@ -187,10 +187,10 @@ contract PayRecordsTest is PayRigBase {
                 MetaTxLib.MODE_RESTRICT_RELAYER, REL, 0, address(0));
             IUARegistry.UASig memory pa = _sigOf(t, x);
             IUARegistry.UASig memory qa = UACall.auth(x.to,
-                _ecdsa(PAYEE_PK, NormalToken(t).receiverFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
+                _ecdsa(PAYEE_PK, NormalToken(t).payeeFeeDigest(x, 10, RF_TO, block.timestamp + 300)));
             uint256 vu = block.timestamp + 300;
             vm.prank(REL);
-            NormalToken(t).mtxPayReceiverFee(x, pa, 10, RF_TO, vu, qa, m);
+            NormalToken(t).mtxPayWithPayeeFee(x, pa, 10, RF_TO, vu, qa, m);
             assertEq(NormalToken(t).balanceOf(vm.addr(PAYEE_PK)), AMOUNT - 10, kinds[i]);
             _eq(NormalToken(t).paymentsOf(NO, 0, 1)[0], vm.addr(PAYEE_PK), AMOUNT - 10, block.number, kinds[i]);
         }

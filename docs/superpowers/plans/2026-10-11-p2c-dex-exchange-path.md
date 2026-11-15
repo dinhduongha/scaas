@@ -1548,8 +1548,8 @@ contract DexExchangeTest is Test {
   - `forge test --match-path test/v2/DexExchange.t.sol` → 24 passed; `forge test --match-path "test/v2/Dex*.t.sol"` → 82
     passed (Dex 36, DexOutside 22, DexExchange 24).
   - `forge test` → **937 passed** (913 + 24), 0 failed.
-  - Size gate: `forge build src --sizes --json > /tmp/sizes.json || true; python3 ../../scripts/size_gate.py
-    /tmp/sizes.json size-baseline.json` → `0 error(s)`; `SCaaSDex` 21,761 B.
+  - Size gate: `T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json || true; python3 ../../scripts/size_gate.py
+    "$T"/sizes.json size-baseline.json` → `0 error(s)`; `SCaaSDex` 21,761 B.
   - e2e: `forge build` (full), then in `scaas-node`: `cargo test --test e2e -- --ignored --test-threads=1` → 4 passed;
     `cargo test --test e2e_hedera -- --ignored` → 1 passed (a fresh worktree may reuse the main checkout's build cache
     with `CARGO_TARGET_DIR=<repo>/scaas-node/target`).

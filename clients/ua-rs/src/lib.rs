@@ -206,8 +206,8 @@ pub const GROUPS: &[&str] = &[
 /// Every purpose at v1 (clientkeys `PURPOSES`, `vectors/ua/kinds.json`); `pqz-verdict` (group 3f, `UAKinds.PURPOSE_PQZ_VERDICT`):
 /// what a PQZ verifier UA signs a `PqzVerdict` under (`wallet::pqz_verdict_typed_data`, feature `wallet`).
 pub const PURPOSES: &[&str] = &[
-    "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
-    "vc-anchor", "trade", "kem", "pqz-key", "membership", "pqz-verdict",
+    "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "payee-fee", "vp",
+    "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update", "pqz-verdict",
 ];
 
 /// The off-chain purpose of a sealed container's sender signature, `keccak256("scaas.ua.purpose.seal.v1")` (MD-10, ua-rs-sign
@@ -253,7 +253,7 @@ pub(crate) fn keccak(parts: &[&[u8]]) -> [u8; 32] {
 /// (`GovBitsVector.t.sol`), one row per line.
 pub const GOVERNANCE_BITS_JSON: &str = include_str!("../../../smartcontracts/vectors/governance/governance_bits.json");
 
-/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-24; `None` past them (bits 25-127
+/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-31; `None` past them (bits 32-127
 /// are free, bits 128-255 the application contract's own, labelled by its `bitLabel(bit)`).
 pub fn governance_bit(bit: u8) -> Option<&'static str> {
     let head = format!("{{\"bit\": {bit}, ");
@@ -298,8 +298,12 @@ pub fn msig_pqz_eligible(key_data: &[u8]) -> Result<bool> {
     msig_pqz_eligible_with(key_data, &|_| None)
 }
 /// `msig_pqz_eligible` with `inner`, an `msig` member's key data by its id: a member is PQ if its kind is in 0x0130-0x0135, or it is an
-/// `msig` that is PQ-eligible itself; none, or an `inner` that holds an `msig` (two levels only), is `MemberUnknown`.
+/// `msig` that is PQ-eligible itself; none is `MemberUnknown`. CTR-UA-44 MM-14: at that member's own level its `msig` slots are classical
+/// weight, never followed (a member that grew a level since it was listed).
 pub fn msig_pqz_eligible_with(key_data: &[u8], inner: &dyn Fn([u8; 32]) -> Option<Vec<u8>>) -> Result<bool> {
+    eligible_at(key_data, Some(inner))
+}
+fn eligible_at(key_data: &[u8], inner: Option<&dyn Fn([u8; 32]) -> Option<Vec<u8>>>) -> Result<bool> {
     let u16_at = |o: usize| key_data.get(o..o + 2).map(|s| u16::from_be_bytes([s[0], s[1]]) as usize);
     let bad = || UAError::KeyData("length");
     let count = u16_at(2).ok_or_else(bad)?;
@@ -310,10 +314,13 @@ pub fn msig_pqz_eligible_with(key_data: &[u8], inner: &dyn Fn([u8; 32]) -> Optio
     for i in 0..count {
         let o = 4 + 36 * i;
         let kind = u16_at(o).ok_or_else(bad)?;
-        let pq = (0x0130..=0x0135).contains(&kind) || (kind == 0x0120 && {
-            let id: [u8; 32] = key_data[o + 2..o + 34].try_into().expect("32 bytes");
-            msig_pqz_eligible(&inner(id).ok_or(UAError::MemberUnknown)?)?
-        });
+        let pq = (0x0130..=0x0135).contains(&kind) || match (kind, inner) {
+            (0x0120, Some(f)) => {
+                let id: [u8; 32] = key_data[o + 2..o + 34].try_into().expect("32 bytes");
+                eligible_at(&f(id).ok_or(UAError::MemberUnknown)?, None)?
+            }
+            _ => false,
+        };
         if !pq {
             classical += u16_at(o + 34).ok_or_else(bad)?;
         }
@@ -549,3 +556,10 @@ pub mod regulated;
 pub mod pay;
 /// T20b (ua-mtx-merge T71, T74): the factory's chain-neutral CREATE3 address of a creation (chain-neutral releases spec §4).
 pub mod factory;
+pub mod wraplimit;
+/// Round 3t: the router's `UASetVerifierFee` and a PQZ debit's fee word (CTR-PQZ-36).
+pub mod pqzfee;
+/// Round 3r: the router's 18 admin ops and the factory's release approval keys (CTR-GOV-23).
+pub mod admin;
+/// The PQZ three-key model: the scoped seeds, the opening KEM seed, the leg seed, `memoHash`, `PqzRollOver` (CTR-PQZ-37 .. -41).
+pub mod pqz3k;

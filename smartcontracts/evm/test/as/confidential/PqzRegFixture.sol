@@ -31,6 +31,7 @@ import {IRegulatedToken} from "../../../src/regulated/IRegulatedToken.sol";
 import {NormalPqzRegulatedToken} from "../../../src/regulated/NormalPqzRegulatedToken.sol";
 import {WrappedPqzRegulatedToken} from "../../../src/regulated/WrappedPqzRegulatedToken.sol";
 import {ComplianceRegistry} from "../../../src/regulated/ComplianceRegistry.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// The signed PQZ entries alone (no overload), so `abi.encodeCall` can name each.
 interface IPqzSigned {
@@ -84,6 +85,16 @@ abstract contract PqzRegFixture is PqzNamedBase {
     /// `DENYLIST` on the token `setUp` creates.
     function _denylist() internal pure virtual returns (bool) { return false; }
 
+    /// Round 3s (spec 2026-11-10-token-lists.md §4.3): `DENYLIST` as the token's own list (`setDenied` by the issuer seat)
+    /// instead of the registry; `_attestDenied` writes the list and `_deniedErr` is `Denied(a)`.
+    function _lists() internal pure virtual returns (bool) { return false; }
+
+    /// The refusal of a denied account at a checked site: the list's `Denied(a)` or the registry's `NotEligible(a, 0)`.
+    function _deniedErr(bytes32 a) internal pure returns (bytes memory) {
+        return _lists() ? abi.encodeWithSelector(bytes4(keccak256("Denied(bytes32)")), a)
+            : abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, a, uint8(0));
+    }
+
     function setUp() public virtual {
         _stack();
         _mockOp(7, 1);
@@ -94,15 +105,15 @@ abstract contract PqzRegFixture is PqzNamedBase {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e,
             type(WrappedPqzRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         issuer = address(new Holder());
         compliance = address(new Holder());
         cadmin = address(new Holder());
-        creg = new ComplianceRegistry(cadmin);
+        creg = new ComplianceRegistry(nid(cadmin), address(0), PQZ_UID);
         vm.prank(cadmin);
-        creg.setAttester(attester, true);
+        creg.setKycProvider(nid(attester), true, EnvKit.regUidOf(address(creg)));
         usd = new MockERC20("USD", "USD", 6);
         gasProbe = new GasProbe();
         tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(_regCfg()), "pr"));
@@ -118,13 +129,15 @@ abstract contract PqzRegFixture is PqzNamedBase {
     function _regCfg() internal view returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(uint256(1) << 40);
         c.lockedFeatures = 0;
-        c.owner = nid(ownerA);
+        c.admin = nid(ownerA);
         c.grantDelay = 1 days;
         c.features |= REG_FEATURES;
         (c.roles.issuer, c.roles.compliance) = (nid(issuer), nid(compliance));
         c.reg.termsHash = keccak256("terms");
-        if (_denylist()) {
-            c.features |= 1 << GovernanceBits.DENYLIST;
+        if (_lists()) {
+            c.features |= 1 << GovernanceBits.DENYLIST; // round 3s: the token's own deny list, no registry
+        } else if (_denylist()) {
+            c.features |= 1 << GovernanceBits.KYC; // round 3s: the registry's deny mask is under bit 28
             (c.reg.complianceRegistry, c.reg.deniedFlags) = (address(creg), SANCTIONED);
         }
         if (_isWrapped()) {
@@ -161,22 +174,30 @@ abstract contract PqzRegFixture is PqzNamedBase {
 
     function _freeze(bytes32 x) internal {
         vm.prank(issuer);
-        _r().freeze(x, REF, 0);
+        _r().freeze(x, REF, 0, EnvKit.codeUidOf(address(_r())));
     }
 
     function _pause() internal returns (uint64 until) {
         until = uint64(block.timestamp + 1 days);
         vm.prank(issuer);
-        _r().pause(REF, until);
+        _r().pause(REF, until, EnvKit.codeUidOf(address(_r())));
     }
 
     function _attestDenied(bytes32 x) internal {
+        if (_lists()) {
+            bytes32[] memory one = new bytes32[](1);
+            one[0] = x;
+            vm.prank(issuer);
+            (bool ok,) = address(tok).call(abi.encodeWithSignature("setDenied(bytes32[],bool,bytes32)", one, true, EnvKit.codeUidOf(address(tok))));
+            require(ok, "setDenied");
+            return;
+        }
         bytes32[] memory as_ = new bytes32[](1);
         uint64[] memory fl = new uint64[](1);
         uint64[] memory vu = new uint64[](1);
         (as_[0], fl[0], vu[0]) = (x, SANCTIONED, type(uint64).max);
         vm.prank(attester);
-        creg.attest(as_, fl, vu);
+        creg.setCompliance(as_, fl, vu, EnvKit.regUidOf(address(creg)));
     }
 
     /// Every proof op answers `word` (1 valid, 0 rejected).

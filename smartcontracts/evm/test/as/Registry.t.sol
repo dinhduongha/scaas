@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RegFixture, Holder} from "./helpers/RegFixture.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IComplianceRegistry} from "../../src/regulated/IComplianceRegistry.sol";
 import {ComplianceRegistry} from "../../src/regulated/ComplianceRegistry.sol";
 import {RegulatedBase} from "../../src/regulated/RegulatedBase.sol";
@@ -13,15 +14,18 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {Catalogue, plainEnv} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
-/// Plan T29 (regulated-kinds spec §2.4, §5; CTR-AS-07, CTR-AS-16, CTR-GOV-18): the canonical `ComplianceRegistry` (admin
-/// written once, attesters by id, `ELIGIBLE_CONTRACT` admin only), the `R` truth table on the registry and through kinds 8
-/// and 9, and the code pin (`REGISTRY_CODEHASH` from the release's `implArgs`, `RegistryCodeMismatch` at init). Each
-/// refusal after its control.
+/// Plan T29 (regulated-kinds spec §2.4, §5; CTR-AS-07, CTR-AS-16, CTR-GOV-18): the canonical `ComplianceRegistry` (its
+/// admin a UA id, KYC providers by id, `ELIGIBLE_CONTRACT` admin only; round 3r's admin and provider rules:
+/// `RegistryAdmin.t.sol`), the `R` truth table on the registry and through kinds 8 and 9, and the code pin
+/// (`COMPLIANCE_REGISTRY_CODEHASH` from the release's `implArgs`, `ComplianceRegistryCodeMismatch` at init). Each refusal after
+/// its control.
 contract RegistryTest is RegFixture {
     /// The canonical registry runtime's code hash (a pin: it moves with the registry's source, its interface or the
     /// compiler settings, old -> new in the commit).
-    bytes32 internal constant REGISTRY_CODEHASH = 0x8e2d42b6304131a9159832ae910e4e39f609cd9fdbffbd6c91a090cec2f43f0c;
+    ///      Fix3 CTR-GOV-28 (`setKycProvider` and `setCompliance` take `chainUid_`): 0x1dc2f8a7…8da4 -> this.
+    bytes32 internal constant COMPLIANCE_REGISTRY_CODEHASH = 0x368a66a3d8e30f2147f5298b21b315e63c62b40555d17d7671aafa4e4de40383;
     uint64 internal constant ACCR = 2;
     uint64 internal constant MAX = type(uint64).max;
     bytes32 internal constant ACC = bytes32(uint256(0xACC));
@@ -32,66 +36,68 @@ contract RegistryTest is RegFixture {
 
     // ------------------------------------------------------------------ the registry
 
-    /// CTR-AS-07: the admin is a contract, set by the constructor and never written again (no writer exists).
-    function test_adminWrittenOnceAContract() public {
-        assertEq(creg.admin(), cadmin);
-        vm.expectRevert(abi.encodeWithSelector(IComplianceRegistry.AdminNotContract.selector, bob));
-        new ComplianceRegistry(bob);
-        assertEq(new ComplianceRegistry(address(new Holder())).admin() != address(0), true);
+    /// CTR-AS-07 (round 3r, spec §5.3): the admin is a UA id set by the constructor (any account, not 0), moved only by the
+    ///  two-step transfer (`RegistryAdmin.t.sol`); the router is written once.
+    function test_adminSetByTheConstructor() public {
+        assertEq(creg.admin(), nid(cadmin));
+        assertEq(creg.govRouter(), address(0));
+        vm.expectRevert(IComplianceRegistry.AdminZero.selector);
+        new ComplianceRegistry(bytes32(0), address(0), bytes32(uint256(0x5EC0)));
+        assertEq(new ComplianceRegistry(nid(bob), address(0), bytes32(uint256(0x5EC0))).admin(), nid(bob), "an EOA");
     }
 
-    /// Attester ids: assigned at the first enabling from 1, never reused; a disable keeps the id; id 0 is the admin, always
-    /// enabled; `setAttester` is the admin's.
-    function test_attesterIds() public {
-        assertEq(creg.attesterId(attester), 1);
-        assertTrue(creg.attesterEnabled(0), "admin");
-        assertTrue(creg.attesterEnabled(1));
-        assertFalse(creg.attesterEnabled(2), "not assigned");
+    /// KYC provider ids: assigned at the first enabling from 1, never reused; a disable keeps the id; id 0 is the admin,
+    /// always enabled; `setKycProvider` is the admin's.
+    function test_kycProviderIds() public {
+        assertEq(creg.kycProviderId(nid(attester)), 1);
+        assertTrue(creg.kycProviderEnabled(0), "admin");
+        assertTrue(creg.kycProviderEnabled(1));
+        assertFalse(creg.kycProviderEnabled(2), "not assigned");
         vm.prank(cadmin);
-        creg.setAttester(attester, false);
-        assertEq(creg.attesterId(attester), 1);
-        assertFalse(creg.attesterEnabled(1));
+        creg.setKycProvider(nid(attester), false, EnvKit.regUidOf(address(creg)));
+        assertEq(creg.kycProviderId(nid(attester)), 1);
+        assertFalse(creg.kycProviderEnabled(1));
         vm.prank(cadmin);
-        creg.setAttester(bob, true);
-        assertEq(creg.attesterId(bob), 2, "the next id");
+        creg.setKycProvider(nid(bob), true, EnvKit.regUidOf(address(creg)));
+        assertEq(creg.kycProviderId(nid(bob)), 2, "the next id");
         vm.prank(cadmin);
-        creg.setAttester(attester, true);
-        assertEq(creg.attesterId(attester), 1, "never reused, never reassigned");
-        vm.expectRevert(IComplianceRegistry.NotAdmin.selector);
+        creg.setKycProvider(nid(attester), true, EnvKit.regUidOf(address(creg)));
+        assertEq(creg.kycProviderId(nid(attester)), 1, "never reused, never reassigned");
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, nid(attester)));
         vm.prank(attester);
-        creg.setAttester(alice, true);
-        vm.expectRevert(IComplianceRegistry.NotAttester.selector);
+        creg.setKycProvider(nid(alice), true, EnvKit.regUidOf(address(creg)));
+        vm.expectRevert(IComplianceRegistry.NotKycProvider.selector);
         vm.prank(cadmin);
-        creg.setAttester(alice, false); // never enabled: nothing to disable
+        creg.setKycProvider(nid(alice), false, EnvKit.regUidOf(address(creg))); // never enabled: nothing to disable
     }
 
-    /// `attest`: an enabled attester (its id) or the admin (id 0); anyone else `NotAttester`, a disabled attester too;
-    /// lengths checked; flags 0 revoke.
-    function test_attest() public {
+    /// `setCompliance`: an enabled KYC provider (its id) or the admin (id 0); anyone else `NotKycProvider`, a disabled
+    /// provider too; lengths checked; flags 0 revoke.
+    function test_setCompliance() public {
         _attest(ACC, KYC, MAX);
-        (uint64 fl, uint64 vu, uint32 id) = creg.attestationOf(ACC);
+        (uint64 fl, uint64 vu, uint32 id) = creg.complianceOf(ACC);
         assertEq(fl, KYC);
         assertEq(vu, MAX);
         assertEq(id, 1);
         _attestAs(cadmin, ACC, ACCR, 5);
-        (fl, vu, id) = creg.attestationOf(ACC);
+        (fl, vu, id) = creg.complianceOf(ACC);
         assertEq(fl, ACCR);
         assertEq(vu, 5);
         assertEq(id, 0, "the admin's id");
-        vm.expectRevert(IComplianceRegistry.NotAttester.selector);
+        vm.expectRevert(IComplianceRegistry.NotKycProvider.selector);
         _attestAs(bob, ACC, KYC, MAX);
         vm.prank(cadmin);
-        creg.setAttester(attester, false);
-        vm.expectRevert(IComplianceRegistry.NotAttester.selector);
+        creg.setKycProvider(nid(attester), false, EnvKit.regUidOf(address(creg)));
+        vm.expectRevert(IComplianceRegistry.NotKycProvider.selector);
         _attest(ACC, KYC, MAX);
         vm.expectRevert(IComplianceRegistry.LengthMismatch.selector);
         vm.prank(cadmin);
-        creg.attest(new bytes32[](2), new uint64[](1), new uint64[](2));
+        creg.setCompliance(new bytes32[](2), new uint64[](1), new uint64[](2), EnvKit.regUidOf(address(creg)));
         _attestAs(cadmin, ACC, 0, MAX); // revoke
         assertFalse(_has(ACC, KYC, 0));
     }
 
-    /// Owner 2026-11-06: a row the admin wrote (stored `attesterId == 0 && flags != 0`) only the admin overwrites or
+    /// Owner 2026-11-06: a row the admin wrote (stored `providerId == 0 && flags != 0`) only the admin overwrites or
     /// revokes; an attester gets `AdminWrittenSlot(account)`, in a batch too (nothing written). An empty slot is open; an
     /// admin row of flags 0 (a revoke) is open, nothing left to protect. Attesters overwrite their own and each other's
     /// rows. Each refusal after its control.
@@ -99,7 +105,7 @@ contract RegistryTest is RegFixture {
         bytes32 b = bytes32(uint256(0xB0B));
         bytes memory locked = abi.encodeWithSelector(IComplianceRegistry.AdminWrittenSlot.selector, ACC);
         vm.prank(cadmin);
-        creg.setAttester(bob, true); // attester id 2
+        creg.setKycProvider(nid(bob), true, EnvKit.regUidOf(address(creg))); // attester id 2
         _attest(ACC, KYC, MAX); // the control: an empty slot is open to an attester
         _attest(ACC, ACCR, 7); // its own row
         _attestAs(bob, ACC, KYC, MAX); // another attester's row
@@ -111,7 +117,7 @@ contract RegistryTest is RegFixture {
         _attest(ACC, 0, MAX); // revoke an admin row
         vm.expectRevert(locked);
         _attestAs(bob, ACC, 0, 0); // another attester, the same
-        (uint64 fl, uint64 vu, uint32 id) = creg.attestationOf(ACC);
+        (uint64 fl, uint64 vu, uint32 id) = creg.complianceOf(ACC);
         assertEq(fl, KYC);
         assertEq(vu, MAX);
         assertEq(id, 0, "the admin's row stands");
@@ -122,18 +128,18 @@ contract RegistryTest is RegFixture {
         (as_[0], as_[1], f2[0], f2[1], v2[0], v2[1]) = (b, ACC, KYC, KYC, MAX, MAX);
         vm.prank(attester);
         vm.expectRevert(locked);
-        creg.attest(as_, f2, v2);
-        (fl,,) = creg.attestationOf(b);
+        creg.setCompliance(as_, f2, v2, EnvKit.regUidOf(address(creg)));
+        (fl,,) = creg.complianceOf(b);
         assertEq(fl, 0, "the batch's first row reverted with it");
         // the admin still overwrites and revokes its own row
         _attestAs(cadmin, ACC, ACCR, 9);
-        (fl, vu, id) = creg.attestationOf(ACC);
+        (fl, vu, id) = creg.complianceOf(ACC);
         assertEq(fl, ACCR);
         assertEq(vu, 9);
         assertEq(id, 0);
         _attestAs(cadmin, ACC, 0, MAX); // the admin's revoke: flags 0, nothing left to protect
         _attest(ACC, KYC, MAX); // open again to an attester
-        (fl,, id) = creg.attestationOf(ACC);
+        (fl,, id) = creg.complianceOf(ACC);
         assertEq(fl, KYC);
         assertEq(id, 1);
         // ELIGIBLE_CONTRACT rows are admin rows too
@@ -176,7 +182,7 @@ contract RegistryTest is RegFixture {
         assertTrue(_has(ACC, 0, SANCTIONED), "denied, lapsed: not active");
         _attest(ACC, SANCTIONED, MAX);
         vm.prank(cadmin);
-        creg.setAttester(attester, false);
+        creg.setKycProvider(nid(attester), false, EnvKit.regUidOf(address(creg)));
         assertTrue(_has(ACC, 0, SANCTIONED), "denied, attester disabled: not active");
         _attestAs(cadmin, ACC, ELIGIBLE, MAX);
         assertTrue(_has(ACC, KYC | ACCR, 0), "ELIGIBLE_CONTRACT satisfies required");
@@ -186,9 +192,9 @@ contract RegistryTest is RegFixture {
         assertFalse(_has(ACC, 0, ELIGIBLE), "ELIGIBLE_CONTRACT as a denied flag denies");
     }
 
-    /// Disabling an attester voids its attestations at once, on the registry and through a token; enabling it again
-    /// restores them (nothing was erased); the admin's (id 0) never lapse by it.
-    function test_attesterDisableVoids() public {
+    /// Disabling a KYC provider voids its rows at once, on the registry and through a token; enabling it again restores
+    /// them (nothing was erased); the admin's (id 0) never lapse by it.
+    function test_kycProviderDisableVoids() public {
         for (uint256 i; i < 2; ++i) {
             _clearBob();
             address t = _listed(i, KYC, 0, bytes32(i));
@@ -196,13 +202,13 @@ contract RegistryTest is RegFixture {
             vm.prank(alice);
             IERC20(t).transfer(bob, 1); // the control
             vm.prank(cadmin);
-            creg.setAttester(attester, false);
+            creg.setKycProvider(nid(attester), false, EnvKit.regUidOf(address(creg)));
             assertFalse(_has(nid(bob), KYC, 0));
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0)));
             IERC20(t).transfer(bob, 1);
             vm.prank(cadmin);
-            creg.setAttester(attester, true);
+            creg.setKycProvider(nid(attester), true, EnvKit.regUidOf(address(creg)));
             vm.prank(alice);
             IERC20(t).transfer(bob, 1);
         }
@@ -210,7 +216,7 @@ contract RegistryTest is RegFixture {
 
     // ------------------------------------------------------------------ R through the token (kinds 8, 9)
 
-    /// `ALLOWLIST` and `DENYLIST` on the receiver of a transfer (spec §3.2): unattested refused `NotEligible(to, 0)`;
+    /// `KYC` (round 3s, both masks) on the receiver of a transfer (spec §3.2): unattested refused `NotEligible(to, 0)`;
     /// attested passes; lapsed refused; `validUntil == now` passes; denied refused; `ELIGIBLE_CONTRACT` passes required,
     /// never denied. A denied or lapsed holder still sends (only receivers are checked).
     function test_receiverTruthTableThroughToken() public {
@@ -245,7 +251,8 @@ contract RegistryTest is RegFixture {
         }
     }
 
-    /// One list at a time: `DENYLIST` alone lets an unattested receiver through; `ALLOWLIST` alone ignores denied flags.
+    /// One mask at a time (round 3s: a zero mask constrains nothing): a deny mask alone lets an unattested receiver through; a
+    /// required mask alone ignores denied flags.
     function test_eachListAlone() public {
         for (uint256 i; i < 2; ++i) {
             _clearBob();
@@ -262,29 +269,33 @@ contract RegistryTest is RegFixture {
         }
     }
 
-    /// A disabled list stops its check (the mirror, Codex 3): after `disableFeature(ALLOWLIST)` an unattested receiver
-    /// passes (its `requiredFlags` are no longer read) and `DENYLIST` still refuses; after `(DENYLIST)` (one call each: not
-    /// delayed bits) the token makes no registry call.
-    function test_disabledListStopsChecking() public {
+    /// A disabled `KYC` stops the check (the mirror, Codex 3; round 3s, spec §5.2): `disableFeature(KYC)` is delayed (the
+    /// proposal changes nothing, RK-3), its confirm after `grantDelay` ends every registry call; `enableFeature(KYC)` again
+    /// at once brings it back.
+    function test_disabledKycStopsChecking() public {
         for (uint256 i; i < 2; ++i) {
             _clearBob();
             address t = _listed(i, KYC, SANCTIONED, bytes32(i));
             bytes memory ne = abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0));
             vm.prank(alice);
             vm.expectRevert(ne);
-            IERC20(t).transfer(bob, 1); // the control: unattested, refused by ALLOWLIST
-            _disable(t, GovernanceBits.ALLOWLIST);
+            IERC20(t).transfer(bob, 1); // the control: unattested, refused by KYC
+            _disable(t, GovernanceBits.KYC);
             vm.prank(alice);
-            IERC20(t).transfer(bob, 1); // ALLOWLIST off: requiredFlags no longer read
-            _attest(nid(bob), SANCTIONED, MAX);
-            vm.prank(alice);
-            vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0)));
-            IERC20(t).transfer(bob, 1);
-            _disable(t, GovernanceBits.DENYLIST);
+            vm.expectRevert(ne);
+            IERC20(t).transfer(bob, 1); // proposed only: still checked
+            vm.warp(block.timestamp + GD);
+            _disable(t, GovernanceBits.KYC);
             _countStart();
             vm.prank(alice);
             IERC20(t).transfer(bob, 1);
             assertEq(_countEnd(0), 0, "no registry call");
+            vm.prank(ownerA);
+            IRegulatedToken(t).enableFeature(GovernanceBits.KYC, EnvKit.codeUidOf(address(IRegulatedToken(t))));
+            vm.prank(alice);
+            vm.expectRevert(ne);
+            IERC20(t).transfer(bob, 1);
+            vm.warp(1_800_000_000);
         }
     }
 
@@ -292,7 +303,7 @@ contract RegistryTest is RegFixture {
     /// holder is refused `NotEligible`.
     function test_initialSupplyRecipientChecked() public {
         IFactoryToken.TokenConfig memory c = _cfg8();
-        c.features |= 1 << GovernanceBits.ALLOWLIST;
+        c.features |= 1 << GovernanceBits.KYC;
         (c.reg.complianceRegistry, c.reg.requiredFlags) = (address(creg), KYC);
         c.initialHolder = bob;
         vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(bob), uint8(0)));
@@ -304,32 +315,34 @@ contract RegistryTest is RegFixture {
     // ------------------------------------------------------------------ the code pin (F-11)
 
     /// Every registry has one runtime (admin in storage): the deployed code hash is the pinned one, whatever the admin, and
-    /// the release carries it (`REGISTRY_CODEHASH`, from `implArgs`).
+    /// the release carries it (`COMPLIANCE_REGISTRY_CODEHASH`, from `implArgs`).
     function test_registryRuntimeHashPinned() public {
-        assertEq(keccak256(type(ComplianceRegistry).runtimeCode), REGISTRY_CODEHASH, "runtime pin");
-        assertEq(address(creg).codehash, REGISTRY_CODEHASH, "deployed");
-        assertEq(address(new ComplianceRegistry(address(new Holder()))).codehash, REGISTRY_CODEHASH, "another admin");
+        assertEq(keccak256(type(ComplianceRegistry).runtimeCode), COMPLIANCE_REGISTRY_CODEHASH, "runtime pin");
+        assertEq(address(creg).codehash, COMPLIANCE_REGISTRY_CODEHASH, "deployed");
+        assertEq(address(new ComplianceRegistry(nid(address(new Holder())), address(0), bytes32(uint256(0x5EC0)))).codehash,
+            COMPLIANCE_REGISTRY_CODEHASH, "another admin");
         for (uint256 i; i < 2; ++i) {
             address impl = f.implementationOf(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED
                 : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1);
-            assertEq(NormalRegulatedToken(payable(impl)).REGISTRY_CODEHASH(), REGISTRY_CODEHASH, "release");
-            assertEq(NormalRegulatedToken(payable(_ks()[i])).REGISTRY_CODEHASH(), REGISTRY_CODEHASH, "token");
+            assertEq(NormalRegulatedToken(payable(impl)).COMPLIANCE_REGISTRY_CODEHASH(), COMPLIANCE_REGISTRY_CODEHASH, "release");
+            assertEq(NormalRegulatedToken(payable(_ks()[i])).COMPLIANCE_REGISTRY_CODEHASH(), COMPLIANCE_REGISTRY_CODEHASH, "token");
         }
     }
 
-    /// Spec §2.4: a registry of another code is refused at init, `RegistryCodeMismatch(registry, codehash)`: a contract of
+    /// Spec §2.4: a registry of another code is refused at init, `ComplianceRegistryCodeMismatch(complianceRegistry, codehash)`: a contract of
     /// other code, an EOA, an empty address; the canonical one creates (the control) and is written in slot +0.
     function test_registryCodehashPinned() public {
         for (uint256 i; i < 2; ++i) {
             IOpenFactory.TokenKind k = i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED;
             IFactoryToken.TokenConfig memory c = i == 0 ? _cfg8() : _cfg9();
-            c.features |= 1 << GovernanceBits.DENYLIST;
+            c.features |= 1 << GovernanceBits.KYC;
             c.reg.deniedFlags = SANCTIONED;
             address other = address(new Holder());
             address[3] memory bad = [other, bob, address(0xDEAD0)];
             for (uint256 j; j < 3; ++j) {
                 c.reg.complianceRegistry = bad[j];
-                vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.RegistryCodeMismatch.selector, bad[j], bad[j].codehash));
+                vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.ComplianceRegistryCodeMismatch.selector, bad[j],
+                    bad[j].codehash));
                 f.createToken(k, 1, abi.encode(c), bytes32(j));
             }
             c.reg.complianceRegistry = address(creg);
@@ -337,7 +350,7 @@ contract RegistryTest is RegFixture {
             IRegulatedToken.RegulatedConfig memory rc = IRegulatedToken(t).regulatedConfig();
             assertEq(rc.complianceRegistry, address(creg));
             assertEq(rc.deniedFlags, SANCTIONED);
-            assertEq(rc.controls & 0x18, 0x10, "DENYLIST in the mirror");
+            assertEq(rc.controls & 0x58, 0x40, "KYC in the mirror, no list");
         }
     }
 
@@ -348,7 +361,7 @@ contract RegistryTest is RegFixture {
         this.releaseWith(e, "");
         vm.expectRevert();
         this.releaseWith(e, abi.encode(bytes32(0)));
-        this.releaseWith(e, abi.encode(REGISTRY_CODEHASH)); // the control
+        this.releaseWith(e, abi.encode(COMPLIANCE_REGISTRY_CODEHASH)); // the control
     }
 
     function releaseWith(IFactoryToken.Env memory e, bytes memory implArgs) external returns (address) {

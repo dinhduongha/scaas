@@ -29,8 +29,8 @@ contract Holder {}
 /// for the controls), a UA registry stand-in (every derived id a SIGNING UA), and one token of each regulated kind with
 /// `FREEZE`, `FORCE`, `PAUSE`, `RECORD`: the issuer and the compliance holders are two contracts (`FORCE` and `RECORD` never
 /// one id), the owner an EOA, `grantDelay` one day; `alice` holds 1,000,000 units of each. Plan T29: one canonical
-/// `ComplianceRegistry` (`creg`, its admin the contract `cadmin`, one enabled attester `attester`), and `_listed` for a token
-/// of kind 8 or 9 with `ALLOWLIST` / `DENYLIST` on it.
+/// `ComplianceRegistry` (`creg`, its admin the native id of the contract `cadmin`, no router, one enabled KYC provider: the
+/// native id of `attester`), and `_listed` for a token of kind 8 or 9 with the registry check (`KYC`, round 3s) on it.
 abstract contract RegFixture is Test {
     uint256 internal constant ALICE_PK = 0xA11CE;
     uint256 internal constant BOB_PK = 0xB0B;
@@ -63,10 +63,13 @@ abstract contract RegFixture is Test {
 
     function _hedera() internal view virtual returns (bool) { return false; }
 
+    /// The chain's governance router the factory names (round 3s's router suite deploys one); 0 = none.
+    function _router() internal virtual returns (address) { return address(0); }
+
     function setUp() public virtual {
         vm.warp(1_800_000_000);
-        f = EnvKit.factory(address(this), UID, 0);
-        ureg = new StubUARegistry(UID);
+        f = EnvKit.factory(address(this), UID, 0, _router());
+        if (address(ureg) == address(0)) ureg = new StubUARegistry(UID); // a router's suite made it first (its registry)
         bool h = _hedera();
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(ureg), address(0), h);
         Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(ureg), address(0), h);
@@ -74,8 +77,8 @@ abstract contract RegFixture is Test {
             type(NormalRegulatedToken).creationCode, regArgs());
         Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, plainEnv(address(f), address(0), UID, address(ureg), h),
             type(WrappedRegulatedToken).creationCode, regArgs());
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
-        f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_REGULATED, true, EnvKit.uidOf(address(f)));
         issuer = address(new Holder());
         compliance = address(new Holder());
         usd = new MockERC20("USD", "USD", 0);
@@ -83,17 +86,17 @@ abstract contract RegFixture is Test {
         t9 = f.createToken(IOpenFactory.TokenKind.WRAPPED_REGULATED, 1, abi.encode(_cfg9()), "t9");
         _wrapFor(t9, alice, SUPPLY);
         cadmin = address(new Holder());
-        creg = new ComplianceRegistry(cadmin);
+        creg = new ComplianceRegistry(nid(cadmin), address(0), UID);
         vm.prank(cadmin);
-        creg.setAttester(attester, true);
+        creg.setKycProvider(nid(attester), true, EnvKit.regUidOf(address(creg)));
     }
 
     /// A token of kind 8 (`i == 0`, `SUPPLY` minted to `alice`, who is attested `KYC` first) or 9 (`alice` wraps `SUPPLY`)
-    /// as the fixture's, with `ALLOWLIST` (`required`, 0 = off) and `DENYLIST` (`denied`, 0 = off) on `creg`.
+    /// as the fixture's, with the registry check on `creg` (round 3s: bit 28 `KYC`, both masks; spec 2026-11-10-token-lists
+    /// §3) when `required | denied != 0`.
     function _listed(uint256 i, uint64 required, uint64 denied, bytes32 salt) internal returns (address t) {
         IFactoryToken.TokenConfig memory c = i == 0 ? _cfg8() : _cfg9();
-        if (required != 0) c.features |= 1 << GovernanceBits.ALLOWLIST;
-        if (denied != 0) c.features |= 1 << GovernanceBits.DENYLIST;
+        if (required | denied != 0) c.features |= 1 << GovernanceBits.KYC;
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.deniedFlags) = (address(creg), required, denied);
         _attest(nid(alice), KYC, type(uint64).max);
         t = f.createToken(i == 0 ? IOpenFactory.TokenKind.NORMAL_REGULATED : IOpenFactory.TokenKind.WRAPPED_REGULATED, 1,
@@ -101,7 +104,7 @@ abstract contract RegFixture is Test {
         if (i == 1) _wrapFor(t, alice, SUPPLY);
     }
 
-    /// `attester` attests `a` with `flags` until `until`.
+    /// `attester` (the KYC provider) writes `a`'s compliance row: `flags` until `until`.
     function _attest(bytes32 a, uint64 flags, uint64 until) internal {
         _attestAs(attester, a, flags, until);
     }
@@ -130,7 +133,7 @@ abstract contract RegFixture is Test {
         uint64[] memory vu = new uint64[](1);
         (as_[0], fl[0], vu[0]) = (a, flags, until);
         vm.prank(who);
-        creg.attest(as_, fl, vu);
+        creg.setCompliance(as_, fl, vu, EnvKit.regUidOf(address(creg)));
     }
 
     /// Kind 8: `PAYABLE | MINTABLE | BURNABLE` and the four controls; this test the minter; `SUPPLY` minted to `alice`.
@@ -138,7 +141,7 @@ abstract contract RegFixture is Test {
         (c.name, c.symbol) = ("Reg", "REG");
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE) | (1 << GovernanceBits.BURNABLE)
             | REG_FEATURES;
-        c.owner = nid(ownerA);
+        c.admin = nid(ownerA);
         c.grantDelay = GD;
         (c.roles.minter, c.roles.issuer, c.roles.compliance) = (nid(address(this)), nid(issuer), nid(compliance));
         (c.initialSupply, c.initialHolder) = (SUPPLY, alice);
@@ -149,7 +152,7 @@ abstract contract RegFixture is Test {
     function _cfg9() internal view returns (IFactoryToken.TokenConfig memory c) {
         (c.name, c.symbol) = ("WReg", "WREG");
         c.features = (1 << GovernanceBits.PAYABLE) | REG_FEATURES;
-        c.owner = nid(ownerA);
+        c.admin = nid(ownerA);
         c.grantDelay = GD;
         (c.roles.issuer, c.roles.compliance) = (nid(issuer), nid(compliance));
         c.legs = new IFactoryToken.Leg[](1);
@@ -177,22 +180,22 @@ abstract contract RegFixture is Test {
 
     function _freeze(address t, bytes32 a) internal {
         vm.prank(issuer);
-        _r(t).freeze(a, REF, 0);
+        _r(t).freeze(a, REF, 0, EnvKit.codeUidOf(t));
     }
 
     function _freezeRecord(address t, bytes32 a, bytes32 recordId) internal {
         vm.prank(issuer);
-        _r(t).freeze(a, REF, recordId);
+        _r(t).freeze(a, REF, recordId, EnvKit.codeUidOf(t));
     }
 
     function _unfreeze(address t, bytes32 a) internal {
         vm.prank(issuer);
-        _r(t).unfreeze(a, REF);
+        _r(t).unfreeze(a, REF, EnvKit.codeUidOf(t));
     }
 
     function _pause(address t, uint64 until) internal {
         vm.prank(issuer);
-        _r(t).pause(REF, until);
+        _r(t).pause(REF, until, EnvKit.codeUidOf(t));
     }
 
     /// Records order `orderId` against `subject` for `beneficiary`; returns its `recordId`.
@@ -200,13 +203,13 @@ abstract contract RegFixture is Test {
         internal returns (bytes32)
     {
         vm.prank(compliance);
-        _r(t).recordOrder(orderId, keccak256("document"), subject, beneficiary, maxAmount, freezeUntil);
+        _r(t).recordOrder(orderId, keccak256("document"), subject, beneficiary, maxAmount, freezeUntil, EnvKit.codeUidOf(t));
         return keccak256(abi.encode(orderId, subject, beneficiary));
     }
 
     function _disable(address t, uint8 bit) internal {
         vm.prank(ownerA);
-        NormalToken(t).disableFeature(bit);
+        NormalToken(t).disableFeature(bit, EnvKit.codeUidOf(address(NormalToken(t))));
     }
 
     function _now() internal view returns (uint64) {

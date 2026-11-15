@@ -67,7 +67,7 @@ def roll_max(entry, fixed, over=0):
 def main():
     cells = json.load(open(os.path.join(HERE, "cells.json")))
     ref = proofs(os.path.join(HERE, "..", "p16k", "estimator-e-s1-16k.txt"),
-                 r"=> /tmp/w/(\w+)_params\.sage: .*codegen proof size ~(\d+) B")
+                 r"=> \S*/(\w+)_params\.sage: .*codegen proof size ~(\d+) B")
     cands = [("16k (approved)", 2560, 16384, 2**50 - 42_310_535, ref)]
     for c in cells:
         if c["variant"] != "q3":

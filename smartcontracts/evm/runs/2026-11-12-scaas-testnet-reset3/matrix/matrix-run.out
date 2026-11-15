@@ -1,0 +1,225 @@
+[scaas-testnet] start (chain 7622, PQZ precompile on chain 7622)
+[scaas-testnet] deployer and signers:0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF 0x6813Eb9362372EEF6200f3b1dbC3f819671cBA69 0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf 
+[scaas-testnet] compile (scripts/capped) …
+[scaas-testnet/tokens] compiled (1s)
+[scaas-testnet/gov] compiled (1s)
+[scaas-testnet/dex] compiled (1s)
+[scaas-testnet/liquidity] compiled (1s)
+[scaas-testnet/misc] compiled (1s)
+[scaas-testnet/zether] compiled (1s)
+[scaas-testnet] compile ok
+[scaas-testnet/tokens] start
+[scaas-testnet/tokens] … 1 txs, 32s
+[scaas-testnet/tokens] … 4 txs, 63s
+[scaas-testnet/tokens] … 7 txs, 94s
+[scaas-testnet/tokens] … 10 txs, 125s
+[scaas-testnet/tokens] … 14 txs, 161s
+[scaas-testnet/tokens] … 17 txs, 192s
+[scaas-testnet/tokens] … 20 txs, 222s
+[scaas-testnet/tokens] … 23 txs, 252s
+[scaas-testnet/tokens] … 26 txs, 283s
+[scaas-testnet/tokens] … 31 txs, 332s
+[scaas-testnet/tokens] … 34 txs, 363s
+[scaas-testnet/tokens] … 37 txs, 393s
+[scaas-testnet/tokens] … 40 txs, 423s
+[scaas-testnet/tokens] … 43 txs, 454s
+[scaas-testnet/tokens] … 46 txs, 484s
+[scaas-testnet/tokens] … 49 txs, 514s
+[scaas-testnet/tokens] … 52 txs, 544s
+[scaas-testnet/tokens] … 55 txs, 574s
+[scaas-testnet/tokens] … 58 txs, 604s
+[scaas-testnet/tokens] … 61 txs, 634s
+[scaas-testnet/tokens] … 64 txs, 664s
+[scaas-testnet/tokens] … 67 txs, 695s
+[scaas-testnet/tokens] … 70 txs, 725s
+[scaas-testnet/tokens] … 73 txs, 755s
+[scaas-testnet/tokens] … 76 txs, 785s
+[scaas-testnet/tokens] … 79 txs, 815s
+[scaas-testnet/tokens] … 82 txs, 845s
+[scaas-testnet/tokens] … 85 txs, 875s
+[scaas-testnet/tokens] … 88 txs, 905s
+[scaas-testnet/tokens] … 91 txs, 936s
+[scaas-testnet/tokens] … 94 txs, 966s
+[scaas-testnet/tokens] … 97 txs, 996s
+[scaas-testnet/tokens] … 100 txs, 1026s
+[scaas-testnet/tokens] … 103 txs, 1056s
+[scaas-testnet/tokens] … 106 txs, 1086s
+[scaas-testnet/tokens] … 109 txs, 1116s
+[scaas-testnet/tokens] … 112 txs, 1147s
+[scaas-testnet/tokens] … 115 txs, 1177s
+[scaas-testnet/tokens] … 118 txs, 1207s
+[scaas-testnet/tokens] … 121 txs, 1237s
+[scaas-testnet/tokens] … 124 txs, 1267s
+[scaas-testnet/tokens] … 127 txs, 1297s
+[scaas-testnet/tokens] … 130 txs, 1327s
+[scaas-testnet/tokens] … 133 txs, 1358s
+[scaas-testnet/tokens] … 136 txs, 1388s
+[scaas-testnet/tokens] … 139 txs, 1418s
+[scaas-testnet/tokens] … 142 txs, 1448s
+[scaas-testnet/tokens] … 145 txs, 1478s
+[scaas-testnet/tokens] … 148 txs, 1509s
+[scaas-testnet/tokens] … 151 txs, 1539s
+[scaas-testnet/tokens] … 154 txs, 1569s
+[scaas-testnet/tokens] … 157 txs, 1599s
+[scaas-testnet/tokens] … 160 txs, 1629s
+[scaas-testnet/tokens] … 163 txs, 1659s
+[scaas-testnet/tokens] … 166 txs, 1689s
+[scaas-testnet/tokens] … 169 txs, 1719s
+[scaas-testnet/tokens] … 172 txs, 1750s
+[scaas-testnet/tokens] … 175 txs, 1780s
+[scaas-testnet/tokens] … 178 txs, 1810s
+[scaas-testnet/tokens] … 181 txs, 1840s
+[scaas-testnet/tokens] … 184 txs, 1870s
+[scaas-testnet/tokens] … 187 txs, 1900s
+[scaas-testnet/tokens] … 190 txs, 1930s
+[scaas-testnet/tokens] … 193 txs, 1960s
+[scaas-testnet/tokens] … 196 txs, 1991s
+[scaas-testnet/tokens] … 200 txs, 2021s
+[scaas-testnet/tokens] … 203 txs, 2051s
+[scaas-testnet/tokens] … 206 txs, 2081s
+[scaas-testnet/tokens] … 209 txs, 2111s
+[scaas-testnet/tokens] … 212 txs, 2141s
+[scaas-testnet/tokens] … 215 txs, 2171s
+[scaas-testnet/tokens] … 218 txs, 2201s
+[scaas-testnet/tokens] … 221 txs, 2232s
+[scaas-testnet/tokens] … 224 txs, 2262s
+[scaas-testnet/tokens] … 227 txs, 2292s
+[scaas-testnet/tokens] … 230 txs, 2322s
+[scaas-testnet/tokens] … 233 txs, 2352s
+[scaas-testnet/tokens] … 236 txs, 2382s
+[scaas-testnet/tokens] … 239 txs, 2412s
+[scaas-testnet/tokens] … 242 txs, 2443s
+[scaas-testnet/tokens] … 245 txs, 2473s
+[scaas-testnet/tokens] … 248 txs, 2503s
+[scaas-testnet/tokens] … 251 txs, 2533s
+[scaas-testnet/tokens] … 254 txs, 2563s
+[scaas-testnet/tokens] … 257 txs, 2593s
+[scaas-testnet/tokens] … 260 txs, 2623s
+[scaas-testnet/tokens] … 263 txs, 2654s
+[scaas-testnet/tokens] … 266 txs, 2684s
+[scaas-testnet/tokens] … 269 txs, 2714s
+[scaas-testnet/tokens] … 272 txs, 2744s
+[scaas-testnet/tokens] … 275 txs, 2774s
+[scaas-testnet/tokens] … 278 txs, 2804s
+[scaas-testnet/tokens] … 281 txs, 2834s
+[scaas-testnet/tokens] … 284 txs, 2864s
+[scaas-testnet/tokens] … 287 txs, 2894s
+[scaas-testnet/tokens] … 290 txs, 2925s
+[scaas-testnet/tokens] … 293 txs, 2955s
+[scaas-testnet/tokens] … 296 txs, 2985s
+[scaas-testnet/tokens] … 299 txs, 3015s
+[scaas-testnet/tokens] … 302 txs, 3045s
+[scaas-testnet/tokens] … 305 txs, 3075s
+[scaas-testnet/tokens] … 308 txs, 3105s
+[scaas-testnet/tokens] … 311 txs, 3135s
+[scaas-testnet/tokens] … 314 txs, 3165s
+[scaas-testnet/tokens] … 317 txs, 3195s
+[scaas-testnet/tokens] … 320 txs, 3226s
+[scaas-testnet/tokens] … 323 txs, 3256s
+[scaas-testnet/tokens] … 326 txs, 3286s
+[scaas-testnet/tokens] … 329 txs, 3316s
+[scaas-testnet/tokens] … 332 txs, 3346s
+[scaas-testnet/tokens] … 335 txs, 3376s
+[scaas-testnet/tokens] … 338 txs, 3406s
+[scaas-testnet/tokens] … 341 txs, 3437s
+[scaas-testnet/tokens] … 344 txs, 3467s
+[scaas-testnet/tokens] … 347 txs, 3497s
+[scaas-testnet/tokens] … 350 txs, 3527s
+[scaas-testnet/tokens] … 353 txs, 3557s
+[scaas-testnet/tokens] … 356 txs, 3587s
+[scaas-testnet/tokens] … 359 txs, 3617s
+[scaas-testnet/tokens] … 362 txs, 3648s
+[scaas-testnet/tokens] … 365 txs, 3678s
+[scaas-testnet/tokens] … 368 txs, 3708s
+[scaas-testnet/tokens] … 371 txs, 3738s
+[scaas-testnet/tokens] … 374 txs, 3768s
+[scaas-testnet/tokens] … 377 txs, 3798s
+[scaas-testnet/tokens] … 380 txs, 3829s
+[scaas-testnet/tokens] … 383 txs, 3859s
+[scaas-testnet/tokens] … 386 txs, 3889s
+[scaas-testnet/tokens] … 389 txs, 3919s
+[scaas-testnet/tokens] … 392 txs, 3949s
+[scaas-testnet/tokens] … 395 txs, 3979s
+[scaas-testnet/tokens] … 398 txs, 4009s
+[scaas-testnet/tokens] … 401 txs, 4040s
+[scaas-testnet/tokens] … 404 txs, 4070s
+[scaas-testnet/tokens] … 407 txs, 4100s
+[scaas-testnet/tokens] … 410 txs, 4130s
+[scaas-testnet/tokens] … 413 txs, 4160s
+[scaas-testnet/tokens] … 416 txs, 4190s
+[scaas-testnet/tokens] … 419 txs, 4221s
+[scaas-testnet/tokens] … 423 txs, 4251s
+[scaas-testnet/tokens] … 426 txs, 4281s
+[scaas-testnet/tokens] … 429 txs, 4311s
+[scaas-testnet/tokens] … 432 txs, 4341s
+[scaas-testnet/tokens] … 435 txs, 4371s
+[scaas-testnet/tokens] … 438 txs, 4402s
+[scaas-testnet/tokens] … 441 txs, 4432s
+[scaas-testnet/tokens] … 444 txs, 4462s
+[scaas-testnet/tokens] … 447 txs, 4492s
+[scaas-testnet/tokens] … 450 txs, 4522s
+[scaas-testnet/tokens] … 453 txs, 4552s
+[scaas-testnet/tokens] … 456 txs, 4582s
+[scaas-testnet/tokens] … 459 txs, 4613s
+[scaas-testnet/tokens] … 462 txs, 4643s
+[scaas-testnet/tokens] … 465 txs, 4673s
+[scaas-testnet/tokens] … 468 txs, 4703s
+[scaas-testnet/tokens] … 471 txs, 4734s
+[scaas-testnet/tokens] … 474 txs, 4766s
+[scaas-testnet/tokens] … 477 txs, 4797s
+[scaas-testnet/tokens] … 480 txs, 4827s
+[scaas-testnet/tokens] … 483 txs, 4858s
+[scaas-testnet/tokens] … 486 txs, 4888s
+[scaas-testnet/tokens] … 489 txs, 4918s
+[scaas-testnet/tokens] … 492 txs, 4948s
+[scaas-testnet/tokens] … 495 txs, 4978s
+[scaas-testnet/tokens] … 498 txs, 5009s
+[scaas-testnet/tokens] … 501 txs, 5039s
+[scaas-testnet/tokens] ok txs 504/504, negatives 5/5 (5062s)
+[scaas-testnet/verify] … 30s
+[scaas-testnet/verify] … 60s
+[scaas-testnet/verify] … 90s
+[scaas-testnet/verify] … 120s
+[scaas-testnet/verify] … 151s
+[scaas-testnet/verify] … 181s
+[scaas-testnet/verify] … 211s
+[scaas-testnet/verify] … 242s
+[scaas-testnet/verify] … 272s
+[scaas-testnet/verify] … 302s
+[scaas-testnet/verify] … 332s
+[scaas-testnet/verify] … 362s
+[scaas-testnet/verify] … 392s
+[scaas-testnet/verify] … 422s
+[scaas-testnet/verify] … 452s
+[scaas-testnet/verify] … 482s
+[scaas-testnet/verify] … 512s
+[scaas-testnet/verify] … 542s
+[scaas-testnet/verify] … 572s
+[scaas-testnet/verify] … 602s
+[scaas-testnet/verify] … 632s
+[scaas-testnet/verify] … 662s
+[scaas-testnet/verify] … 692s
+[scaas-testnet/verify] … 722s
+[scaas-testnet/verify] … 752s
+[scaas-testnet/verify] … 783s
+[scaas-testnet/verify] … 813s
+[scaas-testnet/verify] … 843s
+[scaas-testnet/verify] … 873s
+[scaas-testnet/verify] … 903s
+[scaas-testnet/verify] … 933s
+[scaas-testnet/verify] … 963s
+[scaas-testnet/verify] … 994s
+[scaas-testnet/verify] … 1024s
+[scaas-testnet/verify] … 1055s
+[scaas-testnet/verify] … 1085s
+[scaas-testnet/verify] … 1115s
+[scaas-testnet/verify] … 1146s
+[scaas-testnet/verify] … 1176s
+[scaas-testnet/verify] … 1206s
+[scaas-testnet/verify] … 1236s
+[scaas-testnet/verify] … 1266s
+[scaas-testnet/verify] … 1297s
+## summary (exit 1)
+target | group | result
+scaas-testnet | tokens | ok
+scaas-testnet | groups | fail

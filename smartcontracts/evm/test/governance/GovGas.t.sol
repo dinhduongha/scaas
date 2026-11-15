@@ -114,7 +114,7 @@ contract GovGasNormal is GovRows {
 
     /// A whole-shape holder: `use` pays one feature read and one role read, no call (B-26).
     function test_mintWholeShape() public {
-        _row("NormalToken mint whole-shape", m, G_MINTER, abi.encodeWithSignature("mint(address,uint256)", G_TO, 1));
+        _row("NormalToken mint whole-shape", m, G_MINTER, abi.encodeWithSignature("mint(address,uint256,bytes32)", G_TO, 1, EnvKit.codeUidOf(m)));
     }
 
     function test_createToken() public {
@@ -130,8 +130,8 @@ contract GovGasNormal is GovRows {
     }
 }
 
-/// Factory index spec §3 (plan T67): `createDex` beside `createToken`, steady state (the creator and the owner each have a
-/// DEX already, so the row pays the record and the list elements, not a first list length).
+/// Factory index spec §3 (plan T67): `createDex` beside `createToken`, steady state (the creator has a DEX already, so the
+/// row pays the record and the list elements, not a first list length; no owner word or list since round 3r R1).
 contract GovGasDex is GovRows {
     bytes32 constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     OpenFactory f;
@@ -144,7 +144,7 @@ contract GovGasDex is GovRows {
     }
 
     function _dexConfig() internal pure returns (ISCaaSDex.DexConfig memory) {
-        return ISCaaSDex.DexConfig(nid(G_TO), 0, G_TO, false, 0, address(0));
+        return ISCaaSDex.DexConfig(nid(G_TO), 0, G_TO, false, 0, address(0), 0, 0);
     }
 
     function test_createDex() public {
@@ -153,7 +153,7 @@ contract GovGasDex is GovRows {
 }
 
 /// Factory index spec §8.7 (plan T70): `createInstance` of the test kind `NoteKind` (class 4, kind 0), steady state (the
-/// creator and the owner each have an instance already), beside `createDex`.
+/// creator has an instance already), beside `createDex`.
 contract GovGasInstance is GovRows {
     bytes32 constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     OpenFactory f;
@@ -161,10 +161,10 @@ contract GovGasInstance is GovRows {
     function setUp() public {
         vm.warp(1_800_000_000);
         f = EnvKit.factory(address(this), UID, 0);
-        f.publishClassEnv(4, 0, 1, plainEnv(address(f), address(0), UID, address(0), false));
-        f.deployRelease(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
-            type(NoteKind).creationCode, "");
-        f.setClassKindEnabled(4, 0, true);
+        f.publishClassEnv(4, 0, 1, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0), UID, address(0), false));
+        f.deployImplementation(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
+            type(NoteKind).creationCode, "", EnvKit.uidOf(address(f)));
+        f.setClassKindEnabled(4, 0, true, EnvKit.uidOf(address(f)));
         f.createInstance(IOpenFactory.ReleaseId(4, 0, 1), "i0", abi.encodeCall(INoteKind.initialize, (nid(G_TO), "n")));
     }
 

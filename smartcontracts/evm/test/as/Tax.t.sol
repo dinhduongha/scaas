@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {RegFixture, Holder} from "./helpers/RegFixture.sol";
 import {IRegulatedToken} from "../../src/regulated/IRegulatedToken.sol";
@@ -43,7 +44,7 @@ contract TaxTest is RegFixture {
         fN = EnvKit.factory(address(this), UID, NOTICE);
         Catalogue.release(fN, IOpenFactory.TokenKind.NORMAL_REGULATED, 1, plainEnv(address(fN), address(0), UID,
             address(ureg), false), type(NormalRegulatedToken).creationCode, regArgs());
-        fN.setKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true);
+        fN.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_REGULATED, true, EnvKit.uidOf(address(fN)));
         vm.warp(block.timestamp + NOTICE); // the release is usable after the factory's notice period
         t8n = fN.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(_taxCfg8(nid(taxTo))), "tax8n");
     }
@@ -56,7 +57,7 @@ contract TaxTest is RegFixture {
 
     function _rate(address t, uint32 ppm) internal {
         vm.prank(issuer);
-        IRegulatedToken(t).setTaxRate(ppm);
+        IRegulatedToken(t).setTaxRate(ppm, EnvKit.codeUidOf(address(t)));
     }
 
     function _cfgOf(address t) internal view returns (IRegulatedToken.TaxConfig memory) {
@@ -78,9 +79,9 @@ contract TaxTest is RegFixture {
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "eoa");
         assertTrue(IGovernance(t).hasRole(GovernanceBits.TAX, nid(issuer)), "the issuer seat");
         vm.prank(ownerA);
-        IGovernance(t).grantRole(GovernanceBits.TAX, nid(clerk));
+        IGovernance(t).grantRole(GovernanceBits.TAX, nid(clerk), EnvKit.codeUidOf(address(IGovernance(t))));
         vm.prank(clerk);
-        IRegulatedToken(t).setTaxRate(1_000);
+        IRegulatedToken(t).setTaxRate(1_000, EnvKit.codeUidOf(address(t)));
         assertEq(_cfgOf(t).effectivePpm, 1_000);
     }
 
@@ -88,13 +89,14 @@ contract TaxTest is RegFixture {
     function test_taxBit_issuerOnlyBit23Init() public {
         IFactoryToken.TokenConfig memory c = _cfg8();
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.TAX);
+        c.lockedFeatures = (1 << GovernanceBits.ALLOWLIST) | (1 << GovernanceBits.DENYLIST); // round 3s: no list, no terms
         c.reg.termsHash = 0;
         c.reg.taxRecipient = nid(taxTo);
         (c.roles.issuer, c.roles.compliance, c.roles.minter) = (nid(clerk), 0, 0);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "only23");
         assertTrue(IGovernance(t).hasRole(GovernanceBits.TAX, nid(clerk)));
         vm.prank(clerk);
-        IRegulatedToken(t).setTaxRecipient(nid(address(0x7A1)));
+        IRegulatedToken(t).setTaxRecipient(nid(address(0x7A1)), EnvKit.codeUidOf(address(t)));
         assertEq(_cfgOf(t).taxRecipient, nid(address(0x7A1)));
     }
 
@@ -112,10 +114,10 @@ contract TaxTest is RegFixture {
     /// `RoleRevoked(23)` and `disableFeature(23)` apply at once (Q5): never delay-relaxed.
     function test_taxBit_revokeAndDisableImmediate() public {
         vm.prank(ownerA);
-        IGovernance(t8t).revokeRole(GovernanceBits.TAX, nid(issuer));
+        IGovernance(t8t).revokeRole(GovernanceBits.TAX, nid(issuer), EnvKit.codeUidOf(address(IGovernance(t8t))));
         assertFalse(IGovernance(t8t).hasRole(GovernanceBits.TAX, nid(issuer)), "revoked at once");
         vm.prank(ownerA);
-        IGovernance(t8t).disableFeature(GovernanceBits.TAX);
+        IGovernance(t8t).disableFeature(GovernanceBits.TAX, EnvKit.codeUidOf(address(IGovernance(t8t))));
         assertFalse(_cfgOf(t8t).enabled, "disabled at once");
     }
 
@@ -169,11 +171,11 @@ contract TaxTest is RegFixture {
     function test_setTaxRate_boundAndHolder() public {
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.TaxRateInvalid.selector, uint32(1_000_001)));
-        IRegulatedToken(t8t).setTaxRate(1_000_001);
+        IRegulatedToken(t8t).setTaxRate(1_000_001, EnvKit.codeUidOf(address(t8t)));
         _rate(t8t, 1_000_000);
         vm.prank(clerk);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.TAX, nid(clerk)));
-        IRegulatedToken(t8t).setTaxRate(1);
+        IRegulatedToken(t8t).setTaxRate(1, EnvKit.codeUidOf(address(t8t)));
     }
 
     // ------------------------------------------------------------------ the recipient (spec §6.2, F-15, F-21)
@@ -181,7 +183,7 @@ contract TaxTest is RegFixture {
     function _recipientRefused(bytes32 r, bytes memory err) internal {
         vm.prank(issuer);
         vm.expectRevert(err);
-        IRegulatedToken(t8t).setTaxRecipient(r);
+        IRegulatedToken(t8t).setTaxRecipient(r, EnvKit.codeUidOf(address(t8t)));
     }
 
     function test_setTaxRecipient_poolRefused() public {
@@ -212,17 +214,17 @@ contract TaxTest is RegFixture {
         _attest(nid(alice), KYC, type(uint64).max);
         IFactoryToken.TokenConfig memory c = _taxCfg8(nid(taxTo));
         (c.features, c.reg.complianceRegistry, c.reg.requiredFlags) =
-            (c.features | (1 << GovernanceBits.ALLOWLIST), address(creg), KYC);
+            (c.features | (1 << GovernanceBits.KYC), address(creg), KYC);
         _attest(nid(taxTo), KYC, type(uint64).max);
         c.reg.taxRecipient = nid(taxTo);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "tl2");
         bytes32 r = nid(address(0x7A3));
         vm.prank(issuer);
         vm.expectRevert(abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, r, uint8(0)));
-        IRegulatedToken(t).setTaxRecipient(r);
+        IRegulatedToken(t).setTaxRecipient(r, EnvKit.codeUidOf(address(t)));
         _attest(r, KYC, type(uint64).max); // control
         vm.prank(issuer);
-        IRegulatedToken(t).setTaxRecipient(r);
+        IRegulatedToken(t).setTaxRecipient(r, EnvKit.codeUidOf(address(t)));
     }
 
     function test_setTaxRecipient_paddedNativeAccepted() public {
@@ -230,7 +232,7 @@ contract TaxTest is RegFixture {
         vm.expectEmit(t8t);
         emit IRegulatedToken.TaxRecipientSet(r);
         vm.prank(issuer);
-        IRegulatedToken(t8t).setTaxRecipient(r);
+        IRegulatedToken(t8t).setTaxRecipient(r, EnvKit.codeUidOf(address(t8t)));
         assertEq(_cfgOf(t8t).taxRecipient, r);
     }
 
@@ -249,7 +251,7 @@ contract TaxTest is RegFixture {
     }
 
     function _taxDigest(address t, MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax) internal view returns (bytes32) {
-        return MtxDigest.typed(t, keccak256(abi.encode(UA_PAY_WITH_TAX, MetaTxLib.hashStruct(x), mode, tax)));
+        return MtxDigest.typed(t, keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), mode, tax)));
     }
 
     function _taxSig(address t, MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax)
@@ -344,7 +346,7 @@ contract TaxTest is RegFixture {
         _attest(nid(taxTo), KYC, type(uint64).max);
         IFactoryToken.TokenConfig memory c = _taxCfg8(nid(taxTo));
         (c.features, c.reg.complianceRegistry, c.reg.requiredFlags) =
-            (c.features | (1 << GovernanceBits.ALLOWLIST), address(creg), KYC);
+            (c.features | (1 << GovernanceBits.KYC), address(creg), KYC);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "tl3");
         _payTax(t, "pu", V, 2, 1, ""); // control: attested
         _attest(nid(taxTo), 0, type(uint64).max);
@@ -415,7 +417,7 @@ contract TaxTest is RegFixture {
         (z.relayer, z.feeRecipient) = (address(0), address(0));
         bytes32 raw = keccak256(abi.encode(MetaTxLib.UAMETATRANSFER_TYPEHASH, x.from, x.to, x.value, x.entryRef, x.batch,
             x.nonce, x.validUntil, x.mode, address(0), x.fee, address(0)));
-        assertEq(MetaTxLib.hashStruct(x), raw, "zeroed");
+        assertEq(MtxHash.hashStruct(x), raw, "zeroed");
         IUARegistry.UASig memory s = _taxSig(t8t, z, 2, 1); // signed over the zeroed form
         vm.prank(address(0xF00));
         IRegulatedToken(t8t).mtxPayWithTax(x, 2, 1, s, PayMetaKit.meta("ph"));
@@ -562,9 +564,9 @@ contract TaxTest is RegFixture {
 
     /// The `UAPayWithTax` digest row: non-zero `relayer` / `feeRecipient` in the input, unbound (mode 0), so zeroed.
     function _digestRowJson(MetaTxLib.UAMetaTransfer memory x, uint8 mode, uint256 tax) internal view returns (string memory) {
-        bytes32 sh = keccak256(abi.encode(UA_PAY_WITH_TAX, MetaTxLib.hashStruct(x), mode, tax));
+        bytes32 sh = keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), mode, tax));
         string memory d = string.concat(',"typehash":"', vm.toString(UA_PAY_WITH_TAX), '","paymentHash":"',
-            vm.toString(MetaTxLib.hashStruct(x)), '","structHash":"', vm.toString(sh), '","digest":"',
+            vm.toString(MtxHash.hashStruct(x)), '","structHash":"', vm.toString(sh), '","digest":"',
             vm.toString(_vecDigest(sh)), '"}');
         return string.concat('  {"name":"digest_unbound_relayer_fee_recipient",', _payJson(x), ',"taxMode":',
             vm.toString(mode), ',"tax":"', vm.toString(tax), '",', _domainJson(), d);
@@ -639,10 +641,10 @@ contract TaxTest is RegFixture {
         }
         string memory q = string.concat("[", vm.toString(rows.length), "]");
         MetaTxLib.UAMetaTransfer memory x = _digestInput();
-        bytes32 sh = keccak256(abi.encode(UA_PAY_WITH_TAX, MetaTxLib.hashStruct(x), uint8(2), uint256(50)));
+        bytes32 sh = keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), uint8(2), uint256(50)));
         assertEq(vm.parseJsonBytes32(f, string.concat(q, ".structHash")), sh, "UAPayWithTax struct hash");
         assertEq(vm.parseJsonBytes32(f, string.concat(q, ".digest")), _vecDigest(sh), "UAPayWithTax digest");
-        assertEq(vm.parseJsonBytes32(f, string.concat(q, ".paymentHash")), MetaTxLib.hashStruct(x), "canonical payment");
+        assertEq(vm.parseJsonBytes32(f, string.concat(q, ".paymentHash")), MtxHash.hashStruct(x), "canonical payment");
     }
 
     // ---- typed_ops.json's `UAPayWithTax` row (clientkeys, pay-meta-tax T41)
@@ -676,7 +678,7 @@ contract TaxTest is RegFixture {
         MetaTxLib.UAMetaTransfer memory x = _rowPayment(j, ".ops.UAPayWithTax.message.payment.");
         uint8 mode = uint8(vm.parseJsonUint(j, ".ops.UAPayWithTax.message.taxMode"));
         uint256 tax = vm.parseJsonUint(j, ".ops.UAPayWithTax.message.tax");
-        assertEq(keccak256(abi.encode(UA_PAY_WITH_TAX, MetaTxLib.hashStruct(x), mode, tax)),
+        assertEq(keccak256(abi.encode(UA_PAY_WITH_TAX, MtxHash.hashStruct(x), mode, tax)),
             vm.parseJsonBytes32(j, ".ops.UAPayWithTax.structHash"), "struct hash");
         assertEq(vm.parseJsonBytes32(j, ".ops.UAPayWithTax.typehash"), keccak256(bytes(vm.parseJsonString(j, ".ops.UAPayWithTax.typeString"))));
         assertEq(vm.parseJsonBytes32(j, ".ops.UAPayWithTax.typehash"), UA_PAY_WITH_TAX, "UAPayWithTax typehash");
@@ -688,7 +690,7 @@ contract TaxTest is RegFixture {
             keccak256(vm.parseJsonBytes(j, ".ops.UAPayWithTax.domains.token.calldata")), "the row's calldata");
         uint256 pk = vm.parseJsonUint(j, ".key.private");
         assertEq(x.from, nid(vm.addr(pk)));
-        NormalToken(t8t).mint(vm.addr(pk), x.value); // this test is the kind-8 token's minter
+        NormalToken(t8t).mint(vm.addr(pk), x.value, EnvKit.codeUidOf(address(t8t))); // this test is the kind-8 token's minter
         vm.warp(x.validUntil - 300);
         (uint8 v, bytes32 r, bytes32 ss) = vm.sign(pk, _taxDigest(t8t, x, mode, tax));
         IUARegistry.UASig memory s;

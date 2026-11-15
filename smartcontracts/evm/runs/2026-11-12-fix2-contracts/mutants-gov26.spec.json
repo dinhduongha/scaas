@@ -1,0 +1,10 @@
+[
+ {"id":"G26-1 registry: no body","file":"src/ua/UARegistry.sol","old":"    function rescue(address asset) external {\n        RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);","new":"    function rescue(address asset) external {\n        asset;","path":"test/governance/SingletonRescue.t.sol"},
+ {"id":"G26-2 factory: to itself","file":"src/factory/OpenFactory.sol","old":"RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);","new":"RescueLib.all(asset, address(this));","path":"test/governance/SingletonRescue.t.sol"},
+ {"id":"G26-3 router: no body","file":"src/governance/GovernanceRouter.sol","old":"    function rescue(address asset) external {\n        RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);","new":"    function rescue(address asset) external {\n        asset;","path":"test/governance/SingletonRescue.t.sol"},
+ {"id":"G26-4 relay router: no body","file":"src/metatx/RelayFeeRouter.sol","old":"    function rescue(address asset) external nonReentrant {\n        RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);","new":"    function rescue(address asset) external nonReentrant {\n        asset;","path":"test/governance/SingletonRescue.t.sol"},
+ {"id":"G26-5 relay router: no entry guard","file":"src/metatx/RelayFeeRouter.sol","old":"function rescue(address asset) external nonReentrant {","new":"function rescue(address asset) external {","path":"test/governance/SingletonRescue.t.sol"},
+ {"id":"G26-6 pqchat: no body","file":"src/pqchat/PqChat.sol","old":"    function rescue(address asset) external {\n        RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);","new":"    function rescue(address asset) external {\n        asset;","path":"test/governance/SingletonRescue.t.sol"},
+ {"id":"G26-7 all: native amount 0","file":"src/governance/RescueLib.sol","old":"asset == address(0) ? address(this).balance :","new":"asset == address(0) ? 0 :","path":"test/governance/SingletonRescue.t.sol"},
+ {"id":"G26-8 all: no event","file":"src/governance/RescueLib.sol","old":"        emit IRescuable.Rescued(asset, dest, amount);\n","new":"","path":"test/governance/SingletonRescue.t.sol"}
+]

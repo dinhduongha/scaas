@@ -27,7 +27,7 @@ fee router is `RelayFeeRouter`, its executor `RelayFeeExecutor`.
 ## 1. Step 1: where the tip stands — SPECIFIED (measured inputs)
 
 Every deployed contract, each its own CREATE2 transaction (the T33 / T51 probe; under `isolate` the probe call is a transaction,
-so intrinsic gas and calldata are in it); a release adds the factory frame of `deployImplementation`, measured at **0.31 M**
+so intrinsic gas and calldata are in it); a release adds the factory frame of `deployTokenImplementation`, measured at **0.31 M**
 asked (T10 had 0.37 M) [measured]. Old = the plan block's `d2552671` figures.
 
 | Contract | runtime B old → new | asked | 60 M | over by |
@@ -56,14 +56,14 @@ calldata included) gives 2 to 2.5 % less than forge's regular + state for the sa
 Since `d2552671` the PQZ kinds grew 3.9–8.5 KB (3f, 3h, chain-neutral), the others 0.9–1.2 KB, `OpenFactory` 12.6 KB; kind 13 is
 5.0 KB above the research note's projection.
 
-**The 60 M line in runtime bytes** (fitted on these rows): a release through `deployImplementation` **35,386 B** (1,675.1 gas/B +
+**The 60 M line in runtime bytes** (fitted on these rows): a release through `deployTokenImplementation` **35,386 B** (1,675.1 gas/B +
 0.42 M + 0.31 M frame); a body module (a contract on the token's bases, no frame) **35,570 B**; a library **35,694 B** (1,674.8
 gas/B + 0.22 M); `UARegistry` with its constructor ≈ **35,286 B** (1,694.7 gas/B + 0.2 M). At **57 M** (the margin line, §2):
 33,594 / 33,780 / 33,903 / 33,516 B [estimate].
 
 **Kind 13's `DeployFailed()` in T65:** gas, not size, not init. The release needs 117.97 M (regular + state, frame included);
 `e2e.py` estimates every transaction with `eth_estimateGas`, the copy's Nethermind configs set no `JsonRpc.GasCap`, so the
-estimate ran under the default 100 M cap: the CREATE2 inside `deployImplementation` ran out of gas, returned 0 with no data, and
+estimate ran under the default 100 M cap: the CREATE2 inside `deployTokenImplementation` ran out of gas, returned 0 with no data, and
 `_deploy` reverted `DeployFailed()` (the only place that raises it). The copy allows the size (its genesis: `maxCodeSize`
 0x20000, EIP-7954 off) and the init code runs (forge deploys it). This organisation removes the cause (every transaction ≤ 60
 M); the e2e rerun of kind 13 is a task (§12).
@@ -222,10 +222,17 @@ module. Per-kind release gas (token + modules, each transaction ≤ 60 M): ≈ 9
 | **P** pipeline | pipeline, named-transfer, pay | `mtxExecute`, `mtxBatch`, `mtxCancelNonce`, `executeMetaTransaction`, `cancelNonce`, `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayReceiverFee`, `payWithFee`, `payWithFeeToUA`, `mtxRelayFee`, `metaPayId`, `payLane`, `receiverFeeDigest`, on 8–13 the tax (`mtxPayWithTax`, `payWithTax`, `setTaxRate`, `setTaxRecipient`, `taxConfig`), the digests, nonce views, `supportedModes` (26 entries on 8–13, 21 on 0–5; `registry` and `IS_HEDERA` stay in the token) | `MtxPipelineLib`'s code | `HederaLib`; `RegulatedLib` on 8–13 |
 | **T** trade | trade | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`, `tradeOrderDigest`, `cancelOrderDigest`, `invalidateNoncesDigest`, `minNonce`, `pulled`, `restorePulled`, `mtxWrapOrder` (9–10) | `TradeLib`'s code and the authorisation of the trade path | — |
 | **A** admin | governance, init, tables, token-meta, kind-normal | governance entries (21–22), `initialize`, `validateEnv`, `mtxSelectors`, `supportsInterface`, `chainEnv`, `creator`, `version`, `eip712Domain`, `rescueTo`, `mint`, `mintToUA`, `burn` on the normal kinds (33–40) | — | `GovernanceLib`; `WrappedLib` (`rescue`; `initToken` on 1, 9); `initialize` → `_initRaw`: `RegulatedLib.init` (8–13), `ZetherLib.initNormal` / `initNormalConf` (2, 10), `ZetherWrappedLib.init` (3, 11), `PqzStateLib.init` (4, 12), `PqzWrappedLib.init` (5, 13); `validateEnv` → `ZetherLib.validateEnv` (2, 3, 10, 11), `PqzStateLib.validateEnv` (4, 5, 12, 13) (`ZetherLayer.sol:60`, `PqzLayer.sol:75`) |
-| **W** wrapped / regulated (1, 3, 5, 8–13) | wrapped, regulated | `wrap` ×2, `wrapToUA`, `mtxWrap*`, `unwrap*`, `mtxUnwrap*`, rates, reserve (`addReserve`), legs, `mint` / `mintToUA` of the wrapped kinds; the regulated powers (freeze, pause, force and operator transfers, orders, `regulatedConfig`, the regulated `rescue` and `disableFeature`) (15–49) | — | `WrappedLib`, `RegulatedLib`, `ZetherWrappedLib` / `PqzWrappedLib` where the kind has them |
+| **W** wrap (1, 3, 5, 9, 11, 13; owner 2026-11-10: wrap only) | wrapped | `wrap` ×2, `wrapToUA`, `mtxWrap*`, `unwrap*`, `mtxUnwrap*`, rates, reserve (`addReserve`), legs, the wrap limits, `mint` / `mintToUA` of the wrapped kinds, the wrapped layer's `rescue` and `underlyings` (and `disableFeature` on 1); the compliance hooks wrap and unwrap call stay compiled in from the kind's core (35–39) | — | `WrappedLib`, `ZetherWrappedLib` / `PqzWrappedLib` where the kind has them |
+| **R** regulated (8–13; owner 2026-11-10, group id 12) | regulated | the regulated layer's entries: freeze, pause, force and operator transfers, orders, `canReceive`, `regulatedConfig` and the kind's `disableFeature` (14 on every regulated kind; on 8, 10, 12 the former W) | — | `RegulatedLib`, `GovernanceLib`; `WrappedLib` (`disableFeature` on 9, 11, 13) |
 | **Z** Zether (2, 3, 10, 11) | zether | the Zether entries, `mtxWrapShield` and the unshield-unwraps on 3 and 11 (35–43) | — | `ZetherLib`, `ZetherWrappedLib` |
 | **Q** PQZ (4, 5, 12, 13) | pqz | the PQZ entries, 3f's and 3h's included, `mtxWrapShield` and `mtxUnshieldUnwrap` on 5 and 13 (47–57) | — | `PqzTransferLib`, `PqzBurnLib`, `PqzStateLib`, `PqzViewLib`, `PqzWrappedLib` |
+| **S** PQZ state (5, 13; built as Q2, renamed S by the owner 2026-11-10, group id 8) | pqz | Q's split (the rule below): the PQZ state, the four setters and every `view` / `pure` PQZ entry but `verifyTransferAmount` (32–33) | — | the PQZ libraries |
 | **D** the DEX's admin (owner 2026-11-09) | `SCaaSDex`'s governance | its 22 governance entries | — | `GovernanceLib` |
+
+**Amended (owner 2026-11-10, CTR-TOK-30's Change):** the modules are split by function on every kind, letters A admin, P
+pipeline / pay, T trade, W wrap only, R regulated only, Z Zether, Q PQZ, S the PQZ state (was Q2); kinds 8, 10, 12 rename
+their W to R, kinds 9, 11, 13 split their W into W and R (one more module each: 58 token modules), kinds 5 and 13 rename Q2 to
+S. Built in `script/modules/gen_faces.py` (`R_ENTRIES`, `S_SETTERS`); sizes and deploy gas in CTR-TOK-30's table.
 
 **Modules per kind** after the expected splits: 3 (kind 0), 4 (1, 2, 4, 8, 9), 5 (3, 10), 6 (5, 11), 6–7 (12), 7 (13): 58–59 for
 the twelve kinds; D for the DEX (≈ 5–9 KB [estimate]; the DEX 33,202 B, ≈ 56.3 M, T-2 met). On the normal regulated kinds (8, 10, 12)
@@ -291,7 +298,7 @@ hash only, as today (the same class as re-check P2-A; out of T66b).
   A `validateEnv` and `initialize`), else `ModuleMismatch(i)`. Three to five staticcalls at construction, no byte on the hot path;
   a swapped, foreign or other-set module fails at the release, not at the first user call. The identity views read no storage,
   so they answer a direct call (M2).
-- **Pins:** each kind's `Env.libs` / `libCodeHashes` lists its modules beside its libraries; `deployImplementation` checks every
+- **Pins:** each kind's `Env.libs` / `libCodeHashes` lists its modules beside its libraries; `deployTokenImplementation` checks every
   code hash before the release exists (`LibraryCodeHashMismatch`, as today), and `_checkImplementation` requires each address of
   the token's `modules()` in the env's `libs` (`ModuleNotPinned`). The trust is a library's today: the registrar publishes the
   env and deploys the release.
@@ -305,7 +312,7 @@ hash only, as today (the same class as re-check P2-A; out of T66b).
   code itself, CN-1; `FACTORY` is the same on every chain); it is deployed by the deterministic deployer with `DEPLOY_SALT`, at
   the same address on every chain. `releases.json` gains a row per module.
 - **Deploy order:** libraries, then modules (each its own transaction and its own public gate), then the implementation through
-  `deployImplementation`. `DeployBase`, `deploy.sh`, `e2e.py` follow.
+  `deployTokenImplementation`. `DeployBase`, `deploy.sh`, `e2e.py` follow.
 
 ### 4.6 Module and stub rules
 
@@ -315,7 +322,7 @@ hash only, as today (the same class as re-check P2-A; out of T66b).
 | M2 | Every entry of a module face is `onlyDelegated` (`address(this) != _SELF`, the module's own immutable; ≈ 20 B and ≈ 30 gas per entry, counted in §3.4): a direct call reverts `NotDelegated()`. The identity views (`kind`, `moduleGroup`, `factory`, `FACTORY`, `REGISTRY_CODEHASH`, `pqzSet`) and the inherited `ERC20` entries read no value-bearing state and are not module-face entries |
 | M3 | No `nonReentrant` and no `governed` on a module entry; the stub's `_forward` holds the guard for the frame; module entries call `GovernanceLib` with `_govSubject()` directly (Fable P2-5) |
 | M4 | A module entry has the token entry's mutability exactly (`payable` for `wrap` ×2, `wrapToUA`, `addReserve` in W, `mtxWrapShield` in Z or Q): under `DELEGATECALL` `msg.value` is the caller's, and a non-payable entry would revert on it |
-| M5 | Opcodes: no `SELFDESTRUCT`, no `CALLCODE`; `DELEGATECALL` only to the release's libraries; `CALL` / `STATICCALL` as the bodies do today (self-call, registry, verifiers, underlyings) |
+| M5 | Opcodes: no `SELFDESTRUCT`, no `CALLCODE`; `DELEGATECALL` only to the release's libraries; `CALL` / `STATICCALL` as the bodies do today (self-call, registry, verifiers, underlyings; since the liquidity spec 2026-11-10, module T's one `STATICCALL` to its caller, the capability check T7 of `mtxLiquidityPull`, capped, one word read) |
 | M6 | No state variable of its own; its layout equals its kind's (§8) |
 | M7 | One hop: a module never forwards to another module (it holds no sibling's address); a body that needs another group's body reaches it only by the self-call it makes today (`address(this).call`, `this.disclosureStatement`) |
 | M8 | `_SELF` never decides "is this the implementation" in a module body; `implementation()` stays a kept view of the token |

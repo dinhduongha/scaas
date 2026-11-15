@@ -17,7 +17,7 @@ built code differs from the target.
 | [indexer-feeds.md](indexer-feeds.md) | finality gates, event-set quorum, event normalization, `/v1/jobs` and `/v1/events` feeds |
 | [gateway.md](gateway.md) | door A: `/v1/metatx`, `/v1/ops`, `/v1/gateway`, UA routes, intake, CORS, errors |
 | [admin-auth.md](admin-auth.md) | admin API, built-in users, OIDC, roles, CLI, audit, app serving |
-| [sponsorship.md](sponsorship.md) | gas sponsorship policies, budgets, receiver-pays touchpoints, SponsorshipPool (PLANNED) |
+| [sponsorship.md](sponsorship.md) | gas sponsorship policies, budgets, payee fee touchpoints, SponsorshipPool (PLANNED) |
 | [dex-venue.md](dex-venue.md) | order book, matching, intake, `/v1/dex/*`, watcher, book gossip, managed markets |
 | [mesh.md](mesh.md) | intent envelope, pull bus, acceptance policy, exclusivity, private profile |
 | [gossip.md](gossip.md) | libp2p gossip, PQ transport, validation, numbers, hints, announces |
@@ -65,7 +65,7 @@ In scope:
    journaled nonces. Two gaps of the built code close: door A work becomes journaled and digest-guarded, and
    relayer-bound jobs go to their lane.
 7. Gateway capability route, CORS, error contract, `/v1/ops`, UA routes and app serving; denylist, FinOps, restore and
-   integrity tooling; sponsorship, receiver-pays and registered chain contracts; UA jobs and records; planned asset
+   integrity tooling; sponsorship, payee fee and registered chain contracts; UA jobs and records; planned asset
    snapshots, batching and non-EVM DEX books.
 
 Non-goals:
@@ -349,7 +349,7 @@ Additions for the store-backed rulings (each lands with the change it covers):
   `/v1/ops` accept order per family; 64-byte signatures accepted only on Hedera; UA routes (miss cached 60 s,
   `UA_KEY_IN_USE`, the [NODE-GW-03](gateway.md#NODE-GW-03) target); app headers byte-exact.
 - Accept/lease: denylist per party, door and lease re-check (no address in logs, labels, audit mirror,
-  [NODE-OPS-14](ops.md#NODE-OPS-14)); the [sponsorship tests](sponsorship.md); `receiver_fee` rules; `traceparent` →
+  [NODE-OPS-14](ops.md#NODE-OPS-14)); the [sponsorship tests](sponsorship.md); `payee_fee` rules; `traceparent` →
   `trace_id`; cost fields per family; golden metrics with pre-emitted zeros; `/readyz` per-chain body. Client side:
   acknowledgement cancels, cursor reset ([job-api.md#client-tests](job-api.md#client-tests)).
 - Cancel-by-origin tombstones: ungranted chain `403`, TTL over cap `422`, expired ⇒ no row, `max_tombstones` `429`,

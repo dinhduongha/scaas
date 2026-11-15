@@ -69,7 +69,7 @@ impl TryFrom<UaDomain> for scaas_ua::Domain {
     }
 }
 
-/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-24,
+/// `governance_bits.json`'s row of `bit` as JSON, `{bit, name, type, sentences}` (spec 2026-11-02-governance §1.2): bits 0-31,
 /// any other `UAArgument`.
 #[frb(sync)]
 pub fn governance_bit(bit: i64) -> R<String> {
@@ -417,6 +417,12 @@ pub fn set_kem_key_args(input: String) -> R<String> {
 #[frb(sync)]
 pub fn set_pqz_key_args(input: String) -> R<String> {
     Ok(scaas_ua::json::set_pqz_key_args_json(&input)?)
+}
+/// CTR-UA-44 `updateMsig`, JSON in and out. `input`: `{ua, chainUid, registry, version, threshold, members: [{kind, id, weight}], enabled,
+/// validUntilBlock, sigs}`. Out: `{digest, message, memberDigest, args}`: what a quorum of the stored structure signs on that one registry.
+#[frb(sync)]
+pub fn msig_update(input: String) -> R<String> {
+    Ok(scaas_ua::json::msig_update_json(&input)?)
 }
 /// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
 /// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.

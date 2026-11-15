@@ -11,6 +11,8 @@ fn form_of(name: &str) -> Form {
     match name {
         "TRANSFER" => Form::Transfer,
         "TRANSFER0" => Form::Transfer0,
+        "TRANSFER-SPLIT" => Form::TransferSplit,
+        "TRANSFER-SPLIT0" => Form::TransferSplit0,
         "BURN" => Form::Burn,
         "REFRESH" => Form::Refresh,
         "REGISTER" => Form::Register,
@@ -70,6 +72,7 @@ fn build(form: Form, f: &std::collections::HashMap<&str, Vec<u8>>) -> Vec<u8> {
             v_t: g("v_t"),
             v_f: &f["v_f"],
             v_a: g("v_a"),
+            u_f: g("u_f"),
         }),
     };
     s.encode().unwrap()
@@ -123,7 +126,7 @@ fn fields(s: &Stmt) -> Vec<(&'static str, Vec<u8>)> {
             }
             v.push(("t", d.t.to_vec()));
             v.push(("u", d.u.to_vec()));
-            for (k, o) in [("v_t", d.v_t), ("v_f", Some(d.v_f)), ("v_a", d.v_a)] {
+            for (k, o) in [("v_t", d.v_t), ("v_f", Some(d.v_f)), ("v_a", d.v_a), ("u_f", d.u_f)] {
                 if let Some(o) = o {
                     v.push((k, o.to_vec()));
                 }

@@ -66,16 +66,18 @@ per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owne
    sequence, Cosmos account sequence, GRAM wallet seqno, the Hedera account transaction path) queues *every*
    operation of a subject on *every* contract, so one stuck transaction locks the subject everywhere — a severe
    failure mode of blockchains. On every network the subject only **signs** a domain-separated payload (network +
-   contract + lane + nonce + expiry + operation hash); **each contract keeps its own lane/nonce space** (a random
-   lane derived from the payment reference, nonce 0: [CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)); a relayer
+   contract + lane + nonce + expiry + operation hash); **each contract keeps its own lane/nonce space** (on EVM a
+   payment takes any lane of its payer since pay-meta-tax O3, `payLane(entryRef)` at nonce 0 a client convention; the other
+   families derive the lane from the payment reference, nonce 0, until their rounds: [CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)); a relayer
    submits from **its own** account and pays native gas. Native sponsorship features (Sui sponsored transactions,
    Soroban fee-bump, Cosmos feegrant, GRAM W5) are used only so that a **relayer** pays, never so that the subject's
    sequence orders anything. A relayer runs many signing lanes (accounts derived from one mnemonic by account
    index), each with its own sequence; jobs spread across lanes; the fee sink is a fixed cold wallet and never a
    lane. SCaaS has no ERC-4337 dependency: the meta-transaction lives in the token contract. On EVM and Hedera
-   `mtxExecute` (alias `executeMetaTransaction`) runs a self-call of one of the contract's **own** functions on that
-   implementation's selector allowlist — never a call to another contract — and a token's transfers and payments are
-   `MetaTransfer`s ([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23), [NODE-JOB-20](../node/job-api.md#NODE-JOB-20)); the
+   `mtxExecute(UAMetaTransaction, UASig)` (on ids since the `ua*` / `mtx*` merge, [CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30);
+   `executeMetaTransaction` the EIP-1776 alias over the address struct) runs a self-call of one of the contract's **own**
+   functions on that implementation's selector allowlist — never a call to another contract — and a token's transfers and
+   payments are `UAMetaTransfer`s ([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23), [NODE-JOB-20](../node/job-api.md#NODE-JOB-20)); the
    other families sign the same two kinds ([NET-ALL-26](#NET-ALL-26)); every entry point whose authority is a subject's
    signature is named `mtx…` in the family's case ([NET-ALL-28](#NET-ALL-28)).
 3. **The relayer is not a new global lock**: every adapter's head-of-line behaviour is in
@@ -151,7 +153,10 @@ MetaTransfer { domain "scaas.metatransfer.v1", network, contract, asset, from, t
   opcode (`uint32`), Solana the 8-byte Anchor discriminator, Soroban the host's `function_name`. `args_hash` = the
   family hash (Aptos `sha3_256`, Sui `blake2b256`, CosmWasm and Solana `sha256`, GRAM the cell hash) of the canonical
   encoding of the entry's arguments other than the `MetaCall` and the auth.
-- `MetaTransfer` is the EVM `MetaTransfer` ([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23)): `entry_ref` 0 = a plain
+- `MetaTransfer` is each family's own struct and carries the fields of the EVM `UAMetaTransfer`
+  ([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23)), its `from` the family's native account in its own form; a derived
+  subject signs the family's UA form (the `ua*` / `mtx*` merge, [CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30); no non-EVM
+  code moved in that round). `entry_ref` 0 = a plain
   transfer, ≠ 0 = a payment (`PaymentSettled` with that reference); it keeps the typed fields wallets and the indexer
   read. Family-specific signed bounds stay in the family's `MetaTransfer` (GRAM: the forward-TON floor,
   [NET-TON-14](ton.md#NET-TON-14)).
@@ -160,11 +165,12 @@ MetaTransfer { domain "scaas.metatransfer.v1", network, contract, asset, from, t
   ([CTR-MTX-22](../contracts/metatx.md#CTR-MTX-22)); a family that ever charges a token fee adds it to `MetaTransfer`
   only ([INT-ERP-06](../integration.md#INT-ERP-06), [NODE-MESH-05](../node/mesh.md#NODE-MESH-05)).
 - One lane space per contract for both kinds ([CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)). DEX orders keep their
-  own signed structs, as EVM keeps `TradeOrder` ([CTR-DEX-13](../contracts/dex.md#CTR-DEX-13)).
+  own signed structs, as EVM keeps `UATradeOrder` for a SCaaS token and `TradeOrder` for an outside one
+  ([CTR-DEX-13](../contracts/dex.md#CTR-DEX-13)).
 
 Soroban maps both kinds onto the host authorization preimage and has no struct of its own
-([NET-SOR-16](soroban.md#NET-SOR-16)). On EVM and Hedera the two kinds *are* the EIP-712 `MetaTransaction` and
-`MetaTransfer` ([Hedera mapping](hedera.md#payload)). Transitional (BUILT): the token's generic `relay(op, auth)` checks **`MetaOp` v1** in every
+([NET-SOR-16](soroban.md#NET-SOR-16)). On EVM and Hedera the two kinds *are* the EIP-712 `UAMetaTransaction` and
+`UAMetaTransfer` ([Hedera mapping](hedera.md#payload)). Transitional (BUILT): the token's generic `relay(op, auth)` checks **`MetaOp` v1** in every
 family — `domain = "scaas.metaop.v1"` ‖ network ‖ contract ‖ op (pay | trade | mandate_pay | revoke; GRAM also set_key)
 ‖ from ‖ to ‖ amount (u128) ‖ payRef (32) ‖ lane (32) ‖ nonce (u64) ‖ validUntil (u64, seconds) ‖ relayer ‖ extra
 (H(op parameters); for `trade` the parameters travel verbatim next to it) — and key management and mandates use
@@ -199,11 +205,18 @@ Parity with EVM ([CTR-MTX-09](../contracts/metatx.md#CTR-MTX-09), [CTR-MTX-23](.
 
 | EVM | Non-EVM | Rule |
 |---|---|---|
-| `mtxTransfer` | `mtx_transfer` / `MtxTransfer` (Soroban: SEP-41 `transfer`) | `MetaTransfer{entry_ref: 0}` |
-| `mtxPay` | `mtx_pay` / `MtxPay` | `entry_ref = payId`, lane derived on chain as `H("scaas.pay.lane" ‖ payId)`, `nonce = 0` |
-| `mtxExecuteTransfer` | `mtx_execute_transfer` / `MtxExecuteTransfer` | `MetaTransfer` on a client-chosen lane (Move: fields as typed arguments); not on Soroban (host nonces, no lanes) |
+| `mtxTransfer` | `mtx_transfer` / `MtxTransfer` (Soroban: SEP-41 `transfer`) | `UAMetaTransfer{entryRef: 0}` / `MetaTransfer{entry_ref: 0}` |
+| `mtxPay(UAMetaTransfer, UASig, PayMeta)` | `mtx_pay` / `MtxPay` | EVM: `entryRef == metaPayId(meta)`, any lane of the payer (pay-meta-tax O3, [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)); non-EVM until its round: `entry_ref = payId`, lane derived on chain as `H("scaas.pay.lane" ‖ payId)`, `nonce = 0` |
+| `mtxExecuteTransfer` | `mtx_execute_transfer` / `MtxExecuteTransfer` | the transfer struct on a client-chosen lane (Move: fields as typed arguments); not on Soroban (host nonces, no lanes) |
 | `mtxBatchTransfer`, `mtxBatch` | multi-message transactions (Cosmos messages, Solana instructions, Sui PTB commands, GRAM messages from one lane); Aptos `mtx_batch_transfer` with parallel vectors | atomic per transaction |
-| `mtxTransferWithFee`, `mtxExecuteWithFee`, `mtxPayReceiverFee` | none while non-EVM tokens charge no relayer fee | added with a token fee |
+| `mtxTransferWithFee`, `mtxPayWithPayeeFee` (`mtxExecuteWithFee` is in legacy, typed-signing) | none while non-EVM tokens charge no relayer fee | added with a token fee |
+
+One rule (the `ua*` / `mtx*` merge, [CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30); BUILT on EVM, SPECIFIED elsewhere):
+per operation a contract has its direct entry and at most one contract-verified signed entry, which takes every subject the
+chain's host cannot authorize for a call someone else submits (on EVM native and derived ids, one `mtx<Op>` over `UASig`; on
+Soroban derived ids only, natives by host auth on the direct entry, [NET-SOR-20](soroban.md#NET-SOR-20)); on EVM a token also
+keeps the EIP-1776 alias `executeMetaTransaction` beside `mtxExecute` (owner 2026-11-01). NEAR and Algorand state their
+mechanism in their rounds.
 
 Entry points whose authority is the native transaction signer (owner-native calls, guardian recovery, admin) and chain
 standard interfaces (SEP-41, CW20 `Transfer`/`Send`) keep their names. Programs are immutable at deploy, so the renames
@@ -236,6 +249,26 @@ client `LANE_HORIZON_S`); a node chain on a pruning family must have `max_valid_
 get no pay-once guarantee. Both conditions hold in the code today (SPECIFIED: the constant-equality tests and the
 node refusal).
 
+<a id="service-pull-families"></a><a id="NET-ALL-85"></a>**NET-ALL-85** — **A service pull on every family: one rule, each
+family's native form.** Status: **BUILT** on the EVM and Hedera for the token side, the reference service (test only) and the
+node kind (group 3i, T77–T79); **SPECIFIED** or **PLANNED** elsewhere as the table says. The contract rule is
+[CTR-MTX-32](../contracts/metatx.md#CTR-MTX-32). On every chain: the payer signs once; the authorization is bound to the
+service as executor and to one operation, runs once, and expires; the service takes exactly the signed amount; and the payer
+never pays for an operation that did not happen (on the asynchronous families an explicit refund).
+
+| Family | Native form (the executor binding) | Today | Status |
+|---|---|---|---|
+| EVM | `mtxExecuteTransfer`, `relayer == msg.sender` | possible, atomic | token BUILT; rule BUILT as the reference service (test only) and the node kind |
+| Hedera | the same bytecode | possible, atomic | as EVM (the 64-byte HIP-632 payer tested, T77) |
+| Soroban | a native holder's auth tree rooted at `S.op(args)` with `token.pay(…, pay_ref = op digest, …)` as a sub-invocation; a UA holder `ua_pay(…, relayer = Some(S), auth)` | possible, atomic | SPECIFIED; built in a Soroban round |
+| NEAR | `mtx_execute_transfer(op, auth)` with `op.relayer = S`; the transfer a separate receipt, S refunds in its callback | possible, asynchronous | SPECIFIED; PLANNED with `ua-near` |
+| Algorand | an inner app call `mtx_execute_transfer` (never `mtx_pay`) with `relayer == Txn.sender`, S's app address | possible, atomic | SPECIFIED; PLANNED with `ua-algorand` |
+| Solana | a CPI to `relay_pay` with S's PDA as the `lane` signer; not through the relay-fee router (inference) | possible by direct CPI | PLANNED |
+| TON | a `SignedOp` to the payer's jetton wallet with `relayer == sender`, S; the digest in `pay_ref` | possible, asynchronous; node paths blocked ([NET-TON-14](ton.md#NET-TON-14)) | PLANNED |
+| Cosmos | `ExecuteMsg::Relay{payload, auth}` op `pay`, `relayer == info.sender`, by submessage | possible, atomic | PLANNED |
+| Sui | not possible with today's package (`relayer == ctx.sender()`) | no | PLANNED; needs a token change in its round |
+| Aptos | not possible with today's package (`relay_pay` is a `package entry fun`) | no | PLANNED; needs a token change in its round |
+
 ## 4. Signing domains
 
 <a id="signing-domains"></a>
@@ -260,13 +293,21 @@ nonce, so a signature from a test network or another chain is worthless elsewher
 
 <a id="chain-identity"></a><a id="NET-ALL-22"></a>**NET-ALL-22** — **A chain is identified by `(chain_key,
 chain_uid)`, never by its chain id alone (the chain key resolves to the chain id, so `(chain_key, chain_uid)` and `(chainId, chain_uid)` name the same pair), and `chain_uid` is the `salt` of every SCaaS signing domain.** `chain_uid`
-(`bytes32`, `≠ 0`) is the chain's genesis block hash as its RPC reports it (EVM, Hedera). On EVM and Hedera it is a
-**constructor immutable**, exposed as `chainUid()`, of every SCaaS contract that checks a signature or binds a
-digest to a chain — token implementations (a clone runs its implementation's code, so it uses the implementation's
-value and cannot declare another), the factory (which registers only implementations with its own value), the subject
-account factory, mandate wallets, the DEX and the Universal Account registry — and it is the `salt` of every SCaaS
-EIP-712 domain: `(name, version, chainId, verifyingContract, salt = chain_uid)`, ERC-5267 `eip712Domain()` fields
-`0x1f`.
+(`bytes32`, `≠ 0`) is the chain's genesis block hash as its RPC reports it (EVM, Hedera). On EVM and Hedera every SCaaS
+contract that checks a signature or binds a digest to a chain exposes it as `chainUid()`, from one of two sources, the same on
+every chain (Change 2026-11-07, owner; chain-neutral releases, [CTR-TOK-29](../contracts/token-wrappers.md#CTR-TOK-29)):
+
+- **Factory-made contracts and the factory** are chain-neutral bytecode at the same address on every chain. The factory's
+  `chain_uid` is written once by its registrar after the deterministic deploy (`configureChain`) and must equal the genesis
+  hash whenever the EVM can still prove it (`BLOCKHASH(0)`, EIP-2935), in a transaction tied to this chain by a reference
+  block hash whenever the chain can answer for it; every token, DEX and generic instance carries the factory's value in its
+  own code, appended by the factory when it is created, and the factory refuses an instance that reports another. An
+  implementation carries none (`chainUid()` = 0) and cannot sign.
+- **Every other SCaaS contract** (the Universal Account registry, the governance router, the subject account factory and its
+  accounts, mandate wallets) takes it as a constructor immutable, and so has a different address on each chain.
+
+It is the `salt` of every SCaaS EIP-712 domain: `(name, version, chainId, verifyingContract, salt = chain_uid)`, ERC-5267
+`eip712Domain()` fields `0x1f`.
 
 It is also bound into the `metatx-cancel` digest (the registry's proof of possession is portable since UA-8 and carries no
 chain, [CTR-UA-07](../contracts/accounts.md#CTR-UA-07)) and into the confidential token's statement, envelope, rollover,
@@ -280,10 +321,15 @@ fail; it is unsafe only if it equals another chain's `chain_uid`, which that com
 honest contracts on two chains sharing a chain id (7622 or any other) never accept each other's signatures, whichever
 wallet produced them. A replica deployed elsewhere from a copy of our profile is trusted by nothing of ours: tokens
 bind the registry address at `initialize`, and the node binds every contract's `chainUid()` and the RPC's genesis hash
-per chain profile and refuses a mismatch. Because contracts are deployed through a CREATE2 deployer with a fixed salt
-([NET-EVM-05](evm.md#NET-EVM-05)), a contract whose constructor takes `chain_uid` — and every clone made from it — has
-a **different address on each chain**, so a user's subject account does too; a contract with no chain-specific
-constructor argument has the same address everywhere.
+per chain profile and refuses a mismatch. On a chain id shared by several live chains the factory is configured on each
+of them before any other registrar transaction there, so a replayed configuration cannot bind one to the other's
+`chain_uid`; on the factory a wrong value is permanent for the canonical address on that chain, so the gate dry-runs it
+first. **Addresses.** Contracts are deployed through a CREATE2 deployer with a fixed salt ([NET-EVM-05](evm.md#NET-EVM-05)):
+a contract whose constructor takes `chain_uid` has a **different address on each chain**, so a user's subject account does
+too; the factory, its libraries and the releases have the same address everywhere. An instance's address depends only on the
+factory, the creator's UA id, the class, the kind and the salt (CREATE3), so a creator has the same token, DEX or instance
+address on every chain; the address says nothing about the version, the code or the configuration on a given chain, which
+are read per chain.
 
 Safety does not rest on the address: the salt is in every
 digest. Limit: a genesis hash does not separate the two branches of a fork, which share genesis
@@ -292,16 +338,16 @@ exposes it (Soroban network id, Solana genesis hash), else a chain-profile const
 ([NET-ALL-26](#NET-ALL-26)). Hedera:
 the relay's block-0 hash, fixed only once it is confirmed stable across mirror-node and relay restarts
 ([hedera.md#payload](hedera.md#payload)). Why: chain ids are a registry convention, not unique — 9000 is also Evmos
-Testnet, which is why the private chain moved to the SCaaS testnet ([NET-EVM-02](evm.md#NET-EVM-02)). Transitional (BUILT): only
-the Universal Account registry and the UA meta-transaction domain carry `chain_uid`; deployed tokens, the factory,
-subject accounts, mandate wallets and the DEX sign with `(name, version, chainId, verifyingContract)` and are
-deployed with CREATE, until the salted contracts replace them (nothing is deployed outside test chains).
+Testnet, which is why the private chain moved to the SCaaS testnet ([NET-EVM-02](evm.md#NET-EVM-02)). Status: the two sources BUILT on branch `ua-mtx-merge` (T71–T74; the factory's
+`configureChain`, the env appended to each clone's code, CREATE3 on every creation path).
 
 <a id="chain-profile"></a><a id="NET-ALL-24"></a>**NET-ALL-24** — **A chain profile carries the chain's `chain_uid`
 and its list of SCaaS DEX contracts.** Status: **SPECIFIED**. Every EVM and Hedera chain profile — the node's chain row
 with its registered contracts ([store.md](../node/store.md)), the signer's own pinned profile
 ([CLI-SGN-08](../clients/signers-clientkeys.md#CLI-SGN-08)) and the app's chain configuration — holds `chain_uid` and
-the list of DEX contracts deployed by SCaaS on that chain (each with its `chainUid()` checked).
+the list of DEX contracts deployed by SCaaS on that chain (each with its `chainUid()` checked), each DEX row with its
+liquidity mark (a module of group 11 among its `modules()`, [CTR-DEX-30](../contracts/dex.md#CTR-DEX-30): the node reads it
+before a `mtxLiquidity` job, BUILT; the profile's published mark SPECIFIED).
 
 Clients fill
 `domain.salt` from `chain_uid` and refuse to build or sign a trade order whose `dex` is not on the list
@@ -311,6 +357,9 @@ client takes both values from its own pinned profile (built in, or pinned by the
 `/v1/gateway` answer only to detect a disagreement, never as the source. Why: the token requires only that a trade
 order's `dex` is a contract (owner, 2026-10-08), so the list of genuine DEXes has to live where the signer and the
 relayer can check it. Cost: a new DEX reaches users only with a profile update.
+Change (2026-11-09, group 3i): a chain profile also lists its services, the `chain_contract` rows of kind `service` (the
+node's `[[chains.services]]` today, [NODE-JOB-25](../node/job-api.md#NODE-JOB-25)), advisory as the DEX list is: a client
+warns for a service off the list.
 
 <a id="chain-forks"></a><a id="NET-ALL-25"></a>**NET-ALL-25** — **A chain we run that forks becomes a new chain, and
 no two chain profiles share a genesis hash.** Owner ruling 2026-10-08. Two branches of a fork share their genesis
@@ -455,7 +504,7 @@ branch, the spec / plan file names and the commit prefixes use these names.
 | 4 | PQ verifier | ML-DSA / Falcon only through a chain-native or measured on-chain verifier | host function, precompile, opcode, or none | S4 |
 | 5 | SDK, toolchain and network pins | exact versions pinned, local network first | the chain's SDK / node versions | S5 |
 | 6 | UA ledger in tokens | UA balances live in our tokens, never in a native account a UA cannot sign for ([NET-ALL-21](#NET-ALL-21)) | storage shape of the ledger | S6 |
-| 7 | Replay protection | per-UA lanes and nonces; a payment uses its pay lane, nonce 0 | where the lanes are stored | S7 |
+| 7 | Replay protection | per-UA lanes and nonces; a payment on any lane of its payer (pay-meta-tax O3; built on EVM, each other family in its round, until then its pay lane, nonce 0) | where the lanes are stored | S7 |
 | 8 | Relayer binding | every UA entry relayable (fee may be 0); an optional bound relayer authenticates itself | how the relayer proves itself | S8 |
 | 9 | Who may receive | only a UA that can spend on that chain | the chain's spend check | S9 |
 | 10 | `msig` members | members verified by their own kinds; a member the chain cannot verify carries no signing weight there; a stored `msig` signature (`pop`, KEM, PQZ key) is minimal: `T ≥ N` and `T − weight(i) < N` for every slot `i` (`T` the slots' total weight, `N` the threshold), and a classical-dominant `msig` registers with an empty `pop` (owner 2026-10-31; built on EVM and Soroban; [CTR-UA-07](../contracts/accounts.md#CTR-UA-07), [NET-SOR-18](soroban.md#NET-SOR-18); NEAR UA round: a written requirement, NEAR has no UA registry yet; Algorand UA round: a written requirement, Algorand has no UA registry yet) | which native members exist | S10 |
@@ -469,6 +518,7 @@ branch, the spec / plan file names and the commit prefixes use these names.
 | 18 | Test order | unit tests, then a local network, then the public testnet | the chain's devnet / sandbox | S17 |
 | 19 | Order inside the round | stated per round, with its branches | — | S18 |
 | 20 | Explicit parameters | every entry and every job takes named, typed parameters, as in a REST / JSON / RPC API; no packed `bytes` bundling several fields; a genuine cryptographic blob (`proof`, `ciphertext`, `kemPk`, `pqzKey`, `signature`) is its own named parameter; the statement and digest bytes the verifiers hash stay byte-identical, and what is stored is what the packed bytes were (owner 2026-10-31, [CTR-MTX-29](../contracts/metatx.md#CTR-MTX-29), [CTR-UA-36](../contracts/accounts.md#CTR-UA-36)) | the chain's own argument types (`contracttype` structs on Soroban, ARC-4 structs on Algorand, per-token records on NEAR); a family answers this row in its UA round, NEAR and Algorand each in its own | — (the `ua8-soroban` branch carries Soroban's) |
+| 21 | Signed entries per operation | per operation a direct entry and at most one contract-verified signed entry, taking every subject the chain's host cannot authorize for a call someone else submits ([NET-ALL-28](#NET-ALL-28)) | how the host authorizes a native subject | one, `ua_*`, derived ids only; natives by `require_auth` on the direct entry ([NET-SOR-20](soroban.md#NET-SOR-20)) |
 
 ## 7. Key lifecycle per family
 
@@ -720,7 +770,7 @@ Non-EVM books are served after the venue moves into the node store ([CLI-APP-21]
 | Snapshot builder | SPECIFIED | SPECIFIED (same indexer) | with each family's token | 〃 | 〃 | 〃 | 〃 | 〃 | 〃 |
 | Managed markets | SPECIFIED | SPECIFIED | where an order book exists | — | — | — | — | — | — |
 | Sealed-bid tender | SPECIFIED | SPECIFIED (same bytecode on HSCS; the tender checks no signature, so no Hedera child; deposit token = Hedera v2 meta token; tight gas limit since HSCS charges ≥ 80 % of it) | PLANNED: contract holds the deposit; commit = the meta token's signed `Relay` op with a `pay` memo = `depositRef`, executed by the tender via submessage; commitment over `(chain_id, contract, tender, bidder, price, salt)` with SHA-256 | PLANNED: the bidder's `require_auth` entries for `commit_bid` (deposit = SAC/token `transfer` sub-invocation in the same auth tree); reveal/withdraw permissionless | PLANNED: tender object / resource; deposit coin moved by the relayer-submitted PTB / entry function under the bidder's signed op; time from `Clock` / `timestamp` | PLANNED: async — deposit arrives as a jetton `transfer_notification` with `forward_payload = (tenderId, commitment)`; reveal/withdraw are internal messages; bounce handling on refunds | PLANNED: program + PDA vault per tender; deposit through the token-program CPI under the bidder's precompile-verified op | PLANNED | PLANNED |
-| Receiver-pays | EVM v2 | Hedera v2 | — | — | — | — | — | — | — |
+| Payee fee | EVM v2 | Hedera v2 | — | — | — | — | — | — | — |
 | Gas sponsorship policy (node) | all | all | book and limit only | 〃 | 〃 | 〃 | 〃 | 〃 | 〃 |
 | Token wrappers v2 | SPECIFIED | SPECIFIED ([hedera wrappers](hedera.md#wrappers)) | today `scaas-token` (CW20 + meta-op, `minter`, `initial_balances`, tier 1): tier 1 unchanged (gets `Burn` and minter renounce with its next version); wrapper of a bank denom (`info.funds`) or a CW20 (`Receive`) with the same rate/reserve rules and `wrap_rate_vectors.json`: PLANNED | today SEP-41 token + `pay`, admin `mint`, `burn` (tier 1): unchanged; wrapper of a Stellar Asset Contract (e.g. USDC): PLANNED | none needed (the subject `Account` holds any FA / `Coin<T>`; gasless for every asset) | today Tact jetton + custom wallet + `SignedOp`, admin `Mint` (tier 1): unchanged; third-party jettons cannot carry `SignedOp`, so a wrapper minter (receive `transfer_notification`, mint; unwrap with bounce handling) is the only gasless route: PLANNED, highest value of the three | none needed (the `SmartKeyAccount` PDA owns SPL token accounts for any mint) | PLANNED (no NEP-141 wrapper yet) | PLANNED (no ASA / ARC-200 wrapper yet) |
 | Post-quantum Zether | any EVM chain whose client has the `PQZ` precompile and passes its self-test (no chain-id allowlist, owner ruling 2026-10-31); today the SCaaS testnet (precompile in our client); dev chains tests only (anvil cannot host the precompile, so forge mocks it with `vm.mockCall` on KAT inputs; end to end on a SCaaS testnet copy) | no | Cosmos SDK private chains feasible later (Go module calling `libpqz` via cgo; own spec) | no | no | no | no | no | no |
@@ -728,7 +778,7 @@ Non-EVM books are served after the venue moves into the node store ([CLI-APP-21]
 
 Common to all wrappers: fees are `NONE` off EVM, so fee policies are EVM/Hedera only; named meta-tx functions are
 EVM/Hedera (non-EVM ops are already named — `pay`, `Relay{payload}`, `SignedOp`); a multi-underlying guardian and
-rate timelock, when built elsewhere, follow the EVM rules verbatim. Receiver-pays is unavailable on v1, Zether and
+rate timelock, when built elsewhere, follow the EVM rules verbatim. Payee fee is unavailable on v1, Zether and
 non-EVM families; there the options are payee self-relay and sponsorship. Sponsorship cost fields apply on every
 family and `signed_op` jobs match on the decoded op. Classical Zether feasibility per family:
 [contracts/zether](../contracts/zether.md).

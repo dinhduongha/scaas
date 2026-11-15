@@ -573,7 +573,7 @@ option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, 
    `PRIVATE_KEY=0x…04 FOUNDRY_PROFILE=scaas-testnet CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh
    evm http://127.0.0.1:8545`: 31 transactions, all status 1, through the genesis CREATE2 deployer (UA registry with 17
    `KindConfig`s + `msig`: no `zether-bls12381`, no `0x0142` — the run predates the branch's rebase onto `zether-ungate`;
-   OpenFactory, the relay-fee router (formerly `MtxRelayFee`) + executor, the NormalToken and SCaaSDex releases); `deployments/7622.json`
+   OpenFactory, the relay-fee router (formerly `MtxRelayFee`) + executor, the NormalToken and SCaaSDex releases); the book `7622.json` (now `scaas-testnet.json`, NET-EVM-13)
    (git-ignored; copy in `smartcontracts/evm/runs/2026-10-31-fs3-t13-deploy-7622.txt`). UniswapExecutor: no deploy
    script (plan decision PD7). **Superseded 2026-10-31** by the [salt-v2 set with Zether](#zether-on-the-scaas-testnet-executed-2026-10-31)
    (kept on chain, still verified on Blockscout).
@@ -586,11 +586,16 @@ docker-compose.yml}` back, replace `data/nethermind_data` with the backup's copy
 **Status: executed 2026-11-04** with [reset 1](#code-size-128-kib-on-the-scaas-testnet-reset-1-executed-2026-11-04): image
 `2.2.0-pqz7`, schedule 1 at `0x6aeb2cad` = schedule 0 + `mldsa87Gas` 102,000 (**PROVISIONAL**, not calibrated; the
 calibration waits for the owner's word, TODO pre-freeze item 5). On the live chain the probe answers 1 / 0 at 102,006 gas
-(`../runs/2026-11-04-mldsa87-probe.py`); `UAMldsaVerifier(0x0134, 0x…5caa0014)` `0x0e8D3A7A07252A4Eb62871F3318bc846FEeB6438`
+(`../runs/2026-11-04-mldsa87-probe.py`); `MldsaVerifier(0x0134, 0x…5caa0014)` `0x0e8D3A7A07252A4Eb62871F3318bc846FEeB6438`
 by `forge create` (`DeployBase` probes inside forge's EVM, which has no `MLDSA87`, so the gen-1 registry of `deploy.sh` has no
 `0x0134`); registry gen 2 `0xFA09Cb12c2bdc0d596Adf25c2D3160F5Ab1083DC` (predecessor the gen-1 `ua_registry`, kinds
 `[(0x0134, verifier, 250,000)]`, the PROVISIONAL cap until T-GAS); `mldsa87` registration on gen 2 status 1, 15,561,167 gas
 (`smartcontracts/evm/runs/2026-11-04-mldsa87-gen2-7622.sh`; summary `smartcontracts/evm/runs/2026-11-04-testnet-reset1-7622.txt`).
+**Calibrated 2026-11-15** (TODO 3zd, owner): `mldsa87Gas` **135,000** (two passes 135,000 / 123,000, the larger;
+`../runs/2026-11-15-mldsa87-calib.txt`). `add-schedule.py --mldsa87` writes it (`MLDSA87_GAS`, was `PROVISIONAL_MLDSA87_GAS`);
+the SCaaS testnet keeps 102,000 until reset 4. The probe of a chain at 135,000 expects 135,006 (the record script
+`../runs/2026-11-04-mldsa87-probe.py` checks 102,006: copy it with the new figure). The same passes move `mldsa44Gas`
+49,000 → **59,000** (owner 2026-11-15); `add-schedule.py --mldsa` writes 59,000 / 68,000 / 135,000 (44 / 65 / 87). ML-DSA-65 measured 88,000–100,000 in the same passes (over the 15 % bound against 68,000) and stays 68,000: deferred by the owner (2026-11-15) to the next pqz-core / set-parameter change and its full gate, because at 100,000 it passes the 100,000 fixture cap of the 65 precompile path and moves `debit_min_gas` at all four sets.
 The plan as written before the run:
 
 The plugin of branch `mldsa87` adds `MLDSA87` at `0x000000000000000000000000000000005caa0014` (EIP-8355 layout, ML-DSA-87). The
@@ -600,7 +605,7 @@ ML-DSA-65 ratio (68,000 at EIP-8355's 9,000), never a calibrated figure; the `Ca
 word. Steps, none run yet: build the image (`build-image.sh`, locally, never pushed); roll it out as image `2.2.0-pqz6` was; add a
 schedule with `add-schedule.py <chainspec> <calib-engine-pqz.json> <timestamp> <out> --mldsa87` (a copy of the last schedule plus
 `mldsa87Gas` = `PROVISIONAL_MLDSA87_GAS`; it prints "PROVISIONAL, not calibrated"); after the timestamp, deploy a
-`UAMldsaVerifier(0x0134, 0x…5caa0014, probe valid, probe invalid)` outside `forge script` (P6g D15) and a registry generation that
+`MldsaVerifier(0x0134, 0x…5caa0014, probe valid, probe invalid)` outside `forge script` (P6g D15) and a registry generation that
 enables `0x0134` with the T-GAS cap measured then. Replace the value when the calibration runs.
 
 ## Zether on the SCaaS testnet (executed 2026-10-31)
@@ -623,7 +628,7 @@ owner before 22776's gen-1 registry and for the audit).
    http://192.168.1.72:8545` (the public `rpc`; signed locally, `eth_sendRawTransaction`): 40 transactions, all status 1,
    **gasUsed 716,134,332** (forge's estimate 810,592,383), blocks 5157–5235. AdminLib, TradeLib and HederaLib were already
    on chain at their CREATE2 addresses (same code) and were reused; every other contract is new.
-2. The new set (`deployments/7622.json`, git-ignored; copy in the deploy log):
+2. The new set (the book `7622.json`, now `scaas-testnet.json`, git-ignored; copy in the deploy log):
 
    | Contract | Address |
    |---|---|
@@ -647,7 +652,7 @@ owner before 22776's gen-1 registry and for the audit).
    `0x06d03D56…9776`, OpenFactory `0xC037D039a21646060E5b4ae441c1138e87000BDE`, NormalToken `0xCDb98d83…a551`, SCaaSDex
    `0xe77d3D68…D3D9`, the relay-fee router (formerly `MtxRelayFee`) `0x7FB42079…fa48`, SmartKeyAccountFactory `0x3fAF952D…619D`) stays on chain and verified on
    Blockscout; nothing new is built on it (2026-10-31; reason above).
-3. The releases are usable `noticePeriod` (600 s) after `deployImplementation`; the e2e started after that.
+3. The releases are usable `noticePeriod` (600 s) after `deployTokenImplementation`; the e2e started after that.
 4. E2E: `RPC=http://192.168.1.72:8545 PRIVATE_KEY=<key 4> FOUNDRY_PROFILE=scaas-testnet scripts/capped scripts/e2e-zether.sh`
    (needs `cargo build --release --bin zether-cli` in `clients/zether-prover`, and `clients/clientkeys/node_modules`):
    six `zether-bls12381` UAs with clientkeys PoPs; `NORMAL_ZETHER` token `0x1161E91cAD5a3a3511Ea1E490f51a63cDaF348d3`
@@ -702,7 +707,7 @@ in the same reset. 22776 is the owner's and is never touched (`--testnet-reset` 
 3. Throwaway first: the exact file on a mining-off pqz7 node → genesis **`0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164`,
    unchanged** (the inference held: params and `engine.Pqz` are not in the header; `chainUid` and `chain-uids.json` stay);
    on a throwaway-signer copy of the same params and rows: `codesize` 65,537 B and 119,800 B deploy at 199.9 M gas, probe
-   435 / 0, node e2e 84 / 0, `MLDSA87` inactive before the schedule and 1 / 0 after it, `UAMldsaVerifier`'s constructor
+   435 / 0, node e2e 84 / 0, `MLDSA87` inactive before the schedule and 1 / 0 after it, `MldsaVerifier`'s constructor
    reverting `UAMldsaNoPrecompile` before it (negative control).
 4. Live: `.bak-pre-reset1-20261104` copies of `genesis.json` (sha256 `4fd51bbd…b584`), `docker-compose.yml`, `config.json`,
    `config.rpc.json`; no chain-data backup (owner 2026-10-31): `data/{nethermind_data,nethermind_rpc_data,explorer_db_data,
@@ -714,12 +719,12 @@ in the same reset. 22776 is the owner's and is never touched (`--testnet-reset` 
    `MLDSA87` probe 1 / 0 at 102,006 gas; node e2e **84 ok, 0 FAIL**; `codesize` 65,537 B (100,505,947 gas, block 37) and
    119,800 B (183,562,782 gas, block 39), status 1.
 6. Deploy (below) rc 0: 49 transactions, all status 1, 986,967,204 gas, blocks 49–145; `eth_getCode` non-empty for every
-   address of `deployments/7622.json` and `7622-pqz.json` and the three PQZ releases (`WrappedPqzToken` 72,160 B, 112,574,619
+   address of the books `7622.json` and `7622-pqz.json` (now `scaas-testnet*.json`) and the three PQZ releases (`WrappedPqzToken` 72,160 B, 112,574,619
    gas: the first release above 64 KiB on 7622). PQZ e2e **386 ok, 0 FAIL**; Zether e2e **82 ok, 0 FAIL** (24 transactions);
    `mldsa87` and `fndsa1024` registrations status 1; governance smoke (`../../../smartcontracts/evm/runs/2026-11-04-gov-smoke-7622.sh`):
    `mtxSetListedOnly` through the `GovernanceRouter` at fee 0, relayed by another key, `listedOnly` false → true.
-7. Node: `scaas-node/node.example.toml` (7622 row) `governance_routers` = `0xB64D2D5f…b8E0` (`deployments/7622.json`) and
-   `0xFeC9586a…6F52` (`deployments/7622-pqz.json`).
+7. Node: `scaas-node/node.example.toml` (7622 row) `governance_routers` = `0xB64D2D5f…b8E0` (the book `7622.json`) and
+   `0xFeC9586a…6F52` (`7622-pqz.json`; both now `scaas-testnet*.json`, NET-EVM-13).
 8. Blockscout: DB reset (the renamed `explorer_*` dirs, fresh migrate); `verify-blockscout.sh` with the two broadcasts **and
    the new e2e log named**: 69 ok, 15 skip, 0 fail; by hand the `forge create` contracts, the node's probe and the governance
    smoke's DEX clone: **68 of 68 contracts with source verified, all full matches**, 5 clones linked; the 15 SSTORE2 data
@@ -765,7 +770,7 @@ anything is sent (GD-4).
 **Checks** (as the 2026-10-22 section, plus): `e2e.py codesize --rpc <rpc> --key <test key 0x…04> --sizes 65537:ok,119800:ok
 --gas 199900000` (arm C's rows: 65,537 B deploys once EIP-7954 is out); `eth_getCode` of every release of the deploy JSON
 non-empty; the node's `governance_routers` set to the deploy JSON's `governance_router` and, once `script/pqz/e2e.py` has run, the
-`governance_router` of `smartcontracts/evm/deployments/7622-pqz.json` (the PQZ stack's router on its own registry, by CREATE2 as well).
+`governance_router` of `smartcontracts/evm/deployments/scaas-testnet-pqz.json` (NET-EVM-13) (the PQZ stack's router on its own registry, by CREATE2 as well).
 
 **Rollback:** as the 2026-10-22 section: stop both nodes, put the `genesis.json` backup back, swap the data dirs back, start.
 For reset 1: `SCAAS_TESTNET_DIR=<stack> sh ../runs/2026-11-04-testnet-reset1.sh rollback` puts the four
@@ -1017,7 +1022,7 @@ docker compose stop sc-verifier
 `http://192.168.1.72:8545`, `FOUNDRY_PROFILE` default `scaas-testnet`): one `forge verify-contract … --verifier blockscout`
 per CREATE / CREATE2 row and per factory child of the broadcast (RelayFeeExecutor, the SmartKeyAccount implementation,
 the NormalToken / SCaaSDex implementations), constructor arguments from the init code; for the PQZ e2e
-(`script/pqz/e2e.py`, no broadcast file; `deployments/7622-pqz.json` holds only its last run) every
+(`script/pqz/e2e.py`, no broadcast file; `deployments/scaas-testnet-pqz.json` holds only its last run) every
 `<Name> at 0x…` line of its run logs (constructor arguments from the creation transaction) and every
 `<Name> release at 0x…` (an OpenFactory release: arguments `abi.encode(envVersion, env, implArgs)` rebuilt from the
 factory's `releaseOf` / `envOf`); its tokens (pqUSD, pqW) are EIP-1167 clones of those releases (`Clones` in

@@ -6,7 +6,7 @@ import {GovernanceBits} from "../governance/GovernanceBits.sol";
 import {TokenStore} from "../metatx/TokenStore.sol";
 
 // Positions in `IFactoryToken.Env.deps` (plan 5g-Z2): the `*_ZETHER` kinds' transfer, burn and inner-product verifiers
-// and `ZetherDisclosure` of one curve (CTR-ZTH-20); the `*_PQZ` kinds' `UAPqzVerifier`.
+// and `ZetherDisclosure` of one curve (CTR-ZTH-20); the `*_PQZ` kinds' `PqzKeyVerifier`.
 uint256 constant ENV_ZETHER_TRANSFER = 0;
 uint256 constant ENV_ZETHER_BURN = 1;
 uint256 constant ENV_ZETHER_INNER_PRODUCT = 2;
@@ -18,12 +18,12 @@ uint256 constant ENV_PQZ_VERIFIER = 0;
 ///        chain), the instance's chain values in its own code (`ChainEnv`, appended to the clone by the factory and exposed
 ///        by `chainEnv()`), one generic `initialize(creatorId, version, initArgs)` the factory calls in the SAME call as
 ///        the clone's creation, `kind()` and `validateEnv`. The factory also reads `factory()` at deployment and
-///        `chainUid()`, `features()`, `lockedFeatures()`, `owner()`, `underlyings()` after `initialize` (the post-check,
+///        `chainUid()`, `features()`, `lockedFeatures()`, `admin()`, `underlyings()` after `initialize` (the post-check,
 ///        provenance, the index). The kinds of this repository take `initArgs = abi.encode(TokenConfig)`; a later version
 ///        may take another encoding without a factory change.
 interface IFactoryToken {
     /// @notice The registrar's deployment environment of a release (owner 2026-10-20, CTR-ZTH-20; chain-neutral spec §2.1):
-    ///         the chain values the factory publishes per kind and version (`OpenFactory.publishEnv`), never changed.
+    ///         the chain values the factory publishes per kind and version (`OpenFactory.publishTokenEnv`), never changed.
     ///         `registry` the UA registry (0 = none; its `chainUid()` must be the factory's); `deps` the kind's dependencies
     ///         by position (`*_ZETHER`: `ENV_ZETHER_*`; `*_PQZ`: `ENV_PQZ_VERIFIER`; plain kinds and the DEX: none; at most
     ///         4); `params` a generic class's chain values by documented position (at most 2); `libs` the linked
@@ -103,6 +103,16 @@ interface IFactoryToken {
         /// `LOG` (a `PqzDebitProof` event of the token); any other value `ProofStoreInvalid`. Changed later only through bit
         /// 24 `PQZ_PROOF` (`setProofStore`), effective at the next debit.
         uint8 proofStore;
+        /// `*_PQZ` kinds in `OFFCHAIN` mode only (round 3t, CTR-PQZ-36; every other kind and `PRECOMPILE` require both 0): the
+        /// verifier fee each proof-carrying debit pays to the current verifier UA, in the fee word's unit, and its immutable cap.
+        uint64 verifierFee;
+        uint64 verifierFeeMax;
+        /// `*_PQZ` kinds only (the three-key model, CTR-PQZ-37; every other kind requires both false), immutable: the key
+        /// class and the sealed opening. `PRECOMPILE`: both false (class `registry`). `OFFCHAIN`: `pqzOwnKey` false and
+        /// `pqzOpening` true (class `offchain-shared`), or `pqzOwnKey` true with `pqzOpening` either way (class
+        /// `offchain-token`). Any other combination: `PqzVerifyConfigInvalid`.
+        bool pqzOwnKey;
+        bool pqzOpening;
     }
 
     /// @notice Regulated-kinds spec §2.4: the regulated kinds' (8-13) only; a plain kind (0-5) refuses any set field
@@ -125,21 +135,23 @@ interface IFactoryToken {
         uint8 decimals;
         uint256 features;
         uint256 lockedFeatures;
-        bytes32 owner;               // a UA id (a native account: its padded address); 0 = no administration ever
+        bytes32 admin;               // a UA id (a native account: its padded address); 0 = no administration ever
         GovernanceLib.Roles roles;        // initial holders, each only for a set flag
         uint256 initialSupply;       // NORMAL* only
         address initialHolder;       // NORMAL* only
         Leg[] legs;                  // WRAPPED* only, 1..8
         RateConfig rate;             // WRAPPED* only, with RATE_ADJUSTABLE
         ConfidentialConfig conf;     // *_ZETHER only
-        uint64 grantDelay;           // spec §1.6: the owner's two calls, at most 30 days; 0 = one call
-        address rescueTo;            // spec §6.2: with `RESCUABLE` only, immutable; never the token or a pool
+        uint64 grantDelay;           // spec §1.6: the admin's two calls, at most 30 days; 0 = one call
+        address rescueTo;            // spec §6.2: with `RESCUABLE` only (0 there: SCAAS_DEV_RESCUE, CTR-GOV-25), immutable;
+                                     // never the token or a pool
         uint256 maxSupply;           // WRAPPED* only, spec §5.2: the hybrid's cap, with `MINTABLE` only; 0 = no hybrid
+        uint256 maxWrapSupply;       // WRAPPED* only, CTR-GOV-30: the wrap cap, 0 = none; <= maxSupply when that is not 0
         RegulatedParams reg;         // *_REGULATED (8-13) only
     }
 
-    /// @notice A field set for another kind (`field`: 1 initialSupply/initialHolder, 2 legs, 3 rate, 4 conf, 5 maxSupply,
-    ///         6 reg).
+    /// @notice A field set for another kind (`field`: 1 initialSupply/initialHolder, 2 legs, 3 rate, 4 conf, 5 maxSupply /
+    ///         maxWrapSupply, 6 reg).
     error ConfigFieldForOtherKind(uint8 field);
 
     /// @notice Called by the factory only, in the same call as the clone's creation, on a clone carrying its env
@@ -166,5 +178,7 @@ interface IFactoryToken {
 ///      (8-13) reads it. Every init path of the kinds calls it with the token's own `kind()`.
 function requireRegOfKind(uint8 kind, IFactoryToken.RegulatedParams memory r) pure {
     if (kind < TokenStore.KIND_NORMAL_REGULATED && (r.complianceRegistry != address(0) || r.requiredFlags != 0
-        || r.deniedFlags != 0 || r.termsHash != 0)) revert IFactoryToken.ConfigFieldForOtherKind(6);
+        || r.deniedFlags != 0 || r.termsHash != 0 || r.taxRecipient != 0)) {
+        revert IFactoryToken.ConfigFieldForOtherKind(6); // every field, `taxRecipient` too (Fable A-3)
+    }
 }

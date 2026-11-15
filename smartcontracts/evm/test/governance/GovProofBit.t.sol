@@ -92,7 +92,7 @@ contract GovProofBitTest is PqzOffchainBase {
         nId = nid(vm.addr(NKEY));
         owner_ = nid(address(this));
         router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false);
-        f = new OpenFactory(registrar);
+        f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(router));
         IFactoryToken.Env memory e = pqzEnv(address(f), PQZ_UID, address(reg), address(pqv));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, e, type(NormalPqzToken).creationCode);
@@ -102,10 +102,10 @@ contract GovProofBitTest is PqzOffchainBase {
         Catalogue.release(f, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e, type(WrappedPqzRegulatedToken).creationCode,
             regArgs());
         vm.startPrank(registrar);
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
-        f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true);
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true);
-        f.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true, EnvKit.uidOf(address(f)));
         vm.stopPrank();
     }
 
@@ -115,7 +115,7 @@ contract GovProofBitTest is PqzOffchainBase {
     /// the test its owner, `delay` its grant delay.
     function _tok24(uint8 k, bytes32 issuer, bool withBit, uint64 delay) internal returns (NormalPqzToken t) {
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        (c.owner, c.grantDelay, c.lockedFeatures) = (owner_, delay, 0);
+        (c.admin, c.grantDelay, c.lockedFeatures) = (owner_, delay, 0);
         if (k == 5 || k == 13) {
             c.features = 1 << GovernanceBits.PAYABLE;
             c.roles.minter = 0;
@@ -123,6 +123,7 @@ contract GovProofBitTest is PqzOffchainBase {
             c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
         }
         if (withBit) c.features |= uint256(1) << BIT;
+        if (k >= 12) c.lockedFeatures = uint256(1) << GovernanceBits.DENYLIST; // round 3s: no deny list, no terms, a seat of 24 alone
         c.roles.issuer = issuer;
         t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind(k), 1, abi.encode(c), keccak256(abi.encode(k, issuer, withBit, delay))));
     }
@@ -138,7 +139,7 @@ contract GovProofBitTest is PqzOffchainBase {
         MetaTxLib.UAEnvelope memory u = MetaTxLib.UAEnvelope(from, LANE, router.mtxNonce(from, LANE), block.timestamp + 300, 0,
             address(0xBEEF), 0, address(0xFEE));
         bytes32 sh = keccak256(bytes.concat(abi.encode(GovernanceRouterTypes.UA_SET_PROOF_STORE, u.from), abi.encode(target),
-            abi.encode(next), abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
+            abi.encode(next, EnvKit.codeUidOf(target)), abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
         IUARegistry.UASig memory auth;
         if (from == nId) {
             (uint8 vv, bytes32 r, bytes32 ss) = vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(router)), sh));
@@ -147,7 +148,7 @@ contract GovProofBitTest is PqzOffchainBase {
             auth = UACall.auth(from, _mlAuth());
         }
         vm.prank(address(0x4E1A));
-        router.mtxSetProofStore(u, target, next, auth);
+        router.mtxSetProofStore(u, target, next, EnvKit.codeUidOf(target), auth);
     }
 
     // ------------------------------------------------------------------ the kinds
@@ -189,8 +190,8 @@ contract GovProofBitTest is PqzOffchainBase {
         c.features |= m;
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL, 1, _plain(), type(NormalToken).creationCode);
         vm.prank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL, true);
-        c.conf = IFactoryToken.ConfidentialConfig("", 0, 0, 0, 0, 0, 0, 0, bytes32(0), false, 0);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL, true, EnvKit.uidOf(address(factory)));
+        c.conf = IFactoryToken.ConfidentialConfig("", 0, 0, 0, 0, 0, 0, 0, bytes32(0), false, 0, 0, 0, false, false);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, BIT));
         factory.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "plain-24");
     }
@@ -205,7 +206,7 @@ contract GovProofBitTest is PqzOffchainBase {
         if (viaRouter) _routerSet(h, address(t), PqzCore.LOG);
         else {
             vm.prank(address(uint160(uint256(h))));
-            t.setProofStore(PqzCore.LOG);
+            t.setProofStore(PqzCore.LOG, EnvKit.codeUidOf(address(t)));
         }
         assertEq(t.proofStore(), PqzCore.LOG);
     }
@@ -244,7 +245,7 @@ contract GovProofBitTest is PqzOffchainBase {
             assertTrue(IGovernance(address(t)).hasRole(BIT, nId));
             assertEq(IGovernance(address(t)).holderCount(BIT), 1);
             IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-            (c.owner, c.lockedFeatures, c.roles.issuer) = (owner_, 0, nId);
+            (c.admin, c.lockedFeatures, c.roles.issuer) = (owner_, 0, nId);
             if (k == 5) {
                 c.features = 1 << GovernanceBits.PAYABLE;
                 c.roles.minter = 0;
@@ -261,9 +262,9 @@ contract GovProofBitTest is PqzOffchainBase {
     function test_bit24_notDelayed() public {
         for (uint8 k = 12; k <= 13; ++k) {
             NormalPqzToken t = _tok24(k, nId, true, 1 days);
-            IGovernance(address(t)).revokeRole(BIT, nId);
+            IGovernance(address(t)).revokeRole(BIT, nId, EnvKit.codeUidOf(address(IGovernance(address(t)))));
             assertFalse(IGovernance(address(t)).hasRole(BIT, nId), "revoked at once");
-            IGovernance(address(t)).disableFeature(BIT);
+            IGovernance(address(t)).disableFeature(BIT, EnvKit.codeUidOf(address(IGovernance(address(t)))));
             assertEq(IGovernance(address(t)).features() & (uint256(1) << BIT), 0, "disabled at once");
         }
     }
@@ -275,14 +276,14 @@ contract GovProofBitTest is PqzOffchainBase {
         bytes32 stranger = nid(address(0x5742));
         vm.prank(address(0x5742));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, BIT, stranger));
-        t.setProofStore(PqzCore.LOG);
+        t.setProofStore(PqzCore.LOG, EnvKit.codeUidOf(address(t)));
         NormalPqzToken off = _tok24(4, 0, false, 0);
         vm.prank(vm.addr(NKEY));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, BIT));
-        off.setProofStore(PqzCore.LOG);
+        off.setProofStore(PqzCore.LOG, EnvKit.codeUidOf(address(off)));
         vm.prank(vm.addr(NKEY));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.ProofStoreInvalid.selector, uint8(2)));
-        t.setProofStore(2);
+        t.setProofStore(2, EnvKit.codeUidOf(address(t)));
         assertEq(t.proofStore(), PqzCore.NONE);
     }
 
@@ -291,18 +292,18 @@ contract GovProofBitTest is PqzOffchainBase {
         NormalPqzToken t = _tok24(5, nId, true, 0);
         vm.recordLogs();
         vm.prank(vm.addr(NKEY));
-        t.setProofStore(PqzCore.NONE);
+        t.setProofStore(PqzCore.NONE, EnvKit.codeUidOf(address(t)));
         assertEq(_setEvents(address(t)), 0, "same value: no event");
         vm.recordLogs();
         vm.prank(vm.addr(NKEY));
-        t.setProofStore(PqzCore.LOG);
+        t.setProofStore(PqzCore.LOG, EnvKit.codeUidOf(address(t)));
         Vm.Log[] memory ls = vm.getRecordedLogs();
         assertEq(ls.length, 1);
         assertEq(ls[0].topics[0], EV_SET);
         assertEq(ls[0].data, abi.encode(PqzCore.NONE, PqzCore.LOG));
         vm.recordLogs();
         vm.prank(vm.addr(NKEY));
-        t.setProofStore(PqzCore.LOG);
+        t.setProofStore(PqzCore.LOG, EnvKit.codeUidOf(address(t)));
         assertEq(_setEvents(address(t)), 0, "same value again: no event");
         assertEq(uint8(uint256(vm.load(address(t), PqzCore._STORAGE)) >> 184), PqzCore.LOG, "slot 0 byte 23");
         assertEq(uint8(uint256(vm.load(address(t), PqzCore._STORAGE)) >> 176), 0, "byte 22, pqzVerifyMode, untouched");
@@ -336,10 +337,10 @@ contract GovProofBitTest is PqzOffchainBase {
         NormalPqzToken t = _tok24(12, nId, true, 1 days);
         _shieldOn(t, alice, 10);
         if (mode != PqzCore.NONE) _routerSet(nId, address(t), mode);
-        IGovernance(address(t)).disableFeature(BIT);
+        IGovernance(address(t)).disableFeature(BIT, EnvKit.codeUidOf(address(IGovernance(address(t)))));
         vm.prank(vm.addr(NKEY));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, BIT));
-        t.setProofStore(mode == PqzCore.NONE ? PqzCore.LOG : PqzCore.NONE);
+        t.setProofStore(mode == PqzCore.NONE ? PqzCore.LOG : PqzCore.NONE, EnvKit.codeUidOf(address(t)));
         assertEq(t.proofStore(), mode, "frozen");
         _debit(t, 0, mode == PqzCore.LOG);
     }
@@ -372,9 +373,11 @@ contract GovProofBitTest is PqzOffchainBase {
         }
     }
 
-    // keccak256(abi.encode(mtxSelectors().selectors)) at 6dbb5d3d (T60), before bit 24: 10 entries on 4 and 12, 18 on 5 and 13
-    bytes32 internal constant MTX_SELECTORS_4 = 0xf6b2b0249c9faf7bac2d7443099d69a3b581d327aea7bee34feb215a043327e7;
-    bytes32 internal constant MTX_SELECTORS_5 = 0x2138d643ab3bd760acfaa297443ccb3bac0b302e96c3063baf82c791e828687e;
+    // keccak256(abi.encode(mtxSelectors().selectors)) at 6dbb5d3d (T60), before bit 24: 10 entries on 4 and 12, 18 on 5 and 13;
+    // the three-key model (CTR-PQZ-40, -41): the two single-transfer selectors move (`PqzTransferArgs`) and `mtxRollOverSigned`
+    // is appended, 11 / 19: 4 0xf6b2b024… -> 0x7af66375…, 5 0x2138d643… -> 0xeb88d7e0…
+    bytes32 internal constant MTX_SELECTORS_4 = 0x7af66375a489083c22331c992edb126d2234e82ee5f26d10915bf2370531619d;
+    bytes32 internal constant MTX_SELECTORS_5 = 0xeb88d7e0190996fd39d24638f13302395d2454b08ccdf39841ec4cbd676940df;
     bytes32 internal constant MTX_SELECTORS_12 = MTX_SELECTORS_4;
     bytes32 internal constant MTX_SELECTORS_13 = MTX_SELECTORS_5;
 }

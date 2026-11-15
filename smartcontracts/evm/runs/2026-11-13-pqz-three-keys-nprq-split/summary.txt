@@ -1,0 +1,10 @@
+pqz-three-keys step 4 (pre): split NormalPqzRegulatedTokenQ (owner 2026-11-13) — gate summary
+step | result
+legacy artifacts | script/modules/legacy_artifacts.py build (the copied out/t66b-legacy were stale: the pqzAcc differential red on kinds 4, 5, 12, 13)
+modules + LinkClosure + FactoryIndex | 74 / 74
+forge test per directory (gate.sh) | every directory rc 0; modules 35, v2 635, as 357, governance 525, pqz 455 (+4 skipped), metatx 400, merge 119, ua 636, zether 336 (+4 skipped), wrap 72, pqchat 99, account 58, wallet 100, liquidity 82 (+1 skipped), hedera 20, pqzh 42, research 93 (+6 skipped), top-level 29
+isolate (test/ua/{UAGas,UARegistryGroups}) | 22 / 22
+size gate | 0 errors, 170 contracts
+gas pins | none moved
+sizes (runtime B) | face 23,368 -> 23,543; Q 33,633 -> 24,018; S new 19,388; P, T, A, R unchanged
+deploy asked gas (3p probe) | Q 40.67 M, S 32.92 M, face 40.03 M; regular x 1.05 < 2^24

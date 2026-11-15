@@ -91,6 +91,11 @@ fn sc() -> &'static str {
     concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm")
 }
 
+/// The anvil's `DEPLOY_NAME` (NET-EVM-13: a chain not in `chain-uids.json`), its book `deployments/<name>.json`.
+fn book_name(chain_id: u64) -> String {
+    format!("local-{chain_id}-testnet")
+}
+
 /// Deploy factory + implementation + DEX + token demo (một nửa cung cho `holder`).
 fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
     deploy_with(rpc, chain_id, holder, false)
@@ -98,6 +103,11 @@ fn deploy(rpc: &str, chain_id: u64, holder: Address) -> Value {
 
 /// As [`deploy`]; `zether`: the Zether stack too (`DEPLOY_ZETHER=1`, `deploy.sh`'s `--gas-estimate-multiplier 105`).
 fn deploy_with(rpc: &str, chain_id: u64, holder: Address, zether: bool) -> Value {
+    deploy_env(rpc, chain_id, holder, zether, &[])
+}
+
+/// As [`deploy_with`], with more environment for the script (`DEPLOY_PQCHAT`).
+fn deploy_env(rpc: &str, chain_id: u64, holder: Address, zether: bool, env: &[(&str, &str)]) -> Value {
     let sc = sc();
     let mut cmd = Command::new("forge");
     cmd.current_dir(sc)
@@ -105,15 +115,17 @@ fn deploy_with(rpc: &str, chain_id: u64, holder: Address, zether: bool) -> Value
     if zether {
         cmd.args(["--gas-estimate-multiplier", "105"]).env("DEPLOY_ZETHER", "true");
     }
+    cmd.envs(env.iter().copied());
     let status = cmd
         .env("PRIVATE_KEY", DEPLOYER)
         .env("DEMO_SUPPLY", "1000000000000")
         .env("DEMO_HOLDER", format!("{holder:#x}"))
         .env("FOUNDRY_PROFILE", "scaas-testnet")
+        .env("DEPLOY_NAME", book_name(chain_id))
         .status()
         .expect("forge in PATH");
     assert!(status.success(), "forge script failed");
-    let raw = std::fs::read_to_string(format!("{sc}/deployments/{chain_id}.json")).expect("deployments json");
+    let raw = std::fs::read_to_string(format!("{sc}/deployments/{}.json", book_name(chain_id))).expect("deployments json");
     let dep: Value = serde_json::from_str(&raw).unwrap();
     // P4: the account keys are `smart_key_account_*` (the node reads neither; Odoo seeds from them)
     assert!(dep["smart_key_account_factory"].is_string() && dep["smart_key_account_implementation"].is_string());
@@ -590,8 +602,9 @@ async fn outbox_payment_reaches_chain_and_comes_back_final() {
     let m = UaMtx::Call(UAMetaTransaction { from: acct.into_word(), data: alloy::hex::decode(format!("cfdd7aea{:064x}", 9)).unwrap().into(),
         batch: U256::from(3), nonce: U256::ZERO, validUntil: U256::from(now() + 300), mode: 0, relayer: Address::ZERO, fee: U256::ZERO,
         feeRecipient: Address::ZERO });
-    let ecdsa = owner.sign_hash_sync(&m.digest(&d)).unwrap().as_bytes().to_vec();
-    let sig = (U256::ZERO, Vec::<B256>::new(), Bytes::from(ecdsa)).abi_encode_params();
+    // B P3-2 (CTR-ACC-02): the account answers ERC-1271 by ERC-7739 only, over the token's `UAMetaTransaction`
+    let typ = <UAMetaTransaction as alloy::sol_types::SolStruct>::eip712_encode_type();
+    let sig = sign_7739(&rpc, &owner, acct, token, &typ, m.struct_hash()).await;
     let data = m.calldata(UASig { keyData: Bytes::new(), signature: sig.into(), members: vec![] });
     let floor = scaas_node::guard::erc1271_floor(data.len());
     let w = ProviderBuilder::new().wallet(EthereumWallet::from(relayer.clone())).connect_http(rpc.parse().unwrap());
@@ -640,6 +653,8 @@ fn plain_rows_match_the_forge_abi() {
                 "registry" => "IUARegistry",
                 "factory" => "SmartKeyAccountFactory",
                 "account" => "SmartKeyAccount",
+                // T93 (UA-7 P17, topics P45): the twelve `PqChat` writes
+                "pqchat" => "IPqChat",
                 other => panic!("a plain row on {other}: {}", r.entry),
             };
             let p = format!("{}/../smartcontracts/evm/out/{art}.sol/{art}.json", env!("CARGO_MANIFEST_DIR"));
@@ -651,7 +666,9 @@ fn plain_rows_match_the_forge_abi() {
             n += 1;
         }
     }
-    assert_eq!(n, 18, "18 rows, one contract each (22 before MD-11 (a): the wallet's four flat rows retired)");
+    assert_eq!(n, 35, "35 rows, one contract each (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
+        30 -> 32: the DEX's mtxLiquidity (CTR-DEX-30) and PqChat's remove (UA-7 P48); 32 -> 34: the registry's setPqzScopedKey, \
+        storePqzScopedPop (K3-3); 34 -> 35: the registry's updateMsig (CTR-UA-44))");
 }
 
 /// The `UAEnvelope` of a native signer `from` (its padded id) on lane `batch` at `nonce`, fee 0, open relayer.
@@ -719,11 +736,12 @@ async fn drain(s: &mut Submitter, rx: &mut mpsc::Receiver<Work>) {
 
 alloy::sol! {
     // `owner` a UA id (CTR-GOV-01 Change): a native account's is its address padded to 32 bytes
-    struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; }
+    struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; uint256 features; uint256 lockedFeatures; }
     function createDex(uint64 version, bytes initArgs, bytes32 salt) external returns (address dex);
-    function setMarket(address base, address quote, bool listed) external;
+    // the Change of CTR-GOV-28 in round 3zb + 3zc (O6): bit 11's direct entry takes the DEX's chain word last
+    function setMarket(address base, address quote, bool listed, bytes32 chainUid_) external;
     function approve(address spender, uint256 value) external returns (bool);
-    function mint(address to, uint256 value) external;
+    function mint(address to, uint256 value) external; // `MockERC20`'s (an outside token), not a SCaaS token's
     function puller() external view returns (address);
     function listedOnly() external view returns (bool);
     struct SubjectKey { uint8 kind; bytes32 x; bytes32 y; bytes32 rpIdHash; bytes32 originHash; }
@@ -780,11 +798,11 @@ async fn dex_order_with_a_ua_trade_order_leg() {
     send(&rpc, &deployer, token_b, IToken::transferCall { to: bob.address(), value: U256::from(500_000_000u64) }.abi_encode()).await;
     let treasury = Address::repeat_byte(0x7a);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
-        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
-    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true }.abi_encode()).await;
+        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
+    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true, chainUid_: uid }.abi_encode()).await;
     let usdc = deploy_outside_token(&rpc, &deployer).await;
     send(&rpc, &deployer, usdc, mintCall { to: dave.address(), value: U256::from(1_000_000_000u64) }.abi_encode()).await;
-    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: usdc, listed: true }.abi_encode()).await;
+    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: usdc, listed: true, chainUid_: uid }.abi_encode()).await;
 
     let relayer = key(RELAYER);
     let lane = relayer.address();
@@ -1028,8 +1046,8 @@ async fn dex_fill_below_half_settles_on_anvil() {
     send(&rpc, &deployer, token_b, IToken::transferCall { to: bob.address(), value: U256::from(500_000_000u64) }.abi_encode()).await;
     let treasury = Address::repeat_byte(0x7a);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
-        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
-    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true }.abi_encode()).await;
+        relayerSharePpm: 500_000, treasury, listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
+    send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true, chainUid_: uid }.abi_encode()).await;
 
     let relayer = key(RELAYER);
     let lane = relayer.address();
@@ -1501,11 +1519,12 @@ async fn router_op_signed_by_an_eoa() {
     let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
     let deployer = key(DEPLOYER);
     let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: owner.address().into_word(),
-        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO }.abi_encode().into(),
+        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(),
         salt: B256::repeat_byte(0x60) }.abi_encode()).await;
     assert!(!view(&rpc, dex, listedOnlyCall {}).await);
     let op = signed_op(&owner, json!({"entry": "mtxSetListedOnly", "contract": "gov_router", "token": format!("{router:#x}"),
-        "args": {"target": format!("{dex:#x}"), "on": true},
+        "args": {"target": format!("{dex:#x}"), "on": true,
+            "chainUid": format!("{:#x}", view(&rpc, dex, pqz3f::chainUidCall {}).await)}, // the DEX's chain word (CTR-GOV-28 Change)
         "envelope": envelope(owner.address(), U256::from_be_slice(dex.as_slice()), 0)}), chain_id, uid);
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
@@ -1532,12 +1551,148 @@ async fn router_op_signed_by_an_eoa() {
     assert_eq!(view(&rpc, router, lane).await, U256::from(1u64), "the router's nonce, on the target's lane");
 }
 
+alloy::sol! {
+    function predictAddress(bytes32 creatorId, uint16 contractClass, uint16 kind, bytes32 salt) external view returns (address);
+    function isDex(address dex) external view returns (bool);
+    function isToken(address token) external view returns (bool);
+    /// `PqChat`'s owner (class 3, kind 0): 0 or its creator.
+    function owner() external view returns (bytes32);
+}
+
+/// Owner 2026-11-12 (every state-changing `mtx*` relayable, fee 0 too): an EOA with no gas signs `mtxCreateDex` and `mtxCreateToken`
+/// on the chain's `GovernanceRouter`, the config as named JSON; the node encodes it as the factory's `initArgs` and relays both at
+/// fee 0: the factory records a DEX and a token at the creator's predicted addresses. The negative: the same creation with a job
+/// `initHash` is `dead` `BAD_PAYLOAD`, nothing sent (the lane's nonce does not move).
+#[tokio::test]
+#[ignore]
+async fn router_creations_signed_by_an_eoa() {
+    let chain_id = 31918;
+    let (_anvil, rpc) = start_anvil(chain_id, 31918).await;
+    let owner = small_key(0x61F); // never funded
+    let dep = deploy(&rpc, chain_id, owner.address());
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
+    let factory: Address = dep["token_factory"].as_str().unwrap().parse().unwrap();
+    let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
+    let lane = U256::from_be_slice(factory.as_slice());
+    let z = |b: u8| format!("{:#x}", B256::repeat_byte(b));
+    let a = |b: u8| format!("{:#x}", Address::repeat_byte(b));
+    let me = format!("{:#x}", owner.address().into_word());
+    let dex_op = signed_op(&owner, json!({"entry": "mtxCreateDex", "contract": "gov_router", "token": format!("{router:#x}"),
+        "args": {"target": format!("{factory:#x}"), "version": "1", "salt": z(0x61),
+            "config": {"admin": me, "relayerSharePpm": 0, "treasury": a(0x7a), "listedOnly": true, "grantDelay": "0", "rescueTo": a(0),
+                "features": "0", "lockedFeatures": "0"}},
+        "envelope": envelope(owner.address(), lane, 0)}), chain_id, uid);
+    let token_op = signed_op(&owner, json!({"entry": "mtxCreateToken", "contract": "gov_router", "token": format!("{router:#x}"),
+        "args": {"target": format!("{factory:#x}"), "kind": 0, "version": "1", "salt": z(0x62),
+            "config": {"name": "Relayed", "symbol": "RLY", "decimals": 6, "features": "1", "lockedFeatures": "0", "admin": me,
+                "roles": {"minter": z(0), "rateAdmin": z(0), "guardian": z(0), "issuer": z(0), "compliance": z(0), "burner": z(0)},
+                "initialSupply": "1000", "initialHolder": format!("{:#x}", owner.address()), "legs": [], "rate": {"rateDelay": 0, "maxRateStepBps": 0},
+                "conf": {"auditorKey": "0x", "shieldScale": "0", "maxShielded": "0", "confidentialFee": "0", "disclosureMode": 0, "auditorMode": 0,
+                    "minDecoyFee": "0", "pqzVerifyMode": 0, "pqzVerifierUA": z(0), "pqzVerifierFixed": false, "proofStore": 0, "verifierFee": "0",
+                    "verifierFeeMax": "0", "pqzOwnKey": false, "pqzOpening": false},
+                "grantDelay": "0", "rescueTo": a(0), "maxSupply": "0", "maxWrapSupply": "0",
+                "reg": {"complianceRegistry": a(0), "requiredFlags": "0", "deniedFlags": "0", "termsHash": z(0), "taxRecipient": z(0)}}},
+        "envelope": envelope(owner.address(), lane, 1)}), chain_id, uid);
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let report = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
+    let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg.clone(), "e2e-create".into(),
+        Default::default()).await.unwrap();
+    let mut forged = dex_op.clone();
+    forged["args"]["initHash"] = json!(z(1));
+    state.lock().unwrap().jobs.push(json!({"id": 1, "kind": "ua_metatx", "op": forged}));
+    run_outbox(&mut s).await;
+    assert_eq!(report(1)["chain_state"], "dead", "{}", report(1));
+    assert!(report(1)["error"].as_str().unwrap().contains("BAD_PAYLOAD: args.initHash"), "{}", report(1));
+    let nonce = IMtxIds::mtxNonceCall { from: owner.address().into_word(), batch: lane };
+    assert_eq!(view(&rpc, router, nonce.clone()).await, U256::ZERO, "nothing sent");
+    for (id, op) in [(2, dex_op), (3, token_op)] {
+        state.lock().unwrap().jobs.push(json!({"id": id, "kind": "ua_metatx", "op": op}));
+        run_outbox(&mut s).await;
+        assert_eq!(report(id)["chain_state"], "mined", "{}", report(id));
+    }
+    let dex = view(&rpc, factory, predictAddressCall { creatorId: owner.address().into_word(), contractClass: 2, kind: 0,
+        salt: B256::repeat_byte(0x61) }).await;
+    let tok = view(&rpc, factory, predictAddressCall { creatorId: owner.address().into_word(), contractClass: 1, kind: 0,
+        salt: B256::repeat_byte(0x62) }).await;
+    assert!(view(&rpc, factory, isDexCall { dex }).await && view(&rpc, dex, listedOnlyCall {}).await, "the DEX, its named config");
+    assert!(view(&rpc, factory, isTokenCall { token: tok }).await, "the token");
+    assert_eq!(view(&rpc, router, nonce).await, U256::from(2u64), "two creations on the factory's lane");
+}
+
+/// Owner 2026-11-12 (`mtxCreateInstance`, "both the generic row and the per-class ones"): an EOA with no gas signs two `PqChat`
+/// creations (class 3, kind 0) on the chain's `GovernanceRouter`, relayed at fee 0: one names its `init_call` bytes
+/// (`initialize(0)`), the other the class's named config `{owner: <creator>}`, which the node builds into the call; both instances
+/// stand at the creator's predicted addresses with their owners. The negatives, `dead` with nothing sent (the lane's nonce does
+/// not move): both forms in one job, an owner that is not the creator, an unpublished release (`RELEASE_UNKNOWN`, read from the
+/// factory before the simulation).
+#[tokio::test]
+#[ignore]
+async fn router_instance_creations_signed_by_an_eoa() {
+    let chain_id = 31919;
+    let (_anvil, rpc) = start_anvil(chain_id, 31919).await;
+    let owner = small_key(0x620); // never funded
+    let dep = deploy_env(&rpc, chain_id, owner.address(), false, &[("DEPLOY_PQCHAT", "true")]);
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
+    let factory: Address = dep["token_factory"].as_str().unwrap().parse().unwrap();
+    let token: Address = dep["demo_token"].as_str().unwrap().parse().unwrap();
+    assert!(dep["pqchat_implementation"].is_string(), "PqChat release 1 of (3, 0)");
+    let lane = U256::from_be_slice(factory.as_slice());
+    let z = |b: u8| format!("{:#x}", B256::repeat_byte(b));
+    let me = format!("{:#x}", owner.address().into_word());
+    let op = |args: Value, nonce: u64| signed_op(&owner, json!({"entry": "mtxCreateInstance", "contract": "gov_router",
+        "token": format!("{router:#x}"), "args": args, "envelope": envelope(owner.address(), lane, nonce)}), chain_id, uid);
+    let base = |salt: u8, version: &str| json!({"target": format!("{factory:#x}"), "contractClass": 3, "kind": 0, "version": version,
+        "salt": z(salt)});
+    let with = |mut a: Value, k: &str, v: Value| { a[k] = v; a };
+    let init_zero = json!(format!("0x{}{}", alloy::hex::encode(&alloy::primitives::keccak256("initialize(bytes32)")[..4]), "00".repeat(32)));
+    let raw_op = op(with(base(0x71, "1"), "init_call", init_zero.clone()), 0);
+    let named_op = op(with(base(0x72, "1"), "config", json!({"owner": me})), 1);
+    // the two refused at parse: no digest to sign (the node computes none), so a filler `UASig` (the refusal is by name, before
+    // any signature check)
+    let unsigned = |args: Value, nonce: u64| json!({"entry": "mtxCreateInstance", "contract": "gov_router",
+        "token": format!("{router:#x}"), "args": args, "envelope": envelope(owner.address(), lane, nonce),
+        "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}});
+    let both = unsigned(with(with(base(0x73, "1"), "config", json!({"owner": me})), "init_call", init_zero), 2);
+    let stranger = unsigned(with(base(0x74, "1"), "config", json!({"owner": z(0x0b)})), 2);
+    let unpublished = op(with(base(0x75, "9"), "config", json!({"owner": me})), 2);
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let report = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
+    let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg.clone(), "e2e-instance".into(),
+        Default::default()).await.unwrap();
+    let nonce = IMtxIds::mtxNonceCall { from: owner.address().into_word(), batch: lane };
+    for (id, op, want) in [(1, both, "BAD_PAYLOAD: args.config and args.init_call"), (2, stranger, "args.config.owner: 0 or the creator"),
+                           (3, unpublished, "RELEASE_UNKNOWN")] {
+        state.lock().unwrap().jobs.push(json!({"id": id, "kind": "ua_metatx", "op": op}));
+        run_outbox(&mut s).await;
+        assert_eq!(report(id)["chain_state"], "dead", "{}", report(id));
+        assert!(report(id)["error"].as_str().unwrap().contains(want), "{want}: {}", report(id));
+    }
+    assert_eq!(view(&rpc, router, nonce.clone()).await, U256::ZERO, "nothing sent");
+    for (id, op) in [(4, raw_op), (5, named_op)] {
+        state.lock().unwrap().jobs.push(json!({"id": id, "kind": "ua_metatx", "op": op}));
+        run_outbox(&mut s).await;
+        assert_eq!(report(id)["chain_state"], "mined", "{}", report(id));
+    }
+    let at = |salt: u8| predictAddressCall { creatorId: owner.address().into_word(), contractClass: 3, kind: 0, salt: B256::repeat_byte(salt) };
+    let (raw_at, named_at) = (view(&rpc, factory, at(0x71)).await, view(&rpc, factory, at(0x72)).await);
+    assert_eq!(view(&rpc, raw_at, ownerCall {}).await, B256::ZERO, "init_call: initialize(0)");
+    assert_eq!(view(&rpc, named_at, ownerCall {}).await, owner.address().into_word(), "the named config: the creator owns it");
+    assert_eq!(view(&rpc, router, nonce).await, U256::from(2u64), "two creations on the factory's lane");
+}
+
 // ------------------------------------------------------------------ the merged entries on anvil (ua-mtx-merge T18)
 
 alloy::sol! {
     // `IFactoryToken` (CTR-TOK-25) and the release calls of `OpenFactory` (plan 5g-Z2); `TokenKind` as its `uint8`
     #[derive(Default)]
-    struct Roles { bytes32 minter; bytes32 rateAdmin; bytes32 guardian; bytes32 issuer; bytes32 compliance; }
+    // round 3zb (CTR-GOV-29): + `burner`, the sixth seat
+    struct Roles { bytes32 minter; bytes32 rateAdmin; bytes32 guardian; bytes32 issuer; bytes32 compliance; bytes32 burner; }
     #[derive(Default)]
     struct Leg { address underlying; uint256 num; uint256 den; }
     #[derive(Default)]
@@ -1546,7 +1701,9 @@ alloy::sol! {
     // group 3f (spec §3, AV-2): `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed` appended (0, 0, false for every other kind);
     // group 3h T60 (pqz-proof-path spec §4.1): `proofStore` (0 NONE, 1 LOG; 0 for every other kind)
     struct ConfidentialConfig { bytes auditorKey; uint256 shieldScale; uint256 maxShielded; uint256 confidentialFee; uint8 disclosureMode;
-        uint8 auditorMode; uint256 minDecoyFee; uint8 pqzVerifyMode; bytes32 pqzVerifierUA; bool pqzVerifierFixed; uint8 proofStore; }
+        uint8 auditorMode; uint256 minDecoyFee; uint8 pqzVerifyMode; bytes32 pqzVerifierUA; bool pqzVerifierFixed; uint8 proofStore;
+        uint64 verifierFee; uint64 verifierFeeMax; // round 3t (CTR-PQZ-36): the verifier fee and its cap (0 off)
+        bool pqzOwnKey; bool pqzOpening; } // the three-key model (CTR-PQZ-37): the key class (false, false off PQZ)
     /// Regulated-kinds spec §2.4 (plan T25): the regulated kinds' (8-13) only; a plain kind refuses any set field.
     #[derive(Default)]
     struct RegulatedParams { address complianceRegistry; uint64 requiredFlags; uint64 deniedFlags; bytes32 termsHash;
@@ -1554,17 +1711,21 @@ alloy::sol! {
     #[derive(Default)]
     struct TokenConfig { string name; string symbol; uint8 decimals; uint256 features; uint256 lockedFeatures; bytes32 owner; Roles roles;
         uint256 initialSupply; address initialHolder; Leg[] legs; RateConfig rate; ConfidentialConfig conf; uint64 grantDelay;
-        address rescueTo; uint256 maxSupply; RegulatedParams reg; }
+        address rescueTo; uint256 maxSupply; uint256 maxWrapSupply; RegulatedParams reg; } // round 3zc (CTR-GOV-30): + maxWrapSupply
     // chain-neutral releases (CTR-TOK-29, plan T71 / T74): the factory fills its own `chainUid` and router; `params` the
     // class's chain values
     struct FactoryEnv { address registry; address smartKeyAccountImpl; bool hedera; address[] deps; bytes32[] params;
         address[] libs; bytes32[] libCodeHashes; }
-    function envOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);
-    function publishEnv(uint8 kind, uint16 envVersion, FactoryEnv env) external;
-    function deployImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs) external returns (address);
+    function tokenEnvOf(uint8 kind, uint16 envVersion) external view returns (FactoryEnv);
+    function publishTokenEnv(uint8 kind, uint16 envVersion, bytes32 chainUid, FactoryEnv env) external;
+    function deployTokenImplementation(uint8 kind, uint64 version, uint16 envVersion, bytes initcode, bytes implArgs, bytes32 chainUid) external returns (address);
     function createToken(uint8 kind, uint64 version, bytes initArgs, bytes32 salt) external returns (address);
     function registry() external view returns (address);
     function epoch(address token) external view returns (uint64);
+    // T66b §4.5 (CTR-TOK-30): a token release names its body modules in `implArgs`, one named struct; `modules()` lists them
+    struct ImplArgs { address[] modules; }
+    function implementationOf(uint8 kind, uint64 version) external view returns (address);
+    function modules() external view returns (address[]);
 }
 
 /// The init code of forge's artifact `out/<file>/<name>.json`, each library linked at the address the deploy of `chain_id` gave it
@@ -1595,12 +1756,18 @@ fn linked(chain_id: u64, file: &str, name: &str) -> Vec<u8> {
 async fn registry_zero_token(rpc: &str, chain_id: u64, dep: &Value, holder: Address, supply: u64) -> Address {
     let deployer = key(DEPLOYER);
     let f: Address = dep["token_factory"].as_str().unwrap().parse().unwrap();
-    let mut env = view(rpc, f, envOfCall { kind: 0, envVersion: 1 }).await;
+    let mut env = view(rpc, f, tokenEnvOfCall { kind: 0, envVersion: 1 }).await;
     assert_ne!(env.registry, Address::ZERO, "the deploy's NORMAL release is on the registry");
     env.registry = Address::ZERO;
-    send(rpc, &deployer, f, publishEnvCall { kind: 0, envVersion: 2, env }.abi_encode()).await;
+    let chain_uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap(); // the factory's word (CTR-GOV-27)
+    send(rpc, &deployer, f, publishTokenEnvCall { kind: 0, envVersion: 2, chainUid: chain_uid, env }.abi_encode()).await;
     let code = linked(chain_id, "NormalToken.sol", "NormalToken");
-    send(rpc, &deployer, f, deployImplementationCall { kind: 0, version: 2, envVersion: 2, initcode: code.into(), implArgs: Bytes::new() }.abi_encode()).await;
+    // T66b §4.5: version 2 names version 1's body modules (pinned in env 1, so in env 2)
+    let v1 = view(rpc, f, implementationOfCall { kind: 0, version: 1 }).await;
+    let impl_args = ImplArgs { modules: view(rpc, v1, modulesCall {}).await }.abi_encode().into();
+    let chain_uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    send(rpc, &deployer, f, deployTokenImplementationCall { kind: 0, version: 2, envVersion: 2, initcode: code.into(), implArgs: impl_args,
+        chainUid: chain_uid }.abi_encode()).await;
     let c = TokenConfig { name: "SCaaS Registry Zero".into(), symbol: "bRZ".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
         initialSupply: U256::from(supply), initialHolder: holder, ..Default::default() };
     let t = create(rpc, &deployer, f, createTokenCall { kind: 0, version: 2, initArgs: c.abi_encode().into(), salt: B256::repeat_byte(0x20) }.abi_encode()).await;
@@ -2000,9 +2167,10 @@ alloy::sol! {
     function isFrozen(bytes32 account) external view returns (bool);
 }
 
-/// The deploy with the regulated releases and the canonical `ComplianceRegistry` (`DEPLOY_REGULATED`, its admin a contract: code
-/// set by `anvil_setCode`, the registry's constructor refuses an EOA), a `SmartKeyAccount` of `issuer_key` as the `issuer`
-/// (bit 5 is contract-only), and a kind-8 token with `FREEZE` whose supply is `holder`'s. No list is on: no registry read.
+/// The deploy with the regulated releases and the canonical `ComplianceRegistry` (`DEPLOY_REGULATED`, its admin a UA id since
+/// round 3r, CTR-GOV-23: `COMPLIANCE_ADMIN` the native id of a contract, code set by `anvil_setCode`), a `SmartKeyAccount` of
+/// `issuer_key` as the `issuer` (bit 5 is contract-only), and a kind-8 token with `FREEZE` whose supply is `holder`'s. No list
+/// is on: no registry read.
 async fn regulated_token(chain_id: u64, rpc: &str, issuer_key: &PrivateKeySigner, holder: Address) -> (Value, Address, Address) {
     let admin = Address::repeat_byte(0xad);
     let p = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
@@ -2011,10 +2179,11 @@ async fn regulated_token(chain_id: u64, rpc: &str, issuer_key: &PrivateKeySigner
     let status = Command::new("forge").current_dir(sc)
         .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--disable-code-size-limit", "--sender", DEPLOYER_ADDRESS])
         .env("PRIVATE_KEY", DEPLOYER).env("DEMO_SUPPLY", "1000000000000").env("DEMO_HOLDER", format!("{holder:#x}"))
-        .env("FOUNDRY_PROFILE", "scaas-testnet").env("DEPLOY_REGULATED", "true").env("COMPLIANCE_ADMIN", format!("{admin:#x}"))
+        .env("FOUNDRY_PROFILE", "scaas-testnet").env("DEPLOY_REGULATED", "true").env("COMPLIANCE_ADMIN", format!("{:#x}", admin.into_word()))
+        .env("DEPLOY_NAME", book_name(chain_id))
         .status().expect("forge in PATH");
     assert!(status.success(), "forge script failed");
-    let dep: Value = serde_json::from_str(&std::fs::read_to_string(format!("{sc}/deployments/{chain_id}.json")).unwrap()).unwrap();
+    let dep: Value = serde_json::from_str(&std::fs::read_to_string(format!("{sc}/deployments/{}.json", book_name(chain_id))).unwrap()).unwrap();
     assert!(dep["implementation_normal_regulated"].is_string() && dep["compliance_registry"].is_string(), "{dep}");
     let deployer = key(DEPLOYER);
     let factory: Address = dep["smart_key_account_factory"].as_str().unwrap().parse().unwrap();
@@ -2032,20 +2201,47 @@ async fn regulated_token(chain_id: u64, rpc: &str, issuer_key: &PrivateKeySigner
 }
 
 
-/// The router's `mtxFreeze` (`mtx<Op>`, op `UA<Op>`), or another of the eight, signed by the issuer account through ERC-1271 (its
-/// owner key's ECDSA in the account's `(keyIndex, proof, sig)` form), on the target's lane.
+/// A contract's EIP-712 domain separator from its own `eip712Domain()` (the five SCaaS fields).
+async fn separator(rpc: &str, c: Address) -> B256 {
+    let d = view(rpc, c, scaas_node::abi::IToken::eip712DomainCall {}).await;
+    keccak256((keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"),
+        keccak256(d.name.as_bytes()), keccak256(d.version.as_bytes()), d.chainId, d.verifyingContract, d.salt).abi_encode())
+}
+
+/// The router's `mtxFreeze` (`mtx<Op>`, op `UA<Op>`), or another of the eight, signed by the issuer account through ERC-1271, on the
+/// target's lane. A `SmartKeyAccount` answers ERC-1271 by ERC-7739 only (B P3-2, CTR-ACC-02): its owner key signs
+/// `TypedDataSign{contents: the router's struct, the account's domain}` under the router's separator, in the account's
+/// `(keyIndex, proof, sig)` form, then `app ‖ contents ‖ contentsDescription ‖ uint16(len)` (the router's type string).
 #[allow(clippy::too_many_arguments)]
-fn issuer_op(entry: &str, args: Value, issuer: Address, owner: &PrivateKeySigner, router: Address, token: Address, nonce: u64, chain_id: u64,
-    uid: B256) -> Value
+async fn issuer_op(rpc: &str, entry: &str, args: Value, issuer: Address, owner: &PrivateKeySigner, router: Address, token: Address,
+    nonce: u64) -> Value
 {
+    // the target's chain word, every role holder's op's last field (CTR-GOV-28 Change, round 3zb + 3zc)
+    let mut args = args;
+    args["chainUid"] = json!(format!("{:#x}", view(rpc, token, pqz3f::chainUidCall {}).await));
     let mut op = json!({"entry": entry, "contract": "gov_router", "token": format!("{router:#x}"), "args": args,
         "envelope": envelope(issuer, U256::from_be_slice(token.as_slice()), nonce),
         "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}});
-    let d = scaas_node::typed::Op::parse(&op, None).unwrap().typed.digest_on(chain_id, uid).unwrap();
-    let ecdsa = owner.sign_hash_sync(&d).unwrap().as_bytes().to_vec();
-    let sig = (U256::ZERO, Vec::<B256>::new(), Bytes::from(ecdsa)).abi_encode_params();
+    let p = scaas_node::typed::Op::parse(&op, None).unwrap();
+    let sig = sign_7739(rpc, owner, issuer, router, &p.row.type_string(), p.typed.struct_hash.unwrap()).await;
     op["auth"]["signature"] = json!(format!("0x{}", alloy::hex::encode(sig)));
     op
+}
+
+/// A `SmartKeyAccount`'s (key 0, secp256k1 `owner`) ERC-7739 signature for the struct `contents` of type `typ` in `app`'s domain
+/// (B P3-2, CTR-ACC-02): `owner` signs `0x1901 ‖ app ‖ hashStruct(TypedDataSign{contents, the account's domain})` in the account's
+/// `(keyIndex, proof, sig)` form, then `app ‖ contents ‖ typ ‖ uint16(len)` (implicit contents description).
+async fn sign_7739(rpc: &str, owner: &PrivateKeySigner, account: Address, app: Address, typ: &str, contents: B256) -> Vec<u8> {
+    let name = &typ[..typ.find('(').unwrap()];
+    let (sep, acct) = (separator(rpc, app).await, view(rpc, account, scaas_node::abi::IToken::eip712DomainCall {}).await);
+    let th = keccak256(format!("TypedDataSign({name} contents,string name,string version,uint256 chainId,address verifyingContract,\
+bytes32 salt){typ}"));
+    let tds = keccak256((th, contents, keccak256(acct.name.as_bytes()), keccak256(acct.version.as_bytes()), acct.chainId,
+        acct.verifyingContract, acct.salt).abi_encode());
+    let m = keccak256([&[0x19u8, 0x01][..], sep.as_slice(), tds.as_slice()].concat());
+    let ecdsa = owner.sign_hash_sync(&m).unwrap().as_bytes().to_vec();
+    let inner = (U256::ZERO, Vec::<B256>::new(), Bytes::from(ecdsa)).abi_encode_params();
+    [&inner[..], sep.as_slice(), contents.as_slice(), typ.as_bytes(), &(typ.len() as u16).to_be_bytes()].concat()
 }
 
 /// Regulated-kinds spec §3.1, §7 (plan T35): the issuer's `mtxFreeze` on the chain's `GovernanceRouter`, a `ua_metatx` job relayed at
@@ -2058,11 +2254,10 @@ async fn regulated_freeze_relayed_by_router() {
     let (_anvil, rpc) = start_anvil(chain_id, 31914).await;
     let (owner, holder) = (small_key(0x35A), small_key(0x35B));
     let (dep, token, issuer) = regulated_token(chain_id, &rpc, &owner, holder.address()).await;
-    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
     let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
     let a = holder.address().into_word();
-    let op = issuer_op("mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"),
-        "ref": format!("{:#x}", B256::repeat_byte(0x5e)), "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0, chain_id, uid);
+    let op = issuer_op(&rpc, "mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"),
+        "ref": format!("{:#x}", B256::repeat_byte(0x5e)), "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0).await;
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
     let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
@@ -2090,14 +2285,13 @@ async fn regulated_transfer_refused_frozen() {
     let (_anvil, rpc) = start_anvil(chain_id, 31915).await;
     let (owner, holder) = (small_key(0x35C), small_key(0x35D));
     let (dep, token, issuer) = regulated_token(chain_id, &rpc, &owner, holder.address()).await;
-    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
     let router: Address = dep["governance_router"].as_str().unwrap().parse().unwrap();
     let a = holder.address().into_word();
     let ref_ = format!("{:#x}", B256::repeat_byte(0x5e));
-    let freeze = issuer_op("mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_,
-        "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0, chain_id, uid);
-    let unfreeze = issuer_op("mtxUnfreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_}),
-        issuer, &owner, router, token, 1, chain_id, uid);
+    let freeze = issuer_op(&rpc, "mtxFreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_,
+        "recordId": format!("{:#x}", B256::ZERO)}), issuer, &owner, router, token, 0).await;
+    let unfreeze = issuer_op(&rpc, "mtxUnfreeze", json!({"target": format!("{token:#x}"), "account": format!("{a:#x}"), "ref": ref_}),
+        issuer, &owner, router, token, 1).await;
     let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{token:#x}")], ..Default::default() }));
     let odoo = odoo_at(start_fake(state.clone()).await);
     let cfg = ChainCfg { governance_routers: vec![router], ..chain_cfg(chain_id, &rpc, None) };
@@ -2211,16 +2405,24 @@ async fn pqz_rotation_on_anvil() {
 
 mod pqz3f {
     alloy::sol! {
-        // group 3h (T59): `ownTag` after `salt`
+        // group 3h (T59): `ownTag` after `salt`; the three-key model (CTR-PQZ-40): `uFrom` after `vAuditor`, the two openings last
+        #[derive(Default)]
+        struct PqzOpening { bytes mlkemCt; bytes32 x25519Eph; bytes sealedSeed; }
         struct PqzTransferArgs { uint64 p; uint256 validUntilBlock; uint256 shieldIn; bytes32 fromUA; uint64 keyVersion; bytes32 toUA;
-            bytes32 beneficiaryUA; bytes16 salt; bytes32 ownTag; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes sealedMemo; }
+            bytes32 beneficiaryUA; bytes16 salt; bytes32 ownTag; bytes u; bytes vTo; bytes vFrom; bytes vAuditor; bytes uFrom;
+            bytes sealedMemo; PqzOpening openingTo; PqzOpening openingAuditor; }
+        // K3-3 (CTR-UA-43): what a scoped key record signs (`setPqzScopedKey` / `storePqzScopedPop`: the node's `IUARegistry`)
+        function pqzScopedKeyRecordDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
+            bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes32 openKemHash, uint64 validUntilBlock) external pure returns (bytes32);
+        function chainUid() external view returns (bytes32);
         function transferSingleStatement(PqzTransferArgs t, bytes32 binding) external view returns (bytes);
-        function pqzRevokeVerifier() external;
-        function setKindEnabled(uint8 kind, bool on) external;
-        function latestEnvVersion(uint8 kind) external view returns (uint16);
+        function pqzRevokeVerifier(bytes32 chainUid_) external; // CTR-GOV-28: the token's chain word
+        function setTokenKindEnabled(uint8 kind, bool on, bytes32 chainUid) external;
+        function latestTokenEnvVersion(uint8 kind) external view returns (uint16);
         function latestVersion(uint8 kind) external view returns (uint64);
         function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
         function mtxShield(bytes32 toUA, uint256 amount) external;
+        function totalShielded() external view returns (uint256);
         function keyHashOf(uint16 kind, bytes keyData) external pure returns (bytes32);
         // group 3h (T58, T63): the debit record's view
         struct DebitRecordView { address prevBlob; uint64 p; uint16 deltaP; uint8 proofStore; uint64 shieldIn; uint64 keyVersion;
@@ -2229,7 +2431,7 @@ mod pqz3f {
     }
 }
 
-/// `UAKinds.FNDSA512`: Falcon-512 over the 32-byte `ua_msg` (pure Solidity, `UAFndsaVerifier`; no precompile).
+/// `UAKinds.FNDSA512`: Falcon-512 over the 32-byte `ua_msg` (pure Solidity, `FndsaVerifier`; no precompile).
 const UA_FNDSA512: u16 = 0x0132;
 
 /// A plain CREATE of `code` by `from`: the new contract.
@@ -2244,6 +2446,12 @@ async fn deploy_code(rpc: &str, from: &PrivateKeySigner, code: Vec<u8>) -> Addre
 /// The init code of `out/<name>.sol/<name>.json`, every library linked by placeholder: the base deploy's
 /// (`broadcast/Deploy.s.sol/<chain_id>/run-latest.json`) or `extra`'s; with the transitive library closure, leaf first.
 fn linked_closure(chain_id: u64, name: &str, extra: &BTreeMap<String, Address>) -> (Vec<u8>, Vec<Address>) {
+    linked_closure_in(chain_id, None, name, extra)
+}
+
+/// As [`linked_closure`] for contract `name` of the artifact file `file` (`<name>.sol` when `None`; a body module sits in
+/// its kind's `<Kind>Modules.sol`).
+fn linked_closure_in(chain_id: u64, file: Option<&str>, name: &str, extra: &BTreeMap<String, Address>) -> (Vec<u8>, Vec<Address>) {
     let read = |p: String| -> Value { serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{p}: {e}"))).unwrap() };
     let run = read(format!("{}/broadcast/Deploy.s.sol/{chain_id}/run-latest.json", sc()));
     let mut libs: BTreeMap<String, Address> = run["libraries"].as_array().unwrap().iter().map(|l| {
@@ -2271,8 +2479,35 @@ fn linked_closure(chain_id: u64, name: &str, extra: &BTreeMap<String, Address>) 
         alloy::hex::decode(code).unwrap()
     }
     let mut closure = Vec::new();
-    let code = walk(&format!("{name}.sol"), name, &libs, &mut closure);
+    let code = walk(file.unwrap_or(&format!("{name}.sol")), name, &libs, &mut closure);
     (code, closure)
+}
+
+/// T66b §4.5: `kind`'s body modules as (artifact file, contract) in its `implArgs` order, from the generated
+/// `script/KindModules.sol` (`kindModuleNames`, the list DeployBase reads).
+fn kind_module_names(kind: u8) -> Vec<(String, String)> {
+    let src = std::fs::read_to_string(format!("{}/script/KindModules.sol", sc())).unwrap();
+    let at = src.find(&format!("if (kind == {kind}) {{")).unwrap_or_else(|| panic!("kind {kind} in KindModules.sol"));
+    let body = &src[at..at + src[at..].find("return n;").unwrap()];
+    body.split('"').skip(1).step_by(2).map(|q| {
+        let (f, n) = q.split_once(':').unwrap();
+        (f.to_string(), n.to_string())
+    }).collect()
+}
+
+/// `kind`'s body modules for `factory` (`core`: the kind's constructor argument, "" on 0-5), each a plain CREATE, its
+/// libraries linked as `linked_closure`; the modules and the union of their link closures.
+async fn kind_modules(rpc: &str, chain_id: u64, from: &PrivateKeySigner, factory: Address, kind: u8, core: Bytes,
+    extra: &BTreeMap<String, Address>) -> (Vec<Address>, Vec<Address>)
+{
+    let (mut ms, mut libs) = (Vec::new(), Vec::new());
+    for (file, name) in kind_module_names(kind) {
+        let (mut code, closure) = linked_closure_in(chain_id, Some(&file), &name, extra);
+        code.extend((factory, core.clone()).abi_encode_params());
+        ms.push(deploy_code(rpc, from, code).await);
+        libs.extend(closure.into_iter().filter(|l| !libs.contains(l)).collect::<Vec<_>>());
+    }
+    (ms, libs)
 }
 
 /// The typed `PqzAuth` digest of a debit statement (`PqzCore.authDigest`, pqz-core `pqz-vectors`'s `auth_digest`): the typehash,
@@ -2318,6 +2553,23 @@ impl PqHolder {
         me
     }
 
+    /// K3-3: its scoped version 0 for `scope` (class 3, the token; the opening off: no KEM key), signed under
+    /// `PURPOSE_PQZ_SCOPED_KEY` over the registry's `pqzScopedKeyRecordDigest`, then the proof bytes stored.
+    async fn register_scoped(&self, rpc: &str, registry: Address, deployer: &PrivateKeySigner, scope: Address, pqz_key: Vec<u8>,
+        pqz_pop: Vec<u8>) {
+        let kh = view(rpc, registry, pqz3f::keyHashOfCall { kind: 0x0142, keyData: pqz_key.clone().into() }).await;
+        let (ph, uid) = (keccak256(&pqz_pop), view(rpc, registry, pqz3f::chainUidCall {}).await);
+        let rd = view(rpc, registry, pqz3f::pqzScopedKeyRecordDigestCall { ua: self.ua, keyClass: 3, chainUid: uid, token: scope,
+            version: 0, pqzKeyHash: kh, pqzPopHash: ph, openKemHash: B256::ZERO, validUntilBlock: u64::MAX }).await;
+        let sig = self.sign(rpc, registry, b"scaas.ua.purpose.pqz-scoped-key.v1", rd).await;
+        use scaas_node::abi::IUARegistry as R;
+        let no_kem = R::KemKey { scheme: 0, mlkemEk: Bytes::new(), x25519: B256::ZERO };
+        send(rpc, deployer, registry, R::setPqzScopedKeyCall { ua: self.ua, scope, version: 0, pqzKey: pqz_key.into(), pqzPopHash: ph,
+            openKem: no_kem, validUntilBlock: u64::MAX, sig: UASig { keyData: Bytes::new(), signature: sig.into(), members: vec![] } }
+            .abi_encode()).await;
+        send(rpc, deployer, registry, R::storePqzScopedPopCall { ua: self.ua, scope, version: 0, pqzPop: pqz_pop.into() }.abi_encode()).await;
+    }
+
     /// The Falcon signature over the registry's `uaMessage(fndsa512, purpose, digest)`.
     async fn sign(&self, rpc: &str, registry: Address, purpose: &[u8], digest: B256) -> Vec<u8> {
         use pqcrypto_falcon::falconpadded512 as falcon;
@@ -2352,6 +2604,11 @@ struct OffchainStack {
 }
 
 async fn offchain_stack(chain_id: u64) -> OffchainStack {
+    offchain_stack_vf(chain_id, 0).await
+}
+
+/// Round 3t (CTR-PQZ-36): the stack with `verifierFee = verifierFeeMax = vf`.
+async fn offchain_stack_vf(chain_id: u64, vf: u64) -> OffchainStack {
     let deployer = key(DEPLOYER);
     let (anvil, rpc) = start_anvil(chain_id, chain_id as u16).await;
     let dep = deploy(&rpc, chain_id, deployer.address());
@@ -2362,25 +2619,32 @@ async fn offchain_stack(chain_id: u64) -> OffchainStack {
         let (code, _) = linked_closure(chain_id, lib, &BTreeMap::new());
         extra.insert(format!("src/pqz/{lib}.sol:{lib}"), deploy_code(&rpc, &deployer, code).await);
     }
-    let (code, libs) = linked_closure(chain_id, "NormalPqzToken", &extra);
+    let (code, mut libs) = linked_closure(chain_id, "NormalPqzToken", &extra);
+    // T66b §4.5: the kind's body modules, their link closures beside the face's, the modules pinned after the libraries
+    let (ms, mlibs) = kind_modules(&rpc, chain_id, &deployer, factory, 4, Bytes::new(), &extra).await;
+    libs.extend(mlibs.into_iter().filter(|l| !libs.contains(l)).collect::<Vec<_>>());
+    libs.extend(ms.iter().copied());
     let pr = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
     let mut hashes = Vec::new();
     for l in &libs {
         hashes.push(keccak256(pr.get_code_at(*l).await.unwrap()));
     }
-    let mut env = view(&rpc, factory, envOfCall { kind: 0, envVersion: 1 }).await;
+    let mut env = view(&rpc, factory, tokenEnvOfCall { kind: 0, envVersion: 1 }).await;
     (env.deps, env.libs, env.libCodeHashes) = (vec![Address::ZERO], libs, hashes);
-    let ev = view(&rpc, factory, pqz3f::latestEnvVersionCall { kind: 4 }).await + 1;
-    send(&rpc, &deployer, factory, publishEnvCall { kind: 4, envVersion: ev, env }.abi_encode()).await;
+    let ev = view(&rpc, factory, pqz3f::latestTokenEnvVersionCall { kind: 4 }).await + 1;
+    let chain_uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    send(&rpc, &deployer, factory, publishTokenEnvCall { kind: 4, envVersion: ev, chainUid: chain_uid, env }.abi_encode()).await;
     let ver = view(&rpc, factory, pqz3f::latestVersionCall { kind: 4 }).await + 1;
-    send(&rpc, &deployer, factory, deployImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
-        implArgs: Bytes::new() }.abi_encode()).await;
-    send(&rpc, &deployer, factory, pqz3f::setKindEnabledCall { kind: 4, on: true }.abi_encode()).await;
+    send(&rpc, &deployer, factory, deployTokenImplementationCall { kind: 4, version: ver, envVersion: ev, initcode: code.into(),
+        implArgs: ImplArgs { modules: ms }.abi_encode().into(), chainUid: chain_uid }.abi_encode()).await;
+    send(&rpc, &deployer, factory, pqz3f::setTokenKindEnabledCall { kind: 4, on: true, chainUid: chain_uid }.abi_encode()).await;
     let verifier = small_key(0x3f47);
     let c = TokenConfig { name: "SCaaS PQZ OFFCHAIN".into(), symbol: "pqOFF".into(), decimals: 6, features: U256::from(1u8), // PAYABLE
         owner: deployer.address().into_word(), initialSupply: U256::from(1_000_000u64), initialHolder: deployer.address(),
         conf: ConfidentialConfig { shieldScale: U256::from(1u8), maxShielded: U256::from(1u64 << 40), pqzVerifyMode: 1,
-            pqzVerifierUA: verifier.address().into_word(), pqzVerifierFixed: false, ..Default::default() }, ..Default::default() };
+            pqzVerifierUA: verifier.address().into_word(), pqzVerifierFixed: false, verifierFee: vf, verifierFeeMax: vf,
+            pqzOwnKey: true, ..Default::default() }, // class 3 (CTR-PQZ-37), the opening off: the holders' records scoped to the token
+        ..Default::default() };
     let token = create(&rpc, &deployer, factory, createTokenCall { kind: 4, version: ver, initArgs: c.abi_encode().into(),
         salt: B256::repeat_byte(0x3f) }.abi_encode()).await;
     let cfg = view(&rpc, token, scaas_node::abi::IPqzToken::pqzVerifyConfigCall {}).await;
@@ -2398,9 +2662,19 @@ async fn offchain_stack(chain_id: u64) -> OffchainStack {
     let hexb = |v: &Value| alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap();
     let pop = hexb(&row("registrations", &format!("mldsa65/{name}"))["pqzPop"]);
     let from = PqHolder::register(&rpc, registry, &deployer, hexb(&row("pqzKeyRecords", &format!("fndsa512/{name}"))["pqzKey"]), pop.clone()).await;
-    let to = PqHolder::register(&rpc, registry, &deployer, hexb(&row("pqzKeyRecords", &format!("mldsa87/{name}"))["pqzKey"]), pop).await;
+    let (key_a, key_b) = (hexb(&row("pqzKeyRecords", &format!("fndsa512/{name}"))["pqzKey"]), hexb(&row("pqzKeyRecords", &format!("mldsa87/{name}"))["pqzKey"]));
+    let to = PqHolder::register(&rpc, registry, &deployer, key_b.clone(), pop.clone()).await;
+    // class 3 (K3-3): each holder's version 0 scoped to the token, the other's portable key (a key is unique per UA, `pqzKeyUsed`;
+    // pk_f != pk_t, KV-9), the proof bytes stored unchecked (no 0x0142 verifier on anvil)
+    from.register_scoped(&rpc, registry, &deployer, token, key_b, pop.clone()).await;
+    to.register_scoped(&rpc, registry, &deployer, token, key_a, pop).await;
     let uid = pr.get_block_by_number(0.into()).await.unwrap().unwrap().header.hash;
     OffchainStack { _anvil: anvil, rpc, chain_id, uid, registry, token, verifier, from, to, pk_len: constant("PK"), v_len: constant("V") }
+}
+
+/// The empty `PqzOpening` (a token with the opening off; CTR-PQZ-40).
+fn no_opening() -> Value {
+    json!({"mlkemCt": "0x", "x25519Eph": format!("{:#x}", B256::ZERO), "sealedSeed": "0x"})
 }
 
 impl OffchainStack {
@@ -2419,7 +2693,8 @@ impl OffchainStack {
         let t = pqz3f::PqzTransferArgs { p: 0, validUntilBlock: U256::from(block + 200), shieldIn: U256::ZERO, fromUA: self.from.ua,
             keyVersion: 0, toUA: self.to.ua, beneficiaryUA: B256::ZERO, salt: alloy::primitives::FixedBytes([0x5a; 16]), ownTag: own_tag,
             u: lanes(self.pk_len, 1).into(), vTo: lanes(self.v_len, 1).into(), vFrom: lanes(self.v_len, 1).into(),
-            vAuditor: Bytes::new(), sealedMemo: Bytes::new() };
+            vAuditor: Bytes::new(), uFrom: Bytes::new(), sealedMemo: Bytes::new(), openingTo: Default::default(),
+            openingAuditor: Default::default() };
         let until = now() + 600;
         let m = UAMetaTransaction { from: self.from.ua, data: Bytes::new(), batch: U256::ZERO, nonce: U256::from(nonce),
             validUntil: U256::from(until), mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO };
@@ -2430,11 +2705,14 @@ impl OffchainStack {
         let h = |b: &[u8]| format!("0x{}", alloy::hex::encode(b));
         let args = json!({"p": "0", "validUntilBlock": (block + 200).to_string(), "shieldIn": "0", "fromUA": format!("{:#x}", self.from.ua),
             "keyVersion": "0", "toUA": format!("{:#x}", self.to.ua), "beneficiaryUA": format!("{:#x}", B256::ZERO), "salt": h(&[0x5a; 16]),
-            "ownTag": format!("{own_tag:#x}"), "u": h(&t.u), "vTo": h(&t.vTo), "vFrom": h(&t.vFrom), "vAuditor": "0x", "sealedMemo": "0x"});
+            "ownTag": format!("{own_tag:#x}"), "u": h(&t.u), "vTo": h(&t.vTo), "vFrom": h(&t.vFrom), "vAuditor": "0x", "uFrom": "0x",
+            "sealedMemo": "0x", "openingTo": no_opening(), "openingAuditor": no_opening()});
         let envelope = json!({"from": format!("{:#x}", self.from.ua), "batch": "0", "nonce": nonce.to_string(), "validUntil": until.to_string(),
             "mode": 0, "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)});
         let mut op = json!({"entry": "mtxConfidentialTransferSingle", "contract": "pqz", "token": format!("{:#x}", self.token),
-            "envelope": envelope, "args": {"args": args, "proof": h(&proof), "pqzAuth": pqz_auth, "accHint": "0x"},
+            // round 3t (CTR-PQZ-36): an OFFCHAIN debit names its proved fee word, word 256 of the statement the token built
+            "envelope": envelope, "args": {"args": args, "proof": h(&proof), "pqzAuth": pqz_auth, "accHint": "0x",
+                "pqz_fee": U256::from_be_slice(&stmt[256..288]).to_string()},
             "auth": {"keyData": "0x", "signature": "0x", "members": []}});
         let (w, _) = scaas_node::submit::work_of_op(Some(id), &op, None).unwrap();
         let digest = w.typed.unwrap().digest_on(self.chain_id, self.uid).unwrap();
@@ -2531,15 +2809,24 @@ async fn fake_pqz_verifier(stack: &OffchainStack) -> (String, Arc<Mutex<Vec<Valu
 /// configured endpoint, whose request carries the statement and proof the node rebuilt. The node rebuilds each `PqzVerdict`, the
 /// token accepts it (`PqzVerified` over exactly `keccak256(statement)`, `keccak256(proof)`), and the indexer joins it to the
 /// `ConfidentialTransfer` of the same transaction with its position. The node signs nothing and never reads the precompile.
-/// UNAUDITED.
+/// Round 3t (CTR-PQZ-36, spec §15 (10)): the token charges `verifierFee = 3`, so the holder shields first (the fee leaves
+/// `totalShielded`: at 0 the debit underflows); each job names `pqz_fee` = word 256 = 3 (no beneficiary), the verifier EOA's
+/// ERC-20 balance grows by 3 per op and `totalShielded` falls by 3. UNAUDITED.
 #[tokio::test]
 #[ignore]
 async fn pqz_offchain_transfer_on_anvil() {
-    let st = offchain_stack(31947).await;
+    const VF: u64 = 3;
+    let st = offchain_stack_vf(31947, VF).await;
+    let deployer = key(DEPLOYER);
+    send(&st.rpc, &deployer, st.token, pqz3f::mtxShieldCall { toUA: st.from.ua, amount: U256::from(100u8) }.abi_encode()).await;
+    let shielded = || async { view(&st.rpc, st.token, pqz3f::totalShieldedCall {}).await };
+    let paid = || async { balance(&st.rpc, st.token, st.verifier.address()).await };
+    assert_eq!((shielded().await, paid().await), (U256::from(100u8), U256::ZERO), "shielded first");
     let (url, seen) = fake_pqz_verifier(&st).await;
     let (state, mut s) = st.lane(scaas_node::config::PqzVerifierCfg { endpoints: vec![url], ..Default::default() }).await;
     let last = |id: i64| state.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap_or_default();
     let (mut j1, stmt1, proof1) = st.transfer_job(1, 0).await;
+    assert_eq!(U256::from_be_slice(&stmt1[256..288]), U256::from(VF), "the fee word: vf alone, no beneficiary");
     j1["op"]["args"]["pqz_verdict"] = st.verdict(&stmt1, &proof1).await;
     state.lock().unwrap().jobs.push(j1);
     run_outbox(&mut s).await;
@@ -2567,6 +2854,7 @@ async fn pqz_offchain_transfer_on_anvil() {
         assert_eq!(row["pqz_last_verdict_at"].as_u64(), rc.block_number, "job {id}: the health signal");
     }
     assert!(rows.iter().all(|r| r["event"] != "PqzVerified"), "joined, never a row of its own");
+    assert_eq!((shielded().await, paid().await), (U256::from(100 - 2 * VF), U256::from(2 * VF)), "the verifier paid vf per op");
     let chain = Chain::with_signer(&chain_cfg(st.chain_id, &st.rpc, None), key(RELAYER)).unwrap();
     let pqz: Address = "0x000000000000000000000000000000005caa0f01".parse().unwrap();
     assert!(!chain.is_contract_at(pqz).await.unwrap(), "no PQZ precompile on this chain");
@@ -2621,7 +2909,7 @@ async fn pqz_revoked_verifier_on_anvil() {
     let (j1, stmt, proof) = st.transfer_job(1, 0).await;
     let mut j1 = j1;
     j1["op"]["args"]["pqz_verdict"] = st.verdict(&stmt, &proof).await;
-    send(&st.rpc, &deployer, st.token, pqz3f::pqzRevokeVerifierCall {}.abi_encode()).await;
+    send(&st.rpc, &deployer, st.token, pqz3f::pqzRevokeVerifierCall { chainUid_: st.uid }.abi_encode()).await;
     let cfg = view(&st.rpc, st.token, scaas_node::abi::IPqzToken::pqzVerifyConfigCall {}).await;
     assert_eq!(cfg.verifier, B256::ZERO, "revoked at once");
     let (url, seen) = fake_pqz_verifier(&st).await;
@@ -2660,4 +2948,207 @@ async fn pqz_revoked_verifier_on_anvil() {
     let rv = rows.iter().find(|r| r["event"] == "PqzVerifierRevoked").unwrap_or_else(|| panic!("{rows:?}"));
     assert_eq!((rv["alert"].as_bool(), rv["pqz_verifier_revoked"].as_bool(), rv["previous"].as_str()),
         (Some(true), Some(true), Some(format!("{:#x}", st.verifier.address().into_word()).as_str())), "{rv}");
+}
+
+// ------------------------------------------------------------------ mtxLiquidity's pre-checks on a chain (ua-mtx-liquidity L6c)
+
+mod liq {
+    alloy::sol! {
+        function mint(address to) external returns (uint256 liquidity);
+    }
+}
+
+/// `test/liquidity/LiquidityMocks.sol`'s contract `name`: its init code, or its runtime code (`runtime`), built here as
+/// [`deploy_outside_token`] builds its mock.
+fn liquidity_mock(name: &str, runtime: bool) -> Vec<u8> {
+    let built = Command::new("forge").current_dir(sc()).args(["build", "test/liquidity/LiquidityMocks.sol"])
+        .env("FOUNDRY_PROFILE", "scaas-testnet").status();
+    assert!(built.expect("forge in PATH").success(), "forge build test/liquidity/LiquidityMocks.sol failed");
+    let raw = std::fs::read_to_string(format!("{}/out/LiquidityMocks.sol/{name}.json", sc())).expect("forge build output");
+    let v: Value = serde_json::from_str(&raw).unwrap();
+    alloy::hex::decode(v[if runtime { "deployedBytecode" } else { "bytecode" }]["object"].as_str().unwrap()).unwrap()
+}
+
+/// A `mtxLiquidity` job on `dex` of `(chain_id, chain_uid, dex)` (spec 2026-11-10-dex-liquidity.md §11's shape): `who`'s native
+/// order of `inputs` (each pulled whole) for at least `min_lp` of `lp` to `to` (`out`), fee 0, bound to the lane, lane 7 at nonce
+/// `id`; signed by `who` over the node's `h` in `dex`'s domain ([`sign_liquidity`]).
+fn liquidity_job(id: i64, (chain_id, uid, dex): (u64, B256, Address), who: &PrivateKeySigner, inputs: &[(Address, u64)],
+    (lp, min_lp, to): (Address, u64, Address), interactions: Value) -> Value {
+    let toks = |v: &[(Address, u64)]| v.iter().map(|(t, a)| json!({"token": format!("{t:#x}"), "amount": a.to_string()})).collect::<Vec<_>>();
+    let until = (now() + 600).to_string();
+    let mut j = json!({"id": id, "kind": "call", "op": {"entry": "mtxLiquidity", "contract": "dex", "token": format!("{dex:#x}"),
+        "validUntil": until,
+        "args": {"p": {"ref": format!("{:#x}", B256::left_padding_from(&(id as u64).to_be_bytes())), "order": {
+                "from": format!("{:#x}", who.address().into_word()), "inputs": toks(inputs), "outputs": toks(&[(lp, min_lp)]),
+                "positionManager": format!("{:#x}", Address::ZERO), "positionReader": format!("{:#x}", Address::ZERO), "positionIn": "0",
+                "positionPool": format!("{:#x}", B256::ZERO), "tickLower": 0, "tickUpper": 0, "minLiquidity": "0",
+                "recipient": format!("{:#x}", to.into_word()), "fee": "0", "relayer": format!("{:#x}", key(RELAYER).address()), "flags": 0,
+                "batch": "7", "nonce": id.to_string(), "validUntil": until},
+            "auth": {"keyData": "0x", "signature": "0x", "members": []},
+            "pull": inputs.iter().map(|(_, a)| a.to_string()).collect::<Vec<_>>(), "positionId": "0", "extraTokens": []},
+            "interactions": interactions}}});
+    sign_liquidity(&mut j, (chain_id, uid, dex), who);
+    j
+}
+
+/// `who`'s signature over the node's `h` of the job's order in `dex`'s domain, again after an edit of the order.
+fn sign_liquidity(j: &mut Value, (chain_id, uid, dex): (u64, B256, Address), who: &PrivateKeySigner) {
+    let (w, _) = scaas_node::submit::work_of_op(None, &j["op"], None).unwrap();
+    let o = scaas_node::abi::ISCaaSDex::mtxLiquidityCall::abi_decode(&w.data).unwrap().p.order;
+    let h = scaas_node::dex::liquidity_order_hash(&domain("SCaaS Dex", chain_id, dex, uid), &o);
+    j["op"]["args"]["p"]["auth"]["signature"] = json!(sign_hash(who, h));
+}
+
+/// A submitter on the `RELAYER` lane for a chain whose profile lists `dex` as its DEX.
+async fn liquidity_lane(chain_id: u64, rpc: &str, odoo: &Odoo, dex: Address, name: &str) -> Submitter {
+    let cfg = chain_cfg(chain_id, rpc, Some(dex));
+    Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg, name.into(), Default::default()).await.unwrap()
+}
+
+/// Spec 2026-11-10-dex-liquidity.md §11 through the RPC (review P1-2 (b), P2-6, re-check P3): the deployed liquidity DEX takes a
+/// v2 add of two SCaaS inputs (mined: the positive control); a DEX bound to the chain whose `modules()` lacks group 11 is
+/// `DEX_NOT_LIQUIDITY`; a listed SCaaS input whose code answers no `ILiquidityPullToken` (a token of an earlier release, its
+/// code set by `anvil_setCode` after the listing) is `LIQUIDITY_TOKEN_UNSUPPORTED`; a marked DEX whose simulation answers
+/// `NotLiquidityDex(dex)` (T7 starved) is requeued, never `dead`; `LIQUIDITY_TOO_LARGE` under a lane's `max_gas_per_tx` of 1 M
+/// (the block 200 M; two inputs, 1.1 M) and under a 1 M block (`max_gas_per_tx` 3 M; one input, 1.05 M). L6d, the order's own
+/// pre-checks on the deployed DEX, each one change from a mined add: the same order again is `consumed`
+/// (`LIQUIDITY_ORDER_CLOSED`, pulled), a signature over
+/// another digest `BAD_SIGNATURE`, another relayer `LIQUIDITY_WRONG_RELAYER`, a signed `validUntil` past while the job's is
+/// ahead `expired before submit`, a marked DEX answering another `liquidityOrderDigest` `LIQUIDITY_DIGEST_MISMATCH`. Every
+/// refusal sends nothing.
+#[tokio::test]
+#[ignore]
+async fn liquidity_pre_checks_on_a_chain() {
+    let chain_id = 31917;
+    let (_anvil, rpc) = start_anvil(chain_id, 31917).await;
+    let alice = small_key(0xA11CE);
+    let carol = Address::repeat_byte(0xca);
+    let dep = deploy(&rpc, chain_id, alice.address());
+    let at = |k: &str| -> Address { dep[k].as_str().unwrap().parse().unwrap() };
+    let uid: B256 = dep["chain_uid"].as_str().unwrap().parse().unwrap();
+    let (a, b, factory) = (at("demo_token"), at("demo_token_2"), at("token_factory"));
+    let deployer = key(DEPLOYER);
+    let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { owner: deployer.address().into_word(),
+        relayerSharePpm: 0, treasury: Address::repeat_byte(0x7a), listedOnly: false, grantDelay: 0, rescueTo: Address::ZERO, features: U256::ZERO, lockedFeatures: U256::ZERO }.abi_encode().into(),
+        salt: B256::repeat_byte(0x11) }.abi_encode()).await;
+    send(&rpc, &deployer, dex, setMarketCall { base: a, quote: b, listed: true, chainUid_: uid }.abi_encode()).await;
+    let ms = view(&rpc, dex, scaas_node::abi::ISCaaSDex::modulesCall {}).await;
+    assert_eq!(ms.len(), 2, "the governance and the liquidity module");
+    let mut pair_code = liquidity_mock("MockV2LiquidityPair", false);
+    pair_code.extend((a, b).abi_encode_params());
+    let pair = deploy_code(&rpc, &deployer, pair_code).await;
+    let node_dex = |ms: Vec<Address>, wrong: bool| {
+        let mut c = liquidity_mock("MockNodeDex", false);
+        c.extend((uid, ms, wrong).abi_encode_params());
+        c
+    };
+    let old_dex = deploy_code(&rpc, &deployer, node_dex(vec![ms[0]], false)).await;
+    let starved_dex = deploy_code(&rpc, &deployer, node_dex(ms.clone(), false)).await;
+    let wrong_dex = deploy_code(&rpc, &deployer, node_dex(ms.clone(), true)).await;
+
+    let state = Arc::new(Mutex::new(FakeOdoo { tokens: vec![format!("{a:#x}"), format!("{b:#x}")], ..Default::default() }));
+    let odoo = odoo_at(start_fake(state.clone()).await);
+    let pr = ProviderBuilder::new().connect_http(rpc.parse().unwrap());
+    let sends = || async { pr.get_transaction_count(key(RELAYER).address()).await.unwrap() };
+    let reports = |id: i64| state.lock().unwrap().reports.iter().filter(|r| r["job_id"] == id).cloned().collect::<Vec<_>>();
+    let ix = |t: Address, d: Vec<u8>| json!({"target": format!("{t:#x}"), "data": format!("0x{}", alloy::hex::encode(d))});
+    let add_n = |x: u64| json!([ix(a, IToken::transferCall { to: pair, value: U256::from(x) }.abi_encode()),
+        ix(b, IToken::transferCall { to: pair, value: U256::from(x) }.abi_encode()),
+        ix(pair, liq::mintCall { to: dex }.abi_encode())]);
+    let add = add_n(100_000);
+
+    // the positive control: the deployed DEX, two SCaaS inputs, mined; the node's `h` is the DEX's
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-dex").await;
+    let j1 = liquidity_job(1, (chain_id, uid, dex), &alice, &[(a, 100_000), (b, 100_000)], (pair, 98_000, carol), add.clone());
+    let (w1, _) = scaas_node::submit::work_of_op(Some(1), &j1["op"], None).unwrap();
+    let o1 = scaas_node::abi::ISCaaSDex::mtxLiquidityCall::abi_decode(&w1.data).unwrap().p.order;
+    assert_eq!(view(&rpc, dex, scaas_node::abi::ISCaaSDex::liquidityOrderDigestCall { o: o1.clone() }).await,
+        scaas_node::dex::liquidity_order_hash(&domain("SCaaS Dex", chain_id, dex, uid), &o1), "the node's h is the DEX's");
+    state.lock().unwrap().jobs.push(j1.clone());
+    run_outbox(&mut s).await;
+    assert_eq!(report(&state, 1)["chain_state"], "mined", "{}", report(&state, 1));
+    assert!(balance(&rpc, pair, carol).await >= U256::from(98_000u64), "the LP to the recipient");
+    // L6d's positive control: a second add of 1 000 each, mined; jobs 7-9 and 11 are this shape with one change
+    let two = [(a, 1_000), (b, 1_000)];
+    let dom = (chain_id, uid, dex);
+    state.lock().unwrap().jobs.push(liquidity_job(12, dom, &alice, &two, (pair, 1, carol), add_n(1_000)));
+    run_outbox(&mut s).await;
+    assert_eq!(report(&state, 12)["chain_state"], "mined", "{}", report(&state, 12));
+    let n0 = sends().await;
+
+    // L6d: the order's own pre-checks (spec §11), each one change from a passing job; every miss listed at once
+    let mut red: Vec<String> = vec![];
+    let mut want = |id: i64, st: &str, code: &str| {
+        let r = reports(id).pop().unwrap_or_default();
+        if !(r["chain_state"] == st && r["error"].as_str().unwrap_or_default().contains(code)) {
+            red.push(format!("job {id}: want {st} {code}, got {r}"));
+        }
+    };
+    let mut j6 = j1.clone();
+    j6["id"] = json!(6);
+    let mut j7 = liquidity_job(7, dom, &alice, &two, (pair, 1, carol), add_n(1_000));
+    j7["op"]["args"]["p"]["auth"]["signature"] = json!(sign_hash(&alice, B256::repeat_byte(7)));
+    let mut j8 = liquidity_job(8, dom, &alice, &two, (pair, 1, carol), add_n(1_000));
+    j8["op"]["args"]["p"]["order"]["relayer"] = json!(format!("{:#x}", Address::repeat_byte(0xbe)));
+    sign_liquidity(&mut j8, dom, &alice);
+    let mut j9 = liquidity_job(9, dom, &alice, &two, (pair, 1, carol), add_n(1_000));
+    j9["op"]["args"]["p"]["order"]["validUntil"] = json!((now() - 1).to_string());
+    sign_liquidity(&mut j9, dom, &alice);
+    state.lock().unwrap().jobs.extend([j6, j7, j8, j9]);
+    run_outbox(&mut s).await;
+    want(6, "consumed", "LIQUIDITY_ORDER_CLOSED");
+    want(7, "dead", "BAD_SIGNATURE");
+    want(8, "dead", "LIQUIDITY_WRONG_RELAYER");
+    want(9, "dead", "expired before submit");
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, wrong_dex, "e2e-liq-wrong").await;
+    state.lock().unwrap().jobs.push(liquidity_job(10, (chain_id, uid, wrong_dex), &alice, &two, (pair, 1, carol), add_n(1_000)));
+    run_outbox(&mut s).await;
+    want(10, "dead", "LIQUIDITY_DIGEST_MISMATCH");
+    // the budget against the lane's per-transaction cap, below the block's 200 M: two inputs need 1.1 M, the lane allows 1 M
+    let cfg = ChainCfg { max_gas_per_tx: 1_000_000, ..chain_cfg(chain_id, &rpc, Some(dex)) };
+    let mut s = Submitter::start(Chain::with_signer(&cfg, key(RELAYER)).unwrap(), odoo.clone(), cfg, "e2e-liq-pertx".into(),
+        Default::default()).await.unwrap();
+    state.lock().unwrap().jobs.push(liquidity_job(11, dom, &alice, &two, (pair, 1, carol), add_n(1_000)));
+    run_outbox(&mut s).await;
+    want(11, "dead", "LIQUIDITY_TOO_LARGE");
+    assert!(red.is_empty(), "{red:#?}");
+
+    // a DEX of the release before the liquidity module: bound, on the profile, no group 11
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, old_dex, "e2e-liq-old").await;
+    state.lock().unwrap().jobs.push(liquidity_job(2, (chain_id, uid, old_dex), &alice, &[(a, 1_000)], (pair, 1, carol), add.clone()));
+    run_outbox(&mut s).await;
+    let r2 = report(&state, 2);
+    assert!(r2["chain_state"] == "dead" && r2["error"].as_str().unwrap_or_default().starts_with("DEX_NOT_LIQUIDITY"), "{r2}");
+
+    // a token of an earlier release as a SCaaS input: the DEX's factory still answers a version for it (CTR-DEX-32: the shape the
+    // guard reads), its code answers no ILiquidityPullToken
+    let earlier = format!("0x{}", alloy::hex::encode(liquidity_mock("MockEarlierToken", true)));
+    let _: Value = pr.raw_request("anvil_setCode".into(), (b, earlier)).await.unwrap();
+    let factory = view(&rpc, dex, scaas_node::abi::ISCaaSDex::factoryCall {}).await;
+    assert_ne!(view(&rpc, factory, scaas_node::abi::IOpenFactory::versionOfCall { token: b }).await.version, 0,
+        "still a SCaaS input to the DEX");
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-earlier").await;
+    state.lock().unwrap().jobs.push(liquidity_job(3, (chain_id, uid, dex), &alice, &[(a, 1_000), (b, 1_000)], (pair, 1, carol), add.clone()));
+    run_outbox(&mut s).await;
+    let r3 = report(&state, 3);
+    assert!(r3["chain_state"] == "dead" && r3["error"].as_str().unwrap_or_default().starts_with("LIQUIDITY_TOKEN_UNSUPPORTED"), "{r3}");
+
+    // T7 starved on a marked DEX: requeued, never dead
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, starved_dex, "e2e-liq-starved").await;
+    state.lock().unwrap().jobs.push(liquidity_job(4, (chain_id, uid, starved_dex), &alice, &[(a, 1_000)], (pair, 1, carol), add.clone()));
+    run_outbox(&mut s).await;
+    let r4 = reports(4);
+    assert!(!r4.is_empty() && r4.iter().all(|r| r["chain_state"] == "queued"), "requeued, never dead: {r4:?}");
+    assert!(r4.iter().all(|r| r["error"].as_str().unwrap_or_default().contains("NotLiquidityDex(")), "{r4:?}");
+
+    // the verify budget against this chain's block: a native signer's one input needs 1.05 M, the block holds 1 M, the lane's
+    // max_gas_per_tx 3 M
+    let _: Value = pr.raw_request("evm_setBlockGasLimit".into(), (U256::from(1_000_000u64),)).await.unwrap();
+    let _: Value = pr.raw_request("evm_mine".into(), ()).await.unwrap();
+    let mut s = liquidity_lane(chain_id, &rpc, &odoo, dex, "e2e-liq-large").await;
+    state.lock().unwrap().jobs.push(liquidity_job(5, (chain_id, uid, dex), &alice, &[(a, 1_000)], (pair, 1, carol), add));
+    run_outbox(&mut s).await;
+    let r5 = report(&state, 5);
+    assert!(r5["chain_state"] == "dead" && r5["error"].as_str().unwrap_or_default().starts_with("LIQUIDITY_TOO_LARGE"), "{r5}");
+    assert_eq!(sends().await, n0, "no refusal sends");
 }

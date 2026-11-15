@@ -1,0 +1,19 @@
+# ua-mtx-rescue-vault gate (step | commit | rc | counts). Full output in git-ignored *.log beside this file.
+# forge: one run, `forge test -j 1 --match-path 'test/*.t.sol'` (the glob crosses directories: every test dir), default set
+# n2304-kmax4096, isolate = true; counts per directory from that run.
+forge all | aec1371c | 1 | 395 suites, 4051 passed, 1 failed, 16 skipped
+  account 4 suites 58 passed; as 69 / 353; confidential 1 / 5; factory 1 / 2; fork 1 / 0 (1 skipped); governance 52 / 504;
+  hedera 2 / 20; liquidity 8 / 80 (1 skipped); merge 10 / 118; metatx 36 / 400; modules 12 / 35; p6f 1 / 4; pqchat 9 / 99;
+  pqz 40 / 455 (4 skipped); pqzh 3 / 42; research 6 / 92, 1 failed (6 skipped); top-level 5 / 29; ua 46 / 636; v2 46 / 611;
+  wallet 6 / 100; wrap 10 / 72; zether 27 / 336 (4 skipped); vectors: data only, no tests
+  red: research/PqzProofStoreGas.t.sol test_debitMinGas_isTheCheapestLogDebit, "set.toml debit_min_gas: the LOG burn's full
+  relayed regular gas: 7514684 != 7514750": not this branch's (owner-ruled; debit_min_gas is fixed on ua-mtx-fix2-contracts);
+  set.toml untouched
+pqz n2048-kmax1024 | aec1371c | 0 | 40 suites, 456 passed, 0 failed, 3 skipped
+pqz n2560-kmax16384 | aec1371c | 0 | 40 suites, 451 passed, 0 failed, 8 skipped
+pqz n2816-kmax65536 | aec1371c | 0 | 40 suites, 446 passed, 0 failed, 13 skipped
+size gate | aec1371c | 0 | 0 errors, 169 contracts
+RescueVault mutants | aec1371c | 0 | 23/23 killed (mutants.json)
+clientkeys npm test | aec1371c | 0 | 336 tests, 334 passed, 0 failed, 2 skipped
+docs_check | aec1371c | 0 | 0 errors; test_docs_check ok
+# modules needs the git-ignored out/t66b-legacy/ (script/modules/legacy_artifacts.py build, or a copy from a worktree that has it).

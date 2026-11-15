@@ -21,6 +21,7 @@ import {SSTORE2} from "../../src/common/SSTORE2.sol";
 import {UACall} from "../ua/UACall.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 import {PQZ_UID} from "./helpers/PqzRegistryBase.sol";
 
 /// Group 3f, T44 (PQZ verifier mode spec §3, §5, §6; CTR-PQZ-27, -29, -30 drafts): the `OFFCHAIN` core. Positive control
@@ -168,8 +169,8 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         _shieldOn(t, alice, 10);
         (IPqzToken.PqzTransferArgs memory a, bytes memory st) = _op1Of(t, alice, bob, 5, true);
         IPqzToken.PqzSignedVerdict memory old = _sv(t, st);
-        t.pqzSetVerifier(vB);
-        t.pqzSetVerifier(vA);
+        t.pqzSetVerifier(vB, EnvKit.codeUidOf(address(t)));
+        t.pqzSetVerifier(vA, EnvKit.codeUidOf(address(t)));
         assertEq(t.pqzVerifyConfig().pqzVerifierEpoch, 2);
         assertEq(t.pqzVerifyConfig().verifier, vA);
         vm.expectRevert(_mismatch(5));
@@ -182,7 +183,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         _shieldOn(t, alice, 10);
         (IPqzToken.PqzTransferArgs memory a, bytes memory st) = _op1Of(t, alice, bob, 5, true);
         IPqzToken.PqzSignedVerdict memory sv = _sv(t, st);
-        t.pqzRevokeVerifier();
+        t.pqzRevokeVerifier(EnvKit.codeUidOf(address(t)));
         vm.expectRevert(IPqzToken.PqzVerifierRevoked.selector);
         t.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", sv);
     }
@@ -219,9 +220,9 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     }
 
     function _create(uint8 mode, bytes32 v, bool fixed_) internal returns (address) {
-        (vMode, vUA, vFixed) = (mode, v, fixed_);
+        (vMode, vUA, vFixed, vOwnKey) = (mode, v, fixed_, mode == 1); // OFFCHAIN: class offchain-token (CTR-PQZ-37)
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        (vMode, vUA, vFixed) = (0, bytes32(0), false);
+        (vMode, vUA, vFixed, vOwnKey) = (0, bytes32(0), false, false);
         return factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), keccak256(abi.encode(mode, v, fixed_)));
     }
 
@@ -249,12 +250,12 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
 
     /// A release with `deps = [0]` on a second factory (the release passes `validateEnv`).
     function _zeroDepFactory() internal returns (OpenFactory f) {
-        f = new OpenFactory(registrar);
+        f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(0));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f), PQZ_UID, address(reg), address(0)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
     }
 
     /// PRECOMPILE on it: `SelfTestFailed(address(0))` before any call (the auditor's key is not even read).
@@ -269,10 +270,11 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     /// OFFCHAIN on it initialises and runs a transfer; the precompile is never called (an absent one: no mock answers).
     function test_release_zeroDep_offchainInits() public {
         OpenFactory f = _zeroDepFactory();
-        (vMode, vUA, vFixed) = (1, vA, false);
+        (vMode, vUA, vFixed, vOwnKey) = (1, vA, false, true);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        (vMode, vUA, vFixed) = (0, bytes32(0), false);
+        (vMode, vUA, vFixed, vOwnKey) = (0, bytes32(0), false, false);
         NormalPqzToken t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "zero-dep-off"));
+        _scopedAll(address(t), false);
         assertEq(t.verifier(), address(0));
         assertEq(t.precompile(), address(0));
         assertEq(t.proofSystemId(), PqzSet.PQZL_ID);
@@ -322,8 +324,16 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         assertFalse(proven, "unproven");
     }
 
+    /// CTR-UA-43: an `offchain-token` record of the token stored without its proof.
+    function _unprovenScoped(NormalPqzToken t, bytes memory pk, uint8 seed) internal returns (bytes32 ua) {
+        ua = _mldsaUA(seed);
+        _scopedOn(reg, ua, address(t), pk, false, false);
+        (,,, bool proven) = reg.pqzScopedKeyOf(ua, address(t));
+        assertFalse(proven, "unproven");
+    }
+
     function test_keys_unproven_offchainAccepts() public {
-        bytes32 dan = _unprovenUA(_pk(41), 41);
+        bytes32 dan = _unprovenScoped(off, _pk(41), 41);
         _shieldOn(off, dan, 5); // a credit (TRIVIAL)
         (IPqzToken.PqzTransferArgs memory a, bytes memory st) = _op1Of(off, alice, dan, 5, true);
         off.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", _sv(off, st)); // a credit by a transfer
@@ -349,13 +359,14 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         bytes32 dan = _unprovenUA(other, 42);
         _public(off, address(this), 5 * SCALE);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, dan));
-        off.mtxShield(dan, 5);
+        off.mtxShield(dan, 5); // no record of the token's scope (the registry refuses a scoped key of another length)
         _public(tok, address(this), 5 * SCALE);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, dan));
         tok.mtxShield(dan, 5);
     }
 
-    /// An unproven auditor at init: OFFCHAIN passes, PRECOMPILE refused.
+    /// An unproven auditor at init: OFFCHAIN (`offchain-token`: its key is not read at init, CTR-UA-43) passes,
+    /// PRECOMPILE refused.
     function test_auditor_unproven_offchain() public {
         aud = _unprovenUA(_pk(43), 43);
         NormalPqzToken t = _offToken("aud-unproven-off", vA, false);
@@ -406,26 +417,25 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         uint256 snap = vm.snapshotState();
         off.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", sv);
         vm.revertToState(snap);
-        reg.setPqzKey(bob, 1, _pk(31), keccak256("v1"), UACall.sig(new bytes(ML65_SIG)));
-        reg.storePqzPop(bob, 1, "v1");
+        _scoped(bob, address(off), _spk(0x7001), false); // the token's scope rotates (CTR-UA-43)
         vm.expectRevert(_mismatch(3));
         off.mtxConfidentialTransferSingle(a, VPROOF, _pqAuth(), "", sv);
     }
 
     /// On a registry with the verifier an OFFCHAIN token credits the highest PROVEN version (registry KV-3).
     function test_offchain_currentProvenOnVerifier() public {
-        reg.setPqzKey(bob, 1, _pk(31), keccak256("v1"), UACall.sig(new bytes(ML65_SIG))); // stored, not proven
+        _scopedOn(reg, bob, address(off), _spk(0x7002), false, false); // stored, not proven
         _shieldOn(off, bob, 3);
         assertEq(off.pqzAccount(bob, 0).pendingCount, 1, "version 0, the proven one");
-        reg.storePqzPop(bob, 1, "v1");
+        reg.storePqzScopedPop(bob, address(off), 1, hex"aa");
         _shieldOn(off, bob, 3);
         assertEq(off.pqzAccount(bob, 1).pendingCount, 1, "version 1 once proven");
     }
 
     /// Version 0 unproven while none is proven: current, and an OFFCHAIN token credits it.
     function test_offchain_v0UnprovenWhileNoneProven() public {
-        bytes32 dan = _unprovenUA(_pk(44), 44);
-        (uint64 cur,,,) = reg.pqzKeyOf(dan);
+        bytes32 dan = _unprovenScoped(off, _pk(44), 44);
+        (uint64 cur,,,) = reg.pqzScopedKeyOf(dan, address(off));
         assertEq(cur, 0);
         _shieldOn(off, dan, 2);
         assertEq(off.pqzAccount(dan, 0).pendingCount, 1);
@@ -434,13 +444,14 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     /// On a registry without the verifier a version becomes current only once its proof bytes are stored.
     function test_offchain_noVerifierNeedsBytes() public {
         (NormalPqzToken t, UARegistry r2) = _noVerifierToken(vA);
-        bytes32 dan = UACall.register(r2, UAKinds.MLDSA65, _mlPk(45), _pqzAttrs(_pk(45)), new bytes(ML65_SIG), hex"aa");
+        bytes32 dan = UACall.register(r2, UAKinds.MLDSA65, _mlPk(45), UACall.attrs("", 0, ""), new bytes(ML65_SIG), "");
+        _scopedOn(r2, dan, address(t), _pk(45), false, true);
         _shieldOn(t, dan, 1);
-        r2.setPqzKey(dan, 1, _pk(46), keccak256("b1"), UACall.sig(new bytes(ML65_SIG)));
+        _scopedOn(r2, dan, address(t), _pk(46), false, false);
         vm.roll(block.number + 1); // a new block: a TRIVIAL entry of this block would merge into the tail
         _shieldOn(t, dan, 1);
         assertEq(t.pqzAccount(dan, 0).pendingCount, 2, "v1 without its bytes is not current");
-        r2.storePqzPop(dan, 1, "b1");
+        r2.storePqzScopedPop(dan, address(t), 1, hex"aa");
         vm.roll(block.number + 1);
         _shieldOn(t, dan, 1);
         assertEq(t.pqzAccount(dan, 1).pendingCount, 1, "v1 current once its bytes are stored");
@@ -452,8 +463,7 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         (IPqzToken.PqzBurnArgs memory b,) = _burnOf(off, alice, 10, bytes32(uint256(0xD00D)), 9);
         b.p = 0; // at p 0 both versions' accounts are empty: only the key differs once retargeted
         IPqzToken.PqzSignedVerdict memory sv = _sv(off, off.burnStatement(b, 10, bytes32(uint256(0xD00D)), 0));
-        reg.setPqzKey(alice, 1, _pk(34), keccak256("a1"), UACall.sig(new bytes(ML65_SIG)));
-        reg.storePqzPop(alice, 1, "a1");
+        _scoped(alice, address(off), _spk(0x7003), false);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.StaleKeyVersion.selector, alice, uint64(0), uint64(1)));
         off.mtxUnshield(b, 10, bytes32(uint256(0xD00D)), VPROOF, _pqAuth(), "", sv);
         b.keyVersion = 1;
@@ -465,10 +475,10 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
     /// legs of an op 7 of an OFFCHAIN token: `KeyReused` (KV-9, M-T6). Control: distinct keys land.
     function test_keyReused_legs_offchain() public {
         (NormalPqzToken t, UARegistry r2) = _noVerifierToken(vA);
-        bytes32 s1 = UACall.register(r2, UAKinds.MLDSA65, _mlPk(51), _pqzAttrs(_pk(51)), new bytes(ML65_SIG), hex"aa");
-        bytes32 l1 = UACall.register(r2, UAKinds.MLDSA65, _mlPk(52), _pqzAttrs(_pk(52)), new bytes(ML65_SIG), hex"aa");
-        bytes32 l2 = UACall.register(r2, UAKinds.MLDSA65, _mlPk(53), _pqzAttrs(_pk(52)), new bytes(ML65_SIG), hex"aa");
-        bytes32 l3 = UACall.register(r2, UAKinds.MLDSA65, _mlPk(54), _pqzAttrs(_pk(54)), new bytes(ML65_SIG), hex"aa");
+        bytes32 s1 = _r2Holder(r2, t, 51, _pk(51));
+        bytes32 l1 = _r2Holder(r2, t, 52, _pk(52));
+        bytes32 l2 = _r2Holder(r2, t, 53, _pk(52));
+        bytes32 l3 = _r2Holder(r2, t, 54, _pk(54));
         _shieldOn(t, s1, 10);
         bytes32[] memory legs = new bytes32[](2);
         (legs[0], legs[1]) = (l1, l3);
@@ -480,21 +490,28 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
         t.transferStatement(m, 0);
     }
 
+    /// A holder of `t`'s scope on `r2` (no registry key), its record's proof bytes stored (current on a registry without
+    /// the verifier).
+    function _r2Holder(UARegistry r2, NormalPqzToken t, uint8 seed, bytes memory pk) internal returns (bytes32 ua) {
+        ua = UACall.register(r2, UAKinds.MLDSA65, _mlPk(seed), UACall.attrs("", 0, ""), new bytes(ML65_SIG), "");
+        _scopedOn(r2, ua, address(t), pk, false, true);
+    }
+
     /// A leg's key equal to the auditor's on an OFFCHAIN token: `KeyReused`.
     function test_keyReused_auditor_offchain() public {
         (IPqzToken.PqzTransferArgs memory a,) = _op();
-        (uint64 v, address p, bytes32 ph, bool pr) = reg.pqzKeyOf(aud);
-        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyOf, (bob)), abi.encode(v, p, ph, pr));
+        (uint64 v, address p, bytes32 ph, bool pr) = reg.pqzScopedKeyOf(aud, address(off));
+        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzScopedKeyOf, (bob, address(off))), abi.encode(v, p, ph, pr));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.KeyReused.selector, aud));
         off.transferSingleStatement(a, 0);
     }
 
     /// A migration whose two versions hold one key, on an OFFCHAIN token: `KeyReused`.
     function test_keyReused_migration_offchain() public {
-        reg.setPqzKey(alice, 1, _pk(34), keccak256("a1"), UACall.sig(new bytes(ML65_SIG)));
-        reg.storePqzPop(alice, 1, "a1");
-        (, address p, bytes32 ph, bool pr) = reg.pqzKeyOf(alice);
-        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzKeyAt, (alice, uint64(0))), abi.encode(p, ph, pr));
+        _scoped(alice, address(off), _spk(0x7004), false);
+        (, address p, bytes32 ph, bool pr) = reg.pqzScopedKeyOf(alice, address(off));
+        vm.mockCall(address(reg), abi.encodeCall(IUARegistry.pqzScopedKeyAt, (alice, address(off), uint64(0))),
+            abi.encode(p, ph, pr));
         IPqzToken.PqzTransferArgs memory a = _ts(_payload(1, 0, alice, alice, bytes32(0), _out(5, false), ""));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.KeyReused.selector, alice));
         off.transferSingleStatement(a, 0);
@@ -504,11 +521,12 @@ contract PqzOffchainCoreTest is PqzOffchainBase {
 
     /// An OFFCHAIN token with this test as its owner (the governance entries' caller) on the fixture's factory (notice 0).
     function _owned(bytes32 v, bool fixed_) internal returns (NormalPqzToken t) {
-        (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, v, fixed_);
+        (vMode, vUA, vFixed, vOwnKey) = (PqzCore.OFFCHAIN, v, fixed_, true);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
-        (vMode, vUA, vFixed) = (0, bytes32(0), false);
-        c.owner = bytes32(uint256(uint160(address(this))));
+        (vMode, vUA, vFixed, vOwnKey) = (0, bytes32(0), false, false);
+        c.admin = bytes32(uint256(uint160(address(this))));
         t = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), keccak256(abi.encode(v, fixed_,
             gasleft()))));
+        _scopedAll(address(t), false);
     }
 }

@@ -16,7 +16,7 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 /// @title Kind `NORMAL_REGULATED` (8, CTR-GOV-16, regulated-kinds spec §2.1): `NormalToken` with the regulated layer.
 /// @notice **UNAUDITED.** `_initRaw` runs `RegulatedLib.init` before `NormalToken`'s init, so before the initial-supply mint.
 abstract contract NormalRegulatedTokenCore is NormalTokenCore, RegulatedBase {
-    /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
+    /// @dev `implArgs = abi.encode(COMPLIANCE_REGISTRY_CODEHASH)` (plan T29).
     constructor(address factory_, bytes memory implArgs)
         NormalTokenCore(factory_, implArgs)
         RegulatedBase(implArgs)

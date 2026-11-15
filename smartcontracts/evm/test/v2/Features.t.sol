@@ -50,7 +50,7 @@ contract FeaturesTest is Test {
     function _cfg(uint256 features, uint256 locked, address owner_, address minter_, uint256 supply)
         internal view returns (IFactoryToken.TokenConfig memory c)
     {
-        (c.name, c.symbol, c.decimals, c.features, c.lockedFeatures, c.owner) =
+        (c.name, c.symbol, c.decimals, c.features, c.lockedFeatures, c.admin) =
             ("Points", "PTS", 6, features, locked, nid(owner_));
         c.roles.minter = nid(minter_);
         (c.initialSupply, c.initialHolder) = (supply, alice);
@@ -85,7 +85,7 @@ contract FeaturesTest is Test {
         assertEq(t.version(), 1);
         assertEq(t.features(), PAYABLE | MINTABLE | BURNABLE);
         assertEq(t.lockedFeatures(), PAYABLE | MINTABLE | BURNABLE);
-        assertEq(t.owner(), nid(ownerA));
+        assertEq(t.admin(), nid(ownerA));
         assertTrue(t.hasRole(1, nid(minter)));
         assertEq(t.balanceOf(alice), 1_000);
         assertFalse(t.IS_HEDERA());
@@ -106,21 +106,21 @@ contract FeaturesTest is Test {
         NormalToken t = _token(impl, _cfg(MINTABLE, 0, ownerA, minter, 0));
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), alice));
-        t.mint(alice, 1);
+        t.mint(alice, 1, EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
-        t.mint(alice, 5);
+        t.mint(alice, 5, EnvKit.codeUidOf(address(t)));
         assertEq(t.balanceOf(alice), 5);
         vm.prank(ownerA);
-        t.disableFeature(1);
+        t.disableFeature(1, EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
-        t.mint(alice, 1);
+        t.mint(alice, 1, EnvKit.codeUidOf(address(t)));
     }
 
     function test_mint_withoutTheFlag_fixedSupply() public {
         NormalToken t = _token(impl, _cfg(0, 0, address(0), address(0), 7));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
-        t.mint(alice, 1);
+        t.mint(alice, 1, EnvKit.codeUidOf(address(t)));
         assertEq(t.totalSupply(), 7);
     }
 
@@ -164,7 +164,7 @@ contract FeaturesTest is Test {
         t.mtxPay(x, s, PayMetaKit.meta("r"));
         vm.prank(relayer);
         vm.expectRevert(off);
-        t.mtxPayReceiverFee(x, s, 1, address(0xFEE), block.timestamp, s, PayMetaKit.meta("r"));
+        t.mtxPayWithPayeeFee(x, s, 1, address(0xFEE), block.timestamp, s, PayMetaKit.meta("r"));
         vm.prank(relayer);
         vm.expectEmit(address(t));
         emit IUALedger.UAPaymentSettled(x.from, x.to, 10, 0, relayer, ref); // a typed payment is never gated
@@ -200,31 +200,31 @@ contract FeaturesTest is Test {
         vm.prank(ownerA);
         vm.expectEmit(address(t));
         emit IGovernance.RoleGranted(1, nid(minter), nid(ownerA));
-        t.grantRole(1, nid(minter));
+        t.grantRole(1, nid(minter), EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
-        t.mint(alice, 3);
+        t.mint(alice, 3, EnvKit.codeUidOf(address(t)));
         vm.prank(ownerA);
-        t.transferOwnership(nid(address(0x0B)));
+        t.transferAdmin(nid(address(0x0B)), EnvKit.codeUidOf(address(t)));
         vm.prank(address(0x0B));
-        t.acceptOwnership();
-        assertEq(t.owner(), nid(address(0x0B)));
+        t.acceptAdmin();
+        assertEq(t.admin(), nid(address(0x0B)));
         vm.prank(address(0x0B));
-        t.renounceOwnership();
-        assertEq(t.owner(), bytes32(0));
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
+        assertEq(t.admin(), bytes32(0));
         vm.prank(minter);
-        t.mint(alice, 1);                                     // holders keep their role after the owner renounces
+        t.mint(alice, 1, EnvKit.codeUidOf(address(t)));                                     // holders keep their role after the owner renounces
         vm.prank(minter);
-        t.renounceRole(1);
+        t.renounceRole(1, EnvKit.codeUidOf(address(t)));
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), minter));
-        t.mint(alice, 1);
+        t.mint(alice, 1, EnvKit.codeUidOf(address(t)));
     }
 
     function test_adminFunctionsAreNeverSelfCalls() public {
         NormalToken t = _token(impl, _cfg(MINTABLE, 0, alice, address(0), 0));
         bytes4[7] memory sels = [t.grantRole.selector, t.revokeRole.selector, t.renounceRole.selector,
-            t.disableFeature.selector, t.transferOwnership.selector, t.acceptOwnership.selector,
-            t.renounceOwnership.selector];
+            t.disableFeature.selector, t.transferAdmin.selector, t.acceptAdmin.selector,
+            t.renounceAdmin.selector];
         for (uint256 i; i < 7; ++i) {
             MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({from: alice,
                 data: abi.encodeWithSelector(sels[i]), batch: i, nonce: 0, validUntil: block.timestamp + 300,
@@ -249,19 +249,19 @@ contract FeaturesTest is Test {
         assertEq(uint256(laneBefore), 1);
         assertEq(uint256(balBefore), 100);
         vm.startPrank(ownerA);
-        t.grantRole(1, nid(minter));
-        t.disableFeature(1);
-        t.transferOwnership(nid(minter));
+        t.grantRole(1, nid(minter), EnvKit.codeUidOf(address(t)));
+        t.disableFeature(1, EnvKit.codeUidOf(address(t)));
+        t.transferAdmin(nid(minter), EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         assertEq(vm.load(address(t), lane), laneBefore);
         assertEq(vm.load(address(t), bal), balBefore);
         assertEq(t.balanceOf(alice), 100);
-        // the admin state landed in `scaas.governance`: features word (MINTABLE disabled) and pendingOwner at slot + 3
+        // the admin state landed in `scaas.governance`: features word (MINTABLE disabled) and pendingAdmin at slot + 3
         bytes32 tok = 0x0a3a361961b35589cdb03530b6f9e23a4db6ca9a0dad5ddf5d7761c7fabc8700;
         assertEq(uint256(vm.load(address(t), tok)), t.features());
         assertEq(t.features(), 0);
         assertEq(vm.load(address(t), bytes32(uint256(tok) + 3)), nid(minter)); // the whole word: a UA id
-        assertEq(t.pendingOwner(), nid(minter));
+        assertEq(t.pendingAdmin(), nid(minter));
     }
 
     // ------------------------------------------------------------------ IS_HEDERA (CTR-TOK-23)

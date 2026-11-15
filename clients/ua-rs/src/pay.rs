@@ -4,7 +4,8 @@
 //! `UAMetaTransfer` (`mtxPay`), `UAPayWithTax` (`mtxPayWithTax`, kinds 8-13) and `UARelayFee` with `batch` / `nonce`
 //! (`RelayFeeRouter.relay`). An unbound `relayer` / `feeRecipient` is hashed as 0 (`MetaTxLib.canon`). Pinned by
 //! `smartcontracts/vectors/metatx/{paymeta,payrecords,paytax}.json` (forge) and `typed/typed_ops.json` (clientkeys). The v2
-//! `payNo` text form is in `legacy/ua-rs-sign/pay_meta_v2.rs`. The contract decides; nothing here is a check of record. UNAUDITED.
+//! commitment (a `string payNo`, no `save`) is kept, not built, in `legacy/ua-rs-sign/pay_meta_v2.rs` and
+//! `legacy/ua-mtx-merge/paymeta-v2/`. The contract decides; nothing here is a check of record. UNAUDITED.
 use crate::{address_word, keccak, keccak256, word, DOMAIN_TYPE};
 
 pub const UA_METATRANSFER_TYPE: &str = "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,\

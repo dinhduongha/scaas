@@ -16,6 +16,7 @@ import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {UACall} from "../ua/UACall.sol";
 import {UADexBase, UARouter} from "../ua/UADex.t.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// The token's trade side after ua-mtx-merge T6 (R12, R38), called by selector: this file compiles on the tree before T6
 /// too, so each test is red there on its own (plan T6 step 3).
@@ -69,7 +70,7 @@ contract DexScaasLegsTest is UADexBase {
         super.setUp();
         D = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 2,
             abi.encode(normalInit("D", "D", 0, 1e6, alice, address(0))), "D"));
-        dex.setMarket(address(C), address(D), true);
+        dex.setMarket(address(C), address(D), true, EnvKit.codeUidOf(address(dex)));
         assertEq(C.registry(), address(0));
         assertEq(D.registry(), address(0));
     }

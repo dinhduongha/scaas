@@ -168,7 +168,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     string internal constant VERDICT_T =
         "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
     string internal constant TARGS_T =
-        "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
+        "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes))";
     string internal constant MARGS_T =
         "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
     string internal constant BARGS_T = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes)";
@@ -240,7 +240,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         MetaTxLib.UAEnvelope memory u = _u(nId, address(off));
         bytes memory st = off.transferSingleStatement(a, _tag(address(off), u));
         bytes32 th = keccak256(
-            "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)");
+            "UAPqzTransferSingle(bytes32 from,PqzTransferArgs args,bytes proof,bytes accHint,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor)");
         bytes32 sh = keccak256(bytes.concat(abi.encode(th, u.from), abi.encode(_hashT(a), keccak256(VPROOF), keccak256("")),
             abi.encode(u.batch, u.nonce, u.validUntil, u.mode, address(0), u.fee, address(0))));
         (uint8 vv, bytes32 r, bytes32 ss) = vm.sign(NKEY, MessageHashUtils.toTypedDataHash(_sepOf(address(off)), sh));
@@ -257,7 +257,7 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         uint256 snap = vm.snapshotState();
         vm.prank(address(0x4E1A));
         (bool ok,) = address(off).call(c1);
-        assertTrue(ok, "the pre-3f struct (3h: + ownTag), verdict 1");
+        assertTrue(ok, "the struct without the verdict (3h: + ownTag; three-key model: + uFrom and the openings), verdict 1");
         vm.revertToState(snap);
         vm.prank(address(0x4E1A));
         (ok,) = address(off).call(c2);
@@ -335,13 +335,14 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, vA, false);
         c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
-        c.owner = nid(address(this));
+        c.admin = nid(address(this));
         off = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-owned"));
+        _holders(address(off));
         _shieldOn(off, alice, 100);
         (bytes32 ref, bytes memory st) = _sent(7);
         IPqzToken.PqzSignedVerdict memory sv = _sv(off, st);
         assertTrue(_disclose8(off, ref, 7, sv));
-        off.pqzRevokeVerifier();
+        off.pqzRevokeVerifier(EnvKit.codeUidOf(address(off)));
         assertFalse(_disclose8(off, ref, 7, sv), "revoked: false");
     }
 
@@ -350,21 +351,22 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
     /// The three ops relayed through a router at fee 0 for the owner `nId` (its own key, no registry call).
     function test_router_pqzVerifierOps() public {
         GovernanceRouter router = new GovernanceRouter(PQZ_UID, address(reg), address(0), false);
-        OpenFactory f = new OpenFactory(registrar);
+        OpenFactory f = new OpenFactory(nid(registrar));
         EnvKit.configure(f, PQZ_UID, 0, address(router));
         Catalogue.release(f, IOpenFactory.TokenKind.NORMAL_PQZ, 1, pqzEnv(address(f), PQZ_UID, address(reg), address(pqv)),
             type(NormalPqzToken).creationCode);
         vm.prank(registrar);
-        f.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(f)));
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, vA, false);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
-        c.owner = nId;
+        c.admin = nId;
         NormalPqzToken t = NormalPqzToken(f.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "e-router"));
-        _rop(router, GovernanceRouterTypes.UA_PQZ_SET_VERIFIER, address(t), abi.encode(vB));
+        bytes32 tu = EnvKit.codeUidOf(address(t)); // the token's chain word, the ops' last field (CTR-GOV-28)
+        _rop(router, GovernanceRouterTypes.UA_PQZ_SET_VERIFIER, address(t), abi.encode(vB, tu));
         assertEq(t.pqzVerifyConfig().verifier, vB, "notice 0: at once");
-        _rop(router, GovernanceRouterTypes.UA_PQZ_CANCEL_VERIFIER, address(t), "");
-        _rop(router, GovernanceRouterTypes.UA_PQZ_REVOKE_VERIFIER, address(t), "");
+        _rop(router, GovernanceRouterTypes.UA_PQZ_CANCEL_VERIFIER, address(t), abi.encode(tu));
+        _rop(router, GovernanceRouterTypes.UA_PQZ_REVOKE_VERIFIER, address(t), abi.encode(tu));
         assertEq(t.pqzVerifyConfig().verifier, 0, "revoked");
         assertEq(t.pqzVerifyConfig().pqzVerifierEpoch, 2);
     }
@@ -378,9 +380,14 @@ contract PqzOffchainEntriesTest is PqzOffchainBase {
         IUARegistry.UASig memory auth;
         auth.signature = abi.encodePacked(r, ss, vv);
         vm.prank(address(0x4E1A));
-        if (th == GovernanceRouterTypes.UA_PQZ_SET_VERIFIER) router.mtxPqzSetVerifier(u, target, abi.decode(args, (bytes32)), auth);
-        else if (th == GovernanceRouterTypes.UA_PQZ_CANCEL_VERIFIER) router.mtxPqzCancelVerifier(u, target, auth);
-        else router.mtxPqzRevokeVerifier(u, target, auth);
+        if (th == GovernanceRouterTypes.UA_PQZ_SET_VERIFIER) {
+            (bytes32 next, bytes32 cu) = abi.decode(args, (bytes32, bytes32));
+            router.mtxPqzSetVerifier(u, target, next, cu, auth);
+        } else if (th == GovernanceRouterTypes.UA_PQZ_CANCEL_VERIFIER) {
+            router.mtxPqzCancelVerifier(u, target, abi.decode(args, (bytes32)), auth);
+        } else {
+            router.mtxPqzRevokeVerifier(u, target, abi.decode(args, (bytes32)), auth);
+        }
     }
 
     // ------------------------------------------------------------------ the allow-lists (CTR-MTX-19)

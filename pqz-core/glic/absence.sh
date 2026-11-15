@@ -48,12 +48,12 @@ done
 
 echo "## 4. embedded strings (library version banners, e.g. 'GNU MP', 'MPFR', 'HEXL')"
 for f in $ART; do
-  echo "\$ strings -a $f | grep -iE '$PAT'"; strings -a "$f" | hits "$f"; echo
+  echo "\$ strings -a -n 6 $f | grep -iE '$PAT'"; strings -a -n 6 "$f" | hits "$f"; echo
 done
 echo "## 5. positive control: the same scans find GMP / MPFR where they are (system shared libraries, if installed)"
 for f in /usr/lib/x86_64-linux-gnu/libgmp.so.10 /usr/lib/x86_64-linux-gnu/libmpfr.so.6; do
   [ -e "$f" ] || { echo "$f: not installed"; continue; }
   echo "\$ $NM -D --defined-only $f | grep -ciE '$PAT'"; $NM -D --defined-only "$f" | awk '{print $NF}' | hits "$f" | head -1
-  echo "\$ strings -a $f | grep -ciE '$PAT'"; strings -a "$f" | hits "$f" | head -1; echo
+  echo "\$ strings -a -n 6 $f | grep -ciE '$PAT'"; strings -a -n 6 "$f" | hits "$f" | head -1; echo
 done
 echo "# end"

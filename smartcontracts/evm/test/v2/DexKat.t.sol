@@ -48,13 +48,16 @@ contract DexKatTest is Test {
         vm.warp(1_800_000_000);
         OpenFactory f = EnvKit.factory(address(this), UID_, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
+        // the DEX's two modules (governance, liquidity) are CREATEd by this contract: skip the nonce whose address is the
+        // vectors' outside token below (the liquidity module would land there and be overwritten by the token's code)
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 2);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 6, 1e9, alice, address(0))), "a"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 500_000, TREASURY, false, 0, address(0))), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 500_000, TREASURY, false, 0, address(0), 0, 0)), "dex"));
         // the outside token at its vector address (T66b: the body modules this setUp deploys move the test's nonces)
         usdc = MockERC20(vm.parseJsonAddress(vm.readFile(OUT), ".outside_token"));
         deployCodeTo("Mocks.sol:MockERC20", abi.encode("USD Coin", "USDC", uint8(6)), address(usdc));
-        dex.setMarket(address(a), address(usdc), true);
+        dex.setMarket(address(a), address(usdc), true, EnvKit.codeUidOf(address(dex)));
         usdc.mint(dave, 1e9);
         address p = dex.puller();
         vm.prank(dave);

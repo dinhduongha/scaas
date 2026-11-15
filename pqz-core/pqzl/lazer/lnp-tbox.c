@@ -286,6 +286,11 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
 
   ASSERT_ERR (nex + nprime
               > 0); /* use quad_eval if no norm proof is needed. */
+  /* PQZ (review 3w u1-5): every relation has nex > 0 and nprime > 0; the z3 equation's y3 loop below is bounded by
+     loff4 (upstream), which drops y3's term when nprime = 0: refused (always on, not only with ASSERT) */
+  ERR (nex == 0 || nprime == 0, "%s", "nex, nprime");
+  if (nex == 0 || nprime == 0)
+    return;
   ASSERT_ERR (lambda % 2 == 0);
   ASSERT_ERR (polyvec_get_nelems (tB) == l + lext);
   ASSERT_ERR (polyvec_get_nelems (h) == lambda / 2);
@@ -956,6 +961,10 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
   polymat_t oDm;
   polyvec_t ou;
 
+  /* PQZ (review 3w u1-5): as lnp_tbox_prove */
+  ERR (nex == 0 || nprime == 0, "%s", "nex, nprime");
+  if (nex == 0 || nprime == 0)
+    return 0;
   ASSERT_ERR (lambda % 2 == 0);
   ASSERT_ERR (polyvec_get_nelems (tB) == l + lext);
   ASSERT_ERR (polyvec_get_nelems (h) == lambda / 2);

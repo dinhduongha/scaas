@@ -36,6 +36,9 @@ const A: &[&str] = &["account"];
 const D: &[&str] = &["dex"];
 const REG: &[&str] = &["registry"];
 const FACT: &[&str] = &["factory"];
+/// `PqChat` (UA-7 P17 / P32, topics spec P45): a factory kind's thirteen writes, plain rows (each record is signed in the portable
+/// domain and checked by the contract); the target is an instance of the factory's class 3 (`guard::Rule::FactoryClass`).
+const PC: &[&str] = &["pqchat"];
 
 /// The EIP-712 domain name of a contract kind (the `domains.<kind>` of `typed_ops.json`); `None` for a kind that signs nothing.
 pub fn domain_name(contract: &str) -> Option<&'static str> {
@@ -60,7 +63,9 @@ const NESTED: &[(&str, &str)] = &[
     ("ZetherBurn", "uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom"),
     // group 3g (KV-8): every PQZ debit names its key version after `fromUA`; group 3h (pqz-proof-path spec §3.2, §10): the holder's
     // `ownTag` after `salt` (op 1, op 7) and after `beneficiaryUA` (the burn forms), a named field like every other
-    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo"),
+    // the three-key model (CTR-PQZ-38, -40): `uFrom` after `vAuditor`, the two sealed openings last (all empty without the opening)
+    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor"),
+    ("PqzOpening", "bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed"),
     ("PqzLeg", "bytes32 ua,bytes v,bytes vAuditor"),
     ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
     ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom"),
@@ -97,8 +102,46 @@ const NESTED: &[(&str, &str)] = &[
     ("Interaction", "address target,bytes data"),
     ("ExchangePlan", "bytes32 ref,ExchangeLeg[] legs,address[] extraTokens"),
     ("HybridPlan", "bytes32 ref,DexLeg taker,DexLeg[] makers,uint256 outsideSell,uint256 outsideFloor,address[] extraTokens"),
+    // CTR-DEX-30: the liquidity order (signed in the DEX's domain) and its plan; three levels, the lists bounded (`LIQUIDITY_MAX`)
+    ("LiquidityToken", "address token,uint256 amount"),
+    ("LiquidityOrder", "bytes32 from,LiquidityToken[] inputs,LiquidityToken[] outputs,address positionManager,address positionReader,uint256 positionIn,bytes32 positionPool,int24 tickLower,int24 tickUpper,uint128 minLiquidity,bytes32 recipient,uint256 fee,address relayer,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil"),
+    ("LiquidityPlan", "bytes32 ref,LiquidityOrder order,UASig auth,uint256[] pull,uint256 positionId,address[] extraTokens"),
     // `IGovernance.GrantTerms`: flat, so a decode is one level deep; its `hashStruct` is the signed word, the struct the argument
     ("GrantTerms", "uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope"),
+    // group 3l (wrap limits spec 2026-11-10 §6, §9): a leg's limits, the router's `UASetWrapLimits` takes an array of them
+    ("WrapLimit", "uint24 perUser,uint64 tokenWide,uint32 period"),
+    ("WrapLegLimits", "address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong"),
+    // owner 2026-11-12 (creations relayable): `IFactoryToken.TokenConfig` (CTR-TOK-25) and `ISCaaSDex.DexConfig` by their field names, read
+    // from named JSON; the node ABI-encodes them as the factory's `initArgs` and signs `initHash = keccak256(initArgs)` (`init!`)
+    // round 3zb (CTR-GOV-29): `burner` the sixth seat; round 3zc (CTR-GOV-30): `maxWrapSupply` after `maxSupply`; a config
+    // without either is refused by name (`args.config.roles.burner: missing`), never filled with a default
+    ("TokenRoles", "bytes32 minter,bytes32 rateAdmin,bytes32 guardian,bytes32 issuer,bytes32 compliance,bytes32 burner"),
+    ("TokenLeg", "address underlying,uint256 num,uint256 den"),
+    ("TokenRate", "uint32 rateDelay,uint16 maxRateStepBps"),
+    ("ConfidentialConfig", "bytes auditorKey,uint256 shieldScale,uint256 maxShielded,uint256 confidentialFee,uint8 disclosureMode,uint8 auditorMode,uint256 minDecoyFee,uint8 pqzVerifyMode,bytes32 pqzVerifierUA,bool pqzVerifierFixed,uint8 proofStore,uint64 verifierFee,uint64 verifierFeeMax,bool pqzOwnKey,bool pqzOpening"),
+    ("RegulatedParams", "address complianceRegistry,uint64 requiredFlags,uint64 deniedFlags,bytes32 termsHash,bytes32 taxRecipient"),
+    ("TokenConfig", "string name,string symbol,uint8 decimals,uint256 features,uint256 lockedFeatures,bytes32 admin,TokenRoles roles,uint256 initialSupply,address initialHolder,TokenLeg[] legs,TokenRate rate,ConfidentialConfig conf,uint64 grantDelay,address rescueTo,uint256 maxSupply,uint256 maxWrapSupply,RegulatedParams reg"),
+    ("DexConfig", "bytes32 admin,uint32 relayerSharePpm,address treasury,bool listedOnly,uint64 grantDelay,address rescueTo,uint256 features,uint256 lockedFeatures"),
+    // round 3r (spec 2026-11-10-admin-not-owner.md §5.4): a release env, the router's three publishes take one (bounded below)
+    ("Env", "address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes"),
+    // CTR-GOV-27: `setChainEntries`' named struct (flat, one level), nested in `UASetChainEntries`
+    ("ChainEntries", "address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash"),
+    // `IPqChat`'s records (UA-7 spec §4.1, topics spec §2), by the contract's field names; `Wrap` here is a member's key wrap, not
+    // the op of that name
+    ("MemberKey", "bytes32 ua,uint64 keyId,bytes32 via"),
+    ("Wrap", "bytes32 member,uint64 keyId,bytes mlkemCt,bytes32 x25519Eph,bytes sealedKey"),
+    ("PqChatSession", "bytes32 creator,uint64 nonce,bytes32 homeChain,address homeChatContract,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
+    ("PqChatEpoch", "bytes32 sessionId,bytes32 author,uint64 nonce,uint64 epoch,bytes32 parentEpochId,bytes32[] admins,MemberKey[] members,bytes32[] wrapHashes,bytes sealedInfo"),
+    ("PqChatLeave", "bytes32 sessionId,bytes32 epochId,bytes32 member,uint64 nonce"),
+    ("PqChatRemove", "bytes32 sessionId,bytes32 epochId,uint64 nextEpoch,bytes32[] members,bytes32 admin,uint64 nonce"),
+    ("PqChatMessage", "bytes32 sessionId,bytes32 epochId,bytes32 sender,bytes16 device,uint64 counter,bytes32[] parents,bytes ciphertext"),
+    ("PqTopic", "bytes32 admin,uint64 nonce,bytes32 homeChain,address homeChatContract,string name,bytes about,bool openReplies"),
+    ("PqTopicUpdate", "bytes32 topicId,uint64 seq,string name,bytes about,bool openReplies"),
+    ("PqTopicWriter", "bytes32 topicId,bytes32 writer,bool granted,uint64 seq"),
+    ("EntryRef", "bytes32 chainUid,address pqchat,bytes32 entryId,bytes32 contentHash"),
+    ("PqTopicEntry", "bytes32 topicId,bytes32 author,uint64 nonce,bytes32 parentId,EntryRef ref,string mediaType,bytes body"),
+    ("PqTopicEdit", "bytes32 entryId,bytes32 author,uint64 nonce,uint32 version,string mediaType,bytes body"),
+    ("PqTopicVote", "bytes32 entryId,bytes32 voter,int8 value,uint64 seq"),
 ];
 
 /// `(struct, entry, contract kinds, fields, plan)`. `E` = the envelope fields. The plan is the entry's arguments in order;
@@ -161,7 +204,7 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     // the pay entries (pay-meta-tax spec §2.1, §5.3): `PayMeta` last (spec §7.1: `meta` named per schema, the node builds the body);
     // `mtxPay` signs the payment `UAMetaTransfer` itself (its fields the envelope's and `to`, `value`, `entryRef`)
     ("UAMetaTransfer", "mtxPay", T, "bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,E", "$ @ meta:PayMeta"),
-    ("UAReceiverFee", "mtxPayReceiverFee", T, "UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", "payment payerSig:UASig fee feeRecipient validUntil @ meta:PayMeta"),
+    ("UAPayeeFee", "mtxPayWithPayeeFee", T, "UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", "payment payerSig:UASig fee feeRecipient validUntil @ meta:PayMeta"),
     ("UAPayWithTax", "mtxPayWithTax", T, "UAMetaTransfer payment,uint8 taxMode,uint256 tax", "payment taxMode tax @ meta:PayMeta"),
     // pay-meta-tax spec §4 (O4): the payer's own lane
     ("UARelayFee", "mtxRelayFee", T, "bytes32 from,address target,bytes32 callDataHash,bytes32 payee,uint256 value,uint256 batch,uint256 nonce,uint256 validUntil,address relayer", "from target callDataHash payee value batch nonce validUntil @"),
@@ -170,48 +213,92 @@ const TYPED: &[(&str, &str, &[&str], &str, &str)] = &[
     ("CancelUAWrapOrder", "mtxCancelOrder", T, "UAWrapOrder order", "wrap!order @"),
     ("CancelDexOrder", "mtxCancelOrders", D, "DexOrder order", "[order] [@]"),
     ("ZetherRollOver", "mtxRollOverSigned", Z, "bytes32 ua,uint64 accSeq,uint64 expectedPendingSeq,uint64 validUntilBlock", "ua expectedPendingSeq validUntilBlock @ua"),
+    // CTR-PQZ-41: the holder's rollover with skip marks on an opening token; the call takes the signed n and skip, the token reads
+    // `rollSeq`, `rolled`, `entriesHash` and `chainUid` itself
+    ("PqzRollOver", "mtxRollOverSigned", P, "bytes32 ua,uint64 keyVersion,uint64 rollSeq,uint64 rolled,uint64 n,uint64[] skip,bytes32 entriesHash,uint64 validUntilBlock,bytes32 chainUid", "ua keyVersion n skip validUntilBlock @ua"),
     ("ZetherSetRollOverMode", "mtxSetRollOverMode", Z, "bytes32 ua,uint8 mode,uint64 modeNonce,uint64 validUntilBlock", "ua mode validUntilBlock @ua"),
     ("PqzAuth", "", P, "uint8 op,bytes32 opTag,bytes32 psid,uint256 chainId,address token,address registry,bytes32 from,bytes32 to,bytes32 beneficiary,uint256 fee,uint256 amount,bytes32 recipient,uint64 sendCounter,uint64 p,uint256 validUntilBlock,bool auditorOn,uint256 shieldIn,bytes32 chainUid,bytes32 binding,uint128 salt,bytes32 memoHash,bytes32 bodyHash", ""),
-    // the `GovernanceRouter`'s closed table (spec §3.2, ua-mtx-merge T7): `mtx<Op>`, `target` the first op word, fee mode `NONE`
-    ("UAGrantRole", "mtxGrantRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
-    ("UARevokeRole", "mtxRevokeRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
-    ("UASetGrant", "mtxSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,E", ""),
-    ("UACancelGrant", "mtxCancelGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 account,E", ""),
-    ("UADisableFeature", "mtxDisableFeature", GR, "bytes32 from,address target,uint8 bit,E", ""),
-    ("UATransferOwnership", "mtxTransferOwnership", GR, "bytes32 from,address target,bytes32 newOwner,E", ""),
-    ("UAAcceptOwnership", "mtxAcceptOwnership", GR, "bytes32 from,address target,E", ""),
-    ("UARenounceOwnership", "mtxRenounceOwnership", GR, "bytes32 from,address target,E", ""),
-    ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,E", ""),
-    ("UAMint", "mtxMint", GR, "bytes32 from,address target,address to,uint256 amount,E", ""),
-    ("UAMintToUA", "mtxMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,E", ""),
-    ("UADisableWrap", "mtxDisableWrap", GR, "bytes32 from,address target,address leg,bytes32 reason,E", ""),
-    ("UAProposeRate", "mtxProposeRate", GR, "bytes32 from,address target,address leg,uint96 num,uint96 den,E", ""),
-    ("UACancelRate", "mtxCancelRate", GR, "bytes32 from,address target,E", ""),
-    ("UAExecuteRate", "mtxExecuteRate", GR, "bytes32 from,address target,E", ""),
-    ("UASetMarket", "mtxSetMarket", GR, "bytes32 from,address target,address base,address quote,bool listed,E", ""),
-    ("UASetExchangeTarget", "mtxSetExchangeTarget", GR, "bytes32 from,address target,address exchangeTarget,bool listed,E", ""),
-    ("UASetListedOnly", "mtxSetListedOnly", GR, "bytes32 from,address target,bool on,E", ""),
-    ("UASetFeeSplit", "mtxSetFeeSplit", GR, "bytes32 from,address target,uint32 relayerSharePpm,address treasury,E", ""),
+    // the `GovernanceRouter`'s closed table (spec §3.2, ua-mtx-merge T7): `mtx<Op>`, `target` the first op word, fee mode `NONE`;
+    // the Change of CTR-GOV-28 in round 3zb + 3zc (O5, O6, owner 2026-11-13): every op of a role holder and `UASetWrapLimits`
+    // names the target's chain word last too (`chainUid`; a job without it is `BAD_PAYLOAD`, old rows in
+    // legacy/burner-wrap-caps/typed_v3.rs)
+    ("UAGrantRole", "mtxGrantRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
+    ("UARevokeRole", "mtxRevokeRole", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
+    ("UASetGrant", "mtxSetGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid,E", ""),
+    ("UACancelGrant", "mtxCancelGrant", GR, "bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,E", ""),
+    ("UADisableFeature", "mtxDisableFeature", GR, "bytes32 from,address target,uint8 bit,bytes32 chainUid,E", ""),
+    ("UATransferAdmin", "mtxTransferAdmin", GR, "bytes32 from,address target,bytes32 newAdmin,bytes32 chainUid,E", ""),
+    ("UAAcceptAdmin", "mtxAcceptAdmin", GR, "bytes32 from,address target,E", ""),
+    ("UARenounceAdmin", "mtxRenounceAdmin", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
+    ("UARenounceRole", "mtxRenounceRole", GR, "bytes32 from,address target,uint8 bit,bytes32 chainUid,E", ""), // CTR-GOV-28, owner 2026-11-13
+    ("UAMint", "mtxMint", GR, "bytes32 from,address target,address to,uint256 amount,bytes32 chainUid,E", ""),
+    ("UAMintToUA", "mtxMintToUA", GR, "bytes32 from,address target,bytes32 to,uint256 amount,bytes32 chainUid,E", ""),
+    ("UADisableWrap", "mtxDisableWrap", GR, "bytes32 from,address target,address leg,bytes32 reason,bytes32 chainUid,E", ""),
+    ("UAProposeRate", "mtxProposeRate", GR, "bytes32 from,address target,address leg,uint96 num,uint96 den,bytes32 chainUid,E", ""),
+    ("UACancelRate", "mtxCancelRate", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
+    ("UAExecuteRate", "mtxExecuteRate", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
+    ("UASetMarket", "mtxSetMarket", GR, "bytes32 from,address target,address base,address quote,bool listed,bytes32 chainUid,E", ""),
+    ("UASetExchangeTarget", "mtxSetExchangeTarget", GR, "bytes32 from,address target,address exchangeTarget,bool listed,bytes32 chainUid,E", ""),
+    ("UASetListedOnly", "mtxSetListedOnly", GR, "bytes32 from,address target,bool on,bytes32 chainUid,E", ""),
+    ("UASetFeeSplit", "mtxSetFeeSplit", GR, "bytes32 from,address target,uint32 relayerSharePpm,address treasury,bytes32 chainUid,E", ""),
     // the controls of the regulated kinds 8-13 (plan T32; regulated-kinds spec §3.1, Q8): the direct entry's parameters;
     // `UAOperatorTransfer` names the moved account `account` (CTR-GOV-20: `from` is the signer). Vectors: plan T34
-    ("UAFreeze", "mtxFreeze", GR, "bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 recordId,E", ""),
-    ("UAUnfreeze", "mtxUnfreeze", GR, "bytes32 from,address target,bytes32 account,bytes32 ref,E", ""),
-    ("UAForceTransfer", "mtxForceTransfer", GR, "bytes32 from,address target,bytes32 recordId,uint256 amount,E", ""),
-    ("UAPause", "mtxPause", GR, "bytes32 from,address target,bytes32 ref,uint64 until,E", ""),
-    ("UAUnpause", "mtxUnpause", GR, "bytes32 from,address target,bytes32 ref,E", ""),
-    ("UARecordOrder", "mtxRecordOrder", GR, "bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,E", ""),
-    ("UARevokeOrder", "mtxRevokeOrder", GR, "bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,E", ""),
-    ("UAOperatorTransfer", "mtxOperatorTransfer", GR, "bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,E", ""),
+    ("UAFreeze", "mtxFreeze", GR, "bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid,E", ""),
+    ("UAUnfreeze", "mtxUnfreeze", GR, "bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 chainUid,E", ""),
+    ("UAForceTransfer", "mtxForceTransfer", GR, "bytes32 from,address target,bytes32 recordId,uint256 amount,bytes32 chainUid,E", ""),
+    ("UAPause", "mtxPause", GR, "bytes32 from,address target,bytes32 ref,uint64 until,bytes32 chainUid,E", ""),
+    ("UAUnpause", "mtxUnpause", GR, "bytes32 from,address target,bytes32 ref,bytes32 chainUid,E", ""),
+    ("UARecordOrder", "mtxRecordOrder", GR, "bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,bytes32 chainUid,E", ""),
+    ("UARevokeOrder", "mtxRevokeOrder", GR, "bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,bytes32 chainUid,E", ""),
+    ("UAOperatorTransfer", "mtxOperatorTransfer", GR, "bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid,E", ""),
     // bit 23 `TAX` (pay-meta-tax spec §6.2): the one PERCENT rate, the recipient
-    ("UASetTaxRate", "mtxSetTaxRate", GR, "bytes32 from,address target,uint32 ratePpm,E", ""),
-    ("UASetTaxRecipient", "mtxSetTaxRecipient", GR, "bytes32 from,address target,bytes32 taxRecipient,E", ""),
+    ("UASetTaxRate", "mtxSetTaxRate", GR, "bytes32 from,address target,uint32 ratePpm,bytes32 chainUid,E", ""),
+    ("UASetTaxRecipient", "mtxSetTaxRecipient", GR, "bytes32 from,address target,bytes32 taxRecipient,bytes32 chainUid,E", ""),
     // group 3f (spec §4.2): the owner's verifier transfer of a PQZ token (propose, confirm after the notice), its cancel, the
     // immediate revocation
-    ("UAPqzSetVerifier", "mtxPqzSetVerifier", GR, "bytes32 from,address target,bytes32 next,E", ""),
-    ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", GR, "bytes32 from,address target,E", ""),
-    ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,E", ""),
+    ("UAPqzSetVerifier", "mtxPqzSetVerifier", GR, "bytes32 from,address target,bytes32 next,bytes32 chainUid,E", ""),
+    ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
+    ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", GR, "bytes32 from,address target,bytes32 chainUid,E", ""),
     // group 3h (PQZ proof path spec §5): bit 24 `PQZ_PROOF`, a holder's `NONE` / `LOG` from the next debit
-    ("UASetProofStore", "mtxSetProofStore", GR, "bytes32 from,address target,uint8 next,E", ""),
+    ("UASetProofStore", "mtxSetProofStore", GR, "bytes32 from,address target,uint8 next,bytes32 chainUid,E", ""),
+    // round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit
+    ("UASetVerifierFee", "mtxSetVerifierFee", GR, "bytes32 from,address target,uint64 next,bytes32 chainUid,E", ""),
+    // group 3l (wrap limits spec §9): the owner's limits on a hybrid of the wrapped kinds and bit 26's membership
+    ("UASetWrapLimits", "mtxSetWrapLimits", GR, "bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,E", ""),
+    ("UASetWrapMember", "mtxSetWrapMember", GR, "bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,E", ""),
+    // round 3zc (CTR-GOV-30): the admin's two supply caps of the wrapped kinds (bit 31), the propose and the apply the same op
+    // sent twice (two nonces; a landed one is a proposal or an apply, its event tells which)
+    ("UASetMaxSupply", "mtxSetMaxSupply", GR, "bytes32 from,address target,uint256 maxSupply,bytes32 chainUid,E", ""),
+    ("UASetMaxWrapSupply", "mtxSetMaxWrapSupply", GR, "bytes32 from,address target,uint256 maxWrapSupply,bytes32 chainUid,E", ""),
+    // round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §6.2, §9): the lists of the regulated kinds 8-13 (bit 8's holder,
+    // bit 9's; 1-256 accounts) and the admin's enableFeature of 8, 9 or 28; no token row (governance entries are direct)
+    ("UASetAllowed", "mtxSetAllowed", GR, "bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid,E", ""),
+    ("UASetDenied", "mtxSetDenied", GR, "bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid,E", ""),
+    ("UAEnableFeature", "mtxEnableFeature", GR, "bytes32 from,address target,uint8 bit,bytes32 chainUid,E", ""),
+    // round 3r (CTR-GOV-23, spec §5.4; owner naming 2026-11-11): the admin of `OpenFactory` (its envs, deprecations, kind
+    // switches, directory) and of a `ComplianceRegistry` (its KYC providers, the rows); the four release approvals are no row
+    // (release management is not a node job, owner 2026-11-10)
+    ("UAPublishTokenEnv", "mtxPublishTokenEnv", GR, "bytes32 from,address target,uint8 kind,uint16 envVersion,bytes32 chainUid,Env env,E", ""),
+    ("UAPublishDexEnv", "mtxPublishDexEnv", GR, "bytes32 from,address target,uint16 envVersion,bytes32 chainUid,Env env,E", ""),
+    ("UAPublishClassEnv", "mtxPublishClassEnv", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint16 envVersion,bytes32 chainUid,Env env,E", ""),
+    ("UADeprecateToken", "mtxDeprecateToken", GR, "bytes32 from,address target,uint8 kind,uint64 version,bytes32 chainUid,string reason,E", ""),
+    ("UADeprecateDex", "mtxDeprecateDex", GR, "bytes32 from,address target,uint64 version,bytes32 chainUid,string reason,E", ""),
+    ("UADeprecateRelease", "mtxDeprecateRelease", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason,E", ""),
+    ("UASetTokenKindEnabled", "mtxSetTokenKindEnabled", GR, "bytes32 from,address target,uint8 kind,bool on,bytes32 chainUid,E", ""),
+    ("UASetClassKindEnabled", "mtxSetClassKindEnabled", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,bytes32 chainUid,E", ""),
+    ("UASetKycProvider", "mtxSetKycProvider", GR, "bytes32 from,address target,bytes32 provider,bool enabled,bytes32 chainUid,E", ""),
+    ("UASetCompliance", "mtxSetCompliance", GR, "bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid,E", ""),
+    // owner 2026-11-12: the factory's creations through the router (chain-neutral spec §4.4, S3), relayable at fee 0 like every
+    // `mtx*`; the config is named JSON (`args.config`), the node encodes it as `initArgs` and fills the signed `initHash`.
+    // owner 2026-11-12 ("both the generic row and the per-class ones"): `mtxCreateInstance` takes `args.init_call` (bytes, the
+    // contract's `bytes initCall`) or a known class's named `args.config` the node builds it from ([`instance_init_call`])
+    ("UACreateToken", "mtxCreateToken", GR, "bytes32 from,address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt,E",
+        "E target kind version init!config:TokenConfig salt @"),
+    ("UACreateDex", "mtxCreateDex", GR, "bytes32 from,address target,uint64 version,bytes32 initHash,bytes32 salt,E",
+        "E target version init!config:DexConfig salt @"),
+    ("UACreateInstance", "mtxCreateInstance", GR, "bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 initHash,bytes32 salt,E",
+        "E target contractClass kind version initcall! salt @"),
+    ("UASetChainEntries", "mtxSetChainEntries", GR, "bytes32 from,address target,ChainEntries entries,bytes32 chainUid,E", ""),
     // not rows of the vector file: the DEX's (`dex_order_kat.json`) and the token's on ids (`uatrade_kat.json`), one name per kind
     ("InvalidateNonces", "mtxInvalidateNonces", D, "address from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
     ("UAInvalidateNonces", "mtxInvalidateNonces", T, "bytes32 from,uint256 batch,uint256 minNonce", "from batch minNonce @"),
@@ -239,14 +326,36 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     // group 3g (KV-1): the PQZ key record of `version` (0: the key registered without one, R2 write-once)
     ("storePqzPop", REG, "bytes32 ua,uint64 version,bytes pqzPop"),
     ("setPqzKey", REG, "bytes32 ua,uint64 version,bytes pqzKey,bytes32 pqzPopHash,UASig sig"),
+    // the three-key model (K3-3, CTR-UA-43): a scoped record (scope 0 class 2, the token class 3) and its stored `R_REG` proof
+    ("setPqzScopedKey", REG, "bytes32 ua,address scope,uint64 version,bytes pqzKey,bytes32 pqzPopHash,KemKey openKem,uint64 validUntilBlock,UASig sig"),
+    ("storePqzScopedPop", REG, "bytes32 ua,address scope,uint64 version,bytes pqzPop"),
     ("acceptMembership", REG, "bytes32 ua,MemberSig memberSig"),
+    // CTR-UA-44 (TODO 3ze): an `msig`'s structure update on this registry, signed by a quorum of its stored structure; fee 0, anyone
+    // submits (`chainUid` the registry's word: the contract's `chainUid_`, the JSON name without the trailing underscore)
+    ("updateMsig", REG, "bytes32 ua,uint64 version,MsigStructure structure,uint256 enabled,uint64 validUntilBlock,MemberSig[] sigs,bytes32 chainUid"),
     ("mtxSettle", D, "Settlement[] s"),
     ("mtxExchange", D, "ExchangePlan p,Interaction[] interactions"),
     ("mtxExchangeVia", D, "ExchangePlan p,address executor,bytes data"),
     ("mtxExchangeBatch", D, "ExchangePlan[] ps,Interaction[][] interactions"),
     ("mtxHybrid", D, "HybridPlan p,Interaction[] interactions"),
     ("mtxHybridVia", D, "HybridPlan p,address executor,bytes data"),
+    ("mtxLiquidity", D, "LiquidityPlan p,Interaction[] interactions"),
     ("mtxCancelOrders", D, "DexOrder[] orders,bytes[] sigs"),
+    // `PqChat` (T93; `remove`, UA-7 P48, owner 2026-11-10): the eleven signed writes take their record and its `UASig`; `addWraps` and `storeMessage` carry none (the
+    // guard's unsigned-write rule, P17)
+    ("createSession", PC, "PqChatSession s,Wrap[] wraps,UASig sig"),
+    ("rekey", PC, "PqChatEpoch e,Wrap[] wraps,UASig sig"),
+    ("addWraps", PC, "bytes32 epochId,uint32 first,Wrap[] wraps"),
+    ("leave", PC, "PqChatLeave l,UASig sig"),
+    ("remove", PC, "PqChatRemove r,UASig sig"),
+    ("postMessage", PC, "PqChatMessage m,UASig sig"),
+    ("storeMessage", PC, "uint8 v,bytes8 hint,bytes env"),
+    ("createTopic", PC, "PqTopic t,UASig sig"),
+    ("updateTopic", PC, "PqTopicUpdate u,UASig sig"),
+    ("setTopicWriter", PC, "PqTopicWriter w,UASig sig"),
+    ("postEntry", PC, "PqTopicEntry e,UASig sig"),
+    ("editEntry", PC, "PqTopicEdit e,UASig sig"),
+    ("voteEntry", PC, "PqTopicVote v,UASig sig"),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -268,6 +377,12 @@ enum Tok {
     Sign(Sig),
     /// Group 3f: the `PqzSignedVerdict` the node builds (empty until `crate::pqz` fills it).
     Verdict,
+    /// `init!name:Struct` (owner 2026-11-12, the creations): the named struct `args.name`, sent ABI-encoded as `bytes`; the
+    /// row's `initHash` field is its keccak, filled by the node.
+    Init(String, String),
+    /// `initcall!` (owner 2026-11-12, `mtxCreateInstance`): the class's initializer call, `bytes`: `args.init_call` or built from a
+    /// known class's `args.config` ([`instance_init_call`]); the row's `initHash` is its keccak, filled by the node.
+    InitCall,
 }
 
 #[derive(Debug)]
@@ -334,6 +449,12 @@ fn tok(t: &str, sig: Sig) -> Tok {
     if let Some(n) = t.strip_prefix("wrap!") {
         return Tok::WrapAsTrade(n.into());
     }
+    if t == "initcall!" {
+        return Tok::InitCall;
+    }
+    if let Some((n, ty)) = t.strip_prefix("init!").and_then(|x| x.split_once(':')) {
+        return Tok::Init(n.into(), ty.into());
+    }
     if let Some(l) = t.strip_prefix('[').and_then(|x| x.strip_suffix(']')) {
         return Tok::List(Box::new(tok(l, sig)));
     }
@@ -385,6 +506,7 @@ fn tok_abi(t: &Tok, fields: &[(String, String)]) -> String {
         Tok::WrapAsTrade(n) => abi_type(if of(n).starts_with("(bytes32") { "UATradeOrder" } else { "TradeOrder" }),
         Tok::Sign(s) => abi_type(sig_type(*s)),
         Tok::Verdict => abi_type("PqzSignedVerdict"),
+        Tok::Init(..) | Tok::InitCall => "bytes".into(),
     }
 }
 
@@ -494,6 +616,7 @@ fn word(ty: &str, v: &Val) -> B256 {
     }
     match v {
         Val::Bytes(b) => keccak256(b),
+        Val::String(t) => keccak256(t.as_bytes()), // EIP-712: a string by its bytes' keccak (round 3r's `reason`)
         other => B256::from_slice(&other.abi_encode()),
     }
 }
@@ -522,6 +645,88 @@ fn hash_tuple(name: &str, fields: &[(String, String)], vals: &[Val]) -> B256 {
 /// `msig` has at most 16 members (CTR-UA-09), so a `MemberSig[]` or an `InnerSig[]` has at most 16 slots. The two levels of the type bound the
 /// depth of a decode; this bounds its width: the registry copies a list to memory before its first index check, 16 × 16 at most here.
 const MSIG_MAX_SLOTS: usize = 16;
+/// CTR-UA-44: an `msig` structure has at most 256 slots (`updateMsig`, disabled ones included), 16 at registration (`registerMsig`,
+/// [`register_msig_bounds`]). A `MsigMember` is flat, so this bounds the decode's width; its depth is the type's.
+const MSIG_MAX_MEMBERS: usize = 256;
+/// C9 (spec 2026-11-10-dex-liquidity.md §4.1, §11): at most eight inputs, eight outputs and eight extra tokens per liquidity plan.
+const LIQUIDITY_MAX: usize = 8;
+/// Round 3r (spec §5.4, Fable P3): an `Env`'s bounds, the factory's (`ChainEnvCode.MAX_DEPS`, `MAX_PARAMS`, `MAX_LIBS`), and a
+/// `UASetCompliance`'s rows (the registry's `TooManyRows`, spec §5.3.1), so the node and the contract refuse the same.
+const ENV_MAX_DEPS: usize = 4;
+const ENV_MAX_PARAMS: usize = 2;
+const ENV_MAX_LIBS: usize = 32;
+const COMPLIANCE_MAX_ROWS: usize = 256;
+
+fn arr_len(v: &Val) -> usize {
+    match v {
+        Val::Array(a) => a.len(),
+        _ => usize::MAX,
+    }
+}
+
+/// An `Env` (fields in declaration order: `registry, smartKeyAccountImpl, hedera, deps, params, libs, libCodeHashes`).
+fn env_bounds(t: &[Val], path: &str) -> Result<()> {
+    if arr_len(&t[3]) > ENV_MAX_DEPS {
+        bail!("BAD_PAYLOAD: {path}.deps: more than {ENV_MAX_DEPS}");
+    }
+    if arr_len(&t[4]) > ENV_MAX_PARAMS {
+        bail!("BAD_PAYLOAD: {path}.params: more than {ENV_MAX_PARAMS}");
+    }
+    if arr_len(&t[5]) > ENV_MAX_LIBS || arr_len(&t[5]) != arr_len(&t[6]) {
+        bail!("BAD_PAYLOAD: {path}.libs: at most {ENV_MAX_LIBS}, one libCodeHashes each");
+    }
+    Ok(())
+}
+
+/// Round 3s (spec 2026-11-10-token-lists.md §6.1, §9): a list edit's `accounts`, flat, `1 ≤ length ≤ 256`, refused by name
+/// before any simulation as the token refuses it (`ListBatchInvalid`).
+const LIST_MAX_BATCH: usize = 256;
+
+fn list_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
+    let n = pos(fields, "accounts").map_or(usize::MAX, |i| arr_len(&vals[i]));
+    if n == 0 || n > LIST_MAX_BATCH {
+        bail!("BAD_PAYLOAD: args.accounts: 1 to {LIST_MAX_BATCH} accounts (ListBatchInvalid)");
+    }
+    Ok(())
+}
+
+/// CTR-PQZ-41 (NODE-JOB-28): the signed rollover's `skip` marks, strictly ascending, at most `ROLL_MAX_ANY` (the largest `ROLL_MAX`
+/// of any set, n2048-kmax1024's 80 since the signed rollover's fit (decision 2026-11-14 on CTR-PQZ-41; was 96); the token checks
+/// its own set's, the range and that each marks a credit), refused by name before any simulation.
+const ROLL_MAX_ANY: usize = 80;
+
+fn skip_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
+    let skip: Vec<U256> = pos(fields, "skip").and_then(|i| vals[i].as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_uint().map(|x| x.0)).collect()).unwrap_or_default();
+    if skip.len() > ROLL_MAX_ANY {
+        bail!("BAD_PAYLOAD: args.skip: at most {ROLL_MAX_ANY} marks (RollOverRange)");
+    }
+    if skip.windows(2).any(|w| w[0] >= w[1]) {
+        bail!("BAD_PAYLOAD: args.skip: strictly ascending (SkipRange)");
+    }
+    Ok(())
+}
+
+/// `registerMsig`'s structure: at most 16 members (CTR-UA-09), as the registry's `validateKeyData` refuses more.
+fn register_msig_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
+    let n = pos(fields, "structure").map_or(usize::MAX, |i| match &vals[i] {
+        Val::Tuple(t) => arr_len(&t[1]),
+        _ => usize::MAX,
+    });
+    if n > MSIG_MAX_SLOTS {
+        bail!("BAD_PAYLOAD: args.structure.members: more than 16 members");
+    }
+    Ok(())
+}
+
+/// A `UASetCompliance`'s three arrays: one length, at most 256.
+fn compliance_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
+    let n: Vec<usize> = ["accounts", "flags", "until"].iter().map(|k| pos(fields, k).map_or(usize::MAX, |i| arr_len(&vals[i]))).collect();
+    if n[0] > COMPLIANCE_MAX_ROWS || n.iter().any(|x| *x != n[0]) {
+        bail!("BAD_PAYLOAD: args.accounts: at most {COMPLIANCE_MAX_ROWS} rows, one flags and one until each");
+    }
+    Ok(())
+}
 
 fn fixed(v: &[u8]) -> Val {
     let mut w = B256::ZERO;
@@ -543,12 +748,30 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
         if matches!(el, "MemberSig" | "InnerSig") && a.len() > MSIG_MAX_SLOTS {
             return Err(bad("more than 16 slots"));
         }
+        if el == "MsigMember" && a.len() > MSIG_MAX_MEMBERS {
+            return Err(bad("more than 256 members"));
+        }
+        // CTR-DEX-30 (C9): a liquidity order's inputs and outputs and its plan's extra tokens, at most eight each
+        if el == "LiquidityToken" && a.len() > LIQUIDITY_MAX {
+            return Err(bad(&format!("more than {LIQUIDITY_MAX}")));
+        }
+        // CTR-TOK-25: a wrapped kind's legs, 1..8 (the token refuses more; bounded here before any read)
+        if el == "TokenLeg" && a.len() > 8 {
+            return Err(bad("more than 8 legs"));
+        }
         let v: Result<Vec<Val>> = a.iter().enumerate().map(|(i, x)| parse(el, x, &format!("{path}[{i}]"))).collect();
         return Ok(Val::Array(v?));
     }
     if let Some(f) = nested(ty) {
         let o = j.as_object().ok_or_else(|| bad("not an object"))?;
-        return Ok(Val::Tuple(take(f, o, path)?));
+        let t = take(f, o, path)?;
+        if ty == "LiquidityPlan" {
+            liquidity_plan(&t, path)?;
+        }
+        if ty == "Env" {
+            env_bounds(&t, path)?;
+        }
+        return Ok(Val::Tuple(t));
     }
     if ty == "PayMeta" {
         return pay_meta(j, path);
@@ -565,6 +788,13 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
                     return Err(bad(&format!("not {ty}")));
                 }
                 fixed(&b)
+            } else if let Some(bits) = ty.strip_prefix("int").and_then(|n| n.parse::<u32>().ok()).filter(|b| (8..=64).contains(b)) {
+                // `int8` (a `PqChat` vote): a JSON number in range
+                let n = j.as_i64().ok_or_else(|| bad("not a number"))?;
+                if bits < 64 && n >> (bits - 1) != 0 && n >> (bits - 1) != -1 {
+                    return Err(bad(&format!("outside {ty}")));
+                }
+                Val::Int(alloy::primitives::I256::try_from(n).expect("64 bits"), bits as usize)
             } else {
                 let bits: usize = ty.strip_prefix("uint").and_then(|n| n.parse().ok()).ok_or_else(|| bad("unknown type"))?;
                 let v = match j.as_u64() {
@@ -578,6 +808,26 @@ pub fn parse(ty: &str, j: &Value, path: &str) -> Result<Val> {
             }
         }
     })
+}
+
+/// A `LiquidityPlan`'s own shape (spec 2026-11-10-dex-liquidity.md §11): at most eight extra tokens, one `pull` per input
+/// (fields in declaration order: `ref, order, auth, pull, positionId, extraTokens`; `order.inputs` its second field).
+fn liquidity_plan(t: &[Val], path: &str) -> Result<()> {
+    let len = |v: &Val| match v {
+        Val::Array(a) => a.len(),
+        _ => usize::MAX,
+    };
+    let inputs = match &t[1] {
+        Val::Tuple(o) => len(&o[1]),
+        _ => usize::MAX,
+    };
+    if len(&t[5]) > LIQUIDITY_MAX {
+        bail!("BAD_PAYLOAD: {path}.extraTokens: more than {LIQUIDITY_MAX}");
+    }
+    if len(&t[3]) != inputs {
+        bail!("BAD_PAYLOAD: {path}.pull: one per input");
+    }
+    Ok(())
 }
 
 const PAY_META_ABI: &str = "(bytes32,bytes32,bool,uint16,bytes)";
@@ -726,6 +976,7 @@ fn json_of(ty: &str, v: &Val, number_bits: usize) -> Value {
         Val::FixedBytes(w, n) => json!(format!("0x{}", alloy::hex::encode(&w[..*n]))),
         Val::Uint(u, bits) if *bits <= number_bits => json!(u.saturating_to::<u64>()),
         Val::Uint(u, _) => json!(u.to_string()),
+        Val::Int(i, _) => i64::try_from(*i).map_or(Value::Null, |n| json!(n)),
         Val::String(t) => json!(t),
         _ => Value::Null,
     }
@@ -804,7 +1055,62 @@ fn emit(t: &Tok, row: &Row, a: &Assembled) -> Result<Val> {
         }
         Tok::Sign(_) => a.sig.clone().ok_or_else(|| anyhow!("BAD_PAYLOAD: no signature"))?,
         Tok::Verdict => empty_verdict(),
+        Tok::Init(n, _) => Val::Bytes(get(n)?.abi_encode()),
+        Tok::InitCall => get(INIT_CALL)?,
     })
+}
+
+/// Where the built initializer call waits in [`Assembled::vals`] (no struct field has this name).
+const INIT_CALL: &str = "initCall";
+
+/// Owner 2026-11-12: a job's `init_call` is at most this long (a class's initializer takes named, mostly static arguments;
+/// `PqChat`'s is 36 bytes).
+pub const MAX_INIT_CALL: usize = 4096;
+
+/// The classes whose `mtxCreateInstance` a job may name by fields (`args.config`): `(contractClass, kind)`, the initializer.
+pub const INSTANCE_CONFIGS: &[(u16, u16, &str)] = &[(crate::guard::CLASS_PQCHAT, 0, "PqChat initialize(bytes32 owner)")];
+
+/// Owner 2026-11-12 (`mtxCreateInstance`, both forms): the initializer call of a generic creation, either `args.init_call` (bytes,
+/// at most [`MAX_INIT_CALL`]) or built from a known class's named `args.config` ([`INSTANCE_CONFIGS`]), never both. `PqChat`
+/// (class 3, kind 0): `{owner}`, 0 or the creator (`envelope.from`; the instance refuses any other, `PqChatOwnerNotCreator`).
+fn instance_init_call(a: &Map<String, Value>, e: &Map<String, Value>) -> Result<Vec<u8>> {
+    match (a.get("config"), a.get("init_call")) {
+        (Some(_), Some(_)) => bail!("BAD_PAYLOAD: args.config and args.init_call: a creation names one of them"),
+        (None, None) => bail!("BAD_PAYLOAD: args.init_call: missing (or a known class's args.config)"),
+        (None, Some(v)) => {
+            let b = parse("bytes", v, "args.init_call")?.as_bytes().map(<[u8]>::to_vec).unwrap_or_default();
+            if b.len() > MAX_INIT_CALL {
+                bail!("INIT_CALL_TOO_LONG: args.init_call is {} bytes, at most {MAX_INIT_CALL}", b.len());
+            }
+            Ok(b)
+        }
+        (Some(c), None) => {
+            let id = |k: &str| -> Result<u64> {
+                let p = format!("args.{k}");
+                let v = parse("uint16", a.get(k).ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?;
+                Ok(v.as_uint().map_or(0, |(u, _)| u.to::<u64>()))
+            };
+            let (class, kind) = (id("contractClass")?, id("kind")?);
+            let c = c.as_object().ok_or_else(|| anyhow!("BAD_PAYLOAD: args.config: not an object"))?;
+            match (class, kind) {
+                (3, 0) => {
+                    if let Some(k) = c.keys().find(|k| *k != "owner") {
+                        bail!("BAD_PAYLOAD: args.config.{k}: unknown field (PqChat takes owner)");
+                    }
+                    let owner = parse("bytes32", c.get("owner").ok_or_else(|| anyhow!("BAD_PAYLOAD: args.config.owner: missing"))?,
+                        "args.config.owner")?;
+                    let from = parse("bytes32", e.get("from").ok_or_else(|| anyhow!("BAD_PAYLOAD: envelope.from: missing"))?, "envelope.from")?;
+                    let owner = owner.as_fixed_bytes().map(|(b, _)| B256::from_slice(b)).unwrap_or_default();
+                    if !owner.is_zero() && Some(owner.as_slice()) != from.as_fixed_bytes().map(|(b, _)| b) {
+                        bail!("BAD_PAYLOAD: args.config.owner: 0 or the creator (envelope.from), the instance refuses another");
+                    }
+                    alloy::sol! { function initialize(bytes32 ownerUA) external; }
+                    Ok(initializeCall { ownerUA: owner }.abi_encode())
+                }
+                _ => bail!("INSTANCE_CONFIG_UNKNOWN: class {class} kind {kind} has no named config; send args.init_call"),
+            }
+        }
+    }
 }
 
 /// Group 3f (spec §5.1): the empty verdict, every field 0 and an empty `UASig` (what a `PRECOMPILE` token takes).
@@ -819,7 +1125,7 @@ fn empty_verdict() -> Val {
 
 fn extras(row: &Row) -> Vec<(&str, &str)> {
     row.plan.iter().filter_map(|t| match t {
-        Tok::Extra(n, ty) => Some((n.as_str(), ty.as_str())),
+        Tok::Extra(n, ty) | Tok::Init(n, ty) => Some((n.as_str(), ty.as_str())),
         _ => None,
     }).collect()
 }
@@ -839,17 +1145,57 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
     if let Some(k) = e.keys().find(|k| !in_env(k)) {
         bail!("BAD_PAYLOAD: envelope.{k}: unknown field");
     }
-    if let Some(k) = a.keys().find(|k| in_env(k) || !(pos(&row.fields, k).is_some() || ext.iter().any(|x| x.0 == *k))) {
+    let init_call = row.plan.contains(&Tok::InitCall);
+    if let Some(k) = a.keys().find(|k| in_env(k) || !(pos(&row.fields, k).is_some() || ext.iter().any(|x| x.0 == *k)
+        || (init_call && (*k == "init_call" || *k == "config")))) {
         if matches!(k.as_str(), "data" | "calldata") {
             bail!("HEX_DATA_REFUSED: args.{k}: {} takes explicit named fields", row.entry);
         }
         bail!("BAD_PAYLOAD: args.{k}: unknown field");
     }
+    // owner 2026-11-12 (the creations): `initHash` is the keccak of the encoded named struct, never the job's
+    let init_hash = match row.plan.iter().find_map(|t| match t { Tok::Init(n, ty) => Some((n, ty)), _ => None }) {
+        Some((n, ty)) => {
+            if a.contains_key("initHash") {
+                bail!("BAD_PAYLOAD: args.initHash: the node hashes args.{n}");
+            }
+            let p = format!("args.{n}");
+            let v = parse(ty, a.get(n.as_str()).ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?;
+            Some(json!(format!("{:#x}", keccak256(v.abi_encode()))))
+        }
+        None => None,
+    };
+    let init_call = match init_call {
+        true => {
+            if a.contains_key("initHash") {
+                bail!("BAD_PAYLOAD: args.initHash: the node hashes args.init_call (or the call it builds from args.config)");
+            }
+            Some(instance_init_call(a, e)?)
+        }
+        false => None,
+    };
+    let init_hash = init_hash.or_else(|| init_call.as_ref().map(|c| json!(format!("{:#x}", keccak256(c)))));
     let mut vals: Vec<Val> = Vec::new();
     for (ty, n) in &row.fields {
-        let (src, p) = if in_env(n) { (e.get(n), "envelope") } else { (a.get(n), "args") };
+        let (src, p) = match &init_hash {
+            Some(h) if n == "initHash" => (Some(h), "args"),
+            _ if in_env(n) => (e.get(n), "envelope"),
+            _ => (a.get(n), "args"),
+        };
         let p = format!("{p}.{n}");
         vals.push(parse(ty, src.ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?);
+    }
+    if row.name == "UASetCompliance" {
+        compliance_bounds(&row.fields, &vals)?;
+    }
+    if row.name == "UASetAllowed" || row.name == "UASetDenied" {
+        list_bounds(&row.fields, &vals)?;
+    }
+    if row.name == "PqzRollOver" {
+        skip_bounds(&row.fields, &vals)?;
+    }
+    if row.name == "registerMsig" {
+        register_msig_bounds(&row.fields, &vals)?;
     }
     if row.typed {
         normalize(&row.fields, &mut vals, fee_recipient)?;
@@ -865,6 +1211,9 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
     for (n, ty) in ext {
         let p = format!("args.{n}");
         map.insert(n.to_string(), parse(ty, a.get(n).ok_or_else(|| anyhow!("BAD_PAYLOAD: {p}: missing"))?, &p)?);
+    }
+    if let Some(c) = init_call {
+        map.insert(INIT_CALL.into(), Val::Bytes(c));
     }
     let sig = match (row.sig, sig) {
         (Some(s), Some(v)) => Some(parse(sig_type(s), v, "signature")?),
@@ -899,7 +1248,7 @@ pub struct Typed {
     pub domain_of: Address,
     /// `None`: a plain entry, no typed digest.
     pub struct_hash: Option<B256>,
-    /// The struct `MetaTransactionExecuted` reports when it is not `struct_hash`: a receiver fee's payment.
+    /// The struct `MetaTransactionExecuted` reports when it is not `struct_hash`: a payee fee's payment.
     pub lane_hash: Option<B256>,
     /// `(native signer, signature)` when the signer is known here (the guard recovers a 65-byte one, any other length is the
     /// contract's); `None`: a derived UA, a member set, a key of an account.
@@ -924,6 +1273,10 @@ pub struct Typed {
     /// Group 3f (spec §11.1): a PQZ debit's verdict as the job named it (`args.pqz_verdict`) or as fetched; the `PqzVerdict` it
     /// signs is rebuilt by the node ([`crate::pqz`]), never taken from the job.
     pub pqz_verdict: Option<PqzVerdictArgs>,
+    /// Round 3t (CTR-PQZ-36, NODE-JOB-22's Change): a PQZ debit's proved fee word as the job named it (`args.pqz_fee`, a
+    /// `uint64` decimal string): required on an `OFFCHAIN` token, optional on a `PRECOMPILE` one; [`crate::pqz`] checks it
+    /// against word 256 of the statement the token's own view builds (`PQZ_FEE_MISMATCH`), never sends it.
+    pub pqz_fee: Option<u64>,
 }
 
 /// Group 3f: a job's named `pqz_verdict: {pqzVerifierEpoch, validUntil, auth}` (or a PQZ verifier's answer of that shape): the
@@ -941,7 +1294,7 @@ impl Typed {
         self.hashed(self.struct_hash?, chain_id, chain_uid)
     }
 
-    /// The digest the op's lane reports on chain, what `classify` compares: the payment's for a receiver fee.
+    /// The digest the op's lane reports on chain, what `classify` compares: the payment's for a payee fee.
     pub fn lane_digest_on(&self, chain_id: u64, chain_uid: B256) -> Option<B256> {
         self.hashed(self.lane_hash.or(self.struct_hash)?, chain_id, chain_uid)
     }
@@ -1046,12 +1399,22 @@ impl Op {
             return crate::service::op(o, entry, services);
         }
         let (row, contract) = find(entry, text("contract")?, text("struct")?)?;
+        // T93 (topics P45): a `PqChat` job is its records' named fields; `args`, a record, a list or `sig` as one hex string is the
+        // old hex form
+        if contract == "pqchat" {
+            let args = o.get("args");
+            let hexed = |t: &str, n: &str| (t.ends_with("[]") || nested(t).is_some()) && args.and_then(|a| a.get(n)).is_some_and(Value::is_string);
+            if args.is_some_and(Value::is_string) || row.fields.iter().any(|(t, n)| hexed(t, n)) {
+                bail!("HEX_ARGS_REFUSED: {entry}: name each record's fields in args, the node builds the calldata");
+            }
+        }
         let token = addr(text("token")?.ok_or_else(|| anyhow!("BAD_PAYLOAD: op.token missing"))?).map_err(|e| anyhow!("BAD_PAYLOAD: op.token: {e}"))?;
         let empty = json!({});
         let mut args = o.get("args").unwrap_or(&empty).clone();
         let mut envelope = o.get("envelope").cloned();
-        // spec §7.1: a pay entry's signed payment is `args.t`: the `payment` member, or `mtxPay`'s envelope and fields
-        if let Some(t) = args.as_object_mut().and_then(|a| a.remove("t")) {
+        // spec §7.1: a pay entry's signed payment is `args.t`: the `payment` member, or `mtxPay`'s envelope and fields (an entry
+        // whose own argument is `t`, `PqChat`'s `createTopic`, keeps it)
+        if let Some(t) = args.as_object_mut().filter(|_| pos(&row.fields, "t").is_none()).and_then(|a| a.remove("t")) {
             if pos(&row.fields, "payment").is_some() {
                 args["payment"] = t;
             } else if row.name == "UAMetaTransfer" {
@@ -1080,6 +1443,16 @@ impl Op {
                     node rebuilds the PqzVerdict it signs");
             }
         }
+        // round 3t: `args.pqz_fee` on a debit, a decimal string `< 2^64`, read into `Typed`, never into the bytes
+        let pqz_fee = match (verdict_slot(row), args.as_object_mut().and_then(|a| a.remove("pqz_fee"))) {
+            (_, None | Some(Value::Null)) => None,
+            (None, Some(_)) => bail!("BAD_PAYLOAD: args.pqz_fee: {entry} is no PQZ debit"),
+            (Some(_), Some(Value::String(x))) if x.starts_with("0x") || x.starts_with("0X") =>
+                bail!("HEX_ARGS_REFUSED: args.pqz_fee: the proved fee word as a decimal string"),
+            (Some(_), Some(Value::String(x))) => Some(x.parse::<u64>().map_err(|_| anyhow!("BAD_PAYLOAD: args.pqz_fee: a uint64 \
+                decimal string (below 2^64), got {x:?}"))?),
+            (Some(_), Some(x)) => bail!("BAD_PAYLOAD: args.pqz_fee: a uint64 decimal string, got {x}"),
+        };
         let pqz_verdict = match verdict_slot(row) {
             Some(_) => match args.as_object_mut().and_then(|a| a.remove("pqz_verdict")) {
                 None | Some(Value::Null) => None,
@@ -1098,9 +1471,19 @@ impl Op {
                 }
                 // no `fee_recipient`: the payer hashed these bytes (`callDataHash`), the lane must not rewrite them; an unbound
                 // `relayer` / `feeRecipient` of the inner call goes as 0, which is what the client hashes (job-api.md §5.3)
+                // Fable E N-5: a nested relay fee is refused by name before the recursion, never bounded by depth alone
+                if c.get("entry").and_then(Value::as_str).is_some_and(|e| rows().iter().any(|r| r.relay_fee() && r.entry == e)) {
+                    bail!("BAD_PAYLOAD: a relay fee does not relay a relay fee");
+                }
                 let c = Op::parse_with(c, None, services)?;
                 if c.row.relay_fee() {
                     bail!("BAD_PAYLOAD: a relay fee does not relay a relay fee");
+                }
+                // Fable E N-4: a PQZ debit takes its verdict last, which the payer's `callDataHash` would have to cover before the
+                // node could fetch or rebuild it; the combination is not supported, refused by name
+                if verdict_slot(c.row).is_some() {
+                    bail!("BAD_PAYLOAD: a PQZ debit ({}) is no relay fee's call: its verdict is rebuilt by the node, after the payer \
+                        hashed the call; send it as its own job", c.row.entry);
                 }
                 args["target"] = json!(format!("{:#x}", c.to));
                 args["callDataHash"] = json!(format!("{:#x}", keccak256(&c.data)));
@@ -1132,7 +1515,7 @@ impl Op {
             }
             None => (a.data.clone(), token),
         };
-        let valid_until = deadline(o, &a)?;
+        let valid_until = deadline(o, &a, row.entry == "mtxLiquidity")?;
         let at = |t: &Val, i: usize| t.as_tuple().and_then(|x| x.get(i).cloned());
         let order = a.vals.get("order");
         // who signed: `from`, `ua`, the order's `from` (a `DexOrder`'s inner order), the payment's payee
@@ -1140,7 +1523,7 @@ impl Op {
             Some(x @ (Val::Address(_) | Val::FixedBytes(..))) if row.name != "CancelDexOrder" => Some(x),
             _ => at(t, 1).and_then(|x| at(&x, 0)),
         });
-        // spec §7.1 (C2): `UAPayWithTax`'s signer is the payer `payment.from`; `UAReceiverFee`'s the payee `payment.to`
+        // spec §7.1 (C2): `UAPayWithTax`'s signer is the payer `payment.from`; `UAPayeeFee`'s the payee `payment.to`
         let payment_signer = if row.name == "UAPayWithTax" { 0 } else { 1 };
         let who = a.vals.get("from").cloned().or_else(|| a.vals.get("ua").filter(|_| !row.enveloped).cloned())
             .or_else(|| order_from.clone())
@@ -1158,8 +1541,8 @@ impl Op {
         let derived_signer = derived(a.vals.get("from").cloned()) || derived(order_from)
             || derived(a.vals.get("payment").and_then(|p| at(p, 0)));
         let derived_side = derived_signer || derived(a.vals.get("to").cloned()) || payee.is_some_and(|w| native(&w).is_none());
-        // the outer digest is the job's identity for `UAPayWithTax` (spec §7.1, Codex #1); a receiver fee reports its payment's
-        let lane_hash = pos(&row.fields, "payment").filter(|_| row.name == "UAReceiverFee").and_then(|i| {
+        // the outer digest is the job's identity for `UAPayWithTax` (spec §7.1, Codex #1); a payee fee reports its payment's
+        let lane_hash = pos(&row.fields, "payment").filter(|_| row.name == "UAPayeeFee").and_then(|i| {
             let ty = row.fields[i].0.as_str();
             Some(hash_tuple(ty, nested(ty)?, a.vals["payment"].as_tuple()?))
         });
@@ -1174,7 +1557,7 @@ impl Op {
         let pay_meta_len = a.vals.get("meta").and_then(pay_meta_of).map_or(0, |m| m.body.len());
         let (pqz_parties, pqz_auditor) = pqz_parties(row, &a.vals);
         let typed = Typed { contract, domain_of, struct_hash: a.struct_hash, lane_hash, signer, payee, digest: None, derived_signer, derived_side,
-            pay_meta_len, pqz_parties, pqz_auditor, pqz_verdict };
+            pay_meta_len, pqz_parties, pqz_auditor, pqz_verdict, pqz_fee };
         Ok(Op { row, to, data: data.into(), typed, lane, valid_until })
     }
 }
@@ -1223,17 +1606,19 @@ fn payment_lane(p: &Val) -> Option<(B256, U256, U256)> {
     Some((word_of(&t[0])?, t[4].as_uint()?.0, t[5].as_uint()?.0))
 }
 
-/// A job's deadline: what the chain enforces on the op (the envelope, a fee's, the sooner of a receiver fee and its payment)
+/// A job's deadline: what the chain enforces on the op (the envelope, a fee's, the sooner of a payee fee and its payment)
 /// and `op.validUntil`, the job's own, whichever comes first: a job deadline narrows a signed one, never extends it. A cancel
 /// has no enforced deadline, so its order's `validUntil` is used only when the job names none.
-fn deadline(o: &Map<String, Value>, a: &Assembled) -> Result<u64> {
+fn deadline(o: &Map<String, Value>, a: &Assembled, liquidity: bool) -> Result<u64> {
     let job = o.get("validUntil").map(|v| {
         let s = v.as_str().ok_or_else(|| anyhow!("BAD_PAYLOAD: op.validUntil is not a string"))?;
         uint(s).map_err(|e| anyhow!("BAD_PAYLOAD: op.validUntil: {e}"))
     }).transpose()?;
     let nested = |k: &str, i: usize| a.vals.get(k).and_then(|t| t.as_tuple()).and_then(|t| t.get(i)).and_then(|v| v.as_uint()).map(|x| x.0);
     let own = a.vals.get("validUntil").and_then(|v| v.as_uint()).map(|x| x.0);
-    let enforced = own.into_iter().chain(nested("payment", 6)).min();
+    // a liquidity plan's signed order, `p.order.validUntil` (spec 2026-11-10-dex-liquidity.md §11 "validUntil ahead")
+    let plan = liquidity.then(|| a.vals.get("p")?.as_tuple()?.get(1)?.as_tuple()?.get(16)?.as_uint().map(|x| x.0)).flatten();
+    let enforced = own.into_iter().chain(nested("payment", 6)).chain(plan).min();
     let t = match (enforced, job) {
         (Some(x), Some(y)) => x.min(y),
         (Some(x), None) | (None, Some(x)) => x,
@@ -1319,10 +1704,27 @@ pub fn hex_refused(what: &str) -> anyhow::Error {
 pub mod testkit {
     use super::*;
 
-    /// ua-mtx-merge T76: the router's three creations have vector rows and no node row (chain-neutral spec §6.3: only when
-    /// relaying creations is decided, index spec §8.11 Q11; the guard test names them in `NOT_ROWS`). Every walker over the
-    /// vector sees the rows the node builds; the three must be in the file.
-    pub const NO_NODE_ROW: [&str; 3] = ["UACreateToken", "UACreateDex", "UACreateInstance"];
+    /// Fable E N-6: a fake RPC's answer to `eip712Domain()` (`input`, `0x` hex) on `to`: the vector's token kinds by address
+    /// (`0x…a1` token, `a2` zether, `a3` pqz), any other address `SCaaS MetaToken`; `None` for another call.
+    pub fn domain_answer(input: &str, to: Address) -> Option<String> {
+        let sel = format!("0x{}", alloy::hex::encode(crate::abi::IToken::eip712DomainCall::SELECTOR));
+        if !input.starts_with(&sel) {
+            return None;
+        }
+        let kind = match to.0[19] { 0xa2 if to.0[0] == 0x5c => "zether", 0xa3 if to.0[0] == 0x5c => "pqz", _ => "token" };
+        let r = crate::abi::IToken::eip712DomainReturn { fields: alloy::primitives::FixedBytes([0x1f]),
+            name: domain_name(kind).expect("a token kind").into(), version: "1".into(), chainId: U256::ZERO, verifyingContract: to,
+            salt: B256::ZERO, extensions: vec![] };
+        Some(format!("0x{}", alloy::hex::encode(crate::abi::IToken::eip712DomainCall::abi_encode_returns(&r))))
+    }
+
+    /// ua-mtx-merge T76: the router's three creations have vector rows; owner 2026-11-12: `UACreateToken` and `UACreateDex` are node
+    /// rows taking a named config, which the vector's filler `initArgs` is not, so the walkers over the vector leave them out
+    /// (`creation_rows_encode_the_named_config` pins them); `UACreateInstance` is walked (its `init_call` is the vector's bytes; the
+    /// named form: `instance_rows_take_init_call_or_a_named_config`). The two must be in the file.
+    /// Round 3r (spec §5.6, Q3): the four release approvals too (release management is not a node job, owner 2026-11-10).
+    pub const NO_NODE_ROW: [&str; 6] = ["UACreateToken", "UACreateDex", "UAApproveTokenRelease",
+        "UAApproveDexRelease", "UAApproveRelease", "UARevokeApproval"];
 
     /// Group 3f: the six PQZ debit rows, each taking the node-built `PqzSignedVerdict` last (spec §5.3).
     pub const PQZ_DEBITS: [&str; 6] = ["UAPqzTransferSingle", "UAPqzTransferSingleCompact", "UAPqzTransfer", "UAPqzTransferCompact",
@@ -1357,13 +1759,19 @@ pub mod testkit {
         if let Some(x) = d.get("extra").and_then(Value::as_object) {
             args.extend(x.iter().map(|(k, v)| (k.clone(), v.clone())));
         }
+        // owner 2026-11-12: a generic creation names its initializer call `init_call`; the node hashes it
+        if row.plan.contains(&Tok::InitCall) {
+            let c = args.remove("initCall").expect("the vector's extra.initCall");
+            args.insert("init_call".into(), c);
+            args.remove("initHash");
+        }
         // group 3f: the vector's `PqzSignedVerdict` is the node's to build, never a job's argument
         args.remove("pqzVerdict");
         // clientkeys writes a pay row's `PayMeta` with its body as hex; a job names the body's fields (spec §7.1)
         if let Some(m) = args.get("meta").cloned() {
             args.insert("meta".into(), named_meta(&m));
         }
-        if row.name == "UAReceiverFee" {
+        if row.name == "UAPayeeFee" {
             let s = args["payerSig"].clone();
             args.insert("payerSig".into(), json!({"keyData": "0x", "signature": s, "members": []}));
         }
@@ -1425,6 +1833,15 @@ pub mod testkit {
                 }
                 Tok::Field(n) => { args.insert(n.clone(), to_json(&ty_of(n), x)); }
                 Tok::Extra(n, ty) => { args.insert(n.clone(), to_json(ty, x)); }
+                Tok::Init(n, ty) => {
+                    let v = DynSolType::parse(&abi_type(ty)).unwrap().abi_decode(x.as_bytes().unwrap()).unwrap();
+                    args.insert(n.clone(), to_json(ty, &v));
+                    args.remove("initHash");
+                }
+                Tok::InitCall => {
+                    args.insert("init_call".into(), to_json("bytes", x));
+                    args.remove("initHash");
+                }
                 Tok::Group(g) => for (n, y) in g.iter().zip(x.as_tuple().unwrap()) {
                     args.insert(n.clone(), to_json(&ty_of(n), y));
                 },
@@ -1450,6 +1867,35 @@ pub mod testkit {
     pub fn hex(s: &Value) -> Vec<u8> {
         alloy::hex::decode(&s.as_str().unwrap()[2..]).unwrap()
     }
+
+    /// T93: a `PqChat` job of `entry` on `instance`, every argument named, each value from its type and a running counter (a
+    /// list holds one element, an `int8` is -1), so no two fields carry the same bytes.
+    pub fn pqchat_op(entry: &str, instance: Address) -> Value {
+        fn sample(ty: &str, n: &mut u8) -> Value {
+            *n += 1;
+            if let Some(el) = ty.strip_suffix("[]") {
+                return json!([sample(el, n)]);
+            }
+            if let Some(f) = nested(ty) {
+                return Value::Object(f.iter().map(|(t, k)| (k.clone(), sample(t, n))).collect());
+            }
+            let b = |len: usize| json!(format!("0x{}", alloy::hex::encode(vec![*n; len])));
+            match ty {
+                "address" => b(20),
+                "bytes" => b(3),
+                "string" => json!(format!("text {n}")),
+                "bool" => json!(true),
+                "int8" => json!(-1),
+                t if t.starts_with("bytes") => b(t[5..].parse().unwrap()),
+                t if t[4..].parse::<usize>().unwrap() <= 32 => json!(*n),
+                _ => json!(n.to_string()),
+            }
+        }
+        let row = rows().iter().find(|r| r.entry == entry && r.contracts == ["pqchat"]).unwrap_or_else(|| panic!("no pqchat {entry}"));
+        let mut n = 0;
+        json!({"entry": entry, "contract": "pqchat", "token": format!("{instance:#x}"), "validUntil": "4000000000",
+            "args": Value::Object(row.fields.iter().map(|(t, k)| (k.clone(), sample(t, &mut n))).collect())})
+    }
 }
 
 #[cfg(test)]
@@ -1465,7 +1911,7 @@ mod tests {
     }
 
     fn typed(contract: &'static str, domain_of: Address, h: B256) -> Typed {
-        Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
+        Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract, domain_of, struct_hash: Some(h), lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false }
     }
 
     /// Every row and domain of `typed_ops.json`: encodeType, struct hash, digest, entry selector, calldata; the signature
@@ -1502,14 +1948,31 @@ mod tests {
         // -> (79, 114, 113), UAPayWithTax (three domains) and the router's two tax ops
         // group 3g T54 / T55: -> (80, 114, 113), the rollover's two domains on two rows (`UARollOver` Zether, `UAPqzRollOver` PQZ)
         // group 3f T46 / T47: -> (83, 117, 116), the router's three verifier ops (`UAPqz{Set,Cancel,Revoke}Verifier`)
-        // group 3h T61: -> (84, 118, 117), the router's `UASetProofStore` (bit 24)
-        assert_eq!((structs, domains, calldata), (84, 118, 117), "every row was walked (the three creations left out by vectors())");
+        // group 3h T61: -> (84, 118, 117), the router's `UASetProofStore` (bit 24); group 3l: -> (86, 120, 119), the router's
+        // `UASetWrapLimits`, `UASetWrapMember`; round 3r (CTR-GOV-23): -> (97, 131, 130), the router's eleven admin rows (the
+        // four release approvals, like the creations, left out by vectors()); round 3s (CTR-GOV-24): -> (100, 134, 133), the
+        // router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: -> (101, 135, 134), the router's `UASetVerifierFee`
+        // owner 2026-11-12: -> (102, 136, 135), `UACreateInstance` (its `init_call` the vector's bytes)
+        // the three-key model (CTR-PQZ-41): -> (103, 137, 136), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
+        // round 3zc (CTR-GOV-30): -> (105, 139, 138), the router's `UASetMaxSupply`, `UASetMaxWrapSupply`
+        assert_eq!((structs, domains, calldata), (105, 139, 138), "every row was walked (two creations and the approvals left out by vectors())");
         // plan T32: 70 -> 78, the router's eight regulated controls; pay-meta-tax T42: -> 82, + UAPayWithTax, the two tax ops and
         // mtxPay (its struct `UAMetaTransfer`, no row of the vector file: paymeta.json and pay_job_named_meta_builds_body pin it)
         // group 3g T55: -> 83, `UAPqzRollOver`
-        // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`
-        assert_eq!(rows().iter().filter(|r| r.typed).count(), 87, "84 vector rows, mtxPay, the two invalidations (DEX, token)");
-        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 18, "the wallet's three flat builders are gone (MD-11 (a))");
+        // group 3f T47: -> 86, the router's three verifier ops; group 3h T61: -> 87, `UASetProofStore`; group 3l: -> 89, the
+        // router's `UASetWrapLimits`, `UASetWrapMember`
+        // round 3r (CTR-GOV-23): -> 100, the router's eleven admin rows; round 3s: -> 103, the router's three list / enable rows
+        // round 3t: -> 104, `UASetVerifierFee`; owner 2026-11-12: -> 106, `UACreateToken`, `UACreateDex` (their vector rows stay out
+        // of the walk: filler `initArgs`, `creation_rows_encode_the_named_config`)
+        // owner 2026-11-12: -> 107, `UACreateInstance`
+        // the three-key model (CTR-PQZ-41): -> 108, `PqzRollOver`; round 3zc (CTR-GOV-30): -> 110, `UASetMaxSupply`,
+        // `UASetMaxWrapSupply`
+        assert_eq!(rows().iter().filter(|r| r.typed).count(), 110, "105 vector rows, mtxPay, the two invalidations (DEX, token), the two named creations");
+        // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
+        // (CTR-DEX-30)
+        // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
+        // CTR-UA-44 (TODO 3ze): -> 35, the registry's `updateMsig`
+        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 35, "the wallet's three flat builders are gone (MD-11 (a))");
     }
 
     /// Group 3g (KV-10): the rollover is one row per kind (Zether's form kept; the PQZ one with `keyVersion`, its EIP-712 struct
@@ -1531,6 +1994,26 @@ mod tests {
             o.as_object_mut().unwrap().remove("struct");
             assert_eq!(Op::parse(&o, FEE).unwrap().row.name, name, "{kind}");
         }
+    }
+
+    /// NODE-JOB-28 (spec 2026-11-13-pqz-three-keys §14 item 22): the signed rollover's `skip` at the length and depth bounds:
+    /// 96 ascending marks pass, 97 are refused, as are a descending pair, a repeated mark and a nested array, all by name and
+    /// before any chain read; the vector row itself passes.
+    #[test]
+    fn rollover_signed_skip_bounds() {
+        let v = vectors();
+        let base = op_of("PqzRollOver", "pqz", &v).unwrap();
+        assert_eq!(Op::parse(&base, FEE).unwrap().row.name, "PqzRollOver");
+        let with = |skip: Value| { let mut o = base.clone(); o["args"]["skip"] = skip; Op::parse(&o, FEE) };
+        let marks = |n: u64| Value::Array((0..n).map(|i| json!((10 + 2 * i).to_string())).collect());
+        assert!(with(marks(80)).is_ok(), "ROLL_MAX_ANY marks pass");
+        assert!(with(json!([])).is_ok(), "no mark");
+        for (bad, why) in [(marks(81), "at most 80"), (json!(["7", "5"]), "strictly ascending"), (json!(["5", "5"]), "strictly ascending")] {
+            let e = with(bad).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD: args.skip") && e.contains(why), "{e}");
+        }
+        let e = with(json!([["5"]])).unwrap_err().to_string();
+        assert!(e.starts_with("BAD_PAYLOAD"), "a nested array: {e}");
     }
 
     /// ua-mtx-merge fix (the clientkeys `checkOp` finding, same class): a row whose struct name is not its row name
@@ -1589,6 +2072,34 @@ mod tests {
         let mut o = good;
         o["args"]["data"] = json!("0x1234");
         assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"));
+    }
+
+    /// Round 3t (CTR-PQZ-36, NODE-JOB-22's Change): a PQZ debit's proved fee word is `args.pqz_fee`, a `uint64` decimal string,
+    /// read into `Typed` and never into the bytes; hex `HEX_ARGS_REFUSED`, `2^64` or a number `BAD_PAYLOAD`; no other row takes it.
+    #[test]
+    fn pqz_fee_named() {
+        let v = vectors();
+        for name in PQZ_DEBITS {
+            let good = op_of(name, "pqz", &v).unwrap();
+            let plain = Op::parse(&good, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}"));
+            assert_eq!(plain.typed.pqz_fee, None, "{name}: optional at the parse (pqz.rs requires it on OFFCHAIN)");
+            let with = |x: Value| { let mut o = good.clone(); o["args"]["pqz_fee"] = x; Op::parse(&o, FEE) };
+            let p = with(json!("7")).unwrap();
+            assert_eq!(p.typed.pqz_fee, Some(7), "{name}");
+            assert_eq!((p.data, p.typed.struct_hash), (plain.data.clone(), plain.typed.struct_hash), "{name}: not in the bytes");
+            assert_eq!(with(json!(u64::MAX.to_string())).unwrap().typed.pqz_fee, Some(u64::MAX));
+            let e = with(json!("0x07")).unwrap_err().to_string();
+            assert!(e.starts_with("HEX_ARGS_REFUSED"), "{name}: {e}");
+            let e = with(json!("18446744073709551616")).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD") && e.contains("pqz_fee"), "{name}: 2^64: {e}");
+            let e = with(json!(7)).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD"), "{name}: a number: {e}");
+        }
+        for (name, kind) in [("UAShield", "pqz"), ("UAPqzRollOver", "pqz"), ("UAZetherTransferSingle", "zether")] {
+            let mut o = op_of(name, kind, &v).unwrap();
+            o["args"]["pqz_fee"] = json!("7");
+            assert!(Op::parse(&o, FEE).unwrap_err().to_string().starts_with("BAD_PAYLOAD"), "{name} takes no pqz_fee");
+        }
     }
 
     /// Group 3f (spec §11.1): a PQZ debit's verdict is the named sub-object `pqz_verdict: {pqzVerifierEpoch, validUntil, auth}`,
@@ -1706,6 +2217,60 @@ mod tests {
         assert_eq!(row_of("UAOperatorTransfer", "gov_router").fields[2], ("bytes32".into(), "account".into()));
     }
 
+    /// Round 3r (spec §5.4, Fable P3): the node refuses what the factory and the registry refuse: an `Env` of more than 4 deps,
+    /// 2 params or 32 libs, or libs and code hashes of two lengths; `UASetCompliance` arrays of two lengths or over 256.
+    #[test]
+    fn admin_decode_bounds() {
+        let a = |n: usize| Value::Array((0..n).map(|i| json!(format!("0x{:040x}", i + 1))).collect());
+        let h = |n: usize| Value::Array((0..n).map(|i| json!(format!("0x{:064x}", i + 1))).collect());
+        let env = |d: usize, p: usize, l: usize, c: usize| json!({"registry": format!("0x{:040x}", 0), "smartKeyAccountImpl":
+            format!("0x{:040x}", 0), "hedera": false, "deps": a(d), "params": h(p), "libs": a(l), "libCodeHashes": h(c)});
+        assert!(parse("Env", &env(4, 2, 32, 32), "env").is_ok(), "the bounds themselves pass");
+        for (bad, what) in [(env(5, 2, 1, 1), "deps"), (env(1, 3, 1, 1), "params"), (env(1, 1, 33, 33), "libs"), (env(1, 1, 2, 1), "libs")] {
+            let e = parse("Env", &bad, "env").unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD") && e.contains(what), "{e}");
+        }
+        let f: Vec<(String, String)> = [("bytes32[]", "accounts"), ("uint64[]", "flags"), ("uint64[]", "until")].iter()
+            .map(|(t, n)| (t.to_string(), n.to_string())).collect();
+        let arr = |n: usize| Val::Array(vec![Val::Uint(U256::ZERO, 64); n]);
+        assert!(compliance_bounds(&f, &[arr(256), arr(256), arr(256)]).is_ok());
+        assert!(compliance_bounds(&f, &[arr(257), arr(257), arr(257)]).is_err());
+        assert!(compliance_bounds(&f, &[arr(2), arr(1), arr(2)]).is_err());
+        // round 3s (spec 2026-11-10-token-lists.md §9): a list edit's accounts, 1 to 256, as the token refuses
+        let l: Vec<(String, String)> = [("bytes32[]", "accounts"), ("bool", "on")].iter().map(|(t, n)| (t.to_string(), n.to_string())).collect();
+        let on = Val::Bool(true);
+        assert!(list_bounds(&l, &[arr(256), on.clone()]).is_ok() && list_bounds(&l, &[arr(1), on.clone()]).is_ok());
+        for n in [0, 257] {
+            let e = list_bounds(&l, &[arr(n), on.clone()]).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD") && e.contains("ListBatchInvalid"), "{n}: {e}");
+        }
+        // and the three rows are the router's alone, each with the type string `scaas_ua::regulated` signs
+        for op in ["UASetAllowed", "UASetDenied", "UAEnableFeature"] {
+            let r = row_of(op, "gov_router");
+            assert_eq!(r.contracts, ["gov_router"], "{op}");
+            let ua = if op == "UAEnableFeature" { scaas_ua::regulated::enable_feature_type() }
+                else { scaas_ua::regulated::set_list_type(op == "UASetAllowed") };
+            assert_eq!(r.type_string(), ua, "{op}");
+        }
+    }
+
+    /// Round 3r (spec §5.4, §7): the router's admin rows are the ops `scaas_ua::admin` signs, each way: the same type string,
+    /// the entry `mtx<Op>` on `gov_router` alone; the four release approvals are `scaas_ua::admin` ops and no row.
+    #[test]
+    fn router_admin_rows() {
+        use scaas_ua::admin::{type_string as ua_type, ADMIN_OPS};
+        for (op, _) in ADMIN_OPS {
+            if NO_NODE_ROW.contains(&op) {
+                assert!(rows().iter().all(|r| r.name != op), "{op}: release management is not a node job");
+                continue;
+            }
+            let r = row_of(op, "gov_router");
+            assert_eq!(r.type_string(), ua_type(op).unwrap(), "{op}");
+            assert_eq!(r.entry, format!("mtx{}", &op[2..]), "{op}");
+            assert_eq!(r.contracts, ["gov_router"], "{op}: the router's alone");
+        }
+    }
+
     /// The selectors a list of `MandateWallet.sol` names, read from its source (T66b: `mtxSelectors` answers from its body
     /// `_mtxSelectorsBody`, which the wallet overrides): `X.selector` (its last segment) and the `_REVOKE_*`
     /// constants, in the body of `function <f>` (to its closing brace at four spaces).
@@ -1809,6 +2374,7 @@ mod tests {
                     json!(c.into_iter().collect::<String>())
                 }
                 Value::String(s) if s == "0x" => json!("0x00"),
+                Value::String(s) if uint(s).is_err() => json!(format!("{s}.")), // a `string` (round 3r's `reason`)
                 Value::String(s) => json!(uint(s).unwrap().saturating_add(U256::from(1)).to_string()),
                 x => x.clone(),
             }
@@ -1825,8 +2391,11 @@ mod tests {
                 let (env, args, sig) = op_from_calldata(row, &base.data);
                 assert_eq!(env.as_ref(), op.get("envelope"), "{name}");
                 let mut back = args.as_object().unwrap().clone();
+                // signed, not on the wire (the token reads them): Zether's `accSeq` / `modeNonce`; the PQZ rollover's `rollSeq`,
+                // `rolled`, `entriesHash`, `chainUid` (CTR-PQZ-41)
+                let off = if name == "PqzRollOver" { &["rollSeq", "rolled", "entriesHash", "chainUid"][..] } else { &["accSeq", "modeNonce"][..] };
                 for (k, x) in op["args"].as_object().unwrap() {
-                    if k == "accSeq" || k == "modeNonce" {
+                    if off.contains(&k.as_str()) {
                         back.insert(k.clone(), x.clone());
                     }
                 }
@@ -1848,7 +2417,8 @@ mod tests {
                     // a nudge the parser refuses (a mode bit) sends nothing
                     let Ok(m) = moved else { continue };
                     walked += 1;
-                    let digest_only = matches!(row.name, "ZetherRollOver" | "ZetherSetRollOverMode") && m.data == base.data;
+                    // signed, not on the wire: the token reads them (Zether's sequence words; the PQZ rollover's, CTR-PQZ-41)
+                    let digest_only = matches!(row.name, "ZetherRollOver" | "ZetherSetRollOverMode" | "PqzRollOver") && m.data == base.data;
                     assert!(digest_only || (m.typed.struct_hash != base.typed.struct_hash) == (m.data != base.data),
                         "{name}: {l} moved one output only");
                 }
@@ -1896,6 +2466,21 @@ mod tests {
         assert_eq!(err(bad), "BAD_PAYLOAD: m: more than 16 slots", "before any element is read");
     }
 
+    /// CTR-UA-44: a structure's members, at most 256 before any element is read (`updateMsig`), and at most 16 for `registerMsig`, refused
+    /// by name before any simulation.
+    #[test]
+    fn msig_members_are_bounded() {
+        let members = |n: usize| Value::Array((0..n).map(|i| json!({"kind": 1, "id": format!("{:#x}", B256::with_last_byte(i as u8)), "weight": 1})).collect());
+        parse("MsigMember[]", &members(256), "m").unwrap();
+        let err = |j: Value| parse("MsigMember[]", &j, "m").unwrap_err().to_string();
+        assert_eq!(err(members(257)), "BAD_PAYLOAD: m: more than 256 members");
+        assert_eq!(err(Value::Array(vec![json!("not a member"); 257])), "BAD_PAYLOAD: m: more than 256 members", "before any element");
+        let f = fields_of("MsigStructure structure");
+        let st = |n: usize| parse("MsigStructure", &json!({"threshold": 1, "members": members(n)}), "s").unwrap();
+        assert!(register_msig_bounds(&f, &[st(16)]).is_ok());
+        assert_eq!(register_msig_bounds(&f, &[st(17)]).unwrap_err().to_string(), "BAD_PAYLOAD: args.structure.members: more than 16 members");
+    }
+
     /// The typed bytes a job builds are `abi.encode(MemberSig[])`, the stored form, nested too, and a blob that claims more than it holds
     /// is an error, not a walk: `abi_decode` follows the same two levels.
     #[test]
@@ -1929,6 +2514,29 @@ mod tests {
         }
         Op::parse(&op_of("UAExecute", "wallet", &v).unwrap(), FEE).unwrap();
         Op::parse(&op_of("Execute", "account", &v).unwrap(), FEE).unwrap();
+    }
+
+    /// CTR-GOV-27: every node row signing a `chainUid` (`mtxTransferAdmin`, `mtxRenounceAdmin`, the three env publishes, the
+    /// three deprecations, the two kind switches, `mtxSetChainEntries`; `UARevokeApproval` has no node row, `NO_NODE_ROW`) takes
+    /// it as a named field; a job without it is refused by name; `ChainEntries` is one named object (a packed blob is refused),
+    /// its struct hash nested in the signed one; the vector rows parse (the positive control).
+    #[test]
+    fn chain_word_rows_refuse_a_missing_word() {
+        let v = vectors();
+        let rows: Vec<&str> = TYPED.iter().filter(|r| r.2 == GR && r.3.contains("bytes32 chainUid")).map(|r| r.0).collect();
+        // owner 2026-11-13: + UARenounceRole; round 3zb + 3zc: 24 -> 51 (the 25 rows of O5 / O6, the two cap setters)
+        assert_eq!(rows.len(), 51, "{rows:?}");
+        for op in rows {
+            let good = op_of(op, "gov_router", &v).unwrap();
+            Op::parse(&good, FEE).unwrap();
+            let mut o = good.clone();
+            o["args"].as_object_mut().unwrap().remove("chainUid").unwrap();
+            let e = Op::parse(&o, FEE).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD") && e.contains("args.chainUid: missing"), "{op}: {e}");
+        }
+        let mut o = op_of("UASetChainEntries", "gov_router", &v).unwrap();
+        o["args"]["entries"] = json!(format!("0x{}", "00".repeat(9 * 32)));
+        assert_eq!(Op::parse(&o, FEE).unwrap_err().to_string(), "BAD_PAYLOAD: args.entries: not an object", "a packed blob");
     }
 
     /// The router's rows (spec 2026-11-02-governance §3.2): every op is named JSON, `target` a named field the node signs and sends; a
@@ -2048,7 +2656,7 @@ mod tests {
         let env = env.unwrap();
         assert_eq!(env["relayer"], json!(format!("{:#x}", Address::ZERO)));
         assert_eq!(env["feeRecipient"], json!(format!("{ours:#x}")));
-        let mut op = op_of("UAReceiverFee", "token", &v).unwrap();
+        let mut op = op_of("UAPayeeFee", "token", &v).unwrap();
         let base = Op::parse(&op, FEE).unwrap().typed.struct_hash;
         op["args"]["payment"]["feeRecipient"] = json!(format!("{:#x}", Address::repeat_byte(0x77)));
         assert_eq!(Op::parse(&op, FEE).unwrap().typed.struct_hash, base, "mode 1 does not bind it");
@@ -2135,6 +2743,48 @@ mod tests {
         }
     }
 
+    /// `liquidity_kat.json` (spec 2026-11-10-dex-liquidity.md §12): each row as a named-field `mtxLiquidity` job builds the
+    /// generator's calldata byte for byte, the node's digest of the order is the row's `h` (the negative tick included), and the
+    /// liquidity lists are bounded by type (nine inputs, nine extra tokens, a `pull` short of the inputs).
+    #[test]
+    fn liquidity_rows_match_the_vectors() {
+        let path = format!("{}/../smartcontracts/vectors/ua/liquidity_kat.json", env!("CARGO_MANIFEST_DIR"));
+        let k: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let rows_ = k["rows"].as_array().unwrap();
+        assert_eq!(rows_.len(), 7);
+        let job = |r: &Value| json!({"entry": "mtxLiquidity", "contract": "dex", "token": k["dex"],
+            "args": {"p": {"ref": r["plan"]["ref"], "order": r["order"], "auth": r["auth"], "pull": r["plan"]["pull"],
+                           "positionId": r["plan"]["positionId"], "extraTokens": r["plan"]["extraTokens"]},
+                     "interactions": r["interactions"]},
+            "validUntil": r["order"]["validUntil"]});
+        for r in rows_ {
+            let p = Op::parse(&job(r), FEE).unwrap();
+            assert_eq!(format!("0x{}", alloy::hex::encode(&p.data)), r["mtxLiquidityCalldata"].as_str().unwrap(), "{}", r["name"]);
+            let c = crate::abi::ISCaaSDex::mtxLiquidityCall::abi_decode(&p.data).unwrap();
+            let d = crate::dex::domain("SCaaS Dex", k["chainId"].as_u64().unwrap(), k["dex"].as_str().unwrap().parse().unwrap(),
+                k["chainUid"].as_str().unwrap().parse().unwrap());
+            assert_eq!(format!("{:#x}", crate::dex::liquidity_order_hash(&d, &c.p.order)), r["h"].as_str().unwrap(), "{}", r["name"]);
+        }
+        let err = |f: &dyn Fn(&mut Value)| -> String {
+            let mut j = job(&rows_[0]);
+            f(&mut j);
+            format!("{}", Op::parse(&j, FEE).err().unwrap())
+        };
+        let nine = |x: &Value| Value::Array(vec![x.clone(); 9]);
+        assert!(err(&|j| j["args"]["p"]["order"]["inputs"] = nine(&j["args"]["p"]["order"]["inputs"][0]))
+            .contains("p.order.inputs: more than 8"));
+        assert!(err(&|j| j["args"]["p"]["extraTokens"] = nine(&json!(k["lp"]))).contains("p.extraTokens: more than 8"));
+        assert!(err(&|j| j["args"]["p"]["pull"] = json!(["1"])).contains("p.pull: one per input"));
+        assert!(err(&|j| j["args"]["p"]["order"]["tickLower"] = json!(8_388_608)).contains("outside int24"));
+        // L6d (spec §11 "validUntil ahead"): the job's deadline narrows to the signed order's, never past it
+        let signed: u64 = rows_[0]["order"]["validUntil"].as_str().unwrap().parse().unwrap();
+        let mut j = job(&rows_[0]);
+        j["validUntil"] = json!((signed + 100).to_string());
+        assert_eq!(Op::parse(&j, FEE).unwrap().valid_until, signed, "the order's validUntil");
+        j["validUntil"] = json!((signed - 100).to_string());
+        assert_eq!(Op::parse(&j, FEE).unwrap().valid_until, signed - 100, "the job's, sooner");
+    }
+
     /// A job deadline narrows what is signed, never extends it; a cancel has none of its own.
     #[test]
     fn a_job_deadline_never_outlives_the_signed_one() {
@@ -2147,7 +2797,7 @@ mod tests {
         }
         op.as_object_mut().unwrap().remove("validUntil");
         assert_eq!(Op::parse(&op, FEE).unwrap().valid_until, signed);
-        let mut fee = op_of("UAReceiverFee", "token", &v).unwrap();
+        let mut fee = op_of("UAPayeeFee", "token", &v).unwrap();
         fee.as_object_mut().unwrap().remove("validUntil");
         let outer: u64 = fee["args"]["validUntil"].as_str().unwrap().parse().unwrap();
         fee["args"]["payment"]["validUntil"] = json!((outer + 5).to_string());
@@ -2159,21 +2809,152 @@ mod tests {
         assert_eq!(Op::parse(&c, FEE).unwrap().valid_until, signed + 100, "the chain enforces no deadline on a cancel");
     }
 
-    /// `classify` compares what the chain emits: a receiver fee lands as its payment's `MetaTransfer`, not the outer struct.
+    /// `classify` compares what the chain emits: a payee fee lands as its payment's `MetaTransfer`, not the outer struct.
     #[test]
-    fn a_receiver_fee_is_recognised_by_its_payment_digest() {
+    fn a_payee_fee_is_recognised_by_its_payment_digest() {
         let v = vectors();
-        let d = &v["ops"]["UAReceiverFee"]["domains"]["token"];
-        let op = op_of("UAReceiverFee", "token", &v).unwrap();
+        let d = &v["ops"]["UAPayeeFee"]["domains"]["token"];
+        let op = op_of("UAPayeeFee", "token", &v).unwrap();
         let p = Op::parse(&op, FEE).unwrap();
         let (chain, at, uid) = domain_of(d);
-        let wire = v["ops"]["UAReceiverFee"]["message"]["payment"].clone();
+        let wire = v["ops"]["UAPayeeFee"]["message"]["payment"].clone();
         let m = crate::metatx::UaMtx::from_wire(None, &wire).unwrap();
         let dom = crate::metatx::Domain { name: "SCaaS MetaToken".into(), version: "1".into(), chain_id: chain, verifying_contract: at, salt: uid };
         assert_eq!(p.typed.lane_digest_on(chain, uid), Some(m.digest(&dom)), "the sol! struct, another path");
         assert_ne!(p.typed.lane_digest_on(chain, uid), p.typed.digest_on(chain, uid), "the in-flight key stays the outer op");
         let plain = Op::parse(&op_of("UAUnwrap", "token", &v).unwrap(), FEE).unwrap();
         assert_eq!(plain.typed.lane_digest_on(chain, uid), plain.typed.digest_on(chain, uid));
+    }
+
+    /// Owner 2026-11-12 (every state-changing `mtx*` relayable): `mtxCreateToken` / `mtxCreateDex` take the config as named JSON
+    /// (`args.config`); the node sends it ABI-encoded as the factory's `initArgs` and signs `initHash = keccak256(initArgs)`, the
+    /// vector's type string and selector; the named config's encoding is the forge-checked `create_config.json`. Refused by name: a
+    /// job's own `initHash`, a missing field, a hex config, nine legs.
+    #[test]
+    fn creation_rows_encode_the_named_config() {
+        let raw: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap();
+        let z = |b: u8| format!("{:#x}", B256::repeat_byte(b));
+        // Fable recheck 2 P3-7: the named configs and their `initArgs` are `smartcontracts/vectors/factory/create_config.json`, which
+        // forge's `CreateConfigKat.t.sol` checks against the contracts' structs field by field
+        let kat: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/factory/create_config.json")).unwrap();
+        let bytes_of = |k: &str| alloy::hex::decode(&kat[k]["initArgs"].as_str().unwrap()[2..]).unwrap();
+        let (token, want_token, dex, want_dex) = (kat["token"]["config"].clone(), bytes_of("token"), kat["dex"]["config"].clone(), bytes_of("dex"));
+        for k in ["token", "dex"] {
+            assert_eq!(format!("{:#x}", keccak256(bytes_of(k))), kat[k]["initHash"].as_str().unwrap(), "{k}: the vector's initHash");
+        }
+        for (name, config, want, init_at) in [("UACreateToken", token, want_token, 4usize), ("UACreateDex", dex, want_dex, 3)] {
+            let o = &raw["ops"][name];
+            let d = &o["domains"]["gov_router"];
+            let row = row_of(name, "gov_router");
+            assert_eq!(row.type_string(), o["typeString"].as_str().unwrap(), "{name}");
+            assert_eq!(format!("0x{}", alloy::hex::encode(row.selector)), d["selector"].as_str().unwrap(), "{name}: {}", d["abi"]);
+            let mut args = o["message"].as_object().unwrap().clone();
+            let mut env = Map::new();
+            for k in ["from"].into_iter().chain(ENV) {
+                env.insert(k.to_string(), args.remove(k).unwrap());
+            }
+            args.remove("initHash");
+            args.insert("config".into(), config.clone());
+            let sig = json!({"keyData": "0x", "signature": d["signature"], "members": []});
+            let (env, args) = (Value::Object(env), Value::Object(args));
+            let built = assemble(row, Some(&env), &args, Some(&sig), FEE).unwrap_or_else(|e| panic!("{name}: {e:#}"));
+            // the struct hash, by hand: the vector's typehash over the message's words with `initHash = keccak256(initArgs)`
+            let m = &o["message"];
+            let word = |k: &str| -> [u8; 32] {
+                let v = &m[k];
+                match v.as_str() {
+                    Some(x) if x.starts_with("0x") => { let b = alloy::hex::decode(&x[2..]).unwrap(); let mut w = [0u8; 32]; w[32 - b.len()..].copy_from_slice(&b); w }
+                    Some(x) => U256::from_str_radix(x, 10).unwrap().to_be_bytes(),
+                    None => U256::from(v.as_u64().unwrap()).to_be_bytes(),
+                }
+            };
+            let mut enc = alloy::hex::decode(&o["typehash"].as_str().unwrap()[2..]).unwrap();
+            for (_, k) in &row.fields {
+                enc.extend_from_slice(&if k == "initHash" { keccak256(&want).0 } else { word(k) });
+            }
+            assert_eq!(built.struct_hash, Some(keccak256(&enc)), "{name}: initHash is the keccak of the encoded named config");
+            let tys: Vec<String> = row.plan.iter().map(|t| tok_abi(t, &row.fields)).collect();
+            let call = DynSolType::parse(&format!("({})", tys.join(","))).unwrap().abi_decode_sequence(&built.data[4..]).unwrap();
+            assert_eq!(call.as_tuple().unwrap()[init_at].as_bytes(), Some(&want[..]), "{name}: initArgs = abi.encode(config)");
+            let (_, back, _) = op_from_calldata(row, &built.data);
+            assert_eq!(back["config"], config, "{name}: the calldata reads back to the named config");
+            // refused by name
+            let refused = |mutate: &dyn Fn(&mut Value)| {
+                let mut x = args.clone();
+                mutate(&mut x);
+                assemble(row, Some(&env), &x, Some(&sig), FEE).unwrap_err().to_string()
+            };
+            assert!(refused(&|x| x["initHash"] = json!(z(1))).starts_with("BAD_PAYLOAD: args.initHash: the node hashes args.config"), "{name}");
+            assert!(refused(&|x| { x["config"].as_object_mut().unwrap().remove("admin"); }).contains("args.config.admin: missing"), "{name}");
+            assert!(refused(&|x| x["config"] = json!(format!("0x{}", alloy::hex::encode(&want)))).contains("args.config: not an object"), "{name}");
+            if name == "UACreateToken" {
+                let nine = refused(&|x| x["config"]["legs"] = json!(vec![config["legs"][0].clone(); 9]));
+                assert!(nine.contains("more than 8 legs"), "{nine}");
+                let mut eight = args.clone();
+                eight["config"]["legs"] = json!(vec![config["legs"][0].clone(); 8]);
+                assemble(row, Some(&env), &eight, Some(&sig), FEE).expect("control: eight legs");
+            }
+        }
+    }
+
+    /// Owner 2026-11-12 (`mtxCreateInstance`, "both the generic row and the per-class ones"): a creation names `args.init_call`
+    /// (bytes) or a known class's `args.config`, never both; the node hashes the call into the signed `initHash`. The vector row
+    /// `create_config.json` `instance` (forge `test_instanceInitCallKat`): `PqChat`'s named config builds the row's `initCall`,
+    /// byte for byte the raw form's calldata and struct hash. Refused by name: both, neither, a job's `initHash`, a config of a
+    /// class without one, an unknown config field, an owner neither 0 nor the creator, an `init_call` above [`MAX_INIT_CALL`].
+    #[test]
+    fn instance_rows_take_init_call_or_a_named_config() {
+        let raw: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/typed/typed_ops.json")).unwrap();
+        let kat: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/factory/create_config.json")).unwrap();
+        let k = &kat["instance"];
+        let o = &raw["ops"]["UACreateInstance"];
+        let d = &o["domains"]["gov_router"];
+        let row = row_of("UACreateInstance", "gov_router");
+        assert_eq!(row.type_string(), o["typeString"].as_str().unwrap());
+        assert_eq!(format!("0x{}", alloy::hex::encode(row.selector)), d["selector"].as_str().unwrap(), "{}", d["abi"]);
+        let mut args = o["message"].as_object().unwrap().clone();
+        let mut env = Map::new();
+        for n in ["from"].into_iter().chain(ENV) {
+            env.insert(n.to_string(), args.remove(n).unwrap());
+        }
+        env.insert("from".into(), k["creator"].clone());
+        args.remove("initHash");
+        args.insert("contractClass".into(), k["contractClass"].clone());
+        args.insert("kind".into(), k["kind"].clone());
+        let sig = json!({"keyData": "0x", "signature": d["signature"], "members": []});
+        let env = Value::Object(env);
+        let z32 = |b: u8| format!("{:#x}", B256::repeat_byte(b));
+        let on = |base: &Map<String, Value>, extra: &[(&str, Value)]| {
+            let mut x = base.clone();
+            x.extend(extra.iter().map(|(n, v)| (n.to_string(), v.clone())));
+            assemble(row, Some(&env), &Value::Object(x), Some(&sig), FEE)
+        };
+        let with = |extra: &[(&str, Value)]| on(&args, extra);
+        let raw_form = with(&[("init_call", k["initCall"].clone())]).unwrap();
+        let named = with(&[("config", k["config"].clone())]).unwrap();
+        assert_eq!((&named.data, named.struct_hash), (&raw_form.data, raw_form.struct_hash), "the named config builds the same call");
+        assert_eq!(raw_form.vals["initHash"], Val::FixedBytes(k["initHash"].as_str().unwrap().parse::<B256>().unwrap(), 32), "initHash");
+        let (_, back, _) = op_from_calldata(row, &named.data);
+        assert_eq!(back["init_call"], k["initCall"], "the calldata carries the vector's initCall");
+        with(&[("config", json!({"owner": z32(0)}))]).expect("control: owner 0");
+        let refused = |extra: &[(&str, Value)]| with(extra).unwrap_err().to_string();
+        let other = json!({"owner": format!("{:#x}", B256::repeat_byte(0x0b))});
+        assert!(refused(&[("config", other)]).contains("args.config.owner: 0 or the creator"));
+        assert!(refused(&[("config", k["config"].clone()), ("init_call", k["initCall"].clone())])
+            .starts_with("BAD_PAYLOAD: args.config and args.init_call"));
+        assert!(refused(&[]).starts_with("BAD_PAYLOAD: args.init_call: missing"));
+        assert!(refused(&[("init_call", k["initCall"].clone()), ("initHash", k["initHash"].clone())])
+            .starts_with("BAD_PAYLOAD: args.initHash: the node hashes"));
+        assert!(refused(&[("config", json!({"owner": z32(0), "admin": z32(0)}))]).contains("args.config.admin: unknown field"));
+        assert!(refused(&[("config", json!("0x00"))]).contains("args.config: not an object"));
+        let long = json!(format!("0x{}", "ab".repeat(MAX_INIT_CALL + 1)));
+        assert!(refused(&[("init_call", long)]).starts_with("INIT_CALL_TOO_LONG"));
+        with(&[("init_call", json!(format!("0x{}", "ab".repeat(MAX_INIT_CALL))))]).expect("control: at the bound");
+        let mut seven = args.clone();
+        seven.insert("contractClass".into(), json!(7));
+        assert!(on(&seven, &[("config", k["config"].clone())]).unwrap_err().to_string()
+            .starts_with("INSTANCE_CONFIG_UNKNOWN: class 7 kind 0"));
+        on(&seven, &[("init_call", k["initCall"].clone())]).expect("control: any class by init_call");
     }
 
     /// CTR-MTX-27: `call` is a named op, not hex: the router's calldata carries its bytes, `callDataHash` their hash, and the
@@ -2234,6 +3015,17 @@ mod tests {
             assert!(Op::parse(&bad, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"));
             bad["call"] = json!("0x1234");
             assert!(Op::parse(&bad, FEE).unwrap_err().to_string().starts_with("HEX_DATA_REFUSED"), "op.call as hex");
+            // Fable E N-5: a nested relay fee is refused by name before its body is parsed (its own fields need not be valid)
+            bad["call"] = json!({"entry": row.entry, "call": {"entry": row.entry}});
+            assert_eq!(Op::parse(&bad, FEE).unwrap_err().to_string(), "BAD_PAYLOAD: a relay fee does not relay a relay fee");
+            // Fable E N-4: a PQZ debit (a verdict slot) is no relay fee's call, refused by name; the control: the debit alone parses
+            for debit in ["UAPqzTransferSingle", "UAPqzUnshield"] {
+                let d = op_of(debit, "pqz", &v).unwrap_or_else(|| panic!("{debit}"));
+                Op::parse(&d, FEE).unwrap_or_else(|e| panic!("{debit} alone: {e:#}"));
+                bad["call"] = d;
+                let e = Op::parse(&bad, FEE).unwrap_err().to_string();
+                assert!(e.starts_with("BAD_PAYLOAD: a PQZ debit") && e.contains("is no relay fee's call"), "{debit}: {e}");
+            }
         }
     }
 
@@ -2242,9 +3034,9 @@ mod tests {
     fn the_signer_is_found_where_the_row_keeps_it() {
         let v = vectors();
         let key: Address = v["key"]["address"].as_str().unwrap().parse().unwrap();
-        let payee = Address::from_word(v["ops"]["UAReceiverFee"]["message"]["payment"]["to"].as_str().unwrap().parse().unwrap());
+        let payee = Address::from_word(v["ops"]["UAPayeeFee"]["message"]["payment"]["to"].as_str().unwrap().parse().unwrap());
         for (name, kind, who) in [("Wrap", "token", Some(key)), ("UAUnwrap", "token", Some(key)), ("CancelUAOrder", "token", Some(key)),
-            ("CancelDexOrder", "dex", Some(key)), ("UAWrapOrder", "token", Some(key)), ("UAReceiverFee", "token", Some(payee)),
+            ("CancelDexOrder", "dex", Some(key)), ("UAWrapOrder", "token", Some(key)), ("UAPayeeFee", "token", Some(payee)),
             ("UACancelNonce", "token", Some(key)), ("UASetPayee", "wallet", Some(key)), ("AddKey", "account", None)] {
             let op = op_of(name, kind, &v).unwrap();
             let s = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{name}: {e:#}")).typed.signer;
@@ -2253,8 +3045,8 @@ mod tests {
     }
 
     /// pay-meta-tax T42 (spec §7.1, C2, Codex #1): `tax_job_signer_is_payer_distinct_payee`, `tax_job_outer_digest_is_job_id`: the
-    /// `UAPayWithTax` row's signer is the payment's `from` (never the receiver-fee fallback to `payment.to`), its job identity
-    /// the outer struct (no inner lane hash); a receiver fee keeps its payment's; the relay fee's router call carries the
+    /// `UAPayWithTax` row's signer is the payment's `from` (never the payee-fee fallback to `payment.to`), its job identity
+    /// the outer struct (no inner lane hash); a payee fee keeps its payment's; the relay fee's router call carries the
     /// payer's `batch`, `nonce` (`relay_fee_job_batch_nonce`).
     #[test]
     fn tax_job_signer_is_payer_and_outer_digest_is_job_id() {
@@ -2269,8 +3061,8 @@ mod tests {
             assert_eq!(format!("{:#x}", p.typed.struct_hash.unwrap()), v["ops"]["UAPayWithTax"]["structHash"].as_str().unwrap());
             assert_eq!(p.typed.payee.map(|w| format!("{w:#x}")), m["to"].as_str().map(str::to_string));
         }
-        let rf = Op::parse(&op_of("UAReceiverFee", "token", &v).unwrap(), FEE).unwrap();
-        assert!(rf.typed.lane_hash.is_some(), "a receiver fee is matched by its payment's digest");
+        let rf = Op::parse(&op_of("UAPayeeFee", "token", &v).unwrap(), FEE).unwrap();
+        assert!(rf.typed.lane_hash.is_some(), "a payee fee is matched by its payment's digest");
         let d = &v["ops"]["UARelayFee"]["domains"]["token"];
         let c = IRelayFeeRouter::relayCall::abi_decode(&hex(&d["routerCalldata"])).unwrap();
         assert_eq!((c.batch, c.nonce), (U256::from(7), U256::ZERO), "the payer's lane in the router call");
@@ -2289,5 +3081,87 @@ mod tests {
             assert_eq!(p.data.to_vec(), raw, "{key}");
             assert_eq!((p.to, p.valid_until, p.typed.struct_hash, p.lane), (Address::repeat_byte(0xd0), 1_800_000_300, None, None));
         }
+    }
+
+    /// T93 (UA-7 P17, topics P45): the twelve `PqChat` rows are plain rows of kind `pqchat` alone, no envelope, no fee, no signature
+    /// outside `args`; every job is named fields, its calldata decodes back to the same fields and rebuilds the same bytes; a vote's
+    /// `int8` and a stored blob against the `sol!` encoder; a record, a list or `args` as hex is `HEX_ARGS_REFUSED`.
+    #[test]
+    fn pqchat_jobs_name_their_fields() {
+        use alloy::sol_types::SolValue;
+        let at = Address::repeat_byte(0xc3);
+        let ours: Vec<&Row> = rows().iter().filter(|r| r.contracts.contains(&"pqchat")).collect();
+        assert_eq!(ours.len(), 13);
+        for r in &ours {
+            assert_eq!((r.typed, r.enveloped, r.sig, r.contracts, r.sent), (false, false, None, &["pqchat"][..], r.selector), "{}", r.entry);
+            let op = pqchat_op(r.entry, at);
+            let p = Op::parse(&op, FEE).unwrap_or_else(|e| panic!("{}: {e:#}", r.entry));
+            assert_eq!((p.to, &p.data[..4], p.typed.contract, p.typed.struct_hash, p.lane, p.valid_until),
+                (at, &r.selector[..], "pqchat", None, None, 4_000_000_000), "{}", r.entry);
+            let back = call_op("pqchat", at, &p.data, "4000000000").unwrap_or_else(|e| panic!("{}: {e:#}", r.entry));
+            assert_eq!(back["args"], op["args"], "{}: the calldata's named fields", r.entry);
+            assert_eq!(Op::parse(&back, FEE).unwrap().data, p.data, "{}", r.entry);
+        }
+        alloy::sol! {
+            struct PqTopicVote { bytes32 entryId; bytes32 voter; int8 value; uint64 seq; }
+            struct Stored { uint8 v; bytes8 hint; bytes env; }
+        }
+        let h = |b: u8| format!("{:#x}", B256::repeat_byte(b));
+        let sig = json!({"keyData": "0x01", "signature": "0x02", "members": []});
+        let vote = |value: Value| json!({"entry": "voteEntry", "contract": "pqchat", "token": format!("{at:#x}"), "validUntil": "4000000000",
+            "args": {"v": {"entryId": h(0xe1), "voter": h(0xa1), "value": value, "seq": "7"}, "sig": sig}});
+        let auth = crate::abi::UASig { keyData: vec![1].into(), signature: vec![2].into(), members: vec![] };
+        let want = |value: i8| [&keccak256("voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))")[..4],
+            &(PqTopicVote { entryId: B256::repeat_byte(0xe1), voter: B256::repeat_byte(0xa1), value, seq: 7 }, auth.clone()).abi_encode_params()[..]].concat();
+        for x in [-1i8, 1, -128, 127, 0] {
+            assert_eq!(Op::parse(&vote(json!(x)), FEE).unwrap().data.to_vec(), want(x), "value {x}");
+        }
+        for bad in [json!(128), json!(-129), json!("-1"), json!(1.5)] {
+            let e = Op::parse(&vote(bad.clone()), FEE).unwrap_err().to_string();
+            assert!(e.starts_with("BAD_PAYLOAD: args.v.value"), "{bad}: {e}");
+        }
+        let store = json!({"entry": "storeMessage", "contract": "pqchat", "token": format!("{at:#x}"), "validUntil": "4000000000",
+            "args": {"v": 1, "hint": "0x0102030405060708", "env": "0xabcdef"}});
+        let blob = Stored { v: 1, hint: alloy::primitives::FixedBytes::<8>([1, 2, 3, 4, 5, 6, 7, 8]), env: Bytes::from(vec![0xab, 0xcd, 0xef]) };
+        assert_eq!(Op::parse(&store, FEE).unwrap().data.to_vec(), [&keccak256("storeMessage(uint8,bytes8,bytes)")[..4], &blob.abi_encode_params()[..]].concat());
+        // the old hex forms, one change from a control that parses each
+        let refused = |entry: &str, f: &dyn Fn(&mut Value)| {
+            let mut o = pqchat_op(entry, at);
+            Op::parse(&o, FEE).unwrap_or_else(|e| panic!("{entry}: the control: {e:#}"));
+            f(&mut o);
+            Op::parse(&o, FEE).unwrap_err().to_string()
+        };
+        let blob = json!(format!("0x{}", "00".repeat(256)));
+        for (entry, path) in [("voteEntry", "args"), ("voteEntry", "v"), ("voteEntry", "sig"), ("createSession", "s"), ("createSession", "wraps"),
+            ("rekey", "e"), ("addWraps", "wraps"), ("postMessage", "m"), ("postEntry", "e")] {
+            let e = refused(entry, &|o| if path == "args" { o["args"] = blob.clone() } else { o["args"][path] = blob.clone() });
+            assert!(e.starts_with("HEX_ARGS_REFUSED"), "{entry} {path}: {e}");
+        }
+        assert!(refused("postMessage", &|o| o["args"]["data"] = blob.clone()).starts_with("HEX_DATA_REFUSED"));
+        assert!(refused("postMessage", &|o| o["call"] = blob.clone()).starts_with("HEX_DATA_REFUSED"));
+        // no fee form, no envelope, the signature named in `args` only
+        assert!(refused("postMessage", &|o| o["args"]["fee"] = json!("1")).starts_with("BAD_PAYLOAD: args.fee: unknown field"));
+        assert!(refused("postMessage", &|o| o["envelope"] = json!({})).contains("takes no envelope"));
+        assert!(refused("postMessage", &|o| o["auth"] = o["args"]["sig"].clone()).contains("takes its signature in args"));
+    }
+
+    /// The `PqChat` records' type strings and typehashes against `smartcontracts/vectors/pqchat/` (written by clientkeys), and a
+    /// literal pin of the two that name the home instance (owner 2026-11-10: `homeChatContract`), so a regenerated vector cannot
+    /// move one unnoticed.
+    #[test]
+    fn pqchat_typehashes_are_the_vectors() {
+        let th = |name: &str| type_string(name, nested(name).unwrap_or_else(|| panic!("{name}: no node struct")));
+        let mut n = 0;
+        for f in [include_str!("../../smartcontracts/vectors/pqchat/records.json"), include_str!("../../smartcontracts/vectors/pqchat/topics.json")] {
+            let v: Value = serde_json::from_str(f).unwrap();
+            for (name, t) in v["typehashes"].as_object().unwrap() {
+                let s = th(name);
+                assert_eq!((s.as_str(), format!("{:#x}", keccak256(&s))), (t["type"].as_str().unwrap(), t["hash"].as_str().unwrap().into()), "{name}");
+                n += 1;
+            }
+        }
+        assert_eq!(n, 14);
+        assert_eq!(format!("{:#x}", keccak256(th("PqChatSession"))), "0xe2c3b4c1033a28837e998f325e512f26783cea21cc6ccb347fa3d3d8d7ad1e4d");
+        assert_eq!(format!("{:#x}", keccak256(th("PqTopic"))), "0x66954727fc72dc7660d7951b1a698a5f2fe331ec190195d0b0908f659510828e"); // 3r: `admin`
     }
 }

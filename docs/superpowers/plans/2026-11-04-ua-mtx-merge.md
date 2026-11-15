@@ -14,7 +14,7 @@ sizes and continues instead of stopping. The only hard limit is the reset chain'
 window only.
 
 **Spec:** [`2026-11-04-ua-mtx-merge.md`](../specs/2026-11-04-ua-mtx-merge.md), **accepted by the owner 2026-11-04** (Q1–Q7, §10);
-rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../decisions.md#CTR-MTX-30), its Q6 Change, and the Change
+rules R1–R47 (§5), invariants 1–7 (§8), measurement (§9). **Ruling:** [CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30), its Q6 Change, and the Change
 lines it points to (CTR-MTX-09, CTR-MTX-29, CTR-TOK-24, CTR-UA-19, CTR-DEX-25, CTR-ACC-12, CTR-UA-27). Spike: `docs/research/governance/prototype/merge-entries.md`
 (branch `token-merge`, reference code only, **never merged**).
 
@@ -232,6 +232,8 @@ rustc 1.90); Node `node --test` (`clients/clientkeys`); `zether-prover`; `ua-rs`
 | Service pull (3i) | T77 → T78; T79 ∥ T80; T81 last, lands in T19 | **after T82, before T66b's build (owner 2026-11-09)**: spec `2026-11-09-service-pull.md` (owner approved Q1–Q5 2026-11-09); no production contract changes, so T66b's sizes stand; its tests are T66b's regression net for the token's `mtxExecuteTransfer` path; T80 on `ua-rs-sign` at its next sync |
 | Pay number and pay records (T83) | T83 | **after T62a, before T66b's build (owner 2026-11-09)**: `payNo` → `bytes32`, the on-chain pay records; touches the pay bodies before T66b moves them into module P |
 | Registry generation, library review, size (T66b) | T66b | after T66, before 3c (owner 2026-11-07; parts 1, 2 and 5 moved to T66a, owner 2026-11-08): the `UARegistryLib` <-> `UARegistry` rebalance, then the review of every library and the size reduction to fit 60 M per deployed contract; sequential in this worktree |
+| `PqChat` (3c) | T84 → T85 → T86 → T87 → T96 → T88 → T89 → T90 → T91; T93 after T89; T94 after T90; T92 after the controller's word (shared deploy files); T95 last, after T92 and T90 | **after T66b (owner 2026-11-05: before the EVM freeze)**: the contract side of UA-7 and the public topics; contracts sequential in this worktree |
+| Wrap / unwrap limits on hybrid tokens (3l) | T97 → T98 → T99 → T100; T101 and T102 after T98; T103 after T100; T104 last | **owner approved 2026-11-10** (spec `2026-11-10-wrap-limits.md`, R1–R25); built later in its own worktree, placed by the controller; before T19, T21–T23 (the EVM freeze); contracts sequential |
 | Docs | T19 | drafts beside T14–T18, T24–T36, T37–T43, T51–T57, T67–T76, T44–T50 and T58–T66; lands after T66 and 3c (BUILT only with code and tests) |
 | Close | T21 → T22 → T23 | |
 | Next | TODO item 4 | SCaaS testnet reset 2 deploys the merged code (not this plan) |
@@ -268,7 +270,7 @@ local branch, never merged (spec Q13).
       `MtxPipelineLib`, `WrappedLib`, `ZetherLib`, `ZetherWrappedLib`, `PqzWrappedLib`, the L library, the wallets, for base, M,
       M + L (L alone first), M + D, M + L + D, and each stand-in. Wallet bytecode hashes equal to base.
 - [ ] **Step 7: Deploy gas** by `GovDeploy.t.sol` `test_releaseGasPerKind`'s method ((regular × 64/63 + state) × 1.05) per
-      implementation and library, each its own transaction, plus `deployImplementation`'s frame measured once on the factory path;
+      implementation and library, each its own transaction, plus `deployTokenImplementation`'s frame measured once on the factory path;
       reported as gas asked against 60 M and 70 M (EIP-8037: regular + state ≤ the limit, never `gas_used`), and regular × 1.05
       against 2^24.
 - [ ] **Step 8: Gas** (forge, deterministic): `GovGas` rows on `NormalToken` and `WrappedToken` at `registry() == 0` and `≠ 0`;
@@ -732,7 +734,7 @@ names, the UA binding for an EOA, `--self-test`), `script/pqz/test_e2e_linked.py
 (`test_registryDeployGate`), `test/governance/GovDeploy.t.sol`, `test/zether/ZetherDeploy.t.sol`, `smartcontracts/evm/runs/<date>-ua-mtx-merge-deploy-gas.txt`.
 
 **Interfaces:** `DeployBase`: a public-chain gate that takes the release transaction's measured regular + state gas (fork or local
-simulation through `deployImplementation`) × 1.05 against the chain's limit, and regular × 1.05 < 2^24; selected by a declared
+simulation through `deployTokenImplementation`) × 1.05 against the chain's limit, and regular × 1.05 < 2^24; selected by a declared
 input, not a chain id list (one rule on every chain); the testnet formula unchanged.
 
 - [ ] **Step 1: Failing tests:** `test_publicGateUsesMeasuredReleaseGas`, `test_publicGateRefusesRegularOver2pow24`,
@@ -1504,7 +1506,7 @@ Items, each with a failing test first where it is code:
    is counted (nesting levels of objects and arrays, bounded) and test it.
 2. **The verifier's key-ownership record** (keys it checked off chain, KV-12 OFFCHAIN column) persists across restarts in the
    service's own store; an unreadable store fails closed (no verdict), a lost store only costs re-checks.
-3. **`e2e.py --zero-dep` still deploys `UAPqzVerifier`** for the registration proofs: the zero-dependency release must run with no
+3. **`e2e.py --zero-dep` still deploys `PqzKeyVerifier`** for the registration proofs: the zero-dependency release must run with no
    PQ verifier on the chain (OFFCHAIN accepts unproven keys its verifier checks): drop the deploy there and register the keys
    unproven; a failing run first.
 4. **ARCH-POS-15:** `scaas-pqz-verifier` takes a list of RPC endpoints (failover; the majority option for its reads).
@@ -2242,6 +2244,105 @@ module is security-relevant).
       addresses, tx hashes and costs in a runs note; the T74 probe (`runs/2026-11-08-ua-mtx-merge-hedera-probe/`) already
       confirmed CREATE3, `EXTCODECOPY` and `0x4e59` there.
 
+### Group 3c: `PqChat` (UA-7, EVM): tasks T84–T96
+
+**Sources** (merged from `ua7-research` at `e1c4c6da` in `504cd383`): spec
+[`2026-10-25-ua7-pq-e2e-sessions.md`](../specs/2026-10-25-ua7-pq-e2e-sessions.md) version 2 (owner 2026-11-04, P1–P32, D1–D22),
+spec [`2026-11-07-pqchat-public-topics.md`](../specs/2026-11-07-pqchat-public-topics.md) (D18–D22, Q1–Q2 answered; tasks PC0,
+PT1–PT8; PF1 dropped), plan [`2026-11-04-ua7-pqchat.md`](2026-11-04-ua7-pqchat.md) (its T4–T10, T15 contract half, T21),
+[CTR-CHAT-01](../../decisions.md#CTR-CHAT-01). **Depends on:** T66b (`cd48e32b`; `requirePortable` from T66a, the generic
+catalogue from T70, `ChainEnv` from T71–T72, `RelayFeeRouter` from T82). **Before:** T19, T21–T23. **Owner 2026-11-05:**
+`PqChat` lands before the EVM freeze, so the main audit covers it. Commits `ua-mtx-merge 3c T8x: …`.
+
+**Scope.** The contract side of UA-7: vectors, the `PqChat` release (sessions, epochs, roles, leave, on-chain and stored
+messages, public topics and votes), its gas, size and layout pins, the node's call-table rows, the component doc. T3 of the
+UA-7 plan is T66a's `requirePortable`. **Out of scope** (clients, TODO item 11): UA-7 T11–T14, T17–T20 and PT7; the list of
+what `ua-rs` needs goes in the 3c report.
+
+**Shared worktree (controller 2026-11-10).** Another agent fixes `script/pqz/e2e.py` and the deploy gas limits in `deploy.sh` /
+`DeployBase`: T92 touches `script/DeployBase.s.sol` only after the controller's word; T84–T91 and T93–T94 first. Commits by
+`git commit --only -- <paths>`; no build while `src/pqz/PqzSet.sol` shows modified (an `at-set.sh` run).
+
+**Decisions of this block** (controller calls under the specs, owner may override; each in the 3c report and, where it is a
+rule, in the component doc):
+
+- **3C-D1 — chain values from `ChainEnv`.** The registry, `chain_uid` and the code-size limit are the clone's `ChainEnv`
+  (CTR-TOK-29 as built: `ChainEnvCode`, the limit `params[0]`), as the public-topics spec §11 says ("not immutables of the
+  release"); the UA-7 plan's T8 wording (release immutables) is superseded by it. `validateEnv` refuses `chainUid` 0, registry 0,
+  no `params[0]`, and `params[0] < 24,576` (EIP-170, the smallest EVM code limit; a wrap blob needs 1,689 B).
+- **3C-D2 — `storeMessage` stays in `PqChat`.** P27, P29 and P32 name a chain store as an instance the chain's factory lists as
+  class 3; a chain without the factory has no instance either way, so a store split into a second kind buys nothing there.
+  `storeMessage` reads no registry and no epoch. If the release passes the 33,594 B margin line (57 M asked), CTR-TOK-30's
+  body-module rule applies (a `DELEGATECALL` module of `PqChat` pinned in the class env's `libs`), not a second kind.
+- **3C-D3 — blobs.** A signed record is stored as `abi.encode(record, sigHash)`, `sigHash = keccak256(abi.encode(UASig))`
+  (D11 and P39 for every signed record); a record larger than one blob is chained, each blob led by a flag byte (0 last; 1,
+  then the 20-byte next pointer); `postMessage` takes one blob only (P16). `storeMessage` keeps the raw payload
+  `abi.encode(v, hint, env)` in one blob (P29). Wraps are packed per call, as many per blob as the limit holds, and one slot per
+  wrap (`pointer ‖ offset`) marks it landed (P11).
+- **3C-D4 — events as the specs list them.** Signature bytes ride `PqChatMessagePosted`, `PqTopicEntryPosted` and
+  `PqTopicEntryEdited`; every other signed record keeps its `sigHash` in state and no signature in its event.
+- **3C-D5 — nonce scopes.** `nonceUsed(scope, nonce)` with `scope = keccak256(abi.encode(keccak256("scaas/pqchat/v1/scope/
+  session"), creator))`, `…/scope/epoch` over `(sessionId, author)` (epochs and leaves, §4.3), `…/scope/message` over
+  `(epochId, sender, device)` with `counter` as the nonce; `topicNonceUsed(owner, nonce)`, `entryNonceUsed(topicId, author,
+  nonce)` with their own tags `…/scope/topic`, `…/scope/entry`; all pinned by the vectors.
+- **3C-D6 — shapes the contract checks.** `mlkemCt` 1,568 B, `sealedKey` 48 B; `wraps[j]` names `members[first + j]`'s `ua`
+  and `keyId`; members strictly sorted by `ua` (≥ 2 in a session, ≥ 1 in an epoch); admins strictly sorted and registered; a
+  session's creator in both lists; `homeChain`, `homeChatContract` non-zero. `parents`, `sealedInfo` and padding are client rules
+  (P19, §4.2, §6.5) and are not checked.
+- **3C-D7 — a plain rekey** (P10): `members(e) ⊆ members(parent)` by `ua` and `admins(e) ⊆ admins(parent)`, every one dropped
+  has left the parent epoch; `keyId` and `via` may change; its author is a member of the parent. Anything else is a
+  membership change, authored by an admin of the parent.
+- **3C-D8 — leave and paging.** A leave is a flag (`leftIn`), its nonce in the epoch scope; a repeated leave is accepted and
+  changes nothing more. Paged views answer `(ids, total)` as the factory's index does (CTR-TOK-27): `count = 0` is the count
+  view of P42.
+- **3C-D9 — client byte choices in the vectors.** Padding's length prefix is 4 bytes big-endian (§6.5); a call key's `callId`
+  is 32 bytes and `callEpoch` 4 bytes big-endian (P22). The SFrame KID rows wait for the owner (`S` is not stated, P22); the
+  libp2p and Waku rows are UA-7 T19 and T20 (out of scope).
+
+| Task | What (source) | Files | Red tests (each refusal beside its positive control) | Gates | Mutants | Est. |
+|---|---|---|---|---|---|---|
+| T84 | Vectors (UA-7 T4, PT1) | `clients/clientkeys/src/pqchat.js`, `scripts/pqchat-vectors.mjs`, `test/pqchat.test.js`; `smartcontracts/vectors/pqchat/{records,keys,messages,topics}.json` | the generator reproduces every file byte-equal; typehashes, `DS_C`, ids, scopes, typed digests, `uaMessage` digests with non-zero values in every field (`via`, `device`, `parents`, `ref`); P14 refusals (scheme byte, length, modulus, all-zero X25519); wrap, chain, message, padding, envelope, `sealedInfo`, payload rows reopen | clientkeys, `vectors-check` | one field order swapped in a type string | 1.5 |
+| T85 | Release, sessions, chunks (UA-7 T5, PC0) | `src/pqchat/{IPqChat,PqChatTypes,PqChat}.sol`, `test/pqchat/{PqChatBase,PqChat,PqChatTypes,PqChatRelease}.t.sol`, `test/v2/layout/PqChat.json` | `initialize` once and only by the factory, on a clone with its env; `factoryInfo()`, ERC-165, `owner()`; `validateEnv` refusals; create with all wraps; in chunks, complete only at the last wrap; `addWraps` by a stranger; a wrong wrap (`PqChatWrapHash`); a member without `keyId` (`PqChatKemKey`); unsorted members; a used `(creator, nonce)`; a forged record burns no nonce; typehashes pinned against the vectors (`*TypehashIsPinned`); layout pin | forge `test/pqchat` | completion check, wrap-hash index, nonce order | 2 |
+| T86 | Epochs, the home-instance slot, roles, leave (UA-7 T6) | `PqChat.sol`, `test/pqchat/PqChatEpochs.t.sol` | the P9 removal attack refused (`PqChatEpochTaken`, `PqChatEpochNumber`); an incomplete child never takes the slot; a second complete child refused at home, stored on a replica (another `chain_uid`, another instance); `PqChatNotAdmin`; a member's plain rekey dropping leavers only; an `msig` admin by quorum; O2 and O4; a parent not complete refused; replica records in any order | forge `test/pqchat` | `parent + 1`, the home check, the admin check, plain-rekey equality, the leaver drop | 1.5 |
+| T87 | `postMessage`, `storeMessage`, `storedRange` (UA-7 T7, D15; owner 2026-11-10) | `PqChat.sol`, `test/pqchat/PqChatMessages.t.sol` | member posts; non-member, incomplete epoch refused; the same counter on another device accepted, same device refused; nonce 5 before 4; the blob holds the record and `keccak256(sig)`, the event's bytes hash to it; the vector message id; a stranger's `storeMessage` stored, `storedAt` = the vector payload, `v ≠ 1` and an oversize `env` refused (`PqChatShape`); `storedRange` across a page boundary, past the end empty, the limit clamped, each element `storedAt`'s | forge `test/pqchat` | device dimension, membership check, sig-hash write, the stored list key; a page past the end not empty, the clamp dropped, an off-by-one at the boundary | 1 |
+| T88 | Public topics (PT2: tests 1–4, 6–10 of the topics spec §8) | `PqChat.sol`, `PqChatTypes.sol`, `IPqChat.sol`, `test/pqchat/PqTopics.t.sol` | as the topics spec §8 lists | forge `test/pqchat` | §8's writer, `openReplies`, parent-topic, depth, edit-author, version, `seq`, `ref` shape, scope's `topicId`, list key, `byAuthor` on edits | 2.5 |
+| T89 | Votes (PT3: test 5) | same | §8 test 5 | forge `test/pqchat` | old-count decrement, value range | 0.5 |
+| T90 | Size, deploy gas, gas rows (UA-7 T9, PT4) | `test/pqchat/PqChatGas.t.sol` (`--isolate`), `size-baseline.json` (new row) | rows asserted against new pins: wraps, 2 / 10 / 20-member epochs, a 1 KiB message and a 1,024-B `storeMessage` per signer cost (stand-in verifier with each kind's measured cap), the topic writes of §6; runtime and deploy gas against 60 M asked (margin line 33,594 B); CTR-TOK-30 split if it misses | forge `--isolate`; size gate | — | 1 |
+| T91 | Mutants (UA-7 T5–T7, PT5) | `runs/2026-11-10-ua-mtx-merge-3c/mutants.txt` (summary committed, logs ignored) | each mutant alone on a clean tree, `mutant \| red tests \| rc`, file restored byte-equal | forge `test/pqchat` | every row above | 1 |
+| T92 | The release on the factory and one instance (UA-7 T8, PC0) — **after the controller's word** | `script/DeployBase.s.sol` (`publishClassEnv(3, 0, …)`, `deployImplementation(ReleaseId(3, 0, 1), …)`, `setClassKindEnabled(3, 0, true)`, one `createInstance`), deploy JSON key, `test/pqchat/PqChatDeploy.t.sol` | release checks through the real factory; two instances independent; `contractsPage(3, …)` after a creation | forge `test/pqchat`, the deploy script's forge test | `initialize` without the factory check, `factoryInfo()` with a wrong class | 0.5 |
+| T93 | Node rows (UA-7 T10, PT6) | `scaas-node/src/{typed,guard,abi}.rs`, `docs/node/job-api.md` call table | the twelve rows equal the release's entries both directions; a target not listed by the factory as class 3 (or version 0) refused `CALL_TARGET_REFUSED`; an unknown `PqChat` selector refused; a hex bundle refused (`HEX_ARGS_REFUSED`); job shapes with named fields; the unsigned `storeMessage` and `addWraps` relayed only through `RelayFeeRouter` or the lane policy (P17) | node call-table and job tests (capped), clippy `-D warnings` | a row missing on one side, the class check | 1.5 |
+| T94 | Docs (UA-7 T15 contract half, PT8) | `docs/contracts/pqchat.md` (new; CTR-CHAT-01's anchor moves there with a Change), `docs/contracts/` factory row for class 3; the rest drafted in `scratchpad/2026-11-10-ua-mtx-merge-3c-docs-draft.md` for T19 | — | `docs_check.py check` | — | 1 |
+| T96 | Recovery from state alone (owner 2026-11-10; spec P47) | `PqChat.sol`, `IPqChat.sol`, `test/pqchat/PqChatRecovery.t.sol` | `sessionsOf` / `sessionCount`: every member at create, added members only on rekey, a removed member's entry kept, paging, the end, the clamp; `epochsOf` / `epochCount`: the home list equals the `childOf` chain, no incomplete or losing child, the replica's completion order, paging and the clamp; `latestEpoch` the last entry | forge `test/pqchat` | an entry for a kept member on rekey; an incomplete or a losing child appended; a page past the end not empty | 0.5 |
+| T95 | **On-chain matrix (owner 2026-11-10)**, last: every external entry of `PqChat` called at least once on a real node, direct and relayed where the spec allows — `createSession` whole and in chunks, `addWraps`, `rekey`, `leave`, `childOf` and the home-instance slot, `postMessage`, `storeMessage` and its readers, the topic entries and votes, the factory's `createInstance` for class 3; the unsigned `storeMessage` and `addWraps` relayed through `RelayFeeRouter`; key negatives with their named errors (the P9 removal attack, a second complete child at home, a nonce reuse). First on a local copy of the chain, then on the SCaaS testnet (7622) through its RPC only (no container, config or port of the live stack touched; the key only through `SCAAS_TESTNET_MNEMONIC_FILE`, never printed or written); every transaction ≤ 60 M asked and within the chain's limits | the Step 5b framework `script/onchain/` and `coverage.py` (PqChat's slot in `coverage.json`, no fork of the framework); a runs note `runs/2026-11-10-ua-mtx-merge-3c-onchain/` (entries covered / total, tx hashes, gas, status, every entry not run with its reason; no key, no absolute path) | each entry's receipt status and its state read back through the views; each negative's revert data decoded to its named error | the local copy, then 7622 | — | 1.5 |
+| T105 | Content types (owner 2026-11-10; UA-7 §6.4.1, P49), **follow-up, not built now** | `clients/clientkeys/src/pqchat.js` (encode, decode), `scripts/pqchat-vectors.mjs`, `test/pqchat.test.js`; content rows in `smartcontracts/vectors/pqchat/` from the generator; then the `ua-rs` round reads the same rows | every type of the table round-trips byte-equal; an unknown field ignored; an unknown `type`, a missing `type`, a bound broken by one byte and a non-canonical form each `unsupported`, beside a valid control; a `file`'s `sha256` and `ctSha256` mismatch refused | clientkeys `npm test` | the bounds, the `messageId` target, the default `text/plain` | 1.5 |
+
+**Total:** about 16 agent-days. **Order:** T84 → T85 → T86 → T87 → T96 → T88 → T89 → T90 → T91; T93 after T89 (ABI final); T94
+after T90; T92 when the controller says the deploy files are free; T95 last, after T92 and T90.
+
+### Group 3l: wrap / unwrap limits on hybrid tokens: tasks T97–T104
+
+**Source:** spec [`2026-11-10-wrap-limits.md`](../specs/2026-11-10-wrap-limits.md), **approved by the owner 2026-11-10**, every
+question ruled (R1–R25): hybrid tokens (`maxSupply ≠ 0`) of kinds 1, 3, 5, 9, 11, 13 only; per leg, in quanta, one slot per id
+and leg; the decay linear over `H` with the weighted-average start; the `redeemer` role (bit 27); the unwrap side tightens after
+the factory's `noticePeriod()` and relaxes at once. **UNAUDITED.** **Depends on:** T66b (the body modules; W, Z, Q, T exist).
+**Before:** T19, T21–T23. **Worktree:** its own, later (owner 2026-11-10); commits `ua-mtx-merge 3l T9x: …` / `3l T10x: …` by
+`git commit --only -- <paths>`; heavy commands through `scripts/capped`, foreground; `at-set.sh` one run per work tree,
+`src/pqz/PqzSet.sol` restored. Spec section numbers below are the spec's; test rows are its §11 rows.
+
+| Task | What (spec) | Files | Red tests (each refusal beside its positive control) | Gates | Mutants | Est. |
+|---|---|---|---|---|---|---|
+| T97 | Contracts (§2, §2.1, §4–§6, §8): `scaas.wraplimit`, `ctl` in leg slot a, the minute windows, lists, the entitlement and its decay, the setter with the two-call relax, `setWrapMember`, the views; bits 25–27 and `WrapControlNeedsHybrid` in `initToken`; the receiver / holder words through W, Z, Q, T; the `disableFeature` refusal; legacy copy of the touched bodies first | `src/metatx/{WrappedLib,IWrappedToken,WrappedTokenCore}.sol`, `src/zether/WrappedZetherTokenCore.sol`, `src/pqz/WrappedPqzTokenCore.sol`, `src/governance/GovernanceBits.sol`, `script/modules/entries.json` and the regenerated faces, `test/wrap/WrapLimits*.t.sol` (new), `legacy/ua-mtx-merge/3l/` | §11 rows 1–24, 26–32, 34: lists before the pull; each limit at the cap and one quantum over; token-wide caps; the window's end in minutes; modular aliasing refuses only; per leg; `E` at day 0, H/2, H; dust leaves the clock; a wrap of `E` halves the age; unwrap lowers `E` by exactly `q`; the redeemer past `E` but not past windows; decay on, off, on; saturation and the largest products; wrap side at once / two-call, unwrap side two-call / at once; unit write-once; disable refused while on; pure-wrap creation refused; the order of §4 on kind 9 | forge per directory (capped); size gate | written with T99 | 4–4.5 |
+| T98 | Router ops (§9): `mtxSetWrapLimits`, `mtxSetWrapMember`, typehashes and pins; bit 27 through the existing grant ops | `src/governance/{GovernanceRouter,GovernanceRouterBase}.sol`, `test/governance/` | each op applies on a hybrid through the router; the subject is the signer; a wrong typehash or a missing struct type fails; `*TypehashIsPinned` | forge `test/governance` | a struct type left out of the type string | 0.5 |
+| T99 | Mutants, the decay fuzz, the four PQZ sets (§11) | `runs/<date>-ua-mtx-merge-3l/mutants.txt` (summary committed, logs ignored) | the fuzz invariant `E ≤ b ≤ plain net` over random wraps, unwraps and days; rows 5 and 13 kinds at `n2048-kmax1024`, `n2304-kmax4096`, `n2560-kmax16384`, `n2816-kmax65536` | forge; `script/pqz/at-set.sh <set> test` ×4 | every §11 mutant alone on a clean tree, `mutant \| red tests \| rc`, the file restored byte-equal (the literal "from the last wrap" start, `b' = b − q` under the decay, the clamp missing, `_msgSender()` as the id, the pre-proof count, the unwrap side classified as the wrap side, the hybrid check missing for one bit) | 1.5–2 |
+| T100 | Gates and pins (§8, §10, §11) | `size-baseline.json`, `test/v2/layout/namespaces.json`, gas pins, `test/vectors/selector_audit.json` | the layout pin of `wrapLimit` and `legs[1].ctl`; `vm.accesses` shows no new read on a pure-wrap token; `PlusZero.t.sol` unchanged | size gate old → new with the reason; gas pins old → new (`--isolate`); deploy gas of each W against 60 M asked | `ctl` moved to a new slot | 1 |
+| T101 | Node (§9) | `scaas-node/src/{typed,guard}.rs`, the lane classifier, `docs/node/job-api.md`, `docs/node/submit-lanes.md` | the two router rows equal the router both directions; `WRAP_LIMIT_REFUSED: <error>` keeps a job `queued`, never `dead`; a hex bundle refused (`HEX_ARGS_REFUSED`) | `cargo test` (capped), `cargo clippy --all-targets -- -D warnings` | the refusal classified `reverted`; a row missing on one side | 1–1.5 |
+| T102 | Clients and vectors (§9) | `smartcontracts/vectors/governance/governance_bits.json` (bits 25–27, sentences), `typed_ops.json`, `smartcontracts/vectors/wraplimits/` and its generator, `clients/clientkeys/src/evm.js` and its test, `clients/ua-rs` builder and test, the `ua-*` vector readers | the generator reproduces every file byte-equal; the decay rows (`b`, `s`, `H`, wraps and unwraps by day → `E`, `b'`, `s'`) equal the forge cross-check; both ops signed by `ua-rs` verify in the router | clientkeys, `vectors-check`, `ua-rs` `cargo test` (capped), each `ua-*` reader | a field order swapped in a type string; the decay row with `g'` rounded down | 2–2.5 |
+| T103 | Docs (§13 WL8) | `docs/contracts/token-wrappers.md` (the rule, next free CTR-TOK id), `docs/decisions.md` (the entry with R1–R25), the governance bits doc, the disclosure text | — | `python3 scripts/docs_check.py check` | — | 0.5–1 |
+| T104 | **On-chain matrix**, last (§11's rows): every new entry on hybrids of 1, 9, 3, 11, 5, 13, direct and relayed; the time rows on the local target; then the SCaaS testnet through its RPC only (no container, config or port of the live stack touched; the key only through `SCAAS_TESTNET_MNEMONIC_FILE`) | `script/onchain/` (`coverage.json` rows), a runs note `runs/<date>-ua-mtx-merge-3l-onchain/` (entries covered / total, tx hashes, gas, status; no key, no absolute path) | each receipt and its state read back through the views; each negative's revert decoded to its named error (`WrapLimitExceeded`, `WrapCapExceeded`, `UnwrapAboveNetWrapped`, `WrapControlNeedsHybrid`) | the local target, then 7622 | — | 1 |
+
+**Total:** 11.5–14 agent-days. **Order:** T97 → T98 → T99 → T100; T101 and T102 after T98 (ABI final); T103 after T100; T104
+last, after T100–T102.
+
 ### Factory contract index and extensible catalogue (owner 2026-11-07): tasks T67–T70
 
 **Spec:** [`2026-11-07-factory-contract-index.md`](../specs/2026-11-07-factory-contract-index.md), **revised 2026-11-07**: the
@@ -2301,7 +2402,7 @@ RosterKind}.sol` and the negative mocks (test-only, no `src/` kind); `test/gover
 `size-baseline.json`.
 
 **Interfaces (spec §8.2, §8.4):** `ReleaseId {contractClass, kind, version}`, `ClassRelease`, `FactoryInfo` (seven static
-words); `publishClassEnv`, `deployRelease`, `deprecateRelease`, `setClassKindEnabled`; `classEnvOf`, `latestClassEnvVersion`,
+words); `publishClassEnv`, `deployImplementation`, `deprecateRelease`, `setClassKindEnabled`; `classEnvOf`, `latestClassEnvVersion`,
 `classReleaseOf`, `latestClassVersion`, `classKindEnabled`, `classes`, `kindsOf`; `createInstance(ReleaseId, salt, initCall)`,
 `creating()`; events `ClassEnvPublished`, `ReleaseDeployed`, `ReleaseDeprecated`, `ClassKindEnabled`, `InstanceCreated`;
 errors `ClassReserved`, `ReleaseUnknown`, `ReleaseAlreadyRegistered`, `ReleaseDeprecated`, `ReleaseNotYetUsable`,

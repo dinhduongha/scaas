@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {kindArgs} from "../../script/KindModules.sol";
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -85,7 +86,7 @@ abstract contract MergeBase is UALedgerBase {
     }
 
     function _callDigest(address t, MetaTxLib.UAMetaTransaction memory m) internal view returns (bytes32) {
-        return _dig(t, MetaTxLib.hashStruct(m));
+        return _dig(t, MtxHash.hashStruct(m));
     }
 
     function _xfer(bytes32 from, bytes32 to, uint256 value, uint256 nonce)
@@ -96,7 +97,7 @@ abstract contract MergeBase is UALedgerBase {
     }
 
     function _xferDigest(address t, MetaTxLib.UAMetaTransfer memory x) internal view returns (bytes32) {
-        return _dig(t, MetaTxLib.hashStruct(x));
+        return _dig(t, MtxHash.hashStruct(x));
     }
 
     function _env(bytes32 from, uint256 batch, uint256 nonce) internal view returns (MetaTxLib.UAEnvelope memory e) {

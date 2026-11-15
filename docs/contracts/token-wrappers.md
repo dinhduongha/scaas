@@ -47,7 +47,7 @@ classDiagram
     class ERC20MetaTx {
         <<abstract>>
         ERC-20, MetaTransfer (entryRef), fee
-        receiver-pays, approve only by contracts, UA ledger
+        payee fee, approve only by contracts, UA ledger
     }
     class MetaTokenBase {
         <<abstract>>
@@ -78,7 +78,7 @@ is a per-chain variant, not a creator's choice ([CTR-TOK-23](#CTR-TOK-23)).
 | `WRAPPED_PQZ` | `WrappedPqzToken` | wrapper + post-quantum layer |
 
 There are four confidential-layer kinds and no combined kind: `NORMAL_ZETHER_PQZ` and `WRAPPED_ZETHER_PQZ` (ids 6 and 7)
-were dropped (owner 2026-10-20, plan 5h D21; the ids are not reused: they are the enum members `RETIRED_6` and `RETIRED_7`, which `deployImplementation` refuses with `KindRetired`). Ids 8–13 are the regulated kinds, real enum members, off until a release is published and the kind enabled ([CTR-GOV-16](../decisions.md#ctr-gov-16--regulated-kinds-are-real-enum-members-before-the-factory-freezes); BUILT on branch `governance`, T4, `60406d42`). Both
+were dropped (owner 2026-10-20, plan 5h D21; the ids are not reused: they are the enum members `RETIRED_6` and `RETIRED_7`, which `deployTokenImplementation` refuses with `KindRetired`). Ids 8–13 are the regulated kinds, real enum members, off until a release is published and the kind enabled ([CTR-GOV-16](../decisions.md#ctr-gov-16--regulated-kinds-are-real-enum-members-before-the-factory-freezes); BUILT on branch `governance`, T4, `60406d42`). Both
 layers expose one `mtx*` interface (`IConfidentialToken`, [CTR-ZTH-45](zether.md#CTR-ZTH-45)), so a combined token needs
 no layer argument. Both layers keep shielded value in the `SHIELD_POOL` sentinel instead of burning it
 ([CTR-PQZ-15](pq-zero-knowledge.md#CTR-PQZ-15), [CTR-ZTH-51](zether.md#CTR-ZTH-51)); `SHIELD_POOL` is a token-level
@@ -104,8 +104,8 @@ The kinds are in [CTR-TOK-21](#CTR-TOK-21). The two public kinds without a Zethe
 
 | Kind | Contract | `underlyings` | Supply rule | Invariant |
 |---|---|---|---|---|
-| `NORMAL` | `NormalToken` | none | `initialSupply` minted to `initialHolder` at init; `mint` by `minter` only with `MINTABLE`; holder `burn` with `BURNABLE` ([CTR-TOK-22](#CTR-TOK-22)) | `Σ balances == totalSupply` |
-| `WRAPPED` | `WrappedToken` | 1–8 ERC-20s or the native coin ([CTR-TOK-26](#CTR-TOK-26)), fixed at creation | Only via `wrap` (mints `⌊received·num/den⌋` of the **measured** delta) / `unwrap` (pays `⌊w·den/num⌋`, burns `⌈out·num/den⌉`) on a chosen leg at that leg's rate; `num = den = 1` is the 1:1 case. A **hybrid** (`maxSupply ≠ 0`, fixed at creation, with `MINTABLE`) also mints by its `minter`, under `maxSupply` ([CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)) | `Σ_i⌊reserve_i·num_i/den_i⌋ ≥ totalSupply` with internal per-leg `reserve` (pooled; no per-leg invariant), on a non-hybrid; a hybrid: `totalSupply ≤ maxSupply` ([CTR-TOK-05](#CTR-TOK-05)) |
+| `NORMAL` | `NormalToken` | none | `initialSupply` minted to `initialHolder` at init; `mint` by `minter` only with `MINTABLE`; holder `burn` with `BURNABLE`, or only a `BURNER` holder's burn of its own balance ([CTR-TOK-22](#CTR-TOK-22), [CTR-GOV-29](../decisions.md#CTR-GOV-29)) | `Σ balances == totalSupply` |
+| `WRAPPED` | `WrappedToken` | 1–8 ERC-20s or the native coin ([CTR-TOK-26](#CTR-TOK-26)), fixed at creation | Only via `wrap` (mints `⌊received·num/den⌋` of the **measured** delta) / `unwrap` (pays `⌊w·den/num⌋`, burns `⌈out·num/den⌉`) on a chosen leg at that leg's rate; `num = den = 1` is the 1:1 case. A **hybrid** (`maxSupply ≠ 0`, set at creation, with `MINTABLE`; changeable under bit 31, [supply caps](#supply-caps)) also mints by its `minter`, under `maxSupply` ([CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)); every wrap also under a non-zero `maxWrapSupply` | `Σ_i⌊reserve_i·num_i/den_i⌋ ≥ totalSupply` with internal per-leg `reserve` (pooled; no per-leg invariant), on a non-hybrid; a hybrid: `totalSupply ≤ maxSupply` ([CTR-TOK-05](#CTR-TOK-05)) |
 
 Example (owner requirement): a wrapper over USDT and DAI at 1 → 25,000, i.e. one stablecoin mints 25,000 units of a
 low-value currency token — an `WrappedToken` with two legs and one rate per leg (`num/den` adjusted for each leg's decimals); one leg at a rate is the one-leg case.
@@ -119,7 +119,8 @@ with `UnsupportedUnderlying`, [CTR-ZTH-14](zether.md#CTR-ZTH-14), [CTR-TOK-11](#
 
 <a id="CTR-TOK-09"></a>**CTR-TOK-09** — `NormalToken` (kind `NORMAL`) mints `initialSupply` to `initialHolder` at
 init (`NORMAL*` kinds only; with `initialSupply == 0` nothing is minted and `initialHolder` is ignored). Further supply and burning are features, not class: `mint` by the `minter` with `MINTABLE`
-(`minter == 0` and no flag ⇒ fixed supply), holder `burn` with `BURNABLE`, and the role and its lifecycle are in
+(`minter == 0` and no flag ⇒ fixed supply), `burn` in one of three creation-time modes (off; `BURNABLE`; `BURNER`,
+[CTR-GOV-29](../decisions.md#CTR-GOV-29)), and the roles and their lifecycle are in
 [CTR-TOK-22](#CTR-TOK-22). (Built: the holder's `renounceRole(MINTABLE)`.)
 
 `underlyings.length == 0`. The creation parameters are the `TokenConfig` fields of [CTR-TOK-25](#CTR-TOK-25)
@@ -128,8 +129,9 @@ init (`NORMAL*` kinds only; with `initialSupply == 0` nothing is minted and `ini
 | Function | Rule |
 |---|---|
 | `initialize` | mints `initialSupply` to `initialHolder`; validates the flags ([CTR-TOK-22](#CTR-TOK-22)) |
-| `mint(to, amount)` | `FeatureNotSet(MINTABLE)` when the flag is clear, `MissingRole(MINTABLE, caller)` when the caller (read through `_msgSender()`) lacks the role (not allowlisted: the minter acts through its own contract); to a public balance only |
-| `burn(amount)` | `BURNABLE`; any holder, own public balance (`_msgSender()`; gasless through `mtxExecute`); `Transfer(from, 0, amount)` |
+| `mint(to, amount, chainUid_)` | `FeatureNotSet(MINTABLE)` when the flag is clear, `MissingRole(MINTABLE, caller)` when the caller (read through `_govSubject()`) lacks the role, then `ChainUidMismatch` unless `chainUid_` is the token's word ([CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change; BUILT, build 3zb + 3zc) (not allowlisted: the minter acts through its own contract or the router's `mtxMint`); to a public balance only |
+| `burn(amount)` | mode `BURNABLE` (bit 2): any holder, own public balance (`_msgSender()`; gasless through `mtxBurn` / `mtxExecute`); `Transfer(from, 0, amount)`. Mode off: `FeatureNotSet(2)` |
+| `burn(amount)`, mode `BURNER` (bit 30) | BUILT (build 3zb + 3zc, branch `burner-wrap-caps`). One body for `burn`, `mtxBurn` and the generic `mtxExecute` burn (`NormalTokenCore._burnBody`): `GovernanceUse.use(BURNER, _subject(), amount)`, then the burn of the caller's own balance. `_subject()` is the id whose balance is debited (a signed call's subject, a derived UA's UA-ledger balance), never `_govSubject()`, so a holder burns only its own units. Refusals: `MissingRole(30, id)`, `GrantExpired`, `GrantExhausted(field)` (a `LIMITED` grant, debited by `amount` in raw units, `GrantUsed(30, holder, amount)`); after `disableFeature(30, chainUid_)` every burn is `FeatureNotSet(2)`. No chain word (an own-balance entry, owner OQ3). Rule: [CTR-GOV-29](../decisions.md#CTR-GOV-29) |
 
 Invariant: `Σ balances == totalSupply`. A supply cap or mint-rate limit, if an issuer wants one, belongs in the
 minter contract it controls, not in this kind.
@@ -253,7 +255,7 @@ no standard wrapped native token. `underlying = address(0)` in a `Leg` is the na
 each leg's initial rate are set at creation and never added to or removed (rates themselves may be adjustable,
 [CTR-TOK-13](#CTR-TOK-13)); a user wraps one chosen underlying and unwraps into one chosen underlying, bounded by that
 leg's reserve (`InsufficientReserve`). The `guardian` (role of the `WRAP_DISABLEABLE` flag, [CTR-TOK-22](#CTR-TOK-22); granted by the owner, may be an EOA) has exactly one power:
-`disableWrap(underlying, reason)` — one-way; unwrap from a disabled leg stays open. A disabled leg refuses
+`disableWrap(underlying, reason, chainUid_)` — one-way; unwrap from a disabled leg stays open. A disabled leg refuses
 `addReserve`, and no rate change that lowers `collateralValue()` executes while any leg is disabled. A re-enable power
 would let a compromised guardian reopen a depegged inflow and drain the good legs.
 
@@ -266,7 +268,7 @@ matters in a depeg; role and lifecycle: [CTR-TOK-22](#CTR-TOK-22). The leg order
 | `wrap(address u, uint256 amount) returns (uint256 minted)` | one-leg wrap on leg `u`; `UnknownUnderlying(u)`, `WrapDisabledFor(u)`, `WrapPausedForRateChange(u)` while any change is pending |
 | `unwrap(address u, uint256 wrapped, address recipient, uint256 minOut) returns (uint256 out, uint256 burned)` | one-leg unwrap on leg `u`, bounded by `reserve_u` and `minOut`; works on disabled legs and during a pending change |
 | `addReserve(address u, uint256 amount)` | as for one leg; refused on disabled legs |
-| `disableWrap(address u, bytes32 reason)` | guardian; one-way; `WrapDisabled(u, guardian, reason)`; second call reverts `WrapDisabledFor(u)` |
+| `disableWrap(address u, bytes32 reason, bytes32 chainUid_)` | guardian; then the guardian's chain word ([CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change, BUILT, build 3zb + 3zc); one-way; `WrapDisabled(u, guardian, reason)`; second call reverts `WrapDisabledFor(u)` |
 | `wrap(uint256)`, `unwrap(uint256,address)`, `unwrap(uint256,address,uint256)` (single-asset ABI) | revert `UnderlyingRequired()` unless exactly one leg |
 | `underlying()` | returns `address(0)` with more than one leg; clients use `underlyings()` |
 | rate functions | as for one leg with the leg named in `proposeRate` (default fixed; adjustable per [CTR-TOK-13](#CTR-TOK-13)); one pending change per token; admin-only execution; `RateDecreaseWithDisabledLeg()` if a change lowers `C` while any leg is disabled |
@@ -305,6 +307,66 @@ expected behaviour of an any-of wrapper, not a bug.
   a multi-underlying token should show the per-leg backing before a wrap. (Checking every leg on a multi `wrap` and
   `addReserve` — at most 8 `balanceOf`, as `executeRate` already does — was considered and not adopted.)
 
+#### <a id="supply-caps"></a>2.2.2 Supply caps: `maxSupply`, `maxWrapSupply`, `totalWrapped`
+
+BUILT (build 3zb + 3zc, branch `burner-wrap-caps`); UNAUDITED. The rule is
+[CTR-GOV-30](../decisions.md#CTR-GOV-30); the design is
+[`superpowers/specs/2026-11-13-burner-wrap-caps.md`](../superpowers/specs/2026-11-13-burner-wrap-caps.md) §3. On every
+wrapped kind (1, 3, 5, 9, 11, 13), pure wraps and hybrids:
+
+- **Two caps, one counter.** `maxSupply` stays the **total** cap of a hybrid (wraps and the minter's mints both count;
+  0 = not a hybrid). `maxWrapSupply` bounds the units outstanding through wraps (0 = no wrap cap; a hybrid's wraps stay
+  bound by `maxSupply`); `TokenConfig.maxWrapSupply` sets it at creation, `MaxWrapSupplyInvalid()` above a non-zero
+  `maxSupply` (a Normal kind refuses a non-zero value, `ConfigFieldForOtherKind(5)`). `totalWrapped()` is the counter: every
+  wrap adds the units it mints (a signature wrap's submitter fee part included), every unwrap subtracts the units it burns,
+  saturating at 0 (a hybrid may unwrap minter-minted units). It lives in `WrappedLib` (`WrappedStorage`, appended): the
+  wrap side in `wrap` / `wrapBySigUA`, the burn side in `payOut` / `payOutToUA` / `payOutTo`, each core call site passing
+  the units it burnt. Paths that do not move it: `mint`, `mintToUA`, `mtxShield` / `mtxUnshield` (moves between the public
+  balance and the pool), `addReserve`, transfers, fees, `rescue`, a rate change.
+- **The wrap check.** After `minted` is known: `WrapDisabledFor` → `WrapPausedForRateChange` → the wrapper list → the pull →
+  `WrapTooSmall` → `MaxSupplyExceeded` (hybrid) → `MaxWrapSupplyExceeded(totalWrapped + minted, maxWrapSupply)` → the
+  wrap-limit windows ([CTR-TOK-31](#CTR-TOK-31)); both caps and the windows bind. A signature wrap checks in its quote and
+  writes the counter after the leg's call, so no reader inside the leg sees `totalWrapped()` ahead of `totalSupply()`. The
+  minter's `mint` is bound by `maxSupply` only.
+- **The setters**, in the wrap module, admin-only, each with the chain word (owner O3):
+  `setMaxSupply(uint256 newMaxSupply, bytes32 chainUid_)` (hybrids only) and
+  `setMaxWrapSupply(uint256 newMaxWrapSupply, bytes32 chainUid_)` (every wrapped kind; 0 removes the wrap cap). Order:
+  `NotAdmin`, then `ChainUidMismatch`, before any write ([CTR-GOV-28](../decisions.md#CTR-GOV-28)); then `FeatureNotSet(31)`
+  unless bit 31 `SUPPLY_CAP_ADJUSTABLE` is set (unset at creation, or disabled one-way: both caps fixed for good); then the
+  shape, at both calls: `setMaxSupply` needs the current and the new value non-zero (`MaxSupplyInvalid()`: a hybrid stays a
+  hybrid, a pure wrap has no `maxSupply`).
+- **Propose / apply** under the token's `grantDelay` (no new parameter), one pending per cap, both directions alike:
+  `grantDelay == 0` applies at once; else the first call with a value **proposes** (`MaxSupplyProposed` /
+  `MaxWrapSupplyProposed(by, value, eta)`, `lastProposedAt` written) and the same call again in `[eta, eta + grantDelay]`
+  under the same admin generation **applies** (`MaxSupplySet` / `MaxWrapSupplySet(by, old, new)`); before `eta`
+  `GrantNotReady(31, 0, eta)`. Another value replaces the pending and restarts the clock; past the window or after an admin
+  change the pending is dead and the call proposes again (a landed setter transaction is a proposal or an apply: the event
+  tells which). No cancel entry: propose the current value to replace an unwanted pending. To lower `maxSupply` under the
+  current `maxWrapSupply`, lower `maxWrapSupply` first (both may be pending together).
+- **Floors at the apply**, against the state then: `setMaxSupply` `newMaxSupply ≥ totalSupply()`
+  (`MaxSupplyBelowSupply(maxSupply, totalSupply)`) and `≥ maxWrapSupply` when that is non-zero
+  (`MaxSupplyBelowWrapCap(maxSupply, maxWrapSupply)`); `setMaxWrapSupply`, a non-zero value, `≥ totalWrapped()`
+  (`MaxWrapSupplyBelowWrapped(maxWrapSupply, totalWrapped)`) and `≤ maxSupply` when that is non-zero
+  (`MaxWrapSupplyAboveMaxSupply(maxWrapSupply, maxSupply)`).
+- **A pending lower cap binds nothing before its apply** (owner O4). Consequence: a lower cap applies only if supply is still
+  under it at the apply; anyone who wraps above the pending value before `eta` and holds through the window makes the apply
+  revert, at the cost of locked capital only, and the minter's mint does the same to `maxSupply`. The admin's remedies with
+  existing tools ([ops note](../node/ops.md#supply-caps)): on a hybrid with bit 25 a token-wide wrap limit (tightening the
+  wrap side applies at once); with bit 26 the wrapper list (turning it on applies at once); revoking or narrowing the
+  minter (at once), or `disableFeature(MINTABLE)`; on any wrapped kind with `WRAP_DISABLEABLE`, the guardian's one-way
+  `disableWrap` of a leg. A pure wrap has no bits 25 / 26, so there only `disableWrap` answers.
+- **Convention:** an uncapped hybrid uses `maxSupply = 2^256 − 1`.
+- **Views:** `maxSupply()`, `maxWrapSupply()`, `totalWrapped()`, `reserveValue()` ([CTR-TOK-05](#CTR-TOK-05)),
+  `pendingSupplyCaps() returns (pendingMaxSupply, maxSupplyEta, maxSupplyLive, pendingMaxWrapSupply, maxWrapSupplyEta,
+  maxWrapSupplyLive)`; a `…Live` flag is false past the window, after an admin change, and whenever bit 31 is not set.
+- **Router:** `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` on `GovernanceRouter` (fee mode `NONE`, relayable at fee 0;
+  `UASetMaxSupply(bytes32 from,address target,uint256 maxSupply,bytes32 chainUid,…)` and its twin); the propose and the
+  apply are the same signed op sent twice (two nonces). Disabling bit 31: `mtxDisableFeature`.
+- **Gas (measured, `test/wrap/WrapLimitsGas.t.sol`, regular gas under Amsterdam prices, EIP-8037 state gas apart):** every
+  wrap of every wrapped kind +14.5 k (a cold read-modify-write of `totalWrapped` and a cold read of `maxWrapSupply`), every
+  unwrap +12.5 k (the read-modify-write of `totalWrapped`); a token's first wrap adds the new slot's state gas. Both caps
+  stay `uint256` in their own slots (the `2^256 − 1` convention), so the two reads are not packed.
+
 ## <a id="rates"></a>3. Rates
 
 <a id="CTR-TOK-04"></a>**CTR-TOK-04** — A conversion rate is `(num, den)`, `uint96` each, `1 ≤ num, den < 2^96`,
@@ -326,6 +388,13 @@ the underlying behaves. Wrap mints the **measured** balance delta; unwrap requir
 (`UnderlyingTransferMismatch`); wrap and `addReserve` refuse while `balanceOf < reserve_i` (`ReserveShortfall`); unwrap
 never checks that, so exits stay open. Internal accounting keeps donations and rebases from moving the price.
 On a hybrid, a wrapped token with `maxSupply ≠ 0` ([CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)), the solvency invariant is not claimed: `totalSupply() ≤ maxSupply` holds instead, `balanceOf_i ≥ reserve_i` stays, a mint adds no reserve, and `executeRate` runs every check but the supply comparison, so a rate may fall with no `addReserve`. Any unit redeems at the rate while the reserve lasts, first come. One cap binds every path that raises `totalSupply()` (`MaxSupplyExceeded`); a `RateDecreaseWithDisabledLeg` refusal stays. BUILT on branch `governance` (T9, `20620a1e`), on every `WRAPPED*` kind.
+**The reserve view and the wrap counter** (BUILT, build 3zb + 3zc, branch `burner-wrap-caps`;
+[CTR-GOV-30](../decisions.md#CTR-GOV-30)): `reserveValue()` is the owner's name for the sum `collateralValue()` already
+returns (`Σ_i ⌊reserve_i·num_i/den_i⌋`, saturating; the same library function, `collateralValue()` kept), on every wrapped
+kind; compare it with `totalSupply()` (on a hybrid it may be lower by design). The invariants gain three rows, on every
+wrapped kind: `totalWrapped() ≤ totalSupply()` always; `totalWrapped() ≤ maxWrapSupply()` at every wrap when the cap is
+non-zero; on a pure wrap `totalWrapped() == totalSupply()` exactly (every unit is born by a wrap and dies by an unwrap: the
+positive control of every path of [supply caps](#supply-caps)).
 
 <a id="CTR-TOK-06"></a>**CTR-TOK-06** — **Rate mode is the issuer's choice at creation:** `fixed` (default; no setter
 exists) or `adjustable`. Adjustable: a `rateAdmin` that **has code** (the same `_isContract` as the allowance
@@ -344,18 +413,20 @@ executed, cancelled (also by `disableFeature(RATE_ADJUSTABLE)`; `renounceRole` l
 counts as no change everywhere (`proposeRate`, `pendingRate()`, the wrap pause).
 
 ```
-proposeRate(address u, uint96 num, uint96 den)   // rateAdmin; nothing pending (RateChangePending); RateInvalid;
+proposeRate(address u, uint96 num, uint96 den, bytes32 chainUid_)
+                                                  // rateAdmin, then its chain word (CTR-GOV-28's Change, SPECIFIED,
+                                                  //   build 3zb + 3zc); nothing pending (RateChangePending); RateInvalid;
                                                   //   step bound against the current rate (RateStepTooLarge)
     eta = now + rateDelay; emit RateChangeProposed(u, oldNum, oldDen, num, den, eta)
-cancelRate()                                      // rateAdmin; emit RateChangeCancelled(u)
-executeRate()                                     // rateAdmin only; eta ≤ now ≤ eta + 7 days
+cancelRate(bytes32 chainUid_)                     // rateAdmin, then its word; emit RateChangeCancelled(u)
+executeRate(bytes32 chainUid_)                    // rateAdmin only, then its word; eta ≤ now ≤ eta + 7 days
                                                   //   (RateChangeNotReady / RateChangeExpired)
     every leg: U_i.balanceOf(this) ≥ reserve_i    // ReserveShortfall(u_i, balance, reserve) — no phantom reserve
     C' with the new rate, summed with early exit once ≥ totalSupply
     require C' ≥ totalSupply                       // RateChangeUndercollateralized(C', supply)
     Multi: a change that lowers C' while any leg is disabled ⇒ RateDecreaseWithDisabledLeg
     apply; delete pending; emit RateChanged(u, oldNum, oldDen, num, den)
-renounceRole(3)                                   // a holder gives up the role; the rate and a pending change stay
+renounceRole(3, chainUid_)                        // a holder gives up the role; the rate and a pending change stay
 ```
 
 While a change is pending, `wrap` reverts `WrapPausedForRateChange(u)` **on every leg** of the token; unwrap (direct
@@ -512,7 +583,7 @@ UA with `wrapToUA`, and unwraps a SCaaS ledger leg straight into a UA with `unwr
 
 <a id="CTR-TOK-10"></a>**CTR-TOK-10** — "No one alters a deployed token" holds with only visible exceptions: the feature flags are
 fixed at creation ([CTR-TOK-22](#CTR-TOK-22)) and the roles are held by the accounts the owner granted them to; an owner
-can give everything up. The factory and its registrar have no power over any token, and no role can mint into a shielded
+can give everything up. The factory and its admin have no power over any token, and no role can mint into a shielded
 balance, move balances (except under `FORCE` or `MODERATE`, on public balances, chosen at creation), touch reserves, pause unwrap or add or remove an
 underlying. A role can mint only under `MINTABLE`; a hybrid's issuer mints unbacked units under `maxSupply` ([CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)).
 
@@ -523,9 +594,9 @@ immutable: see the administration bullet below.
 
 | Bit | Flag | Holder | Valid kinds | Meaning |
 |---|---|---|---|---|
-| 0 | `PAYABLE` | — | all | `IERC20Payment` works (`mtxPay`, `payWithFee`, `payLane`, `PaymentSettled`); **default off**; immutable (no role). `MetaTransfer` is never gated (`PaymentSettled` is also emitted by any `MetaTransfer` with `entryRef ≠ 0`, whatever the flag; the flag gates `mtxPay`, `payWithFee`, `mtxPayReceiverFee` and `supportsInterface(IERC20Payment)`) |
+| 0 | `PAYABLE` | — | all | `IERC20Payment` works (`mtxPay`, `payWithFee`, `payLane`, `PaymentSettled`); **default off**; immutable (no role). `MetaTransfer` is never gated (`PaymentSettled` is also emitted by any `MetaTransfer` with `entryRef ≠ 0`, whatever the flag; the flag gates `mtxPay`, `payWithFee`, `mtxPayWithPayeeFee` and `supportsInterface(IERC20Payment)`) |
 | 1 | `MINTABLE` | `minter` | `NORMAL*`, `WRAPPED*` as a hybrid (under `maxSupply`, [CTR-GOV-12](../decisions.md#ctr-gov-12--hybrid-underlying-wrap-and-issuer-mint-on-one-token-the-reserve-can-run-out)) | `mint` to a public balance (a minter never mints into a shielded balance) |
-| 2 | `BURNABLE` | — (holder) | `NORMAL*` | holder `burn` of its public balance |
+| 2 | `BURNABLE` | — (holder) | `NORMAL*` | holder `burn` of its public balance; exclusive with bit 30 |
 | 3 | `RATE_ADJUSTABLE` | `rateAdmin` (contract) | `WRAPPED*` | rate change with timelock; off ⇒ rates fixed at creation |
 | 4 | `WRAP_DISABLEABLE` | `guardian` | `WRAPPED*` | disable wrap per leg, one-way |
 | 5 | `FREEZE` | contract | regulated implementations ([CTR-AS-17](asset-suite.md#CTR-AS-17)) | as [CTR-AS-05](asset-suite.md#CTR-AS-05) |
@@ -533,26 +604,30 @@ immutable: see the administration bullet below.
 | 7 | `PAUSE` | contract | regulated implementations | as [CTR-AS-06](asset-suite.md#CTR-AS-06) |
 | 8 | `ALLOWLIST` | none, parameters | regulated implementations, not the confidential kinds | a receiver must hold `requiredFlags` in a `ComplianceRegistry` ([CTR-AS-07](asset-suite.md#CTR-AS-07)) |
 | 9 | `DENYLIST` | none, parameters | regulated implementations | a receiver must hold none of `deniedFlags` in that registry ([CTR-AS-07](asset-suite.md#CTR-AS-07)) |
-| 17 | `RESCUABLE` | none, `rescueTo` | all token kinds | anyone's `rescue(asset)` moves what the token does not owe to the immutable `rescueTo` ([CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto)); set at creation iff `rescueTo ≠ 0`, always locked |
+| 17 | `RESCUABLE` | none, `rescueTo` | all token kinds | anyone's `rescue(asset)` moves what the token does not owe to the immutable `rescueTo` ([CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto)); set at creation, always locked; `rescueTo` only with it, 0 there the constant dev address, a `RescueVault` ([CTR-GOV-25](../decisions.md#CTR-GOV-25)) |
 | 21 | `MODERATE` | contract | regulated implementations; re-scoped by the owner 2026-11-05 ("other hierarchical moderation", TBD), no body | — |
-| 22 | `OPERATOR_TRANSFER` | any (an EOA, a single-key UA, an `msig`, a contract); each holder's grant `WHOLE` or `LIMITED` | regulated kinds 8–13 only; a plain kind refuses it (`FeatureInvalidForKind`); SPECIFIED, entry in plan T32 | `operatorTransfer(from, to, amount, ref)`: moves public units with no record, the CTR-GOV-08 refusals ([CTR-GOV-20](../decisions.md#ctr-gov-20--operator_transfer-bit-22-any-holder-the-regulated-kinds), [CTR-GOV-13](../decisions.md#ctr-gov-13--moderate-only-on-public-balances)) |
+| 22 | `OPERATOR_TRANSFER` | any (an EOA, a single-key UA, an `msig`, a contract); each holder's grant `WHOLE` or `LIMITED` | regulated kinds 8–13 only; a plain kind refuses it (`FeatureInvalidForKind`); SPECIFIED, entry in plan T32 | `operatorTransfer(from, to, amount, ref, chainUid_)`: moves public units with no record, the CTR-GOV-08 refusals ([CTR-GOV-20](../decisions.md#ctr-gov-20--operator_transfer-bit-22-any-holder-the-regulated-kinds), [CTR-GOV-13](../decisions.md#ctr-gov-13--moderate-only-on-public-balances)) |
+| 24 | `PQZ_PROOF` | any holder (`roles.issuer` on a plain PQZ kind takes this bit alone) | the PQZ kinds 4, 5, 12, 13 | `setProofStore(uint8 next, bytes32 chainUid_)`: the token's proof storage mode NONE / LOG, from the next debit; disabling the bit freezes the mode ([CTR-PQZ-35](pq-zero-knowledge.md#CTR-PQZ-35), [CTR-GOV-22](../decisions.md#CTR-GOV-22); BUILT, group 3h T61; the chain word: BUILT, build 3zb + 3zc) |
+| 30 | `BURNER` | any (an EOA, a single-key UA, an `msig`, a contract); `roles.burner` the seat at creation; each grant `WHOLE` or `LIMITED`, scalar = the amount burnt | the Normal kinds 0, 2, 4, 8, 10, 12; a wrapped kind refuses it (`FeatureInvalidForKind`, `roles.burner` `NoSuchRole(30)`) | only a holder `burn`s, its own balance, within its grant; exclusive with bit 2 at creation (`FeatureConflict(30, 2)`), never enabled later, disableable one-way (every burn stops). BUILT, build 3zb + 3zc ([CTR-GOV-29](../decisions.md#CTR-GOV-29)) |
+| 31 | `SUPPLY_CAP_ADJUSTABLE` | none (a capability) | the wrapped kinds 1, 3, 5, 9, 11, 13 | the admin may change `maxSupply` (a hybrid) and `maxWrapSupply` after `grantDelay` ([supply caps](#supply-caps)); unset or disabled (one-way): both caps fixed for good; never enabled later. BUILT, build 3zb + 3zc ([CTR-GOV-30](../decisions.md#CTR-GOV-30)) |
 
 The bits are the one table of [CTR-GOV-10](../decisions.md#ctr-gov-10--bit-bands-0-127-one-meaning-128-255-per-application-none-refused): bits 0–127 belong to SCaaS, with the same meaning on every SCaaS contract (bits 11 `LISTING` and 12 `FEE_ROUTING` are the DEX's, [CTR-DEX-03](dex.md#CTR-DEX-03)); bits 128–255 belong to an application, labelled by its `bitLabel(bit)`; no band is refused, and a contract's `_validBits()` is the only check. `smartcontracts/vectors/governance/governance_bits.json` holds each SCaaS bit's name, type and disclosure sentence, read by every client (BUILT on branch `governance`, T14, `7887a712`).
 
-- **Administration: one `owner`, in `GovernanceBase`** ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)). Each token has one `owner`, a UA id (`bytes32`: a native account's padded address, or a derived UA's registered id); 0 at creation means no administration ever, and `initialize` refuses a holder on an unlocked bit in that case. The owner can: `grantRole(bit, account)` and `setGrant(bit, holder, terms)`, in two calls within `[eta, eta + grantDelay]` when they add a holder or widen anything (the pending binds a `termsHash` the confirm must match), at once when `grantDelay` is 0 or they narrow ([CTR-GOV-04](../decisions.md#ctr-gov-04--two-call-grantdelay-and-holdercount)); `cancelGrant(bit, account)`, which deletes a pending; `revokeRole(bit, account)`, at once, which deletes one too; `disableFeature(bit)`, one-way, only for a flag not in `lockedFeatures` (reverts `FeatureLocked(bit)`; `FeatureNotSet(bit)` when already clear); two-step `transferOwnership(bytes32)`, not delayed; `renounceOwnership()`, after which the owner is 0 for ever. **`renounceOwnership` reverts while a bit that is not locked has a live root** (`OwnerHasHolders(bit)`): revoke them first, an expired root included ([CTR-GOV-02](../decisions.md#ctr-gov-02--the-grant-record-in-the-contract-subject-to-measuring)). A locked bit's holders survive it, and can add nobody. A holder performs the flag's actions, within its `Grant` if limited, and may `renounceRole(bit)`. The owner only administers: it acts on a flag only if it holds the role. `PAYABLE`, `BURNABLE` and `RESCUABLE` have no holder and are always locked. `hasRole` means listed, not able to act. Events: `RoleGranted` / `RoleRevoked`, `GrantProposed`, `GrantCancelled`, `GrantSet`, `GrantUsed`, `FeatureDisabled(bit, by)`, the ownership events, every identity a `bytes32`. **Who is calling:** the token reads `_govSubject()`: the native id of `msg.sender`, or, when `msg.sender` is the chain's `GovernanceRouter` (the release's `GOV_ROUTER` immutable), the UA the router authenticated for that call. No governance operation has an `mtx*` or `ua*` entry on the token; a derived UA, a PQ key or an `msig`, or a gas-less owner, signs it at the router, relayed at fee 0 ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)). In production the owner or a holder is a Safe, a multisig, or a UA through the router. BUILT on branch `governance` (T3 `7825361b`, T5 `7d0c6a86`, T6 `ead16677`, T7 `c2525e28`, T10b `ac29de05`, T11 `ea9f4e9d`).
+- **Administration: one `admin`, in `GovernanceBase`** ([CTR-GOV-01](../decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)). Each token has one `admin` (the former `owner`, [CTR-GOV-23](../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract)), a UA id (`bytes32`: a native account's padded address, or a derived UA's registered id); 0 at creation means no administration ever, and `initialize` refuses a holder on an unlocked bit in that case. The admin can (each entry with a trailing `chainUid_`, the token's own chain word, [CTR-GOV-28](../decisions.md#CTR-GOV-28)): `grantRole(bit, account, chainUid_)` and `setGrant(bit, holder, terms, chainUid_)`, in two calls within `[eta, eta + grantDelay]` when they add a holder or widen anything (the pending binds a `termsHash` the confirm must match), at once when `grantDelay` is 0 or they narrow ([CTR-GOV-04](../decisions.md#ctr-gov-04--two-call-grantdelay-and-holdercount)); `cancelGrant(bit, account, chainUid_)`, which deletes a pending; `revokeRole(bit, account, chainUid_)`, at once, which deletes one too; `disableFeature(bit, chainUid_)`, one-way, only for a flag not in `lockedFeatures` (reverts `FeatureLocked(bit)`; `FeatureNotSet(bit)` when already clear); two-step `transferAdmin(newAdmin, chainUid_)`, not delayed ([CTR-GOV-27](../decisions.md#CTR-GOV-27)); `renounceAdmin(chainUid_)`, after which the admin is 0 for ever (the admin first, `NotAdmin`, then `chainUid_` the token's own chain word, `ChainUidMismatch(expected, got)`: a native admin's direct renounce made for a sibling with the same chain id is void; owner 2026-11-12, Fable recheck-2 P3-1; its router op `mtxRenounceAdmin` signs and forwards the word). **`renounceAdmin` reverts while a bit that is not locked has a live root** (`OwnerHasHolders(bit)`): revoke them first, an expired root included ([CTR-GOV-02](../decisions.md#ctr-gov-02--the-grant-record-in-the-contract-subject-to-measuring)). A locked bit's holders survive it, and can add nobody. **The chain word on every admin entry** ([CTR-GOV-28](../decisions.md#CTR-GOV-28), owner 2026-11-13; BUILT on branch `ua-mtx-fix3-chainuid`, UNAUDITED): an admin-only entry (`grantRole`, `disableFeature`, `enableFeature` of 8-13, `pqzCancelVerifier`, `pqzRevokeVerifier`) refuses a stranger `NotAdmin`, then a word that is not the token's `ChainUidMismatch(expected, got)`, before any write; an entry a holder, a grantor or a proposer may call too (`setGrant`, `revokeRole`, `cancelGrant`, and `pqzSetVerifier` / `setVerifierFee` whose confirm checks the proposer) checks the admin's word before any write and another caller's after its own checks, the call reverting whole; so a native admin's direct admin call made for a sibling with the same chain id is void. A holder's own `renounceRole(bit, chainUid_)` checks the word too, before any write (a caller without the bit `MissingRole` first; owner 2026-11-13, renounceRole carries the chain word too). `acceptAdmin` takes no word (the pending is set only by a word-checked `transferAdmin`). The router's ops sign the word as their last field and forward it. **Every direct entry a role holder calls carries the word too** ([CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change, owner 2026-11-13; BUILT, build 3zb + 3zc): `mint`, `mintToUA`, `disableWrap`, `proposeRate`, `cancelRate`, `executeRate`, `setWrapMember`, the regulated powers, `setProofStore` and the DEX's four powers take a trailing `chainUid_`; a stranger keeps today's refusal by name, a holder with another word gets `ChainUidMismatch` before any write and before its grant is debited (`GovernanceBaseCore._holderOnChain`). `burn` in `BURNER` mode and the `REDEEMER` unwraps stay without (own-balance entries). A holder performs the flag's actions, within its `Grant` if limited, and may `renounceRole(bit, chainUid_)`. The admin only administers: it acts on a flag only if it holds the role. `PAYABLE`, `BURNABLE` and `RESCUABLE` have no holder and are always locked. `hasRole` means listed, not able to act. Events: `RoleGranted` / `RoleRevoked`, `GrantProposed`, `GrantCancelled`, `GrantSet`, `GrantUsed`, `FeatureDisabled(bit, by)`, the admin events, every identity a `bytes32`. **Who is calling:** the token reads `_govSubject()`: the native id of `msg.sender`, or, when `msg.sender` is the chain's `GovernanceRouter` (the release's `GOV_ROUTER` immutable), the UA the router authenticated for that call. No governance operation has an `mtx*` or `ua*` entry on the token; a derived UA, a PQ key or an `msig`, or a gas-less admin, signs it at the router, relayed at fee 0 ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)). In production the admin or a holder is a Safe, a multisig, or a UA through the router. BUILT on branch `governance` (T3 `7825361b`, T5 `7d0c6a86`, T6 `ead16677`, T7 `c2525e28`, T10b `ac29de05`, T11 `ea9f4e9d`).
 - **Validation in the token**, in `initialize` through `GovernanceLib` (the factory only forwards; `createTokenUnregistered`
   lets anyone bring an implementation, so the token is the one authority): each flag valid for the kind
   (`FeatureInvalidForKind(bit)`); `lockedFeatures ⊆ features` (`LockedNotSubset()`); a role holder in `roles` only for a
-  set flag (`RoleWithoutFeature(bit)`); contract-only roles are native ids with code (`RoleNotContract`); `UA_POOL`, `SHIELD_POOL` and 0 refused as owner and holder (`OwnerAccountPool`, `RoleAccountPool`, `RoleAccountZero`); `grantDelay ≤ 30 days` (`GrantDelayTooLong`); `RESCUABLE` iff `rescueTo ≠ 0`, never the token or a pool (`RescueConfigInvalid`); on `WRAPPED*` `MINTABLE` iff `maxSupply ≠ 0`; `roles.issuer` and `roles.compliance` refused (`RoleWithoutFeature(5)`, `RoleWithoutFeature(10)`). Roles may also be granted later by the owner.
-- **Views:** `features()`, `lockedFeatures()`, `validBits()`, `owner()`, `pendingOwner()` (each a `bytes32`), `hasRole(bit, account)`, `holderCount(bit)`, `grantOf(bit, holder)`, `grantDelay()`, `pendingGrant(bit, account)`, `lastProposedAt()`, `bitLabel(bit)`, `rescueTo()`, `maxSupply()` (`WRAPPED*`), `kind()`, `version()`.
+  set flag (`RoleWithoutFeature(bit)`); contract-only roles are native ids with code (`RoleNotContract`); `UA_POOL`, `SHIELD_POOL` and 0 refused as admin and holder (`AdminAccountPool`, `RoleAccountPool`, `RoleAccountZero`); `grantDelay ≤ 30 days` (`GrantDelayTooLong`); `RESCUABLE` iff `rescueTo ≠ 0`, never the token or a pool (`RescueConfigInvalid`); on `WRAPPED*` `MINTABLE` iff `maxSupply ≠ 0`; `BURNABLE` and `BURNER` not both (`FeatureConflict(30, 2)`, BUILT, build 3zb + 3zc); `roles.burner` only with bit 30; `roles.issuer` and `roles.compliance` refused (`RoleWithoutFeature(5)`, `RoleWithoutFeature(10)`). Roles may also be granted later by the owner.
+- **Views:** `features()`, `lockedFeatures()`, `validBits()`, `admin()`, `pendingAdmin()` (each a `bytes32`), `hasRole(bit, account)`, `holderCount(bit)`, `grantOf(bit, holder)`, `grantDelay()`, `pendingGrant(bit, account)`, `lastProposedAt()`, `bitLabel(bit)`, `rescueTo()`, `maxSupply()` (`WRAPPED*`), and on `WRAPPED*` `maxWrapSupply()`, `totalWrapped()`, `reserveValue()`, `pendingSupplyCaps()` ([supply caps](#supply-caps), SPECIFIED), `kind()`, `version()`.
   `supportsInterface(IERC20Payment)` is true iff `PAYABLE` is set. `rateAdjustable()` and the role holders stay public so
   wallets and indexers flag them. (The wrap pause during a pending rate change is a consequence of that change, not a
   separate power.)
 - **The regulated controls are flags 5–9** ([CTR-AS-17](asset-suite.md#CTR-AS-17)); their rules (caps, cooldowns, orders, the receiver check, the shape-step plus `_update` check) are
   unchanged and will live in `GovernanceLib` and the regulated release's libraries. A token with none of the flags is fully permissionless. No kind of this release takes one: `NORMAL` and `WRAPPED` refuse
   flags 5–9 with `FeatureNotBuilt`, the confidential kinds with `FeatureInvalidForKind`; that is the built state, not a permanent rule ([CTR-GOV-03](../decisions.md#ctr-gov-03--a-plain-transfer-stays-0-one-regulated-implementation-per-kind-never-per-feature), [CTR-GOV-17](../decisions.md#ctr-gov-17--regulated-confidential-kinds-the-rules)). The regulated implementations are SPECIFIED, not built.
-- Flags valid on confidential kinds: `PAYABLE`, `RESCUABLE`; `MINTABLE`/`BURNABLE` (`NORMAL_ZETHER`, `NORMAL_PQZ`); `MINTABLE` as a hybrid, `RATE_ADJUSTABLE`/
-  `WRAP_DISABLEABLE` (`WRAPPED_ZETHER`, `WRAPPED_PQZ`) (each kind's `_validBits()`).
+- Flags valid on confidential kinds: `PAYABLE`, `RESCUABLE`; `MINTABLE`/`BURNABLE` or `BURNER` (`NORMAL_ZETHER`, `NORMAL_PQZ`); `MINTABLE` as a hybrid, `RATE_ADJUSTABLE`/
+  `WRAP_DISABLEABLE`, `SUPPLY_CAP_ADJUSTABLE` (`WRAPPED_ZETHER`, `WRAPPED_PQZ`) (each kind's `_validBits()`; bits 30, 31 BUILT, build 3zb + 3zc).
+  On these kinds the `R_BURN` / `ZetherBurn` unshield is not a burn and is not gated by `BURNER` ([CTR-GOV-29](../decisions.md#CTR-GOV-29)).
 
 <a id="permissionless-vs-controlled"></a>
 
@@ -572,7 +647,8 @@ as above until the regulated implementations are built. `WRAPPED*` uses the same
 contract, and only a contract may call `transferFrom`. An EOA never holds or grants an allowance on a SCaaS token** —
 directly, through `mtxExecute` (`approve` is in no allowlist, [CTR-MTX-19](metatx.md#CTR-MTX-19)), or by any permit.
 Nor does a Universal Account, on any `ua*` path ([CTR-UA-27](accounts.md#CTR-UA-27): no `uaApprove`; its pulls are
-signed `UATradeOrder`s).
+signed `UATradeOrder`s). A user provides AMM liquidity by a signed `LiquidityOrder` ([CTR-DEX-30](dex.md#CTR-DEX-30)),
+never an allowance.
 Enforced in the token code of every family (owner). The caller is `_msgSender()`, equal to `msg.sender` because
 `approve` is never a self-call. Allowance-like grants obey the same rule: a `TradeOrder` names its executor `dex`,
 which must be a contract (`mtxTrade` checks `msg.sender == o.dex` and `_isContract(o.dex)`), so signing `dex` = an EOA
@@ -595,6 +671,9 @@ check was dropped); the rule handles each one explicitly:
   approve)`, a Safe `execTransaction`, or a Safe MultiSend that approves and uses the allowance in one transaction. The
   token sees `msg.sender` = the account. A signature check (`isValidSignature`) is not the account's execution policy
   (Safe guards, modules and thresholds run only on execution), which is why a gasless `approve` by ERC-1271 is refused.
+- A contract that must take a payer's SCaaS tokens into its custody does it by a service pull, the payer's one signed
+  transfer bound to the service and one operation, never an allowance ([CTR-MTX-32](metatx.md#CTR-MTX-32); group 3i,
+  owner 2026-11-09).
 - Payments never need allowances (`pay`, `payWithFee`), the DEX needs none for SCaaS tokens
   ([CTR-DEX-15](dex.md#CTR-DEX-15)), and a mandate is not an allowance: a `MandateWallet` delegate (possibly an EOA)
   pays from the wallet under caps, and the wallet, a contract, is the token's `msg.sender` ([CTR-ACC-06](mandates.md#CTR-ACC-06)).
@@ -634,24 +713,26 @@ empty output — with no symptom until someone has deposited funds.
   every token is a 45-byte EIP-1167 clone (`363d3d373d3d3d363d73<impl>5af43d82803e903d91602b57fd5bf3`) that
   `DELEGATECALL`s it with its own storage. A clone costs ~45 000 gas instead of ~2.5 M.
 - **Versions live in the factory, which deploys them** (owner 2026-10-20, plan 5g-Z2): the registrar publishes
-  versioned environments (`publishEnv(kind, envVersion, Env)`, never changed) and releases code with
-  `deployImplementation(kind, version, envVersion, initcode, implArgs)` (registrar only, append-only, version 0
+  versioned environments (`publishTokenEnv(kind, envVersion, chainUid_, Env)`, never changed) and releases code with
+  `deployTokenImplementation(kind, version, envVersion, initcode, implArgs)` (registrar only, append-only, version 0
   forbidden; the factory's own `CREATE2` with the named env appended, [CTR-TOK-03](#CTR-TOK-03)); a release is usable
-  `noticePeriod` seconds after its deployment; `deprecate` is immediate and refuses new tokens of that version (owner 2026-10-20; tokens already
+  `noticePeriod` seconds after its deployment; `deprecateToken` is immediate and refuses new tokens of that version (owner 2026-10-20; tokens already
   made are untouched), `createTokenUnregistered` deploys an off-catalogue implementation with `version() == 0` (visibly),
   plain kinds only (owner 2026-10-19). A bug in a version is permanent for that version's tokens; the remedy is
   voluntary migration (unwrap the old token, wrap the new one).
-- **Atomic init**: CREATE2 salt = `keccak256(abi.encode(msg.sender, salt))` (nobody can take another creator's
-  address); `initialize` runs in the same call and requires `msg.sender == FACTORY`; implementations lock themselves
-  in the constructor.
-- **Kind gate**: `setKindEnabled(kind, on)` (registrar); the plain kinds start on, the confidential kinds off (owner
+- **Atomic init**: CREATE3 with `s = keccak256(abi.encode(creatorId, class, kind, salt))` (nobody can take another
+  creator's address; [CTR-TOK-29](#CTR-TOK-29); the CREATE2 salt `keccak256(abi.encode(msg.sender, salt))` before T72);
+  `initialize` runs in the same call and requires `msg.sender == FACTORY`;
+  implementations lock themselves in the constructor.
+- **Kind gate**: `setTokenKindEnabled(kind, on, chainUid_)` (registrar; the word [chain-bound](#factory)); the plain kinds start on, the confidential kinds off (owner
   2026-10-20, plan 5g-Z2; it replaces `setZetherEnabled` / `setPqzEnabled`). The chain gates are the implementations':
   a Zether `initialize` reverts when the release's transfer verifier does not run on the chain (no chain-id
   allowlist, [CTR-ZTH-52](zether.md#CTR-ZTH-52)); a PQZ `initialize` runs `PqzSafety` (the
   precompile self-test; no chain allowlist). `OpenFactoryV1` (with its own gate) is in `legacy/p5/` (P5).
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet. Its only powers are
-  `publishEnv`, `publishDexEnv`, `deployImplementation`, `deployDexImplementation`, `deprecate`, `deprecateDex` and
-  `setKindEnabled`.
+  `configureChain` (once), `publishTokenEnv`, `publishDexEnv`, `deployTokenImplementation`, `deployDexImplementation`,
+  `deprecateToken`, `deprecateDex`, `setTokenKindEnabled` and the generic catalogue's `publishClassEnv`, `deployImplementation`,
+  `deprecateRelease`, `setClassKindEnabled` ([CTR-TOK-28](#CTR-TOK-28)).
 - **Same rule on every family**: a fix to an Aptos package, Sui package, Solana program, Cosmos contract, GRAM or
   Soroban contract is a new deployment at a new address plus voluntary migration by the owners of the balances;
   accounts on the old deployment keep working with the old code ([CTR-GEN-02](README.md#CTR-GEN-02)).
@@ -672,7 +753,7 @@ does **not** answer "is this the token I should use" — that has no on-chain an
 `isRegisteredToken(token)` says the token was made from a registered version (`version ≠ 0`); a version-0 token
 (`createTokenUnregistered`, plain kinds only) is unvetted code and clients and the gateway treat it so. For confidential
 tokens the factory is the published source of the verifiers: the release's env (`releaseOf(kind, version)` gives
-`envVersion` and `envHash`, `envOf(kind, envVersion).deps` the addresses, [CTR-ZTH-20](zether.md#CTR-ZTH-20)). Provenance metadata published for
+`envVersion` and `envHash`, `tokenEnvOf(kind, envVersion).deps` the addresses, [CTR-ZTH-20](zether.md#CTR-ZTH-20)). Provenance metadata published for
 every asset: `creator`, `underlying`, `version`, `implementation`, creation block (issuance timestamp), and for
 wrappers the live reserve `underlying.balanceOf(token)` — readable by anyone for free.
 
@@ -682,39 +763,47 @@ wrappers the live reserve `underlying.balanceOf(token)` — readable by anyone f
 <a id="factory-v2"></a>
 
 <a id="CTR-TOK-03"></a>**CTR-TOK-03** — **One factory, `OpenFactory`** (owner), the only factory of a chain. The
-constructor takes the registrar, `chain_uid` (immutable, exposed as `chainUid()`) and the notice period (`noticePeriod()`,
-seconds); an env must name this factory and `chain_uid`, and `deployImplementation` refuses a release whose `chainUid()`
-differs, so a clone's domain `salt` has exactly one source ([CTR-GEN-05](README.md#CTR-GEN-05)). The kinds are in [CTR-TOK-21](#CTR-TOK-21), the creation API in
-[CTR-TOK-25](#CTR-TOK-25). The factory is deployed through the deterministic CREATE2 deployer
-([CTR-GEN-06](README.md#CTR-GEN-06)).
+constructor takes the registrar only (the same bytes, so the same address, on every chain); the chain's values are set once
+by the registrar's `configureChain(chainUid, noticePeriod, govRouter, refBlock, refHash)` ([CTR-TOK-29](#CTR-TOK-29)), and
+every publish, deploy and creation entry refuses before it (`ChainNotConfigured`). A clone's domain `salt` has exactly one
+source, the `chain_uid` the factory appends to its code ([CTR-GEN-05](README.md#CTR-GEN-05)). The kinds are in [CTR-TOK-21](#CTR-TOK-21), the creation API in
+[CTR-TOK-25](#CTR-TOK-25), the index in [CTR-TOK-27](#CTR-TOK-27), the generic catalogue in [CTR-TOK-28](#CTR-TOK-28). The
+factory is deployed through the deterministic CREATE2 deployer ([CTR-GEN-06](README.md#CTR-GEN-06)).
 
 <a id="release-env"></a>**Releases and their environment** (owner 2026-10-20, plan 5g-Z2). The factory deploys every
 implementation itself, so what a release depends on is fixed in its code by construction:
 
-- **Split.** The implementation carries what never changes for it: the release's `Env` as constructor immutables —
-  `factory`, `chainUid`, the UA `registry`, the `SmartKeyAccount` implementation, `hedera`, the kind's dependencies
+- **Split.** Since the chain-neutral releases ([CTR-TOK-29](#CTR-TOK-29)) the implementation's code holds no chain value:
+  each instance's `ChainEnv` (the factory's `chainUid` and `govRouter`, and the release env's values below) is appended to
+  its clone's code. The env carries the UA `registry`, the `SmartKeyAccount` implementation, `hedera`, `params`, the kind's dependencies
   `deps` by position (`*_ZETHER`: transfer, burn and inner-product verifier and `ZetherDisclosure` of one curve;
-  `*_PQZ`: the `UAPqzVerifier`; plain kinds and the DEX: none) and the linked libraries `libs` with their
+  `*_PQZ`: the `PqzKeyVerifier`; plain kinds and the DEX: none) and the linked libraries `libs` with their
   `libCodeHashes`. Each instance carries its own configuration in `initArgs` (rates, features, roles, the confidential
   settings…), decoded by the implementation's generic `initialize(creator, version, initArgs)`; the factory never reads it
   (owner 2026-10-20).
-- **Envs** are published per kind (and one domain for the DEX) by `publishEnv(kind, envVersion, Env)` /
-  `publishDexEnv(envVersion, Env)`: versions from 1, append-only, never changed (`EnvAlreadyPublished`), `Env.factory` and
-  `Env.chainUid` the factory's own and no library code hash `0` or `keccak256("")`, a pin that checks nothing
+- **Envs** are published per kind (and one domain for the DEX) by `publishTokenEnv(kind, envVersion, chainUid_, Env)` /
+  `publishDexEnv(envVersion, Env)`: versions from 1, append-only, never changed (`EnvAlreadyPublished`), no factory, `chainUid`
+  or router in it (the factory adds its own), and no library code hash `0` or `keccak256("")`, a pin that checks nothing
   (`EnvInvalid`); `EnvPublished(domain, envVersion, envHash)` with
-  `envHash = keccak256(abi.encode(env))`; views `envOf`, `dexEnvOf`, `latestEnvVersion`, `latestDexEnvVersion`.
-- **Deployment.** `deployImplementation(kind, version, envVersion, initcode, implArgs)` /
-  `deployDexImplementation(version, envVersion, initcode, implArgs)` name the env explicitly: it must be published for
+  `envHash = keccak256(abi.encode(env))`; views `tokenEnvOf`, `dexEnvOf`, `latestTokenEnvVersion`, `latestDexEnvVersion`.
+- **Deployment.** `deployTokenImplementation(kind, version, envVersion, initcode, implArgs, chainUid_)` /
+  `deployDexImplementation(version, envVersion, initcode, implArgs, chainUid_)` (the word [chain-bound](#factory)) name the env explicitly: it must be published for
   that kind or the DEX (`EnvUnknown(domain, envVersion)`). Interim rule, controller proposal 2026-10-20 (owner may
   override; the owner declined "bind the kind's latest env"): the final binding rule belongs to a later
   governance-matrix spec. The factory checks each `libs[i].codehash` against `libCodeHashes[i]`
   (`LibraryCodeHashMismatch`; the list is the registrar's, checked by code hash, not compared with the init code's link
-  references — owner 2026-10-20), `CREATE2`s `initcode ‖ abi.encode(envVersion, env, implArgs)` (salt
-  `keccak256(abi.encode(kind, version))`, DEX `keccak256(abi.encode("dex", version))`), bubbles a constructor's revert
+  references — owner 2026-10-20), `CREATE2`s the init code with its chain-neutral arguments (no env in them, so the
+  release has the same address on every chain; salt `keccak256(abi.encode(kind, version))`, DEX
+  `keccak256(abi.encode("dex", version))`), bubbles a constructor's revert
   (`DeployFailed` without revert data, e.g. a runtime over the chain's code-size limit; init code over the chain's
-  EIP-3860 limit halts the factory's frame instead, so the registrar's call consumes all its gas without `DeployFailed`), checks `kind()`, `factory()`, `chainUid()`, and records
+  EIP-3860 limit halts the factory's frame instead, so the registrar's call consumes all its gas without `DeployFailed`), checks `kind()`, `factory()`, `validateEnv` and the
+  body modules ([CTR-TOK-30](#CTR-TOK-30)), and records
   `Release {implementation, envVersion, envHash, usableFrom, deprecated}`. The event carries the env version and hash,
   `keccak256(initcode)` (without the appended arguments: a reproducible-build check) and the deployed code hash.
+  **Names (owner 2026-11-10):** the token-kind path is `deployTokenImplementation` (was `deployImplementation`), the
+  generic class path `deployImplementation(ReleaseId, envVersion, initSelector, interfaceId, initcode, implArgs)` (was
+  `deployRelease`); `deployDexImplementation` keeps its name. The factory already deployed on the SCaaS testnet keeps the
+  old names.
 - **Notice period.** `usableFrom = block.timestamp + noticePeriod`; `createToken` / `createDex` refuse a release before
   it (`VersionNotYetUsable`, `DexVersionNotYetUsable`). The deploy script reads `NOTICE_PERIOD`: every mainnet (any
   chain outside `DeployBase._isTestChain`'s fixed test / dev list — 22776, Hedera 295, Ethereum, BSC, an unknown chain)
@@ -739,31 +828,89 @@ struct TokenConfig {
     string name; string symbol; uint8 decimals;
     uint256 features; uint256 lockedFeatures;
     bytes32 owner;                             // a UA id (a native account: its address padded to 32 bytes; CTR-GOV-01 Change, owner 2026-11-04); 0 = no administration ever
-    Roles roles;                               // initial holders, UA ids (optional, each only for a set flag): minter, rateAdmin (a native id with code), guardian, issuer, compliance
+    Roles roles;                               // initial holders, UA ids (optional, each only for a set flag): minter, rateAdmin (a native id with code), guardian, issuer, compliance, burner (bit 30, CTR-GOV-29; BUILT, build 3zb + 3zc)
     uint256 initialSupply; address initialHolder;   // NORMAL* only; initialHolder is ignored when initialSupply == 0
     Leg[] legs;                                // underlying (address(0) = native coin, CTR-TOK-26), num, den — WRAPPED* only, 1..8
     RateConfig rate;                           // with RATE_ADJUSTABLE
     uint64 grantDelay;                         // the owner's two calls (CTR-GOV-04), at most 30 days; 0 = one call; immutable
-    address rescueTo;                          // with RESCUABLE only (CTR-GOV-06), a payout address, immutable; never the token or a pool
-    uint256 maxSupply;                         // WRAPPED* only (ConfigFieldForOtherKind(5) elsewhere): the hybrid's cap, with MINTABLE only; 0 = no hybrid (CTR-GOV-12)
+    address rescueTo;                          // with RESCUABLE only (CTR-GOV-06; 0: SCAAS_DEV_RESCUE, CTR-GOV-25), immutable; never the token or a pool
+    uint256 maxSupply;                         // WRAPPED* only (ConfigFieldForOtherKind(5) elsewhere): the hybrid's cap, with MINTABLE only; 0 = no hybrid (CTR-GOV-12); changeable under bit 31 (CTR-GOV-30)
+    uint256 maxWrapSupply;                     // WRAPPED* only (ConfigFieldForOtherKind(5) elsewhere): the wrap cap, 0 = none; <= a non-zero maxSupply (MaxWrapSupplyInvalid); CTR-GOV-30, BUILT, build 3zb + 3zc
     ConfidentialConfig conf;                   // auditorKey (empty = none), shieldScale, maxShielded, confidentialFee, disclosureMode {BUNDLE, COMPACT}, auditorMode {NONE, FULL, OPTIONAL}, minDecoyFee (both confidential layers; the least per-leg `decoyFee`, renamed from `multiLegFee`, owner 2026-10-20) — confidential kinds only (modes: CTR-ZTH-48/49, built in P3b; the token refuses a key that does not match auditorMode); no verifier field since plan 5g-Z2: the verifiers are the release's env deps, CTR-ZTH-20
+    RegulatedParams reg;                       // *_REGULATED (8-13) only (ConfigFieldForOtherKind(6) elsewhere): complianceRegistry, requiredFlags, deniedFlags, termsHash ([asset-suite §2.2](asset-suite.md#22-configuration-and-init))
 }
-struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo; } // owner a UA id
+struct DexConfig { bytes32 owner; uint32 relayerSharePpm; address treasury; bool listedOnly; uint64 grantDelay; address rescueTo;
+    uint256 features; uint256 lockedFeatures; } // owner a UA id; features: bit 29 CLOSED_MARKETS or 0 (dex.md CTR-DEX-32)
 ```
 
-- **Creation (unchanged pattern).** `CREATE2` of an EIP-1167 clone, then `initialize(creator, version, initArgs)` **in the same call** (no
-  front-run of `initialize`, no deployed-but-uninitialized state); the implementation locks its own `initialize` in
-  its constructor. The address is predictable from `(factory, salt, implementation)`.
+- **Creation** (order since T71–T72): `CREATE3` of an EIP-1167 clone with its `ChainEnv` appended to its code
+  ([CTR-TOK-29](#CTR-TOK-29)), then `initialize(creatorId, version, initArgs)` **in the same call** (no front-run of
+  `initialize`, no deployed-but-uninitialized state), then the post-init `chainUid()` check, the index record
+  ([CTR-TOK-27](#CTR-TOK-27)) and the one event; the implementation locks its own `initialize` in its constructor. The
+  address is `predictAddress(creatorId, class, kind, salt)`, independent of the implementation.
 - **Kinds** (fresh enum, nothing deployed): `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER`, `NORMAL_PQZ`,
-  `WRAPPED_PQZ`; 6 and 7 are `RETIRED_6`, `RETIRED_7` (were `NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ`, dropped 2026-10-20, ids not reused), decoded and refused by `deployImplementation` (`KindRetired`); 8–13 are `NORMAL_REGULATED`, `WRAPPED_REGULATED`, `NORMAL_ZETHER_REGULATED`, `WRAPPED_ZETHER_REGULATED`, `NORMAL_PQZ_REGULATED`, `WRAPPED_PQZ_REGULATED`, off until a release is published and the kind enabled ([CTR-GOV-16](../decisions.md#ctr-gov-16--regulated-kinds-are-real-enum-members-before-the-factory-freezes); T4, `60406d42`). The catalogue keeps versions per kind
+  `WRAPPED_PQZ`; 6 and 7 are `RETIRED_6`, `RETIRED_7` (were `NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ`, dropped 2026-10-20, ids not reused), decoded and refused by `deployTokenImplementation` (`KindRetired`); 8–13 are `NORMAL_REGULATED`, `WRAPPED_REGULATED`, `NORMAL_ZETHER_REGULATED`, `WRAPPED_ZETHER_REGULATED`, `NORMAL_PQZ_REGULATED`, `WRAPPED_PQZ_REGULATED` (BUILT, ua-mtx-merge T24–T36: one regulated implementation each,
+  [asset-suite §2.1](asset-suite.md#21-shape)), off until a release is published and the kind enabled ([CTR-GOV-16](../decisions.md#ctr-gov-16--regulated-kinds-are-real-enum-members-before-the-factory-freezes); T4, `60406d42`). The catalogue keeps versions per kind
   (deploy, deprecate; [CTR-TOK-03](#CTR-TOK-03)); it is append-only.
-- **One event per creation:** `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures,
-  owner, underlyings)`, where `lockedFeatures` is the value the token stored (`locked | (features & ALWAYS_LOCKED)`, read
-  back from `lockedFeatures()` after `initialize`), not the requested one; `DexCreated(dex, creator, version, implementation, owner)` for a DEX clone; `owner` is a `bytes32` UA id in both events
+- **One event per creation:** `TokenCreated(token, creatorId, kind, version, implementation, features, lockedFeatures,
+  owner, underlyings)` (`creatorId` a `bytes32` UA id, indexed: a native creator's padded address; through the router the
+  signing UA), where `lockedFeatures` is the value the token stored (`locked | (features & ALWAYS_LOCKED)`, read
+  back from `lockedFeatures()` after `initialize`), not the requested one; `DexCreated(dex, creatorId, version, implementation, owner)` for a DEX clone; `owner` is a `bytes32` UA id in both events
   ([CTR-DEX-24](dex.md#CTR-DEX-24)).
 - **Registry views:** `isToken`, `versionOf`; for a DEX `isDex`, `dexVersionOf` (advisory, tokens never consult them,
   [CTR-DEX-24](dex.md#CTR-DEX-24)); catalogue `deployDexImplementation`, `dexReleaseOf`, `dexImplementationOf`,
-  `latestDexVersion`.
+  `latestDexVersion`. All of them read the index record ([CTR-TOK-27](#CTR-TOK-27)), which replaced the per-token info.
+
+<a id="CTR-TOK-27"></a>**CTR-TOK-27** — **The factory indexes every contract it creates, in its own state** (owner
+2026-11-07: "no event filtering, because events are lost"; factory index spec Q1–Q6 as recommended). **BUILT** (T67;
+creator ids T71; `test/v2/FactoryIndex.t.sol`). One record per created contract, never changed or deleted:
+`Created {addr, creatorId, contractClass, kind, version, createdBlock, createdAt}` (two slots), and per class
+two lists: all, by creator. Views `infoOf(c)`, `contractsPage(class, from, n)`,
+`contractsOfCreator(creatorId, class, from, n)`, each `(page, total)`, oldest
+first, `n ≤ MAX_PAGE = 100` (`PageTooLarge`), `n = 0` the count, `from ≥ total` an empty page; an unknown class is
+`ClassUnknown`. Class ids are `uint16` (Q12): 0 not made here, 1 `TOKEN`, 2 `DEX`, 3 `PQCHAT`
+([pqchat.md](pqchat.md#CTR-CHAT-02)), 4–65535 the factory admin's, next free. Change (
+[CTR-GOV-23](../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract)): the factory keeps no
+owner information: no `ownerUA` in the record or in `FactoryInfo`, no `contractsOfOwner`; a contract's admin is its own
+`admin()`, read from it; the creator beside the version is what wallets show (Q1); releases are not indexed (Q3). Measured (`GovGas`): `createToken` 1,446,879 → 1,805,428, `createDex` 3,416,944 → 4,006,661 gas with the
+index (T67), 2,183,102 / 4,383,367 with CREATE3 and the env (T72); `createInstance` 1,826,732 (T70); CTR-GOV-23 (one record
+slot and one list element fewer, no `admin()` read): 2,183,975 / 4,148,399 / 1,592,228 (`createInstance` of `NoteKind`).
+
+<a id="CTR-TOK-28"></a>**CTR-TOK-28** — **The generic catalogue: a new class or kind without a factory change** (owner
+2026-11-07: "`OpenFactory` must be built so that later the admin can easily add another kind / implementation"; Q7–Q12 as
+recommended). **BUILT** (T70; `test/v2/FactoryGenericKind.t.sol`). A release is `ReleaseId {contractClass, kind,
+version}` for a class ≥ 3 (0–2 `ClassReserved`: tokens and the DEX keep their typed paths, Q10). Registrar only:
+`publishClassEnv(class, kind, envVersion, Env)`; `deployImplementation(id, envVersion, initSelector, interfaceId, initcode,
+implArgs, chainUid_)` (was `deployRelease`, renamed by the owner 2026-11-10), which checks code, `factoryInfo()` (224 B naming this
+factory and the release's own id, owner 0, initialized: `ReleaseInfoMismatch`), ERC-165 (`0x01ffc9a7`, `interfaceId`, not
+`0xffffffff`: `InterfaceNotSupported`), `validateEnv` and the modules ([CTR-TOK-30](#CTR-TOK-30)); `deprecateRelease(id,
+chainUid_, reason)` (immediate, `ReleaseIsDeprecated` on creation: an error cannot share the event's name); `setClassKindEnabled`
+(a new `(class, kind)` starts off, Q7; `ClassKindDisabled`). Anyone: `createInstance(id, salt, initCall)` — a usable,
+non-deprecated release of an enabled pair, `initCall` the catalogued initializer only (`InitSelectorMismatch`), value 0,
+to the fresh clone only, then its `factoryInfo()` and `chainUid()` checked (`InstanceInfoMismatch`), the record and the
+lists, `InstanceCreated`. `creating()` returns the creator of the creation in progress (EIP-1153, Q8). No unregistered
+generic path (Q9); not a node job (Q11). The factory enforces the release's code, env, initializer, interface and
+`chain_uid`; it cannot know whether the release's own logic is sound: that is the registrar's trust root, as for tokens.
+
+<a id="CTR-TOK-29"></a>**CTR-TOK-29** — **Chain-neutral releases: one address per release on every chain, the chain's
+values in each clone's code** (owner 2026-11-07, option I; S3 the signing UA). **BUILT** (T71, T72, T76; deploy T73; two
+chains T74; `test/v2/ChainNeutral.t.sol`, `ChainNeutralFactory.t.sol`, `test/governance/GovRouterCreate.t.sol`).
+- `OpenFactory(bytes32 admin)`; `configureChain(chainUid, noticePeriod, govRouter, govRouterCodeHash, refBlock, refHash)` once
+  (`ChainAlreadyConfigured`): `chainUid` the genesis hash whenever the EVM can prove it (`BLOCKHASH(0)`, EIP-2935;
+  `ChainUidNotGenesis`), a reference block's hash checked when given (`RefBlockMismatch`, against a sibling chain with the
+  same chain id), the router's `chainUid()` equal; `noticePeriod` at most 30 days (`NoticePeriodTooLong`).
+- The published `Env` holds no factory, `chainUid` or router; the factory appends each instance's `ChainEnv {chainUid,
+  registry, govRouter, smartKeyAccountImpl, hedera, deps, params}` to its clone's runtime code (`ChainEnvCode`), read by
+  `EXTCODECOPY` (one copy of the 138-byte head per signed call, no cache), never an immutable and never an entry's
+  parameter. `initialize` on code that is not such a clone reverts `EnvMissing`; the implementation reads an all-zero env
+  and signs nothing (`ChainUidZero`).
+- Every creation is CREATE3 with `s = keccak256(abi.encode(creatorId, class, kind, salt))`; `predictAddress(creatorId,
+  class, kind, salt)`; `InstanceNotCreated`, `SaltAlreadyUsed`; the clone's `chainUid()` checked after `initialize`.
+- Through the chain's `GovernanceRouter` the creator is the signing UA (S3): `mtxCreateToken`, `mtxCreateDex`,
+  `mtxCreateInstance` ([CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder)); the factory reads the router's
+  `subject()` once at entry and refuses 0 (`RouterSubjectZero`).
+- Cost (T72, the env read): `mtxTransfer` +636 to +646 gas, `transferToUA` +1,311 to +1,400, the router's `mtxMint` +682;
+  every kind's runtime +0.8 to +1.2 KB.
 - One `IOpenFactory` and one `IFactoryToken` (the v1 and v2 interfaces are in `legacy/`).
 
 Flag validation is the token's ([CTR-TOK-22](#CTR-TOK-22)): the factory only forwards `initArgs`.
@@ -782,18 +929,72 @@ implArgs)` (the factory's append), `initialize(creator, version, bytes initArgs)
 node and clientkeys moved (P5), not deleted.
 Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
 
-- `constructor(address registrar, bytes32 chainUid, uint64 noticePeriod)`, `chainUid` non-zero (`ChainUidZero`).
-  `publishEnv`, `publishDexEnv`, `deployImplementation`, `deployDexImplementation`, `deprecate`, `deprecateDex` and
-  `setKindEnabled` are registrar-only (`NotRegistrar`; a registrar that is an EIP-7702 designator gets
-  `CallerDelegated`, owner ruling D2, 2026-10-30); envs and the catalogue are append-only (`EnvAlreadyPublished`,
+- `constructor(bytes32 admin)` (a native id: `AdminNotNative`), then `configureChain` once, the admin's direct call
+  ([CTR-TOK-29](#CTR-TOK-29); `chainUid` non-zero, `ChainUidZero`). The admin is a UA id
+  ([CTR-GOV-23](../decisions.md#ctr-gov-23--one-admin-per-contract-a-ua-named-admin-on-every-contract)): `admin()`,
+  `pendingAdmin()`, `adminGeneration()`, the two-step `transferAdmin` / `acceptAdmin` and `renounceAdmin(chainUid_)`, both
+  only after `configureChain` (`ChainNotConfigured`; the renounce chain-bound, below); a derived admin acts only through the configured router's `subject()`.
+  `publishTokenEnv`, `publishDexEnv`, `publishClassEnv`, `deprecateToken`, `deprecateDex`, `deprecateRelease`,
+  `setTokenKindEnabled`, `setClassKindEnabled`, `setChainEntries` and the approvals are admin-only (`NotAdmin(caller)`; an
+  admin that is an EIP-7702 designator gets `CallerDelegated` on the direct path, owner ruling D2, 2026-10-30), each a router
+  op too (`mtx<Op>`, fee 0 allowed, spec 2026-11-10-admin-not-owner.md §5.4).
+  **Chain-bound deprecations and switches** (fix2 2026-11-12, Fable review D P3-2; was a documented limit).
+  `deprecateToken(kind, version, chainUid_, reason)`, `deprecateDex(version, chainUid_, reason)`,
+  `deprecateRelease(id, chainUid_, reason)`, `setTokenKindEnabled(kind, on, chainUid_)` and
+  `setClassKindEnabled(class, kind, on, chainUid_)` take the factory's `chainUid` word, checked as the approvals check
+  theirs: only after `configureChain` (`ChainNotConfigured`) and equal to this factory's (`ChainUidMismatch(expected,
+  got)`), before anything is written. On two chains with one chain id a native admin's direct transaction made for one
+  is void on the sibling, whatever the nonces. Their router ops sign the same word after the op's static fields
+  (`UADeprecateToken(…,uint64 version,bytes32 chainUid,string reason,…)`, `UASetTokenKindEnabled(…,bool on,bytes32
+  chainUid,…)`), as the approvals sign theirs. Test `test_siblingReplay_chainBound` (`test/v2/Factory.t.sol`); the
+  router's binding matrix covers the word (`GovRouterAdmin.t.sol`). Status **BUILT** (branch `ua-mtx-fix2-contracts`).
+  **Chain-bound deploys and renounce** ([CTR-GOV-27](../decisions.md#CTR-GOV-27), owner 2026-11-12). The three deploys take a
+  last `chainUid_` (`deployTokenImplementation(kind, version, envVersion, initcode, implArgs, chainUid_)`,
+  `deployDexImplementation(version, envVersion, initcode, implArgs, chainUid_)`, `deployImplementation(id, envVersion,
+  initSelector, interfaceId, initcode, implArgs, chainUid_)`), checked first, before the approval: the native admin's own
+  deploy carries no approval key, so its direct transaction made for a sibling is void here. `renounceAdmin(chainUid_)`:
+  the admin (`NotAdmin`), then the word, before anything is written; its router op `mtxRenounceAdmin` signs the target's
+  word (`UARenounceAdmin(bytes32 from,address target,bytes32 chainUid,…)`) and forwards it. The same errors as above.
+  Tests `test_siblingReplay_deploysAndRenounce` (`test/v2/Factory.t.sol`), `test_renounceAdmin_siblingWordRefused`
+  (`GovRouter.t.sol`). Status **BUILT** (branch `ua-mtx-fix2-contracts`).
+  **Chain-bound transfer, directory, publishes and revoke** ([CTR-GOV-27](../decisions.md#CTR-GOV-27)'s Change, owner
+  2026-11-12). `transferAdmin(newAdmin, chainUid_)` on every `IAdmin` contract (the factory, every token kind, the DEX, a
+  `ComplianceRegistry`: [asset-suite.md](asset-suite.md#CTR-AS-07)), `setChainEntries(ChainEntries entries, chainUid_)` (the
+  nine words one named struct), `publishTokenEnv(kind, envVersion, chainUid_, env)`, `publishDexEnv(envVersion, chainUid_,
+  env)`, `publishClassEnv(class, kind, envVersion, chainUid_, env)` and `revokeApproval(key, chainUid_)`: the admin
+  (`NotAdmin`), then the word (`ChainNotConfigured`, `ChainUidMismatch`), before anything is written. Their router ops sign
+  the word after the op's static fields, before `env` (`UATransferAdmin(…,bytes32 newAdmin,bytes32 chainUid,…)`,
+  `UARevokeApproval(…,bytes32 key,bytes32 chainUid,…)`, `UAPublishTokenEnv(…,uint16 envVersion,bytes32 chainUid,Env env,…)`),
+  and `UASetChainEntries(bytes32 from,address target,ChainEntries entries,bytes32 chainUid,…)` nests the EIP-712 struct
+  `ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,…,bytes32 zetherStatementsCodeHash)`. Tests
+  `test_siblingReplay_adminEntries` (`test/v2/Factory.t.sol`), `test_setChainEntries_siblingWordRefused`
+  (`FactoryDirectory.t.sol`), `test_transferAdmin_siblingWordRefused` (`GovRouter.t.sol`, `RegistryAdmin.t.sol`), the 12 kinds
+  and the DEX in `AdminNames.t.sol`, the router's binding matrix (`GovRouterAdmin.t.sol`). Status **BUILT** (branch
+  `ua-mtx-fix2-contracts`). No direct admin entry of the factory is left without the word but `configureChain`, which
+  writes it.
+- **Release deploys: approve, then an open deploy** (owner, final, spec §5.6). The admin approves one release by hash
+  (`approveTokenRelease`, `approveDexRelease`, `approveRelease`; the factory's own `chainUid`, address and `adminGeneration`
+  bound, `until` at most 30 days ahead: `ApprovalFieldMismatch`, `ApprovalTooLong`, `ApprovalLive`), revokes an unused one
+  (`revokeApproval`, `ApprovalNotRevocable`); `approvalOf(key)` answers it, the key `keccak256(abi.encode(tag, chainUid,
+  factory, <the deploy's stored fields>, initcodeHash, implArgsHash))`, one tag per domain. `deployTokenImplementation`,
+  `deployDexImplementation` and `deployImplementation` carry no signature and are open to anyone against a live approval,
+  consumed once (`ReleaseNotApproved(key)`, checked before the version); the native admin's own deploy is its own approval
+  (and consumes a live one of the same key). A deploy's result does not depend on the sender's gas (`_supports` requires its
+  probe's stipend: `ProbeGasLow`). No node row (release management is not a node job, owner 2026-11-10). BUILT (T5, T7).
+- **The chain's directory** (owner, option (a), spec §13): `setChainEntries(ChainEntries(relayFeeRouter, …, zetherStatements,
+  …), chainUid_)` writes
+  each non-zero entry once (`EntryAlreadySet`), each against its code hash and its bindings (the relay router's
+  `EXECUTOR()`, the registry's `govRouter()`, the account factory's `chainUid()` and implementation); `directory()` and one
+  view per entry (`uaRegistry()` is the router's `registry()`); every env publish takes only the router's registry and
+  `SmartKeyAccount` implementation, or 0. BUILT (T15).
+-  envs and the catalogue are append-only (`EnvAlreadyPublished`,
   `VersionAlreadyRegistered`, `DexVersionAlreadyRegistered`); env version 0 and release version 0 are refused.
 - **Deployment** ([CTR-TOK-03](#CTR-TOK-03)): `EnvUnknown`, `LibraryCodeHashMismatch`, the constructor's own error or
-  `DeployFailed`, then `kind()`, `factory()` and `chainUid()` read by staticcall: `ImplementationNotAContract` (also for an
+  `DeployFailed`, then `kind()` and `factory()` read by staticcall: `ImplementationNotAContract` (also for an
 EIP-7702 designator: `SigCheck.isContract`, owner ruling D5, 2026-10-30; a designator implementation would be a mutable
 backdoor, since clones `DELEGATECALL` through it),
   `VersionKindMismatch(expected, got)` (`got = type(uint256).max` when there is no answer),
-  `ImplementationFactoryMismatch`, `ChainUidMismatch`. The constructor refuses a notice period over 30 days
-  (`NoticePeriodTooLong`). Kinds 6–7 do not exist (`NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ` dropped, plan 5h D21: `KindReserved` removed, the ABI decoder rejects them); kinds 2–5 are built (Zether P3, PQZ P6g; review W-Q, 2026-10-19: this text had kinds 4–7 reserved).
+  `ImplementationFactoryMismatch`. `configureChain` refuses a notice period over 30 days (`NoticePeriodTooLong`). Kinds 6–7 do not exist (`NORMAL_ZETHER_PQZ` / `WRAPPED_ZETHER_PQZ` dropped, plan 5h D21: `KindReserved` removed, the ABI decoder rejects them); kinds 2–5 are built (Zether P3, PQZ P6g; review W-Q, 2026-10-19: this text had kinds 4–7 reserved).
   The constructors check their env: a confidential kind needs its `deps` (`*_ZETHER`: four with code, a registry, the
   two verifiers of one `proofSystemId`, both fixed to `deps[2]`, two addresses, the transfer verifier answering
   `ringSize()` and the burn verifier not; `*_PQZ`: the verifier) and refuses a Hedera env
@@ -802,16 +1003,16 @@ backdoor, since clones `DELEGATECALL` through it),
 - **Creation:** `createToken` (a deployed release: `VersionUnknown`; not deprecated: `VersionDeprecated`; past
   `usableFrom`: `VersionNotYetUsable`) and `createTokenUnregistered` (plain kinds only, `UnregisteredConfidentialKind`
   for 2–7; the implementation checks of a deployment, recorded with `version == 0`) refuse a disabled kind
-  (`KindDisabled`), clone with salt `keccak256(abi.encode(msg.sender, salt))` (`SaltAlreadyUsed` when the predicted address is already in the
+  (`KindDisabled`), clone by CREATE3 ([CTR-TOK-29](#CTR-TOK-29); `SaltAlreadyUsed` when the predicted address is already in the
   index or has code: an unregistered implementation may self-destruct its clone in `initialize`), call `initialize` in the same call,
   then read the token's `underlyings()` (at most 8, else `UnderlyingCountInvalid`; the token checks the count per kind:
-  `NORMAL*` 0, `WRAPPED*` 1–8), `features()`, `lockedFeatures()` and `owner()` for the index and the one
+  `NORMAL*` 0, `WRAPPED*` 1–8), `features()` and `lockedFeatures()` for the index (no admin read, CTR-GOV-23) and the one
   `TokenCreated`. A field of another kind reverts
   `ConfigFieldForOtherKind(field)`: 1 `initialSupply`/`initialHolder` (not `NORMAL*`), 2 `legs`, 3 `rate` (not
   `WRAPPED*`), 4 `conf` (not a confidential kind).
 - `latestVersion` / `latestDexVersion` may name a deprecated version: clients pick the newest non-deprecated one
-  (`isDeprecated`, `isDexDeprecated`).
-- **Views:** `registrar`, `chainUid`, `implementationOf`, `isDeprecated`, `latestVersion`, `predictAddress`, `isToken`,
+  (`isTokenDeprecated`, `isDexDeprecated`).
+- **Views:** `admin`, `pendingAdmin`, `adminGeneration`, `approvalOf`, `directory`, `chainUid`, `implementationOf`, `isTokenDeprecated`, `latestVersion`, `predictAddress`, `isToken`,
   `creatorOf`, `versionOf`, `getWrapper(creator, underlying)` (the first; it may be a multi-leg token: read
   `underlyings()`), `getWrapperCount/At`, `deployCountFor/deployedFor`. Every leg is indexed, `address(0)` for the
   native coin.
@@ -823,12 +1024,13 @@ backdoor, since clones `DELEGATECALL` through it),
   `ConfidentialConfig` has no verifier field.
 - **Trust the index only for registered versions** (`isRegisteredToken(token)`, `versionOf(token).version != 0`): the
   factory indexes what the config says, and an unregistered implementation (version 0) may do anything else with it.
-  The registrar's key is the trust root for registered code (a multisig / UA msig before mainnet).
+  The factory admin's key is the trust root for registered code (moved to a UA `msig` or a PQ UA before mainnet, by
+  `transferAdmin`).
 
 <a id="factory-interface"></a>
 
 The built interface is `IOpenFactory.sol` and the `TokenConfig` block of [CTR-TOK-25](#CTR-TOK-25); the event is
-`TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures, owner, underlyings)`, the
+`TokenCreated(token, creatorId, kind, version, implementation, features, lockedFeatures, owner, underlyings)`, the
 enum `TokenKind { NORMAL, WRAPPED, NORMAL_ZETHER, WRAPPED_ZETHER, NORMAL_PQZ, WRAPPED_PQZ }`. The deploy scripts publish env 1 of `NORMAL` and of the DEX and deploy `NormalToken` as
 version 1 of `NORMAL` and `SCaaSDex` as DEX version 1 through the factory (with `DEPLOY_ZETHER=1` also both `*_ZETHER` kinds on
 the BLS12-381 env, the kinds enabled); `WrappedToken` is not deployed ([CTR-GEN-06](README.md#CTR-GEN-06), [CTR-TOK-24](#CTR-TOK-24)). Separate `AssetFactory` for action
@@ -846,28 +1048,36 @@ The block is the **built** function set, grouped by the built contracts; the rol
 //   mtxExecute, the named functions and the trade entry points — metatx.md#interfaces, dex.md#CTR-DEX-15
 function mtxSelectors() external view returns (bytes4[] memory, uint8[] memory, uint8[] memory);   // per kind, CTR-MTX-19
 // MetaTokenBase: kind(), creator(), version(), supportsInterface(bytes4), IS_HEDERA; IGovernance (GovernanceBase, CTR-GOV-01): features(), lockedFeatures(), validBits(),
-//   owner(), pendingOwner() (both bytes32 UA ids), hasRole(uint8,bytes32), holderCount, grantOf, grantDelay(), pendingGrant, lastProposedAt(), bitLabel,
-//   grantRole, setGrant, cancelGrant, revokeRole, renounceRole, disableFeature, transferOwnership(bytes32), acceptOwnership, renounceOwnership;
+//   admin(), pendingAdmin() (both bytes32 UA ids), hasRole(uint8,bytes32), holderCount, grantOf, grantDelay(), pendingGrant, lastProposedAt(), bitLabel,
+//   grantRole, setGrant, cancelGrant, revokeRole, renounceRole, disableFeature, transferAdmin(bytes32,bytes32), acceptAdmin, renounceAdmin(bytes32);
 //   IRescuable: rescue(address asset) (anyone, with RESCUABLE), rescueTo()
 // NormalToken
-function mint(address to, uint256 amount) external;  function burn(uint256 amount) external;
+function mint(address to, uint256 amount, bytes32 chainUid_) external;  function burn(uint256 amount) external;   // the word: CTR-GOV-28's Change; burn: off / BURNABLE / BURNER (CTR-GOV-29)
 // WrappedToken (CTR-TOK-21), 1–8 legs: the single-asset ABI reverts UnderlyingRequired unless exactly one leg
 function wrap(uint256 amount) external payable returns (uint256 minted);
 function unwrap(uint256 wrapped, address recipient) external returns (uint256 out);                   // minOut = 0; not allowlisted
 function unwrap(uint256 wrapped, address recipient, uint256 minOut) external returns (uint256 out);
 function addReserve(address underlying, uint256 amount) external payable;
-function proposeRate(address underlying, uint96 num, uint96 den) external;   // rateAdmin; one pending per token; RateFixed if fixed
-function cancelRate() external;                                              // rateAdmin
-function executeRate() external;                                             // rateAdmin only, eta ≤ now ≤ eta + 7 days
+function proposeRate(address underlying, uint96 num, uint96 den, bytes32 chainUid_) external;   // rateAdmin; one pending per token; RateFixed if fixed
+function cancelRate(bytes32 chainUid_) external;                             // rateAdmin
+function executeRate(bytes32 chainUid_) external;                            // rateAdmin only, eta ≤ now ≤ eta + 7 days
 function underlyings() external view returns (address[] memory);
 function legOf(address u) external view returns (uint96 num, uint96 den, uint256 reserve, uint8 decimals, bool wrapEnabled);
 function collateralValue() external view returns (uint256);                  // Σ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply on a non-hybrid
+function reserveValue() external view returns (uint256);                     // the same sum (CTR-GOV-30)
 function wrap(address underlying, uint256 amount) external payable returns (uint256 minted);
 function unwrap(address underlying, uint256 wrapped, address recipient, uint256 minOut)
     external returns (uint256 out, uint256 burned);
 function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) external returns (uint256 minted);  // CTR-TOK-20
-function disableWrap(address underlying, bytes32 reason) external;           // guardian, one-way
+function disableWrap(address underlying, bytes32 reason, bytes32 chainUid_) external;   // guardian, one-way
 function maxSupply() external view returns (uint256);                        // the hybrid's cap, 0 = not a hybrid (CTR-GOV-12)
+// build 3zb + 3zc (CTR-GOV-30; BUILT): the supply caps (#supply-caps)
+function setMaxSupply(uint256 newMaxSupply, bytes32 chainUid_) external;     // admin; hybrids only; bit 31; grantDelay
+function setMaxWrapSupply(uint256 newMaxWrapSupply, bytes32 chainUid_) external;   // admin; every wrapped kind; 0 = no wrap cap
+function maxWrapSupply() external view returns (uint256);
+function totalWrapped() external view returns (uint256);
+function pendingSupplyCaps() external view returns (uint256 pendingMaxSupply, uint64 maxSupplyEta, bool maxSupplyLive,
+    uint256 pendingMaxWrapSupply, uint64 maxWrapSupplyEta, bool maxWrapSupplyLive);
 // errors: WrapPausedForRateChange(address), UnwrapBelowMin(uint256 out, uint256 minOut), UnwrapRecipientInvalid(address), NativeNotGasless(), WrapOrderInvalid(address), WrapReceivedMismatch(uint256,uint256)
 ```
 
@@ -875,9 +1085,9 @@ function maxSupply() external view returns (uint256);                        // 
 |---|---|---|
 | `ERC20MetaTx` | `MetaTransactionExecuted`, `MetaNonceCancelled(address indexed from, uint256 indexed batch, uint256 newNonce)`, `TradeFilled`, `OrderCancelled`, `NoncesInvalidated` | `MetaTx*`, `Mtx*` gateway errors, `SpenderNotContract`, `CallerNotContract`, `FeeRecipientIsPayee()`, the `mtxTrade` errors ([dex.md](dex.md#CTR-DEX-15)) |
 | `MetaTokenBase` | `PaymentSettled` | `PayToZero()`, `MtxModeShape(uint32 mode)`, `MtxBatchEmpty()`, `MtxBatchLengthMismatch()`, `NotFactory()`, `AlreadyInitialized()`, `UnderlyingCountInvalid(uint256)` |
-| `IGovernance` (on `MetaTokenBase`, through `GovernanceBase`; every name of the former `ITokenAdmin` kept; identities `bytes32`) | `RoleGranted`, `RoleRevoked`, `FeatureDisabled`, `GrantSet`, `GrantUsed`, `GrantProposed`, `GrantCancelled`, `OwnershipTransferStarted`, `OwnershipTransferred` | `FeatureInvalidForKind`, `FeatureNotBuilt`, `LockedNotSubset`, `RoleWithoutFeature`, `RoleNotContract`, `NoSuchRole`, `FeatureLocked`, `FeatureNotSet`, `NotOwner`, `NotPendingOwner`, `MissingRole`, `RoleAccountZero(uint8)`, `RoleAccountPool`, `OwnerAccountPool`, `OwnerHasHolders`, `GrantDelayTooLong`, `GrantNotReady`, `GrantTermsMismatch`, `GrantNotNarrower`, `GrantWordRefused`, `GrantBudgetRequired`, `GrantExhausted`, `GrantExpired`, `GrantBarred`, `GrantWindowInUse` (`FeatureReserved` stays declared, with no reachable case since CTR-GOV-10's Change); `IRescuable`: `Rescued`, `RescueConfigInvalid`, `RescueAssetInvalid`, `RescueTouchedLeg` |
+| `IGovernance` (on `MetaTokenBase`, through `GovernanceBase`; every name of the former `ITokenAdmin` kept; identities `bytes32`) | `RoleGranted`, `RoleRevoked`, `FeatureDisabled`, `GrantSet`, `GrantUsed`, `GrantProposed`, `GrantCancelled`, `AdminTransferStarted`, `AdminTransferred` | `FeatureInvalidForKind`, `FeatureNotBuilt`, `LockedNotSubset`, `RoleWithoutFeature`, `RoleNotContract`, `NoSuchRole`, `FeatureLocked`, `FeatureNotSet`, `NotAdmin`, `NotPendingAdmin`, `MissingRole`, `RoleAccountZero(uint8)`, `RoleAccountPool`, `AdminAccountPool`, `AdminHasHolders`, `GrantDelayTooLong`, `GrantNotReady`, `GrantTermsMismatch`, `GrantNotNarrower`, `GrantWordRefused`, `GrantBudgetRequired`, `GrantExhausted`, `GrantExpired`, `GrantBarred`, `GrantWindowInUse`, `FeatureConflict(uint8 bit, uint8 other)` (BUILT, build 3zb + 3zc) (`FeatureReserved` stays declared, with no reachable case since CTR-GOV-10's Change); `IRescuable`: `Rescued`, `RescueConfigInvalid`, `RescueAssetInvalid`, `RescueTouchedLeg` |
 | `NormalToken` | — (no `MinterRenounced`) | — (no `NotMinter`) |
-| `WrappedToken` (events and errors declared in `IWrappedToken`) | `Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted)`, `Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut)`, `ReserveAdded(address indexed from, address indexed underlying, uint256 amount)`, `RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta)`, `RateChangeCancelled(address indexed underlying)`, `RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen)`, `WrapDisabled(address indexed underlying, bytes32 indexed guardian, bytes32 reason)` (the guardian a UA id, CTR-GOV-01 Change) | `UnderlyingInvalid(address)`, `DecimalsUnreadable(address)`, `RateInvalid(uint256,uint256)`, `RateConfigInvalid()`, `WrapTooSmall()`, `UnwrapTooSmall()`, `UnwrapBelowMin(uint256 out, uint256 minOut)`, `UnwrapRecipientInvalid(address)`, `InsufficientReserve(address,uint256,uint256)`, `ReserveShortfall(address,uint256,uint256)`, `UnderlyingTransferMismatch(address,uint256,uint256)`, `UnknownUnderlying(address)`, `RateFixed()`, `NotRateAdmin()`, `RateChangePending()`, `NoRateChangePending()`, `RateChangeNotReady(uint64)`, `RateChangeExpired(uint64)`, `RateStepTooLarge()`, `RateChangeUndercollateralized(uint256,uint256)`, `WrapPausedForRateChange(address)`, `WrapDisabledFor(address)`, `DuplicateUnderlying(address)`, `RateDecreaseWithDisabledLeg()`, `UnderlyingRequired()`, `NotGuardian()`, `NativeValueMismatch(uint256 value, uint256 expected)`, `NativeNotGasless()`, `WrapOrderInvalid(address)`, `WrapReceivedMismatch(uint256,uint256)`, `FailedCall()`, `SafeERC20FailedOperation(address)`, `InsufficientBalance(uint256,uint256)`, `HtsQueryFailed(address u, int64 responseCode)`, `AssociateFailed(int64)` |
+| `WrappedToken` (events and errors declared in `IWrappedToken`) | `Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted)`, `Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned, uint256 underlyingOut)`, `ReserveAdded(address indexed from, address indexed underlying, uint256 amount)`, `RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen, uint64 eta)`, `RateChangeCancelled(address indexed underlying)`, `RateChanged(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen)`, `WrapDisabled(address indexed underlying, bytes32 indexed guardian, bytes32 reason)` (the guardian a UA id, CTR-GOV-01 Change); BUILT, build 3zb + 3zc: `MaxSupplyProposed(bytes32 indexed by, uint256 maxSupply, uint64 eta)`, `MaxSupplySet(bytes32 indexed by, uint256 oldMaxSupply, uint256 newMaxSupply)`, `MaxWrapSupplyProposed`, `MaxWrapSupplySet` (the same shapes) | `UnderlyingInvalid(address)`, `DecimalsUnreadable(address)`, `RateInvalid(uint256,uint256)`, `RateConfigInvalid()`, `WrapTooSmall()`, `UnwrapTooSmall()`, `UnwrapBelowMin(uint256 out, uint256 minOut)`, `UnwrapRecipientInvalid(address)`, `InsufficientReserve(address,uint256,uint256)`, `ReserveShortfall(address,uint256,uint256)`, `UnderlyingTransferMismatch(address,uint256,uint256)`, `UnknownUnderlying(address)`, `RateFixed()`, `NotRateAdmin()`, `RateChangePending()`, `NoRateChangePending()`, `RateChangeNotReady(uint64)`, `RateChangeExpired(uint64)`, `RateStepTooLarge()`, `RateChangeUndercollateralized(uint256,uint256)`, `WrapPausedForRateChange(address)`, `WrapDisabledFor(address)`, `DuplicateUnderlying(address)`, `RateDecreaseWithDisabledLeg()`, `UnderlyingRequired()`, `NotGuardian()`, `NativeValueMismatch(uint256 value, uint256 expected)`, `NativeNotGasless()`, `WrapOrderInvalid(address)`, `WrapReceivedMismatch(uint256,uint256)`, BUILT, build 3zb + 3zc: `MaxWrapSupplyExceeded(uint256 totalWrapped, uint256 maxWrapSupply)`, `MaxWrapSupplyInvalid()`, `MaxSupplyBelowSupply(uint256,uint256)`, `MaxSupplyBelowWrapCap(uint256,uint256)`, `MaxWrapSupplyBelowWrapped(uint256,uint256)`, `MaxWrapSupplyAboveMaxSupply(uint256,uint256)`, `FailedCall()`, `SafeERC20FailedOperation(address)`, `InsufficientBalance(uint256,uint256)`, `HtsQueryFailed(address u, int64 responseCode)`, `AssociateFailed(int64)` |
 | `OpenFactory` | `TokenCreated(…)` ([CTR-TOK-25](#CTR-TOK-25)); built; the v1 factory keeps `TokenDeployed(…)` (Zether) | as [above](#factory-interface) |
 
 The node's event normaliser adds `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChange*`, `WrapDisabled`,
@@ -898,7 +1108,7 @@ each library ≤ 24,576 B.
 | `ZetherLib` (built, 15,662 B) | statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries | `*_ZETHER` |
 | `HederaLib` | HIP-632 signature path (`requireValid`, public view, linked; 753 B), HTS associate | all (branch on `IS_HEDERA`, [CTR-TOK-23](#CTR-TOK-23)) |
 
-- **Pay stays inline** (controller ruling, pending the owner): `mtxPay`, `payWithFee` and `mtxPayReceiverFee` are thin builders over the inline `MetaTransfer` core, which a library cannot call; each checks the `PAYABLE` flag.
+- **Pay stays inline** (controller ruling, pending the owner): `mtxPay`, `payWithFee` and `mtxPayWithPayeeFee` are thin builders over the inline `MetaTransfer` core, which a library cannot call; each checks the `PAYABLE` flag.
 - **Inline in the token**, never behind a library: ERC-20 `transfer`/`transferFrom`, the core of a `MetaTransfer`, and
   the per-transfer administration check of a regulated implementation (a bit test plus a mapping read, cheaper than a `DELEGATECALL`); a plain implementation has none: a plain `transfer` and `mtxTransfer` add no storage read ([CTR-GOV-11](../decisions.md#ctr-gov-11--0-on-a-plain-transfer-means-no-new-read)).
 - **Signature check:** one internal `SigCheck` for every contract ([CTR-MTX-25](metatx.md#CTR-MTX-25)).
@@ -948,71 +1158,99 @@ own code limit above 65,536 B.
   `abi.encode(ImplArgs{address[] modules})` on 0–5 and the DEX, `abi.encode(RegulatedImplArgs{bytes32 registryCodehash;
   address[] modules})` on 8–13. The implementation's constructor checks each module: code present and the count
   (`ModuleMissing(i)`), then `kind()`, `moduleGroup()` for its slot, `factory()`, `REGISTRY_CODEHASH()` on 8–13 and
-  `pqzSet()` (the set's self-test hash) on 4, 5, 12, 13 (`ModuleMismatch(i)`); `modules()` lists them. The release's env pins
+  `pqzSet()` (the set's identity: the self-test hash, `SET_DIGEST` once [CTR-PQZ-42](pq-zero-knowledge.md#CTR-PQZ-42) is built) on 4, 5, 12, 13 (`ModuleMismatch(i)`); `modules()` lists them. The release's env pins
   each module's code hash beside the libraries (`LibraryCodeHashMismatch`), and `OpenFactory` refuses a release whose
   `modules()` names an address outside its env (`ModuleNotPinned`; `ModulesUnreadable` when the view fails) on
-  `deployImplementation`, `deployDexImplementation` and `createTokenUnregistered`. A module holds no chain value: it is
-  deployed by CREATE2 through the deterministic deployer with `DEPLOY_SALT`, at the same address on every chain.
+  `deployTokenImplementation`, `deployDexImplementation`, `createTokenUnregistered` and `deployImplementation`. A module holds no chain
+  value: it is deployed by CREATE2 through the deterministic deployer with `DEPLOY_SALT`, at the same address on every chain.
+- **Every class's release is module-checked** (owner 2026-11-10). The token kinds, the DEX and every generic class
+  (`deployImplementation`: `PqChat`, class 3) are checked by the same `_checkModules`. Every release of every class answers
+  `modules()`; an empty list is allowed (a class with no body module answers `[]`). The answer is fixed by the release's
+  code (immutables or constants, never storage): the factory reads it once, at the release (on `createTokenUnregistered` at
+  each creation), so an answer that could change after the check is not allowed. In the repository every `modules()` reads
+  immutables only: the twelve token kinds, the DEX (its D) and `PqChat` (`PqChatTopics`). Only the factory makes a
+  release: `deployTokenImplementation`, `deployDexImplementation` and `deployImplementation` are registrar-only and `CREATE2` the given
+  init code inside the factory; no path registers an implementation by address (`createTokenUnregistered` clones a
+  caller-named implementation of kind 0 or 1 without registering it, version 0, and checks it, its modules included, at
+  each creation). The factory already deployed on the SCaaS testnet is immutable and keeps the old behaviour (no module
+  check on `deployImplementation`); the check applies to the releases registered on a factory built from this code.
+- **Modules by function (owner 2026-11-10; BUILT on branch `ua-mtx-3p`, group 3p; UNAUDITED).** On every kind a module
+  holds one function: A admin, P pipeline / pay, T trade, **W wrap only**, **R regulated only**, Z Zether, Q PQZ, **S** the PQZ
+  state (was Q2). Kinds 8, 10, 12 rename their W to R; kinds 9, 11, 13 split their W into W (wrap) and R (the regulated layer's
+  entries: the same 14 on every regulated kind), one more module per release; kinds 5 and 13 rename Q2 to S. The compliance
+  hooks that wrap and unwrap call are internal and stay compiled into W; only the regulated entries move. The token ABI, the
+  storage (a module has its core's layout), the call count (one hop) and every rule are unchanged; the group ids keep their
+  values (W 4, S 8 as Q2's) and R takes 12. `script/modules/gen_faces.py` assigns the entries (`R_ENTRIES`, `S_SETTERS`), and
+  `test/modules/Groups.t.sol` pins which module holds which entry and that every stub reaches its module.
 - **Rule 4, one cold account where there was one.** Module P compiles `MtxPipelineLib`'s code in (the library's entries are
   thin wrappers of internal twins; P overrides the 15 pipeline hooks), T compiles `TradeLib`'s core and the trade
-  authorisation in, A the two payment views. W, Z, Q, `GovernanceRouter` and the wallets keep the library call.
+  authorisation in, A the two payment views. W, R, Z, Q, S, `GovernanceRouter` and the wallets keep the library call.
   `MtxPipelineLib` and `TradeLib` stay libraries: the router, the wallets and the DEX call them.
 
 | Group | id | Bodies | Links |
 |---|---|---|---|
 | **P** | 1 | the signed pipeline, named transfers, pay and the relay fee; the tax entries on 8–13 | `HederaLib`; `RegulatedLib` on 8–13 |
-| **T** | 2 | trade | — |
-| **A** | 3 | governance, `initialize`, `validateEnv`, the tables and token meta; `mint`, `mintToUA`, `burn` on the normal kinds | `GovernanceLib`; the kind's init / env libraries |
-| **W** | 4 | wrapped (1, 3, 5, 9, 11, 13) and the regulated powers (8–13) | `WrappedLib`, `RegulatedLib` |
+| **T** | 2 | trade; `mtxLiquidityPull` (the DEX's liquidity pull, [CTR-DEX-30](dex.md#CTR-DEX-30)) | — |
+| **A** | 3 | governance, `initialize`, `validateEnv`, the tables and token meta (`supportsInterface` answers `ILiquidityPullToken`); `mint`, `mintToUA`, `burn` on the normal kinds | `GovernanceLib`; the kind's init / env libraries |
+| **W** | 4 | wrap only (1, 3, 5, 9, 11, 13): wrap, unwrap, rates, reserve, legs, the wrap limits, `mint` / `mintToUA` of the wrapped kinds, the wrapped layer's `rescue` and `underlyings`; the compliance hooks wrap and unwrap call stay compiled in from the kind's core | `WrappedLib` (`ZetherWrappedLib` / `PqzWrappedLib` where the kind has them) |
+| **R** | 12 | regulated only (8–13): the regulated layer's 14 entries (freeze, pause, force and operator transfers, orders, `canReceive`, `regulatedConfig`, the kind's `disableFeature`) | `RegulatedLib`, `GovernanceLib`; `WrappedLib` on 9, 11, 13 |
 | **Z** | 5 | Zether (2, 3, 10, 11) | `ZetherLib`, `ZetherWrappedLib` |
 | **Q** | 6 | PQZ (4, 5, 12, 13): the ops and their verdict entries | `PqzTransferLib`, `PqzBurnLib`, `PqzStateLib`, `PqzViewLib`, `PqzWrappedLib` |
-| **Q2** | 8 | on 5 and 13: the PQZ state, setters and views (Q split by the rule below) | the PQZ libraries |
-| **D** | 10 | the DEX's 22 governance entries (`SCaaSDexD`) | `GovernanceLib` |
+| **S** | 8 | on 5, 12 and 13: the PQZ state, setters and views (Q split by the rule below; named Q2 until 2026-11-10; on 12 since owner 2026-11-13) | the PQZ libraries |
+| **D** | 10 | the DEX's 22 governance entries (`SCaaSDexGovernanceModule`); from build 3zb + 3zc (SPECIFIED, owner O8, [CTR-TOK-30](../decisions.md#ctr-tok-30--body-modules-every-body-but-the-erc-20-core-runs-in-a-delegatecall-module-of-its-kind)'s Change) 26: also the four powers `setMarket`, `setExchangeTarget`, `setListedOnly`, `setFeeSplit` ([dex.md](dex.md#dex-governance-module)) | `GovernanceLib` |
+| **L** | 11 | the DEX's liquidity entries `mtxLiquidity` and `liquidityOrderDigest` (`SCaaSDexLiquidityModule`, [CTR-DEX-30](dex.md#CTR-DEX-30)); `mtxLiquidity`'s stub is an S1 variant (the DEX's `nonReentrant` around a DELEGATECALL with a normal return) | — |
 
 Ids 7 (P2, pay) and 9 (G, governance) are reserved for the splits below. **Modules per kind and runtime (B)**, release
-first (`forge build src --sizes`, T66b 4.4):
+first (`forge build src --sizes` on branch `ua-mtx-3p`, the modules by function of 2026-11-10; the T66b 4.4 figures before it
+are in [decisions.md](../decisions.md#ctr-tok-30--body-modules-every-body-but-the-erc-20-core-runs-in-a-delegatecall-module-of-its-kind)):
 
-| Kind | Release | P | T | A | W | Z | Q | Q2 |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 0 `NormalToken` | 13,734 | 24,300 | 14,259 | 23,994 | | | | |
-| 1 `WrappedToken` | 17,808 | 24,728 | 15,635 | 19,629 | 21,873 | | | |
-| 2 `NormalZetherToken` | 17,088 | 25,288 | 14,253 | 23,463 | | 21,948 | | |
-| 3 `WrappedZetherToken` | 21,520 | 25,835 | 15,635 | 16,746 | 21,697 | 27,996 | | |
-| 4 `NormalPqzToken` | 19,045 | 25,495 | 14,309 | 26,411 | | | 30,641 | |
-| 5 `WrappedPqzToken` | 24,314 | 26,086 | 15,684 | 16,875 | 21,903 | | 28,283 | 18,216 |
-| 8 `NormalRegulatedToken` | 17,484 | 28,943 | 15,527 | 25,702 | 11,778 | | | |
-| 9 `WrappedRegulatedToken` | 21,249 | 29,378 | 16,996 | 21,348 | 28,021 | | | |
-| 10 `NormalZetherRegulatedToken` | 20,619 | 29,960 | 15,527 | 25,190 | 11,778 | 23,880 | | |
-| 11 `WrappedZetherRegulatedToken` | 24,995 | 30,507 | 16,996 | 18,481 | 29,011 | 28,865 | | |
-| 12 `NormalPqzRegulatedToken` | 22,556 | 30,177 | 15,576 | 28,131 | 11,827 | | 32,423 | |
-| 13 `WrappedPqzRegulatedToken` | 27,713 | 30,783 | 17,045 | 18,594 | 29,202 | | 29,465 | 19,038 |
+| Kind | Release | P | T | A | W | R | Z | Q | S |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 `NormalToken` | 13,888 | 24,300 | 17,424 | 24,021 | | | | | |
+| 1 `WrappedToken` | 19,532 | 24,728 | 18,799 | 19,673 | 26,138 | | | | |
+| 2 `NormalZetherToken` | 17,242 | 25,288 | 17,418 | 23,490 | | | 21,948 | | |
+| 3 `WrappedZetherToken` | 23,238 | 25,835 | 18,799 | 16,804 | 25,961 | | 28,287 | | |
+| 4 `NormalPqzToken` | 19,199 | 25,495 | 17,474 | 26,438 | | | | 30,641 | |
+| 5 `WrappedPqzToken` | 26,026 | 26,086 | 18,848 | 16,919 | 26,152 | | | 28,405 | 18,216 |
+| 8 `NormalRegulatedToken` | 17,653 | 28,943 | 18,701 | 25,729 | | 11,778 | | | |
+| 9 `WrappedRegulatedToken` | 23,250 | 29,378 | 20,170 | 21,369 | 27,239 | 11,999 | | | |
+| 10 `NormalZetherRegulatedToken` | 20,773 | 29,960 | 18,701 | 25,217 | | 11,778 | 23,880 | | |
+| 11 `WrappedZetherRegulatedToken` | 26,992 | 30,507 | 20,170 | 18,502 | 28,229 | 11,999 | 28,912 | | |
+| 12 `NormalPqzRegulatedToken` (branch `pqz-three-keys`, 2026-11-13) | 23,543 | 30,458 | 18,971 | 28,824 | | 13,557 | | 24,018 | 19,388 |
+| 13 `WrappedPqzRegulatedToken` | 29,795 | 30,783 | 20,219 | 18,608 | 28,420 | 12,048 | | 29,490 | 19,038 |
 
-55 token modules and the DEX's D (6,459 B; `SCaaSDex` 32,991 B). **Which entry runs where** (`script/t66b/entries.json`, the
+59 token modules (58 before 2026-11-13: kind 12 splits Q into Q and S, owner 2026-11-13, Q 33,633 -> 24,018 B, S 19,388 B, the face 23,368 -> 23,543 B; 55 before 2026-11-10: 9, 11, 13 split W into W and R) and the DEX's D (6,459 B; `SCaaSDex` 32,991 B at T66b 4.4). Liquidity (ua-mtx-liquidity, measured,
+[CTR-DEX-30](dex.md#CTR-DEX-30)): T 17,418-20,219 B per kind (+3.1-3.2 KB: `mtxLiquidityPull`), A +27 B, the faces +154-181 B,
+`SCaaSDexLiquidityModule` 19,055 B (it also holds the DEX-domain cancels, the owner's size ruling), `SCaaSDex` 32,809 B (fix2 2026-11-12: 19,487 B and 33,238 B). **Which entry runs where** (`script/modules/entries.json`, the
 generator's input; a kind has the subset it declares):
 
 | Group | Entries |
 |---|---|
 | kept in the token | `allowance`, `approve`, `balanceOf`, `balanceOfUA`, `chainUid`, `decimals`, `FACTORY`, `factory`, `implementation`, `IS_HEDERA`, `kind`, `modules`, `name`, `RATE_WINDOW`, `registry`, `REGISTRY_CODEHASH`, `SMART_KEY_ACCOUNT_IMPL`, `symbol`, `totalSupply`, `transfer`, `transferFrom`, `transferToUA` |
-| P | `cancelNonce`, `executeMetaTransaction`, `metaPayId`, `mtxBatch`, `mtxBatchTransfer`, `mtxCancelNonce`, `mtxDigest`, `mtxExecute`, `mtxExecuteTransfer`, `mtxNonce`, `mtxPay`, `mtxPayReceiverFee`, `mtxPayWithTax`, `mtxRelayFee`, `mtxTransfer`, `mtxTransferDigest`, `mtxTransferWithFee`, `payLane`, `payWithFee`, `payWithFeeToUA`, `payWithTax`, `receiverFeeDigest`, `setTaxRate`, `setTaxRecipient`, `supportedModes`, `taxConfig` |
+| P | `cancelNonce`, `executeMetaTransaction`, `metaPayId`, `mtxBatch`, `mtxBatchTransfer`, `mtxCancelNonce`, `mtxDigest`, `mtxExecute`, `mtxExecuteTransfer`, `mtxNonce`, `mtxPay`, `mtxPayWithPayeeFee`, `mtxPayWithTax`, `mtxRelayFee`, `mtxTransfer`, `mtxTransferDigest`, `mtxTransferWithFee`, `payLane`, `payWithFee`, `payWithFeeToUA`, `payWithTax`, `payeeFeeDigest`, `setTaxRate`, `setTaxRecipient`, `supportedModes`, `taxConfig` |
 | T | `cancelOrderDigest`, `invalidateNoncesDigest`, `minNonce`, `mtxCancelOrder`, `mtxInvalidateNonces`, `mtxTrade`, `mtxWrapOrder`, `pulled`, `restorePulled`, `tradeOrderDigest` |
-| A | `acceptOwnership`, `bitLabel`, `burn`, `cancelGrant`, `chainEnv`, `creator`, `disableFeature`, `eip712Domain`, `features`, `GOV_ROUTER`, `grantDelay`, `grantOf`, `grantRole`, `hasRole`, `holderCount`, `initialize`, `lastProposedAt`, `lockedFeatures`, `mint`, `mintToUA`, `mtxBurn`, `mtxSelectors`, `owner`, `paymentCount`, `paymentsOf`, `pendingGrant`, `pendingOwner`, `renounceOwnership`, `renounceRole`, `rescue`, `rescueTo`, `revokeRole`, `setGrant`, `supportsInterface`, `transferOwnership`, `underlyings`, `validateEnv`, `validBits`, `version` |
-| W | `addReserve`, `cancelRate`, `canReceive`, `collateralValue`, `disableFeature`, `disableWrap`, `executeRate`, `forceTransfer`, `freeze`, `freezeOf`, `isFrozen`, `legOf`, `maxRateStepBps`, `maxSupply`, `mint`, `mintToUA`, `mtxAddReserve`, `mtxUnwrap`, `mtxUnwrapLeg`, `mtxUnwrapToUA`, `mtxWrap`, `mtxWrapLeg`, `mtxWrapToUA`, `operatorTransfer`, `order`, `pause`, `pendingRate`, `previewUnwrap`, `previewWrap`, `proposeRate`, `rateAdjustable`, `rateDelay`, `recordOrder`, `regulatedConfig`, `rescue`, `revokeOrder`, `underlying`, `underlyings`, `unfreeze`, `unpause`, `unwrap`, `unwrapToUA`, `wrap`, `wrapToUA` |
+| A | `acceptAdmin`, `bitLabel`, `burn`, `cancelGrant`, `chainEnv`, `creator`, `disableFeature`, `eip712Domain`, `features`, `GOV_ROUTER`, `grantDelay`, `grantOf`, `grantRole`, `hasRole`, `holderCount`, `initialize`, `lastProposedAt`, `lockedFeatures`, `mint`, `mintToUA`, `mtxBurn`, `mtxSelectors`, `admin`, `paymentCount`, `paymentsOf`, `pendingGrant`, `pendingAdmin`, `renounceAdmin`, `renounceRole`, `rescue`, `rescueTo`, `revokeRole`, `setGrant`, `supportsInterface`, `transferAdmin`, `underlyings`, `validateEnv`, `validBits`, `version` |
+| W | `addReserve`, `cancelRate`, `collateralValue`, `disableFeature`, `disableWrap`, `executeRate`, `legOf`, `maxRateStepBps`, `maxSupply`, `mint`, `mintToUA`, `mtxAddReserve`, `mtxUnwrap`, `mtxUnwrapLeg`, `mtxUnwrapToUA`, `mtxWrap`, `mtxWrapLeg`, `mtxWrapToUA`, `pendingRate`, `previewUnwrap`, `previewWrap`, `proposeRate`, `rateAdjustable`, `rateDelay`, `rescue`, `setWrapLimits`, `setWrapMember`, `underlying`, `underlyings`, `unwrap`, `unwrapToUA`, `wrap`, `wrapLimits`, `wrapQuotaOf`, `wrapQuotaTotal`, `wrapToUA`; build 3zb + 3zc (SPECIFIED): `maxWrapSupply`, `pendingSupplyCaps`, `reserveValue`, `setMaxSupply`, `setMaxWrapSupply`, `totalWrapped` |
+| R (8–13) | `canReceive`, `disableFeature`, `forceTransfer`, `freeze`, `freezeOf`, `isFrozen`, `operatorTransfer`, `order`, `pause`, `recordOrder`, `regulatedConfig`, `revokeOrder`, `unfreeze`, `unpause` |
 | Z | `accountState`, `auditorKey`, `auditorMode`, `burnVerifier`, `confidentialFee`, `curve`, `disableFeature`, `disclosure`, `disclosureMode`, `envelopeBinding`, `executeRate`, `maxDecryptableShielded`, `minDecoyFee`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferSingle`, `mtxRollOver`, `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode`, `mtxShield`, `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxWrapShield`, `registered`, `rescue`, `sendCounter`, `shieldScale`, `totalShielded`, `transferEntry`, `transferMemo`, `underlyings`, `verifier` |
-| Q | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disableFeature`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `executeRate`, `maxShielded`, `minDecoyFee`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferSingle`, `mtxConfidentialTransferSingleCompact`, `mtxPrepareAcc`, `mtxRollOver`, `mtxShield`, `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxWrapShield`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `rescue`, `setProofStore`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `verifier`, `verifyTransferAmount` |
-| Q2 (5, 13) | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `maxShielded`, `minDecoyFee`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `setProofStore`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `underlyings`, `unshieldUnwrapStatement`, `unwrapBinding`, `verifier` |
+| Q | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disableFeature`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `executeRate`, `maxShielded`, `minDecoyFee`, `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferSingle`, `mtxConfidentialTransferSingleCompact`, `mtxPrepareAcc`, `mtxRollOver`, `mtxShield`, `mtxUnshield`, `mtxUnshieldUnwrap`, `mtxWrapShield`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `rescue`, `setProofStore`, `setVerifierFee`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `verifier`, `verifyTransferAmount` |
+| S (5, 12, 13) | `auditorMode`, `auditorUA`, `burnStatement`, `confidentialFee`, `disclosureMode`, `disclosureStatement`, `envelopeBinding`, `maxShielded`, `minDecoyFee`, `pqzAcc`, `pqzAccount`, `pqzCancelVerifier`, `pqzDebitRecord`, `pqzEntryBlob`, `pqzPending`, `pqzPendingCt`, `pqzRevokeVerifier`, `pqzSetVerifier`, `pqzVerifyConfig`, `precompile`, `proofStore`, `proofSystemId`, `setProofStore`, `setVerifierFee`, `shieldScale`, `totalShielded`, `transferCiphertextHash`, `transferEntry`, `transferSingleStatement`, `transferStatement`, `underlyings`, `unshieldUnwrapStatement`, `unwrapBinding`, `verifier` |
 
-An entry in two rows runs in the module of the kind's own override: `disableFeature` in A on 0, 2, 4, in W on 1 and 8–13, in
-Z on 3, in Q on 5; `mint`, `mintToUA` in A on the normal kinds, in W on the wrapped ones; `rescue`, `underlyings` in A on
+An entry in two rows runs in the module of the kind's own override: `setVerifierFee` (group 3t, [CTR-PQZ-36](pq-zero-knowledge.md#CTR-PQZ-36)) in Q on 4, in S on 5, 12, 13; `disableFeature` in A on 0, 2, 4, in W on 1, in R on
+8–13, in Z on 3, in Q on 5; `mint`, `mintToUA` in A on the normal kinds, in W on the wrapped ones; `rescue`, `underlyings` in A on
 0, 2, 4, 8, 10, 12, in W on 1, 9, 11, 13, in Z on 3, in Q on 5; `executeRate` in W on 1, 9, in Z on 3, 11, in Q on 5, 13; the
-confidential entries in Z on the Zether kinds and in Q on the PQZ kinds. On 5 and 13 every PQZ `view` / `pure` entry but
-`verifyTransferAmount`, and the four setters, run in Q2.
+confidential entries in Z on the Zether kinds and in Q on the PQZ kinds. On 5, 12 and 13 every PQZ `view` / `pure` entry but
+`verifyTransferAmount`, and the four setters, run in S (5's `underlyings` too; 13's runs in W; 12 has no wrap entries).
 
 - **Splitting rule and growth (owner 2026-11-09, T66b spec §11 (b), (e), (g)).** A module that passes 33,780 B of runtime
   (≈ 57 M asked; hard line 35,570 B ≈ 60 M) splits along its domains and never forwards to its sibling: Q into the ops and
-  their verdicts (Q) and the state, setters and views (Q2), built on 5 and 13; P into the pipeline and named transfers (P)
+  their verdicts (Q) and the state, setters and views (S, Q2 until 2026-11-10), built on 5, 12 and 13 (12 by the owner's ruling of 2026-11-13, ahead of its line); P into the pipeline and named transfers (P)
   and pay with the relay fee (P2), on no kind today (the largest P 30,783 B); A into A and G, the governance entries, when
   A passes the line; the DEX's D the same. A later governance version grows `GovernanceLib` first (14,513 B; lines 33,903 B
-  and 35,694 B). The byte lines are fitted estimates; the asked gas decides.
+  and 35,694 B). The byte lines are fitted estimates; the asked gas decides. **Ask first** (owner 2026-11-11,
+  [CTR-TOK-30's Change](../decisions.md#ctr-tok-30--body-modules-every-body-but-the-erc-20-core-runs-in-a-delegatecall-module-of-its-kind)): no module is split and no size lever applied without asking the owner; a
+  module or library past its notice line stops the work, its measured sizes are reported, and the owner chooses the split above
+  or another way.
 - **Pay stays in P, one per kind (§11 (g), kept as specified).** The T66b 4.4 comparison on the final tree (every kind's P split, a comparison build only): the twelve pay modules would be 15,336–15,407 B on 0–5 and 19,883–19,962 B on 8–13, and they all differ with immutables, link references and metadata zeroed (first difference at byte 22–23, the dispatcher's jump targets; the nearest pairs, kinds 0 / 2 and 8 / 10, at bytes 72 and 515): each kind's hooks (`_mtxRule`, `_uaAllowed`, `_update`, the regulated hooks) are compiled into its pay bodies. A shared pay module (one regulated module for 10–13,
   or one per family) is recorded for a later switch: it needs those hooks as data, a cross-kind check, one storage layout for
   the pay namespaces and its own review; a switch is a new release of the kinds.
@@ -1053,6 +1291,41 @@ The constructor sets `scaas.token.initialized` on the implementation's own stora
 the rate admin sets `rateAdjustable = false`, `rateAdmin = 0` and drops the pending change; the per-leg `adjustable`
 copy stays set (wrap then reads an empty `_pending`, one extra SLOAD), so fixed-at-creation tokens keep the cheap path.
 The controls of flags 5–9 live in the `scaas.regulated` namespace ([asset-suite.md](asset-suite.md#storage), [CTR-TOK-24](#CTR-TOK-24)).
+
+<a id="CTR-TOK-31"></a>**CTR-TOK-31** — **Wrap and unwrap limits on the hybrids of the wrapped kinds** (owner 2026-11-10, the rulings of
+[`superpowers/specs/2026-11-10-wrap-limits.md`](../superpowers/specs/2026-11-10-wrap-limits.md); [decisions.md](../decisions.md#ctr-tok-31--wrap-and-unwrap-limits-on-the-hybrids-of-the-wrapped-kinds);
+**BUILT** on branch `ua-mtx-wraplimit`, group 3l; UNAUDITED). Three SCaaS bits, valid only on a **hybrid** (`maxSupply ≠ 0`) of
+kinds 1, 3, 5, 9, 11, 13: 25 `WRAP_LIMIT` (a capability), 26 `WRAP_LIST` (a power), 27 `REDEEMER` (a scalar power); a pure-wrap
+token's creation with any of them is refused (`WrapControlNeedsHybrid`), the normal kinds refuse them (`FeatureInvalidForKind`).
+
+- **Limits.** Per leg, per direction, a short and a long fixed window `(perUser, tokenWide, period)`, each part off at 0, counted
+  in the underlying moved (a wrap's measured `received`, an unwrap's `out`) in quanta of `10^unitExp` raw units (`unitExp`
+  fixed by the first configuration); `perUser ≤ 2^19 − 1`, `period` whole minutes up to `2^20 − 1`. The subject is the payer
+  of a wrap (the caller, the signer, the order's `o.from`) and the holder of an unwrap (the signer's id, never `UA_POOL`; the
+  proof's sender of an unshield-unwrap); the net credit goes to the id credited (`to`, `toUA`, the order's destination).
+- **The net rule and the decay.** Once bit 25 holds and the first configuration is written, every wrap credits and every
+  unwrap debits the id's base `b` (quanta, rounded against the id) and its weighted-average start (an absolute minute,
+  `uint64`); with `netUnwrap` on or `decayDays ≠ 0` an unwrap needs `q ≤ E`, `E` the base decayed linearly to 0 over
+  `decayDays` from the start. A holder of bit 27 unwraps past `E`; the excess (raw units) is a use of its grant.
+- **Lists.** A wrapper list and an unwrapper list; bit 26's holder writes members at once
+  (`setWrapMember(bytes32 account, bool canWrap, bool canUnwrap, bytes32 chainUid_)`).
+- **Governance.** `setWrapLimits(WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList, bytes32 chainUid_)`
+  (the owner, directly or through `GovernanceRouter`'s `mtxSetWrapLimits`): a wrap-side relaxation or an unwrap-side
+  tightening waits the factory's `noticePeriod()` (two calls, the same commitment, the same owner generation, in
+  `[eta, eta + delay]`); the rest applies at once. `disableFeature` of 25, 26, 27 is refused while a control under it is on.
+  **The chain word** (owner O5 / O6; BUILT, build 3zb + 3zc, branch `burner-wrap-caps`): both
+  direct entries take a trailing `chainUid_`, checked after the caller (`setWrapLimits`: `NotAdmin`, then
+  `ChainUidMismatch`, before any write and before the library's own checks; `setWrapMember`: a stranger keeps its refusal,
+  a holder's word before any write); the word is not part of the pending's commitment; the router ops `mtxSetWrapLimits`,
+  `mtxSetWrapMember` sign `bytes32 chainUid` as the last op field ([CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change). The
+  wrap-limit windows and the supply caps both bind a wrap ([supply caps](#supply-caps)).
+- **Storage.** `scaas.wraplimit` (pinned in `test/v2/layout/namespaces.json`): two config words and two token-wide window words
+  per leg, one quota word per id and leg, a member byte per id, the pending; `Leg.ctl` at byte 24 of leg slot a, so a token
+  without the bits, or never configured, reads nothing new on a wrap or an unwrap.
+- **Disclosed** (`governance_bits.json` bits 25–27): the fixed-window burst, Sybil splitting, a first-come token-wide cap, the
+  notice that may be 0, pre-configuration ids with `b = 0`, minted units never count, a rate rise not redeemable under the rule,
+  entitlement for hire, the round trip that makes the start younger, the shielded id apart from the public id (Q17,
+  ruled (a) by the owner 2026-11-10: disclosed, no new rule), the redeemer's reach and the instant stops that remain (a member removed, a redeemer revoked).
 
 ## 9. Gas
 
@@ -1119,8 +1392,11 @@ Unit (forge, `test/v2/`):
 | `WRAPPED`, one leg | rate 1:1 equals the removed v1 wrapper's behaviour; rounding down on wrap/unwrap; `burned = ⌈out·q⌉`; `previewWrap` `used`; `WrapTooSmall`/`UnwrapTooSmall`/`UnwrapBelowMin`; two-argument `unwrap` = `minOut 0`; fee-on-transfer inbound measured; sender-pays fee-on-transfer reverts `UnderlyingTransferMismatch`; donation not counted; `ReserveShortfall` after a negative-rebase mock stops wrap and not unwrap; `addReserve`; decimals snapshot; init refusals |
 | Rates | fixed ⇒ `RateFixed`; propose/cancel/execute; only the admin executes (`NotRateAdmin` for anyone else); delay and window bounds; an expired change counts as none for `proposeRate`, `pendingRate()` and the pause; step bound both directions at the exact edge; decrease refused without collateral, accepted after `addReserve`; execute refused with `ReserveShortfall` when any leg's balance is below its reserve (shock, then decrease); `collateralValue` saturates and `executeRate` exits early on a huge leg; revoking or renouncing the rate role leaves the rate, `disableFeature(RATE_ADJUSTABLE)` cancels a pending change; EOA admin refused at init; wrap paused on **every** leg while anything is pending, reopens on execute/cancel/expiry, unwrap and `addReserve` open |
 | `WRAPPED`, several legs | 2–8 legs, duplicates, zero; per-leg reserves; unwrap bounded by `reserve_i`; guardian disable one-way and idempotence error; unwrap open on a disabled leg; `addReserve` refused on it; `RateDecreaseWithDisabledLeg`; the cross-leg scenario (pending decrease on leg `i`, flash-wrap of leg `j`) reverts `WrapPausedForRateChange` and a third-party `executeRate` reverts `NotRateAdmin`; single-asset ABI reverts `UnderlyingRequired` with more than one leg |
-| Factory (`Factory.t.sol`) | zero `chain_uid` refused; envs (registrar, versioned, never changed, the factory's own; a release names a published one, an older env stays usable); library code hashes; deployment checks `kind()`, `factory()` and `chainUid()`, bubbles a constructor's revert, refuses reserved kinds, emits the release hashes; notice period; kind gate; `deprecate` refuses new tokens of that version; one `TokenCreated` with provenance; every leg indexed, native included; leg count by kind (`NORMAL` 0, `WRAPPED` 1–8); unknown version; salt scoped by creator and not reusable; `createTokenUnregistered` checked and recorded as version 0; the factory only forwards, the token validates flags and fields (`ConfigFieldForOtherKind`); only the factory initialises, once; `kind()` constant; sizes |
-| Features | every invalid combination of [CTR-TOK-22](#CTR-TOK-22) reverts with its error (`FeatureInvalidForKind`, `LockedNotSubset`, `RoleWithoutFeature`); owner grant/revoke (two calls under `grantDelay`, `termsHash`, `cancelGrant`), `setGrant` and its refusals, leaves and their parent, holder `renounceRole`, `renounceOwnership` (refused while an unlocked bit has a live root; locked holders keep roles), `disableFeature` on a locked, a disableable and an already-clear bit; `PAYABLE` off ⇒ `supportsInterface(IERC20Payment)` false and pay reverts; rate fixed vs adjustable; guardian; the hybrid's cap on every path; rescue; flags 5–9 refused (`FeatureNotBuilt` on `NORMAL`, `WRAPPED`, `FeatureInvalidForKind` on the confidential kinds); a plain `transfer` and `mtxTransfer` add no storage read on every kind (CTR-GOV-11, `test/vectors/plus_zero_slots.json`); every non-view selector classified (`test/vectors/selector_audit.json`). Suites: `test/governance/` (BUILT on branch `governance`) |
+| Factory (`Factory.t.sol`) | zero `chain_uid` refused; envs (registrar, versioned, never changed, the factory's own; a release names a published one, an older env stays usable); library code hashes; deployment checks `kind()`, `factory()` and `chainUid()`, bubbles a constructor's revert, refuses reserved kinds, emits the release hashes; notice period; kind gate; `deprecateToken` refuses new tokens of that version; one `TokenCreated` with provenance; every leg indexed, native included; leg count by kind (`NORMAL` 0, `WRAPPED` 1–8); unknown version; salt scoped by creator and not reusable; `createTokenUnregistered` checked and recorded as version 0; the factory only forwards, the token validates flags and fields (`ConfigFieldForOtherKind`); only the factory initialises, once; `kind()` constant; sizes |
+| Features | every invalid combination of [CTR-TOK-22](#CTR-TOK-22) reverts with its error (`FeatureInvalidForKind`, `LockedNotSubset`, `RoleWithoutFeature`); owner grant/revoke (two calls under `grantDelay`, `termsHash`, `cancelGrant`), `setGrant` and its refusals, leaves and their parent, holder `renounceRole`, `renounceAdmin` (refused while an unlocked bit has a live root; locked holders keep roles), `disableFeature` on a locked, a disableable and an already-clear bit; `PAYABLE` off ⇒ `supportsInterface(IERC20Payment)` false and pay reverts; rate fixed vs adjustable; guardian; the hybrid's cap on every path; rescue; flags 5–9 refused (`FeatureNotBuilt` on `NORMAL`, `WRAPPED`, `FeatureInvalidForKind` on the confidential kinds); a plain `transfer` and `mtxTransfer` add no storage read on every kind (CTR-GOV-11, `test/vectors/plus_zero_slots.json`); every non-view selector classified (`test/vectors/selector_audit.json`). Suites: `test/governance/` (BUILT on branch `governance`) |
+| `BURNER` (BUILT, build 3zb + 3zc; [CTR-GOV-29](../decisions.md#CTR-GOV-29)) | `test/governance/GovBurner.t.sol`, `GovBurnerKinds.t.sol`, over the six Normal kinds: init refusals (`FeatureConflict(30, 2)`, bits 30 / 31 on the wrong kinds, `roles.burner` without the bit or on a wrapped kind, the seat with `admin == 0` and bit 30 unlocked); never enabled after creation; `maxWrapSupply ≠ 0` refused at both Normal refusal sites; the seat burns by `burn`, `mtxBurn` (native and derived UA) and generic `mtxExecute` (the positive control); a non-holder `MissingRole(30, id)` on each path; a `LIMITED` holder past each grant word; a leaf debits its parent; nobody burns after `revokeRole` or `disableFeature(30)`; own balance only; the confidential kinds' unshield not gated; a frozen or denied burner refused; mutants |
+| Supply caps (BUILT, build 3zb + 3zc; [supply caps](#supply-caps)) | `test/wrap/SupplyCaps.t.sol`, `SupplyCapsKinds.t.sol`, over the six wrapped kinds, pure and hybrid: the counter's exact delta on every wrap and unwrap path (a leg with `num ≠ den`), no move on `mint`, `mtxShield`, `mtxUnshield`, `addReserve`; saturation at 0; `totalWrapped ≤ totalSupply` always and `==` on a pure wrap; the cap exactly reached and one unit over (`MaxWrapSupplyExceeded`) on each wrap path, `mtxWrapShield` included; the cap and the wrap-limit windows each refuse alone; the minter ignores `maxWrapSupply`; the setters' order (`NotAdmin`, `ChainUidMismatch`), `FeatureNotSet(31)`, propose / `GrantNotReady` / apply / dead after the window or an admin change / replaced; each floor at the apply with the state moved during the delay; `reserveValue() == collateralValue()`; `pendingSupplyCaps()` flags; the router ops; mutants |
+| The chain word on holder entries (BUILT, build 3zb + 3zc; [CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change) | `test/governance/HolderChainWord.t.sol`: per entry a stranger's refusal of today (right and wrong word), a holder's sibling word `ChainUidMismatch` with nothing written and a `LIMITED` grant not debited, the right word acts; each router op over a sibling's word refused; typehash and selector pins |
 | Layout | `test_storageLayoutIsPinned` per implementation; library storage isolation (a write through one library never changes another namespace); the size gate ([CTR-TOK-24](#CTR-TOK-24)) |
 | Hedera | HIP-632 path under `IS_HEDERA` (mocked precompile, as in `test/hedera/`); association at init; fail-closed custom-fee check: `isToken` rc ≠ SUCCESS, `getTokenCustomFees` rc ≠ SUCCESS, and a non-empty fee list each refuse the underlying |
 

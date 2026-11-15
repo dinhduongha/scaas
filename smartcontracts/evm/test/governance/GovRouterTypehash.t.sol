@@ -18,117 +18,139 @@ contract GovRouterTypehashTest is Test {
 
     function test_uaGrantRoleTypehashIsPinned() public pure {
         assertEq(T.UA_GRANT_ROLE, keccak256(
-                "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_GRANT_ROLE, 0x6eb86b2377b08b35d4ba9aea808b9f8291b350ae6aefdaa1c62b291013b79a6d);
+                "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_GRANT_ROLE, 0x7e30f73602b0877ac8eae6e0b6425bcc72048f392c9e414d1c8a97fbd4f8da33);
     }
 
     function test_uaRevokeRoleTypehashIsPinned() public pure {
         assertEq(T.UA_REVOKE_ROLE, keccak256(
-                "UARevokeRole(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_REVOKE_ROLE, 0x2485b5c9b89864d24866c5f8cd84f9b306e3d837034f8d8232e51f31518594e0);
+                "UARevokeRole(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_REVOKE_ROLE, 0xa9c0495d353fe516fffc4fa34f5b5f4879eda540ad5de0782bdc86ac9c8c1c03);
     }
 
     function test_uaSetGrantTypehashIsPinned() public pure {
         assertEq(T.UA_SET_GRANT, keccak256(
-                "UASetGrant(bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                "UASetGrant(bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
                 "GrantTerms(uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope)"));
-        assertEq(T.UA_SET_GRANT, 0xc98bbb9ea43c430a7dbc43f74b8a5454c65373047ee3b5f0c727407d69a89fcf);
+        assertEq(T.UA_SET_GRANT, 0xc9202c6babd97e3f1f8afd98abf29525401103cb46c6ff0f0bcaa7e77103cf6c);
     }
 
     function test_uaCancelGrantTypehashIsPinned() public pure {
         assertEq(T.UA_CANCEL_GRANT, keccak256(
-                "UACancelGrant(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_CANCEL_GRANT, 0x739f1688b6c65ab49c43063518ad450a1f15587a4ae1d9346f616483b2a71ea9);
+                "UACancelGrant(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_CANCEL_GRANT, 0x0510dc02d904cec3a43632efdbfea34b40812852fd0e152e1d74bea1370ca551);
     }
 
     function test_uaDisableFeatureTypehashIsPinned() public pure {
         assertEq(T.UA_DISABLE_FEATURE, keccak256(
-                "UADisableFeature(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_DISABLE_FEATURE, 0x245ae38b9763de03075abd2d8b1f0e14d547af425936778038cc4d0d059f0394);
+                "UADisableFeature(bytes32 from,address target,uint8 bit,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_DISABLE_FEATURE, 0xdc8093c9b1dce6c2a8fc9ded2a0e2aa5b7f44c8753597044c35eaa37f532716f);
     }
 
-    function test_uaTransferOwnershipTypehashIsPinned() public pure {
-        assertEq(T.UA_TRANSFER_OWNERSHIP, keccak256(
-                "UATransferOwnership(bytes32 from,address target,bytes32 newOwner,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_TRANSFER_OWNERSHIP, 0xa468e58d6110336b12945530c88e879bc757390554493d6c405eb996e9f34b19);
+    /// Round 3r R3 (spec 2026-11-10-admin-not-owner.md §4.3, CTR-GOV-23): the three admin ops, `newAdmin` the transfer's word.
+    function test_uaTransferAdminTypehashIsPinned() public pure {
+        assertEq(T.UA_TRANSFER_ADMIN, keccak256(
+                "UATransferAdmin(bytes32 from,address target,bytes32 newAdmin,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_TRANSFER_ADMIN, 0x9e2062b913247268065eb1fa8c1595353228814a1aa316c86861b1d7a1f8954b);
     }
 
-    function test_uaAcceptOwnershipTypehashIsPinned() public pure {
-        assertEq(T.UA_ACCEPT_OWNERSHIP, keccak256(
-                "UAAcceptOwnership(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_ACCEPT_OWNERSHIP, 0x2ce67927cc2f2144e5b45b15e37e55814a22d43808f8ee507784924ed777243d);
+    function test_uaAcceptAdminTypehashIsPinned() public pure {
+        assertEq(T.UA_ACCEPT_ADMIN, keccak256(
+                "UAAcceptAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_ACCEPT_ADMIN, 0x996ac68d825579b63a05d8de5e842540e3941eb831a15f6c822bfdff810048e8);
     }
 
-    function test_uaRenounceOwnershipTypehashIsPinned() public pure {
-        assertEq(T.UA_RENOUNCE_OWNERSHIP, keccak256(
-                "UARenounceOwnership(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_RENOUNCE_OWNERSHIP, 0x0397c70ed0d09c398e5f2d00425b822788d86a35a074bf84e9438818da053445);
+    /// Fable recheck-2 P3-1: the target's chain word signed (was 0x4be88ff950da1b2063111810c97fc341fb457a71d9719475cf513a9f09dde5ba,
+    /// without `bytes32 chainUid`; its legacy pin below).
+    function test_uaRenounceAdminTypehashIsPinned() public pure {
+        assertEq(T.UA_RENOUNCE_ADMIN, keccak256(
+                "UARenounceAdmin(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_RENOUNCE_ADMIN, 0x3284850e6f597dfa1e39dfc3ea0ed14eddef8ca3053aac324b16ce608cce7086);
+        assertEq(keccak256(
+                "UARenounceAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x4be88ff950da1b2063111810c97fc341fb457a71d9719475cf513a9f09dde5ba);
     }
 
+    /// Round 3r R3 (§4.3): the three ownership ops the admin ops replaced, legacy pins of a retired form: a client or node
+    /// row signing one of them signs for no entry.
+    function test_ownershipTypehashesAreLegacyPins() public pure {
+        assertEq(keccak256(
+            "UATransferOwnership(bytes32 from,address target,bytes32 newOwner,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), 0xa468e58d6110336b12945530c88e879bc757390554493d6c405eb996e9f34b19);
+        assertEq(keccak256(
+            "UAAcceptOwnership(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), 0x2ce67927cc2f2144e5b45b15e37e55814a22d43808f8ee507784924ed777243d);
+        assertEq(keccak256(
+            "UARenounceOwnership(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), 0x0397c70ed0d09c398e5f2d00425b822788d86a35a074bf84e9438818da053445);
+    }
+
+    /// CTR-GOV-28 (owner 2026-11-13, renounceRole carries the chain word too): the target's chain word signed (was
+    /// 0x1a32125783655840c2b0717e59159708af35ca4638bf313676e325dd5029c3e1, without `bytes32 chainUid`; its legacy pin below).
     function test_uaRenounceRoleTypehashIsPinned() public pure {
         assertEq(T.UA_RENOUNCE_ROLE, keccak256(
-                "UARenounceRole(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_RENOUNCE_ROLE, 0x1a32125783655840c2b0717e59159708af35ca4638bf313676e325dd5029c3e1);
+                "UARenounceRole(bytes32 from,address target,uint8 bit,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_RENOUNCE_ROLE, 0x74561cb1e1190de99b11489b67a9286153ec5bccd8898fee18b308c24e17f756);
+        assertEq(keccak256(
+                "UARenounceRole(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x1a32125783655840c2b0717e59159708af35ca4638bf313676e325dd5029c3e1);
     }
 
     function test_uaMintTypehashIsPinned() public pure {
         assertEq(T.UA_MINT, keccak256(
-                "UAMint(bytes32 from,address target,address to,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_MINT, 0xc4e90edd003399ea85dd8419c3cf0e918f3b20d8cbcf13d8e3ae47dc33af5fe9);
+                "UAMint(bytes32 from,address target,address to,uint256 amount,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_MINT, 0x6a2a3ca584935f39a43344324d603a745bccb600b85eb667ab977209a35c8089);
     }
 
     function test_uaMintToUATypehashIsPinned() public pure {
         assertEq(T.UA_MINT_TO_UA, keccak256(
-                "UAMintToUA(bytes32 from,address target,bytes32 to,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_MINT_TO_UA, 0x3f15ea1661a843b380990b511dd9bdd73527754fbae7d392545286c6e9a1ec59);
+                "UAMintToUA(bytes32 from,address target,bytes32 to,uint256 amount,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_MINT_TO_UA, 0x151aaeef9db6049eb63e5fdc1c4b56b51d7c76c4bab2203e92e6a427cf720833);
     }
 
     function test_uaDisableWrapTypehashIsPinned() public pure {
         assertEq(T.UA_DISABLE_WRAP, keccak256(
-                "UADisableWrap(bytes32 from,address target,address leg,bytes32 reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_DISABLE_WRAP, 0x605b248d1b84f07924e8c06b5d9494a653fd360b0650096d018fa057f8f3fd70);
+                "UADisableWrap(bytes32 from,address target,address leg,bytes32 reason,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_DISABLE_WRAP, 0xf193822b101931d9818473fcb1ad06364dbea1011981caed0a7c52e49d52440b);
     }
 
     function test_uaProposeRateTypehashIsPinned() public pure {
         assertEq(T.UA_PROPOSE_RATE, keccak256(
-                "UAProposeRate(bytes32 from,address target,address leg,uint96 num,uint96 den,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_PROPOSE_RATE, 0x6fa5ee4883f1b444b81cf4ee7267e5cfd0cdbb6d33b5292714aaa419c2d0d45a);
+                "UAProposeRate(bytes32 from,address target,address leg,uint96 num,uint96 den,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_PROPOSE_RATE, 0x51a9ddd07fcee711394d415dbbf566b7155d3c54640d45f635ce708b12c8789f);
     }
 
     function test_uaCancelRateTypehashIsPinned() public pure {
         assertEq(T.UA_CANCEL_RATE, keccak256(
-                "UACancelRate(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_CANCEL_RATE, 0x563e79a9b01c20db3955058e27b3f8a8d67d86c200c852f4d711056e68e64d96);
+                "UACancelRate(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_CANCEL_RATE, 0x64014751b8c994968de40ae2357581cbae458afa024b98f860d13a8f1809bd8f);
     }
 
     function test_uaExecuteRateTypehashIsPinned() public pure {
         assertEq(T.UA_EXECUTE_RATE, keccak256(
-                "UAExecuteRate(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_EXECUTE_RATE, 0xd1c67b623f98fe4629d466c3c52ec4f095ff5efc028dc94fc1e5ebf9bb44e4b6);
+                "UAExecuteRate(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_EXECUTE_RATE, 0x1bf76e7e282c0081f740cf18aae89ea3a3ab9e759b228f8a4be368ca84335385);
     }
 
     function test_uaSetMarketTypehashIsPinned() public pure {
         assertEq(T.UA_SET_MARKET, keccak256(
-                "UASetMarket(bytes32 from,address target,address base,address quote,bool listed,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_SET_MARKET, 0x18f8aca93f48321be5b95fe425feb92e2fca25868e6f55dcfc34caa60f49ce59);
+                "UASetMarket(bytes32 from,address target,address base,address quote,bool listed,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_MARKET, 0x86b53af092197fdd5273770a9674c9a033df686987c5b6a1d969d9c30efc20f9);
     }
 
     function test_uaSetExchangeTargetTypehashIsPinned() public pure {
         assertEq(T.UA_SET_EXCHANGE_TARGET, keccak256(
-                "UASetExchangeTarget(bytes32 from,address target,address exchangeTarget,bool listed,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_SET_EXCHANGE_TARGET, 0x502716f005e21f4f3a33cde1a9847201283c24b803d751fceabcd1b8c07b20af);
+                "UASetExchangeTarget(bytes32 from,address target,address exchangeTarget,bool listed,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_EXCHANGE_TARGET, 0x975b3cfdaa85b3bcdc4ad30902a11acdbd43da65f45a19913a32b9d3726b2027);
     }
 
     function test_uaSetListedOnlyTypehashIsPinned() public pure {
         assertEq(T.UA_SET_LISTED_ONLY, keccak256(
-                "UASetListedOnly(bytes32 from,address target,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_SET_LISTED_ONLY, 0x3abe22525c2ee61aeb0d36c03336dbcf35638f73729a5f572d55d335d81044e6);
+                "UASetListedOnly(bytes32 from,address target,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_LISTED_ONLY, 0x8d72a605fd72d20d1f429cfdd3152bc4ea89116ee8b6b3c3e9e80bc62e6084bd);
     }
 
     function test_uaSetFeeSplitTypehashIsPinned() public pure {
         assertEq(T.UA_SET_FEE_SPLIT, keccak256(
-                "UASetFeeSplit(bytes32 from,address target,uint32 relayerSharePpm,address treasury,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_SET_FEE_SPLIT, 0x6b852244442b250d05068e09239a3187da2ac9c9c3d2b8bfc89f77de52466649);
+                "UASetFeeSplit(bytes32 from,address target,uint32 relayerSharePpm,address treasury,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_FEE_SPLIT, 0x033aa9eec82133d20b674a0f9004cea346a836273f1aa029f94ce3c59be25244);
     }
 
     // ---- plan T76 (chain-neutral spec §4.4, S3; owner 2026-11-07): the factory's creations, the signing UA the creator
@@ -155,89 +177,96 @@ contract GovRouterTypehashTest is Test {
 
     function test_uaFreezeTypehashIsPinned() public pure {
         assertEq(T.UA_FREEZE, keccak256(
-                "UAFreeze(bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 recordId,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_FREEZE, 0xf5fc2a4678771231313015bbd08dc97a79091035881d6266350b0776d6a2984a);
+                "UAFreeze(bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_FREEZE, 0xc1d29d858cc52ade83ec376b97aa374eb3f358e1dd131db8cbef52bf916a20c9);
     }
 
     function test_uaUnfreezeTypehashIsPinned() public pure {
         assertEq(T.UA_UNFREEZE, keccak256(
-                "UAUnfreeze(bytes32 from,address target,bytes32 account,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_UNFREEZE, 0x20a16034799ae1e37ea7af0e3bc3e983f2ecd30a20c2b6c9234b8fa705fbb9a9);
+                "UAUnfreeze(bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_UNFREEZE, 0x743250cc49234ccd8f1025ad872345b386023efdde4dba846d70f892c3d40cbd);
     }
 
     function test_uaForceTransferTypehashIsPinned() public pure {
         assertEq(T.UA_FORCE_TRANSFER, keccak256(
-                "UAForceTransfer(bytes32 from,address target,bytes32 recordId,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_FORCE_TRANSFER, 0x29f5036246375be4eb17b4e995b326935a99cc74c4f0cec933eb9aca28cec4e3);
+                "UAForceTransfer(bytes32 from,address target,bytes32 recordId,uint256 amount,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_FORCE_TRANSFER, 0xee5ea60f926f722222788d9521a1a2c74730bbcc7975236661ded5f887c4990b);
     }
 
     /// pay-meta-tax T39 (spec §6.2): the two router ops of bit 23 `TAX`.
     function test_uaSetTaxRateTypehashIsPinned() public pure {
         assertEq(T.UA_SET_TAX_RATE, keccak256(
-                "UASetTaxRate(bytes32 from,address target,uint32 ratePpm,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_SET_TAX_RATE, 0x75a25977ad049952fa3befd753aa1c9dbc3a38461944061e37d2652fdc6d123f);
+                "UASetTaxRate(bytes32 from,address target,uint32 ratePpm,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_TAX_RATE, 0x7b8c829142578820adae041129e19e2cf43a572e9a6dd2fcadf7dd876d8aa6cd);
     }
 
     function test_uaSetTaxRecipientTypehashIsPinned() public pure {
         assertEq(T.UA_SET_TAX_RECIPIENT, keccak256(
-                "UASetTaxRecipient(bytes32 from,address target,bytes32 taxRecipient,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_SET_TAX_RECIPIENT, 0x35a73542fb90c355f539cf8ebee2a653d5a10216b659fc5304d32671e634750f);
+                "UASetTaxRecipient(bytes32 from,address target,bytes32 taxRecipient,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_TAX_RECIPIENT, 0xc10f95c0e8a37899cad41fe81819491e96a5126ad3a4eec8310556b16cfa8063);
     }
 
     /// Group 3f (PQZ verifier mode spec §4.2): the PQZ verifier UA's three owner ops.
     function test_uaPqzSetVerifierTypehashIsPinned() public pure {
         assertEq(T.UA_PQZ_SET_VERIFIER, keccak256(
-                "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_PQZ_SET_VERIFIER, 0xc7b836ae14938e0da524ac8a888c602948164c3e01c450a2d4a60d8b257a2aee);
+                "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_PQZ_SET_VERIFIER, 0xd56492a28d9da80fec901ca1a76afa2873e191037e5ad45cc585f79374a8abed);
     }
 
     function test_uaPqzCancelVerifierTypehashIsPinned() public pure {
         assertEq(T.UA_PQZ_CANCEL_VERIFIER, keccak256(
-                "UAPqzCancelVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_PQZ_CANCEL_VERIFIER, 0x7f04a47d44fd0fc31c5bea71922bca3fdee4f3c7dbf0460b73526499ed942911);
+                "UAPqzCancelVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_PQZ_CANCEL_VERIFIER, 0xcaccf959e16353f1bd765e011520734ff15eb62b443a7040348fccbe83f6406b);
     }
 
     function test_uaPqzRevokeVerifierTypehashIsPinned() public pure {
         assertEq(T.UA_PQZ_REVOKE_VERIFIER, keccak256(
-                "UAPqzRevokeVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_PQZ_REVOKE_VERIFIER, 0xb395011f54af6f642333ddf8e664418b27c5ddeea94d7750852501c6d640a6d6);
+                "UAPqzRevokeVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_PQZ_REVOKE_VERIFIER, 0x8db6ecaa6eded24dd4deddf5d146f953293e3cda0e0a810fd853208ebcb09228);
     }
 
     /// Group 3h T61 (PQZ proof path spec §5): bit 24 `PQZ_PROOF`'s router op.
     function test_UASetProofStoreTypehashIsPinned() public pure {
         assertEq(T.UA_SET_PROOF_STORE, keccak256(
-                "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_SET_PROOF_STORE, 0xcd4ab7150dc9686c7487ea24b688ec51c778304d95fa7690b26c39c447a9203d);
+                "UASetProofStore(bytes32 from,address target,uint8 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_PROOF_STORE, 0xb52c6ed89b7762888703b3fff1806dba3720c5bc8d527c6ee3015f6e82074771);
+    }
+
+    /// Round 3t (CTR-PQZ-36, verifier fee spec §7.2, §8): the admin's verifier fee router op.
+    function test_uaSetVerifierFeeTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_VERIFIER_FEE, keccak256(
+                "UASetVerifierFee(bytes32 from,address target,uint64 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_VERIFIER_FEE, 0x5f8c20d2f3af20d59df1aa1fe75e52fc9b95a15483b98b268246963ff7b4076e);
     }
 
     function test_uaPauseTypehashIsPinned() public pure {
         assertEq(T.UA_PAUSE, keccak256(
-                "UAPause(bytes32 from,address target,bytes32 ref,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_PAUSE, 0x7012cbf0bda862fc56133a096ecd7b9f807ea2ed26917f3f10cdf41c0ecb7282);
+                "UAPause(bytes32 from,address target,bytes32 ref,uint64 until,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_PAUSE, 0x8d5d406f385be323c37c4fc0e5eec98dd544e9703aee6d0ed8c99da8384ffdfc);
     }
 
     function test_uaUnpauseTypehashIsPinned() public pure {
         assertEq(T.UA_UNPAUSE, keccak256(
-                "UAUnpause(bytes32 from,address target,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_UNPAUSE, 0xa0e6b7b2c0d59ae1f15155df7ad7a30795fdca2d126d90a823d9567f9485640b);
+                "UAUnpause(bytes32 from,address target,bytes32 ref,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_UNPAUSE, 0xdcf12cc8f5422fcc88fe35a94ad34839570282d57863634c9a664eee78bfdc7b);
     }
 
     function test_uaRecordOrderTypehashIsPinned() public pure {
         assertEq(T.UA_RECORD_ORDER, keccak256(
-                "UARecordOrder(bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_RECORD_ORDER, 0x9557599df6a72c81048fc69876b562d875d344af32ee60b25a6a5e6d54e8d988);
+                "UARecordOrder(bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_RECORD_ORDER, 0xd0d57dc222a76c7d71c28118a08220adb820f66041ab6027bd7c6aae1edc842d);
     }
 
     function test_uaRevokeOrderTypehashIsPinned() public pure {
         assertEq(T.UA_REVOKE_ORDER, keccak256(
-                "UARevokeOrder(bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_REVOKE_ORDER, 0xb5794e916523312dcd4225c8024c11f9fa4eb9e8e6c3bd525720e709e5a3f976);
+                "UARevokeOrder(bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_REVOKE_ORDER, 0x529b2fb2a3cee1ff50f6489ff509f38a776662ddf44a332b3647b64270c55e2e);
     }
 
     function test_uaOperatorTransferTypehashIsPinned() public pure {
         assertEq(T.UA_OPERATOR_TRANSFER, keccak256(
-                "UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
-        assertEq(T.UA_OPERATOR_TRANSFER, 0xc6020647b60fc768241df1c03875c3f208172161422171416b21769872766fc9);
+                "UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_OPERATOR_TRANSFER, 0x8151c0ca719356d25349f482d74e645de54a1f6ecf3b2501f76b9cb81689c751);
     }
 
     /// ua-mtx-merge T7 (R14): the 19 address `<Op>` structs left the router with their `mtx<Op>(Envelope, …, bytes)` entries
@@ -285,10 +314,230 @@ contract GovRouterTypehashTest is Test {
             "SetFeeSplit(address from,address target,uint32 relayerSharePpm,address treasury,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"), 0xf084d8f72f5ab8472e967cf0f499a1f0885d6c4ef8598e122bc9c5789f5cec6b);
     }
 
+    /// Group 3l (wrap limits spec 2026-11-10 §9): the two ops over the hybrids, the leg array's referenced struct types in
+    /// EIP-712 order (`WrapLegLimits` before `WrapLimit`).
+    function test_uaSetWrapLimitsTypehashIsPinned() public pure {
+        assertEq(T.WRAP_LIMIT, keccak256("WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)"));
+        assertEq(T.WRAP_LIMIT, 0x88e353aa16497f3ec3b6798928cbaae4294124785a960bbb1f375a58f4375cd0);
+        assertEq(T.WRAP_LEG_LIMITS, keccak256(
+                "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)"
+                "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)"));
+        assertEq(T.WRAP_LEG_LIMITS, 0x6ed041f8db544256208e9c373a1bba92e15793b4c38bc2839e4bce69a3aac1fe);
+        assertEq(T.UA_SET_WRAP_LIMITS, keccak256(
+                "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)"
+                "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)"));
+        assertEq(T.UA_SET_WRAP_LIMITS, 0x2bb99089b2d5f6c379276c8114164056ed8dd457573dc758454a492c4600dc7b);
+    }
+
+    function test_uaSetWrapMemberTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_WRAP_MEMBER, keccak256(
+                "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_WRAP_MEMBER, 0xbe5bae53702fa711734463078650d651b1b0eb1a62f84a79570d0dcc1af05e3e);
+    }
+
+    /// Round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4; owner naming 2026-11-11): the fifteen admin ops of
+    /// `OpenFactory` and `ComplianceRegistry`, `Env` the three publishes' referenced struct (each array the `keccak256` of its
+    /// words), a `reason` as `keccak256(bytes(reason))`; `cast keccak` of each string.
+    function test_envTypehashIsPinned() public pure {
+        assertEq(T.ENV, keccak256(
+                "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)"));
+        assertEq(T.ENV, 0x57dc07fcda880fe21683eb19b444c097afd8de8f6b5d074732aa0bb5623df9ec);
+    }
+
+    function test_uaPublishTokenEnvTypehashIsPinned() public pure {
+        assertEq(T.UA_PUBLISH_TOKEN_ENV, keccak256(
+                "UAPublishTokenEnv(bytes32 from,address target,uint8 kind,uint16 envVersion,bytes32 chainUid,Env env,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)"));
+        assertEq(T.UA_PUBLISH_TOKEN_ENV, 0xed4035e6866cd24022373cf2bebdf30f9f76df48dc68c1df90b7bdd13305934e);
+    }
+
+    function test_uaPublishDexEnvTypehashIsPinned() public pure {
+        assertEq(T.UA_PUBLISH_DEX_ENV, keccak256(
+                "UAPublishDexEnv(bytes32 from,address target,uint16 envVersion,bytes32 chainUid,Env env,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)"));
+        assertEq(T.UA_PUBLISH_DEX_ENV, 0x8b39773c5e1fa4e894ff4b4cf29e6751ccbe11b4d7bf95d08cdcba7a001360ff);
+    }
+
+    function test_uaPublishClassEnvTypehashIsPinned() public pure {
+        assertEq(T.UA_PUBLISH_CLASS_ENV, keccak256(
+                "UAPublishClassEnv(bytes32 from,address target,uint16 contractClass,uint16 kind,uint16 envVersion,bytes32 chainUid,Env env,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)"));
+        assertEq(T.UA_PUBLISH_CLASS_ENV, 0xe153bf924a4a043871268ded20064bc8f4e5c8c8b4ce2f9d6e56b2484004b8b5);
+    }
+
+    function test_uaApproveTokenReleaseTypehashIsPinned() public pure {
+        assertEq(T.UA_APPROVE_TOKEN_RELEASE, keccak256(
+                "UAApproveTokenRelease(bytes32 from,address target,uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_APPROVE_TOKEN_RELEASE, 0x52467783d24eba4c698616d4fe49a418a800c33e23418fcec1eb2cb6501054d7);
+    }
+
+    function test_uaApproveDexReleaseTypehashIsPinned() public pure {
+        assertEq(T.UA_APPROVE_DEX_RELEASE, keccak256(
+                "UAApproveDexRelease(bytes32 from,address target,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_APPROVE_DEX_RELEASE, 0xfb267b4328281cbb5da14f411b09ef0d7d0adc31b12c778a1b8297a35685e6a5);
+    }
+
+    function test_uaApproveReleaseTypehashIsPinned() public pure {
+        assertEq(T.UA_APPROVE_RELEASE, keccak256(
+                "UAApproveRelease(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_APPROVE_RELEASE, 0x4fb394a7e626a3167d3530c62b793b0a2c2d204f745891803f5b4aae92fb3cbe);
+    }
+
+    function test_uaRevokeApprovalTypehashIsPinned() public pure {
+        assertEq(T.UA_REVOKE_APPROVAL, keccak256(
+                "UARevokeApproval(bytes32 from,address target,bytes32 key,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_REVOKE_APPROVAL, 0x41b488adcad4b375bb1ee3ce0018ff8bf564cff5601a196d2d343c5c8f1aa326);
+    }
+
+    function test_uaDeprecateTokenTypehashIsPinned() public pure {
+        assertEq(T.UA_DEPRECATE_TOKEN, keccak256(
+                "UADeprecateToken(bytes32 from,address target,uint8 kind,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_DEPRECATE_TOKEN, 0x4717d0debde9ab7256162ee9ef333bc4c854b87e28aab7c09a8203a0ffc6e24d);
+    }
+
+    function test_uaDeprecateDexTypehashIsPinned() public pure {
+        assertEq(T.UA_DEPRECATE_DEX, keccak256(
+                "UADeprecateDex(bytes32 from,address target,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_DEPRECATE_DEX, 0xddedb8bd4876a053b7b63869d41250bc738d656f2bfd024a1ae1fcc264681ffe);
+    }
+
+    function test_uaDeprecateReleaseTypehashIsPinned() public pure {
+        assertEq(T.UA_DEPRECATE_RELEASE, keccak256(
+                "UADeprecateRelease(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_DEPRECATE_RELEASE, 0xa50986bc6297955147dca7b40ce67bdda5703257c934f3cf640e56c1712234c0);
+    }
+
+    function test_uaSetTokenKindEnabledTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_TOKEN_KIND_ENABLED, keccak256(
+                "UASetTokenKindEnabled(bytes32 from,address target,uint8 kind,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_TOKEN_KIND_ENABLED, 0x81c105dd11bbd05cfae8418dc92cd640f688d28bfa4c728beaee94a1686661e6);
+    }
+
+    function test_uaSetClassKindEnabledTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_CLASS_KIND_ENABLED, keccak256(
+                "UASetClassKindEnabled(bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_CLASS_KIND_ENABLED, 0x41909ea9441e19515ea7b41c682a2a99396ffed2471eb871bfadd2c59301f4ef);
+    }
+
+    function test_uaSetKycProviderTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_KYC_PROVIDER, keccak256(
+                "UASetKycProvider(bytes32 from,address target,bytes32 provider,bool enabled,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_KYC_PROVIDER, 0x42994251d19a3f14dc2ba5339fab914f956bfb8d260fa0b977a63bb6526d8d59);
+    }
+
+    function test_uaSetComplianceTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_COMPLIANCE, keccak256(
+                "UASetCompliance(bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_COMPLIANCE, 0x5232b6b3723b8837763887a60d51e887dadddf419b869589e816f9c663488ae1);
+    }
+
+    /// Round 3s (spec 2026-11-10-token-lists.md §7): the lists and `enableFeature`.
+    function test_uaSetAllowedTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_ALLOWED, keccak256(
+                "UASetAllowed(bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_ALLOWED, 0x8b4e1156d6bf0dab397419dfbc30e8dea5224ee6e77517427a30434393f3544f);
+    }
+
+    function test_uaSetDeniedTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_DENIED, keccak256(
+                "UASetDenied(bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_DENIED, 0x4f7dfc3cc16b95183f25cdec5eb42a662c6b7c1185d7f6e908a5b9c532815a04);
+    }
+
+    function test_uaEnableFeatureTypehashIsPinned() public pure {
+        assertEq(T.UA_ENABLE_FEATURE, keccak256(
+                "UAEnableFeature(bytes32 from,address target,uint8 bit,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_ENABLE_FEATURE, 0x6d795c82dfbfc795cf08672ccca8dd62498cae13fc4e40dc02e3181a9ddf35dd);
+    }
+
+    function test_uaSetChainEntriesTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_CHAIN_ENTRIES, keccak256(
+                "UASetChainEntries(bytes32 from,address target,ChainEntries entries,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+                "ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash)"));
+        assertEq(T.UA_SET_CHAIN_ENTRIES, 0x67b3d46a304b73e23b2d0c0bb6eb5b8016ee67748316c1fcd58d3532af4462b0);
+    }
+
+    /// CTR-GOV-27: `setChainEntries`'s named struct, nested in `UASetChainEntries`.
+    function test_chainEntriesTypehashIsPinned() public pure {
+        assertEq(T.CHAIN_ENTRIES, keccak256(
+                "ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash)"));
+        assertEq(T.CHAIN_ENTRIES, 0xff27c281c7e96a0af93e5ec989572bbf09fef340df246979c708e7ddba598949);
+    }
+
     /// The router's ordered cancel (Q2, R19) signs `MetaTxLib`'s `UACancelNonce`, like a token.
     function test_uaCancelNonceTypehashIsPinned() public pure {
         assertEq(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, keccak256(
                 "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
         assertEq(MetaTxLib.UA_CANCEL_NONCE_TYPEHASH, 0xcd17c2129240241748e841a7f0572558b9c5a900a47bc540170a8c258d291c54);
+    }
+
+    /// Round 3zc (spec 2026-11-13-burner-wrap-caps.md §3.7, CTR-GOV-30): the admin's two supply-cap ops, the word last.
+    function test_uaSetMaxSupplyTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_MAX_SUPPLY, keccak256(
+                "UASetMaxSupply(bytes32 from,address target,uint256 maxSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_MAX_SUPPLY, 0xd3a0fcdc734e08ffbd80a66bf49e1c1fdf973ae638f10b569340374a3da1de67);
+    }
+
+    function test_uaSetMaxWrapSupplyTypehashIsPinned() public pure {
+        assertEq(T.UA_SET_MAX_WRAP_SUPPLY, keccak256(
+                "UASetMaxWrapSupply(bytes32 from,address target,uint256 maxWrapSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"));
+        assertEq(T.UA_SET_MAX_WRAP_SUPPLY, 0x70d8a5c0eb38fe1d35cfcd4a86e0418d74b60bd54341104a655ddfddaecb6dc3);
+    }
+
+    /// Round 3zb + 3zc (CTR-GOV-28 Change, owner 2026-11-13 "(2), gộp vào round 3zb + 3zc."; O5 for `UASetWrapLimits`): the 25
+    /// structs before `bytes32 chainUid` joined them, legacy pins of retired forms (old → new in the commit): a client or a node
+    /// row still signing one signs for no entry.
+    function test_holderOpsWithoutTheWordAreLegacyPins() public pure {
+        assertEq(keccak256("UAMint(bytes32 from,address target,address to,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0xc4e90edd003399ea85dd8419c3cf0e918f3b20d8cbcf13d8e3ae47dc33af5fe9); // UA_MINT
+        assertEq(keccak256("UAMintToUA(bytes32 from,address target,bytes32 to,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x3f15ea1661a843b380990b511dd9bdd73527754fbae7d392545286c6e9a1ec59); // UA_MINT_TO_UA
+        assertEq(keccak256("UADisableWrap(bytes32 from,address target,address leg,bytes32 reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x605b248d1b84f07924e8c06b5d9494a653fd360b0650096d018fa057f8f3fd70); // UA_DISABLE_WRAP
+        assertEq(keccak256("UAProposeRate(bytes32 from,address target,address leg,uint96 num,uint96 den,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x6fa5ee4883f1b444b81cf4ee7267e5cfd0cdbb6d33b5292714aaa419c2d0d45a); // UA_PROPOSE_RATE
+        assertEq(keccak256("UACancelRate(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x563e79a9b01c20db3955058e27b3f8a8d67d86c200c852f4d711056e68e64d96); // UA_CANCEL_RATE
+        assertEq(keccak256("UAExecuteRate(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0xd1c67b623f98fe4629d466c3c52ec4f095ff5efc028dc94fc1e5ebf9bb44e4b6); // UA_EXECUTE_RATE
+        assertEq(keccak256("UASetMarket(bytes32 from,address target,address base,address quote,bool listed,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x18f8aca93f48321be5b95fe425feb92e2fca25868e6f55dcfc34caa60f49ce59); // UA_SET_MARKET
+        assertEq(keccak256("UASetExchangeTarget(bytes32 from,address target,address exchangeTarget,bool listed,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x502716f005e21f4f3a33cde1a9847201283c24b803d751fceabcd1b8c07b20af); // UA_SET_EXCHANGE_TARGET
+        assertEq(keccak256("UASetListedOnly(bytes32 from,address target,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x3abe22525c2ee61aeb0d36c03336dbcf35638f73729a5f572d55d335d81044e6); // UA_SET_LISTED_ONLY
+        assertEq(keccak256("UASetFeeSplit(bytes32 from,address target,uint32 relayerSharePpm,address treasury,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x6b852244442b250d05068e09239a3187da2ac9c9c3d2b8bfc89f77de52466649); // UA_SET_FEE_SPLIT
+        assertEq(keccak256("UAFreeze(bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 recordId,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0xf5fc2a4678771231313015bbd08dc97a79091035881d6266350b0776d6a2984a); // UA_FREEZE
+        assertEq(keccak256("UAUnfreeze(bytes32 from,address target,bytes32 account,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x20a16034799ae1e37ea7af0e3bc3e983f2ecd30a20c2b6c9234b8fa705fbb9a9); // UA_UNFREEZE
+        assertEq(keccak256("UAForceTransfer(bytes32 from,address target,bytes32 recordId,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x29f5036246375be4eb17b4e995b326935a99cc74c4f0cec933eb9aca28cec4e3); // UA_FORCE_TRANSFER
+        assertEq(keccak256("UAPause(bytes32 from,address target,bytes32 ref,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x7012cbf0bda862fc56133a096ecd7b9f807ea2ed26917f3f10cdf41c0ecb7282); // UA_PAUSE
+        assertEq(keccak256("UAUnpause(bytes32 from,address target,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0xa0e6b7b2c0d59ae1f15155df7ad7a30795fdca2d126d90a823d9567f9485640b); // UA_UNPAUSE
+        assertEq(keccak256("UARecordOrder(bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x9557599df6a72c81048fc69876b562d875d344af32ee60b25a6a5e6d54e8d988); // UA_RECORD_ORDER
+        assertEq(keccak256("UARevokeOrder(bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0xb5794e916523312dcd4225c8024c11f9fa4eb9e8e6c3bd525720e709e5a3f976); // UA_REVOKE_ORDER
+        assertEq(keccak256("UASetTaxRate(bytes32 from,address target,uint32 ratePpm,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x75a25977ad049952fa3befd753aa1c9dbc3a38461944061e37d2652fdc6d123f); // UA_SET_TAX_RATE
+        assertEq(keccak256("UASetTaxRecipient(bytes32 from,address target,bytes32 taxRecipient,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x35a73542fb90c355f539cf8ebee2a653d5a10216b659fc5304d32671e634750f); // UA_SET_TAX_RECIPIENT
+        assertEq(keccak256("UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0xcd4ab7150dc9686c7487ea24b688ec51c778304d95fa7690b26c39c447a9203d); // UA_SET_PROOF_STORE
+        assertEq(keccak256("UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0xc6020647b60fc768241df1c03875c3f208172161422171416b21769872766fc9); // UA_OPERATOR_TRANSFER
+        assertEq(keccak256("UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)"),
+            0xf14b3d3a4d329bfab6d7ab83d5a66e814aeec17aa1d0d74f55c7387dcfc20a5d); // UA_SET_WRAP_LIMITS
+        assertEq(keccak256("UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x53c3dd8795828323114f4a8181924254206647ac65db33075e95796d9d71ecbd); // UA_SET_WRAP_MEMBER
+        assertEq(keccak256("UASetAllowed(bytes32 from,address target,bytes32[] accounts,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0xa96171fcd5e3202f58eeb220838f1277c4d57b19b0cbea4dc7f324970253d232); // UA_SET_ALLOWED
+        assertEq(keccak256("UASetDenied(bytes32 from,address target,bytes32[] accounts,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"),
+            0x11df43474f648318e52abedb4d7a998e8e0ba0957b93b4d2ac967bc412355094); // UA_SET_DENIED
     }
 }

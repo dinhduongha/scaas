@@ -168,6 +168,11 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: usize) -> [u8; 32] {
     ::pqzl::enc_group_seed(seed_enc, g as u32)
 }
 
+/// An opening token's leg seed (spec K3-4, `pqz_enc_leg_seed`), `pkt_hash` = keccak256(pk_t). Pure hashing.
+pub fn enc_leg_seed(seed_enc: &[u8; 32], to_ua: &[u8; 32], pkt_hash: &[u8; 32]) -> [u8; 32] {
+    ::pqzl::enc_leg_seed(seed_enc, to_ua, pkt_hash)
+}
+
 /// Dec of `ct = u ‖ v` (16,512 B) with `s`: the 16 digits `M` and their noise (§4.2, `pqz_dec`).
 pub fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Option<([i64; 16], [i64; 16])> {
     dec_win(s, ct, 0)

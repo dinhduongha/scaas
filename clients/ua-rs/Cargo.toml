@@ -14,6 +14,9 @@ sha3 = "0.10"
 k256 = { version = "=0.14.0", default-features = false, features = ["arithmetic", "ecdsa", "schnorr", "hash2curve"] }
 p256 = { version = "=0.14.0", default-features = false, features = ["arithmetic", "ecdsa"] }
 sha2 = "=0.10.9"
+# the three-key model's HKDF-SHA256 (src/pqz3k.rs; the version already in the lockfile); feature `wallet` uses it too (SLIP-10,
+# EIP-2333, the PQ seeds), so it is no longer optional there
+hmac = "=0.12.1"
 curve25519-dalek = "4"
 ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["fast"] }
 ark-ff = "0.5"
@@ -40,7 +43,6 @@ slh-dsa = { version = "=0.2.0-rc.5", default-features = false, optional = true }
 bip39 = { version = "=2.2.2", default-features = false, features = ["alloc", "zeroize"], optional = true }
 bip32 = { version = "=0.6.0", default-features = false, features = ["alloc", "secp256k1"], optional = true }
 hkdf = { version = "=0.12.4", optional = true }
-hmac = { version = "=0.12.1", optional = true }
 zeroize = { version = "=1.8.2", optional = true }
 unicode-normalization = { version = "=0.1.26", optional = true }
 # ua-rs-sign T3a: the native addresses of clientkeys `describe` (cosmos RIPEMD-160 + bech32, Solana base58, Sui BLAKE2b-256);
@@ -93,7 +95,7 @@ js-sys = { version = "=0.3.107", optional = true }
 # `vectors` also keeps the facades' raw decrypt commands and zether-prover's `hazmat` (ARCH-POS-13, T15c: never in a release build).
 # `mlock` on by default for native builds (owner 2026-11-06, superseding MD-5's list); off Unix it compiles out (no libc).
 default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096", "mlock"]
-wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:hmac", "dep:zeroize", "dep:unicode-normalization",
+wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:zeroize", "dep:unicode-normalization",
     "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "dep:aes-gcm", "dep:aes-gcm-siv", "dep:base64ct", "dep:scrypt", "dep:js-sys", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
 zether = ["wallet", "dep:zether-prover"]
 pqz = ["wallet", "dep:pqz-ffi", "dep:subtle"]

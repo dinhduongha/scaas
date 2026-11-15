@@ -60,7 +60,7 @@ abstract contract ZetherReceiverSuite is ZetherRegFixture {
         v1[0] = 1;
         (bool ok2, bytes memory ret,) = _try(_multiTo(one, v1, BAL - 10 - 3 * DECOY_FEE, dave.ua));
         assertFalse(ok2);
-        assertEq(ret, abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, dId, uint8(0)), "control: a denied beneficiary");
+        assertEq(ret, _deniedErr(dId), "control: a denied beneficiary");
         (ok2, ret,) = _try(_multiTo(one, v1, BAL - 10 - 3 * DECOY_FEE, carol.ua));
         assertEq(ret, abi.encodeWithSelector(IRegulatedToken.FeeRecipientFrozen.selector, cId), "control: a frozen beneficiary");
     }
@@ -75,7 +75,29 @@ abstract contract ZetherReceiverSuite is ZetherRegFixture {
         (bool ok2, bytes memory ret,) = _try(abi.encodeWithSelector(IZetherToken.mtxUnshield.selector,
             _zBurn(pl, _none()), 10, nid(DENIED), pr));
         assertFalse(ok2);
-        assertEq(ret, abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, nid(DENIED), uint8(0)));
+        assertEq(ret, _deniedErr(nid(DENIED)));
+    }
+
+    /// Round 3s (spec §4.3, M5): the proof's sender (`_regZetherSender` → `_regSender`) is checked by the deny list before the
+    /// proof (`Denied(uaOf(yFrom))`); the registry's check is receiver-only (CTR-AS-07), so a sender the registry denies
+    /// sends. Each with its control: the sender not denied passes.
+    function test_deniedSender() public {
+        for (uint256 k; k < 4; ++k) {
+            bytes memory cd = _opCall(k, BAL, 0);
+            uint256 snap = vm.snapshotState();
+            (bool ok,,) = _try(cd);
+            assertTrue(ok, "control: the sender not denied");
+            vm.revertToState(snap);
+            _attestDenied(aId);
+            (bool ok2, bytes memory ret,) = _try(cd);
+            if (_lists()) {
+                assertFalse(ok2);
+                assertEq(ret, _deniedErr(aId), "the list checks the sender");
+            } else {
+                assertTrue(ok2, "the registry checks receivers only");
+            }
+            vm.revertToState(snap);
+        }
     }
 
     /// CTR-GOV-17: bit 8 is outside the confidential kinds' mask; the kind answers its id and `IRegulatedToken`.
@@ -107,4 +129,14 @@ contract ZetherReceiver10Test is ZetherReceiverSuite {
 
 contract ZetherReceiver11Test is ZetherReceiverSuite {
     function _isWrapped() internal pure override returns (bool) { return true; }
+}
+
+/// Round 3s (spec 2026-11-10-token-lists.md §4.3, §13 (2)): the same suite with `DENYLIST` as the token's own list: the
+/// confidential sites (sender, beneficiary, unshield recipient) refuse `Denied`; a denied decoy still receives (I9, M28).
+contract ZetherLists10Test is ZetherReceiver10Test {
+    function _lists() internal pure override returns (bool) { return true; }
+}
+
+contract ZetherLists11Test is ZetherReceiver11Test {
+    function _lists() internal pure override returns (bool) { return true; }
 }

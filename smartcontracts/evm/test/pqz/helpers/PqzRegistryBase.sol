@@ -4,8 +4,8 @@ pragma solidity ^0.8.24;
 import {PqzMock} from "./PqzMock.sol";
 import {UARegistry} from "../../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../../src/ua/UAKinds.sol";
-import {UAMldsaVerifier} from "../../../src/ua/MlDsa.sol";
-import {UAPqzVerifier} from "../../../src/pqz/UAPqzVerifier.sol";
+import {MldsaVerifier} from "../../../src/ua/MlDsa.sol";
+import {PqzKeyVerifier} from "../../../src/pqz/PqzKeyVerifier.sol";
 import {PqzSet} from "../../../src/pqz/PqzSet.sol";
 import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
 import {UACall} from "../../ua/UACall.sol";
@@ -39,7 +39,7 @@ bytes32 constant PQZL_ID = PqzSet.PQZL_ID;
 bytes32 constant PQZH_ID = PqzSet.PQZH_ID;
 
 /// @notice A gen-1 `UARegistry` as on chain 7622 (P6g plan D15): `mldsa65` on its precompile candidate (mocked: every
-///         input ⇒ 1 except the probe's invalid one) and the PQZ key verifier `UAPqzVerifier` (slot 0x0142; the `PQZ`
+///         input ⇒ 1 except the probe's invalid one) and the PQZ key verifier `PqzKeyVerifier` (slot 0x0142; the `PQZ`
 ///         precompile mocked, `PqzMock`). ML-DSA signatures are filler bytes of the right length; what is real is every
 ///         registry and verifier path between them.
 abstract contract PqzRegistryBase is PqzMock {
@@ -49,8 +49,8 @@ abstract contract PqzRegistryBase is PqzMock {
     uint64 internal constant CAP_PQZ = 3_500_000;
 
     UARegistry internal reg;
-    UAMldsaVerifier internal mlv;
-    UAPqzVerifier internal pqv;
+    MldsaVerifier internal mlv;
+    PqzKeyVerifier internal pqv;
     bytes internal regStmt; // statement_register.json: opTag ‖ PQZL id ‖ message ‖ pk (the self-test's), the set's
     bytes internal regProof; // proof_pqzl.json REGISTER, the set's
 
@@ -64,7 +64,7 @@ abstract contract PqzRegistryBase is PqzMock {
 
     /// The self-test's `R_REG` vector of `psid` as the probe (the pinned one, W-B); the mocked precompile accepts
     /// exactly that input.
-    function _newPqzVerifier(bytes32 psid) internal returns (UAPqzVerifier v) {
+    function _newPqzVerifier(bytes32 psid) internal returns (PqzKeyVerifier v) {
         regStmt = _vecHex("statement_register.json", ".rows[0].stmt");
         // PQZH: the set's `proof_pqzh.json` row 4 (REGISTER) extracted to `test/vectors/pqzh/<set>/register_proof.hex`
         // (its keccak = the set's selftest.json `register.pqzh.proof_keccak`; the probe pin `PqzSet.PROBE_PQZH` checks it):
@@ -77,12 +77,12 @@ abstract contract PqzRegistryBase is PqzMock {
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(0)));
         bytes memory st = bytes.concat(_slice(regStmt, 0, 32), psid, _slice(regStmt, 64, PqzSet.STMT_REGISTER - 64));
         vm.mockCall(PQZ, abi.encodePacked(uint8(3), uint32(PqzSet.STMT_REGISTER), st, regProof), abi.encode(uint256(1)));
-        v = new UAPqzVerifier(PQZ, psid, _slice(regStmt, 96, PqzSet.PK), bytes32(_slice(regStmt, 64, 32)), regProof);
+        v = new PqzKeyVerifier(PQZ, psid, _slice(regStmt, 96, PqzSet.PK), bytes32(_slice(regStmt, 64, 32)), regProof);
     }
 
     function _registryStack() internal {
         (bytes memory valid, bytes memory invalid) = _mockMlDsa();
-        mlv = new UAMldsaVerifier(UAKinds.MLDSA65, ML65, valid, invalid);
+        mlv = new MldsaVerifier(UAKinds.MLDSA65, ML65, valid, invalid);
         pqv = _newPqzVerifier(PQZL_ID);
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](4);
         k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);

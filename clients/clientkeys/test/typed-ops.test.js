@@ -16,6 +16,7 @@ import * as zether from '../src/zether.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, abiEncode, word } from '../src/bytes.js';
 import { expectedCall, norm } from '../scripts/typed-ops-expected.mjs';
 import * as reg from '../src/regulated.js';
+import { creationInitArgs, instanceInitCall } from '../src/factory.js';
 
 const { TYPED_OPS, hashTypedData, hashStruct, checkOp, checkWrapOrder, checkUAWrapOrder, checkTradeOrder, checkCancel, encodeType } = evm;
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/typed/typed_ops.json', import.meta.url)));
@@ -43,9 +44,11 @@ const PLAN = {
   UARollOver: '0xd5ad0bcf…0465fd', UAPqzRollOver: '0x900621af…44e200a9bb75', UAPrepareAcc: '0xe173bbc7…ef43cc',
   AddKey: '0x9d156f1f…7244a6bb', RemoveKey: '0xcef46d27…618280b3', RotateKey: '0x5b8f8761…64fb0777',
   SetGuardian: '0xd2603850…6b967689f6', CancelRecovery: '0x3df995dd…1213adda', Execute: '0xe0b649e9…c6053f1df7',
-  UAReceiverFee: '0xb12d2a08…7c75021a', UARelayFee: '0x220269b9…e493e43ea5', UAWrapOrder: '0x2a01cb57…fc04533c',
+  UAPayeeFee: '0x8a3955a6…6a16c7ca', UARelayFee: '0x220269b9…e493e43ea5', UAWrapOrder: '0x2a01cb57…fc04533c',
   CancelUAOrder: '0x47eb46c7…a1eaeba', CancelUAWrapOrder: '0x7679e176…2326d9d', CancelDexOrder: '0xcc35e105…f433c6',
   ZetherRollOver: '0x52e2c8f8…71768b1e', ZetherSetRollOverMode: '0x5f5a4ffa…4d55e09d', PqzAuth: '0x380b0de6…42644e6f',
+  // the three-key model (CTR-PQZ-41): the holder's signed rollover, PqzCore.ROLL_OVER_TYPEHASH (PqzThreeKeys.t.sol's pin)
+  PqzRollOver: '0x1517899d…625c41cb',
   UACancelNonce: '0xcd17c2129240241748e841a7f0572558b9c5a900a47bc540170a8c258d291c54',
   UASetMandate: '0x77cac4912d9b5ea899e4894cd527290f239809543c0a3604b89ef74796d88492',
   UASetPayee: '0xf0fb362dece88eadf659a55ed5c2606877293dbd69f9bb7eba806da921a77dc4',
@@ -59,7 +62,9 @@ const PLAN = {
 
 // Appendix X.4, the nested strings verbatim.
 const E = 'uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient';
-const TA = 'PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo)';
+// the three-key model (CTR-PQZ-38, -40): `uFrom` and the two `PqzOpening`s, the nested type first (sorted)
+const TA = 'PqzOpening(bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed)'
+  + 'PqzTransferArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor)';
 const LEG = 'PqzLeg(bytes32 ua,bytes v,bytes vAuditor)';
 const MA = 'PqzMultiArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo)';
 const BA = 'PqzBurnArgs(uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom)';
@@ -169,13 +174,16 @@ test('kept unchanged: the type strings the plan freezes', () => {
   const nested = (name) => TYPED_OPS[name].typeString.slice(name.length);
   assert.ok(nested('CancelUAOrder').endsWith(`UATradeOrder${order('bytes32')}`));
   assert.ok(nested('CancelDexOrder').endsWith(`DexOrder(address sellToken,TradeOrder order)TradeOrder${order('address')}`));
-  assert.ok(nested('UAReceiverFee').endsWith(`UAMetaTransfer${transfer('bytes32')}`));
+  assert.ok(nested('UAPayeeFee').endsWith(`UAMetaTransfer${transfer('bytes32')}`));
 });
 
 test('the table covers every allowlisted entry of every contract, one row per op, and only them', () => {
   const count = (contract, ua) => Object.values(TYPED_OPS).filter((o) => o.envelope && o.ua === ua && o.on.includes(contract)).length;
+  // the three-key model (CTR-PQZ-41): the PQZ kinds' `mtxRollOverSigned` carries the holder's own signature and is relayed on
+  // the generic paths only; its row is the raw `PqzRollOver`, no envelope row
+  const generic = (contract) => (/Pqz/.test(contract) ? 1 : 0);
   for (const [contract, addressN] of Object.entries(ADDRESS_ENTRIES)) {
-    assert.equal(count(contract, false) + count(contract, true), mtxSelectorCount(contract), contract);
+    assert.equal(count(contract, false) + count(contract, true) + generic(contract), mtxSelectorCount(contract), contract);
     assert.equal(count(contract, false), addressN, contract);
   }
   // ua-mtx-merge T11 (MD-7): 112 − 45 retired − the wallet's five address ops (Q6) + its six `UA<Op>` = 68; `UACancelNonce` an
@@ -186,8 +194,12 @@ test('the table covers every allowlisted entry of every contract, one row per op
   // ua-mtx-merge T76: + the router's three creations (`UACreateToken`, `UACreateDex`, `UACreateInstance`): 83, 73
   // T46 (group 3f): + the router's three PQZ verifier ops (`UAPqzSetVerifier`, `UAPqzCancelVerifier`, `UAPqzRevokeVerifier`): 86, 76
   // group 3h T61: + the router's `UASetProofStore` (bit 24): 87, 77
-  assert.equal(Object.keys(TYPED_OPS).length, 87);
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 77);
+  // group 3l: + the router's `UASetWrapLimits`, `UASetWrapMember`: 89, 79
+  // round 3r: + the router's fifteen admin ops of the factory and a compliance registry: 104, 94
+  // round 3s: + the router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`: 107, 97; round 3t: + `UASetVerifierFee`: 108, 98;
+  // the three-key model: + the raw `PqzRollOver`: 109, 98; round 3zc: + `UASetMaxSupply`, `UASetMaxWrapSupply`: 111, 100
+  assert.equal(Object.keys(TYPED_OPS).length, 111);
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.envelope).length, 100);
   for (const o of Object.values(TYPED_OPS)) {
     if (o.envelope) assert.ok(o.entry.startsWith('mtx'), o.primary);
     if (o.ua) assert.equal(o.fields[0].type, 'bytes32', o.primary);
@@ -310,7 +322,7 @@ test('the cancel row is ordered and native-capable: UACancelNonce(bytes32 from,u
 // governance T12 (spec §3.2): the router's rows read from the contract's own pin, test/governance/GovRouterTypehash.t.sol
 // (literal strings and `cast keccak` hashes), apart from the table in src/evm.js: a mismatch is a stop-and-report.
 // ua-mtx-merge T7 / T11 (R14): 19 `UA<Op>` rows on the `mtx<Op>` entries; the 19 address rows retired.
-test('GovernanceRouter: 33 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
+test('GovernanceRouter: 53 rows equal GovRouterTypehash.t.sol, target the first op word, fee mode NONE, the router domain only', () => {
   const sol = readFileSync(new URL('../../../smartcontracts/evm/test/governance/GovRouterTypehash.t.sol', import.meta.url), 'utf8');
   const pins = [...sol.matchAll(/keccak256\(\s*((?:"[^"]*"\s*)+)\)\);\s*assertEq\(T\.\w+, (0x[0-9a-f]{64})\)/g)]
     .map(([, lits, hash]) => [[...lits.matchAll(/"([^"]*)"/g)].map((x) => x[1]).join(''), hash]);
@@ -318,12 +330,17 @@ test('GovernanceRouter: 33 rows equal GovRouterTypehash.t.sol, target the first 
   // pay-meta-tax T39 / T41: + `UASetTaxRate`, `UASetTaxRecipient`; ua-mtx-merge T76: + the three creations
   // T46 (group 3f): the three PQZ verifier ops are checked against GovernanceRouterBase.sol in pqz-verdict.test.js, and here
   // too once this pin file carries them
-  const rows = pins.filter(([s]) => !s.startsWith('GrantTerms('));
+  // group 3l: the leg array's two struct types are pinned there too, not rows
+  // round 3r: + the fifteen admin ops of the factory and a compliance registry, and the `Env` struct pin
+  const rows = pins.filter(([s]) => !s.startsWith('GrantTerms(') && !s.startsWith('WrapLimit(') && !s.startsWith('WrapLegLimits(')
+    && !s.startsWith('Env(') && !s.startsWith('ChainEntries('));
   const pqzPinned = rows.filter(([s]) => s.startsWith('UAPqz')).length;
   assert.ok(pqzPinned === 0 || pqzPinned === 3, `${pqzPinned} PQZ verifier pins`);
-  // group 3h T61: + `UASetProofStore` (bit 24)
-  assert.equal(pins.length - pqzPinned, 34);
-  assert.equal(rows.length - pqzPinned, 33);
+  // group 3h T61: + `UASetProofStore` (bit 24); group 3l: + `UASetWrapLimits`, `UASetWrapMember` and the two struct pins;
+  // round 3s: + `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: + `UASetVerifierFee`
+  // CTR-GOV-27: + the `ChainEntries` struct pin; round 3zc: + `UASetMaxSupply`, `UASetMaxWrapSupply`
+  assert.equal(pins.length - pqzPinned, 61);
+  assert.equal(rows.length - pqzPinned, 56);
   for (const [s, hash] of rows) {
     const name = s.slice(0, s.indexOf('('));
     const op = TYPED_OPS[name];
@@ -337,19 +354,76 @@ test('GovernanceRouter: 33 rows equal GovRouterTypehash.t.sol, target the first 
     const r = V.ops[name];
     assert.deepEqual(Object.keys(r.domains), ['gov_router'], name);
     assert.equal(r.domains.gov_router.domain.name, 'SCaaS GovernanceRouter', name);
-    assert.deepEqual([r.message.mode, r.message.fee], [1, '0'], `${name}: fee mode NONE`);
+    // fee mode NONE; round 3r's `UAApproveTokenRelease`, round 3s's `UASetDenied`, round 3t's `UASetVerifierFee` and round 3zc's
+    // two cap setters leave the relayer unbound too (mode 0, the canonical-zero rows)
+    const open = ['UAApproveTokenRelease', 'UASetDenied', 'UASetVerifierFee', 'UASetMaxSupply', 'UASetMaxWrapSupply'].includes(name);
+    assert.deepEqual([r.message.mode, r.message.fee], [open ? 0 : 1, '0'], `${name}: fee mode NONE`);
   }
-  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 37); // 3h T61: + UASetProofStore
+  assert.equal(Object.values(TYPED_OPS).filter((o) => o.on.includes('GovernanceRouter')).length, 60); // 3h T61: + UASetProofStore; 3l: + 2; 3r: + 15; 3s: + 3; 3t: + 1; 3zc: + 2
   assert.equal(V.ops.UACancelNonce.domains.gov_router.domain.name, 'SCaaS GovernanceRouter');
   assert.equal(V.ops.CancelNonce.domains.gov_router, undefined);
+});
+
+// Round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §6.2): the lists and `enableFeature`: the struct words after `target`,
+// `accounts` hashed as the keccak256 of its words (the order and the length signed); `UASetDenied` at mode 0 with a non-zero
+// relayer and fee recipient signs both as 0.
+test('round 3s: UASetAllowed, UASetDenied, UAEnableFeature', () => {
+  const JUNK = '0x' + 'ba'.repeat(20);
+  for (const [name, params] of [['UASetAllowed', 'accounts,on,chainUid'], ['UASetDenied', 'accounts,on,chainUid'],
+    ['UAEnableFeature', 'bit,chainUid']]) {
+    assert.deepEqual(TYPED_OPS[name].fields.map((f) => f.name).slice(0, -7), ['from', 'target', ...params.split(',')], name);
+  }
+  const r = V.ops.UASetDenied;
+  assert.equal(r.message.accounts.length, 2);
+  const d = r.domains.gov_router;
+  const build = (m) => builders[`${bld('UASetDenied')}TypedData`]({ ...domainOf(r, d), message: m });
+  const open = build({ ...r.message, relayer: JUNK, feeRecipient: JUNK });
+  assert.deepEqual([open.message.relayer, open.message.feeRecipient], [ZERO, ZERO]);
+  assert.equal(hex(hashTypedData(open)), d.digest, 'an unbound relayer and fee recipient sign as 0');
+  const swapped = build({ ...r.message, accounts: [...r.message.accounts].reverse() });
+  assert.notEqual(hex(hashTypedData(swapped)), d.digest, 'the order of accounts is signed');
+  assert.equal(V.ops.UAEnableFeature.message.bit, 9);
+});
+
+// CTR-GOV-28 (owner 2026-11-13): every admin op of a token, the DEX or a registry signs the target's chain word as its last op
+// field (`bytes32 chainUid`, before the envelope); the rows carry context A's; another word is another digest.
+// Owner 2026-11-13 (renounceRole carries the chain word too): `UARenounceRole`, a holder's own, the thirteenth.
+// The Change of round 3zb + 3zc (O5, O6, owner 2026-11-13): every op of a role holder (24), `UASetWrapLimits` and the two new
+// cap setters too: 13 -> 40.
+const CHAIN_WORD_OPS = ['UAGrantRole', 'UARevokeRole', 'UASetGrant', 'UACancelGrant', 'UADisableFeature', 'UAEnableFeature',
+  'UAPqzSetVerifier', 'UAPqzCancelVerifier', 'UAPqzRevokeVerifier', 'UASetVerifierFee', 'UASetKycProvider', 'UASetCompliance',
+  'UARenounceRole',
+  'UAMint', 'UAMintToUA', 'UADisableWrap', 'UAProposeRate', 'UACancelRate', 'UAExecuteRate', 'UASetMarket', 'UASetExchangeTarget',
+  'UASetListedOnly', 'UASetFeeSplit', 'UAFreeze', 'UAUnfreeze', 'UAForceTransfer', 'UAPause', 'UAUnpause', 'UARecordOrder',
+  'UARevokeOrder', 'UASetTaxRate', 'UASetTaxRecipient', 'UASetProofStore', 'UAOperatorTransfer', 'UASetWrapLimits', 'UASetWrapMember',
+  'UASetAllowed', 'UASetDenied', 'UASetMaxSupply', 'UASetMaxWrapSupply'];
+test('CTR-GOV-28: the forty ops sign the chain word last', () => {
+  const ops = CHAIN_WORD_OPS;
+  assert.equal(ops.length, 40);
+  // the only router ops without the word: the nonce cancel, the admin's accept (CTR-GOV-28's reading) and the three creations
+  const without = Object.entries(TYPED_OPS).filter(([, o]) => o.on.includes('GovernanceRouter') && !o.fields.some((f) => f.name === 'chainUid'))
+    .map(([n]) => n);
+  assert.deepEqual(without, ['UACancelNonce', 'UAAcceptAdmin', 'UACreateToken', 'UACreateDex', 'UACreateInstance']);
+  for (const name of ops) {
+    const f = TYPED_OPS[name].fields;
+    assert.deepEqual([f.at(-8).name, f.at(-8).type], ['chainUid', 'bytes32'], name);
+    const r = V.ops[name];
+    const d = r.domains.gov_router;
+    assert.equal(r.message.chainUid, d.domain.salt, `${name}: context A's word (the router's salt there)`);
+    const build = (m) => builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: m });
+    assert.equal(hex(hashTypedData(build(r.message))), d.digest, `${name}: the row's digest`);
+    assert.notEqual(hex(hashTypedData(build({ ...r.message, chainUid: '0x' + '00'.repeat(32) }))), d.digest, `${name}: the word is signed`);
+  }
 });
 
 // ua-mtx-merge T34 (regulated-kinds spec §3.1, §7; CTR-GOV-20 Change, owner 2026-11-06): the router's eight regulated controls.
 // Each digest with a non-zero relayer and fee recipient left unbound (mode 0, then the row's mode 1 with feeRecipient unbound)
 // equals the digest over the canonical 0, as `MetaTxLib.canon` hashes it, and differs from a hash of the raw message.
-const REGULATED = { UAFreeze: 'account,ref,recordId', UAUnfreeze: 'account,ref', UAForceTransfer: 'recordId,amount',
-  UAPause: 'ref,until', UAUnpause: 'ref', UARecordOrder: 'orderId,documentHash,subject,beneficiary,maxAmount,freezeUntil',
-  UARevokeOrder: 'recordId,reasonRef', UAOperatorTransfer: 'account,to,amount,ref' };
+// The Change of CTR-GOV-28 in round 3zb + 3zc: each signs the token's chain word last.
+const REGULATED = { UAFreeze: 'account,ref,recordId,chainUid', UAUnfreeze: 'account,ref,chainUid', UAForceTransfer: 'recordId,amount,chainUid',
+  UAPause: 'ref,until,chainUid', UAUnpause: 'ref,chainUid',
+  UARecordOrder: 'orderId,documentHash,subject,beneficiary,maxAmount,freezeUntil,chainUid', UARevokeOrder: 'recordId,reasonRef,chainUid',
+  UAOperatorTransfer: 'account,to,amount,ref,chainUid' };
 test('the eight regulated router ops: from the signer, target, the direct entry\'s params; a non-zero unbound relayer or ' +
   'feeRecipient signs as 0', () => {
   const JUNK = '0x' + 'ba'.repeat(20);
@@ -377,6 +451,33 @@ test('the eight regulated router ops: from the signer, target, the direct entry\
   assert.ok(TYPED_OPS.UAOperatorTransfer.typeString.startsWith('UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,'));
   assert.equal(V.ops.UAFreeze.message.recordId, reg.recordId(V.ops.UARecordOrder.message.orderId, V.ops.UARecordOrder.message.subject,
     V.ops.UARecordOrder.message.beneficiary), 'one record across the rows');
+});
+
+// Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §3.5, §3.7): the admin's two supply caps. The struct words after
+// `target`: the new cap, the token's chain word; fee mode NONE with the relayer and the fee recipient unbound (mode 0): a non-zero
+// value in both signs as 0, as `MetaTxLib.canon` hashes it; the cap and the word are signed.
+test('round 3zc: UASetMaxSupply, UASetMaxWrapSupply; a non-zero unbound relayer or feeRecipient signs as 0', () => {
+  const JUNK = '0x' + 'ba'.repeat(20);
+  for (const [name, cap, entry] of [['UASetMaxSupply', 'maxSupply', 'mtxSetMaxSupply'],
+    ['UASetMaxWrapSupply', 'maxWrapSupply', 'mtxSetMaxWrapSupply']]) {
+    const op = TYPED_OPS[name];
+    assert.equal(op.typeString, `${name}(bytes32 from,address target,uint256 ${cap},bytes32 chainUid,${E})`, name);
+    assert.equal(op.entry, entry, name);
+    const r = V.ops[name];
+    const d = r.domains.gov_router;
+    assert.deepEqual([r.message.mode, r.message.fee, r.message.relayer, r.message.feeRecipient], [0, '0', ZERO, ZERO], name);
+    assert.equal(d.abi, `${entry}((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,`
+      + '(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))', name);
+    const build = (m) => builders[`${bld(name)}TypedData`]({ ...domainOf(r, d), message: m });
+    const open = build({ ...r.message, relayer: JUNK, feeRecipient: JUNK });
+    assert.deepEqual([open.message.relayer, open.message.feeRecipient], [ZERO, ZERO], name);
+    assert.equal(hex(hashTypedData(open)), d.digest, `${name}: an unbound relayer and fee recipient sign as 0`);
+    assert.notEqual(hex(hashStruct(open.types, name, { ...r.message, relayer: JUNK, feeRecipient: JUNK })), r.structHash,
+      `${name}: canon matters`);
+    assert.notEqual(hex(hashTypedData(build({ ...r.message, [cap]: '1' }))), d.digest, `${name}: the cap is signed`);
+    assert.notEqual(hex(hashTypedData(build({ ...r.message, chainUid: '0x' + '00'.repeat(32) }))), d.digest, `${name}: the word is signed`);
+  }
+  assert.ok(BigInt(V.ops.UASetMaxWrapSupply.message.maxWrapSupply) <= BigInt(V.ops.UASetMaxSupply.message.maxSupply), 'the wrap cap below');
 });
 
 test('a router row refuses a field off GrantTerms, a value out of range, a string bool, another domain; target is signed', () => {
@@ -423,7 +524,8 @@ test('checkOp refuses every changed field; the server supplies only the envelope
         const k = path.at(-1);
         const v = o[k];
         o[k] = typeof v === 'boolean' ? !v : typeof v === 'number' ? v + 1
-          : /^0x/.test(v) ? (v.length === 2 ? '0x00' : v.slice(0, -2) + (v.endsWith('00') ? '01' : '00')) : String(BigInt(v) + 1n);
+          : /^0x/.test(v) ? (v.length === 2 ? '0x00' : v.slice(0, -2) + (v.endsWith('00') ? '01' : '00'))
+            : /^[0-9]+$/.test(v) ? String(BigInt(v) + 1n) : `${v}!`; // round 3r: a `string` (a deprecation's reason)
         assert.throws(() => checkOp(bad, want), /Refusing to sign/, `${name} ${kind} ${path.join('.')}`);
       }
     }
@@ -505,10 +607,10 @@ test('canonical zero for an unbound relayer / fee recipient: envelope and nested
   assert.deepEqual([m(1).relayer, m(1).feeRecipient], [A, ZERO]);
   assert.deepEqual([m(2).relayer, m(2).feeRecipient], [ZERO, B]);
   assert.deepEqual([m(3).relayer, m(3).feeRecipient], [A, B]);
-  const open = evm.uaReceiverFeeTypedData({ ...at, message: { payment: { from: '0x' + '0a'.repeat(32), to: '0x' + '0b'.repeat(32), value: 1,
+  const open = evm.uaPayeeFeeTypedData({ ...at, message: { payment: { from: '0x' + '0a'.repeat(32), to: '0x' + '0b'.repeat(32), value: 1,
     mode: 0, relayer: A, feeRecipient: B }, fee: 1, feeRecipient: B, validUntil: 9 } }).message.payment;
   assert.deepEqual([open.relayer, open.feeRecipient], [ZERO, ZERO]);
-  const ua = evm.uaReceiverFeeTypedData({ ...at, message: { payment: { from: '0x' + '0a'.repeat(32), to: '0x' + '0b'.repeat(32), value: 1,
+  const ua = evm.uaPayeeFeeTypedData({ ...at, message: { payment: { from: '0x' + '0a'.repeat(32), to: '0x' + '0b'.repeat(32), value: 1,
     mode: 1, relayer: A, feeRecipient: B }, fee: 1, feeRecipient: B, validUntil: 9 } }).message.payment;
   assert.deepEqual([ua.relayer, ua.feeRecipient], [A, ZERO]);
   // the order's `relayer` is no envelope field: it stays
@@ -549,9 +651,17 @@ test('an unbound relayer or feeRecipient is signed as 0 and shown as unbound: ev
     relayer: ZERO, feeRecipient: ZERO } }))));
   // group 3h (plan T59): the six PQZ debit rows of release 3h leave both open (mode 0x20), given a non-zero relayer above; every
   // other row binds its relayer (the open case of a token op is the mode-0 burn above)
-  const open3h = rows().filter(([, x]) => x.release === '3h').length;
+  // the three-key model: the two single transfers moved again (release "three-keys"), open as before
+  const open3h = rows().filter(([, x]) => x.release === '3h' || (x.release === 'three-keys' && x.message.mode !== undefined)).length;
   assert.equal(open3h, 6, 'the six 3h rows');
-  assert.equal(relayerOpen, open3h, 'only the 3h rows leave the relayer open');
+  // round 3r: `UAApproveTokenRelease` leaves both open too (mode 0), given a non-zero relayer and fee recipient above
+  assert.equal(TYPED_OPS.UAApproveTokenRelease && V.ops.UAApproveTokenRelease.message.mode, 0);
+  // round 3t: `UASetVerifierFee` too (mode 0), the row with a non-zero unbound relayer and fee recipient given above
+  assert.equal(V.ops.UASetVerifierFee.message.mode, 0);
+  // round 3zc: `UASetMaxSupply`, `UASetMaxWrapSupply` too (mode 0)
+  assert.deepEqual([V.ops.UASetMaxSupply.message.mode, V.ops.UASetMaxWrapSupply.message.mode], [0, 0]);
+  assert.equal(relayerOpen, open3h + 5, 'the 3h rows, UAApproveTokenRelease, UASetDenied (round 3s), UASetVerifierFee and the two cap '
+    + 'setters (round 3zc) leave the relayer open');
 });
 
 test('the builder refuses a field off the struct, a value out of range, a domain the op does not live in', () => {
@@ -705,7 +815,7 @@ test('checkOp keeps a relayer or fee recipient the client named: refused when th
   const payment = { from: R_ME, to: '0x' + '22'.repeat(32), value: 5, entryRef: '0x' + '09'.repeat(32), batch: 1, nonce: 0, validUntil: 9, mode: 0,
     relayer: R_RELAYER, fee: 0, feeRecipient: ZERO };
   const rf = { payment, fee: 1, feeRecipient: R_FEE_TO, validUntil: 9 };
-  assert.throws(() => checkOp(evm.uaReceiverFeeTypedData({ ...R_AT, message: rf }), rWant(rf, { op: 'UAReceiverFee' })),
+  assert.throws(() => checkOp(evm.uaPayeeFeeTypedData({ ...R_AT, message: rf }), rWant(rf, { op: 'UAPayeeFee' })),
     /relayer you named is not bound/);
 });
 
@@ -771,7 +881,7 @@ test('calldata refuses what the entry cannot verify: the missing signature, an e
   for (const name of ['UARollOverSigned', 'UASetRollOverMode']) {
     assert.throws(() => builders[`${bld(name)}Calldata`](tdOf(name), one(name).signature), /Refusing to sign: ownerSig is required/, name);
   }
-  assert.throws(() => evm.uaReceiverFeeCalldata(tdOf('UAReceiverFee'), one('UAReceiverFee').signature), /payerSig is required/);
+  assert.throws(() => evm.uaPayeeFeeCalldata(tdOf('UAPayeeFee'), one('UAPayeeFee').signature), /payerSig is required/);
   assert.throws(() => evm.uaUnwrapCalldata(tdOf('UAUnwrap')), /signature is required/);
   assert.throws(() => evm.uaUnwrapCalldata(tdOf('UAUnwrap'), '0x'), /signature is required/);
   // the account's own: a raw signature is 65 bytes, anything else names its key
@@ -828,4 +938,52 @@ test('the router creations: initHash binds the extra bytes', () => {
     assert.throws(() => op.call(td, d.signature, { [field]: '0x00' }), /not the signed initHash/, name);
     assert.throws(() => op.call(td, d.signature, {}), new RegExp(`needs extra.${field}`), name);
   }
+});
+
+// Fable recheck 2 P3-7 (NODE-JOB-26): a creation's named config and its `initArgs` (smartcontracts/vectors/factory/create_config.json,
+// checked against the Solidity structs by forge `CreateConfigKat.t.sol`, read by the node too): the bytes a client sends in
+// `extra.initArgs` are the ones the node rebuilds from the named config, and they bind the signed `initHash`.
+test('the router creations: the named config vector binds initHash', () => {
+  const K = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/factory/create_config.json', import.meta.url)));
+  for (const [name, key] of [['UACreateToken', 'token'], ['UACreateDex', 'dex']]) {
+    const op = TYPED_OPS[name];
+    const d = V.ops[name].domains.gov_router;
+    const { initArgs, initHash } = K[key];
+    assert.equal(hex(keccak_256(fromHex(initArgs))), initHash, name);
+    const td = { types: op.types, primaryType: op.primary, domain: d.domain, message: { ...V.ops[name].message, initHash } };
+    const data = hex(op.call(td, d.signature, { initArgs }).data);
+    assert.ok(data.includes(initArgs.slice(2)), `${name}: the calldata carries initArgs`);
+    assert.throws(() => op.call(td, d.signature, { initArgs: d.extra.initArgs }), /not the signed initHash/, name);
+    // Fable recheck 3 R3-7: the named config itself encodes to the row's initArgs (the same struct order forge checks)
+    assert.equal(creationInitArgs(key, K[key].config), initArgs, `${name}: config -> initArgs`);
+    assert.throws(() => creationInitArgs(key, { ...K[key].config, extra: 1 }), /no field extra/, name);
+    const { grantDelay, ...missing } = K[key].config;
+    assert.throws(() => creationInitArgs(key, missing), /config.grantDelay: missing/, name);
+  }
+  const swapped = { ...K.dex.config, grantDelay: K.dex.config.relayerSharePpm, relayerSharePpm: Number(K.dex.config.grantDelay) };
+  assert.notEqual(creationInitArgs('dex', swapped), K.dex.initArgs, 'two fields swapped: other bytes');
+  assert.throws(() => creationInitArgs('token', { ...K.token.config, decimals: 256 }), /out of uint8/);
+  // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): `maxWrapSupply` and `roles.burner` are required by name, never a silent default
+  const { maxWrapSupply, ...noWrapCap } = K.token.config;
+  assert.throws(() => creationInitArgs('token', noWrapCap), /config.maxWrapSupply: missing/);
+  const { burner, ...fiveRoles } = K.token.config.roles;
+  assert.throws(() => creationInitArgs('token', { ...K.token.config, roles: fiveRoles }), /config.roles.burner: missing/);
+  assert.ok(maxWrapSupply !== undefined && burner !== undefined, 'the vector names both (create_config.json regenerated)');
+});
+
+// Owner 2026-11-12 (mtxCreateInstance, both forms): the `instance` row of create_config.json (forge test_instanceInitCallKat, the
+// node's instance_rows_take_init_call_or_a_named_config): PqChat's named config builds the row's initCall, whose keccak is the
+// signed initHash; the router entry carries those bytes and refuses others.
+test('the router creations: the instance row, named config and initCall', () => {
+  const K = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/factory/create_config.json', import.meta.url)));
+  const { contractClass, kind, config, initCall, initHash } = K.instance;
+  assert.equal(instanceInitCall(contractClass, kind, config), initCall);
+  assert.equal(hex(keccak_256(fromHex(initCall))), initHash);
+  const op = TYPED_OPS.UACreateInstance;
+  const d = V.ops.UACreateInstance.domains.gov_router;
+  const td = { types: op.types, primaryType: op.primary, domain: d.domain, message: { ...V.ops.UACreateInstance.message, initHash } };
+  assert.ok(hex(op.call(td, d.signature, { initCall }).data).includes(initCall.slice(2)), 'the calldata carries initCall');
+  assert.throws(() => op.call(td, d.signature, { initCall: d.extra.initCall }), /not the signed initHash/);
+  assert.throws(() => instanceInitCall(7, 0, config), /class 7 kind 0: no named config/);
+  assert.throws(() => instanceInitCall(3, 0, { ...config, admin: 1 }), /no field admin/);
 });

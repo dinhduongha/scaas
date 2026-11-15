@@ -11,6 +11,7 @@ import {IGovernance} from "../../../src/governance/IGovernance.sol";
 import {IZetherToken} from "../../../src/zether/IZetherToken.sol";
 import {ZetherLayer} from "../../../src/zether/ZetherLayer.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Plan T32 (owner 2026-11-05, CTR-GOV-20; CTR-GOV-13, CTR-GOV-17, never lose ciphertext; I8), the row T30 left open: on
 /// kinds 10 and 11 `operatorTransfer` moves public balances only. A Zether UA holding a public (UA-ledger) balance and a
@@ -34,7 +35,7 @@ abstract contract ZetherOperatorSuite is ZetherRegFixture {
         c.grantDelay = 0; // the grant applies at once
         tok = NormalZetherToken(factory.createToken(_kind(), 1, abi.encode(c), "zop"));
         vm.prank(ownerA);
-        IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK));
+        IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK), EnvKit.codeUidOf(address(IGovernance(address(tok)))));
         _funded(300);
         _public(tok, address(this), PUBLIC);
         tok.transferToUA(aId, PUBLIC);
@@ -70,7 +71,7 @@ abstract contract ZetherOperatorSuite is ZetherRegFixture {
         uint256 pool = tok.balanceOf(SHIELD_POOL_);
         vm.startStateDiffRecording();
         vm.prank(CLERK);
-        _r().operatorTransfer(aId, nid(BENEFICIARY), 20_000, REF);
+        _r().operatorTransfer(aId, nid(BENEFICIARY), 20_000, REF, EnvKit.codeUidOf(address(_r())));
         assertEq(_shieldedAccesses(), 0, "operatorTransfer reads and writes no shielded state (I8)");
 
         assertEq(tok.balanceOfUA(aId), PUBLIC - 20_000, "the public balance");
@@ -86,9 +87,9 @@ abstract contract ZetherOperatorSuite is ZetherRegFixture {
     function test_operatorTransferCannotReachShielded() public {
         vm.prank(CLERK);
         vm.expectRevert();
-        _r().operatorTransfer(aId, nid(BENEFICIARY), PUBLIC + 1, REF);
+        _r().operatorTransfer(aId, nid(BENEFICIARY), PUBLIC + 1, REF, EnvKit.codeUidOf(address(_r())));
         vm.prank(CLERK);
-        _r().operatorTransfer(aId, nid(BENEFICIARY), PUBLIC, REF); // the control
+        _r().operatorTransfer(aId, nid(BENEFICIARY), PUBLIC, REF, EnvKit.codeUidOf(address(_r()))); // the control
         assertTrue(_holds(tok, alice, 300, true), "the shielded balance");
     }
 }

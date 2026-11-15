@@ -81,7 +81,7 @@ void main() {
       expect(hx(groupTag(group: r['group'])!), r['GROUP']);
     }
     expect(groupTag(group: 'nope'), isNull);
-    expect(rows(k, 'purposes').length, 16); // 15 purposes (pqz-verdict: group 3f), `pop` has v1 and v2
+    expect(rows(k, 'purposes').length, 17); // 16 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44), `pop` has v1 and v2
     for (final r in rows(k, 'purposes')) {
       expect(hx(purposeTagV(purpose: r['purpose'], version: r['version'])), r['purposeTag']);
       if (r['version'] == 1) expect(hx(purposeTag(purpose: r['purpose'])), r['purposeTag']);
@@ -381,6 +381,17 @@ void main() {
       final m = uaMessage(kind: 0x0120, purpose: purposeTag(purpose: 'membership'), digest: d);
       expect(hx(m), r['message']);
       expect(hx(memberDigest(structureUa: ua, uaMsg: m)), r['memberDigest']);
+    }
+  });
+
+  test('msig update rows (CTR-UA-44)', () {
+    expect(rows(pv, 'msigUpdates').length, 4);
+    for (final r in rows(pv, 'msigUpdates')) {
+      final i = {for (final k in ['ua', 'chainUid', 'registry', 'version', 'threshold', 'members', 'enabled', 'validUntilBlock']) k: r[k]};
+      i['sigs'] = r['args']['sigs'];
+      final o = jsonDecode(msigUpdate(input: jsonEncode(i)));
+      expect([o['digest'], o['message'], o['memberDigest']], [r['digest'], r['message'], r['memberDigest']], reason: r['name']);
+      expect(o['args'], r['args'], reason: r['name']);
     }
   });
 
@@ -805,15 +816,15 @@ void main() {
     }
   });
 
-  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 24 UAArgument
+  // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 31 UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
   test('governance bits rows', () {
     final v = jsonDecode(File('$vectors/../governance/governance_bits.json').readAsStringSync()) as Map;
     final rows = v['bits'] as List;
-    expect(rows.length, 25);
+    expect(rows.length, 32); // round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS; round 3zb + 3zc: bits 30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE
     for (final r in rows) {
       expect(jsonDecode(governanceBit(bit: r['bit'] as int)), r, reason: 'bit ${r['bit']}');
     }
-    for (final bit in [25, 127, 128, 255, 256, -1]) {
+    for (final bit in [32, 127, 128, 255, 256, -1]) {
       expect(errCode(() => governanceBit(bit: bit)), 'UAArgument', reason: '$bit');
     }
   });
@@ -821,6 +832,7 @@ void main() {
   // pay-meta-tax T41, T83: paymeta.json v3 rows (save without a payNo refused; the UUIDv7 shown) and paytax.json's UAPayWithTax digest row
   test('pay rows', () {
     final pm = jsonDecode(File('$vectors/../metatx/paymeta.json').readAsStringSync()) as List;
+    expect(pm.any((r) => !(r['accepted'] as bool)), isTrue, reason: 'a refused row');
     for (final r in pm) {
       final i = jsonEncode({'salt': r['salt'], 'payNo': r['payNo'], 'save': r['save'], 'schema': r['schema'], 'body': r['body']});
       if (r['accepted'] as bool) {

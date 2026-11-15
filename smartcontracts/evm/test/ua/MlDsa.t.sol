@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {PqVectors} from "./PqVectors.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
 import {Shake} from "../../src/ua/Shake.sol";
-import {MlDsa, UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {MlDsa, MldsaVerifier} from "../../src/ua/MlDsa.sol";
 
 /// FIPS 204 Table 1, ML-DSA-87, written out here (the test's own copy of `MlDsa.params87()`).
 function p87() pure returns (MlDsa.Params memory) {
@@ -97,11 +97,11 @@ contract MlDsaTest is PqVectors {
     }
 
     function test_kat_mldsa44() public {
-        _uaVector("mldsa44", address(new UAMldsaVerifier(PqUA.MLDSA44, address(0), "", "")), PqUA.MLDSA44);
+        _uaVector("mldsa44", address(new MldsaVerifier(PqUA.MLDSA44, address(0), "", "")), PqUA.MLDSA44);
     }
 
     function test_kat_mldsa65() public {
-        _uaVector("mldsa65", address(new UAMldsaVerifier(PqUA.MLDSA65, address(0), "", "")), PqUA.MLDSA65);
+        _uaVector("mldsa65", address(new MldsaVerifier(PqUA.MLDSA65, address(0), "", "")), PqUA.MLDSA65);
     }
 
     /// The EIP-8051 expanded key: Solidity and clientkeys produce the same bytes, and it verifies the same signature.
@@ -112,7 +112,7 @@ contract MlDsaTest is PqVectors {
         uint16[2] memory kinds = [PqUA.MLDSA44, PqUA.MLDSA65];
         for (uint256 i; i < 2; ++i) {
             uint256 level = i == 0 ? 44 : 65;
-            bytes memory ek = new UAMldsaVerifier(kinds[i], address(0), "", "").expandedKey(_k(kat, names[i], "pk"));
+            bytes memory ek = new MldsaVerifier(kinds[i], address(0), "", "").expandedKey(_k(kat, names[i], "pk"));
             assertEq(ek, _k(kat, names[i], "expanded_key"), names[i]);
             bytes memory mprime = abi.encodePacked(bytes2(0), _k(kat, names[i], "signed_message"));
             bytes memory sig = _k(kat, names[i], "sig");
@@ -134,7 +134,7 @@ contract MlDsaTest is PqVectors {
         string[2] memory names = ["mldsa44", "mldsa65"];
         uint16[2] memory kinds = [PqUA.MLDSA44, PqUA.MLDSA65];
         for (uint256 i; i < 2; ++i) {
-            UAMldsaVerifier v = new UAMldsaVerifier(kinds[i], address(0), "", "");
+            MldsaVerifier v = new MldsaVerifier(kinds[i], address(0), "", "");
             bytes memory pk = _k(kat, names[i], "pk");
             uint256 parts = v.expandedKeyParts();
             assertEq(parts, i + 1, "parts");
@@ -149,7 +149,7 @@ contract MlDsaTest is PqVectors {
                 all = bytes.concat(all, part);
             }
             assertEq(all, _k(kat, names[i], "expanded_key"), names[i]);
-            vm.expectRevert(abi.encodeWithSelector(UAMldsaVerifier.UAMldsaPart.selector, parts));
+            vm.expectRevert(abi.encodeWithSelector(MldsaVerifier.UAMldsaPart.selector, parts));
             v.expandedKeyPart(pk, parts);
             bytes32 m = bytes32(_k(kat, names[i], "ua_msg"));
             bytes memory sig = _k(kat, names[i], "sig");
@@ -221,11 +221,11 @@ contract MlDsaTest is PqVectors {
             bytes memory valid = _k(kat, names[i], "eip8355_probe_valid");
             bytes memory invalid = _k(kat, names[i], "eip8355_probe_invalid");
             vm.etch(pc, ""); // no code: probe fails, pure Solidity
-            assertEq(new UAMldsaVerifier(kinds[i], pc, valid, invalid).PRECOMPILE(), address(0));
+            assertEq(new MldsaVerifier(kinds[i], pc, valid, invalid).PRECOMPILE(), address(0));
             vm.etch(pc, address(new AlwaysOne()).code); // answers 1 to everything: refused
-            assertEq(new UAMldsaVerifier(kinds[i], pc, valid, invalid).PRECOMPILE(), address(0));
+            assertEq(new MldsaVerifier(kinds[i], pc, valid, invalid).PRECOMPILE(), address(0));
             vm.etch(pc, address(new Eip8355Emulator()).code);
-            UAMldsaVerifier v = new UAMldsaVerifier(kinds[i], pc, valid, invalid);
+            MldsaVerifier v = new MldsaVerifier(kinds[i], pc, valid, invalid);
             assertEq(v.PRECOMPILE(), pc);
             bytes32 uaMsg = bytes32(_k(kat, names[i], "ua_msg"));
             assertTrue(v.verify(_k(kat, names[i], "pk"), uaMsg, _k(kat, names[i], "sig")));
@@ -237,18 +237,18 @@ contract MlDsaTest is PqVectors {
     }
 
     function test_refusesOtherKinds() public {
-        vm.expectRevert(abi.encodeWithSelector(UAMldsaVerifier.UAMldsaKind.selector, PqUA.FNDSA512));
-        new UAMldsaVerifier(PqUA.FNDSA512, address(0), "", "");
+        vm.expectRevert(abi.encodeWithSelector(MldsaVerifier.UAMldsaKind.selector, PqUA.FNDSA512));
+        new MldsaVerifier(PqUA.FNDSA512, address(0), "", "");
     }
 
     function test_malformed_mldsa() public {
         string memory kat = _kat();
-        UAMldsaVerifier v = new UAMldsaVerifier(PqUA.MLDSA44, address(0), "", "");
+        MldsaVerifier v = new MldsaVerifier(PqUA.MLDSA44, address(0), "", "");
         bytes memory pk = _k(kat, "mldsa44", "pk");
         bytes memory sig = _k(kat, "mldsa44", "sig");
         bytes32 m = bytes32(_k(kat, "mldsa44", "ua_msg"));
         assertFalse(v.verify(_k(kat, "mldsa65", "pk"), m, sig)); // a 65 key on the 44 verifier
-        assertFalse(new UAMldsaVerifier(PqUA.MLDSA65, address(0), "", "").verify(pk, m, sig)); // 44 on the 65 verifier
+        assertFalse(new MldsaVerifier(PqUA.MLDSA65, address(0), "", "").verify(pk, m, sig)); // 44 on the 65 verifier
         assertFalse(v.verify(pk, m, bytes.concat(sig, hex"00")));
         sig[2420 - 4] = 0x51; // hint count of row 0 above ω = 80
         assertFalse(v.verify(pk, m, sig));
@@ -325,7 +325,7 @@ contract MlDsaTest is PqVectors {
         string memory kat = _kat();
         address pc = 0x000000000000000000000000000000005caA0014; // the SCaaS testnet's MLDSA87
         vm.etch(pc, address(new Eip8355Emulator87()).code);
-        UAMldsaVerifier v = new UAMldsaVerifier(
+        MldsaVerifier v = new MldsaVerifier(
             PqUA.MLDSA87, pc, _k(kat, "mldsa87", "eip8355_probe_valid"), _k(kat, "mldsa87", "eip8355_probe_invalid"));
         assertEq(v.PRECOMPILE(), pc);
         _uaVector("mldsa87", address(v), PqUA.MLDSA87);
@@ -333,7 +333,7 @@ contract MlDsaTest is PqVectors {
     }
 
     function deploy87(address pc, bytes calldata valid, bytes calldata invalid) external returns (address) {
-        return address(new UAMldsaVerifier(PqUA.MLDSA87, pc, valid, invalid));
+        return address(new MldsaVerifier(PqUA.MLDSA87, pc, valid, invalid));
     }
 
     /// CTR-UA-39 Q1: no verifier for `mldsa87` without a precompile that answers the probe (none, one that says 1 to everything,
@@ -358,15 +358,15 @@ contract MlDsaTest is PqVectors {
         vm.expectRevert(no);
         this.deploy87(pc, _k(kat, "mldsa65", "eip8355_probe_valid"), _k(kat, "mldsa65", "eip8355_probe_invalid"));
         vm.etch(pc, address(new Eip8355Emulator87()).code);
-        UAMldsaVerifier v = new UAMldsaVerifier(PqUA.MLDSA87, pc, valid, invalid);
+        MldsaVerifier v = new MldsaVerifier(PqUA.MLDSA87, pc, valid, invalid);
         assertEq(v.PRECOMPILE(), pc);
         assertEq(v.expandedKeyParts(), 0, "no cache");
         bytes memory pk = _k(kat, "mldsa87", "pk");
-        vm.expectRevert(abi.encodeWithSelector(UAMldsaVerifier.UAMldsaPart.selector, 0));
+        vm.expectRevert(abi.encodeWithSelector(MldsaVerifier.UAMldsaPart.selector, 0));
         v.expandedKeyPart(pk, 0);
         assertFalse(v.verifyCached("", bytes32(_k(kat, "mldsa87", "ua_msg")), _k(kat, "mldsa87", "sig")));
         // the 44 / 65 verifiers keep their Solidity path without a precompile
-        assertEq(new UAMldsaVerifier(PqUA.MLDSA65, address(0), "", "").PRECOMPILE(), address(0));
+        assertEq(new MldsaVerifier(PqUA.MLDSA65, address(0), "", "").PRECOMPILE(), address(0));
     }
 
     /// The precompile path checks the lengths before calling; the probe needs this level's exact split and a non-reverting
@@ -378,9 +378,9 @@ contract MlDsaTest is PqVectors {
         bytes memory valid44 = _k(kat, "mldsa44", "eip8355_probe_valid");
         bytes memory invalid44 = _k(kat, "mldsa44", "eip8355_probe_invalid");
         vm.etch(pc, address(new Eip8355Emulator()).code); // answers both levels
-        UAMldsaVerifier v = new UAMldsaVerifier(PqUA.MLDSA44, pc, valid44, invalid44);
+        MldsaVerifier v = new MldsaVerifier(PqUA.MLDSA44, pc, valid44, invalid44);
         assertEq(v.PRECOMPILE(), pc);
-        assertEq(new UAMldsaVerifier(PqUA.MLDSA44, pc, _k(kat, "mldsa65", "eip8355_probe_valid"),
+        assertEq(new MldsaVerifier(PqUA.MLDSA44, pc, _k(kat, "mldsa65", "eip8355_probe_valid"),
             _k(kat, "mldsa65", "eip8355_probe_invalid")).PRECOMPILE(), address(0), "65 probe on the 44 verifier");
         vm.etch(pc, address(new AlwaysOne()).code); // now any call would answer 1
         bytes memory pk = _k(kat, "mldsa44", "pk");
@@ -389,7 +389,7 @@ contract MlDsaTest is PqVectors {
         assertFalse(v.verify(bytes.concat(pk, hex"00"), m, sig), "pk length");
         assertFalse(v.verify(pk, m, bytes.concat(sig, hex"00")), "sig length");
         vm.etch(pc, address(new RevertsOnInvalid()).code);
-        assertEq(new UAMldsaVerifier(PqUA.MLDSA44, pc, valid44, invalid44).PRECOMPILE(), address(0), "reverts on invalid");
+        assertEq(new MldsaVerifier(PqUA.MLDSA44, pc, valid44, invalid44).PRECOMPILE(), address(0), "reverts on invalid");
     }
 
     /// The degenerate expanded key `Â = 0`, `t̂1 = 0` with the vector's `tr` (level 44 for i = 0, else 65): it accepts

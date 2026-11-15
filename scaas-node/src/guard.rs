@@ -4,7 +4,8 @@
 //! - a job runs only as a named entry: its selector is a row of the entry table (`crate::typed`) on the contract kind it
 //!   names, and the target meets that kind's rule — a token entry on a registered token, a wallet's or account's on any
 //!   bound contract that is no token or factory, a DEX entry on a listed DEX, a registry or factory entry on the configured
-//!   one (a `transfer` of the lane's own balance is no row; there is no hex path);
+//!   one, a `PqChat` entry on an instance the token factory lists as class 3, its unsigned writes paid or under the lane
+//!   policy (a `transfer` of the lane's own balance is no row; there is no hex path);
 //! - a meta-transaction runs only on a contract bound to this chain (`chainUid()`, the salt every signature on it
 //!   commits to); a `MetaTransfer` only on a registered token (answering `chainUid()` costs nothing to deploy);
 //! - a signature that can be checked here is (the typed digest, computed locally): a native signer that recovers to
@@ -25,7 +26,7 @@ use alloy::primitives::{Address, Bytes, B256};
 use alloy::sol_types::{SolCall, SolValue};
 use tracing::warn;
 
-use crate::abi::{IMtxIds, IPqzToken, IRelayFeeRouter, ISCaaSDex, IToken, IUALedger, IUARegistry};
+use crate::abi::{IMtxIds, IModuleGroup, IOpenFactory, IPqzToken, IRelayFeeRouter, ISCaaSDex, IToken, IUAKindOf, IUALedger, IUARegistry, IERC165};
 use crate::chain::{BlockGas, Chain, SimError};
 use crate::config::ChainCfg;
 use crate::metatx::{Mtx, UaMtx};
@@ -55,7 +56,14 @@ pub enum Rule {
     /// One of the chain's `GovernanceRouter`s (`governance_routers`), bound to this chain (spec 2026-11-02-governance §12.7): its
     /// typed entries only; a router is no target of any other kind's row.
     GovRouter,
+    /// An instance of a generic class of the chain's `OpenFactory` (`token_factory`, factory index spec §8.6): `infoOf(target)` lists
+    /// this `contractClass` with `version ≠ 0` (`pqchat`: class 3, UA-7 P32, topics spec P45). An instance answers no `chainUid()`
+    /// (its records are portable): the listing binds it, and no other kind's rule takes it.
+    FactoryClass(u16),
 }
+
+/// `PqChat`'s class on `OpenFactory`'s generic path (D22).
+pub const CLASS_PQCHAT: u16 = 3;
 
 /// The rule of a contract kind (`typed::Row::contracts`).
 pub fn rule_of(contract: &str) -> Option<Rule> {
@@ -66,6 +74,7 @@ pub fn rule_of(contract: &str) -> Option<Rule> {
         "registry" => Rule::UaRegistry,
         "factory" => Rule::AccountFactory,
         "gov_router" => Rule::GovRouter,
+        "pqchat" => Rule::FactoryClass(CLASS_PQCHAT),
         _ => return None,
     })
 }
@@ -104,31 +113,79 @@ async fn no_pending_party(chain: &Chain, w: &Work) -> Result<(), Refusal> {
         Ok(None) => return Ok(()),
         Err(e) => return read("PQZ parties")(e).map_or(Ok(()), Err),
     };
+    // NODE-JOB-28 (CTR-UA-43): the key reads follow the token's scope, as its `_keyOf` / `_keyAtOf`
+    let scope = match crate::pqz::key_scope(chain, w.to).await {
+        Ok((s, _)) => s,
+        Err(e) => return read("pqzVerifyConfig")(e).map_or(Ok(()), Err),
+    };
     for ua in parties {
-        let cur = match chain.call_view(registry, IUARegistry::pqzKeyOfCall { ua }).await {
+        let cur = match scope {
+            None => chain.call_view(registry, IUARegistry::pqzKeyOfCall { ua }).await.map(|c| (c.version, c.ptr)),
+            Some(scope) => chain.call_view(registry, IUARegistry::pqzScopedKeyOfCall { ua, scope }).await.map(|c| (c.version, c.ptr)),
+        };
+        let (cur_version, cur_ptr) = match cur {
             Ok(c) => c,
             Err(e) => match read("pqzKeyOf")(e) { Some(r) => return Err(r), None => continue },
         };
-        let latest = match chain.call_view(registry, IUARegistry::pqzKeyLatestCall { ua }).await {
+        let latest = match scope {
+            None => chain.call_view(registry, IUARegistry::pqzKeyLatestCall { ua }).await,
+            Some(scope) => chain.call_view(registry, IUARegistry::pqzScopedKeyLatestCall { ua, scope }).await,
+        };
+        let latest = match latest {
             Ok(l) => l,
             Err(e) => match read("pqzKeyLatest")(e) { Some(r) => return Err(r), None => continue },
         };
-        if latest <= cur.version || cur.ptr == Address::ZERO {
+        if latest <= cur_version || cur_ptr == Address::ZERO {
             continue;
         }
-        let at = match chain.call_view(registry, IUARegistry::pqzKeyAtCall { ua, version: latest }).await {
+        let at = match scope {
+            None => chain.call_view(registry, IUARegistry::pqzKeyAtCall { ua, version: latest }).await.map(|a| a.ptr),
+            Some(scope) => chain.call_view(registry, IUARegistry::pqzScopedKeyAtCall { ua, scope, version: latest }).await.map(|a| a.ptr),
+        };
+        let at_ptr = match at {
             Ok(a) => a,
             Err(e) => match read("pqzKeyAt")(e) { Some(r) => return Err(r), None => continue },
         };
         let len = |a| async move { chain.code_len(a).await };
-        let (l, c) = match (len(at.ptr).await, len(cur.ptr).await) {
+        let (l, c) = match (len(at_ptr).await, len(cur_ptr).await) {
             (Ok(l), Ok(c)) => (l, c),
             (Err(e), _) | (_, Err(e)) => match read("eth_getCode")(e) { Some(r) => return Err(r), None => continue },
         };
         if l == c {
             return Err(Refusal::Policy(format!("PQZ_KEY_ROTATION_PENDING: {ua:#x} has version {latest} stored and not yet current \
-                (current {}); prove against its current key once version {latest} is current", cur.version)));
+                (current {cur_version}); prove against its current key once version {latest} is current")));
         }
+    }
+    Ok(())
+}
+
+/// NODE-JOB-28 (spec 2026-11-13-pqz-three-keys §3, §7; CTR-PQZ-41): on a token with the opening on, the public rollover
+/// (`UAPqzRollOver`, `mtxRollOver`) is refused `ROLLOVER_SIGNED_ONLY`, zero sends (the token reverts `RollOverSignedOnly`; the
+/// holder signs `mtxRollOverSigned`, row `PqzRollOver`); on an `OFFCHAIN` token a debit with auditor copies whose auditor has no
+/// key of the token's scope is `AUDITOR_KEY_MISSING`, back in the queue (the auditor may register), before anything is sent.
+async fn three_keys(chain: &Chain, w: &Work) -> Result<(), Refusal> {
+    let Some(t) = w.typed.as_ref().filter(|t| t.contract == "pqz") else { return Ok(()) };
+    let rollover = w.data.get(..4).and_then(|s| row(s.try_into().ok()?, "pqz")).is_some_and(|r| r.name == "UAPqzRollOver");
+    if !rollover && !t.pqz_auditor {
+        return Ok(());
+    }
+    let tr = |what: &str, e: SimError| match e {
+        SimError::Transport(e) => Refusal::Transport(format!("{what}: {e}")),
+        SimError::Revert(e) => Refusal::Policy(format!("{what}: {e}")),
+    };
+    let (scope, opening) = crate::pqz::key_scope(chain, w.to).await.map_err(|e| tr("pqzVerifyConfig()", e))?;
+    if rollover && opening {
+        return Err(Refusal::Policy(format!("ROLLOVER_SIGNED_ONLY: {:#x} has the opening on: only its holder rolls over, by the \
+            signed mtxRollOverSigned (row PqzRollOver); no public rollover there", w.to)));
+    }
+    let Some(scope) = scope.filter(|_| t.pqz_auditor) else { return Ok(()) };
+    let registry = chain.call_view(w.to, IUALedger::registryCall {}).await.map_err(|e| tr("registry()", e))?;
+    let auditor = chain.call_view(w.to, IPqzToken::auditorUACall {}).await.map_err(|e| tr("auditorUA()", e))?;
+    let k = chain.call_view(registry, IUARegistry::pqzScopedKeyOfCall { ua: auditor, scope }).await
+        .map_err(|e| tr("pqzScopedKeyOf", e))?;
+    if k.ptr == Address::ZERO {
+        return Err(Refusal::Transport(format!("AUDITOR_KEY_MISSING: the auditor {auditor:#x} of {:#x} has no key of scope {scope:#x} \
+            (pqzScopedKeyOf): a debit with auditor copies cannot land until it registers one", w.to)));
     }
     Ok(())
 }
@@ -139,6 +196,181 @@ pub async fn pqz_rotated(chain: &Chain, w: &Work, lookback: u64) -> anyhow::Resu
     let Some((registry, parties)) = pqz_parties(chain, w).await.map_err(|e| anyhow::anyhow!("{e:?}"))? else { return Ok(false) };
     chain.pqz_key_current_since(registry, &parties, lookback).await
 }
+
+/// Round 3t (CTR-PQZ-36, spec §10): a PQZ job's token emitted a `VerifierFeeSet` that moved the fee ([`fee_moves`]) in the last
+/// `lookback` blocks (the event is
+/// evidence of the cause of an `AuthRejected` / `PqzVerdictMismatch(3)`, not proof); `Ok(false)` for any other job.
+pub async fn pqz_fee_changed(chain: &Chain, w: &Work, lookback: u64) -> anyhow::Result<bool> {
+    if w.typed.as_ref().is_none_or(|t| t.contract != "pqz") {
+        return Ok(false);
+    }
+    let logs = chain.logs_since(w.to, <IPqzToken::VerifierFeeSet as alloy::sol_types::SolEvent>::SIGNATURE_HASH, lookback).await?;
+    Ok(fee_moves(&logs))
+}
+
+/// Fable 3r3s3t P3-4: a `VerifierFeeSet` moved the fee (`previous != next`); a cancel `(cur, cur)` moves nothing.
+fn fee_moves(logs: &[alloy::rpc::types::Log]) -> bool {
+    logs.iter().any(|l| l.log_decode::<IPqzToken::VerifierFeeSet>().is_ok_and(|e| e.inner.previous != e.inner.next))
+}
+
+/// Group 3g: how far back a party's `UAPqzKeyCurrent` (and round 3t a token's `VerifierFeeSet`) counts as "since intake".
+// ponytail: a fixed window, not the job's own intake block (the pull path carries none); a job older than this window that
+// meets a rotation is reported `dead` with `ProofRejected`; use the job's claim block once the node's own queue carries it
+pub const ROTATION_LOOKBACK: u64 = 10_000;
+
+/// What a refused simulation of an EVM job means (NODE-LANE-09; Fable E N-1: one classifier for every runner of the EVM
+/// contracts, the pipelined `Submitter` and the generic `lane_runner` (Hedera), so one rule on every chain).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Verdict {
+    /// Done on chain: `Some(label)` is the job's error (`already_invalidated`, `LIQUIDITY_ORDER_CLOSED: …`); `None`: the subject's
+    /// nonce is used, the runner labels by whom.
+    Consumed(Option<String>),
+    /// A refusal a later block may lift, by name: back in the queue, never `dead` while the op may still land.
+    Requeue(String),
+    /// Never sendable as named.
+    Dead(String),
+}
+
+/// R80: `mtxNonce(from, batch) > nonce`: the meta-tx's subject nonce is used (by whom: `classify`). `Ok(false)` for a job without
+/// an envelope. An RPC error is `Err`: no conclusion (fail closed).
+pub async fn consumed(chain: &Chain, w: &Work) -> anyhow::Result<bool> {
+    let Some(m) = &w.meta else { return Ok(false) };
+    chain.nonce_spent(m).await
+}
+
+/// [`Verdict`] of a simulation (or the guard's build step) that refused `w` with `reason` (a `decode_revert` string or a named
+/// refusal): a liquidity order already pulled, an invalidation in force or a used subject nonce are `consumed` (G6, MT-8, R80); a
+/// PQZ debit over the lane's cap on a `LOG` token, a starved capability check, a regulated refusal (spec §7), a wrap limit
+/// (group 3l), a liftable PQZ verdict refusal (group 3f), a fee word moved (round 3t), a rotated or unknown key version
+/// (group 3g) are back in the queue by name; the job's own subject off a list, and anything else, `dead`.
+pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict {
+    use crate::abi::PqzRefusal;
+    if reason.starts_with(LIQUIDITY_ORDER_CLOSED) {
+        return Verdict::Consumed(Some(reason));
+    }
+    // NODE-JOB-24 (group 3h, pqz-proof-path spec §10): under `LOG` a holder of bit 24 may switch the token to `NONE` and the job
+    // may land: `PROOF_STORE_OVER_LANE_CAP`, back in the queue; under `NONE`, or without the view, the plain refusal
+    if over_cap(&reason) && crate::pqz::is_debit(w) {
+        match chain.call_view(w.to, IPqzToken::proofStoreCall {}).await {
+            Ok(m) if m == crate::abi::PROOF_STORE_LOG => return Verdict::Requeue(format!("PROOF_STORE_OVER_LANE_CAP: {reason}")),
+            Ok(_) | Err(SimError::Revert(_)) => {}
+            Err(SimError::Transport(e)) => return Verdict::Requeue(format!("proofStore(): {e}; {reason}")),
+        }
+    }
+    // re-check P3 (spec §11): a starved T7 on a DEX the guard found marked is gas, not a wrong DEX
+    if liquidity_starved(&w.data, &reason) {
+        return Verdict::Requeue(format!("simulate: {reason}: the tokens' capability check starved, retry"));
+    }
+    if already_invalidated(&w.data, &reason) {
+        return Verdict::Consumed(Some("already_invalidated".into()));
+    }
+    match consumed(chain, w).await {
+        Ok(true) => return Verdict::Consumed(None),
+        Ok(false) => {}
+        Err(e) => return Verdict::Requeue(format!("mtxNonce: {e:#}")),
+    }
+    // round 3s (spec 2026-11-10-token-lists.md §9, Fable P3-8): the job's own subject off the allow list or on the deny list:
+    // refused by name, not waiting as a liftable refusal
+    if let Some(code) = w.meta.as_ref().and_then(|m| crate::abi::own_list_refusal(&reason, m.from)) {
+        return Verdict::Dead(format!("{code}: {reason}"));
+    }
+    // regulated-kinds spec §7: a freeze, a pause, an eligibility or the registry may lift and the payload may still land
+    if crate::abi::regulated_refusal(&reason).is_some() {
+        return Verdict::Requeue(format!("REGULATED_REFUSED: {reason}"));
+    }
+    // group 3l (wrap limits spec §9): a window ends, a member is added, a redeemer is granted, a later wrap raises the entitlement
+    if crate::abi::wrap_limit_refusal(&reason).is_some() {
+        return Verdict::Requeue(format!("WRAP_LIMIT_REFUSED: {reason}"));
+    }
+    // round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §4): a wrap or a mint above a cap (an unwrap or a cap change lifts
+    // it), a cap setter before its `eta` (`GrantNotReady(31, …)`, the clock lifts it) or under a floor at its apply (supply or
+    // the other setter lifts it); `MaxSupplyInvalid`, `MaxWrapSupplyInvalid` and `FeatureNotSet(31)` stay `dead` by name below
+    if crate::abi::supply_cap_refusal(&reason).is_some_and(|(_, liftable)| liftable)
+        || crate::abi::gov_word(&reason, "GrantNotReady", "bit") == Some(SUPPLY_CAP_ADJUSTABLE)
+    {
+        return Verdict::Requeue(format!("SUPPLY_CAP_REFUSED: {reason}"));
+    }
+    // round 3zb (CTR-GOV-29, spec §4; NODE-LANE-09's class): a burner's or a minter's grant window spent (`GrantExhausted(3)`):
+    // the next window lifts it. Every other grant refusal (the job's own subject lacks the power) stays `dead` by name.
+    if crate::abi::gov_word(&reason, "GrantExhausted", "field") == Some(GRANT_WINDOW) && window_op(&w.data) {
+        return Verdict::Requeue(format!("GRANT_WINDOW_REFUSED: {reason}"));
+    }
+    // group 3f (spec §11.1): a PQZ verifier mode refusal by name, never `dead` while the op may land with another verdict; a
+    // `PqzVerdictMismatch` after a party's indexed `UAPqzKeyCurrent` is `PQZ_KEY_ROTATED` (T55)
+    if let Some((name, liftable)) = crate::abi::pqz_verdict_refusal(&reason) {
+        if name == "PqzVerdictMismatch" {
+            match pqz_rotated(chain, w, ROTATION_LOOKBACK).await {
+                Ok(true) => return Verdict::Requeue(format!("PQZ_KEY_ROTATED: {reason}")),
+                Ok(false) => {}
+                Err(e) => return Verdict::Requeue(format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")),
+            }
+            // round 3t: field 3 (the statement) after an indexed `VerifierFeeSet`: the fee word moved
+            if verdict_field(&reason) == Some(3) {
+                if let Some(v) = fee_moved(chain, w, &reason).await {
+                    return v;
+                }
+            }
+        }
+        return if liftable { Verdict::Requeue(format!("PQZ_VERDICT_REFUSED: {reason}")) } else { Verdict::Dead(reason) };
+    }
+    // round 3t (CTR-PQZ-36, spec §10): `AuthRejected` after an indexed `VerifierFeeSet` of its token is `PQZ_FEE_MISMATCH`, back
+    // in the queue (a decrease may restore the word), never `dead`; without the event `dead`
+    if reason.starts_with("AuthRejected") {
+        return fee_moved(chain, w, &reason).await.unwrap_or(Verdict::Dead(reason));
+    }
+    // NODE-JOB-28: the public rollover on an opening token never lands (the lease-time check names it first, `three_keys`)
+    if reason.starts_with("RollOverSignedOnly") {
+        return Verdict::Dead(format!("ROLLOVER_SIGNED_ONLY: {reason}"));
+    }
+    // group 3g (spec §7.3): a stale debit or two equal keys never land, a version above current may become current, a proof
+    // built before a party's rotation is `PQZ_KEY_ROTATED`
+    match crate::abi::pqz_refusal(&reason) {
+        Some(PqzRefusal::Stale) => Verdict::Dead(format!("PQZ_KEY_STALE: {reason}")),
+        Some(PqzRefusal::Reused) => Verdict::Dead(format!("PQZ_KEY_REUSED: {reason}")),
+        Some(PqzRefusal::Unknown) => Verdict::Requeue(format!("PQZ_KEY_VERSION_UNKNOWN: {reason}")),
+        Some(PqzRefusal::ProofRejected) => match pqz_rotated(chain, w, ROTATION_LOOKBACK).await {
+            Ok(true) => Verdict::Requeue(format!("PQZ_KEY_ROTATED: {reason}")),
+            Ok(false) => Verdict::Dead(reason),
+            Err(e) => Verdict::Requeue(format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")),
+        },
+        None => Verdict::Dead(reason),
+    }
+}
+
+/// Governance bit 31 `SUPPLY_CAP_ADJUSTABLE` (CTR-GOV-30): its setters' pending refusal is `GrantNotReady(31, 0, eta)`.
+const SUPPLY_CAP_ADJUSTABLE: u8 = 31;
+/// `GrantExhausted`'s field 3: the grant's `perWindow` spent in the current window.
+const GRANT_WINDOW: u8 = 3;
+
+/// The ops whose window refusal the next window lifts (spec 2026-11-13-burner-wrap-caps.md §4): a token's `mtxBurn` (bit 30) and
+/// the router's `mtxMint`, `mtxMintToUA` (bit 1), by the job's selector.
+fn window_op(data: &[u8]) -> bool {
+    data.get(..4).is_some_and(|s| typed::rows().iter()
+        .any(|r| matches!(r.name, "UABurn" | "UAMint" | "UAMintToUA") && r.sent[..] == *s))
+}
+
+/// The `field` of a `decode_revert` string `PqzVerdictMismatch(PqzVerdictMismatch { field: N })`, parsed whole (Fable E N-11: never
+/// a substring, so `field: 30` is not field 3).
+fn verdict_field(reason: &str) -> Option<u8> {
+    let rest = reason.split_once("field: ")?.1;
+    rest[..rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len())].parse().ok()
+}
+
+/// Round 3t (CTR-PQZ-36, spec §10, T55's pattern): `PQZ_FEE_MISMATCH` when the job's token emitted a `VerifierFeeSet` that moved
+/// the fee since intake (the `ROTATION_LOOKBACK` window; a cancel `(cur, cur)` is no move, Fable 3r3s3t P3-4); an unreadable log
+/// is `PQZ_FEE_LOG_UNREAD`, back in the queue, never counted as a move.
+async fn fee_moved(chain: &Chain, w: &Work, reason: &str) -> Option<Verdict> {
+    match pqz_fee_changed(chain, w, ROTATION_LOOKBACK).await {
+        Ok(true) => Some(Verdict::Requeue(format!("PQZ_FEE_MISMATCH: {reason} after VerifierFeeSet"))),
+        Ok(false) => None,
+        Err(e) => Some(Verdict::Requeue(format!("PQZ_FEE_LOG_UNREAD: {e:#}; {reason}"))),
+    }
+}
+
+/// NODE-JOB-28 (spec 2026-11-13-pqz-three-keys §12): an op the connected chain cannot include, by its own limits (the block gas
+/// limit bounds regular + state under EIP-8037; 2^24 regular gas per transaction, EIP-7825; the calldata floor, EIP-7976), is
+/// refused by this name instead of sent. The operator's own `max_gas_per_tx` is not a chain limit and keeps its plain refusal.
+pub const TX_EXCEEDS_CHAIN_LIMIT: &str = "TX_EXCEEDS_CHAIN_LIMIT";
 
 /// The refusal of a relayed PQ registration (`register` with its `R_REG` proof) whose gas estimate is over the
 /// per-transaction cap ([`total_cap`]: `max_gas_per_tx`, the block gas limit) or that the chain's estimate refuses for
@@ -153,10 +385,11 @@ pub fn pq_register(data: &[u8]) -> bool {
 }
 
 /// Forge's minimum relayer CALL gas of a `SmartKeyAccount`-signed `mtxExecute` after the split (the ERC-1271 call two
-/// frames below the token: token → `MtxPipelineLib` → wallet, ≥ (400,000 · 64/63 + 5,000) · 64/63): 446,904
-/// (`smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt`, `test_minGas_smartKeyAccountMtxExecute`, Task 8).
+/// frames below the token: token → `MtxPipelineLib` → wallet, ≥ (400,000 · 64/63 + 5,000) · 64/63): 446,912
+/// (`test_minGas_smartKeyAccountMtxExecute`; 446,904 at `smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt`,
+/// Task 8; 446,912 with the ERC-7739 signature, B P3-2, 2026-11-12).
 /// It is execution gas only (`call{gas: g}`): no intrinsic, no calldata.
-pub const ERC1271_CALL_GAS: u64 = 446_904;
+pub const ERC1271_CALL_GAS: u64 = 446_912;
 
 /// The gas floor of a contract signer's meta-tx whose calldata is `len` bytes (P1b note c; T17 fix 1): 21,000
 /// intrinsic (pre-Amsterdam; EIP-2780 lowers it, which only grows the margin) + 64 gas per calldata byte (the EIP-7976
@@ -200,6 +433,8 @@ pub struct Facts {
     pub ua_registry: bool,
     /// One of `governance_routers`.
     pub gov_router: bool,
+    /// `infoOf(target)`'s `(contractClass, version)` on `token_factory`, when made there (read for a factory class's rule only).
+    pub listed: Option<(u16, u64)>,
     /// `chainUid()` equals this chain's (NODE-GW-07).
     pub bound: bool,
 }
@@ -207,6 +442,10 @@ pub struct Facts {
 pub fn allowed(rule: Rule, f: &Facts) -> bool {
     if rule == Rule::Token {
         return f.bound && f.token;
+    }
+    if let Rule::FactoryClass(c) = rule {
+        // the factory's record is the binding: an instance answers no `chainUid()`
+        return matches!(f.listed, Some((k, v)) if k == c && v != 0) && !f.token && !f.token_factory && !f.gov_router;
     }
     f.bound
         && !f.token
@@ -220,6 +459,7 @@ pub fn allowed(rule: Rule, f: &Facts) -> bool {
             Rule::Dex => f.dex,
             Rule::UaRegistry => f.ua_registry,
             Rule::GovRouter => true,
+            Rule::FactoryClass(_) => false,
         }
 }
 
@@ -427,6 +667,186 @@ pub fn reason_is_out_of_gas(data: &[u8]) -> bool {
     data.is_empty() || <InteractionFailed as alloy::sol_types::SolError>::abi_decode(data).is_ok_and(|e| e.reason.is_empty())
 }
 
+/// `ILiquidityPullToken`'s ERC-165 id: the selector of `mtxLiquidityPull` (CTR-DEX-30).
+pub const LIQUIDITY_PULL_ID: [u8; 4] = [0x85, 0xfd, 0xfd, 0x38];
+/// The liquidity module's group (`SCaaSDexCore.GROUP_LIQUIDITY`).
+pub const GROUP_LIQUIDITY: u8 = 11;
+/// A liquidity plan's work beside its verifies (spec §13: the plan's base): what the budget check adds to the caps.
+pub const LIQUIDITY_BASE_GAS: u64 = 1_000_000;
+
+/// The liquidity mark (spec §11, review P1-2 (b)): a module of group 11 among a DEX's `modules()`.
+pub fn liquidity_marked(groups: &[u8]) -> bool {
+    groups.contains(&GROUP_LIQUIDITY)
+}
+
+/// A kind's verify cap (CTR-DEX-26's table); `None` for a kind the table does not name (the simulation decides).
+pub fn verify_cap(kind: u16) -> Option<u64> {
+    Some(match kind {
+        0x0131 => 5_950_000, // mldsa65 (cached key)
+        0x0130 => 4_250_000, // mldsa44 (cached key)
+        0x0132 => 2_500_000, // fndsa512
+        0x0133 => 1_400_000, // slhdsa128s
+        0x0102 => 210_000,   // ed25519
+        // p256, webauthn-p256: the registry's cap (DeployBase), CTR-DEX-26's row (owner 2026-11-10; was the classical 50,000)
+        0x0101 | 0x0100 => 400_000,
+        // the classical row (CTR-DEX-26, <= 50,000): bip340, secp256k1 (L6d; the deploy's cap), a native id
+        0x0103 | 0x0108 | 0 => 50_000,
+        _ => return None,
+    })
+}
+
+/// `LIQUIDITY_TOO_LARGE` (spec §11, §13): every SCaaS input verifies the same signature once, so the plan needs the signer's
+/// cap times the SCaaS inputs plus its base within `budget` (min of the lane's `max_gas_per_tx` and the chain's block limit).
+pub fn liquidity_too_large(scaas_inputs: u64, kind: u16, budget: u64) -> Option<String> {
+    let need = verify_cap(kind)?.saturating_mul(scaas_inputs).saturating_add(LIQUIDITY_BASE_GAS);
+    (need > budget).then(|| format!("LIQUIDITY_TOO_LARGE: {scaas_inputs} SCaaS inputs of kind 0x{kind:04x} need about {need} gas, \
+        above {budget}: split the order"))
+}
+
+/// A simulation of `mtxLiquidity` that reverts `NotLiquidityDex(dex)` on a DEX the guard found marked is a token's capability
+/// check starved of gas (re-check P3), not a wrong DEX: the job is requeued, never dead.
+pub fn liquidity_starved(data: &[u8], reason: &str) -> bool {
+    data.get(..4) == Some(&ISCaaSDex::mtxLiquidityCall::SELECTOR[..]) && reason.starts_with("NotLiquidityDex(")
+}
+
+/// The refusal of a liquidity order the DEX already pulled (`pulled(h) != 0`): it landed, here or by another relayer, so the
+/// submitter reports it `consumed`, never `dead` (G6; spec §11 "completion and state").
+pub const LIQUIDITY_ORDER_CLOSED: &str = "LIQUIDITY_ORDER_CLOSED";
+
+/// The pre-checks of a `mtxLiquidity` job before simulation (spec 2026-11-10-dex-liquidity.md §11): the DEX's liquidity mark
+/// (`DEX_NOT_LIQUIDITY`); `relayer` 0 or this lane (`LIQUIDITY_WRONG_RELAYER`); the node's `h` equal to the DEX's
+/// `liquidityOrderDigest` (`LIQUIDITY_DIGEST_MISMATCH`); a native signer's signature over `h` (`BAD_SIGNATURE`, CTR-UA-24: an
+/// account without code signs with its own key, a contract's ERC-1271 is the simulation's, as [`Guard::check_signature`]);
+/// `pulled(h) == 0` ([`LIQUIDITY_ORDER_CLOSED`]); each SCaaS input's `ILiquidityPullToken` (`LIQUIDITY_TOKEN_UNSUPPORTED`: a
+/// token of an earlier release); the verify budget within min(`max_gas_per_tx`, the block gas limit) (`LIQUIDITY_TOO_LARGE`).
+/// The signed `validUntil` narrows the job's deadline (`typed.rs`), which the lane checks before simulation. A transport
+/// error is a retry; a token's read that reverts is the answer "no".
+// ponytail: reads per job, no cache; cache the mark per DEX if the reads show up in the lane's latency
+/// Owner 2026-11-12 (`mtxCreateInstance`): the release `(contractClass, kind, version)` is published on the factory (`target`) and
+/// not deprecated, read with `classReleaseOf` before the simulation; refused by name (`dead`), an unread answer back in the queue.
+async fn check_release(chain: &Chain, row: &typed::Row, data: &[u8]) -> Result<(), Refusal> {
+    let bad = |e: anyhow::Error| Refusal::Policy(format!("{e:#}"));
+    let v = typed::call_values(row, data).map_err(bad)?;
+    let n = |i: usize| v.get(i).and_then(|x| x.as_uint()).map_or(0, |(u, _)| u.to::<u64>());
+    let factory = v.get(1).and_then(|x| x.as_address()).unwrap_or_default();
+    let (c, k, ver) = (n(2) as u16, n(3) as u16, n(4));
+    let id = IOpenFactory::ReleaseId { contractClass: c, kind: k, version: ver };
+    let r = chain.call_view(factory, IOpenFactory::classReleaseOfCall { id }).await.map_err(|e| match e {
+        SimError::Revert(r) => Refusal::Policy(format!("RELEASE_UNKNOWN: class {c} kind {k} version {ver}: the factory {factory:#x} \
+            answers no release ({r})")),
+        SimError::Transport(t) => Refusal::Transport(format!("release of class {c} kind {k} version {ver} unread: {t}")),
+    })?;
+    if r.implementation.is_zero() {
+        return Err(Refusal::Policy(format!("RELEASE_UNKNOWN: class {c} kind {k} version {ver} is not published on {factory:#x}")));
+    }
+    if r.deprecated {
+        return Err(Refusal::Policy(format!("RELEASE_DEPRECATED: class {c} kind {k} version {ver} on {factory:#x}")));
+    }
+    Ok(())
+}
+
+async fn check_liquidity(chain: &Chain, w: &Work, max_gas_per_tx: u64) -> Result<(), Refusal> {
+    let policy = |m: String| Refusal::Policy(m);
+    let call = <ISCaaSDex::mtxLiquidityCall as SolCall>::abi_decode(&w.data)
+        .map_err(|e| policy(format!("BAD_PAYLOAD: mtxLiquidity: {e}")))?;
+    let read = |e: SimError| match e {
+        SimError::Transport(m) => Err(Refusal::Transport(m)),
+        SimError::Revert(_) => Ok(()),
+    };
+    let mut groups = vec![];
+    match chain.call_view(w.to, ISCaaSDex::modulesCall {}).await {
+        Ok(ms) => {
+            for m in ms {
+                match chain.call_view(m, IModuleGroup::moduleGroupCall {}).await {
+                    Ok(g) => groups.push(g),
+                    Err(e) => read(e)?,
+                }
+            }
+        }
+        Err(e) => read(e)?,
+    }
+    if !liquidity_marked(&groups) {
+        return Err(policy(format!("DEX_NOT_LIQUIDITY: {:#x} has no liquidity module (group 11 among its modules())", w.to)));
+    }
+    let o = &call.p.order;
+    if o.relayer != Address::ZERO && o.relayer != chain.address() {
+        return Err(policy(format!("LIQUIDITY_WRONG_RELAYER: the order is bound to {:#x}, not this lane {:#x}", o.relayer,
+            chain.address())));
+    }
+    let uid = chain.uid().await.map_err(|e| Refusal::Transport(format!("chain_uid: {e:#}")))?;
+    let h = crate::dex::liquidity_order_hash(&crate::dex::domain("SCaaS Dex", chain.number, w.to, uid), o);
+    match chain.call_view(w.to, ISCaaSDex::liquidityOrderDigestCall { o: o.clone() }).await {
+        Ok(d) if d == h => {}
+        Ok(d) => return Err(policy(format!("LIQUIDITY_DIGEST_MISMATCH: the DEX's liquidityOrderDigest {d:#x} is not the node's h {h:#x}"))),
+        Err(SimError::Revert(m)) => return Err(policy(format!("LIQUIDITY_DIGEST_MISMATCH: liquidityOrderDigest reverts ({m})"))),
+        Err(SimError::Transport(m)) => return Err(Refusal::Transport(m)),
+    }
+    let a = &call.p.auth;
+    if let Some(who) = crate::metatx::native(&o.from).filter(|_| a.keyData.is_empty() && a.members.is_empty() && a.signature.len() == 65) {
+        if !typed::recovers(h, &a.signature, who) {
+            match chain.is_contract_at(who).await {
+                Ok(true) => {}
+                Ok(false) => return Err(policy(format!("BAD_SIGNATURE: not {who:#x}'s over the liquidity order {h:#x}"))),
+                Err(e) => return Err(Refusal::Transport(format!("eth_getCode: {e:#}"))),
+            }
+        }
+    }
+    match chain.call_view(w.to, ISCaaSDex::pulledCall { orderHash: h }).await {
+        Ok(n) if n.is_zero() => {}
+        Ok(_) => return Err(policy(format!("{LIQUIDITY_ORDER_CLOSED}: the DEX pulled the order {h:#x} already (consumed)"))),
+        Err(SimError::Revert(m)) => return Err(policy(m)),
+        Err(SimError::Transport(m)) => return Err(Refusal::Transport(m)),
+    }
+    // CTR-DEX-32: an input is SCaaS iff the DEX's factory made it (`versionOf`), never the DEX's `tokenKind` (0 for a token of
+    // a pair never listed) and never a deprecation
+    let sim = |e: SimError| match e {
+        SimError::Transport(m) => Refusal::Transport(m),
+        SimError::Revert(m) => policy(m),
+    };
+    let factory = chain.call_view(w.to, ISCaaSDex::factoryCall {}).await.map_err(sim)?;
+    let mut scaas = vec![];
+    for t in &o.inputs {
+        if crate::dex::kind_by_factory(chain, factory, t.token).await.map_err(sim)? != crate::dex::KIND_SCAAS {
+            continue;
+        }
+        let ok = match chain.call_view(t.token, IERC165::supportsInterfaceCall { id: LIQUIDITY_PULL_ID.into() }).await {
+            Ok(b) => b,
+            Err(e) => {
+                read(e)?;
+                false
+            }
+        };
+        if !ok {
+            return Err(policy(format!("LIQUIDITY_TOKEN_UNSUPPORTED: {:#x} answers no ILiquidityPullToken (a token of an \
+                earlier release cannot be a liquidity input)", t.token)));
+        }
+        scaas.push(t.token);
+    }
+    let Some(first) = scaas.first() else { return Ok(()) };
+    let kind = if crate::metatx::native(&o.from).is_some() {
+        0
+    } else {
+        let reg = chain.call_view(*first, IUALedger::registryCall {}).await.map_err(|e| match e {
+            SimError::Transport(m) => Refusal::Transport(m),
+            SimError::Revert(m) => policy(m),
+        })?;
+        match chain.call_view(reg, IUAKindOf::kindOfCall { ua: o.from }).await {
+            Ok(k) => k,
+            Err(e) => {
+                read(e)?;
+                return Ok(()); // the simulation names it
+            }
+        }
+    };
+    let block = chain.block_gas().await.map_err(|e| Refusal::Transport(format!("block gas limit: {e:#}")))?;
+    // the lane's per-transaction cap and the chain's block, never a fixed 2^24 (EIP-7825 is not on every chain); the config
+    // always carries `max_gas_per_tx` (its serde default, config.rs), so no block-only fallback is needed
+    match liquidity_too_large(scaas.len() as u64, kind, max_gas_per_tx.min(block.limit)) {
+        Some(m) => Err(policy(m)),
+        None => Ok(()),
+    }
+}
+
 /// The next gas to try for `mtxSettle`: ×1.5, capped at `max`; `None` once at the cap.
 pub fn next_gas(g: u64, max: u64) -> Option<u64> {
     (g < max).then(|| g.saturating_add(g / 2).min(max))
@@ -459,6 +879,8 @@ impl From<Refusal> for SimError {
 /// (a contract that is not bound yet is asked again).
 pub struct Guard {
     pub tokens: Arc<RwLock<Vec<Address>>>,
+    /// The lane's `max_gas_per_tx` (a liquidity plan's verify budget, spec §11).
+    max_gas_per_tx: u64,
     relay_fee: Option<RelayFee>,
     max_pay_meta_bytes: usize,
     token_factory: Option<Address>,
@@ -467,8 +889,14 @@ pub struct Guard {
     dexes: Vec<Address>,
     gov_routers: Vec<Address>,
     bound: Mutex<HashSet<Address>>,
+    /// `token_factory`'s records read ([`Guard::listed`]): a record never changes once made.
+    listed: Mutex<HashMap<Address, (u16, u64)>>,
+    /// `params.relay_unsigned_pqchat` (default false): the lane relays `PqChat`'s unsigned writes at its own gas (UA-7 P17).
+    relay_unsigned_pqchat: bool,
     /// Tokens whose UA ledger is on (`registry() ≠ 0`).
     ua_ledger: Mutex<HashSet<Address>>,
+    /// A token's `eip712Domain().name` (an immutable of its kind), read once ([`Guard::require_kind`]).
+    domain_names: Mutex<HashMap<Address, String>>,
     /// `params.l1_fee = "op-stack"`: relay-fee quotes add `GasPriceOracle.getL1Fee`.
     op_stack: bool,
     /// Group 3f: the PQZ verifier mode's verdict fill and shield switch (`[pqz_verifier]`), one rule on every path.
@@ -483,6 +911,7 @@ impl Guard {
     pub fn new(cfg: &ChainCfg, tokens: Arc<RwLock<Vec<Address>>>) -> anyhow::Result<Self> {
         Ok(Self {
             relay_fee: RelayFee::from_cfg(cfg)?,
+            max_gas_per_tx: cfg.max_gas_per_tx,
             max_pay_meta_bytes: cfg.relay_params()?.max_pay_meta_bytes,
             tokens,
             token_factory: cfg.token_factory,
@@ -491,7 +920,15 @@ impl Guard {
             dexes: cfg.dex.into_iter().collect(),
             gov_routers: cfg.governance_routers.clone(),
             bound: Default::default(),
+            listed: Default::default(),
+            relay_unsigned_pqchat: match cfg.params.get("relay_unsigned_pqchat") {
+                None => false,
+                Some(toml::Value::Boolean(b)) => *b,
+                Some(v) => anyhow::bail!("params.relay_unsigned_pqchat must be a bool (relay PqChat's unsigned storeMessage / addWraps \
+                    at the lane's gas), not {v}"),
+            },
             ua_ledger: Default::default(),
+            domain_names: Default::default(),
             op_stack: match cfg.params.get("l1_fee") {
                 None => false,
                 Some(v) if v.as_str() == Some("op-stack") => true,
@@ -619,6 +1056,10 @@ impl Guard {
         }
         self.check_payee(payee)?;
         self.require_bound(chain, w.to).await?;
+        // Fable recheck 2 P3-1: the struct's `contract` (default `token`) picks its digest domain, as on a named row
+        if let Some(t) = &w.typed {
+            self.require_kind(chain, w.to, t.contract).await?;
+        }
         if ua && w.typed.as_ref().is_some_and(|t| t.derived_side) {
             // no published UA allowlist to read: the UA path's fee class and kind are the simulation's
             return self.require_ua_ledger(chain, w.to).await;
@@ -651,10 +1092,23 @@ impl Guard {
             };
             let target = relay_call_ok(rf, chain.address(), w.to, &w.data, |a| self.registered(a)).map_err(Refusal::Policy)?;
             relay_inner_ok(&self.gov_routers, &w.data).map_err(Refusal::Policy)?;
+            // Fable recheck 2 P3-1: the payer signs in the fee token's domain, named by the op's `contract`
+            if let Some(t) = &w.typed {
+                self.require_kind(chain, t.domain_of, t.contract).await?;
+            }
             // proposed NODE-JOB-25 on the inner call: a service runs its entries only, under the service rule
             if self.is_service(target) {
                 let c = relay_call(&w.data).ok_or_else(|| refused("not a relay call".into()))?;
                 return self.check_service(chain, target, &c.call, None).await;
+            }
+            // UA-7 P32 / topics P45 on the inner call: a `PqChat` entry runs on an instance `token_factory` lists (no `chainUid()`);
+            // paid this way, an unsigned write needs no lane policy (P17)
+            if let Some(r) = relay_call(&w.data).and_then(|c| c.call.get(..4).and_then(|s| self::row(s.try_into().ok()?, "pqchat"))) {
+                let rule = Rule::FactoryClass(CLASS_PQCHAT);
+                if allowed(rule, &self.facts(chain, target, rule).await?) {
+                    return Ok(());
+                }
+                return Err(refused(format!("{} relayed to {target:#x}: no PqChat instance of token_factory", r.entry)));
             }
             return self.require_bound(chain, target).await;
         }
@@ -663,6 +1117,12 @@ impl Guard {
             return Err(refused(format!("{} ({contract}) on {:#x}: a service takes its own entries only", row.entry, w.to)));
         }
         let Some(rule) = rule_of(contract) else { return Err(refused(format!("unknown contract kind {contract:?}"))) };
+        // UA-7 P17 (owner 2026-11-05): a `PqChat` write with no `UASig` (`storeMessage`, `addWraps`) runs paid, as a relay fee's call
+        // (the branch above), or under the operator's `params.relay_unsigned_pqchat`: by default the lane pays no gas for it
+        if contract == "pqchat" && !self.relay_unsigned_pqchat && !row.fields.iter().any(|f| f.0 == "UASig") {
+            return Err(Refusal::Policy(format!("UNSIGNED_WRITE_NOT_PAID: {} carries no signature: send it as a relay fee's call \
+                (RelayFeeRouter.relay), or the operator sets params.relay_unsigned_pqchat", row.entry)));
+        }
         self.check_payee(w.typed.as_ref().and_then(|t| t.payee))?;
         // pay-meta-tax spec §7.1: the `body` of a pay entry's `PayMeta` (plan T83: `payNo` a fixed word), before any read or
         // simulation
@@ -675,28 +1135,26 @@ impl Guard {
                 return Err(Self::not_served(w.to));
             }
             self.require_bound(chain, w.to).await?;
+            self.require_kind(chain, w.to, contract).await?;
             // R44 (step 7a): only a derived `from` or `to` needs the UA ledger; an all-native merged entry runs at `registry() == 0`
             if w.typed.as_ref().is_some_and(|t| t.derived_side) {
                 self.require_ua_ledger(chain, w.to).await?;
             }
             no_pending_party(chain, w).await?;
+            three_keys(chain, w).await?;
             // group 3f (spec §11.1): `refuse_shield_when_unserved`, for every consumer
             return self.pqz.check_shield(chain, w).await;
         }
-        let facts = Facts {
-            token: self.tokens.read().map(|t| t.contains(&w.to)).unwrap_or(true),
-            token_factory: self.token_factory == Some(w.to),
-            account_factory: self.account_factory == Some(w.to),
-            dex: self.dexes.contains(&w.to),
-            ua_registry: self.ua_registry == Some(w.to),
-            gov_router: self.gov_routers.contains(&w.to),
-            bound: self.bound(chain, w.to).await?,
-        };
-        if allowed(rule, &facts) {
-            Ok(())
-        } else {
-            Err(refused(format!("{} on {:#x}", row.entry, w.to)))
+        if !allowed(rule, &self.facts(chain, w.to, rule).await?) {
+            return Err(refused(format!("{} on {:#x}", row.entry, w.to)));
         }
+        if sel == ISCaaSDex::mtxLiquidityCall::SELECTOR {
+            return check_liquidity(chain, w, self.max_gas_per_tx).await;
+        }
+        if row.name == "UACreateInstance" {
+            return check_release(chain, row, &w.data).await;
+        }
+        Ok(())
     }
 
     /// The gateway pre-check, on every path: the local typed digest against a native signature. Recovered to the signer ⇒
@@ -802,6 +1260,74 @@ impl Guard {
         }
     }
 
+    /// What the node knows of `to` for `rule`: the config, the registered list, the factory's record (a factory class's rule only)
+    /// and `chainUid()` (every other rule).
+    async fn facts(&self, chain: &Chain, to: Address, rule: Rule) -> Result<Facts, Refusal> {
+        let class = matches!(rule, Rule::FactoryClass(_));
+        Ok(Facts {
+            token: self.tokens.read().map(|t| t.contains(&to)).unwrap_or(true),
+            token_factory: self.token_factory == Some(to),
+            account_factory: self.account_factory == Some(to),
+            dex: self.dexes.contains(&to),
+            ua_registry: self.ua_registry == Some(to),
+            gov_router: self.gov_routers.contains(&to),
+            listed: if class { self.listed(chain, to).await? } else { None },
+            // an instance answers no `chainUid()`: its rule reads the factory's record instead
+            bound: !class && self.bound(chain, to).await?,
+        })
+    }
+
+    /// `infoOf(to)` on `token_factory`: `(contractClass, version)` of a contract it made, cached (a record never changes once
+    /// made); `None` with no factory configured, for a contract it did not make (class 0, asked again next time), or a factory
+    /// that does not answer.
+    async fn listed(&self, chain: &Chain, to: Address) -> Result<Option<(u16, u64)>, Refusal> {
+        if let Some(l) = self.listed.lock().ok().and_then(|m| m.get(&to).copied()) {
+            return Ok(Some(l));
+        }
+        let Some(f) = self.token_factory else { return Ok(None) };
+        let c = match chain.call_view(f, IOpenFactory::infoOfCall { c: to }).await {
+            Ok(c) => c,
+            Err(SimError::Revert(_)) => return Ok(None),
+            Err(SimError::Transport(e)) => return Err(Refusal::Transport(format!("infoOf: {e}"))),
+        };
+        if c.contractClass == 0 {
+            return Ok(None);
+        }
+        if let Ok(mut m) = self.listed.lock() {
+            m.insert(to, (c.contractClass, c.version));
+        }
+        Ok(Some((c.contractClass, c.version)))
+    }
+
+    /// Fable E N-6: the op's `contract` (`token`, `zether`, `pqz`) picks the node's digest domain, so it must be the token's own:
+    /// `eip712Domain().name` equal to that kind's, else `CONTRACT_KIND_MISMATCH` (`dead`). The name is an immutable of the
+    /// implementation: kept once it matched a kind asked for, a mismatching answer is read again next time (Fable recheck 2 P3-2).
+    async fn require_kind(&self, chain: &Chain, to: Address, contract: &str) -> Result<(), Refusal> {
+        let cached = self.domain_names.lock().ok().and_then(|m| m.get(&to).cloned());
+        let name = match cached {
+            Some(n) => n,
+            None => {
+                let n = match chain.call_view(to, IToken::eip712DomainCall {}).await {
+                    Ok(d) => d.name,
+                    Err(SimError::Revert(e)) => return Err(Refusal::Policy(format!(
+                        "CONTRACT_KIND_MISMATCH: {to:#x} answers no eip712Domain(): {e}"))),
+                    Err(SimError::Transport(e)) => return Err(Refusal::Transport(format!("eip712Domain(): {e}"))),
+                };
+                n
+            }
+        };
+        match typed::domain_name(contract) {
+            Some(want) if want == name => {
+                if let Ok(mut m) = self.domain_names.lock() {
+                    m.insert(to, name);
+                }
+                Ok(())
+            }
+            want => Err(Refusal::Policy(format!(
+                "CONTRACT_KIND_MISMATCH: contract {contract:?} signs in {want:?}, {to:#x}'s domain is {name:?}"))),
+        }
+    }
+
     async fn require_bound(&self, chain: &Chain, to: Address) -> Result<(), Refusal> {
         if self.bound(chain, to).await? {
             Ok(())
@@ -831,7 +1357,7 @@ impl Guard {
 }
 
 /// The typed digest of `w`, computed here (no chain view: only the cached `chain_uid`): the dedup key, on `w.typed`. On `w.meta`
-/// the digest its `MetaTransactionExecuted` will carry: the same, but for a receiver fee, which lands as its payment.
+/// the digest its `MetaTransactionExecuted` will carry: the same, but for a payee fee, which lands as its payment.
 pub async fn fill_digest(chain: &Chain, w: &mut Work) -> Result<(), SimError> {
     let Some(t) = w.typed.as_mut() else { return Ok(()) };
     if t.digest.is_some() || t.struct_hash.is_none() {
@@ -870,7 +1396,7 @@ async fn pull_digest(chain: &Chain, token: Address, struct_hash: B256) -> Result
     let uid = chain.uid().await.map_err(|e| Refusal::Transport(format!("chain_uid: {e:#}")))?;
     let t = typed::Typed { contract: "service", domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer: None,
         payee: None, digest: None, derived_signer: false, derived_side: false, pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false,
-        pqz_verdict: None };
+        pqz_verdict: None, pqz_fee: None };
     Ok(t.digest_in(name, chain.number, uid).expect("a struct hash"))
 }
 
@@ -881,7 +1407,21 @@ async fn pull_digest(chain: &Chain, token: Address, struct_hash: B256) -> Result
 /// meta-tx gets at least the ERC-1271 floor.
 /// NODE-JOB-24: a refusal of [`gas`] for the lane's per-transaction cap (`max_gas_per_tx`, the block gas limit, 2^24 before
 /// Amsterdam), not for the calldata floor or a revert of the call itself.
+/// The router's list edits (spec 2026-11-10-token-lists.md §6.2): `mtxSetAllowed`, `mtxSetDenied`, with the target's chain
+/// word (CTR-GOV-28 Change, round 3zb + 3zc; were 0x06b98e72, 0x1d288fdc without it).
+const SEL_LIST_EDITS: [[u8; 4]; 2] = [[0x6c, 0x83, 0x2e, 0xcf], [0xf8, 0xd9, 0xf1, 0xf3]];
+
+/// Round 3s (spec §6.1, §14; Fable P3-4): a list edit's estimate above the chain's block gas limit is refused by name, before
+/// sending: a smaller batch fits (256 new rows ≈ 31 M with the verification).
+fn list_batch_note(data: &[u8]) -> &'static str {
+    match data.get(..4) {
+        Some(s) if SEL_LIST_EDITS.iter().any(|x| x == s) => " (LIST_BATCH_TOO_LARGE: send fewer accounts per setAllowed / setDenied)",
+        _ => "",
+    }
+}
+
 pub fn over_cap(reason: &str) -> bool {
+    let reason = reason.strip_prefix(TX_EXCEEDS_CHAIN_LIMIT).and_then(|r| r.strip_prefix(": ")).unwrap_or(reason);
     reason.starts_with("gas ") && (reason.contains(" above max_gas_per_tx ") || reason.contains(" above the chain's block gas limit ")
         || reason.contains(" above the 2^24 gas limit of a transaction"))
 }
@@ -891,7 +1431,7 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
     let floor = calldata_floor(w.data.len());
     if block.amsterdam && floor > MAX_TX_GAS {
         return Err(SimError::Revert(format!(
-            "calldata floor {floor} above the 2^24 regular gas of a transaction ({} B; EIP-7976, EIP-7825)", w.data.len())));
+            "{TX_EXCEEDS_CHAIN_LIMIT}: calldata floor {floor} above the 2^24 regular gas of a transaction ({} B; EIP-7976, EIP-7825)", w.data.len())));
     }
     // ruling R-node: a relayed PQ registration that does not fit one transaction is refused with its own code
     let split = w.meta.is_none() && pq_register(&w.data);
@@ -909,10 +1449,10 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
         return Err(SimError::Revert(format!("gas {est} above max_gas_per_tx {max}")));
     }
     if est > block.limit {
-        return Err(SimError::Revert(format!("gas {est} above the chain's block gas limit {}", block.limit)));
+        return Err(SimError::Revert(format!("{TX_EXCEEDS_CHAIN_LIMIT}: gas {est} above the chain's block gas limit {}{}", block.limit, list_batch_note(&w.data))));
     }
     if !block.amsterdam && est > MAX_TX_GAS {
-        return Err(SimError::Revert(format!("gas {est} above the 2^24 gas limit of a transaction (EIP-7825, before Amsterdam)")));
+        return Err(SimError::Revert(format!("{TX_EXCEEDS_CHAIN_LIMIT}: gas {est} above the 2^24 gas limit of a transaction (EIP-7825, before Amsterdam)")));
     }
     let max = total_cap(max, block);
     let g = if w.meta.is_none() && w.data.get(..4) == Some(&SEL_MTX_SETTLE[..]) {
@@ -1002,7 +1542,10 @@ mod tests {
         assert_eq!(sel("setKemKey", "registry"), U::setKemKeyCall::SELECTOR);
         assert_eq!(sel("storePqzPop", "registry"), U::storePqzPopCall::SELECTOR);
         assert_eq!(sel("setPqzKey", "registry"), U::setPqzKeyCall::SELECTOR);
+        assert_eq!(sel("setPqzScopedKey", "registry"), U::setPqzScopedKeyCall::SELECTOR);
+        assert_eq!(sel("storePqzScopedPop", "registry"), U::storePqzScopedPopCall::SELECTOR);
         assert_eq!(sel("acceptMembership", "registry"), U::acceptMembershipCall::SELECTOR);
+        assert_eq!(sel("updateMsig", "registry"), U::updateMsigCall::SELECTOR);
         let cast = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
         assert_eq!(sel("deploy", "factory"), cast("deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)"));
         assert_eq!(sel("mtxExecuteAsOwner", "account"), cast("mtxExecuteAsOwner(bytes,uint256,uint256,bytes)"));
@@ -1023,14 +1566,43 @@ mod tests {
     /// `(url, chain config, methods seen)`: an RPC answering every `eth_call` with `chain_uid` (so `chainUid()` binds and
     /// `registry()` is non-zero), every `eth_getCode` empty, no `eth_estimateGas`.
     async fn bound(uid: B256) -> (ChainCfg, Arc<Mutex<Vec<String>>>) {
+        let (cfg, seen, _) = bound_release(uid).await;
+        (cfg, seen)
+    }
+
+    /// [`bound`], and the release `classReleaseOf` answers: `(implementation, deprecated)`, a live one at first; `None`: a revert.
+    /// Fable recheck 4 R4-4: only for the vector's `UACreateInstance` release `(contractClass, kind, version)` asked of its
+    /// `target`; any other id or address answers the zero struct (no release).
+    async fn bound_release(uid: B256) -> (ChainCfg, Arc<Mutex<Vec<String>>>, Arc<Mutex<Option<(Address, bool)>>>) {
+        let release: Arc<Mutex<Option<(Address, bool)>>> = Arc::new(Mutex::new(Some((Address::repeat_byte(0x1e), false))));
+        let m = typed::testkit::vectors()["ops"]["UACreateInstance"]["message"].clone();
+        let n = |k: &str| m[k].as_u64().or_else(|| m[k].as_str().and_then(|x| x.parse().ok())).unwrap();
+        let want = (m["target"].as_str().unwrap().parse::<Address>().unwrap(), n("contractClass") as u16, n("kind") as u16, n("version"));
+        let r2 = release.clone();
         let seen: Arc<Mutex<Vec<String>>> = Default::default();
         let s2 = seen.clone();
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<serde_json::Value>| {
-            let s2 = s2.clone();
+            let (s2, now) = (s2.clone(), *r2.lock().unwrap());
             async move {
                 let m = r["method"].as_str().unwrap().to_string();
                 s2.lock().unwrap().push(m.clone());
+                let p = &r["params"][0];
+                let (input, to) = (p["input"].as_str().or(p["data"].as_str()).unwrap_or("0x"), p["to"].as_str().unwrap_or_default().parse().unwrap_or_default());
+                let release = format!("0x{}", alloy::hex::encode(IOpenFactory::classReleaseOfCall::SELECTOR));
                 let result = match m.as_str() {
+                    "eth_call" if typed::testkit::domain_answer(input, to).is_some() => serde_json::json!(typed::testkit::domain_answer(input, to)),
+                    // owner 2026-11-12: the release `mtxCreateInstance` names (`bound_release`)
+                    "eth_call" if input.starts_with(&release) => match now.filter(|_| {
+                        let id = IOpenFactory::classReleaseOfCall::abi_decode(&alloy::hex::decode(&input[2..]).unwrap()).unwrap().id;
+                        (to, id.contractClass, id.kind, id.version) == want
+                    }).or(if now.is_some() { Some((Address::ZERO, false)) } else { None }) {
+                        Some((implementation, deprecated)) => serde_json::json!(format!("0x{}", alloy::hex::encode(
+                            IOpenFactory::classReleaseOfCall::abi_encode_returns(&IOpenFactory::ClassRelease { implementation,
+                                envVersion: 1, envHash: B256::ZERO, usableFrom: 0, deprecated, initSelector: Default::default(),
+                                interfaceId: Default::default() })))),
+                        None => return axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": r["id"],
+                            "error": {"code": 3, "message": "execution reverted", "data": "0x"}})),
+                    },
                     "eth_call" => serde_json::json!(format!("{uid:#x}")),
                     "eth_getCode" => serde_json::json!("0x"),
                     _ => serde_json::Value::Null,
@@ -1041,7 +1613,27 @@ mod tests {
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
-        (ChainCfg { evm_chain_number: 31337, rpc_urls: vec![url], chain_uid: Some(uid), ..Default::default() }, seen)
+        (ChainCfg { evm_chain_number: 31337, rpc_urls: vec![url], chain_uid: Some(uid), ..Default::default() }, seen, release)
+    }
+
+    /// Owner 2026-11-12: `mtxCreateInstance` names a published, live release of the factory, read before the simulation; an
+    /// unpublished one is `RELEASE_UNKNOWN`, a deprecated one `RELEASE_DEPRECATED`, a reverting read `RELEASE_UNKNOWN` (all `dead`).
+    /// Control: the live release passes.
+    #[tokio::test]
+    async fn an_instance_names_a_live_release() {
+        use crate::typed::testkit::{op_of, vectors};
+        let v = vectors();
+        let uid: B256 = v["ops"]["UAUnwrap"]["domains"]["token"]["domain"]["salt"].as_str().unwrap().parse().unwrap();
+        let (cfg, _, release) = bound_release(uid).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let (w, _) = crate::submit::work_of_op(Some(1), &op_of("UACreateInstance", "gov_router", &v).unwrap(), None).unwrap();
+        let g = Guard::new(&ChainCfg { governance_routers: vec![w.to], ..cfg.clone() }, Default::default()).unwrap();
+        g.check(&chain, &w).await.expect("control: a live release");
+        for (now, want) in [(Some((Address::ZERO, false)), "RELEASE_UNKNOWN"), (Some((Address::repeat_byte(0x1e), true)), "RELEASE_DEPRECATED"),
+                            (None, "RELEASE_UNKNOWN")] {
+            *release.lock().unwrap() = now;
+            assert!(matches!(g.check(&chain, &w).await, Err(Refusal::Policy(e)) if e.starts_with(want)), "{want}");
+        }
     }
 
     fn signer() -> alloy::signers::local::PrivateKeySigner {
@@ -1074,7 +1666,7 @@ mod tests {
                     }.to_string());
                 }
                 let (mut w, _) = crate::submit::work_of_op(Some(1), &op, None).unwrap_or_else(|e| panic!("{name}: {e:#}"));
-                if matches!(name.as_str(), "UAPayUnderMandate" | "UADelegateRevoke" | "UAReceiverFee") {
+                if matches!(name.as_str(), "UAPayUnderMandate" | "UADelegateRevoke" | "UAPayeeFee") {
                     w.typed.as_mut().unwrap().signer = None; // the vector's lane 7, its one key for payer and payee
                 }
                 assert_eq!(format!("0x{}", alloy::hex::encode(&w.data[..4])), d["selector"].as_str().unwrap(), "{name}");
@@ -1096,12 +1688,24 @@ mod tests {
         // plan T34: (97, 3, 97) -> (105, 3, 105), the router's eight regulated controls' vector rows walked; pay-meta-tax T42:
         // -> (110, 3, 110), UAPayWithTax's three domains and the router's two tax ops
         // group 3f T46 / T47: -> (113, 3, 113), the router's three verifier ops' vector rows
-        // group 3h T61: -> (114, 3, 114), the router's `UASetProofStore`
-        assert_eq!((sent, relayed, refused), (114, 3, 114), "the walk reached every row with an entry; the relay fees: submit.rs");
+        // group 3h T61: -> (114, 3, 114), the router's `UASetProofStore`; group 3l: -> (116, 3, 116), the router's two wrap-limit ops
+        // round 3r (CTR-GOV-23): -> (127, 3, 127), the router's eleven admin rows; round 3s (CTR-GOV-24): -> (130, 3, 130), the
+        // router's `UASetAllowed`, `UASetDenied`, `UAEnableFeature`; round 3t: -> (131, 3, 131), the router's `UASetVerifierFee`
+        // owner 2026-11-12: -> (132, 3, 132), the router's `UACreateInstance` (its vector row's `init_call`)
+        // the three-key model (CTR-PQZ-41): -> (133, 3, 133), `PqzRollOver` (`mtxRollOverSigned` on the PQZ token)
+        // round 3zc (CTR-GOV-30): -> (135, 3, 135), the router's `UASetMaxSupply`, `UASetMaxWrapSupply`
+        assert_eq!((sent, relayed, refused), (135, 3, 135), "the walk reached every row with an entry; the relay fees: submit.rs");
         // plan T32: 87 -> 95, the router's eight regulated controls; pay-meta-tax T42: -> 99, mtxPay, mtxPayWithTax, the two tax ops
         // group 3g T55: -> 100, the rollover one row per kind (`UARollOver` Zether, `UAPqzRollOver` PQZ with `keyVersion`)
         // group 3f T47: -> 103, the router's three verifier ops; group 3h T61: -> 104, `UASetProofStore`
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 104, "table rows: 86 typed with an entry, 18 plain");
+        // T93: 104 -> 116, `PqChat`'s twelve plain rows; group 3l: -> 118, the router's two wrap-limit ops; UA-7 P48:
+        // -> 119, `remove`; ua-mtx-liquidity L6 (79c3501e, moved at L6d): -> 120, `mtxLiquidity`
+        // round 3r (CTR-GOV-23): -> 131, the router's eleven admin rows; round 3s (CTR-GOV-24): -> 134, the router's three list /
+        // enable rows; round 3t: -> 135, `UASetVerifierFee`; owner 2026-11-12: -> 137, `UACreateToken`, `UACreateDex` (no vector
+        // walk: their vector rows carry filler `initArgs`; `typed::tests::creation_rows_encode_the_named_config`); -> 138,
+        // `UACreateInstance`; the three-key model: -> 141, `PqzRollOver`, the registry's `setPqzScopedKey`, `storePqzScopedPop`;
+        // round 3zc (CTR-GOV-30): -> 143, the router's two cap setters; CTR-UA-44 (TODO 3ze): -> 144, the registry's `updateMsig`
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 144, "table rows: 109 typed with an entry, 35 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -1129,28 +1733,58 @@ mod tests {
             "mtxPayUnderMandate(address,address,uint256,bytes32,uint64,uint256,bytes)", "mtxRevoke(address,uint64,uint256,bytes)",
             "mtxExecuteAsOwnerRaw(bytes,uint256,uint256,bytes)",
             "grantRole(uint8,bytes32)", "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-            "transferOwnership(bytes32)", "setListedOnly(bool)"] {
-            for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
-                let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+            "transferAdmin(bytes32,bytes32)", "setListedOnly(bool)",
+            // round 3zb + 3zc: the direct entries with the chain word (governed, relayed through the router only) and the cap setters
+            "mint(address,uint256,bytes32)", "setListedOnly(bool,bytes32)", "setMaxSupply(uint256,bytes32)",
+            "setMaxWrapSupply(uint256,bytes32)"] {
+            for kind in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"] {
+                let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: kind, domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                     derived_signer: false, derived_side: false };
-                let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, meta: None, entry: true, typed: Some(t) };
+                let w = Work { job_id: Some(1), to: target, data: cast(s).into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) };
                 let e = g.check(&chain, &w).await.unwrap_err();
                 assert!(matches!(&e, Refusal::Policy(r) if r.starts_with("CALL_TARGET_REFUSED")), "{s} on {kind}: {e:?}");
             }
         }
+        // the Change of CTR-GOV-28 in round 3zb + 3zc: the 25 router ops' old shapes (without the chain word, their calldata in
+        // vectors/typed/legacy/burner-wrap-caps/) are no row: refused by name on a listed router; a job naming one without
+        // `chainUid` is `BAD_PAYLOAD` (`typed::tests::chain_word_rows_refuse_a_missing_word`)
+        let old = format!("{}/../smartcontracts/vectors/typed/legacy/burner-wrap-caps/typed_ops.json", env!("CARGO_MANIFEST_DIR"));
+        let old: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(old).unwrap()).unwrap();
+        let mut moved = 0;
+        for (name, o) in old["ops"].as_object().unwrap() {
+            let Some(d) = o["domains"].get("gov_router") else { continue };
+            // the six rows `typed::testkit::vectors()` leaves out (`NO_NODE_ROW`, unchanged since 3fa153e4), not moved shapes of
+            // this round: `UACreateToken` / `UACreateDex` are node rows built from a named config, which the vector's filler
+            // `initArgs` is not (pinned by `typed::tests::creation_rows_encode_the_named_config`); the four release approvals
+            // are no node job by the owner's ruling (decisions.md CTR-GOV-23 "Release management is not a node job", `NOT_ROWS`; job-api.md, the router row)
+            if typed::testkit::NO_NODE_ROW.contains(&name.as_str()) {
+                continue;
+            }
+            if v["ops"][name]["typehash"] == o["typehash"] {
+                continue;
+            }
+            let data = alloy::hex::decode(d["calldata"].as_str().unwrap()).unwrap();
+            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: "gov_router", domain_of: target, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+                derived_signer: false, derived_side: false };
+            let w = Work { job_id: Some(1), to: target, data: data.into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) };
+            let e = g.check(&chain, &w).await.unwrap_err();
+            assert!(matches!(&e, Refusal::Policy(r) if r.starts_with("CALL_TARGET_REFUSED")), "the old {name}: {e:?}");
+            moved += 1;
+        }
+        assert_eq!(moved, 25, "the old shapes walked");
     }
 
-    /// Item of the lane, not of `Typed`: after `fill_digest` a receiver fee is keyed by its outer digest and `classify` compares
+    /// Item of the lane, not of `Typed`: after `fill_digest` a payee fee is keyed by its outer digest and `classify` compares
     /// the payment's, what the chain emits; an ordinary op has one digest for both.
     #[tokio::test]
     async fn fill_digest_keeps_the_key_and_what_the_chain_emits_apart() {
         use crate::typed::testkit::{op_of, vectors};
         let v = vectors();
-        let d = &v["ops"]["UAReceiverFee"]["domains"]["token"];
+        let d = &v["ops"]["UAPayeeFee"]["domains"]["token"];
         let uid: B256 = d["domain"]["salt"].as_str().unwrap().parse().unwrap();
         let (cfg, _) = bound(uid).await;
         let chain = Chain::with_signer(&cfg, signer()).unwrap();
-        let (mut w, _) = crate::submit::work_of_op(Some(1), &op_of("UAReceiverFee", "token", &v).unwrap(), None).unwrap();
+        let (mut w, _) = crate::submit::work_of_op(Some(1), &op_of("UAPayeeFee", "token", &v).unwrap(), None).unwrap();
         fill_digest(&chain, &mut w).await.unwrap();
         let t = w.typed.clone().unwrap();
         assert_eq!(format!("{:#x}", w.digest().unwrap()), d["digest"].as_str().unwrap(), "the in-flight key: the vector's outer digest");
@@ -1176,7 +1810,7 @@ mod tests {
             validUntil: alloy::primitives::U256::from(4_000_000_000u64), mode: 0, relayer: Address::ZERO, fee: alloy::primitives::U256::ZERO, feeRecipient: Address::ZERO };
         let m = UaMtx::Transfer(t);
         let auth = |sig: &[u8]| crate::abi::UASig { keyData: Bytes::new(), signature: sig.to_vec().into(), members: vec![] };
-        let work = |sig: Vec<u8>| Work { job_id: Some(1), to: token, data: m.calldata(auth(&sig)), valid_until: 4_000_000_000,
+        let work = |sig: Vec<u8>| Work { job_id: Some(1), to: token, data: m.calldata(auth(&sig)), valid_until: 4_000_000_000, envelope_until: 4_000_000_000,
             meta: Some(crate::submit::MetaRef::of_ua(token, &m, None)), entry: false,
             typed: Some(crate::submit::transfer_typed(None, token, m.struct_hash(), Some((from, sig.into()))).unwrap()) };
         g.check(&chain, &work(vec![0xab; 64])).await.unwrap();
@@ -1191,7 +1825,7 @@ mod tests {
         let cfg = ChainCfg { evm_chain_number: 7, rpc_urls: vec!["http://127.0.0.1:9".into()], ..Default::default() };
         let chain = Chain::with_signer(&cfg, signer()).unwrap();
         let g = Guard::new(&cfg, Default::default()).unwrap();
-        let w = |data: Vec<u8>, entry: bool| Work { job_id: Some(1), to: Address::repeat_byte(1), data: data.into(), valid_until: 0, meta: None, entry, typed: None };
+        let w = |data: Vec<u8>, entry: bool| Work { job_id: Some(1), to: Address::repeat_byte(1), data: data.into(), valid_until: 0, envelope_until: 0, meta: None, entry, typed: None };
         let transfer = IToken::transferCall { to: Address::repeat_byte(2), value: alloy::primitives::U256::from(1) }.abi_encode();
         assert!(matches!(g.check(&chain, &w(transfer.clone(), true)).await, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")));
         assert!(matches!(g.check(&chain, &w(transfer, false)).await, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")));
@@ -1388,6 +2022,22 @@ mod tests {
             let all = Facts { gov_router: true, dex: true, account_factory: true, ua_registry: true, ..bound };
             assert!(!allowed(other, &all), "{other:?}: a router is no target of another kind's row");
         }
+        // T93 (topics P45): a factory class, bound by the factory's record (an instance answers no `chainUid()`)
+        let chat = Rule::FactoryClass(CLASS_PQCHAT);
+        let listed = Facts { listed: Some((3, 1)), ..Default::default() };
+        assert_eq!(rule_of("pqchat"), Some(chat));
+        assert!(allowed(chat, &listed), "listed as class 3 with a release");
+        assert!(!allowed(chat, &Facts::default()), "only a listed instance");
+        assert!(!allowed(chat, &bound), "bound is not listed");
+        assert!(!allowed(chat, &Facts { listed: Some((3, 0)), ..listed }), "version 0");
+        assert!(!allowed(chat, &Facts { listed: Some((4, 1)), ..listed }), "another class");
+        assert!(!allowed(chat, &Facts { token: true, ..listed }), "never a registered token");
+        assert!(!allowed(chat, &Facts { token_factory: true, ..listed }), "never the token factory");
+        assert!(!allowed(chat, &Facts { gov_router: true, ..listed }), "a router takes its own rows only");
+        for other in [Rule::SelfAuth, Rule::Dex, Rule::AccountFactory, Rule::UaRegistry, Rule::GovRouter] {
+            let all = Facts { gov_router: other == Rule::GovRouter, dex: true, account_factory: true, ua_registry: true, ..listed };
+            assert!(!allowed(other, &all), "{other:?}: an instance is no target of another kind's row");
+        }
     }
 
     /// The kind of each contract of `selector_audit.json` (`DexPuller` is no target of a job: the DEX calls it).
@@ -1396,23 +2046,44 @@ mod tests {
         ("WrappedZetherToken", "zether"), ("NormalPqzToken", "pqz"), ("WrappedPqzToken", "pqz"), ("SCaaSDex", "dex"),
         ("GovernanceRouter", "gov_router"), ("NormalRegulatedToken", "token"), ("WrappedRegulatedToken", "token"),
         ("NormalZetherRegulatedToken", "zether"), ("WrappedZetherRegulatedToken", "zether"), ("NormalPqzRegulatedToken", "pqz"),
-        ("WrappedPqzRegulatedToken", "pqz")];
+        ("WrappedPqzRegulatedToken", "pqz"), ("OpenFactory", "open_factory"), ("UARegistry", "registry"),
+        ("SmartKeyAccountFactory", "factory"), ("SmartKeyAccount", "account")];
+    // round 3r (spec §7): `OpenFactory` under its own label: the node's contract kind `factory` is `SmartKeyAccountFactory`
+    // (`deploy`); `OpenFactory` has no node row, its three open deploys `APPROVED(release)` are in `NOT_ROWS`
     /// `SIGNED` entries no job names, each with its reason: `(name, the argument list's start)`.
     const NOT_ROWS: &[(&str, &str, &str)] = &[
         ("executeMetaTransaction", "((address,bytes,", "the EIP-1776 alias (R3): its address MetaTransaction is no job shape"),
         ("mtxExecute", "((bytes32,bytes,", "the generic UAMetaTransaction: a job names its operation (HEX_DATA_REFUSED on struct = call)"),
         ("mtxBatch", "((bytes32,bytes,", "the generic batch: as mtxExecute"),
+        // owner 2026-11-12: `SmartKeyAccount`'s generic entries on its address `MetaTransaction`
+        ("mtxExecute", "((address,bytes,", "the account's generic MetaTransaction: a job names its operation (mtxExecuteAsOwner, the account's named rows)"),
+        ("mtxBatch", "((address,bytes,", "the account's generic batch: as its mtxExecute"),
         ("mtxBatchTransfer", "((bytes32,bytes32,", "a transfer relays as one mtxExecuteTransfer (ua_metatx struct job)"),
         ("mtxTransfer", "(bytes32,bytes32,", "the flat transfer: the same UAMetaTransfer as mtxExecuteTransfer"),
         ("mtxTransferWithFee", "(bytes32,bytes32,", "the flat transfer with a fee: as mtxTransfer"),
         ("mtxTrade", "((bytes32,address,", "the DEX's pull (NotDex for any other caller)"),
         ("restorePulled", "((bytes32,address,", "the DEX's (NotDex)"),
+        ("mtxLiquidityPull", "((bytes32,(address,uint256)[],", "the DEX's liquidity pull (NotLiquidityDex, and no valid digest for any other caller): reached only through the relayed mtxLiquidity (spec 2026-11-10-dex-liquidity.md §11)"),
         ("exchangeOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
         ("settleOne", "((bytes32,", "the DEX's own self-call (NotSelf)"),
-        ("mtxCreateToken", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
-        ("mtxCreateDex", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
-        ("mtxCreateInstance", "((bytes32,uint256,", "the factory's creations through the router (S3, plan T76): no node row until relaying creations is decided (chain-neutral spec §6.3, index spec §8.11 Q11); anyone submits them, fee 0"),
+        // owner 2026-11-12: `mtxCreateToken`, `mtxCreateDex` and `mtxCreateInstance` are rows (their configs named; the instance's
+        // `init_call` or a known class's named config)
+        ("mtxApproveTokenRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
+        ("mtxApproveDexRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
+        ("mtxApproveRelease", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
+        ("mtxRevokeApproval", "((bytes32,uint256,", RELEASE_NOT_A_JOB),
+        ("deployTokenImplementation", "(uint8,", RELEASE_NOT_A_JOB),
+        ("deployDexImplementation", "(uint64,", RELEASE_NOT_A_JOB),
+        ("deployImplementation", "((uint16,", RELEASE_NOT_A_JOB),
     ];
+    /// `addKey` -> `mtxAddKey`: the envelope entry that self-calls an operation.
+    fn mtx_of(name: &str) -> String {
+        let mut c = name.chars();
+        c.next().map_or(String::new(), |f| format!("mtx{}{}", f.to_ascii_uppercase(), c.as_str()))
+    }
+
+    /// Round 3r (spec 2026-11-10-admin-not-owner.md §5.6, Q3): the four approval ops and the three open deploys.
+    const RELEASE_NOT_A_JOB: &str = "release management is not a node job (owner 2026-11-10)";
     const ENV_UA: &str = "((bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
     const ENV_ADDR: &str = "((address,uint256,uint256,uint256,uint32,address,uint256,address)";
 
@@ -1421,7 +2092,7 @@ mod tests {
     /// through the router); every `SIGNED` entry of those contracts is a row of the kind, a `ua_metatx` struct job's entry
     /// (`mtxExecuteTransfer`, `mtxPayMeta`, the calldata [`crate::metatx::UaMtx`] builds), the inner operation an envelope row of the
     /// same name self-calls (also the holder's direct call), or named in `NOT_ROWS` with its reason. The router's generic entries
-    /// (`PERMISSIONLESS(refuses every call)`) are no row; no `BIT`, `OWNER` or `HOLDER_OWN` entry of a governed contract is a row of any
+    /// (`PERMISSIONLESS(refuses every call)`) are no row; no `BIT`, `ADMIN` or `HOLDER_OWN` entry of a governed contract is a row of any
     /// kind, so no governance op is relayable on it.
     #[test]
     fn allow_lists_equal_the_selector_audit_both_directions() {
@@ -1437,13 +2108,20 @@ mod tests {
         let auth = crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] };
         let struct_jobs: HashSet<[u8; 4]> = [m.calldata(auth)[..4].try_into().unwrap()].into_iter().collect();
         let (mut rowed, mut exempt, mut governed) = (0, 0, 0);
-        for kind in ["token", "zether", "pqz", "dex", "gov_router"] {
+        // Fable E N-10: + the registry and the account factory, whose writes anyone may relay: a row there is a SIGNED entry or a
+        // PERMISSIONLESS one (`storePqzPop`, `deploy`: a proof or the address fixes what they write)
+        // owner 2026-11-12: + the account (`SmartKeyAccount`; its guardian's `initiateRecovery` is class GUARDIAN, no row)
+        for kind in ["token", "zether", "pqz", "dex", "gov_router", "open_factory", "registry", "factory", "account"] {
             let entries: Vec<&serde_json::Value> = AUDIT_KINDS.iter().filter(|(_, k)| *k == kind)
                 .flat_map(|(c, _)| audit[*c].as_array().unwrap_or_else(|| panic!("{c}"))).collect();
             let signed: HashSet<[u8; 4]> = entries.iter().filter(|r| r["class"] == "SIGNED").map(|r| sel(r["sig"].as_str().unwrap())).collect();
+            let open_rows = matches!(kind, "registry" | "factory");
+            let open: HashSet<[u8; 4]> = entries.iter().filter(|r| open_rows && r["class"].as_str().is_some_and(|c| c.starts_with("PERMISSIONLESS(")))
+                .map(|r| sel(r["sig"].as_str().unwrap())).collect();
             let ours: Vec<&typed::Row> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&kind)).collect();
             for r in &ours {
-                assert!(signed.contains(&r.selector), "{} ({}) on {kind} is no SIGNED entry of a {kind} contract", r.name, r.entry);
+                assert!(signed.contains(&r.selector) || open.contains(&r.selector),
+                    "{} ({}) on {kind} is no SIGNED entry of a {kind} contract", r.name, r.entry);
             }
             for e in entries.iter().filter(|r| r["class"] == "SIGNED") {
                 let s = e["sig"].as_str().unwrap();
@@ -1453,8 +2131,8 @@ mod tests {
                 } else if kind != "dex" && kind != "gov_router" && struct_jobs.contains(&sel(s)) {
                     exempt += 1;
                 } else if !args.starts_with(ENV_UA) && !args.starts_with(ENV_ADDR)
-                    && ours.iter().any(|r| r.entry == name && r.enveloped) {
-                    exempt += 1; // the inner operation its envelope row self-calls
+                    && ours.iter().any(|r| r.enveloped && (r.entry == name || r.entry == mtx_of(name))) {
+                    exempt += 1; // the inner operation its envelope row self-calls (the account's `addKey` behind `mtxAddKey`)
                 } else {
                     assert!(NOT_ROWS.iter().any(|(n, a, _)| *n == name && args.starts_with(a)), "{kind}: SIGNED {s} has no row and no reason");
                     exempt += 1;
@@ -1463,24 +2141,41 @@ mod tests {
             for e in entries.iter().filter(|r| r["class"] != "SIGNED") {
                 let s = e["sig"].as_str().unwrap();
                 for k in kinds {
+                    if k == kind && open.contains(&sel(s)) && row(sel(s), k).is_some() {
+                        rowed += 1; // a relayable PERMISSIONLESS write of the registry or the account factory
+                        continue;
+                    }
                     assert!(row(sel(s), k).is_none(), "{kind}: {s} ({}) is a {k} row", e["class"]);
                 }
                 let class = e["class"].as_str().unwrap();
-                governed += usize::from(class.starts_with("BIT") || class == "OWNER" || class == "HOLDER_OWN");
+                if class.starts_with("APPROVED") {
+                    // round 3r: the factory's open deploys (an approved release), each named with its reason
+                    let (name, args) = s.split_at(s.find('(').unwrap());
+                    assert!(NOT_ROWS.iter().any(|(n, a, _)| *n == name && args.starts_with(a)), "{kind}: {s} ({class}) not in NOT_ROWS");
+                    exempt += 1;
+                }
+                governed += usize::from(class.starts_with("BIT") || class == "ADMIN" || class == "HOLDER_OWN" || class == "GUARDIAN");
             }
         }
-        let creation = |s: &str| s.starts_with("mtxCreateToken(") || s.starts_with("mtxCreateDex(") || s.starts_with("mtxCreateInstance(");
+        let not_row = |s: &str| NOT_ROWS.iter().any(|(n, a, _)| s.strip_prefix(n).is_some_and(|x| x.starts_with(a)));
         let router: HashSet<[u8; 4]> = audit["GovernanceRouter"].as_array().unwrap().iter().filter(|r| r["class"] == "SIGNED")
-            .map(|r| r["sig"].as_str().unwrap()).filter(|s| !creation(s)).map(sel).collect();
-        // group 3f T45 / T47: 30 -> 33, the three verifier ops; group 3h T61: -> 34, `mtxSetProofStore` (bit 24)
-        assert_eq!(router.len(), 34, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h); the three creations (T76) in NOT_ROWS");
+            .map(|r| r["sig"].as_str().unwrap()).filter(|s| !not_row(s)).map(sel).collect();
+        // group 3f T45 / T47: 30 -> 33, the three verifier ops; group 3h T61: -> 34, `mtxSetProofStore` (bit 24); group 3l: -> 36,
+        // `mtxSetWrapLimits`, `mtxSetWrapMember`
+        // round 3r: -> 47, the eleven admin ops of the factory and the compliance registry (the four approvals in NOT_ROWS)
+        // round 3s (CTR-GOV-24): -> 50, `mtxSetAllowed`, `mtxSetDenied`, `mtxEnableFeature`; round 3t: -> 51, `mtxSetVerifierFee`
+        // owner 2026-11-12: -> 53, `mtxCreateToken`, `mtxCreateDex`; -> 54, `mtxCreateInstance`; round 3zc (CTR-GOV-30): -> 56,
+        // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` (the 25 ops of the Change of CTR-GOV-28 moved selector in place)
+        assert_eq!(router.len(), 56, "19 ops, the eight regulated controls (plan T32), the ordered cancel, the two tax ops (pay-meta-tax T39), the three verifier ops (3f), bit 24's op (3h), the two wrap-limit ops (3l), the eleven admin ops (3r), the three creations (a token, a DEX, an instance); the four release approvals (3r) in NOT_ROWS");
         let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| !r.entry.is_empty() && r.contracts.contains(&"gov_router")).map(|r| r.sent).collect();
         assert_eq!(ours, router, "the router's allow-list, both directions");
         assert_eq!((rowed, exempt, governed), (ROWED, EXEMPT, GOVERNED), "every SIGNED entry was walked");
     }
     /// Regulated-kinds spec §7 (plan T35), one kind 8-13 against its base kind, both directions:
-    /// - the contract: its `mtxSelectors()`, `_mtxRule` and `_uaAllowed` are `return super.<f>(…)` over the base kind, and
-    ///   `RegulatedBase` defines none of them, so the meta-tx allow-lists are the base kind's;
+    /// - the contract (split tree, T66b): `<Kind>Core is <Base>Core, RegulatedBase`; its `_mtxSelectorsBody`, `_mtxRule` and
+    ///   `_uaAllowed` are `return super.<f>(…)` over `<Base>Core`; the module's `mtxSelectors()` returns `_mtxSelectorsBody()`;
+    ///   and neither `RegulatedBase`, `RegulatedLib`, the face nor the modules define any of them, so the meta-tx allow-lists
+    ///   are the base kind's;
     /// - `selector_audit.json`: its `SIGNED` entries are the base kind's, each way; every other entry it adds is one of the eight
     ///   `BIT` controls (5, 6, 7, 10, 22), none a row of any node kind (relayed through the router only);
     /// - the node: the rows of the base's node kind on its `SIGNED` entries are the same set on the regulated kind, and the guard
@@ -1488,20 +2183,30 @@ mod tests {
     fn regulated_kind_rows_equal_contract(kind: &str, base: &str, node_kind: &str, base_dir: &str) {
         let root = format!("{}/../smartcontracts/evm", env!("CARGO_MANIFEST_DIR"));
         let read = |p: &str| std::fs::read_to_string(format!("{root}/{p}")).unwrap_or_else(|e| panic!("{p}: {e}"));
-        let src = read(&format!("src/regulated/{kind}.sol"));
-        assert!(src.contains(&format!("contract {kind} is {base}, RegulatedBase {{")), "{kind} is {base}, RegulatedBase");
-        assert!(read(&format!("src/{base_dir}/{base}.sol")).contains(&format!("contract {base} ")), "{base} in src/{base_dir}");
-        for (f, args) in [("mtxSelectors", "()"), ("_mtxRule", "(sel)"), ("_uaAllowed", "(sel)")] {
+        // ua-mtx-merge T66b: the kind's logic is `<Kind>Core`; the face (`<Kind>.sol`) and `<Kind>Modules.sol` forward to it.
+        let src = read(&format!("src/regulated/{kind}Core.sol"));
+        assert!(src.contains(&format!("abstract contract {kind}Core is {base}Core, RegulatedBase {{")), "{kind}Core is {base}Core, RegulatedBase");
+        assert!(read(&format!("src/{base_dir}/{base}Core.sol")).contains(&format!("abstract contract {base}Core ")), "{base}Core in src/{base_dir}");
+        let body_of = |src: &str, f: &str| -> String {
             let i = src.find(&format!("function {f}(")).unwrap_or_else(|| panic!("{kind}: no {f}"));
-            let body = &src[i..i + src[i..].find("\n    }\n").unwrap()];
-            assert!(body.contains(&format!("override({base}, ")), "{kind}.{f} overrides {base}'s");
-            let stmts: Vec<&str> = body[body.find('{').unwrap() + 1..].split(';').map(str::trim).filter(|s| !s.is_empty()).collect();
-            assert_eq!(stmts, [format!("return super.{f}{args}")], "{kind}.{f}: the base kind's, unchanged");
+            src[i..i + src[i..].find("\n    }\n").unwrap()].to_string()
+        };
+        let stmts = |body: &str| -> Vec<String> {
+            body[body.find('{').unwrap() + 1..].split(';').map(str::trim).filter(|s| !s.is_empty()).map(String::from).collect()
+        };
+        for (f, args) in [("_mtxSelectorsBody", "()"), ("_mtxRule", "(sel)"), ("_uaAllowed", "(sel)")] {
+            let body = body_of(&src, f);
+            let o = body.find("override(").unwrap_or_else(|| panic!("{kind}Core.{f}: no override")) + "override(".len();
+            let over: Vec<&str> = body[o..o + body[o..].find(')').unwrap()].split(',').map(str::trim).collect();
+            assert!(over.contains(&format!("{base}Core").as_str()), "{kind}Core.{f} overrides {base}Core's: {over:?}");
+            assert_eq!(stmts(&body), [format!("return super.{f}{args}")], "{kind}Core.{f}: the base kind's, unchanged");
         }
-        for lib in ["RegulatedBase", "RegulatedLib"] {
-            let s = read(&format!("src/regulated/{lib}.sol"));
-            for f in ["function mtxSelectors(", "function _mtxRule(", "function _uaAllowed("] {
-                assert!(!s.contains(f), "{lib} defines {f}: {kind}'s super would reach it first");
+        let modules = read(&format!("src/regulated/{kind}Modules.sol"));
+        assert_eq!(stmts(&body_of(&modules, "mtxSelectors")), ["return _mtxSelectorsBody()"], "{kind}Modules.mtxSelectors");
+        for file in ["RegulatedBase".to_string(), "RegulatedLib".to_string(), kind.to_string(), format!("{kind}Modules")] {
+            let s = read(&format!("src/regulated/{file}.sol"));
+            for f in ["function _mtxSelectorsBody(", "function _mtxRule(", "function _uaAllowed("] {
+                assert!(!s.contains(f), "{file} defines {f}: {kind}'s allow-list would not be {base}Core's");
             }
         }
         let p = format!("{root}/test/vectors/selector_audit.json");
@@ -1525,15 +2230,19 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
             assert_eq!(k.get(s), Some(c), "{kind}: {s} keeps {base}'s class");
         }
         let added: std::collections::BTreeMap<&String, &String> = k.iter().filter(|(s, _)| !b.contains_key(*s)).collect();
-        let controls = ["freeze(bytes32,bytes32,bytes32)", "unfreeze(bytes32,bytes32)", "forceTransfer(bytes32,uint256)",
-            "pause(bytes32,uint64)", "unpause(bytes32)", "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
-            "revokeOrder(bytes32,bytes32)", "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+        // the Change of CTR-GOV-28 in round 3zb + 3zc (O6): every control takes the token's chain word last
+        let controls = ["freeze(bytes32,bytes32,bytes32,bytes32)", "unfreeze(bytes32,bytes32,bytes32)", "forceTransfer(bytes32,uint256,bytes32)",
+            "pause(bytes32,uint64,bytes32)", "unpause(bytes32,bytes32)", "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
+            "revokeOrder(bytes32,bytes32,bytes32)", "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
             // pay-meta-tax T39 / T40: bit 23's two powers, the direct payWithTax (the caller's own balance), mtxPayWithTax
-            "setTaxRate(uint32)", "setTaxRecipient(bytes32)", "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
-            PAY_WITH_TAX];
+            "setTaxRate(uint32,bytes32)", "setTaxRecipient(bytes32,bytes32)", "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes))",
+            PAY_WITH_TAX,
+            // round 3s (CTR-GOV-24): the lists (bits 8, 9; on 10-13 setAllowed's row holds, no holder can exist) and the enable
+            "setAllowed(bytes32[],bool,bytes32)", "setDenied(bytes32[],bool,bytes32)", "enableFeature(uint8,bytes32)"];
         assert_eq!(added.keys().map(|s| s.as_str()).collect::<std::collections::BTreeSet<_>>(), controls.into_iter().collect(), "{kind}");
         for (s, c) in added.iter().filter(|(s, _)| s.as_str() != PAY_WITH_TAX) {
-            assert!(c.starts_with("BIT(") || (c.as_str() == "OWN_BALANCE" && s.starts_with("payWithTax(")), "{kind}: {s} is {c}");
+            assert!(c.starts_with("BIT(") || (c.as_str() == "OWN_BALANCE" && s.starts_with("payWithTax("))
+                || (c.as_str() == "ADMIN" && s.as_str() == "enableFeature(uint8,bytes32)"), "{kind}: {s} is {c}");
             for nk in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
                 assert!(row(sel(s), nk).is_none(), "{kind}: the control {s} is a {nk} row");
             }
@@ -1627,7 +2336,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let class = |s: &str| entries.iter().find(|e| e["sig"] == s).map(|e| e["class"].as_str().unwrap().to_string());
         let view = format!("verifyTransferAmount(bytes32,uint256,uint256,uint8,uint64,bytes,{VERDICT_ABI})");
         assert_eq!(sel(&view), [0xe9, 0x74, 0x8a, 0x12], "the forge artifact's selector");
-        for s in ["pqzSetVerifier(bytes32)", "pqzCancelVerifier()", "pqzRevokeVerifier()", view.as_str()] {
+        for s in ["pqzSetVerifier(bytes32,bytes32)", "pqzCancelVerifier(bytes32)", "pqzRevokeVerifier(bytes32)", view.as_str()] {
             if !s.starts_with("verifyTransferAmount") {
                 let c = class(s).unwrap_or_else(|| panic!("{contract}: {s} not in the audit"));
                 assert_ne!(c, "SIGNED", "{contract}: {s} is the owner's own call, relayed through the router only");
@@ -1655,6 +2364,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         pqz_verdict_rows_equal_contract("WrappedPqzRegulatedToken", 12);
     }
 
+    /// CTR-GOV-28: the three verifier ops and the fee op sign the token's `chainUid` last (selectors old -> new: 0x065bf7fd ->
+    /// 0x690eea59, 0x681afa10 -> 0xd5c14210, 0x42242ae3 -> 0xe816ad71, 0xf0d8cbbf -> 0x280839e6).
     /// Group 3f (spec §4.2): the router's three verifier ops (and 3h T61's `UASetProofStore`) are rows of `gov_router` only, over the `UA*` structs the brief names,
     /// their selectors the forge artifact's and the router's `SIGNED` entries in `selector_audit.json`, their vectors in
     /// `typed_ops.json` (struct hash, digest and calldata pinned by `typed_ops_kat_every_entry`); fee mode `NONE` like every router
@@ -1663,15 +2374,19 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     fn router_pqz_verifier_rows() {
         let env = format!("{ENV_UA},");
         let want = [
-            ("UAPqzSetVerifier", "mtxPqzSetVerifier", "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
-                format!("mtxPqzSetVerifier{env}address,bytes32,{UASIG_ABI})"), [0x06, 0x5b, 0xf7, 0xfd]),
-            ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", "UAPqzCancelVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
-                format!("mtxPqzCancelVerifier{env}address,{UASIG_ABI})"), [0x68, 0x1a, 0xfa, 0x10]),
-            ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", "UAPqzRevokeVerifier(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
-                format!("mtxPqzRevokeVerifier{env}address,{UASIG_ABI})"), [0x42, 0x24, 0x2a, 0xe3]),
-            // group 3h T61 (PQZ proof path spec §5): bit 24's op, the same router row shape
-            ("UASetProofStore", "mtxSetProofStore", "UASetProofStore(bytes32 from,address target,uint8 next,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
-                format!("mtxSetProofStore{env}address,uint8,{UASIG_ABI})"), [0xa6, 0x3e, 0x58, 0x86]),
+            ("UAPqzSetVerifier", "mtxPqzSetVerifier", "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxPqzSetVerifier{env}address,bytes32,bytes32,{UASIG_ABI})"), [0x69, 0x0e, 0xea, 0x59]),
+            ("UAPqzCancelVerifier", "mtxPqzCancelVerifier", "UAPqzCancelVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxPqzCancelVerifier{env}address,bytes32,{UASIG_ABI})"), [0xd5, 0xc1, 0x42, 0x10]),
+            ("UAPqzRevokeVerifier", "mtxPqzRevokeVerifier", "UAPqzRevokeVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxPqzRevokeVerifier{env}address,bytes32,{UASIG_ABI})"), [0xe8, 0x16, 0xad, 0x71]),
+            // group 3h T61 (PQZ proof path spec §5): bit 24's op, the same router row shape; the Change of CTR-GOV-28 in round
+            // 3zb + 3zc: + the chain word (0xa63e5886 -> 0x3b127180)
+            ("UASetProofStore", "mtxSetProofStore", "UASetProofStore(bytes32 from,address target,uint8 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxSetProofStore{env}address,uint8,bytes32,{UASIG_ABI})"), [0x3b, 0x12, 0x71, 0x80]),
+            // round 3t (CTR-PQZ-36): the admin's verifier fee, the same router row shape
+            ("UASetVerifierFee", "mtxSetVerifierFee", "UASetVerifierFee(bytes32 from,address target,uint64 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)",
+                format!("mtxSetVerifierFee{env}address,uint64,bytes32,{UASIG_ABI})"), [0x28, 0x08, 0x39, 0xe6]),
         ];
         let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
         let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
@@ -1692,24 +2407,120 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         }
     }
 
+    /// Group 3l (wrap limits spec 2026-11-10 §9): the router's two ops on the hybrids are rows of `gov_router` only, over the
+    /// `UA*` structs the spec names (the leg array's referenced types in EIP-712 order), their selectors the forge artifact's and
+    /// `SIGNED` entries of the router in `selector_audit.json`, their vectors in `typed_ops.json`; no token row moves (the
+    /// tokens' `setWrapLimits` / `setWrapMember` are governed, never on a token's allow-list). The Change of CTR-GOV-28 in round
+    /// 3zb + 3zc (O5, O6): both sign the token's chain word last (selectors old -> new: `mtxSetWrapLimits` 0x6178483c ->
+    /// 0x6564fc04, `mtxSetWrapMember` 0x3c0ed776 -> 0x438aef3c); round 3zc (CTR-GOV-30): the admin's two cap setters, the same
+    /// row shape (`mtxSetMaxSupply` 0xf1d24225, `mtxSetMaxWrapSupply` 0xd60e02f5).
+    #[test]
+    fn router_wrap_limit_rows() {
+        let env = format!("{ENV_UA},");
+        let leg = "(address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))";
+        let refs = "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)";
+        let want = [
+            ("UASetWrapLimits", "mtxSetWrapLimits",
+                format!("UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient){refs}"),
+                format!("mtxSetWrapLimits{env}address,{leg}[],bool,bool,bool,bytes32,{UASIG_ABI})"), [0x65, 0x64, 0xfc, 0x04]),
+            ("UASetWrapMember", "mtxSetWrapMember",
+                "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)".to_string(),
+                format!("mtxSetWrapMember{env}address,bytes32,bool,bool,bytes32,{UASIG_ABI})"), [0x43, 0x8a, 0xef, 0x3c]),
+            ("UASetMaxSupply", "mtxSetMaxSupply",
+                "UASetMaxSupply(bytes32 from,address target,uint256 maxSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)".to_string(),
+                format!("mtxSetMaxSupply{env}address,uint256,bytes32,{UASIG_ABI})"), [0xf1, 0xd2, 0x42, 0x25]),
+            ("UASetMaxWrapSupply", "mtxSetMaxWrapSupply",
+                "UASetMaxWrapSupply(bytes32 from,address target,uint256 maxWrapSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)".to_string(),
+                format!("mtxSetMaxWrapSupply{env}address,uint256,bytes32,{UASIG_ABI})"), [0xd6, 0x0e, 0x02, 0xf5]),
+        ];
+        let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
+        let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let router: HashSet<&str> = audit["GovernanceRouter"].as_array().unwrap().iter().filter(|r| r["class"] == "SIGNED")
+            .map(|r| r["sig"].as_str().unwrap()).collect();
+        let v = typed::testkit::vectors();
+        for (name, entry, ty, sig, artifact) in &want {
+            let r = typed::testkit::row_of(name, "gov_router");
+            assert_eq!((r.entry, r.type_string().as_str(), r.contracts), (*entry, ty.as_str(), &["gov_router"][..]), "{name}");
+            assert_eq!(r.selector, *artifact, "{name}: the forge artifact's {sig}");
+            assert_eq!(alloy::primitives::keccak256(sig.as_bytes())[..4], r.selector[..], "{name}");
+            assert_eq!(row(r.sent, "gov_router").map(|x| x.name), Some(*name), "{name}: allowed on a router");
+            for k in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory"] {
+                assert!(row(r.sent, k).is_none(), "{name} is a {k} row");
+            }
+            assert!(router.contains(sig.as_str()), "{name}: {sig} is no SIGNED entry of the router in selector_audit.json");
+            assert_eq!(v["ops"][*name]["typeString"].as_str(), Some(ty.as_str()), "{name}: typed_ops.json's row");
+        }
+    }
+
+    /// The Change of CTR-GOV-28 in round 3zb + 3zc (O3, O5, O6, spec 2026-11-13-burner-wrap-caps.md §3.5, §3.8, §3.9, §4): every
+    /// role holder's direct entry and the admin's `setWrapLimits` take the chain word last, keep their class in
+    /// `selector_audit.json` (the old forms gone), and are no row of any kind (relayed through the router only); the two new cap
+    /// setters are `ADMIN` on the six wrapped kinds, never on a token's allow-list.
+    #[test]
+    fn chain_word_entries_are_governed_and_no_row() {
+        let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
+        let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let class = |c: &str, s: &str| audit[c].as_array().unwrap_or_else(|| panic!("{c}")).iter().find(|e| e["sig"] == s)
+            .map(|e| e["class"].as_str().unwrap().to_string());
+        let leg = "(address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))";
+        let limits = format!("setWrapLimits({leg}[],bool,bool,bool,bytes32)");
+        let any_token = [("mint(address,uint256,bytes32)", "BIT(1)"), ("mintToUA(bytes32,uint256,bytes32)", "BIT(1)")];
+        let wrapped = [("disableWrap(address,bytes32,bytes32)", "BIT(4)"), ("proposeRate(address,uint96,uint96,bytes32)", "BIT(3)"),
+            ("cancelRate(bytes32)", "BIT(3)"), ("executeRate(bytes32)", "BIT(3)"), ("setWrapMember(bytes32,bool,bool,bytes32)", "BIT(26)"),
+            (limits.as_str(), "ADMIN"), ("setMaxSupply(uint256,bytes32)", "ADMIN"), ("setMaxWrapSupply(uint256,bytes32)", "ADMIN")];
+        let dex = [("setMarket(address,address,bool,bytes32)", "BIT(11)"), ("setExchangeTarget(address,bool,bytes32)", "BIT(11)"),
+            ("setListedOnly(bool,bytes32)", "BIT(11)"), ("setFeeSplit(uint32,address,bytes32)", "BIT(12)")];
+        let gone = ["mint(address,uint256)", "mintToUA(bytes32,uint256)", "disableWrap(address,bytes32)", "cancelRate()",
+            "executeRate()", "setWrapMember(bytes32,bool,bool)", "setProofStore(uint8)", "setMarket(address,address,bool)",
+            "setFeeSplit(uint32,address)"];
+        let mut checked = vec![];
+        for (c, _) in AUDIT_KINDS.iter().filter(|(c, k)| matches!(*k, "token" | "zether" | "pqz") && c.ends_with("Token")) {
+            let mut want: Vec<(&str, &str)> = any_token.to_vec();
+            if c.starts_with("Wrapped") {
+                want.extend(wrapped.iter().copied());
+            }
+            for (s, cl) in &want {
+                assert_eq!(class(c, s).as_deref(), Some(*cl), "{c}: {s}");
+            }
+            assert_eq!(class(c, "setMaxSupply(uint256,bytes32)").is_some(), c.starts_with("Wrapped"), "{c}: the cap setters on the wrapped kinds only");
+            checked.extend(want.iter().map(|(s, _)| s.to_string()));
+            for s in gone {
+                assert_eq!(class(c, s), None, "{c}: the old {s}");
+            }
+        }
+        assert_eq!(AUDIT_KINDS.iter().filter(|(c, _)| c.starts_with("Wrapped") && c.ends_with("Token")).count(), 6);
+        for (s, cl) in dex {
+            assert_eq!(class("SCaaSDex", s).as_deref(), Some(cl), "SCaaSDex: {s}");
+            checked.push(s.to_string());
+        }
+        let sel = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
+        for s in &checked {
+            for k in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
+                assert!(row(sel(s), k).is_none(), "{s} is a {k} row");
+            }
+        }
+    }
+
     /// Group 3h T61 / T63 (spec §10): bit 24's router op both directions: `UASetProofStore` is a row of `gov_router` only, its
     /// selector the forge artifact's and a `SIGNED` entry of the router in `selector_audit.json`; the token's own
     /// `setProofStore(uint8)` (`BIT(24)` on the four PQZ kinds) is no row on any kind (relayed through the router only).
     #[test]
     fn proof_store_router_row_equal_contract() {
-        let sig = format!("mtxSetProofStore{ENV_UA},address,uint8,{UASIG_ABI})");
+        // the Change of CTR-GOV-28 in round 3zb + 3zc: + the chain word (router 0xa63e5886 -> 0x3b127180; direct
+        // `setProofStore(uint8)` -> `setProofStore(uint8,bytes32)`)
+        let sig = format!("mtxSetProofStore{ENV_UA},address,uint8,bytes32,{UASIG_ABI})");
         let r = typed::testkit::row_of("UASetProofStore", "gov_router");
         assert_eq!((r.entry, r.contracts), ("mtxSetProofStore", &["gov_router"][..]));
-        assert_eq!(r.selector, [0xa6, 0x3e, 0x58, 0x86], "the forge artifact's {sig}");
+        assert_eq!(r.selector, [0x3b, 0x12, 0x71, 0x80], "the forge artifact's {sig}");
         assert_eq!(alloy::primitives::keccak256(sig.as_bytes())[..4], r.selector[..]);
         assert_eq!(row(r.sent, "gov_router").map(|x| x.name), Some("UASetProofStore"));
         let p = format!("{}/../smartcontracts/evm/test/vectors/selector_audit.json", env!("CARGO_MANIFEST_DIR"));
         let audit: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
         let class = |c: &str, s: &str| audit[c].as_array().unwrap().iter().find(|e| e["sig"] == s).map(|e| e["class"].as_str().unwrap().to_string());
         assert_eq!(class("GovernanceRouter", &sig).as_deref(), Some("SIGNED"));
-        let direct = alloy::primitives::keccak256(b"setProofStore(uint8)");
+        let direct = alloy::primitives::keccak256(b"setProofStore(uint8,bytes32)");
         for c in ["NormalPqzToken", "WrappedPqzToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken"] {
-            assert_eq!(class(c, "setProofStore(uint8)").as_deref(), Some("BIT(24)"), "{c}");
+            assert_eq!(class(c, "setProofStore(uint8,bytes32)").as_deref(), Some("BIT(24)"), "{c}");
         }
         for k in ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router"] {
             assert!(row(direct[..4].try_into().unwrap(), k).is_none(), "setProofStore is a {k} row");
@@ -1731,18 +2542,42 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // twelve proof entries of 5 and 13 (ten of 4 and 12) moved selector in place (rowed or exempt as before)
     // group 3h T61: (257, 181, 241) -> (258, 181, 245): the router's `mtxSetProofStore` rowed; `setProofStore` governed (bit 24) on
     // each of the four PQZ kinds
-    const ROWED: usize = 258;
+    // group 3l: (258, 181, 245) -> (260, 181, 257): the router's `mtxSetWrapLimits`, `mtxSetWrapMember` rowed; the tokens'
+    // `setWrapLimits` (ADMIN) and `setWrapMember` (BIT(26)) governed on each of the six wrapped kinds
+    // ua-mtx-liquidity L6: ROWED -> 261 (the DEX's `mtxLiquidity`), EXEMPT 181 -> 193 (`mtxLiquidityPull` on the twelve
+    // kinds, NOT_ROWS)
+    // round 3r (CTR-GOV-23): (261, 193, 257) -> (272, 200, 274), measured and counted from selector_audit.json: the router's
+    // eleven admin ops rowed; its four release approvals and `OpenFactory`'s three open deploys in NOT_ROWS; `OpenFactory`'s
+    // 17 `ADMIN` / `HOLDER_OWN` entries governed
+    // round 3s (CTR-GOV-24): (272, 200, 274) -> (275, 200, 292), measured and counted from selector_audit.json: the router's three
+    // list / enable ops rowed (SIGNED); the six regulated kinds' setAllowed BIT(8), setDenied BIT(9), enableFeature ADMIN governed;
+    // round 3t (CTR-PQZ-36): -> (276, 200, 296): the router's `mtxSetVerifierFee` rowed; `setVerifierFee` (ADMIN) governed on each
+    // of the four PQZ kinds
+    // Fable E N-10: 276 -> 286, the registry's eight SIGNED rows and the two PERMISSIONLESS ones (`storePqzPop`, `deploy`)
+    // owner 2026-11-12: -> 288, the router's `mtxCreateToken`, `mtxCreateDex`; EXEMPT 200 -> 198
+    // owner 2026-11-12 (GUARDIAN): -> 296, the account's eight rows; EXEMPT -> 207, its six self-called operations and its three
+    // generic entries; GOVERNED -> 297, its guardian's `initiateRecovery`
+    // owner 2026-11-12 ("both the generic row and the per-class ones"): -> 297, the router's `mtxCreateInstance`; EXEMPT -> 206
+    // the three-key model: -> 303, `mtxRollOverSigned` on the four PQZ kinds (row `PqzRollOver`), the registry's
+    // `setPqzScopedKey` (SIGNED) and `storePqzScopedPop` (PERMISSIONLESS)
+    // round 3zb + 3zc: -> 305, the router's `mtxSetMaxSupply`, `mtxSetMaxWrapSupply`; GOVERNED 297 -> 309, `setMaxSupply`,
+    // `setMaxWrapSupply` (ADMIN) on each of the six wrapped kinds (expected from the contracts; the 25 ops of the Change of
+    // CTR-GOV-28 and their direct entries moved selector in place, their classes kept)
+    // CTR-UA-44 (TODO 3ze): -> 306, the registry's `updateMsig` (SIGNED)
+    const ROWED: usize = 306;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
-    const EXEMPT: usize = 181;
-    const GOVERNED: usize = 245;
+    const EXEMPT: usize = 206;
+    const GOVERNED: usize = 309;
 
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<serde_json::Value>| async move {
             let input = r["params"][0]["input"].as_str().or(r["params"][0]["data"].as_str()).unwrap_or("0x").to_string();
             let reg = format!("0x{}", alloy::hex::encode(IUALedger::registryCall::SELECTOR));
+            let to: Address = r["params"][0]["to"].as_str().unwrap_or_default().parse().unwrap_or_default();
             let result = match r["method"].as_str().unwrap() {
                 "eth_call" if input.starts_with(&reg) => serde_json::json!(format!("{:#x}", registry.into_word())),
+                "eth_call" if typed::testkit::domain_answer(&input, to).is_some() => serde_json::json!(typed::testkit::domain_answer(&input, to)),
                 "eth_call" => serde_json::json!(format!("{uid:#x}")),
                 "eth_getCode" => serde_json::json!("0x"),
                 _ => serde_json::Value::Null,
@@ -1788,6 +2623,46 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         w.typed.as_mut().unwrap().signer = None;
         let g = Guard::new(&ChainCfg::default(), Arc::new(RwLock::new(vec![w.to]))).unwrap();
         g.check(&chain, &w).await.unwrap_or_else(|e| panic!("an EOA to an EOA: {e:?}"));
+    }
+
+    /// Fable E N-6: the op's `contract` picks the digest's domain, so on a token it must be the token's own kind: a `UAUnwrap`
+    /// named `pqz` on a `SCaaS MetaToken` is `CONTRACT_KIND_MISMATCH` (`Policy`, `dead`), before any simulation; named `token` it
+    /// passes (the control). The name is read once per token; an unreachable RPC is `Transport`, nothing cached.
+    #[tokio::test]
+    async fn the_op_contract_is_the_token_domain_kind() {
+        use crate::typed::testkit::{op_of, vectors};
+        let v = vectors();
+        let (chain, _) = at_registry_zero(&v).await;
+        let (w, _) = crate::submit::work_of_op(Some(1), &op_of("UAUnwrap", "token", &v).unwrap(), None).unwrap();
+        let g = Guard::new(&ChainCfg::default(), Arc::new(RwLock::new(vec![w.to]))).unwrap();
+        g.check(&chain, &w).await.unwrap_or_else(|e| panic!("control: {e:?}"));
+        assert_eq!(g.domain_names.lock().unwrap().get(&w.to).map(String::as_str), Some("SCaaS MetaToken"), "read once, kept");
+        for kind in ["pqz", "zether"] {
+            let mut x = w.clone();
+            x.typed.as_mut().unwrap().contract = kind;
+            match g.check(&chain, &x).await {
+                Err(Refusal::Policy(e)) => assert!(e.starts_with("CONTRACT_KIND_MISMATCH: contract") && e.contains("SCaaS MetaToken"), "{kind}: {e}"),
+                r => panic!("{kind}: {r:?}"),
+            }
+        }
+        let down = Chain::with_signer(&ChainCfg { evm_chain_number: 31337, rpc_urls: vec!["http://127.0.0.1:9".into()],
+            chain_uid: chain_uid_of(&v), ..Default::default() }, signer()).unwrap();
+        let g2 = Guard::new(&ChainCfg::default(), Arc::new(RwLock::new(vec![w.to]))).unwrap();
+        g2.bound.lock().unwrap().insert(w.to);
+        assert!(matches!(g2.require_kind(&down, w.to, "token").await, Err(Refusal::Transport(_))));
+        assert!(g2.domain_names.lock().unwrap().is_empty(), "an unread name is not kept");
+        // Fable recheck 2 P3-2: a name that matched no kind asked for is not kept (one wrong answer never sticks)
+        let g3 = Guard::new(&ChainCfg::default(), Arc::new(RwLock::new(vec![w.to]))).unwrap();
+        let mut x = w.clone();
+        x.typed.as_mut().unwrap().contract = "pqz";
+        assert!(g3.check(&chain, &x).await.is_err());
+        assert!(g3.domain_names.lock().unwrap().is_empty(), "a mismatching answer is read again next time");
+        g3.check(&chain, &w).await.unwrap();
+        assert!(g3.domain_names.lock().unwrap().contains_key(&w.to), "control: a match is kept");
+    }
+
+    fn chain_uid_of(v: &serde_json::Value) -> Option<B256> {
+        v["ops"]["UAUnwrap"]["domains"]["token"]["domain"]["salt"].as_str().unwrap().parse().ok()
     }
 
     /// R44: a derived `from` or `to` needs the UA ledger: at `registry() == 0` it is refused by name (`FEATURE_UNSUPPORTED`)
@@ -1896,9 +2771,9 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
                 value: alloy::primitives::U256::from(1), batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
                 validUntil: alloy::primitives::U256::from(4_000_000_000u64),
                 auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
-            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
+            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: "token", domain_of: token, struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None,
                 derived_signer: false, derived_side: false };
-            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, meta: None, entry: true, typed: Some(t) }
+            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) }
         };
         let g = |routers: Vec<Address>| Guard::new(&ChainCfg { params: params.clone(), governance_routers: routers, ..cfg.clone() },
             Arc::new(RwLock::new(vec![token]))).unwrap();
@@ -1948,17 +2823,17 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     #[test]
     fn erc1271_floor_covers_forge_minimum() {
         let log = std::fs::read_to_string(format!(
-            "{}/../smartcontracts/evm/runs/2026-10-27-metatx-split-node-floor.txt", env!("CARGO_MANIFEST_DIR"))).unwrap();
+            "{}/../smartcontracts/evm/runs/2026-11-12-fix2-contracts-node-floor.txt", env!("CARGO_MANIFEST_DIR"))).unwrap();
         let tag = "min gas, SmartKeyAccount-signed mtxExecute (relayer's call gas):";
         let measured: u64 = log.lines().find_map(|l| l.trim().strip_prefix(tag)).unwrap().trim().parse().unwrap();
-        assert_eq!(measured, ERC1271_CALL_GAS, "Task 8's figure");
+        assert_eq!(measured, ERC1271_CALL_GAS, "the forge figure (B P3-2: ERC-7739)");
         const { assert!(ERC1271_CALL_GAS >= (400_000 * 64 / 63 + 5_000) * 64 / 63, "two frames above the 400 k cap") };
         for len in [0usize, 708, 4_000] {
             let f = erc1271_floor(len);
             assert!(f >= 21_000 + 64 * len as u64 + measured + measured / 10, "{len}: {f}");
         }
-        assert_eq!(erc1271_floor(0), 512_594);
-        assert_eq!(erc1271_floor(708), 512_594 + 45_312);
+        assert_eq!(erc1271_floor(0), 512_603);
+        assert_eq!(erc1271_floor(708), 512_603 + 45_312);
     }
 
     #[test]
@@ -1987,6 +2862,35 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         assert!(!settled_all(&ok(vec![true, false])), "an empty MatchFailed is out of gas: more gas, never invalid");
         assert!(!settled_all(&ok(vec![])));
         assert!(!settled_all(&[1, 2, 3]));
+    }
+
+    /// Spec 2026-11-10-dex-liquidity.md §11: the liquidity mark, the verify budget (three mldsa65-signed SCaaS inputs do not fit
+    /// 2^24, two do; a classical signer's eight do), and a starved capability check read as a retry, never a wrong DEX.
+    #[test]
+    fn liquidity_pre_checks() {
+        assert!(liquidity_marked(&[10, 11]));
+        assert!(!liquidity_marked(&[10]));
+        assert!(!liquidity_marked(&[]));
+        assert!(liquidity_too_large(3, 0x0131, MAX_TX_GAS).is_some_and(|m| m.starts_with("LIQUIDITY_TOO_LARGE")));
+        assert!(liquidity_too_large(2, 0x0131, MAX_TX_GAS).is_none());
+        assert!(liquidity_too_large(8, 0, MAX_TX_GAS).is_none());
+        assert!(liquidity_too_large(2, 0x0131, 12_000_000).is_some(), "a block below 2 caps and the base");
+        assert!(liquidity_too_large(9, 0x0999, 1).is_none(), "a kind the table does not name: the simulation's");
+        // CTR-DEX-26's classical row (<= 50,000) holds secp256k1 too (the deploy's cap, DeployBase.sol)
+        assert_eq!(verify_cap(0x0108), Some(50_000), "secp256k1");
+        // p256 and webauthn-p256 at the registry's 400,000 (DeployBase.sol, owner 2026-11-10): 40 SCaaS inputs need
+        // 17,000,000 gas, above the 2^24 transaction cap; at the old 50,000 they fitted (3,000,000)
+        assert_eq!((verify_cap(0x0101), verify_cap(0x0100)), (Some(400_000), Some(400_000)), "p256, webauthn-p256");
+        assert!(liquidity_too_large(40, 0x0101, MAX_TX_GAS).is_some_and(|m| m.contains("need about 17000000 gas")));
+        assert!(liquidity_too_large(39, 0x0100, MAX_TX_GAS).is_none(), "39 x 400,000 + the base = 16,600,000");
+        let sel = ISCaaSDex::mtxLiquidityCall::SELECTOR;
+        assert!(liquidity_starved(&[sel[0], sel[1], sel[2], sel[3], 0], "NotLiquidityDex(0x00000000000000000000000000000000000000d1)"));
+        assert!(!liquidity_starved(&[sel[0], sel[1], sel[2], sel[3]], "OrderClosed(0x01)"));
+        assert!(!liquidity_starved(&[0, 0, 0, 0], "NotLiquidityDex(0x01)"), "another entry: not ours");
+        // the chain's bytes as the simulation decodes them (L6c: unnamed, they read `revert 0x0e46ff74…` and went dead)
+        let t7 = crate::abi::decode_revert(&ISCaaSDex::NotLiquidityDex { caller: Address::repeat_byte(0xd1) }.abi_encode());
+        assert!(liquidity_starved(&[sel[0], sel[1], sel[2], sel[3], 0], &t7), "{t7}");
+        assert_eq!(LIQUIDITY_PULL_ID, <crate::abi::ILiquidityPull::mtxLiquidityPullCall as SolCall>::SELECTOR);
     }
 
     #[test]
@@ -2048,5 +2952,233 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         assert!(already_invalidated(&[&SEL_TOKEN_INVALIDATE_NONCES[..], &[0u8; 128]].concat(), &reason));
         assert!(!already_invalidated(&[&[0x93, 0xcb, 0x3e, 0x81][..], &[0u8; 128]].concat(), &reason));
         assert!(!already_invalidated(&inv, "MinNonceAboveCap(MinNonceAboveCap { requested: 1 })"));
+    }
+
+    /// The `PqChat` writes as `IPqChat.sol` declares them, read from the source (and `IUARegistry.sol` for `UASig`), not copied:
+    /// every `external` function that is neither `view` nor `pure`, as its canonical signature.
+    fn pqchat_writes() -> Vec<String> {
+        let src = |f: &str| std::fs::read_to_string(format!("{}/../smartcontracts/evm/src/{f}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+            .lines().map(|l| l.split("//").next().unwrap_or_default().to_string()).collect::<Vec<_>>().join(" ");
+        let (chat, reg) = (src("pqchat/IPqChat.sol"), src("ua/IUARegistry.sol"));
+        let mut structs: HashMap<String, Vec<String>> = HashMap::new();
+        for (scope, s) in [("", &chat), ("IUARegistry.", &reg)] {
+            for part in s.split(" struct ").skip(1) {
+                let (name, body) = part.split_once('{').unwrap();
+                let fields = body.split('}').next().unwrap().split(';').filter_map(|f| f.split_whitespace().next()).map(String::from);
+                structs.insert(format!("{scope}{}", name.trim()), fields.collect());
+            }
+        }
+        fn canon(ty: &str, scope: &str, structs: &HashMap<String, Vec<String>>) -> String {
+            let base = ty.trim_end_matches("[]");
+            let (scope, key) = match base.split_once('.') {
+                Some((s, _)) => (format!("{s}."), base.to_string()),
+                None => (scope.to_string(), format!("{scope}{base}")),
+            };
+            match structs.get(&key) {
+                Some(f) => format!("({}){}", f.iter().map(|t| canon(t, &scope, structs)).collect::<Vec<_>>().join(","), &ty[base.len()..]),
+                None => ty.to_string(),
+            }
+        }
+        chat.split(" function ").skip(1).filter_map(|f| {
+            let (name, rest) = f.split_once('(')?;
+            let (args, tail) = rest.split_once(')')?;
+            let tail = tail.split(';').next()?;
+            let args: Vec<String> = args.split(',').filter_map(|p| p.split_whitespace().next()).map(|t| canon(t, "", &structs)).collect();
+            (tail.contains("external") && !tail.contains(" view") && !tail.contains(" pure")).then(|| format!("{}({})", name.trim(), args.join(",")))
+        }).collect()
+    }
+
+    /// T93 (UA-7 P17, topics P45; AGENTS "Node"): the `pqchat` allow-list equals the contract's writes both directions, the contract
+    /// side derived from `IPqChat.sol` (`initialize` is the factory's alone, no row); the selectors are forge's `methodIdentifiers`;
+    /// each write is a row of `pqchat` and of no other kind; a view and `initialize` are rows of no kind.
+    #[test]
+    fn pqchat_rows_equal_the_contract_both_directions() {
+        let sel = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
+        let all = pqchat_writes();
+        let writes: Vec<&String> = all.iter().filter(|s| !s.starts_with("initialize(")).collect();
+        assert_eq!((all.len(), writes.len()), (14, 13), "{all:?}");
+        let theirs: HashSet<[u8; 4]> = writes.iter().map(|s| sel(s)).collect();
+        let ours: HashSet<[u8; 4]> = typed::rows().iter().filter(|r| r.contracts.contains(&"pqchat")).map(|r| r.sent).collect();
+        assert_eq!(ours, theirs, "the PqChat allow-list, both directions");
+        let forge: HashSet<[u8; 4]> = ["21829f04", "1222a945", "2b9ab93a", "3c289881", "6035115c", "a52f4d6d", "95660a78", "47bee6d5", "c8de3d2d",
+            "04857ea8", "1fd5aeac", "f3ee47ee", "5aee92d5"].iter().map(|h| alloy::hex::decode(h).unwrap().try_into().unwrap()).collect();
+        assert_eq!(ours, forge, "forge's IPqChat methodIdentifiers");
+        let kinds = ["token", "zether", "pqz", "wallet", "account", "dex", "registry", "factory", "gov_router", "pqchat"];
+        for s in &writes {
+            for k in kinds {
+                assert_eq!(row(sel(s), k).is_some(), k == "pqchat", "{s} on {k}");
+            }
+        }
+        for s in ["initialize(bytes32)", "owner()", "sessionOf(bytes32)", "storedRange(bytes8,uint256,uint256)", "topicOf(bytes32)"] {
+            for k in kinds {
+                assert!(row(sel(s), k).is_none(), "{s} on {k}");
+            }
+        }
+    }
+
+    /// T93 (UA-7 P32, topics P45): an RPC whose `factory` lists `instances` as `(address, contractClass, version)` through `infoOf`
+    /// (the reads counted), every other address unlisted; a listed address answers no `chainUid()` (a `PqChat` record is portable),
+    /// every other `eth_call` `uid`; `eth_getCode` empty.
+    async fn factory_rpc(uid: B256, factory: Address, instances: Vec<(Address, u16, u64)>) -> (ChainCfg, Arc<Mutex<usize>>) {
+        use crate::abi::IOpenFactory;
+        let reads: Arc<Mutex<usize>> = Default::default();
+        let r2 = reads.clone();
+        let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(q): axum::Json<serde_json::Value>| {
+            let (instances, r2) = (instances.clone(), r2.clone());
+            async move {
+                let p = &q["params"][0];
+                let to: Address = p["to"].as_str().unwrap_or("0x0000000000000000000000000000000000000000").parse().unwrap();
+                let input = alloy::hex::decode(p["input"].as_str().or(p["data"].as_str()).unwrap_or("0x")).unwrap_or_default();
+                let listed = |a: Address| instances.iter().find(|i| i.0 == a).map_or((0, 0), |i| (i.1, i.2));
+                let out = match q["method"].as_str().unwrap() {
+                    "eth_call" if to == factory && input.get(..4) == Some(&IOpenFactory::infoOfCall::SELECTOR[..]) => {
+                        *r2.lock().unwrap() += 1;
+                        let c = IOpenFactory::infoOfCall::abi_decode(&input).unwrap().c;
+                        let (class, version) = listed(c);
+                        Some(IOpenFactory::infoOfCall::abi_encode_returns(&IOpenFactory::Created { addr: if class == 0 { Address::ZERO } else { c },
+                            creatorId: B256::ZERO, contractClass: class, kind: 0, version, createdBlock: 1, createdAt: 1 }))
+                    }
+                    "eth_call" if listed(to).0 != 0 => Some(vec![]),
+                    "eth_call" if typed::testkit::domain_answer(&format!("0x{}", alloy::hex::encode(&input)), to).is_some() =>
+                        typed::testkit::domain_answer(&format!("0x{}", alloy::hex::encode(&input)), to).map(|h| alloy::hex::decode(&h[2..]).unwrap()),
+                    "eth_call" => Some(uid.to_vec()),
+                    "eth_getCode" => Some(vec![]),
+                    _ => None,
+                };
+                let result = out.map_or(serde_json::Value::Null, |b| serde_json::json!(format!("0x{}", alloy::hex::encode(b))));
+                axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": q["id"], "result": result}))
+            }
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (ChainCfg { evm_chain_number: 31337, rpc_urls: vec![url], chain_uid: Some(uid), token_factory: Some(factory), ..Default::default() }, reads)
+    }
+
+    fn target_refused(e: Result<(), Refusal>, what: &str) {
+        assert!(matches!(&e, Err(Refusal::Policy(r)) if r.starts_with("CALL_TARGET_REFUSED")), "{what}: {e:?}");
+    }
+
+    fn with_param(cfg: &ChainCfg, k: &str, v: toml::Value) -> ChainCfg {
+        ChainCfg { params: [(k.to_string(), v)].into_iter().collect(), ..cfg.clone() }
+    }
+
+    /// T93 (UA-7 P32, topics P45, factory index §8.6): a `PqChat` job runs only on an instance `token_factory` lists as class 3 with a
+    /// release (`version ≠ 0`), read once and cached; `CALL_TARGET_REFUSED` on version 0, another class, an address the factory did not
+    /// make, with another factory or none configured; an unknown selector named `pqchat` too. The reverse: another kind's row on an
+    /// instance, even one configured as that kind's target, is refused (an instance answers no `chainUid()`), beside its control.
+    #[tokio::test]
+    async fn a_pqchat_job_runs_only_on_a_class_3_instance() {
+        let uid = B256::repeat_byte(0x31);
+        let (factory, chat, v0, c4, other) = (Address::repeat_byte(0xfa), Address::repeat_byte(0xc3), Address::repeat_byte(0xc0),
+            Address::repeat_byte(0xc4), Address::repeat_byte(0xb0));
+        let (cfg, reads) = factory_rpc(uid, factory, vec![(chat, 3, 1), (v0, 3, 0), (c4, 4, 1)]).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let open = |c: &ChainCfg| Guard::new(&with_param(c, "relay_unsigned_pqchat", toml::Value::Boolean(true)), Default::default()).unwrap();
+        let work = |entry: &str, to: Address| crate::submit::work_of_op(Some(1), &typed::testkit::pqchat_op(entry, to), None).unwrap().0;
+        let g = open(&cfg);
+        let entries: Vec<&str> = typed::rows().iter().filter(|r| r.contracts.contains(&"pqchat")).map(|r| r.entry).collect();
+        for e in &entries {
+            g.check(&chain, &work(e, chat)).await.unwrap_or_else(|x| panic!("{e}: {x:?}"));
+        }
+        assert_eq!((entries.len(), *reads.lock().unwrap()), (13, 1), "infoOf read once, then cached"); // P48: + remove
+        for (to, c, what) in [(v0, cfg.clone(), "version 0"), (c4, cfg.clone(), "class 4"), (other, cfg.clone(), "not made by the factory"),
+            (chat, ChainCfg { token_factory: Some(Address::repeat_byte(0xfb)), ..cfg.clone() }, "another factory"),
+            (chat, ChainCfg { token_factory: None, ..cfg.clone() }, "no token_factory")] {
+            target_refused(open(&c).check(&chain, &work("postMessage", to)).await, what);
+        }
+        let cast = |s: &str| -> Bytes { alloy::primitives::keccak256(s)[..4].to_vec().into() };
+        for s in ["initialize(bytes32)", "sessionOf(bytes32)", "storedRange(bytes8,uint256,uint256)", "transfer(address,uint256)"] {
+            let mut w = work("postMessage", chat);
+            w.data = cast(s);
+            target_refused(g.check(&chain, &w).await, s);
+        }
+        for kind in ["wallet", "account", "dex", "registry", "factory", "gov_router"] {
+            let r = typed::rows().iter().find(|r| !r.entry.is_empty() && r.contracts.contains(&kind)).unwrap();
+            let on = |to: Address| {
+                let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: kind, domain_of: to,
+                    struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false };
+                let c = match kind {
+                    "dex" => ChainCfg { dex: Some(to), ..cfg.clone() },
+                    "registry" => ChainCfg { ua_registry: Some(to), ..cfg.clone() },
+                    "factory" => ChainCfg { account_factory: Some(to), ..cfg.clone() },
+                    "gov_router" => ChainCfg { governance_routers: vec![to], ..cfg.clone() },
+                    _ => cfg.clone(),
+                };
+                (Guard::new(&c, Default::default()).unwrap(), Work { job_id: Some(1), to, data: r.sent.to_vec().into(), valid_until: 0, envelope_until: 0,
+                    meta: None, entry: true, typed: Some(t) })
+            };
+            let (g, w) = on(other);
+            g.check(&chain, &w).await.unwrap_or_else(|e| panic!("{kind} ({}) on a bound contract: {e:?}", r.entry));
+            let (g, w) = on(chat);
+            target_refused(g.check(&chain, &w).await, &format!("{kind} ({}) on the instance", r.entry));
+        }
+    }
+
+    /// T93 (UA-7 P17, owner 2026-11-05): an unsigned write (`storeMessage`, `addWraps`: no `UASig`) runs on the direct path only under
+    /// the operator's `params.relay_unsigned_pqchat` (default off: `UNSIGNED_WRITE_NOT_PAID`, before any read), and always as a relay
+    /// fee's inner call (paid through `RelayFeeRouter`); a signed write needs neither. On the relay path the target rule holds both
+    /// directions: a `PqChat` call relayed to a contract that is no instance is refused, another kind's call relayed to an instance too.
+    #[tokio::test]
+    async fn unsigned_pqchat_writes_run_paid_or_under_the_lane_policy() {
+        let uid = B256::repeat_byte(0x31);
+        let (factory, chat, other) = (Address::repeat_byte(0xfa), Address::repeat_byte(0xc3), Address::repeat_byte(0xb0));
+        let (cfg, reads) = factory_rpc(uid, factory, vec![(chat, 3, 1)]).await;
+        let chain = Chain::with_signer(&cfg, signer()).unwrap();
+        let work = |entry: &str| crate::submit::work_of_op(Some(1), &typed::testkit::pqchat_op(entry, chat), None).unwrap().0;
+        let unpaid = |e: Result<(), Refusal>, what: &str| assert!(matches!(&e, Err(Refusal::Policy(r)) if r.starts_with("UNSIGNED_WRITE_NOT_PAID")), "{what}: {e:?}");
+        let shut = Guard::new(&cfg, Default::default()).unwrap();
+        let off = Guard::new(&with_param(&cfg, "relay_unsigned_pqchat", toml::Value::Boolean(false)), Default::default()).unwrap();
+        for entry in ["storeMessage", "addWraps"] {
+            unpaid(shut.check(&chain, &work(entry)).await, entry);
+            unpaid(off.check(&chain, &work(entry)).await, entry);
+        }
+        assert_eq!(*reads.lock().unwrap(), 0, "refused before any read");
+        let open = Guard::new(&with_param(&cfg, "relay_unsigned_pqchat", toml::Value::Boolean(true)), Default::default()).unwrap();
+        for entry in ["storeMessage", "addWraps"] {
+            open.check(&chain, &work(entry)).await.unwrap_or_else(|e| panic!("{entry} under the lane policy: {e:?}"));
+        }
+        shut.check(&chain, &work("postMessage")).await.unwrap_or_else(|e| panic!("a signed write: {e:?}"));
+        for bad in [toml::Value::String("true".into()), toml::Value::Integer(1)] {
+            assert!(Guard::new(&with_param(&cfg, "relay_unsigned_pqchat", bad), Default::default()).is_err());
+        }
+        let (rf, token) = (Address::repeat_byte(0xf4), Address::repeat_byte(0x11));
+        let router = [("router".to_string(), toml::Value::String(format!("{rf:#x}")))].into_iter().collect();
+        let paid = Guard::new(&with_param(&cfg, "relay_fee", toml::Value::Table(router)), Arc::new(RwLock::new(vec![token]))).unwrap();
+        let relayed = |target: Address, call: Bytes| {
+            let data = IRelayFeeRouter::relayCall { target, callData: call, token, from: B256::repeat_byte(2), payee: rf.into_word(),
+                value: alloy::primitives::U256::from(1), batch: alloy::primitives::U256::from(7), nonce: alloy::primitives::U256::ZERO,
+                validUntil: alloy::primitives::U256::from(4_000_000_000u64),
+                auth: crate::abi::UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } }.abi_encode();
+            let t = typed::Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract: "token", domain_of: token,
+                struct_hash: None, lane_hash: None, signer: None, payee: None, digest: None, derived_signer: false, derived_side: false };
+            Work { job_id: Some(1), to: rf, data: data.into(), valid_until: 0, envelope_until: 0, meta: None, entry: true, typed: Some(t) }
+        };
+        for entry in ["storeMessage", "addWraps", "postMessage"] {
+            paid.check(&chain, &relayed(chat, work(entry).data)).await.unwrap_or_else(|e| panic!("{entry} as a relay fee's call: {e:?}"));
+            target_refused(paid.check(&chain, &relayed(other, work(entry).data)).await, &format!("{entry} relayed to no instance"));
+        }
+        let cancel = typed::Op::parse(&typed::testkit::op_of("UACancelNonce", "token", &typed::testkit::vectors()).unwrap(), None).unwrap().data;
+        paid.check(&chain, &relayed(other, cancel.clone())).await.unwrap_or_else(|e| panic!("a token's cancel relayed to a bound contract: {e:?}"));
+        let e = paid.check(&chain, &relayed(chat, cancel)).await;
+        assert!(matches!(&e, Err(Refusal::Policy(r)) if r.starts_with("CHAIN_UID_MISMATCH")), "another kind's call relayed to an instance: {e:?}");
+    }
+
+    /// Round 3s (spec 2026-11-10-token-lists.md §9, Fable P3-4): a list edit's estimate above the block limit names its remedy;
+    /// any other call does not. The selectors are the router's (spec §7).
+    #[test]
+    fn list_batch_over_block_limit_named() {
+        let mut cd = vec![0x6c, 0x83, 0x2e, 0xcf];
+        assert!(list_batch_note(&cd).contains("LIST_BATCH_TOO_LARGE"));
+        cd[..4].copy_from_slice(&[0xf8, 0xd9, 0xf1, 0xf3]);
+        assert!(list_batch_note(&cd).contains("LIST_BATCH_TOO_LARGE"));
+        // the old shapes (without the chain word) are no list edit any more
+        assert_eq!(list_batch_note(&[0x06, 0xb9, 0x8e, 0x72]), "", "the old mtxSetAllowed");
+        assert_eq!(list_batch_note(&[0x2e, 0xb8, 0xc7, 0x08]), "", "mtxEnableFeature: no batch");
+        let rows = typed::testkit::vectors();
+        for (op, sel) in [("UASetAllowed", SEL_LIST_EDITS[0]), ("UASetDenied", SEL_LIST_EDITS[1])] {
+            let cd = rows["ops"][op]["domains"]["gov_router"]["calldata"].as_str().unwrap();
+            assert_eq!(&cd[2..10], alloy::hex::encode(sel), "{op}: the router's selector");
+        }
     }
 }

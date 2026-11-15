@@ -7,7 +7,7 @@ import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {Musig2Secp256k1Verifier} from "../../src/ua/verifiers/Musig2Secp256k1Verifier.sol";
 import {Musig2Bn254Verifier} from "../../src/ua/verifiers/Musig2Bn254Verifier.sol";
-import {UAFrostSecp256k1Verifier} from "../../src/ua/verifiers/UAFrostSecp256k1Verifier.sol";
+import {FrostSecp256k1Verifier} from "../../src/ua/verifiers/FrostSecp256k1Verifier.sol";
 import {FrostBn254Verifier} from "../../src/ua/verifiers/FrostBn254Verifier.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {GroupFixtures} from "./GroupFixtures.sol";
@@ -43,7 +43,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
     function setUp() public override {
         super.setUp();
         (vMS, vMB) = (address(new Musig2Secp256k1Verifier()), address(new Musig2Bn254Verifier()));
-        (vFS, vFB) = (address(new UAFrostSecp256k1Verifier()), address(new FrostBn254Verifier()));
+        (vFS, vFB) = (address(new FrostSecp256k1Verifier()), address(new FrostBn254Verifier()));
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _allCfgs(KINDS.length));
     }
 
@@ -492,7 +492,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             bytes memory d = _msigKey(uint16(i + 1), m);
             bytes32 ms = UACall.register(regs[i], UAKinds.MSIG, d, _none(), "", "");
             regs[i].acceptMembership(ms, s[0]);
-            uint256 bound = GROUP_CAP + 45_000 + 2_500; // MSIG_MEMBER_GAS + MSIG_ACCEPTED_GAS
+            uint256 bound = GROUP_CAP + 45_000 + 3_500; // MSIG_MEMBER_GAS + MSIG_ACCEPTED_GAS (3ze: 2,500 -> 3,500)
             if (i == 1) bound += GROUP_CAP / 63 + 5_000; // gen 1's own hold (register step 4)
             (bool ok,) = address(regs[i]).call{gas: bound}(
                 _reqCall(ms, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s))

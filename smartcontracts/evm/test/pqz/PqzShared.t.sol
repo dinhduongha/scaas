@@ -23,6 +23,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {IPqzWrappedToken} from "../../src/pqz/IPqzToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan 5h Task 3b on the PQZ kinds (the precompile mocked): the shared `IConfidentialToken` signature (`beneficiary`
 /// = the payload's, D20), the unshield to a `bytes32` UA recipient (UA-5c (b)), the unshield-unwrap to a UA through a
@@ -107,17 +108,17 @@ contract PqzSharedTest is PqzFixture {
         // the UA allowlist of the kind: not `mtxWrapShield` (a UA wrap-shields in two steps)
         _uaRefused(NormalPqzToken(address(w)), abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), SCALE, alice)));
         (bytes4[] memory s, uint8[] memory cl,) = w.mtxSelectors();
-        bytes4[18] memory want = [
+        bytes4[19] memory want = [
             IMetaTx.cancelNonce.selector, bytes4(keccak256("wrap(uint256)")), bytes4(keccak256("unwrap(uint256,address,uint256)")),
             bytes4(keccak256("wrap(address,uint256)")), bytes4(keccak256("unwrap(address,uint256,address,uint256)")),
             WrappedToken.addReserve.selector, WrappedToken.wrapToUA.selector, WrappedToken.unwrapToUA.selector,
             IConfidentialToken.mtxShield.selector, IPqzToken.mtxConfidentialTransfer.selector, IPqzToken.mtxConfidentialTransferCompact.selector,
             IPqzToken.mtxUnshield.selector, IConfidentialWrappedToken.mtxWrapShield.selector, IPqzWrappedToken.mtxUnshieldUnwrap.selector,
             IPqzToken.mtxConfidentialTransferSingle.selector, IPqzToken.mtxConfidentialTransferSingleCompact.selector,
-            IPqzToken.mtxRollOver.selector, IPqzToken.mtxPrepareAcc.selector
+            IPqzToken.mtxRollOver.selector, IPqzToken.mtxPrepareAcc.selector, IPqzToken.mtxRollOverSigned.selector
         ];
-        assertEq(s.length, 18);
-        for (uint256 i; i < 18; ++i) {
+        assertEq(s.length, 19);
+        for (uint256 i; i < 19; ++i) {
             assertEq(s[i], want[i]);
             if (i >= 8) assertEq(cl[i], 1, "the PQZ ops ABSOLUTE");
         }
@@ -135,19 +136,19 @@ contract PqzSharedTest is PqzFixture {
         t.mtxExecute(m, UACall.auth(m.from, _mlAuth()));
     }
 
-    /// `NORMAL_PQZ`: exactly `cancelNonce`, `burn`, the six shared PQZ ops and the rollover / `mtxPrepareAcc` (owner
-    /// 2026-10-20: every mtx* write is relayable), `ABSOLUTE`.
+    /// `NORMAL_PQZ`: exactly `cancelNonce`, `burn`, the six shared PQZ ops, the rollover / `mtxPrepareAcc` (owner
+    /// 2026-10-20: every mtx* write is relayable) and the holder's `mtxRollOverSigned` (CTR-PQZ-41), `ABSOLUTE`.
     function test_allowlists_normalKind() public {
         (bytes4[] memory s, uint8[] memory c,) = NormalPqzToken(address(tok)).mtxSelectors();
-        bytes4[10] memory want = [
+        bytes4[11] memory want = [
             IMetaTx.cancelNonce.selector, NormalToken.burn.selector, IConfidentialToken.mtxShield.selector,
             IPqzToken.mtxConfidentialTransfer.selector, IPqzToken.mtxConfidentialTransferCompact.selector,
             IPqzToken.mtxUnshield.selector, IPqzToken.mtxConfidentialTransferSingle.selector,
             IPqzToken.mtxConfidentialTransferSingleCompact.selector, IPqzToken.mtxRollOver.selector,
-            IPqzToken.mtxPrepareAcc.selector
+            IPqzToken.mtxPrepareAcc.selector, IPqzToken.mtxRollOverSigned.selector
         ];
-        assertEq(s.length, 10);
-        for (uint256 i; i < 10; ++i) {
+        assertEq(s.length, 11);
+        for (uint256 i; i < 11; ++i) {
             assertEq(s[i], want[i]);
             assertEq(c[i], i == 1 ? 2 : 1);
         }
@@ -197,7 +198,7 @@ contract PqzSharedTest is PqzFixture {
         // the UA envelope
         _fund(tok, alice, 3);
         vm.roll(block.number + ROLL_AGE);
-        NormalPqzToken(address(tok)).mintToUA(fan, 5);
+        NormalPqzToken(address(tok)).mintToUA(fan, 5, EnvKit.codeUidOf(address(tok)));
         minted += 5;
         _relayUA(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1)), 0);
         assertEq(tok.pqzAccount(alice, 0).rolled, 2, "rolled via the UA envelope, fee 0");

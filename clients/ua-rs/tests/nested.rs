@@ -41,7 +41,8 @@ fn nested_eligibility_rows() {
     }
     let outer = row(&n, &"msig-nested-pq".into());
     let third = bytes(&n["structures"][0]["keyData"]);
-    assert_eq!(msig_pqz_eligible_with(&third, &|_| Some(bytes(&outer["keyData"]))), Err(UAError::MemberUnknown), "a third level");
+    // CTR-UA-44 MM-14: a member's own msig slot is classical weight, never followed; registration still refuses a third level (structures)
+    assert_eq!(msig_pqz_eligible_with(&third, &|_| Some(bytes(&outer["keyData"]))), Ok(true), "a third level");
 }
 fn hex_of(id: &[u8; 32]) -> String {
     format!("0x{}", hex::encode(id))

@@ -226,11 +226,21 @@ library ZetherLib {
         }
     }
 
-    /// @dev `target` answers `sel()` with one word.
+    /// @dev `target` answers `sel()` with one word. The call gets exactly `_PROBE_GAS` (the gas floor of
+    ///      `OpenFactory._supports` first) and a failed call that used all of it reverts `BadInit`: a starved or costly
+    ///      answer never reads as "does not answer", so the negative probe of the burn verifier fails closed too (spec 3r
+    ///      §5.6 N3; Fable 3r3s3t P3-9).
     function _answers(address target, bytes4 sel) private view returns (bool) {
-        (bool ok, bytes memory r) = target.staticcall(abi.encodeWithSelector(sel));
+        uint256 g = gasleft();
+        if (g < _PROBE_GAS * 64 / 63 + _PROBE_GAS_MARGIN) revert IZetherToken.BadInit();
+        (bool ok, bytes memory r) = target.staticcall{gas: _PROBE_GAS}(abi.encodeWithSelector(sel));
+        if (!ok && g - gasleft() >= _PROBE_GAS) revert IZetherToken.BadInit();
         return ok && r.length == 32;
     }
+
+    /// @dev The probe's cap and margin, `OpenFactory`'s (`_PROBE_GAS`, `_PROBE_GAS_MARGIN`).
+    uint256 private constant _PROBE_GAS = 30_000;
+    uint256 private constant _PROBE_GAS_MARGIN = 5_000;
 
     /// @dev The transfer verifier: the clone's env dependency `ENV_ZETHER_TRANSFER` (its code, under the token's
     ///      `DELEGATECALL`; chain-neutral spec §2.2: the copy into storage at `init` is dropped).
@@ -247,8 +257,10 @@ library ZetherLib {
     ///         one (CTR-ZTH-49).
     function init(IFactoryToken.ConfidentialConfig memory c, IZetherVerifier v) public {
         // group 3f (PQZ verifier mode spec §3, §9): the PQZ verifier fields are another kind's (Zether ≠ PQZ); group 3h (pqz-proof-path
-        // spec §4.1, C8): `proofStore` too, in the same check (no Zether body moves)
-        if (c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.proofStore != 0) {
+        // spec §4.1, C8): `proofStore` too, in the same check (no Zether body moves); round 3t (CTR-PQZ-36): the verifier fee
+        // and its cap too
+        if (c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.proofStore != 0 || c.verifierFee != 0
+            || c.verifierFeeMax != 0 || c.pqzOwnKey || c.pqzOpening) {
             revert IFactoryToken.ConfigFieldForOtherKind(4);
         }
         // the release's verifier must run here (an absent precompile answers success with empty output; moved from the
@@ -290,12 +302,12 @@ library ZetherLib {
     ///         `ZetherWrappedLib.init`): `legs`, `rate` and `maxSupply` must be empty, `reg` too on a plain kind, the metadata
     ///         and the token's `kind` are written; returns what the token hands `GovernanceLib.init`, so this library holds no
     ///         DELEGATECALL (`LinkClosure`).
-    function initNormal(bytes calldata initArgs, uint8 kind) public returns (uint256 features, uint256 lockedFeatures, bytes32 owner,
+    function initNormal(bytes calldata initArgs, uint8 kind) public returns (uint256 features, uint256 lockedFeatures, bytes32 admin,
         uint64 grantDelay, address rescueTo, GovernanceLib.Roles memory roles)
     {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.legs.length != 0) revert IFactoryToken.ConfigFieldForOtherKind(2);
-        if (cfg.maxSupply != 0) revert IFactoryToken.ConfigFieldForOtherKind(5);
+        if (cfg.maxSupply != 0 || cfg.maxWrapSupply != 0) revert IFactoryToken.ConfigFieldForOtherKind(5);
         if (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0) revert IFactoryToken.ConfigFieldForOtherKind(3);
         requireRegOfKind(kind, cfg.reg);
         TokenStore.TokenStorage storage t = TokenStore.$();
@@ -303,7 +315,7 @@ library ZetherLib {
         t.symbol = cfg.symbol;
         t.decimals = cfg.decimals;
         t.kind = kind;
-        return (cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles);
+        return (cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, cfg.rescueTo, cfg.roles);
     }
 
     /// @notice Part 2, after the token's `GovernanceLib.init`: `init` of `conf`; returns the initial mint the token makes.

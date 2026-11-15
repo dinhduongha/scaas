@@ -4361,6 +4361,7 @@ dependencies = [
  "cc",
  "curve25519-dalek",
  "ed25519-dalek",
+ "hmac 0.12.1",
  "k256 0.14.0",
  "ml-dsa",
  "p256 0.14.0",

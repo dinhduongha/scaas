@@ -1,0 +1,80 @@
+## Coverage per contract (state-changing called = a transaction of this net called the entry and succeeded;
+## reached = it also ran inside another call, by the trace (local only); views reached = answered an eth_call)
+group | contract | entries | state-changing | local: state-changing called / reached / views reached
+pqchat | PqChat | 59 | 14 | 12 / 14 / 1
+pqchat | PqChatTopics | 21 | 6 | 0 / 6 / 0 | via PqChat
+
+## local: per record file (txs, status 1, the heaviest gasUsed; eth_calls answered; negatives refused as expected)
+records | txs | status 1 | max gasUsed | calls ok | negatives
+pqchat | 34 | 34 | 13,425,775 | 0 / 0 | 10 / 10
+
+## local: state-changing entries not called by a transaction, with the reason
+pqchat | PqChat | addWraps(bytes32,uint32,(bytes32,uint64,bytes,bytes32,bytes)[]) | reached inside another call (trace)
+pqchat | PqChat | initialize(bytes32) | reached inside another call (trace)
+pqchat | PqChatTopics | createTopic((bytes32,uint64,bytes32,address,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry, reached by its callers
+pqchat | PqChatTopics | editEntry((bytes32,bytes32,uint64,uint32,string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry, reached by its callers
+pqchat | PqChatTopics | postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry, reached by its callers
+pqchat | PqChatTopics | setTopicWriter((bytes32,bytes32,bool,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry, reached by its callers
+pqchat | PqChatTopics | updateTopic((bytes32,uint64,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry, reached by its callers
+pqchat | PqChatTopics | voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry, reached by its callers
+(0 without a reason)
+
+## local: negatives (10; refused as expected = status 2)
+ok  | PqChat | negative: pqchat: createSession with a used (creator, nonce) | expected 0xf89eeec1 got 0xf89eeec1
+ok  | PqChat | negative: pqchat: a second child at home (the P9 removal attack) | expected 0x683ad3f6 got 0x683ad3f6
+ok  | PqChat | negative: pqchat: postMessage with a used (epoch, sender, device) counter | expected 0xf89eeec1 got 0xf89eeec1
+ok  | PqChat | negative: pqchat: postMessage by a non-member | expected 0x4af7706d got 0x4af7706d
+ok  | PqChat | negative: pqchat: postMessage under a superseded epoch (Fable P1-1) | expected 0x683ad3f6 got 0x683ad3f6
+ok  | PqChat | negative: pqchat: remove replayed | expected 0xf89eeec1 got 0xf89eeec1
+ok  | PqChat | negative: pqchat: the removed member's rekey (the race of the Fable review P1-2) | expected 0x4af7706d got 0x4af7706d
+ok  | PqChat | negative: pqchat: a child keeping a removed member | expected 0xad08b15c got 0xad08b15c
+ok  | PqChat | negative: pqchat: storeMessage of a version other than 1 | expected 0x0c92e8bd got 0x0c92e8bd
+ok  | PqChat | negative: pqchat: a vote value of 2 | expected 0xfdbde166 got 0xfdbde166
+
+## local: transactions 34, status 1: 34; the heaviest ten
+13,425,775 | 0x71e6441a7545f214c2e7a71890aa09670cab30c0e75a7feb708df9fb5dbb8254 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+13,425,485 | 0xab12cdb6c9fd0a1f276b1e0a3653c7a16e3524f20963262065c4186546e6fc0d | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+13,425,376 | 0x17ced0cdc3b31283dcbb619f643afd0180b3488449c1e91d2776d25049b58b85 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+9,594,555 | 0xe0ee379804591a7244ce4d14f5343acbbb103a7176d583a47d4f18e372b482e5 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+9,594,265 | 0x570adfae28c35b0a1337aae75309605e42b735afaaad8d92ee0adae0c4378b59 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+9,594,156 | 0xa9b59970d6c5748048411fa0109fd3b63da00d6f9d31ab644999ac648571592a | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+7,711,215 | 0x38c83ee6c91fa3ce1a5d931e0b8d0f8241f48018d8ae32ab663dc8fbc07283e7 | UARegistry | register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)
+7,696,510 | 0xf4eada379c27ab1933d9d6ab3221b67b7d3086b08bf4e1c40a6c2b6d540f6eca | UARegistry | register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)
+7,694,183 | 0xae2677916e9d76b16a8d0deadccc7f78b8a7190258ebd45b7a0fd9049774b143 | UARegistry | register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)
+7,663,934 | 0xab1fc8941184e8c0216651038dcf86beaff63385bbe29b9d61636503feceabf6 | PqChat | rekey((bytes32,bytes32,uint64,uint64,bytes32,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))
+
+## local: every transaction (script | status | gasUsed | hash | contract | what)
+pqchat | 1 | 316,480 | 0x991fbfe52afd6ecb6f7a89a992169aaecdddee04241a8341fbe93518de27e1ed | OpenFactory | createInstance((uint16,uint16,uint64),bytes32,bytes)
+pqchat | 1 | 9,594,156 | 0xa9b59970d6c5748048411fa0109fd3b63da00d6f9d31ab644999ac648571592a | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+pqchat | 1 | 13,425,376 | 0x17ced0cdc3b31283dcbb619f643afd0180b3488449c1e91d2776d25049b58b85 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+pqchat | 1 | 7,711,215 | 0x38c83ee6c91fa3ce1a5d931e0b8d0f8241f48018d8ae32ab663dc8fbc07283e7 | UARegistry | register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)
+pqchat | 1 | 9,594,555 | 0xe0ee379804591a7244ce4d14f5343acbbb103a7176d583a47d4f18e372b482e5 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+pqchat | 1 | 13,425,775 | 0x71e6441a7545f214c2e7a71890aa09670cab30c0e75a7feb708df9fb5dbb8254 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+pqchat | 1 | 7,694,183 | 0xae2677916e9d76b16a8d0deadccc7f78b8a7190258ebd45b7a0fd9049774b143 | UARegistry | register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)
+pqchat | 1 | 9,594,265 | 0x570adfae28c35b0a1337aae75309605e42b735afaaad8d92ee0adae0c4378b59 | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+pqchat | 1 | 13,425,485 | 0xab12cdb6c9fd0a1f276b1e0a3653c7a16e3524f20963262065c4186546e6fc0d | UARegistry | cacheExpandedKey(uint16,bytes,uint256)
+pqchat | 1 | 7,696,510 | 0xf4eada379c27ab1933d9d6ab3221b67b7d3086b08bf4e1c40a6c2b6d540f6eca | UARegistry | register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)
+pqchat | 1 | 577,710 | 0x787ad9e8321a17439d5ead1cde64dd966ff010ff1fe8d6a1da0dff838b7a4383 | OpenFactory | createToken(uint8,uint64,bytes,bytes32)
+pqchat | 1 | 7,178,599 | 0x254cd4149c0fd1e2e09c419a1ce86d2b7428e728eb9af4f188c176e82e2c826f | PqChat | createSession((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32
+pqchat | 1 | 6,732,362 | 0x2dac4bbba0bfb4ab634e466c7dc89bf7e4de0c3f3745fb84a24760d2c7d5568d | PqChat | createSession((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32
+pqchat | 1 | 586,248 | 0xc49c5d5919ba75349c2d3be67142783b496f347c253ce1f9db85026ca540751c | RelayFeeRouter | relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(
+pqchat | 1 | 7,204,189 | 0xf917571e33f5eb1ab60bad537d0278ed20cf6503b77052a2e79ca85be429ecb9 | PqChat | rekey((bytes32,bytes32,uint64,uint64,bytes32,bytes32[],(bytes32,uint64,bytes32)[],bytes32[
+pqchat | 1 | 7,663,934 | 0xab1fc8941184e8c0216651038dcf86beaff63385bbe29b9d61636503feceabf6 | PqChat | rekey((bytes32,bytes32,uint64,uint64,bytes32,bytes32[],(bytes32,uint64,bytes32)[],bytes32[
+pqchat | 1 | 7,179,328 | 0x4d5d769ad73dee9b9eeb20acdee16fb0d9d04d16486664739b90b053fcad5707 | PqChat | createSession((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32
+pqchat | 1 | 6,185,671 | 0xc11ff804058ba85afdc457847ea20c1338a3f3fc9e685083f945412d023b2a4e | PqChat | postMessage((bytes32,bytes32,bytes32,bytes16,uint64,bytes32[],bytes),(bytes,bytes,(uint16,
+pqchat | 1 | 6,184,663 | 0xdd5dc4717a42cc3691215ffb8b63308d7305eef19b0ec0ada626bfc997ff1659 | PqChat | postMessage((bytes32,bytes32,bytes32,bytes16,uint64,bytes32[],bytes),(bytes,bytes,(uint16,
+pqchat | 1 | 6,000,463 | 0x02341ef2b36321d97cf5b05cdd1056a54e2ca0d56f938270add8c2487cec5a50 | PqChat | leave((bytes32,bytes32,bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))
+pqchat | 1 | 6,136,514 | 0x3eb01d61c143fa78a9e91a5bed9d213d4383b6b673804167798d94e71a1cc400 | PqChat | remove((bytes32,bytes32,uint64,bytes32[],bytes32,uint64),(bytes,bytes,(uint16,(uint16,byte
+pqchat | 1 | 6,749,521 | 0xfe819f43620fab7bf3630e2c087923d2ce5a57b109fc0caa79efc5aa295d3935 | PqChat | rekey((bytes32,bytes32,uint64,uint64,bytes32,bytes32[],(bytes32,uint64,bytes32)[],bytes32[
+pqchat | 1 | 7,593,184 | 0x101c76a94a36d87b4e3e360eba38a43887a27660777114f2afe600a930a92d29 | PqChat | createSession((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32
+pqchat | 1 | 6,157,644 | 0xf0273ddddf83b73e237462c012d3813c91af90c38d71d5763c76d2ac06f1975b | PqChat | remove((bytes32,bytes32,uint64,bytes32[],bytes32,uint64),(bytes,bytes,(uint16,(uint16,byte
+pqchat | 1 | 147,412 | 0x866dc9d777ad2792fdcad0d1cdc3ced9fa8605fae1cb0ff0c089d575097bea47 | PqChat | storeMessage(uint8,bytes8,bytes)
+pqchat | 1 | 203,303 | 0xb80f2dcd4803a67ca70dd594e87bb372707a99abe80d102bd400a4c20269a34b | RelayFeeRouter | relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(
+pqchat | 1 | 6,219,608 | 0xfe46e6fe1f8ee544b6bce891bd01323ae2e264d37dab6f041efa625dacdec012 | PqChat | createTopic((bytes32,uint64,bytes32,address,string,bytes,bool),(bytes,bytes,(uint16,(uint1
+pqchat | 1 | 6,083,978 | 0x0d6ffea167b9dc5cc39d4994c8253a49d8248a09646010bbc53037fd962d87c0 | PqChat | updateTopic((bytes32,uint64,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes
+pqchat | 1 | 6,011,764 | 0xe9f161c58067fb787058e08d05fddca740b117390ec0695f25f116b7535daeb1 | PqChat | setTopicWriter((bytes32,bytes32,bool,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[
+pqchat | 1 | 6,256,207 | 0xa45debf8ad8bf01d598fd38847056f6d1df5dd6af7432aae4792dc2b97a526c3 | PqChat | postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),
+pqchat | 1 | 6,261,743 | 0x5b19e9af6781bfc6efa0ec2b2338dd449511e1020137d36d775f8aecd9cdfc2d | PqChat | postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),
+pqchat | 1 | 6,143,031 | 0xfeeb0f914828c85d3cd66b82ce3193aa8d1a742b25306a9dd482a634e4a81670 | PqChat | editEntry((bytes32,bytes32,uint64,uint32,string,bytes),(bytes,bytes,(uint16,(uint16,bytes)
+pqchat | 1 | 5,990,058 | 0x43b8cf0a1fd60bb8f9df93c9ed41bc3456e7721a3612a47fad9b66e78b9a7eb4 | PqChat | voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))
+pqchat | 1 | 5,954,050 | 0xab6c80c8cbf627cfb354cca038003f4cad8cd29749e62ecdd43ef9b80ba050f5 | PqChat | voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))

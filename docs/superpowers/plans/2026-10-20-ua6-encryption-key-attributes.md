@@ -176,7 +176,7 @@ instances and `proofSystemId` (to legacy per U10); tests `test/zether/**` (fixtu
 
 ### Task 9: Gates (U17, U18)
 - [ ] Full forge suite: `../../scripts/capped forge test` green (count recorded).
-- [ ] Sizes: `../../scripts/capped forge build --sizes --json > /tmp/ua6-sizes.json 2>/dev/null; python3 -I ../../scripts/size_gate.py /tmp/ua6-sizes.json size-baseline.json`; ratchet the baseline down where code shrank; log `runs/<date>-ua6-sizes.txt`.
+- [ ] Sizes: `T=$(mktemp -d); ../../scripts/capped forge build --sizes --json > "$T"/ua6-sizes.json 2>/dev/null; python3 -I ../../scripts/size_gate.py "$T"/ua6-sizes.json size-baseline.json`; ratchet the baseline down where code shrank; log `runs/<date>-ua6-sizes.txt`.
 - [ ] Gas: the U18 rows by `../../scripts/capped forge test --isolate --match-path 'test/ua/{UAGas,UARegistryUA6}.t.sol' -vv`
   and the Zether / PQZ gas tests; log `smartcontracts/evm/runs/<date>-ua6-gas.txt` with before / after.
 - [ ] `python3 -I scripts/docs_check.py check` 0 errors; the docs' gas rows updated from the log. Commit.

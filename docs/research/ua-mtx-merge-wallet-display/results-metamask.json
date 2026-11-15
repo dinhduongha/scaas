@@ -1,0 +1,13 @@
+{
+  "wallet": "MetaMask/v13.55.0",
+  "userAgent": "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0",
+  "account": "0x0fa792d0e3e9359024407655e1524b597b5e6799",
+  "chainId": 7622,
+  "results": [
+    {"id": "UAMetaTransfer", "primaryType": "UAMetaTransfer", "digest": "0x646b2ff0d1571ce8d763fa2444bfb1a2ef3f06806a4e8fad1beb0b10df482e4d", "signature": "0xd5dc32ae56ac36008dacec7c85f8a4628c2de7886a3b31c53cea67750dd36fa91271b68767c64ce71532cb7ccb694401b8846b64eed1ce06f8660d660675a9ca1b", "recovered": "0x0Fa792D0E3E9359024407655E1524B597b5E6799", "match": true},
+    {"id": "UASetMandate", "primaryType": "UASetMandate", "digest": "0xc917bb34aa16a0881fe008bbce594280e0a9feb36159e02b3c378f769bec5be0", "signature": "0xd907dba265a81da014686b1ef559d53889a31aadd0d8e556253a518f07339d526ac29ea70eab1caa0d7836dcd61528a445ed576fa921fa4e68d7feebbb8a1e541b", "recovered": "0x0Fa792D0E3E9359024407655E1524B597b5E6799", "match": true},
+    {"id": "UATradeOrder", "primaryType": "UATradeOrder", "digest": "0x0f5096320871c0ed970b34c16f79aa08a8c8d80331551d2af862c813cc5ec6dd", "signature": "0x62876a016a948fb9bd9911136feca04017b1965697063455c3a4a9c4a21321bd02e93f067fb6285c112931463c8b51a78ed074061cb22491ff4e2fe07a8711c01b", "recovered": "0x0Fa792D0E3E9359024407655E1524B597b5E6799", "match": true},
+    {"id": "UARelayFee", "primaryType": "UARelayFee", "digest": "0x3adc4abcc85b833dc62471f888eedeb2afc9f1b47c566a69239810c139476e1c", "signature": "0xc1066e13a5f996cb5d1b1fad59a633ccd399303bfbc2bdcd40cb40705848a6de60cb7b7cc23b1a9e1ff4f923c7188f374c3402a8f4119ddc74efe46c096f89d61b", "recovered": "0x0Fa792D0E3E9359024407655E1524B597b5E6799", "match": true},
+    {"id": "UAPayUnderMandate", "primaryType": "UAPayUnderMandate", "digest": "0xd9a363a6f5fbeee583046838937cd7ae13e6f159cd4318ce1467e39b7d425c8d", "signature": "0xf923a6f9f25a04df75badfd75ba80ae7a8df904668b2c015b062ea1205a1086f3e765441e8ab52e94bc7bfad5e4d29d86426a3167a0d83706c2d26fd039001851c", "recovered": "0x0Fa792D0E3E9359024407655E1524B597b5E6799", "match": true}
+  ]
+}

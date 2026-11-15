@@ -5,6 +5,7 @@ import {PqzRegFixture} from "./PqzRegFixture.sol";
 import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Plan T31 (regulated-kinds spec §3.3, §4.3; CTR-GOV-17, never lose ciphertext; I8): on kinds 12 and 13 `FORCE` moves the
 /// subject's public balance only. A frozen PQZ UA holding a public (UA-ledger) balance and a shielded one is forced: its
@@ -34,10 +35,10 @@ abstract contract PqzForceSuite is PqzRegFixture {
 
         vm.prank(compliance);
         _r().recordOrder(keccak256("order"), keccak256("document"), alice, nid(BENEFICIARY), PUBLIC,
-            uint64(block.timestamp + 10 days));
+            uint64(block.timestamp + 10 days), EnvKit.codeUidOf(address(_r())));
         bytes32 rid = keccak256(abi.encode(keccak256("order"), alice, nid(BENEFICIARY)));
         vm.prank(issuer);
-        _r().freeze(alice, REF, rid);
+        _r().freeze(alice, REF, rid, EnvKit.codeUidOf(address(_r())));
 
         IPqzToken.AccountState memory before = tok.pqzAccount(alice, 0);
         bytes memory acc = tok.pqzAcc(alice, 0);
@@ -46,7 +47,7 @@ abstract contract PqzForceSuite is PqzRegFixture {
         uint256 pool = tok.balanceOf(MetaTxLib.SHIELD_POOL);
         vm.startStateDiffRecording();
         vm.prank(issuer);
-        _r().forceTransfer(rid, 20_000);
+        _r().forceTransfer(rid, 20_000, EnvKit.codeUidOf(address(_r())));
         assertEq(_pqzAccesses(alice, true), 0, "FORCE reads and writes no PQZ state (I8)");
 
         assertEq(tok.balanceOfUA(alice), PUBLIC - 20_000, "the subject's public balance");

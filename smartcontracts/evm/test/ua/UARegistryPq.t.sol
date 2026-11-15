@@ -6,10 +6,10 @@ import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IUAKindVerifier, IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
-import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {MldsaVerifier} from "../../src/ua/MlDsa.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
-import {UAFndsaVerifier} from "../../src/ua/FnDsa.sol";
-import {UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
+import {FndsaVerifier} from "../../src/ua/FnDsa.sol";
+import {SlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
 import {console2} from "forge-std/Test.sol";
 import {MockVerifier, UARegistryBase} from "./UARegistryBase.sol";
@@ -55,14 +55,14 @@ contract UARegistryPqTest is UARegistryBase {
         bytes memory valid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid");
         ml87.allow(keccak256(valid));
         c = new UARegistry.KindConfig[](7);
-        c[6] = UARegistry.KindConfig(0x0135, address(new UAFndsaVerifier(0x0135)), 5_250_000); // CTR-UA-40, provisional cap
-        c[5] = UARegistry.KindConfig(0x0134, address(new UAMldsaVerifier(
+        c[6] = UARegistry.KindConfig(0x0135, address(new FndsaVerifier(0x0135)), 5_250_000); // CTR-UA-40, provisional cap
+        c[5] = UARegistry.KindConfig(0x0134, address(new MldsaVerifier(
             0x0134, address(ml87), valid, vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid"))), 250_000);
         c[0] = UARegistry.KindConfig(0x0101, address(new P256Verifier()), 400_000);
-        c[1] = UARegistry.KindConfig(0x0130, address(new UAMldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44);
-        c[2] = UARegistry.KindConfig(0x0131, address(new UAMldsaVerifier(0x0131, address(0), "", "")), CAP_MLDSA65);
-        c[3] = UARegistry.KindConfig(0x0132, address(new UAFndsaVerifier(0x0132)), CAP_FNDSA);
-        c[4] = UARegistry.KindConfig(0x0133, address(new UASlhdsaVerifier()), CAP_SLHDSA);
+        c[1] = UARegistry.KindConfig(0x0130, address(new MldsaVerifier(0x0130, address(0), "", "")), CAP_MLDSA44);
+        c[2] = UARegistry.KindConfig(0x0131, address(new MldsaVerifier(0x0131, address(0), "", "")), CAP_MLDSA65);
+        c[3] = UARegistry.KindConfig(0x0132, address(new FndsaVerifier(0x0132)), CAP_FNDSA);
+        c[4] = UARegistry.KindConfig(0x0133, address(new SlhdsaVerifier()), CAP_SLHDSA);
     }
 
     /// Mock verifiers for 0x0101, the six PQ kinds and the PQZ key verifier 0x0142, PQ caps `pqCap`.
@@ -198,9 +198,9 @@ contract UARegistryPqTest is UARegistryBase {
         bytes memory valid = vm.parseJsonBytes(kat, ".kinds.mldsa44.eip8355_probe_valid");
         stub.set(keccak256(valid));
         c[1].verifier = address(
-            new UAMldsaVerifier(0x0130, address(stub), valid, vm.parseJsonBytes(kat, ".kinds.mldsa44.eip8355_probe_invalid"))
+            new MldsaVerifier(0x0130, address(stub), valid, vm.parseJsonBytes(kat, ".kinds.mldsa44.eip8355_probe_invalid"))
         );
-        assertEq(UAMldsaVerifier(c[1].verifier).PRECOMPILE(), address(stub));
+        assertEq(MldsaVerifier(c[1].verifier).PRECOMPILE(), address(stub));
         c[1].cap = 50_000;
         UARegistry pre = _deploy(address(0x5ca4), chainUidA, address(0), false, BUDGET, address(0), true, c);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyCache.selector, uint16(0x0130)));
@@ -423,15 +423,15 @@ contract UARegistryPqTest is UARegistryBase {
         UACall.register(r, UAKinds.MSIG, tk, _none(), "", "");
     }
 
-    /// T-GAS: at the largest `mldsa65` cap the structure bound admits for the treasury (5,910,000; 5,911,000 before
-    /// `MSIG_ACCEPTED_GAS`, CTR-UA-37) the `msig` itself registers (step 4) but not as a PQZ holder (review2 C0-5): 2 x 5.91 M
+    /// T-GAS: at the largest `mldsa65` cap the structure bound admits for the treasury (5,909,000 since CTR-UA-44's
+    /// `MSIG_ACCEPTED_GAS` 3,500; 5,910,000 at 2,500; 5,911,000 before `MSIG_ACCEPTED_GAS`, CTR-UA-37) the `msig` itself registers (step 4) but not as a PQZ holder (review2 C0-5): 2 x 5.91 M
     /// + the cheapest PQZL debit is over 2^24.
     /// The vector's treasury PoP binds a PQZ key, so its signing sets are not run here with the real verifiers
     /// (`test_T_GAS_pqHybrid` does for the hybrid; `UARegistryPq.t.sol:382` `test_T_GAS_msigPqHold` for the treasury's bound).
     function test_T_GAS_pqTreasury() public {
         string memory pj = _pj();
         UARegistry.KindConfig[] memory c = _realPq();
-        c[2].cap = 5_910_000;
+        c[2].cap = 5_909_000;
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _withPqz(c));
         _members(r, pj);
         bytes32 tua = r.uaOf(UAKinds.MSIG, vm.parseJsonBytes(pj, ".msig.treasury.keyData"));
@@ -475,11 +475,12 @@ contract UARegistryPqTest is UARegistryBase {
     /// `verifyBudget` at the largest cap the bound admits; one more thousand gas of cap and the structure is refused.
     function test_T_GAS_msigPqHold() public {
         MockVerifier burner = new MockVerifier(0, 5_900_000);
-        (UARegistry r, bytes memory d) = _burnMembers(REG_A, address(burner), 5_910_000);
+        // CTR-UA-44 (TODO 3ze): MSIG_ACCEPTED_GAS 2,500 -> 3,500 moves the largest cap 5,910,000 -> 5,909,000
+        (UARegistry r, bytes memory d) = _burnMembers(REG_A, address(burner), 5_909_000);
         bytes32 id = r.uaOf(UAKinds.MSIG, d);
         bytes32 ua = UACall.register(r, UAKinds.MSIG, d, _none(), _burnSigs(r, d, id, UAKinds.PURPOSE_POP_V2, _regDigest(id, UAKinds.MSIG)), "");
         r.requireAuthorized{gas: BUDGET}(ua, UAKinds.PURPOSE_METATX, DIGEST, UACall.auth(ua, abi.encode(d, _burnSigs(r, d, ua, UAKinds.PURPOSE_METATX, DIGEST))));
-        (UARegistry r2,) = _burnMembers(address(0x5ca6), address(burner), 5_911_000);
+        (UARegistry r2,) = _burnMembers(address(0x5ca6), address(burner), 5_910_000);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
         UACall.register(r2, UAKinds.MSIG, d, _none(), "", "");
     }
@@ -527,7 +528,7 @@ contract UARegistryPqTest is UARegistryBase {
         m[1] = Member(UAKinds.EVM_EOA, _pad(a), 1);
         bytes memory d = _msigKey(2, m);
         uint256 held = CAP_MLDSA65 + CAP_MLDSA65 / 63 + 5_000; // gen 1's hold inside gen 2's 63/64
-        uint256 bound = 445_000 + 45_000 + held + (held - 400_000) / 63 + 2_500; // MSIG_ACCEPTED_GAS
+        uint256 bound = 445_000 + 45_000 + held + (held - 400_000) / 63 + 3_500; // MSIG_ACCEPTED_GAS (3ze: 2,500 -> 3,500)
         UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
         UARegistry tight = _deploy(address(0x5d20), chainUidA, address(home), false, uint64(bound - 1), impl, true, none);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));

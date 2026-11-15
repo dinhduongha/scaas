@@ -22,6 +22,7 @@ import {HederaLib} from "../../src/hedera/HederaLib.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
 import {SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 import {PqzRegistryBase, PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
@@ -29,6 +30,7 @@ import {plainEnv} from "../helpers/Catalogue.sol";
 import {IRig, PlainRig, PqzRig, ZetherRig} from "./helpers/KindRigs.sol";
 import {nid} from "../helpers/Ids.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {MtxHash} from "../helpers/MtxHash.sol";
 
 /// Submits `cd` to `t` with exactly `g` gas for the frame (not a transaction: no intrinsic gas, no calldata floor).
 contract GasProbe {
@@ -75,9 +77,9 @@ contract MtxCtxTest is PqzRegistryBase {
         vm.etch(HAS, type(MockHederaAccountService).runtimeCode);
         MockHederaAccountService(HAS).setEdKey(hed, vm.addr(ED_PK));
         u = _mldsaUA(9);
-        tok.mint(alice, 1_000_000);
-        tok.mintToUA(u, 1_000_000);
-        htok.mint(hed, 1_000_000);
+        tok.mint(alice, 1_000_000, EnvKit.codeUidOf(address(tok)));
+        tok.mintToUA(u, 1_000_000, EnvKit.codeUidOf(address(tok)));
+        htok.mint(hed, 1_000_000, EnvKit.codeUidOf(address(htok)));
     }
 
     function _token(address ska, bool hedera) internal returns (NormalToken t) {
@@ -508,9 +510,14 @@ contract MtxCtxTest is PqzRegistryBase {
     function test_minGas_smartKeyAccountMtxExecute() public {
         address acct = fac.deploy(SubjectKey(KeyKind.SECP256K1, bytes32(uint256(uint160(vm.addr(SKA_PK)))), 0, 0, 0),
             address(0x6A2D));
-        tok.mint(acct, 1_000);
+        tok.mint(acct, 1_000, EnvKit.codeUidOf(address(tok)));
         MetaTxLib.MetaTransaction memory m = _mt(acct, abi.encodeCall(IMetaTx.cancelNonce, (9)), 1, RR, 0);
-        bytes memory sig = abi.encode(uint256(0), new bytes32[](0), _ecdsa(SKA_PK, MtxDigest.metaTx(address(tok), m)));
+        bytes32 app = Erc7739Kit.separator(address(tok));
+        bytes32 c = MtxHash.hashStruct(m);
+        assertEq(keccak256(abi.encodePacked(hex"1901", app, c)), MtxDigest.metaTx(address(tok), m));
+        bytes memory sig = Erc7739Kit.wrap(abi.encode(uint256(0), new bytes32[](0),
+            _ecdsa(SKA_PK, Erc7739Kit.nested(acct, app, "MetaTransaction", Erc7739Kit.METATX_TYPE, c))), app, c,
+            Erc7739Kit.METATX_TYPE);
         bytes memory cd = abi.encodeCall(IMetaTx.executeMetaTransaction, (m, sig));
         // the ERC-1271 STATICCALL comes from module P's frame
         uint256 snap = vm.snapshotState();

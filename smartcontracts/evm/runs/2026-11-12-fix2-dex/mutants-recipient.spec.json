@@ -1,0 +1,37 @@
+[
+ {
+  "id": "R1 recipient check dropped",
+  "file": "src/dex/SCaaSDexCore.sol",
+  "old": "if (a < b || a - b < min) revert ISCaaSDex.InsufficientOutput(token);",
+  "new": "a; b; min;",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "R2 exchange payout not measured",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "_payLeg(sellToken, c, surplus, submitter, true);",
+  "new": "_payLeg(sellToken, c, surplus, submitter, false);",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "R3 derived id read as an address",
+  "file": "src/dex/SCaaSDexCore.sol",
+  "old": "            : abi.encodeCall(IUALedger.balanceOfUA, (id)));",
+  "new": "            : abi.encodeCall(IERC20.balanceOf, (TradeLib.addr(id))));",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "R4 the surplus counted in the minimum",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "_sendChecked(o.receiveToken, to, c.recv - c.fee + surplus, c.recv - c.fee);",
+  "new": "_sendChecked(o.receiveToken, to, c.recv - c.fee + surplus, c.recv - c.fee + surplus);",
+  "path": "test/v2/DexMarkets.t.sol"
+ },
+ {
+  "id": "R5 the fee not netted",
+  "file": "src/dex/SCaaSDex.sol",
+  "old": "_sendChecked(o.receiveToken, to, c.recv - c.fee + surplus, c.recv - c.fee);",
+  "new": "_sendChecked(o.receiveToken, to, c.recv - c.fee + surplus, c.recv);",
+  "path": "test/v2/DexMarkets.t.sol"
+ }
+]

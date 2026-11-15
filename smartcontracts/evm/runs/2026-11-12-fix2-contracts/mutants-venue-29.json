@@ -1,0 +1,32 @@
+[
+ {
+  "id": "N1",
+  "file": "src/dex/venue.rs",
+  "test": "market_rule",
+  "killed": true
+ },
+ {
+  "id": "N2",
+  "file": "src/dex.rs",
+  "test": "market_rule",
+  "killed": true
+ },
+ {
+  "id": "N3",
+  "file": "src/dex/venue.rs",
+  "test": "feature_disabled_29",
+  "killed": true
+ },
+ {
+  "id": "N4",
+  "file": "src/dex.rs",
+  "test": "market_rule",
+  "killed": true
+ },
+ {
+  "id": "N5",
+  "file": "src/dex/venue.rs",
+  "test": "feature_disabled_29",
+  "killed": true
+ }
+]

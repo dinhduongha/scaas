@@ -1733,7 +1733,7 @@ impl PqzKey {
             Some(w) => *w,
             None => crate::keccak256(&tag),
         };
-        let st = Debit { form, header: hd, pk_f: &sk.0.pk[..], pk_t: None, pk_a: None, t, u: &c.0.u[..], v_t: None, v_f, v_a: None };
+        let st = Debit { form, header: hd, pk_f: &sk.0.pk[..], pk_t: None, pk_a: None, t, u: &c.0.u[..], v_t: None, v_f, v_a: None, u_f: None };
         let stmt = Stmt::Debit(st).encode().map_err(|_| Error::Argument)?;
         let wit = Zeroizing::new(wit_debit(&sk.0, &c.0, &[dr]));
         Ok(with_tag(proved(&stmt, &prove(form.op(), &stmt, &wit, &d.rnd32)?), &tag))
@@ -1790,6 +1790,7 @@ impl PqzKey {
             v_t: Some(v(0)?),
             v_f: v(1)?,
             v_a: pk_a.map(|_| v(2)).transpose()?,
+            u_f: None,
         };
         let stmt = Stmt::Debit(st).encode().map_err(|_| Error::Argument)?;
         let wit = Zeroizing::new(wit_debit(&sk.0, &c.0, &[dv, dr]));

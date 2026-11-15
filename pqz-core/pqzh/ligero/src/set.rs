@@ -65,11 +65,11 @@ pub(crate) use pqzh::*;
 
 /// the set's name (pqz-core/params/sets/<SET_NAME>/)
 pub const NAME: &str = lattice::SET_NAME;
-/// l2 bounds: CBD(1) vectors (s, r), CBD(20) vectors (e, e1), e2 (v3 36 / 164 / 64)
+/// l2 bounds: CBD(1) vectors (s, r), CBD(20) vectors (e, e1), e2 (n2048-kmax1024 36 / 164 / 64)
 pub const BETA_S: usize = lattice::BETA_S;
 pub const BETA_E: usize = lattice::BETA_E;
 pub const BETA_2: usize = lattice::BETA_2;
-/// bit widths: M_i < 2^MBITS, c_i + 64 < 2^CBITS, e_T + 2^(EBITS-1) < 2^EBITS (v3 14 / 11 / 25)
+/// bit widths: M_i < 2^MBITS, c_i + 64 < 2^CBITS, e_T + 2^(EBITS-1) < 2^EBITS (n2048-kmax1024 14 / 11 / 25)
 pub const MBITS: u32 = lattice::MBITS;
 pub const CBITS: u32 = lattice::CBITS;
 pub const EBITS: u32 = lattice::EBITS;

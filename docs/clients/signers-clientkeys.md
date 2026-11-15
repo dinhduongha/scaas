@@ -167,7 +167,10 @@ EVM browser wallets are used only through open standards (EIP-1193, EIP-6963, EI
    `eth_getCode` through the wallet's own provider and sends a `wallet_kind` hint: `eoa` ⇒ the signature must recover to
    the wallet as before; `contract` ⇒ the signature is accepted unchecked and the node's simulation (a real
    `isValidSignature`) decides ([INT-ERP-03](../integration.md#INT-ERP-03)). A wrong hint opens no path to funds: an
-   invalid signature cannot execute on chain.
+   invalid signature cannot execute on chain. A key of a `SmartKeyAccount` or a `MandateWallet` owner signs the
+   ERC-7739 `erc7739TypedData(td, {wallet, address, chainId, chainUid})` of the app's typed data (its fields stay readable),
+   never the digest itself, and sends `erc7739Signature(inner, td)` ([accounts.md CTR-ACC-02](../contracts/accounts.md#erc1271-wrap));
+   the account's own entries are signed as they are.
 
 <a id="CLI-SGN-06"></a>**CLI-SGN-06** — **WalletConnect v2 is a seam behind a configuration flag; no SDK is loaded by the
 core.** A `providerFactories` registry; the WalletConnect option appears only when a project id is configured **and** an
@@ -184,7 +187,7 @@ Hedera HashPack (also a seam) and the TON Connect HTTP bridge.
 first.** The server supplies only the nonce, a `validUntil` inside the window and a fee within the user's `maxFee`.
 `checkPayment` rebuilds the payment `MetaTransfer` from the required `payee`, `entryRef` (the request's, on lane
 `payLane(entryRef)` with nonce 0), `expectedToken` and `amount` (× 10^`tokenDecimals`): `from` = the account, the right
-chain, fee ≤ `maxFee` (default 0), expiry ≤ 1 day, the right type; `checkReceiverFee` likewise for a payee's receiver-pays co-signature (both paths):
+chain, fee ≤ `maxFee` (default 0), expiry ≤ 1 day, the right type; `checkPayeeFee` likewise for a payee's fee co-signature (both paths):
 `paymentDigest` = the expected payment's digest, fee ≤ the payee's `maxFee`, to its `feeRecipient` ([CTR-MTX-06](../contracts/metatx.md#CTR-MTX-06)); `checkOwnerCall` accepts only a `SmartKeyAccount` `MetaTransaction` (`from` = the account itself,
 [CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)) whose `data` is `addKey(the key just created)` on the right
 account/chain with expiry ≤ 1 hour; anything else ⇒ refused. An owner call is signed only after a form showing the account, the selector and value 0. BUILT.
@@ -207,7 +210,7 @@ rebuilds the payload with `fam/<family>.js` and returns a frozen `checked` objec
 | Aptos | payload fields (op, from, to, amount, asset, window); `account == account_of(root, owner)`; `message` = the digest text; `application == location.origin` (portal: the configured `aptos_application`); `chainId`; `nonce == lane` |
 | Soroban | decode the invocation: contract = token, function, args (from, to, amount); `network_id` = the configured passphrase hash; `signature_expiration_ledger` ≤ current + window |
 | Cosmos, GRAM, Hedera ED25519 | the payload rebuilt from terms == `payload_hex`; `from`; chain/network; contract; amount |
-| EVM named operations (every struct of `typed_ops.json`, [CLI-SGN-42](#CLI-SGN-42)) | `checkOp(td, {op, contract, chainId, chainUid, message, maxFee, feeRecipient, relayer})` checks **per struct**: the typed data is rebuilt from the fields the client built from the user's input (`from` too), every one present (nothing omitted reads as zero); the server supplies only the lane, nonce, deadline and fee fields of the envelope, the fee within `maxFee` (PERCENT only on an AMOUNT op, on the op's own amount, [CTR-MTX-20](../contracts/metatx.md#CTR-MTX-20)), a bound fee recipient or relayer the one named. Any other struct (an order, a cancel, `ReceiverFee`, `RelayFee`, `PqzAuth`) is all the client's. `checkWrapOrder` / `checkUAWrapOrder`, `checkCancel`, `checkReceiverFee` and `checkTradeOrder` carry their own rules; `checkOp` refuses a wrap order. `checkCall` (the generic `MetaTransaction`) stays beside it |
+| EVM named operations (every struct of `typed_ops.json`, [CLI-SGN-42](#CLI-SGN-42)) | `checkOp(td, {op, contract, chainId, chainUid, message, maxFee, feeRecipient, relayer})` checks **per struct**: the typed data is rebuilt from the fields the client built from the user's input (`from` too), every one present (nothing omitted reads as zero); the server supplies only the lane, nonce, deadline and fee fields of the envelope, the fee within `maxFee` (PERCENT only on an AMOUNT op, on the op's own amount, [CTR-MTX-20](../contracts/metatx.md#CTR-MTX-20)), a bound fee recipient or relayer the one named. Any other struct (an order, a cancel, `UAPayeeFee`, `UARelayFee`, `PqzAuth`) is all the client's. `checkWrapOrder` / `checkUAWrapOrder`, `checkCancel`, `checkPayeeFee` and `checkTradeOrder` carry their own rules; `checkOp` refuses a wrap order. `checkCall` (the generic `MetaTransaction`) stays beside it |
 | Portable UA records (`UARegistration`, `UAKemRecord`, `UAPqzKeyRecord`, `UAMembership`; a native `msig` member) | the typed data rebuilt from the record's fields by `portableTypedData` ([CLI-SGN-41](#CLI-SGN-41)) equals what is shown: domain `name` + `version` only, `ua`, the `uint16 kind` with its name, the key and proof hashes. SPECIFIED for `checkTerms`; today the builder is the check |
 
 NEAR secp256k1 (kind `0x0108`, raw op digest): the token's `env::ecrecover` takes the recovery id, so the client sends
@@ -305,21 +308,29 @@ pools" (default off); allows `receiveToken` = the sell token with a "cycle" labe
 amount`; asks an outside-token holder to approve the listed DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)),
 never the DEX; and checks each `ExchangeLegSettled` against `limitReceive`, showing `surplus` as price improvement.
 
-<a id="CLI-SGN-38"></a>**CLI-SGN-38** — **A pay-meta payment is signed only when its `entryRef` is `metaPayId(salt, meta)` of
-the `(salt, meta)` the client holds, and the decoded `meta` is shown next to the typed data.** Status: clientkeys
-**BUILT** (metatx split T18; [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)). `metaPayId(salt, meta)`, `decodeMeta`
-(the envelope `abi.encode(uint16 schema, bytes body)` in canonical form only; schema 1 a UTF-8 note, 2 `{creditorRef,
-invoiceNo, dueDate}`, 3 `{chainId, target, callHash}`, 4 encrypted (its length only; not decrypted here); any other
-schema refused), `buildMtxPayMeta` / `buildUaPayMeta` (the payment of `mtxPay` / `uaPay` with `entryRef = payId`, lane
-`payLane(payId)`, nonce 0; calldata `mtxPayMeta` / `uaPayMeta`, or with `onChain: false` the off-chain variant `mtxPay` /
-`uaPay` with the same digest, `(salt, meta)` then kept by the payee) and `checkPayMeta` (the server's `MetaTransfer` must
-carry that `payId`, then every [CLI-SGN-05](#CLI-SGN-05) `checkPayment` check). A request whose `entryRef` differs from
-`metaPayId(salt, meta)` is refused before anything is signed. The vectors are `smartcontracts/vectors/metatx/paymeta.json`
-(also read by `scaas-ua` `meta_pay_id` / `pay_lane` and QML `UaKinds.metaPayId` / `payLane`). A `meta` sent on chain is
-public forever ([CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)); private metadata uses schema 4 or the off-chain variant.
-Family wallets (other families sign their own `MetaOp`): the same `payId` derivation byte for byte; **TON**: a pay-meta
-whose payee bounces still uses up that `(payer, payId)` (its lane is spent), so a retry picks a new `salt` (a new
-`payId`).
+<a id="CLI-SGN-38"></a>**CLI-SGN-38** — **A pay-meta payment is signed only when its `entryRef` is `metaPayId` of the payment
+metadata the client holds, and the decoded metadata is shown next to the typed data.** Status: clientkeys **BUILT** (EVM:
+pay-meta-tax T41, plan T83; non-EVM families: metatx split T18; [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)).
+**Change (pay-meta-tax T41 / plan T83, review E C-2):** on the EVM the separate `mtxPayMeta` / `uaPayMeta` entries are gone
+and the v1 helpers with them (`metaPayId(salt, meta)`, `decodeMeta`, `buildMtxPayMeta`, `buildUaPayMeta`). The EVM API is
+`payMeta({salt, payNo, save, schema, body | fields})` (the checked `PayMeta`: a non-zero salt from the CSPRNG when absent,
+`schema == 0` iff the body is empty, no `save` without a `payNo`; `payNo` 32 bytes, recommended a right-aligned UUIDv7,
+`payNoFromUuid` / `payNoToUuid`), `metaPayId(PayMeta)` (`keccak256("scaas.pay.meta.v3" ‖ salt ‖ keccak256(abi.encode(bytes32
+payNo, bool save, uint16 schema, bytes body)))`), `encodeMetaBody` / `decodeMetaBody` (schema 1 a UTF-8 note, 2 `{creditorRef,
+invoiceNo, dueDate}`, 3 `{chainId, target, callHash}`, 4 encrypted (its length only; not decrypted here); any other schema
+refused), `payMetaWarning` (a clear `payNo` or a schema 1 or 2 body is public forever, once per payee per session),
+`buildPay` / `buildPayWithPayeeFee` / `buildPayWithTax` (the `UAMetaTransfer` of `mtxPay` / `mtxPayWithPayeeFee` /
+`mtxPayWithTax` with `entryRef = metaPayId(meta)`, by default the lane `payLane(payId)` nonce 0, `PayMeta` last in the
+calldata) and `checkPayMeta(td, {meta, entryRef, …})` (the server's `UAMetaTransfer` must carry that `payId`, then every
+[CLI-SGN-05](#CLI-SGN-05) `checkPayment` check). A request whose `entryRef` differs from `metaPayId(meta)` is refused before
+anything is signed. Vectors `smartcontracts/vectors/metatx/paymeta.json`, written by forge; also read by `scaas-ua`
+`pay::meta_pay_id_v3` / `json::meta_pay_id_json`, ua-c `scaas_ua_meta_pay_id`, ua-cxx and ua-dart-frb `metaPayId`, QML
+`UaKinds.metaPayIdV3`. The non-EVM families keep the v1 form (`keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`, their
+own `MetaOp`): `metaop.js` `checkPayMeta(op, salt, meta)` over `metaPayIdV1`, the NEAR / Algorand `buildPayMeta`, `scaas-ua`
+`meta_pay_id` and QML `UaKinds.metaPayId(salt, meta)`, vectors `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json`.
+A body sent on chain is public forever ([CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)); private metadata uses schema 4.
+**TON**: a pay-meta whose payee bounces still uses up that `(payer, payId)` (its lane is spent), so a retry picks a new
+`salt` (a new `payId`).
 
 <a id="CLI-SGN-39"></a>**CLI-SGN-39** — **A relay-fee payment is built for exactly one signed call, shown together with
 it, and never pays or approves the router's executor or marker.** Status: clientkeys (EVM) **BUILT** (metatx split T18;
@@ -348,6 +359,13 @@ its vectors):
 4. **TON**: do not queue an op at lane nonce `n + 1` behind a revocable order at `n`: a revoke moves the lane to `n + 2`,
    so the queued op fails.
 
+<a id="service-pull-builder"></a>**Service pull** ([CTR-MTX-32](../contracts/metatx.md#CTR-MTX-32)). `clientkeys`
+`buildServicePull` (`src/evm.js`, **BUILT**, group 3i T78, `test/servicepull.test.js` reading
+`smartcontracts/vectors/metatx/servicepull.json`) builds the pull at fee `NONE`, `entryRef` from the operation's typed data
+in the service's domain; it refuses an operation outside the node-relayable field types (and `intN`), another payer, another
+chain and a zero amount; with a fee, `buildRelayFee` on the same lane at `nonce + 1`. The `ua-rs` builder and its display
+(recompute `entryRef`, refuse a mismatch) land with branch `ua-rs-sign`: SPECIFIED here.
+
 <a id="CLI-SGN-41"></a>**CLI-SGN-41** — **A portable UA record is signed as typed data, and a registry call is built from named fields, by one
 builder per library** (owner 2026-10-31, the portable records and the explicit-parameter rule; builder names are controller calls, owner may
 override). Status: clientkeys, `ua-rs`, the wrappers and the reproducers **BUILT** (`typed-signing`). `portableTypedData(primaryType, message)` (`clients/clientkeys/src/ua.js`)
@@ -366,7 +384,7 @@ as the registry does, before a form is chosen) / `kemPkOf`, `msigStructure`, `ty
 `uaSig` convert between the packed bytes and the typed forms. `portable.json` carries every row's `typedData` and `args`, so each library is checked
 against them ([ua-libraries.md](ua-libraries.md)).
 
-<a id="CLI-SGN-42"></a>**CLI-SGN-42** — **Every named EVM operation is built from one table of typed structs, one builder pair per struct** (owner option B and the explicit-parameter rule, 2026-10-31; builder names are controller calls, owner may override). Status: clientkeys **BUILT** (typed-signing C1, C6; `zether-prover` C7). `src/evm.js` holds one table of type strings (`TYPED_OPS`); `<op>TypedData({name, contract, chainId, chainUid, message})` returns the exact JSON for `eth_signTypedData_v4` and `<op>Calldata(td, sig, extra)` the entry's calldata (`extra`: `pqzAuth`, `ownerSig`, `payerSig` where an entry takes one), exported by name (`unwrapTypedData`, `uaUnwrapCalldata`, `executeTypedData`, `receiverFeeTypedData`, `relayFeeTypedData`, …) and collected in `OP_BUILDERS`; `zether.js` builds the confidential envelopes from the explicit structs and the `ZetherRollOver` / `ZetherSetRollOverMode` digests. `smartcontracts/vectors/typed/typed_ops.json` (74 structs; `scripts/typed-ops-vectors.mjs`) pins type string, typehash, domain per contract kind, message, struct hash, digest and calldata, and `scripts/typed-ops-cast-check.mjs` compares every row with `cast`. `buildRelayFee` builds the `RelayFee` and the router's `relay` call; the generic `metaTxTypedData`, `uaMetaTxTypedData`, `mtxExecuteCalldata` and `checkCall` stay (TS-D14: a mixed batch and an operation with no named entry). `zether-prover` has `typedDigest` over the 47 Zether rows and `namedCall` for the relayed named entries; the other `ua-*` libraries build no EVM op digest, only portable records and registry arguments ([ua-libraries.md](ua-libraries.md)). The legacy builders are in `clients/clientkeys/legacy/typed-signing/`.
+<a id="CLI-SGN-42"></a>**CLI-SGN-42** — **Every named EVM operation is built from one table of typed structs, one builder pair per struct** (owner option B and the explicit-parameter rule, 2026-10-31; builder names are controller calls, owner may override). Status: clientkeys **BUILT** (typed-signing C1, C6; `zether-prover` C7). `src/evm.js` holds one table of type strings (`TYPED_OPS`); `<op>TypedData({name, contract, chainId, chainUid, message})` returns the exact JSON for `eth_signTypedData_v4` and `<op>Calldata(td, sig, extra)` the entry's calldata (`extra`: `pqzAuth`, `ownerSig`, `payerSig` where an entry takes one), exported by name (`unwrapTypedData`, `uaUnwrapCalldata`, `executeTypedData`, `payeeFeeTypedData`, `relayFeeTypedData`, …) and collected in `OP_BUILDERS`; `zether.js` builds the confidential envelopes from the explicit structs and the `ZetherRollOver` / `ZetherSetRollOverMode` digests. `smartcontracts/vectors/typed/typed_ops.json` (74 structs; `scripts/typed-ops-vectors.mjs`) pins type string, typehash, domain per contract kind, message, struct hash, digest and calldata, and `scripts/typed-ops-cast-check.mjs` compares every row with `cast`. `buildRelayFee` builds the `RelayFee` and the router's `relay` call; the generic `metaTxTypedData`, `uaMetaTxTypedData`, `mtxExecuteCalldata` and `checkCall` stay (TS-D14: a mixed batch and an operation with no named entry). `zether-prover` has `typedDigest` over the 47 Zether rows and `namedCall` for the relayed named entries; the other `ua-*` libraries build no EVM op digest, only portable records and registry arguments ([ua-libraries.md](ua-libraries.md)). The legacy builders are in `clients/clientkeys/legacy/typed-signing/`.
 
 <a id="CLI-SGN-40"></a>**CLI-SGN-40** — **A wallet never signs an EIP-7702 authorization, and clientkeys refuses a raw
 digest unless the caller opts in.** Owner rule 2026-10-30 after the EIP-7702 hot-wallet drain
@@ -1032,6 +1050,169 @@ existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzTok
 `UAMetaTransaction` builder (UA path, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA
 vectors (`smartcontracts/vectors/ua/kinds.json`) carry the `pqz-mlwe` scheme row (seed → pk, keyHash, `pqz_reg_message`). Protocol detail:
 [contracts/pq-zether](../contracts/pq-zero-knowledge.md). SPECIFIED.
+
+<a id="CLI-SGN-49"></a>**CLI-SGN-49** — **A PQZ key has versions: the seed of version v ≥ 1 appends `be64(v)`, an `msig` draws
+each version fresh, vault and backup keys name `(ua, version, pqzKeyHash)`, and the builders refuse a broken sequence.** Status:
+**BUILT** in `clientkeys` (group 3g T54; `src/pq.js` `pqzKeySeed(seed, account, index, version)`, `src/ua.js`
+`pqzKeyVersionRecordMessage`, `pqzKeyVersionRecordOf`, `pqzDecoyCandidates`, `pqzVaultKey`, `src/evm.js` `checkPqzDebit`,
+`src/ua-verify.js` `verifyPqzKeyVersionRecord`; `test/pqz-versions.test.js`, `pq_kat.json` `pqzSeeds`); **SPECIFIED** for
+`ua-rs` (branch `ua-rs-sign`) and the other `ua-*`. Registry rule [CTR-UA-42](../contracts/accounts.md#CTR-UA-42).
+- `seed32_v = HKDF-SHA256(BIP-39 seed, "scaas.ua.pq.v1", "scaas.ua.pqz-mlwe.v1" ‖ u32 account ‖ u32 index [‖ be64 v])`:
+  version 0 keeps the info without the suffix (today's keys stay), every v ≥ 1 appends `be64(v)`. An `msig` operator draws
+  each version's `seed32` fresh, never from this.
+- A vault or backup entry is keyed by `(ua, version, pqzKeyHash)`, so two keys at one number stay apart.
+- Decoys: never a UA whose latest version is pending (stored, its proof not yet stored), `pqzDecoyCandidates`.
+- `checkPqzDebit(td, {current})`: at the current version every debit; a stale version only migrates (op 1 to the UA itself)
+  or refreshes (a burn of 0); above current none.
+- The version builders refuse a replacement of version 0, a gap (`v ≠ latest + 1`), a version without version 0, and a key
+  the UA already holds at another version. This replaces "one PQZ key per UA, ever" above for versions ≥ 1; version 0 stays
+  write-once.
+- **Change (owner 2026-11-13, three-key model; SPECIFIED):** this rule is the `registry` key class; the `offchain-shared` and
+  `offchain-token` seeds, the opening KEM key and their vault leaves are [CLI-SGN-50](#CLI-SGN-50).
+
+<a id="CLI-SGN-50"></a>**CLI-SGN-50** — **One PQZ seed per key class, version and (for `offchain-token`) token, and one opening KEM
+key per scoped record, each domain-separated and derived from the wallet seed** (owner 2026-11-13; spec
+[`2026-11-13-pqz-three-keys.md`](../superpowers/specs/2026-11-13-pqz-three-keys.md) K3-2, K3-6b; key classes
+[CTR-PQZ-37](../contracts/pq-zero-knowledge.md#CTR-PQZ-37), records [CTR-UA-43](../contracts/accounts.md#CTR-UA-43)). Status:
+**SPECIFIED** for `clientkeys`, `ua-rs` and every `ua-*`. Extends [CLI-SGN-49](#CLI-SGN-49); the `registry` key is byte for byte
+its rule.
+- `seed32 = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1", info)`, `pk = KeyGen(seed32)` at the scope's set:
+  `registry` `"scaas.ua.pqz-mlwe.v1" ‖ u32(account) ‖ u32(index) [‖ be64(v) for v ≥ 1]` (unchanged); `offchain-shared`
+  `"scaas.ua.pqz-mlwe.offchain-shared.v1" ‖ u32(account) ‖ u32(index) ‖ chainUid(32) ‖ be64(v)` (the version always, `v = 0`
+  too); `offchain-token` `"scaas.ua.pqz-mlwe.offchain-token.v1" ‖ u32(account) ‖ u32(index) ‖ chainUid(32) ‖ token(20) ‖ be64(v)`.
+  Only the `registry` key stays chain-independent. An `msig` operator draws each class and version fresh.
+- **Opening KEM key** of a scoped record of an opening scope: `openKemSeed = HKDF-SHA256(ikm = BIP-39 seed, salt =
+  "scaas.ua.kem.v1", info, L = 96)` with `info = "scaas.kem.pqz-opening.1" ‖ ua ‖ chainUid(32) ‖ be64(v)` (`offchain-shared`) or
+  `"scaas.kem.pqz-opening-token.1" ‖ ua ‖ chainUid(32) ‖ token(20) ‖ be64(v)` (`offchain-token` with the opening), `v` the
+  record's version; `(ek, dk) = ML-KEM-1024.KeyGen_internal(d = openKemSeed[0:32], z = openKemSeed[32:64])`,
+  `sk_X = openKemSeed[64:96]`, `kemPk = 0x01 ‖ ek ‖ X25519(sk_X, 9)`. It is never given to chat code; the chat KEM key is a
+  different key.
+- Derived only in the key worker; vault leaves `vault:pqz:<class>:<account>:<index>[:<chainUid>[:<token>]]:<v>`, one per version
+  for the opening KEM key beside it. `seed_enc`, the memo key and `ownTag`'s key keep their formulas with `pqzKeySeed` = the seed
+  of the token's class and version.
+- **`ownTag` on an opening token's op 1 covers `u_f`** ([CTR-PQZ-34](../contracts/pq-zero-knowledge.md#CTR-PQZ-34)'s Change).
+- **Key handles carry their class**: a wallet never loads a `registry` or `offchain-shared` secret into a code path that handles
+  an `offchain-token`'s ciphertexts, or the reverse; a mismatch is refused before any arithmetic.
+- KAT rows in `pq_kat.json`: the three classes, two tokens, two chains, versions 0 and 1 give pairwise distinct seeds (`registry`
+  rows unchanged); `openKemSeed` for both classes. Restore test: mnemonic only → the opening KEM keys of versions 0 and 1 equal the
+  stored records and every opening opens.
+
+<a id="CLI-SGN-51"></a>**CLI-SGN-51** — **On an opening token a wallet never applies its PQZ secret to a credit: it re-encrypts
+from the sealed opening and compares bytes; every failure is one outcome, "skip"** (owner 2026-11-13; spec K3-7; opening
+[CTR-PQZ-40](../contracts/pq-zero-knowledge.md#CTR-PQZ-40)). Status: **SPECIFIED**; mandatory in `clientkeys`, `ua-rs` (the only
+signer) and every binding through it; no opening-token "decrypt credit" entry exists in release builds. For a pending entry of
+`(ua, version)` read from state:
+1. TRIVIAL entry: accept (the amount is public).
+2. Read the slot, the blob, the entry's `u`, `v_t`, `[v_a]`, `O_t`, `[O_a]`.
+3. Derive the opening KEM secret of this account's key version ([CLI-SGN-50](#CLI-SGN-50)).
+4. `ss = Decaps(O_t)` (ML-KEM with implicit rejection; an X25519 low-order point is the same outcome, skip, on no separate path);
+   `kek`; open `sealedSeed` with the `aad` of CTR-PQZ-40. Tag fails: skip.
+5. `(r, e1, e2_t, e2_a) = Enc-expand(seed_leg)` with the pinned sampler; the relation's norm bounds must hold, else skip.
+6. `P(Aᵀr + e1)` byte-equal to the stored `u`, else skip.
+7. `w = v_t − pkᵀr − e2_t (mod q)` on the 16 plaintext coefficients with the holder's own `pk` (the token's scope) of that
+   version; every `w_i = Δ·d_i` exactly with `d_i ∈ [0, 16)`, else skip. The amount is `Σ d_i·16^i`.
+8. Recompute `O_t` from `seed_leg` and compare with the stored bytes, else skip.
+9. With the auditor on: `v_a = pk_aᵀr + e2_a + Δ·d` byte-equal with the auditor's key from the registry, and `O_a` recomputed from
+   `seed_leg` and the auditor's opening KEM key of its key version (the blob's `kv` tail) byte-equal to the stored bytes, else
+   skip. So no credit is spendable by an honest wallet while the auditor is blinded.
+10. Accept.
+
+- **Key handle** (owner 2026-11-14, the Change of this rule in `decisions.md`; Fable review of the round P1-1). Status:
+  **SPECIFIED** until the round's client gates are green: the handle refuses mislabelled credits; it holds the PQZ secret of its
+  record, but no binding in this repository proves through it yet. "No bare class-2 decrypt" is enforced here, in the clients,
+  not in pqz-ffi. `clientkeys` `pqzKeyHandle` and `ua-rs` `pqz3k::PqzKeyHandle`, one per key with the opening
+  (`offchain-shared`, or `offchain-token` of a token with the opening) and key version:
+  - It derives and holds that key's PQZ seed and its opening KEM secret; no member returns either. The scoped seed of a key
+    with the opening is no public export (`pqzScopedKeySeed` / `pqz_scoped_key_seed` removed); only an `offchain-token` key of a
+    token **without** the opening keeps one, `pqzTokenKeySeedWithoutOpening` / `pqz_token_key_seed_without_opening` (the accepted
+    exposure of [CTR-PQZ-37](../contracts/pq-zero-knowledge.md#CTR-PQZ-37)). The KAT reads the handle's
+    `seedCommitment = keccak256(seed32)`.
+  - `check(credit)` reads the blob itself (`pqzOpeningBlobOf` / `pqz3k::opening_blob`), refuses a credit of another token
+    (class 3), recipient or key version, and builds both `aad`s from the blob's own bytes; `clientkeys` runs steps 2–4, 8 and the
+    auditor's opening of step 9 itself, the binding's check (pqz-ffi `opening::check_recipient`) the PQZ arithmetic of steps
+    5–7 and `v_a`; `ua-rs` hands the opening KEM seed and those inputs to the binding's check. The result is an **acceptance**
+    bound to the handle, the index and `h(i)` (slot and blob bytes), or a skip.
+  - The PQZ seed reaches a function only through three gated entries, counted: `withSecretOwn` / `with_secret_own` after the
+    holder's own `ownTag` verifies under the handle's key; `withSecretWindow` / `with_secret_window` when every window entry is
+    skip-marked, TRIVIAL or accepted by this handle with the same index and bytes, else refused before the seed is touched;
+    `withSecretKeygen` / `with_secret_keygen` (the public key and the `R_REG` proof of registration), counted apart.
+- <a id="pqz-wallet-wasm"></a>**The browser wallet's check** (TODO 3zf, owner 2026-11-15). Status: **BUILT**, **UNAUDITED**. A
+  browser wallet holds an opening token through the wallet module: `pqz-core/ffi/wallet-wasm` (pqz-ffi
+  `opening::check_recipient` / `check_auditor` in wasm32, one module per parameter set, built by its `build.sh`; no built `.wasm`
+  is committed) and its loader `clientkeys` `src/pqzopenWasm.js`. It is not the test harness `pqz-core/ffi/wasm` (review P-E).
+  - **Exports**: only `memory`, `input_ptr`, `input_cap`, `out_ptr`, `pk_bytes`, `check_recipient(n)`, `check_auditor(n)`
+    (`strip-exports.mjs` drops pqz-ffi's C ABI from the module). The module owns its buffers: the caller writes a frame of `n`
+    bytes into the module's input; no export takes a caller's pointer; the crate has no `unsafe` code. The frame (named
+    fields, each with its length; `lib.rs` states it) is checked field by field (every fixed field its exact length, the
+    frame's end, the cap, depth 1), and a malformed one is the outcome of a failed check. Every call zeroes the output first
+    and the input (the opening KEM seed) after.
+  - **One outcome per failure, as the Rust API**: the recipient's `null` (skip) or `{ digits, amount }`; the auditor's `read`,
+    `recipient-unreadable`, `unreadable`. A malformed input to the loader (a wrong length, type or key version) is that
+    outcome, never a throw with detail; a trap re-instantiates the module. No error detail or step number leaves
+    ([ARCH-POS-13](../decisions.md#ARCH-POS-13)).
+  - **Loader**: `loadPqzWallet(bytes | WebAssembly.Module)` takes what the caller gives and fetches nothing; it refuses a module
+    whose exports or imports are not the wallet's. `pqzUnpack(P, packBits)` gives the lanes of a stored form.
+  - **Handle**: `pqzKeyHandle(...).check(credit, wallet)` with a wallet of `loadPqzWallet` runs steps 2–4, 8 and the auditor's
+    opening of step 9 as before, then hands its opening KEM seed and the credit read from the blob (`u`, `v` unpacked,
+    `credit.pk` the holder's own PQZ key of that version, the auditor's `pk`) to the module, which runs steps 3–9; the seed goes
+    to no other `verify`. A module of another set than the handle's layout, or a missing `pk`, is an error before the check.
+  - **Tests** (`pqz-core/ffi/wallet-wasm/run.sh`, `mutants.py`; summary `pqz-core/ffi/runs/2026-11-15-wallet-wasm.txt`): at the
+    four sets, `opening.json`'s rows rebuilt natively and checked field by field, every case (the rows and their one-change
+    variants) wasm = native, the raw ABI's and the loader's malformed inputs, a trapped instance replaced, the handle with a
+    planted `u*`; 14 mutants of the wrapper, loader and handle, each red. `pqz-core/ffi/run.sh` runs it as its part
+    `ffi/wallet` at the run's set, so every gate covers it; the set lines of its `Cargo.toml` are `gen_set.py`'s. `clientkeys` `test/pqz-wallet-wasm.test.js` is skipped without the built modules
+    (`PQZ_WALLET_DIR`).
+- **A skip is no reason to mark on one read** (Fable P2-1): a mark is irreversible, and the auditor's key and opening KEM key that
+  decide step 9 are bound by nothing the holder signs. A wallet signs a skip mark only for a skip reproduced with the registry
+  reads taken at a finalized block from the node list in strict-majority mode
+  ([ARCH-POS-15](../decisions.md#ARCH-POS-15)) (`pqzMarks` / `PqzKeyHandle::marks` refuse every other skip). Inputs missing or
+  malformed locally (no auditor keys for an audited leg, a blob of another length) are an error before the check, never a
+  skip. `h(i)` is hashed by the wallet from the bytes it checked (`pqzEntryHash` / `pqz3k::entry_hash`), never taken from a
+  node's code-hash answer.
+- **Shared rows** (Fable P2-2): `smartcontracts/vectors/ua/pqz3k_kat.json` (`clientkeys/scripts/pqz3k-vectors.mjs`): the handle's
+  seed commitments, `ownTag` over `u_f`, `h(i)` and `entriesHash`, the `UAPqzScopedKey` / `UAPqzScopedKeyRecord` digests and
+  both messages, and an opening blob with its offsets; read by `clientkeys` and `ua-rs` and checked against the contracts by
+  `test/pqz/PqzClientRows.t.sol`. The K3-7 differential of spec §14.19 between `clientkeys` and `ua-rs` waits for a client that
+  carries steps 5–7; today both hand them to pqz-ffi.
+- Inputs are public bytes and the opening KEM secret; `s` is not an input. No error detail, step number or timing class leaves
+  the wallet. The PQZ secret is applied only to the holder's own `(u_f, v_f)` after its `ownTag` verifies, and to a `T` whose
+  every part is that, an accepted credit, a TRIVIAL entry or a marked slot (zero); the prover refuses a window with an
+  unaccepted, unmarked credit **before** the secret is loaded.
+- **Debit**: the wallet picks `p` so that every entry of the window is accepted, TRIVIAL or skip-marked; a failing entry below
+  the wanted `p` is skip-marked first by the signed rollover ([CTR-PQZ-41](../contracts/pq-zero-knowledge.md#CTR-PQZ-41)). A bad
+  unmarked entry inside a materialised `acc` (a wallet fault only): at an index `≥ floor` the wallet debits (a refresh) at
+  `p ≤ index`, which un-rolls `[p, rolled)`, then marks it; below `floor` the wallet stops using that account version, says so
+  locally and does not decrypt.
+- **Restore** from state alone: last debit record → blob → `ownTag` → own balance; then every later entry by the check above.
+- **The auditor tool** runs the same steps with its roles swapped (opens `O_a`, checks `v_a` with its `pk_a`, recomputes `O_t`
+  and `v_t` with the recipient's public key) and never applies `s`. Its outcomes per credit are public and named: `read` (both
+  openings good); `recipient-unreadable` (`O_a` good, `O_t` or `v_t` bad; an honest recipient skips it); `unreadable` (`O_a`
+  fails; an honest recipient skips it too, and the outcome alone says nothing about the recipient); `unreadable, taken` (an
+  `unreadable` or `recipient-unreadable` entry, unmarked, that a recipient-signed rollover or debit has taken: its index is below
+  the account's `rolled` or `floor`). Only `unreadable, taken` shows that the recipient's wallet bypassed the check, and it names
+  both UAs; it is a compliance event for the issuer, with no contract action (owner 2026-11-13).
+- An accepted credit is an honest encryption with the sampler's noise, so `K_MAX·B ≤ E` holds as on `PRECOMPILE`; whether its
+  amount is backed is the verifier's soundness (T27), unchanged.
+
+<a id="pqz-verdict-clients"></a>**PQZ verifier mode in the clients** (group 3f). `clientkeys` builds the `PqzVerdict` digest,
+the empty and the signed `PqzSignedVerdict` and the proof-carrying entries with the verdict last (**BUILT**, T46: `test/pqz-verdict.test.js`, reading
+`smartcontracts/vectors/pqz/n2304-kmax4096/verdict.json`); `ua-rs` and its wrappers sign `PqzVerdict` under the `pqz-verdict` purpose like any
+other UA message (**SPECIFIED**, branch `ua-rs-sign`). Contract rule:
+[pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md#pqz-verifier-mode). **The verifier fee** (group 3t,
+[CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36); **BUILT**): `clientkeys` has the router type `UASetVerifierFee`
+(`typed_ops.json`), `pqzFeeWord({confidentialFee, beneficiaryUA, verifierFee, legs, decoyFee})` for display and the node /
+verifier parity (a witness takes word 256 of the token's statement view, never this sum) and `decodePqzVerifyConfig` with the
+four fee fields (`test/pqz-verifier-fee.test.js` reads `smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json` (the set's own directory, T-05)); `ua-rs` `src/pqzfee.rs`
+the `UASetVerifierFee` struct hash and digest and `pqz_fee_word` (`tests/pqzfee.rs`). Neither has a `TokenConfig` encoder: the
+creation fields `pqzVerifyMode`, `pqzVerifierUA`, `pqzVerifierFixed`, `verifierFee`, `verifierFeeMax` are the wizard's when it is
+built.
+
+<a id="pqchat-signing"></a>**What a wallet shows before signing a PqChat record** (SPECIFIED; contract records
+[CTR-CHAT-03](../contracts/pqchat.md#CTR-CHAT-03)). A session or an epoch: the instance (chain name, address, listed by the
+factory as class 3), the member UAs with their KEM fingerprints (`kemPkHash`), the admins, and "plain rekey" or "membership
+change: adds X, removes Y"; a warning when two UAs list the same KEM key. A message posted on chain: "public forever and costs
+gas", and the device id's kind (a v7 id shows the device's creation time, [CTR-CHAT-12](../contracts/pqchat.md#CTR-CHAT-12)).
+A topic write: "public forever, nothing can be removed".
 
 An `msig` member accepts its place with `membershipMessage({ ua, member })` (`digest` for a native member, `memberDigest` under `member` for a derived one), sent as `acceptMembership` by anyone ([CTR-UA-37](../contracts/accounts.md#CTR-UA-37)). Listing in `msigOf` is no consent: a client adds the weights of the slots where `memberAccepted` is true, shows the `msig` as not active below the threshold, and does not name it as a signer, party, role holder or payer until then (**SPECIFIED**: no client reads `memberAccepted` yet; `membershipMessage` is built in clientkeys and every library has the digest). Below the threshold it can authorize nothing on a registry with this rule, for any purpose on any contract.
 

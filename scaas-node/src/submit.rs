@@ -16,7 +16,6 @@ use anyhow::Result;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 
-use crate::abi::PqzRefusal;
 use crate::breaker::Breaker;
 use crate::chain::{Chain, SimError};
 use crate::config::ChainCfg;
@@ -34,10 +33,6 @@ const SAMPLE_EVERY: Duration = Duration::from_secs(15);
 /// §8.5: số khối gần nhất tìm `MetaTransactionExecuted` khi phân loại một meta-tx đã bị tiêu thụ.
 /// ponytail: cửa sổ cố định; ghi khối lúc claim vào `Sent` nếu tx kẹt lâu hay ra `unknown`.
 const CLASSIFY_LOOKBACK: u64 = 1_000;
-/// Group 3g: how far back a party's `UAPqzKeyCurrent` counts as "since intake" for `PQZ_KEY_ROTATED`.
-// ponytail: a fixed window, not the job's own intake block (the pull path carries none); a job older than this window that
-// meets a rotation is reported `dead` with `ProofRejected`; use the job's claim block once the node's own queue carries it
-const ROTATION_LOOKBACK: u64 = 10_000;
 
 /// `scaas_submit_bump_skipped_consumed_total`: lần `track()` KHÔNG bump vì meta-tx đã bị tiêu thụ (R80).
 pub static BUMP_SKIPPED_CONSUMED: AtomicU64 = AtomicU64::new(0);
@@ -48,7 +43,11 @@ pub struct Work {
     pub job_id: Option<i64>,
     pub to: Address,
     pub data: Bytes,
+    /// The deadline the work is sent under: the op's own, or for a PQZ debit the sooner of it and its verdict's `validUntil`.
     pub valid_until: u64,
+    /// The op's own deadline (its envelope's), never narrowed by a verdict: a renewed verdict extends `valid_until` up to it
+    /// (Fable recheck R-1, E N-3).
+    pub envelope_until: u64,
     /// `None` cho job `call`.
     pub meta: Option<MetaRef>,
     /// A named entry ([`crate::typed::Op`]): the guard reads its row; else a transfer struct (`meta`).
@@ -206,6 +205,21 @@ struct Sent {
     ceiling: Option<u128>,
 }
 
+/// CTR-MTX-86, one rule on every family (the EVM lanes here, the other adapters' `step_once`): a job carrying `receiver_fee`
+/// (the old name) or `payee_fee` is refused by name, never relayed without the payee's fee authorization. The node builds no
+/// payee fee: it goes as the named EVM entry `mtxPayWithPayeeFee` (an `op`); the other families have no such entry.
+pub fn refuse_payee_fee_fields(job: &Job) -> Result<()> {
+    if job.receiver_fee.is_some() {
+        anyhow::bail!("RECEIVER_FEE_REFUSED: the job field receiver_fee is now payee_fee (owner 2026-11-12); a payee fee goes as \
+            the named entry mtxPayWithPayeeFee");
+    }
+    if job.payee_fee.is_some() {
+        anyhow::bail!("PAYEE_FEE_REFUSED: the payee fee (payee_fee) goes as the named EVM entry mtxPayWithPayeeFee; refused, never \
+            relayed without it");
+    }
+    Ok(())
+}
+
 /// One job, one `Work` (job-api.md): a named `op`, or a transfer struct. NODE-LANE-10 (R84): the unbound `relayer` /
 /// `feeRecipient` are normalized here (`fee_recipient` = `[[chains]] fee_recipient`), never relayed as the job carries them.
 /// The dedup key is the typed digest of what is built here (`guard::fill_digest`), never the job's `digest` field.
@@ -219,9 +233,7 @@ pub fn work_from_job_with(job: &Job, fee_recipient: Option<Address>, services: &
     if let Some(k) = job.kind.as_deref().filter(|k| !matches!(*k, "metatx" | "ua_metatx" | "call")) {
         anyhow::bail!("unknown job kind {k:?} (metatx | ua_metatx | call)");
     }
-    if job.receiver_fee.is_some() {
-        anyhow::bail!("receiver-pays (receiver_fee) goes as the named entry mtxPayReceiverFee; refused, never relayed without it");
-    }
+    refuse_payee_fee_fields(job)?;
     if job.call.is_some() || job.calldata.is_some() || job.data.is_some() {
         return Err(hex_refused("call"));
     }
@@ -254,7 +266,7 @@ pub fn transfer_typed(contract: Option<&str>, token: Address, struct_hash: B256,
         "pqz" => "pqz",
         c => anyhow::bail!("BAD_PAYLOAD: contract {c:?} (token | zether | pqz)"),
     };
-    Ok(Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
+    Ok(Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
         derived_signer: false, derived_side: false })
 }
 
@@ -286,7 +298,7 @@ fn work_of_op_with(job_id: Option<i64>, op: &serde_json::Value, fee_recipient: O
     // a service pull's nonce and its `UAMetaTransactionExecuted` are the pulled token's (spec §8), its target the service
     let token = if p.typed.contract == "service" { p.typed.domain_of } else { p.to };
     let meta = p.lane.map(|(from, batch, nonce)| MetaRef { token, from, batch, nonce, digest: None, ua, addr_nonce });
-    Ok((Work { job_id, to: p.to, data: p.data, valid_until: p.valid_until, meta, entry: true, typed: Some(p.typed) }, ua))
+    Ok((Work { job_id, to: p.to, data: p.data, valid_until: p.valid_until, envelope_until: p.valid_until, meta, entry: true, typed: Some(p.typed) }, ua))
 }
 
 /// A `ua_metatx` struct job (job-api.md, CTR-UA-26, CTR-MTX-30): `{token, m, auth}`, relayed as `mtxExecuteTransfer` of the
@@ -317,7 +329,8 @@ fn ua_work(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
     }
     let data = m.calldata(auth);
     let meta = Some(MetaRef::of_ua(token, &m, None));
-    Ok(Work { job_id: Some(job.id), to: token, data, valid_until: m.valid_until().saturating_to(), meta, entry: false, typed })
+    let until = m.valid_until().saturating_to();
+    Ok(Work { job_id: Some(job.id), to: token, data, valid_until: until, envelope_until: until, meta, entry: false, typed })
 }
 
 /// The relayer of a landed meta-transaction is this lane's, or, for a service pull (its token not the target), the
@@ -345,6 +358,9 @@ pub struct Submitter {
     tripped: Option<&'static str>,
     /// PAY-FIX2, NODE-GW-07, NODE-JOB-20: checked before every simulation.
     guard: Guard,
+    /// Fable recheck 4 R4-1: [`Chain::failover_answers`] when the job in hand started ([`Submitter::submit`]); [`Submitter::fail`]
+    /// requeues when it moved.
+    failover_mark: u64,
 }
 
 impl Submitter {
@@ -381,6 +397,7 @@ impl Submitter {
             sampled: None,
             tripped: None,
             guard,
+            failover_mark: 0,
         };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
@@ -403,16 +420,24 @@ impl Submitter {
             };
             // review T4 m2: a rebuilt payload is re-signed by `track`, so it passes the guard too; refused ⇒ that
             // nonce is only ever gap-filled
+            // Fable recheck 5 R5-2: a refusal read while a failover endpoint answered is no verdict: the start fails (and is
+            // retried) as on a transport error, never a gap-fill and `dead`
+            let mark = me.chain.failover_answers();
+            let moved = |me: &Self| me.chain.failover_answers() != mark;
             let work = match work {
                 Some(mut w) => match me.guard.check(&me.chain, &w).await {
                     // group 3f: a replacement re-signs the bytes, so a PQZ debit gets its verdict again; none ⇒ gap-filled only
                     Ok(()) => match me.guard.pqz_fill(&me.chain, &mut w).await {
                         Ok(()) => Some(w),
+                        Err(r) if moved(&me) => anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r:?}; the lane does not start: the node exits, its supervisor restarts it", j.job_id))),
                         Err(r) => {
                             warn!(job = j.job_id, nonce = n, "tracked PQZ job without a verdict ({r:?}); its nonce is only gap-filled");
                             None
                         }
                     },
+                    Err(Refusal::Policy(r)) if moved(&me) => {
+                        anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r}; the lane does not start: the node exits, its supervisor restarts it", j.job_id)))
+                    }
                     Err(Refusal::Policy(r)) => {
                         warn!(job = j.job_id, nonce = n, "tracked job refused by the guard: {r}; its nonce is only gap-filled");
                         None
@@ -423,7 +448,9 @@ impl Submitter {
             };
             // its replacements reuse the original transaction's gas limit (review M3); only when the RPC cannot tell,
             // the cap: the operator's, never past what the chain's blocks take (an unreadable block fails the start)
-            let sent = me.chain.tx_fees(hash).await.ok().flatten();
+            // Fable recheck 6 R6-2: an unread transaction fails the start (as `fees()` above); only an unknown one (`None`) takes
+            // the cap and, priced, leaves the nonce to the gap-fill
+            let sent = me.chain.tx_fees(hash).await.map_err(|e| anyhow::anyhow!("tracked job {}: eth_getTransactionByHash: {e:#}; the lane does not start: the node exits, its supervisor restarts it", j.job_id))?;
             let gas = match sent {
                 Some((g, _)) => g,
                 None => guard::total_cap(me.cfg.max_gas_per_tx, me.chain.block_gas().await?),
@@ -555,17 +582,52 @@ impl Submitter {
     /// digest, computed here; G2: a digest or the same bytes with a live transaction on another path (another lane, the
     /// gateway) is not signed twice.
     pub async fn submit(&mut self, w: Work) {
+        self.failover_mark = self.chain.failover_answers();
         match self.guard.check(&self.chain, &w).await {
             Ok(()) => {}
+            // spec §11: a liquidity order the DEX already pulled landed (here or by another relayer): consumed, never dead (G6)
+            Err(Refusal::Policy(reason)) if reason.starts_with(guard::LIQUIDITY_ORDER_CLOSED) => {
+                if let Some(id) = w.job_id {
+                    self.report(id, "consumed", None, None, Some(reason)).await;
+                }
+                return;
+            }
+            // Fable recheck 2 P3-2: a wrong `contract` delivered again after its op landed (a derived signer's) is `consumed`;
+            // recheck 4 R4-2: a creation delivered again after its release was deprecated, the same
+            Err(Refusal::Policy(reason)) if ["CONTRACT_KIND_MISMATCH", "RELEASE_DEPRECATED", "RELEASE_UNKNOWN"]
+                .iter().any(|p| reason.starts_with(p)) => {
+                return match self.consumed(&w).await {
+                    Ok(true) => self.report_consumed(&w).await,
+                    Ok(false) => self.fail(&w, reason).await,
+                    Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+                };
+            }
             Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
             Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
         }
         let mut w = w;
+        // Fable recheck S-2: past the op's own deadline nothing can land: `dead` before the fill, whose refusals would requeue
+        // without end (after the guard, so a pulled liquidity order stays `consumed`); a landed op is `consumed`, never `dead`
+        if w.envelope_until <= now() {
+            return match self.consumed(&w).await {
+                Ok(true) => self.report_consumed(&w).await,
+                Ok(false) => self.fail(&w, "expired before submit".into()).await,
+                Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+            };
+        }
         // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt by the node, before the digest and any simulation
-        match self.guard.pqz_fill(&self.chain, &mut w).await {
-            Ok(()) => {}
-            Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
-            Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
+        if let Err(refusal) = self.guard.pqz_fill(&self.chain, &mut w).await {
+            // Fable recheck S-1: the fill runs before any simulation, so a debit that already landed (a first transaction
+            // mined after a gap-filled re-fill, another relayer) is `consumed` first, never refused by its stale verdict
+            match self.consumed(&w).await {
+                Ok(true) => return self.report_consumed(&w).await,
+                Ok(false) => {}
+                Err(e) => return self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+            }
+            return match refusal {
+                Refusal::Policy(reason) => self.fail(&w, reason).await,
+                Refusal::Transport(reason) => self.requeue(&w, reason).await,
+            };
         }
         match guard::fill_digest(&self.chain, &mut w).await {
             Ok(()) => {}
@@ -595,6 +657,10 @@ impl Submitter {
     /// `guard` theo `w` vào `Sent` khi tx được gửi; mọi lối ra khác thả nó (nhả digest).
     async fn send(&mut self, w: Work, guard: Option<InflightGuard>) {
         if w.valid_until <= now() {
+            // E N-3: past a PQZ verdict's life only, the envelope may still land with a fresh verdict: back in the queue
+            if w.envelope_until > now() {
+                return self.requeue(&w, "PQZ_VERDICT_EXPIRED: the verdict ran out before the send; the envelope is live".into()).await;
+            }
             if let Some(id) = w.job_id {
                 self.report(id, "dead", None, None, Some("expired before submit".into())).await;
             }
@@ -602,9 +668,6 @@ impl Submitter {
         }
         let gas = match guard::gas(&self.chain, &w, self.cfg.max_gas_per_tx).await {
             Ok(g) => g,
-            Err(SimError::Revert(reason)) if guard::over_cap(&reason) && crate::pqz::is_debit(&w) => {
-                return self.over_cap(&w, reason).await;
-            }
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => return self.requeue(&w, format!("simulate: {reason}")).await,
         };
@@ -658,76 +721,25 @@ impl Submitter {
         self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None, ceiling });
     }
 
-    /// NODE-JOB-24 (group 3h, pqz-proof-path spec §10): a PQZ debit whose estimate (regular + state, under the token's current
-    /// `proofStore()`) is above the lane's cap. Under `LOG` a holder of bit 24 may switch the token to `NONE` and the job may land:
-    /// `PROOF_STORE_OVER_LANE_CAP`, back in the queue, never `dead` (it ends `dead` only at its `validUntil`). Under `NONE`, or on a
-    /// release without the view, nothing makes it cheaper: the plain refusal.
-    async fn over_cap(&self, w: &Work, reason: String) {
-        match self.chain.call_view(w.to, crate::abi::IPqzToken::proofStoreCall {}).await {
-            Ok(m) if m == crate::abi::PROOF_STORE_LOG => self.requeue(w, format!("PROOF_STORE_OVER_LANE_CAP: {reason}")).await,
-            Ok(_) | Err(SimError::Revert(_)) => self.refused(w, reason).await,
-            Err(SimError::Transport(e)) => self.requeue(w, format!("proofStore(): {e}; {reason}")).await,
-        }
-    }
-
-    /// Mô phỏng revert. Meta-tx mà nonce chủ thể đã qua ⇒ `consumed` (R80: relayer khác có thể đã đưa nó lên chain),
-    /// không `dead`; không đọc được nonce ⇒ tạm thời. An invalidation already in force is done, never dead (MT-8).
+    /// A refused simulation, classified by [`guard::revert_verdict`] (the one classifier of every EVM runner, Fable E N-1):
+    /// done on chain (`consumed`), back in the queue by name, or `dead`.
     async fn refused(&self, w: &Work, reason: String) {
-        if guard::already_invalidated(&w.data, &reason) {
-            if let Some(id) = w.job_id {
-                self.report(id, "consumed", None, None, Some("already_invalidated".into())).await;
+        match guard::revert_verdict(&self.chain, w, reason).await {
+            guard::Verdict::Consumed(None) => self.report_consumed(w).await,
+            guard::Verdict::Consumed(Some(label)) => {
+                if let Some(id) = w.job_id {
+                    self.report(id, "consumed", None, None, Some(label)).await;
+                }
             }
-            return;
-        }
-        match self.consumed(w).await {
-            Ok(true) => self.report_consumed(w).await,
-            // regulated-kinds spec §7: a freeze, a pause, an eligibility or the registry may lift and the payload may still
-            // land (here later, or by another relayer): a named refusal, back in the queue, never `dead`
-            Ok(false) if crate::abi::regulated_refusal(&reason).is_some() => {
-                self.requeue(w, format!("REGULATED_REFUSED: {reason}")).await
-            }
-            // group 3f (spec §11.1): a PQZ verifier mode refusal by name, never `dead` while the op may land with another verdict
-            Ok(false) if crate::abi::pqz_verdict_refusal(&reason).is_some() => self.pqz_refused(w, reason).await,
-            // group 3g (spec §7.3): the PQZ key-version reverts by name; a stale debit or two equal keys never land, a version
-            // above current may become current, a proof built before a party's rotation is `PQZ_KEY_ROTATED`, never `dead`
-            Ok(false) => match crate::abi::pqz_refusal(&reason) {
-                Some(PqzRefusal::Stale) => self.fail(w, format!("PQZ_KEY_STALE: {reason}")).await,
-                Some(PqzRefusal::Reused) => self.fail(w, format!("PQZ_KEY_REUSED: {reason}")).await,
-                Some(PqzRefusal::Unknown) => self.requeue(w, format!("PQZ_KEY_VERSION_UNKNOWN: {reason}")).await,
-                Some(PqzRefusal::ProofRejected) => match guard::pqz_rotated(&self.chain, w, ROTATION_LOOKBACK).await {
-                    Ok(true) => self.requeue(w, format!("PQZ_KEY_ROTATED: {reason}")).await,
-                    Ok(false) => self.fail(w, reason).await,
-                    Err(e) => self.requeue(w, format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")).await,
-                },
-                None => self.fail(w, reason).await,
-            },
-            Err(e) => self.requeue(w, format!("mtxNonce: {e:#}")).await,
-        }
-    }
-
-    /// Group 3f (spec §11.1): a verdict, epoch, `eta` or registration may lift it: back in the queue (`PQZ_KEY_ROTATED` for a
-    /// `PqzVerdictMismatch` after a party's indexed `UAPqzKeyCurrent`, T55); the op's own shape never lands: `dead`.
-    async fn pqz_refused(&self, w: &Work, reason: String) {
-        let Some((name, liftable)) = crate::abi::pqz_verdict_refusal(&reason) else { return self.fail(w, reason).await };
-        if name == "PqzVerdictMismatch" {
-            match guard::pqz_rotated(&self.chain, w, ROTATION_LOOKBACK).await {
-                Ok(true) => return self.requeue(w, format!("PQZ_KEY_ROTATED: {reason}")).await,
-                Ok(false) => {}
-                Err(e) => return self.requeue(w, format!("PQZ_KEY_ROTATED read: {e:#}; {reason}")).await,
-            }
-        }
-        if liftable {
-            self.requeue(w, format!("PQZ_VERDICT_REFUSED: {reason}")).await
-        } else {
-            self.fail(w, reason).await
+            guard::Verdict::Requeue(r) => self.requeue(w, r).await,
+            guard::Verdict::Dead(r) => self.fail(w, r).await,
         }
     }
 
     /// R80: `mtxNonce(from, batch) > nonce` ⇔ nonce chủ thể của meta-tx đã bị dùng (bởi ai thì `classify`).
     /// `Ok(false)` cho job `call`. Lỗi RPC ⇒ `Err`: người gọi không bump, không kết luận (fail closed).
     async fn consumed(&self, w: &Work) -> Result<bool> {
-        let Some(m) = &w.meta else { return Ok(false) };
-        Ok(self.chain.subject_nonce(m).await? > m.nonce)
+        guard::consumed(&self.chain, w).await
     }
 
     /// §8.5 — chỉ là nhãn cho `last_error` ở Odoo; `landed_elsewhere` do indexer quyết khi `final`.
@@ -751,6 +763,12 @@ impl Submitter {
     }
 
     async fn fail(&self, w: &Work, reason: String) {
+        // Fable recheck 4 R4-1: one rule for every refusal of the submit path (the guard's reads, the fill, the simulation, the
+        // nonce read behind `consumed`): a failover endpoint answered a read of this job, so the refusal may be of a block behind
+        // the head; back in the queue, final once the first endpoint answers
+        if self.chain.failover_answers() != self.failover_mark {
+            return self.requeue(w, crate::adapters::evm::failover_answer(&reason)).await;
+        }
         warn!(job = ?w.job_id, "simulation refused: {reason}");
         if let Some(id) = w.job_id {
             self.report(id, "dead", None, None, Some(reason)).await;
@@ -858,17 +876,48 @@ impl Submitter {
                 }
                 continue;
             }
-            let live = s.work.as_ref().filter(|w| w.valid_until > now()).cloned();
+            // a PQZ debit lives to its envelope's deadline: past its verdict's alone, the fill below renews the verdict or the
+            // job goes back to the queue, never `dead` (Fable recheck R-1, E N-3)
+            let mut live = s.work.as_ref().filter(|w| w.valid_until > now() || (crate::pqz::is_debit(w) && w.envelope_until > now())).cloned();
             let expired_job = match (&s.work, &live) {
                 (Some(w), None) => w.job_id,
                 _ => None,
             };
+            let stuck_gas = s.gas;
+            // Fable 3r3s3t P3-3 (spec 3t §10, the fee pre-check "again before every send"): a stuck PQZ debit's replacement
+            // runs the fill first (the fee word, the verdict; a renewed verdict extends the work's deadline, R-1); refused by
+            // name, the nonce is gap-filled and the job back in the queue, never `dead`: the first transaction may still land
+            // (recheck R-2); an unreadable chain waits a round, no bump
+            let mut refused = None;
+            if let Some(w) = live.as_mut().filter(|w| crate::pqz::is_debit(w)) {
+                let filled = match self.guard.pqz_fill(&self.chain, w).await {
+                    // Fable recheck S-3: a fill that renewed nothing (the view refused the op) leaves an expired verdict: never
+                    // re-sent as it is
+                    Ok(()) if w.valid_until <= now() => Err(Refusal::Transport("PQZ_VERDICT_EXPIRED: the re-fill renewed no \
+                        verdict".into())),
+                    r => r,
+                };
+                match filled {
+                    Ok(()) => {}
+                    Err(Refusal::Transport(r)) if !r.starts_with("PQZ_") => {
+                        warn!(nonce = n, "PQZ fill: {r}; no bump this round");
+                        if let Some(s) = self.inflight.get_mut(&n) {
+                            s.at = Instant::now();
+                        }
+                        continue;
+                    }
+                    Err(e) => refused = live.take().map(|w| (w, e)),
+                }
+            }
             let (to, data, gas) = match &live {
-                Some(w) => (w.to, w.data.clone(), s.gas),
+                Some(w) => (w.to, w.data.clone(), stuck_gas),
                 None => (self.chain.address(), Bytes::new(), GAP_FILL_GAS),
             };
             if let Some(id) = expired_job {
                 self.report(id, "dead", None, None, Some("expired while stuck; nonce gap-filled".into())).await;
+            }
+            if let Some((w, Refusal::Policy(r) | Refusal::Transport(r))) = refused {
+                self.requeue(&w, format!("{r}; nonce gap-filled")).await;
             }
             let replaced = match self.chain.sign(n, to, data, gas, fees).await {
                 Ok((raw, h)) => match self.chain.send_raw(&raw).await {
@@ -904,6 +953,7 @@ impl Submitter {
     async fn receipt_of(&self, hashes: Vec<B256>) -> Result<Option<(B256, TransactionReceipt)>> {
         for h in hashes.into_iter().rev() {
             if let Some(rc) = self.chain.primary().get_transaction_receipt(h).await? {
+                self.chain.saw_block(rc.block_number.unwrap_or_default()); // Fable recheck 2 P2-1
                 return Ok(Some((h, rc)));
             }
         }
@@ -1067,6 +1117,15 @@ pub(crate) mod tests {
         designator: Option<Address>,
         /// Block 0 is the recorded Hedera testnet block, not the pinned `UID` (default: a pruned RPC).
         genesis: bool,
+        /// Fable recheck 4 R4-1: a failover endpoint of the chain: `eth_chainId` 31337 and block 0 hashed `UID`.
+        failover: bool,
+        /// Its `eth_chainId` when not 31337 (Hedera's 296).
+        failover_id: Option<u64>,
+        /// Fable recheck 6 R6-2: `eth_getTransactionByHash` fails (a transport error).
+        tx_err: bool,
+        /// Fable recheck 4 R4-2: `classReleaseOf` answers a published release, deprecated; or none (implementation 0).
+        release_deprecated: bool,
+        release_unknown: bool,
         /// `latest`'s `gasLimit` (default 200,000,000, the SCaaS testnet's target).
         block_gas: Option<u64>,
         /// `latest` has no `blockAccessListHash`: a chain before Amsterdam (Osaka, an L2, anvil).
@@ -1091,6 +1150,8 @@ pub(crate) mod tests {
         pqz_rotated: bool,
         /// Group 3f: `pqzVerifyConfig()` answers `(mode, verifier, epoch)`; `None`: it reverts (a token without the view).
         pqz_cfg: Option<(u8, B256, u32)>,
+        /// Fable E N-6: the token's `eip712Domain().name` (default: the first job's kind through `outcomes`, else `SCaaS MetaToken`).
+        domain: Option<&'static str>,
         /// Group 3f: the input of every `eth_call` to a PQZ view (`pqzVerifyConfig`, `proofSystemId`, `envelopeBinding`, the
         /// statement views), in order.
         views: Vec<Vec<u8>>,
@@ -1098,6 +1159,25 @@ pub(crate) mod tests {
         code_asked: Vec<Address>,
         /// Group 3h: `proofStore()` answers this (0 `NONE`, 1 `LOG`); `None`: it reverts (a release before 3h).
         proof_store: Option<u8>,
+        /// Round 3t: `pqzVerifyConfig().verifierFee`.
+        pqz_vf: u64,
+        /// Round 3t: `eth_getLogs` for `VerifierFeeSet` answers one log (the token's fee changed).
+        fee_set: bool,
+        /// Fable 3r3s3t P3-4: that log is a cancel `VerifierFeeSet(2, 2)` (no move).
+        fee_cancel: bool,
+        /// `eth_getLogs` answers a transport error.
+        logs_down: bool,
+        /// The statement views answer 288 bytes whose word 256 (the fee word) is this; `None`: `STATEMENT` (word 256 = 0).
+        stmt_fee: Option<u64>,
+        /// The statement views revert (the token refuses the op).
+        stmt_revert: bool,
+        /// NODE-JOB-28: `pqzVerifyConfig()`'s `pqzOwnKey` and `pqzOpening` (the key class, CTR-PQZ-37).
+        pqz_own_key: bool,
+        pqz_opening: bool,
+        /// NODE-JOB-28: `pqzScopedKeyOf` answers no record (the auditor has no key of the token's scope).
+        scoped_none: bool,
+        /// The scopes `pqzScopedKeyOf` / `pqzScopedKeyLatest` / `pqzScopedKeyAt` were asked for, in order.
+        scopes_asked: Vec<Address>,
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -1106,7 +1186,7 @@ pub(crate) mod tests {
     /// The PQZ views of the fake token: `pqzVerifyConfig`, `proofSystemId`, `envelopeBinding`, the four statement views (the forge
     /// artifact's selectors, pinned in `pqz::tests::views_are_the_contracts`).
     // group 3h T59: the four statement views after `ownTag` (pqz.rs `views_are_the_contracts`)
-    const PQZ_VIEWS: [[u8; 4]; 7] = [[0xdc, 0x59, 0xc6, 0x6e], [0x1f, 0x3b, 0x28, 0xf2], [0x35, 0xad, 0x08, 0xaa], [0x93, 0x14, 0x15, 0xee],
+    const PQZ_VIEWS: [[u8; 4]; 7] = [[0xdc, 0x59, 0xc6, 0x6e], [0x1f, 0x3b, 0x28, 0xf2], [0x35, 0xad, 0x08, 0xaa], [0x50, 0xf9, 0xbe, 0x2f],
         [0x8a, 0x21, 0x61, 0xba], [0xda, 0x8c, 0x9e, 0xed], [0x8e, 0x4c, 0xcf, 0x2e]];
     const PQZ_KEY0: Address = Address::repeat_byte(0xe0);
     const PQZ_KEY1: Address = Address::repeat_byte(0xe1);
@@ -1130,6 +1210,7 @@ pub(crate) mod tests {
                 "eth_estimateGas" if e.sim == Some("estimate_oog") => Err(err(-32000, "gas required exceeds allowance (100000000)", None)),
                 "eth_estimateGas" if e.sim == Some("estimate_down") => Err(err(-32000, "upstream timeout", None)),
                 "eth_estimateGas" => Ok(json!(format!("{:#x}", e.estimate.unwrap_or(0x30000)))),
+                "eth_getTransactionByHash" if e.tx_err => Err(err(-32000, "upstream timeout", None)),
                 "eth_getTransactionByHash" => Ok(e.tx_gas.map_or(Value::Null, |g| {
                     let mut t = json!({"gas": format!("{g:#x}")});
                     if let Some(f) = e.tx_max_fee {
@@ -1141,13 +1222,22 @@ pub(crate) mod tests {
                 "eth_feeHistory" => Ok(json!({"oldestBlock": "0x1", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
-                "eth_getLogs" if e.pqz_rotated && p[0]["topics"][0] == json!(format!("{:#x}",
-                    <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH)) => Ok(json!([{
-                    "address": p[0]["address"].clone(), "topics": [p[0]["topics"][0].clone(), format!("{:#x}", B256::repeat_byte(1)),
+                "eth_getLogs" if e.logs_down => Err(err(-32000, "upstream timeout", None)),
+                // the rotation filter asks `UAPqzKeyCurrent` and `UAPqzScopedKeyCurrent` (one topic-0 list); a log of the first
+                "eth_getLogs" if e.pqz_rotated && p[0]["topics"][0].as_array().is_some_and(|t| t.contains(&json!(format!("{:#x}",
+                    <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH)))) => Ok(json!([{
+                    "address": p[0]["address"].clone(), "topics": [format!("{:#x}",
+                        <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH), format!("{:#x}", B256::repeat_byte(1)),
                         format!("{:#x}", B256::from(U256::from(1)))],
                     "data": "0x", "blockNumber": "0x9", "blockHash": format!("{:#x}", B256::repeat_byte(9)),
                     "transactionHash": format!("{:#x}", B256::repeat_byte(8)), "transactionIndex": "0x0", "logIndex": "0x0",
                     "removed": false}])),
+                "eth_getLogs" if e.fee_set && p[0]["topics"][0] == json!(format!("{:#x}",
+                    <crate::abi::IPqzToken::VerifierFeeSet as alloy::sol_types::SolEvent>::SIGNATURE_HASH)) => Ok(json!([{
+                    "address": p[0]["address"].clone(), "topics": [p[0]["topics"][0].clone()],
+                    "data": format!("0x{}", alloy::hex::encode((if e.fee_cancel { 2u64 } else { 3u64 }, 2u64).abi_encode())), "blockNumber": "0x9",
+                    "blockHash": format!("{:#x}", B256::repeat_byte(9)), "transactionHash": format!("{:#x}", B256::repeat_byte(8)),
+                    "transactionIndex": "0x0", "logIndex": "0x0", "removed": false}])),
                 "eth_getLogs" => Ok(json!([])),
                 "eth_getBalance" => Ok(json!("0xde0b6b3a7640000")),
                 "eth_getBlockByNumber" if p[0] == "latest" => {
@@ -1155,6 +1245,12 @@ pub(crate) mod tests {
                     if !e.osaka {
                         b["blockAccessListHash"] = json!(format!("{:#x}", B256::repeat_byte(0xba)));
                     }
+                    Ok(b)
+                }
+                "eth_chainId" if e.failover => Ok(json!(format!("{:#x}", e.failover_id.unwrap_or(31337)))),
+                "eth_getBlockByNumber" if e.failover && p[0] == "0x0" => {
+                    let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                    b["hash"] = json!(format!("{:#x}", B256::from(U256::from(UID))));
                     Ok(b)
                 }
                 "eth_getBlockByNumber" if e.genesis => {
@@ -1181,6 +1277,16 @@ pub(crate) mod tests {
                         Ok(json!(format!("0x{}", alloy::hex::encode(out))))
                     } else if sel == IToken::supportedModesCall::SELECTOR {
                         Ok(word(U256::from(0xF3)))
+                    } else if sel == IToken::eip712DomainCall::SELECTOR {
+                        let name = e.domain.unwrap_or("SCaaS MetaToken");
+                        Ok(json!(format!("0x{}", alloy::hex::encode(IToken::eip712DomainCall::abi_encode_returns(&IToken::eip712DomainReturn {
+                            fields: alloy::primitives::FixedBytes([0x1f]), name: name.into(), version: "1".into(), chainId: U256::from(7622),
+                            verifyingContract: TOKEN, salt: B256::ZERO, extensions: vec![] })))))
+                    } else if sel == crate::abi::IOpenFactory::classReleaseOfCall::SELECTOR {
+                        use crate::abi::IOpenFactory as F;
+                        Ok(json!(format!("0x{}", alloy::hex::encode(F::classReleaseOfCall::abi_encode_returns(&F::ClassRelease {
+                            implementation: if e.release_unknown { Address::ZERO } else { Address::repeat_byte(0x1e) }, envVersion: 1, envHash: B256::ZERO, usableFrom: 0,
+                            deprecated: e.release_deprecated, initSelector: Default::default(), interfaceId: Default::default() })))))
                     } else if sel == IToken::chainUidCall::SELECTOR {
                         match e.uid_err {
                             Some("revert") => Err(err(3, "execution reverted", Some("0x".into()))),
@@ -1194,6 +1300,21 @@ pub(crate) mod tests {
                     } else if sel == crate::abi::IGasPriceOracle::getL1FeeCall::SELECTOR {
                         assert_eq!(p[0]["to"].as_str().map(str::to_lowercase), Some(format!("{:#x}", guard::GAS_PRICE_ORACLE)));
                         e.l1_fee.map(|f| word(U256::from(f))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
+                    } else if sel == crate::abi::IUARegistry::pqzScopedKeyOfCall::SELECTOR {
+                        let c = <crate::abi::IUARegistry::pqzScopedKeyOfCall as alloy::sol_types::SolCall>::abi_decode(
+                            &alloy::hex::decode(&input[2..]).unwrap()).unwrap();
+                        e.scopes_asked.push(c.scope);
+                        let ptr = if e.scoped_none { Address::ZERO } else { PQZ_KEY0 };
+                        Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzScopedKeyOfCall::abi_encode_returns(
+                            &crate::abi::IUARegistry::pqzScopedKeyOfReturn { version: 0, ptr, pqzPopHash: B256::ZERO, proven: true })))))
+                    } else if sel == crate::abi::IUARegistry::pqzScopedKeyLatestCall::SELECTOR {
+                        let c = <crate::abi::IUARegistry::pqzScopedKeyLatestCall as alloy::sol_types::SolCall>::abi_decode(
+                            &alloy::hex::decode(&input[2..]).unwrap()).unwrap();
+                        e.scopes_asked.push(c.scope);
+                        Ok(word(U256::from(e.pqz_latest)))
+                    } else if sel == crate::abi::IUARegistry::pqzScopedKeyAtCall::SELECTOR {
+                        Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzScopedKeyAtCall::abi_encode_returns(
+                            &crate::abi::IUARegistry::pqzScopedKeyAtReturn { ptr: PQZ_KEY1, pqzPopHash: B256::ZERO, proven: false })))))
                     } else if sel == crate::abi::IUARegistry::pqzKeyOfCall::SELECTOR {
                         Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzKeyOfCall::abi_encode_returns(
                             &crate::abi::IUARegistry::pqzKeyOfReturn { version: 0, ptr: PQZ_KEY0, pqzPopHash: B256::ZERO, proven: true })))))
@@ -1213,14 +1334,21 @@ pub(crate) mod tests {
                                 Some((mode, verifier, epoch)) => Ok(json!(format!("0x{}", alloy::hex::encode(
                                     crate::abi::IPqzToken::pqzVerifyConfigCall::abi_encode_returns(&crate::abi::IPqzToken::PqzVerifyConfig {
                                         pqzVerifyMode: mode, verifier, fixed_: false, pqzVerifierEpoch: epoch, pending: B256::ZERO, eta: 0,
-                                        noticePeriod: 0 }))))),
+                                        noticePeriod: 0, verifierFee: e.pqz_vf, verifierFeeMax: 0, verifierFeePending: 0, verifierFeeEta: 0,
+                                        pqzOwnKey: e.pqz_own_key, pqzOpening: e.pqz_opening }))))),
                             }
                         } else if s4 == crate::abi::IPqzToken::proofSystemIdCall::SELECTOR {
                             Ok(json!(format!("{PSID:#x}")))
                         } else if s4 == crate::abi::IPqzToken::envelopeBindingCall::SELECTOR {
                             Ok(json!(format!("{BINDING:#x}")))
+                        } else if e.stmt_revert {
+                            Err(err(3, "execution reverted", Some("0x".into())))
                         } else {
-                            Ok(json!(format!("0x{}", alloy::hex::encode(Bytes::from(STATEMENT.to_vec()).abi_encode()))))
+                            let st = match e.stmt_fee {
+                                None => STATEMENT.to_vec(),
+                                Some(f) => [&STATEMENT[..], &[0u8; 216], &U256::from(f).to_be_bytes::<32>()].concat(),
+                            };
+                            Ok(json!(format!("0x{}", alloy::hex::encode(Bytes::from(st).abi_encode()))))
                         }
                     } else if sel == crate::abi::IPqzToken::proofStoreCall::SELECTOR {
                         e.proof_store.map(|m| word(U256::from(m))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
@@ -1251,7 +1379,7 @@ pub(crate) mod tests {
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
                             Some("registry_unavailable") => {
-                                let data = crate::abi::IRegulatedToken::RegistryUnavailable { registry: Address::repeat_byte(0xc0) };
+                                let data = crate::abi::IRegulatedToken::ComplianceRegistryUnavailable { complianceRegistry: Address::repeat_byte(0xc0) };
                                 let data = alloy::sol_types::SolError::abi_encode(&data);
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
@@ -1266,9 +1394,15 @@ pub(crate) mod tests {
                                 };
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
+                            // round 3t: `PqzAuth` refused (the fee word the holder signed moved)
+                            Some("auth_rejected") => {
+                                let data = alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::AuthRejected {});
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
                             // group 3f: the token refuses the verdict the node rebuilt (here: field 3, the statement moved)
-                            Some("verdict_mismatch") => {
-                                let data = alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::PqzVerdictMismatch { field: 3 });
+                            Some(s @ ("verdict_mismatch" | "verdict_mismatch_30")) => {
+                                let field = if s == "verdict_mismatch" { 3 } else { 30 };
+                                let data = alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::PqzVerdictMismatch { field });
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
                             // Nethermind 2.2.0's answer for a call over 2^24 regular gas (EIP-7825 under EIP-8037)
@@ -1489,7 +1623,138 @@ pub(crate) mod tests {
         }
     }
 
-    /// As `Frozen`: `RegistryUnavailable` (the token's bounded registry call failed) is a refusal, named, never `dead`.
+    /// Fable E N-8: the one sink of every runner's job report strips endpoint URLs from the error.
+    #[tokio::test]
+    async fn a_job_error_carries_no_endpoint_url() {
+        let (odoo, o) = fake_odoo(Fake::default()).await;
+        let r = Report { job_id: 7, chain_state: "queued".into(), tx_hash: None, outer_nonce: None, signer_address: None,
+            error: Some("rpc: error sending request for url (https://rpc.example/v3/KEY) after http://10.0.0.7:8545/ x".into()) };
+        odoo.relay_report(&r).await.unwrap();
+        assert_eq!(o.lock().unwrap().reports[0]["error"], "rpc: error sending request for url (<url>) after <url> x");
+        assert_eq!(crate::chain::redact_urls("no url; wss://h:1/p,ws://q"), "no url; <url>");
+        assert_eq!(crate::chain::redact_urls("x http://h/p?a=1;key=SECRET,b=2 y"), "x <url> y", "recheck R-7: a key after ; or ,");
+    }
+
+    /// Fable E N-1 (NODE-LANE-09, one rule on every chain): the generic lane runner of a Hedera chain classifies a refused
+    /// simulation with the `Submitter`'s one classifier: `Frozen` is `REGULATED_REFUSED`, back in the queue, never `dead`; a spent
+    /// subject nonce `consumed`; a revert of no class stays `dead`; nothing is sent.
+    #[tokio::test]
+    async fn lane_runner_requeues_a_liftable_refusal_on_hedera() {
+        for (sim, nonce, state, prefix) in [("frozen", 0, "queued", "REGULATED_REFUSED: Frozen("), ("frozen", 1, "consumed", "unknown"),
+            ("revert", 0, "dead", "MetaTxBadNonce(")] {
+            let (url, rpc) = fake_evm(Evm { sim: Some(sim), mtx_nonce: Some(nonce), ..Default::default() }).await;
+            let mut cfg = test_cfg(&url);
+            (cfg.family, cfg.evm_chain_number) = ("hedera".into(), 296);
+            let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap();
+            let a = crate::adapters::hedera::HederaAdapter::new(&cfg, vec![Chain::with_signer(&cfg, signer).unwrap()]).unwrap();
+            let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"finality_mode": "instant", "finality_depth": 0,
+                "finality_quorum": 1, "indexed_block": 0, "tokens": toks(), "journal_max_nonce": null})).unwrap();
+            crate::adapter::ChainAdapter::refresh_tokens(&a, &nc);
+            // the payer signs over Hedera's chain id
+            let mut j = job(7);
+            let w = work_from_job(&serde_json::from_value::<Job>(j.clone()).unwrap(), None).unwrap();
+            let d = w.typed.as_ref().unwrap().digest_on(296, B256::from(U256::from(UID))).unwrap();
+            j["auth"]["signature"] = json!(format!("0x{}", alloy::hex::encode(payer_key().sign_hash_sync(&d).unwrap().as_bytes())));
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+            crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap();
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{sim} {nonce}: {last}");
+            assert!(last["error"].as_str().unwrap().starts_with(prefix), "{sim} {nonce}: {last}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
+    /// Fable recheck 5 R5-1: the generic lane runner (Hedera's, `EvmAdapter`) keeps the rule: a guard refusal on a failover
+    /// endpoint's answer (`chainUid()` of another chain) and a simulation revert whose nonce read a failover endpoint answered are
+    /// back in the queue (`FAILOVER_ANSWER`), never `dead`; nothing is sent. Controls: the same answers from the first endpoint
+    /// are `dead`.
+    #[tokio::test]
+    async fn the_generic_runner_requeues_a_refusal_on_a_failover_answer() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let run = |first: Evm, second: Option<Evm>| async move {
+            let (url, rpc) = fake_evm(first).await;
+            let mut cfg = test_cfg(&url);
+            if let Some(e) = second {
+                cfg.rpc_urls.push(fake_evm(Evm { failover: true, ..e }).await.0);
+            }
+            let a = crate::adapters::evm::EvmAdapter::new(&cfg, vec![Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap()],
+                Default::default()).unwrap();
+            let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"finality_mode": "depth", "finality_depth": 0,
+                "finality_quorum": 1, "indexed_block": 0, "tokens": toks(), "journal_max_nonce": null})).unwrap();
+            crate::adapter::ChainAdapter::refresh_tokens(&a, &nc);
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+            crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap();
+            assert!(rpc.lock().unwrap().sent.is_empty());
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            (last["chain_state"].as_str().unwrap().to_string(), last["error"].as_str().unwrap_or_default().to_string())
+        };
+        let (st, e) = run(Evm { uid_err: Some("transport"), ..ok() }, Some(Evm { uid: Some(0x25), ..ok() })).await;
+        assert!(st == "queued" && e.contains("FAILOVER_ANSWER") && e.contains("CHAIN_UID_MISMATCH"), "{st}: {e}");
+        let (st, e) = run(Evm { uid: Some(0x25), ..ok() }, None).await;
+        assert!(st == "dead" && e.starts_with("CHAIN_UID_MISMATCH"), "control: {st}: {e}");
+        let (st, e) = run(Evm { sim: Some("revert"), mtx_nonce: None, ..Default::default() }, Some(Evm { sim: Some("revert"), ..ok() })).await;
+        // the nonce read behind the verdict answered by the failover endpoint: unread since recheck 7 R7-1 (before it: `Dead` read
+        // there, requeued by the classifier's mark)
+        assert!(st == "queued" && e.contains("FAILOVER_ANSWER"), "{st}: {e}");
+        let (st, e) = run(Evm { sim: Some("revert"), ..ok() }, None).await;
+        assert!(st == "dead" && e.starts_with("MetaTxBadNonce("), "control: {st}: {e}");
+    }
+
+    /// Round 3zb + 3zc (spec 2026-11-13-burner-wrap-caps.md §4's verdict table), through the one classifier on vector jobs whose
+    /// subject nonce is unspent: a wrap or a mint above a cap, a cap setter before its `eta` or under a floor at its apply are
+    /// `SUPPLY_CAP_REFUSED`, back in the queue; a burner's or a minter's spent window `GRANT_WINDOW_REFUSED`; the shape refusals,
+    /// bit 31 off and the burn refusals of the job's own subject `dead` by name. Controls: `GrantNotReady` of another bit, a
+    /// window refusal on an op that is no burn and no mint.
+    #[tokio::test]
+    async fn supply_cap_and_grant_window_verdicts() {
+        use crate::abi::{decode_revert, IGovernance as G, ISupplyCaps as C};
+        use crate::guard::{revert_verdict, Verdict};
+        use crate::typed::testkit::{op_of, vectors};
+        use alloy::sol_types::SolError;
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let chain = Chain::with_signer(&test_cfg(&url), PrivateKeySigner::random()).unwrap();
+        let v = vectors();
+        let (u, b) = (U256::from(5), B256::repeat_byte(0xb1));
+        for (name, kind, err, want) in [
+            ("Wrap", "token", C::MaxWrapSupplyExceeded { totalWrapped: u, maxWrapSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxWrapSupplyExceeded("),
+            ("Wrap", "token", C::MaxSupplyExceeded { supply: u, maxSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyExceeded("),
+            ("UAMint", "gov_router", C::MaxSupplyExceeded { supply: u, maxSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyExceeded("),
+            ("UASetMaxSupply", "gov_router", G::GrantNotReady { bit: 31, account: B256::ZERO, eta: 9 }.abi_encode(), "SUPPLY_CAP_REFUSED: GrantNotReady("),
+            ("UASetMaxSupply", "gov_router", C::MaxSupplyBelowSupply { maxSupply: u, totalSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyBelowSupply("),
+            ("UASetMaxSupply", "gov_router", C::MaxSupplyBelowWrapCap { maxSupply: u, maxWrapSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyBelowWrapCap("),
+            ("UASetMaxWrapSupply", "gov_router", C::MaxWrapSupplyBelowWrapped { maxWrapSupply: u, totalWrapped: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxWrapSupplyBelowWrapped("),
+            ("UASetMaxWrapSupply", "gov_router", C::MaxWrapSupplyAboveMaxSupply { maxWrapSupply: u, maxSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxWrapSupplyAboveMaxSupply("),
+            ("UABurn", "token", G::GrantExhausted { field: 3 }.abi_encode(), "GRANT_WINDOW_REFUSED: GrantExhausted("),
+            ("UAMint", "gov_router", G::GrantExhausted { field: 3 }.abi_encode(), "GRANT_WINDOW_REFUSED: GrantExhausted("),
+            ("UAMintToUA", "gov_router", G::GrantExhausted { field: 3 }.abi_encode(), "GRANT_WINDOW_REFUSED: GrantExhausted("),
+        ] {
+            let w = work_of_op(Some(1), &op_of(name, kind, &v).unwrap(), None).unwrap().0;
+            let r = revert_verdict(&chain, &w, decode_revert(&err)).await;
+            assert!(matches!(&r, Verdict::Requeue(e) if e.starts_with(want)), "{name}: {r:?}");
+        }
+        for (name, kind, err, want) in [
+            ("UASetMaxSupply", "gov_router", G::FeatureNotSet { bit: 31 }.abi_encode(), "FeatureNotSet("),
+            ("UASetMaxSupply", "gov_router", C::MaxSupplyInvalid {}.abi_encode(), "MaxSupplyInvalid"),
+            ("UASetMaxWrapSupply", "gov_router", C::MaxWrapSupplyInvalid {}.abi_encode(), "MaxWrapSupplyInvalid"),
+            ("UASetMaxSupply", "gov_router", G::GrantNotReady { bit: 3, account: b, eta: 9 }.abi_encode(), "GrantNotReady("),
+            ("UABurn", "token", G::MissingRole { bit: 30, account: b }.abi_encode(), "MissingRole("),
+            ("UABurn", "token", G::FeatureNotSet { bit: 2 }.abi_encode(), "FeatureNotSet("),
+            ("UABurn", "token", G::FeatureNotSet { bit: 30 }.abi_encode(), "FeatureNotSet("),
+            ("UABurn", "token", G::GrantExpired { bit: 30, holder: b }.abi_encode(), "GrantExpired("),
+            ("UABurn", "token", G::GrantExhausted { field: 0 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 1 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 2 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 5 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 7 }.abi_encode(), "GrantExhausted("),
+            ("UASetGrant", "gov_router", G::GrantExhausted { field: 3 }.abi_encode(), "GrantExhausted("),
+        ] {
+            let w = work_of_op(Some(1), &op_of(name, kind, &v).unwrap(), None).unwrap().0;
+            let r = revert_verdict(&chain, &w, decode_revert(&err)).await;
+            assert!(matches!(&r, Verdict::Dead(e) if e.starts_with(want)), "{name}: {r:?}");
+        }
+    }
+
+    /// As `Frozen`: `ComplianceRegistryUnavailable` (the token's bounded registry call failed) is a refusal, named, never `dead`.
     #[tokio::test]
     async fn registry_unavailable_is_refusal() {
         let (url, rpc) = fake_evm(Evm { sim: Some("registry_unavailable"), mtx_nonce: Some(0), ..Default::default() }).await;
@@ -1497,7 +1762,7 @@ pub(crate) mod tests {
         lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
         assert_eq!(states(&o), ["queued"]);
         let err = o.lock().unwrap().reports[0]["error"].as_str().unwrap().to_string();
-        assert!(err.starts_with("REGULATED_REFUSED: RegistryUnavailable("), "{err}");
+        assert!(err.starts_with("REGULATED_REFUSED: ComplianceRegistryUnavailable("), "{err}");
         assert!(rpc.lock().unwrap().sent.is_empty());
     }
 
@@ -1589,12 +1854,15 @@ pub(crate) mod tests {
     /// Lỗi tạm thời nhả digest ngay (không ai bị chặn tới hết hạn).
     #[tokio::test]
     async fn one_digest_is_signed_once_across_lanes_and_released_on_transient_errors() {
+        // Fable recheck 7 R7-3: each job built once: `job()` stamps `validUntil` from the clock, so two calls a second apart are
+        // two ops (other digests), and the test would pass or fail by the second
+        let j7 = job(7);
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j7.clone()], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let mut a = lane(&url, odoo.clone(), 1, set.clone()).await;
         let mut b = lane(&url, odoo, 2, set.clone()).await;
-        let mut w = work_from_job(&serde_json::from_value(resign(job(0))).unwrap(), None).unwrap();
+        let mut w = work_from_job(&serde_json::from_value(resign(j7)).unwrap(), None).unwrap();
         w.job_id = None; // the gateway's path
         a.submit(w.clone()).await;
         b.poll_outbox().await;
@@ -1603,11 +1871,12 @@ pub(crate) mod tests {
         let claims = o.lock().unwrap().claims;
         assert_eq!((claims, states(&o).len()), (0, 0), "skipped before relay_claim");
 
+        let j8 = job(8);
         let (url, _) = fake_evm(Evm { sim: Some("transport"), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(8)], tokens: toks(), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j8.clone()], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let want = {
-            let j: Job = serde_json::from_value(resign(job(8))).unwrap();
+            let j: Job = serde_json::from_value(resign(j8)).unwrap();
             work_from_job(&j, None).unwrap().typed.unwrap().digest_on(31337, B256::from(U256::from(UID))).unwrap()
         };
         lane(&url, odoo, 1, set.clone()).await.poll_outbox().await;
@@ -1616,7 +1885,7 @@ pub(crate) mod tests {
     }
 
     /// NODE-LANE-10 for every origin (review T2 I1): an outbox job's unbound `feeRecipient`/`relayer` never reach the
-    /// chain as the job carries them; receiver-pays is refused, not dropped (m5); the in-flight key is the token's
+    /// chain as the job carries them; payee fee is refused, not dropped (m5); the in-flight key is the token's
     /// digest, never the job's `digest` (m6).
     #[tokio::test]
     async fn outbox_jobs_are_normalized_and_keyed_by_the_token_digest() {
@@ -1642,8 +1911,17 @@ pub(crate) mod tests {
         let bound = UAMetaTransfer { mode: 0x23, ..t.clone() };
         assert_eq!(sent(raw(&bound), Some(ours)), UaMtx::Transfer(bound.clone()), "bound fields are the signer's");
         let mut rf = raw(&t);
-        rf["receiver_fee"] = json!({"fee": "1", "feeRecipient": format!("{thief:#x}"), "validUntil": "1", "signature": "0x"});
-        assert!(work_from_job(&serde_json::from_value(rf).unwrap(), None).is_err(), "receiver-pays is not built");
+        rf["payee_fee"] = json!({"fee": "1", "feeRecipient": format!("{thief:#x}"), "validUntil": "1", "signature": "0x"});
+        let e = work_from_job(&serde_json::from_value(rf.clone()).unwrap(), None).unwrap_err().to_string();
+        assert!(e.starts_with("PAYEE_FEE_REFUSED"), "payee fee is not built: {e}");
+        // owner 2026-11-12 (CTR-MTX-86): the old field name is refused by name, whichever field the job also carries
+        for keep in [true, false] {
+            let mut old = if keep { rf.clone() } else { raw(&t) };
+            old["receiver_fee"] = rf["payee_fee"].clone();
+            let e = work_from_job(&serde_json::from_value(old).unwrap(), None).unwrap_err().to_string();
+            assert!(e.starts_with("RECEIVER_FEE_REFUSED") && e.contains("payee_fee"), "{e}");
+        }
+        assert!(work_from_job(&serde_json::from_value(raw(&t)).unwrap(), None).is_ok(), "control: the plain job is built");
         // through the lane: normalized on chain, keyed by the typed digest computed here
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let (odoo, o) = fake_odoo(Fake { jobs: vec![raw(&t)], tokens: toks(), ..Default::default() }).await;
@@ -1659,7 +1937,9 @@ pub(crate) mod tests {
     }
 
     /// Every report of one poll on a lane built with `tweak`, and the fake chain.
-    async fn outcomes(e: Evm, jobs: Vec<Value>, tweak: impl FnOnce(&mut ChainCfg)) -> (Vec<(String, String)>, Rpc) {
+    async fn outcomes(mut e: Evm, jobs: Vec<Value>, tweak: impl FnOnce(&mut ChainCfg)) -> (Vec<(String, String)>, Rpc) {
+        // Fable E N-6: the token answers the domain of the kind its first job names, unless the test sets one
+        e.domain = e.domain.or_else(|| jobs.first().and_then(|j| j["op"]["contract"].as_str()).and_then(crate::typed::domain_name));
         let (url, rpc) = fake_evm(e).await;
         let (odoo, o) = fake_odoo(Fake { jobs, tokens: toks(), ..Default::default() }).await;
         lane_cfg(&url, odoo, 1, InflightSet::default(), tweak).await.unwrap().poll_outbox().await;
@@ -1783,7 +2063,12 @@ pub(crate) mod tests {
                 let job: Job = serde_json::from_str(&json!({"id": 3, "kind": if row.ua() { "ua_metatx" } else { "metatx" }, "op": op}).to_string()).unwrap();
                 let w = work_from_job(&job, None).unwrap_or_else(|e| panic!("{name} on {kind}: {e:#}"));
                 let (env, mut args, sig) = op_from_calldata(row, &w.data);
-                for k in ["accSeq", "modeNonce"].iter().filter(|_| matches!(row.name, "ZetherRollOver" | "ZetherSetRollOverMode")) {
+                let off: &[&str] = match row.name {
+                    "ZetherRollOver" | "ZetherSetRollOverMode" => &["accSeq", "modeNonce"],
+                    "PqzRollOver" => &["rollSeq", "rolled", "entriesHash", "chainUid"], // CTR-PQZ-41: the token reads them
+                    _ => &[],
+                };
+                for k in off {
                     if let Some(x) = op["args"].get(*k) {
                         args[*k] = x.clone();
                     }
@@ -1804,8 +2089,12 @@ pub(crate) mod tests {
         }
         // plan T34 added the router's eight regulated control rows to typed_ops.json (97 -> 105); pay-meta-tax T41: -> 110
         // (UAPayWithTax's three domains, the router's two tax ops); group 3f T46 / T47: -> 113, the router's three verifier ops
-        // group 3h T61: -> 114, the router's `UASetProofStore`
-        assert_eq!(n, 114, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // group 3h T61: -> 114, the router's `UASetProofStore`; group 3l: -> 116, the router's two wrap-limit ops
+        // round 3r (CTR-GOV-23): -> 127, the router's eleven admin rows; round 3s: -> 130, the router's three list / enable rows
+        // round 3t: -> 131, the router's `UASetVerifierFee`; owner 2026-11-12: -> 132, the router's `UACreateInstance`
+        // the three-key model (CTR-PQZ-41): -> 133, `PqzRollOver`; round 3zc (CTR-GOV-30): -> 135, the router's
+        // `UASetMaxSupply`, `UASetMaxWrapSupply`
+        assert_eq!(n, 135, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the
@@ -1948,6 +2237,32 @@ pub(crate) mod tests {
         assert!(r[0].0 == "dead" && r[0].1.starts_with("TOKEN_NOT_SERVED"), "{r:?}");
     }
 
+    /// Fable recheck 4 R4-1: a refusal read while a failover endpoint answered is no verdict: the first endpoint answers
+    /// `chainUid()` with a transport error, the failover one (of this chain, at the head) with another chain's uid: the job is
+    /// back in the queue (`FAILOVER_ANSWER`), nothing sent. Control: the same answer from the first endpoint is `dead`.
+    #[tokio::test]
+    async fn a_refusal_on_a_failover_answer_is_requeued() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let (first, first_rpc) = fake_evm(Evm { uid_err: Some("transport"), ..ok() }).await;
+        let (other, rpc) = fake_evm(Evm { uid: Some(0x25), failover: true, ..ok() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&first, odoo, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.unwrap();
+        s.poll_outbox().await;
+        let reports = || -> Vec<(String, String)> { o.lock().unwrap().reports.iter()
+            .map(|r| (r["chain_state"].as_str().unwrap().to_string(), r["error"].as_str().unwrap_or_default().to_string())).collect() };
+        let r = reports();
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("FAILOVER_ANSWER") && r[0].1.contains("CHAIN_UID_MISMATCH"), "{r:?}");
+        assert_eq!(rpc.lock().unwrap().sent.len(), 0);
+        // the next job, refused on the first endpoint's own answer, is `dead`: the count is per job (marked at its submit)
+        (first_rpc.lock().unwrap().uid_err, first_rpc.lock().unwrap().uid) = (None, Some(0x25));
+        o.lock().unwrap().jobs = vec![job(8)];
+        s.poll_outbox().await;
+        let r = reports();
+        assert!(r.last().is_some_and(|x| x.0 == "dead" && x.1.starts_with("CHAIN_UID_MISMATCH")), "{r:?}");
+        let (r, _) = outcomes(Evm { uid: Some(0x25), ..ok() }, vec![job(7)], |_| {}).await;
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("CHAIN_UID_MISMATCH"), "control: {r:?}");
+    }
+
     /// Review T4 I3: the guard's chain facts — binding (mismatch never cached, a revert or no `chainUid()` unbound, a
     /// transport error transient), the factories and the DEX list by address, the gas bounds and the 1271 floor's
     /// signer — each pinned on the lane.
@@ -2015,7 +2330,7 @@ pub(crate) mod tests {
         assert_eq!(rpc.lock().unwrap().gas, vec![37_440_000]);
         // the block gas limit binds before max_gas_per_tx (a smaller chain, or the ramp after a reset)
         let (r, rpc) = outcomes(Evm { estimate: Some(31_200_000), block_gas: Some(30_000_000), ..ok() }, vec![job(7)], cap).await;
-        assert!(r[0].0 == "dead" && r[0].1.contains("above the chain's block gas limit 30000000"), "{r:?}");
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("TX_EXCEEDS_CHAIN_LIMIT: gas 31200000 above the chain's block gas limit 30000000"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
         // the padded limit stops at the block gas limit, never below the estimate
         let (_, rpc) = outcomes(Evm { estimate: Some(31_200_000), block_gas: Some(32_000_000), ..ok() }, vec![job(7)], cap).await;
@@ -2032,7 +2347,7 @@ pub(crate) mod tests {
         assert_eq!((deploy(261_924).len(), deploy(261_892).len()), (261_924, 261_892));
         let fac = move |c: &mut ChainCfg| { c.max_gas_per_tx = 64_000_000; c.ua_registry = Some(af); };
         let (r, rpc) = outcomes(ok(), vec![call_job(9, af, deploy(261_924))], fac).await;
-        assert!(r[0].0 == "dead" && r[0].1.starts_with("calldata floor 16778136 above the 2^24 regular gas"), "{r:?}");
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("TX_EXCEEDS_CHAIN_LIMIT: calldata floor 16778136 above the 2^24 regular gas"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
         let (r, _) = outcomes(ok(), vec![call_job(9, af, deploy(261_892))], fac).await;
         assert_eq!(states_of(&r).last().copied(), Some("broadcast"), "{r:?}");
@@ -2048,7 +2363,7 @@ pub(crate) mod tests {
         let cap = |c: &mut ChainCfg| c.max_gas_per_tx = 64_000_000;
         // Osaka: an estimate over 2^24 is refused, a large one under it is padded to 2^24 at most
         let (r, rpc) = outcomes(Evm { estimate: Some(31_200_000), osaka: true, ..ok() }, vec![job(7)], cap).await;
-        assert!(r[0].0 == "dead" && r[0].1.contains("above the 2^24 gas limit of a transaction"), "{r:?}");
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("TX_EXCEEDS_CHAIN_LIMIT: gas ") && r[0].1.contains("above the 2^24 gas limit of a transaction"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
         let (r, rpc) = outcomes(Evm { estimate: Some(15_000_000), osaka: true, ..ok() }, vec![job(7)], cap).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
@@ -2133,6 +2448,11 @@ pub(crate) mod tests {
         let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
         let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
         assert_eq!(s.inflight.get(&0).expect("tracked").gas, guard::MAX_TX_GAS);
+        // Fable recheck 6 R6-2: the tracked transaction unread (a transport error, not "unknown"): the lane does not start
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, tx_err: true, ..Default::default() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
+        let e = lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.err().expect("no start");
+        assert!(e.to_string().contains("eth_getTransactionByHash"), "{e:#}");
         // no original gas and no block: the lane does not start (retried like any start-up RPC failure)
         let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, block_err: true, ..Default::default() }).await;
         let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
@@ -2168,6 +2488,50 @@ pub(crate) mod tests {
                 false => assert!(last["chain_state"] == "dead" && last["error"].as_str().unwrap().contains("gap-filled"), "{last}"),
             }
         }
+    }
+
+    /// Fable recheck 7 R7-1: the lane's `consumed` and Hedera's `op_consumed` read "not spent" on a failover endpoint (the first
+    /// down) as no verdict (`Err`: every caller asks again); the controls: the first endpoint's "not spent" is `false`.
+    #[tokio::test]
+    async fn not_consumed_on_a_failover_answer_is_unread() {
+        let w = work_from_job(&serde_json::from_value::<Job>(job(7)).unwrap(), None).unwrap();
+        let (first, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (other, _) = fake_evm(Evm { mtx_nonce: Some(0), failover: true, ..Default::default() }).await;
+        let (other_h, _) = fake_evm(Evm { mtx_nonce: Some(0), failover: true, failover_id: Some(296), ..Default::default() }).await;
+        let one = test_cfg(&first);
+        let two = ChainCfg { rpc_urls: vec!["http://127.0.0.1:9".into(), other], ..test_cfg(&first) };
+        let chain = |c: &ChainCfg| Chain::with_signer(c, PrivateKeySigner::random()).unwrap();
+        assert!(!guard::consumed(&chain(&one), &w).await.unwrap(), "control");
+        assert!(guard::consumed(&chain(&two), &w).await.unwrap_err().to_string().starts_with("FAILOVER_ANSWER"));
+        let job: Job = serde_json::from_value(job(7)).unwrap();
+        let hedera = |urls: Vec<String>| {
+            let c = ChainCfg { family: "hedera".into(), evm_chain_number: 296, rpc_urls: urls, ..test_cfg(&first) };
+            crate::adapters::hedera::HederaAdapter::new(&c, vec![chain(&c)]).unwrap()
+        };
+        use crate::adapter::ChainAdapter;
+        assert_eq!(hedera(vec![first.clone()]).op_consumed(&job).await.unwrap(), Some(false), "control: Hedera");
+        let e = hedera(vec!["http://127.0.0.1:9".into(), other_h]).op_consumed(&job).await.unwrap_err();
+        assert!(e.to_string().starts_with("FAILOVER_ANSWER"), "{e:#}");
+    }
+
+    /// Fable recheck 5 R5-2: at a restart, a tracked job refused on a failover endpoint's answer (the first endpoint answers
+    /// `chainUid()` with a transport error, the failover one with another chain's) is no verdict: the lane does not start (it is
+    /// retried), never a gap-fill and `dead`. Control: the same refusal from the first endpoint: only gap-filled.
+    #[tokio::test]
+    async fn a_tracked_job_refused_on_a_failover_answer_fails_the_start() {
+        let tracked = json!([{"job_id": 7, "nonce": 0, "state": "broadcast",
+            "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": job(7)}]);
+        let ok = || Evm { mtx_nonce: Some(0), count: 1, ..Default::default() };
+        let (first, _) = fake_evm(Evm { uid_err: Some("transport"), ..ok() }).await;
+        let (other, _) = fake_evm(Evm { uid: Some(0x25), failover: true, ..ok() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked.clone(), ..Default::default() }).await;
+        let e = lane_cfg(&first, odoo, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.err().expect("no start");
+        assert!(e.to_string().starts_with("FAILOVER_ANSWER") && e.to_string().contains("CHAIN_UID_MISMATCH")
+            && e.to_string().contains("the node exits"), "{e:#}");
+        let (url, _) = fake_evm(Evm { uid: Some(0x25), ..ok() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked, ..Default::default() }).await;
+        let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.unwrap();
+        assert!(s.inflight.get(&0).expect("tracked").work.is_none(), "control: refused on the first endpoint, only gap-filled");
     }
 
     // ------------------------------------------------------------------ CTR-MTX-26 / -27 on EVM (T17)
@@ -2281,6 +2645,9 @@ pub(crate) mod tests {
             acceptMembershipCall { ua, memberSig: crate::abi::MemberSig { index: 3, members: vec![], sig: b(3309, 36) } }.abi_encode(),
             registerMsigCall { structure: MsigStructure { threshold: 2, members: members(2) }, attrs: attrs(), pop: pops(2),
                 pqzPop: b(pqz_pop, 12) }.abi_encode(),
+            // CTR-UA-44: a structure update, anyone submits (fee 0)
+            updateMsigCall { ua, version: 1, structure: MsigStructure { threshold: 2, members: members(3) }, enabled: U256::from(7u8),
+                validUntilBlock: 1_000, sigs: pops(2), chainUid_: B256::repeat_byte(0x7c) }.abi_encode(),
             // typed-signing R1b (TS-D13): the typed single-key entries (no PQZ / KEM holders: empty attributes)
             registerWebAuthnCall { key: WebAuthnKey { x: B256::repeat_byte(14), y: B256::repeat_byte(15), rpIdHash: B256::repeat_byte(16) },
                 attrs: none(), pop: b(640, 17), pqzPop: Bytes::new() }.abi_encode(),
@@ -2313,6 +2680,10 @@ pub(crate) mod tests {
         assert_eq!(setPqzKeyCall::SELECTOR, [0xbd, 0x97, 0xb6, 0xa1]);
         assert_eq!(acceptMembershipCall::SIGNATURE, "acceptMembership(bytes32,(uint16,(uint16,bytes)[],bytes))");
         assert_eq!(acceptMembershipCall::SELECTOR, [0x2c, 0x1a, 0xc9, 0x86]);
+        // CTR-UA-44: forge `test_msigUpdateTypehashesPinned` pins the same selector
+        assert_eq!(updateMsigCall::SIGNATURE,
+            "updateMsig(bytes32,uint64,(uint16,(uint16,bytes32,uint16)[]),uint256,uint64,(uint16,(uint16,bytes)[],bytes)[],bytes32)");
+        assert_eq!(updateMsigCall::SELECTOR, [0x53, 0x3f, 0x2d, 0x73]);
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
         let (reg, other) = (Address::repeat_byte(0x5e), Address::repeat_byte(0x5f));
         let cfg = move |c: &mut ChainCfg| c.ua_registry = Some(reg);
@@ -2371,9 +2742,11 @@ pub(crate) mod tests {
     fn pqz_job(id: i64) -> Value {
         let v = crate::typed::testkit::vectors();
         let row = crate::typed::testkit::row_of("UAPqzTransferSingle", "pqz");
-        let (env, args, sig) = crate::typed::testkit::split(row, "UAPqzTransferSingle", "pqz", &v);
+        let (env, mut args, sig) = crate::typed::testkit::split(row, "UAPqzTransferSingle", "pqz", &v);
         let mut env = env.unwrap();
         env["from"] = json!(format!("{:#x}", B256::repeat_byte(0xab)));
+        // round 3t: the proved fee word, the fake statement's word 256 (it is 40 bytes: 0)
+        args["pqz_fee"] = json!("0");
         json!({"id": id, "kind": "ua_metatx", "op": {"entry": row.entry, "contract": "pqz", "token": format!("{TOKEN:#x}"),
             "envelope": env, "args": args, "auth": sig.unwrap()}})
     }
@@ -2451,6 +2824,62 @@ pub(crate) mod tests {
             let (r, _) = outcomes(e, vec![pqz_job(7)], |_| {}).await;
             assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         }
+    }
+
+    /// The public rollover job (`UAPqzRollOver`, `mtxRollOver`) from typed_ops.json, its subject a derived UA, on `TOKEN`.
+    fn pqz_rollover_job(id: i64) -> Value {
+        let v = crate::typed::testkit::vectors();
+        let row = crate::typed::testkit::row_of("UAPqzRollOver", "pqz");
+        let (env, args, sig) = crate::typed::testkit::split(row, "UAPqzRollOver", "pqz", &v);
+        let mut env = env.unwrap();
+        env["from"] = json!(format!("{:#x}", B256::repeat_byte(0xab)));
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": row.entry, "contract": "pqz", "token": format!("{TOKEN:#x}"),
+            "envelope": env, "args": args, "auth": sig.unwrap()}})
+    }
+
+    /// NODE-JOB-28 (spec 2026-11-13-pqz-three-keys §14 item 22): the public rollover on a token with the opening on is refused
+    /// `ROLLOVER_SIGNED_ONLY`, `dead`, zero sends, nothing simulated; the same job on a token without the opening, `OFFCHAIN` or
+    /// `PRECOMPILE`, goes.
+    #[tokio::test]
+    async fn public_rollover_on_an_opening_token_is_signed_only() {
+        let (r, rpc) = outcomes(Evm { pqz_opening: true, ..offchain() }, vec![pqz_rollover_job(7)], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("ROLLOVER_SIGNED_ONLY: "), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        assert!(!rpc.lock().unwrap().calls.iter().any(|m| m == "eth_estimateGas"), "refused before any simulation");
+        for e in [offchain(), Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() }] {
+            let (r, _) = outcomes(e, vec![pqz_rollover_job(7)], |_| {}).await;
+            assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        }
+    }
+
+    /// NODE-JOB-28: an `OFFCHAIN` debit with auditor copies whose auditor has no key of the token's scope (class 3: the token,
+    /// class 2: 0) is `AUDITOR_KEY_MISSING`, back in the queue (the auditor may register), zero sends; with the key it goes on to the
+    /// verdict. The key reads of the token (the parties' too, `no_pending_party`) all ask the token's scope (CTR-UA-43).
+    #[tokio::test]
+    async fn auditor_without_a_scoped_key_is_named() {
+        let mut j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        j["op"]["args"]["args"]["vAuditor"] = json!(format!("0x{}", "a1".repeat(32)));
+        for (own, scope) in [(true, TOKEN), (false, Address::ZERO)] {
+            let (r, rpc) = outcomes(Evm { pqz_own_key: own, scoped_none: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+            assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("AUDITOR_KEY_MISSING: "), "{r:?}");
+            let e = rpc.lock().unwrap();
+            assert!(e.sent.is_empty());
+            assert!(!e.scopes_asked.is_empty() && e.scopes_asked.iter().all(|s| *s == scope), "class {}: {:?}", 3 - u8::from(!own), e.scopes_asked);
+        }
+        let (r, rpc) = outcomes(Evm { pqz_own_key: true, ..offchain() }, vec![j], |_| {}).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        assert!(rpc.lock().unwrap().scopes_asked.iter().all(|s| *s == TOKEN));
+    }
+
+    /// NODE-JOB-28 (CTR-UA-43): on a class-3 token the pending-version check reads the scoped records of the token, never the
+    /// registry key: a receiver with a scoped version stored above current is `PQZ_KEY_ROTATION_PENDING`.
+    #[tokio::test]
+    async fn rotation_pending_reads_the_tokens_scope() {
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        let (r, rpc) = outcomes(Evm { pqz_own_key: true, pqz_latest: 1, ..offchain() }, vec![j], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("PQZ_KEY_ROTATION_PENDING: "), "{r:?}");
+        let e = rpc.lock().unwrap();
+        assert!(e.sent.is_empty() && !e.scopes_asked.is_empty() && e.scopes_asked.iter().all(|s| *s == TOKEN), "{:?}", e.scopes_asked);
     }
 
     /// Group 3g (spec §7.3): `ProofRejected` after an indexed `UAPqzKeyCurrent` of a party is `PQZ_KEY_ROTATED`, the simulation
@@ -2566,6 +2995,47 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         }
         let (r, _) = outcomes(ok(), vec![call_job(9, ROUTER, relay_data(ROUTER, 100))], |_| {}).await;
         assert!(r[0].0 == "dead" && r[0].1.contains("no params.relay_fee.router"), "{r:?}");
+    }
+
+    /// Fable recheck 4 R4-2: a creation refused `RELEASE_DEPRECATED` or `RELEASE_UNKNOWN` reads the subject nonce first: spent (it
+    /// landed before, delivered again) is `consumed`; unspent `dead`; unreadable `queued`. Nothing is sent.
+    #[tokio::test]
+    async fn a_release_refusal_reads_the_nonce_first() {
+        let v = crate::typed::testkit::vectors();
+        let mut op = crate::typed::testkit::op_of("UACreateInstance", "gov_router", &v).unwrap();
+        op["envelope"]["nonce"] = json!("0");
+        let router: Address = op["token"].as_str().unwrap().parse().unwrap();
+        for (unknown, name) in [(false, "RELEASE_DEPRECATED"), (true, "RELEASE_UNKNOWN")] {
+            for (nonce, want) in [(Some(1), "consumed"), (Some(0), "dead"), (None, "queued")] {
+                let e = Evm { mtx_nonce: nonce, release_deprecated: !unknown, release_unknown: unknown, ..Default::default() };
+                let job = json!({"id": 9, "kind": "ua_metatx", "op": op.clone()});
+                let (r, rpc) = outcomes(e, vec![job], |c| c.governance_routers = vec![router]).await;
+                assert_eq!(r[0].0, want, "{name}, mtxNonce {nonce:?}: {r:?}");
+                assert!(want != "dead" || r[0].1.starts_with(name), "{r:?}");
+                assert!(rpc.lock().unwrap().sent.is_empty());
+            }
+        }
+    }
+
+    /// Fable recheck 2 P3-1: a transfer struct job (its `contract` defaults to `token`) and a relay fee (signed in the fee token's
+    /// domain) on a token of another kind are `CONTRACT_KIND_MISMATCH`, nothing sent; the control: the token's own kind.
+    #[tokio::test]
+    async fn a_transfer_and_a_relay_fee_name_the_token_kind() {
+        let ok = |d: Option<&'static str>| Evm { mtx_nonce: Some(0), domain: d, ..Default::default() };
+        for (what, j) in [("transfer", job(7)), ("relay fee", call_job(9, ROUTER, relay_data(ROUTER, 100)))] {
+            let (r, rpc) = outcomes(ok(Some("SCaaS PqzToken")), vec![j.clone()], |c| relay_params(c, &[])).await;
+            assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("CONTRACT_KIND_MISMATCH"), "{what}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{what}: nothing sent");
+            let (r, _) = outcomes(ok(None), vec![j], |c| relay_params(c, &[])).await;
+            assert!(r.iter().all(|x| !x.1.contains("CONTRACT_KIND_MISMATCH")), "{what} control: {r:?}");
+        }
+        // Fable recheck 2 P3-2: the same mismatch after the op's nonce was spent is `consumed`, never `dead`
+        let (r, _) = outcomes(Evm { mtx_nonce: Some(1), domain: Some("SCaaS PqzToken"), ..Default::default() }, vec![ua_job(7, &ua_meta(7))],
+            |_| {}).await;
+        assert_eq!(states_of(&r), ["consumed"], "{r:?}");
+        let (r, _) = outcomes(Evm { mtx_nonce: None, domain: Some("SCaaS PqzToken"), ..Default::default() }, vec![ua_job(7, &ua_meta(7))],
+            |_| {}).await;
+        assert_eq!(states_of(&r), ["queued"], "an unreadable nonce decides nothing: {r:?}");
     }
 
     /// CTR-MTX-27 on the lane: the whole `relay` is simulated and sent only when the fee reaches this lane (open mode,
@@ -2973,7 +3443,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
     /// The fake token's verifier UA (a native id) and an `OFFCHAIN` token at epoch 2.
     const VERIFIER: B256 = B256::repeat_byte(0x0e);
     fn offchain() -> Evm {
-        Evm { mtx_nonce: Some(0), pqz_cfg: Some((1, VERIFIER, 2)), ..Default::default() }
+        Evm { mtx_nonce: Some(0), pqz_cfg: Some((1, VERIFIER, 2)), domain: Some("SCaaS PqzToken"), ..Default::default() }
     }
 
     /// A verifier's `UASig` (a native id's 65 bytes), `tag` its first byte.
@@ -3068,7 +3538,7 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             pqzVerifierEpoch: 2, validUntil: until });
         assert_eq!(v.sig, ua_sig(&verdict_auth(0x7e)), "the job's signature, as it named it");
         // the statement view: the job's own `args` and the binding the token gave for its envelope
-        let st = e.views.iter().find(|i| i[..4] == [0x93, 0x14, 0x15, 0xee]).expect("transferSingleStatement asked");
+        let st = e.views.iter().find(|i| i[..4] == [0x50, 0xf9, 0xbe, 0x2f]).expect("transferSingleStatement asked");
         let ty = alloy::dyn_abi::DynSolType::parse(&format!("({},bytes32)", crate::typed::abi_of("PqzTransferArgs"))).unwrap();
         let got = ty.abi_decode_params(&st[4..]).unwrap();
         let want = crate::typed::parse("PqzTransferArgs", &j["op"]["args"]["args"], "args").unwrap();
@@ -3122,6 +3592,8 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
                 }
             }).await;
             assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "{why}: {r:?}");
+            // Fable E N-8: the endpoints by index, never their URLs
+            assert!(r[0].1.contains("endpoint 1: ") && r[0].1.contains("endpoint 2: ") && !r[0].1.contains("127.0.0.1"), "{why}: {r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
         }
         let (url, ver) = fake_verifier(answer_json(2, until, 0x7f)).await;
@@ -3157,6 +3629,34 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             assert_eq!(v, empty, "the empty verdict");
         }
         assert!(ver.lock().unwrap().reqs.is_empty(), "no endpoint asked for a PRECOMPILE token");
+    }
+
+    /// Round 3t (CTR-PQZ-36, spec §10; N1): the fee pre-check before the verdict fetch, one source (the statement view's word
+    /// 256): an `OFFCHAIN` job without `pqz_fee` is `dead` `BAD_PAYLOAD: no pqz_fee`; a wrong one `PQZ_FEE_MISMATCH`, back in the
+    /// queue, never `dead` (a decrease may restore the word), zero sends and no endpoint asked; on a `PRECOMPILE` token a named
+    /// wrong one is the same, an absent one passes (the control: the right word is sent).
+    #[tokio::test]
+    async fn pqz_fee_precheck() {
+        let (url, ver) = fake_verifier(answer_json(2, now() + 600, 0x7f)).await;
+        let mut none = pqz_job(7);
+        none["op"]["args"].as_object_mut().unwrap().remove("pqz_fee");
+        let (r, rpc) = outcomes(offchain(), vec![none.clone()], endpoints(vec![url.clone()])).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("BAD_PAYLOAD: no pqz_fee"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        let mut wrong = pqz_job(7);
+        wrong["op"]["args"]["pqz_fee"] = json!("1");
+        let (r, rpc) = outcomes(Evm { pqz_vf: 2, ..offchain() }, vec![wrong.clone()], endpoints(vec![url.clone()])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_MISMATCH: proved 1, the token's fee word is 0"), "{r:?}");
+        assert!(r[0].1.contains("verifierFee 2,"), "the term in force (N2): {r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        assert!(ver.lock().unwrap().reqs.is_empty(), "the pre-check runs before the verdict fetch");
+        let precompile = || Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
+        let (r, _) = outcomes(precompile(), vec![wrong], endpoints(vec![url.clone()])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_MISMATCH"), "PRECOMPILE, named: {r:?}");
+        let (r, _) = outcomes(precompile(), vec![none], endpoints(vec![url.clone()])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "PRECOMPILE, absent: {r:?}");
+        let (r, _) = outcomes(offchain(), vec![pqz_job(7)], endpoints(vec![url])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "the control: {r:?}");
     }
 
     /// Spec §11.1: a verdict at another epoch than the token's is re-fetched once: the job's stale one ⇒ one request; the
@@ -3205,6 +3705,179 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
         assert!(rpc.lock().unwrap().sent.is_empty() && ver.lock().unwrap().reqs.is_empty());
     }
 
+    /// Round 3t (CTR-PQZ-36, spec §10; N3): a PQZ debit's simulation reverting `AuthRejected()` or `PqzVerdictMismatch(3)` after
+    /// an indexed `VerifierFeeSet` of its token is `PQZ_FEE_MISMATCH`, back in the queue, never `dead`, zero sends; the controls:
+    /// `AuthRejected` without the event is `dead`, `PqzVerdictMismatch` without it the plain `PQZ_VERDICT_REFUSED`.
+    #[tokio::test]
+    async fn auth_rejected_after_fee_set_not_dead() {
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        for sim in ["auth_rejected", "verdict_mismatch"] {
+            let (r, rpc) = outcomes(Evm { sim: Some(sim), fee_set: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+            assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_MISMATCH: ") && r[0].1.ends_with("after VerifierFeeSet"),
+                "{sim}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{sim}");
+        }
+        let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AuthRejected"), "{r:?}");
+        // Fable 3r3s3t P3-4: a cancel `VerifierFeeSet(cur, cur)` moves nothing (`dead`); an unreadable log is `PQZ_FEE_LOG_UNREAD`,
+        // back in the queue, never counted as a move
+        let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), fee_set: true, fee_cancel: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AuthRejected"), "a cancel: {r:?}");
+        let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), logs_down: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_LOG_UNREAD: "), "{r:?}");
+        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch"), ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: "), "{r:?}");
+        // Fable E N-11: the field is parsed whole: field 30 after a `VerifierFeeSet` is no fee move
+        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch_30"), fee_set: true, ..offchain() }, vec![j], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: PqzVerdictMismatch"), "{r:?}");
+    }
+
+    /// Fable 3r3s3t P3-3 (spec 3t §10: the fee pre-check "again before every send"): a stuck PQZ debit is re-checked before its
+    /// replacement; the token's fee word moved since the first send: the nonce is gap-filled (a 0-value self-send, never the
+    /// debit again) and the job is `PQZ_FEE_MISMATCH`, back in the queue; the control: the word unchanged, the debit is bumped.
+    #[tokio::test]
+    async fn a_stuck_pqz_debit_runs_the_fee_check_before_its_replacement() {
+        for moved in [false, true] {
+            let (url, rpc) = fake_evm(offchain()).await;
+            let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            s.poll_outbox().await;
+            assert_eq!(states(&o), ["signed", "broadcast"]);
+            if moved {
+                rpc.lock().unwrap().stmt_fee = Some(5);
+            }
+            s.track().await;
+            let me = s.address();
+            let sent = rpc.lock().unwrap().sent.clone();
+            assert_eq!(sent.len(), 2, "{moved}");
+            if moved {
+                assert!(sent[1].1 == me && sent[1].2.is_empty(), "a gap-filler, never the debit again");
+                let last = o.lock().unwrap().reports.last().cloned().unwrap();
+                assert_eq!(last["chain_state"], "queued");
+                assert!(last["error"].as_str().unwrap().starts_with("PQZ_FEE_MISMATCH: proved 0, the token's fee word is 5"), "{last}");
+            } else {
+                assert_eq!(sent[1].2, sent[0].2, "the debit bumped");
+                assert_eq!(states(&o), ["signed", "broadcast", "broadcast"]);
+            }
+        }
+    }
+
+    /// Fable recheck R-1 (and E N-3): a stuck PQZ debit whose verdict ran out while its envelope lives is re-filled with a renewed
+    /// verdict and re-sent, and the work's deadline follows the renewed verdict (up to the envelope's): never reported `dead`
+    /// while that replacement may land.
+    #[tokio::test]
+    async fn a_stuck_pqz_debit_with_an_expired_verdict_is_renewed_never_dead() {
+        let v2 = now() + 600;
+        let (ver, _) = fake_verifier(answer_json(2, v2, 0x7f)).await;
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 2, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+            endpoints(vec![ver])(c);
+            c.pqz_verifier.valid_margin_secs = 0;
+        }).await.unwrap();
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        tokio::time::sleep(Duration::from_secs(3)).await; // the job's own verdict has run out; its envelope lives
+        s.track().await;
+        assert_eq!(states(&o), ["signed", "broadcast", "broadcast"], "re-sent with a renewed verdict, never dead");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].2 != sent[0].2 && sent_verdict("UAPqzTransferSingle", &sent[1].2).pqzVerdict.validUntil == v2);
+        let w = s.inflight.values().next().and_then(|x| x.work.clone()).expect("still tracked");
+        assert_eq!(w.valid_until, w.envelope_until.min(v2), "the deadline follows the renewed verdict");
+    }
+
+    /// Fable E N-3 (recheck): a job awaiting retry whose verdict, not its envelope, ran out is back in the queue
+    /// (`PQZ_VERDICT_EXPIRED`), never `dead`, nothing sent; the control: the envelope expired too, `dead`.
+    #[tokio::test]
+    async fn a_retry_past_its_verdict_only_requeues() {
+        for (envelope_live, state) in [(true, "queued"), (false, "dead")] {
+            let (url, rpc) = fake_evm(offchain()).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (mut w, _) = work_of_op(Some(7), &pqz_job(7)["op"], None).unwrap();
+            (w.valid_until, w.envelope_until) = (now() - 1, if envelope_live { now() + 600 } else { now() - 1 });
+            s.retry.push_back((w, None));
+            s.drain_retry().await;
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{last}");
+            if envelope_live {
+                assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_EXPIRED"), "{last}");
+            }
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
+    /// Fable recheck R-2: a re-fill refused by a rule (here: the verdict at an old epoch, no endpoint to renew it) gap-fills the
+    /// nonce and puts the job back in the queue, never `dead`: the first transaction may still land.
+    #[tokio::test]
+    async fn a_refused_re_fill_requeues_never_dead() {
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        rpc.lock().unwrap().pqz_cfg = Some((1, VERIFIER, 3));
+        s.track().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "queued", "{last}");
+        assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_MISSING"), "{last}");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].1 == s.address() && sent[1].2.is_empty(), "a gap-filler");
+        // recheck S-1: the first transaction wins the nonce (the debit landed); the job polled again is `consumed`, never `dead`
+        rpc.lock().unwrap().receipts.insert(sent[0].0, true);
+        rpc.lock().unwrap().mtx_nonce = Some(u64::MAX);
+        s.track().await;
+        assert_eq!(s.inflight_count(), 0);
+        o.lock().unwrap().jobs.push(with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e)));
+        s.poll_outbox().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "consumed", "{last}");
+    }
+
+    /// Fable recheck S-2: a PQZ job past its envelope is `dead` before the fill (whose refusal, here a fee mismatch, would requeue
+    /// it on every poll), nothing sent; the control: the envelope live, the same job is `PQZ_FEE_MISMATCH`, queued.
+    #[tokio::test]
+    async fn a_job_past_its_envelope_is_dead_before_the_fill() {
+        for (expired, state) in [(true, "dead"), (false, "queued")] {
+            let (url, rpc) = fake_evm(Evm { stmt_fee: Some(5), ..offchain() }).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (mut w, _) = work_of_op(Some(7), &with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e))["op"], None).unwrap();
+            if expired {
+                (w.valid_until, w.envelope_until) = (now() - 1, now() - 1);
+            }
+            s.submit(w).await;
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{last}");
+            let want = if expired { "expired before submit" } else { "PQZ_FEE_MISMATCH" };
+            assert!(last["error"].as_str().unwrap().starts_with(want), "{last}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
+    /// Fable recheck S-3: a stuck debit past its verdict whose re-fill renews nothing (the token's view refuses the op) is never
+    /// re-sent as it is: its nonce is gap-filled and the job back in the queue.
+    #[tokio::test]
+    async fn a_re_fill_that_renews_nothing_gap_fills() {
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 2, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.pqz_verifier.valid_margin_secs = 0).await.unwrap();
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        rpc.lock().unwrap().stmt_revert = true;
+        s.track().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "queued", "{last}");
+        assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_EXPIRED"), "{last}");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].1 == s.address() && sent[1].2.is_empty(), "a gap-filler, never the stale debit");
+    }
+
     /// The node never asks for the PQZ precompile on an `OFFCHAIN` token's job (spec §3, O1: OFFCHAIN ignores whether a
     /// precompile exists): sent on a chain where nothing has code at `0x…5caa0f01`.
     #[tokio::test]
@@ -3249,11 +3922,20 @@ address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes3
             c.pqz_verifier.refuse_shield_when_unserved = true;
         };
         let revoked = Evm { pqz_cfg: Some((1, B256::ZERO, 3)), ..offchain() };
-        for (e, urls, why) in [(revoked, vec![url.clone()], "revoked"), (offchain(), vec![DEAD.to_string()], "unreachable"),
-            (offchain(), vec![refusing.clone()], "probe refused"), (offchain(), vec![], "no endpoint")] {
+        for (e, urls, why) in [(revoked, vec![url.clone()], "revoked"), (offchain(), vec![refusing.clone()], "probe refused"),
+            (offchain(), vec![], "no endpoint")] {
             let (r, rpc) = outcomes(e, shield_jobs(), on(urls)).await;
             assert!(r.len() == 2 && r.iter().all(|x| x.0 == "dead" && x.1.starts_with("PQZ_VERIFIER_UNREACHABLE")), "{why}: {r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
+        }
+        // Fable E N-2: a probe with a transport error (nothing listens) or a 5xx (recheck R-5) is no answer: back in the queue,
+        // never `dead`
+        let (busy, b) = fake_verifier(json!({"error": "upstream"})).await;
+        b.lock().unwrap().status = 503;
+        for urls in [vec![DEAD.to_string()], vec![refusing.clone(), DEAD.to_string()], vec![busy]] {
+            let (r, rpc) = outcomes(offchain(), shield_jobs(), on(urls)).await;
+            assert!(r.len() == 2 && r.iter().all(|x| x.0 == "queued" && x.1.starts_with("PQZ_VERIFIER_PROBE_UNREAD")), "{r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
         }
         let precompile = Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
         for (e, urls) in [(offchain(), vec![DEAD.to_string(), refusing, url.clone()]), (precompile, vec![])] {

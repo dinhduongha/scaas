@@ -612,10 +612,11 @@ fn deploy_evm(id: u64, rpc: &str) -> Address {
         .args(["script", "script/Deploy.s.sol", "--rpc-url", rpc, "--broadcast", "--slow", "--silent", "--disable-code-size-limit", "--sender", DEPLOYER_ADDRESS])
         .env("PRIVATE_KEY", DEPLOYER_KEY)
         .env("FOUNDRY_PROFILE", "scaas-testnet")
+        .env("DEPLOY_NAME", format!("local-{id}-testnet")) // NET-EVM-13: an anvil is not in chain-uids.json
         .status()
         .expect("forge in PATH");
     assert!(st.success(), "forge script on chain {id}");
-    let dep: Value = serde_json::from_str(&std::fs::read_to_string(format!("{EVM_DIR}/deployments/{id}.json")).unwrap()).unwrap();
+    let dep: Value = serde_json::from_str(&std::fs::read_to_string(format!("{EVM_DIR}/deployments/local-{id}-testnet.json")).unwrap()).unwrap();
     dep["ua_registry"].as_str().unwrap().parse().unwrap()
 }
 

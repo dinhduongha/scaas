@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+pragma solidity ^0.8.24;
+
+/// @title The global table of bits 0-127 (owner 2026-11-02, CTR-GOV-10 and its Change of 2026-11-04): one meaning on every
+///        SCaaS contract, allocated once, never renumbered. Bits 128-255 belong to each application contract, labelled by
+///        `bitLabel`; no band is refused.
+library GovernanceBits {
+    uint8 internal constant PAYABLE = 0;
+    uint8 internal constant MINTABLE = 1;
+    uint8 internal constant BURNABLE = 2;
+    uint8 internal constant RATE_ADJUSTABLE = 3;
+    uint8 internal constant WRAP_DISABLEABLE = 4;
+    uint8 internal constant FREEZE = 5;
+    uint8 internal constant FORCE = 6;
+    uint8 internal constant PAUSE = 7;
+    uint8 internal constant ALLOWLIST = 8;
+    uint8 internal constant DENYLIST = 9;
+    uint8 internal constant RECORD = 10;
+    uint8 internal constant LISTING = 11;
+    uint8 internal constant FEE_ROUTING = 12;
+    uint8 internal constant RESCUABLE = 17;
+    uint8 internal constant MODERATE = 21;
+    /// @dev A holder moves units out of an account to another, public balances only, with no record (CTR-GOV-20, owner
+    ///      2026-11-05): any holder (never contract-only), `WHOLE` or `LIMITED`, on the regulated kinds 8-13 only; a plain
+    ///      kind refuses it. Its entry is plan T32.
+    uint8 internal constant OPERATOR_TRANSFER = 22;
+    /// @dev The tax recipient and the one token-wide PERCENT rate of the regulated kinds 8-13 (pay-meta-tax spec §6, O9,
+    ///      O10): a power, no scalar, no scope; any holder (an EOA, an `msig`, a contract), never contract-only; granted
+    ///      with the issuer seat; never delay-relaxed (Q5).
+    uint8 internal constant TAX = 23;
+    /// @dev The PQZ kinds' proof storage mode (group 3h, PQZ proof path spec §5, O10): `setProofStore`, `NONE` (the proof in
+    ///      calldata only) or `LOG` (each later debit's proof as an event); a power, no scalar, no scope; on kinds 4, 5, 12,
+    ///      13 only; any holder (an EOA, a single-key UA, an `msig`, a contract), never contract-only; granted with the
+    ///      issuer seat; never delay-relaxed. Disabling it freezes the current mode.
+    uint8 internal constant PQZ_PROOF = 24;
+
+    /// @dev Flags 5–9 (CTR-AS-17, CTR-GOV-18): the controls of the regulated kinds 8–13; no plain kind's valid mask holds
+    ///      them, so a plain kind refuses each with `FeatureInvalidForKind` (regulated-kinds spec Q3).
+    uint256 internal constant REGULATED = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << ALLOWLIST) | (1 << DENYLIST);
+    /// @dev `Roles.issuer`'s bits: `init` grants it each one that is set (regulated-kinds spec §2.4; bit 23, pay-meta-tax
+    ///      spec §6.1, F-19; bit 24, PQZ proof path spec §5, which a plain PQZ kind's issuer seat takes alone).
+    uint256 internal constant ISSUER_BITS = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << TAX) | (1 << PQZ_PROOF);
+    /// @dev What the PQZ kinds 4, 5, 12, 13 add to their base kind's valid and role masks (bit 24).
+    uint256 internal constant PQZ_KIND_BITS = 1 << PQZ_PROOF;
+    /// @dev The contract-only bits a threshold (`msig`) UA may hold as a contract (RK-1, CTR-AS-03 Change, owner
+    ///      2026-11-05); any other contract-only bit (`RATE_ADJUSTABLE`) still takes a native id with code.
+    uint256 internal constant REGULATED_ROLES =
+        (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << RECORD) | (1 << MODERATE);
+    uint256 internal constant ALWAYS_LOCKED = (1 << PAYABLE) | (1 << BURNABLE) | (1 << RESCUABLE);
+
+    // Per kind (CTR-TOK-22, spec §1.2). No plain kind takes a bit of 5-9: each refuses them as invalid for the kind; the
+    // regulated kinds 8-13 hold them (CTR-AS-17, CTR-GOV-03), and bit 22 (CTR-GOV-20).
+    /// @dev `RESCUABLE` on every token kind (spec §6.2, CTR-GOV-06): set at creation iff `rescueTo != 0`, always locked.
+    uint256 internal constant NORMAL_BITS = (1 << PAYABLE) | (1 << MINTABLE) | (1 << BURNABLE) | (1 << RESCUABLE);
+    /// @dev `MINTABLE` makes a hybrid (spec §5.2, CTR-GOV-12): set at creation iff `maxSupply != 0`.
+    uint256 internal constant WRAPPED_BITS =
+        (1 << PAYABLE) | (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE) | (1 << RESCUABLE);
+    /// @dev The masks of each kind (spec §1.2): the bits with a holder, those whose holder must have code, those whose power
+    ///      passes the number it acts on (B-09), those whose power reads `use`'s scope (B-10). Every token kind: scalar bit 1,
+    ///      no scope.
+    uint256 internal constant NORMAL_ROLES = 1 << MINTABLE;
+    uint256 internal constant WRAPPED_ROLES = (1 << MINTABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE);
+    uint256 internal constant WRAPPED_CONTRACT_ONLY = 1 << RATE_ADJUSTABLE;
+    uint256 internal constant TOKEN_SCALAR = 1 << MINTABLE;
+
+    uint256 internal constant DEX_BITS = (1 << LISTING) | (1 << FEE_ROUTING);
+}

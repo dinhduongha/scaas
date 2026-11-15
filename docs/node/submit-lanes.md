@@ -338,6 +338,78 @@ Unwrap jobs ([unwrap jobs](#unwrap-jobs)) simulate the full outer transaction an
 signing. A subject that crossed the grief threshold gets a re-simulation right before signing too
 ([NODE-LANE-15](#NODE-LANE-15)).
 
+**PQZ verdicts** (group 3f, BUILT, T47; [NODE-JOB-22](job-api.md#NODE-JOB-22)): the verdict fill runs after the guard and before the
+digest and any simulation on every path (the lane, the gateway's `POST /v1/op`, the generic lane runner); a verdict the gateway
+fetched is reused by the lane. A tracked PQZ debit after a restart gets its verdict again before any replacement; without one its
+nonce is gap-filled only. **The fee pre-check** (group 3t, BUILT; [CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36)) runs first in the same
+fill, before the verdict fetch, on every path and again before every send, a stuck debit's replacement included (refused: the
+nonce is gap-filled): `args.pqz_fee` against word 256 of the token's own statement view; `PQZ_FEE_MISMATCH` keeps the job queued (a 422 at the gateway). Liftable, back in the queue: `PQZ_FEE_MISMATCH`
+(also a simulation's `AuthRejected` / `PqzVerdictMismatch(3)` after an indexed `VerifierFeeSet` of the token), and the setter's
+`VerifierFeeNotReady`, `VerifierFeePending`; final: `VerifierFeeAboveMax`, `VerifierFeeSame`.
+
+<a id="rpc-failover"></a>**Chain reads fail over** ([ARCH-POS-15](../decisions.md#ARCH-POS-15), failover; BUILT, `chain::tests::chain_reads_fail_over_on_transport_errors_never_on_a_revert`;
+Fable review of ua-mtx-merge E N-11; recheck 2 P3-4). These reads go through one read helper (`Chain::read`): the simulation,
+`chainUid()`, `pqzVerifyConfig` and the statement views, the service and registry reads, `eip712Domain()`, the subject nonce, code
+reads, the latest block's gas limit, the `VerifierFeeSet`, `UAPqzKeyCurrent` and executed-event logs, the DEX venue's checks (its
+views, a failed settlement's evidence, ERC-1271) and the drift reader's balances. Not through it: the lane's own sends, nonces, fees
+and receipts, and the indexers' log scans (their quorum). One endpoint answers the whole read (a log window's head and logs alike),
+`rpc_urls` in the order given; a transport error (the endpoint down, an error answer that is no revert) moves the read to the next
+endpoint. A revert is the contract's answer and is final only from the first endpoint; a failover endpoint's revert is a transport
+error (recheck 3 R3-1), and so is a refusal read from its *value* (recheck 4 R4-1, 5 R5-1..4; it may lag a block): `Chain` counts
+failover answers, and a refusal while the count moved is `FAILOVER_ANSWER: …`, back in the queue, on the pipelined lane and the
+generic lane runner (Hedera); at a restart such a tracked job (or an unread tracked transaction) fails the start: the node exits, its
+supervisor restarts it (all chains and the gateway down meanwhile). The venue's evidence, maker health and list reads are no verdict
+(the order stays; 503, `LIST_UNREAD`); the gateway, order intake and both cancels answer 503, not 400 (recheck 6). No job goes `dead`
+on an unread chain or on a failover endpoint's answer; an expiry (`expired before submit`, `expired while stuck; nonce gap-filled`,
+`expired before inclusion`) is `dead` only after the first endpoint said the op did not land (recheck 7); a first endpoint's revert
+stays `dead` by design. `scaas_rpc_failover_answers_total` counts the failover answers (R5-5). A failover endpoint answers at all only
+when its `eth_blockNumber` is at or above the highest block seen from the first endpoint (its receipts, the heads the indexer, the
+venue and the health probe poll), one value per `[[chains]]` table (recheck 2 P2-1, 3 R3-1); its own head never raises it (R3-2),
+nothing lowers it, a restart clears it. It is used only once its `eth_chainId` and block 0 hash are the chain's (the pinned
+`chain_uid`, else the first endpoint's block 0), read at first use and kept; another network (another id, or a reset or forked one
+with the same id) is dropped with a log line, an unreadable id or block 0 is logged as such and asked again (recheck 2 P3-5, 3 R3-3).
+The lane's own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum. The strict-majority option
+stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Each request gets `rpc_timeout_ms` (30 s: a read's, each
+span of a log window, the lane's nonce, fee, send and receipt requests), each request of a simulation `rpc_simulate_timeout_ms` (120
+s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured, generous), per `[[chains]]` table, 0 refused at
+start; an endpoint that accepts and never answers fails the read over (Fable recheck 3 R3-4, recheck 4 R4-3; tests
+`a_hung_endpoint_and_the_block_gas_read_fail_over`, `each_log_span_has_its_own_timeout`). An error answer is a revert when it carries
+revert data or names a revert, else when it names an execution error, except a node's own limit by its exact phrase (geth's `execution
+aborted (timeout = …)`; Nethermind 2.2.0's names neither; Erigon's, Reth's unverified, a known limit, recheck 4 R4-5): transport
+(recheck 2 P3-8, recheck 3 R3-6; `an_aborted_execution_is_transport`). The venue's ERC-1271 call uses the same classifier.
+
+**Log windows** (Fable recheck R-6; BUILT, `chain::tests::a_log_window_is_chunked_for_an_rpc_that_caps_the_range`). The
+`VerifierFeeSet` and `UAPqzKeyCurrent` reads behind `PQZ_FEE_LOG_UNREAD` / `PQZ_KEY_ROTATED read` and the executed-event lookup
+span a fixed window (`ROTATION_LOOKBACK`, 10,000 blocks). An endpoint that refuses a span with an error answer (an RPC that caps
+the `eth_getLogs` range) is asked again in tenths of it, contiguous up to the head, down to a floor of 10 blocks or a twentieth of
+the window, whichever is larger; after an answer the span doubles again, below half of a span refused. One that refuses the floor
+fails the read over to the next endpoint, so a window costs at most about 25 requests; a transport error fails over at once and
+never shrinks the span (Fable recheck 2 P3-3). *Operator note:* an RPC that caps `eth_getLogs` below a twentieth of the window
+(500 blocks) is given up for these reads: the PQZ jobs that need them stay in the queue (`PQZ_FEE_LOG_UNREAD`,
+`PQZ_KEY_ROTATED read`) and the log says the span was refused; list a second endpoint with a cap of at least 500 blocks
+(Fable recheck 3 R3-8). *Known limit* (PLANNED, open): the window is not bounded by the job's intake block (the pull path
+carries none; `ponytail:` on `ROTATION_LOOKBACK`).
+
+**A silent verifier endpoint rests** (Fable review of ua-mtx-merge E N-7; BUILT,
+`pqz::tests::a_silent_verifier_endpoint_rests_for_the_backoff_window`). The verifier fetch and the shield probe run inside the
+lane's single loop (at intake, and again in `track` when a stuck debit's replacement re-runs the fill), `timeout_ms` (5 s) per
+endpoint. An endpoint that did not answer (a timeout, a refused connection, a 5xx) is not asked again for
+`max(10 s, 4 × timeout_ms)`, by the fetch or the probe: inside that window it counts as not answering (`PQZ_VERDICT_MISSING`,
+`PQZ_VERIFIER_PROBE_UNREAD`, back in the queue) and the next endpoint is asked. So each silent endpoint costs the loop at most
+one `timeout_ms` per window, a quarter of the loop's time per endpoint (two silent ones: half), not one per job. An answer rests
+nothing, however slow (Fable recheck 3 R3-5, superseding recheck 2 P3-6's rest of slow answers, which served a heavy set's
+normal verdict one job per window). A refusal (a 4xx, a malformed answer) is an answer: that endpoint is asked again at once.
+*Known limit* (documented, not built): an endpoint whose normal answer takes most of `timeout_ms` costs that much per job in the
+lane's loop; a fetch budget per poll round is not built. Operators set `timeout_ms` above the verifier's normal verdict time
+with a margin ([ops.md](ops.md)).
+
+<a id="NODE-JOB-24"></a>**NODE-JOB-24** — **A PQZ debit above the lane's cap on a LOG token is held, never `dead`** (group 3h, Fable
+P2; **BUILT**, T63 `39fa296c`, `a6040f9a`, node mutants N1–N3 killed). A PQZ debit whose simulation is over the lane's cap (`gas …
+above max_gas_per_tx …`, `… above the chain's block gas limit …`, `… above the 2^24 gas limit of a transaction`) on a token whose
+`proofStore()` answers LOG ([CTR-PQZ-35](../contracts/pq-zero-knowledge.md#CTR-PQZ-35)) is requeued with
+`PROOF_STORE_OVER_LANE_CAP: <reason>` and reported `dead` only at its `validUntil`; under NONE, or on a release without
+`proofStore()` (before 3h), it is the plain refusal as before; a transport error on the probe requeues.
+
 ## 7. Breakers
 
 <a id="breaker"></a><a id="NODE-LANE-05"></a>**NODE-LANE-05** — **Circuit breakers never block indexing.** Per lane
@@ -459,10 +531,35 @@ someone else landed it; the client marks it final from the event feed (landed el
 `dead` when superseded. One per-chain in-flight digest set prevents our node from holding two live outer txs for one
 intent. Cost: one `eth_call` per stuck tx per `stuck_after_secs` (60 s) and per reverted receipt. After the consumption
 check, a simulation revert that a later block may lift on a regulated token (`Frozen`, `TokenPaused`, `NotEligible`,
-`FeeRecipientFrozen`, `RegistryUnavailable`, `RegistryGasStarved`) is a named refusal: `queued` with `REGULATED_REFUSED:
+`FeeRecipientFrozen`, `RegistryUnavailable`, `RegistryGasStarved`; group 3s: `NotAllowed`, `Denied` of a party not the job's subject) is a named refusal: `queued` with `REGULATED_REFUSED:
 <error>`, never `dead` while the payload may still land; expiry or the attempt cap ([NODE-LANE-14](#NODE-LANE-14)) ends it
-(BUILT, ua-mtx-merge T35; regulated-kinds spec §7). Such a refusal is no billed failure, so it never counts in the grief
-score ([NODE-LANE-15](#NODE-LANE-15), not built).
+(BUILT, ua-mtx-merge T35; regulated-kinds spec §7). A wrapped hybrid's wrap-limit refusal (`WrapLimitExceeded`,
+`WrapCapExceeded`, `UnwrapAboveNetWrapped`, `WrapperNotListed`, `UnwrapperNotListed`: a window ends, a member is added, a
+redeemer is granted, a later wrap raises the entitlement) is the same class: `queued` with `WRAP_LIMIT_REFUSED: <error>`,
+never `dead` (BUILT, branch `ua-mtx-wraplimit`, group 3l; wrap limits spec 2026-11-10 §9; [CTR-TOK-31](../contracts/token-wrappers.md#CTR-TOK-31));
+`WrapControlNeedsHybrid`, a creation refusal, is not in it. <a id="supply-cap-verdicts"></a>Build 3zb + 3zc (BUILT, branch
+`burner-wrap-caps`; the node code `guard::revert_verdict`, test
+`submit::tests::supply_cap_and_grant_window_verdicts`; spec 2026-11-13-burner-wrap-caps.md §4;
+[CTR-GOV-29](../decisions.md#CTR-GOV-29), [CTR-GOV-30](../decisions.md#CTR-GOV-30)) adds two classes, each named:
+
+| Revert | On | Verdict |
+|---|---|---|
+| `MaxWrapSupplyExceeded`, `MaxSupplyExceeded` | any wrap job; `MaxSupplyExceeded` also the minter's `mtxMint` / `mtxMintToUA` | `queued`, `SUPPLY_CAP_REFUSED: <error>`: an unwrap or a cap change lets it land; a wrap larger than a cap that cannot move waits until its deadline |
+| `GrantNotReady(31, …)` | `mtxSetMaxSupply`, `mtxSetMaxWrapSupply` (a pending cap change before its `eta`) | `queued`, `SUPPLY_CAP_REFUSED`: the clock lifts it |
+| `MaxSupplyBelowSupply`, `MaxSupplyBelowWrapCap`, `MaxWrapSupplyBelowWrapped`, `MaxWrapSupplyAboveMaxSupply` | the two setter ops (the floors at the apply) | `queued`, `SUPPLY_CAP_REFUSED`: supply or the other setter lifts it |
+| `FeatureNotSet(31)`, `MaxSupplyInvalid`, `MaxWrapSupplyInvalid` | the setters, a creation | `dead`, by name |
+| `MissingRole(30, from)`, `FeatureNotSet(2)` / `(30)`, `GrantExpired`, `GrantExhausted` fields 0, 1, 2, 5, 7 | `mtxBurn` | `dead`, by name (the job's own subject lacks the power) |
+| `GrantExhausted(3)` (the grant's window spent) | a token's `mtxBurn`; the router's `mtxMint`, `mtxMintToUA` | `queued`, `GRANT_WINDOW_REFUSED: <error>`: the next window lifts it |
+
+Two rows are a **rule change**: before 3zb + 3zc no supply-cap and no grant refusal had a class here, so a wrap or a mint
+above `maxSupply` (`MaxSupplyExceeded`) and a mint whose window was spent went `dead`; now they wait in the queue (expiry or the
+attempt cap ends them). `GrantExhausted(3)`
+on any other op, and `GrantNotReady` of another bit, keep their `dead` verdict. A wrong chain word (`ChainUidMismatch`) on any op
+stays `dead` by name. Such a refusal is no billed failure, so it never counts in the grief
+score ([NODE-LANE-15](#NODE-LANE-15), not built). One classifier holds every class of this section and the PQZ ones
+(`guard::revert_verdict`: `consumed`, back in the queue by name, or `dead`), used by the EVM `Submitter` and by the generic lane
+runner for every EVM-contract family (Hedera), so one rule on every chain (BUILT, Fable review of ua-mtx-merge E N-1; test
+`lane_runner_requeues_a_liftable_refusal_on_hedera`). Other families keep the adapter's own replay check (`op_consumed`).
 
 **Classification after consumption:**
 
@@ -578,7 +675,7 @@ has `Mtx::normalize(&mut self, fee_recipient: Option<Address>)`, called **once, 
 request, a job or an envelope**: BUILT in gateway `post_metatx` (`work_of`) and in `submit::work_from_job` (the outbox submitter and
 the EVM/Hedera adapters' `build`, with `[[chains]] fee_recipient`); the mesh work builder is SPECIFIED. The outbox's
 in-flight key is the typed digest the node computes locally from the op (typed-signing N1), never the job's `digest` field; for a derived-UA or contract signer, whose claim of `contract` the calldata cannot check, it is that digest together with `keccak(to ‖ data)`, both free or neither ([job-api.md](job-api.md#named-entries)). A job-API job built by an ERP with fee 0 and
-recipient 0 is unchanged in effect. A job carrying `receiver_fee` is refused (`dead`), never relayed without it. BUILT: the guard
+recipient 0 is unchanged in effect. A job carrying `payee_fee` is refused (`dead`, `PAYEE_FEE_REFUSED`; the old name `receiver_fee`: `RECEIVER_FEE_REFUSED`) on every family (the other adapters refuse it before any build), never relayed without it. BUILT: the guard
 ([NODE-JOB-20](job-api.md#NODE-JOB-20)) runs in `Submitter::submit` before the local digest, simulation or signing; a `MetaTransfer` and the
 order and wrap entries need a registered token (an entry also a listed DEX), else `TOKEN_NOT_SERVED`; the token lists refresh every
 15 s with the breaker sample. Jobs rebuilt from the tracked journal after a restart pass the guard too and keep their sent transaction's gas limit (`max_gas_per_tx` capped by the block gas limit, and by 2^24 before Amsterdam, when the RPC no longer knows it; [Amsterdam gas](#amsterdam-gas)); a refused
@@ -597,7 +694,7 @@ the batch's `outer_tx` row, journals every item with the same `lane_label`, `out
 A failing batch is re-simulated
 and resubmitted without the failing item (`dead` with its decoded reason; the item counts toward
 [NODE-LANE-15](#NODE-LANE-15)). Measured cost is split evenly over the items (remainder to the lowest `uid`), so
-`usage_day` sums to the fee paid. **Never batched**: unwrap ops, `receiver_fee` jobs, `call` jobs, sponsored jobs
+`usage_day` sums to the fee paid. **Never batched**: unwrap ops, `payee_fee` jobs, `call` jobs, sponsored jobs
 (their cap is per tx, [NODE-SPN-02](sponsorship.md#NODE-SPN-02)), PQZ envelopes. Flush: 50 items or 3 s. One journal
 transaction per outer tx keeps journal-before-broadcast and `plan()` unchanged; batched jobs wait ≤ 3 s.
 
@@ -631,17 +728,18 @@ job is simulated whole (the call and the payment) and sent only when the payment
 is at least the operator's `params.relay_fee.min_amount`: there is no token price feed and no gas price or limit is assumed, so
 the fee-covers-gas rule is the operator's floor (TON: `min_ton_value` prices the TON the escrow ties up; Solana: `min_lamports_value`
 covers a first-use lane PDA's rent). The router, the registered token, the shape of the payment (`entryRef == relayRef(...)`,
-`batch == payLane(entryRef)`, nonce 0, relayer = router, fee mode NONE) and the inner target's chain are checked before the
-simulation; a refusal is terminal. The gas floor
-of a contract signer's job is per job: `guard::erc1271_floor(len)` = 21,000 + 64 per calldata byte + 446,904 (forge's least relayer
-CALL gas of a `SmartKeyAccount`-signed `mtxExecute`, two frames below the token after the split) + 10 %, 512,594 at zero calldata;
-an anvil run sends exactly that gas and it settles. EVM UA payers (node-ua-jobs 2026-10-30): `uaRelay` takes the same
-checks on ids, and after the simulation the fee × `params.relay_fee.min_wei_value[token]` must reach the quote (the gas limit
-× the job's fee ceiling, 2 × its first max fee per gas, + 2 × the OP-stack L1 data fee; required for a UA payer, whose verify
-gas depends on its kind; for `relay` only when the token has a price; below it the job is requeued). A priced job's
+the payer's own lane `(from, batch)` at its signed nonce since pay-meta-tax O4 (EVM; each non-EVM family keeps its
+own once-per-`ref` rule until its round), relayer = router, fee mode NONE) and the inner target's chain are checked
+before the simulation; a refusal is terminal. The gas floor
+of a contract signer's job is per job: `guard::erc1271_floor(len)` = 21,000 + 64 per calldata byte + 446,912 (forge's least relayer
+CALL gas of a `SmartKeyAccount`-signed `mtxExecute`, two frames below the token after the split) + 10 %, 512,603 at zero calldata (446,904 / 512,594 before the ERC-7739 signature, B P3-2);
+an anvil run sends exactly that gas and it settles. EVM payers are ids since the `ua*` / `mtx*` merge (node-ua-jobs 2026-10-30; one `relay` on ids): it takes the same
+checks, and after the simulation the fee × `params.relay_fee.min_wei_value[token]` must reach the quote (the gas limit
+× the job's fee ceiling, 2 × its first max fee per gas, + 2 × the OP-stack L1 data fee; required for a derived payer, whose verify
+gas depends on its kind; for a native payer only when the token has a price; below it the job is requeued). A priced job's
 replacements never sign above its ceiling (fix 1, review I1), a restart re-checks it at its tracked max fee, and while a
 relay-fee job of a payer is in flight no other job of that payer on that token is signed, nor the reverse (`SUBJECT_HELD`,
-review I2); `ua_metatx` jobs run as `metatx` jobs on the UA ledger (`uaNonce`, the UA digests). A TON relay-fee job tracks the escrow (pending, funded, released or refunded)
+review I2); `ua_metatx` jobs run as `metatx` jobs on the UA ledger (`mtxNonce(bytes32 from, batch)`, the UA digests). A TON relay-fee job tracks the escrow (pending, funded, released or refunded)
 by the router's own events naming the lane, never by absence, and sends `RelayRefund` after the deadline.
 
 NEAR (near-algorand T16–T19): a wrapper job runs the token's `relay_fee_<entry>` (one receipt); a router job is tracked

@@ -1,6 +1,6 @@
 # Chain-neutral releases: the same factory, release and instance addresses on every chain
 
-**Status:** SPECIFIED, **approved by the owner 2026-11-07 (option I); Fable review applied** (decisions A and B; the eight
+**Status:** **Built (T19, 2026-11-10):** §2–§4 and §6.1 (T71, T72), §6.2 (T73), §6.3–§6.4 (T74), §4.4 (T76) BUILT on branch `ua-mtx-merge`, UNAUDITED; rule CTR-TOK-29. SPECIFIED, **approved by the owner 2026-11-07 (option I); Fable review applied** (decisions A and B; the eight
 questions of §10.3 answered as recommended, then question 5 overridden by option I: `ChainEnv` appended to each clone's code,
 §2; the Fable review's findings, no P0, applied as listed in §11). Nothing is built. Companion of the factory index spec
 [`2026-11-07-factory-contract-index.md`](2026-11-07-factory-contract-index.md) (index §1–§7 and extension §8 approved; S3's
@@ -45,7 +45,7 @@ constructor argument and the implementation's address and code hash differ per c
 | `deps` | `ZetherLayer` `TRANSFER_VERIFIER`, `BURN_VERIFIER`, `_DISCLOSURE`; `PqzLayer.PQZ_VERIFIER` | per release and chain | Zether / PQZ proof entries |
 | `libs`, `libCodeHashes` | linked addresses in the bytecode; hashes checked by the factory at release deploy | no (§5) | every linked call |
 | `implArgs` | `RegulatedBase.REGISTRY_CODEHASH` (the canonical `ComplianceRegistry` runtime hash) | no: `ComplianceRegistry` keeps `admin` in storage and has no immutable, so its runtime is the same everywhere | `initialize` |
-| `noticePeriod` | `OpenFactory` immutable | **yes** (7622: minutes; a mainnet: ≥ 3 days, `DeployBase._checkedNotice`) | `deployImplementation`, `deployRelease` |
+| `noticePeriod` | `OpenFactory` immutable | **yes** (7622: minutes; a mainnet: ≥ 3 days, `DeployBase._checkedNotice`) | `deployTokenImplementation`, `deployImplementation` |
 
 Unchanged and out of scope (not factory-made; their constructors keep `chain_uid` as an immutable, so they keep a per-chain
 address, NET-ALL-22 as today): `UARegistry`, `GovernanceRouter`, `SmartKeyAccountFactory` and accounts, `MandateWallet`,
@@ -353,7 +353,7 @@ accept it. No library needs it today.
 | 12 token kinds (0–5, 8–13) | constructors per above; `ZetherLayer`, `PqzLayer` deps → code reads; constructor checks → `validateEnv`; kinds 10–13: reader and `validateEnv` body in their linked libraries; `RegulatedBase.REGISTRY_CODEHASH` stays an immutable (chain-neutral) |
 | `SCaaSDex` | the same as a kind; `DexPuller` is `CREATE`d by the DEX at nonce 1, so it follows the DEX's address unchanged |
 | `PqChat` (class 3, 3c) | constructor `(ReleaseId, factory_, implArgs)`; `chainUid`, registry and the code-size limit (`params[0]`, a chain value: 131,072 on 7622, 65,536 under EIP-7954) from the clone's code; index §8.8's PC0 row follows |
-| Generic classes (index §8) | `factoryInfo().chainUid` from the code; `deployRelease` calls `validateEnv`; the acceptance mocks `NoteKind`, `RosterKind` read their env from code |
+| Generic classes (index §8) | `factoryInfo().chainUid` from the code; `deployImplementation` calls `validateEnv`; the acceptance mocks `NoteKind`, `RosterKind` read their env from code |
 | Storage layout pins | **none move for the env** (option I); `TokenStore` unchanged (§4.4) |
 | Typehashes, selectors of `mtx*` | unchanged (no domain field moves; only its source) |
 
@@ -446,7 +446,7 @@ code hash (§3.4).
 | `createToken`, plain kind | CREATE2 clone (≈ 0.25 M state) | + CREATE3 proxy (account and 8 B: ≈ 0.19 M state, ≈ +40–50 k regular) + 95 B env code (145,350 state) | **≈ +0.34 M state, ≈ +45 k regular** |
 | `createToken`, PQZ kinds (115 B) / Zether kinds (175 B) | as above | as above | ≈ +0.37 M / ≈ +0.46 M state |
 | `createDex` (95 B) / `createInstance` `PqChat` (127 B) | as above | as above | ≈ +0.34 M / ≈ +0.39 M state |
-| `deployImplementation` / `deployRelease` | init code + ≈ 1 KB env | init code + 64 B; + `validateEnv` staticcall | smaller calldata, ≈ +5–20 k regular |
+| `deployTokenImplementation` / `deployImplementation` | init code + ≈ 1 KB env | init code + 64 B; + `validateEnv` staticcall | smaller calldata, ≈ +5–20 k regular |
 | `configureChain` | (constructor) | once per chain, 3 slots, ≤ 3 hash look-ups | ≈ +0.29 M state, once |
 
 The CREATE3 proxy's 0.19 M is index §8.7's clone figure (≈ 0.25 M for an account and 45 B) less 45 B × 1,530, plus 8 B × 1,530.

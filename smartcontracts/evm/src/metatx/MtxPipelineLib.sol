@@ -65,8 +65,8 @@ library MtxPipelineLib {
         mapping(bytes32 from => mapping(uint256 batch => uint256)) nonce;
     }
 
-    bytes32 private constant UA_RECEIVER_FEE_TYPEHASH = keccak256(
-        "UAReceiverFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,"
+    bytes32 private constant UA_PAYEE_FEE_TYPEHASH = keccak256(
+        "UAPayeeFee(UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil)UAMetaTransfer(bytes32 from,"
         "bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,"
         "address relayer,uint256 fee,address feeRecipient)"
     );
@@ -133,7 +133,7 @@ library MtxPipelineLib {
         _requireSignature(c, from, digest, sig);
     }
 
-    /// @notice The UA rule under `purpose` (metatx, trade, receiver-fee).
+    /// @notice The UA rule under `purpose` (metatx, trade, payee-fee).
     function authorize(Ctx calldata c, bytes32 from, bytes32 purpose, bytes32 digest, IUARegistry.UASig calldata auth)
         external view
     {
@@ -154,11 +154,11 @@ library MtxPipelineLib {
         return _transferDigest(domainSeparator, t);
     }
 
-    /// @notice The payee's digest of receiver-pays (TS-D19): `UAReceiverFee`, nesting the payer's payment.
-    function receiverFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
+    /// @notice The payee's digest of the payee fee (TS-D19): `UAPayeeFee`, nesting the payer's payment.
+    function payeeFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
         address feeRecipient, uint256 validUntil) external pure returns (bytes32)
     {
-        return _receiverFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
+        return _payeeFeeDigest(domainSeparator, t, fee, feeRecipient, validUntil);
     }
 
     /// @notice The payer's struct hash of a payment with its tax (pay-meta-tax spec §5.2, lever 6): `UAPayWithTax`, nesting
@@ -213,11 +213,11 @@ library MtxPipelineLib {
         return MessageHashUtils.toTypedDataHash(domainSeparator, _structHash(t));
     }
 
-    function _receiverFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
+    function _payeeFeeDigest(bytes32 domainSeparator, MetaTxLib.UAMetaTransfer calldata t, uint256 fee,
         address feeRecipient, uint256 validUntil) internal pure returns (bytes32)
     {
         return MessageHashUtils.toTypedDataHash(domainSeparator, keccak256(abi.encode(
-            UA_RECEIVER_FEE_TYPEHASH, _structHash(t), fee, feeRecipient, validUntil)));
+            UA_PAYEE_FEE_TYPEHASH, _structHash(t), fee, feeRecipient, validUntil)));
     }
 
     function _payWithTaxHash(MetaTxLib.UAMetaTransfer calldata t, uint8 taxMode, uint256 tax) internal pure returns (bytes32) {
@@ -291,15 +291,20 @@ library MtxPipelineLib {
 
     /// @dev The fee of a self-call (both paths): `ABSOLUTE` + `FIXED` = the signed amount, uncapped (step 3 refused
     ///      `ABSOLUTE` + `PERCENT`); anything else = `FeePolicy.compute` on the basis (≤ 1 %). A `UA_POOL` recipient
-    ///      would credit the pool's slot.
+    ///      would credit the pool's slot; the token itself and `SHIELD_POOL` are refused here too, before the self-call,
+    ///      as `_checkTransfer` does (CTR-MTX-17 cheap checks first; Fable B P3-4).
     function _callFee(uint8 feeClass, uint256 basis, uint32 mode, uint256 signed, address feeTo)
-        internal pure returns (uint256 fee, address)
+        internal view returns (uint256 fee, address)
     {
         FeeMode fm = MetaTxLib.feeModeOf(mode);
         if (fm == FeeMode.NONE) return (0, feeTo);
         fee = fm == FeeMode.FIXED && feeClass == FEE_CLASS_ABSOLUTE ? signed : FeePolicy.compute(fm, basis, signed);
         FeePolicy.validateRecipient(fm, feeTo);
-        if (fee != 0 && feeTo == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
+        if (fee != 0) {
+            if (feeTo == address(this)) revert IERC20MetaTx.TransferToSelf();
+            if (feeTo == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
+            if (feeTo == MetaTxLib.SHIELD_POOL) revert IUALedger.ShieldPoolNotPayable();
+        }
         return (fee, feeTo);
     }
 

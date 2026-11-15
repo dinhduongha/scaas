@@ -195,8 +195,11 @@ Three properties distinguish a contract call from an ordinary API call:
 **The four-condition test for anchoring a commitment.** Data may be anchored on chain only if all four hold
 ([integration.md](integration.md#data-protection)):
 
-1. **Commitment only.** No plaintext amounts outside value transfers, no account numbers, tax ids or party names.
-   Business documents are referenced by an unlinkable value: a payment `entryRef` is 32 random bytes
+1. **Commitment only.** No plaintext amounts outside value transfers, no account numbers. **Recommended:** commitments
+   only; a business document number, tax id or party name in clear is not recommended and never refused by the contracts:
+   the payment metadata may carry it (`payNo`, schema 1 or 2) at the payer's choice, with the wallet's warning; schema 4
+   for private data ([ARCH-POS-17](decisions.md#ARCH-POS-17), owner O5). Business documents are referenced by an
+   unlinkable value: a payment `entryRef` is the commitment of its `PayMeta`, salted with 32 random bytes
    ([CTR-MTX-03](contracts/metatx.md#CTR-MTX-03)); other anchored records use a salted commitment such as
    `keccak256(salt ‖ payload)` with a per-record salt (current formats: [INT-ERP-23](integration.md#INT-ERP-23)).
 2. **Separable, destroyable salt.** Each salt is 256-bit CSPRNG output, stored off chain in the client's secret store,
@@ -337,6 +340,10 @@ registered implementation, initialized in the same call, and answers its own pro
 
 *Valid features per kind: the "Valid kinds" column of [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22) and
 `validBits()`; `RESCUABLE` is set at creation iff `rescueTo ≠ 0`, `MINTABLE` on a wrapped kind iff `maxSupply ≠ 0`; the bit table and its disclosure sentences are `smartcontracts/vectors/governance/governance_bits.json`.
+Build 3zb + 3zc (BUILT, branch `burner-wrap-caps`): bit 30 `BURNER` on every Normal kind, exclusive
+with `BURNABLE` (only a role holder burns, its own balance, within its grant: [CTR-GOV-29](decisions.md#CTR-GOV-29)); bit 31
+`SUPPLY_CAP_ADJUSTABLE` on every wrapped kind (`maxSupply` and the wrap cap `maxWrapSupply` changeable by the admin after
+`grantDelay`; every wrapped kind counts `totalWrapped()`: [CTR-GOV-30](decisions.md#CTR-GOV-30)).
 The regulated flags 5–9 live on one regulated implementation per kind, never per feature
 ([CTR-GOV-03](decisions.md#ctr-gov-03--a-plain-transfer-stays-0-one-regulated-implementation-per-kind-never-per-feature),
 [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)); the regulated confidential kinds follow
@@ -355,7 +362,7 @@ anyone writing a class for it.
 **Why the owner can only give things up.** There is no upgrade key, so the flags a token is born with are the most it
 can ever do: an optional `owner` grants and revokes the roles of those flags (adding or widening a holder takes two
 calls within `[eta, eta + grantDelay]`), may clear a flag that was not locked, and may renounce, after which nobody
-administers the token (`renounceOwnership` reverts while a bit that is not locked has a live root, so the owner revokes
+administers the token (`renounceAdmin` reverts while a bit that is not locked has a live root, so the admin revokes
 them first; a locked bit's holders survive it); a role holder exercises only its flag, within its `Grant` if limited
 ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10)).
 Wallets read `features()`, `lockedFeatures()`, `owner()`, the role holders and `grantOf`, so a holder can see the whole power set before
@@ -397,7 +404,7 @@ payment never blocks an unrelated one, and a payment request derives its own lan
 
 Who pays is a commercial choice, not a contract change: the company relayer with fee 0 (the B2B default), a fee in
 the token to an open relayer, the payee submitting the payer's signed cheque itself, or the payee co-signing to pay
-the fee ([payers](contracts/metatx.md#payers), [receiver-pays](contracts/metatx.md#receiver-pays)). A sponsorship
+the fee ([payers](contracts/metatx.md#payers), [payee fee](contracts/metatx.md#payee-fee)). A sponsorship
 policy is node configuration ([node/sponsorship.md](node/sponsorship.md)).
 
 <a id="accounts-and-keys"></a>
@@ -863,7 +870,7 @@ target; the rules are at the linked anchors.
 |---|---|---|---|
 | Factory registrar (multisig before mainnet) | register implementation versions, deprecate a version (marks, never blocks), enable Zether on development chains | touch any token or DEX, change a deployed implementation, stop a token from working | [CTR-TOK-18](contracts/token-wrappers.md#CTR-TOK-18), [CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25) |
 | Token `owner` (optional, a UA id; 0 = none) | grant (two calls under `grantDelay` when adding or widening), limit by a `Grant`, and revoke the roles of the flags set at creation, clear a flag that was not locked, transfer or renounce ownership | set a flag, act on a flag without holding the role, touch a reserve, renounce while an unlocked bit has a live root | [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-GOV-01](decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex) |
-| Token role holders (`minter`, `rateAdmin`, `guardian`; `issuer`, `compliance` on the regulated implementations, not built) | the power of their flag only, within their `Grant`: mint to a public balance (a hybrid's minted units are unbacked, under `maxSupply`), a timelocked rate step, disable wrap, and on the regulated implementations freeze, forced transfer against a recorded order, bounded pause; a delegable holder grants narrower leaves | mint into a shielded balance, touch a reserve, move balances outside `FORCE` or `MODERATE` (public balances only), upgrade | [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17) |
+| Token role holders (`minter`, `rateAdmin`, `guardian`; `issuer`, `compliance` on the regulated implementations, not built; `burner`, SPECIFIED build 3zb + 3zc) | the power of their flag only, within their `Grant`, each direct call with the token's chain word ([CTR-GOV-28](decisions.md#CTR-GOV-28)'s Change, SPECIFIED): mint to a public balance (a hybrid's minted units are unbacked, under `maxSupply`), burn its own balance (`BURNER`), a timelocked rate step, disable wrap, and on the regulated implementations freeze, forced transfer against a recorded order, bounded pause; a delegable holder grants narrower leaves | mint into a shielded balance, touch a reserve, move balances outside `FORCE` or `MODERATE` (public balances only), upgrade | [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17) |
 | DEX `owner` and holders of `LISTING`, `FEE_ROUTING` | list or delist a market, list exchange targets, switch listed-only mode (`LISTING`); set the fee split (`FEE_ROUTING`) | touch funds, change a signed fee amount, pause the whole DEX | [CTR-DEX-03](contracts/dex.md#CTR-DEX-03) |
 | Anyone, `rescue` | move what a token or a `DexPuller` does not owe to its immutable `rescueTo` | choose the destination, touch a leg's reserve | [CTR-GOV-06](decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto) |
 | `GovernanceRouter` (one per chain and UA registry; no owner, holds nothing) | relay a subject's signed owner or holder op (typed `mtx<Op>` / `ua<Op>`, fee 0) to the target it names, naming the subject only for that call | act without the subject's signature, run a generic call, hold a balance | [CTR-GOV-15](decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder) |
@@ -908,10 +915,14 @@ SCaaS takes no position on any one country's law ([ARCH-POS-04](decisions.md#ARC
 technical controls to their own regime (GDPR-class: lawful basis, minimization, erasure, retention, cross-border
 transfer, processor agreements):
 
-1. **No personal data on chain.** On chain go addresses, amounts (or ciphertexts), random `entryRef`s, digests and
-   commitments; never names, document numbers, tax ids, order numbers or free text. A CI guard on calldata types
-   (allow `address`, `bool`, `uint*`, `int*`, `bytes32`, `bytes32[]`; deny `string` and `bytes` except declared proof
-   and signature fields) is PLANNED.
+1. **No personal data on chain, recommended.** On chain go addresses, amounts (or ciphertexts), salted `entryRef`s,
+   digests and commitments. Names, document numbers, tax ids, order numbers or free text are not recommended: a warning,
+   not a ban ([ARCH-POS-17](decisions.md#ARCH-POS-17), owner O5). A payer may put them in a payment's metadata in clear
+   (`payNo`, schema 1 or 2), where they are public and searchable forever, and wallets warn before signing; schema 4 (an
+   encrypted body) for private data. Factual point: the transaction carries `from` and `to` in clear, so a holder of the
+   document who learns something identifying the payment can link the payer's address to the payer. A CI guard on
+   calldata types (allow `address`, `bool`, `uint*`, `int*`, `bytes32`, `bytes32[]`; deny `string` and `bytes` except
+   declared proof and signature fields and the declared `PayMeta.payNo` and `PayMeta.body`) is PLANNED.
 2. **Linkage off chain.** The mapping address ↔ party lives in the client's system of record and can be erased there.
 3. **Minimized node state.** The node store keeps payloads (payer, payee, amounts) only as long as needed
    (`job_retention_secs`: 30 days for terminal jobs; feeds 7 days); backups are encrypted, file mode 0600 or database
@@ -955,7 +966,7 @@ Crypto-shredding, disclosure for reconciliation and the land gate are in
 | **UA** | Universal Account: an account identifier derived from key data, an EOA generalised to every signature scheme — the native address for a chain's native accounts (never registered), otherwise `keccak256(keccak256(kind_tag) ‖ key_data)` (32 bytes, kind-tagged, top 96 bits non-zero), registered per chain with a portable proof of possession that binds the UA, its attributes (PQZ key, KEM record) and the PQZ proof hash — no chain, registry or caller, so registration is relayable and copyable to any chain (UA-8) ([contracts/accounts.md](contracts/accounts.md)). The built registry uses the Zether-only `keccak256(encodedY)` form until the UA registry replaces it ([CTR-UA-22](contracts/accounts.md#CTR-UA-22)). |
 | **Mandate** | An on-chain spending authorization held by a subject's wallet contract (`MandateWallet`): delegate, per-payment and per-period caps, payees, expiry, revocation ([CTR-ACC-06](contracts/mandates.md#CTR-ACC-06)). |
 | **Kind** | The implementation a token is cloned from, chosen at creation: `NORMAL`, `WRAPPED` (1–8 legs), `NORMAL_ZETHER`, `WRAPPED_ZETHER`; the post-quantum kinds are reserved ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). Code, not a setting. |
-| **Feature flag** | A bit of a token's `features`, chosen at creation (`PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, `RESCUABLE`, the regulated `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`, `DENYLIST`); per flag locked or disableable, never set later ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
+| **Feature flag** | A bit of a token's `features`, chosen at creation (`PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, `RESCUABLE`, the regulated `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`, `DENYLIST`; SPECIFIED for build 3zb + 3zc: `BURNER`, `SUPPLY_CAP_ADJUSTABLE`); per flag locked or disableable, never set later ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
 | **Owner** | A token's or a DEX's optional administrator, a UA id: grants and revokes the roles of its flags, may clear an unlocked flag, may renounce for good; it acts on a flag only through a role ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22), [CTR-GOV-01](decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)). |
 | **Role holder** | A UA id granted the role of a flag (`minter`, `rateAdmin`, `guardian`, `issuer`, `compliance`), whole or within a `Grant`; it can use only that flag's power and keeps the role after the owner renounces ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
 | **Shield / unshield** | Moving value into or out of a confidential token's shielded (encrypted) balance, from or to the public balance (`mtxShield`, `mtxUnshield`) or straight from or to an underlying leg (`mtxWrapShield`, `mtxUnshieldUnwrap`) ([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45)). |

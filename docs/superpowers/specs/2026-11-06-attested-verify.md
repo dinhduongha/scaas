@@ -1,6 +1,6 @@
 # PQZ verifier mode (3f) — design
 
-**PQZ verifier** = a UA that signs a `PqzVerdict` off chain; not `UAPqzVerifier` (the registry's on-chain PoP verifier contract,
+**PQZ verifier** = a UA that signs a `PqzVerdict` off chain; not `PqzKeyVerifier` (the registry's on-chain PoP verifier contract,
 unchanged). "Verdict" also keeps its older sense here: the precompile's (or `pqz-ffi`'s) 0 / 1 result on a proof.
 
 **Names renamed by the owner 2026-11-07.** "Attest" is reserved for identity and compliance attestation (KYC,
@@ -33,7 +33,7 @@ Every new name above is owner-approved (2026-11-07), the derived ones included (
 `pqzVerifyConfig()` / `PqzVerifyConfig`, `PQZ_VERDICT_*`, `pqz_verdict`, `[pqz_verifier]`, `scaas-pqz-verifier`,
 `/v1/pqz-verdict`); kept as they are: `PURPOSE_PQZ_VERDICT`, `vectors/pqz/verdict.json`, `OFFCHAIN`, the `*_offchain` test names.
 
-**Status:** **approved by the owner 2026-11-06; build after T57 (3g; owner 2026-11-07: 3g before 3f).** SPECIFIED; nothing is built. Revised after the Codex and Fable
+**Status:** **approved by the owner 2026-11-06; build after T57 (3g; owner 2026-11-07: 3g before 3f).** **BUILT on branch `ua-mtx-merge`** (T19, 2026-11-10): contracts T44 + T45 `2cce490d`; vectors and `clientkeys` T46 `134560c1`, `e452b88f`, `8563eb78`; node T47 `75ddccc4`, `fd2dfb2f`, `e50251b4`, `b3b31560`, `062133b6` (the token view SPECIFIED); the PQZ verifier (off-chain) T48 `06e11d23`, `5d4a2780`; invariants T49 `9d7c2576`; UNAUDITED. The normative text is `contracts/pq-zero-knowledge.md` §9.5 and `node/job-api.md` NODE-JOB-22. Revised after the Codex and Fable
 reviews of the first draft ([Codex](../../research/attest-codex-review.md): 2 high, 6 medium, 3 low;
 [Fable](../../research/attest-fable-review.md): 0 P0, 4 P1, 8 P2, 4 P3, its answers (a) and (b)) and the owner's rulings R1–R4 of
 2026-11-06; every finding's outcome is in §17. Work-order group **3f** of branch `ua-mtx-merge`: tasks **T44–T50** after 3e
@@ -47,7 +47,7 @@ spend), [CTR-PQZ-14](../../contracts/pq-zero-knowledge.md#CTR-PQZ-14) (disclosur
 [CTR-PQZ-23](../../contracts/pq-zero-knowledge.md#CTR-PQZ-23) and the never-lose-ciphertext rule,
 [CTR-UA-07](../../contracts/accounts.md#CTR-UA-07) (portable PoP), [CTR-UA-23](../../contracts/accounts.md#CTR-UA-23) (verify caps,
 the 66 % rule), [CTR-UA-39](../../contracts/accounts.md#CTR-UA-39) (`mldsa87` only with a precompile),
-[CTR-MTX-30](../../decisions.md#CTR-MTX-30) (one signed entry per operation),
+[CTR-MTX-30](../../contracts/metatx.md#CTR-MTX-30) (one signed entry per operation),
 [CTR-MTX-29](../../decisions.md#ctr-mtx-29--every-parameter-is-explicit) (explicit parameters),
 [CTR-GOV-10](../../decisions.md#ctr-gov-10--bit-bands-0-127-one-meaning-128-255-per-application-none-refused) (bit bands); the
 regulated-kinds spec [2026-11-05-regulated-kinds.md](2026-11-05-regulated-kinds.md) (FREEZE / PAUSE, RK-2's pending, §6.2's size
@@ -115,8 +115,14 @@ chain is test-only.
 - **Authorization is unchanged.** Every debit still needs the subject's signature over `PqzAuth`, checked on chain
   ([CTR-PQZ-12](../../contracts/pq-zero-knowledge.md#CTR-PQZ-12)). A dishonest verifier cannot spend a victim's balance: it can
   fabricate a balance under a signing UA it controls and drain the pool through it.
-- **Confidentiality** of honestly formed data is unchanged under the existing assumptions: the verifier sees only public bytes (the
-  statement and the proof), no secret leaves the client. It does not guarantee that outputs of a dishonest verdict are valid
+- **Confidentiality** depends on the token's key class (Change of 2026-11-13, spec
+  [2026-11-13-pqz-three-keys.md](2026-11-13-pqz-three-keys.md) K3-1; [CTR-PQZ-37](../../contracts/pq-zero-knowledge.md#CTR-PQZ-37)).
+  Shared-key token: a holder's keys are not exposed, provided its wallet follows the holder check (K3-7); incoming amounts are
+  as private as the holder's opening KEM key of that chain. Own-key token with the sealed opening: as a shared-key token, with
+  the key and the opening KEM key of that token only. Own-key token without it: whoever controls the token's verifier can
+  recover a key of that token from its holder's public reactions, and every observer learns it; the loss is stated in
+  ARCH-POS-13's Change; no other key is touched. (Before: "unchanged under the existing assumptions: the verifier sees only
+  public bytes (the statement and the proof), no secret leaves the client"; that missed the key recovery by planted credits.) It does not guarantee that outputs of a dishonest verdict are valid
   encryptions, correct auditor copies or recoverable balances. With an auditor on, the verifier learns which ops are audited
   (public on chain anyway; Fable P2-10).
 - **Censorship and delay.** The verifier sees each debit **before inclusion** and can refuse or delay any party's transfers and
@@ -167,7 +173,7 @@ decodes it in `_init`, so the encoding moves for every kind (the regulated spec 
   dep, still never Hedera; a non-zero dep must be a contract); `PqzLayer._init` / `PqzStateLib.init` in PRECOMPILE mode refuse a
   zero `releaseProofVerifier` with `SelfTestFailed(address(0))` **before any call**, then run today's reads and self-test
   unchanged; in OFFCHAIN mode they read nothing from it. The PQZ releases are deployed by `script/pqz/e2e.py` (not `DeployBase`,
-  whose comment names it), which gains the zero-dep form for a chain where `UAPqzVerifier` cannot be deployed. `OpenFactory` is
+  whose comment names it), which gains the zero-dep form for a chain where `PqzKeyVerifier` cannot be deployed. `OpenFactory` is
   unchanged: it has no canonical-verifier list ([CTR-ZTH-20](../../contracts/zether.md#CTR-ZTH-20)'s 5g-Z2 note). The mode is never
   inferred from a missing dependency.
 - **`proofSystemId` in OFFCHAIN mode:** `PqzSet.PQZL_ID` of the release's build (Q2 answered: PQZL only). The set is implicit in the

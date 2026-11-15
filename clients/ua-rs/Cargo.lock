@@ -1208,7 +1208,10 @@ dependencies = [
 name = "pqz-ffi"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
+ "curve25519-dalek",
  "hkdf",
+ "ml-kem",
  "pqz-stmt",
  "pqzh-ligero",
  "pqzl",

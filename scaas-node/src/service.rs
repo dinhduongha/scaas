@@ -322,7 +322,7 @@ pub fn op(o: &Map<String, Value>, entry: &str, types: &Types) -> Result<Op> {
     let typed = Typed { contract: "service", domain_of: pull, struct_hash: Some(UaMtx::Transfer(t.clone()).struct_hash()),
         lane_hash: None, signer: native(&t.from).zip(native_sig), payee: Some(t.to), digest: None, derived_signer,
         derived_side: derived_signer || native(&t.to).is_none(), pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false,
-        pqz_verdict: None };
+        pqz_verdict: None, pqz_fee: None };
     Ok(Op { row: &typed::SERVICE_ROW, to: s, data, typed, lane: Some((t.from, t.batch, t.nonce)), valid_until: t.validUntil.saturating_to() })
 }
 

@@ -319,7 +319,7 @@ const canonRows = [
   ['UAMetaTransfer mode 1 (relayer bound, feeRecipient not)', 'uaMetaTransferTypedData', { ...domainOf, message: { ...uaMeta, mode: 1 } }],
   ['UABurn (an op struct with the envelope)', 'uaBurnTypedData', { ...domainOf, message: { from: evm.padId(ACCOUNT), amount: '5', batch: '1',
     nonce: '1', validUntil: String(NOW), mode: 0, relayer: RELAYER, fee: '0', feeRecipient: FEE_TO } }],
-  ['UAReceiverFee (nested UAMetaTransfer)', 'uaReceiverFeeTypedData', { ...domainOf, message: { payment: uaMeta, fee: '10',
+  ['UAPayeeFee (nested UAMetaTransfer)', 'uaPayeeFeeTypedData', { ...domainOf, message: { payment: uaMeta, fee: '10',
     feeRecipient: FEE_TO, validUntil: String(NOW) } }, true],
 ].map(([id, builder, input, nested]) => {
   const build = evm.OP_BUILDERS[builder] ?? evm[builder];
@@ -338,17 +338,17 @@ const canonRows = [
 const Q = (td) => JSON.parse(JSON.stringify(td));
 const set = (td, f) => { const c = Q(td); f(c); return c; };
 const W = { chainId: 7622, chainUid: CHAIN_UID, now: NOW };
-// ua-mtx-merge (R12, R20, R39, R46): a payment, a receiver fee, a SCaaS sell token's order and a wrap order are the `UA` structs
+// ua-mtx-merge (R12, R20, R39, R46): a payment, a payee fee, a SCaaS sell token's order and a wrap order are the `UA` structs
 // between 32-byte ids (`padId` of a native address); `PayMeta` v3 (CTR-MTX-26, T83) is `{salt, payNo, save, schema, body}`.
 const [UA_ACCOUNT, UA_PAYEE] = [evm.padId(ACCOUNT), evm.padId(PAYEE)];
 const payment = evm.uaMetaTransferTypedData({ ...domainOf, message: { from: UA_ACCOUNT, to: UA_PAYEE, value: '125000500000', entryRef: REF,
   batch: evm.payLane(REF), nonce: '0', validUntil: String(NOW + 300), mode: 1, relayer: RELAYER } });
 const payExpect = { check: 'Payment', account: UA_ACCOUNT, ...W, amount: '125000.5', decimals: 6, payee: UA_PAYEE, entryRef: REF,
   expectedToken: TOKEN };
-const rfee = evm.uaReceiverFeeTypedData({ ...domainOf, message: { payment: { from: UA_ACCOUNT, to: UA_PAYEE, value: '125000500000',
+const rfee = evm.uaPayeeFeeTypedData({ ...domainOf, message: { payment: { from: UA_ACCOUNT, to: UA_PAYEE, value: '125000500000',
   entryRef: REF, batch: evm.payLane(REF), nonce: '0', validUntil: String(NOW + 300), mode: 1, relayer: RELAYER, fee: '0' }, fee: '1000',
   feeRecipient: FEE_TO, validUntil: String(NOW + 300) } });
-const rfeeExpect = { check: 'ReceiverFee', payee: UA_PAYEE, ...W, amount: '125000.5', decimals: 6, entryRef: REF, expectedToken: TOKEN,
+const rfeeExpect = { check: 'PayeeFee', payee: UA_PAYEE, ...W, amount: '125000.5', decimals: 6, entryRef: REF, expectedToken: TOKEN,
   maxFee: '1000', feeRecipient: FEE_TO };
 const PM = JSON.parse(readFileSync(join(VECTORS, 'metatx/paymeta.json'), 'utf8')).find((r) => r.name === 'note_utf8');
 const PM_META = { salt: PM.salt, payNo: PM.payNo, save: PM.save, schema: PM.schema, body: PM.body };
@@ -392,8 +392,8 @@ const policy = [
   ['payment: another payee (a drain)', set(payment, (t) => { t.message.to = '0x' + 'ee'.repeat(32); }), payExpect],
   ['payment: non-zero feeRecipient unbound by mode 1', set(payment, (t) => { t.message.feeRecipient = FEE_TO; }), payExpect],
   ['payment: fee above the limit', evm.uaMetaTransferTypedData({ ...domainOf, message: { ...payment.message, mode: 33, fee: '5' } }), payExpect],
-  ['receiver fee', rfee, rfeeExpect],
-  ['receiver fee: above the payee\'s limit', rfee, { ...rfeeExpect, maxFee: '999' }],
+  ['payee fee', rfee, rfeeExpect],
+  ['payee fee: above the payee\'s limit', rfee, { ...rfeeExpect, maxFee: '999' }],
   ['pay-meta', payMeta, payMetaExpect],
   ['pay-meta: metadata of another salt', payMeta, { ...payMetaExpect, meta: { ...PM_META, salt: '0x' + '42'.repeat(32) } }],
   ['op UABurn', burn, burnExpect],

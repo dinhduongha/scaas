@@ -65,12 +65,12 @@ public class SpecTests
     [Test]
     public void Mldsa87_joins_with_the_schedule_that_carries_its_key()
     {
-        ISpecProvider p = Provider(WithPqz(Schedule(T1), With(Schedule(T2), "mldsa87Gas", MlDsa.Provisional87Gas)));
+        ISpecProvider p = Provider(WithPqz(Schedule(T1), With(Schedule(T2), "mldsa87Gas", MlDsa.Calibrated87Gas)));
         Assert.That(Set(p, T1).Contains(PqzAddresses.MlDsa87), Is.False, "a schedule without the key");
         Assert.That(Three.All(Set(p, T1).Contains));
         Assert.That(Set(p, T2).Contains(PqzAddresses.MlDsa87), "from the schedule with the key");
         Assert.That(p.GetSpec(new ForkActivation(10_000, T2)).IsPrecompile(PqzAddresses.MlDsa87));
-        Assert.That(PqzReleaseSpec.ScheduleOf(p.GetSpec(new ForkActivation(10_000, T2)))!.MlDsa87Gas, Is.EqualTo(MlDsa.Provisional87Gas));
+        Assert.That(PqzReleaseSpec.ScheduleOf(p.GetSpec(new ForkActivation(10_000, T2)))!.MlDsa87Gas, Is.EqualTo(MlDsa.Calibrated87Gas));
         Assert.That(new PqzPrecompileProvider().GetPrecompiles().ContainsKey(PqzAddresses.MlDsa87), "the provider knows it");
     }
 
@@ -89,6 +89,25 @@ public class SpecTests
         }
         Assert.That(PqzReleaseSpec.ScheduleOf(p.GenesisSpec), Is.Not.Null, "genesis spec");
         Assert.That(p.TransitionActivations.Select(a => a.Timestamp), Does.Not.Contain((ulong?)0));
+    }
+
+    /// <summary>Review 3w T-38: a new chain whose genesis timestamp T0 &gt; 0 with its first schedule at T0: active from
+    /// block 0, and T0 is no fork transition (EIP-2124); a later schedule still is one.</summary>
+    [Test]
+    public void A_schedule_at_a_nonzero_genesis_timestamp_is_no_transition()
+    {
+        const ulong T0 = 500_000;
+        ISpecProvider p = Provider(Load(g =>
+        {
+            g["genesis"]!["timestamp"] = "0x" + T0.ToString("x");
+            g["engine"]!["Pqz"] = new JsonObject { ["schedules"] = new JsonArray(Schedule(T0, 1000), Schedule(T1, 2000)) };
+        }));
+        ulong?[] ts = p.TransitionActivations.Select(a => a.Timestamp).ToArray();
+        Assert.That(ts, Does.Not.Contain((ulong?)T0), "the genesis schedule is no fork");
+        Assert.That(ts, Does.Contain((ulong?)T1), "a later schedule is");
+        Assert.That(PqzReleaseSpec.ScheduleOf(p.GenesisSpec)?.SelftestGas, Is.EqualTo(1000), "genesis spec");
+        Assert.That(PqzReleaseSpec.ScheduleOf(p.GetSpec(new ForkActivation(1, T0 + 1)))?.SelftestGas, Is.EqualTo(1000));
+        Assert.That(PqzReleaseSpec.ScheduleOf(p.GetSpec(new ForkActivation(2, T1)))?.SelftestGas, Is.EqualTo(2000));
     }
 
     [Test]
@@ -154,7 +173,9 @@ public class SpecTests
     }
 
     /// <summary>Nethermind 2.2.0: <c>IsPrecompile</c> (what the VM, the gas policy and the code-info repositories ask)
-    /// finds the three 0x5caa5… addresses from T on, directly and through a decorator, and keeps the stock ones.</summary>
+    /// finds the three <c>0x…5caa0f01 / 0012 / 0013</c> addresses from T on, directly and through a decorator, and keeps the
+    /// stock ones: Nethermind's own lookup (a number of 64 or more is looked up in the set) with no override in
+    /// <see cref="PqzReleaseSpec"/> (review 3w T-21).</summary>
     [Test]
     public void IsPrecompile_finds_the_three_from_T()
     {

@@ -25,9 +25,15 @@ contract LigeroVerifier {
     uint256 internal constant TX_STMT = 83_072;
     uint256 internal constant TX0_STMT = 66_560;
     uint256 internal constant REG_STMT = 16_480;
-    /// proofSystemId, statement bytes 32..63 (plan D3): n2048-kmax1024's PQZH id since the R0 review fix (2026-10-25),
-    /// keccak256("scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v3") (the retired v1 / v2 ids are refused)
-    bytes32 internal constant PQZH_ID = 0x56293621ce64083ca3165d7972b4108a1195f7bf41f1918df6d6d4da1da7df5d;
+    /// proofSystemId, statement bytes 32..63 (plan D3): n2048-kmax1024's PQZH id since the three-key round (2026-11-13,
+    /// K3-4b: T-35 role tags), keccak256("scaas/pqz/pqzh/ligero-fq42-n32756k817t121-keccak256-zk-proven/v4") (the
+    /// retired v1 / v2 / v3 ids are refused)
+    bytes32 internal constant PQZH_ID = 0x3cf01f8334f4a200471100233fa0d85944e60830d1dc8873577a31d4dff58439;
+    /// one-byte role tags (merkle.rs, T-35): leaf, node, absorb, squeeze, PoW
+    uint8 internal constant TAG_NODE = 1;
+    uint8 internal constant TAG_ABSORB = 2;
+    uint8 internal constant TAG_SQUEEZE = 3;
+    uint8 internal constant TAG_POW = 4;
     /// opTags keccak256("SCAAS-PQZ-OP-<NAME>-V1"), statement bytes 0..31
     bytes32 internal constant TAG_TRANSFER = 0xef22f3d1c1fc2edc565522eb73ca8cb782e8780eaf9b1f677965dd0cd5275414;
     bytes32 internal constant TAG_REGISTER = 0x69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088;
@@ -199,20 +205,20 @@ contract LigeroVerifier {
 
     // ---------------------------------------------------------------- transcript (transcript.rs)
     function absorb(V memory v, bytes memory data) internal pure {
-        v.st = keccak256(abi.encodePacked(v.st, data));
+        v.st = keccak256(abi.encodePacked(TAG_ABSORB, v.st, data));
         v.ctr = 0;
         v.hpos = 4;
     }
 
     function absorbCd(V memory v, bytes calldata data) internal pure {
-        v.st = keccak256(abi.encodePacked(v.st, data));
+        v.st = keccak256(abi.encodePacked(TAG_ABSORB, v.st, data));
         v.ctr = 0;
         v.hpos = 4;
     }
 
     function word(V memory v) internal pure returns (uint256 w) {
         if (v.hpos == 4) {
-            v.hbuf = uint256(keccak256(abi.encodePacked(v.st, uint8(0xff), uint64(v.ctr))));
+            v.hbuf = uint256(keccak256(abi.encodePacked(TAG_SQUEEZE, v.st, uint64(v.ctr))));
             v.ctr++;
             v.hpos = 0;
         }
@@ -417,7 +423,7 @@ contract LigeroVerifier {
         for (uint256 i; i < v.tri.length; ++i) v.rq[i] = f4(v);
         absorbCd(v, proof[32:32 + polyBytes]);
         bytes8 nonce = bytes8(proof[32 + polyBytes:40 + polyBytes]);
-        if (uint256(keccak256(abi.encodePacked(v.st, "PoW", nonce))) >> (256 - powBits) != 0) return false;
+        if (uint256(keccak256(abi.encodePacked(TAG_POW, v.st, nonce))) >> (256 - powBits) != 0) return false;
         absorb(v, abi.encodePacked(nonce));
         v.idx = drawIndices(v);
         return polysCanonical(v.wOff, 3 * v.d2 - v.ell);
@@ -526,7 +532,7 @@ contract LigeroVerifier {
         return merkleRoot(ix, h, depth, mpOff, v.pOff + plen) == root;
     }
 
-    /// leaf = keccak256(salt || column) for each opened column; every value canonical
+    /// leaf = keccak256(TAG_LEAF (0) || salt || column) for each opened column; every value canonical
     function leaves(uint256 co, uint256 cw, uint256[] memory h) internal pure returns (bool ok) {
         assembly {
             ok := 1
@@ -537,8 +543,9 @@ contract LigeroVerifier {
                 for { let p := add(c, 32) } lt(p, add(c, cw)) { p := add(p, 6) } {
                     if iszero(lt(shr(208, calldataload(p)), Q)) { ok := 0 }
                 }
-                calldatacopy(buf, c, cw)
-                mstore(add(add(h, 32), mul(i, 32)), keccak256(buf, cw))
+                mstore8(buf, 0) // TAG_LEAF
+                calldatacopy(add(buf, 1), c, cw)
+                mstore(add(add(h, 32), mul(i, 32)), keccak256(buf, add(cw, 1)))
             }
         }
     }
@@ -557,7 +564,7 @@ contract LigeroVerifier {
             while (i < d) {
                 uint256 x = ix[i];
                 if (x % 2 == 0 && i + 1 < d && ix[i + 1] == x + 1) {
-                    h[o] = uint256(keccak256(abi.encodePacked(h[i], h[i + 1])));
+                    h[o] = uint256(keccak256(abi.encodePacked(TAG_NODE, h[i], h[i + 1])));
                     i += 2;
                 } else {
                     if (sp + 32 > end) return 0;
@@ -566,7 +573,9 @@ contract LigeroVerifier {
                         sib := calldataload(sp)
                     }
                     sp += 32;
-                    h[o] = x % 2 == 0 ? uint256(keccak256(abi.encodePacked(h[i], sib))) : uint256(keccak256(abi.encodePacked(sib, h[i])));
+                    h[o] = x % 2 == 0
+                        ? uint256(keccak256(abi.encodePacked(TAG_NODE, h[i], sib)))
+                        : uint256(keccak256(abi.encodePacked(TAG_NODE, sib, h[i])));
                     i += 1;
                 }
                 ix[o] = x / 2;

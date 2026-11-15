@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
@@ -84,6 +86,21 @@ contract OtherSystemBurnVerifier {
     constructor(address ip) { innerProduct = ip; }
 
     function proofSystemId() external pure returns (bytes32) { return keccak256("another proof system"); }
+}
+
+/// A burn verifier of the right system and inner product whose `ringSize()` answers only after burning more than a probe's
+/// 30,000 gas (Fable 3r3s3t P3-9): a costly answer must not read as "does not answer".
+contract CostlyRingSizeBurnVerifier {
+    address public immutable innerProduct;
+    bytes32 public immutable proofSystemId;
+
+    constructor(address ip, bytes32 id) { (innerProduct, proofSystemId) = (ip, id); }
+
+    function ringSize() external view returns (uint256) {
+        uint256 x;
+        for (uint256 i; i < 200; ++i) x = uint256(keccak256(abi.encode(x, gasleft())));
+        return x == 0 ? 0 : 2;
+    }
 }
 
 /// The same, with a `curveName()` that reverts: the typed error survives with an empty name (review 5g-Z2 M-1).
@@ -285,6 +302,32 @@ contract ZetherRevertPathsTest is ZetherFixture {
         factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER, 1, abi.encode(r), "wrap");
     }
 
+    /// Fable 3r3s3t P3-9 (spec 3r §5.6 N3): the negative probe (the burn verifier must not answer `ringSize()`) fails closed.
+    /// Two transfer verifiers (the burn slot answers `ringSize()`): at no gas does `validateEnv` pass; a starved probe reverts
+    /// `BadInit` rather than reading as "does not answer". Positive control: the right env passes with the same sweep's top.
+    function test_validateEnv_negativeProbeFailsClosed() public {
+        IFactoryToken.Env memory e = _zenv();
+        address ip = address(ZetherVerifierBase(address(ver)).innerProduct());
+        e.deps[1] = address(new ZetherTransferVerifierBls12381(ZetherVerifierBase(address(ver)).innerProduct()));
+        bytes32 uid = factory.chainUid();
+        bytes memory bad = abi.encodeCall(normalImpl.validateEnv, (instanceEnv(e, uid, address(0))));
+        // a burn slot that answers `ringSize()` at a cost above the probe's cap
+        IFactoryToken.Env memory c = _zenv();
+        c.deps[1] = address(new CostlyRingSizeBurnVerifier(ip, IZetherVerifier(address(ver)).proofSystemId()));
+        bytes memory costly = abi.encodeCall(normalImpl.validateEnv, (instanceEnv(c, uid, address(0))));
+        vm.expectRevert(IZetherToken.BadInit.selector);
+        normalImpl.validateEnv(instanceEnv(c, uid, address(0)));
+        for (uint256 g = 20_000; g <= 400_000; g += 500) {
+            (bool ok,) = address(normalImpl).staticcall{gas: g}(bad);
+            assertFalse(ok, "two transfer verifiers never pass");
+            (ok,) = address(normalImpl).staticcall{gas: g}(costly);
+            assertFalse(ok, "a costly answer never reads as none");
+        }
+        (bool good,) = address(normalImpl).staticcall{gas: 400_000}(
+            abi.encodeCall(normalImpl.validateEnv, (instanceEnv(_zenv(), uid, address(0)))));
+        assertTrue(good, "control: the right env passes at the sweep's top");
+    }
+
     /// The release's `Env.deps` (plan 5g-Z2, CTR-ZTH-20): four entries with code, a registry, the two verifiers of one
     /// proof system, both fixed to the env's inner-product verifier, each in its role; never on Hedera. Chain-neutral
     /// releases (plan T72): the constructor's checks are the release's `validateEnv` (`ZetherLib`), which the factory
@@ -327,10 +370,10 @@ contract ZetherRevertPathsTest is ZetherFixture {
         IFactoryToken.Env memory e9 = withModules(pinned(bad[7], IOpenFactory.TokenKind.NORMAL_ZETHER),
             Catalogue.modulesOn(factory, IOpenFactory.TokenKind.NORMAL_ZETHER, 1));
         vm.prank(registrar);
-        factory.publishEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, e9);
+        factory.publishTokenEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, EnvKit.uidOf(address(factory)), e9);
         vm.prank(registrar);
         vm.expectRevert(IZetherToken.BadInit.selector);
-        factory.deployImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, 9, code, args);
+        factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 9, 9, code, args, EnvKit.uidOf(address(factory)));
         // an honest copy of the transfer verifier on the same inner-product verifier is a different (valid) release
         IFactoryToken.Env memory e = _zenv();
         e.deps[0] = address(copy);
@@ -376,13 +419,13 @@ contract ZetherRevertPathsTest is ZetherFixture {
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
             IOpenFactory.TokenKind.NORMAL_ZETHER));
         factory.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL_ZETHER, address(normalImpl), abi.encode(_cfg(false, 1 << 40)), "x");
-        // only the registrar publishes envs and deploys releases
+        // only the admin publishes envs; a deploy by another needs the admin's approval
         IFactoryToken.Env memory e = _zenv();
         e.deps[0] = address(fake);
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        factory.publishEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 2, e);
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        factory.deployImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 2, 1, type(NormalZetherToken).creationCode, "");
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
+        factory.publishTokenEnv(IOpenFactory.TokenKind.NORMAL_ZETHER, 2, EnvKit.uidOf(address(factory)), e);
+        vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
+        factory.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL_ZETHER, 2, 1, type(NormalZetherToken).creationCode, "", EnvKit.uidOf(address(factory)));
         // the factory-made token carries the env's verifiers
         assertEq(address(tok.verifier()), address(ver));
         assertEq(address(tok.burnVerifier()), address(burnVer));
@@ -431,7 +474,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         assertEq(tok.totalShielded(), 0);
         vm.prank(address(0xBAD));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.MINTABLE, address(0xBAD)));
-        NormalZetherToken(address(tok)).mint(address(0xBAD), 1);
+        NormalZetherToken(address(tok)).mint(address(0xBAD), 1, EnvKit.codeUidOf(address(tok)));
     }
 
     /// CTR-TOK-01 (MT-3) on the public side of a Zether token: only contracts grant and spend allowances.

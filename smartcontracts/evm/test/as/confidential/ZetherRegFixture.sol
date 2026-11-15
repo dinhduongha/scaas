@@ -22,6 +22,7 @@ import {IRegulatedToken} from "../../../src/regulated/IRegulatedToken.sol";
 import {NormalZetherRegulatedToken} from "../../../src/regulated/NormalZetherRegulatedToken.sol";
 import {WrappedZetherRegulatedToken} from "../../../src/regulated/WrappedZetherRegulatedToken.sol";
 import {ComplianceRegistry} from "../../../src/regulated/ComplianceRegistry.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// The signed transfer entries alone (no overload), so `abi.encodeCall` can name each.
 interface IZetherSigned {
@@ -76,6 +77,16 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
     /// `DENYLIST` on the token `setUp` creates.
     function _denylist() internal pure virtual returns (bool) { return false; }
 
+    /// Round 3s (spec 2026-11-10-token-lists.md §4.3): `DENYLIST` as the token's own list (`setDenied` by the issuer seat)
+    /// instead of the registry; `_attestDenied` writes the list and `_deniedErr` is `Denied(a)`.
+    function _lists() internal pure virtual returns (bool) { return false; }
+
+    /// The refusal of a denied account at a checked site: the list's `Denied(a)` or the registry's `NotEligible(a, 0)`.
+    function _deniedErr(bytes32 a) internal pure returns (bytes memory) {
+        return _lists() ? abi.encodeWithSelector(bytes4(keccak256("Denied(bytes32)")), a)
+            : abi.encodeWithSelector(IRegulatedToken.NotEligible.selector, a, uint8(0));
+    }
+
     function setUp() public virtual {
         _stack();
         Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1, _zenv(),
@@ -83,15 +94,15 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
             type(WrappedZetherRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         issuer = address(new Holder());
         compliance = address(new Holder());
         cadmin = address(new Holder());
-        creg = new ComplianceRegistry(cadmin);
+        creg = new ComplianceRegistry(nid(cadmin), address(0), bytes32(uint256(0x5EC0)));
         vm.prank(cadmin);
-        creg.setAttester(attester, true);
+        creg.setKycProvider(nid(attester), true, EnvKit.regUidOf(address(creg)));
         usd = new MockERC20("USD", "USD", 6);
         _users();
         dave = _user(0xDA7E, address(0xD4));
@@ -105,13 +116,15 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
     function _regCfg(bool auditor, uint256 maxShielded) internal view returns (IFactoryToken.TokenConfig memory c) {
         c = _cfg(auditor, maxShielded);
         c.lockedFeatures = 0;
-        c.owner = nid(ownerA);
+        c.admin = nid(ownerA);
         c.grantDelay = 1 days;
         c.features |= REG_FEATURES;
         (c.roles.issuer, c.roles.compliance) = (nid(issuer), nid(compliance));
         c.reg.termsHash = keccak256("terms");
-        if (_denylist()) {
-            c.features |= 1 << GovernanceBits.DENYLIST;
+        if (_lists()) {
+            c.features |= 1 << GovernanceBits.DENYLIST; // round 3s: the token's own deny list, no registry
+        } else if (_denylist()) {
+            c.features |= 1 << GovernanceBits.KYC; // round 3s: the registry's deny mask is under bit 28
             (c.reg.complianceRegistry, c.reg.deniedFlags) = (address(creg), SANCTIONED);
         }
         if (_isWrapped()) {
@@ -146,22 +159,30 @@ abstract contract ZetherRegFixture is ZetherNamedBase {
 
     function _freeze(bytes32 a) internal {
         vm.prank(issuer);
-        _r().freeze(a, REF, 0);
+        _r().freeze(a, REF, 0, EnvKit.codeUidOf(address(_r())));
     }
 
     function _pause() internal returns (uint64 until) {
         until = uint64(block.timestamp + 1 days);
         vm.prank(issuer);
-        _r().pause(REF, until);
+        _r().pause(REF, until, EnvKit.codeUidOf(address(_r())));
     }
 
     function _attestDenied(bytes32 a) internal {
+        if (_lists()) {
+            bytes32[] memory one = new bytes32[](1);
+            one[0] = a;
+            vm.prank(issuer);
+            (bool ok,) = address(tok).call(abi.encodeWithSignature("setDenied(bytes32[],bool,bytes32)", one, true, EnvKit.codeUidOf(address(tok))));
+            require(ok, "setDenied");
+            return;
+        }
         bytes32[] memory as_ = new bytes32[](1);
         uint64[] memory fl = new uint64[](1);
         uint64[] memory vu = new uint64[](1);
         (as_[0], fl[0], vu[0]) = (a, SANCTIONED, type(uint64).max);
         vm.prank(attester);
-        creg.attest(as_, fl, vu);
+        creg.setCompliance(as_, fl, vu, EnvKit.regUidOf(address(creg)));
     }
 
     /// `alice` holds `b` shielded units in `acc`.

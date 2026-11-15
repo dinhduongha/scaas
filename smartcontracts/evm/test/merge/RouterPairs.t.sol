@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "../helpers/EnvKit.sol";
 import {Vm} from "forge-std/Test.sol";
 import {GovernanceRouter} from "../../src/governance/GovernanceRouter.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
@@ -33,15 +34,21 @@ contract RouterPairsTest is GovRouterFixture {
 
     /// The ABI types of each op's own parameters (after `target`), index = op.
     function _types(uint256 op) internal pure returns (string memory) {
-        string[19] memory t = ["uint8,bytes32", "uint8,bytes32",
-            "uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32)", "uint8,bytes32", "uint8",
-            "bytes32", "", "", "uint8", "address,uint256", "bytes32,uint256", "address,bytes32", "address,uint96,uint96", "",
+        string[19] memory t = ["uint8,bytes32,bytes32", "uint8,bytes32,bytes32",
+            "uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32", "uint8,bytes32,bytes32",
+            "uint8,bytes32",
+            "bytes32,bytes32", "", "bytes32", "uint8,bytes32", "address,uint256", "bytes32,uint256", "address,bytes32", "address,uint96,uint96", "",
             "", "address,address,bool", "address,bool", "bool", "uint32,address"];
         return t[op];
     }
 
     function _sel(uint256 op, string memory env, string memory sig) internal view returns (bytes4) {
         string memory ty = _types(op);
+        // round 3zb + 3zc (CTR-GOV-28 Change): the merged entries from `OP_MINT` on take the target's chain word last; the
+        // retired address forms keep their old parameters
+        if (op >= OP_MINT && keccak256(bytes(env)) == keccak256(bytes(ENV_UA))) {
+            ty = bytes(ty).length == 0 ? "bytes32" : string.concat(ty, ",bytes32");
+        }
         return bytes4(keccak256(bytes(string.concat("mtx", rows[op].name, "(", env, ",address",
             bytes(ty).length == 0 ? "" : ",", ty, ",", sig, ")"))));
     }
@@ -85,6 +92,10 @@ contract RouterPairsTest is GovRouterFixture {
         bytes memory words) internal view returns (bytes memory)
     {
         MetaTxLib.UAEnvelope memory e = _envelope(r, from, batch);
+        if (op >= OP_MINT) { // the target's chain word, the op's last field (CTR-GOV-28 Change)
+            args = bytes.concat(args, abi.encode(EnvKit.codeUidOf(target)));
+            words = bytes.concat(words, abi.encode(EnvKit.codeUidOf(target)));
+        }
         bytes memory tail = _tail(abi.encode(_auth(from, _mDigest(r, op, e, target, words))));
         return _cd(_merged(op), e, target, args, tail);
     }
@@ -107,43 +118,43 @@ contract RouterPairsTest is GovRouterFixture {
     function _rowBy(uint256 op, bytes32 s, bytes32 y) internal {
         if (op == GRANT_ROLE) {
             NormalToken t = _normal(s, 0, 0);
-            _m(op, s, address(t), abi.encode(MINT, y));
+            _m(op, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
             assertTrue(t.hasRole(MINT, y), "GrantRole");
         } else if (op == REVOKE_ROLE) {
             NormalToken t = _normal(s, y, 0);
-            _m(op, s, address(t), abi.encode(MINT, y));
+            _m(op, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
             assertTrue(t.grantOf(MINT, y).barred, "RevokeRole");
         } else if (op == SET_GRANT) {
             NormalToken t = _normal(s, 0, 0);
-            (bytes memory a, bytes memory w) = _setGrantArgs(MINT, y, _limited(100));
+            (bytes memory a, bytes memory w) = _setGrantArgs(MINT, y, _limited(100), EnvKit.codeUidOf(address(t)));
             _runOn(router, _mCall(router, op, s, 0, address(t), a, w));
             assertEq(t.grantOf(MINT, y).total, 100, "SetGrant");
         } else if (op == CANCEL_GRANT) {
             NormalToken t = _normal(s, 0, 1 hours);
-            _m(GRANT_ROLE, s, address(t), abi.encode(MINT, y));
-            _m(op, s, address(t), abi.encode(MINT, y));
+            _m(GRANT_ROLE, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
+            _m(op, s, address(t), abi.encode(MINT, y, EnvKit.codeUidOf(address(t))));
             (uint64 eta,,,) = t.pendingGrant(MINT, y);
             assertEq(eta, 0, "CancelGrant");
         } else if (op == DISABLE_FEATURE) {
             NormalToken t = _normal(s, 0, 0);
-            _m(op, s, address(t), abi.encode(MINT));
+            _m(op, s, address(t), abi.encode(MINT, EnvKit.codeUidOf(address(t))));
             assertEq(t.features() & (uint256(1) << MINT), 0, "DisableFeature");
-        } else if (op == TRANSFER_OWNERSHIP) {
+        } else if (op == TRANSFER_ADMIN) {
             NormalToken t = _normal(s, 0, 0);
-            _m(op, s, address(t), abi.encode(y));
-            assertEq(t.pendingOwner(), y, "TransferOwnership");
-        } else if (op == ACCEPT_OWNERSHIP) {
+            _m(op, s, address(t), abi.encode(y, EnvKit.codeUidOf(address(t))));
+            assertEq(t.pendingAdmin(), y, "TransferAdmin");
+        } else if (op == ACCEPT_ADMIN) {
             NormalToken t = _normal(_pad(address(this)), 0, 0);
-            t.transferOwnership(s);
+            t.transferAdmin(s, EnvKit.codeUidOf(address(t)));
             _m(op, s, address(t), "");
-            assertEq(t.owner(), s, "AcceptOwnership");
-        } else if (op == RENOUNCE_OWNERSHIP) {
+            assertEq(t.admin(), s, "AcceptAdmin");
+        } else if (op == RENOUNCE_ADMIN) {
             NormalToken t = _normal(s, 0, 0);
-            _m(op, s, address(t), "");
-            assertEq(t.owner(), bytes32(0), "RenounceOwnership");
+            _m(op, s, address(t), abi.encode(EnvKit.codeUidOf(address(t))));
+            assertEq(t.admin(), bytes32(0), "RenounceAdmin");
         } else if (op == RENOUNCE_ROLE) {
             NormalToken t = _normal(s, s, 0);
-            _m(op, s, address(t), abi.encode(MINT));
+            _m(op, s, address(t), abi.encode(MINT, EnvKit.codeUidOf(address(t))));
             assertFalse(t.hasRole(MINT, s), "RenounceRole");
         } else if (op == OP_MINT) {
             NormalToken t = _normal(s, s, 0);
@@ -217,9 +228,9 @@ contract RouterPairsTest is GovRouterFixture {
     function test_routerRow_SetGrant() public { _both(SET_GRANT); }
     function test_routerRow_CancelGrant() public { _both(CANCEL_GRANT); }
     function test_routerRow_DisableFeature() public { _both(DISABLE_FEATURE); }
-    function test_routerRow_TransferOwnership() public { _both(TRANSFER_OWNERSHIP); }
-    function test_routerRow_AcceptOwnership() public { _both(ACCEPT_OWNERSHIP); }
-    function test_routerRow_RenounceOwnership() public { _both(RENOUNCE_OWNERSHIP); }
+    function test_routerRow_TransferAdmin() public { _both(TRANSFER_ADMIN); }
+    function test_routerRow_AcceptAdmin() public { _both(ACCEPT_ADMIN); }
+    function test_routerRow_RenounceAdmin() public { _both(RENOUNCE_ADMIN); }
     function test_routerRow_RenounceRole() public { _both(RENOUNCE_ROLE); }
     function test_routerRow_Mint() public { _both(OP_MINT); }
     function test_routerRow_MintToUA() public { _both(MINT_TO_UA); }
@@ -309,7 +320,7 @@ contract RouterPairsTest is GovRouterFixture {
     /// same subjects' merged op runs.
     function test_routerGenericEntriesRefuseEveryCall() public {
         NormalToken t = _normal(pq, pq, 0);
-        bytes[4] memory blobs = [abi.encodeCall(IGovernance.grantRole, (MINT, eoa)),
+        bytes[4] memory blobs = [abi.encodeCall(IGovernance.grantRole, (MINT, eoa, EnvKit.codeUidOf(address(t)))),
             _mCall(router, OP_MINT, pq, 0, address(t), abi.encode(BOB, uint256(1)), abi.encode(BOB, uint256(1))),
             abi.encodeCall(IMetaTx.cancelNonce, (7)), bytes("")];
         bytes32[2] memory who = [eoa, pq];
@@ -353,13 +364,17 @@ contract RouterPairsTest is GovRouterFixture {
     function _oldHasNoEntry(uint256 op, address target) internal {
         bytes memory args = _anyArgs(op);
         bytes memory words = args;
-        if (op == SET_GRANT) (args, words) = _setGrantArgs(MINT, next, _limited(1));
+        if (op == SET_GRANT) (args, words) = _setGrantArgs(MINT, next, _limited(1), keccak256("a chain word"));
         MetaTxLib.UAEnvelope memory e = _envelope(router, eoa, 0);
         bytes memory oldSig = _ecdsa(eoa, keccak256(abi.encodePacked("\x19\x01", _domain(router),
             _structHash(op, false, e, target, words))));
         (bool ok, bytes memory ret) = address(router).call(_cd(_old(op), e, target, args, _tail(abi.encode(oldSig))));
         assertFalse(ok, rows[op].name);
         assertEq(ret.length, 0, rows[op].name);
+        if (op >= OP_MINT) { // the merged entry takes the target's chain word last (CTR-GOV-28 Change); any word for AnyTarget
+            args = bytes.concat(args, abi.encode(keccak256("a chain word")));
+            words = bytes.concat(words, abi.encode(keccak256("a chain word")));
+        }
         IUARegistry.UASig memory a;
         a.signature = oldSig;
         (ok, ret) = address(router).call(_cd(_merged(op), e, target, args, _tail(abi.encode(a))));
@@ -373,9 +388,11 @@ contract RouterPairsTest is GovRouterFixture {
     function _anyArgs(uint256 op) internal view returns (bytes memory) {
         string memory ty = _types(op);
         if (bytes(ty).length == 0) return "";
-        if (op == GRANT_ROLE || op == REVOKE_ROLE || op == CANCEL_GRANT) return abi.encode(MINT, next);
-        if (op == DISABLE_FEATURE || op == RENOUNCE_ROLE) return abi.encode(MINT);
-        if (op == TRANSFER_OWNERSHIP) return abi.encode(next);
+        if (op == GRANT_ROLE || op == REVOKE_ROLE || op == CANCEL_GRANT) return abi.encode(MINT, next, keccak256("a chain word"));
+        if (op == DISABLE_FEATURE) return abi.encode(MINT, keccak256("a chain word"));
+        if (op == RENOUNCE_ROLE) return abi.encode(MINT, keccak256("a chain word"));
+        if (op == TRANSFER_ADMIN) return abi.encode(next, keccak256("a chain word"));
+        if (op == RENOUNCE_ADMIN) return abi.encode(keccak256("a chain word"));
         if (op == OP_MINT) return abi.encode(BOB, uint256(1));
         if (op == MINT_TO_UA) return abi.encode(pq, uint256(1));
         if (op == DISABLE_WRAP) return abi.encode(address(usd), bytes32("r"));

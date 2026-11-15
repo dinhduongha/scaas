@@ -13,7 +13,8 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title Kind `NORMAL` (CTR-TOK-21): a standalone token, no underlying.
-/// @notice Flags valid here: `PAYABLE`, `MINTABLE` (role `minter`), `BURNABLE` (holder burn). A supply cap or a mint
+/// @notice Flags valid here: `PAYABLE`, `MINTABLE` (role `minter`), `BURNABLE` (holder burn) or `BURNER` (role `burner`,
+///         CTR-GOV-29). A supply cap or a mint
 ///         rate limit, if an issuer needs one, lives in its minter contract. Built by `OpenFactory.createToken`
 ///         (CTR-TOK-25): `initialSupply` is minted to `initialHolder`; `legs`, `rate`, `conf` must be empty.
 abstract contract NormalTokenCore is MetaTokenBase {
@@ -24,7 +25,7 @@ abstract contract NormalTokenCore is MetaTokenBase {
         "UABurn(bytes32 from,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; this kind
+    /// @dev The factory's append (`OpenFactory.deployTokenImplementation`, chain-neutral spec §2.1): its address; this kind
     ///      takes no `implArgs`.
     constructor(address factory_, bytes memory) MetaTokenBase(factory_) {}
 
@@ -40,26 +41,31 @@ abstract contract NormalTokenCore is MetaTokenBase {
         _requireUnused(cfg, false, true, true, true);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         // 5-9 are not in the kind's mask: `init` refuses each with `FeatureInvalidForKind` (regulated-kinds spec Q3)
-        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles,
+        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, cfg.rescueTo, cfg.roles,
             _validBits(), _roleBits(), _contractOnlyBits(), _registry());
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
-    /// @notice `MINTABLE` and the `minter` role; never allowlisted (a minter contract's caps run on its own call).
-    function _mintBody(address to, uint256 amount) internal {
-        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
+    /// @notice `MINTABLE` and the `minter` role; never allowlisted (a minter contract's caps run on its own call). The holder's
+    ///         chain word first (CTR-GOV-28 Change, round 3zb + 3zc).
+    function _mintBody(address to, uint256 amount, bytes32 chainUid_) internal {
+        GovernanceUse.use(GovernanceBits.MINTABLE, _holderOnChain(GovernanceBits.MINTABLE, chainUid_), amount);
         _mint(to, amount);
     }
 
     /// @notice `mint` into the registered SIGNING UA `to` (CTR-UA-28): the same flag and role; never allowlisted.
-    function _mintToUABody(bytes32 to, uint256 amount) internal {
-        GovernanceUse.use(GovernanceBits.MINTABLE, _govSubject(), amount);
+    function _mintToUABody(bytes32 to, uint256 amount, bytes32 chainUid_) internal {
+        GovernanceUse.use(GovernanceBits.MINTABLE, _holderOnChain(GovernanceBits.MINTABLE, chainUid_), amount);
         _uaMint(to, amount);
     }
 
-    /// @notice Allowlisted `AMOUNT(0)` (CTR-MTX-19): gasless through `mtxExecute`.
+    /// @notice Allowlisted `AMOUNT(0)` (CTR-MTX-19): gasless through `mtxExecute`. CTR-GOV-29 (round 3zb): with `BURNER` set
+    ///         only a holder burns, its own balance (`_subject()`, the id `_burn(_msgSender(), …)` debits: never
+    ///         `_govSubject()`), within its grant (scalar = `amount`); else `BURNABLE` (any holder), else `FeatureNotSet(2)`.
+    ///         One check for `burn`, `mtxBurn` and the generic `mtxExecute` burn (both reach this body by the self-call).
     function _burnBody(uint256 amount) internal {
-        GovernanceLib.requireFeature(GovernanceBits.BURNABLE);
+        if (GovernanceLib.hasFeature(GovernanceBits.BURNER)) GovernanceUse.use(GovernanceBits.BURNER, _subject(), amount);
+        else GovernanceLib.requireFeature(GovernanceBits.BURNABLE);
         _burn(_msgSender(), amount);
     }
 

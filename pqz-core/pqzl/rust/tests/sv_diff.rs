@@ -1,8 +1,9 @@
 //! The specialised verifier (`Ctx::verify_fast`, pqz_sv.c) against the generic one (`Ctx::verify`, the reference)
 //! and against the C core's `pqz_verify_fast`, on the cases of `pqzl/test/pqz_sv_diff.c` (ported below: the same
 //! xorshift stream, statements, witnesses, proofs and mutations), with the sample of `pqzl/sv/rel3.sh`
-//! (`4 4 2 1 10 12 12 12 12 2`: 3,484 cases over the six forms + every built R_TXM shape); `PQZL_SV_DIFF` takes other
-//! arguments (`n_reg n_tx muts seed fuzz n_burn n_ds n_dr n_tx0 n_txm`). Where C evaluates two `rnd ()` calls
+//! (`4 4 2 1 10 12 12 12 12 2`: 3,484 cases over the six forms + every built R_TXM shape + R_TXS / R_TXS0 with n_tx
+//! proofs each); `PQZL_SV_DIFF` takes other arguments (`n_reg n_tx muts seed fuzz n_burn n_ds n_dr n_tx0 n_txm
+//! [n_txs]`, n_txs defaulting to n_tx). Where C evaluates two `rnd ()` calls
 //! unsequenced, the port follows clang's order (the C build's compiler): an assignment's right side first, operands
 //! and arguments left to right. The case count does not depend on that order.
 //!
@@ -39,7 +40,10 @@ fn vectors_verify_fast() {
 #[cfg(feature = "test-hooks")]
 #[allow(clippy::needless_range_loop)] // the index loops follow pqz_sv_diff.c's
 mod harness {
-    use pqzl::{encrypt, keypair_from_secret, test_mutate, Ctx, MAX_PROOF, POLYVEC_BYTES as PV, PROOF_SYSTEM_ID, V_BYTES as VB};
+    use pqzl::{
+        encrypt, keypair_from_secret, test_mutate, Ctx, MAX_PROOF, POLYVEC_BYTES as PV, PROOF_SYSTEM_ID, PROOF_SYSTEM_SPLIT_ID,
+        V_BYTES as VB,
+    };
 
     const Q: u64 = pqzl::Q;
     const PREFIX: usize = 64;
@@ -96,7 +100,9 @@ mod harness {
         #[cfg(feature = "oversize")]
         (16, 0, 4),
     ];
-    pub const NREL: usize = 6 + TXD.len();
+    /// R_TXS, then R_TXS0 (op 1 under PQZL_SPLIT_ID, three-key spec K3-4; pqz_bench's order)
+    const TXS_REL: usize = 6 + TXD.len();
+    pub const NREL: usize = 8 + TXD.len();
 
     /// relation names (R_TX0 is op 1 with the 66,560-byte statement: relations are named by index, not by op)
     pub fn name(rel: usize) -> String {
@@ -107,16 +113,24 @@ mod harness {
             3 => "R_DS".into(),
             4 => "R_DR".into(),
             5 => "R_TX0".into(),
+            r if r == TXS_REL => "R_TXS".into(),
+            r if r == TXS_REL + 1 => "R_TXS0".into(),
             _ => format!("R_TXM{}{}", TXD[rel - 6].0, if TXD[rel - 6].1 == 1 { "" } else { "_0" }),
         }
     }
     fn op(rel: usize) -> u8 {
+        if rel >= TXS_REL {
+            return 1;
+        }
         [3, 1, 2, 4, 5, 1].get(rel).copied().unwrap_or(7)
     }
-    /// the relation code of test_mutate: the op, 0x81 (R_TX0) or 0x70 | auditorOn << 3 | log2 M
+    /// the relation code of test_mutate: the op, 0x81 (R_TX0), 0x41 / 0xc1 (R_TXS / R_TXS0) or 0x70 | auditorOn << 3 |
+    /// log2 M
     fn mop(rel: usize) -> u8 {
         match rel {
             5 => 0x81,
+            r if r == TXS_REL => 0x41,
+            r if r == TXS_REL + 1 => 0xc1,
             0..=4 => op(rel),
             _ => 0x70 | (TXD[rel - 6].1 as u8) << 3 | TXD[rel - 6].2,
         }
@@ -282,6 +296,43 @@ mod harness {
             let mut w0 = w[..(6 * pqzl::N) + 64].to_vec(); // s_f, e_f, r, e1, e2_t, e2_f
             w0.extend_from_slice(&w[(6 * pqzl::N) + 96..(6 * pqzl::N) + 128]); // d, d'
             (s0, w0)
+        }
+
+        /// a fresh R_TXS (or, tx0, R_TXS0) statement, as pqz_sv_diff.c make_tx + make_txs: R_TX's / R_TX0's statement
+        /// under PQZL_SPLIT_ID with the sender's own v_f and u_f under fresh (r_f, e1_f, e2_f); the leg is R_TX's
+        fn make_txs(&mut self, tx0: bool) -> (Vec<u8>, Vec<u8>) {
+            let (tx, w) = self.make_tx(false);
+            let n = pqzl::N;
+            let rf = self.short8::<{ pqzl::N }>(1, pqzl::BETA_S as i64);
+            let e1f = self.short16::<{ pqzl::N }>(20, pqzl::BETA_E as i64);
+            let e2f = self.short16::<16>(20, 64);
+            let dp: [u8; 16] = w[6 * n + 112..6 * n + 128].try_into().unwrap();
+            let pkf: &[u8; PV] = tx[HEADER..HEADER + PV].try_into().unwrap();
+            let o = encrypt(&[pkf], &[dp], &rf, &e1f, &[e2f]).unwrap();
+            // R_TX0's statement of the same transfer: no pk_a, no v_a, auditorOn 0 (as make_tx)
+            let mut st = if tx0 {
+                let mut s0 = tx[..HEADER + 2 * PV].to_vec();
+                s0.extend_from_slice(&tx[HEADER + 3 * PV..TX_STMT - VB]);
+                s0[HDR_AUDITOR_ON + 31] = 0;
+                s0
+            } else {
+                tx
+            };
+            let vf = HEADER + 4 * PV + VB + PV + VB - if tx0 { PV } else { 0 };
+            st[32..64].copy_from_slice(&PROOF_SYSTEM_SPLIT_ID);
+            st[vf..vf + VB].copy_from_slice(&o.vs[0]);
+            st.extend_from_slice(&o.u[..]);
+            // witness: s_f || e_f || r || e1 || r_f || e1_f || e2_t || e2_f || [e2_a] || d || d'
+            let mut wt = w[..6 * n].to_vec();
+            wt.extend(rf.iter().map(|&x| x as u8));
+            wt.extend(e1f.iter().flat_map(|x| x.to_le_bytes()));
+            wt.extend_from_slice(&w[6 * n..6 * n + 32]);
+            wt.extend(e2f.iter().flat_map(|x| x.to_le_bytes()));
+            if !tx0 {
+                wt.extend_from_slice(&w[6 * n + 64..6 * n + 96]);
+            }
+            wt.extend_from_slice(&w[6 * n + 96..6 * n + 128]);
+            (st, wt)
         }
 
         /// a fresh R_BURN statement: new key, balance in T, amount, fee; fresh (r, e1, e2_f) for the new balance;
@@ -630,17 +681,23 @@ mod harness {
     pub fn args() -> [u64; 10] {
         let s = std::env::var("PQZL_SV_DIFF").unwrap_or("4 4 2 1 10 12 12 12 12 2".into());
         let v: Vec<u64> = s.split_whitespace().map(|x| x.parse().unwrap()).collect();
-        v.try_into().expect("PQZL_SV_DIFF: 10 numbers")
+        v[..10].try_into().expect("PQZL_SV_DIFF: 10 or 11 numbers")
+    }
+    /// n_txs: PQZL_SV_DIFF's 11th number, default n_tx
+    fn n_txs(a: &[u64; 10]) -> u64 {
+        let s = std::env::var("PQZL_SV_DIFF").unwrap_or_default();
+        s.split_whitespace().nth(10).map(|x| x.parse().unwrap()).unwrap_or(a[1])
     }
 
     /// pqz_sv_diff.c main's loop: per relation, per honest proof, the proof and its cases (`sink (rel, op, stmt,
     /// cases)`); returns the number of failed proves
     pub fn run(a: [u64; 10], mut sink: impl FnMut(usize, u8, &[u8], Vec<Case>)) -> usize {
+        let ntxs = n_txs(&a);
         let [nreg, ntx, muts, seed, fuzz, nburn, nds, ndr, ntx0, ntxm] = a;
         let nps = [nreg, ntx, nburn, nds, ndr, ntx0];
         let mut g = Gen { xs: 0x243F_6A88_85A3_08D3 ^ seed.wrapping_mul(0x9E37_79B9_7F4A_7C15), ctx: Ctx::new(), prev: vec![None; NREL], prove_fails: 0 };
         for rel in 0..NREL {
-            let np = if rel < 6 { nps[rel] } else { ntxm };
+            let np = if rel < 6 { nps[rel] } else if rel >= TXS_REL { ntxs } else { ntxm };
             for _ in 0..np {
                 let mut r32 = [0u8; 32];
                 g.rnd_bytes(&mut r32);
@@ -649,6 +706,7 @@ mod harness {
                     1 | 5 => g.make_tx(rel == 5), // both transfer forms
                     2 => g.make_burn(),
                     3 | 4 => g.make_disc(rel == 4),
+                    r if r >= TXS_REL => g.make_txs(r == TXS_REL + 1),
                     _ => g.make_txm(rel - 6),
                 };
                 let Ok(pf) = g.ctx.prove(op(rel), &st, &wit, &r32) else {

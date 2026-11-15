@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! The signing policy in front of every typed signature (spec §5.4, MD-9; T4): [`NativeKey::sign_typed`] takes an [`Expect`],
-//! one variant per clientkeys `check*` (`evm.js`: `checkPayment`, `checkReceiverFee`, `checkPayMeta`, `checkOp`, `checkCall`,
+//! one variant per clientkeys `check*` (`evm.js`: `checkPayment`, `checkPayeeFee`, `checkPayMeta`, `checkOp`, `checkCall`,
 //! `checkOwnerCall`, `checkCancel`, `checkTradeOrder`, `checkWrapOrder`) with the check's named inputs as the user confirmed
 //! them, or `Any(AllowAnyTypedData)`, the general EVM wallet's opt-in. A check rebuilds what the user asked for with the SCaaS
 //! builders (their canonical step) and compares that digest with the **faithful** digest of the server's typed data: a mismatch
@@ -57,7 +57,7 @@ pub struct Invalidate {
 /// What the user confirmed, per clientkeys check (its inputs by name; amounts and fees as decimal strings, `max_fee` in base units,
 /// 0 by default; ids of 32 bytes, a native address zero-padded (`padId`), where the struct takes ids). [`Expect::from_json`] reads
 /// clientkeys' `expectDigest` input. ua-mtx-merge (R12, R20, R39, R46): the token's address `MetaTransfer`, `ReceiverFee`,
-/// `TradeOrder`, `WrapOrder` and their cancels left; a payment, a receiver fee, a SCaaS sell token's order and a wrap order are
+/// `TradeOrder`, `WrapOrder` and their cancels left; a payment, a payee fee, a SCaaS sell token's order and a wrap order are
 /// the `UA` structs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -79,8 +79,9 @@ pub enum Expect {
         now: u64,
         max_window: u64,
     },
-    /// `checkReceiverFee`: the payee's co-signature of `UAReceiverFee` over the payment it expects.
-    ReceiverFee {
+    /// `checkPayeeFee`: the payee's co-signature of `UAPayeeFee` over the payment it expects (CTR-MTX-86, owner 2026-11-12: was
+    /// `ReceiverFee`).
+    PayeeFee {
         payee: [u8; 32],
         chain_id: u64,
         chain_uid: [u8; 32],
@@ -284,7 +285,7 @@ impl Expect {
                 now: x.u64("now")?,
                 max_window: x.opt_u64("maxWindow", DAY)?,
             },
-            "ReceiverFee" => Expect::ReceiverFee {
+            "PayeeFee" => Expect::PayeeFee {
                 payee: x.b32("payee")?,
                 chain_id: x.u64("chainId")?,
                 chain_uid: x.b32("chainUid")?,
@@ -490,9 +491,9 @@ fn check(td: &TypedData, e: &Expect) -> Result<[u8; 32]> {
             max_window,
         } => payment(td, &Pay { account, chain_id: *chain_id, chain_uid, amount, decimals: *decimals, payee, expected_token, max_fee,
             fee_recipient: fee_recipient.as_ref(), relayer: relayer.as_ref(), now: *now, max_window: *max_window }, entry_ref),
-        Expect::ReceiverFee {
+        Expect::PayeeFee {
             payee, chain_id, chain_uid, amount, decimals, entry_ref, expected_token, max_fee, fee_recipient, now, max_window,
-        } => receiver_fee(td, payee, *chain_id, chain_uid, &to_base(amount, *decimals)?, entry_ref, expected_token, max_fee, fee_recipient,
+        } => payee_fee(td, payee, *chain_id, chain_uid, &to_base(amount, *decimals)?, entry_ref, expected_token, max_fee, fee_recipient,
             *now, *max_window),
         Expect::PayMeta {
             meta, entry_ref, account, chain_id, chain_uid, amount, decimals, payee, expected_token, max_fee, fee_recipient, relayer,
@@ -687,13 +688,13 @@ fn payment(td: &TypedData, p: &Pay, entry_ref: &[u8; 32]) -> Result<[u8; 32]> {
     build("UAMetaTransfer", name_of(td), p.expected_token, p.chain_id, p.chain_uid, msg)
 }
 
-/// clientkeys `checkReceiverFee`.
+/// clientkeys `checkPayeeFee`.
 #[allow(clippy::too_many_arguments)]
-fn receiver_fee(
+fn payee_fee(
     td: &TypedData, payee: &[u8], chain_id: u64, chain_uid: &[u8; 32], value: &U256, entry_ref: &[u8; 32], token: &[u8; 20], max_fee: &str,
     fee_recipient: &[u8; 20], now: u64, max_window: u64,
 ) -> Result<[u8; 32]> {
-    if td.primary_type() != "UAReceiverFee" {
+    if td.primary_type() != "UAPayeeFee" {
         return refuse();
     }
     let (m, d) = (obj(td.message()), td.domain());
@@ -727,7 +728,7 @@ fn receiver_fee(
     msg.insert("fee".into(), dec(&fee));
     msg.insert("feeRecipient".into(), to_hex(fee_recipient).into());
     msg.insert("validUntil".into(), get(&m, "validUntil").cloned().unwrap_or(Value::Null));
-    build("UAReceiverFee", name_of(td), token, chain_id, chain_uid, msg)
+    build("UAPayeeFee", name_of(td), token, chain_id, chain_uid, msg)
 }
 
 const E_FIELDS: [&str; 7] = ["batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"];

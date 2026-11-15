@@ -106,3 +106,15 @@ test('KV-8: the refresh is a burn of 0 with no recipient, the unwrap form never'
   const unwrap = debit('UAPqzUnshieldUnwrap', { unwrap: { ...m.unwrap, amount: '0' } }, { keyVersion: '1' });
   refusesMsg(() => evm.checkPqzDebit(unwrap, { current: 2 }), /StaleKeyVersion/);
 });
+
+// T-13 (KV-9): the keys of one statement pairwise distinct before encryption; one case per pair kind, the control passes
+test('T-13: pqzKeysDistinct refuses a duplicate leg, leg = pk_f, leg = pk_a, naming the later UA; distinct keys pass', () => {
+  const k = (b) => '0x' + b.repeat(64);
+  const [f, t1, t2, a] = [{ ua: '0x' + 'f1'.repeat(32), key: k('01') }, { ua: '0x' + 'a1'.repeat(32), key: k('02') },
+    { ua: '0x' + 'a2'.repeat(32), key: k('03') }, { ua: '0x' + 'ad'.repeat(32), key: k('04') }];
+  evm.pqzKeysDistinct([f, t1, t2, a]);
+  assert.throws(() => evm.pqzKeysDistinct([f, t1, { ...t2, key: t1.key }, a]), new RegExp(`KeyReused: ${t2.ua}`), 'duplicate leg');
+  assert.throws(() => evm.pqzKeysDistinct([f, { ...t1, key: f.key }]), new RegExp(`KeyReused: ${t1.ua}`), 'leg = pk_f');
+  assert.throws(() => evm.pqzKeysDistinct([f, t1, { ...a, key: t1.key }]), new RegExp(`KeyReused: ${a.ua}`), 'leg = pk_a');
+  assert.throws(() => evm.pqzKeysDistinct([f, t1, { ...a, key: f.key.toUpperCase().replace('0X', '0x') }]), /KeyReused/, 'hex case');
+});

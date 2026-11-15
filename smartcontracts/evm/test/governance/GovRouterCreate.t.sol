@@ -20,9 +20,12 @@ import {NoteKind, BadKind, INoteKind} from "../v2/mocks/GenericKinds.sol";
 /// A stand-in for a chain's router: it answers `chainUid()` and a `subject()` it is told, and calls the factory.
 contract SubjectRouter {
     bytes32 public chainUid;
+    address public registry; // `configureChain` reads it and its `smartKeyCloneHash()` (spec 2026-11-10-admin-not-owner.md §13.3)
     bytes32 internal _subject;
 
-    constructor(bytes32 uid) { chainUid = uid; }
+    constructor(bytes32 uid, address registry_) { (chainUid, registry) = (uid, registry_); }
+
+    function smartKeyCloneHash() external view returns (bytes32) { return IUARegistry(registry).smartKeyCloneHash(); }
 
     function subject() external view returns (bytes32) { return _subject; }
 
@@ -56,18 +59,18 @@ contract GovRouterCreateTest is GovRouterFixture {
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(f), "");
         (address[] memory dm, bytes memory dargs) = deployDexModules(address(f));
         vm.startPrank(REGISTRAR);
-        f.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, withModules(plainEnv(address(f), address(0), chainUidA, PREG, false), ms));
-        f.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
-        f.publishDexEnv(1, withModules(plainEnv(address(f), address(0), chainUidA, address(0), false), dm));
-        f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, dargs);
-        f.publishClassEnv(4, 0, 1, plainEnv(address(f), address(0), chainUidA, address(0), false));
-        f.deployRelease(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
-            type(NoteKind).creationCode, "");
-        f.setClassKindEnabled(4, 0, true);
-        f.publishClassEnv(4, 1, 1, plainEnv(address(f), address(0), chainUidA, address(0), false));
-        f.deployRelease(IOpenFactory.ReleaseId(4, 1, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
-            type(BadKind).creationCode, abi.encode(uint8(16))); // NESTED: its initialize creates a (4, 0, 1) instance
-        f.setClassKindEnabled(4, 1, true);
+        f.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(f)), withModules(plainEnv(address(f), address(0), chainUidA, PREG, false), ms));
+        f.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(f)));
+        f.publishDexEnv(1, EnvKit.uidOf(address(f)), withModules(plainEnv(address(f), address(0), chainUidA, address(0), false), dm));
+        f.deployDexImplementation(1, 1, type(SCaaSDex).creationCode, dargs, EnvKit.uidOf(address(f)));
+        f.publishClassEnv(4, 0, 1, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0), chainUidA, address(0), false));
+        f.deployImplementation(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
+            type(NoteKind).creationCode, "", EnvKit.uidOf(address(f)));
+        f.setClassKindEnabled(4, 0, true, EnvKit.uidOf(address(f)));
+        f.publishClassEnv(4, 1, 1, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0), chainUidA, address(0), false));
+        f.deployImplementation(IOpenFactory.ReleaseId(4, 1, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
+            type(BadKind).creationCode, abi.encode(uint8(16)), EnvKit.uidOf(address(f))); // NESTED: its initialize creates a (4, 0, 1) instance
+        f.setClassKindEnabled(4, 1, true, EnvKit.uidOf(address(f)));
         vm.stopPrank();
     }
 
@@ -124,7 +127,7 @@ contract GovRouterCreateTest is GovRouterFixture {
     }
 
     function test_create_dexAndInstance() public {
-        bytes memory dexArgs = abi.encode(ISCaaSDex.DexConfig(eoa, 0, TREASURY, false, 0, address(0)));
+        bytes memory dexArgs = abi.encode(ISCaaSDex.DexConfig(eoa, 0, TREASURY, false, 0, address(0), 0, 0));
         MetaTxLib.UAEnvelope memory e = _envelope(router, pq, 0);
         bytes32 d = _d(CREATE_DEX, e, abi.encode(uint64(1), keccak256(dexArgs), bytes32("dex")));
         router.mtxCreateDex(e, address(f), 1, dexArgs, "dex", _auth(pq, d));
@@ -161,19 +164,19 @@ contract GovRouterCreateTest is GovRouterFixture {
     }
 
     function test_create_subjectZeroRefused_nonRouterSubjectIgnored() public {
-        SubjectRouter r = new SubjectRouter(chainUidA);
+        SubjectRouter r = new SubjectRouter(chainUidA, PREG);
         OpenFactory g = EnvKit.factory(REGISTRAR, chainUidA, 0, address(r));
         (address[] memory ms, bytes memory args) = deployKindModules(0, address(g), ""); // T66b
         vm.startPrank(REGISTRAR);
-        g.publishEnv(IOpenFactory.TokenKind.NORMAL, 1, withModules(plainEnv(address(g), address(0), chainUidA, PREG, false), ms));
-        g.deployImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args);
+        g.publishTokenEnv(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(g)), withModules(plainEnv(address(g), address(0), chainUidA, PREG, false), ms));
+        g.deployTokenImplementation(IOpenFactory.TokenKind.NORMAL, 1, 1, type(NormalToken).creationCode, args, EnvKit.uidOf(address(g)));
         vm.stopPrank();
         vm.expectRevert(IOpenFactory.RouterSubjectZero.selector);
         r.create(g, bytes32(0), _tokenArgs());
         address t = r.create(g, pq, _tokenArgs()); // positive control: the router's subject is the creator
         assertEq(g.infoOf(t).creatorId, pq);
         // a contract that is not this factory's router claims a subject: its own address is the creator
-        SubjectRouter other = new SubjectRouter(chainUidA);
+        SubjectRouter other = new SubjectRouter(chainUidA, PREG);
         address u = other.create(g, pq, _tokenArgs());
         assertEq(g.infoOf(u).creatorId, nid(address(other)));
     }

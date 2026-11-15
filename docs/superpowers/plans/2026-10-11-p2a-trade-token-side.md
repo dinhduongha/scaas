@@ -1072,8 +1072,8 @@ index 55e4507..a49c42d 100644
 ```
 
 - [ ] **Step 9: Run** — `--match-path test/v2/Trade.t.sol` (13 passed), `--match-path test/v2/MtxWrap.t.sol` (9),
-  `--match-contract TradeKatTest` (1); full suite: 817 + 23 = 840; size gate (`forge build src --sizes --json … || true`
-  then `python3 scripts/size_gate.py /tmp/sizes.json smartcontracts/evm/size-baseline.json`): 0 errors.
+  `--match-contract TradeKatTest` (1); full suite: 817 + 23 = 840; size gate (`T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json || true`
+  then `python3 scripts/size_gate.py "$T"/sizes.json smartcontracts/evm/size-baseline.json`): 0 errors.
 
 - [ ] **Step 10: Commit** — `P2a: TradeOrder on every token (TradeLib, scaas.trade), mtxWrap, trade KAT` + trailer.
 

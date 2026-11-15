@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {EnvKit} from "./EnvKit.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {kindModuleNames, kindImplArgs} from "../../script/KindModules.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
@@ -43,13 +44,13 @@ function probeRelease(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version
 function _probeRelease(OpenFactory f, IOpenFactory.TokenKind kind, uint64 version, IFactoryToken.Env memory e,
     bytes memory code, bytes memory implArgs) returns (address)
 {
-    Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
     uint16 v = Catalogue.env(f, kind, e);
-    vm.prank(f.registrar());
-    return f.deployImplementation(kind, version, v, code, implArgs);
+    bytes32 u = EnvKit.uidOf(address(f));
+    Vm(address(uint160(uint256(keccak256("hevm cheat code"))))).prank(address(uint160(uint256(f.admin()))));
+    return f.deployTokenImplementation(kind, version, v, code, implArgs, u);
 }
 
-/// @dev The group suffix of a module artifact name ("…:WrappedPqzTokenQ2" -> "Q2", "…:NormalTokenP" -> "P").
+/// @dev The group suffix of a module artifact name ("…:WrappedPqzTokenS" -> "S", "…:NormalTokenP" -> "P"; a two-character group such as P2 ends in a digit).
 function _group(string memory name) pure returns (string memory g) {
     bytes memory b = bytes(name);
     uint256 k = b[b.length - 1] >= "0" && b[b.length - 1] <= "9" ? 2 : 1;

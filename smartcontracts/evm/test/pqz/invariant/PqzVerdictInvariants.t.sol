@@ -29,8 +29,9 @@ contract PqzVerdictInvariantsTest is PqzOffchainBase {
         (vMode, vUA, vFixed) = (PqzCore.OFFCHAIN, vA, false);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         (vMode, vUA, vFixed) = (0, bytes32(0), false);
-        c.owner = bytes32(uint256(uint160(address(h))));
+        c.admin = bytes32(uint256(uint160(address(h))));
         off = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "inv-off"));
+        _holders(address(off));
         h.setOff(off);
         _shieldOn(tok, alice, 1_000_000);
         _shieldOn(off, alice, 1_000_000);

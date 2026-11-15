@@ -513,7 +513,7 @@ fn frost_row<C: Ciphersuite>(kind: u16, label: &str, (t, n): (u16, u16), role: &
         }
         if kind == FROST_SECP {
             // repeated / cancelling C_i0: every PoK valid and Y = Σ C_i0, but the partial sum and C_20 share an x, which
-            // UAFrostSecp256k1Verifier's mixed addition refuses (_addMixed: doubling or a sum at infinity)
+            // FrostSecp256k1Verifier's mixed addition refuses (_addMixed: doubling or a sum at infinity)
             assert_eq!(n, 3);
             let zero = <<C::Group as Group>::Field>::zero();
             for (name, cancel, c) in [

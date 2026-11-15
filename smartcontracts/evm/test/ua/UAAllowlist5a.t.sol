@@ -75,7 +75,7 @@ contract UAAllowlist5aTest is UALedgerBase {
         IFactoryToken.TokenConfig memory c = normalInit("NB", "NB", 6, 0, address(0), address(this));
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE);
         nb.initialize(nid(address(this)), 1, abi.encode(c));
-        nb.mintToUA(uaP, 10);
+        nb.mintToUA(uaP, 10, EnvKit.codeUidOf(address(nb)));
         _exec(address(nb), _m(address(nb), uaP, abi.encodeCall(NormalToken.burn, (1))),
             abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.BURNABLE));
     }
@@ -164,7 +164,7 @@ contract UAAllowlist5aTest is UALedgerBase {
         address[6] memory on = [address(wrp), address(tok), address(tok), address(wrp), address(tok), address(tok)];
         bytes[6] memory calls = [
             abi.encodeCall(WrappedToken.wrapToUA, (address(und), 1, uaB)),
-            abi.encodeCall(NormalToken.mintToUA, (uaB, 1)),
+            abi.encodeCall(NormalToken.mintToUA, (uaB, 1, EnvKit.codeUidOf(address(tok)))),
             abi.encodeCall(NormalToken.payWithFeeToUA, (uaB, 1, FeeMode.NONE, 0, address(0), PayMetaKit.ref(bytes32("ref")), PayMetaKit.meta(bytes32("ref")))),
             abi.encodeWithSignature("addReserve(address,uint256)", address(und), 1),
             abi.encodeCall(IERC20.approve, (address(this), 1)),

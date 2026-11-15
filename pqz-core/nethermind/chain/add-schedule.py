@@ -13,7 +13,8 @@ gen_set.py's) or a hex prefix of the proofSystemId; --selftest also takes selfte
 other price stays). Refuses a calibration file with other than one schedule, one that lacks a row of the replaced ops
 / id that the last schedule has (that shape would become a miss), and a duplicate row (review W-F, 2026-10-19).
 --mldsa87 (CTR-UA-39, owner 2026-11-04) also sets the optional key mldsa87Gas, which activates MLDSA87 at 0x...5caa0014 from
-that schedule on, to PROVISIONAL_MLDSA87_GAS: the spec's ESTIMATE, not calibrated; the calibration run waits for the owner's word.
+that schedule on, to MLDSA87_GAS: calibrated 2026-11-15 (TODO 3zd, ../runs/2026-11-15-mldsa87-calib.txt). --mldsa (owner
+2026-11-15) sets all three ML-DSA keys: MLDSA44_GAS and MLDSA87_GAS calibrated by the same passes, MLDSA65_GAS kept.
 add-schedule.py --check runs the self-check. Run with python3 -I."""
 import copy
 import json
@@ -26,9 +27,13 @@ SET = os.environ.get("PQZ_SET", "n2304-kmax4096")
 _SJ = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../params/sets", SET, "set.json")))
 IDS = {k: "0x" + _SJ[f"{k}_id"] for k in ("pqzl", "pqzh") if f"{k}_id" in _SJ}  # review R4-C3: the set's ids, not v3 / v1
 KEY = lambda r: (r["op"], r["id"].lower(), r["stmtLen"], r.get("legs"), r.get("auditorOn"))
-# PROVISIONAL (CTR-UA-39 Q4): ML-DSA-87 by the ML-DSA-65 ratio, 68,000 at EIP-8355's 9,000 -> about 102,000 at its 13,500;
-# the plugin's MlDsa.Provisional87Gas. Never "calibrated": replace it with the Calibrate figure when the owner allows the run.
-PROVISIONAL_MLDSA87_GAS = 102_000
+# CTR-UA-39 Q4, TODO 3zd (owner 2026-11-15): Calibrate in the calib image, two passes 135,000 / 123,000, the larger
+# (../runs/2026-11-15-mldsa87-calib.txt); the plugin's MlDsa.Calibrated87Gas. Was the PROVISIONAL estimate 102,000.
+MLDSA87_GAS = 135_000
+# owner 2026-11-15: ML-DSA-44 from the same passes, the higher (59,000 / 58,000; was 49,000, P6f 2026-10-15), the plugin's
+# MlDsa.Calibrated44Gas. ML-DSA-65 kept at 68,000: it measured 88,000-100,000, deferred by the owner to
+# the next pqz-core / set-parameter change (at 100,000 it passes the 100,000 fixture cap and moves debit_min_gas).
+MLDSA44_GAS, MLDSA65_GAS = 59_000, 68_000
 
 
 def main(src, cal, ts, out, *flags):
@@ -70,8 +75,10 @@ def main(src, cal, ts, out, *flags):
         sys.exit(f"duplicate rows: {sorted({k for k in keys if keys.count(k) > 1}, key=str)}")
     if "--selftest" in flags:
         s["selftestGas"] = cs["selftestGas"]
-    if "--mldsa87" in flags:
-        s["mldsa87Gas"] = PROVISIONAL_MLDSA87_GAS
+    if "--mldsa87" in flags or "--mldsa" in flags:
+        s["mldsa87Gas"] = MLDSA87_GAS
+    if "--mldsa" in flags:
+        s["mldsa44Gas"], s["mldsa65Gas"] = MLDSA44_GAS, MLDSA65_GAS
     g2 = copy.deepcopy(g)
     g2["engine"]["Pqz"]["schedules"].append(s)
     rest = lambda x: {k: v for k, v in x.items() if k != "engine"} | {"engine": {k: v for k, v in x["engine"].items() if k != "Pqz"}}
@@ -81,7 +88,7 @@ def main(src, cal, ts, out, *flags):
     print(f"{out}: schedule {len(sch)} added at {t} = {hex(t)}: {len(s['pqz'])} rows ({len(new_rows)} new of ops {sorted(ops)}"
           f"{'' if idp == '0x' else f' id {idp[:10]}…'}), "
           f"selftest {s['selftestGas']}, mldsa44 {s['mldsa44Gas']}, mldsa65 {s['mldsa65Gas']}"
-          + (f", mldsa87 {s['mldsa87Gas']} (PROVISIONAL, not calibrated)" if "mldsa87Gas" in s else ""))
+          + (f", mldsa87 {s['mldsa87Gas']} (calibrated 2026-11-15)" if "mldsa87Gas" in s else ""))
     for r in new_rows:
         shape = f" M {r.get('legs')} auditorOn {r.get('auditorOn')}" if r["op"] == 7 else ""
         was = old.get(KEY(r))
@@ -109,7 +116,12 @@ def check():
         assert g["engine"]["Pqz"]["schedules"][1]["selftestGas"] == 3, g
         assert "mldsa87Gas" not in g["engine"]["Pqz"]["schedules"][1], g
         g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1", "--mldsa87")
-        assert g["engine"]["Pqz"]["schedules"][1]["mldsa87Gas"] == PROVISIONAL_MLDSA87_GAS == 102_000, g
+        assert g["engine"]["Pqz"]["schedules"][1]["mldsa87Gas"] == MLDSA87_GAS == 135_000, g
+        assert (g["engine"]["Pqz"]["schedules"][1]["mldsa44Gas"], g["engine"]["Pqz"]["schedules"][1]["mldsa65Gas"]) == (1, 2), g
+        g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1", "--mldsa")
+        s1 = g["engine"]["Pqz"]["schedules"][1]
+        assert (s1["mldsa44Gas"], s1["mldsa65Gas"], s1["mldsa87Gas"]) == (MLDSA44_GAS, MLDSA65_GAS, MLDSA87_GAS) == (59_000, 68_000, 135_000), g
+        assert g["engine"]["Pqz"]["schedules"][0]["mldsa44Gas"] == 1, g
         for bad in (["--id", "pqzq"], ["--ops", "2"]):
             try:
                 main(src, cal, str(int(time.time()) + 900), out, *bad)

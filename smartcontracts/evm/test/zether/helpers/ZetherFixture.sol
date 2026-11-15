@@ -107,8 +107,8 @@ abstract contract ZetherFixture is Test {
         normalImpl = NormalZetherToken(Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_ZETHER, 1, _zenv(),
             type(NormalZetherToken).creationCode));
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
     }
 
@@ -143,7 +143,7 @@ abstract contract ZetherFixture is Test {
         c.conf = IFactoryToken.ConfidentialConfig(
             auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,
             auditor ? aMode : 0, minDecoy
-        , 0, bytes32(0), false, 0);
+        , 0, bytes32(0), false, 0, 0, 0, false, false);
     }
 
     function _newToken(bool auditor, bytes32 salt) internal virtual returns (NormalZetherToken) {
@@ -204,7 +204,7 @@ abstract contract ZetherFixture is Test {
 
     /// @dev `units` public units to `to`.
     function _public(NormalZetherToken t, address to, uint256 units) internal virtual {
-        NormalZetherToken(address(t)).mint(to, units);
+        NormalZetherToken(address(t)).mint(to, units, EnvKit.codeUidOf(address(t)));
         minted[address(t)] += units;
     }
 

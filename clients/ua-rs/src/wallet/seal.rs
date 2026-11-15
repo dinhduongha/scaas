@@ -58,7 +58,7 @@ use super::sign::seal_request;
 use super::signer::{KeyRef, Signer};
 use super::uasig::{msig_members, Slot};
 use super::{bounded, Error, Result, Wallet};
-use crate::ua8::{inner_digest, member_keys, msig_sig_minimal, Accepted, Inner, InnerSig, MemberSig, Members, MsigStructure, UASig};
+use crate::ua8::{inner_digest, member_keys_current, msig_sig_minimal, Accepted, Inner, InnerSig, MemberSig, Members, MsigStructure, UASig};
 use crate::{derive_ua, keccak256, member_digest, purpose_tag, seal_purpose_tag, ua_message};
 use base64ct::{Base64UrlUnpadded, Encoding};
 use rand_core::{OsRng, RngCore};
@@ -512,7 +512,7 @@ fn leaf_ok(kind: u16, key: &[u8], md: &[u8; 32], sig: &[u8]) -> Result<bool> {
 /// member over `memberDigest(id, m0)`, an `msig` member with no `sig` and its own non-empty list over `innerDigest`.
 fn msig_ok(id: &[u8; 32], d: &[u8], m0: &[u8; 32], slots: &[MemberSig], members: &Members, accepted: &Accepted) -> Result<bool> {
     let cs = |_| Error::ContainerSender;
-    let keys = member_keys(d, members).map_err(cs)?;
+    let keys = member_keys_current(d, members, &|_| None).map_err(cs)?;
     let inner = |x: [u8; 32]| members(x).map(|(_, k)| k);
     if !msig_sig_minimal(d, slots, &inner).map_err(cs)? {
         return Ok(false);
@@ -533,7 +533,7 @@ fn msig_ok(id: &[u8; 32], d: &[u8], m0: &[u8; 32], slots: &[MemberSig], members:
             s.members.is_empty() && leaf_ok(m.kind, key, &md, &s.sig)?
         } else {
             let leaves = MsigStructure::from_key_data(key).map_err(cs)?.members;
-            let inner_keys = member_keys(key, members).map_err(cs)?;
+            let inner_keys = member_keys_current(key, members, &|_| None).map_err(cs)?;
             let imd = inner_digest(&m.id, &md)?;
             let leaf = |x: &InnerSig| -> Result<bool> {
                 match (leaves.get(usize::from(x.index)), inner_keys.get(usize::from(x.index))) {

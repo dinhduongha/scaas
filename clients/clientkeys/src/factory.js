@@ -4,7 +4,7 @@
 // env appended to every clone's code. Against smartcontracts/vectors/factory/create3_kat.json (written by forge,
 // Create3Kat.t.sol). The address says nothing about the version, the code or the configuration on a chain: read
 // `infoOf(addr)` and the instance per chain (spec §4.3). UNAUDITED.
-import { hex, fromHex, keccak_256, concatBytes, abiEncode } from './bytes.js';
+import { hex, fromHex, keccak_256, concatBytes, abiEncode, utf8ToBytes } from './bytes.js';
 
 /** `PUSH8 363d3d37363d34f0 RETURNDATASIZE MSTORE PUSH1 8 PUSH1 24 RETURN`: deposits the proxy's runtime. */
 export const PROXY_INITCODE = '0x67363d3d37363d34f03d5260086018f3';
@@ -59,4 +59,85 @@ export function cloneRuntime(implementation, envBytes) {
 export function cloneInitCode(implementation, envBytes) {
   const rt = cloneRuntime(implementation, envBytes);
   return concatBytes(Uint8Array.of(0x61, rt.length >> 8, rt.length & 0xff, 0x3d, 0x81, 0x60, 0x0a, 0x3d, 0x39, 0xf3), rt);
+}
+
+const RELEASE_KEY = {
+  token: ['scaas.factory.release.token', ['uint8 kind', 'uint64 version', 'uint16 envVersion']],
+  dex: ['scaas.factory.release.dex', ['uint64 version', 'uint16 envVersion']],
+  class: ['scaas.factory.release.class', ['uint16 contractClass', 'uint16 kind', 'uint64 version', 'uint16 envVersion',
+    'bytes4 initSelector', 'bytes4 interfaceId']],
+};
+
+/** Round 3r (spec 2026-11-10-admin-not-owner.md §5.6 table): the factory's release approval key, what `approvalOf` and
+ *  `revokeApproval` take: `keccak256(abi.encode(keccak256(tag), chainUid, factory, <the deploy's fields>, initcodeHash,
+ *  implArgsHash))`, `domain` one of `token`, `dex`, `class`; the fields by their names in the approval op's message. */
+export function releaseApprovalKey(domain, m) {
+  const [tag, fields] = RELEASE_KEY[domain] ?? (() => { throw new Error(`no release domain ${domain}`); })();
+  const ts = ['bytes32', 'bytes32', 'address', ...fields.map((f) => f.split(' ')[0]), 'bytes32', 'bytes32'];
+  const vs = [hex(keccak_256(utf8ToBytes(tag))), hex(b32(m.chainUid, 'chainUid')), m.factory,
+    ...fields.map((f) => { const [t, n] = f.split(' '); return t.startsWith('uint') ? BigInt(m[n]) : m[n]; }),
+    hex(b32(m.initcodeHash, 'initcodeHash')), hex(b32(m.implArgsHash, 'implArgsHash'))];
+  return hex(keccak_256(abiEncode(ts, vs)));
+}
+
+// Fable recheck 3 R3-7 (NODE-JOB-26): a creation's named config as the factory decodes it, field by field in the Solidity
+// structs' order (IFactoryToken.TokenConfig, GovernanceLib.Roles, ISCaaSDex.DexConfig); `{ of: T }` is `T[]`.
+// round 3zb (CTR-GOV-29): `burner` the sixth seat; round 3zc (CTR-GOV-30): `maxWrapSupply` after `maxSupply`. A config without
+// either is refused by name (`config.roles.burner: missing`), never filled with a default.
+const ROLES = [['minter', 'bytes32'], ['rateAdmin', 'bytes32'], ['guardian', 'bytes32'], ['issuer', 'bytes32'], ['compliance', 'bytes32'],
+  ['burner', 'bytes32']];
+const LEG = [['underlying', 'address'], ['num', 'uint256'], ['den', 'uint256']];
+const RATE = [['rateDelay', 'uint32'], ['maxRateStepBps', 'uint16']];
+const CONF = [['auditorKey', 'bytes'], ['shieldScale', 'uint256'], ['maxShielded', 'uint256'], ['confidentialFee', 'uint256'],
+  ['disclosureMode', 'uint8'], ['auditorMode', 'uint8'], ['minDecoyFee', 'uint256'], ['pqzVerifyMode', 'uint8'],
+  ['pqzVerifierUA', 'bytes32'], ['pqzVerifierFixed', 'bool'], ['proofStore', 'uint8'], ['verifierFee', 'uint64'],
+  ['verifierFeeMax', 'uint64'], ['pqzOwnKey', 'bool'], ['pqzOpening', 'bool']]; // the three-key model (CTR-PQZ-37)
+const REG = [['complianceRegistry', 'address'], ['requiredFlags', 'uint64'], ['deniedFlags', 'uint64'], ['termsHash', 'bytes32'],
+  ['taxRecipient', 'bytes32']];
+const CONFIG = {
+  token: [['name', 'string'], ['symbol', 'string'], ['decimals', 'uint8'], ['features', 'uint256'], ['lockedFeatures', 'uint256'],
+    ['admin', 'bytes32'], ['roles', ROLES], ['initialSupply', 'uint256'], ['initialHolder', 'address'], ['legs', { of: LEG }],
+    ['rate', RATE], ['conf', CONF], ['grantDelay', 'uint64'], ['rescueTo', 'address'], ['maxSupply', 'uint256'],
+    ['maxWrapSupply', 'uint256'], ['reg', REG]],
+  dex: [['admin', 'bytes32'], ['relayerSharePpm', 'uint32'], ['treasury', 'address'], ['listedOnly', 'bool'],
+    ['grantDelay', 'uint64'], ['rescueTo', 'address'], ['features', 'uint256'], ['lockedFeatures', 'uint256']],
+};
+
+const typeOf = (t) => typeof t === 'string' ? t : t.of ? `${typeOf(t.of)}[]` : `(${t.map(([, x]) => typeOf(x)).join(',')})`;
+
+function valueOf(t, v, path) {
+  if (v === undefined) throw new Error(`${path}: missing`);
+  if (t.of) {
+    if (!Array.isArray(v)) throw new Error(`${path}: an array`);
+    return v.map((x, i) => valueOf(t.of, x, `${path}[${i}]`));
+  }
+  if (Array.isArray(t)) {
+    const extra = Object.keys(v).filter((k) => !t.some(([n]) => n === k));
+    if (extra.length) throw new Error(`${path}: no field ${extra.join(', ')}`);
+    return t.map(([n, x]) => valueOf(x, v[n], `${path}.${n}`));
+  }
+  if (t.startsWith('uint')) {
+    const n = BigInt(v);
+    if (n < 0n || n >= 1n << BigInt(t.slice(4))) throw new Error(`${path}: out of ${t}`);
+    return n;
+  }
+  return v;
+}
+
+/** `initArgs = abi.encode(config)` of a token (`kind` `token`) or DEX (`dex`) creation from its named config, every field
+ *  named and none unknown; `initHash = keccak256(initArgs)` is what the creation signs. */
+export function creationInitArgs(kind, config) {
+  const t = CONFIG[kind] ?? (() => { throw new Error(`no creation config ${kind}`); })();
+  return hex(abiEncode([typeOf(t)], [valueOf(t, config, 'config')]));
+}
+
+/** Owner 2026-11-12 (`mtxCreateInstance`, the per-class named form): the initializer call a known generic class takes from its
+ *  named config, the bytes a creation sends as `initCall` (`initHash = keccak256(initCall)`). `PqChat` (class 3, kind 0):
+ *  `initialize(bytes32 owner)`, `owner` 0 or the creator. Any other class: send its `initCall` bytes. */
+export function instanceInitCall(contractClass, kind, config) {
+  if (Number(contractClass) !== 3 || Number(kind) !== 0) throw new Error(`class ${contractClass} kind ${kind}: no named config; send initCall`);
+  const extra = Object.keys(config).filter((k) => k !== 'owner');
+  if (extra.length) throw new Error(`config: no field ${extra.join(', ')}`);
+  if (config.owner === undefined) throw new Error('config.owner: missing');
+  return hex(concatBytes(keccak_256(utf8ToBytes('initialize(bytes32)')).subarray(0, 4), b32(config.owner, 'owner')));
 }

@@ -18,6 +18,7 @@ import {NormalZetherRegulatedToken} from "../../../src/regulated/NormalZetherReg
 import {WrappedZetherRegulatedToken} from "../../../src/regulated/WrappedZetherRegulatedToken.sol";
 import {NormalPqzRegulatedToken} from "../../../src/regulated/NormalPqzRegulatedToken.sol";
 import {WrappedPqzRegulatedToken} from "../../../src/regulated/WrappedPqzRegulatedToken.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 // The regulated kinds 8-13 as `KindRig`s (spec 2026-11-09-service-pull §11, plan T77): one token of each kind with
 // `FREEZE`, `FORCE`, `PAUSE`, `RECORD` (issuer and compliance two `Holder` contracts, the owner an EOA, `grantDelay` one day,
@@ -43,7 +44,7 @@ function regulate(IFactoryToken.TokenConfig memory c, address issuer, address co
     pure returns (IFactoryToken.TokenConfig memory)
 {
     c.lockedFeatures = 0;
-    c.owner = nid(address(0x0A11));
+    c.admin = nid(address(0x0A11));
     c.grantDelay = 1 days;
     c.features |= RIG_REG_FEATURES;
     (c.roles.issuer, c.roles.compliance) = (nid(issuer), nid(compliance));
@@ -69,15 +70,15 @@ contract ZetherRegRig is ZetherFixture, KindRig {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1, _zenv(),
             type(WrappedZetherRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         (address issuer, address compliance) = (address(new Holder()), address(new Holder()));
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         address signer = vm.addr(RIG_SK);
         address t = factory.createToken(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, 1,
             abi.encode(regulate(_cfg(true, uint256(1) << 40), issuer, compliance, false, address(0))), "zr10");
-        NormalZetherRegulatedToken(t).mint(signer, 20_000_000);
+        NormalZetherRegulatedToken(t).mint(signer, 20_000_000, EnvKit.codeUidOf(address(t)));
         tks.push(Tk("NORMAL_ZETHER_REGULATED", t, RIG_SK, signer, 0xB0B, vm.addr(0xB0B), address(0xFEE), address(0xBEEF), 0, 0, address(0), address(0), 0, 0));
         address w = factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, 1,
             abi.encode(regulate(_cfg(true, uint256(1) << 40), issuer, compliance, true, address(usd))), "zr11");
@@ -98,15 +99,15 @@ contract PqzRegRig is PqzFixture, KindRig {
         Catalogue.release(factory, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1, e,
             type(WrappedPqzRegulatedToken).creationCode, regArgs());
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         (address issuer, address compliance) = (address(new Holder()), address(new Holder()));
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         address signer = vm.addr(RIG_SK);
         address t = factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, 1,
             abi.encode(regulate(_cfg(uint256(1) << 40), issuer, compliance, false, address(0))), "pr12");
-        NormalPqzRegulatedToken(t).mint(signer, 20_000_000);
+        NormalPqzRegulatedToken(t).mint(signer, 20_000_000, EnvKit.codeUidOf(address(t)));
         tks.push(Tk("NORMAL_PQZ_REGULATED", t, RIG_SK, signer, 0xB0B, vm.addr(0xB0B), address(0xFEE), address(0xBEEF), 0, 0, address(0), address(0), 0, 0));
         address w = factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, 1,
             abi.encode(regulate(_cfg(uint256(1) << 40), issuer, compliance, true, address(usd))), "pr13");

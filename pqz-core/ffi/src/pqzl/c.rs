@@ -79,6 +79,7 @@ extern "C" {
     ) -> i32;
     fn pqz_dec_win(s: *const i8, ct: *const u8, win: u32, m: *mut i64, noise: *mut i64) -> i32;
     fn pqz_enc_group_seed(seed_enc: *const u8, g: u32, out: *mut u8);
+    fn pqz_enc_leg_seed(seed_enc: *const u8, to_ua: *const u8, pkt_hash: *const u8, out: *mut u8);
     #[cfg(feature = "fuzz")]
     fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8, outlen: *mut usize) -> i32;
     #[cfg(feature = "prove")]
@@ -274,6 +275,14 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: usize) -> [u8; 32] {
     let mut out = [0u8; 32];
     // SAFETY: fixed-size buffers; the function reads 32 bytes and writes 32 bytes, touches no global state
     unsafe { pqz_enc_group_seed(seed_enc.as_ptr(), g as u32, out.as_mut_ptr()) };
+    out
+}
+
+/// An opening token's leg seed (spec K3-4, `pqz_enc_leg_seed`), `pkt_hash` = keccak256(pk_t). Pure hashing.
+pub fn enc_leg_seed(seed_enc: &[u8; 32], to_ua: &[u8; 32], pkt_hash: &[u8; 32]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    // SAFETY: three 32-byte inputs and a 32-byte output; no global state
+    unsafe { pqz_enc_leg_seed(seed_enc.as_ptr(), to_ua.as_ptr(), pkt_hash.as_ptr(), out.as_mut_ptr()) };
     out
 }
 

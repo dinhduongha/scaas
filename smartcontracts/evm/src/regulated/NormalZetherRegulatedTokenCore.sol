@@ -29,7 +29,7 @@ import {RegulatedBase} from "./RegulatedBase.sol";
 ///         takes no hook (U1, U2). `FORCE` moves the public balance only (`_poolMove`); `ZetherLib` state is never touched
 ///         (I8). `ALLOWLIST` (8) is outside the kind's mask (CTR-GOV-17).
 abstract contract NormalZetherRegulatedTokenCore is NormalZetherTokenCore, RegulatedBase {
-    /// @dev `implArgs = abi.encode(REGISTRY_CODEHASH)` (plan T29).
+    /// @dev `implArgs = abi.encode(COMPLIANCE_REGISTRY_CODEHASH)` (plan T29).
     constructor(address factory_, bytes memory implArgs)
         NormalZetherTokenCore(factory_, implArgs)
         RegulatedBase(implArgs)
@@ -49,7 +49,7 @@ abstract contract NormalZetherRegulatedTokenCore is NormalZetherTokenCore, Regul
     }
 
     function _roleBits() internal pure override returns (uint256) {
-        return GovernanceBits.NORMAL_ROLES | REG_ROLES;
+        return GovernanceBits.NORMAL_ROLES | REG_ROLES_CONFIDENTIAL;
     }
 
     function _contractOnlyBits() internal pure override returns (uint256) {

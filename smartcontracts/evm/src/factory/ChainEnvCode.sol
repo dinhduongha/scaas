@@ -108,7 +108,7 @@ library ChainEnvCode {
         }
     }
 
-    /// @notice The env bytes of `e` (the factory's composition; counts within the bounds, checked at `publishEnv`).
+    /// @notice The env bytes of `e` (the factory's composition; counts within the bounds, checked at `publishTokenEnv`).
     function encode(IFactoryToken.ChainEnv memory e) internal pure returns (bytes memory b) {
         b = abi.encodePacked(e.chainUid, e.registry, e.govRouter, e.smartKeyAccountImpl, e.hedera, uint8(e.deps.length));
         for (uint256 i; i < e.deps.length; ++i) b = bytes.concat(b, bytes20(e.deps[i]));

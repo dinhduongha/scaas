@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  metaPayId, metaPayIdV1, payMeta, payNoFromUuid, payNoToUuid, encodeMetaBody, decodeMetaBody, payMetaWarning, buildPay, buildPayReceiverFee,
+  metaPayId, metaPayIdV1, payMeta, payNoFromUuid, payNoToUuid, encodeMetaBody, decodeMetaBody, payMetaWarning, buildPay, buildPayWithPayeeFee,
   checkPayMeta, hashTypedData, uaMetaTransferTypedData, padId, payLane, payWithFeeToUACalldata,
 } from '../src/evm.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, abiEncode } from '../src/bytes.js';
@@ -162,13 +162,13 @@ test('a digest with a non-zero unbound relayer / feeRecipient is the canonical o
   assert.equal(hex(unbound.digest), hex(zero.digest));
 });
 
-test('buildPayReceiverFee: the payer\'s mode-1 payment, the payee\'s UAReceiverFee, PayMeta last', () => {
+test('buildPayWithPayeeFee: the payer\'s mode-1 payment, the payee\'s UAPayeeFee, PayMeta last', () => {
   const r = row('note_utf8');
-  const p = buildPayReceiverFee({ ...base, meta: metaOf(r), fee: 30n, feeRecipient: FEE_TO, rfValidUntil: NOW + 60 });
-  assert.equal(p.typedData.primaryType, 'UAReceiverFee');
+  const p = buildPayWithPayeeFee({ ...base, meta: metaOf(r), fee: 30n, feeRecipient: FEE_TO, pfValidUntil: NOW + 60 });
+  assert.equal(p.typedData.primaryType, 'UAPayeeFee');
   assert.equal(p.typedData.message.payment.entryRef, r.payId);
   const cd = p.calldata(new Uint8Array(65).fill(1), new Uint8Array(65).fill(2));
-  assert.equal(hex(cd.subarray(0, 4)), sel(`mtxPayReceiverFee(${UMT},${SIG},uint256,address,uint256,${SIG},${PM})`));
+  assert.equal(hex(cd.subarray(0, 4)), sel(`mtxPayWithPayeeFee(${UMT},${SIG},uint256,address,uint256,${SIG},${PM})`));
 });
 
 test('payWithFeeToUA carries PayMeta; checkPayMeta refuses a server entryRef over another meta', () => {

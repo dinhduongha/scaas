@@ -99,8 +99,8 @@ use zeroize::{Zeroize, Zeroizing};
 
 type Word = [u8; 32];
 
-/// `OpenFactory._rec` (the factory index, ua-mtx-merge T67; slot 8, where `_info` was): three words `creatorId`, `ownerUA`,
-/// `contractClass(16) ‖ kind(16) ‖ version(64) ‖ createdBlock(64) ‖ createdAt(64)` from the low end; held to its pin,
+/// `OpenFactory._rec` (the factory index, ua-mtx-merge T67; slot 8, where `_info` was): two words since round 3r R1 (no owner),
+/// `creatorId`, `contractClass(16) ‖ kind(16) ‖ version(64) ‖ createdBlock(64) ‖ createdAt(64)` from the low end; held to its pin,
 /// `test/zether/ZetherStateVectors.t.sol`, by `factory_record_is_the_layout_pin`. The PQZ kinds (`IOpenFactory.TokenKind`).
 const REC_SLOT: u64 = 8;
 const CLASS_TOKEN: u16 = 1;
@@ -434,8 +434,8 @@ fn open<'u>(a: &Args, url: &'u str, block_at: Option<u64>) -> Result<(Reader<'u>
         return Err("R3: the node answered another block than the one asked for".into());
     }
     let r = Reader { url, hash: b["hash"].as_str().ok_or("R3: no block hash")?.to_string() };
-    // R5: `_rec[token]`'s word 2
-    let rec = r.word(&a.factory, &add(&keccak256(&[addr_word(&a.token), be(REC_SLOT)].concat()), 2))?;
+    // R5: `_rec[token]`'s word 1 (round 3r R1: two words, no `ownerUA`)
+    let rec = r.word(&a.factory, &add(&keccak256(&[addr_word(&a.token), be(REC_SLOT)].concat()), 1))?;
     if !catalogued(&rec) {
         return Err("R5: the token is not a PQZ token catalogued by this factory".into());
     }
@@ -451,7 +451,7 @@ fn open<'u>(a: &Args, url: &'u str, block_at: Option<u64>) -> Result<(Reader<'u>
     Ok((r, block))
 }
 
-/// `_rec[token]` word 2 names a token (class TOKEN; 0 is "not made here") of a PQZ kind: `contractClass` the low 16 bits, `kind`
+/// `_rec[token]` word 1 names a token (class TOKEN; 0 is "not made here") of a PQZ kind: `contractClass` the low 16 bits, `kind`
 /// the next 16.
 fn catalogued(rec: &Word) -> bool {
     let class = u16::from_be_bytes([rec[30], rec[31]]);
@@ -819,7 +819,9 @@ fn decoys(a: &Args) -> Result<Value, String> {
 const EV_PROOF: &str = "PqzDebitProof(address,bytes32,uint64,bytes,bytes)";
 const EV_CREDITED: &str = "Credited(bytes32,uint64,uint64,bytes32)";
 /// The ABI types of the PQZ transfer entries (`IPqzToken`, `PqzLayer`; `typed_ops.json`'s signatures, group 3h).
-const PA: &str = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
+/// `PqzTransferArgs`; the three-key model (CTR-PQZ-38, -40) put `uFrom` before `sealedMemo` and the two `PqzOpening`s last.
+const PA: &str =
+    "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes))";
 const MA: &str = "(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes)";
 const UA_ENV: &str = "(bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
 const UA_SIG: &str = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
@@ -915,7 +917,7 @@ fn called(a: &Args, input: &[u8], compact_token: bool) -> Result<Called, String>
         let legs = t.checked_add(ao(d, t + 32 * 10)?).ok_or("ABI: an offset")?;
         (w(5)?, au(d, t + 32 * 6)?, 12, au(d, legs)?)
     } else {
-        (w(6)?, 0, 13, 1)
+        (w(6)?, 0, 14, 1) // `sealedMemo` after `uFrom` (the three-key model)
     };
     let sealed_memo = ab(d, t, 32 * memo_at)?;
     Ok(Called { from: w(3)?, multi: e.multi, beneficiary, valid_until, hash: e.compact || compact_token, sealed_memo, binding, decoy_fee, m, proof })
@@ -1197,7 +1199,7 @@ mod tests {
     fn helpers() {
         let c = curl_config("https://node/x?key=a\"b", r#"{"a":"\\"}"#);
         assert!(c.contains(r#"url = "https://node/x?key=a\"b""#), "{c}");
-        assert!(!curl_config("-o /tmp/x", "{}\nurl = \"evil\"").contains("\nurl = \"evil"), "no injected lines");
+        assert!(!curl_config("-o out/x", "{}\nurl = \"evil\"").contains("\nurl = \"evil"), "no injected lines");
         assert_eq!(add(&[0xff; 32], 1), [0; 32]);
         assert_eq!(hx(&erc7201("scaas.pqz")), "0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500");
         assert_eq!(unhex("0x0aFf").unwrap(), [10, 255]);
@@ -1314,7 +1316,7 @@ mod tests {
     }
 
     /// T20b second sync (T15m2): `OpenFactory._rec[token]` (the factory index, ua-mtx-merge T67) is read where its pin puts it,
-    /// `test/zether/ZetherStateVectors.t.sol`: slot `REC`, word 2 (`base + 2`), from the low end `contractClass(16) ‖ kind(16) ‖
+    /// `test/zether/ZetherStateVectors.t.sol`: slot `REC`, word 1 (`base + 1`, round 3r R1), from the low end `contractClass(16) ‖ kind(16) ‖
     /// version(64)`; R5 takes class TOKEN with one of this reader's kinds, never the old one-word `_info` packing.
     #[test]
     fn factory_record_is_the_layout_pin() {
@@ -1323,10 +1325,11 @@ mod tests {
         for a in [
             &format!("uint256 internal constant REC = {REC_SLOT};")[..],
             "uint256 base = uint256(keccak256(abi.encode(address(tok), REC)));",
-            "vm.load(address(factory), bytes32(base + 2)));",
-            r#"assertEq(uint16(uint256(r2)), 1, "_rec[token].contractClass (TOKEN)");"#,
-            "assertEq(uint16(uint256(r2) >> 16), ",
-            r#"assertEq(uint64(uint256(r2) >> 32), 1, "_rec[token].version");"#,
+            "vm.load(address(factory), bytes32(base + 1)),",
+            r#"assertEq(uint16(uint256(r1)), 1, "_rec[token].contractClass (TOKEN)");"#,
+            "assertEq(uint16(uint256(r1) >> 16), ",
+            r#"assertEq(uint64(uint256(r1) >> 32), 1, "_rec[token].version");"#,
+            r#"assertEq(r2, bytes32(0), "no third word");"#,
         ] {
             assert!(pin.contains(a), "the pin moved: {a}");
         }

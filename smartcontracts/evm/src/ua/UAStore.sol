@@ -77,6 +77,18 @@ library UAStore {
         /// at registration and never again (0: an empty `pop`, or any other kind). `accepted` (15) adds the later acceptances; their
         /// difference is what accepted later (`popSlotsOf`). It lives with the record (gen 2 forwards gen 1's).
         mapping(bytes32 ua => uint256) popSlots;
+        /// 20–26. The PQZ three-key model (spec 2026-11-13-pqz-three-keys K3-3): the scoped PQZ key records `(ua, scope,
+        /// version)`, `scope` 0 for class `offchain-shared`, the token for class `offchain-token`, beside the unchanged class-1
+        /// records (2, 7, 8, 17); each written once. 20 the key (`ptr`, `proven`; `added` unused), 21 its proof hash, 22 its
+        /// `R_REG` proof bytes, 23 its opening KEM key `kemPk` (SSTORE2, 0 = none), 24 `latest` / `current` / `listed` per
+        /// `(ua, scope)`, 25 / 26 the per-scope holder list (a UA once per scope, at its first eligible version).
+        mapping(bytes32 ua => mapping(address scope => mapping(uint64 version => PqzKey))) scopedKey;
+        mapping(bytes32 ua => mapping(address scope => mapping(uint64 version => bytes32))) scopedPopHash;
+        mapping(bytes32 ua => mapping(address scope => mapping(uint64 version => address[]))) scopedPop;
+        mapping(bytes32 ua => mapping(address scope => mapping(uint64 version => address))) scopedOpenKem;
+        mapping(bytes32 ua => mapping(address scope => PqzVersions)) scopedVersions;
+        mapping(address scope => uint256) scopedCount;
+        mapping(address scope => mapping(uint256 i => bytes32 ua)) scopedAt;
     }
 
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
@@ -138,11 +150,16 @@ library UAStore {
 
     // ----- records held here -----
 
-    /// The registration blob of a record held here: `keyData` (`keyPtr` prefix ‖ the rest), `pop`.
-    function registration(bytes32 ua, address keyPtr) internal view returns (bytes memory keyData, bytes memory pop) {
+    /// The registration blob of the record `r` held here: `keyData` (`keyPtr` prefix ‖ the rest), `pop`. A kind with no stored
+    /// `vk` has no prefix: an `msig`'s `keyPtr` is its current structure's (CTR-UA-44 MM-10), never part of its key data.
+    function registration(bytes32 ua, IUARegistry.Record memory r)
+        internal
+        view
+        returns (bytes memory keyData, bytes memory pop)
+    {
         bytes memory rest;
         (rest, pop) = abi.decode(SSTORE2.readChunks(layout().reg[ua]), (bytes, bytes));
-        keyData = bytes.concat(SSTORE2.read(keyPtr), rest);
+        keyData = bytes.concat(SSTORE2.read(vkLength(r.kind) == 0 ? address(0) : r.keyPtr), rest);
     }
 
     /// The `keyRest` of a record held here, read alone (msig-pophash I1: never the blob's `pop`, whose length the
@@ -152,6 +169,62 @@ library UAStore {
     function keyRest(bytes32 ua) internal view returns (bytes memory) {
         address p = layout().reg[ua][0];
         return SSTORE2.read(p, 0x60, uint256(bytes32(SSTORE2.read(p, 0x40, 32))));
+    }
+
+    // ----- an `msig`'s current structure (CTR-UA-44, MM-6 … MM-9) -----
+
+    /// The current structure of the `msig` `ua` held here, `ptr` its record's `keyPtr` (MM-7): 0 = never updated, the
+    /// registration's CTR-UA-09 bytes (every slot enabled, version 0); else the `updateMsig` blob `u16 threshold ‖ u16 count ‖
+    /// count × (u16 kind ‖ id ‖ u16 weight) ‖ u256 enabled ‖ u64 version` (MM-6), whose first `4 + 36·count` bytes are the
+    /// CTR-UA-09 form, so every reader that indexes `4 + 36·i` keeps its offsets.
+    function msig(bytes32 ua, address ptr) internal view returns (bytes memory) {
+        return ptr == address(0) ? keyRest(ua) : SSTORE2.read(ptr);
+    }
+
+    /// The enabled slots of the structure `d` (MM-9): its trailer's word, else (no trailer: never updated) every slot, in the
+    /// 256-safe form (`1 << 256` is 0). `enabled` has no bit past the slots (`updateMsig` row 5), so no reader masks by count.
+    function enabledOf(bytes memory d) internal pure returns (uint256) {
+        uint256 n = u16(d, 2);
+        if (d.length > 4 + 36 * n) return word(d, 4 + 36 * n);
+        return n >= 256 ? type(uint256).max : (1 << n) - 1;
+    }
+
+    /// The version of the structure `d` (0: no trailer, never updated).
+    function versionOf(bytes memory d) internal pure returns (uint64) {
+        uint256 o = 4 + 36 * u16(d, 2) + 32;
+        return d.length > o ? uint64(word(d, o) >> 192) : 0;
+    }
+
+    /// `enabled` and `version` of an updated `msig` from its blob's last 40 bytes, without its slots (`memberAccepted`,
+    /// `msigStateOf`). `ptr` ≠ 0.
+    function trailer(address ptr) internal view returns (uint256 enabled, uint64 version) {
+        bytes memory t = SSTORE2.read(ptr, ptr.code.length - 41, 40);
+        (enabled, version) = (word(t, 0), uint64(word(t, 32) >> 192));
+    }
+
+    /// The blob of the structure `s` with its trailer (MM-6), in one allocation for any count (P2-4: never `bytes.concat` in a
+    /// loop): what `updateMsig` stores, and the form a gen-1 structure takes here (`msigOf` + `msigStateOf`).
+    function blob(IUARegistry.MsigStructure memory s, uint256 enabled, uint64 version) internal pure returns (bytes memory d) {
+        IUARegistry.MsigMember[] memory m = s.members;
+        uint256 n = m.length;
+        uint256 len = 44 + 36 * n;
+        uint256 t = s.threshold;
+        d = new bytes(len + 32); // room for the last 32-byte store; the length is set back below
+        assembly ("memory-safe") {
+            let p := add(d, 32)
+            mstore(p, or(shl(240, t), shl(224, n)))
+            for { let i := 0 } lt(i, n) { i := add(i, 1) } {
+                let e := mload(add(add(m, 32), mul(32, i)))
+                let q := add(p, add(4, mul(36, i)))
+                mstore(q, shl(240, and(mload(e), 0xffff)))
+                mstore(add(q, 2), mload(add(e, 32)))
+                mstore(add(q, 34), shl(240, and(mload(add(e, 64)), 0xffff)))
+            }
+            let q := add(p, add(4, mul(36, n)))
+            mstore(q, enabled)
+            mstore(add(q, 32), shl(192, version))
+            mstore(d, len)
+        }
     }
 
     /// The stored record `scheme ‖ ek ‖ x25519 ‖ sig` of `(ua, version)` as its `KemKey` (scheme 1: the 1,601-byte key)

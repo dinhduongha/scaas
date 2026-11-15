@@ -17,6 +17,7 @@ import {IERC20Payment} from "./IERC20Payment.sol";
 import {MtxPipelineLib} from "./MtxPipelineLib.sol";
 import {IMetaTokenV2} from "./IMetaTokenV2.sol";
 import {IUALedger} from "./IUALedger.sol";
+import {ILiquidityPullToken} from "../trade/ITradeToken.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IFactoryToken, requireRegOfKind} from "../factory/IFactoryToken.sol";
 import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
@@ -26,10 +27,10 @@ import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title Common root of the v2 tiers on `ERC20MetaTx` (TW2 §3.3, §7; CTR-MTX-07). EIP-1167 clones.
 /// @notice The named functions (CTR-MTX-09) only build the `UAMetaTransfer` of their operation and run its pipeline;
-///         receiver-pays (CTR-MTX-05/06); one form per operation for native and derived ids (ua-mtx-merge T2: today's
-///         `ua*` bodies under the `mtx*` names, the address bodies in legacy/ua-mtx-merge/). Features, owner and roles
+///         payee fee (CTR-MTX-05/06); one form per operation for native and derived ids (ua-mtx-merge T2: today's
+///         `ua*` bodies under the `mtx*` names, the address bodies in legacy/ua-mtx-merge/). Features, admin and roles
 ///         (CTR-GOV-01) live in `GovernanceBase`, init and provenance in the ERC-7201 namespace `scaas.token`. Pay
-///         (`mtxPay`, `payWithFee`, `payWithFeeToUA`, `mtxPayReceiverFee`, each with `PayMeta` last) works only with `PAYABLE`; a
+///         (`mtxPay`, `payWithFee`, `payWithFeeToUA`, `mtxPayWithPayeeFee`, each with `PayMeta` last) works only with `PAYABLE`; a
 ///         `UAMetaTransfer` through `mtxExecuteTransfer` (with or without `entryRef`) is never gated. Chain-neutral code
 ///         (CTR-TOK-29): the chain values (`chain_uid`, the UA registry, the router, the `SmartKeyAccount` implementation,
 ///         Hedera, the dependencies) are the instance's `ChainEnv`, appended to its clone's code by the factory and read
@@ -67,7 +68,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
 
     /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it. Chain-neutral (chain-neutral spec
     ///      §2.1, plan T72): the factory's address and `implArgs` (values the same on every chain; plain kinds take none)
-    ///      are the only arguments `OpenFactory.deployImplementation` appends.
+    ///      are the only arguments `OpenFactory.deployTokenImplementation` appends.
     constructor(address factory_) ERC20MetaTx(bytes32(0), address(0), address(0), false) GovernanceBaseCore(address(0)) {
         FACTORY = factory_;
         _SELF = address(this);
@@ -113,6 +114,8 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     function _chainUidInCode() internal pure override returns (bool) { return true; }
 
     function _chainUidRaw() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
+
+    function _govChainUid() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }
 
     /// @notice This instance's `chain_uid`; 0 on the implementation (a view: no revert).
     function chainUid() external view  returns (bytes32) { return ChainEnvCode.chainUid(); }
@@ -162,12 +165,13 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         requireRegOfKind(kind(), cfg.reg);
         if (supply && (cfg.initialSupply != 0 || cfg.initialHolder != address(0))) revert IFactoryToken.ConfigFieldForOtherKind(1);
         if (legs && cfg.legs.length != 0) revert IFactoryToken.ConfigFieldForOtherKind(2);
-        if (legs && cfg.maxSupply != 0) revert IFactoryToken.ConfigFieldForOtherKind(5);
+        if (legs && (cfg.maxSupply != 0 || cfg.maxWrapSupply != 0)) revert IFactoryToken.ConfigFieldForOtherKind(5);
         if (rate && (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0)) revert IFactoryToken.ConfigFieldForOtherKind(3);
         IFactoryToken.ConfidentialConfig memory c = cfg.conf;
         if (conf && (c.auditorKey.length != 0 || c.shieldScale != 0 || c.maxShielded != 0
             || c.confidentialFee != 0 || c.disclosureMode != 0 || c.auditorMode != 0 || c.minDecoyFee != 0
-            || c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.proofStore != 0)) {
+            || c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.proofStore != 0
+            || c.verifierFee != 0 || c.verifierFeeMax != 0 || c.pqzOwnKey || c.pqzOpening)) {
             revert IFactoryToken.ConfigFieldForOtherKind(4);
         }
     }
@@ -193,7 +197,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     ///         implementation, so the factory can check it before any clone exists.
     function kind() public pure virtual returns (uint8);
 
-    // ------------------------------------------------------------------ features, owner, roles (CTR-TOK-22)
+    // ------------------------------------------------------------------ features, admin, roles (CTR-TOK-22)
 
     // ------------------------------------------------------------------ the forward stubs (T66b, spec §4.1 rule 2, S1, S2)
 
@@ -244,7 +248,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         v(module);
     }
 
-    /// @dev One guard over every entry point (CTR-MTX-18), the role and owner functions too (W-Q).
+    /// @dev One guard over every entry point (CTR-MTX-18), the role and admin functions too (W-Q).
     function _guardIn() internal override returns (bool) { return _enter(); }
     function _guardOut(bool outer) internal override { _exit(outer); }
 
@@ -257,10 +261,12 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
     function _scopeBits() internal pure override returns (uint256) { return 0; }
     function _uaRegistry() internal view override returns (address) { return _registry(); }
 
-    /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is.
+    /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set, `IRescuable` only while `RESCUABLE` is;
+    ///         `ILiquidityPullToken` on every kind (CTR-DEX-30: the node's pre-check of a liquidity input).
     function _supportsInterfaceBody(bytes4 id) internal view virtual returns (bool) {
         return id == type(IERC165).interfaceId || id == type(IERC20).interfaceId || id == type(IMetaTx).interfaceId
             || id == type(IERC20MetaTx).interfaceId || id == type(IGovernance).interfaceId
+            || id == type(ILiquidityPullToken).interfaceId
             || (id == type(IERC20Payment).interfaceId && GovernanceLib.hasFeature(GovernanceBits.PAYABLE))
             || (id == type(IRescuable).interfaceId && GovernanceLib.hasFeature(GovernanceBits.RESCUABLE))
             || (id == type(IUALedger).interfaceId && _registry() != address(0));
@@ -272,7 +278,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         GovernanceLib.rescue(asset);
     }
 
-    /// @notice Immutable: set by `init` with bit 17, no writer after.
+    /// @notice Immutable: set by `init` with bit 17 (0 there: `SCAAS_DEV_RESCUE`, CTR-GOV-25), no writer after; 0 without it.
     function _rescueToBody() internal view returns (address) {
         return GovernanceLib.$().rescueTo;
     }
@@ -363,39 +369,39 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         return _pipePaymentsOf(payNo, offset, limit);
     }
 
-    // ------------------------------------------------------------------ receiver-pays (CTR-MTX-05, CTR-MTX-06)
+    // ------------------------------------------------------------------ payee fee (CTR-MTX-05, CTR-MTX-06)
 
-    function _receiverFeeDigestBody(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) internal view returns (bytes32)
+    function _payeeFeeDigestBody(MetaTxLib.UAMetaTransfer calldata t, uint256 fee, address feeRecipient, uint256 validUntil) internal view returns (bytes32)
     {
-        return _pipeReceiverFeeDigest(_domainSeparatorV4(), t, fee, feeRecipient, validUntil);
+        return _pipePayeeFeeDigest(_domainSeparatorV4(), t, fee, feeRecipient, validUntil);
     }
 
     /// @notice CTR-MTX-05/06 on ids: the shape on `t`, then the payer's `UAMetaTransfer` through the typed pipeline,
-    ///         untouched; the payee `t.to` co-signs `UAReceiverFee` nesting it — a native id itself (ECDSA, ERC-1271,
-    ///         HIP-632), a derived one through the registry under `receiver-fee` — and pays `fee` out of what it
+    ///         untouched; the payee `t.to` co-signs `UAPayeeFee` nesting it — a native id itself (ECDSA, ERC-1271,
+    ///         HIP-632), a derived one through the registry under `payee-fee` — and pays `fee` out of what it
     ///         received. A `UA_POOL` recipient is refused before any move (a move to the pool's address would credit its
     ///         slot with no UA balance behind it).
-    function _mtxPayReceiverFeeBody(
+    function _mtxPayWithPayeeFeeBody(
         MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
-        uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth,
+        uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth,
         MetaTxLib.PayMeta calldata meta
     ) internal returns (bool) {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(t.entryRef, meta); // `entryRef` ≠ 0 with it; any lane (spec §2.5, O3)
-        _receiverFee(t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth);
+        _payeeFee(t, payerAuth, fee, feeRecipient, pfValidUntil, payeeAuth);
         _payRecord(meta, t.to, t.value - fee); // the payee paid `fee` out of `value` (`fee <= value` checked)
         return true;
     }
 
-    /// @dev `mtxPayReceiverFee`'s body after `_payMeta` (its seven arguments leave no stack for the locals).
-    function _receiverFee(
+    /// @dev `mtxPayWithPayeeFee`'s body after `_payMeta` (its seven arguments leave no stack for the locals).
+    function _payeeFee(
         MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata payerAuth,
-        uint256 fee, address feeRecipient, uint256 rfValidUntil, IUARegistry.UASig calldata payeeAuth
+        uint256 fee, address feeRecipient, uint256 pfValidUntil, IUARegistry.UASig calldata payeeAuth
     ) private {
         if (t.mode & MetaTxLib.MODE_FEE_MASK != 0 || t.fee != 0
-            || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || feeRecipient == address(0)) revert IMetaTokenV2.ReceiverFeeShape();
-        if (block.timestamp > rfValidUntil) revert IMetaTokenV2.ReceiverFeeExpired(rfValidUntil, block.timestamp);
-        if (fee == 0 || fee > t.value) revert IMetaTokenV2.ReceiverFeeAmount(fee, t.value);
+            || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || feeRecipient == address(0)) revert IMetaTokenV2.PayeeFeeShape();
+        if (block.timestamp > pfValidUntil) revert IMetaTokenV2.PayeeFeeExpired(pfValidUntil, block.timestamp);
+        if (fee == 0 || fee > t.value) revert IMetaTokenV2.PayeeFeeAmount(fee, t.value);
         bytes32 to = MetaTxLib.pad(feeRecipient);
         if (to == t.to) revert IERC20MetaTx.FeeRecipientIsPayee();
         // early only: without it the fee's `_uaMove` reverts the whole call with the same `TransferToSelf`
@@ -403,10 +409,10 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         if (feeRecipient == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
         _regFeeTo(to, fee);
         bytes32 d = _uaExecuteTransfer(t, 0, payerAuth, 0, 0);
-        _pipeAuthorize(_mtxCtx(), t.to, UAKinds.PURPOSE_RECEIVER_FEE,
-            _receiverFeeDigestBody(t, fee, feeRecipient, rfValidUntil), payeeAuth);
+        _pipeAuthorize(_mtxCtx(), t.to, UAKinds.PURPOSE_PAYEE_FEE,
+            _payeeFeeDigestBody(t, fee, feeRecipient, pfValidUntil), payeeAuth);
         _uaMove(t.to, to, fee);
-        emit IMetaTokenV2.UAReceiverFeePaid(d, t.to, feeRecipient, fee);
+        emit IMetaTokenV2.UAPayeeFeePaid(d, t.to, feeRecipient, fee);
     }
 
     // ------------------------------------------------------------------ relay fee (CTR-MTX-27, TS-D19)
@@ -485,7 +491,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, GovernanceBaseCore {
         GovernanceLib.requireFeature(GovernanceBits.PAYABLE);
         _payMeta(entryRef, meta);
         _requireDerivedReceiver(to);
-        bytes32 payer = MetaTxLib.pad(_msgSender());
+        bytes32 payer = _subject(); // the ticket's UA under a self-call, never `pad(UA_POOL)` (Fable B P3-1)
         uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
         FeePolicy.validateRecipient(feeMode, feeRecipient);
         _regFeeTo(MetaTxLib.pad(feeRecipient), feeAmount);

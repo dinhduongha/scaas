@@ -3,15 +3,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { secp256k1 } from '@noble/curves/secp256k1.js';
 import {
-  hashTypedData, hashStruct, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
+  hashTypedData, hashStruct, erc7739TypedData, erc7739Signature, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCall, addKeyTypedData, executeTypedData, checkOwnerCall, checkPayment,
   keyProofMessage, metaTxTypedData, uaMetaTxTypedData, uaMetaTransferTypedData, checkCall, tradeOrderTypedData, uaTradeOrderTypedData, padId,
   cancelUAOrderTypedData, cancelDexOrderTypedData, invalidateNoncesTypedData, uaInvalidateNoncesTypedData, checkTradeOrder, bidMinFill,
-  bidMinBase, checkCancel, payLane, uaReceiverFeeTypedData, wrapToUACall, unwrapToUACall, payWithFeeToUACalldata, checkReceiverFee,
+  bidMinBase, checkCancel, payLane, uaPayeeFeeTypedData, wrapToUACall, unwrapToUACall, payWithFeeToUACalldata, checkPayeeFee,
   uaPayUnderMandateTypedData, uaPayUnderMandateCalldata, uaDelegateRevokeTypedData, uaDelegateRevokeCalldata, mtxExecuteCalldata,
   mtxExecuteTransferCalldata, TYPED_OPS, metaPayId,
 } from '../src/evm.js';
-import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
+import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
 
 const vectors = new URL('../../../smartcontracts/evm/test/vectors/', import.meta.url);
 const read = (f) => JSON.parse(readFileSync(new URL(f, vectors)));
@@ -106,6 +106,50 @@ test('SmartKeyAccount owner call = forge KAT (AccountKat.t.sol, smart_key_accoun
   assert.equal(hex(accountSignature(0, [], sig)), k.signature);
   const r = secp256k1.Signature.fromBytes(sig.subarray(0, 64), 'compact').addRecoveryBit(sig[64] - 27);
   assert.equal(evmAddress(r.recoverPublicKey(fromHex(k.digest)).toBytes(false)), k.signer_key);
+});
+
+// B P3-2 (CTR-ACC-02, owner 2026-11-12: ERC-7739 only): the nested `TypedDataSign` a wallet key signs and the signature
+// suffix, against the forge KAT (AccountKat.t.sol, erc7739_kat.json): implicit mode (a token's `UAMetaTransfer` for a
+// `SmartKeyAccount`) and explicit mode (`Order` nesting `Asset` for a `MandateWallet`).
+test('erc7739TypedData / erc7739Signature = forge KAT (erc7739_kat.json)', () => {
+  const k = read('erc7739_kat.json');
+  const chainId = Number(k.chain_id);
+  const s = k.smart_key_account;
+  const td = uaMetaTransferTypedData({ name: s.app_name, contract: s.app_contract, chainId, chainUid: k.salt,
+    message: { from: s.from, to: s.to, value: s.value, entryRef: s.entry_ref, batch: s.batch, validUntil: s.valid_until } });
+  assert.equal(hex(hashTypedData(td)), hex(keccak_256(concatBytes(new Uint8Array([0x19, 1]), fromHex(s.app_separator),
+    fromHex(s.contents)))), 'the app hash is 0x1901 ‖ separator ‖ contents');
+  const nested = erc7739TypedData(td, { wallet: 'SmartKeyAccount', address: s.wallet, chainId, chainUid: k.salt });
+  assert.equal(hex(hashTypedData(nested)), s.digest);
+  const sig = fromHex(s.signature);
+  const blob = sig.subarray(0, sig.length - 66 - ((sig[sig.length - 2] << 8) | sig[sig.length - 1]));
+  assert.equal(blob.length, 256, 'abi.encode(0, [], 65-byte ECDSA)');
+  assert.equal(hex(erc7739Signature(blob, td)), s.signature);
+  const ecdsa = blob.subarray(160, 225);
+  const r = secp256k1.Signature.fromBytes(ecdsa.subarray(0, 64), 'compact').addRecoveryBit(ecdsa[64] - 27);
+  assert.equal(evmAddress(r.recoverPublicKey(fromHex(s.digest)).toBytes(false)), s.signer_key);
+  assert.notEqual(hex(hashTypedData(erc7739TypedData(td, { wallet: 'SmartKeyAccount', address: '0x' + '33'.repeat(20), chainId,
+    chainUid: k.salt }))), s.digest, 'bound to the wallet');
+
+  const m = k.mandate_wallet;
+  const order = {
+    types: { EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'chainId', type: 'uint256' },
+      { name: 'verifyingContract', type: 'address' }], Order: [{ name: 'give', type: 'Asset' }, { name: 'nonce', type: 'uint256' }],
+    Asset: [{ name: 'token', type: 'address' }, { name: 'amount', type: 'uint256' }] },
+    primaryType: 'Order',
+    domain: { name: m.app_name, version: m.app_version, chainId, verifyingContract: m.app_contract },
+    message: { give: { token: m.token, amount: m.amount }, nonce: m.nonce },
+  };
+  const n2 = erc7739TypedData(order, { wallet: 'MandateWallet', address: m.wallet, chainId, chainUid: k.salt });
+  assert.equal(hex(hashTypedData(n2)), m.digest);
+  const msig = fromHex(m.signature);
+  assert.equal(hex(erc7739Signature(msig.subarray(0, 65), order)), m.signature, 'explicit mode: contentsType ‖ Order');
+  assert.ok(new TextDecoder().decode(msig.subarray(65 + 64, msig.length - 2)).endsWith(')Order'));
+  assert.throws(() => erc7739TypedData(td, { wallet: 'NormalToken', address: s.wallet, chainId, chainUid: k.salt }), /no ERC-7739/);
+  const w = { wallet: 'MandateWallet', address: m.wallet, chainId, chainUid: k.salt };
+  for (const bad of ['', 'order', 'Or der', 'Or,der', 'Or(der', 'Or)der', 'Or\0der']) {
+    assert.throws(() => erc7739TypedData({ ...order, primaryType: bad }, w), /refuses the contents name/, JSON.stringify(bad));
+  }
 });
 
 // ua-mtx-merge T3b / T11 (Q6, MD-11): the wallet's one signed entry per op over `UA<Op>`; the flat builders' KATs
@@ -591,19 +635,19 @@ test('key proof message = keccak256("scaas-subject-key-proof-v1" ‖ challenge) 
   assert.equal(hex(keyProofMessage(new Uint8Array(32))), KEY_PROOF_ZERO);
 });
 
-test('UA-5a: UAReceiverFee typed data and the receivers\' calldata (`cast calldata`, foundry 1.3.5); checkCall', () => {
-  // ReceiverPays.t.sol test_uaReceiverFeeDigestIsPinned: the typehash and the salted domain of the token
+test('UA-5a: UAPayeeFee typed data and the receivers\' calldata (`cast calldata`, foundry 1.3.5); checkCall', () => {
+  // test/v2/PayeeFee.t.sol test_payeeFeeDigestIsPinned: the typehash and the salted domain of the token
   const fields = (td) => td.types[td.primaryType].map((f) => `${f.type} ${f.name}`).join(',');
   const contract = '0x' + 'a1'.repeat(20);
   const ZERO_FEE_TO = '0x' + '00'.repeat(20);
   const chainUid = '0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464';
   const paymentDigest = hex(keccak_256(utf8ToBytes('payment')));
-  const td = uaReceiverFeeTypedData({ name: 'SCaaS MetaToken', contract, chainId: 7622, chainUid, message: {
+  const td = uaPayeeFeeTypedData({ name: 'SCaaS MetaToken', contract, chainId: 7622, chainUid, message: {
     payment: { from: padId(contract), to: padId(contract), value: 1, entryRef: paymentDigest, batch: 0, nonce: 0, validUntil: 1, mode: 1,
       relayer: contract, fee: 0, feeRecipient: ZERO_FEE_TO },
     fee: 3000000, feeRecipient: '0x0000000000000000000000000000000000000fee', validUntil: 1800000060 } });
-  const typehash = '0xb12d2a080dcf6d9edea1a63b0fd3a59ebffa656c929d21f676d1f1507c75021a';
-  assert.equal(hex(keccak_256(utf8ToBytes(`UAReceiverFee(${fields(td)})UAMetaTransfer(${td.types.UAMetaTransfer.map((f) => `${f.type} ${f.name}`).join(',')})`))), typehash);
+  const typehash = '0x8a3955a6c3529266f588d56c7bfd28bdd0b5ad194fc9ca4428e159686a16c7ca';
+  assert.equal(hex(keccak_256(utf8ToBytes(`UAPayeeFee(${fields(td)})UAMetaTransfer(${td.types.UAMetaTransfer.map((f) => `${f.type} ${f.name}`).join(',')})`))), typehash);
   const ds = hashStruct(td.types, 'EIP712Domain', td.domain);
   const sh = keccak_256(abiEncode(['bytes32', 'bytes32', 'uint256', 'address', 'uint256'],
     [typehash, hex(hashStruct(td.types, 'UAMetaTransfer', td.message.payment)), 3000000n,
@@ -643,22 +687,22 @@ test('UA-5a: UAReceiverFee typed data and the receivers\' calldata (`cast callda
   assert.throws(() => run(hex(payWithFeeToUACalldata(TO, 1n, 0, 0n, '0x' + '00'.repeat(20), REF, META))), /never signed as a call/);
 });
 
-test('receiver-pays: the payee co-signs UAReceiverFee nesting only the payment it expects, within its own bounds', () => {
+test('payee fee: the payee co-signs UAPayeeFee nesting only the payment it expects, within its own bounds', () => {
   const FEE_TO = '0x' + '0f'.repeat(20);
   const payment = serverPayment();   // mode 1 (relayer bound), fee NONE, lane payLane(REF), nonce 0: CTR-MTX-06's shape
   const pd = hex(hashTypedData(payment));
   const rf = (over = {}, dom = {}, pay = {}) => {
-    const t = uaReceiverFeeTypedData({ name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID, message: { payment: { ...payment.message, ...pay },
+    const t = uaPayeeFeeTypedData({ name: 'SCaaS MetaToken', contract: TOKEN, chainId: 7622, chainUid: UID, message: { payment: { ...payment.message, ...pay },
       fee: '3000000', feeRecipient: FEE_TO, validUntil: String(NOW + 60), ...over } });
     t.domain = { ...t.domain, ...dom };
     return t;
   };
   const want = { payee: PAYEE_ID, chainId: 7622, chainUid: UID, amount: '125000.5', decimals: 6, entryRef: REF,
     expectedToken: TOKEN, maxFee: '3000000', feeRecipient: FEE_TO, now: NOW };
-  const ok = checkReceiverFee(rf(), want);
+  const ok = checkPayeeFee(rf(), want);
   assert.equal(hex(ok.digest), hex(hashTypedData(rf())));
   assert.deepEqual([hex(ok.paymentDigest), ok.payer, ok.fee, ok.feeRecipient], [pd, ACCOUNT_ID, 3000000n, FEE_TO]);
-  const no = (td, w, why) => assert.throws(() => checkReceiverFee(td, { ...want, ...w }), why);
+  const no = (td, w, why) => assert.throws(() => checkPayeeFee(td, { ...want, ...w }), why);
   // the payee's own bounds on fee / feeRecipient / deadline
   no(rf(), { maxFee: '2999999' }, /the fee is above your limit/);
   no(rf(), { maxFee: undefined }, /the fee is above your limit/);
@@ -673,12 +717,13 @@ test('receiver-pays: the payee co-signs UAReceiverFee nesting only the payment i
   no(rf({ fee: '125000500001' }), { maxFee: '999999999999' }, /more than the payment/);
   no(rf(), { entryRef: '0x' + '0a'.repeat(32) }, /reference differs/);
   no(rf({}, {}, { nonce: '1' }), {}, /on its request lane/);
-  no(rf({}, {}, { mode: 0x21, fee: '1' }), {}, /receiver-pays shape/);
-  no(rf({}, {}, { mode: 0, relayer: '0x' + '00'.repeat(20) }), {}, /receiver-pays shape/);
+  no(rf({}, {}, { mode: 0x21, fee: '1' }), {}, /payee fee shape/);
+  no(rf({}, {}, { mode: 0, relayer: '0x' + '00'.repeat(20) }), {}, /payee fee shape/);
   no(rf({}, { verifyingContract: ATK }), {}, /wrong token/);
-  no(rf({}, { salt: '0x' + '11'.repeat(32) }), {}, /unexpected receiver fee fields/);
-  no({ ...rf(), primaryType: 'MetaTransfer' }, {}, /not a receiver fee/);
-  no({ ...rf(), primaryType: 'ReceiverFee' }, {}, /not a receiver fee/);   // the address struct (legacy)
+  no(rf({}, { salt: '0x' + '11'.repeat(32) }), {}, /unexpected payee fee fields/);
+  no({ ...rf(), primaryType: 'MetaTransfer' }, {}, /not a payee fee/);
+  no({ ...rf(), primaryType: 'ReceiverFee' }, {}, /not a payee fee/);   // the address struct (legacy)
+  no({ ...rf(), primaryType: 'UAReceiverFee' }, {}, /not a payee fee/); // the name before the payee-fee rename (legacy)
 });
 
 test('a bid\'s minFill from a base minimum and back (CLI-SGN-35)', () => {

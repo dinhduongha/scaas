@@ -12,10 +12,12 @@ import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// The delegate of the 2026-10-29 hot-wallet drain: says yes to every ERC-1271 question and, called on the victim's
 /// address, makes any call as the victim.
@@ -55,7 +57,7 @@ contract Sweeper7702Test is MandateFixture {
         u.approve(address(wt), 100);
         wt.wrap(100);
         vm.stopPrank();
-        t.mint(owner, 500);
+        t.mint(owner, 500, EnvKit.codeUidOf(address(t)));
         vm.etch(owner, abi.encodePacked(hex"ef0100", address(sweeper))); // the phished authorization
     }
 
@@ -66,20 +68,20 @@ contract Sweeper7702Test is MandateFixture {
     }
 
     function test_sweeper_directCallsRefused() public {
-        bytes32 tokenOwner = v.owner();
+        bytes32 tokenOwner = v.admin();
         _swept(address(v), abi.encodeCall(IERC20.transfer, (attacker, 1_000)));
         _swept(address(v), abi.encodeCall(IERC20Payment.payWithFee, (attacker, 1_000, FeeMode.NONE, 0, address(0),
             PayMetaKit.ref(0), PayMetaKit.meta(0))));
         _swept(address(v), abi.encodeCall(IERC20.approve, (address(sweeper), 1_000)));
-        _swept(address(v), abi.encodeCall(NormalToken.mint, (attacker, 1e9)));
-        _swept(address(v), abi.encodeCall(IGovernance.transferOwnership, (nid(attacker))));
+        _swept(address(v), abi.encodeCall(NormalToken.mint, (attacker, 1e9, EnvKit.codeUidOf(address(v)))));
+        _swept(address(v), abi.encodeCall(IAdmin.transferAdmin, (nid(attacker), EnvKit.codeUidOf(address(v)))));
         _swept(address(v), abi.encodeCall(IMetaTx.cancelNonce, (0)));
         _swept(address(wt), abi.encodeWithSignature("unwrap(uint256,address)", 100, attacker));
         _swept(address(w), abi.encodeCall(MandateWallet.execute, (address(t), 0, abi.encodeCall(IERC20.transfer, (attacker, 10_000)))));
         _swept(address(w), abi.encodeCall(MandateWallet.setMandate, (address(t), _id(attacker), 10_000, 10_000, 1 days, uint64(block.timestamp + 1 days))));
         _swept(address(w), abi.encodeCall(MandateWallet.setPayee, (address(t), _id(attacker), true)));
         assertEq(v.balanceOf(owner), 1_000);
-        assertEq(v.owner(), tokenOwner);
+        assertEq(v.admin(), tokenOwner);
         assertEq(wt.balanceOf(owner), 100);
         assertEq(t.balanceOf(address(w)), 10_000);
         assertEq(v.balanceOf(attacker) + wt.balanceOf(attacker) + u.balanceOf(attacker) + t.balanceOf(attacker), 0);

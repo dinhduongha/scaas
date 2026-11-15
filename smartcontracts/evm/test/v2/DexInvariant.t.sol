@@ -14,6 +14,7 @@ import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UADexBase} from "../ua/UADex.t.sol";
 import {MockRouter, MockExecutor} from "./DexExchange.t.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Builds only valid calls (`fail_on_revert`) of `mtxSettle`, `mtxExchange`, `mtxHybrid` / `mtxHybridVia` and
 /// `mtxExchangeBatch` over the listed pairs A/B (SCaaS, UA ledgers on) and A/usdc (outside, natives only). Five
@@ -574,7 +575,7 @@ contract DexInvariantTest is UADexBase {
         usdc.mint(address(exec), 200_000);
         // every target listed: a `LISTED_POOLS` order still settles
         address[5] memory targets = [address(router), address(exec), address(A), address(B), address(usdc)];
-        for (uint256 i; i < targets.length; ++i) dex.setExchangeTarget(targets[i], true);
+        for (uint256 i; i < targets.length; ++i) dex.setExchangeTarget(targets[i], true, EnvKit.codeUidOf(address(dex)));
         h = new DexHandler(dex, lreg, router, exec, [address(A), address(B), address(usdc)],
             [ALICE_PK, BOB_PK, DAVE_PK], [uaP, uaB], [_key(UAKinds.P256), _key(UAKinds.BIP340)],
             [UAKinds.P256, UAKinds.BIP340]);

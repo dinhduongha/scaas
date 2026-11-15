@@ -39,6 +39,8 @@ fn hex(s: &Value) -> Vec<u8> {
 fn rel_code(r: &Value) -> u8 {
     match r["form"].as_str().unwrap() {
         "TRANSFER0" => 0x81,
+        "TRANSFER-SPLIT" => 0x41,
+        "TRANSFER-SPLIT0" => 0xc1,
         "TRANSFER-MULTI" => {
             let case = r["statement"]["case"].as_str().unwrap(); // M<m>-<on|off>[-...]
             let mut it = case[1..].split('-');
@@ -72,7 +74,12 @@ fn proofs() -> Vec<(u8, Vec<u8>)> {
     }
     let mut codes: Vec<u8> = out.iter().map(|(c, _)| *c).collect();
     codes.sort();
-    assert_eq!(codes, [1, 2, 3, 4, 5, 0x70, 0x71, 0x72, 0x73, 0x78, 0x79, 0x7a, 0x7b, 0x81], "six forms + eight R_TXM");
+    let mut want = vec![1, 2, 3, 4, 5, 0x70, 0x71, 0x72, 0x73, 0x78, 0x79, 0x7a, 0x7b, 0x81];
+    if common::ncodes() == 16 {
+        want.extend([0x41, 0xc1]); // the bench's R_TXS / R_TXS0 (a set without vectors)
+        want.sort();
+    }
+    assert_eq!(codes, want, "six forms + eight R_TXM (+ R_TXS / R_TXS0)");
     if cfg!(feature = "oversize") {
         for code in [0x74, 0x7c] {
             out.push((code, synthetic_proof(code, 1).expect("synthetic proof")));
@@ -209,7 +216,7 @@ fn power2round_eq_c() {
         }
         i += 1;
     }
-    assert_eq!(i, if cfg!(feature = "oversize") { 14 } else { 12 });
+    assert_eq!(i, if cfg!(feature = "oversize") { 16 } else { 14 });
 }
 
 #[test]
@@ -237,7 +244,7 @@ fn ghint_eq_c() {
         }
         i += 1;
     }
-    assert_eq!(i, if cfg!(feature = "oversize") { 14 } else { 12 });
+    assert_eq!(i, if cfg!(feature = "oversize") { 16 } else { 14 });
     assert_eq!(c_ghint(i as u32, &[0; 192]), None, "C has more relations");
 }
 

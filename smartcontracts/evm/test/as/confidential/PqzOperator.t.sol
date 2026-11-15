@@ -12,6 +12,7 @@ import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {WrappedPqzToken} from "../../../src/pqz/WrappedPqzToken.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Plan T32 (owner 2026-11-05, CTR-GOV-20; CTR-GOV-13, CTR-GOV-17, never lose ciphertext; I8), the row T31 left open: on
 /// kinds 12 and 13 `operatorTransfer` moves public balances only. A PQZ UA holding a public (UA-ledger) balance and a
@@ -32,7 +33,7 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
         tok = NormalPqzToken(factory.createToken(_kind(), 1, abi.encode(c), "pop"));
         w = WrappedPqzToken(payable(address(tok)));
         vm.prank(ownerA);
-        IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK));
+        IGovernance(address(tok)).grantRole(GovernanceBits.OPERATOR_TRANSFER, nid(CLERK), EnvKit.codeUidOf(address(IGovernance(address(tok)))));
         _shieldTo(alice, 300);
         _pub(address(this), PUBLIC);
         tok.transferToUA(alice, PUBLIC);
@@ -53,7 +54,7 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
         uint256 pool = tok.balanceOf(MetaTxLib.SHIELD_POOL);
         vm.startStateDiffRecording();
         vm.prank(CLERK);
-        _r().operatorTransfer(alice, nid(BENEFICIARY), 20_000, REF);
+        _r().operatorTransfer(alice, nid(BENEFICIARY), 20_000, REF, EnvKit.codeUidOf(address(_r())));
         assertEq(_pqzAccesses(alice, true), 0, "operatorTransfer reads and writes no PQZ state (I8)");
 
         assertEq(tok.balanceOfUA(alice), PUBLIC - 20_000, "the public balance");
@@ -70,9 +71,9 @@ abstract contract PqzOperatorSuite is PqzRegFixture {
         uint256 shielded = tok.totalShielded();
         vm.prank(CLERK);
         vm.expectRevert();
-        _r().operatorTransfer(alice, nid(BENEFICIARY), PUBLIC + 1, REF);
+        _r().operatorTransfer(alice, nid(BENEFICIARY), PUBLIC + 1, REF, EnvKit.codeUidOf(address(_r())));
         vm.prank(CLERK);
-        _r().operatorTransfer(alice, nid(BENEFICIARY), PUBLIC, REF); // the control
+        _r().operatorTransfer(alice, nid(BENEFICIARY), PUBLIC, REF, EnvKit.codeUidOf(address(_r()))); // the control
         assertEq(tok.totalShielded(), shielded);
     }
 }

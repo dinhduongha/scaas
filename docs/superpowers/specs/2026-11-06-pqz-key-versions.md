@@ -1,6 +1,6 @@
 # Versioned PQZ keys (group 3g) — design
 
-**Status:** **approved by the owner 2026-11-06; build after T43, before 3f (owner 2026-11-07: 3g before 3f), with T66b's registry generation (owner 2026-11-07: `requirePortable`, the `msig` KEM refusal and the rebalance moved from 3c to plan task T66b).** SPECIFIED; nothing is built.
+**Status:** **approved by the owner 2026-11-06; build after T43, before 3f (owner 2026-11-07: 3g before 3f), with T66b's registry generation (owner 2026-11-07: `requirePortable`, the `msig` KEM refusal and the rebalance moved from 3c to plan task T66b).** **BUILT on branch `ua-mtx-merge`** (T19, 2026-11-10): EVM registry and tokens T51–T54, node T55, invariants T56 `e1336e60`; `ua-rs-sign`'s share SPECIFIED; UNAUDITED. Rule ids as landed: CTR-UA-42 (this spec's CTR-UA-41: that id went to the verifier-naming rule of 2026-11-10), CTR-PQZ-31, CTR-PQZ-32, NODE-JOB-23, CLI-SGN-49 (this spec's CLI-SGN-43: taken on `ua-rs-sign`).
 Revised after the Codex and Fable reviews of the first draft ([Codex](../../research/pqzver-codex-review.md): 2 high, 2 medium;
 [Fable](../../research/pqzver-fable-review.md): 0 P0, 0 P1, 5 P2, 10 P3, verdicts on Q1–Q4, a missing-items list) and the
 owner's rulings R1–R5 of 2026-11-06; every finding's outcome is in §17. Work-order group **3g** of branch `ua-mtx-merge`: tasks
@@ -82,7 +82,7 @@ key from the block it becomes current; the balance under v moves to v+1 by one p
 stops it **reading** what comes after (its shares of v stay valid for v), it does not remove it from the m-of-n.
 
 **Non-goals.** No change to `pqz-core` (`pqzl`, `pqzh`, `stmt`, `ffi`), to any relation, statement layout, transcript, binding tag or
-`proofSystemId`; no change to `UAPqzVerifier` (it proves any 32-byte message); no Zether change (Zether ≠ PQZ: the Zether key is
+`proofSystemId`; no change to `PqzKeyVerifier` (it proves any 32-byte message); no Zether change (Zether ≠ PQZ: the Zether key is
 the UA, CTR-UA-16). No change to the signing key, the members or the threshold of a UA (still CTR-UA-13: those are in the id). No
 threshold decryption or proving (research C/D). No migration of deployed state: every chain is test-only; reset 2 loads the new
 release.
@@ -374,7 +374,7 @@ key → balance = Σ over versions.
 
 **KV-13.** The relations (`R_TX`, `R_TX0`, `R_TXM`, burn, refresh, `R_DR`, `R_REG`), the statement layout of
 [§7.7](../../contracts/pq-zero-knowledge.md#77-statement-layout) (the 640-byte header, then `pk_f ‖ [pk_t] ‖ [pk_a] ‖ T ‖ out`),
-the PQZL and PQZH transcripts (`hash0` over `op` and the whole statement), `PqzAuth` (R1), `UAPqzVerifier`, the precompile and the
+the PQZL and PQZH transcripts (`hash0` over `op` and the whole statement), `PqzAuth` (R1), `PqzKeyVerifier`, the precompile and the
 four sets' parameters are untouched. The version decides only **which** key bytes and which `T` the contract writes into the
 existing slots and which account it updates. So: the **same `proofSystemId`**; **no new pqz-core vectors**: the
 `smartcontracts/vectors/pqz/<set>/` statement bytes, proofs and `auth_digest` fields stay byte-equal (a UA that never rotates

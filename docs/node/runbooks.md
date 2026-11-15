@@ -58,7 +58,7 @@ consulted · I informed · — not involved):
 | Regulated token pause / unpause | I | — | A/R | C | — | — | I | — |
 | `disableWrap` on a multi-underlying leg | I | — | A | — | R | — | I | I |
 | Rate change propose / execute / cancel | I | — | A | C | — | R | I | — |
-| `renounceRole(bit)` (rate admin, guardian, minter) | — | — | A | C | R (own role) | R (own role) | — | — |
+| `renounceRole(bit, chainUid_)` (rate admin, guardian, minter) | — | — | A | C | R (own role) | R (own role) | — | — |
 | Token registration / intake pause (`active`) on a node | A/R | — | C | — | — | — | I | — |
 | `fee_recipient` change | A/R | C (second person, procedural) | — | — | — | — | — | — |
 | Node policies (acceptance, fees, sponsorship, gossip, peers, mesh peer URLs) | A/R | — | C (own tokens) | — | — | — | C | — |
@@ -309,7 +309,7 @@ negative rebase, confiscation, bug):
 
 Depeg on a multi-underlying leg (external price signal):
 
-1. Guardian submits `disableWrap(u, reason)` **privately** (private relay or builder bundle), never through the public
+1. Guardian submits `disableWrap(u, reason, chainUid_)` (the token's `chainUid()` from build 3zb + 3zc, SPECIFIED, [integration.md](../integration.md#holder-chain-word)) **privately** (private relay or builder bundle), never through the public
    mempool or an open-mesh job.
 2. Exits stay open; no re-enable exists (a new token if the leg must return). RA cancels pending rate changes during the
    incident (`RateDecreaseWithDisabledLeg` blocks decreases anyway).
@@ -331,12 +331,12 @@ Depeg on a multi-underlying leg (external price signal):
 
 <a id="rb-13-regulator-order"></a>Regulated token:
 
-1. Legal validates the order. CO records it: `recordOrder(orderId, docHash, subject, beneficiary, maxAmount)` from the
+1. Legal validates the order. CO records it: `recordOrder(orderId, docHash, subject, beneficiary, maxAmount, freezeUntil, chainUid_)` from the
    compliance multisig (optionally submitted as a `call` job by the issuer's namespace, through its role-holder
    contract).
 2. IS asks NO in writing for a silence of `ScaasForcedTransfer` with matchers `chain` **and `token`** for the planned
    window; NO creates it (the other tokens keep paging).
-3. IS: `freeze(subject, ref)`, then `forceTransfer(recordId, amount)` ≤ `maxAmount`; `unfreeze` when the order says
+3. IS: `freeze(subject, ref, recordId, chainUid_)`, then `forceTransfer(recordId, amount, chainUid_)` ≤ `maxAmount`; `unfreeze` when the order says
    so; CO `revokeOrder` stops further execution.
 4. `OrderRecorded` without a matching internal record (`ScaasWatchedEvent`) ⇒ compliance key compromise: CO revokes the
    record, rotates the multisig signer, IS refuses execution.
@@ -566,7 +566,7 @@ outside these docs):
 - **Chain enablement** (`draft → active`, tooling PLANNED): only after (1) a working simulation path, (2) 7 days of
   measured finality depth on the real network, (3) ≥ 2 independent RPC endpoints for the quorum
   ([indexer-feeds.md#finality](indexer-feeds.md#finality)). Real deployments (SCaaS testnet, chain 7622 — formerly 9000 — and Gnosis first, then the other
-  families) are recorded per chain in `deployments/<chain>.json`.
+  families) are recorded per chain in `deployments/<key>.json` (NET-EVM-13).
 - **Open gateway**: a per-IP rate limit at the reverse proxy in front of any gateway open to the public
   ([gateway.md#auth](gateway.md#auth)).
 - **Custody**: production custody adapters (KMS/HSM/broker) for custodial or delegated client wallets — an env-held key

@@ -1,10 +1,10 @@
 {
- "note": "governance T13 (spec section 10.1): every non-view external of the fifteen artifacts (plan T32: + the six regulated kinds 8-13, each its base kind's rows and the eight control entries; + the router's eight control ops), one class each, read by test/governance/SelectorAudit.t.sol against ./out. BIT(n): a holder of bit n, the feature on. OWNER: the owner (revokeRole and setGrant also a live grantor of a delegable grant). HOLDER_OWN: the caller's own role or pending ownership. OWN_BALANCE: the caller's own balance or an allowance its holder granted. SIGNED: a signature of the subject it acts for (a self-call or the DEX's puller only inside a signed settlement). FACTORY: the factory, once. PERMISSIONLESS(reason): anyone, for the reason given. `error`: what a stranger's call with zero arguments reverts with; required on BIT, OWNER, HOLDER_OWN, FACTORY. Written once, then classified by hand; never regenerated to go green. Group 3h T59: the six PQZ proof-carrying entries of kinds 4, 5, 12 and 13 (direct and signed) take `bytes32 ownTag` in their args tuple (pqz-proof-path spec §3.2); their signatures moved in place, every class unchanged (the rows before: test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json). Group 3h T61: bit 24 `PQZ_PROOF`'s power `setProofStore(uint8)` on kinds 4, 5, 12 and 13 (BIT(24)), and the router's `mtxSetProofStore` (SIGNED) (pqz-proof-path spec §5).",
+ "note": "governance T13 (spec section 10.1): every non-view external of the fifteen artifacts (plan T32: + the six regulated kinds 8-13, each its base kind's rows and the eight control entries; + the router's eight control ops), one class each, read by test/governance/SelectorAudit.t.sol against ./out. BIT(n): a holder of bit n, the feature on. ADMIN: the admin (revokeRole and setGrant also a live grantor of a delegable grant). HOLDER_OWN: the caller's own role or pending admin role. OWN_BALANCE: the caller's own balance or an allowance its holder granted. SIGNED: a signature of the subject it acts for (a self-call or the DEX's puller only inside a signed settlement). FACTORY: the factory, once. PERMISSIONLESS(reason): anyone, for the reason given. `error`: what a stranger's call with zero arguments reverts with; required on BIT, ADMIN, HOLDER_OWN, FACTORY. Written once, then classified by hand; never regenerated to go green. Group 3h T59: the six PQZ proof-carrying entries of kinds 4, 5, 12 and 13 (direct and signed) take `bytes32 ownTag` in their args tuple (pqz-proof-path spec §3.2); their signatures moved in place, every class unchanged (the rows before: test/vectors/legacy/ua-mtx-merge/3h/selector_audit.json). Group 3h T61: bit 24 `PQZ_PROOF`'s power `setProofStore(uint8)` on kinds 4, 5, 12 and 13 (BIT(24)), and the router's `mtxSetProofStore` (SIGNED) (pqz-proof-path spec §5). Round 3r R3 (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §4.1): class OWNER renamed ADMIN, the three admin entries acceptAdmin(), renounceAdmin(), transferAdmin(bytes32) and their errors NotAdmin(bytes32), NotPendingAdmin(bytes32) in place of the ownership names, and the router's mtxTransferAdmin, mtxAcceptAdmin, mtxRenounceAdmin (SIGNED), every class unchanged. Round 3r T7 (spec 2026-11-10-admin-not-owner.md §5.4, §5.6, §7; owner naming 2026-11-11): the router's fifteen admin ops of OpenFactory and ComplianceRegistry (SIGNED); OpenFactory added: its admin entries ADMIN (configureChain direct only, the rest direct or through its router), acceptAdmin HOLDER_OWN, the three release deploys APPROVED(release) (open to anyone against a live approval of their key, the native admin's own call its own approval; a stranger's zero-argument call ReleaseNotApproved), the four creations PERMISSIONLESS. APPROVED(reason): anyone, against an approval the admin gave, for the reason given. Round 3s (spec 2026-11-10-token-lists.md §6, §9; CTR-GOV-24): each regulated kind 8-13 adds setAllowed BIT(8), setDenied BIT(9) (a holder of the bit, the feature on or off: a holder writes a dormant list) and enableFeature ADMIN; setAllowed exists on 10-13 too, where bit 8 is not valid, so no holder can exist and it always reverts MissingRole (one IRegulatedToken for the six kinds, Fable P3-8); the router adds mtxSetAllowed, mtxSetDenied, mtxEnableFeature (SIGNED). Fix2 CTR-GOV-26 (owner 2026-11-12): rescue(address) PERMISSIONLESS on GovernanceRouter and OpenFactory (UARegistry's row with its audit, ua-mtx-merge), and two contracts added whole: RelayFeeRouter, PqChat (each entry SIGNED by the subject it acts for, or PERMISSIONLESS with its reason; PqChat.initialize FACTORY). Fable recheck-2 P3-1 (owner 2026-11-12): renounceAdmin(bytes32) on every kind, the DEX and OpenFactory, the router's mtxRenounceAdmin with its bytes32 chainUid, and the three release deploys with a last bytes32 chainUid_, their signatures moved in place, every class unchanged; a stranger's zero-argument deploy now meets the chain word first (ChainUidMismatch(bytes32,bytes32), the factory's word against 0) where it met ReleaseNotApproved(bytes32). Fable review of ua-mtx-merge E N-10 (2026-11-12): UARegistry and SmartKeyAccountFactory added, each write SIGNED (a signature or proof of possession of the subject it registers or changes) or PERMISSIONLESS; Owner 2026-11-12: + SmartKeyAccount, with the class GUARDIAN (the account's guardian; a stranger's zero-argument call reverts NotGuardian()) for initiateRecovery; its self-only entries (reached by the account's own signed calls) are SIGNED. Merge of ua-mtx-merge into fix2 (2026-11-12): UARegistry's rescue(address) PERMISSIONLESS (CTR-GOV-26) joins its rows. CTR-GOV-27 (owner 2026-11-12, \"đồng ý.\"): transferAdmin(bytes32,bytes32) on every kind, the DEX and OpenFactory; OpenFactory's three env publishes (a bytes32 chainUid_ after the static fields, before env), revokeApproval(bytes32,bytes32) and setChainEntries(ChainEntries,bytes32) (one named struct, then the word); the router's mtxTransferAdmin, the three mtxPublish*Env, mtxRevokeApproval and mtxSetChainEntries likewise; their signatures moved in place, every class and error unchanged (a stranger meets NotAdmin before the word). Round 3zb + 3zc (CTR-GOV-28 Change, CTR-GOV-30): the 24 role-holder entries and setWrapLimits take a trailing bytes32 chainUid_, their router ops a bytes32 chainUid before the UASig; + setMaxSupply / setMaxWrapSupply (ADMIN) on the six wrapped kinds and mtxSetMaxSupply / mtxSetMaxWrapSupply (SIGNED) on the router. burn(uint256) stays OWN_BALANCE on the Normal kinds (the caller's own balance in every mode); under bit 30 BURNER it also reads that power on the same subject (CTR-GOV-29), a stranger without the role refused MissingRole(30, id).",
  "NormalToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -17,9 +17,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -27,9 +27,9 @@
    "error": ""
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -37,9 +37,9 @@
    "error": ""
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -47,12 +47,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -97,12 +97,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -137,12 +142,12 @@
    "error": ""
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -157,14 +162,14 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -172,14 +177,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -189,9 +194,9 @@
  ],
  "WrappedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -204,9 +209,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -214,17 +219,17 @@
    "error": ""
   },
   {
-   "sig": "cancelRate()",
+   "sig": "cancelRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "disableWrap(address,bytes32)",
+   "sig": "disableWrap(address,bytes32,bytes32)",
    "class": "BIT(4)",
    "error": "NotGuardian()"
   },
@@ -234,14 +239,14 @@
    "error": ""
   },
   {
-   "sig": "executeRate()",
+   "sig": "executeRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -249,12 +254,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -299,12 +304,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -374,17 +384,17 @@
    "error": ""
   },
   {
-   "sig": "proposeRate(address,uint96,uint96)",
+   "sig": "proposeRate(address,uint96,uint96,bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -399,14 +409,34 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setMaxSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setMaxWrapSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
+   "class": "BIT(26)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -414,14 +444,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -466,9 +496,9 @@
  ],
  "NormalZetherToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -481,9 +511,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -491,9 +521,9 @@
    "error": ""
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -501,9 +531,9 @@
    "error": ""
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -511,12 +541,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -591,12 +621,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -691,12 +726,12 @@
    "error": ""
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -711,14 +746,14 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -726,14 +761,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -743,9 +778,9 @@
  ],
  "WrappedZetherToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -758,9 +793,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -768,17 +803,17 @@
    "error": ""
   },
   {
-   "sig": "cancelRate()",
+   "sig": "cancelRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "disableWrap(address,bytes32)",
+   "sig": "disableWrap(address,bytes32,bytes32)",
    "class": "BIT(4)",
    "error": "NotGuardian()"
   },
@@ -788,14 +823,14 @@
    "error": ""
   },
   {
-   "sig": "executeRate()",
+   "sig": "executeRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -803,12 +838,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -883,12 +918,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1038,17 +1078,17 @@
    "error": ""
   },
   {
-   "sig": "proposeRate(address,uint96,uint96)",
+   "sig": "proposeRate(address,uint96,uint96,bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -1063,14 +1103,34 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setMaxSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setMaxWrapSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
+   "class": "BIT(26)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -1078,14 +1138,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -1130,9 +1190,9 @@
  ],
  "NormalPqzToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -1145,9 +1205,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -1155,9 +1215,9 @@
    "error": ""
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -1165,9 +1225,9 @@
    "error": ""
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -1175,12 +1235,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -1230,22 +1290,22 @@
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1265,12 +1325,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1296,6 +1361,11 @@
   },
   {
    "sig": "mtxRollOver(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1345,27 +1415,27 @@
    "error": ""
   },
   {
-   "sig": "pqzCancelVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzCancelVerifier(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "pqzRevokeVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzRevokeVerifier(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "pqzSetVerifier(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzSetVerifier(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -1380,19 +1450,24 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setProofStore(uint8)",
+   "sig": "setProofStore(uint8,bytes32)",
    "class": "BIT(24)",
    "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setVerifierFee(uint64,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -1400,14 +1475,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -1417,9 +1492,9 @@
  ],
  "WrappedPqzToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -1432,9 +1507,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -1442,17 +1517,17 @@
    "error": ""
   },
   {
-   "sig": "cancelRate()",
+   "sig": "cancelRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "disableWrap(address,bytes32)",
+   "sig": "disableWrap(address,bytes32,bytes32)",
    "class": "BIT(4)",
    "error": "NotGuardian()"
   },
@@ -1462,14 +1537,14 @@
    "error": ""
   },
   {
-   "sig": "executeRate()",
+   "sig": "executeRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -1477,12 +1552,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -1532,22 +1607,22 @@
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1567,12 +1642,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1598,6 +1678,11 @@
   },
   {
    "sig": "mtxRollOver(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1702,32 +1787,32 @@
    "error": ""
   },
   {
-   "sig": "pqzCancelVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzCancelVerifier(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "pqzRevokeVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzRevokeVerifier(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "pqzSetVerifier(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzSetVerifier(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "proposeRate(address,uint96,uint96)",
+   "sig": "proposeRate(address,uint96,uint96,bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -1742,18 +1827,43 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setProofStore(uint8)",
+   "sig": "setMaxSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setMaxWrapSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setProofStore(uint8,bytes32)",
    "class": "BIT(24)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setVerifierFee(uint64,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
+   "class": "BIT(26)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
@@ -1762,14 +1872,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -1814,9 +1924,9 @@
  ],
  "NormalRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -1829,9 +1939,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -1839,9 +1949,14 @@
    "error": ""
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "enableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -1849,19 +1964,19 @@
    "error": ""
   },
   {
-   "sig": "forceTransfer(bytes32,uint256)",
+   "sig": "forceTransfer(bytes32,uint256,bytes32)",
    "class": "BIT(6)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -1869,12 +1984,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -1919,12 +2034,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -1954,12 +2074,12 @@
    "error": ""
   },
   {
-   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
    "class": "BIT(22)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "pause(bytes32,uint64)",
+   "sig": "pause(bytes32,uint64,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -1979,17 +2099,17 @@
    "error": ""
   },
   {
-   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -2004,27 +2124,37 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeOrder(bytes32,bytes32)",
+   "sig": "revokeOrder(bytes32,bytes32,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setAllowed(bytes32[],bool,bytes32)",
+   "class": "BIT(8)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRate(uint32)",
+   "sig": "setDenied(bytes32[],bool,bytes32)",
+   "class": "BIT(9)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32,bytes32)",
    "class": "BIT(23)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRecipient(bytes32)",
+   "sig": "setTaxRecipient(bytes32,bytes32)",
    "class": "BIT(23)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -2034,14 +2164,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -2049,21 +2179,21 @@
    "error": ""
   },
   {
-   "sig": "unfreeze(bytes32,bytes32)",
+   "sig": "unfreeze(bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "unpause(bytes32)",
+   "sig": "unpause(bytes32,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   }
  ],
  "WrappedRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -2076,9 +2206,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -2086,19 +2216,24 @@
    "error": ""
   },
   {
-   "sig": "cancelRate()",
+   "sig": "cancelRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "disableWrap(address,bytes32)",
+   "sig": "disableWrap(address,bytes32,bytes32)",
    "class": "BIT(4)",
    "error": "NotGuardian()"
+  },
+  {
+   "sig": "enableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -2106,24 +2241,24 @@
    "error": ""
   },
   {
-   "sig": "executeRate()",
+   "sig": "executeRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "forceTransfer(bytes32,uint256)",
+   "sig": "forceTransfer(bytes32,uint256,bytes32)",
    "class": "BIT(6)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -2131,12 +2266,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -2181,12 +2316,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -2251,12 +2391,12 @@
    "error": ""
   },
   {
-   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
    "class": "BIT(22)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "pause(bytes32,uint64)",
+   "sig": "pause(bytes32,uint64,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -2276,22 +2416,22 @@
    "error": ""
   },
   {
-   "sig": "proposeRate(address,uint96,uint96)",
+   "sig": "proposeRate(address,uint96,uint96,bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -2306,28 +2446,58 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeOrder(bytes32,bytes32)",
+   "sig": "revokeOrder(bytes32,bytes32,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setAllowed(bytes32[],bool,bytes32)",
+   "class": "BIT(8)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRate(uint32)",
+   "sig": "setDenied(bytes32[],bool,bytes32)",
+   "class": "BIT(9)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setMaxSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setMaxWrapSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32,bytes32)",
    "class": "BIT(23)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRecipient(bytes32)",
+   "sig": "setTaxRecipient(bytes32,bytes32)",
    "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
+   "class": "BIT(26)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
@@ -2336,14 +2506,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -2351,12 +2521,12 @@
    "error": ""
   },
   {
-   "sig": "unfreeze(bytes32,bytes32)",
+   "sig": "unfreeze(bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "unpause(bytes32)",
+   "sig": "unpause(bytes32,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -2398,9 +2568,9 @@
  ],
  "NormalZetherRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -2413,9 +2583,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -2423,9 +2593,14 @@
    "error": ""
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "enableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -2433,19 +2608,19 @@
    "error": ""
   },
   {
-   "sig": "forceTransfer(bytes32,uint256)",
+   "sig": "forceTransfer(bytes32,uint256,bytes32)",
    "class": "BIT(6)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -2453,12 +2628,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -2533,12 +2708,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -2628,12 +2808,12 @@
    "error": ""
   },
   {
-   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
    "class": "BIT(22)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "pause(bytes32,uint64)",
+   "sig": "pause(bytes32,uint64,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -2653,17 +2833,17 @@
    "error": ""
   },
   {
-   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -2678,27 +2858,37 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeOrder(bytes32,bytes32)",
+   "sig": "revokeOrder(bytes32,bytes32,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setAllowed(bytes32[],bool,bytes32)",
+   "class": "BIT(8)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRate(uint32)",
+   "sig": "setDenied(bytes32[],bool,bytes32)",
+   "class": "BIT(9)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32,bytes32)",
    "class": "BIT(23)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRecipient(bytes32)",
+   "sig": "setTaxRecipient(bytes32,bytes32)",
    "class": "BIT(23)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -2708,14 +2898,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -2723,21 +2913,21 @@
    "error": ""
   },
   {
-   "sig": "unfreeze(bytes32,bytes32)",
+   "sig": "unfreeze(bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "unpause(bytes32)",
+   "sig": "unpause(bytes32,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   }
  ],
  "WrappedZetherRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -2750,9 +2940,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -2760,19 +2950,24 @@
    "error": ""
   },
   {
-   "sig": "cancelRate()",
+   "sig": "cancelRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "disableWrap(address,bytes32)",
+   "sig": "disableWrap(address,bytes32,bytes32)",
    "class": "BIT(4)",
    "error": "NotGuardian()"
+  },
+  {
+   "sig": "enableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -2780,24 +2975,24 @@
    "error": ""
   },
   {
-   "sig": "executeRate()",
+   "sig": "executeRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "forceTransfer(bytes32,uint256)",
+   "sig": "forceTransfer(bytes32,uint256,bytes32)",
    "class": "BIT(6)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -2805,12 +3000,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -2885,12 +3080,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -3035,12 +3235,12 @@
    "error": ""
   },
   {
-   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
    "class": "BIT(22)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "pause(bytes32,uint64)",
+   "sig": "pause(bytes32,uint64,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -3060,22 +3260,22 @@
    "error": ""
   },
   {
-   "sig": "proposeRate(address,uint96,uint96)",
+   "sig": "proposeRate(address,uint96,uint96,bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -3090,28 +3290,58 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeOrder(bytes32,bytes32)",
+   "sig": "revokeOrder(bytes32,bytes32,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setAllowed(bytes32[],bool,bytes32)",
+   "class": "BIT(8)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRate(uint32)",
+   "sig": "setDenied(bytes32[],bool,bytes32)",
+   "class": "BIT(9)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setMaxSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setMaxWrapSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32,bytes32)",
    "class": "BIT(23)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRecipient(bytes32)",
+   "sig": "setTaxRecipient(bytes32,bytes32)",
    "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
+   "class": "BIT(26)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
@@ -3120,14 +3350,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -3135,12 +3365,12 @@
    "error": ""
   },
   {
-   "sig": "unfreeze(bytes32,bytes32)",
+   "sig": "unfreeze(bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "unpause(bytes32)",
+   "sig": "unpause(bytes32,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -3182,9 +3412,9 @@
  ],
  "NormalPqzRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "approve(address,uint256)",
@@ -3197,9 +3427,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -3207,9 +3437,14 @@
    "error": ""
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "enableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -3217,19 +3452,19 @@
    "error": ""
   },
   {
-   "sig": "forceTransfer(bytes32,uint256)",
+   "sig": "forceTransfer(bytes32,uint256,bytes32)",
    "class": "BIT(6)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -3237,12 +3472,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -3292,22 +3527,22 @@
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -3327,12 +3562,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -3363,6 +3603,11 @@
   },
   {
    "sig": "mtxRollOver(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -3402,12 +3647,12 @@
    "error": ""
   },
   {
-   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
    "class": "BIT(22)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "pause(bytes32,uint64)",
+   "sig": "pause(bytes32,uint64,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -3427,32 +3672,32 @@
    "error": ""
   },
   {
-   "sig": "pqzCancelVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzCancelVerifier(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "pqzRevokeVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzRevokeVerifier(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "pqzSetVerifier(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzSetVerifier(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -3467,34 +3712,49 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeOrder(bytes32,bytes32)",
+   "sig": "revokeOrder(bytes32,bytes32,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setAllowed(bytes32[],bool,bytes32)",
+   "class": "BIT(8)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setProofStore(uint8)",
+   "sig": "setDenied(bytes32[],bool,bytes32)",
+   "class": "BIT(9)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setProofStore(uint8,bytes32)",
    "class": "BIT(24)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRate(uint32)",
+   "sig": "setTaxRate(uint32,bytes32)",
    "class": "BIT(23)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRecipient(bytes32)",
+   "sig": "setTaxRecipient(bytes32,bytes32)",
    "class": "BIT(23)",
    "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setVerifierFee(uint64,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "transfer(address,uint256)",
@@ -3502,14 +3762,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -3517,21 +3777,21 @@
    "error": ""
   },
   {
-   "sig": "unfreeze(bytes32,bytes32)",
+   "sig": "unfreeze(bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "unpause(bytes32)",
+   "sig": "unpause(bytes32,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   }
  ],
  "WrappedPqzRegulatedToken": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
    "sig": "addReserve(address,uint256)",
@@ -3544,9 +3804,9 @@
    "error": ""
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "cancelNonce(uint256)",
@@ -3554,19 +3814,24 @@
    "error": ""
   },
   {
-   "sig": "cancelRate()",
+   "sig": "cancelRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "disableWrap(address,bytes32)",
+   "sig": "disableWrap(address,bytes32,bytes32)",
    "class": "BIT(4)",
    "error": "NotGuardian()"
+  },
+  {
+   "sig": "enableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
@@ -3574,24 +3839,24 @@
    "error": ""
   },
   {
-   "sig": "executeRate()",
+   "sig": "executeRate(bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "forceTransfer(bytes32,uint256)",
+   "sig": "forceTransfer(bytes32,uint256,bytes32)",
    "class": "BIT(6)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "sig": "freeze(bytes32,bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -3599,12 +3864,12 @@
    "error": "NotFactory()"
   },
   {
-   "sig": "mint(address,uint256)",
+   "sig": "mint(address,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "mintToUA(bytes32,uint256)",
+   "sig": "mintToUA(bytes32,uint256,bytes32)",
    "class": "BIT(1)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -3654,22 +3919,22 @@
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])))",
    "class": "SIGNED",
    "error": ""
   },
@@ -3689,12 +3954,17 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
+   "sig": "mtxPayWithPayeeFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))",
    "class": "SIGNED",
    "error": ""
   },
@@ -3725,6 +3995,11 @@
   },
   {
    "sig": "mtxRollOver(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -3819,12 +4094,12 @@
    "error": ""
   },
   {
-   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32)",
    "class": "BIT(22)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "pause(bytes32,uint64)",
+   "sig": "pause(bytes32,uint64,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -3844,37 +4119,37 @@
    "error": ""
   },
   {
-   "sig": "pqzCancelVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzCancelVerifier(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "pqzRevokeVerifier()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzRevokeVerifier(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "pqzSetVerifier(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "pqzSetVerifier(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "proposeRate(address,uint96,uint96)",
+   "sig": "proposeRate(address,uint96,uint96,bytes32)",
    "class": "BIT(3)",
    "error": "NotRateAdmin()"
   },
   {
-   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -3889,33 +4164,68 @@
    "error": "NotDex(address)"
   },
   {
-   "sig": "revokeOrder(bytes32,bytes32)",
+   "sig": "revokeOrder(bytes32,bytes32,bytes32)",
    "class": "BIT(10)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setAllowed(bytes32[],bool,bytes32)",
+   "class": "BIT(8)",
+   "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setProofStore(uint8)",
+   "sig": "setDenied(bytes32[],bool,bytes32)",
+   "class": "BIT(9)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setMaxSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setMaxWrapSupply(uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setProofStore(uint8,bytes32)",
    "class": "BIT(24)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRate(uint32)",
+   "sig": "setTaxRate(uint32,bytes32)",
    "class": "BIT(23)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setTaxRecipient(bytes32)",
+   "sig": "setTaxRecipient(bytes32,bytes32)",
    "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setVerifierFee(uint64,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setWrapLimits((address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setWrapMember(bytes32,bool,bool,bytes32)",
+   "class": "BIT(26)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
@@ -3924,14 +4234,14 @@
    "error": ""
   },
   {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
    "sig": "transferFrom(address,address,uint256)",
    "class": "OWN_BALANCE",
    "error": ""
-  },
-  {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
   },
   {
    "sig": "transferToUA(bytes32,uint256)",
@@ -3939,12 +4249,12 @@
    "error": ""
   },
   {
-   "sig": "unfreeze(bytes32,bytes32)",
+   "sig": "unfreeze(bytes32,bytes32,bytes32)",
    "class": "BIT(5)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "unpause(bytes32)",
+   "sig": "unpause(bytes32,bytes32)",
    "class": "BIT(7)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -3986,19 +4296,19 @@
  ],
  "SCaaSDex": [
   {
-   "sig": "acceptOwnership()",
+   "sig": "acceptAdmin()",
    "class": "HOLDER_OWN",
-   "error": "NotPendingOwner(bytes32)"
+   "error": "NotPendingAdmin(bytes32)"
   },
   {
-   "sig": "cancelGrant(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "cancelGrant(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "disableFeature(uint8)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "disableFeature(uint8,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "exchangeOne((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,uint256)[],address[]),(address,bytes)[],address)",
@@ -4006,9 +4316,9 @@
    "error": "NotSelf()"
   },
   {
-   "sig": "grantRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "grantRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
    "sig": "initialize(bytes32,uint64,bytes)",
@@ -4051,47 +4361,57 @@
    "error": ""
   },
   {
+   "sig": "mtxLiquidity((bytes32,(bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256[],uint256,address[]),(address,bytes)[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
    "sig": "mtxSettle((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256),(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256)[])[])",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "renounceOwnership()",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "renounceRole(uint8)",
+   "sig": "renounceRole(uint8,bytes32)",
    "class": "HOLDER_OWN",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "revokeRole(uint8,bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(a stray's whole balance to the puller's immutable rescueTo, under the entry guard; no user fund rests at the DEX, Fable D P3-5)",
+   "error": ""
   },
   {
-   "sig": "setExchangeTarget(address,bool)",
+   "sig": "revokeRole(uint8,bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setExchangeTarget(address,bool,bytes32)",
    "class": "BIT(11)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setFeeSplit(uint32,address)",
+   "sig": "setFeeSplit(uint32,address,bytes32)",
    "class": "BIT(12)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   },
   {
-   "sig": "setListedOnly(bool)",
+   "sig": "setListedOnly(bool,bytes32)",
    "class": "BIT(11)",
    "error": "MissingRole(uint8,bytes32)"
   },
   {
-   "sig": "setMarket(address,address,bool)",
+   "sig": "setMarket(address,address,bool,bytes32)",
    "class": "BIT(11)",
    "error": "MissingRole(uint8,bytes32)"
   },
@@ -4101,9 +4421,9 @@
    "error": "NotSelf()"
   },
   {
-   "sig": "transferOwnership(bytes32)",
-   "class": "OWNER",
-   "error": "NotOwner(bytes32)"
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
   }
  ],
  "DexPuller": [
@@ -4130,7 +4450,22 @@
    "error": "MtxSelectorNotAllowed(bytes4)"
   },
   {
-   "sig": "mtxAcceptOwnership((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxAcceptAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxApproveDexRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxApproveRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(uint16,uint16,uint64,uint16,bytes4,bytes4,bytes32,bytes32,bytes32,address,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxApproveTokenRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4140,7 +4475,7 @@
    "error": "MtxSelectorNotAllowed(bytes4)"
   },
   {
-   "sig": "mtxCancelGrant((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxCancelGrant((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4150,7 +4485,7 @@
    "error": ""
   },
   {
-   "sig": "mtxCancelRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxCancelRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4170,12 +4505,32 @@
    "error": ""
   },
   {
-   "sig": "mtxDisableFeature((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxDeprecateDex((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,bytes32,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxDisableWrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxDeprecateRelease((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,bytes32,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxDeprecateToken((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint64,bytes32,string,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxDisableFeature((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxDisableWrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxEnableFeature((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
@@ -4185,142 +4540,629 @@
    "error": "MtxSelectorNotAllowed(bytes4)"
   },
   {
-   "sig": "mtxExecuteRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxExecuteRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxForceTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxForceTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint256,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxFreeze((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxFreeze((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxGrantRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxGrantRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxMint((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxMint((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,uint256,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxMintToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxMintToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint256,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxOperatorTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,uint256,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxOperatorTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,uint256,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPause((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxPause((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint64,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPqzCancelVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxPqzCancelVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPqzRevokeVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxPqzRevokeVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxPqzSetVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxPqzSetVerifier((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxProposeRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,uint96,uint96,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxProposeRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,uint96,uint96,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxRecordOrder((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,bytes32,bytes32,uint256,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxPublishClassEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxRenounceOwnership((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxPublishDexEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxRenounceRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxPublishTokenEnv((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxRevokeOrder((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxRecordOrder((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxRevokeRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxRenounceAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxSetExchangeTarget((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxRenounceRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxSetFeeSplit((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxRevokeApproval((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxSetGrant((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxRevokeOrder((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxSetListedOnly((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxRevokeRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxSetMarket((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,address,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxSetAllowed((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32[],bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxSetProofStore((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxSetChainEntries((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32),bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxSetTaxRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxSetClassKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxSetTaxRecipient((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxSetCompliance((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32[],uint64[],uint64[],bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxTransferOwnership((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxSetDenied((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32[],bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnfreeze((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxSetExchangeTarget((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
    "class": "SIGNED",
    "error": ""
   },
   {
-   "sig": "mtxUnpause((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "sig": "mtxSetFeeSplit((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint32,address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetGrant((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetKycProvider((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetListedOnly((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetMarket((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,address,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetMaxSupply((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetMaxWrapSupply((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetProofStore((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetTaxRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetTaxRecipient((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetTokenKindEnabled((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetVerifierFee((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetWrapLimits((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(address,uint8,uint16,(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32),(uint24,uint64,uint32))[],bool,bool,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetWrapMember((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,bool,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferAdmin((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnfreeze((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnpause((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the whole balance of a stray to the constant SCAAS_DEV_RESCUE; the contract holds nothing by design, CTR-GOV-26)",
+   "error": ""
+  }
+ ],
+ "OpenFactory": [
+  {
+   "sig": "acceptAdmin()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingAdmin(bytes32)"
+  },
+  {
+   "sig": "approveDexRelease(uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "approveRelease((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes32,bytes32,bytes32,address,uint32,uint64)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "approveTokenRelease(uint8,uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "configureChain(bytes32,uint64,address,bytes32,uint256,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "createDex(uint64,bytes,bytes32)",
+   "class": "PERMISSIONLESS(anyone creates from a usable release of an enabled kind; the creator is the caller, or the subject the chain's router signed for)",
+   "error": ""
+  },
+  {
+   "sig": "createInstance((uint16,uint16,uint64),bytes32,bytes)",
+   "class": "PERMISSIONLESS(anyone creates from a usable release of an enabled kind; the creator is the caller, or the subject the chain's router signed for)",
+   "error": ""
+  },
+  {
+   "sig": "createToken(uint8,uint64,bytes,bytes32)",
+   "class": "PERMISSIONLESS(anyone creates from a usable release of an enabled kind; the creator is the caller, or the subject the chain's router signed for)",
+   "error": ""
+  },
+  {
+   "sig": "createTokenUnregistered(uint8,address,bytes,bytes32)",
+   "class": "PERMISSIONLESS(anyone creates from a usable release of an enabled kind; the creator is the caller, or the subject the chain's router signed for)",
+   "error": ""
+  },
+  {
+   "sig": "deployDexImplementation(uint64,uint16,bytes,bytes,bytes32)",
+   "class": "APPROVED(release)",
+   "error": "ChainUidMismatch(bytes32,bytes32)"
+  },
+  {
+   "sig": "deployImplementation((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes,bytes,bytes32)",
+   "class": "APPROVED(release)",
+   "error": "ChainUidMismatch(bytes32,bytes32)"
+  },
+  {
+   "sig": "deployTokenImplementation(uint8,uint64,uint16,bytes,bytes,bytes32)",
+   "class": "APPROVED(release)",
+   "error": "ChainUidMismatch(bytes32,bytes32)"
+  },
+  {
+   "sig": "deprecateDex(uint64,bytes32,string)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "deprecateRelease((uint16,uint16,uint64),bytes32,string)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "deprecateToken(uint8,uint64,bytes32,string)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "publishClassEnv(uint16,uint16,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "publishDexEnv(uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "publishTokenEnv(uint8,uint16,bytes32,(address,address,bool,address[],bytes32[],address[],bytes32[]))",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "renounceAdmin(bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the whole balance of a stray to the constant SCAAS_DEV_RESCUE; the contract holds nothing by design, CTR-GOV-26)",
+   "error": ""
+  },
+  {
+   "sig": "revokeApproval(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setChainEntries((address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32),bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setClassKindEnabled(uint16,uint16,bool,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "setTokenKindEnabled(uint8,bool,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  },
+  {
+   "sig": "transferAdmin(bytes32,bytes32)",
+   "class": "ADMIN",
+   "error": "NotAdmin(bytes32)"
+  }
+ ],
+ "RelayFeeRouter": [
+  {
+   "sig": "relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the whole balance of a stray to the constant SCAAS_DEV_RESCUE; the contract holds nothing by design, CTR-GOV-26)",
+   "error": ""
+  }
+ ],
+ "PqChat": [
+  {
+   "sig": "addWraps(bytes32,uint32,(bytes32,uint64,bytes,bytes32,bytes)[])",
+   "class": "PERMISSIONLESS(unsigned wraps of an epoch, checked against its signed hash; pqchat.md section 10)",
+   "error": ""
+  },
+  {
+   "sig": "createSession((bytes32,uint64,bytes32,address,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "createTopic((bytes32,uint64,bytes32,address,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "editEntry((bytes32,bytes32,uint64,uint32,string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "initialize(bytes32)",
+   "class": "FACTORY",
+   "error": "PqChatNotFactory()"
+  },
+  {
+   "sig": "leave((bytes32,bytes32,bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "postMessage((bytes32,bytes32,bytes32,bytes16,uint64,bytes32[],bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "rekey((bytes32,bytes32,uint64,uint64,bytes32,bytes32[],(bytes32,uint64,bytes32)[],bytes32[],bytes),(bytes32,uint64,bytes,bytes32,bytes)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "remove((bytes32,bytes32,uint64,bytes32[],bytes32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the whole balance of a stray to the constant SCAAS_DEV_RESCUE; the contract holds nothing by design, CTR-GOV-26)",
+   "error": ""
+  },
+  {
+   "sig": "setTopicWriter((bytes32,bytes32,bool,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "storeMessage(uint8,bytes8,bytes)",
+   "class": "PERMISSIONLESS(an unsigned blob, one per call; pqchat.md section 10)",
+   "error": ""
+  },
+  {
+   "sig": "updateTopic((bytes32,uint64,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  }
+ ],
+ "UARegistry": [
+  {
+   "sig": "acceptMembership(bytes32,(uint16,(uint16,bytes)[],bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "cacheExpandedKey(uint16,bytes,uint256)",
+   "class": "PERMISSIONLESS(caches part of a public ML-DSA key's expansion; it changes no record)",
+   "error": ""
+  },
+  {
+   "sig": "register(uint16,bytes,(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "registerFrost(uint16,(bytes,uint16,(bytes[],bytes,bytes32)[]),(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "registerMsig((uint16,(uint16,bytes32,uint16)[]),(bytes,bytes32,(uint8,bytes,bytes32),bytes32),(uint16,(uint16,bytes)[],bytes)[],bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "registerMuSig2(uint16,(bytes,bytes[]),(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "registerWebAuthn((bytes32,bytes32,bytes32),(bytes,bytes32,(uint8,bytes,bytes32),bytes32),bytes,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the whole balance of a stray to the constant SCAAS_DEV_RESCUE; the contract holds nothing by design, CTR-GOV-26)",
+   "error": ""
+  },
+  {
+   "sig": "setKemKey(bytes32,uint64,(uint8,bytes,bytes32),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "setPqzKey(bytes32,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "setPqzScopedKey(bytes32,address,uint64,bytes,bytes32,(uint8,bytes,bytes32),uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "storePqzPop(bytes32,uint64,bytes)",
+   "class": "PERMISSIONLESS(stores the proof bytes whose hash the UA signed in its record, once, after the proof verifies)",
+   "error": ""
+  },
+  {
+   "sig": "storePqzScopedPop(bytes32,address,uint64,bytes)",
+   "class": "PERMISSIONLESS(stores the proof bytes whose hash the UA signed in its scoped record, once, after the proof verifies)",
+   "error": ""
+  },
+  {
+   "sig": "updateMsig(bytes32,uint64,(uint16,(uint16,bytes32,uint16)[]),uint256,uint64,(uint16,(uint16,bytes)[],bytes)[],bytes32)",
+   "class": "SIGNED",
+   "error": ""
+  }
+ ],
+ "SmartKeyAccountFactory": [
+  {
+   "sig": "deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)",
+   "class": "PERMISSIONLESS(the account its first key and guardian fix by CREATE2; any caller deploys the same one)",
+   "error": ""
+  }
+ ],
+ "SmartKeyAccount": [
+  {
+   "sig": "addKey((uint8,bytes32,bytes32,bytes32,bytes32))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "cancelRecovery()",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "completeRecovery((uint8,bytes32,bytes32,bytes32,bytes32))",
+   "class": "PERMISSIONLESS(completes the recovery the guardian started, its key only, after the delay)",
+   "error": ""
+  },
+  {
+   "sig": "execute(address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "initialize((uint8,bytes32,bytes32,bytes32,bytes32),address)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "initiateRecovery((uint8,bytes32,bytes32,bytes32,bytes32))",
+   "class": "GUARDIAN",
+   "error": "NotGuardian()"
+  },
+  {
+   "sig": "mtxAddKey((address,uint256,uint256,uint256,uint32,address,uint256,address),uint8,bytes32,bytes32,bytes32,bytes32,(uint256,bytes32[],bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatch((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],bytes[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelRecovery((address,uint256,uint256,uint256,uint32,address,uint256,address),(uint256,bytes32[],bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes,(uint256,bytes32[],bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteAsOwner(bytes,uint256,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRemoveKey((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(uint256,bytes32[],bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRotateKey((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,uint8,bytes32,bytes32,bytes32,bytes32,(uint256,bytes32[],bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetGuardian((address,uint256,uint256,uint256,uint32,address,uint256,address),address,(uint256,bytes32[],bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "removeKey(uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "rotateKey(uint256,(uint8,bytes32,bytes32,bytes32,bytes32))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "setGuardian(address)",
    "class": "SIGNED",
    "error": ""
   }

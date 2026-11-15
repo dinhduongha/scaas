@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "./MtxHash.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 interface ISaltedDomain {
@@ -26,6 +27,6 @@ library MtxDigest {
 
     /// The digest of a `MetaTransaction` in `c`'s domain (relayer / fee recipient zeroed when unbound).
     function metaTx(address c, MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
-        return typed(c, MetaTxLib.hashStruct(m));
+        return typed(c, MtxHash.hashStruct(m));
     }
 }

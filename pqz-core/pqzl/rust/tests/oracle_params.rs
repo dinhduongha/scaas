@@ -7,7 +7,7 @@ use pqzl::testkit::params_words;
 #[test]
 fn constants_eq_c() {
     let rels = params_words();
-    assert_eq!(rels.len(), if cfg!(feature = "oversize") { 14 } else { 12 });
+    assert_eq!(rels.len(), if cfg!(feature = "oversize") { 16 } else { 14 });
     for (i, (name, w)) in rels.iter().enumerate() {
         assert_eq!(c_params(i as u32).as_ref(), Some(w), "{name}");
     }

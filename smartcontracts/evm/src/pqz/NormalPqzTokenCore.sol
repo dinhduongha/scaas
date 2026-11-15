@@ -26,8 +26,8 @@ import {IPqzToken} from "./IPqzToken.sol";
 ///         only; shielded value exists only through `mtxShield`, which moves public units to `SHIELD_POOL` (D19). Flags: `PAYABLE`,
 ///         `MINTABLE`, `BURNABLE`. Built by `OpenFactory.createToken` with `conf` set and `legs`, `rate` empty.
 abstract contract NormalPqzTokenCore is NormalTokenCore, PqzLayer {
-    /// @dev The factory's append (`OpenFactory.deployImplementation`, chain-neutral spec §2.1): its address; no
-    ///      `implArgs`. The env (`deps[ENV_PQZ_VERIFIER]` the release's `UAPqzVerifier`, CTR-ZTH-20 / CTR-PQZ-10; a
+    /// @dev The factory's append (`OpenFactory.deployTokenImplementation`, chain-neutral spec §2.1): its address; no
+    ///      `implArgs`. The env (`deps[ENV_PQZ_VERIFIER]` the release's `PqzKeyVerifier`, CTR-ZTH-20 / CTR-PQZ-10; a
     ///      registry) is checked by `validateEnv` (`PqzStateLib`).
     constructor(address factory_, bytes memory implArgs) NormalTokenCore(factory_, implArgs) {}
 
@@ -47,7 +47,7 @@ abstract contract NormalPqzTokenCore is NormalTokenCore, PqzLayer {
     function _init(IFactoryToken.TokenConfig memory cfg) internal override(MetaTokenBase, NormalTokenCore) {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
+        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
             _roleBits(), _contractOnlyBits(), _registry());
         PqzStateLib.init(cfg.conf, _registry(), _pqzVerifier(), FACTORY);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
@@ -82,9 +82,9 @@ abstract contract NormalPqzTokenCore is NormalTokenCore, PqzLayer {
     ///         `ABSOLUTE` (incl. the rollover and `mtxPrepareAcc`).
     function _mtxSelectorsBody() internal pure virtual override(MetaTxBaseCore, NormalTokenCore) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](10);
-        c = new uint8[](10);
-        a = new uint8[](10);
+        s = new bytes4[](11);
+        c = new uint8[](11);
+        a = new uint8[](11);
         (s[0], c[0]) = (IMetaTx.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (BURN_SELECTOR, FEE_CLASS_AMOUNT);
         (s[2], c[2]) = (IConfidentialToken.mtxShield.selector, FEE_CLASS_ABSOLUTE);
@@ -95,6 +95,7 @@ abstract contract NormalPqzTokenCore is NormalTokenCore, PqzLayer {
         (s[7], c[7]) = (IPqzToken.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
         (s[8], c[8]) = (IPqzToken.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
         (s[9], c[9]) = (IPqzToken.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
+        (s[10], c[10]) = (IPqzToken.mtxRollOverSigned.selector, FEE_CLASS_ABSOLUTE); // CTR-PQZ-41
     }
 
     function _mtxRule(bytes4 sel) internal view virtual override(MetaTxBaseCore, NormalTokenCore) returns (MtxRule memory) {

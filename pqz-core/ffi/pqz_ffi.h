@@ -9,7 +9,8 @@
  *
  * Thread-safe (the PQZL core's calls, Rust by default or the C core, are serialised inside, one process-wide lock,
  * and run on one worker thread with its own 16 MiB stack); never unwinds, aborts or exits (native builds;
- * except Rust's abort on a failed heap allocation; a panic = abort build does not compile). The
+ * except Rust's abort on a failed heap allocation; a panic = abort build does not compile; and with the opt-in C core,
+ * feature pqzl-c, an arena exhaustion inside LaZer is a trap, SIGILL: README "Arenas"). The
  * caller's stack: 1 MiB suffices (test one_mib_stack).
  */
 #ifndef PQZ_FFI_H

@@ -1,0 +1,3 @@
+group | contract | entries | state-changing | local: state-changing called / reached / views reached
+pqchat | PqChat | 59 | 14 | 12 / 14 / 1
+pqchat | PqChatTopics | 21 | 6 | 0 / 6 / 0 | via PqChat

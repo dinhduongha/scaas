@@ -66,7 +66,7 @@ KindInfo kindInfo(uint16_t kind);
 std::vector<KindInfo> kinds();  // the whole table, in order
 Bytes tag(uint16_t kind);
 std::string kindTagString(uint16_t kind);
-// governance_bits.json's row of `bit` as JSON {bit, name, type, sentences} (bits 0-24; any other throws UAArgument)
+// governance_bits.json's row of `bit` as JSON {bit, name, type, sentences} (bits 0-31; any other throws UAArgument)
 std::string governanceBit(uint8_t bit);
 std::optional<Bytes> groupTag(const std::string& group);
 std::optional<std::string> groupTagString(const std::string& group);
@@ -166,6 +166,9 @@ std::string registrationArgs(const std::string& input);
 std::string setKemKeyArgs(const std::string& input);
 // setPqzKey's explicit arguments, JSON in and out. In: {ua, pqzKey, pqzPopHash, sig}, sig as setKemKeyArgs. Out: the same fields, sig complete.
 std::string setPqzKeyArgs(const std::string& input);
+// CTR-UA-44 updateMsig, JSON in and out. In: {ua, chainUid, registry, version, threshold, members: [{kind, id, weight}], enabled,
+// validUntilBlock, sigs}. Out: {digest, message, memberDigest, args}: what a quorum of the stored structure signs on that one registry.
+std::string msigUpdate(const std::string& input);
 // What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
 // `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
 std::string payDigest(const std::string& input);

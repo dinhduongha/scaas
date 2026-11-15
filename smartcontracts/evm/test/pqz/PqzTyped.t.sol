@@ -31,7 +31,9 @@ import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 
 string constant T_TRANSFER = '"PqzTransferArgs":[{"name":"p","type":"uint64"},{"name":"validUntilBlock","type":"uint256"},{"name":"shieldIn","type":"uint256"},'
     '{"name":"fromUA","type":"bytes32"},{"name":"keyVersion","type":"uint64"},{"name":"toUA","type":"bytes32"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"salt","type":"bytes16"},'
-    '{"name":"ownTag","type":"bytes32"},{"name":"u","type":"bytes"},{"name":"vTo","type":"bytes"},{"name":"vFrom","type":"bytes"},{"name":"vAuditor","type":"bytes"},{"name":"sealedMemo","type":"bytes"}]';
+    '{"name":"ownTag","type":"bytes32"},{"name":"u","type":"bytes"},{"name":"vTo","type":"bytes"},{"name":"vFrom","type":"bytes"},{"name":"vAuditor","type":"bytes"},{"name":"uFrom","type":"bytes"},{"name":"sealedMemo","type":"bytes"},'
+    '{"name":"openingTo","type":"PqzOpening"},{"name":"openingAuditor","type":"PqzOpening"}],'
+    '"PqzOpening":[{"name":"mlkemCt","type":"bytes"},{"name":"x25519Eph","type":"bytes32"},{"name":"sealedSeed","type":"bytes"}]';
 string constant T_LEG = '"PqzLeg":[{"name":"ua","type":"bytes32"},{"name":"v","type":"bytes"},{"name":"vAuditor","type":"bytes"}]';
 string constant T_MULTI = '"PqzMultiArgs":[{"name":"p","type":"uint64"},{"name":"validUntilBlock","type":"uint256"},{"name":"shieldIn","type":"uint256"},'
     '{"name":"fromUA","type":"bytes32"},{"name":"keyVersion","type":"uint64"},{"name":"beneficiaryUA","type":"bytes32"},{"name":"decoyFee","type":"uint256"},{"name":"salt","type":"bytes16"},'
@@ -46,7 +48,12 @@ function transferJson(IPqzToken.PqzTransferArgs memory t) pure returns (string m
             ',"keyVersion":', n(t.keyVersion), ',"toUA":', h(t.toUA), ',"beneficiaryUA":', h(t.beneficiaryUA), ',"salt":',
             hexJson(abi.encodePacked(t.salt)), ',"ownTag":', h(t.ownTag)),
         string.concat(',"u":', hexJson(t.u), ',"vTo":', hexJson(t.vTo), ',"vFrom":', hexJson(t.vFrom), ',"vAuditor":', hexJson(t.vAuditor),
-            ',"sealedMemo":', hexJson(t.sealedMemo), '}'));
+            ',"uFrom":', hexJson(t.uFrom), ',"sealedMemo":', hexJson(t.sealedMemo), ',"openingTo":', openingJson(t.openingTo),
+            ',"openingAuditor":', openingJson(t.openingAuditor), '}'));
+}
+
+function openingJson(IPqzToken.PqzOpening memory o) pure returns (string memory) {
+    return string.concat('{"mlkemCt":', hexJson(o.mlkemCt), ',"x25519Eph":', h(o.x25519Eph), ',"sealedSeed":', hexJson(o.sealedSeed), '}');
 }
 
 function multiJson(IPqzToken.PqzMultiArgs memory t) pure returns (string memory) {

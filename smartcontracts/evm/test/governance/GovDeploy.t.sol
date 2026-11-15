@@ -26,6 +26,8 @@ import {NormalPqzRegulatedToken} from "../../src/regulated/NormalPqzRegulatedTok
 import {NormalZetherRegulatedToken} from "../../src/regulated/NormalZetherRegulatedToken.sol";
 import {WrappedZetherRegulatedToken} from "../../src/regulated/WrappedZetherRegulatedToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {PqChat} from "../../src/pqchat/PqChat.sol";
+import {IPqChat} from "../../src/pqchat/IPqChat.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
@@ -45,6 +47,21 @@ import {
     ZetherTransferVerifierBls12381,
     ZetherBurnVerifierBls12381
 } from "../../src/zether/ZetherVerifier.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
+
+/// The getters `DeployBase` checks on `PQZ_KEY_VERIFIER` (a real one needs the chain's PQZ precompile in its constructor).
+contract PqzKeyVerifierStandIn {
+    address public constant PRECOMPILE = PqzSafety.PQZ;
+    bytes32 public constant PROOF_SYSTEM_ID = PqzSafety.PQZL_ID;
+}
+
+/// The getters `DeployBase` checks on `MLDSA87_VERIFIER` (a real one reverts `UAMldsaNoPrecompile` without one).
+contract Mldsa87VerifierStandIn {
+    uint16 public constant KIND = 0x0134;
+    address public constant PRECOMPILE = 0x000000000000000000000000000000005caA0014;
+}
 
 /// @notice Plan T16 (CTR-GOV-19, GD-12; spec S0, S8, §12.10): every kind has a deploy path, the chain's `GovernanceRouter` is
 ///         deployed before the releases and gated, and every kind's release fits a 200 M block (the SCaaS testnet's,
@@ -66,8 +83,8 @@ contract GovDeployTest is Test {
         assertEq(vm.parseJsonAddress(json, ".implementation_wrapped"), w);
         assertEq(WrappedToken(w).chainUid(), bytes32(0), "chain-neutral: a release carries no env");
         assertEq(f.chainUid(), ZUID, "the factory's, gated");
-        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.WRAPPED), "the kind is on from the factory's start");
-        IFactoryToken.Env memory e = envClosure(f.envOf(IOpenFactory.TokenKind.WRAPPED, 1), w); // T66b: modules after it
+        assertTrue(f.tokenKindEnabled(IOpenFactory.TokenKind.WRAPPED), "the kind is on from the factory's start");
+        IFactoryToken.Env memory e = envClosure(f.tokenEnvOf(IOpenFactory.TokenKind.WRAPPED, 1), w); // T66b: modules after it
         assertEq(keccak256(abi.encode(e.libs)), keccak256(abi.encode(closureLibs(IOpenFactory.TokenKind.WRAPPED))), "link closure");
         for (uint256 i; i < e.libs.length; ++i) assertEq(e.libCodeHashes[i], e.libs[i].codehash, "pinned");
         assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
@@ -76,7 +93,7 @@ contract GovDeployTest is Test {
 
         DeployHarness plain = new DeployHarness();
         (OpenFactory g,) = plain.deploy(ZUID, false, ska); // (the JSON object "deploy" is one per process: not read here)
-        assertEq(g.latestEnvVersion(IOpenFactory.TokenKind.WRAPPED), 0, "the default deploys no WRAPPED");
+        assertEq(g.latestTokenEnvVersion(IOpenFactory.TokenKind.WRAPPED), 0, "the default deploys no WRAPPED");
         assertEq(g.implementationOf(IOpenFactory.TokenKind.WRAPPED, 1), address(0), "no WRAPPED release");
     }
 
@@ -97,10 +114,10 @@ contract GovDeployTest is Test {
             assertEq(WrappedRegulatedToken(payable(w)).kind(), 8 + i, "the release");
             assertEq(vm.parseJsonAddress(json, keys[i]), w);
             assertEq(WrappedRegulatedToken(payable(w)).chainUid(), bytes32(0), "a release carries no env");
-            assertTrue(f.kindEnabled(k), "enabled (T28)");
-            assertEq(WrappedRegulatedToken(payable(w)).REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
+            assertTrue(f.tokenKindEnabled(k), "enabled (T28)");
+            assertEq(WrappedRegulatedToken(payable(w)).COMPLIANCE_REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
                 "the registry code pin in implArgs (T29)");
-            IFactoryToken.Env memory e = envClosure(f.envOf(k, 1), w); // T66b: the body modules after the closure
+            IFactoryToken.Env memory e = envClosure(f.tokenEnvOf(k, 1), w); // T66b: the body modules after the closure
             assertEq(keccak256(abi.encode(e.libs)), keccak256(abi.encode(closureLibs(k))), "link closure");
             for (uint256 j; j < e.libs.length; ++j) assertEq(e.libCodeHashes[j], e.libs[j].codehash, "pinned");
             assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
@@ -111,7 +128,53 @@ contract GovDeployTest is Test {
         (OpenFactory g,) = plain.deploy(ZUID, false, ska);
         assertEq(g.implementationOf(ks[0], 1), address(0), "the default deploys no regulated release");
         assertEq(g.implementationOf(ks[1], 1), address(0), "the default deploys no regulated release");
-        assertFalse(g.kindEnabled(ks[0]));
+        assertFalse(g.tokenKindEnabled(ks[0]));
+    }
+
+    /// Plan 3c T92 (UA-7 D22, topics spec §11): `DEPLOY_PQCHAT` registers `PqChat` on the factory's generic path: the class
+    /// env 1 of `(3, 0)` (the UA registry, `params[0]` the declared code limit), release 1 from the chain-neutral init code,
+    /// the `(3, 0)` switch on, and with a notice period of 0 one instance owned by no UA (JSON `pqchat_implementation`,
+    /// `pqchat_instance`), listed by `contractsPage(3, …)`; with a notice period the release waits and no instance is made;
+    /// without the flag nothing of class 3.
+    function test_deployPqChatPath() public {
+        DeployHarness h = new DeployHarness();
+        h.setPqChat(true);
+        h.setNotice(0);
+        (OpenFactory f, string memory json) = h.deploy(ZUID, false, ska);
+        IOpenFactory.ReleaseId memory id = IOpenFactory.ReleaseId(3, 0, 1);
+        IOpenFactory.ClassRelease memory r = f.classReleaseOf(id);
+        assertEq(vm.parseJsonAddress(json, ".pqchat_implementation"), r.implementation);
+        assertTrue(r.implementation.code.length != 0, "the release");
+        assertEq(PqChat(r.implementation).owner(), bytes32(0), "an implementation: no owner");
+        assertEq(r.initSelector, IPqChat.initialize.selector);
+        assertEq(r.interfaceId, type(IPqChat).interfaceId);
+        assertTrue(f.classKindEnabled(3, 0), "(3, 0) on");
+        IFactoryToken.Env memory e = f.classEnvOf(3, 0, r.envVersion);
+        assertEq(e.registry, vm.parseJsonAddress(json, ".ua_registry"));
+        assertEq(uint256(e.params[0]), h.chainCodeLimit(), "params[0]: the declared code limit");
+        address topics = vm.parseJsonAddress(json, ".pqchat_topics");
+        assertEq(e.libs.length, 1);
+        assertEq(e.libs[0], topics, "the body module pinned in libs (CTR-TOK-30, 3C-D2)");
+        assertEq(e.libCodeHashes[0], topics.codehash);
+        assertEq(PqChat(r.implementation).modules()[0], topics, "named in implArgs");
+        address inst = vm.parseJsonAddress(json, ".pqchat_instance");
+        assertEq(IPqChat(inst).owner(), bytes32(0), "owned by no UA");
+        (IOpenFactory.Created[] memory page, uint256 total) = f.contractsPage(3, 0, 8);
+        assertEq(total, 1);
+        assertEq(page[0].addr, inst);
+
+        DeployHarness late = new DeployHarness();
+        late.setPqChat(true);
+        late.setNotice(1 days);
+        (OpenFactory g,) = late.deploy(ZUID, false, ska); // (the JSON object "deploy" is one per process: not read here)
+        assertTrue(g.classReleaseOf(id).implementation != address(0), "the release, waiting for its notice period");
+        (, total) = g.contractsPage(3, 0, 8);
+        assertEq(total, 0, "no instance before the notice period");
+
+        DeployHarness plain = new DeployHarness();
+        (OpenFactory p,) = plain.deploy(ZUID, false, ska);
+        assertEq(p.classReleaseOf(id).implementation, address(0), "the default registers no PqChat");
+        assertFalse(p.classKindEnabled(3, 0));
     }
 
     /// Plan T30 (regulated-kinds spec §6.1): `DEPLOY_ZETHER` also deploys the regulated Zether releases 10 and 11 (version 1,
@@ -131,11 +194,11 @@ contract GovDeployTest is Test {
             assertEq(NormalZetherRegulatedToken(w).kind(), 10 + i, "the release's kind");
             assertEq(vm.parseJsonAddress(json, keys[i]), w);
             assertEq(NormalZetherRegulatedToken(w).chainUid(), bytes32(0), "a release carries no env");
-            assertTrue(f.kindEnabled(k), "enabled");
-            assertEq(NormalZetherRegulatedToken(w).REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
+            assertTrue(f.tokenKindEnabled(k), "enabled");
+            assertEq(NormalZetherRegulatedToken(w).COMPLIANCE_REGISTRY_CODEHASH(), keccak256(type(ComplianceRegistry).runtimeCode),
                 "the registry code pin in implArgs");
-            IFactoryToken.Env memory e = envClosure(f.envOf(k, 1), w); // T66b: each env's body modules after its closure
-            IFactoryToken.Env memory b = envClosure(f.envOf(IOpenFactory.TokenKind(2 + i), 1),
+            IFactoryToken.Env memory e = envClosure(f.tokenEnvOf(k, 1), w); // T66b: each env's body modules after its closure
+            IFactoryToken.Env memory b = envClosure(f.tokenEnvOf(IOpenFactory.TokenKind(2 + i), 1),
                 f.implementationOf(IOpenFactory.TokenKind(2 + i), 1));
             // the base kind's env libraries (DeployBase's order) and `RegulatedLib`: the closure as a set
             assertEq(e.libs.length, b.libs.length + 1, "link closure");
@@ -155,7 +218,7 @@ contract GovDeployTest is Test {
         DeployHarness plain = new DeployHarness();
         (OpenFactory g,) = plain.deploy(ZUID, false, ska);
         assertEq(g.implementationOf(ks[0], 1), address(0), "no Zether stack, no regulated Zether release");
-        assertFalse(g.kindEnabled(ks[1]));
+        assertFalse(g.tokenKindEnabled(ks[1]));
     }
 
     /// Plan T33 (regulated-kinds spec §6.1): each regulated release published as its stack deploys it: 8, 9 by
@@ -163,7 +226,7 @@ contract GovDeployTest is Test {
     /// env with `RegulatedLib`, `implArgs` the registry pin; a forge EVM has no PQZ precompile, so a contract stands in for
     /// the verifier as in `_release`). Each: version 1 on env 1, its kind, gated, enabled, `RegulatedLib` in `Env.libs`
     /// with its code hash in `libCodeHashes`, the UA registry and the router of this deploy (T32's move), and a
-    /// `REGISTRY_CODEHASH` equal to the code of the registry this deploy put up (`compliance_registry`).
+    /// `COMPLIANCE_REGISTRY_CODEHASH` equal to the code of the registry this deploy put up (`compliance_registry`).
     function test_regulatedReleasesPublished_8() public { _published(IOpenFactory.TokenKind.NORMAL_REGULATED); }
 
     function test_regulatedReleasesPublished_9() public { _published(IOpenFactory.TokenKind.WRAPPED_REGULATED); }
@@ -175,6 +238,69 @@ contract GovDeployTest is Test {
     function test_regulatedReleasesPublished_12() public { _published(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED); }
 
     function test_regulatedReleasesPublished_13() public { _published(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED); }
+
+    /// Owner 2026-11-15 (`DEPLOY_PQZ`): with every flag and the two verifiers `deploy.sh evm`'s first step builds on the chain (here
+    /// stand-ins with the getters `DeployBase` checks; forge has no PQZ / ML-DSA-87 precompile), the deploy publishes all 12
+    /// token kinds 0-5 and 8-13, version 1, enabled; the gen-1 registry lists `pqz-mlwe` 0x0142 and `mldsa87` 0x0134 on them and
+    /// the gate (the chain's probe forced to pass) holds; the PQZ envs: deps `[PQZ_KEY_VERIFIER]`, the kind's link closure, the
+    /// regulated ones the registry pin.
+    function test_deployPqzPublishesEveryKind() public {
+        DeployHarness h = new DeployHarness();
+        h.setWrapped(true);
+        h.setRegulated(true);
+        h.setComplianceAdmin(address(this));
+        address pqv = address(new PqzKeyVerifierStandIn());
+        address v87 = address(new Mldsa87VerifierStandIn());
+        h.setPqz(true, pqv, v87);
+        h.forcePq(true, true);
+        (OpenFactory f, string memory json) = h.deploy(ZUID, true, ska);
+        uint8[12] memory ks = [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13];
+        for (uint256 i; i < 12; ++i) {
+            IOpenFactory.TokenKind k = IOpenFactory.TokenKind(ks[i]);
+            assertTrue(f.implementationOf(k, 1) != address(0), string.concat("release of kind ", vm.toString(ks[i])));
+            assertTrue(f.tokenKindEnabled(k), string.concat("kind enabled ", vm.toString(ks[i])));
+        }
+        IUARegistry reg = IUARegistry(vm.parseJsonAddress(json, ".ua_registry"));
+        assertTrue(reg.kindEnabled(0x0142) && reg.kindEnabled(0x0134), "the gen-1 registry lists 0x0142 and 0x0134");
+        assertEq(vm.parseJsonAddress(json, ".pqz_key_verifier"), pqv);
+        assertEq(vm.parseJsonAddress(json, ".mldsa87_verifier"), v87);
+        assertEq(vm.parseJsonAddress(json, ".implementation_wrapped_pqz_regulated"), f.implementationOf(IOpenFactory.TokenKind(13), 1));
+        for (uint8 k = 4; k <= 13; k += (k == 5 ? 7 : 1)) {
+            IOpenFactory.TokenKind kk = IOpenFactory.TokenKind(k);
+            address w = f.implementationOf(kk, 1);
+            IFactoryToken.Env memory env = envClosure(f.tokenEnvOf(kk, 1), w);
+            assertEq(env.deps.length, 1, "one dependency");
+            assertEq(env.deps[0], pqv, "the PqzKeyVerifier");
+            address[] memory want = closureLibs(kk);
+            assertEq(env.libs.length, want.length, "link closure");
+            for (uint256 j; j < env.libs.length; ++j) {
+                bool found;
+                for (uint256 m; m < want.length; ++m) found = found || want[m] == env.libs[j];
+                assertTrue(found, "a library of the closure");
+            }
+            if (k >= 12) {
+                assertEq(NormalRegulatedToken(w).COMPLIANCE_REGISTRY_CODEHASH(),
+                    vm.parseJsonAddress(json, ".compliance_registry").codehash, "the registry pin");
+            }
+        }
+    }
+
+    /// `DEPLOY_PQZ` without `PQZ_KEY_VERIFIER` (a chain without the PQZ precompile: the first step built none) is refused by name;
+    /// so is a chain whose probe passes and whose registry would miss the kind.
+    function test_deployPqzRefusals() public {
+        DeployHarness h = new DeployHarness();
+        h.setPqz(true, address(0), address(0));
+        vm.expectRevert(bytes("DEPLOY_PQZ: no PQZ_KEY_VERIFIER (deploy.sh evm's pq-verifiers step needs the chain's PQZ precompile)"));
+        h.deploy(ZUID, false, ska);
+        h = new DeployHarness();
+        h.forcePq(true, false);
+        vm.expectRevert(bytes("gen-1 registry: PQ precompile kind 0x0142 the probe passes is missing (PQZ_KEY_VERIFIER: deploy.sh evm's pq-verifiers step)"));
+        h.deploy(ZUID, false, ska);
+        h = new DeployHarness();
+        h.forcePq(false, true);
+        vm.expectRevert(bytes("gen-1 registry: PQ precompile kind 0x0134 the probe passes is missing (MLDSA87_VERIFIER: deploy.sh evm's pq-verifiers step)"));
+        h.deploy(ZUID, false, ska);
+    }
 
     function _published(IOpenFactory.TokenKind k) internal {
         DeployHarness h = new DeployHarness();
@@ -189,7 +315,7 @@ contract GovDeployTest is Test {
                 ".implementation_normal_zether_regulated_bls12381", ".implementation_wrapped_zether_regulated_bls12381"];
             w = f.implementationOf(k, 1);
             assertEq(vm.parseJsonAddress(json, keys[b]), w, "the JSON key");
-        } else { // e2e.py's steps: publishEnv(k, 1, base env + RegulatedLib), deployImplementation(k, 1, 1, code, pin), enable
+        } else { // e2e.py's steps: publishTokenEnv(k, 1, base env + RegulatedLib), deployTokenImplementation(k, 1, 1, code, pin), enable
             IFactoryToken.Env memory e = pinned(plainEnv(address(f), address(0), ZUID, vm.parseJsonAddress(json, ".ua_registry"),
                 false), k);
             e.deps = new address[](1);
@@ -197,17 +323,17 @@ contract GovDeployTest is Test {
             bytes memory code = b == 4 ? type(NormalPqzRegulatedToken).creationCode : type(WrappedPqzRegulatedToken).creationCode;
             (address[] memory ms, bytes memory args) = deployKindModules(uint8(k), address(f), regArgs()); // T66b
             vm.startPrank(address(h));
-            f.publishEnv(k, 1, withModules(e, ms));
-            w = f.deployImplementation(k, 1, 1, code, args);
-            f.setKindEnabled(k, true);
+            f.publishTokenEnv(k, 1, EnvKit.uidOf(address(f)), withModules(e, ms));
+            w = f.deployTokenImplementation(k, 1, 1, code, args, EnvKit.uidOf(address(f)));
+            f.setTokenKindEnabled(k, true, EnvKit.uidOf(address(f)));
             vm.stopPrank();
         }
         assertEq(NormalRegulatedToken(w).kind(), uint8(k), "the release's kind");
         assertEq(NormalRegulatedToken(w).chainUid(), bytes32(0), "a release carries no env");
-        assertTrue(f.kindEnabled(k), "enabled");
+        assertTrue(f.tokenKindEnabled(k), "enabled");
         address creg = vm.parseJsonAddress(json, ".compliance_registry");
-        assertEq(NormalRegulatedToken(w).REGISTRY_CODEHASH(), creg.codehash, "the pin = the deployed registry's code");
-        IFactoryToken.Env memory env = envClosure(f.envOf(k, 1), w); // T66b: the body modules after the closure
+        assertEq(NormalRegulatedToken(w).COMPLIANCE_REGISTRY_CODEHASH(), creg.codehash, "the pin = the deployed registry's code");
+        IFactoryToken.Env memory env = envClosure(f.tokenEnvOf(k, 1), w); // T66b: the body modules after the closure
         address[] memory want = closureLibs(k);
         assertEq(env.libs.length, want.length, "link closure");
         bool lib;
@@ -225,9 +351,10 @@ contract GovDeployTest is Test {
     }
 
     /// Plan T33 (regulated-kinds spec §6.1, F-21; CTR-AS-07, CTR-AS-16): `DEPLOY_REGULATED` puts up one canonical
-    /// `ComplianceRegistry` by CREATE2, its admin `COMPLIANCE_ADMIN` (a contract; none or an EOA refused by the registry's
-    /// constructor), its code the regulated releases' pin; JSON `compliance_registry`, `compliance_registry_codehash`. The
-    /// admin's `ELIGIBLE_CONTRACT` rows for a DEX venue (`createDex`) and its `DexPuller` let an `ALLOWLIST` token reach the
+    /// `ComplianceRegistry` by CREATE2, its admin the native id of `COMPLIANCE_ADMIN` (any account, round 3r; none refused by
+    /// the registry's constructor, `AdminZero`) and its router this deploy's (spec §5.3), its code the regulated releases' pin
+    /// whatever the admin and router; JSON `compliance_registry`, `compliance_registry_codehash`. The
+    /// admin's `ELIGIBLE_CONTRACT` rows for a DEX venue (`createDex`) and its `DexPuller` let a `KYC` token (round 3s) reach the
     /// venue, which it refuses before them.
     function test_registryDeployedAndDexAttested() public {
         DeployHarness h = new DeployHarness();
@@ -238,17 +365,20 @@ contract GovDeployTest is Test {
         bytes32 pin = keccak256(type(ComplianceRegistry).runtimeCode);
         assertEq(address(r).codehash, pin, "the canonical code");
         assertEq(vm.parseJsonBytes32(json, ".compliance_registry_codehash"), pin, "JSON codehash");
-        assertEq(r.admin(), address(this), "COMPLIANCE_ADMIN");
-        assertEq(address(r), vm.computeCreate2Address(keccak256("scaas.deploy.v1"),
-            keccak256(abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(address(this)))), address(h)), "CREATE2");
+        address router = vm.parseJsonAddress(json, ".governance_router");
+        assertEq(r.admin(), nid(address(this)), "COMPLIANCE_ADMIN");
+        assertEq(r.govRouter(), router, "the chain's router");
+        assertEq(r.chainUid(), ZUID, "the chain's word (CTR-GOV-27)");
+        assertEq(address(r), vm.computeCreate2Address(keccak256("scaas.deploy.v1"), keccak256(abi.encodePacked(
+            type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router, ZUID))), address(h)), "CREATE2");
 
-        address dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0x7EA5), false, 0, address(0))), "venue");
+        address dex = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 0, address(0x7EA5), false, 0, address(0), 0, 0)), "venue");
         address puller = SCaaSDex(dex).puller();
         address alice = address(0xA11CE);
         _attest(r, nid(alice), 1, type(uint64).max);
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.owner) = ("Reg", "REG", nid(address(0x0A11)));
-        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.ALLOWLIST);
+        (c.name, c.symbol, c.admin) = ("Reg", "REG", nid(address(0x0A11)));
+        c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.KYC); // round 3s: the registry check is bit 28
         (c.initialSupply, c.initialHolder) = (1000, alice);
         (c.reg.complianceRegistry, c.reg.requiredFlags, c.reg.termsHash) = (address(r), 1, keccak256("terms"));
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL_REGULATED, 1, abi.encode(c), "t");
@@ -260,9 +390,9 @@ contract GovDeployTest is Test {
         uint64[] memory fl = new uint64[](2);
         uint64[] memory vu = new uint64[](2);
         (a[0], a[1], fl[0], fl[1], vu[0], vu[1]) = (nid(dex), nid(puller), 8, 8, type(uint64).max, type(uint64).max);
-        r.attest(a, fl, vu); // the admin's call (this test is COMPLIANCE_ADMIN)
+        r.setCompliance(a, fl, vu, ZUID); // the admin's call (this test is COMPLIANCE_ADMIN); the registry's word
         for (uint256 i; i < 2; ++i) {
-            (uint64 flags, uint64 until, uint32 id) = r.attestationOf(a[i]);
+            (uint64 flags, uint64 until, uint32 id) = r.complianceOf(a[i]);
             assertEq(flags, 8, "ELIGIBLE_CONTRACT");
             assertEq(until, type(uint64).max);
             assertEq(id, 0, "an admin row");
@@ -274,11 +404,11 @@ contract GovDeployTest is Test {
 
         DeployHarness none = new DeployHarness();
         none.setRegulated(true);
-        vm.expectRevert(abi.encodeWithSelector(IComplianceRegistry.AdminNotContract.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IComplianceRegistry.AdminZero.selector));
         none.deploy(ZUID, false, ska);
-        none.setComplianceAdmin(address(0xE0A));
-        vm.expectRevert(abi.encodeWithSelector(IComplianceRegistry.AdminNotContract.selector, address(0xE0A)));
-        none.deploy(ZUID, false, ska);
+        none.setComplianceAdmin(address(0xE0A)); // an EOA: any account is an admin since round 3r
+        (, json) = none.deploy(ZUID, false, ska);
+        assertEq(ComplianceRegistry(vm.parseJsonAddress(json, ".compliance_registry")).admin(), nid(address(0xE0A)));
     }
 
     function _attest(ComplianceRegistry r, bytes32 account, uint64 flags, uint64 until) internal {
@@ -286,7 +416,7 @@ contract GovDeployTest is Test {
         uint64[] memory fl = new uint64[](1);
         uint64[] memory vu = new uint64[](1);
         (a[0], fl[0], vu[0]) = (account, flags, until);
-        r.attest(a, fl, vu);
+        r.setCompliance(a, fl, vu, EnvKit.regUidOf(address(r)));
     }
 
     /// The `WRAPPED` release is gated as every release (NET-EVM-06, GD-4): one gas below its own need, by name, and nothing of
@@ -312,9 +442,14 @@ contract GovDeployTest is Test {
         // 43,503 -> 44,456 B (the env read from the clone's code, `chainEnv`, `validateEnv`); 3f T44: 44,456 -> 44,610 B (the
         // three PQZ verifier fields refused by `_requireUnused`); 3h T60: 44,610 -> 44,635 B (`proofStore` refused there too);
         // T83: 44,635 -> 45,522 B (the pay records' views and `_payRecord`, the v3 `PayMeta` tuple); T66b (the body
-        // modules): 45,522 -> 17,808 B, under the registry's 28,165, so the code limit is checked on the release by name
-        h.limitCode(17_807);
-        vm.expectRevert(bytes("WrappedToken runtime 17808 B > chain code limit 17807 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
+        // modules): 45,522 -> 17,808 B, under the registry's 28,165, so the code limit is checked on the release by name;
+        // group 3l: 17,808 -> 19,366 B (the five wrap-limit stubs); merge3k (+ ua-mtx-liquidity's `mtxLiquidityPull` stub):
+        // 19,366 -> 19,532 B; Fable review fixes 2026-11-11 (B P3-1, B P2-1 in the ERC-20 core): 19,532 -> 19,626 B;
+        // fix2 CTR-GOV-27's Change (`transferAdmin(bytes32,bytes32)`'s stub in the dispatcher): 19,626 -> 19,652 B; fix3
+        // CTR-GOV-28 (the five admin stubs take `chainUid_`): 19,652 -> 19,743 B; round 3zb + 3zc (the six supply-cap stubs,
+        // the holder entries' chain word, CTR-GOV-28 Change / -30): 19,743 -> 19,988 B
+        h.limitCode(19_987);
+        vm.expectRevert(bytes("WrappedToken runtime 19988 B > chain code limit 19987 B (CHAIN_CODE_LIMIT, CTR-GOV-19)"));
         h.requireGas("WrappedToken");
     }
 
@@ -380,7 +515,7 @@ contract GovDeployTest is Test {
             _release(type(WrappedRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_REGULATED, router),
             _release(type(WrappedPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, router),
             _release(type(NormalRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_REGULATED, router),
-            abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(router)), // T29: a plain deploy, admin a contract
+            abi.encodePacked(type(ComplianceRegistry).creationCode, abi.encode(nid(address(this)), router, ZUID)), // a plain deploy
             _release(type(NormalZetherRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, router), // T30
             _release(type(WrappedZetherRegulatedToken).creationCode, IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, router),
             _release(type(NormalPqzRegulatedToken).creationCode, IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, router) // T31
@@ -483,7 +618,7 @@ contract GovDeployTest is Test {
     /// Plan T10 (T2 and T7 moved the bytecode): `RelayFeeRouter` (no constructor argument: one address on every chain) and the
     /// `GovernanceRouter` (here on the SCaaS testnet's reset-1 inputs: chain_uid, registry, `SmartKeyAccount`
     /// implementation, not Hedera) at their deploy CREATE2 addresses (the deterministic deployer, the default
-    /// `DEPLOY_SALT`), not the reset-1 ones (`deployments/7622.json`, which `node.example.toml`'s `governance_routers`
+    /// `DEPLOY_SALT`), not the reset-1 ones (that reset's book `7622.json`, which `node.example.toml`'s `governance_routers`
     /// names): a deploy of this tree lists the new ones.
     function test_routerAndRelayFeeRouterNewAddresses() public pure {
         bytes32 deploySalt = keccak256("scaas.deploy.v1");
@@ -504,8 +639,18 @@ contract GovDeployTest is Test {
         // 0x8B56809BBf5f6595351F648a499E194292B6100C; T82 (the metadata hash: the contract's new name and file, owner
         // 2026-11-09): -> 0x6e5ADaD0b26E45d76250564dC569D2C05a082762; T83 (the metadata hash: `MetaTxLib.PayMeta` v3 and
         // `PayRecord`, owner 2026-11-09): -> 0x70ba50D63EC511e4a39bf34d8EE01F3e85D3cEaC; T66b (the metadata hash: the
-        // T66b sources it imports, the `IERC20MetaTx` comment of f0c03715 among them; its code unchanged): -> this
-        assertEq(rf, 0xd981282EC3f2F979B953BDE7c7c3c4100caDfe89, "RelayFeeRouter");
+        // T66b sources it imports, the `IERC20MetaTx` comment of f0c03715 among them; its code unchanged):
+        // 0xd981282EC3f2F979B953BDE7c7c3c4100caDfe89; Fable review fixes 2026-11-11 (the metadata hash: `MetaTxLib` loses
+        // `hashStruct` / `validateMode`, B P3-3; its code unchanged): -> 0x43E08564FE056f53014bb2c40C4f845E550Eb8Cf;
+        // re-check C6 (the metadata hash: `ModeUnknownBits` leaves `MetaTxLib`): 0xa3097e517E91B9e0f807815f92052212AD53a454;
+        // fix2 CTR-GOV-26 (its `rescue(asset)` to the constant dev address, under the entry guard):
+        // 0x92CF546e4F32C23859255BC207B33af34F584A2A; CTR-GOV-25 Change (the constant is the one-owner `RescueVault`):
+        // 0xd96A3154BD20B4082D430E792e8245910c12F1FD; CTR-GOV-25 Change (the two-role `RescueVault`, admin + rescuer):
+        // 0xcc4746baCAFfD3605D7745AB8fE18CA44501f445; Fable fix2 V-1 (the vault's ERC-5267 fields 0x0b moved the constant):
+        // 0xBbc8A5561C5d1877a3Cb0Bac6Ca80446BA100F5F; pqz-three-keys step 3 (the metadata hash: `IUARegistry` gains the
+        // scoped PQZ key records, K3-3; its code unchanged): 0x7f00524c2b24014C7db703d89c1b16B49B3aEfeF; CTR-UA-44 (TODO 3ze; the
+        // metadata hash: `IUARegistry` gains `updateMsig`, `msigStateOf`; its code unchanged): -> this
+        assertEq(rf, 0x3a77CAC88eeFa96E89CA64154D20dc8efcaE082C, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -528,8 +673,59 @@ contract GovDeployTest is Test {
         // T83 (the metadata hash: `IMetaTokenV2`'s pay-record views, `PaymentMeta` v3): -> 0x7d3C8bE73d8840bA378F83D8Ac1297080ceaCc03
         // T66b 3.1b (the metadata hash: `UAKinds` / `UAStore` comments naming `UARegistryCoreLib`): ->
         // 0x13CBB3D5DCb0736f87F136ad13276568A80d1aa9; T66b 4.1 (the `<X>Core` + flat-face split of `GovernanceRouterBase`,
-        // 15,305 -> 15,572 B runtime): -> this
-        assertEq(router, 0x639e34f93Ac69d6Ba31D773AC915894542180723, "GovernanceRouter");
+        // 15,305 -> 15,572 B runtime): -> 0x639e34f93Ac69d6Ba31D773AC915894542180723; the factory's release entries renamed
+        // (owner 2026-11-10; the metadata hash: `IOpenFactory`'s `deployTokenImplementation` / `deployImplementation`, its
+        // code unchanged): -> 0x9084894b49299A2b1DFdB271e2C5Fd8D4f9bA904; group 3l (`mtxSetWrapLimits`, `mtxSetWrapMember`,
+        // their typehashes; 0x7F3b13D20e51EA69BBEeF32394a76db36013FEE3 on its branch), merged (merge3k): ->
+        // 0x1b8ae68e34f2710b8ba48b33fD53942F3b1a47A0; group 3p (owner 2026-11-10, CTR-UA-41; the metadata hash: the comment of
+        // `IFactoryToken` naming `PqzKeyVerifier`, was `UAPqzVerifier`): -> 0xe3E535A28d5aBCa856dE18bdc46AaD334ab71f42; the
+        // directories renamed (owner 2026-11-10; the metadata hash: `UAMetaTxBase`'s comment names script/modules/gen_faces.py,
+        // was script/t66b/): -> 0xb0E39bCa5EA2C70840e28Ba356606f607F54a1D3; round 3r T2 / T7a (CTR-GOV-23: `IGovernance is IAdmin`
+        // and its admin names, the three ops `mtxTransferAdmin`, `mtxAcceptAdmin`, `mtxRenounceAdmin` and their typehashes): ->
+        // 0x62505351CB1f44c078fcC44C8ec9531B145C93E3; round 3r T4 (R1; the metadata hash: `IOpenFactory` without the owner in
+        // `Created`, the events and `FactoryInfo`, no `contractsOfOwner`): -> 0x349b10f51bCA434cd4C3609EA8C327c755b4fA97;
+        // round 3r T5 (the metadata hash: `IOpenFactory is IAdmin`, its approvals, no `registrar`): ->
+        // 0x53EE55a076bDeb38b3924471aFFEEb74AD32d47E; round 3r T6 (the metadata hash: `IRegulatedToken`'s compliance
+        // registry errors renamed and `ComplianceRegistryRouterMismatch`, its code unchanged): ->
+        // 0xcA8b1b01BB32b807Fc7848CE3a28EfA727A28BBf; round 3r T15 (the router's view `smartKeyCloneHash()`, +52 B; the
+        // metadata hash: `IOpenFactory`'s directory, spec §13): -> 0x27D74283541a0bEfd3281ADa6609dfC3221d1836; round 3r T7 (the fifteen
+        // admin ops of the factory and a compliance registry, spec §5.4; owner naming 2026-11-11): ->
+        // 0x668B713392eEcF586D1BAbF16be677b94a71E8f0; round 3s T4 (CTR-GOV-24: `mtxSetAllowed`, `mtxSetDenied`,
+        // `mtxEnableFeature`) and round 3t (CTR-PQZ-36: `mtxSetVerifierFee`), both in (merge 0d6bc40c; 3t alone was
+        // 0xA978FEFC6E60Bb1Bfe66F55b5A877b3C44094C3a): -> 0xf6cEa6aB1eF258779F44546EE3BD596aD2576EFe; Fable review fixes
+        // 2026-11-11 (`MtxPipelineLib._callFee`'s refusals, B P3-4; the metadata hash: `MetaTxLib`, `GovernanceLib`):
+        // 0xc1F97DFA09Ee3D51D370542dbD2c0f5024d8C880; re-check C1, C2, C4, C6 (the metadata hash: `GovernanceLib._cuts`,
+        // `ITradeToken`, `MetaTxLib`): 0xD05a7FF11D301Cd9112Ea2eAb6174f3E84bA7c3A; fix2 D P3-2 (the deprecations and kind
+        // switches carry `chainUid`, their typehashes): 0x34C0c8173824aE118c6Ec0E183290280C21530b9; fix2 D P3-5 (the metadata
+        // hash: `ISCaaSDex.rescue`, `SCaaSDex`'s comments): 0xF35EF840Db3c7FD9F63e8cd86e88e2dE9CB46C29; fix2 CTR-GOV-25 (the
+        // metadata hash: `RescueLib`, `GovernanceLib.init`, `DexPuller`): 0x3B3B1Cda834b39B4541d0861226E7bE4712302AF; fix2
+        // CTR-GOV-26 (its `rescue(asset)` to the constant dev address): 0x1C8CfE54481AA3974F6967FB58d0C6ea93393b0a; fix2
+        // recheck-2 P3-1 (CTR-GOV-27: `mtxRenounceAdmin` and `UARenounceAdmin` carry `chainUid`; the metadata hash:
+        // `IGovernance`, `IOpenFactory`): 0x60B276496DA55AA0dAD11DcbDaf6Eb00e1E2e51B; fix2 CTR-MTX-86 (the payee-fee names; the
+        // metadata hash: `MtxPipelineLib`, `UAMetaTxBase`, `UAKinds`): 0xAC730941186ffda9664cbAf9C386628a256F6Bd4; fix2
+        // CTR-GOV-27's Change (`mtxTransferAdmin`, the three `mtxPublish*Env`, `mtxRevokeApproval` carry `chainUid`,
+        // `mtxSetChainEntries` the nested `ChainEntries`; the metadata hash: `IAdmin`, `IOpenFactory`, `IComplianceRegistry`):
+        // 0x2f014B077cFcaa4a0A6C7239147DeD7FAe23877F. On ua-mtx-fix2-dex from 0x1C8CfE54…: fix2-dex CTR-DEX-32 (the metadata
+        // hash: `ISCaaSDex.DexConfig` gains `features`, `lockedFeatures`; its code unchanged):
+        // 0x442Df70CD12C49b876D5552Fa40b126C5E0E662f; fix2-dex settle outcome rule (the metadata hash:
+        // `ISCaaSDex.SellerOverDebited`): 0x51E43059317Bf99D7d615a0334e1781BA62CFFf5. The merge of 8f4b1b64 (both):
+        // 0x34021369121a22e7A94f19778C9704a24A493a05. On ua-mtx-rescue-vault from 0x60B27649…: CTR-GOV-25 Change (the constant
+        // is the one-owner `RescueVault`): 0xcf6aB482462467de132E93aE6471e0A6d9117c9c; CTR-GOV-25 Change (the two-role
+        // `RescueVault`, admin + rescuer): 0xE8b1c2FFc9E8BC552a266E86e8Bd6046E8E6272A. The merge of e374704f (both):
+        // 0xf670956b67F159a1323e12309cD375D28a44d2a3; Fable fix2 V-1 (the vault's ERC-5267 fields 0x0b moved the constant):
+        // 0xc18b4D5EA8a7d88ed37Da8F26A4c4e521c38C2BA; Fable fix2 GOV-4 (the metadata hash: `IGovernance.renounceAdmin`'s
+        // NatSpec): 0xB1218049Db73aF164e688b770DBC05d422624A1a; fix3 CTR-GOV-28 (the twelve admin ops sign and forward the
+        // target's `chainUid`, their typehashes; the metadata hash: `IGovernance`, `IRegulatedToken`, `IPqzToken`,
+        // `IComplianceRegistry`): 0x1C62B8aa42b5c800eFa3BE1a97f62925c0d74a47; fix3 owner 2026-11-13 (`mtxRenounceRole` signs
+        // and forwards the word, `UARenounceRole`'s typehash; the metadata hash: `IGovernance.renounceRole`):
+        // 0xc757ebb994C1c938FF89c948B9b73B4eb0b4c2A0; pqz-three-keys step 3 (the metadata hash: `IUARegistry` gains the
+        // scoped PQZ key records, K3-3; its code unchanged): 0xCA60e74Eadd0F0A40d9A34b35D611e0Ed3fF572f; pqz-three-keys step 4
+        // (the metadata hash: `IPqzToken` gains the opening fields, `mtxRollOverSigned`, `pqzSkipped`; its code unchanged):
+        // 0x454bdF0b754A318ebA96d50689FB14762a255Aeb; burner-wrap-caps (round 3zb + 3zc: the chain word on 25 holder ops,
+        // `mtxSetMaxSupply`, `mtxSetMaxWrapSupply`, CTR-GOV-28 Change, CTR-GOV-30): 0xA243e3F1a8bBc3659ac69b5AE0A571b1CF0a5E1D;
+        // msig-members, CTR-UA-44 (TODO 3ze; the metadata hash: `IUARegistry` gains `updateMsig`, `msigStateOf`; its code
+        // unchanged): 0x25e38E5af7B8aeF469B92cc357f56F46898FCe70. The merge pre-reset4 (both; the metadata hash): -> this
+        assertEq(router, 0xEf29EBaCe18B161338a8a0f8cF34839b233127F9, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

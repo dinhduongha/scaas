@@ -12,6 +12,7 @@ import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
 import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../../src/ua/UAKinds.sol";
 import {UARegistry} from "../../../src/ua/UARegistry.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// Group 3f, T49 (PQZ verifier mode spec §14): the handler of invariants I1-I6. Two tokens from the same state: `pre`
 /// (PRECOMPILE, the precompile mocked to accept) and `off` (OFFCHAIN, this handler its owner; the factory's notice period 0, so a
@@ -171,7 +172,7 @@ contract PqzVerdictHandler is PqzOffchainBase {
         bytes32 cur = off.pqzVerifyConfig().verifier;
         (bytes32 next, uint256 k) = cur == vA ? (vB, VKEY2) : (vA, VKEY);
         uint32 e = off.pqzVerifyConfig().pqzVerifierEpoch;
-        try off.pqzSetVerifier(next) {
+        try off.pqzSetVerifier(next, EnvKit.codeUidOf(address(off))) {
             (keyNow, coded) = (k, false); // a native verifier with code is refused at the proposal
             ++moves;
             if (off.pqzVerifyConfig().pqzVerifierEpoch <= e) ++epochStuck;
@@ -180,7 +181,7 @@ contract PqzVerdictHandler is PqzOffchainBase {
 
     function revoke() external {
         uint32 e = off.pqzVerifyConfig().pqzVerifierEpoch;
-        try off.pqzRevokeVerifier() {
+        try off.pqzRevokeVerifier(EnvKit.codeUidOf(address(off))) {
             keyNow = 0;
             coded = false;
             ++moves;

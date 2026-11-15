@@ -4,7 +4,7 @@
 // signatures.json's `native` key, RFC 6979), the entry's signature, selector and calldata. Fields a row does not set are
 // fillers, keccak256 of the field's path: right types, not valid proofs, ciphertexts or lengths, since a typed digest
 // hashes `bytes` whatever their length. C2-C6 run these against the chain as NamedEntry.t.sol does (`structHash` under the
-// contract's own domain). The rows of the C0 entries and of C6's orders, cancels and receiver fees take values their
+// contract's own domain). The rows of the C0 entries and of C6's orders, cancels and payee fees take values their
 // fixtures accept. ua-mtx-merge T11 (CTR-MTX-30, MD-7): one row per op, the merged `UA<Op>` on its `mtx<Op>` entry with
 // `UASig`; the address rows of merged ops are in vectors/typed/legacy/ua-mtx-merge/ (generator in clientkeys/legacy/).
 //   node scripts/typed-ops-vectors.mjs [outDir]
@@ -17,6 +17,7 @@ import { TYPED_OPS, OP_BUILDERS, hashStruct, hashTypedData, uaMetaTransferTypedD
 } from '../src/evm.js';
 import { confPublic, g1 } from '../src/zether.js';
 import { recordId } from '../src/regulated.js';
+import { releaseApprovalKey } from '../src/factory.js';
 import { ecdsa, nativeSk, nativeAddr, nativeUa, be } from './ua-signers.mjs';
 
 const VECTORS = fileURLToPath(new URL('../../../smartcontracts/vectors/', import.meta.url));
@@ -82,6 +83,8 @@ const COMMIT_REVEAL = { sealedMemo: '0x' };  // a BUNDLE form carries no memo
 const ROW = {
   UAUnwrap: { wrapped: 1000000, minOut: 990000, recipient: '0x0000000000000000000000000000000000000B0B' },
   UAShield: { toUA: ZETHER_UA, amount: 10 },
+  // CTR-PQZ-41: the skip marks strictly ascending, as the token and the node require (the generic filler gives two decreasing)
+  PqzRollOver: { skip: [92000, 155000] },
   // the delegate a 32-byte id (Q6, CTR-ACC-12), the address of today's row zero-padded
   UASetMandate: { token: '0x5ca00000000000000000000000000000000000b1', delegate: padId('0x00000000000000000000000000000000000000d2'),
     maxPerPayment: 7, maxPerPeriod: 9, periodSeconds: 86400, expiry: 1900000000 },
@@ -90,7 +93,7 @@ const ROW = {
   UASetRollOverMode: { rollOverMode: 1 },
   ZetherSetRollOverMode: { mode: 1 },
   PqzAuth: { op: 1, chainId: contexts.A.chainId, token: CONTRACT.pqz, registry: contexts.A.registry, chainUid: contexts.A.chainUid },
-  UAReceiverFee: { payment: pay(hex(nativeUa), padId('0x0000000000000000000000000000000000005409')), fee: 300000, feeRecipient: FEE_TO,
+  UAPayeeFee: { payment: pay(hex(nativeUa), padId('0x0000000000000000000000000000000000005409')), fee: 300000, feeRecipient: FEE_TO,
     validUntil: 1800000060 },
   // a regulated kind's payment with its tax (pay-meta-tax spec §5.2): AMOUNT 1,000 of the 100,000,000
   UAPayWithTax: { payment: pay(hex(nativeUa), padId('0x0000000000000000000000000000000000005409')), taxMode: 2, tax: 1000 },
@@ -101,6 +104,15 @@ const ROW = {
   UAPqzSetVerifier: { next: padId('0x5ca00000000000000000000000000000000000f1') },
   // group 3h (T61): LOG
   UASetProofStore: { next: 1 },
+  // round 3t (CTR-PQZ-36): the verifier fee 3; relayer and fee recipient unbound (mode 0), as MetaTxLib.canon hashes them
+  UASetVerifierFee: { next: 3, mode: 0, fee: 0 },
+  // group 3l (wrap limits spec §6, §9): one leg at a hundredth of a 6-decimal unit, a daily wrap window, the net rule with a
+  // two-year decay; values a hybrid at `target` with bits 25 and 26 takes (TypedOps.t.sol's router rows); a member both ways
+  UASetWrapLimits: { legs: [{ underlying: '0x5ca00000000000000000000000000000000000c3', unitExp: 4, decayDays: 730,
+    wrapShort: { perUser: 100000, tokenWide: 0, period: 86400 }, wrapLong: { perUser: 0, tokenWide: 5000000, period: 2592000 },
+    unwrapShort: { perUser: 0, tokenWide: 0, period: 0 }, unwrapLong: { perUser: 0, tokenWide: 0, period: 0 } }],
+    netUnwrap: true, wrapList: false, unwrapList: false },
+  UASetWrapMember: { account: padId('0x00000000000000000000000000000000000007a1'), canWrap: true, canUnwrap: true },
 };
 ROW.UAWrapOrder = wrapOrder(hex(nativeUa), NO_ID);
 ROW.CancelUAOrder = { order: order(hex(nativeUa), NO_ID) };
@@ -120,6 +132,9 @@ ROW.UAPqzTransferSingle = { args: COMMIT_REVEAL };
 const RELEASE_3H = new Set(['UAPqzTransferSingle', 'UAPqzTransferSingleCompact', 'UAPqzTransfer', 'UAPqzTransferCompact', 'UAPqzUnshield',
   'UAPqzUnshieldUnwrap']);
 for (const n of RELEASE_3H) ROW[n] = { ...ROW[n], mode: 0, fee: 0 };
+// The three-key model (CTR-PQZ-38, -40, -41): `PqzTransferArgs` gains `uFrom` and the two openings (the two single-transfer rows
+// move), and the holder's `PqzRollOver` is new; those rows are tagged `"release": "three-keys"`.
+const RELEASE_3K = new Set(['UAPqzTransferSingle', 'UAPqzTransferSingleCompact', 'PqzRollOver']);
 // The regulated controls (regulated-kinds spec §3.1, ua-mtx-merge T34): values a kind-8 token at `target` takes at
 // REG_NOW (TypedOps.t.sol's regulated rows): one record runs through them, recorded by `UARecordOrder`, backing `UAFreeze`,
 // moved under by `UAForceTransfer`, ended by `UARevokeOrder`; `UAOperatorTransfer` moves the record's subject's units.
@@ -147,6 +162,50 @@ ROW.UACreateDex = { version: 1, initHash: hex(keccak_256(fromHex(INIT_ARGS))), s
 ROW.UACreateInstance = { contractClass: 4, kind: 0, version: 1, initHash: hex(keccak_256(fromHex(INIT_CALL))),
   salt: hex(hash('create.instance.salt')) };
 
+// Round 3r (spec 2026-11-10-admin-not-owner.md §5.4): the admin ops of the factory and a compliance registry. The token kinds
+// are `NORMAL` (an enum on the entry: a filler would not decode); `UAApproveTokenRelease` leaves the relayer and the fee
+// recipient unbound at fee 0 (mode 0): 0 in the message, as `MetaTxLib.canon` hashes them, and test/typed-ops.test.js signs it
+// again with a non-zero value in both. Every other field is a filler (the router signs and forwards; the target checks).
+const REASON = 'a release found bad';
+ROW.UAPublishTokenEnv = { kind: 0 };
+ROW.UAApproveTokenRelease = { kind: 0, mode: 0, fee: 0 };
+ROW.UADeprecateToken = { kind: 0, reason: REASON };
+ROW.UADeprecateDex = { reason: REASON };
+ROW.UADeprecateRelease = { reason: REASON };
+ROW.UASetTokenKindEnabled = { kind: 1, on: true };
+// Fable recheck-2 P3-1: the renounce names the target's chain word, context A's (the router rows run on a token there)
+ROW.UARenounceAdmin = { chainUid: contexts.A.chainUid };
+// CTR-GOV-27: the transfer names the target's chain word too, context A's (the router rows run on a token there); the
+// factory's ops (publishes, revoke, entries) carry a filler word (their rows run on a sink)
+ROW.UATransferAdmin = { chainUid: contexts.A.chainUid };
+// Round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §6.2, §10): two accounts on a list (the order and the length are signed),
+// bit 9 switched on. `UASetDenied` leaves the relayer and the fee recipient unbound at fee 0 (mode 0): 0 in the message, as
+// `MetaTxLib.canon` hashes them, and test/typed-ops.test.js and ua-rs sign it again with a non-zero value in both.
+const LISTED = [padId('0x00000000000000000000000000000000000007a1'), padId('0x00000000000000000000000000000000000007a2')];
+ROW.UASetAllowed = { accounts: LISTED, on: true };
+ROW.UASetDenied = { accounts: LISTED, on: true, mode: 0, fee: 0 };
+ROW.UAEnableFeature = { bit: 9 };
+// CTR-GOV-28 (owner 2026-11-13): every admin op of a token, the DEX or a registry names the target's chain word, context A's
+// (the router rows run there), as `UATransferAdmin` does
+// owner 2026-11-13 (renounceRole carries the chain word too): `UARenounceRole`, a holder's own, likewise
+for (const n of ['UAGrantRole', 'UARevokeRole', 'UASetGrant', 'UACancelGrant', 'UADisableFeature', 'UAEnableFeature', 'UAPqzSetVerifier',
+  'UAPqzCancelVerifier', 'UAPqzRevokeVerifier', 'UASetVerifierFee', 'UASetKycProvider', 'UASetCompliance', 'UARenounceRole']) {
+  ROW[n] = { ...ROW[n], chainUid: contexts.A.chainUid };
+}
+// Round 3zc (CTR-GOV-30): the admin's two supply caps, a hybrid's `maxSupply` and its wrap cap below it; both leave the relayer
+// and the fee recipient unbound at fee 0 (mode 0): 0 in the message, as `MetaTxLib.canon` hashes them, and test/typed-ops.test.js
+// and ua-rs sign them again with a non-zero value in both.
+ROW.UASetMaxSupply = { maxSupply: 1000000000, mode: 0, fee: 0 };
+ROW.UASetMaxWrapSupply = { maxWrapSupply: 500000000, mode: 0, fee: 0 };
+// The Change of CTR-GOV-28 in round 3zb + 3zc (O5, O6, owner 2026-11-13): every op of a role holder, `UASetWrapLimits` and the two
+// cap setters name the target's chain word too, context A's
+for (const n of ['UAMint', 'UAMintToUA', 'UADisableWrap', 'UAProposeRate', 'UACancelRate', 'UAExecuteRate', 'UASetMarket',
+  'UASetExchangeTarget', 'UASetListedOnly', 'UASetFeeSplit', 'UAFreeze', 'UAUnfreeze', 'UAForceTransfer', 'UAPause', 'UAUnpause',
+  'UARecordOrder', 'UARevokeOrder', 'UASetTaxRate', 'UASetTaxRecipient', 'UASetProofStore', 'UAOperatorTransfer', 'UASetWrapLimits',
+  'UASetWrapMember', 'UASetAllowed', 'UASetDenied', 'UASetMaxSupply', 'UASetMaxWrapSupply']) {
+  ROW[n] = { ...ROW[n], chainUid: contexts.A.chainUid };
+}
+
 function sample(name, op) {
   const own = {};
   for (const f of op.fields) own[f.name] = fill(f.type, `${name}.${f.name}`, op.types);
@@ -154,7 +213,7 @@ function sample(name, op) {
   const row = ROW[name] ?? {};
   const merged = { ...base, ...row };
   for (const k of Object.keys(row)) {
-    if (row[k] && typeof row[k] === 'object') merged[k] = { ...base[k], ...row[k] };
+    if (row[k] && typeof row[k] === 'object' && !Array.isArray(row[k])) merged[k] = { ...base[k], ...row[k] }; // an array is the row's
   }
   return merged;
 }
@@ -173,7 +232,7 @@ function extraOf(name, td, at) {
   const base = (TYPED_OPS[name]?.primary ?? name).replace(/^UA/, '');
   if (/^Pqz(Transfer|Unshield)/.test(base)) return { pqzAuth: PQZ_AUTH, pqzVerdict: EMPTY_PQZ_VERDICT };
   if (base === 'RollOverSigned' || base === 'SetRollOverMode') return { ownerSig: OWNER_SIG };
-  if (base === 'ReceiverFee') {
+  if (base === 'PayeeFee') {
     return { payerSig: nativeSig(hashTypedData(uaMetaTransferTypedData({ ...at, message: td.message.payment }))), meta: META };
   }
   if (base === 'PayWithTax' || base === 'PayUnderMandate') return { meta: META };
@@ -185,7 +244,7 @@ function extraOf(name, td, at) {
 const ops = {};
 for (const [name, op] of Object.entries(TYPED_OPS)) {
   // a per-kind row of one struct name (group 3g: `UAPqzRollOver`) names its EIP-712 primary type
-  const row = { ...(op.primary !== name ? { primaryType: op.primary } : {}), ...(RELEASE_3H.has(name) ? { release: '3h' } : {}),
+  const row = { ...(op.primary !== name ? { primaryType: op.primary } : {}), ...(RELEASE_3K.has(name) ? { release: 'three-keys' } : RELEASE_3H.has(name) ? { release: '3h' } : {}),
     typeString: op.typeString, typehash: op.typehash, on: op.on, types: op.types, domains: {} };
   const message = sample(name, op);
   const relay = name === 'UARelayFee' ? { token: CONTRACT.token, chainId: contexts.A.chainId, chainUid: contexts.A.chainUid, router: ROUTER,
@@ -211,6 +270,9 @@ for (const [name, op] of Object.entries(TYPED_OPS)) {
       routerCalldata: hex(plan.calldata(signature)) });
     row.domains[kind] = d;
   }
+  // round 3r (spec §5.6): the factory's key of the approved release, checked on the factory by FactoryAdmin.t.sol
+  const domain = { UAApproveTokenRelease: 'token', UAApproveDexRelease: 'dex', UAApproveRelease: 'class' }[name];
+  if (domain) row.approvalKey = releaseApprovalKey(domain, row.message);
   ops[name] = row;
 }
 
@@ -227,7 +289,9 @@ const out = {
     + 'proofs or ciphertexts. `extra`: what the entry takes unsigned (`meta`: the `PayMeta` a pay entry takes last, pay-meta-tax T41; '
     + '`pqzVerdict`: the `PqzSignedVerdict` a PQZ entry takes last, after the signature, the empty one of a PRECOMPILE token, group 3f). '
     + '`release: "3h"` (group 3h, pqz-proof-path spec §9.3, C9): a row of a format 3h moved (the six PQZ debits gain `ownTag`); those rows '
-    + 'leave the relayer and the fee recipient unbound at fee 0 (mode 0), 0 in the message and the calldata.',
+    + 'leave the relayer and the fee recipient unbound at fee 0 (mode 0), 0 in the message and the calldata. `release: "three-keys"` '
+    + '(spec 2026-11-13 pqz-three-keys, CTR-PQZ-38, -40, -41): `PqzTransferArgs` gains `uFrom` and the two `PqzOpening`s (the two single '
+    + 'transfers, fee 0 and unbound as their 3h rows), `PqzRollOver` is new (the holder\'s signed rollover, purpose `zether-auth`).',
   version: 1, context: 'A', key: { private: hex(be(nativeSk, 32)), address: FROM, ua: hex(nativeUa) }, ops,
 };
 mkdirSync(OUT, { recursive: true });

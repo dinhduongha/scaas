@@ -114,10 +114,20 @@ contract PqzStateVectorsTest is PqzSlots {
     /// `_newWrapped` with its leg at the state rows' `underlying` (T66b: the body modules `_releaseWrapped` deploys move this
     /// test's CREATE nonces, so a `new` leg would land elsewhere; the rows keep their bytes). A set without state vectors: as
     /// `_newWrapped`.
+    address internal rowsU; // the rows' leg, read once before a rewrite
+    bool internal rowsFresh; // STATE_VECTORS=1 at a set whose file held no leg: this write creates it as `_newWrapped`
+
+    /// The leg of the set's rows; 0 when the file is missing or holds no leg (a first write that stopped part way).
+    function _rowsLeg(string memory f) internal view returns (address) {
+        if (!vm.exists(f)) return address(0);
+        string[] memory p = vm.split(vm.readFile(f), "\"underlying\": \"");
+        return p.length < 2 ? address(0) : vm.parseAddress(vm.split(p[1], "\"")[0]);
+    }
+
     function _newWrappedAtRows(bytes32 s) internal returns (WrappedPqzToken) {
-        string memory f = string.concat(_vecDir(), "state.json");
-        if (!vm.exists(f)) return _newWrapped(s);
-        address u = vm.parseAddress(vm.split(vm.split(vm.readFile(f), "\"underlying\": \"")[1], "\"")[0]);
+        // round 3t: read before the writer truncates the file (STATE_VECTORS=1 builds this token while it writes)
+        address u = rowsU != address(0) ? rowsU : (rowsFresh ? address(0) : _rowsLeg(string.concat(_vecDir(), "state.json")));
+        if (u == address(0)) return _newWrapped(s);
         deployCodeTo("Mocks.sol:MockERC20", abi.encode("USD", "USD", uint8(6)), u);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = (1 << GovernanceBits.PAYABLE);
@@ -425,6 +435,8 @@ contract PqzStateVectorsTest is PqzSlots {
         assertEq(tok.pqzAccount(dave, 0).accBlob, address(0), "dave: never debited");
         if (!vm.envOr("STATE_VECTORS", false)) return;
         path = string.concat(_vecDir(), "state.json");
+        rowsU = _rowsLeg(path);
+        rowsFresh = rowsU == address(0);
         vm.writeFile(path, "");
         _w(string.concat("{\"_comment\": ", _q(string.concat("smartcontracts/evm/test/pqz/PqzStateVectors.t.sol at contract commit ",
             vm.envString("CONTRACT_COMMIT"), " (STATE_VECTORS=1); proofs mocked; UNAUDITED")), ","));

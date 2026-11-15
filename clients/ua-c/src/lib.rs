@@ -478,7 +478,7 @@ pub extern "C" fn scaas_ua_kind_tag_string(kind: u16, out: *mut c_char, out_len:
 }
 
 /// Governance bit `bit`'s row of `governance_bits.json` (spec 2026-11-02-governance §1.2) as JSON, `{bit, name, type, sentences}`
-/// (NUL-terminated; `*out_len` counts the NUL). Bits 0-24; any other bit is `SCAAS_UA_ERR_ARGUMENT` (25-127 free, 128-255 the
+/// (NUL-terminated; `*out_len` counts the NUL). Bits 0-31; any other bit is `SCAAS_UA_ERR_ARGUMENT` (32-127 free, 128-255 the
 /// application's `bitLabel`).
 #[no_mangle]
 pub extern "C" fn scaas_ua_governance_bit(bit: u8, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
@@ -1049,6 +1049,14 @@ pub extern "C" fn scaas_ua_set_kem_key_args(input: *const c_char, out: *mut c_ch
 #[no_mangle]
 pub extern "C" fn scaas_ua_set_pqz_key_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
     json_call(ua::json::set_pqz_key_args_json, input, out, out_len)
+}
+
+/// CTR-UA-44 `updateMsig`, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, chainUid, registry, version, threshold, members: [{kind, id, weight}], enabled, validUntilBlock, sigs}` (`enabled` a
+/// decimal string or number, `sigs` the stored structure's member signatures). Out: `{digest, message, memberDigest, args}`: what a quorum of
+/// the stored structure signs on that one registry, and the named arguments.
+#[no_mangle]
+pub extern "C" fn scaas_ua_msig_update(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    json_call(ua::json::msig_update_json, input, out, out_len)
 }
 
 /// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,

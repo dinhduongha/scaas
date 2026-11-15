@@ -99,6 +99,19 @@ sol! {
     #[derive(Debug, PartialEq, Eq)]
     struct HybridPlan { bytes32 ref; DexLeg taker; DexLeg[] makers; uint256 outsideSell; uint256 outsideFloor; address[] extraTokens; }
 
+    /// `ITradeToken.LiquidityToken` / `LiquidityOrder` and `ISCaaSDex.LiquidityPlan` (CTR-DEX-30): one signed order in the DEX's
+    /// domain, every field named; `int24` ticks sign-extended.
+    #[derive(Debug, PartialEq, Eq)]
+    struct LiquidityToken { address token; uint256 amount; }
+    #[derive(Debug, PartialEq, Eq)]
+    struct LiquidityOrder {
+        bytes32 from; LiquidityToken[] inputs; LiquidityToken[] outputs; address positionManager; address positionReader;
+        uint256 positionIn; bytes32 positionPool; int24 tickLower; int24 tickUpper; uint128 minLiquidity; bytes32 recipient;
+        uint256 fee; address relayer; uint8 flags; uint256 batch; uint256 nonce; uint256 validUntil;
+    }
+    #[derive(Debug, PartialEq, Eq)]
+    struct LiquidityPlan { bytes32 ref; LiquidityOrder order; UASig auth; uint256[] pull; uint256 positionId; address[] extraTokens; }
+
     /// An outside-token order (CTR-DEX-18): the `TradeOrder` signed in the DEX's domain with its sell token.
     #[derive(Debug, PartialEq, Eq)]
     struct DexOrder { address sellToken; TradeOrder order; }
@@ -115,6 +128,12 @@ sol! {
     struct CancelDexOrder { DexOrder order; }
     struct InvalidateNonces { address from; uint256 batch; uint256 minNonce; }
 
+    /// A token's DEX-only liquidity pull (CTR-DEX-30): never a job; its selector is the ERC-165 id the pre-check asks.
+    #[derive(Debug)]
+    interface ILiquidityPull {
+        function mtxLiquidityPull(LiquidityOrder o, UASig auth, uint256 amount, address submitter) external;
+    }
+
     /// `SCaaSDex` (a clone per DEX, `createDex`): what the venue sends and reads.
     #[derive(Debug)]
     interface ISCaaSDex {
@@ -125,6 +144,11 @@ sol! {
         function exchangeOne(ExchangePlan p, Interaction[] interactions, address submitter) external;
         function mtxHybrid(HybridPlan p, Interaction[] interactions) external;
         function mtxHybridVia(HybridPlan p, address executor, bytes data) external;
+        function mtxLiquidity(LiquidityPlan p, Interaction[] interactions) external;
+        function modules() external view returns (address[] m);
+        function liquidityOrderDigest(LiquidityOrder o) external view returns (bytes32);
+        event LiquiditySettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 recipient,
+            uint256[] pulled, uint256[] refunded, uint256[] received, uint256[] dexFees, uint256 positionId, uint128 liquidity);
         event ExchangeFailed(bytes32 indexed ref, bytes reason);
         function settleOne(Settlement s, address submitter) external;
         function mtxCancelOrders(DexOrder[] orders, bytes[] sigs) external;
@@ -137,6 +161,11 @@ sol! {
         function puller() external view returns (address);
         function marketListed(address a, address b) external view returns (bool);
         function tokenKind(address token) external view returns (uint8);
+        /// CTR-DEX-32: the exchange path's known-token check on a closed DEX; its factory and `features()` (bit 29
+        /// `CLOSED_MARKETS`), which the venue reads
+        function tokenKnown(address token) external view returns (bool);
+        function factory() external view returns (address);
+        function features() external view returns (uint256);
         function chainUid() external view returns (bytes32);
         function SMART_KEY_ACCOUNT_IMPL() external view returns (address);
         event LegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
@@ -167,6 +196,9 @@ sol! {
         error ConservationBroken(address token);
         error NotSelf();
         error InteractionFailed(uint256 index, address target, bytes reason);
+        /// A token's T7 (`ITradeToken.NotLiquidityDex`), bubbled by `mtxLiquidity`: named, so a starved one is requeued
+        /// (`guard::liquidity_starved`), never `dead` as raw hex.
+        error NotLiquidityDex(address caller);
     }
 
     /// Every SCaaS contract on `MetaTxBase` (`IMetaTx`) plus the address surface: `SmartKeyAccount`'s (`IMetaTxAddress`: `mtxNonce`,
@@ -338,6 +370,9 @@ sol! {
         struct FrostKey { bytes groupKey; uint16 threshold; FrostMember[] members; }
         function register(uint16 kind, bytes keyData, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function registerMsig(MsigStructure structure, UAAttrs attrs, MemberSig[] pop, bytes pqzPop) external returns (bytes32);
+        /// CTR-UA-44: an `msig`'s structure update on this registry (`version` = stored + 1, signed by a quorum of the stored structure).
+        function updateMsig(bytes32 ua, uint64 version, MsigStructure structure, uint256 enabled, uint64 validUntilBlock, MemberSig[] sigs,
+            bytes32 chainUid_) external;
         function registerWebAuthn(WebAuthnKey key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function registerMuSig2(uint16 kind, MuSig2Key key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
         function registerFrost(uint16 kind, FrostKey key, UAAttrs attrs, bytes pop, bytes pqzPop) external returns (bytes32);
@@ -349,9 +384,18 @@ sol! {
         function pqzKeyOf(bytes32 ua) external view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
         function pqzKeyAt(bytes32 ua, uint64 version) external view returns (address ptr, bytes32 pqzPopHash, bool proven);
         function pqzKeyLatest(bytes32 ua) external view returns (uint64);
+        // the three-key model (K3-3, CTR-UA-43): scoped records, scope 0 (class 2) or the token (class 3); `openKem` the opening
+        // KEM key (present iff the scope's tokens have the opening on)
+        function setPqzScopedKey(bytes32 ua, address scope, uint64 version, bytes pqzKey, bytes32 pqzPopHash, KemKey openKem,
+            uint64 validUntilBlock, UASig sig) external;
+        function storePqzScopedPop(bytes32 ua, address scope, uint64 version, bytes pqzPop) external;
+        function pqzScopedKeyOf(bytes32 ua, address scope) external view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven);
+        function pqzScopedKeyAt(bytes32 ua, address scope, uint64 version) external view returns (address ptr, bytes32 pqzPopHash, bool proven);
+        function pqzScopedKeyLatest(bytes32 ua, address scope) external view returns (uint64);
         event UAPqzPopStored(bytes32 indexed ua, uint64 indexed version, uint8 checkedPqzPop, bytes pqzPop);
         event UAPqzKeyAdded(bytes32 indexed ua, uint64 indexed version, bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes pqzKey, bytes sig);
         event UAPqzKeyCurrent(bytes32 indexed ua, uint64 indexed version);
+        event UAPqzScopedKeyCurrent(bytes32 indexed ua, address indexed scope, uint64 indexed version);
         function acceptMembership(bytes32 ua, MemberSig memberSig) external;
         /// A derived id's authorization under a purpose (CTR-UA-07): reverts `UAUnauthorized(ua)` when it is not one; the venue
         /// asks it for a derived seller's order, as the token's `authorize` does.
@@ -380,8 +424,11 @@ sol! {
             uint32 pqzVerifierEpoch; uint64 validUntil; }
         #[derive(PartialEq, Eq)]
         struct PqzSignedVerdict { PqzVerdict pqzVerdict; UASig sig; }
+        // round 3t (CTR-PQZ-36): + the verifier fee, its immutable cap, a live pending increase and its `eta`; the three-key model
+        // (CTR-PQZ-37): + the key class, `pqzOwnKey` and `pqzOpening` (words 11 and 12)
         struct PqzVerifyConfig { uint8 pqzVerifyMode; bytes32 verifier; bool fixed_; uint32 pqzVerifierEpoch; bytes32 pending;
-            uint64 eta; uint64 noticePeriod; }
+            uint64 eta; uint64 noticePeriod; uint64 verifierFee; uint64 verifierFeeMax; uint64 verifierFeePending; uint64 verifierFeeEta;
+            bool pqzOwnKey; bool pqzOpening; }
         function pqzVerifyConfig() external view returns (PqzVerifyConfig memory);
         function proofSystemId() external view returns (bytes32);
         /// The relayed op's binding (`TAG_UA_ENVELOPE`, every envelope field but `data`): the `binding` of the statement views.
@@ -407,6 +454,23 @@ sol! {
         error PqzVerdictRequired();
         error PqzVerdictRejected();
         error PqzVerdictMismatch(uint8 field);
+        // ---- the three-key model (CTR-PQZ-40, -41): a form refused with the opening on, the public rollover there, the marks
+        error OpUnsupported();
+        error RollOverSignedOnly();
+        error SkipRange(uint256 index);
+        error SkipTrivial(uint256 index);
+        event PqzSkipped(bytes32 indexed ua, uint64 indexed keyVersion, uint64 index);
+        // ---- round 3t (CTR-PQZ-36, verifier fee spec §7, §10): the admin's setter, its events and refusals
+        function setVerifierFee(uint64 next, bytes32 chainUid_) external; // CTR-GOV-28: + the chain word
+        function confidentialFee() external view returns (uint256);
+        event VerifierFeeProposed(uint64 current, uint64 next, uint64 eta);
+        event VerifierFeeSet(uint64 previous, uint64 next);
+        error VerifierFeeAboveMax(uint64 fee, uint64 max);
+        error VerifierFeePending(uint64 pending);
+        error VerifierFeeSame();
+        error VerifierFeeNotReady(uint64 eta);
+        /// `PqzAuth` refused (the holder's signature over the 20 header words): after a fee change, the fee word moved
+        error AuthRejected();
     }
 
     /// `IPqzToken.sol`'s file-level event (the error of the same name is `IPqzToken`'s) and the confidential op events
@@ -465,15 +529,25 @@ sol! {
         event TaxRecipientSet(bytes32 indexed taxRecipient);
         event PaymentTaxed(bytes32 indexed entryRef, bytes32 indexed payee, bytes32 indexed taxRecipient, bytes32 from,
             uint8 taxMode, uint256 tax, bytes32 digest);
+        /// Round 3s (spec 2026-11-10-token-lists.md §6.1, CTR-GOV-24): one event per account of a list edit.
+        event AllowedSet(bytes32 indexed account, bytes32 indexed by, bool on);
+        event DeniedSet(bytes32 indexed account, bytes32 indexed by, bool on);
         error Frozen(bytes32 account);
+        error NotAllowed(bytes32 account);
+        error Denied(bytes32 account);
+        error ListBatchInvalid(uint256 length);
+        error ListAccountZero();
+        error ComplianceRegistryNotSet();
+        error ListHolderMissing(uint8 bit);
         error TokenPaused(uint64 until);
         error NotEligible(bytes32 account, uint8 reason);
         error FeeRecipientFrozen(bytes32 account);
         error RefRequired();
         error RegulatedConfigInvalid();
-        error RegistryCodeMismatch(address registry, bytes32 codehash);
-        error RegistryUnavailable(address registry);
-        error RegistryGasStarved(uint256 cap, uint256 left);
+        error ComplianceRegistryCodeMismatch(address complianceRegistry, bytes32 codehash);
+        error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);
+        error ComplianceRegistryUnavailable(address complianceRegistry);
+        error ComplianceRegistryGasStarved(uint256 cap, uint256 left);
         error OrderExists(bytes32 recordId);
         error OrderUnknown(bytes32 recordId);
         error OrderInactive(bytes32 recordId);
@@ -497,26 +571,75 @@ sol! {
         error TaxExceedsAmount(uint256 tax, uint256 amount);
         error TaxMismatch(uint256 expected, uint256 got);
         error TaxRecipientIsPayee();
-        function freeze(bytes32 account, bytes32 ref, bytes32 recordId) external;
-        function unfreeze(bytes32 account, bytes32 ref) external;
-        function forceTransfer(bytes32 recordId, uint256 amount) external;
-        function pause(bytes32 ref, uint64 until) external;
-        function unpause(bytes32 ref) external;
+        // the Change of CTR-GOV-28 in round 3zb + 3zc (O6): every role holder's direct entry takes the token's chain word last
+        function freeze(bytes32 account, bytes32 ref, bytes32 recordId, bytes32 chainUid_) external;
+        function unfreeze(bytes32 account, bytes32 ref, bytes32 chainUid_) external;
+        function forceTransfer(bytes32 recordId, uint256 amount, bytes32 chainUid_) external;
+        function pause(bytes32 ref, uint64 until, bytes32 chainUid_) external;
+        function unpause(bytes32 ref, bytes32 chainUid_) external;
         function recordOrder(bytes32 orderId, bytes32 documentHash, bytes32 subject, bytes32 beneficiary, uint256 maxAmount,
-            uint64 freezeUntil) external;
-        function revokeOrder(bytes32 recordId, bytes32 reasonRef) external;
-        function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref) external;
-        function setTaxRate(uint32 ratePpm) external;
-        function setTaxRecipient(bytes32 taxRecipient) external;
+            uint64 freezeUntil, bytes32 chainUid_) external;
+        function revokeOrder(bytes32 recordId, bytes32 reasonRef, bytes32 chainUid_) external;
+        function operatorTransfer(bytes32 from, bytes32 to, uint256 amount, bytes32 ref, bytes32 chainUid_) external;
+        function setTaxRate(uint32 ratePpm, bytes32 chainUid_) external;
+        function setTaxRecipient(bytes32 taxRecipient, bytes32 chainUid_) external;
         function taxConfig() external view returns (TaxConfig);
         function mtxPayWithTax(UAMetaTransfer t, uint8 taxMode, uint256 tax, UASig auth, PayMeta meta) external returns (bool);
         function payWithTax(bytes32 to, uint256 amount, uint8 taxMode, uint256 tax, bytes32 entryRef, PayMeta meta)
             external returns (bool);
+        function setAllowed(bytes32[] accounts, bool on, bytes32 chainUid_) external;
+        function setDenied(bytes32[] accounts, bool on, bytes32 chainUid_) external;
+        function listFlagsOf(bytes32 account) external view returns (uint8);
+        function enableFeature(uint8 bit, bytes32 chainUid_) external; // CTR-GOV-28: + the chain word
         function regulatedConfig() external view returns (RegulatedConfig);
         function freezeOf(bytes32 account) external view returns (FreezeState);
         function isFrozen(bytes32 account) external view returns (bool);
         function canReceive(bytes32 account) external view returns (bool ok, uint8 reason);
         function order(bytes32 recordId) external view returns (OrderRecord);
+    }
+
+    /// A body module's group (T66b §4.5): the liquidity mark of a DEX is a module of group 11 (CTR-DEX-30, spec §11).
+    #[derive(Debug)]
+    interface IModuleGroup {
+        function moduleGroup() external view returns (uint8);
+    }
+
+    /// The registry's kind of a derived id (the verify budget of a liquidity plan).
+    #[derive(Debug)]
+    interface IUAKindOf {
+        function kindOf(bytes32 ua) external view returns (uint16);
+    }
+
+    /// Group 3l (wrap limits spec 2026-11-10 §7, §9): the wrapped kinds' named refusals of a wrap or an unwrap under the
+    /// limits, which a later block may lift (a window ends, a member is added, a redeemer is granted, a later wrap raises the
+    /// entitlement): [`wrap_limit_refusal`].
+    #[derive(Debug)]
+    interface IWrapLimits {
+        error WrapLimitExceeded(address underlying, uint8 limit, bytes32 account, uint256 amount, uint256 remaining);
+        error WrapCapExceeded(address underlying, uint8 limit, uint256 amount, uint256 remaining);
+        error UnwrapAboveNetWrapped(address underlying, bytes32 account, uint256 amount, uint256 entitlement);
+        error WrapperNotListed(bytes32 account);
+        error UnwrapperNotListed(bytes32 account);
+        error WrapControlNeedsHybrid(uint8 bit);
+        error WrapSubjectZero();
+    }
+
+    /// Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §3.4-§3.6, §4): the wrapped kinds' supply-cap refusals, decoded
+    /// by name ([`supply_cap_refusal`]): a wrap or a mint above a cap, a cap setter's floors at its apply, the shape refusals.
+    #[derive(Debug)]
+    interface ISupplyCaps {
+        error MaxSupplyExceeded(uint256 supply, uint256 maxSupply);
+        error MaxWrapSupplyExceeded(uint256 totalWrapped, uint256 maxWrapSupply);
+        error MaxSupplyBelowSupply(uint256 maxSupply, uint256 totalSupply);
+        error MaxSupplyBelowWrapCap(uint256 maxSupply, uint256 maxWrapSupply);
+        error MaxWrapSupplyBelowWrapped(uint256 maxWrapSupply, uint256 totalWrapped);
+        error MaxWrapSupplyAboveMaxSupply(uint256 maxWrapSupply, uint256 maxSupply);
+        error MaxSupplyInvalid();
+        error MaxWrapSupplyInvalid();
+        event MaxSupplyProposed(bytes32 indexed by, uint256 maxSupply, uint64 eta);
+        event MaxSupplySet(bytes32 indexed by, uint256 oldMaxSupply, uint256 newMaxSupply);
+        event MaxWrapSupplyProposed(bytes32 indexed by, uint256 maxWrapSupply, uint64 eta);
+        event MaxWrapSupplySet(bytes32 indexed by, uint256 oldMaxWrapSupply, uint256 newMaxWrapSupply);
     }
 
     /// ERC-165 (`MetaTokenBase.supportsInterface`): a regulated kind answers [`regulated_interface_id`], kinds 0-5 do not (M-10).
@@ -525,20 +648,44 @@ sol! {
         function supportsInterface(bytes4 id) external view returns (bool);
     }
 
-    /// `IComplianceRegistry` (regulated-kinds spec §5): the two reads `canReceive` makes, read by the venue to compute `R` with
-    /// `scaas_ua::regulated::can_receive` and to know the receiver's attestation `validUntil` (NODE-DEX-11, `ATTESTATION_SHORTER`).
+    /// `IComplianceRegistry` (regulated-kinds spec §5; round 3r, spec 2026-11-10-admin-not-owner §5.3.1: the KYC provider): the
+    /// two reads `canReceive` makes, read by the venue to compute `R` with `scaas_ua::regulated::can_receive` and to know the
+    /// receiver's compliance row `validUntil` (NODE-DEX-11, `ATTESTATION_SHORTER`); its events and errors, decoded by name.
     #[derive(Debug)]
     interface IComplianceRegistry {
-        event AttesterSet(address indexed attester, uint32 indexed attesterId, bool enabled);
-        event Attested(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed attesterId);
-        function attestationOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 attesterId);
-        function attesterEnabled(uint32 id) external view returns (bool);
-        error NotAdmin();
-        error NotAttester();
-        error AdminNotContract(address a);
+        event KycProviderSet(bytes32 indexed provider, uint32 indexed providerId, bool enabled);
+        event ComplianceSet(bytes32 indexed account, uint64 flags, uint64 validUntil, uint32 indexed providerId);
+        function complianceOf(bytes32 account) external view returns (uint64 flags, uint64 validUntil, uint32 providerId);
+        function kycProviderEnabled(uint32 id) external view returns (bool);
+        error AdminZero();
+        error AdminUnreachable(bytes32 admin);
+        error RouterNotContract(address govRouter);
+        error NotKycProvider();
+        error KycProviderZero();
+        error TooManyRows(uint256 n);
         error LengthMismatch();
         error EligibleContractAdminOnly();
         error AdminWrittenSlot(bytes32 account);
+    }
+
+    /// `IOpenFactory.infoOf` (factory index spec §8.6): the record of a contract the chain's factory made, read for the generic
+    /// factory-class rule (`guard::Rule::FactoryClass`; `PqChat` is class 3, topics spec P45); no owner since round 3r R1.
+    #[derive(Debug)]
+    interface IOpenFactory {
+        struct Created {
+            address addr; bytes32 creatorId; uint16 contractClass; uint16 kind; uint64 version;
+            uint64 createdBlock; uint64 createdAt;
+        }
+        function infoOf(address c) external view returns (Created memory);
+        /// CTR-DEX-18 / CTR-DEX-32: a token is SCaaS iff the factory made it from a registered release (`version != 0`).
+        function versionOf(address token) external view returns (uint8 kind, uint64 version);
+        /// Owner 2026-11-12: a generic release (`mtxCreateInstance` is checked against it before the simulation).
+        struct ReleaseId { uint16 contractClass; uint16 kind; uint64 version; }
+        struct ClassRelease {
+            address implementation; uint16 envVersion; bytes32 envHash; uint64 usableFrom; bool deprecated; bytes4 initSelector;
+            bytes4 interfaceId;
+        }
+        function classReleaseOf(ReleaseId calldata id) external view returns (ClassRelease memory);
     }
 
     /// `IGovernance`'s events the indexer reads (M-08) and the errors of a role or a pending the node names (§3.1).
@@ -546,6 +693,7 @@ sol! {
     interface IGovernance {
         event RoleRevoked(uint8 indexed bit, bytes32 indexed account, bytes32 indexed sender);
         event FeatureDisabled(uint8 indexed bit, bytes32 indexed by);
+        event FeatureEnabled(uint8 indexed bit, bytes32 indexed by);
         event RelaxProposed(uint8 indexed bit, bytes32 indexed account, uint8 action, bytes32 proposer, uint64 eta);
         error MissingRole(uint8 bit, bytes32 account);
         error RoleNotContract(uint8 bit, bytes32 account);
@@ -556,9 +704,13 @@ sol! {
         error FeatureInvalidForKind(uint8 bit);
         error FeatureLocked(uint8 bit);
         error FeatureNotSet(uint8 bit);
+        error FeatureNotEnableable(uint8 bit);
+        error FeatureNotDisableable(uint8 bit);
+        error FeatureAlreadySet(uint8 bit);
         error GrantExhausted(uint8 field);
         error GrantExpired(uint8 bit, bytes32 holder);
         error GrantBarred(uint8 bit, bytes32 account);
+        error FeatureConflict(uint8 bit, uint8 other);
     }
 }
 
@@ -569,14 +721,62 @@ pub fn regulated_interface_id() -> [u8; 4] {
 }
 
 /// A regulated token's refusal that a later block may lift (regulated-kinds spec §7): the account is frozen, the token
-/// paused, the receiver not eligible, the fee recipient frozen, or the registry unreadable. The node names it and never
+/// paused, the receiver not eligible, the fee recipient frozen, the registry unreadable, or (round 3s) a party off the allow
+/// list or on the deny list, which a list edit lifts. The node names it and never
 /// reports the job `dead` for it while its payload may still land (another relayer, after an unfreeze, an unpause or an
 /// attestation); it is never counted against the subject's or a maker's grief score (asset-suite §2.7, F-16). `reason`
 /// is a `decode_revert` string.
 pub fn regulated_refusal(reason: &str) -> Option<&'static str> {
-    const LIFTABLE: [&str; 6] = ["Frozen", "TokenPaused", "NotEligible", "FeeRecipientFrozen", "RegistryUnavailable", "RegistryGasStarved"];
+    const LIFTABLE: [&str; 8] = ["Frozen", "TokenPaused", "NotEligible", "FeeRecipientFrozen", "ComplianceRegistryUnavailable",
+        "ComplianceRegistryGasStarved", "NotAllowed", "Denied"];
     let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
     LIFTABLE.into_iter().find(|n| *n == name)
+}
+
+/// Round 3s (spec 2026-11-10-token-lists.md §9, Fable P3-8): a list refusal of the job's own subject (`Denied(subject)`,
+/// `NotAllowed(subject)`, the token's answer at simulation, so a dormant list refuses nothing): refused by name (`DENIED`,
+/// `NOT_ALLOWED`), zero sends, never back in the queue with no grief score; another party's list refusal stays liftable
+/// ([`regulated_refusal`]).
+pub fn own_list_refusal(reason: &str, subject: alloy::primitives::B256) -> Option<&'static str> {
+    let (name, rest) = reason.split_once('(')?;
+    let code = match name {
+        "Denied" => "DENIED",
+        "NotAllowed" => "NOT_ALLOWED",
+        _ => return None,
+    };
+    // `decode_revert`'s form: `Denied(Denied { account: 0x… })`
+    let i = rest.find("0x")?;
+    let a: alloy::primitives::B256 = rest.get(i..i + 66)?.parse().ok()?;
+    (a == subject).then_some(code)
+}
+
+/// Group 3l (wrap limits spec §9, NODE-LANE-09's class): a wrap or an unwrap a wrap limit refuses at simulation. A window ends,
+/// a member is added, a redeemer is granted or a later wrap raises the entitlement, so the payload may still land: the job stays
+/// `queued` with `WRAP_LIMIT_REFUSED: <named error>`, never `dead` (expiry or the attempt cap ends it), and no grief score.
+/// `WrapControlNeedsHybrid` (a creation refusal, permanent) is not in the class. `reason` is a `decode_revert` string.
+pub fn wrap_limit_refusal(reason: &str) -> Option<&'static str> {
+    const LIFTABLE: [&str; 5] = ["WrapLimitExceeded", "WrapCapExceeded", "UnwrapAboveNetWrapped", "WrapperNotListed", "UnwrapperNotListed"];
+    let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
+    LIFTABLE.into_iter().find(|n| *n == name)
+}
+
+/// Round 3zc (CTR-GOV-30, spec 2026-11-13-burner-wrap-caps.md §4's verdict table): a supply-cap refusal by name and whether a later
+/// block may lift it (`true`: a wrap or a mint above a cap, which an unwrap or a cap change lifts; a setter's floor at its apply,
+/// which supply or the other setter lifts; `false`: the shape refusals `MaxSupplyInvalid`, `MaxWrapSupplyInvalid`, never). The
+/// node keeps a liftable one `queued` with `SUPPLY_CAP_REFUSED: <named error>`. `reason` is a `decode_revert` string.
+pub fn supply_cap_refusal(reason: &str) -> Option<(&'static str, bool)> {
+    const LIFTABLE: [&str; 6] = ["MaxSupplyExceeded", "MaxWrapSupplyExceeded", "MaxSupplyBelowSupply", "MaxSupplyBelowWrapCap",
+        "MaxWrapSupplyBelowWrapped", "MaxWrapSupplyAboveMaxSupply"];
+    const FINAL: [&str; 2] = ["MaxSupplyInvalid", "MaxWrapSupplyInvalid"];
+    let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
+    LIFTABLE.into_iter().find(|n| *n == name).map(|n| (n, true)).or_else(|| FINAL.into_iter().find(|n| *n == name).map(|n| (n, false)))
+}
+
+/// A governance error's word `key` (`bit`, `field`) in a `decode_revert` string `Name(Name { key: N, … })` of the error `name`,
+/// parsed whole (`bit: 31` is not bit 3).
+pub fn gov_word(reason: &str, name: &str, key: &str) -> Option<u8> {
+    let rest = reason.strip_prefix(name)?.strip_prefix('(')?.split_once(&format!("{key}: "))?.1;
+    rest[..rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len())].parse().ok()
 }
 
 /// What a PQZ token's key-version refusal means for a job (group 3g, spec §7.3), from a `decode_revert` string.
@@ -603,10 +803,12 @@ pub const PROOF_STORE_LOG: u8 = 1;
 /// verifier's next epoch, an `eta` reached, a registration: back in the queue, never `dead`) or never (`false`: the op's own
 /// shape, a fixed verifier, the wrong mode). `reason` is a `decode_revert` string.
 pub fn pqz_verdict_refusal(reason: &str) -> Option<(&'static str, bool)> {
-    const LIFTABLE: [&str; 7] = ["PqzVerdictMismatch", "PqzVerdictRejected", "PqzVerifierRevoked", "PqzVerifierChanged",
-        "PqzVerifierNotReady", "PqzVerifierPending", "PqzVerifierUnregistered"];
-    const FINAL: [&str; 6] = ["PqzVerifierFixed", "PqzVerifierSame", "PqzVerifierKind", "PqzVerdictRequired", "PqzVerifyModeInvalid",
-        "PqzVerifyConfigInvalid"];
+    // round 3t (CTR-PQZ-36): the fee setter's `VerifierFeeNotReady` / `VerifierFeePending` liftable, `VerifierFeeAboveMax` /
+    // `VerifierFeeSame` final
+    const LIFTABLE: [&str; 9] = ["PqzVerdictMismatch", "PqzVerdictRejected", "PqzVerifierRevoked", "PqzVerifierChanged",
+        "PqzVerifierNotReady", "PqzVerifierPending", "PqzVerifierUnregistered", "VerifierFeeNotReady", "VerifierFeePending"];
+    const FINAL: [&str; 8] = ["PqzVerifierFixed", "PqzVerifierSame", "PqzVerifierKind", "PqzVerdictRequired", "PqzVerifyModeInvalid",
+        "PqzVerifyConfigInvalid", "VerifierFeeAboveMax", "VerifierFeeSame"];
     let name = reason.split(['(', ' ', '{']).next().unwrap_or_default();
     LIFTABLE.into_iter().find(|n| *n == name).map(|n| (n, true)).or_else(|| FINAL.into_iter().find(|n| *n == name).map(|n| (n, false)))
 }
@@ -641,7 +843,13 @@ pub fn decode_revert(data: &[u8]) -> String {
     if let Ok(e) = IRegulatedToken::IRegulatedTokenErrors::abi_decode(data) {
         return format!("{e:?}");
     }
+    if let Ok(e) = IWrapLimits::IWrapLimitsErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
     if let Ok(e) = IGovernance::IGovernanceErrors::abi_decode(data) {
+        return format!("{e:?}");
+    }
+    if let Ok(e) = ISupplyCaps::ISupplyCapsErrors::abi_decode(data) {
         return format!("{e:?}");
     }
     if let Ok(e) = IComplianceRegistry::IComplianceRegistryErrors::abi_decode(data) {
@@ -680,10 +888,27 @@ mod tests {
 
     /// `type(IRegulatedToken).interfaceId`: the XOR of its eighteen selectors (pay-meta-tax T39 / T40: + setTaxRate,
     /// setTaxRecipient, taxConfig, mtxPayWithTax, payWithTax; 0xf35dd87a -> 0xaf5683ea, the forge artifact's methodIdentifiers;
-    /// plan T83, `PayMeta` v3 in the two tax entries' tuples: 0xaf5683ea -> 0x01a22b62).
+    /// plan T83, `PayMeta` v3 in the two tax entries' tuples: 0xaf5683ea -> 0x01a22b62; round 3s, spec 2026-11-10-token-lists.md
+    /// §7, + setAllowed, setDenied, listFlagsOf, enableFeature: 0x01a22b62 -> 0x789ed7c4).
+    #[test]
+    fn own_list_refusal_names_the_subject_only() {
+        let (s, o) = (alloy::primitives::B256::repeat_byte(0xa1), alloy::primitives::B256::repeat_byte(0xb2));
+        let r = decode_revert(&IRegulatedToken::Denied { account: s }.abi_encode());
+        assert_eq!(own_list_refusal(&r, s), Some("DENIED"), "{r}");
+        assert_eq!(own_list_refusal(&r, o), None, "another party's: liftable");
+        assert_eq!(regulated_refusal(&r), Some("Denied"));
+        let r = decode_revert(&IRegulatedToken::NotAllowed { account: s }.abi_encode());
+        assert_eq!(own_list_refusal(&r, s), Some("NOT_ALLOWED"), "{r}");
+        assert_eq!(regulated_refusal(&r), Some("NotAllowed"));
+        assert_eq!(own_list_refusal(&decode_revert(&IRegulatedToken::Frozen { account: s }.abi_encode()), s), None);
+    }
+
     #[test]
     fn regulated_interface_id_is_the_xor_of_its_functions() {
-        assert_eq!(regulated_interface_id(), [0x01, 0xa2, 0x2b, 0x62]);
+        // CTR-GOV-28: `enableFeature(uint8)` -> `enableFeature(uint8,bytes32)`: 0x789ed7c4 -> 0xbf2cb59a; its Change in round
+        // 3zb + 3zc (the twelve regulated entries take the holder's chain word): 0xbf2cb59a -> 0xc28996b2, the forge artifact's
+        // methodIdentifiers XORed
+        assert_eq!(regulated_interface_id(), [0xc2, 0x89, 0x96, 0xb2]);
     }
 
     /// Group 3g (spec §7.3): the PQZ key-version reverts decode by name and classify; another revert is none of them.
@@ -732,6 +957,35 @@ mod tests {
         assert_eq!(pqz_verdict_refusal("PqzVerdictMismatchX(..)"), None);
     }
 
+    /// Group 3l (wrap limits spec §9): the five liftable wrap-limit refusals decode by name and are the class; the creation
+    /// refusal and the subject check are named but not in it.
+    #[test]
+    fn wrap_limit_refusals_are_named() {
+        let a = alloy::primitives::B256::repeat_byte(0xf1);
+        let u = alloy::primitives::Address::repeat_byte(5);
+        for (data, name) in [
+            (IWrapLimits::WrapLimitExceeded { underlying: u, limit: 2, account: a, amount: U256::from(7), remaining: U256::ZERO }.abi_encode(), "WrapLimitExceeded"),
+            (IWrapLimits::WrapCapExceeded { underlying: u, limit: 0, amount: U256::from(7), remaining: U256::ZERO }.abi_encode(), "WrapCapExceeded"),
+            (IWrapLimits::UnwrapAboveNetWrapped { underlying: u, account: a, amount: U256::from(7), entitlement: U256::from(1) }.abi_encode(), "UnwrapAboveNetWrapped"),
+            (IWrapLimits::WrapperNotListed { account: a }.abi_encode(), "WrapperNotListed"),
+            (IWrapLimits::UnwrapperNotListed { account: a }.abi_encode(), "UnwrapperNotListed"),
+        ] {
+            let r = decode_revert(&data);
+            assert!(r.starts_with(&format!("{name}(")), "{r}");
+            assert_eq!(wrap_limit_refusal(&r), Some(name), "{r}");
+            assert_eq!(regulated_refusal(&r), None, "{r}: not a regulated refusal");
+        }
+        for (data, name) in [
+            (IWrapLimits::WrapControlNeedsHybrid { bit: 25 }.abi_encode(), "WrapControlNeedsHybrid"),
+            (IWrapLimits::WrapSubjectZero {}.abi_encode(), "WrapSubjectZero"),
+        ] {
+            let r = decode_revert(&data);
+            assert!(r.starts_with(name), "{r}");
+            assert_eq!(wrap_limit_refusal(&r), None, "{name}: named, not liftable");
+        }
+        assert_eq!(wrap_limit_refusal("WrapLimitExceededX(..)"), None);
+    }
+
     /// Regulated-kinds spec §7: every §3.1 error and `NotProposer` decoded by name; the six a later block may lift are the
     /// refusals the submit path and the venue keep apart from `dead` and from blame; the others are not.
     #[test]
@@ -742,8 +996,10 @@ mod tests {
             (IRegulatedToken::TokenPaused { until: 7 }.abi_encode(), "TokenPaused"),
             (IRegulatedToken::NotEligible { account: a, reason: 1 }.abi_encode(), "NotEligible"),
             (IRegulatedToken::FeeRecipientFrozen { account: a }.abi_encode(), "FeeRecipientFrozen"),
-            (IRegulatedToken::RegistryUnavailable { registry: alloy::primitives::Address::repeat_byte(5) }.abi_encode(), "RegistryUnavailable"),
-            (IRegulatedToken::RegistryGasStarved { cap: U256::from(50_000), left: U256::from(1) }.abi_encode(), "RegistryGasStarved"),
+            (IRegulatedToken::ComplianceRegistryUnavailable { complianceRegistry: alloy::primitives::Address::repeat_byte(5) }.abi_encode(),
+                "ComplianceRegistryUnavailable"),
+            (IRegulatedToken::ComplianceRegistryGasStarved { cap: U256::from(50_000), left: U256::from(1) }.abi_encode(),
+                "ComplianceRegistryGasStarved"),
         ] {
             let r = decode_revert(&data);
             assert!(r.starts_with(&format!("{name}(")), "{r}");
@@ -755,12 +1011,17 @@ mod tests {
             (IRegulatedToken::RefRequired {}.abi_encode(), "RefRequired"),
             (IRegulatedToken::PauseCooldown { until: 1 }.abi_encode(), "PauseCooldown"),
             (IComplianceRegistry::AdminWrittenSlot { account: a }.abi_encode(), "AdminWrittenSlot"),
+            (IComplianceRegistry::NotKycProvider {}.abi_encode(), "NotKycProvider"),
+            (IRegulatedToken::ComplianceRegistryRouterMismatch { complianceRegistry: alloy::primitives::Address::repeat_byte(5),
+                got: alloy::primitives::Address::repeat_byte(6) }.abi_encode(), "ComplianceRegistryRouterMismatch"),
         ] {
             let r = decode_revert(&data);
             assert!(r.starts_with(&format!("{name}(")), "{r}");
             assert_eq!(regulated_refusal(&r), None, "{name}: named, not liftable");
         }
         assert_eq!(regulated_refusal("FrozenX(..)"), None);
+        assert_eq!(regulated_refusal(&decode_revert(&IWrapLimits::WrapperNotListed { account: a }.abi_encode())), None,
+            "a wrap limit is its own class");
         assert_eq!(regulated_refusal("revert 0x1234"), None);
     }
 
@@ -786,8 +1047,9 @@ mod tests {
         assert_eq!(named, 17, "every refused freeze row");
         let rows = v["receiver"].as_array().unwrap();
         for r in rows {
-            let a = Attestation { flags: n(&r["flags"]), valid_until: n(&r["validUntil"]), attester_enabled: r["attesterEnabled"].as_bool().unwrap() };
-            let (req, den) = (r["allowlist"].as_bool().unwrap().then(|| n(&r["requiredFlags"])), r["denylist"].as_bool().unwrap().then(|| n(&r["deniedFlags"])));
+            let a = Attestation { flags: n(&r["flags"]), valid_until: n(&r["validUntil"]), attester_enabled: r["kycProviderEnabled"].as_bool().unwrap() };
+            let kyc = r["kyc"].as_bool().unwrap(); // round 3s: both masks under bit 28
+            let (req, den) = (kyc.then(|| n(&r["requiredFlags"])), kyc.then(|| n(&r["deniedFlags"])));
             let got = can_receive(req, den, &a, n(&r["now"]));
             assert_eq!(got, (r["ok"].as_bool().unwrap(), r["reason"].as_u64().unwrap() as u8), "{}", r["name"]);
         }

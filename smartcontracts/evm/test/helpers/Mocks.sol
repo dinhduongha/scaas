@@ -7,8 +7,11 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 /// every derived id a registered `p256` UA. It authorizes nothing: only native signers work against it.
 contract StubUARegistry {
     bytes32 public immutable chainUid;
+    /// The registry's `SmartKeyAccount` clone code hash (0 = none), which a factory's router must match (spec §13.4).
+    bytes32 public smartKeyCloneHash;
     constructor(bytes32 u) { chainUid = u; }
     function kindOf(bytes32) external pure returns (uint16) { return 0x0101; }
+    function setSmartKeyCloneHash(bytes32 h) external { smartKeyCloneHash = h; }
 }
 
 contract MockERC20 is ERC20 {

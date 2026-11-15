@@ -641,7 +641,8 @@ macro_rules! relay_fee {
 /// orders, the nonce invalidations). ua-mtx-merge (CTR-MTX-30, R12, R39, R46): the token's address `MetaTransfer`, `TradeOrder`
 /// and `WrapOrder` left; `TradeOrder` stays nested in the DEX's `DexOrder`. Group 3g (KV-8): `keyVersion` after `fromUA`. Group 3h
 /// (proof-path spec §3.2, PP-3): `bytes32 ownTag` after `salt` (`PqzTransferArgs`, `PqzMultiArgs`) and after `beneficiaryUA`
-/// (`PqzBurnArgs`).
+/// (`PqzBurnArgs`). The three-key model (CTR-PQZ-38, -40; clientkeys `STRUCTS`): `uFrom` after `vAuditor` and the two sealed
+/// openings (`PqzOpening`) last in `PqzTransferArgs`, all three empty on a token without the opening.
 const STRUCTS: &[(&str, &str)] = &[
     ("TradeOrder", order!("address")),
     ("UATradeOrder", order!("bytes32")),
@@ -652,7 +653,8 @@ const STRUCTS: &[(&str, &str)] = &[
     ("UAMetaTransaction", concat!("bytes32 from,bytes data,", envelope!())),
     ("InvalidateNonces", "address from,uint256 batch,uint256 minNonce"),
     ("UAInvalidateNonces", "bytes32 from,uint256 batch,uint256 minNonce"),
-    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes sealedMemo"),
+    ("PqzTransferArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 toUA,bytes32 beneficiaryUA,bytes16 salt,bytes32 ownTag,bytes u,bytes vTo,bytes vFrom,bytes vAuditor,bytes uFrom,bytes sealedMemo,PqzOpening openingTo,PqzOpening openingAuditor"),
+    ("PqzOpening", "bytes mlkemCt,bytes32 x25519Eph,bytes sealedSeed"),
     ("PqzLeg", "bytes32 ua,bytes v,bytes vAuditor"),
     ("PqzMultiArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,uint256 decoyFee,bytes16 salt,bytes32 ownTag,bytes[] u,PqzLeg[] legs,bytes vFrom,bytes sealedMemo"),
     ("PqzBurnArgs", "uint64 p,uint256 validUntilBlock,uint256 shieldIn,bytes32 fromUA,uint64 keyVersion,bytes32 beneficiaryUA,bytes32 ownTag,bytes u,bytes vFrom"),
@@ -741,7 +743,7 @@ const OPS: &[Op] = &[
     op("UARollOverSigned", "bytes32 ua,uint64 expectedPendingSeq,uint64 validUntilBlock", &[Z], None),
     op("UASetRollOverMode", "bytes32 ua,uint8 rollOverMode,uint64 validUntilBlock", &[Z], None),
     op("UARollOverBatch", "bytes32[] uas", &[Z], None),
-    raw("UAReceiverFee", "UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", TOKENS),
+    raw("UAPayeeFee", "UAMetaTransfer payment,uint256 fee,address feeRecipient,uint256 validUntil", TOKENS),
     // pay-meta-tax spec §5.2: the regulated kinds 8-13 sign in the base kinds' domains
     raw("UAPayWithTax", "UAMetaTransfer payment,uint8 taxMode,uint256 tax", TOKENS),
     raw("UARelayFee", relay_fee!("bytes32"), TOKENS),

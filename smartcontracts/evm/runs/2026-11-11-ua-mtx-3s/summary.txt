@@ -1,0 +1,27 @@
+ua-mtx-3s (round 3s, owner rulings 2026-11-10, CTR-GOV-24): bit 28 `KYC` takes over the compliance registry check; bits 8
+`ALLOWLIST` and 9 `DENYLIST` become lists held in the token (`listFlags`, `setAllowed` / `setDenied`, `listFlagsOf`), both parties
+checked; `enableFeature(8|9|28)` at once, 8 and 9 never disabled, `KYC` disabled after `grantDelay`; `lockedFeatures` locks the
+creation state on or off. Spec docs/superpowers/specs/2026-11-10-token-lists.md. Base ua-mtx-3s at 4bad0ad6 (ua-mtx-3r merged at
+7f52aac9). Steps by gates.sh here; full output in the git-ignored <step>.log beside this file (a red first run kept as
+<step>.red.log). Foundry 1.8.5, solc 0.8.37, Amsterdam, default PQZ set n2304-kmax4096; every heavy run through scripts/capped
+(4 GB; the node 6 GB), one at a time, beside round 3r's stream. The four PQZ sets and the node e2e: deferred to the stacked gate
+(owner). Mutants: mutants.py here, one per run, restored byte-equal, rows in mutants.txt. UNAUDITED.
+
+step | commit | rc | counts
+t1-lists (red first) | 93ffd525+T1 | 1 | 0 passed, 37 failed (8 suites: Lists 10, ListGovernance 16, ListRouter 1 setUp, RegulatedGas 6, Zether/PqzLists 4 setUp); every failure the absent build (RegulatedConfigInvalid, FeatureInvalidForKind(28), LockedNotSubset, NoSuchRole(8), no enableFeature)
+t3-as (targeted: test/as, T1's suites green) | T3 tree | 0 | 548 passed, 0 failed after the migrations (first run 520 / 26: I12's formula, the registry tests under KYC, the termsHash predicate; then 547 / 1: RegulatedSkeleton's role constant)
+forge-v2 (targeted: layout, opcodes) | T3 tree | 1 -> fixed | 716 passed, 2 failed: the DELEGATECALL pins (RegulatedLib 1 -> 2, R +1 on each kind), moved; rerun with T9
+forge-governance (targeted) | T3+T4 tree | 1 -> fixed | 595 passed, 2 failed: governance_bits.json stale (T6), GovRelax's issuer seat (8, 9 now taken); both fixed, the two suites 31 / 31 passed
+size (src build, targeted rows) | 16acb419 | 1 -> 0 | 166 contracts; 22 ratchet rows grew (the lists' L at every hooked module +161-168 B, the faces +301-369 B, GovernanceLib +428 B), moved old -> new; module Q of 12 (NormalPqzRegulatedTokenQ) 32,584 B against the notice line 33,780 B (1,196 B left) and the stop line 35,570 B; WrappedPqzRegulatedTokenQ 29,651 B; R 13,277-13,547 B; RegulatedLib 11,798 B; GovernanceRouter 24,445 B; no lever
+forge-as (targeted, T5) | T5 tree | 0 | 548 passed (the invariant suites RegInv8-13 with list edits and enables: I14 hits 1-12 per kind, I15 every call; the first run 546 / 2: I9's expectation counted a list-blocked sender, fixed)
+vectors (T6) | T6 tree | 0 | governance_bits.json (GovBitsVector WRITE_BITS, rows 0-28) and regulated_kat.json (RegulatedKat WRITE_REGULATED_KAT: receiver rows under KYC, 16 list rows, 9 predicate rows) written by forge and green; typed_ops.json by clientkeys' generator (+3 rows, no other row moved)
+forge-metatx (targeted: TypedOps' three router rows) | T6 tree | 0 | 547 passed, 1 skipped
+clientkeys | T6 tree | 0 | npm test green (first run 2 red: the router pin counts 54 / 50 -> 57 / 53 and the open-relayer rows +1, fixed)
+ua-rs, ua-py, ua-go, ua-c, ua-cxx, ua-cs, ua-dart, ua-dart-frb, ua-qt, zether-prover (typed_ops) | T6 tree | 0 | each green (ua-dart after dart pub get --offline: the work tree had no package resolution)
+node-test, node-clippy (T7) | T7 tree | 0 | cargo test --lib 711 passed (first runs: the venue mock's controls 8 -> 64 for KYC, the count pins +3 router rows, GOVERNED 274 -> 292); clippy -D warnings clean
+scripts (T8: the on-chain scripts build) | T8 tree | 0 | Deploy, DeploySend and the on-chain scripts compile with the KYC migration; pq.py, zether_reg.py parse; the local matrix run and the new list steps not done (see the report)
+gas (T9: RegulatedGas.t.sol, kind 8, cold, frame gas) | 298ddc5b | 0 | transfer no control 52,867; lists (8, 9) 57,503; KYC 61,880; KYC + deny list 66,488; mtxExecuteTransfer fee 0 under the lists 97,074; with a fee 120,471 (no pin before: spec §14's estimates only)
+forge-v2 (T9 rerun) | 298ddc5b | 0 | 718 passed
+deferred to the stacked gate | - | - | forge for every test/ directory, the full size gate, the four PQZ sets, node e2e, all clients, docs_check (controller 2026-11-11)
+mutants (T10) | 2b1+M4b | - | 48 rows (M1-M34 with b / c variants, B1-B3), each alone, restored byte-equal (git diff clean after each): 47 killed, 1 survived: M4 (`_feeRecipient` drops L) against Lists.t.sol, equivalent on the public kinds (the fee's own move runs `_regMove`'s L(to)); M4b, the same mutant against the confidential suites (the beneficiary's fee off the hooked ledger), killed
+t8-scripts (T8: src and the on-chain scripts into out/onchain, the list / enable steps) | T8b tree | 0 | builds; coverage.py gen (ONCHAIN_OUT=out/onchain) -> runs/2026-11-11-ua-mtx-3s-onchain/coverage.json: 14 groups, 2562 entries (setAllowed, setDenied, listFlagsOf on the six regulated kinds, enableFeature, the router's three ops); the local matrix run: stacked gate

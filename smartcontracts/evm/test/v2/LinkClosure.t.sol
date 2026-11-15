@@ -132,8 +132,9 @@ contract LinkClosureTest is Test {
     }
 
     function _dexMods() internal pure returns (string[] memory m) {
-        m = new string[](1);
-        m[0] = "SCaaSDexAdmin.sol:SCaaSDexD";
+        m = new string[](2);
+        m[0] = "SCaaSDexAdmin.sol:SCaaSDexGovernanceModule";
+        m[1] = "SCaaSDexLiquidityModule.sol:SCaaSDexLiquidityModule";
     }
 
     function _mods(IOpenFactory.TokenKind k) internal pure returns (string[] memory) {
@@ -150,11 +151,11 @@ contract LinkClosureTest is Test {
         address ska = new SmartKeyAccountFactory(ZUID).IMPLEMENTATION();
         DeployHarness h = new DeployHarness();
         (OpenFactory f,) = h.deploy(ZUID, true, ska);
-        _assertEnvIsClosure("DeployBase NONE", "NormalToken", _mods(NORMAL), _modulesOf(f, NORMAL), f.envOf(NORMAL, 1));
+        _assertEnvIsClosure("DeployBase NONE", "NormalToken", _mods(NORMAL), _modulesOf(f, NORMAL), f.tokenEnvOf(NORMAL, 1));
         IOpenFactory.TokenKind z = IOpenFactory.TokenKind.NORMAL_ZETHER;
-        _assertEnvIsClosure("DeployBase NORMAL_ZETHER", "NormalZetherToken", _mods(z), _modulesOf(f, z), f.envOf(z, 1));
+        _assertEnvIsClosure("DeployBase NORMAL_ZETHER", "NormalZetherToken", _mods(z), _modulesOf(f, z), f.tokenEnvOf(z, 1));
         z = IOpenFactory.TokenKind.WRAPPED_ZETHER;
-        _assertEnvIsClosure("DeployBase WRAPPED_ZETHER", "WrappedZetherToken", _mods(z), _modulesOf(f, z), f.envOf(z, 1));
+        _assertEnvIsClosure("DeployBase WRAPPED_ZETHER", "WrappedZetherToken", _mods(z), _modulesOf(f, z), f.tokenEnvOf(z, 1));
         _assertEnvIsClosure("DeployBase DEX", "SCaaSDex", _dexMods(), ITokenModules(f.dexImplementationOf(1)).modules(),
             f.dexEnvOf(1));
 
@@ -186,7 +187,7 @@ contract LinkClosureTest is Test {
             IOpenFactory.TokenKind k = IOpenFactory.TokenKind(8 + i);
             IFactoryToken.Env memory e;
             address[] memory ms;
-            if (i < 4) (e, ms) = (f.envOf(k, 1), _modulesOf(f, k));
+            if (i < 4) (e, ms) = (f.tokenEnvOf(k, 1), _modulesOf(f, k));
             else (e.libs, e.libCodeHashes) = (closureLibs(k), _pins(closureLibs(k)));
             _assertEnvIsClosure(impls[i], impls[i], _mods(k), ms, e);
             bool lib;
@@ -257,9 +258,10 @@ contract LinkClosureTest is Test {
             bytes32 h = keccak256(bytes(name));
             // WrappedLib: `GovernanceLib.init` and, since B-26, `GovernanceUse.use`'s one call to `useLimited` (1 -> 2).
             // RegulatedLib: plan T28's bodies inline `GovernanceUse.use`, whose one call to `GovernanceLib.useLimited` is
-            // its only DELEGATECALL (0 -> 1; its link reference, already in every regulated kind's closure)
+            // its only DELEGATECALL (0 -> 1; its link reference, already in every regulated kind's closure); round 3s:
+            // `setList` checks the role as `use` does without its feature test, its own `useLimited` call (1 -> 2)
             uint256 want = h == keccak256("MtxPipelineLib") || h == keccak256("ZetherWrappedLib") || h == keccak256("PqzWrappedLib")
-                || h == keccak256("WrappedLib") ? 2 : h == keccak256("RegulatedLib") || h == keccak256("UARegistryAuxLib") ? 1 : 0;
+                || h == keccak256("WrappedLib") || h == keccak256("RegulatedLib") ? 2 : h == keccak256("UARegistryAuxLib") ? 1 : 0;
             assertEq(delegates, want, string.concat(name, ": DELEGATECALL count"));
         }
     }
@@ -280,7 +282,8 @@ contract LinkClosureTest is Test {
         (address[] memory d,) = deployDexModules(address(0xFAC));
         address[] memory dl = new address[](2);
         (dl[0], dl[1]) = (address(GovernanceLib), address(TradeLib));
-        seen += _scanModule("SCaaSDexD", d[0].code, dl, pins);
+        seen += _scanModule("SCaaSDexGovernanceModule", d[0].code, dl, pins);
+        seen += _scanModule("SCaaSDexLiquidityModule", d[1].code, dl, pins);
         assertEq(seen, vm.parseJsonKeys(pins, ".").length - 1, "every pinned module scanned");
     }
 

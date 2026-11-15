@@ -7,7 +7,7 @@
 `ZetherTranscript` and the Rust prover `zether-prover` exist with tests (P3;
 `smartcontracts/evm/src/zether/**`); the accounts are UAs of the UA registry's Zether kinds (UA-3,
 [registry](#registry)). Classical Zether is open on every chain with the BLS12-381 precompiles (no chain-id allowlist,
-owner ruling 2026-10-31), and the factory's kind gate starts off for kinds 2–3 (`setKindEnabled`, [safety
+owner ruling 2026-10-31), and the factory's kind gate starts off for kinds 2–3 (`setTokenKindEnabled`, [safety
 gate](#safety-gate)). Post-quantum confidential balances are a separate class ([pq-zero-knowledge.md](pq-zero-knowledge.md)). Relaying is
 the generic self-call ([relaying](#envelope)), `chainUid` is in every chain-bound digest; the built `ZetherToken` with its
 `ZetherMetaTx` envelope is backed up, not built, in `smartcontracts/evm/legacy/p3/`. **Built (P3b):** the storage and auditor modes, the salted `s` and the sender memo ([CTR-ZTH-38](#CTR-ZTH-38), [CTR-ZTH-48](#CTR-ZTH-48)–[CTR-ZTH-50](#CTR-ZTH-50), [CTR-ZTH-30](#CTR-ZTH-30)).
@@ -967,7 +967,7 @@ other write of the account is a Zether Schnorr by `x` through `registry.requireA
 |---|---|---|
 | `mtxRollOverSigned`, `mtxSetRollOverMode` | `zether-owner` | `UASig{signature: sig}` (before typed-signing C3 `abi.encode(bytes(""), sig)`): Schnorr by `x` over `uaMessage(0x0141, PURPOSE_ZETHER_OWNER, digest)`, `Y` from the record; a registered Zether UA only, else `AccountNotRegistered` |
 | `register` PoP | `pop` (version 2) | Schnorr by `x` over `uaMessage(0x0141, PURPOSE_POP_V2, typed(UARegistration{UAPortableRecord{UA, 0x0141, 0, UAKemRecord{UA, 0, 0, 0}}, 0}))` |
-| UA-ledger writes of the account's public balance (`ua*`, `uaExecute(mtxShield)`, trade, mandates, receiver fee) | the write's purpose | the same Schnorr (`abi.encode(bytes(""), sig)`); `zether-bls12381` is a SIGNING UA, not an `msig` member (CTR-UA-14) |
+| UA-ledger writes of the account's public balance (`ua*`, `uaExecute(mtxShield)`, trade, mandates, payee fee) | the write's purpose | the same Schnorr (`abi.encode(bytes(""), sig)`); `zether-bls12381` is a SIGNING UA, not an `msig` member (CTR-UA-14) |
 
 Schnorr (every curve):
 
@@ -1215,9 +1215,10 @@ confidential transfers are `mtxConfidentialTransfer…` (wallets may label them 
 | `mtxConfidentialTransferSingleCompact` | PQZ only | op 1 in commit-reveal form |
 | `mtxUnshield(…, uint256 amount, bytes32 recipient)` | both | the unshield proof; `amount·shieldScale` from `SHIELD_POOL` to `recipient`; PQZ `amount = 0, recipient = 0` is a refresh; one function for native and UA recipients ([CTR-ZTH-51](#CTR-ZTH-51)) |
 | `mtxUnshieldUnwrap(…)` | `UNDERLYING_*` | the same proof; `amount·shieldScale` burnt **from the pool**, then the leg pays `u` that value rounded down, bounded by `minOut`, nothing minted; the holder loses less than one raw underlying unit to the rounding (a public `unwrap` burns only `⌈out·q⌉`), so a client picks `amount` with `previewUnwrap(u, amount·shieldScale).burned == amount·shieldScale` |
-| `mtxRollOver(bytes32 ua, uint256 n)` | both | PQZ: roll `n` queue entries ([§7.6](pq-zero-knowledge.md#76-rollover)); Zether: one aggregated `pending`, any `n ≥ 1` rolls it |
+| `mtxRollOver(bytes32 ua, uint256 n)` | Zether only (since PQZ's 3g; `IZetherToken`) | one aggregated `pending`, any `n ≥ 1` rolls it |
+| `mtxRollOver(bytes32 ua, uint64 keyVersion, uint256 n)` | PQZ only (3g, [CTR-PQZ-31](pq-zero-knowledge.md#CTR-PQZ-31)) | roll `n` queue entries of that key version ([§7.6](pq-zero-knowledge.md#76-rollover)); event `PqzRolledOver` |
 | `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode` | Zether only | the roll-over functions of [ElGamal state and lifecycle](#rollover) |
-| `mtxPrepareAcc(bytes32 ua, uint256 half)` | PQZ only | [pq-zero-knowledge.md §7.6](pq-zero-knowledge.md#76-rollover) |
+| `mtxPrepareAcc(bytes32 ua, uint64 keyVersion, uint256 half)` | PQZ only | [pq-zero-knowledge.md §7.6](pq-zero-knowledge.md#76-rollover), per key version since 3g |
 
 **Shared proof-taking signature** (controller ruling, plan 5h): `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary,
 bytes accHint[, layer-neutral trailing arguments])`. PQZ: `auth` = the signing UA's signature over `authDigest` (formerly
@@ -1254,7 +1255,7 @@ Zether token (its own confidential account is classical by nature). Since typed-
   on both layers (the Zether invariant handler of plan 5h Task 3z, `PqzPoolInvariantTest`): `totalSupply()` unchanged by shield / unshield / fees,
   `Σ balanceOf == totalSupply`, `balanceOf(SHIELD_POOL) == totalShielded·shieldScale`, `reserve ≥ totalSupply()`. The pool guard lives in
   `ERC20MetaTx._uaMove` (a native `SHIELD_POOL` side reverts `ShieldPoolNotPayable`, which covers outer fees, `uaExecute` fee calls and
-  receiver fees); a unshield's payee check also refuses `UA_POOL` (`UAPoolNotPayable`). **Trust boundary:** the layers move the pool only
+  payee fees); a unshield's payee check also refuses `UA_POOL` (`UAPoolNotPayable`). **Trust boundary:** the layers move the pool only
   through the internal `_poolMove`, which is unguarded by design (the guarded `_uaMove` would refuse the pool); only layer code may call it, and
   any contract that inherits `ERC20MetaTx` and calls `_poolMove` can move the pool. The libraries return what the debit moved (Zether
   `fee`, PQZ `PqzCore.Paid`) and the token pays exactly that.
@@ -1298,8 +1299,13 @@ nothing else. **Built (P3)**; every view takes `envelopeBinding` (`transferState
 relays), and `unshieldUnwrapStatement` / `unwrapBinding` serve `mtxUnshieldUnwrap` (controller ruling, pending the owner).
 
 <a id="CTR-ZTH-47"></a>**CTR-ZTH-47** — **Regulated flags are refused on confidential kinds** (owner, T11). The flags
-valid on `NORMAL_ZETHER` / `WRAPPED_ZETHER` are `PAYABLE`, `RESCUABLE`; `MINTABLE` / `BURNABLE` (`NORMAL_ZETHER`);
-`MINTABLE` as a hybrid, `RATE_ADJUSTABLE` / `WRAP_DISABLEABLE` (`WRAPPED_ZETHER`) ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)). The regulated
+valid on `NORMAL_ZETHER` / `WRAPPED_ZETHER` are `PAYABLE`, `RESCUABLE`; `MINTABLE` / `BURNABLE` or `BURNER` (`NORMAL_ZETHER`);
+`MINTABLE` as a hybrid, `RATE_ADJUSTABLE` / `WRAP_DISABLEABLE`, `SUPPLY_CAP_ADJUSTABLE` (`WRAPPED_ZETHER`) ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22);
+bits 30 `BURNER` and 31 `SUPPLY_CAP_ADJUSTABLE` BUILT, build 3zb + 3zc, branch `burner-wrap-caps`). The
+`ZetherBurn` unshield (`mtxUnshield`, and the refresh) is **not a burn**: it moves units from `SHIELD_POOL` to a recipient,
+`totalSupply()` does not move, and it is not gated by `BURNER` (owner O1, [CTR-GOV-29](../decisions.md#CTR-GOV-29)); a shielded
+holder that wants to destroy units unshields to itself and burns under the role check. `mtxWrapShield` and
+`mtxUnshieldUnwrap` move `totalWrapped()` like any wrap and unwrap ([supply caps](token-wrappers.md#supply-caps)). The regulated
 flags 5–9 (`FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`, `DENYLIST`) are refused at creation (`FeatureInvalidForKind`; the token
 validates, not the factory) ([CTR-AS-17](asset-suite.md#CTR-AS-17)). This is the built state, not a permanent rule: the
 regulated confidential kinds (enum ids 10 `NORMAL_ZETHER_REGULATED`, 11 `WRAPPED_ZETHER_REGULATED`, off until published)
@@ -1333,7 +1339,7 @@ refuse a point outside the subgroup ([§9.1](#merged-check)). Never on Hedera (`
 Hedera env; `DEPLOY_ZETHER` refuses a Hedera deploy; the Hedera registry gets no `zether-bls12381`; regression test
 `test/zether/ZetherNoEip2537.t.sol`).
 
-- `OpenFactory.kindEnabled(NORMAL_ZETHER / WRAPPED_ZETHER)` starts `false`; `setKindEnabled` (registrar) is the
+- `OpenFactory.tokenKindEnabled(NORMAL_ZETHER / WRAPPED_ZETHER)` starts `false`; `setTokenKindEnabled` (registrar) is the
   generic gate of every kind (plan 5g-Z2): enabling the Zether kinds is an admin act per chain; creating a `*_ZETHER`
   token reverts when the kind is off (`KindDisabled`).
 - The release's verifiers stay pinned ([CTR-ZTH-20](#CTR-ZTH-20)).
@@ -1368,7 +1374,7 @@ could carry a fake verifier (`true` for every proof ⇒ `mtxUnshield` drains the
   constructor-fixed `Canonical` sets, `zetherVerifiers` / `pqzVerifier` and `NotCanonicalVerifiers`). The registrar
   publishes per kind a versioned, never-changed `Env` whose `deps` are, for `*_ZETHER`, the transfer, burn and
   inner-product verifier and `ZetherDisclosure` of one curve (positions `ENV_ZETHER_*` 0–3), for `*_PQZ` the
-  `UAPqzVerifier` (`ENV_PQZ_VERIFIER` 0); `deployImplementation(kind, version, envVersion, initcode, implArgs)`
+  `PqzKeyVerifier` (`ENV_PQZ_VERIFIER` 0); `deployTokenImplementation(kind, version, envVersion, initcode, implArgs)`
   `CREATE2`s the init code with that env appended, so the verifiers are immutables of the release by construction
   ([CTR-TOK-03](token-wrappers.md#release-env)). The Zether constructor refuses missing code, two verifiers of different
   proof systems, verifiers not fixed to `deps[2]`, a swapped or duplicated transfer / burn pair (the transfer verifier
@@ -1382,14 +1388,14 @@ could carry a fake verifier (`true` for every proof ⇒ `mtxUnshield` drains the
   the trust root for code — a multisig / UA msig before mainnet (a timelock is an option, not built).
 - **Clients and the gateway** accept a Zether token only when the chain's published `OpenFactory` answers
   `isRegisteredToken(token)` and `registry()` equals the chain's canonical registry; the factory is the published source of
-  the verifier addresses (`releaseOf(kind, version)` → `envOf(kind, envVersion).deps`). The built `clients/clientkeys/src/zether.js` does not check this yet. Tests: the client
+  the verifier addresses (`releaseOf(kind, version)` → `tokenEnvOf(kind, envVersion).deps`). The built `clients/clientkeys/src/zether.js` does not check this yet. Tests: the client
   refuses an unregistered token or a foreign `registry()`; the gateway errors when relaying a Zether op of one. The gateway
   half is [NODE-GW-01](../node/gateway.md#NODE-GW-01)'s door; the client half
   [CLI-SGN-10](../clients/signers-clientkeys.md#CLI-SGN-10). Status: contracts **BUILT** (5g-Z1, 5g-Z2), clients and gateway
   **SPECIFIED**.
 
 Open work (owner/operator; none of it is a deploy gate, owner ruling 2026-10-31): there is no dev gate to lift — the
-kind is open on every chain with EIP-2537 once `setKindEnabled` turns it on ([CTR-ZTH-52](#CTR-ZTH-52)); an independent
+kind is open on every chain with EIP-2537 once `setTokenKindEnabled` turns it on ([CTR-ZTH-52](#CTR-ZTH-52)); an independent
 cryptographic audit (Σ-Bulletproofs, transcript, inner-product argument, registry PoP) is still wanted, and until one is
 recorded the label stays **UNAUDITED** and client screens show the warning
 ([README](README.md#production-gates-unaudited)); the curve is decided, BLS12-381 only ([CTR-ZTH-32](#CTR-ZTH-32)), the

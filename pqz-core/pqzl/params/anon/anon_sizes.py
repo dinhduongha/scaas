@@ -30,7 +30,7 @@ def codegen_bytes(name):
     p = os.path.join(HERE, 'sizing-anon.txt')
     if not os.path.exists(p):
         return None
-    m = re.search(rf'=> /tmp/w/{name}_params\.sage: .*codegen proof size ~(\d+) B', open(p).read())
+    m = re.search(rf'=> \S*/{name}_params\.sage: .*codegen proof size ~(\d+) B', open(p).read())
     return int(m.group(1)) if m else None
 
 

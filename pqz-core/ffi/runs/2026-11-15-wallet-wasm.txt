@@ -1,0 +1,34 @@
+# TODO 3zf: the browser wallet's K3-7 holder check (pqz-core/ffi/wallet-wasm + clients/clientkeys/src/pqzopenWasm.js). UNAUDITED.
+# Branch pqz-wallet-wasm from pre-reset4 a5cfe748a. No change to pqz-ffi/src, pqzl, pqzh, stmt or set params: no full gate.
+# Full outputs stayed local (git-ignored wallet-wasm/target/out). Each command under scripts/capped.
+step | commit | rc | counts
+1 worktree + branch pqz-wallet-wasm (ignored inputs copied as real dirs) | a5cfe748a | 0 | -
+2 wallet crate: lib.rs, cases.rs, build.sh, strip-exports.mjs, run.sh | 9f7b01105 | 0 | exports memory input_ptr input_cap out_ptr pk_bytes check_recipient check_auditor; no unsafe
+3 clientkeys loader pqzopenWasm.js, pqzKeyHandle.check(credit, wallet), test/pqz-wallet-wasm.test.js | fd5b5406b | 0 | -
+4 mutants.py | 207a5b2d5 | 0 | -
+5 docs: signers-clientkeys.md #pqz-wallet-wasm, decisions.md CLI-SGN-51 Change, ffi README | ffba31815 | 0 | -
+gate wallet-wasm/run.sh, four sets | ffba31815 | 0 | 22/22 tests; per set 103 cases wasm = native (opening.json's 2 rows field by field + one-change variants), 116 raw malformed frames, 60 loader negatives, handle with a planted u*
+gate wallet-wasm/mutants.py (n2304-kmax4096 + n2048-kmax1024) | 207a5b2d5 | 0 | control ok before and after; 13/13 killed (R1-R8 wrapper, J1-J3 + J5 loader, J4 handle)
+gate clippy wallet crate, native and wasm32, -D warnings | 9f7b01105 | 0 | 0 warnings
+gate clientkeys full suite, without modules | fd5b5406b | 0 | 354 tests, 349 pass, 0 fail, 5 skipped (2 of them: the wallet tests without PQZ_WALLET_DIR)
+gate clientkeys full suite, PQZ_WALLET_DIR set (four sets) | fd5b5406b | 0 | 374 tests, 371 pass, 0 fail, 3 skipped
+gate ffi/run.sh ffi/test + ffi/wasm, n2048-kmax1024 | ffba31815 | 0 | 30 tests ok, 0 failed; native = wasm32 29 lines
+gate ffi/run.sh ffi/test + ffi/wasm, n2304-kmax4096 | 207a5b2d5 | 0 | 30 tests ok, 0 failed; native = wasm32 29 lines
+gate ffi/run.sh ffi/test + ffi/wasm, n2560-kmax16384 | ffba31815 | 0 | 30 tests ok, 0 failed; native = wasm32 29 lines
+gate ffi/run.sh ffi/test + ffi/wasm, n2816-kmax65536 | ffba31815 | 0 | 30 tests ok, 0 failed; native = wasm32 15 lines (no PQZH at this set)
+gate docs_check check / test_docs_check | ffba31815 | 0 | 0 errors, 7 warnings (budgets; signers-clientkeys.md was over budget before), test ok
+# ffi/native and ffi/bench were not run (resume state marked them): nothing they read changed.
+# Leftovers (owner 2026-11-15), same branch
+6 gen_set.py writes wallet-wasm/Cargo.toml's set block (output only) | 889a2dc8d | 0 | generated = hand-written byte for byte; --all --check rc 0 (94 files, 93 before); hand-edited set line rc 1; restored rc 0; no other generated file changed
+7 trap test (first instance wrapped to throw WebAssembly.RuntimeError; re-instantiated, next calls right) + mutant J6 | f33dc5e72 | 0 | -
+gate wallet-wasm/run.sh, four sets | f33dc5e72 | 0 | 26/26 tests (the trap test at each set)
+gate wallet-wasm/mutants.py | f33dc5e72 | 0 | control ok before and after; 14/14 killed (R1-R8 wrapper, J1-J3 + J5 + J6 loader, J4 handle); R1 still by the raw ABI trap, J6 by the trap test
+8 ffi/run.sh part ffi/wallet (wallet-wasm/run.sh at the run's set) | 4e9cb32b1 | 0 | -
+gate ffi/run.sh shell control, n2304-kmax4096, other parts resumed, R8 planted in lib.rs | 4e9cb32b1 | 1 | ffi/wallet FAILED (4/8 red), ffi/run.sh FAILED; lib.rs restored
+gate ffi/run.sh, n2304-kmax4096, ffi/wallet part alone (other parts resumed) | 4e9cb32b1 | 0 | 8/8, 103 cases wasm = native
+# ffi/run.sh not re-run at four sets for step 8 (owner 2026-11-15: the existing parts are unaffected). No full gate; the gate
+# of record stays 3fa153e4 plus gate-reds.
+# Mutants: R1 n <= cap dropped | R2 auditor outcomes swapped | R3 trailing bytes accepted | R4 fixed length word unchecked |
+# R5 output not zeroed | R6 input not wiped | R7 auditorOn not 0/1 taken as on | R8 skip reported accepted | J1 loader export
+# check dropped | J2 loader auditor outcomes swapped | J3 isPqzWallet true for any object | J4 handle set check dropped |
+# J5 digits not read on code 1 | J6 no re-instantiate after a trap. Each killed.

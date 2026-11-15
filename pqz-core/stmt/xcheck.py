@@ -31,7 +31,7 @@ C_FORMS = {"reg": "REGISTER", "tx": "TRANSFER", "burn": "BURN", "ds": "DISCLOSE-
 
 
 def op_of(form):
-    return kat.OP_BYTE[form.rstrip("0")]
+    return kat.OP_BYTE[form.rstrip("0").replace("-SPLIT", "")]
 
 
 def fields_of(form, st):
@@ -40,10 +40,10 @@ def fields_of(form, st):
         return {"words": st[:96], "pk": st[96:]}
     if form.startswith("DISCLOSE"):
         return {"words": st[:288], "pk": st[288:288 + PK], "u": st[288 + PK:288 + 2 * PK], "v": st[288 + 2 * PK:]}
-    tr, aud = form.startswith("TRANSFER"), form == "TRANSFER"
+    tr, aud, split = form.startswith("TRANSFER"), form in ("TRANSFER", "TRANSFER-SPLIT"), "-SPLIT" in form
     f, o, b = {"hdr": st[:HB]}, 0, st[HB:]
     for k, n, on in (("pk_f", PK, True), ("pk_t", PK, tr), ("pk_a", PK, aud), ("t", CT, True), ("u", PK, True),
-                     ("v_t", V, tr), ("v_f", V, True), ("v_a", V, aud)):
+                     ("v_t", V, tr), ("v_f", V, True), ("v_a", V, aud), ("u_f", PK, split)):
         if on:
             f[k], o = b[o:o + n], o + n
     assert o == len(b)
@@ -53,7 +53,7 @@ def fields_of(form, st):
 def rebuild(form, st):
     """pqz_kat.py's own builders from its parse of st."""
     p = kat.parse(op_of(form), st)
-    op = form.rstrip("0")
+    op = form.rstrip("0").replace("-SPLIT", "")
     assert p["op"] == op
     if op == "REGISTER":
         return kat.build_register(p["message"], p["pk"], psid=st[32:64])
@@ -63,7 +63,7 @@ def rebuild(form, st):
     f = {k: p[k] for k in kat.HEADER if k != "opTag"}
     f["salt"] = f["salt"][16:]  # 16 zero bytes || salt (parse enforces it)
     out = p["u"] + b"".join(p[k] for k in ("v_t", "v_f", "v_a") if k in p)
-    return kat.build_debit(op, f, p["pk_f"], p["T"], out, pk_t=p.get("pk_t"), pk_a=p.get("pk_a"))
+    return kat.build_debit(op, f, p["pk_f"], p["T"], out, pk_t=p.get("pk_t"), pk_a=p.get("pk_a"), u_f=p.get("u_f"))
 
 
 def main(argv):
@@ -83,14 +83,15 @@ def main(argv):
     valid = []
     for _ in range(n):
         for form in ("TRANSFER", "TRANSFER0", "BURN", "REFRESH", "REGISTER", "DISCLOSE-SENDER", "DISCLOSE-RECEIVER",
-                     "DISCLOSE-AUDITOR"):
-            psid = rng.choice([kat.PQZL_ID, kat.PQZH_ID])
-            op = form.rstrip("0")
+                     "DISCLOSE-AUDITOR", "TRANSFER-SPLIT", "TRANSFER-SPLIT0"):
+            # every id that serves the form (K3-4: PQZL_SPLIT_ID the split transfer, burn, refresh, sender disclosure)
+            psid = rng.choice([i for i in kat.KNOWN_IDS if form in kat.FORMS_OF[i]])
+            op = form.rstrip("0").replace("-SPLIT", "")
             if op == "REGISTER":
                 st = kat.build_register(rng.randbytes(32), coeffs(kat.N), psid=psid)
             elif op.startswith("DISCLOSE"):
                 f = {k: rng.randbytes(32) for k in kat.DISC[2:]}
-                f.update(proofSystemId=psid, amount=rng.getrandbits(64), kind=rng.randrange(3))
+                f.update(proofSystemId=psid, amount=rng.getrandbits(64), kind=kat.OPENING_KIND[op])
                 st = kat.build_disclose(op, f, coeffs(kat.N), coeffs(kat.N), coeffs(16))
             else:
                 f = {k: rng.randbytes(32) for k in kat.HEADER[2:]}
@@ -99,10 +100,11 @@ def main(argv):
                 f.pop("auditorOn")
                 for k in kat.ZERO_WORDS[op]:
                     f[k] = 0
-                tr, aud = op == "TRANSFER", form == "TRANSFER"
+                tr, aud = op == "TRANSFER", form in ("TRANSFER", "TRANSFER-SPLIT")
                 out = coeffs(kat.N + 16 * (2 + aud if tr else 1))
                 st = kat.build_debit(op, f, coeffs(kat.N), coeffs(kat.N + 16), out, pk_t=coeffs(kat.N) if tr else None,
-                                     pk_a=coeffs(kat.N) if aud else None)
+                                     pk_a=coeffs(kat.N) if aud else None,
+                                     u_f=coeffs(kat.N) if "-SPLIT" in form else None)
             assert len(st) == kat.STMT_BYTES[form] and rebuild(form, st) == st
             kat.parse(op_of(form), st)
             valid.append((form, st))
@@ -156,16 +158,21 @@ def main(argv):
         bad(op, rng.choice([kat.OP_TAG[m] for m in kat.OP_NAMES if kat.OP_BYTE[m] != op]) + st[32:], "opTag")
         bad(op % 5 + 1, st, "other op")
         bad(op, st[:32] + rng.randbytes(32) + st[64:], "id")
+        # K3-4: an id that does not serve the form
+        for i in kat.KNOWN_IDS:
+            if form not in kat.FORMS_OF[i]:
+                bad(op, st[:32] + i + st[64:], "id does not serve the form")
         if form.startswith("DISCLOSE"):
             i = 224 + rng.randrange(24)
             bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1:], "amount")
             # the kind word = OpeningKind + 256 w (R0-1): w = 0 but for AUDITOR, w < S_AUD there; < 2^16
             k = int.from_bytes(st[256:288], "big") & 255
             wmax = kat.S_AUD if form == "DISCLOSE-AUDITOR" else 1
-            for v, what in ((k + 256 * wmax, "kind window"), (k + 2**16, "kind word >= 2^16")):
+            for v, what in ((k + 256 * wmax, "kind window"), (k + 2**16, "kind word >= 2^16"),
+                            ((k + 1 + rng.randrange(255)) % 256, "kind low byte (T-36)")):
                 bad(op, st[:256] + kat.word(v) + st[288:], what)
         elif form != "REGISTER":
-            for k in kat.ZERO_WORDS[form.rstrip("0")]:
+            for k in kat.ZERO_WORDS[op_of(form) == 1 and "TRANSFER" or form.rstrip("0")]:
                 i = 32 * kat.HEADER.index(k) + 16 + rng.randrange(16)  # the low half: the salt form still holds
                 bad(op, st[:i] + bytes([st[i] ^ (1 + rng.randrange(255))]) + st[i + 1:], k)
             for w, what in ((256, "fee"), (288, "amount"), (576, "salt")):

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
 import {MetaTxBaseCore} from "../../src/metatx/MetaTxBase.sol";
 
 import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
@@ -19,6 +20,7 @@ contract Recorder {
 /// CTR-MTX-16…19, CTR-MTX-22: the generic pipeline of `MetaTxBase` on a registry-like contract.
 contract MetaTxBaseTest is MtxFixture {
     using MetaTxLib for MetaTxLib.MetaTransaction;
+    using MtxHash for MetaTxLib.MetaTransaction;
 
     uint256 internal constant N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
 

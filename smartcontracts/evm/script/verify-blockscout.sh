@@ -4,14 +4,15 @@
 # usage: verify-blockscout.sh [broadcast.json ...] [e2e-run-log ...]  (paths relative to smartcontracts/evm; an argument
 #   ending in .json is a broadcast; default broadcast/Deploy.s.sol/7622/run-latest.json and, when present,
 #   broadcast/ZetherE2E.s.sol/7622/run-latest.json)
-#   env BLOCKSCOUT_API (default http://192.168.1.72:4000/api), RPC (default http://192.168.1.72:8545),
+#   env BLOCKSCOUT_API (default http://127.0.0.1:4000/api), RPC (default http://127.0.0.1:8545; loopback: the host's LAN
+#   address is not fixed),
 #   FOUNDRY_PROFILE (default scaas-testnet)
 # Run after every 7622 reset or deploy. Broadcast: the CREATE / CREATE2 rows and the contracts they create
 # (additionalContracts: RelayFeeExecutor, the SmartKeyAccount implementation, the token / DEX implementations); the
 # constructor arguments are the tail of each init code after the artifact's creation bytecode. A child forge cannot
 # name: an EIP-1167 clone (a factory token, `createToken`) is checked as below, an SSTORE2 data contract (code starting
 # 0x00: the inner-product verifier's generators, registry records, memos) is listed as skip (data, nothing to verify).
-# PQZ e2e (script/pqz/e2e.py, which writes only the last run's addresses to deployments/7622-pqz.json): its run logs,
+# PQZ e2e (script/pqz/e2e.py, which writes only the last run's addresses to deployments/scaas-testnet-pqz.json): its run logs,
 # default every runs/*.txt whose "# P6g e2e on chain" header names this chain's genesis hash (older logs name a reset
 # chain, whose addresses now hold other code). Per log line "      <Name> at 0x…": a direct CREATE from the deployer,
 # constructor arguments = the input of the log's last "tx …: 0x…" line before it (the creation) after the artifact's
@@ -38,13 +39,15 @@ if [ ${#bs[@]} -eq 0 ]; then
 fi
 for B in "${bs[@]}"; do [ -f "$B" ] || { echo "no broadcast $B" >&2; exit 2; }; done
 B="${bs[0]}"
-API="${BLOCKSCOUT_API:-http://192.168.1.72:4000/api}"
-RPC="${RPC:-http://192.168.1.72:8545}"
+API="${BLOCKSCOUT_API:-http://127.0.0.1:4000/api}"
+RPC="${RPC:-http://127.0.0.1:8545}"
 export FOUNDRY_PROFILE="${FOUNDRY_PROFILE:-scaas-testnet}"
 CAPPED="$(git rev-parse --show-toplevel)/scripts/capped"
 CHAIN="$(jq -r .chain "$B")"
 ENV_T='(address,bytes32,address,address,bool,address[],address[],bytes32[])'
 fails=0; skips=0; table=(); seen=" "
+# one progress line per contract as it is decided (the table at the end repeats them)
+progress() { echo "[verify] ${table[${#table[@]}-1]}"; }
 
 # Gentle on the API (Blockscout's per-IP limit, 500 calls / 15 min by default, answers 429): curl retries a 429 with a
 # back-off, one address call per check, a pause between contracts.
@@ -63,7 +66,7 @@ verify() {
   sleep 2
   src="$(jq -r '.metadata.settings.compilationTarget | keys[0]' "$art")"
   [ -n "$args" ] && opt=(--constructor-args "0x$args")
-  out="$("$CAPPED" forge verify-contract "$addr" "$src:$name" --verifier blockscout --verifier-url "$API/" \
+  out="$("$CAPPED" timeout "${VERIFY_TIMEOUT:-600}" forge verify-contract "$addr" "$src:$name" --verifier blockscout --verifier-url "$API/" \
          --chain-id "$CHAIN" "${opt[@]}" --watch --delay 10 --skip-is-verified-check 2>&1)"
   if [ "$(addr_field "$addr" is_verified)" = true ]; then table+=("ok    $label  $addr")
   else
@@ -72,7 +75,9 @@ verify() {
 }
 
 # clone <label> <address>: an EIP-1167 clone of a release is not verified itself; Blockscout must link it (proxy_type
-# eip1167) to its implementation, which must be verified. A data contract (SSTORE2, code 0x00…) is a skip.
+# eip1167, or clone_with_immutable_arguments for a clone with data appended after the 45-byte proxy, e.g. a factory
+# token or a PqChat instance) to its implementation, which must be verified. A data contract (SSTORE2, code 0x00…) is a
+# skip.
 clone() {
   local name=$1 addr=$2 code impl j pt li iv
   code="$(cast code -r "$RPC" "$addr")"
@@ -88,7 +93,7 @@ clone() {
     in="$(api "smart-contracts/$impl" | jq -r '.name // empty')"
     art="$(ls out/*/"$in".json 2>/dev/null | head -1)"
     if [ -n "$in" ] && [ -n "$art" ]; then
-      "$CAPPED" forge verify-contract "$addr" "$(jq -r '.metadata.settings.compilationTarget | keys[0]' "$art"):$in" \
+      "$CAPPED" timeout "${VERIFY_TIMEOUT:-600}" forge verify-contract "$addr" "$(jq -r '.metadata.settings.compilationTarget | keys[0]' "$art"):$in" \
         --verifier blockscout --verifier-url "$API/" --chain-id "$CHAIN" --skip-is-verified-check >/dev/null 2>&1
       known "$addr"
     fi
@@ -97,8 +102,8 @@ clone() {
   pt="$(jq -r '.proxy_type // "none"' <<< "$j")"
   li="$(jq -r '[.implementations[]?.address_hash | ascii_downcase] | join(",")' <<< "$j")"
   iv="$(addr_field "$impl" is_verified)"
-  if [ "$pt" = eip1167 ] && [ "$li" = "$impl" ] && [ "$iv" = true ]; then
-    table+=("ok    $name  $addr  eip1167 clone of $impl (verified)")
+  if { [ "$pt" = eip1167 ] || [ "$pt" = clone_with_immutable_arguments ]; } && [ "$li" = "$impl" ] && [ "$iv" = true ]; then
+    table+=("ok    $name  $addr  $pt clone of $impl (verified, $(( (${#code} - 2) / 2 )) B)")
   else
     table+=("fail  $name  $addr  clone of $impl: proxy_type $pt, implementations [$li], implementation verified $iv"); fails=$((fails + 1))
   fi
@@ -112,6 +117,7 @@ for B in "${bs[@]}"; do
     [[ "$seen" == *" ${addr,,} "* ]] && continue; seen+="${addr,,} "
     if [ "$name" = - ]; then clone "child of $(jq -r --arg a "${addr,,}" '.transactions[] | select([.additionalContracts[]?.address | ascii_downcase] | index($a)) | .function // .contractName' "$B" | head -1)" "$addr"
     else verify "$name" "$addr" "$(ctor_tail "$name" "$init")"; fi
+    progress
   done < <(jq -r '.transactions[]
     | (select(.transactionType | test("^CREATE")) | [.contractName, .contractAddress,
          (if .transaction.to then "0x" + .transaction.input[66:] else .transaction.input end)]),
@@ -139,13 +145,13 @@ for log in "${logs[@]}"; do
       [ "$v" -gt 0 ] && ev="$(cast call -r "$RPC" "$fac" 'releaseOf(uint8,uint64)((address,uint16,bytes32,uint64,bool))' "$kind" "$v" \
                               | sed -E 's/^\([^,]+, ([0-9]+),.*/\1/')"
       if [ -z "$ev" ]; then table+=("fail  $name  $addr  not a release of factory $fac"); fails=$((fails + 1)); continue; fi
-      env="$(cast call -r "$RPC" "$fac" "envOf(uint8,uint16)($ENV_T)" "$kind" "$ev")"
+      env="$(cast call -r "$RPC" "$fac" "tokenEnvOf(uint8,uint16)($ENV_T)" "$kind" "$ev")"
       args="$(cast abi-encode "f(uint16,$ENV_T,bytes)" "$ev" "$env" 0x)"
-      verify "$name" "$addr" "${args#0x}" "$name (release kind $kind v$v)"
+      verify "$name" "$addr" "${args#0x}" "$name (release kind $kind v$v)"; progress
     elif ls out/*/"$name".json >/dev/null 2>&1; then    # a direct CREATE from the e2e deployer
-      verify "$name" "$addr" "$(ctor_tail "$name" "$(cast tx -r "$RPC" "$tx" input)")"
+      verify "$name" "$addr" "$(ctor_tail "$name" "$(cast tx -r "$RPC" "$tx" input)")"; progress
     else                                                 # a token: EIP-1167 clone of a release
-      clone "$name" "$addr"
+      clone "$name" "$addr"; progress
     fi
   done < <(awk '/^(ok|FAIL) +tx .*: 0x[0-9a-f]{64}/ { match($0, /: 0x[0-9a-f]{64}/); tx = substr($0, RSTART + 2, 66) }
                 $0 ~ /^      [A-Za-z0-9_]+ (release )?at 0x[0-9a-fA-F]{40}/ { print $1, ($2 == "release" ? "release" : "-"), ($2 == "release" ? $4 : $3), tx }' "$log")

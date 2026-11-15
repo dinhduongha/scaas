@@ -595,7 +595,7 @@ ScaasUaStatus scaas_ua_kind_tag_string(uint16_t kind,
 
 /**
  * Governance bit `bit`'s row of `governance_bits.json` (spec 2026-11-02-governance §1.2) as JSON, `{bit, name, type, sentences}`
- * (NUL-terminated; `*out_len` counts the NUL). Bits 0-24; any other bit is `SCAAS_UA_ERR_ARGUMENT` (25-127 free, 128-255 the
+ * (NUL-terminated; `*out_len` counts the NUL). Bits 0-31; any other bit is `SCAAS_UA_ERR_ARGUMENT` (32-127 free, 128-255 the
  * application's `bitLabel`).
  */
 ScaasUaStatus scaas_ua_governance_bit(uint8_t bit,
@@ -965,6 +965,15 @@ ScaasUaStatus scaas_ua_set_kem_key_args(const char *input,
 ScaasUaStatus scaas_ua_set_pqz_key_args(const char *input,
                                         char *out,
                                         size_t *out_len);
+
+/**
+ * CTR-UA-44 `updateMsig`, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, chainUid, registry, version, threshold, members: [{kind, id, weight}], enabled, validUntilBlock, sigs}` (`enabled` a
+ * decimal string or number, `sigs` the stored structure's member signatures). Out: `{digest, message, memberDigest, args}`: what a quorum of
+ * the stored structure signs on that one registry, and the named arguments.
+ */
+ScaasUaStatus scaas_ua_msig_update(const char *input,
+                                   char *out,
+                                   size_t *out_len);
 
 /**
  * What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,

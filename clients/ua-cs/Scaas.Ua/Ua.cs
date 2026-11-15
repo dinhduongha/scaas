@@ -67,8 +67,8 @@ public static partial class UA
          "fndsa512", "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe"];
 
     public static readonly string[] Purposes =
-        ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
-         "vc-anchor", "trade", "kem", "pqz-key", "membership", "pqz-verdict"];
+        ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "payee-fee", "vp",
+         "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update", "pqz-verdict"];
 
     public const string DomainType =
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)";
@@ -88,15 +88,23 @@ public static partial class UA
 
     public static readonly byte[] MsgTag = Keccak256(Utf8("scaas.ua.msg.v1"));
 
-    /// <summary>The governance bits 0-24 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the
-    /// app from smartcontracts/vectors/governance/governance_bits.json; bits 25-127 are free, 128-255 the application's bitLabel(bit).</summary>
+    /// <summary>The governance bits 0-31 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the
+    /// app from smartcontracts/vectors/governance/governance_bits.json; bits 32-127 are free, 128-255 the application's bitLabel(bit).</summary>
     public static readonly (string Name, string Type)[] GovernanceBits =
     [
         ("PAYABLE", "capability"), ("MINTABLE", "power"), ("BURNABLE", "capability"), ("RATE_ADJUSTABLE", "power"),
-        ("WRAP_DISABLEABLE", "power"), ("FREEZE", "power"), ("FORCE", "power"), ("PAUSE", "power"), ("ALLOWLIST", "capability"),
-        ("DENYLIST", "capability"), ("RECORD", "power"), ("LISTING", "power"), ("FEE_ROUTING", "power"), ("", "unused"), ("", "unused"),
+        ("WRAP_DISABLEABLE", "power"), ("FREEZE", "power"), ("FORCE", "power"), ("PAUSE", "power"), ("ALLOWLIST", "power"),
+        ("DENYLIST", "power"), ("RECORD", "power"), ("LISTING", "power"), ("FEE_ROUTING", "power"), ("", "unused"), ("", "unused"),
         ("ARBITRATE", "reserved"), ("CORRECT", "reserved"), ("RESCUABLE", "capability"), ("PUBLISH", "power"), ("DEPRECATE", "power"),
         ("ENABLE_KIND", "power"), ("MODERATE", "power"), ("OPERATOR_TRANSFER", "power"), ("TAX", "power"), ("PQZ_PROOF", "power"),
+        // group 3l (wrap limits spec 2026-11-10 §2): the hybrids' wrap controls
+        ("WRAP_LIMIT", "capability"), ("WRAP_LIST", "power"), ("REDEEMER", "power"),
+        // round 3s (CTR-GOV-24): 8, 9 the token's lists (powers), 28 the compliance registry check
+        ("KYC", "capability"),
+        // CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
+        ("CLOSED_MARKETS", "capability"),
+        // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
+        ("BURNER", "power"), ("SUPPLY_CAP_ADJUSTABLE", "capability"),
     ];
 
     public static Kind KindInfo(ushort kind) =>
@@ -226,7 +234,22 @@ public static partial class UA
         ["UAPqzKeyVersion"] = PqzKeyVersionType,
         ["UAPqzKeyVersionRecord"] = "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)" + PqzKeyVersionType,
         ["UAMembership"] = "UAMembership(bytes32 ua,bytes32 member)",
+        // CTR-UA-44 (TODO 3ze): an msig's structure update on one registry
+        ["UAMsigUpdate"] = "UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,"
+            + "uint256 enabled,uint64 validUntilBlock)" + MsigMemberType,
+        ["UAMsigMember"] = MsigMemberType,
     };
+
+    const string MsigMemberType = "UAMsigMember(uint16 kind,bytes32 id,uint16 weight)";
+
+    /// <summary>CTR-UA-44: the typed <c>UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}</c>,
+    /// <c>members</c> an EIP-712 array of <c>UAMsigMember</c>, <c>enabled</c> the uint256 bitmap as 32 big-endian bytes (bit i = slot i): what a
+    /// quorum of the stored structure signs for <c>updateMsig</c> on that one registry, under <c>UAMessage(MSIG, PURPOSE_MSIG_UPDATE, ·)</c>.</summary>
+    public static byte[] MsigUpdateDigest(byte[] ua, byte[] chainUid, byte[] registry, ulong version, ushort threshold,
+        IReadOnlyList<MsigMember> members, byte[] enabled, ulong validUntilBlock) =>
+        Typed(HashStruct("UAMsigUpdate", ua, chainUid, AddressWord(registry), Word(version), Word(threshold),
+            Keccak256(members.Select(m => HashStruct("UAMsigMember", Word(m.Kind), m.Id, Word(m.Weight))).ToArray()),
+            Sized(enabled, 32, "enabled"), Word(validUntilBlock)));
 
     public static byte[] PortableTypehash(string name) => Keccak256(Utf8(PortableTypes[name]));
 
