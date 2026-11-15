@@ -248,6 +248,63 @@ fn auditor_outcomes() {
     assert_eq!(g.recipient(), None);
 }
 
+/// Review 3w-delta U2-2: the auditor's last outcome, `Unreadable` after its own opening authenticated and the leg failed
+/// (each fixture's `O_a` opens; the leg check decides): `O_a` with other coins than K3-6's, `u` off by one, `v_a` off by
+/// one e2, each resealed honestly; with the recipient's outcome beside it. Control: the honest fixture is `Read`.
+#[test]
+fn auditor_unreadable_after_opening() {
+    let f = Fx::new(true);
+    assert_eq!((f.recipient(), f.auditor()), (Some(f.d), Ao::Read(f.d))); // control
+    // O_a: a valid opening of the right seed under role 0's coins, not byte-equal to K3-6's
+    let mut g = f.clone();
+    let c = g.credit();
+    g.o_a = seal(Role::Recipient, &c, &c.auditor.unwrap(), &g.seed_leg).unwrap();
+    assert_eq!((g.recipient(), g.auditor()), (None, Ao::Unreadable), "O_a other coins");
+    // u off by one coefficient (both openings resealed over it): the expansion's u differs (step 6)
+    let mut g = f.clone();
+    set_be8(&mut g.u[..], 0, (be8(&f.u[..], 0) + 1) % Q);
+    g.reseal();
+    assert_eq!((g.recipient(), g.auditor()), (None, Ao::Unreadable), "u off by one");
+    // v_a off by one e2 (resealed): the auditor's digits fail (step 7 on v_a)
+    let mut g = f.clone();
+    set_be8(&mut g.v_a, 0, (be8(&f.v_a, 0) + 1) % Q);
+    g.reseal();
+    assert_eq!((g.recipient(), g.auditor()), (None, Ao::Unreadable), "v_a off by one e2");
+}
+
+/// Review 3w-delta U2-2: openings and opening KEM keys of the wrong shape, each against the honest fixture (control
+/// first): `None` for the recipient, `Unreadable` for the auditor, never a panic; `seal` refuses a malformed `kemPk`.
+#[test]
+fn malformed_opening_and_kem_key() {
+    let f = Fx::new(true);
+    assert_eq!((f.recipient(), f.auditor()), (Some(f.d), Ao::Read(f.d))); // control
+    for (name, len) in [("empty", 0usize), ("ct only", 1568), ("one byte short", OPENING - 1), ("one byte long", OPENING + 1)] {
+        let mut g = f.clone();
+        g.o_t.resize(len, 0);
+        assert_eq!(g.recipient(), None, "O_t {name}");
+        let mut g = f.clone();
+        g.o_a.resize(len, 0);
+        assert_eq!(g.auditor(), Ao::Unreadable, "O_a {name}");
+    }
+    let mut short = f.kem_t.clone();
+    short.truncate(100);
+    let mut scheme = f.kem_t.clone();
+    scheme[0] = 2;
+    let mut ek_q = f.kem_t.clone();
+    ek_q[1..3].fill(0xff); // the first 12-bit ek coefficient 0xfff >= q
+    let mut long = f.kem_t.clone();
+    long.push(0);
+    for (name, kem) in [("100 bytes", &short), ("scheme 2", &scheme), ("ek coefficient >= q", &ek_q), ("one byte long", &long)] {
+        let mut g = f.clone();
+        g.kem_t = kem.clone();
+        assert_eq!(g.recipient(), None, "recipient kemPk {name}");
+        let c = f.credit();
+        assert!(seal(Role::Recipient, &c, &Party { kem_pk: kem, ..c.to }, &f.seed_leg).is_none(), "seal to kemPk {name}");
+    }
+    let c = f.credit();
+    assert!(seal(Role::Recipient, &c, &c.to, &f.seed_leg).is_some()); // control
+}
+
 /// A small-order X25519 point as E: skipped (the same outcome), and refused as a recipient key by seal.
 #[test]
 fn low_order_x25519() {
