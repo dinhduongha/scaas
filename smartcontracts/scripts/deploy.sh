@@ -30,7 +30,14 @@
 #                            in order, each transaction with an explicit gas limit, (regular + state) x 1.05 measured on
 #                            the fork, capped at the RPC's block gas limit; one that needs more than that limit refuses
 #                            the plan by name (TxGasOverBlockLimit) before anything is sent. No forge estimate, no
-#                            multiplier. The PQZ kinds 4, 5, 12, 13 are deployed by script/pqz/e2e.py, not here.
+#                            multiplier. First (owner 2026-11-15) script/pq_verifiers.py deploys on the real chain the
+#                            verifiers whose constructors probe its own precompiles (PqzKeyVerifier for pqz-mlwe 0x0142,
+#                            MldsaVerifier(0x0134) for mldsa87; forge's EVM has neither precompile), by CREATE2 with
+#                            DEPLOY_SALT after each probe passes, and hands them to Deploy.s.sol (PQZ_KEY_VERIFIER,
+#                            MLDSA87_VERIFIER): the gen-1 registry lists both kinds, and its gate refuses a registry that
+#                            misses a kind whose precompile the chain answers; a chain without them (anvil): skipped by
+#                            name. DEPLOY_PQZ=1 publishes the PQZ releases 4, 5, 12, 13 on this factory (on for the SCaaS
+#                            testnet; script/pqz/e2e.py keeps its own factory for its harness runs).
 #                            Progress (owner 2026-11-15, runs never silent): short [deploy] lines on stdout: simulate
 #                            start / ok <N> txs, est gas; one line per transaction as its receipt lands (send <i>/<N>
 #                            <phase> <contract> gas <used> <address> tx <hash>; the phase from the plan: libraries,
@@ -159,6 +166,15 @@ PY2
              wait "$1"
            }
            T0=$SECONDS
+           # owner 2026-11-15: the verifiers whose constructors probe the chain's own precompiles (PqzKeyVerifier 0x0142, the
+           # mldsa87 MldsaVerifier 0x0134), on the real chain before the simulation (forge's EVM has no such precompile),
+           # by CREATE2 with DEPLOY_SALT (script/pq_verifiers.py, e2e.py's builders); their addresses reach Deploy.s.sol by
+           # env. A precompile the chain lacks: that verifier is skipped by name (DeployBase's gate then requires nothing).
+           say "pq-verifiers start"
+           forge build src/pqz/PqzKeyVerifier.sol src/ua/MlDsa.sol >> "$DL" 2>&1 || fail pq-verifiers $?
+           PV="$(python3 -I script/pq_verifiers.py "$NET" 2>> "$DL")" || { printf '%s\n' "$PV" | grep '^\[deploy\]'; fail pq-verifiers 1; }
+           printf '%s\n' "$PV" | grep '^\[deploy\]' || true
+           for kv in $(printf '%s\n' "$PV" | grep -E '^(PQZ_KEY_VERIFIER|MLDSA87_VERIFIER)=0x[0-9a-fA-F]{40}$'); do export "${kv?}"; done
            say "simulate start chain $C $K"
            forge script script/Deploy.s.sol --rpc-url "$NET" "${Z[@]}" --sender "$S" "$@" >> "$DL" 2>&1 &
            follow $! || fail simulate $?

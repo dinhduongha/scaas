@@ -71,6 +71,14 @@ import {
 import {IZetherInnerProductVerifier} from "../src/zether/IZetherVerifier.sol";
 import {NormalZetherToken} from "../src/zether/NormalZetherToken.sol";
 import {WrappedZetherToken} from "../src/zether/WrappedZetherToken.sol";
+import {PqzKeyVerifier} from "../src/pqz/PqzKeyVerifier.sol";
+import {PqzSafety} from "../src/pqz/PqzSafety.sol";
+import {PqzStateLib} from "../src/pqz/PqzStateLib.sol";
+import {PqzTransferLib} from "../src/pqz/PqzTransferLib.sol";
+import {PqzBurnLib} from "../src/pqz/PqzBurnLib.sol";
+import {PqzViewLib} from "../src/pqz/PqzViewLib.sol";
+import {PqzWrappedLib} from "../src/pqz/PqzWrappedLib.sol";
+import {PqPrecompileProbe} from "./PqPrecompileProbe.sol";
 
 /// @notice The public-chain gate's probe (Q4): one CREATE2 of `code`, so a release that is not a call (the UA registry, its
 ///         library) is measured as its own transaction. Deployed only inside the gate's snapshot, never sent.
@@ -105,6 +113,16 @@ abstract contract DeployBase is DeployBook {
     /// @notice `DEPLOY_PQCHAT` env (default false): also register `PqChat` (UA-7, D22: class 3, kind 0 on the generic path) and,
     ///         when the chain's notice period is 0, create one instance (`_deployPqChat`, plan 3c T92).
     bool internal deployPqChat;
+    /// @notice `DEPLOY_PQZ` env (default false; on for the SCaaS testnet, owner 2026-11-15): also the PQZ releases 4, 5, 12, 13
+    ///         on this factory (`_deployPqz`), their one dependency `PQZ_KEY_VERIFIER`.
+    bool internal deployPqz;
+    /// @notice `PQZ_KEY_VERIFIER` / `MLDSA87_VERIFIER` env (default 0): the verifiers whose constructors probe the chain's own
+    ///         precompiles, so forge's EVM cannot build them; `deploy.sh evm`'s first step (`script/pq_verifiers.py`, e2e.py's
+    ///         builders) deploys each by CREATE2 with `DEPLOY_SALT` on the real chain after its probe passed. The gen-1 registry
+    ///         lists `pqz-mlwe` 0x0142 and `mldsa87` 0x0134 on them; `_checkGen1Kinds` refuses a registry that misses a kind
+    ///         whose precompile the chain answers (`_pqPrecompiles`).
+    address internal pqzKeyVerifier;
+    address internal mldsa87Verifier;
     /// @notice `COMPLIANCE_ADMIN` env, a UA id (`bytes32`), required with `DEPLOY_REGULATED`, no default (round 3r, spec §6):
     ///         the canonical `ComplianceRegistry`'s first admin, native or derived (the router is its constructor argument;
     ///         CTR-AS-07, regulated-kinds spec §6.1, F-21); the registry's constructor refuses 0 (`AdminZero`).
@@ -170,6 +188,9 @@ abstract contract DeployBase is DeployBook {
     ///         a chain before it is final. The probe runs in this script's EVM: forge's has no such precompile, so the SCaaS
     ///         testnet deploys its `mldsa87` verifier the way it deploys `mldsa65`'s, outside `forge script` (P6g D15, `e2e.py`).
     uint64 internal constant CAP_MLDSA87 = 250_000;
+    /// @notice `pqz-mlwe` 0x0142 (CTR-PQZ-13): `PqzKeyVerifier`'s R_REG PoP through the `PQZ` precompile, the cap of
+    ///         `script/pqz/e2e.py` (`CAP_PQZ`, the P6g gen-1 registry of the SCaaS testnet).
+    uint64 internal constant CAP_PQZ_MLWE = 4_500_000;
     address internal constant MLDSA87_EIP8355 = address(0x14);
     address internal constant MLDSA87_SCAAS_TESTNET = 0x000000000000000000000000000000005caA0014;
 
@@ -309,6 +330,9 @@ abstract contract DeployBase is DeployBook {
         deployWrapped = vm.envOr("DEPLOY_WRAPPED", false);
         deployRegulated = vm.envOr("DEPLOY_REGULATED", false);
         deployPqChat = vm.envOr("DEPLOY_PQCHAT", false);
+        deployPqz = vm.envOr("DEPLOY_PQZ", false);
+        pqzKeyVerifier = vm.envOr("PQZ_KEY_VERIFIER", address(0));
+        mldsa87Verifier = vm.envOr("MLDSA87_VERIFIER", address(0));
         complianceAdmin = vm.envOr("COMPLIANCE_ADMIN", bytes32(0));
         require(!deployRegulated || complianceAdmin != bytes32(0), "COMPLIANCE_ADMIN: a UA id (bytes32), required with DEPLOY_REGULATED");
         factoryAdminNext = vm.envOr("FACTORY_ADMIN_NEXT", bytes32(0));
@@ -402,6 +426,7 @@ abstract contract DeployBase is DeployBook {
         if (deployWrapped && register && !configureOnly) _deployWrapped(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployRegulated && register && !configureOnly) _deployRegulated(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployPqChat && register && !configureOnly) _deployPqChat(f, address(reg));
+        if (deployPqz && register && !configureOnly) _deployPqz(f, address(reg), smartKeyAccountImpl, isHedera);
         if (deployZether && !configureOnly) _deployZether(f, register, smartKeyAccountImpl, address(reg));
         if (register && !configureOnly && factoryAdminNext != bytes32(0)) f.transferAdmin(factoryAdminNext, f.chainUid());
         if (register) {
@@ -785,7 +810,7 @@ abstract contract DeployBase is DeployBook {
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
         (bool bls, bool bnG2) = _precompiles();
         uint64 budget = isHedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
-        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](21);
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](22);
         uint256 n;
         k[n++] = UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier{salt: salt}()), 400_000);
         k[n++] = UARegistry.KindConfig(UAKinds.P256, address(new P256Verifier{salt: salt}()), 400_000);
@@ -846,6 +871,18 @@ abstract contract DeployBase is DeployBook {
             k[n++] = UARegistry.KindConfig(
                 UAKinds.MLDSA87, address(new MldsaVerifier{salt: salt}(UAKinds.MLDSA87, p87, v87, i87)), CAP_MLDSA87
             );
+        } else if (mldsa87Verifier != address(0) && _pqKindFits(CAP_MLDSA87, budget)) {
+            // built on the chain by deploy.sh evm's first step (forge's EVM has no ML-DSA-87 precompile, P6g D15)
+            require(mldsa87Verifier.code.length != 0 && MldsaVerifier(mldsa87Verifier).KIND() == UAKinds.MLDSA87
+                && MldsaVerifier(mldsa87Verifier).PRECOMPILE() != address(0),
+                "MLDSA87_VERIFIER: not an MldsaVerifier(0x0134) with a precompile on this chain");
+            k[n++] = UARegistry.KindConfig(UAKinds.MLDSA87, mldsa87Verifier, CAP_MLDSA87);
+        }
+        if (pqzKeyVerifier != address(0) && _pqKindFits(CAP_PQZ_MLWE, budget)) {
+            require(pqzKeyVerifier.code.length != 0 && PqzKeyVerifier(pqzKeyVerifier).PRECOMPILE() == PqzSafety.PQZ
+                && PqzKeyVerifier(pqzKeyVerifier).PROOF_SYSTEM_ID() == PqzSafety.PQZL_ID,
+                "PQZ_KEY_VERIFIER: not a PqzKeyVerifier on the PQZ precompile and the set's PQZL id");
+            k[n++] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, pqzKeyVerifier, CAP_PQZ_MLWE);
         }
         assembly ("memory-safe") {
             mstore(k, n)
@@ -856,9 +893,12 @@ abstract contract DeployBase is DeployBook {
         // same gate.
         _requireRegistryGas(isHedera, budget, smartKeyAccountImpl, k);
         reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, smartKeyAccountImpl, true, k);
-        _checkGen1Kinds(reg, bls, isHedera);
+        (bool pqz, bool ml87) = _pqPrecompiles();
+        _checkGen1Kinds(reg, bls, isHedera, pqz, ml87);
         _gate(address(reg));
         vm.serializeAddress("deploy", "ua_registry", address(reg));
+        if (reg.kindEnabled(UAKinds.PQZ_MLWE)) vm.serializeAddress("deploy", "pqz_key_verifier", pqzKeyVerifier);
+        if (reg.kindEnabled(UAKinds.MLDSA87)) vm.serializeAddress("deploy", "mldsa87_verifier", mldsa87Verifier);
         vm.serializeAddress("deploy", "ua_registry_core_lib", address(UARegistryCoreLib));
         vm.serializeAddress("deploy", "ua_registry_aux_lib", address(UARegistryAuxLib));
     }
@@ -877,8 +917,14 @@ abstract contract DeployBase is DeployBook {
     ///         `schnorr-bls12381` 0x0105, `bls12381-minsig` 0x0106 and, except on Hedera (no Zether token can exist there,
     ///         `ZetherLayer`), `zether-bls12381` 0x0141; otherwise the deploy reverts before anything is sent. No
     ///         `UARegistry` change. A probe that fails (the RPC refuses the call) requires nothing (`_precompiles`).
-    function _checkGen1Kinds(IUARegistry reg, bool bls, bool isHedera) internal view {
+    ///         Owner 2026-11-15: the same for the chain's own PQ precompiles (`_pqPrecompiles`): `pqz` (the `PQZ` self-test
+    ///         answers) requires `pqz-mlwe` 0x0142, `ml87` (an ML-DSA-87 precompile answers the KAT probe) `mldsa87` 0x0134.
+    function _checkGen1Kinds(IUARegistry reg, bool bls, bool isHedera, bool pqz, bool ml87) internal view {
         require(reg.generation() == 1, "gen-1 registry: not generation 1");
+        require(!pqz || reg.kindEnabled(UAKinds.PQZ_MLWE),
+            "gen-1 registry: PQ precompile kind 0x0142 the probe passes is missing (PQZ_KEY_VERIFIER: deploy.sh evm's pq-verifiers step)");
+        require(!ml87 || reg.kindEnabled(UAKinds.MLDSA87),
+            "gen-1 registry: PQ precompile kind 0x0134 the probe passes is missing (MLDSA87_VERIFIER: deploy.sh evm's pq-verifiers step)");
         if (!bls) return;
         uint16[3] memory need = [UAKinds.SCHNORR_BLS12381, UAKinds.BLS12381_MINSIG, UAKinds.ZETHER_BLS12381];
         for (uint256 i; i < (isHedera ? 2 : 3); ++i) {
@@ -896,6 +942,18 @@ abstract contract DeployBase is DeployBook {
         invalid = vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid");
         if (PqUA.probe(MLDSA87_EIP8355, valid, invalid)) p = MLDSA87_EIP8355;
         else if (PqUA.probe(MLDSA87_SCAAS_TESTNET, valid, invalid)) p = MLDSA87_SCAAS_TESTNET;
+    }
+
+    /// @notice The chain's own verdict on its PQ precompiles (`PqPrecompileProbe`: the `PQZ` self-test; the `mldsa87` KAT probe
+    ///         at `0x14` or the SCaaS testnet's address), by `eth_call` with no `to` as `_precompiles`. An RPC that refuses the
+    ///         call (anvil answers, both false) requires neither kind. Tests override it.
+    function _pqPrecompiles() internal virtual returns (bool pqz, bool ml87) {
+        string memory kat = vm.readFile("../vectors/ua/pq_kat.json");
+        bytes memory init = abi.encodePacked(type(PqPrecompileProbe).creationCode, abi.encode(
+            vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_valid"), vm.parseJsonBytes(kat, ".kinds.mldsa87.eip8355_probe_invalid")));
+        try vm.rpc("eth_call", string.concat('[{"data":"', vm.toString(init), '","gas":"0x1c9c380"},"latest"]')) returns (bytes memory out) {
+            if (out.length == 64) (pqz, ml87) = abi.decode(out, (bool, bool));
+        } catch {}
     }
 
     /// @notice The chain's own verdict on its pairing precompiles (`UAPrecompileProbe`), asked through `eth_call` with
@@ -977,6 +1035,66 @@ abstract contract DeployBase is DeployBook {
         vm.serializeAddress("deploy", "implementation_wrapped_zether_regulated_bls12381", w);
         f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_ZETHER_REGULATED, true, f.chainUid());
         f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_ZETHER_REGULATED, true, f.chainUid());
+    }
+
+    /// @notice Owner 2026-11-15 (`DEPLOY_PQZ`): the PQZ releases on this factory as `script/pqz/e2e.py` publishes them on its own:
+    ///         env version 1 of `NORMAL_PQZ` (4), `WRAPPED_PQZ` (5), `NORMAL_PQZ_REGULATED` (12), `WRAPPED_PQZ_REGULATED` (13), its one
+    ///         dependency `PQZ_KEY_VERIFIER` (CTR-ZTH-20; a PRECOMPILE token takes the precompile and proof system from it), the
+    ///         link closure `_pqzLibs` (the regulated kinds with `RegulatedLib`), the body modules (`_kindRelease`), `implArgs`
+    ///         with `COMPLIANCE_REGISTRY_CODEHASH` on 12, 13; each release and module after its gate (`_requireReleaseGas`,
+    ///         NET-EVM-06); then the four kinds enabled. JSON `implementation_{normal,wrapped}_pqz`,
+    ///         `implementation_{normal,wrapped}_pqz_regulated`, `pqz_key_verifier`. **UNAUDITED.**
+    function _deployPqz(OpenFactory f, address reg, address ska, bool isHedera) internal {
+        require(pqzKeyVerifier != address(0), "DEPLOY_PQZ: no PQZ_KEY_VERIFIER (deploy.sh evm's pq-verifiers step needs the chain's PQZ precompile)");
+        IOpenFactory.TokenKind k = IOpenFactory.TokenKind.NORMAL_PQZ;
+        _pqzRelease(f, k, "NormalPqzToken", vm.getCode("NormalPqzToken.sol:NormalPqzToken"), "implementation_normal_pqz",
+            _pqzEnv(f, reg, ska, isHedera, k));
+        k = IOpenFactory.TokenKind.WRAPPED_PQZ;
+        _pqzRelease(f, k, "WrappedPqzToken", vm.getCode("WrappedPqzToken.sol:WrappedPqzToken"), "implementation_wrapped_pqz",
+            _pqzEnv(f, reg, ska, isHedera, k));
+        k = IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED;
+        _pqzRelease(f, k, "NormalPqzRegulatedToken", vm.getCode("NormalPqzRegulatedToken.sol:NormalPqzRegulatedToken"),
+            "implementation_normal_pqz_regulated", _pqzEnv(f, reg, ska, isHedera, k));
+        k = IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED;
+        _pqzRelease(f, k, "WrappedPqzRegulatedToken", vm.getCode("WrappedPqzRegulatedToken.sol:WrappedPqzRegulatedToken"),
+            "implementation_wrapped_pqz_regulated", _pqzEnv(f, reg, ska, isHedera, k));
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, f.chainUid());
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true, f.chainUid());
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED, true, f.chainUid());
+        f.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED, true, f.chainUid());
+    }
+
+    /// @notice One PQZ release of `_deployPqz` on env `e` (`_pqzEnv`), `coreArgs` the registry pin on 12, 13. The init code by
+    ///         `vm.getCode` (linked as `_module`'s), not embedded in this script: four more embedded releases would grow every
+    ///         contract that inherits `DeployBase` (the test harness) past the test's gas.
+    function _pqzRelease(OpenFactory f, IOpenFactory.TokenKind kind, string memory name, bytes memory code,
+        string memory key, IFactoryToken.Env memory e) internal
+    {
+        bytes memory coreArgs = uint8(kind) >= 8 ? abi.encode(_complianceRegistryCodehash()) : bytes("");
+        vm.serializeAddress("deploy", key, _kindRelease(f, kind, name, code, coreArgs, e));
+    }
+
+    /// @notice A PQZ kind's env 1: deps `[PQZ_KEY_VERIFIER]`, its closure (`_pqzLibs`; `RegulatedLib` on 12, 13).
+    function _pqzEnv(OpenFactory f, address reg, address ska, bool isHedera, IOpenFactory.TokenKind kind)
+        internal view returns (IFactoryToken.Env memory)
+    {
+        address[] memory deps = new address[](1);
+        deps[0] = pqzKeyVerifier;
+        bool underlying = kind == IOpenFactory.TokenKind.WRAPPED_PQZ || kind == IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED;
+        address[] memory libs = uint8(kind) >= 8 ? _withRegulatedLib(_pqzLibs(underlying)) : _pqzLibs(underlying);
+        return _env(f, reg, ska, isHedera, deps, libs);
+    }
+
+    /// @notice The link closure of a PQZ token (`test/helpers/Catalogue.sol` `closureLibs`, the order of e2e.py's link
+    ///         references as a set): `WrappedLib` and `PqzWrappedLib` only in `WRAPPED_PQZ`.
+    function _pqzLibs(bool underlying) internal pure returns (address[] memory l) {
+        l = new address[](underlying ? 9 : 7);
+        (l[0], l[1], l[2]) = (address(GovernanceLib), address(HederaLib), address(MtxPipelineLib));
+        uint256 n = 3;
+        if (underlying) l[n++] = address(WrappedLib);
+        (l[n], l[n + 1], l[n + 2], l[n + 3]) =
+            (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib));
+        if (underlying) l[n + 4] = address(PqzWrappedLib);
     }
 
     /// @notice `libs` and `RegulatedLib` last: a regulated kind's closure (it links only `GovernanceLib`, already in `libs`).

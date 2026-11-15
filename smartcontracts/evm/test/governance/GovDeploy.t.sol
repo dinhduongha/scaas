@@ -48,6 +48,20 @@ import {
     ZetherBurnVerifierBls12381
 } from "../../src/zether/ZetherVerifier.sol";
 import {EnvKit} from "../helpers/EnvKit.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
+
+/// The getters `DeployBase` checks on `PQZ_KEY_VERIFIER` (a real one needs the chain's PQZ precompile in its constructor).
+contract PqzKeyVerifierStandIn {
+    address public constant PRECOMPILE = PqzSafety.PQZ;
+    bytes32 public constant PROOF_SYSTEM_ID = PqzSafety.PQZL_ID;
+}
+
+/// The getters `DeployBase` checks on `MLDSA87_VERIFIER` (a real one reverts `UAMldsaNoPrecompile` without one).
+contract Mldsa87VerifierStandIn {
+    uint16 public constant KIND = 0x0134;
+    address public constant PRECOMPILE = 0x000000000000000000000000000000005caA0014;
+}
 
 /// @notice Plan T16 (CTR-GOV-19, GD-12; spec S0, S8, §12.10): every kind has a deploy path, the chain's `GovernanceRouter` is
 ///         deployed before the releases and gated, and every kind's release fits a 200 M block (the SCaaS testnet's,
@@ -224,6 +238,69 @@ contract GovDeployTest is Test {
     function test_regulatedReleasesPublished_12() public { _published(IOpenFactory.TokenKind.NORMAL_PQZ_REGULATED); }
 
     function test_regulatedReleasesPublished_13() public { _published(IOpenFactory.TokenKind.WRAPPED_PQZ_REGULATED); }
+
+    /// Owner 2026-11-15 (`DEPLOY_PQZ`): with every flag and the two verifiers `deploy.sh evm`'s first step builds on the chain (here
+    /// stand-ins with the getters `DeployBase` checks; forge has no PQZ / ML-DSA-87 precompile), the deploy publishes all 12
+    /// token kinds 0-5 and 8-13, version 1, enabled; the gen-1 registry lists `pqz-mlwe` 0x0142 and `mldsa87` 0x0134 on them and
+    /// the gate (the chain's probe forced to pass) holds; the PQZ envs: deps `[PQZ_KEY_VERIFIER]`, the kind's link closure, the
+    /// regulated ones the registry pin.
+    function test_deployPqzPublishesEveryKind() public {
+        DeployHarness h = new DeployHarness();
+        h.setWrapped(true);
+        h.setRegulated(true);
+        h.setComplianceAdmin(address(this));
+        address pqv = address(new PqzKeyVerifierStandIn());
+        address v87 = address(new Mldsa87VerifierStandIn());
+        h.setPqz(true, pqv, v87);
+        h.forcePq(true, true);
+        (OpenFactory f, string memory json) = h.deploy(ZUID, true, ska);
+        uint8[12] memory ks = [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13];
+        for (uint256 i; i < 12; ++i) {
+            IOpenFactory.TokenKind k = IOpenFactory.TokenKind(ks[i]);
+            assertTrue(f.implementationOf(k, 1) != address(0), string.concat("release of kind ", vm.toString(ks[i])));
+            assertTrue(f.tokenKindEnabled(k), string.concat("kind enabled ", vm.toString(ks[i])));
+        }
+        IUARegistry reg = IUARegistry(vm.parseJsonAddress(json, ".ua_registry"));
+        assertTrue(reg.kindEnabled(0x0142) && reg.kindEnabled(0x0134), "the gen-1 registry lists 0x0142 and 0x0134");
+        assertEq(vm.parseJsonAddress(json, ".pqz_key_verifier"), pqv);
+        assertEq(vm.parseJsonAddress(json, ".mldsa87_verifier"), v87);
+        assertEq(vm.parseJsonAddress(json, ".implementation_wrapped_pqz_regulated"), f.implementationOf(IOpenFactory.TokenKind(13), 1));
+        for (uint8 k = 4; k <= 13; k += (k == 5 ? 7 : 1)) {
+            IOpenFactory.TokenKind kk = IOpenFactory.TokenKind(k);
+            address w = f.implementationOf(kk, 1);
+            IFactoryToken.Env memory env = envClosure(f.tokenEnvOf(kk, 1), w);
+            assertEq(env.deps.length, 1, "one dependency");
+            assertEq(env.deps[0], pqv, "the PqzKeyVerifier");
+            address[] memory want = closureLibs(kk);
+            assertEq(env.libs.length, want.length, "link closure");
+            for (uint256 j; j < env.libs.length; ++j) {
+                bool found;
+                for (uint256 m; m < want.length; ++m) found = found || want[m] == env.libs[j];
+                assertTrue(found, "a library of the closure");
+            }
+            if (k >= 12) {
+                assertEq(NormalRegulatedToken(w).COMPLIANCE_REGISTRY_CODEHASH(),
+                    vm.parseJsonAddress(json, ".compliance_registry").codehash, "the registry pin");
+            }
+        }
+    }
+
+    /// `DEPLOY_PQZ` without `PQZ_KEY_VERIFIER` (a chain without the PQZ precompile: the first step built none) is refused by name;
+    /// so is a chain whose probe passes and whose registry would miss the kind.
+    function test_deployPqzRefusals() public {
+        DeployHarness h = new DeployHarness();
+        h.setPqz(true, address(0), address(0));
+        vm.expectRevert(bytes("DEPLOY_PQZ: no PQZ_KEY_VERIFIER (deploy.sh evm's pq-verifiers step needs the chain's PQZ precompile)"));
+        h.deploy(ZUID, false, ska);
+        h = new DeployHarness();
+        h.forcePq(true, false);
+        vm.expectRevert(bytes("gen-1 registry: PQ precompile kind 0x0142 the probe passes is missing (PQZ_KEY_VERIFIER: deploy.sh evm's pq-verifiers step)"));
+        h.deploy(ZUID, false, ska);
+        h = new DeployHarness();
+        h.forcePq(false, true);
+        vm.expectRevert(bytes("gen-1 registry: PQ precompile kind 0x0134 the probe passes is missing (MLDSA87_VERIFIER: deploy.sh evm's pq-verifiers step)"));
+        h.deploy(ZUID, false, ska);
+    }
 
     function _published(IOpenFactory.TokenKind k) internal {
         DeployHarness h = new DeployHarness();

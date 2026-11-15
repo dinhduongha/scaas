@@ -32,6 +32,11 @@ and creates the PQZ tokens OFFCHAIN with the deployer EOA as their transferable 
                        against typed_ops.json, the verdict digest against pqz/verdict.json, every signature and its encoder
                        against the built ABI in out/)
 
+Owner 2026-11-15: this script keeps its own factory, registry and router for its harness runs (section 1); the chain's
+deploy (`deploy.sh evm`) publishes the PQZ releases 4, 5, 12, 13 on the main factory itself (DeployBase `DEPLOY_PQZ`), and
+its first step (`script/pq_verifiers.py`) builds `PqzKeyVerifier` and the `mldsa87` verifier with this script's
+`Deployer` and probes.
+
 Deploying contracts and sending transactions only: the node is not touched. Gas price 2·baseFee + 1 gwei (baseFee +
 tip). Test keys of the 7622 genesis (0x…01–0x…03). Exit 0 iff every check passed."""
 import argparse
@@ -600,7 +605,7 @@ class Sender:
                 check(False, f"{what}: estimateGas {e}")
                 raise
         fee = int(head["baseFeePerGas"], 16)
-        raw = legacy_tx(self.key, self.nonce, 2 * fee + 10**9, gas, to, 0, data, 7622)
+        raw = legacy_tx(self.key, self.nonce, 2 * fee + 10**9, gas, to, 0, data, CTX[0] or 7622)  # the run's chain (run, pq_verifiers.py)
         self.nonce += 1
         h = rpc("eth_sendRawTransaction", ["0x" + raw.hex()])
         t0 = time.time()

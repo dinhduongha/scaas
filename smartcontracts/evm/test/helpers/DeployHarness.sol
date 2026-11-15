@@ -12,6 +12,8 @@ contract DeployHarness is DeployBase {
     bool internal forced;
     bool internal forcedBls;
     bool internal forcedBnG2;
+    bool internal forcedPqz;
+    bool internal forcedMl87;
     uint256 internal gateLimit;
     uint256 internal codeLimit;
     uint8 internal gate; // 0 = `RELEASE_GAS_GATE` (env, or its default), 1 = testnet, 2 = public
@@ -100,7 +102,23 @@ contract DeployHarness is DeployBase {
 
     function pqKindFits(uint64 cap, uint64 budget) external pure returns (bool) { return _pqKindFits(cap, budget); }
 
-    function checkGen1Kinds(IUARegistry reg, bool bls, bool hedera) external view { _checkGen1Kinds(reg, bls, hedera); }
+    function checkGen1Kinds(IUARegistry reg, bool bls, bool hedera) external view {
+        _checkGen1Kinds(reg, bls, hedera, false, false);
+    }
+
+    function checkGen1Kinds(IUARegistry reg, bool bls, bool hedera, bool pqz, bool ml87) external view {
+        _checkGen1Kinds(reg, bls, hedera, pqz, ml87);
+    }
+
+    /// The chain's PQ precompile verdict (`_pqPrecompiles`: no RPC in a test), default none.
+    function forcePq(bool pqz, bool ml87) external { (forcedPqz, forcedMl87) = (pqz, ml87); }
+
+    /// `DEPLOY_PQZ`, `PQZ_KEY_VERIFIER`, `MLDSA87_VERIFIER` for the next `deploy` (owner 2026-11-15).
+    function setPqz(bool on, address pqzVerifier, address ml87Verifier) external {
+        (deployPqz, pqzKeyVerifier, mldsa87Verifier) = (on, pqzVerifier, ml87Verifier);
+    }
+
+    function _pqPrecompiles() internal view override returns (bool, bool) { return (forcedPqz, forcedMl87); }
 
     function defaultNotice(uint256 chainId) external pure returns (uint256) { return _defaultNotice(chainId); }
 

@@ -230,6 +230,43 @@ contract UADeployTest is Test {
         h.checkGen1Kinds(reg, true, false);
     }
 
+    /// Owner 2026-11-15: a gen-1 registry with `pqz-mlwe` 0x0142 / `mldsa87` 0x0134 as given (verifier: any code).
+    function _gen1Pq(bool pqz, bool ml87) internal returns (IUARegistry) {
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
+        uint256 n;
+        if (pqz) k[n++] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(this), 4_500_000);
+        if (ml87) k[n++] = UARegistry.KindConfig(UAKinds.MLDSA87, address(this), 250_000);
+        assembly ("memory-safe") {
+            mstore(k, n)
+        }
+        return IUARegistry(address(new UARegistry(UID, address(0), false, 12_000_000, address(0), true, k)));
+    }
+
+    function _missingPq(string memory kind, string memory env) internal pure returns (bytes memory) {
+        return bytes(string.concat("gen-1 registry: PQ precompile kind ", kind, " the probe passes is missing (", env,
+            ": deploy.sh evm's pq-verifiers step)"));
+    }
+
+    /// Owner 2026-11-15: the chain answers the `PQZ` self-test / the `mldsa87` probe and the registry lacks `pqz-mlwe` 0x0142
+    /// / `mldsa87` 0x0134: refused, naming the kind; with it: passes; a chain whose probe fails (anvil) requires neither.
+    function test_gen1KindGate_pqKinds() public {
+        DeployHarness h = new DeployHarness();
+        IUARegistry none = _gen1Pq(false, false);
+        vm.expectRevert(_missingPq("0x0142", "PQZ_KEY_VERIFIER"));
+        h.checkGen1Kinds(none, false, false, true, false);
+        vm.expectRevert(_missingPq("0x0134", "MLDSA87_VERIFIER"));
+        h.checkGen1Kinds(none, false, false, false, true);
+        IUARegistry onlyPqz = _gen1Pq(true, false);
+        h.checkGen1Kinds(onlyPqz, false, false, true, false);
+        vm.expectRevert(_missingPq("0x0134", "MLDSA87_VERIFIER"));
+        h.checkGen1Kinds(onlyPqz, false, false, true, true);
+        IUARegistry only87 = _gen1Pq(false, true);
+        vm.expectRevert(_missingPq("0x0142", "PQZ_KEY_VERIFIER"));
+        h.checkGen1Kinds(only87, false, false, true, true);
+        h.checkGen1Kinds(_gen1Pq(true, true), false, false, true, true); // control: both there
+        h.checkGen1Kinds(none, false, false, false, false); // the probe fails: nothing required
+    }
+
     /// The probe does not pass EIP-2537: nothing is required (Hedera or not).
     function test_gen1KindGate_noBlsPasses() public {
         DeployHarness h = new DeployHarness();
