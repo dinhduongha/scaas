@@ -96,7 +96,9 @@ fn typed_ops_json_rows() {
             }
         }
     }
-    assert_eq!((ops, rows), (87, 121)); // 3h T61: + UASetProofStore (86, 120 before)
+    // the seventh sync (ua-mtx-merge 44cd27d2e): + 27 ops (the three-key `PqzRollOver`, the admin ops for UA*Ownership, the
+    // verifier fee, wrap limits, supply caps, lists, catalogue and chain entries ops of the router); 3h T61: + UASetProofStore
+    assert_eq!((ops, rows), (111, 145));
 }
 
 /// `ua/portable.json` and `ua/nested.json`: the typed data of every registration, KEM record, PQZ key record and acceptance hashes
@@ -707,13 +709,14 @@ fn pay_meta_v3_body_rules() {
     assert_eq!(run(&with("salt", json!(format!("0x{}", "00".repeat(32))))).err(), refused, "salt 0");
 }
 
-/// Group 3f (PQZ verifier mode spec §5.1, §11.3): `pqz/verdict.json` (forge-written, `PqzVerdictVectors.t.sol`). Every row's
+/// Group 3f (PQZ verifier mode spec §5.1, §11.3): `pqz/<set>/verdict.json` (forge-written, the set's own directory since the
+/// three-key round, `PqzVerdictVectors.t.sol`). Every row's
 /// `PqzVerdict` from `pqz_verdict_typed_data` in the token's domain: type string and typehash, domain separator, struct hash and
 /// digest; `proofHash` the keccak256 of the set's `proof_pqzl.json` proof bytes; the registry's `uaAuthDigest` under `pqz-verdict`;
 /// the EOA verifier's 65-byte signature recovers to its id and is what ua-rs signs with that key (`ua_sig`, RFC 6979), byte for byte.
 #[test]
 fn verdict_json_rows() {
-    let f = load("pqz/verdict.json");
+    let f = load("pqz/n2304-kmax4096/verdict.json");
     let (d, g) = (&f["domain"], &f["registryDomain"]);
     let (contract, chain, uid) = (b20(&d["verifyingContract"]), chain_id(&d["chainId"]), b32(&d["salt"]));
     let purpose = purpose_tag("pqz-verdict").unwrap();
@@ -850,8 +853,10 @@ fn proof_path_rows_canon() {
     let debits = ["UAPqzTransferSingle", "UAPqzTransferSingleCompact", "UAPqzTransfer", "UAPqzTransferCompact", "UAPqzUnshield", "UAPqzUnshieldUnwrap"];
     for name in debits.iter().chain(&["UASetProofStore"]) {
         let r = &t["ops"][*name];
+        // the three-key round (CTR-PQZ-38) moved `PqzTransferArgs` (`uFrom`, the openings): op 1's two rows carry its tag
         if *name != "UASetProofStore" {
-            assert_eq!(r["release"], "3h", "{name}");
+            let release = if name.starts_with("UAPqzTransferSingle") { "three-keys" } else { "3h" };
+            assert_eq!(r["release"], release, "{name}");
         }
         let (_, d) = r["domains"].as_object().unwrap().iter().next().unwrap();
         let dom = &d["domain"];
