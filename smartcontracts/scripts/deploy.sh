@@ -91,6 +91,11 @@ SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shift 2
 case "$FAMILY" in
   evm)     cd "$SC/evm"; Z=(--disable-code-size-limit) # forge 1.8.5: EIP-3860 on the script contract itself (Deploy.s.sol initcode > 48 KiB); the chain enforces 64 KiB
+           # The scripts' own gas budget (forge's gas_limit, foundry.toml 2^33), not a chain figure: the simulations run every
+           # transaction twice (DeploySend: measured, then sent; Deploy.s.sol's public gate: each release measured, then
+           # deployed) and a snapshot's revert returns no gas; at reset 4b (153 transactions) DeploySend spent 2^33 by tx
+           # 108 and its call ran short of gas. block.gaslimit stays the chain's (the fork's block).
+           export FOUNDRY_GAS_LIMIT="${FOUNDRY_GAS_LIMIT:-68719476736}"
            C="$(cast chain-id --rpc-url "$NET")"; S="$(cast wallet address --private-key "$PRIVATE_KEY")"
            # NET-EVM-13: the book by the chain's key (DEPLOY_NAME for a chain not in chain-uids.json), a named fail first
            K="$(python3 -I script/deploybook.py key "$C" "$(cast block 0 --field hash --rpc-url "$NET")")"
@@ -99,7 +104,8 @@ case "$FAMILY" in
            # NET-EVM-11: Deploy.s.sol simulated on the RPC's fork, nothing sent (the JSON, the release list, the plan in
            # forge's dry-run file), then DeploySend.s.sol sends that plan, each transaction with an explicit gas limit
            P="broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" B="broadcast/DeploySend.s.sol/$C/run-latest.json"
-           rm -f "$P" "$B" # never a stale plan, never a previous run's receipts
+           Q="broadcast/Deploy.s.sol/$C/dry-run/send-plan.json" # DeploySend.plan's arrays, written from $P
+           rm -f "$P" "$Q" "$B" # never a stale plan, never a previous run's receipts
            DL="${DEPLOY_LOG:-runs/$(date -u +%F)-deploy-$K.log}"; mkdir -p "$(dirname "$DL")"; : > "$DL"
            W="$(mktemp)"; trap 'rm -f "$W"' EXIT
            say() { echo "[deploy] $*"; }
@@ -172,7 +178,7 @@ PY2
            # env. A precompile the chain lacks: that verifier is skipped by name (DeployBase's gate then requires nothing).
            say "pq-verifiers start"
            forge build src/pqz/PqzKeyVerifier.sol src/ua/MlDsa.sol >> "$DL" 2>&1 || fail pq-verifiers $?
-           PV="$(python3 -I script/pq_verifiers.py "$NET" 2>> "$DL")" || { printf '%s\n' "$PV" | grep '^\[deploy\]'; fail pq-verifiers 1; }
+           PV="$(python3 -I script/pq_verifiers.py "$NET" 2>> "$DL")" || { printf '%s\n' "$PV" | grep '^\[deploy\]' || true; tail -n 3 "$DL" | sed 's/^/[deploy] pq-verifiers: /'; fail pq-verifiers 1; }
            printf '%s\n' "$PV" | grep '^\[deploy\]' || true
            for kv in $(printf '%s\n' "$PV" | grep -E '^(PQZ_KEY_VERIFIER|MLDSA87_VERIFIER)=0x[0-9a-fA-F]{40}$'); do export "${kv?}"; done
            say "simulate start chain $C $K"
@@ -180,7 +186,14 @@ PY2
            follow $! || fail simulate $?
            [ -f "$P" ] || fail simulate "1 (no plan $P)"
            say "simulate ok $(python3 -I -c 'import json,sys; t=json.load(open(sys.argv[1]))["transactions"]; print(len(t), "txs, est gas", format(sum(int(x["transaction"].get("gas") or "0x0", 16) for x in t), ","))' "$P")"
-           forge script script/DeploySend.s.sol --sig 'run(string)' "$P" \
+           # one array per field (DeploySend.plan: four cheatcode calls, not five per transaction); a CREATE's `to` is the
+           # zero address and a missing value 0, both checked there; nothing else is changed or dropped
+           python3 -I -c 'import json, sys
+t = [x["transaction"] for x in json.load(open(sys.argv[1]))["transactions"]]
+json.dump({"from": [x["from"] for x in t], "to": [x.get("to") or "0x" + "00" * 20 for x in t],
+           "value": [x.get("value") or "0x0" for x in t], "input": [x.get("input") or "0x" for x in t]}, open(sys.argv[2], "w"))' "$P" "$Q" \
+             || fail plan $?
+           forge script script/DeploySend.s.sol --sig 'run(string)' "$Q" \
              --rpc-url "$NET" --broadcast --slow "${Z[@]}" --sender "$S" "$@" >> "$DL" 2>&1 &
            rc=0; follow $! plan || rc=$?
            if [ "$rc" != 0 ]; then

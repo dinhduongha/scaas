@@ -4,8 +4,8 @@ pragma solidity ^0.8.24;
 import {Script, console} from "forge-std/Script.sol";
 import {Vm} from "forge-std/Vm.sol";
 
-/// deploy.sh evm, the sending run (NET-EVM-27): the transactions of `Deploy.s.sol`'s simulation (`plan`, forge's dry-run
-/// file, the linked libraries first), sent in order, each with an explicit gas limit. Every transaction is first run in
+/// deploy.sh evm, the sending run (NET-EVM-27): the transactions of `Deploy.s.sol`'s simulation (`planFile`, the send plan
+/// deploy.sh writes from forge's dry-run file, see `plan`; the linked libraries first), sent in order, each with an explicit gas limit. Every transaction is first run in
 /// order on this run's fork of the RPC and measured as `DeployBase._measuredGas` does (regular = `lastCallGas` x 64/63,
 /// state = EIP-8037's); its limit is (regular + state) x 1.05 capped at the chain's block gas limit (`block.gaslimit`, read
 /// from the RPC). One that needs more than that block gas limit refuses the whole plan by name before anything is sent.
@@ -22,24 +22,14 @@ contract DeploySend is Script {
     error TxGasOverBlockLimit(uint256 index, uint256 regular, uint256 state, uint256 blockGasLimit);
     error PlanTxNotSendable(uint256 index, string why);
 
-    function run(string calldata plan) external {
-        string memory j = vm.readFile(plan);
+    function run(string calldata planFile) external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address sender = vm.addr(pk);
-        uint256 n;
-        while (vm.keyExistsJson(j, _at(n, ""))) ++n;
-        address[] memory to = new address[](n);
-        bytes[] memory input = new bytes[](n);
+        (address[] memory to, bytes[] memory input) = plan(vm.readFile(planFile), sender);
+        uint256 n = to.length;
         uint256[] memory limit = new uint256[](n);
         uint256 snap = vm.snapshotState();
         for (uint256 i; i < n; ++i) {
-            if (!vm.keyExistsJson(j, _at(i, ".to"))) revert PlanTxNotSendable(i, "a CREATE (no `to`)");
-            if (vm.parseJsonAddress(j, _at(i, ".from")) != sender) revert PlanTxNotSendable(i, "another sender");
-            if (vm.keyExistsJson(j, _at(i, ".value")) && vm.parseJsonUint(j, _at(i, ".value")) != 0) {
-                revert PlanTxNotSendable(i, "a value");
-            }
-            to[i] = vm.parseJsonAddress(j, _at(i, ".to"));
-            input[i] = vm.parseJsonBytes(j, _at(i, ".input"));
             if (_done(to[i], input[i], i)) continue; // limit[i] = 0: not sent
             vm.prank(sender, sender);
             (bool ok,) = to[i].call(input[i]);
@@ -60,6 +50,28 @@ contract DeploySend is Script {
             if (!ok) revert PlanTxNotSendable(i, "reverts at its limit");
         }
         vm.stopBroadcast();
+    }
+
+    /// @notice The send plan `j` (`deploy.sh evm` writes it from forge's dry-run file: one array per field, `from`, `to`,
+    ///         `value`, `input`, a transaction per index; a CREATE's `to` is the zero address, a missing `value` 0): each
+    ///         transaction's `to` and `input`, refusing a CREATE, another sender or a value by index. Four cheatcode calls
+    ///         for the whole plan: `forge script` keeps every cheatcode call's input, so reading forge's dry-run file field
+    ///         by field per transaction held transactions x plan size (reset 4b: 153 transactions, a 6.8 MB plan, past
+    ///         the 4 GB cap; measured 6.6 MB per call).
+    function plan(string memory j, address sender) public pure returns (address[] memory to, bytes[] memory input) {
+        address[] memory from = vm.parseJsonAddressArray(j, ".from");
+        to = vm.parseJsonAddressArray(j, ".to");
+        uint256[] memory value = vm.parseJsonUintArray(j, ".value");
+        input = vm.parseJsonBytesArray(j, ".input");
+        uint256 n = from.length;
+        if (to.length != n || value.length != n || input.length != n) {
+            revert PlanTxNotSendable(type(uint256).max, "the plan's fields do not line up");
+        }
+        for (uint256 i; i < n; ++i) {
+            if (to[i] == address(0)) revert PlanTxNotSendable(i, "a CREATE (no `to`)");
+            if (from[i] != sender) revert PlanTxNotSendable(i, "another sender");
+            if (value[i] != 0) revert PlanTxNotSendable(i, "a value");
+        }
     }
 
     /// @notice The `CREATE2` address a factory's release deploy (`deployTokenImplementation`, `deployDexImplementation`,
@@ -124,9 +136,5 @@ contract DeploySend is Script {
         uint16 contractClass;
         uint16 kind;
         uint64 version;
-    }
-
-    function _at(uint256 i, string memory key) internal pure returns (string memory) {
-        return string.concat(".transactions[", vm.toString(i), "].transaction", key);
     }
 }

@@ -49,6 +49,8 @@ reset)
   cp "$NEW" genesis.json
   sed -i "s#image: $OLD#image: $IMG#" docker-compose.yml
   [ "$(grep -c "image: $IMG" docker-compose.yml)" = 2 ] || { say "FAIL compose: not two services on $IMG"; exit 1; }
+  echo "\$ head before stop" >> "$LOG"; python3 -I "$C/e2e.py" head --rpc $RPC >> "$LOG" 2>&1 || true
+  run docker compose stop -t 120 explorer-frontend explorer-backend explorer-db rpc sealer
   run $A sh -c "for d in nethermind_data nethermind_rpc_data explorer_db_data explorer_app_data; do mv /d/\$d /d/\$d.$TAG-$D && mkdir /d/\$d; done; mkdir /d/explorer_app_data/logs /d/explorer_app_data/dets; ls /d"
   run docker compose up -d sealer
   echo "\$ sealer eth_blockNumber (sidecar)" >> "$LOG"; side mba_chain_sealer eth_blockNumber >> "$LOG" 2>&1

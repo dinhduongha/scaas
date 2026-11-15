@@ -32,6 +32,39 @@ def say(s):
     print(f"[deploy] pq-verifiers {s}", flush=True)
 
 
+E_STATE_GAS_PER_BYTE = 1530  # EIP-8037 code deposit, DeployBase.STATE_GAS_PER_BYTE
+
+
+def gate(D, name, args, src=None):
+    """The release gas gate of `name` before its CREATE2 (NET-EVM-06), by the declared `RELEASE_GAS_GATE` as DeployBase's
+    `_requireReleaseGas(name, to, data)`: `testnet`, e2e.py's formula; `public`, the declared code limit (`CHAIN_CODE_LIMIT`,
+    default 65,536), then the transaction measured: `eth_estimateGas` (regular + state) x 1.05 within the block gas limit,
+    and regular x 1.05 < 2^24, regular bounded above by the estimate less the code deposit (runtime x 1,530, EIP-8037),
+    which `eth_estimateGas` does not give apart. Code already at the address: nothing is sent, nothing gated."""
+    gate = os.environ.get("RELEASE_GAS_GATE", "testnet")
+    if gate != "public":
+        return E.require_release_gas(name)
+    j = json.load(open(os.path.join(E.EVM, E.OUT_DIR, (src or name) + ".sol", name + ".json")))
+    runtime = len(j["deployedBytecode"]["object"].removeprefix("0x")) // 2
+    limit_code = int(os.environ.get("CHAIN_CODE_LIMIT", "65536"))
+    if runtime > limit_code:
+        raise SystemExit(f"[deploy] pq-verifiers FAIL {name} runtime {runtime:,} B > CHAIN_CODE_LIMIT {limit_code:,} (NET-EVM-06)")
+    init = D.linked(name, src)[0] + args
+    if E.rpc("eth_getCode", [E.create2_address(E.CREATE2_DEPLOYER, E.DEPLOY_SALT, init), "latest"]) != "0x":
+        return
+    tx = {"from": D.s.addr, "to": E.CREATE2_DEPLOYER, "data": "0x" + (E.DEPLOY_SALT + init).hex()}
+    total = int(E.rpc("eth_estimateGas", [tx]), 16)
+    regular = max(total - runtime * E_STATE_GAS_PER_BYTE, 0)
+    limit = int(E.rpc("eth_getBlockByNumber", ["latest", False])["gasLimit"], 16)
+    if regular * 105 // 100 >= 1 << 24:
+        raise SystemExit(f"[deploy] pq-verifiers FAIL {name} release: regular gas x 1.05 = {regular * 105 // 100:,} >= 2^24 "
+                         "(EIP-7825, NET-EVM-06)")
+    if limit < total * 105 // 100:
+        raise SystemExit(f"[deploy] pq-verifiers FAIL block gas limit {limit:,} < {total * 105 // 100:,} asked by the {name} "
+                         "release (measured regular + state x 1.05, NET-EVM-06)")
+    say(f"gate public {name}: runtime {runtime:,} B, estimate {total:,}, regular <= {regular:,}, block {limit:,}")
+
+
 def main(rpc):
     E.RPC = rpc
     chain = int(E.rpc("eth_chainId"), 16)
@@ -47,11 +80,11 @@ def main(rpc):
     if st[2:] != want:
         say(f"skip PqzKeyVerifier: no PQZ precompile at {E.PQZ} (OP_SELFTEST {st[:18]}, want {want[:16]}...)")
     else:
-        E.require_release_gas("PqzKeyVerifier")
         reg_stmt = bytes.fromhex(json.load(open(os.path.join(E.K.VEC_DIR, "statement_register.json")))["rows"][0]["stmt"])
         reg_proof = bytes.fromhex(json.load(open(os.path.join(E.K.VEC_DIR, "proof_pqzl.json")))["rows"][4]["proof"])
-        a = D.deploy2("PqzKeyVerifier", E.encs(["w", "w", "b", "w", "b"],
-                                                [E.PQZ, E.PQZL_ID, reg_stmt[96:], reg_stmt[64:96], reg_proof]), "pqz_key_verifier")
+        args = E.encs(["w", "w", "b", "w", "b"], [E.PQZ, E.PQZL_ID, reg_stmt[96:], reg_stmt[64:96], reg_proof])
+        gate(D, "PqzKeyVerifier", args)
+        a = D.deploy2("PqzKeyVerifier", args, "pqz_key_verifier")
         ok = E.words(E.call(a, E.cd("isSupportedOnThisChain()", [])))[0][-1] == 1
         E.check(ok, f"PqzKeyVerifier {a}: isSupportedOnThisChain()")
         if not ok:
@@ -71,8 +104,9 @@ def main(rpc):
     if cand is None:
         say(f"skip MldsaVerifier(0x0134): no ML-DSA-87 precompile answers the KAT probe at {', '.join(ML87_CANDIDATES)}")
     else:
-        E.require_release_gas("MldsaVerifier")
-        a = D.deploy2("MldsaVerifier", E.encs(["w", "w", "b", "b"], [0x0134, cand, valid, bad]), "mldsa87_verifier", src="MlDsa")
+        args = E.encs(["w", "w", "b", "b"], [0x0134, cand, valid, bad])
+        gate(D, "MldsaVerifier", args, src="MlDsa")
+        a = D.deploy2("MldsaVerifier", args, "mldsa87_verifier", src="MlDsa")
         got = "0x" + E.words(E.call(a, E.cd("PRECOMPILE()", [])))[0][12:].hex()
         ok = got == cand.lower()
         E.check(ok, f"MldsaVerifier(0x0134) {a}: PRECOMPILE() = {got}")

@@ -411,10 +411,18 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   60 M anvil (`smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-t66b-followup-gas.txt`). Change (owner 2026-11-15): before the
   simulation, `deploy.sh evm` deploys on the real chain the verifiers whose constructors probe its own precompiles
   (`script/pq_verifiers.py`: `PqzKeyVerifier`, `MldsaVerifier(0x0134)`; by CREATE2 with `DEPLOY_SALT`, each transaction's
-  limit e2e.py's estimate × 1.15 + 50,000 within the block gas limit, each release gated as NET-EVM-06), skipped by name where
+  limit e2e.py's estimate × 1.15 + 50,000 within the block gas limit, each release gated as NET-EVM-06 by the declared
+  `RELEASE_GAS_GATE`; under `public`, `eth_estimateGas` stands for the measured run and the regular part is bounded above by the
+  estimate less the code deposit, runtime × 1,530), skipped by name where
   the precompile does not answer; `DEPLOY_PQZ=1` adds the PQZ releases 4, 5, 12, 13 to the plan
   ([gen-1 kind gate](../contracts/accounts.md#gen1-kind-gate)). Every line of the run on stdout is short (`[deploy] …`, one
-  per transaction); forge's output goes to a git-ignored log.
+  per transaction); forge's output goes to a git-ignored log. Change (reset 4b, 2026-11-15): DeploySend reads a send plan
+  `deploy.sh` writes from forge's dry-run file, one array per field (`from`, `to`, `value`, `input`; a CREATE's `to` the zero
+  address, a missing value 0, both refused or checked by index in `DeploySend.plan`), in four cheatcode calls: `forge script`
+  keeps every cheatcode call's input, and reading the dry-run file field by field per transaction held transactions × plan
+  size (153 transactions, a 6.8 MB plan: past the 4 GB cap; now 377 MB peak). The scripts' own gas budget
+  (`FOUNDRY_GAS_LIMIT`, default 2^36 in `deploy.sh`; not a chain figure, `block.gaslimit` stays the fork's) covers each
+  transaction run twice, measured then sent: at 2^33 DeploySend ran short at the 108th transaction.
 - <a id="NET-EVM-12"></a>**NET-EVM-12 — Every contract a remote deploy leaves on a chain is source-verified on that chain's
   explorer** (owner ruling 2026-11-10; BUILT on branch `ua-mtx-merge`: `smartcontracts/evm/script/onchain/verify.sh` and
   `vcheck.py`, offline tests in `test_vcheck.py`; the Etherscan and Sourcify request shapes are tested offline only, no public
