@@ -204,9 +204,9 @@ Affected steps only (owner: the full gate runs once, later, on the final core tr
 | Sealer mutants | 34871de6 | 0 | Se1–Se3 3 / 3 red; Ma–Md re-run 4 / 4 red |
 | plugin full suite (`run-tests.sh`) | 98a3ec51 | 0 | 63 / 63 at n2304-kmax4096 (the 6 new fault-boundary children and the provisional check included) |
 | plugin mutants (`plugin_mutants.py`, ML-DSA tests) | 98a3ec51 | 0 | W1 watchdog not started: red, the blocking child killed by the test's own 30 s bound; F1 the pre-fix NodeFault order: red (logger, stderr, message: 3 failed); C1 the zero word's warning unguarded: red (exit 120, not 0); 3 / 3 |
-| plugin full suite, with the PQZ-seam children | this commit | 0 | 66 / 66 at n2304-kmax4096 |
-| plugin mutants (ML-DSA tests + PQZ-seam children) | this commit | 0 | W1 red (30 s bound); F1 red (6 failed: 3 ML-DSA, 3 PQZ); C1 red; P1 `PqzPrecompile.Run` without its catch: red (`message`: the exception escapes); 4 / 4 |
-| docs_check | this commit | 0 | 0 errors (7 warnings, 16 notes, unchanged); test_docs_check ok |
+| plugin full suite, with the PQZ-seam children | c3bb8a6a (tree) | 0 | 66 / 66 at n2304-kmax4096 |
+| plugin mutants (ML-DSA tests + PQZ-seam children) | c3bb8a6a (tree) | 0 | W1 red (30 s bound); F1 red (6 failed: 3 ML-DSA, 3 PQZ); C1 red; P1 `PqzPrecompile.Run` without its catch: red (`message`: the exception escapes); 4 / 4 |
+| docs_check | c3bb8a6a (tree) | 0 | 0 errors (7 warnings, 16 notes, unchanged); test_docs_check ok |
 
 Not run here (not touched, or the full gate's): ct, ub, diff, cargo (pqz-stmt, Ligero), xcheck, the other three sets
 (the plugin's full suite at n2304-kmax4096 only).
