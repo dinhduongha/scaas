@@ -688,7 +688,8 @@ on the body-module build ([CTR-TOK-30](token-wrappers.md#CTR-TOK-30); owner 2026
 P and the self-call's stub to Q add two frames; moved +963 / +972 / +980 / +989 after rounds 3r + 3s + 3t, owner
 2026-11-11, from 7,298,111 / 7,513,388 / 7,726,229 / 7,968,014; moved +324 at each set after the Fable review fixes,
 owner ruling 2026-11-11 "move the pin", from 7,299,074 / 7,514,360 / 7,727,209 / 7,969,003). So the worst-case authorization may not exceed about 9.41 M / 10.70 M / 8.98 M /
-8.74 M (before 3zh-core group 2: 9.48 M / 9.26 M / 9.05 M / 8.81 M), less its calldata term (112,640 gas for two ML-DSA-65 slots; `test_register_msigHolderBoundary`); `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused, a 2-of-2
+8.74 M (before 3zh-core group 2: 9.48 M / 9.26 M / 9.05 M / 8.81 M), less its calldata term (112,640 gas for two ML-DSA-65 slots; `test_register_msigHolderBoundary`); `{fndsa512 × 4, slhdsa128s}, t = 5` (≈ 11.6 M) and `{fndsa512 × 4}, t = 4` (≈ 10.2 M) are refused (since 3zh-core group 2
+the second fits at `n2304-kmax4096`, room ≈ 10.70 M: `test_register_msigHolderOverBound` is red there, reported to the owner), a 2-of-2
 `mldsa65` quorum on the precompile is not. Single-key holders are unaffected (their cap is ≤ 2.5 M). A PQ-eligible `msig` registers with its m-of-n `pop`, so nobody
 can fix it without a key. One key = one purpose: the PQZ key decrypts and proves, the signer's key authorizes; the UA's
 PQ signing kinds ([CTR-UA-23](accounts.md#CTR-UA-23)) invite exactly this hybrid. A leaked PQZ key is a read-only breach
