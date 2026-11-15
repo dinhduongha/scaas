@@ -22,14 +22,15 @@ pqz-ffi = { path = "..", default-features = false, features = ["prove", "pqzl-ru
 name = "cases"
 path = "cases.rs"
 
-# the parameter set, forwarded to pqz-ffi (exactly one; ./build.sh: PQZ_SET). Written by hand: gen_set.py does not list
-# this crate, so a new set needs its line here.
+# the parameter set, forwarded to pqz-ffi (exactly one; ./build.sh: PQZ_SET)
 [features]
 default = ["set-n2304-kmax4096"]
+# BEGIN gen_set.py sets
 set-n2048-kmax1024 = ["pqz-ffi/set-n2048-kmax1024"]
 set-n2304-kmax4096 = ["pqz-ffi/set-n2304-kmax4096"]
 set-n2560-kmax16384 = ["pqz-ffi/set-n2560-kmax16384"]
 set-n2816-kmax65536 = ["pqz-ffi/set-n2816-kmax65536"]
+# END gen_set.py sets
 
 # no panic setting: native keeps unwind (pqz-ffi requires it), wasm32-unknown-unknown aborts (its default): a panic traps
 # and the loader re-instantiates the module
