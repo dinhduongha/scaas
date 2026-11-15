@@ -251,12 +251,19 @@ library UAStore {
     /// The part pointers of a complete ML-DSA cache (20 bytes each, in order), else empty: `PqUA.mldsaParts(kind)` of them
     /// (none for another kind, whose id holds no cache).
     function expanded(bytes32 ua, uint16 kind) internal view returns (bytes memory ek) {
-        uint256 n = PqUA.mldsaParts(kind);
-        if (n == 0) return ek;
+        // `PqUA.mldsaParts(kind)`, inline on this hot path (`mldsa65` first: the common holder; `UAStoreLayout.t.sol` pins that the
+        // two agree for every kind)
+        uint256 n;
+        if (kind == UAKinds.MLDSA65) n = 2;
+        else if (kind == UAKinds.MLDSA44) n = 1;
+        else if (kind == UAKinds.MLDSA87) n = 3;
+        else return ek;
         address[3] storage p = layout().ekPtr[ua];
+        address a = p[0];
+        if (a == address(0)) return ek; // no cache (or a precompile kind): one read, nothing allocated
         ek = new bytes(20 * n + 12); // each pointer written as a word: 12 bytes of room after the last
         for (uint256 i; i < n; ++i) {
-            address a = p[i];
+            if (i != 0) a = p[i];
             if (a == address(0)) return "";
             assembly ("memory-safe") {
                 mstore(add(add(ek, 32), mul(i, 20)), shl(96, a))

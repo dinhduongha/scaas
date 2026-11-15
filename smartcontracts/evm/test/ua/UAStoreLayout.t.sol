@@ -4,6 +4,19 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {UAStore} from "../../src/ua/UAStore.sol";
+import {PqUA} from "../../src/ua/PqUA.sol";
+
+/// 3zh (owner 2026-11-15, F-12): `UAStore.expanded`'s inline part count against `PqUA.mldsaParts`, every kind 0x0100-0x01ff:
+/// all three pointers set, the length it reads back in pointers.
+contract UAStorePartsProbe {
+    function parts(uint16 kind, bytes32 u) external returns (uint256) {
+        UAStore.Layout storage s = UAStore.layout();
+        (s.ekPtr[u][0], s.ekPtr[u][1], s.ekPtr[u][2]) = (address(0xa1), address(0xa2), address(0xa3));
+        bytes memory ek = UAStore.expanded(u, kind);
+        if (ek.length >= 20) require(address(bytes20(ek)) == address(0xa1), "part 0 first");
+        return ek.length / 20;
+    }
+}
 
 /// Writes one field of every `UAStore.Layout` slot through the source's own struct, so the test reads where the compiler
 /// put each one.
@@ -111,5 +124,15 @@ contract UAStoreLayoutTest is Test {
         assertEq(art.readString(".storageLayout.storage[0].label"), "_s");
         assertEq(art.readString(".storageLayout.storage[0].slot"), "0");
         assertFalse(vm.keyExistsJson(art, ".storageLayout.storage[1]"));
+    }
+
+    /// F-12: one part count for the registry's read and the verifier's (`PqUA.mldsaParts`: 1 / 2 / 3 for 0x0130 / 0x0131 / 0x0134,
+    /// 0 for every other kind).
+    function test_expandedPartsAgreeWithPqUA() public {
+        UAStorePartsProbe p = new UAStorePartsProbe();
+        for (uint16 k = 0x0100; k < 0x0200; ++k) {
+            assertEq(p.parts(k, bytes32(uint256(k))), PqUA.mldsaParts(k), vm.toString(uint256(k)));
+        }
+        assertEq(PqUA.mldsaParts(0x0130) + PqUA.mldsaParts(0x0131) + PqUA.mldsaParts(0x0134), 6);
     }
 }

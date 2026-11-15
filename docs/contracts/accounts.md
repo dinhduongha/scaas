@@ -989,8 +989,8 @@ regular gas, over EIP-7825's 2^24 = 16,777,216, which Nethermind applies to `eth
 - **Cache before register** (MD-3): without a precompile every check of an ML-DSA signature, the PoP included, needs the
   kind's full cache: `cacheExpandedKey(kind, pk, part)` for every part (anyone, one transaction a part, idempotent, derived
   on-chain from `pk`), then `register`. An incomplete cache reverts **`UAKeyNotCached(bytes32 ua)`**, in code on every path
-  (`_sigOk` before the PoP; `requireAuthorized`'s `_derived` after the capped call answered false, so the precompile path pays
-  nothing for it and the FIPS-key verify, dearer than every cached cap, never yields a verdict; F-8). With a precompile `cacheExpandedKey` stays refused (`UAKeyCache`).
+  (`register`'s PoP and `requireAuthorized`, F-8), asked only after a refused check, so an accepted one pays nothing for it (the
+  FIPS-key verify, dearer than every cached cap, never yields a verdict there). With a precompile `cacheExpandedKey` stays refused (`UAKeyCache`).
 - **Parts** (MD-4): `PqUA.mldsaParts` is the one count, read by `MldsaVerifier.expandedKeyParts`, `cacheExpandedKey` and
   `UAStore.expanded`: `mldsa44` 1 (20,544 B), `mldsa65` 2 (rows 0–2 | 3–5 ‖ tr ‖ t̂1; 15,360 / 21,568 B), `mldsa87` 3 (rows
   0–2 | 3–5 | 6–7 ‖ tr ‖ t̂1; 21,504 / 21,504 / 22,592 B), each one SSTORE2 blob under EIP-170. `UAStore.ekPtr` is

@@ -275,7 +275,10 @@ library UARegistryCoreLib {
     ) internal {
         (bytes32 record, bytes32 h) = _attrs(kind, d, ua, attrs, pqzPop); // 5
         bytes32 rd = UAKinds.portableDigest(UAKinds.registrationHash(record, attrs.pqzPopHash));
-        if (!_sigOk(_cfgKind(), kind, d, ua, UAKinds.PURPOSE_POP_V2, rd, sig, members)) revert IUARegistry.UAPoP(); // 6
+        if (!_sigOk(_cfgKind(), kind, d, ua, UAKinds.PURPOSE_POP_V2, rd, sig, members)) { // 6
+            _notCached(_cfgKind(), kind, ua);
+            revert IUARegistry.UAPoP();
+        }
         _pqzAttach(ua, attrs, pqzPop, h, UAKinds.portableDigest(record)); // 7
     }
 
@@ -653,11 +656,6 @@ library UARegistryCoreLib {
         if (uint160(cfg) == 0) return UAStore.via(_pred(), ua, purpose, digest, IUARegistry.UASig("", sig, members));
         bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
         bytes memory ek = UAStore.expanded(ua, kind); // ML-DSA: a complete cache is the key the PoP verifies on
-        // CTR-UA-23 (owner 2026-11-15): without a precompile only the complete cache (the FIPS-key verify of ML-DSA-65 / -87
-        // is over EIP-7825's 2^24): every part by `cacheExpandedKey` first
-        if (ek.length == 0 && PqUA.mldsaParts(kind) != 0 && UAStore.noPrecompile(address(uint160(cfg)))) {
-            revert IUARegistry.UAKeyNotCached(ua);
-        }
         bytes memory data = ek.length != 0
             ? abi.encodeWithSelector(MldsaVerifier.verifyCached.selector, ek, message, sig)
             : abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, d, message, sig);
@@ -666,6 +664,15 @@ library UARegistryCoreLib {
             return UAStore.capped(address(uint160(cfg)), IUARegistry(address(this)).verifyBudget(), data, 1, false);
         }
         return UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true);
+    }
+
+    /// CTR-UA-23 (owner 2026-11-15): on a refused check of `ua` (`kind`, its verifier `cfg`), the named refusal where the cause is an
+    /// incomplete ML-DSA cache on a verifier without a precompile (there only the complete cache verifies: the FIPS-key verify of
+    /// ML-DSA-65 / -87 is over EIP-7825's 2^24 and dearer than every cached cap): `UAKeyNotCached`, `cacheExpandedKey` every part
+    /// first. Asked only after a false verdict, so an accepted check pays nothing for it.
+    function _notCached(uint256 cfg, uint16 kind, bytes32 ua) internal view {
+        if (PqUA.mldsaParts(kind) != 0 && uint160(cfg) != 0 && UAStore.expanded(ua, kind).length == 0
+            && UAStore.noPrecompile(address(uint160(cfg)))) revert IUARegistry.UAKeyNotCached(ua);
     }
 
     /// The portable purposes (POP_V2, KEM, PQZ_KEY; rulings A1-f1, A5-m3; PQCHAT, UA-7 O1; PQZ_SCOPED_KEY, the three-key model

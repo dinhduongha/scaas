@@ -318,15 +318,14 @@ contract UARegistryCoreLibMsigTest is UARegistryBase {
         if (kind == 273) return 19614;
         if (kind == 274) return 19692;
         if (kind == 275) return 19737;
-        // 3zh (owner 2026-11-15): an ML-DSA row (its stand-in now a `CacheVerifier` on a precompile) takes the ML-DSA branch of
-        // `_derived` (`PqUA.mldsaParts`, the part pointers into one allocation, F-8's check asked only after a false verdict):
-        // 0x0130 23,347 -> 23,926, 0x0131 24,005 -> 24,648; 0x0134 also reads its first cache pointer now (a cold SLOAD; three parts
-        // since 3zh): 22,197 -> 25,132
-        if (kind == 304) return 23926;
-        if (kind == 305) return 24648;
+        if (kind == 304) return 23347;
+        if (kind == 305) return 24005;
         if (kind == 306) return 20960;
         if (kind == 307) return 20249;
-        if (kind == 308) return 25132; // mldsa87 (CTR-UA-39), added on its branch (mock verifier); 3zh: see above
+        // mldsa87 (CTR-UA-39), added on its branch (mock verifier). 3zh (owner 2026-11-15): 22,197 -> 24,456, the row now reads its
+        // first cache pointer (a cold SLOAD: three parts since 3zh, `UAStore.expanded`); its stand-in a `CacheVerifier` on a
+        // precompile, as the 0x0130 / 0x0131 rows'
+        if (kind == 308) return 24456;
         if (kind == 309) return 21562; // fndsa1024 (CTR-UA-40), added on its branch (mock verifier)
         if (kind == 321) return 19661;
         return 0;

@@ -3423,26 +3423,27 @@ contract UARegistryUA8Test is UARegistryBase {
     function _pin(string memory name) internal pure returns (uint256, uint256) {
         bytes32 h = keccak256(bytes(name));
         // PINS: name -> (regular gas, state gas); the rows of all four sets (a set's rows carry its name)
+        // 3zh (owner 2026-11-15: `_consent` / `requirePortable` ask `UAKeyNotCached` on a refused check; `UAStore.expanded` reads up to three part pointers; n2304-kmax4096, the other sets by at-set): register webauthn-p256: 182,158 -> 182,197; register p256: 164,700 -> 164,739; register ed25519: 324,200 -> 324,239; register bip340: 161,494 -> 161,532; register secp256k1: 160,513 -> 160,551; register schnorr-bn254: 175,898 -> 175,936; register schnorr-bls12381: 203,033 -> 203,071; register bls12381-minsig: 338,913 -> 338,951; register bls-bn254-minsig: 353,687 -> 353,725; register zether-bls12381: 215,754 -> 215,793; register mldsa44: 4,348,778 -> 4,349,357; register fndsa512: 2,746,904 -> 2,746,940; register slhdsa128s: 1,123,486 -> 1,123,520; register msig-classical: 169,945 -> 169,998; setKemKey fndsa512/v2 n2304-kmax4096: 2,524,650 -> 2,524,662
         // CTR-UA-44 (TODO 3ze: updateMsig, msigStateOf in the dispatch; `registration(ua, Record)`; the bound walks enabled slots; at
         // n2304-kmax4096, the other sets by at-set): register webauthn-p256: 182,139 -> 182,158; register p256: 164,635 -> 164,700; register ed25519: 324,135 -> 324,200; register bip340: 161,429 -> 161,494; register secp256k1: 160,448 -> 160,513; register schnorr-bn254: 175,833 -> 175,898; register schnorr-bls12381: 202,968 -> 203,033; register bls12381-minsig: 338,848 -> 338,913; register bls-bn254-minsig: 353,626 -> 353,687; register zether-bls12381: 215,689 -> 215,754; register mldsa44: 4,348,713 -> 4,348,778; register fndsa512: 2,746,837 -> 2,746,904; register slhdsa128s: 1,123,421 -> 1,123,486; register msig-classical: 166,449 -> 169,945; register msig-pq-native: 331,080 -> 333,373; setKemKey fndsa512/v2 n2304-kmax4096: 2,524,272 -> 2,524,650; registrationOf msig-pq on gen 2 (gen 1 record) n2304-kmax4096: 145,981 -> 146,268; registrationOf msig-pq on gen 1 n2304-kmax4096: 99,640 -> 100,059; at-set: setKemKey fndsa512/v2 n2048-kmax1024: 2,524,272 -> 2,524,650; registrationOf msig-pq on gen 2 (gen 1 record) n2048-kmax1024: 135,605 -> 135,892; registrationOf msig-pq on gen 1 n2048-kmax1024: 92,990 -> 93,409; setKemKey fndsa512/v2 n2560-kmax16384: 2,524,272 -> 2,524,650; registrationOf msig-pq on gen 2 (gen 1 record) n2560-kmax16384: 156,812 -> 157,099; registrationOf msig-pq on gen 1 n2560-kmax16384: 106,557 -> 106,976; setKemKey fndsa512/v2 n2816-kmax65536: 2,524,272 -> 2,524,650; registrationOf msig-pq on gen 2 (gen 1 record) n2816-kmax65536: 176,320 -> 176,607; registrationOf msig-pq on gen 1 n2816-kmax65536: 121,770 -> 122,189
-        if (h == keccak256("register webauthn-p256")) return (182158, 1702890);
-        if (h == keccak256("register p256")) return (164700, 1164330);
-        if (h == keccak256("register ed25519")) return (324200, 1115370);
-        if (h == keccak256("register bip340")) return (161494, 1115370);
-        if (h == keccak256("register secp256k1")) return (160513, 1213290);
-        if (h == keccak256("register schnorr-bn254")) return (175898, 1213290);
-        if (h == keccak256("register schnorr-bls12381")) return (203033, 1409130);
-        if (h == keccak256("register bls12381-minsig")) return (338913, 1556010);
-        if (h == keccak256("register bls-bn254-minsig")) return (353687, 1262250);
-        if (h == keccak256("register zether-bls12381")) return (215754, 1594260);
-        if (h == keccak256("register mldsa44")) return (4348778, 6881940);
+        if (h == keccak256("register webauthn-p256")) return (182197, 1702890);
+        if (h == keccak256("register p256")) return (164739, 1164330);
+        if (h == keccak256("register ed25519")) return (324239, 1115370);
+        if (h == keccak256("register bip340")) return (161532, 1115370);
+        if (h == keccak256("register secp256k1")) return (160551, 1213290);
+        if (h == keccak256("register schnorr-bn254")) return (175936, 1213290);
+        if (h == keccak256("register schnorr-bls12381")) return (203071, 1409130);
+        if (h == keccak256("register bls12381-minsig")) return (338951, 1556010);
+        if (h == keccak256("register bls-bn254-minsig")) return (353725, 1262250);
+        if (h == keccak256("register zether-bls12381")) return (215793, 1594260);
+        if (h == keccak256("register mldsa44")) return (4349357, 6881940);
         if (h == keccak256("register mldsa65#1")) return (387992, 9232020);
         if (h == keccak256("register mldsa65#2")) return (387992, 9134100);
         if (h == keccak256("register mldsa65/n2048-kmax1024")) return (3341208, 81415890);
         // pqz-three-keys step 3 (K3-3, the scoped records; the registry and Aux dispatchers carry eleven more selectors): register fndsa512 2,746,835 -> 2,746,837; popOf 20,118 -> 20,229; register msig-classical: 166,225 -> 166,449; register msig-pq-native: 330,779 -> 331,080; setKemKey fndsa512/v2 n2048-kmax1024: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2048-kmax1024: 17,661 -> 17,772; popOf (the blob setKemKey decodes) msig-12-slhdsa128s (32 B: keccak256 of its 96,832 B pop): 17,328 -> 17,439; popOf unregistered (view baseline): 10,784 -> 10,819; setKemKey fndsa512/v2 n2304-kmax4096: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096: 17,661 -> 17,772; setKemKey fndsa512/v2 n2560-kmax16384: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2560-kmax16384: 17,661 -> 17,772; setKemKey fndsa512/v2 n2816-kmax65536: 2,524,153 -> 2,524,272; popOf (the blob setKemKey decodes) fndsa512/v2 n2816-kmax65536: 17,661 -> 17,772 (the rows of the other sets by the same delta, re-measured by at-set)
-        if (h == keccak256("register fndsa512")) return (2746904, 6384690);
-        if (h == keccak256("register slhdsa128s")) return (1123486, 13246740);
-        if (h == keccak256("register msig-classical")) return (169945, 1115370);
+        if (h == keccak256("register fndsa512")) return (2746940, 6384690);
+        if (h == keccak256("register slhdsa128s")) return (1123520, 13246740);
+        if (h == keccak256("register msig-classical")) return (169998, 1115370);
         if (h == keccak256("register msig-pq/n2048-kmax1024")) return (3468184, 73446120);
         if (h == keccak256("register msig-pq-native")) return (333373, 1360170);
         if (h == keccak256("setKemKey mldsa65/v2 n2048-kmax1024")) return (357272, 7991190);
@@ -3464,7 +3465,7 @@ contract UARegistryUA8Test is UARegistryBase {
         if (h == keccak256("register msig-pq/n2304-kmax4096")) return (3740568, 79930260);
         if (h == keccak256("setKemKey mldsa65/v2 n2304-kmax4096")) return (357272, 7991190);
         if (h == keccak256("popOf (the blob setKemKey decodes) mldsa65/v2 n2304-kmax4096")) return (20229, 0);
-        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2524650, 3947400);
+        if (h == keccak256("setKemKey fndsa512/v2 n2304-kmax4096")) return (2524662, 3947400);
         if (h == keccak256("popOf (the blob setKemKey decodes) fndsa512/v2 n2304-kmax4096")) return (17772, 0);
         if (h == keccak256("register mldsa65 with pqzPop n2304-kmax4096")) return (3613592, 87997950);
         if (h == keccak256("register mldsa65 without pqzPop n2304-kmax4096")) return (1667992, 40742370);

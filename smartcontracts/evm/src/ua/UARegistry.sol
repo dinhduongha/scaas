@@ -733,7 +733,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     // ----- requireAuthorized -----
 
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig calldata auth) external view {
-        if (!_authorized(ua, purposeTag, digest, auth)) revert UAUnauthorized(ua);
+        if (!_authorized(ua, purposeTag, digest, auth)) {
+            // owner 2026-11-15, F-8: an ML-DSA record without its complete cache on a verifier without a precompile gets the named
+            // refusal (CTR-UA-23), asked only after a refused check, so an accepted one pays nothing for it
+            uint16 kind = _s.records[ua].kind;
+            uint256 cfg = _cfg(kind);
+            if (PqUA.mldsaParts(kind) != 0 && uint160(cfg) != 0 && UAStore.expanded(ua, kind).length == 0
+                && UAStore.noPrecompile(address(uint160(cfg)))) revert UAKeyNotCached(ua);
+            revert UAUnauthorized(ua);
+        }
     }
 
     /// TS-D12: native — `signature` only; `msig` — `members` only (the structure from the record); other derived ids —
@@ -779,19 +787,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
                 if (vl == 0) {
                     keyData = UAStore.keyRest(id);
                 } else {
-                    if (PqUA.mldsaParts(kind) != 0) { // ML-DSA: the complete cache, else the precompile (CTR-UA-23)
-                        bytes memory ek = UAStore.expanded(id, kind);
-                        if (ek.length != 0) {
-                            bytes32 m = UAKinds.uaMessage(kind, purposeTag, digest);
-                            return _verifierCall(cfg, MldsaVerifier.verifyCached.selector, ek, m, sig);
-                        }
-                        // owner 2026-11-15, F-8: without its cache and without a precompile an ML-DSA key never yields a
-                        // verdict here: the named refusal (asked after the call, so the precompile path pays nothing for it;
-                        // the FIPS-key verify costs more than every cached cap, so it cannot pass under one)
-                        bool ok = _verifierCall(cfg, IUAKindVerifier.verify.selector, SSTORE2.read(r.keyPtr),
-                            UAKinds.uaMessage(kind, purposeTag, digest), sig);
-                        if (!ok && UAStore.noPrecompile(address(uint160(cfg)))) revert UAKeyNotCached(id);
-                        return ok;
+                    bytes memory ek = UAStore.expanded(id, kind);
+                    if (ek.length != 0) {
+                        bytes32 m = UAKinds.uaMessage(kind, purposeTag, digest);
+                        return _verifierCall(cfg, MldsaVerifier.verifyCached.selector, ek, m, sig);
                     }
                     keyData = SSTORE2.read(r.keyPtr);
                 }
