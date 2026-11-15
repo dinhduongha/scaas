@@ -587,6 +587,9 @@ library UARegistryCoreLib {
             ok = auth.keyData.length == 0 && auth.signature.length == 0
                 && _msig(ua, md, typedDigest, false, UAStore.msig(ua, r.keyPtr), auth.members);
         }
+        // No UAKeyNotCached here (3zh, 2026-11-15): a record of this registry exists only after `register`, which needs the
+        // complete ML-DSA cache without a precompile (`_consent`), and SSTORE2 parts are never removed; a gen-1 record has no
+        // row here (r.kind == 0 above). A refusal of a stored ML-DSA record is a wrong signature, never a missing cache.
         if (!ok) revert IUARegistry.UAUnauthorized(ua);
     }
 
