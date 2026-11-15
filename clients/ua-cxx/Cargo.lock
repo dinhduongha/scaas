@@ -21,6 +21,7 @@ dependencies = [
  "cfg-if",
  "cipher",
  "cpufeatures 0.2.17",
+ "zeroize",
 ]
 
 [[package]]
@@ -936,6 +937,7 @@ checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
 dependencies = [
  "opaque-debug",
  "polyval",
+ "zeroize",
 ]
 
 [[package]]
@@ -1313,6 +1315,7 @@ dependencies = [
  "cpufeatures 0.2.17",
  "opaque-debug",
  "universal-hash",
+ "zeroize",
 ]
 
 [[package]]
@@ -1328,10 +1331,13 @@ dependencies = [
 name = "pqz-ffi"
 version = "0.1.0"
 dependencies = [
+ "aes",
  "aes-gcm",
  "curve25519-dalek",
+ "ghash",
  "hkdf",
  "ml-kem",
+ "polyval",
  "pqz-stmt",
  "pqzh-ligero",
  "pqzl",
