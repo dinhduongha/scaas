@@ -114,6 +114,8 @@ rej_standard (rng_state_t state, const intvec_t z, const intvec_t v,
   pqz_fx_i128 num = pqz_sat_sub128 (_int2i128 (t2), (pqz_fx_i128)(2 * (pqz_fx_u128)_int2i128 (t1)));
   uint64_t den = 2 * (uint64_t)_int2i128 (sigma2);
   int64_t t = _quot_q56 (num, den);
+  /* PQZ (3zh Fable F-4): <z, v> and <v, v> with v = c s or R s are witness-dependent */
+  explicit_bzero (t1bytes__, sizeof (t1bytes__)), explicit_bzero (t2bytes__, sizeof (t2bytes__));
   return !_accept_exp (state, t, _lnM_q56 (scM));
 }
 
@@ -132,6 +134,7 @@ rej_bimodal (rng_state_t state, const intvec_t z, const intvec_t v,
   uint64_t s2 = (uint64_t)_int2i128 (sigma2);
   int64_t a = _quot_q56 (_int2i128 (t2), 2 * s2); /* <v,v> / (2 sigma^2) >= 0 */
   int64_t y = _quot_q56 (_int2i128 (t1), s2);     /* <z,v> / sigma^2 */
+  explicit_bzero (t1bytes__, sizeof (t1bytes__)), explicit_bzero (t2bytes__, sizeof (t2bytes__)); /* PQZ (F-4) */
   int64_t ys = y >> 63;
   y = (y ^ ys) - ys;                                /* |y| */
   /* p = exp(a) / (M cosh y) = 2 exp(a - |y|) / (M (1 + exp(-2|y|))) ; accept iff u < p.
@@ -167,5 +170,6 @@ rej_onetime (rng_state_t state, const intvec_t z, const intvec_t v,
 
   intvec_dot (t1, z, v); /* <z,v> */
   int neg = (int)((pqz_fx_u128)_int2i128 (t1) >> 127);
+  explicit_bzero (t1bytes__, sizeof (t1bytes__)); /* PQZ (F-4) */
   return rej_standard (state, z, v, scM, sigma2) | neg;
 }

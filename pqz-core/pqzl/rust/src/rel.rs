@@ -765,6 +765,7 @@ fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<boo
     // carries and the noise are wiped on every exit (C `explicit_bzero` of d, dp, dsum, wv, M, eT, c)
     let mut d = Wiped(vec_try(l)?);
     d.resize(l, [0i64; 16]);
+    crate::name_buf(&d.0);
     let (mut dsum, mut dp) = (Wiped([0i64; 16]), Wiped([0i64; 16]));
     for i in 0..16 {
         dsum[i] = if h.burn { digit(t.amount, i) } else { 0 };
@@ -999,6 +1000,9 @@ impl Ctx {
         let mut m = Wiped(PolyVec::new((tb.l + tb.lext) as usize)?);
         let Some((mut s, mut t)) = build(a, r, stmt)? else { return Err(Error::Input) };
         let mut s2 = Wiped(PolyVec::new(tb.m2 as usize)?);
+        for v in [&s1, &m, &s2] {
+            crate::name_buf(&v.0.0); // the wipe test hook (3zh Fable F-10)
+        }
         if !witness(&mut t, r, wit, &mut s1)? {
             return Err(Error::Input);
         }
@@ -1007,6 +1011,7 @@ impl Ctx {
         {
             // t_a2 freed before the encoding, as before (the memory peaks)
             let mut t_a2 = Wiped(PolyVec::new(tb.kmsis as usize)?);
+            crate::name_buf(&t_a2.0.0);
             let mut hash = hash0;
             abdlop::commit(&mut f.t_a1, &mut t_a2, &mut s1, &mut s2, keys, tb)?;
             crate::ct::public(&f.t_a1[..]); // review E: the commitment, hashed and sent (t_a2 stays secret)

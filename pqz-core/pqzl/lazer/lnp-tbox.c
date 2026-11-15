@@ -851,6 +851,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
     }
 
   explicit_bzero (expseed, sizeof (expseed)); /* PQZ (review round 2, Q-B): the z3 / z4 rejection and mask seeds */
+  explicit_bzero (tmpbytes__, sizeof (tmpbytes__)); /* PQZ (3zh Fable F-4): an evaluation at the witness (h_i = g_i + tmp) */
   polyvec_free (s);
   spolymat_free (R2t);
   spolyvec_free (r1t);

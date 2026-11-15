@@ -444,9 +444,11 @@ pub fn fs_trace_take() -> Vec<fstrace::Rec> {
     fstrace::T.with(|t| t.borrow_mut().replace(Vec::new()).unwrap_or_default())
 }
 
-/// Test hook (review 3w-delta U1h-1, `tests/wipe.rs`): `f(address)` on this thread for each heap buffer of a
-/// rejection try's secret z3 / z4 and R s3 / R' s4 (`tbox::compute_z34`) when it is filled; the test's allocator then
-/// checks that each is cleared when it is freed, a rejected try's included. Off (None) unless a test sets it.
+/// Test hook (review 3w-delta U1h-1, `tests/wipe.rs`): `f(address)` on this thread for each heap buffer the prover
+/// holds in [`Wiped`] when it is allocated or filled (`name_buf`): a rejection try's z3 / z4 and R s3 / R' s4, the
+/// witness images s3 / s4 and their coefficient copies, the masks y1 .. y4 and their products, the rejection steps'
+/// `intvec` / `coeffvec` copies, s1 / m / s2 / tA2, the digits (3zh Fable F-10); the test's allocator then checks that
+/// each is cleared when it is freed, a rejected try's included. Off (None) unless a test sets it.
 #[cfg(feature = "test-hooks")]
 pub fn set_secret_buf_hook(f: Option<fn(usize)>) {
     SECRET_BUF.with(|h| h.set(f))
@@ -457,12 +459,19 @@ std::thread_local! {
     static SECRET_BUF: core::cell::Cell<Option<fn(usize)>> = const { core::cell::Cell::new(None) };
 }
 
+/// Names `v`'s heap buffer to the test hook (`set_secret_buf_hook`); nothing without `test-hooks` or without a buffer.
 #[cfg(feature = "test-hooks")]
-pub(crate) fn secret_buf(p: *const i64) {
-    if let Some(f) = SECRET_BUF.with(|h| h.get()) {
-        f(p as usize)
+pub(crate) fn name_buf<T>(v: &alloc::vec::Vec<T>) {
+    if v.capacity() > 0 && core::mem::size_of::<T>() > 0 {
+        if let Some(f) = SECRET_BUF.with(|h| h.get()) {
+            f(v.as_ptr() as usize)
+        }
     }
 }
+
+#[cfg(not(feature = "test-hooks"))]
+#[inline(always)]
+pub(crate) fn name_buf<T>(_v: &alloc::vec::Vec<T>) {}
 
 #[cfg(feature = "test-hooks")]
 pub mod fstrace {

@@ -912,9 +912,13 @@ fn compute_z34(
     // the witness part s1[m1..] and Es·s1 / Ds·s1 (review G-2, fix B)
     let mut s3 = Wiped(PolyVec::new(nex)?);
     let mut s4 = Wiped(PolyVec::new(nprime)?);
+    crate::name_buf(&s3.0.0);
+    crate::name_buf(&s4.0.0);
     // the masks, a rejected try's z3, z4 and the images R s3, R' s4 (256 linear forms of the witness each): cleared on
     // every exit (review 3w u1-3, as C's pqz_arena_wipe_release)
     let (mut y3, mut y4) = (Wiped(PolyVec::new(w)?), Wiped(PolyVec::new(w)?));
+    crate::name_buf(&y3.0.0);
+    crate::name_buf(&y4.0.0);
     polyvec::set_zero(&mut m.sub(l + 2 * w, 1, 1)); // beta
 
     let mut loff = 0;
@@ -1029,11 +1033,9 @@ fn compute_z34(
             let s3c = Wiped(coeffs_i64(&mut s3)?);
             z3v = Wiped(coeffs_i64(&mut y3)?); // drops (wipes) the rejected try's z3 (review 3w-delta U1h-1)
             rs3 = Wiped(r_times(&s3c, &cseed, 0)?);
-            #[cfg(feature = "test-hooks")]
-            {
-                crate::secret_buf(z3v.as_ptr());
-                crate::secret_buf(rs3.as_ptr());
-            }
+            crate::name_buf(&s3c.0);
+            crate::name_buf(&z3v.0);
+            crate::name_buf(&rs3.0);
             if !cheat_skips_s3() {
                 z3v.iter_mut().zip(rs3.iter()).for_each(|(z, &r)| *z += beta3 * r);
             }
@@ -1043,23 +1045,27 @@ fn compute_z34(
             let s4c = Wiped(coeffs_i64(&mut s4)?);
             z4v = Wiped(coeffs_i64(&mut y4)?); // as z3v
             rs4 = Wiped(r_times(&s4c, &cseed, 256)?);
-            #[cfg(feature = "test-hooks")]
-            {
-                crate::secret_buf(z4v.as_ptr());
-                crate::secret_buf(rs4.as_ptr());
-            }
+            crate::name_buf(&s4c.0);
+            crate::name_buf(&z4v.0);
+            crate::name_buf(&rs4.0);
             z4v.iter_mut().zip(rs4.iter()).for_each(|(z, &r)| *z += beta4 * r);
         }
         // rejection sampling (rej3 = rej4 = 2 in every relation: bimodal)
         if nex > 0 && p.rej3 != 0 && !cheat_skips_s3() {
-            let rej = rej_bimodal(&mut rstate, &Wiped(intvec(&z3v)?), &Wiped(intvec(&rs3)?), &p.scm3, &p.stdev3sqr)?;
+            let (zi, ri) = (Wiped(intvec(&z3v)?), Wiped(intvec(&rs3)?));
+            crate::name_buf(zi.0.buf());
+            crate::name_buf(ri.0.buf());
+            let rej = rej_bimodal(&mut rstate, &zi, &ri, &p.scm3, &p.stdev3sqr)?;
             let rej = crate::ct::verdict(rej); // review E: the verdict is public
             if rej {
                 continue;
             }
         }
         if nprime > 0 && p.rej4 != 0 {
-            let rej = rej_bimodal(&mut rstate, &Wiped(intvec(&z4v)?), &Wiped(intvec(&rs4)?), &p.scm4, &p.stdev4sqr)?;
+            let (zi, ri) = (Wiped(intvec(&z4v)?), Wiped(intvec(&rs4)?));
+            crate::name_buf(zi.0.buf());
+            crate::name_buf(ri.0.buf());
+            let rej = rej_bimodal(&mut rstate, &zi, &ri, &p.scm4, &p.stdev4sqr)?;
             let rej = crate::ct::verdict(rej); // review E: the verdict is public
             if rej {
                 continue;
@@ -1141,6 +1147,7 @@ pub(crate) fn prove(
 
     // s = (<s1>, <m>, <y3>, <y4>, <beta>) (and <g> before the last check)
     let mut sv = Wiped(PolyVec::new(np)?);
+    crate::name_buf(&sv.0.0);
     polyvec::set(&mut sv.sub(0, m1 + z, 2), &**s1);
     polyvec::auto(&mut sv.sub(1, m1 + z, 2), &mut **s1);
     polyvec::set(&mut sv.sub((m1 + z) * 2, loff + 1, 2), &m.sub(l, loff + 1, 1));
@@ -1198,7 +1205,7 @@ pub(crate) fn prove(
         if mode == 0 || mode == 4 {
             check_coeff0(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub, Some(false))?;
         }
-        let mut t = evaleq(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub)?;
+        let mut t = Wiped(evaleq(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub)?); // the evaluation at the witness (F-4)
         f.h[i].add_assign(&mut t, false);
         crate::ct::public(&f.h[i]); // review E: hi, a proof field
         #[cfg(feature = "test-hooks")]
