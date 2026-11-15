@@ -86,6 +86,22 @@ for (const set of SETS) {
     console.log(`# ${set}: ${C.cases.length} cases wasm = native`);
   });
 
+  test(`${set}: opening.json's rejects (review 3w-delta U2-2): wasm = the native outcomes the generator recorded`, async () => {
+    const w = await loadPqzWallet(bytes);
+    const x = C.rows.find((y) => y.auditorOn);
+    assert.ok(K.rejects.length >= 15);
+    for (const r of K.rejects) {
+      const c = structuredClone(x.credit);
+      const [who, f] = r.field.split('.');
+      assert.ok((who === 'to' || who === 'auditor') && (f === 'opening' || f === 'kemPk'), r.field);
+      c[who][f] = h0(r.value);
+      assert.equal(outcomeR(w.checkRecipient(x.openKemSeedT, c)), r.recipient, r.case);
+      assert.equal(outcomeA(w.checkAuditor(x.openKemSeedA, c)), r.auditor, r.case);
+    }
+    // control: the unedited credit reads
+    assert.ok(outcomeA(w.checkAuditor(x.openKemSeedA, x.credit)).startsWith('read:'));
+  });
+
   test(`${set}: the raw ABI: a malformed frame is the one outcome, no trap; output and input cleared`, async () => {
     const { instance: { exports: e } } = await WebAssembly.instantiate(bytes, {});
     const view = (ptr, n) => new Uint8Array(e.memory.buffer, ptr, n); // call ptr() first: it may grow the memory

@@ -784,6 +784,7 @@ fn opening_file() -> (String, String) {
     let (pk_f, pk_t, pk_a) = (pk(&kf), pk(&kt), pk(&ka));
     let (seed_t, seed_a) = (op::open_kem_seed(&bip39, &[0x11; 32], &chains[0], None, 0), op::open_kem_seed(&bip39, &[0xA0; 32], &chains[0], None, 0));
     let (kem_t, kem_a) = (op::open_kem_pk(&seed_t), op::open_kem_pk(&seed_a));
+    let mut rejects = vec![];
     let rows = [false, true]
         .into_iter()
         .map(|aud| {
@@ -824,6 +825,7 @@ fn opening_file() -> (String, String) {
                     ("opening_a", hx(o_a)),
                 ]);
                 assert_eq!(op::check_auditor(&seed_a, &c), op::AuditorOutcome::Read(d));
+                rejects = opening_rejects(&c, &s.seed_leg, &seed_t, &seed_a);
             }
             o(kv)
         })
@@ -840,9 +842,78 @@ fn opening_file() -> (String, String) {
          coefficient, big-endian; CTR-PQZ-40); chainUid 0xC1.., token 0x70.., recipient 0x11.., auditor 0xA0.., key version 0, the readers' \
          opening KEM keys from bip39 seed 0x4D.. (offchain-shared, version 0). openKemSeeds: HKDF-SHA256(bip39 seed, \
          scaas.ua.kem.v1, scaas.kem.pqz-opening.1 || ua || chainUid || be64(v)) for an empty token (offchain-shared), \
-         scaas.kem.pqz-opening-token.1 || ua || chainUid || token || be64(v) otherwise, 96 B.",
-        vec![("bip39_seed", hx(&bip39)), ("openKemSeeds", J::A(seeds)), ("rows", J::A(rows))],
+         scaas.kem.pqz-opening-token.1 || ua || chainUid || token || be64(v) otherwise, 96 B. rejects (review 3w-delta \
+         U2-2): one-change edits of the audited row's credit, field (to.opening, auditor.opening, to.kemPk) = value, \
+         with pqz-ffi's native outcomes of check_recipient (skip / accepted:<digits>) and check_auditor (read:<digits> / \
+         recipient-unreadable / unreadable); open: none = the edited opening opens to nothing for its reader (its \
+         openKemSeeds key, aad_t / aad_a), else the seed_leg it opens to (then it is not K3-6's opening of its role: the \
+         auditor's Unreadable branch after the opening); seal: refused = seal to the edited kemPk refuses.",
+        vec![("bip39_seed", hx(&bip39)), ("openKemSeeds", J::A(seeds)), ("rows", J::A(rows)), ("rejects", J::A(rejects))],
     )
+}
+
+/// opening.json's `rejects` (review 3w-delta U2-2, the rows of pqz-ffi tests/opening.rs's negatives): on the audited
+/// credit `c`, one field changed each, with the native outcomes of both readers. `open` says what the edited opening opens
+/// to for its reader; `seal` what sealing to an edited `kemPk` does.
+fn opening_rejects(c: &pqz_ffi::opening::Credit, seed_leg: &[u8; 32], seed_t: &[u8; 96], seed_a: &[u8; 96]) -> Vec<J> {
+    use pqz_ffi::opening::{self as op, AuditorOutcome as Ao, Credit, Party, Role};
+    let a = c.auditor.expect("the audited row");
+    let outcome = |x: &Credit| {
+        let r = op::check_recipient(seed_t, x).map_or("skip".to_string(), |d| format!("accepted:{}", hex(&d)));
+        let au = match op::check_auditor(seed_a, x) {
+            Ao::Read(d) => format!("read:{}", hex(&d)),
+            Ao::RecipientUnreadable => "recipient-unreadable".to_string(),
+            Ao::Unreadable => "unreadable".to_string(),
+        };
+        (J::from(r.as_str()), J::from(au.as_str()))
+    };
+    let row = |case: &str, field: &str, value: &[u8], x: &Credit, extra: (&str, J)| {
+        let (r, au) = outcome(x);
+        o(vec![("case", J::from(case)), ("field", J::from(field)), ("value", hx(value)), extra, ("recipient", r), ("auditor", au)])
+    };
+    let none = || J::from("none");
+    let mut out = vec![];
+    // the auditor's Unreadable branch after its opening authenticates: O_a opens to seed_leg but under role 0's coins
+    let other = op::seal(Role::Recipient, c, &a, seed_leg).expect("seal");
+    let x = Credit { auditor: Some(Party { opening: &other, ..a }), ..*c };
+    assert_eq!(op::check_auditor(seed_a, &x), Ao::Unreadable);
+    out.push(row("O_a other coins (role 0's)", "auditor.opening", &other, &x, ("open", hx(seed_leg))));
+    // truncated, long and tampered openings, each reader's
+    for (who, p) in [("O_t", c.to), ("O_a", a)] {
+        let field = if who == "O_t" { "to.opening" } else { "auditor.opening" };
+        let mut edits: Vec<(String, Vec<u8>)> = [("empty", 0usize), ("ct only", op::MLKEM_CT), ("one byte short", op::OPENING - 1), ("one byte long", op::OPENING + 1)]
+            .iter()
+            .map(|&(n, len)| {
+                let mut b = p.opening.to_vec();
+                b.resize(len, 0);
+                (n.to_string(), b)
+            })
+            .collect();
+        let mut t = p.opening.to_vec();
+        t[op::OPENING - 1] ^= 1;
+        edits.push(("tag flipped".to_string(), t));
+        for (n, b) in &edits {
+            let q = Party { opening: b, ..p };
+            let x = if who == "O_t" { Credit { to: q, ..*c } } else { Credit { auditor: Some(q), ..*c } };
+            out.push(row(&format!("{who} {n}"), field, b, &x, ("open", none())));
+        }
+    }
+    // malformed opening KEM keys of the recipient: seal refuses each
+    let mut short = c.to.kem_pk.to_vec();
+    short.truncate(100);
+    let mut scheme = c.to.kem_pk.to_vec();
+    scheme[0] = 2;
+    let mut ek_q = c.to.kem_pk.to_vec();
+    ek_q[1..3].fill(0xff); // the first 12-bit ek coefficient 0xfff >= q
+    let mut long = c.to.kem_pk.to_vec();
+    long.push(0);
+    for (n, k) in [("kemPk 100 bytes", &short), ("kemPk scheme 2", &scheme), ("kemPk ek coefficient >= q", &ek_q), ("kemPk one byte long", &long)] {
+        let q = Party { kem_pk: k, ..c.to };
+        assert!(op::seal(Role::Recipient, c, &q, seed_leg).is_none(), "{n}");
+        let x = Credit { to: q, ..*c };
+        out.push(row(n, "to.kemPk", k, &x, ("seal", J::from("refused"))));
+    }
+    out
 }
 
 /// proof_pqzl_split.json (spec three-key model K3-4, PQZL_SPLIT_ID's op 1 R_TXS / R_TXS0; UNAUDITED): the scenario's

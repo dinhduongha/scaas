@@ -218,6 +218,43 @@ test('pqzKeyHandle: the planted probe never loads the secret; a mark lets the wi
   }
 });
 
+test('U2-2: opening.json rejects: a malformed opening opens to null, O_a under role 0\'s coins is not K3-6\'s, a malformed kemPk is refused', () => {
+  const r1 = K.rows.find((r) => r.auditorOn);
+  const reader = (ua) => openKemKey(openKemSeed(SEED, { ua, chainUid: CU[0], version: 0 }));
+  const T = reader('0x' + '11'.repeat(32));
+  const A = reader('0x' + 'a0'.repeat(32));
+  const open = (R, opening, aad) => openOpening({ opening, kemPk: R.kemPk, dk: R.dk, x25519Secret: R.x25519Secret, aad });
+  // controls: the honest openings open to seed_leg and are K3-6's
+  assert.equal(hex(open(T, h0(r1.opening_t), h0(r1.aad_t))), h0(r1.seed_leg));
+  assert.equal(hex(open(A, h0(r1.opening_a), h0(r1.aad_a))), h0(r1.seed_leg));
+  assert.equal(hex(sealOpening({ seedLeg: fromHex(h0(r1.seed_leg)), role: 0, kemPk: T.kemPk, aad: h0(r1.aad_t) }).bytes), h0(r1.opening_t));
+  assert.ok(K.rejects.length >= 15);
+  const seen = new Set();
+  for (const x of K.rejects) {
+    seen.add(x.field);
+    assert.equal(x.recipient, 'skip', x.case);
+    if (x.field === 'to.kemPk') {
+      assert.equal(x.seal, 'refused', x.case);
+      assert.throws(() => sealOpening({ seedLeg: fromHex(h0(r1.seed_leg)), role: 0, kemPk: h0(x.value), aad: h0(r1.aad_t) }), undefined, x.case);
+      continue;
+    }
+    const to = x.field === 'to.opening';
+    assert.ok(to || x.field === 'auditor.opening', x.field);
+    const got = open(to ? T : A, h0(x.value), h0(to ? r1.aad_t : r1.aad_a));
+    if (x.open === 'none') {
+      assert.equal(got, null, x.case);
+    } else {
+      // the auditor's Unreadable branch after its opening authenticates: opens to seed_leg, but is not K3-6's opening of role 1
+      assert.equal(hex(got), h0(x.open), x.case);
+      assert.equal(x.auditor, 'unreadable', x.case);
+      const k36 = hex(sealOpening({ seedLeg: got, role: to ? 0 : 1, kemPk: (to ? T : A).kemPk, aad: h0(to ? r1.aad_t : r1.aad_a) }).bytes);
+      assert.equal(k36, h0(to ? r1.opening_t : r1.opening_a));
+      assert.notEqual(k36, h0(x.value), x.case);
+    }
+  }
+  assert.deepEqual([...seen].sort(), ['auditor.opening', 'to.kemPk', 'to.opening']);
+});
+
 test('U4h-3: malformed hex and out-of-range integers are refused, never changed; valid controls', () => {
   const r = K.rows[0];
   const ok = hex(legSeedOfKeyHash(h0(r.seed_enc), h0(r.toUA), h0(r.pk_t_keccak)));
