@@ -56,3 +56,17 @@ the forge-written `state.json` that `pqz_kat.py`'s `check_state` does not rebuil
 checkers on edited JSON: no verifier and no proof is involved. The baseline `cac043bc` tamper.py and pqz_kat.py on the
 same vectors give the same 8 misses and 193 / 201: a tooling gap since `state.json` came (2026-11-07), hidden because
 that step already failed at `EXTRA state.json` (review 3w u5-1), not a regression.
+
+## T-20, the exit-120 drill (closed at reset 4)
+
+Owner 2026-11-15 ("Làm vào testnet luôn"): run once on the SCaaS testnet after reset 4's reset, before its deploy
+(`smartcontracts/evm/runs/2026-11-15-reset4.txt`, row T-20; image `2.2.0-pqz9`, pin `29c351ec…a677c`). (a) The
+fault-hook library mounted over the rpc node's: `PQZ-REFUSE … sha256 1726b2ee… != the reviewed 29c351ec…; exit 120` at
+start-up, before any block; `restart: unless-stopped` restarted it 10 times in 90 s with a growing back-off, refused each
+time (a deterministic start-up refusal, so no block is involved); the sealer sealed on (0 restarts), Blockscout stayed up.
+(b) The image's library with one appended byte: the same, `9d9aecd4… != the reviewed 29c351ec…; exit 120`. (c) The worker
+fault itself cannot be reached in a node: the start-up pin refuses every library but the reviewed one, and
+`TEST_FAIL_WORKER` is set only by a direct call to the exported `pqz_test_fail_worker`, which no node path makes; the fault
+path ran in the node image's own runtime through `Harness fault`: the honest input `…01`, then with the hook on
+`PQZ-NODE-FAULT status=4 … exit 120`, no word returned. Restored: `PQZ-START` with the pin on both nodes, blocks advance,
+`OP_SELFTEST` answers `d6c01fbc…`; no bad block or stuck head, so no second reset.
