@@ -24,7 +24,7 @@ for S in $SETS; do
     echo "  FAIL build $S, see $L"; fail=1
   fi
 done
-L=$O/test.log
+L=$O/test-$(echo $SETS | tr ' ' '+').log # per set list: concurrent gates of other sets keep theirs
 echo "test $SETS"
 (cd ../../../clients/clientkeys && PQZ_WALLET_DIR=$O PQZ_WALLET_SETS="$SETS" node --test test/pqz-wallet-wasm.test.js) > "$L" 2>&1
 r=$?
