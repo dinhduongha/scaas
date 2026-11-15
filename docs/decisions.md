@@ -816,9 +816,9 @@ Change (2026-11-11, ua-mtx-fix-node, Fable re-check 2 S-1..S-3; controller call;
 - old: — · status: current · owner: yes · date: 2026-11-15 · normative: node/job-api.md#NODE-JOB-29 · superseded-by: —
 
 **Rule.** (Summary; normative [job-api.md](node/job-api.md#NODE-JOB-29).) On a registry whose ML-DSA verifier has no precompile, a UA registration of an ML-DSA key is preceded by the node's own `cacheExpandedKey` call jobs, one per part, named fields `kind`, `pk`, `part`, the calldata built by the node, each with an explicit gas limit (NET-EVM-11), allow-lists equal to the contract's both directions; `UAKeyNotCached` maps to the node error `UA_KEY_NOT_CACHED`. Clients (`clientkeys`, `ua-rs`) get a builder for the part transactions and the cache-then-register order.
-**Status.** SPECIFIED (owner 2026-11-15: built in the ua-rs-sign port round, after 3zh). UNAUDITED.
+**Status.** BUILT on branch `ua-rs-sign` (owner 2026-11-15: built in the ua-rs-sign port round, after 3zh): the node's lane `2064e707d`, `clientkeys` `bd23168d7`, `ua-rs` `97b96e967`; the gateway route `POST /v1/ua/register` stays SPECIFIED (NODE-GW-03). UNAUDITED.
 **Why.** The node is open: a subject without native gas cannot send 40–48 M-gas cache transactions, and the guarantee that a registration it accepts can land belongs in the node.
-**Cost if wrong.** Until built, an ML-DSA registration on a no-precompile deploy relayed by the node reverts `UAKeyNotCached` unless someone sent the parts first.
+**Cost if wrong.** Without it an ML-DSA registration on a no-precompile deploy relayed by the node reverts `UAKeyNotCached` unless someone sent the parts first.
 **Source.** Owner 2026-11-15 on Fable's F-3, "F-3: như đề xuất.": SPECIFIED in TODO 3zh, built in the `ua-rs-sign` port round after it; spec `superpowers/specs/2026-11-15-mldsa-precompile-cache.md` MD-14.
 
 ### NODE-JOB-80 — Node talks to ERP only over json/2

@@ -634,19 +634,33 @@ global (a digest is the intent's identity; a call hash is not). An earlier key `
 with `allow_call` hold another tenant's retry at `409 DUPLICATE_CALL`. Two tenants may each queue the same call; the target
 refuses the second.
 
-<a id="NODE-JOB-29"></a>**NODE-JOB-29** (SPECIFIED, owner 2026-11-15, TODO 3zh MD-14; built in the ua-rs-sign port round) — **An ML-DSA
-registration on a registry without the precompile is preceded by its cache parts**
-([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)'s Change: `register` reverts `UAKeyNotCached` before every part is stored). For
-`POST /v1/ua/register` of kind 0x0130 / 0x0131 / 0x0134 on a chain whose registry's verifier of that kind has no precompile
-(`PRECOMPILE()` 0), the gateway queues the node's own `cacheExpandedKey` `call` jobs first, one per part (`PqUA.mldsaParts`:
-1 / 2 / 3), each with named fields `kind`, `pk` (the registration's key data), `part`; the node builds the calldata
-`cacheExpandedKey(uint16,bytes,uint256)` from them (no hex), sends each with an explicit gas limit ([NET-EVM-11](../networks/evm.md#NET-EVM-11):
-the measured regular + state × 1.05 within the block gas limit, 40–48 M), skips a part already stored (`expandedKeyOf`), and
-leases the `register` job only after every part landed. The row is `PERMISSIONLESS` (anyone may send a part; it writes only what
-the registry derives from `pk`); the allow-lists (`guard.rs`, `CALL_TABLE`, `typed.rs`) gain it in both directions against the
-contract's entries. `UAKeyNotCached(ua)` on a simulation or a receipt maps to `UA_KEY_NOT_CACHED` (the job stays `queued` while
-a part may still land, never `dead`). Clients (`clientkeys`, `ua-rs`) get a builder of the part transactions and the
-cache-then-register order for a subject that sends them itself.
+<a id="NODE-JOB-29"></a>**NODE-JOB-29** (BUILT on the lane, branch `ua-rs-sign` `2064e707d`, owner 2026-11-15, TODO 3zh MD-14; the gateway
+route `POST /v1/ua/register` is itself SPECIFIED, [NODE-GW-03](gateway.md#NODE-GW-03), and hands its `register` to the same lane
+step; UNAUDITED) — **An ML-DSA registration on a registry without the precompile is preceded by its cache parts**
+([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)'s Change: `register` reverts `UAKeyNotCached` before every part is stored). For a
+`register` `call` job of kind 0x0130 / 0x0131 / 0x0134 whose key has the kind's FIPS 204 length (1,312 / 1,952 / 2,592 B) on a
+chain whose registry's verifier of that kind has no precompile (`PRECOMPILE()` 0), the lane sends the node's own
+`cacheExpandedKey` `call` jobs first, one per part (`PqUA.mldsaParts`: 1 / 2 / 3), each the named op `{entry: cacheExpandedKey,
+args: {kind, pk, part}}` (`pk` the registration's key data) built by the plain row's parser, so the node builds the calldata
+`cacheExpandedKey(uint16,bytes,uint256)` from the named fields (no hex). The lane learns the registry's path from the
+registration's own simulation: the registry reverts `UAKeyNotCached(ua)` only when its verifier of the kind has no precompile, so
+on a precompile registry the `register` goes at once and no part is sent. It then reads `uaOf(kind, pk)` and `expandedKeyOf(ua)`,
+skips a part already stored and a part in flight (once node-wide, the lanes' in-flight set), sends every other part with an
+explicit gas limit ([NET-EVM-11](../networks/evm.md#NET-EVM-11): the part's estimate, regular + state, × 1.05, within the block
+gas limit, else `TX_EXCEEDS_CHAIN_LIMIT`, and within `max_gas_per_tx`; 40–48 M), and puts the `register` back `queued` under
+`UA_KEY_NOT_CACHED`; the `register` is sent only once its simulation passes, i.e. after every part landed. A part the chain refuses
+can never land: the registration is `dead` as `UA_KEY_NOT_CACHED: part <n> refused: …`. The row is `PERMISSIONLESS` (anyone may
+send a part; it writes only what the registry derives from `pk`): a consumer's own `cacheExpandedKey` `call` job takes the same
+row and the same gas, its `kind`, `pk` length and `part` refused by name before any simulation (`BAD_PAYLOAD: args.kind` /
+`args.pk` / `args.part`); the allow-lists (`guard.rs`, the [call table](#call-table), `typed.rs`) hold it in both directions against
+the contract's entries (`selector_audit.json`). `UAKeyNotCached(ua)` on any simulation maps to `UA_KEY_NOT_CACHED` (the job stays
+`queued` while a part may still land, never `dead`); so does a reverted receipt of such a registration whose re-simulation reverts
+it (a part dropped by a reorg). Tests: `submit.rs` `mldsa_register_sends_its_cache_parts_first`,
+`mldsa_register_cache_refusals_by_name`, `mldsa_register_reverted_for_its_cache_waits`; `typed.rs` `cache_parts_are_bounded`;
+`guard.rs` `the_plain_rows_are_pinned`, `allow_lists_equal_the_selector_audit_both_directions`. Clients build the part transactions
+and the cache-then-register order for a subject that sends them itself: `clientkeys` `cacheExpandedKeyCall`, `mldsaCacheCalls`,
+`cacheThenRegister` (`src/ua.js`); `ua-rs` `mldsa_cache::{part_call, part_calls, cache_then_register}`; both read
+`smartcontracts/vectors/ua/mldsa_cache.json`'s keys (no byte format changed, no new vector).
 
 <a id="NODE-JOB-15"></a>**NODE-JOB-15** (open; default applied) — The namespace created for an ERP client that
 migrates from the legacy pull path gets `allow_call = true` (mandates and subject accounts need it).
@@ -799,8 +813,8 @@ pull path `dead` with `CALL_TARGET_REFUSED` before simulation. A new call shape 
 The `registry`, `factory` and `account` rows are walked both directions against `UARegistry`, `SmartKeyAccountFactory` and `SmartKeyAccount` in
 `selector_audit.json` (Fable review of ua-mtx-merge E N-10; BUILT, `allow_lists_equal_the_selector_audit_both_directions` and
 forge `SelectorAudit.t.sol` `test_everySelectorIsClassified`): each row is a `SIGNED` entry, or a `PERMISSIONLESS` one whose
-proof or address fixes what it writes (`storePqzPop`, `deploy`); a new `SIGNED` write without a row fails; `cacheExpandedKey`
-(`PERMISSIONLESS`) has no row. On the account (owner 2026-11-12; BUILT) the guardian's `initiateRecovery` is the audit class
+proof or address fixes what it writes (`storePqzPop`, `deploy`; `cacheExpandedKey`, [NODE-JOB-29](#NODE-JOB-29): the registry
+derives what it writes from `pk`); a new `SIGNED` write without a row fails. On the account (owner 2026-11-12; BUILT) the guardian's `initiateRecovery` is the audit class
 `GUARDIAN` (a stranger is refused `NotGuardian()`), no row; its self-only operations (`addKey`, `setGuardian`, `execute`, …) are
 reached through its signed `mtx*` rows; its generic `mtxExecute` / `mtxBatch` on an address `MetaTransaction` are no row (a job
 names its operation).
@@ -880,7 +894,7 @@ is `422 HEX_ARGS_REFUSED`.
 | `SmartKeyAccount.mtxExecuteAsOwner(bytes,uint256,uint256,bytes)` (built in P4) | runtime code = EIP-1167 clone of that factory's `IMPLEMENTATION` (checked at lease, cached); the account address is predicted per chain (the factory's constructor takes `chain_uid`, so the same owner has a different account address on each chain) | client subject accounts; role holders that are subject accounts |
 | `MandateWallet` named entries (`mtxPayUnderMandate`, `mtxDelegateRevoke`) and flat builders (`mtxPayUnderMandate`, `mtxRevoke`), all epoch-bound: the job re-reads `epoch(token)` and re-signs on `StaleEpoch`, [CTR-ACC-07](../contracts/mandates.md#CTR-ACC-07); `mtxExecuteAsOwner`; `HederaMandateWallet.mtxExecuteAsOwnerRaw` | any address that is not a registered token and whose `chainUid()` equals `chain.chain_uid` (self-authenticating: the target checks the delegate/owner signature; a wallet is deployed per user with a deployer-chosen value, so it is read at lease and cached) | client payment requests, auto-pay |
 | `SCaaSDex.mtxSettle` / `mtxExchange` / `mtxExchangeVia` / `mtxHybrid` / `mtxHybridVia` / `mtxExchangeBatch` ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20), [-27](../contracts/dex.md#CTR-DEX-27), [-28](../contracts/dex.md#CTR-DEX-28), BUILT on the new `SCaaSDex` (P2c); the node side, [NODE-DEX-17](dex-venue.md#NODE-DEX-17), SPECIFIED) / `mtxCancelOrders` / `mtxInvalidateNonces` | a DEX on the chain profile's DEX list (`chain_contract.kind = dex`, [NET-ALL-24](../networks/README.md#NET-ALL-24)); never any other address | DEX venue (`~dex`) |
-| `UARegistry.register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`, `storePqzPop`, `setPqzKey`, `acceptMembership`, `updateMsig` (CTR-UA-44) (the UA registry, deployed on every chain since UA-3; `deployments/<key>.json` `ua_registry`; the writes of [CTR-UA-36](../contracts/accounts.md#CTR-UA-36), each relayable by anyone, owner 2026-10-30 ruling R-node, built on `ua8` in `64c233d4`, the typed rows in `typed-signing` Part R; one registry per chain, so once a chain runs a generation 2 the writes for generation-1 records are not relayable; a relayed `register` / `registerMsig` with its proof over min(`max_gas_per_tx`, block gas limit) is refused `UA_REGISTER_SPLIT`) | `Rule::UaRegistry`: the chain's `[[chains]] ua_registry` (unset ⇒ refused), bound to this chain ([NODE-GW-03](gateway.md#NODE-GW-03)) | namespaces with `allow_call`, relayers; the node gateway once `POST /v1/ua/register` is built |
+| `UARegistry.register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`, `setKemKey`, `storePqzPop`, `setPqzKey`, `acceptMembership`, `updateMsig` (CTR-UA-44), `cacheExpandedKey` (PERMISSIONLESS, [NODE-JOB-29](#NODE-JOB-29)) (the UA registry, deployed on every chain since UA-3; `deployments/<key>.json` `ua_registry`; the writes of [CTR-UA-36](../contracts/accounts.md#CTR-UA-36), each relayable by anyone, owner 2026-10-30 ruling R-node, built on `ua8` in `64c233d4`, the typed rows in `typed-signing` Part R; one registry per chain, so once a chain runs a generation 2 the writes for generation-1 records are not relayable; a relayed `register` / `registerMsig` with its proof over min(`max_gas_per_tx`, block gas limit) is refused `UA_REGISTER_SPLIT`) | `Rule::UaRegistry`: the chain's `[[chains]] ua_registry` (unset ⇒ refused), bound to this chain ([NODE-GW-03](gateway.md#NODE-GW-03)) | namespaces with `allow_call`, relayers; the node gateway once `POST /v1/ua/register` is built |
 | `SealedBidTender.commitBid`, `revealBid`, `withdrawDeposit`, `settleTender` | `chain_contract.kind = tender` | client tender flows ([contracts/tender.md](../contracts/tender.md)) |
 | `VestingGrant.release`; `Distribution.claim`, `claimMany` | runtime code = EIP-1167 clone of the registered asset-suite implementation (codehash checked at lease, cached) | client asset-suite flows ([contracts/asset-suite.md](../contracts/asset-suite.md)) |
 | `ExchangeOffer.exchange(MetaTransaction,bytes)` | EIP-1167 clone of the registered `ExchangeOffer` implementation (like `SCaaSDex.mtxSettle`: the leg carries the holder's own signature) | client corporate actions |
