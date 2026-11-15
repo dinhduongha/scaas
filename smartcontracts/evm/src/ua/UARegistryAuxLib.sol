@@ -466,13 +466,16 @@ library UARegistryAuxLib {
     }
 
     /// Where slot 0x0142 has a verifier: `R_REG` over the scoped message (`UAPoP`), then one owner per proven key across every
-    /// record space (K3-3 "never the registry key"; `UAKeyInUse`), `keyOwner`, `proven`. False without the verifier.
+    /// record space (K3-3 "never the registry key"; `UAKeyInUse`), `keyOwner`, `proven`. False without the verifier, and
+    /// (owner 2026-11-15, Codex U4h-1, CTR-PQZ-30's Change) for a key of another set than this build's (`PqzSet.PK`): the
+    /// verifier checks its own set only, so such a proof is stored unproven, `proven` false and `UAPqzScopedPopStored` with
+    /// `CHECKED_NONE`, for the off-chain check of CTR-PQZ-30; no on-chain path takes it as checked.
     function _scopedProve(bytes32 ua, address scope, uint64 version, bytes memory key, bytes calldata pqzPop)
         private
         returns (bool)
     {
         uint256 cfg = UARegistryCoreLib._cfgPqz();
-        if (uint160(cfg) == 0) return false;
+        if (uint160(cfg) == 0 || key.length != PqzSet.PK) return false;
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key);
         bytes32 m = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_SCOPED_KEY,
             UAKinds.pqzScopedKeyDigest(ua, _class(scope), _chainUid(), scope, version, h));

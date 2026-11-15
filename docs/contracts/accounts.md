@@ -1303,7 +1303,9 @@ registry generation; nothing deployed is upgraded), UNAUDITED; other families ta
   Scoped proofs are made under **`PQZL_ID`** (the registry's id, PQZL only), never the token's id: `0x0142` verifies them where
   the precompile exists, and an `OFFCHAIN` token's verifier checks them under `PQZL_ID`. Eligibility and `current` per
   `(ua, scope)` exactly as [CTR-UA-42](#CTR-UA-42); on an `OFFCHAIN` token [CTR-PQZ-30](pq-zero-knowledge.md#CTR-PQZ-30) applies
-  unchanged. The proof bytes are stored for both classes (owner 2026-11-13).
+  unchanged. The proof bytes are stored for both classes (owner 2026-11-13). A key of another set than the `0x0142` verifier's
+  is stored unproven even where the verifier is enabled (`CHECKED_NONE`, owner 2026-11-15, Codex U4h-1,
+  [CTR-PQZ-30](pq-zero-knowledge.md#CTR-PQZ-30)'s Change).
 - **Opening KEM key.** A scoped record may carry `KemKey openKem {uint8 scheme; bytes mlkemEk; bytes32 x25519}`
   ([CTR-UA-32](#CTR-UA-32)'s scheme 1 and length checks, 1,601 B stored), signed as `openKemHash`. It is present **if and only if
   the scope's tokens have the opening on**: always on an `offchain-shared` record (absent: refused); on an `offchain-token` record

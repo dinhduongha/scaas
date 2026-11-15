@@ -6102,6 +6102,8 @@ Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](contracts/pq-zero-knowledge.md#
 **Cost if wrong.** A key nobody proved could take credits it can never spend; a duplicate key could carry a verdict to another account (closed on chain by 3g's per-UA marker and pairwise `KeyReused`).
 **Source.** Owner ruling R3 (2026-11-06); spec §6 (AV-6), §10 row 4; 3g spec `superpowers/specs/2026-11-06-pqz-key-versions.md` §5 (KV-12) and §10 row 11.
 
+Change (2026-11-15, owner, Codex U4h-1 P2; status: BUILT on branch `3zh-mldsa`, UNAUDITED): a scoped key of another set than the registry's `0x0142` verifier checks (length other than the build's `PqzSet.PK`) gets its `R_REG` proof stored **unproven** by `storePqzScopedPop` even where the verifier is enabled (`proven` false, `UAPqzScopedPopStored` with `CHECKED_NONE`, no `keyOwner`), for the off-chain check of this rule; before it the store called the verifier, which refuses every other set's key, and reverted `UAPoP`, so an `OFFCHAIN` token of another set could never get its proof bytes (registration nor rotation). Every read keeps the mark: `PRECOMPILE` requires `proven`; `OFFCHAIN` takes the stored key by length and its verifier checks `R_REG` off chain. A key of the verifier's own set verifies on chain as before. Tests: `PqzScopedKeys.t.sol` `test_u4h1_*`, at all four sets; mutants in `runs/2026-11-15-3zh-mldsa-mutants.py`.
+
 ### CTR-PQZ-31 — PQZ state per (ua, version): credits to current, a stale version only migrates
 - old: — · status: current · owner: yes · date: 2026-11-06 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-31 · superseded-by: —
 

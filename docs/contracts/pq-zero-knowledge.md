@@ -2649,6 +2649,15 @@ refuses lands (shields carry no proof) and stays undebitable until the key passe
 
 **Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** Every current and historical key read of a token uses the token's scope ([CTR-UA-43](accounts.md#CTR-UA-43)): `registry` `pqzKeyOf` / `pqzKeyAt`; `offchain-shared` scope `address(0)`; `offchain-token` scope `address(this)`; one internal function takes the scope and no site reads the registry views directly. The verifier's duties above apply per scope: a scoped `R_REG` proof is over `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, digest(ua, keyClass, chainUid, token, version, pqzKeyHash))` and is checked under `PQZL_ID`, never the token's id; the proof bytes are stored for both scoped classes.
 
+**Change (owner 2026-11-15, Codex U4h-1; BUILT on branch `3zh-mldsa`, UNAUDITED).** A scoped key of **another set** than the
+registry's `0x0142` verifier checks (its length other than this build's `PqzSet.PK`): `storePqzScopedPop` stores the proof bytes
+**unproven** even where the verifier is enabled — `proven` false, `UAPqzScopedPopStored` with `CHECKED_NONE`, no `keyOwner` — for
+the off-chain check above (the verifier checks its own set only; before this Change the store reverted `UAPoP` and an
+`OFFCHAIN` token of another set could never get its proof bytes). Every on-chain use knows the mark: a `PRECOMPILE` read requires
+`proven`, an `OFFCHAIN` read takes the stored key by length and leaves `R_REG` to its verifier, which must not treat the record as
+checked on chain (`CHECKED_NONE`). A key of the verifier's set still verifies on chain (`UAPoP` on a wrong proof). Tests
+`test/ua/PqzScopedKeys.t.sol` `test_u4h1_*` (verifier enabled; at all four sets).
+
 **The PQZ verifier (off-chain)** is a separately operated trust role, not a node module: [ops.md](../node/ops.md#pqz-verifier)
 (BUILT, T48). It verifies public statements and proofs with `pqz-ffi` and signs; it decrypts nothing and holds no PQZ secret
 ([ARCH-POS-13](../decisions.md#ARCH-POS-13)). Open (owner): who assembles the k member signatures of an `msig` verifier's one
