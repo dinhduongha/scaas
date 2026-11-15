@@ -1321,7 +1321,9 @@ registry generation; nothing deployed is upgraded), UNAUDITED; other families ta
   (`UAKeyInUse`).
 - **Views and events.** `pqzScopedKeyOf(ua, scope) → (version, ptr, pqzPopHash, proven)`, `pqzScopedKeyAt(ua, scope, version)`,
   `pqzScopedKeyLatest(ua, scope)`, `pqzScopedPopOf`, `pqzOpenKemAt`, a per-scope holder list (`count` / `at`, as
-  [CTR-UA-29](#CTR-UA-29)) so a wallet finds a token's holders from state; events `UAPqzScopedKeyAdded`, `UAPqzScopedPopStored`,
+  [CTR-UA-29](#CTR-UA-29)) so a wallet finds a token's holders from state (owner 2026-11-15, Codex U4h-2; BUILT on `3zh-mldsa`: on
+  a registry that is not the PQZ host, in front of a predecessor, the list is the predecessor's then its own, as the scoped key
+  reads forward); events `UAPqzScopedKeyAdded`, `UAPqzScopedPopStored`,
   `UAPqzScopedKeyCurrent`. Nothing is deleted.
 - **Token reads.** Every current and historical PQZ key read of a token uses the token's scope
   ([CTR-PQZ-30](pq-zero-knowledge.md#CTR-PQZ-30)'s Change); no record: `AccountNotRegistered(ua)`. A holder without the record

@@ -754,4 +754,25 @@ contract PqzScopedKeysTest is UARegistryBase {
         r.storePqzScopedPop(ua, address(0), 0, x.proof);
         assertEq(r.pqzScopedCount(address(0)), 0);
     }
+
+    // ----- Codex U4h-2 (owner 2026-11-15): a successor's scoped holder list shows the predecessor's holders -----
+
+    /// A holder registered on gen 1 (`pv`, slot 0x0142 with the verifier) with a proven scope-0 key; gen 2 in front of it without
+    /// 0x0142: its scoped key read forwards (as before), and so does its holder list now (count, entry, the index past the end).
+    function test_u4h2_successorListsInheritedHolders() public {
+        bytes32 ua = _single(pv, ml1);
+        R memory x = _rec(ua, address(0), 0, _pk(0), true);
+        _set(pv, ml1, x);
+        pv.storePqzScopedPop(ua, address(0), 0, x.proof);
+        UARegistry g2 = _deploy(address(0x5Ca0000000000000000000000000000000000044), chainUidA, address(pv), false, BUDGET,
+            address(0), true, new UARegistry.KindConfig[](0));
+        (uint64 v, address ptr,, bool pr) = g2.pqzScopedKeyOf(ua, address(0));
+        assertEq(abi.encode(v, SSTORE2.read(ptr), pr), abi.encode(uint64(0), x.key, true), "the key read forwards (control)");
+        assertEq(pv.pqzScopedCount(address(0)), 1);
+        assertEq(g2.pqzScopedCount(address(0)), 1, "the inherited holder is listed");
+        assertEq(g2.pqzScopedAt(address(0), 0), ua);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAIndex.selector, UAKinds.PQZ_MLWE, uint256(1)));
+        g2.pqzScopedAt(address(0), 1);
+        assertEq(g2.pqzScopedCount(address(tOn)), 0, "another scope: none");
+    }
 }

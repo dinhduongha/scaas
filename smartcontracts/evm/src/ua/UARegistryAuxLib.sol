@@ -527,13 +527,28 @@ library UARegistryAuxLib {
         (k.scheme, k.mlkemEk, k.x25519) = (uint8(pk[0]), UAStore.cut(pk, 1, 1568), bytes32(UAStore.word(pk, 1569)));
     }
 
-    function pqzScopedCount(address scope) external returns (uint256) {
-        return UAStore.layout().scopedCount[scope];
+    /// Codex U4h-2 (owner 2026-11-15): a scope's holder list follows the scoped key reads' forwarding (`_away`): on a registry that
+    /// is not the PQZ host (slot 0x0142 empty) in front of a predecessor, the predecessor's list first, then this registry's own.
+    function _scopedFrom() private view returns (address p) {
+        if (uint160(UARegistryCoreLib._cfgPqz()) == 0) p = UARegistryCoreLib._pred();
+    }
+
+    function pqzScopedCount(address scope) external returns (uint256 n) {
+        address p = _scopedFrom();
+        if (p != address(0)) n = IUARegistry(p).pqzScopedCount(scope);
+        n += UAStore.layout().scopedCount[scope];
     }
 
     function pqzScopedAt(address scope, uint256 i) external returns (bytes32) {
-        if (i >= UAStore.layout().scopedCount[scope]) revert IUARegistry.UAIndex(UAKinds.PQZ_MLWE, i);
-        return UAStore.layout().scopedAt[scope][i];
+        address p = _scopedFrom();
+        uint256 j = i;
+        if (p != address(0)) {
+            uint256 m = IUARegistry(p).pqzScopedCount(scope);
+            if (j < m) return IUARegistry(p).pqzScopedAt(scope, j);
+            j -= m;
+        }
+        if (j >= UAStore.layout().scopedCount[scope]) revert IUARegistry.UAIndex(UAKinds.PQZ_MLWE, i);
+        return UAStore.layout().scopedAt[scope][j];
     }
 
     function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
