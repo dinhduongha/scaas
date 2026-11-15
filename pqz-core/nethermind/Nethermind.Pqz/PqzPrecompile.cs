@@ -45,8 +45,8 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
         Run(inputData.Span, PqzReleaseSpec.ScheduleOf(releaseSpec));
 
     /// <summary>A managed exception on this path (outside the library's statuses: loading or binding the library, the
-    /// log line) is a fault of this node (D4, review 3w T-16): <see cref="NodeFault(string, ReadOnlySpan{byte})"/>, never
-    /// Nethermind's failed call. <see cref="DllNotFoundException"/> stays Nethermind's own exit 110.</summary>
+    /// log line) is a fault of this node (D4, review 3w T-16): <see cref="NodeFault(string, Exception, ReadOnlySpan{byte})"/>,
+    /// never Nethermind's failed call. <see cref="DllNotFoundException"/> stays Nethermind's own exit 110.</summary>
     public static Result<byte[]> Run(ReadOnlySpan<byte> input, PqzSchedule? s)
     {
         try
@@ -55,7 +55,7 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
         }
         catch (Exception e) when (e is not DllNotFoundException)
         {
-            NodeFault($"{e.GetType().Name}: {e.Message}", input);
+            NodeFault("", e, input); // the cause is built inside the fault boundary (review 3w-delta U3h-2)
             throw; // not reached (NodeFault exits)
         }
     }
@@ -87,17 +87,81 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
     /// <summary>D4: a fault of this node is never a verdict; stop the process (the block is never sealed or imported,
     /// nothing is marked invalid; a restart re-processes). The same exit path Nethermind takes for a missing
     /// precompile library (110), here 120.</summary>
-    public static void NodeFault(int status, ReadOnlySpan<byte> input) => NodeFault($"status={status}", input);
+    public static void NodeFault(int status, ReadOnlySpan<byte> input) => Fault(null, null, status, input);
 
-    /// <summary>D4 with <paramref name="cause"/> in the <c>PQZ-NODE-FAULT</c> line (a library status, or a managed
-    /// exception in a PQZ or ML-DSA call).</summary>
-    public static void NodeFault(string cause, ReadOnlySpan<byte> input)
+    /// <summary>D4 for a managed exception in a PQZ or ML-DSA call; <paramref name="where"/> prefixes the cause
+    /// (<c>e.GetType().Name: e.Message</c>), which is built here, inside the boundary.</summary>
+    public static void NodeFault(string where, Exception e, ReadOnlySpan<byte> input) => Fault(where, e, 0, input);
+
+    /// <summary>The fixed line written when building or writing the <c>PQZ-NODE-FAULT</c> diagnostic itself failed.</summary>
+    public const string FallbackLine = "PQZ-NODE-FAULT (the diagnostic failed): a fault of this node, not of the input; exit 120";
+
+    /// <summary>Review 3w-delta U3h-2 (owner 2026-11-15): termination is unconditional. The cause, the line (Keccak of
+    /// the input), stderr and the logger are inside a <c>try</c>; any exception there is caught, the fixed
+    /// <see cref="FallbackLine"/> is tried once, and <see cref="Terminate"/> runs from the <c>finally</c>.</summary>
+    private static void Fault(string? where, Exception? e, int status, ReadOnlySpan<byte> input)
     {
-        string msg = $"PQZ-NODE-FAULT {cause} keccak={Keccak.Compute(input)} len={input.Length}: a fault of this node, not of the input; exit 120";
-        Console.Error.WriteLine(msg);
-        Console.Error.Flush();
-        if (Log.IsError) Log.Error(msg);
-        Environment.Exit(ExitCode);
+        try
+        {
+            string cause = e is null ? $"status={status}" : $"{where}{e.GetType().Name}: {e.Message}";
+            string msg = $"PQZ-NODE-FAULT {cause} keccak={Keccak.Compute(input)} len={input.Length}: a fault of this node, not of the input; exit 120";
+            Console.Error.WriteLine(msg);
+            Console.Error.Flush();
+            if (Log.IsError) Log.Error(msg);
+        }
+        catch
+        {
+            try
+            {
+                Console.Error.WriteLine(FallbackLine);
+                Console.Error.Flush();
+            }
+            catch
+            {
+                // nothing left to report through: terminate anyway
+            }
+        }
+        finally
+        {
+            Terminate();
+        }
+    }
+
+    /// <summary>The exit watchdog's bound: <see cref="Terminate"/>'s dedicated thread calls
+    /// <see cref="Environment.FailFast(string)"/> if the process still runs this long after
+    /// <see cref="Environment.Exit(int)"/> began (a ProcessExit handler blocked, e.g. on the faulting thread).</summary>
+    public const int ExitWatchdogMs = 10_000;
+
+    /// <summary>The watchdog's FailFast message.</summary>
+    public const string WatchdogLine = "PQZ-NODE-FAULT exit watchdog: the process did not exit within the bound after exit 120; FailFast";
+
+    /// <summary>Review 3w-delta U3h-2 + T-20 (owner 2026-11-15, "thêm watchdog"): start the watchdog (a dedicated
+    /// background thread, not the thread pool), then <c>Environment.Exit(120)</c>; should Exit return or throw,
+    /// FailFast at once. Never returns. The watchdog's FailFast ends the process with the runtime's abort status, not
+    /// 120; a fault-handling path that hangs is the case it covers.</summary>
+    public static void Terminate()
+    {
+        try
+        {
+            Thread w = new(() =>
+            {
+                Thread.Sleep(ExitWatchdogMs);
+                Environment.FailFast(WatchdogLine);
+            }) { IsBackground = true, Name = "pqz-exit-watchdog" };
+            w.Start();
+        }
+        catch
+        {
+            // no watchdog thread: Exit below still runs
+        }
+        try
+        {
+            Environment.Exit(ExitCode);
+        }
+        finally
+        {
+            Environment.FailFast("PQZ-NODE-FAULT: Environment.Exit returned; FailFast");
+        }
     }
 
     public const int ExitCode = 120;

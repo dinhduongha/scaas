@@ -20,22 +20,78 @@ using Nethermind.Serialization.Json;
 //   Harness run   <ffiDir> <corpus.jsonl> <repoRoot> [--minutes N] [--threads 8] [--seed S]
 //   Harness fault <hooksDir> <corpus.jsonl>        (test child: status 4 through PqzPrecompile.Run ⇒ exit 120)
 //   Harness panic <hooksDir> <corpus.jsonl>        (test child: status 3 through PqzPrecompile.Run ⇒ …00, exit 0)
-//   Harness mldsa-fault                            (test child: a non-crypto exception in MlDsa.Verify ⇒ exit 120)
+//   Harness mldsa-fault [variant]                  (test child: a non-crypto exception in MlDsa.Verify ⇒ exit 120;
+//                                                   variants logger | stderr | message | blocking-exit | crypto-logger,
+//                                                   review 3w-delta U3h-2)
 return args.Length > 0 && args[0] == "fault" ? Fault.Exec(args) : args.Length > 0 && args[0] == "panic" ? Panic.Exec(args)
-    : args.Length > 0 && args[0] == "mldsa-fault" ? MlDsaFault.Exec() : Run.Exec(args);
+    : args.Length > 0 && args[0] == "mldsa-fault" ? MlDsaFault.Exec(args.Length > 1 ? args[1] : "") : Run.Exec(args);
 
 /// <summary>Review 3w T-16 (D4): an exception other than <see cref="CryptographicException"/> inside an ML-DSA verify,
 /// raised through the <see cref="MlDsa.VerifyFn"/> seam, is <c>PQZ-NODE-FAULT</c> and exit 120, never a word.</summary>
+/// Review 3w-delta U3h-2 variants: <c>logger</c> (the logger throws), <c>stderr</c> (stderr throws), <c>message</c>
+/// (the exception's Message getter throws), <c>blocking-exit</c> (a ProcessExit handler blocks forever: the exit
+/// watchdog must end the process), <c>crypto-logger</c> (a CryptographicException with a throwing logger: the zero
+/// word, exit 0; W-R kept).</summary>
 static class MlDsaFault
 {
-    public static int Exec()
+    public static int Exec(string variant)
     {
         byte[] input = new byte[MlDsa.Pk65 + MlDsa.Sig65 + 32];
-        Console.WriteLine("mldsa fault child: the seam throws InvalidOperationException");
-        byte[] o = MlDsa.Verify(MLDsaAlgorithm.MLDsa65, MlDsa.Pk65, MlDsa.Sig65, input, (_, _, _, _) => throw new InvalidOperationException("seam"));
+        Exception thrown = new InvalidOperationException("seam");
+        switch (variant)
+        {
+            case "": break;
+            case "logger": PqzPrecompile.Log = new ILogger(new ThrowingLogger()); break;
+            case "stderr": Console.SetError(new ThrowingWriter()); break;
+            case "message": thrown = new MessageThrows(); break;
+            case "blocking-exit": AppDomain.CurrentDomain.ProcessExit += (_, _) => Thread.Sleep(Timeout.Infinite); break;
+            case "crypto-logger":
+                PqzPrecompile.Log = new ILogger(new ThrowingLogger());
+                thrown = new CryptographicException("seam");
+                break;
+            default: Console.WriteLine($"mldsa fault child: unknown variant {variant}"); return 2;
+        }
+        Console.WriteLine($"mldsa fault child ({(variant == "" ? "seam" : variant)}): the seam throws {thrown.GetType().Name}");
+        byte[] o = MlDsa.Verify(MLDsaAlgorithm.MLDsa65, MlDsa.Pk65, MlDsa.Sig65, input, (_, _, _, _) => throw thrown);
+        if (variant == "crypto-logger")
+        {
+            Console.WriteLine($"mldsa fault child: word {Convert.ToHexStringLower(o)}");
+            return 0;
+        }
         Console.WriteLine($"mldsa fault child: returned {Convert.ToHexStringLower(o)} (must not happen)");
         return 1;
     }
+}
+
+/// <summary>A logger whose every write throws (U3h-2 controls).</summary>
+sealed class ThrowingLogger : InterfaceLogger
+{
+    public void Info(string text) => throw new IOException("logger");
+    public void Warn(string text) => throw new IOException("logger");
+    public void Debug(string text) => throw new IOException("logger");
+    public void Trace(string text) => throw new IOException("logger");
+    public void Error(string text, Exception? ex = null) => throw new IOException("logger");
+    public bool IsInfo => true;
+    public bool IsWarn => true;
+    public bool IsDebug => true;
+    public bool IsTrace => true;
+    public bool IsError => true;
+}
+
+/// <summary>A stderr whose every write and flush throws (U3h-2 control).</summary>
+sealed class ThrowingWriter : TextWriter
+{
+    public override Encoding Encoding => Encoding.UTF8;
+    public override void Write(char value) => throw new IOException("stderr");
+    public override void Write(string? value) => throw new IOException("stderr");
+    public override void WriteLine(string? value) => throw new IOException("stderr");
+    public override void Flush() => throw new IOException("stderr");
+}
+
+/// <summary>An exception whose Message getter throws (U3h-2 control: building the cause fails).</summary>
+sealed class MessageThrows : Exception
+{
+    public override string Message => throw new InvalidOperationException("message getter");
 }
 
 static class Shared

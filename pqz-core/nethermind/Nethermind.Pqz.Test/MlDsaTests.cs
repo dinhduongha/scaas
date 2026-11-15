@@ -197,6 +197,64 @@ public class MlDsaTests
         Assert.That(outp, Does.Not.Contain("must not happen"));
     }
 
+    /// <summary>Review 3w-delta U3h-2: the child (<c>Harness mldsa-fault &lt;variant&gt;</c>) within
+    /// <paramref name="boundMs"/>; killed and failed past it, so a hang fails this test by its own bound. (exit code,
+    /// stdout, stderr, elapsed ms)</summary>
+    private static (int Exit, string Out, string Err, long Ms) Child(string variant, int boundMs)
+    {
+        string harness = Path.Combine(AppContext.BaseDirectory, "Harness.dll");
+        ProcessStartInfo psi = new("dotnet", [harness, "mldsa-fault", variant]) { RedirectStandardError = true, RedirectStandardOutput = true };
+        Stopwatch sw = Stopwatch.StartNew();
+        using Process p = Process.Start(psi)!;
+        System.Threading.Tasks.Task<string> err = p.StandardError.ReadToEndAsync(), outp = p.StandardOutput.ReadToEndAsync();
+        if (!p.WaitForExit(boundMs))
+        {
+            p.Kill(entireProcessTree: true);
+            Assert.Fail($"mldsa fault child {variant}: still running after {boundMs} ms (killed)");
+        }
+        p.WaitForExit();
+        TestContext.Progress.WriteLine($"mldsa fault child {variant}: exit {p.ExitCode} after {sw.ElapsedMilliseconds} ms; stdout: {outp.Result.Trim()}; stderr: {err.Result.Trim()}");
+        return (p.ExitCode, outp.Result, err.Result, sw.ElapsedMilliseconds);
+    }
+
+    /// <summary>Review 3w-delta U3h-2: termination is unconditional when the diagnostic fails: a throwing logger, a
+    /// throwing stderr, an exception whose Message throws, each exit 120 and never a word.</summary>
+    [TestCase("logger")]
+    [TestCase("stderr")]
+    [TestCase("message")]
+    public void A_failing_diagnostic_still_exits_120(string variant)
+    {
+        var (exit, outp, err, _) = Child(variant, 60_000);
+        Assert.That(exit, Is.EqualTo(PqzPrecompile.ExitCode), variant);
+        Assert.That(outp, Does.Not.Contain("must not happen"), variant);
+        if (variant == "logger") Assert.That(err, Does.Contain("PQZ-NODE-FAULT ").And.Contain("InvalidOperationException: seam"));
+        if (variant == "message") Assert.That(err, Does.Contain(PqzPrecompile.FallbackLine));
+    }
+
+    /// <summary>Review 3w-delta U3h-2 + T-20 (owner 2026-11-15): a ProcessExit handler that blocks forever cannot hang
+    /// the node: the exit watchdog ends the child within <see cref="PqzPrecompile.ExitWatchdogMs"/> + 20 s (start-up
+    /// included), with its line, never a word.</summary>
+    [Test]
+    public void A_blocking_shutdown_handler_is_ended_by_the_watchdog()
+    {
+        var (exit, outp, err, ms) = Child("blocking-exit", PqzPrecompile.ExitWatchdogMs + 20_000);
+        Assert.That(exit, Is.Not.EqualTo(0));
+        Assert.That(err, Does.Contain("PQZ-NODE-FAULT ").And.Contain("InvalidOperationException: seam"));
+        Assert.That(err, Does.Contain(PqzPrecompile.WatchdogLine));
+        Assert.That(outp, Does.Not.Contain("must not happen"));
+        Assert.That(ms, Is.GreaterThanOrEqualTo(PqzPrecompile.ExitWatchdogMs), "ended by the watchdog, not earlier");
+    }
+
+    /// <summary>W-R kept (review 3w-delta U3h-2): a CryptographicException with a throwing logger is still the zero
+    /// word, and the node goes on (exit 0).</summary>
+    [Test]
+    public void A_crypto_exception_with_a_throwing_logger_is_the_zero_word()
+    {
+        var (exit, outp, _, _) = Child("crypto-logger", 60_000);
+        Assert.That(exit, Is.EqualTo(0));
+        Assert.That(outp, Does.Contain("word " + new string('0', 64)));
+    }
+
     /// <summary>Review R4-C4: the start-up known-answer set gives (1, then seven 0) per level through the precompile
     /// path, and its hash is the compiled-in constant; every case differs from the valid input.</summary>
     [Test]
