@@ -146,7 +146,7 @@ int main(void) {
     CHECK(scaas_ua_pqz_public(qk, qpk, &qpk_len) == SCAAS_UA_OK && qpk_len == 18432);
     char qreq[256];
     snprintf(qreq, sizeof qreq, "{\"proofSystemId\":\"0x%s\",\"kind\":305,\"ua\":\"0x%064d\"}",
-             "ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e", 1);
+             "41852bdcad5a49d19e7a054f1a658373a97126e7db09bd8f51aaab8d19a504fc", 1);
     len = sizeof qout;
     CHECK(scaas_ua_pqz_call(qk, "proveRegister", qreq, qout, &len) == SCAAS_UA_OK && strstr(qout, "\"proof\"") && strstr(qout, "\"message\""));
     len = sizeof qout;

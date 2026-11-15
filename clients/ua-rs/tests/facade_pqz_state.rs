@@ -410,8 +410,8 @@ fn word_negatives_refused_before_the_key() {
         f(&mut r);
         refused(what, k, "balance", &r, want);
     };
-    let other = if st::SET == "n2048-kmax1024" { "ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e" } else {
-        "c752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe"
+    let other = if st::SET == "n2048-kmax1024" { "41852bdcad5a49d19e7a054f1a658373a97126e7db09bd8f51aaab8d19a504fc" } else {
+        "a626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee"
     };
     neg("psid of another set", k, &ok, &|r| r["psid"] = json!(format!("0x{other}")), Error::PqzSetMismatch);
     neg("a pending index missing", k, &ok, &|r| { r["pending"].as_array_mut().unwrap().pop(); }, Error::Argument);

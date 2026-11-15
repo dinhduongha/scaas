@@ -1466,8 +1466,8 @@ func TestPqzWordsOnTheForgeRows(t *testing.T) {
 
 // --- the PQZ facade ---
 
-const pqzl2304 = "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e"
-const pqzl2048 = "0xc752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe"
+const pqzl2304 = "0x41852bdcad5a49d19e7a054f1a658373a97126e7db09bd8f51aaab8d19a504fc"
+const pqzl2048 = "0xa626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee"
 
 func TestPqz(t *testing.T) {
 	f := newFix(t)

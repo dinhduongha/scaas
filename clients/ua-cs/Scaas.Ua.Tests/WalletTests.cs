@@ -24,8 +24,8 @@ public class WalletTests : IDisposable
         Kem = Load("smartcontracts/vectors/ua/kem.json"), SealV = Load("smartcontracts/vectors/ua/seal.json"),
         Vault = Load("smartcontracts/vectors/ua/vault.json"), Zj = Load("smartcontracts/vectors/ua/zether.json");
     static readonly HashSet<ushort> Deterministic = [0x0101, 0x0102, 0x0106, 0x0107, 0x0108];
-    const string Pqzl2304 = "0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e";
-    const string Pqzl2048 = "0xc752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe";
+    const string Pqzl2304 = "0x41852bdcad5a49d19e7a054f1a658373a97126e7db09bd8f51aaab8d19a504fc";
+    const string Pqzl2048 = "0xa626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee";
 
     static string FindRoot()
     {

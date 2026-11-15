@@ -679,7 +679,7 @@ void main() {
     };
     final k = await (await walletOf('pq_kat')).pqzKey(account: 0, index: 0);
     expect(await code(() => k.call(cmd: 'balance', requestJson: jsonEncode(words))), 'UAArgument');
-    final other = {...words, 'psid': '0xc752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe'}; // n2048-kmax1024
+    final other = {...words, 'psid': '0xa626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee'}; // n2048-kmax1024
     expect(await code(() => k.call(cmd: 'balance', requestJson: jsonEncode(other))), 'UAPqzSetMismatch');
     for (final c in raw) {
       expect(await code(() => k.call(cmd: c, requestJson: '{}')), 'UAArgument', reason: c);

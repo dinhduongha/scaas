@@ -497,6 +497,16 @@ fn pk_ref(b: &[u8]) -> Result<&[u8; PK_BYTES]> {
     b.try_into().map_err(|_| Error::Argument)
 }
 
+/// Public stand-in key `x` of a sender's re-encryption ([`PqzKey::sender_enc`]): coefficient 0 is `x + 1`, every other zero
+/// (canonical; never a registered key, which is uniform mod `q`; one equal to the leg's key makes the core refuse: `Argument`).
+fn stand_in(x: usize) -> [u8; PK_BYTES] {
+    let mut p = [0u8; PK_BYTES];
+    if let Some(c) = p.get_mut(..8) {
+        c.copy_from_slice(&(x as u64 + 1).to_be_bytes());
+    }
+    p
+}
+
 /// The debit header words a caller gives.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Header {
@@ -1942,42 +1952,37 @@ impl PqzKey {
     }
 
     /// The sender's re-encryption of the transfer's leg: op 1 (`multi` `None`: `[pk_t, pk_f, (pk_a)]`, leg 0) or op 7 group
-    /// `j / per` (`multi` `Some((M, j))`), `dv` at the leg, zero elsewhere; this handle's `pk` stands in for the other recipients
-    /// (the randomness does not depend on them). The encryption and the leg's index in it.
+    /// `j / per` (`multi` `Some((M, j))`), `dv` at the leg, zero elsewhere; position `x` of the other recipients holds the public
+    /// [`stand_in`] key `x` (the randomness `r, e1, e2` depends on their count only; review 3w u3-4: the cores refuse one key at one
+    /// window twice under one randomness, so this handle's `pk` cannot stand in for them all). The encryption and the leg's index.
     fn sender_enc(
         &self, seed: &[u8; 32], pk_t: &[u8], aud: bool, multi: Option<(usize, usize)>, words: &[Word; DISC_WORDS], dv: [u8; 16],
     ) -> Result<(Wiped, usize)> {
         let id = system(words.get(1).ok_or(Error::Argument)?)?;
-        let own = pk_ref(&self.pk)?;
-        Ok(match multi {
-            None => {
-                let n = 2 + aud as usize;
-                let pks = [pk_ref(pk_t)?, own, own];
-                let msgs = [dv, [0; 16], [0; 16]];
-                let (pks, msgs) = (pks.get(..n).ok_or(Error::Argument)?, msgs.get(..n).ok_or(Error::Argument)?);
-                (Wiped(pqzl::enc(pks, msgs, seed).ok_or(Error::Argument)?), 0)
-            }
+        let pk_t = pk_ref(pk_t)?;
+        // the recipients' count and windows, the leg's index `i` among them, the seed of its group
+        let (n, i, win, seed) = match multi {
+            None => (2 + aud as usize, 0, None, *seed),
             Some((m, j)) => {
                 if !built_legs(&id).contains(&m) || j >= m {
                     return Err(Error::Argument);
                 }
                 let per = legs_per_group(aud);
                 let (g, lo) = (j / per, j / per * per);
-                let (n, i) = ((lo + per).min(m) - lo, j - lo);
-                let mut pks: Vec<&[u8; PK_BYTES]> = (0..n).map(|k| if k == i { pk_ref(pk_t) } else { Ok(own) }).collect::<Result<_>>()?;
-                if g == 0 {
-                    pks.push(own);
-                }
-                let mut win = vec![0u8; pks.len()];
+                let legs = (lo + per).min(m) - lo;
+                let mut win = vec![0u8; legs + (g == 0) as usize];
                 if aud {
-                    pks.extend(std::iter::repeat_n(own, n));
-                    win.extend((0..n).map(|w| w as u8));
+                    win.extend((0..legs).map(|w| w as u8));
                 }
-                let mut msgs = vec![[0u8; 16]; pks.len()];
-                *msgs.get_mut(i).ok_or(Error::Argument)? = dv;
-                (Wiped(pqzl::enc_win(&pks, Some(&win), &msgs, &pqzl::enc_group_seed(seed, g)).ok_or(Error::Argument)?), i)
+                (win.len(), j - lo, Some(win), pqzl::enc_group_seed(seed, g))
             }
-        })
+        };
+        let others: Vec<[u8; PK_BYTES]> = (0..n).map(stand_in).collect();
+        let pks: Vec<&[u8; PK_BYTES]> = others.iter().enumerate().map(|(x, s)| if x == i { pk_t } else { s }).collect();
+        let mut msgs = vec![[0u8; 16]; n];
+        *msgs.get_mut(i).ok_or(Error::Argument)? = dv;
+        let seed = Zeroizing::new(seed);
+        Ok((Wiped(pqzl::enc_win(&pks, win.as_deref(), &msgs, &seed).ok_or(Error::Argument)?), i))
     }
 
     fn cache_key(seed32: &[u8]) -> Result<Zeroizing<[u8; 32]>> {

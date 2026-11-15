@@ -2025,10 +2025,10 @@ class WalletZether(WalletCase):
         L.zether_key_free(None)
 
 
-PQZL_ID = {'n2048-kmax1024': 'c752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe',
-           'n2304-kmax4096': 'ef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e',
-           'n2560-kmax16384': 'eacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882',
-           'n2816-kmax65536': 'a801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9'}
+PQZL_ID = {'n2048-kmax1024': 'a626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee',
+           'n2304-kmax4096': '41852bdcad5a49d19e7a054f1a658373a97126e7db09bd8f51aaab8d19a504fc',
+           'n2560-kmax16384': '53aa68704b996ebee81c257c513ea3c114ed04137b5e8b1ba94cfc95e3d83841',
+           'n2816-kmax65536': '7a3e76790c331d1ff5b7b8e9897e876dc11773afed874fcd65c145aeba1da28f'}
 
 
 PQZ_OUT_MAX = 1_052_672  # SCAAS_UA_PQZ_OUT_MAX

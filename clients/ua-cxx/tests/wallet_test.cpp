@@ -856,7 +856,7 @@ static void pqz_words() {
     Wallet w = wallet_of("pq_kat");
     PqzKey k = w.pqzKey(0, 0);
     CHECK(code_of([&] { k.call("balance", words.dump()); }) == "UAArgument", "a forge row: no wallet key");
-    words["psid"] = "0xc752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe";  // n2048-kmax1024
+    words["psid"] = "0xa626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee";  // n2048-kmax1024
     CHECK(code_of([&] { k.call("balance", words.dump()); }) == "UAPqzSetMismatch", "the other set's psid");
     for (auto& c : raw) CHECK(code_of([&] { k.call(c, "{}"); }) == "UAArgument", c);
     // T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs under
