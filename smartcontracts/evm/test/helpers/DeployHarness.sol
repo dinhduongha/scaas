@@ -14,9 +14,15 @@ contract DeployHarness is DeployBase {
     bool internal forcedBnG2;
     bool internal forcedPqz;
     bool internal forcedMl87;
+    bool internal forcedMl44;
+    bool internal forcedMl65;
     uint256 internal gateLimit;
     uint256 internal codeLimit;
     uint8 internal gate; // 0 = `RELEASE_GAS_GATE` (env, or its default), 1 = testnet, 2 = public
+
+    constructor() {
+        mldsaPrecompile = true; // `MLDSA_PRECOMPILE`'s default, `on` (`_setup` does not run here)
+    }
 
     function force(bool bls12381, bool bn254G2) external {
         (forced, forcedBls, forcedBnG2) = (true, bls12381, bn254G2);
@@ -113,12 +119,28 @@ contract DeployHarness is DeployBase {
     /// The chain's PQ precompile verdict (`_pqPrecompiles`: no RPC in a test), default none.
     function forcePq(bool pqz, bool ml87) external { (forcedPqz, forcedMl87) = (pqz, ml87); }
 
+    /// The chain's `mldsa44` / `mldsa65` precompile verdict (owner 2026-11-15), default none.
+    function forceMl(bool ml44, bool ml65) external { (forcedMl44, forcedMl65) = (ml44, ml65); }
+
     /// `DEPLOY_PQZ`, `PQZ_KEY_VERIFIER`, `MLDSA87_VERIFIER` for the next `deploy` (owner 2026-11-15).
     function setPqz(bool on, address pqzVerifier, address ml87Verifier) external {
         (deployPqz, pqzKeyVerifier, mldsa87Verifier) = (on, pqzVerifier, ml87Verifier);
     }
 
-    function _pqPrecompiles() internal view override returns (bool, bool) { return (forcedPqz, forcedMl87); }
+    /// `MLDSA_PRECOMPILE` (on / off), `MLDSA44_VERIFIER`, `MLDSA65_VERIFIER` for the next `deploy` (owner 2026-11-15).
+    function setMldsa(bool on, address ml44Verifier, address ml65Verifier) external {
+        (mldsaPrecompile, mldsa44Verifier, mldsa65Verifier) = (on, ml44Verifier, ml65Verifier);
+    }
+
+    /// MD-5: `_cacheFits` of ML-DSA kind `i` at the (stood-in) block gas limit.
+    function cacheFits(uint256 i) external view returns (bool) { return _cacheFits(i); }
+
+    /// MD-15: the real `_pqPrecompiles` (its `eth_call`; a test has no RPC, so the call fails).
+    function realPq() external returns (bool pqz, bool[3] memory ml) { return DeployBase._pqPrecompiles(); }
+
+    function _pqPrecompiles() internal view override returns (bool, bool[3] memory) {
+        return (forcedPqz, [forcedMl44, forcedMl65, forcedMl87]);
+    }
 
     function defaultNotice(uint256 chainId) external pure returns (uint256) { return _defaultNotice(chainId); }
 

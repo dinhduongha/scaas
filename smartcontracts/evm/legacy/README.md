@@ -439,3 +439,7 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `v_f`, every rollover was public. `src/pqz/{PqzCore,PqzStateLib,PqzLayer,IPqzToken,PqzTransferLib,PqzViewLib}.sol` and
   `src/factory/IFactoryToken.sol` (`ConfidentialConfig` without `pqzOwnKey` / `pqzOpening`). Superseded by the key
   classes (`registry`, `offchain-shared`, `offchain-token`): no `OFFCHAIN` token on the registry key can be created. Not built.
+- `3zh-mldsa/`: `src/ua/MlDsa.sol` as it stood at `ebd6eb4a9`, before round 3zh (owner 2026-11-15, CTR-UA-39's Change): the
+  `MldsaVerifier` constructor reverted `UAMldsaNoPrecompile` for `mldsa87` without a probed precompile, `expandedKeyParts()` was
+  1 / 2 / 0 (no `mldsa87` cache) and `verifyCached` read the parts with its own loop. Superseded by the three-part `mldsa87`
+  cache (`PqUA.mldsaParts`: 1 / 2 / 3, `MlDsa.readParts`). Not built.

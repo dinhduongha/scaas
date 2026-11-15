@@ -7,6 +7,7 @@ import {IUARegistry} from "./IUARegistry.sol";
 import {IUAPopVerifier} from "./IUAVerifier.sol";
 import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
+import {PqUA} from "./PqUA.sol";
 import {PqzSet} from "../pqz/PqzSet.sol";
 import {MldsaVerifier} from "./MlDsa.sol";
 
@@ -14,8 +15,9 @@ import {MldsaVerifier} from "./MlDsa.sol";
 ///        2026-11-09-t66b-library-organisation.md §11 (f)): the `register` forms, the `msig`, `acceptMembership`,
 ///        `requirePortable`, the pure digests; the key writes after registration and the other reads off the hot path are
 ///        `UARegistryAuxLib`'s, which runs this library's shared helpers by a nested DELEGATECALL (T66b 3.1c: `portableOk`,
-///        `pqzHolder`, `pqzProof`, `keyUa`) and compiles in only its small `internal` ones; the reads `registrationOf`, `uaCount`
-///        stay here (owner 2026-11-09: moving entries from the core to the Aux library is deferred). Run by DELEGATECALL from a
+///        `pqzHolder`, `pqzProof`, `keyUa`) and compiles in only its small `internal` ones; the read `uaCount`
+///        stays here (owner 2026-11-09: moving entries from the core to the Aux library is deferred; owner 2026-11-15, D1, an
+///        explicit exception: `registrationOf` moved to the Aux library verbatim, for size). Run by DELEGATECALL from a
 ///        thin entry per function, so `address(this)` is the registry and the storage is its `UAStore.Layout`. Same check order, same stored bytes, same events and errors as when this
 ///        code was in the registry (`legacy/typed-signing/UARegistryPreSplit.sol`; `test/ua/UARegistrySplit.t.sol`).
 /// @notice What a library cannot read, the registry's immutables, reaches it two ways (no new selector):
@@ -274,7 +276,10 @@ library UARegistryCoreLib {
     ) internal {
         (bytes32 record, bytes32 h) = _attrs(kind, d, ua, attrs, pqzPop); // 5
         bytes32 rd = UAKinds.portableDigest(UAKinds.registrationHash(record, attrs.pqzPopHash));
-        if (!_sigOk(_cfgKind(), kind, d, ua, UAKinds.PURPOSE_POP_V2, rd, sig, members)) revert IUARegistry.UAPoP(); // 6
+        if (!_sigOk(_cfgKind(), kind, d, ua, UAKinds.PURPOSE_POP_V2, rd, sig, members)) { // 6
+            _notCached(_cfgKind(), kind, ua);
+            revert IUARegistry.UAPoP();
+        }
         _pqzAttach(ua, attrs, pqzPop, h, UAKinds.portableDigest(record)); // 7
     }
 
@@ -386,20 +391,24 @@ library UARegistryCoreLib {
             revert IUARegistry.UAKindDisabled(UAKinds.PQZ_MLWE);
         }
         if (!_holder(kind, d)) revert IUARegistry.UAPqzHolder(ua);
+        // MD-13 (owner 2026-11-15, F-1): every holder kind, a single key with its own cap (gen 1's for a record gen 1 holds)
+        if (kind != UAKinds.MSIG) {
+            return _msigDebit(gen1 ? IUARegistry(g1).verifyCap(kind) : _cfgKind() >> 160, 192 + _slotBytes(kind, 0), ua);
+        }
         // CTR-PQZ-12 (review2 C0-5, controller proposal, owner may override): an `msig` holder's worst-case
         // authorization plus the set's cheapest PQZL debit (its full relayed transaction, fee signer included) must fit
         // one transaction at the EIP-7825 cap 2^24, else every credit to it could be locked. Not the chain's own limit.
         // UA8-D12: the PQZ key only, not the KEM record. The authorization's own calldata counts too, 16 gas a byte and the EIP-7976 floor of
         // 64: `PQZ_DEBIT_MIN_GAS` holds one holder signature, which is counted again here, on the safe side.
         // CTR-UA-44 MM-14: a member that grew a level since is left out, never a revert (the key write still runs)
-        if (kind == UAKinds.MSIG) _msigDebit(_membersWorst(d, gen1 ? UAStore.SMART_KEY_1271_GAS : _nativeCap(), true), d, ua);
+        _msigDebit(_membersWorst(d, gen1 ? UAStore.SMART_KEY_1271_GAS : _nativeCap(), true), _authBytes(d, 192), ua);
     }
 
-    /// The `msig` debit bound of `_pqzHolder` on `d` (its enabled slots), `w` its `_membersWorst`: a gen-2 registry in front forwards
-    /// the whole authorization to the one that holds the record (`UAStore.via`) and holds 1/63 of it again plus the margin: counted
-    /// here. `UAPqzHolder`.
-    function _msigDebit(uint256 w, bytes memory d, bytes32 ua) internal view {
-        uint256 a = _authBytes(d, 192);
+    /// The debit bound of `_pqzHolder`: `w` the holder's worst authorization (an `msig`: its `_membersWorst` over its enabled slots;
+    /// a single key: its kind's cap), `a` its calldata bytes. A gen-2 registry in front forwards the whole authorization to the one
+    /// that holds the record (`UAStore.via`) and holds 1/63 of it again plus the margin: counted here (a single key's verifier
+    /// call holds the same, `UAStore.capped`). `UAPqzHolder`.
+    function _msigDebit(uint256 w, uint256 a, bytes32 ua) internal pure {
         uint256 debit = PqzSet.PQZ_DEBIT_MIN_GAS;
         if (w + w / 63 + SigCheck.GAS_MARGIN + debit + 16 * a > TX_GAS_CAP || debit + 64 * a > TX_GAS_CAP) revert IUARegistry.UAPqzHolder(ua);
     }
@@ -531,7 +540,7 @@ library UARegistryCoreLib {
     /// gas measured a slot and the rounding of `MSIG_UPDATE_SLOT_GAS`).
     function msigBound(bytes32 ua, bytes memory t, bytes memory stored) external {
         uint256 w = _membersWorst(t, _nativeCap(), true);
-        if (_pqEligible(t, false)) _msigDebit(w, t, ua);
+        if (_pqEligible(t, false)) _msigDebit(w, _authBytes(t, 192), ua);
         else if (_pqEligible(stored, false)) revert IUARegistry.UAPqzHolder(ua);
         uint256 n = UAStore.u16(t, 2);
         uint256 a = _authBytes(t, 192);
@@ -656,6 +665,15 @@ library UARegistryCoreLib {
             return UAStore.capped(address(uint160(cfg)), IUARegistry(address(this)).verifyBudget(), data, 1, false);
         }
         return UAStore.capped(address(uint160(cfg)), cfg >> 160, data, 1, true);
+    }
+
+    /// CTR-UA-23 (owner 2026-11-15): on a refused check of `ua` (`kind`, its verifier `cfg`), the named refusal where the cause is an
+    /// incomplete ML-DSA cache on a verifier without a precompile (there only the complete cache verifies: the FIPS-key verify of
+    /// ML-DSA-65 / -87 is over EIP-7825's 2^24 and dearer than every cached cap): `UAKeyNotCached`, `cacheExpandedKey` every part
+    /// first. Asked only after a false verdict, so an accepted check pays nothing for it.
+    function _notCached(uint256 cfg, uint16 kind, bytes32 ua) internal view {
+        if (PqUA.mldsaParts(kind) != 0 && uint160(cfg) != 0 && UAStore.expanded(ua, kind).length == 0
+            && UAStore.noPrecompile(address(uint160(cfg)))) revert IUARegistry.UAKeyNotCached(ua);
     }
 
     /// The portable purposes (POP_V2, KEM, PQZ_KEY; rulings A1-f1, A5-m3; PQCHAT, UA-7 O1; PQZ_SCOPED_KEY, the three-key model
@@ -883,33 +901,6 @@ library UARegistryCoreLib {
             }
             a[j] = v;
         }
-    }
-
-    // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----
-
-    function registrationOf(bytes32 ua)
-        external
-        returns (uint16 kind, bytes memory keyData, IUARegistry.UAAttrs memory attrs, bytes memory pop, bytes memory pqzPop)
-    {
-        if (_elsewhere(ua)) {
-            (kind, keyData, attrs, pop, pqzPop) = IUARegistry(_pred()).registrationOf(ua);
-            // A5-c2 / A6-I1: gen 1's `register` key (version 0) proven here, its proof stored here
-            if (attrs.pqzKey.length != 0 && pqzPop.length == 0 && !UAStore.layout().pqzKey[ua][0].added) {
-                pqzPop = SSTORE2.readChunks(UAStore.layout().pqzPop[ua][0]);
-            }
-            return (kind, keyData, attrs, pop, pqzPop);
-        }
-        IUARegistry.Record memory r = UAStore.layout().records[ua];
-        kind = r.kind;
-        if (kind == 0) return (kind, keyData, attrs, pop, pqzPop);
-        (keyData, pop) = UAStore.registration(ua, r);
-        UAStore.KemCommit memory c = UAStore.layout().kemCommit[ua];
-        if (c.kemPkHash != 0) (attrs.kem.scheme, attrs.kemPkHash) = (c.scheme, c.kemPkHash); // the committed form
-        else (attrs.kem,) = UAStore.kemAt(ua, 0); // the register KEM key is version 0
-        UAStore.PqzKey memory k = UAStore.layout().pqzKey[ua][0];
-        if (k.added) return (kind, keyData, attrs, pop, pqzPop); // A4-c3: an added key is no `register` argument
-        (attrs.pqzKey, attrs.pqzPopHash) = (SSTORE2.read(k.ptr), UAStore.layout().pqzPopHash[ua][0]);
-        pqzPop = SSTORE2.readChunks(UAStore.layout().pqzPop[ua][0]);
     }
 
     // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----

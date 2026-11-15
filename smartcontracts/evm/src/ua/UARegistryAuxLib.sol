@@ -6,6 +6,7 @@ import {IUARegistry} from "./IUARegistry.sol";
 import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
 import {MldsaVerifier} from "./MlDsa.sol";
+import {PqUA} from "./PqUA.sol";
 import {UARegistryCoreLib} from "./UARegistryCoreLib.sol";
 import {IUAPopVerifier} from "./IUAVerifier.sol";
 import {PqzSet} from "../pqz/PqzSet.sol";
@@ -94,25 +95,22 @@ library UARegistryAuxLib {
     /// Stores part `part` of the expanded key of `pk` under `uaOf(kind, pk)`, computed by the kind's verifier
     /// (`expandedKeyPart`) from the authenticated `pk` — never accepted from a caller (a caller-supplied expanded key
     /// allows universal forgery). Anyone may call it, before or after `register`; a part already stored is left as it
-    /// is (a front-runner stored the same bytes). Each part is one transaction (ML-DSA-65 part 1: ≈ 13.4 M gas).
+    /// is (a front-runner stored the same bytes). Each part is one transaction under EIP-7825's 2^24 regular gas (ML-DSA-44
+    /// one part, ML-DSA-65 two, ML-DSA-87 three: `PqUA.mldsaParts`; `UARegistryPq.t.sol` pins each). Without a precompile `register` needs every part
+    /// first (`UAKeyNotCached`, CTR-UA-23).
     /// Reverts `UAKeyCache(kind)` for a kind other than ML-DSA, a disabled kind, a part past the last, or a verifier
     /// that uses a precompile; `UAKeyData` for a key of the wrong length.
     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua) {
         UAStore.Layout storage s = UAStore.layout();
         address v = address(uint160(UARegistryCoreLib._cfgKind()));
-        if (
-            (kind != UAKinds.MLDSA44 && kind != UAKinds.MLDSA65) || v == address(0) || part >= _ekParts(kind)
-                || MldsaVerifier(v).PRECOMPILE() != address(0)
-        ) revert IUARegistry.UAKeyCache(kind);
+        if (part >= PqUA.mldsaParts(kind) || v == address(0) || MldsaVerifier(v).PRECOMPILE() != address(0)) {
+            revert IUARegistry.UAKeyCache(kind);
+        }
         ua = abi.decode(_core(abi.encodeWithSelector(UARegistryCoreLib.keyUa.selector, kind, pk)), (bytes32));
         if (s.ekPtr[ua][part] != address(0)) return ua;
         address ptr = SSTORE2.write(MldsaVerifier(v).expandedKeyPart(pk, part));
         s.ekPtr[ua][part] = ptr;
         emit IUARegistry.UAKeyCached(ua, kind, part, ptr);
-    }
-
-    function _ekParts(uint16 kind) private pure returns (uint256) {
-        return kind == UAKinds.MLDSA44 ? 1 : 2;
     }
 
     // ----- the PQZ proof later (UA8-D8, P8) and the PQZ key versions later (ruling A1-I1; group 3g) -----
@@ -468,13 +466,16 @@ library UARegistryAuxLib {
     }
 
     /// Where slot 0x0142 has a verifier: `R_REG` over the scoped message (`UAPoP`), then one owner per proven key across every
-    /// record space (K3-3 "never the registry key"; `UAKeyInUse`), `keyOwner`, `proven`. False without the verifier.
+    /// record space (K3-3 "never the registry key"; `UAKeyInUse`), `keyOwner`, `proven`. False without the verifier, and
+    /// (owner 2026-11-15, Codex U4h-1, CTR-PQZ-30's Change) for a key of another set than this build's (`PqzSet.PK`): the
+    /// verifier checks its own set only, so such a proof is stored unproven, `proven` false and `UAPqzScopedPopStored` with
+    /// `CHECKED_NONE`, for the off-chain check of CTR-PQZ-30; no on-chain path takes it as checked.
     function _scopedProve(bytes32 ua, address scope, uint64 version, bytes memory key, bytes calldata pqzPop)
         private
         returns (bool)
     {
         uint256 cfg = UARegistryCoreLib._cfgPqz();
-        if (uint160(cfg) == 0) return false;
+        if (uint160(cfg) == 0 || key.length != PqzSet.PK) return false;
         bytes32 h = UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key);
         bytes32 m = UAKinds.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_PQZ_SCOPED_KEY,
             UAKinds.pqzScopedKeyDigest(ua, _class(scope), _chainUid(), scope, version, h));
@@ -526,13 +527,28 @@ library UARegistryAuxLib {
         (k.scheme, k.mlkemEk, k.x25519) = (uint8(pk[0]), UAStore.cut(pk, 1, 1568), bytes32(UAStore.word(pk, 1569)));
     }
 
-    function pqzScopedCount(address scope) external returns (uint256) {
-        return UAStore.layout().scopedCount[scope];
+    /// Codex U4h-2 (owner 2026-11-15): a scope's holder list follows the scoped key reads' forwarding (`_away`): on a registry that
+    /// is not the PQZ host (slot 0x0142 empty) in front of a predecessor, the predecessor's list first, then this registry's own.
+    function _scopedFrom() private view returns (address p) {
+        if (uint160(UARegistryCoreLib._cfgPqz()) == 0) p = UARegistryCoreLib._pred();
+    }
+
+    function pqzScopedCount(address scope) external returns (uint256 n) {
+        address p = _scopedFrom();
+        if (p != address(0)) n = IUARegistry(p).pqzScopedCount(scope);
+        n += UAStore.layout().scopedCount[scope];
     }
 
     function pqzScopedAt(address scope, uint256 i) external returns (bytes32) {
-        if (i >= UAStore.layout().scopedCount[scope]) revert IUARegistry.UAIndex(UAKinds.PQZ_MLWE, i);
-        return UAStore.layout().scopedAt[scope][i];
+        address p = _scopedFrom();
+        uint256 j = i;
+        if (p != address(0)) {
+            uint256 m = IUARegistry(p).pqzScopedCount(scope);
+            if (j < m) return IUARegistry(p).pqzScopedAt(scope, j);
+            j -= m;
+        }
+        if (j >= UAStore.layout().scopedCount[scope]) revert IUARegistry.UAIndex(UAKinds.PQZ_MLWE, i);
+        return UAStore.layout().scopedAt[scope][j];
     }
 
     function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version,
@@ -677,6 +693,34 @@ library UARegistryAuxLib {
         if (!UARegistryCoreLib._listedHere()) return IUARegistry(UARegistryCoreLib._pred()).uaAt(kind, i);
         if (i >= UAStore.layout().uaCount[kind]) revert IUARegistry.UAIndex(kind, i);
         return UAStore.layout().uaAt[kind][i];
+    }
+
+    // ----- moved from `UARegistry` (T66b 3.1b), then from `UARegistryCoreLib` (owner 2026-11-15, D1): a read off the hot path, run by
+    // `_libView` -----
+
+    function registrationOf(bytes32 ua)
+        external
+        returns (uint16 kind, bytes memory keyData, IUARegistry.UAAttrs memory attrs, bytes memory pop, bytes memory pqzPop)
+    {
+        if (UARegistryCoreLib._elsewhere(ua)) {
+            (kind, keyData, attrs, pop, pqzPop) = IUARegistry(UARegistryCoreLib._pred()).registrationOf(ua);
+            // A5-c2 / A6-I1: gen 1's `register` key (version 0) proven here, its proof stored here
+            if (attrs.pqzKey.length != 0 && pqzPop.length == 0 && !UAStore.layout().pqzKey[ua][0].added) {
+                pqzPop = SSTORE2.readChunks(UAStore.layout().pqzPop[ua][0]);
+            }
+            return (kind, keyData, attrs, pop, pqzPop);
+        }
+        IUARegistry.Record memory r = UAStore.layout().records[ua];
+        kind = r.kind;
+        if (kind == 0) return (kind, keyData, attrs, pop, pqzPop);
+        (keyData, pop) = UAStore.registration(ua, r);
+        UAStore.KemCommit memory c = UAStore.layout().kemCommit[ua];
+        if (c.kemPkHash != 0) (attrs.kem.scheme, attrs.kemPkHash) = (c.scheme, c.kemPkHash); // the committed form
+        else (attrs.kem,) = UAStore.kemAt(ua, 0); // the register KEM key is version 0
+        UAStore.PqzKey memory k = UAStore.layout().pqzKey[ua][0];
+        if (k.added) return (kind, keyData, attrs, pop, pqzPop); // A4-c3: an added key is no `register` argument
+        (attrs.pqzKey, attrs.pqzPopHash) = (SSTORE2.read(k.ptr), UAStore.layout().pqzPopHash[ua][0]);
+        pqzPop = SSTORE2.readChunks(UAStore.layout().pqzPop[ua][0]);
     }
 
     // ----- moved from `UARegistry` (T66b 3.1b): a read off the hot path, run by `_libView` -----

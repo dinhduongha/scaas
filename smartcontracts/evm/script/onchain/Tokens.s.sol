@@ -188,8 +188,10 @@ contract Tokens is OnchainBase {
         // ML-DSA-65, CTR-UA-39's verifyCached); a FIPS-key verify does not fit the kind's verify cap
         // each asks a fixed 56 M (under 60 M): the fork's estimate undershoots regular + state gas (EIP-8037)
         vm.startBroadcast(k1);
-        IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 0);
-        IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 1);
+        if (_mldsaCache(ML65)) { // 3zh: the cache path only (a precompile verifier refuses the cache)
+            IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 0);
+            IUARegistry(registry).cacheExpandedKey{gas: 56_000_000}(ML65, pk, 1);
+        }
         uaM = IUARegistry(registry).register{gas: 56_000_000}(ML65, pk, none, pop, "");
         vm.stopBroadcast();
         require(uaM == ua && IUARegistry(registry).kindOf(ua) == ML65, "ML-DSA UA");

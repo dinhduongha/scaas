@@ -66,7 +66,7 @@ mkdir -p "$OUTD"
 # router ops, the holder entries with the chain word; was pqz-three-keys step 7c's), never an earlier list
 [ -f "$OUTD/coverage.json" ] || cp runs/2026-11-15-burner-wrap-caps-entries/coverage.json "$OUTD/coverage.json"
 LOG=$OUTD/matrix-$tgt.log
-GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers pqchat rescue pqzkeys pqzwallet views wraplimits}
+GROUPS=${MATRIX_GROUPS:-tokens gov dex liquidity misc zether pq pqoff verifiers mldsaalt pqchat rescue pqzkeys pqzwallet views wraplimits}
 T=$(mktemp -d)
 A= CP= P= STAGE=setup
 CS=$(cd ../../pqz-core/nethermind/chain && pwd)
@@ -286,6 +286,10 @@ if [ -n "$SCOPE" ]; then
       step "/$g" "" "" ../../scripts/capped env FOUNDRY_OUT="${EVM_OUT:-out/t66b-e2e}" FOUNDRY_CACHE_PATH=cache/t66b-e2e \
         forge build src test/helpers/Mocks.sol script/onchain/OnchainForwarder.sol || fail "forge build of e2e.py's artifacts"
       say "/$g" "compiled (${SECS}s)" ;;
+    mldsaalt)  # round 3zh (MD-8): the throwaway registry of the opposite MLDSA_PRECOMPILE mode (MldsaVerifier for pq_verifiers.py too)
+      step "/$g" "" "" ../../scripts/capped forge build src script/onchain/MldsaAlt.s.sol --out out/onchain-mldsaalt \
+        --cache-path cache/onchain-mldsaalt || fail "forge build MldsaAlt.s.sol"
+      say "/$g" "compiled (${SECS}s)" ;;
     rescue)
       step "/$g" "" "" ../../scripts/capped forge build src script/onchain/Rescue.s.sol --out out/onchain-rescue \
         --cache-path cache/onchain-rescue || fail "forge build Rescue.s.sol"
@@ -342,6 +346,10 @@ for g in $GROUPS; do
     fi ;;
   verify) verify verify; continue ;;
   verifiers) step "/$g" "$RPC" "" python3 -I script/onchain/verifiers.py "$tgt" "$RPC" || r=1 ;;
+  # round 3zh (MD-8): precompile against cache on this chain, a throwaway registry in the opposite MLDSA_PRECOMPILE mode
+  mldsaalt)
+    step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" ONCHAIN_GAS_MULTIPLIER="${ONCHAIN_GAS_MULTIPLIER:-130}" \
+      sh script/onchain/mldsaalt.sh || r=1 ;;
   # the RescueVault (CTR-GOV-25): its admin and rescuer test keys, by anvil_setStorageAt (local) or the genesis alloc
   # (scaas-testnet, NET-EVM-14); elsewhere its admin is the real dev admin (rescue.sh)
   rescue)

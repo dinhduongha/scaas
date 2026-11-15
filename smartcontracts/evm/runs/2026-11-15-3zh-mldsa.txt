@@ -1,0 +1,39 @@
+Round 3zh-mldsa (TODO 3zh; owner 2026-11-15; spec docs/superpowers/specs/2026-11-15-mldsa-precompile-cache.md, revised after
+the Fable review). Forge 1.8.5, solc 0.8.37, Amsterdam, isolate; regular = lastCallGas x 64/63 where stated. UNAUDITED.
+Full output in git-ignored logs (the forge, matrix and mutant logs of this run); this file holds the summary only.
+
+step | commit | rc | counts
+spec | a2226a24e, bb78dd936 | - | MD-1 .. MD-15, section 7 (Revision 1)
+contracts + tests + vectors | 643113ef7, 4a644e34f | - | -
+deploy + matrix scripts | 37ae520e2 | - | -
+docs | 7acb60ace | - | -
+D1 registrationOf to UARegistryAuxLib (owner 2026-11-15) | c6ea366ff | - | -
+U4h-1 another set's scoped proof stored unproven (Codex, owner 2026-11-15) | 352adc58f | - | -
+U4h-2 successor scoped holder list forwards (Codex, owner 2026-11-15) | 967576671 | - | -
+earlier per-set runs (at-set sensitive, 4a644e34f) | 4a644e34f | - | STOPPED as superseded (owner order 2026-11-15): n2048 1436 passed / 1 failed, n2560 1429 / 2, n2816 stopped at its build; the gates below ran once on the final tree
+matrix local (anvil; verifiers mldsaalt misc tokens; table-local.txt, coverage.json in runs/2026-11-15-3zh-mldsa-matrix/) | 4a644e34f | 0 | deploy 112 txs; verifiers calls 32/32, negatives 32/32; mldsaalt txs 35/35, negatives 5/5 (MLDSA_PRECOMPILE=off side: anvil has no ML-DSA precompile, so the on side is not run, by name); misc txs 103/103, negatives 25/25; tokens txs 536/536, negatives 13/13 (not re-run after D1 / U4h-1 / U4h-2: registry-internal changes, covered by the forge gates)
+forge test, default set n2304-kmax4096, per test dir | 967576671 | 0 | ua 729, pqz 505 (4 skipped), governance 599, v2 636, as 357, metatx 400, zether 336 (4 skipped), merge 119, modules 35, liquidity 82 (1 skipped), pqchat 99, wrap 117, pqzh 42, research 93 (6 skipped), account 58, confidential 5, factory 2, fork 0 (1 skipped), hedera 20, p6f 4, wallet 100, top-level 29
+forge test --isolate test/ua/{UAGas,UARegistryGroups} | 967576671 | 0 | 22 passed
+size gate (scripts/size_gate.py) | 967576671 | 0 | 170 contracts; UARegistryCoreLib 33,796 B (line 35,694 B), UARegistryAuxLib 33,726 B (notice line 33,903 B: 177 B left), UARegistry 32,334 B
+docs_check check / test_docs_check | 967576671 | 0 | 0 errors, 7 warnings (line budgets); ok
+mutants (runs/2026-11-15-3zh-mldsa-mutants.py) | 967576671 | 0 | 17/17 caught (M14-M17 U4h-1 / U4h-2), sources restored
+at-set sensitive n2048-kmax1024 | 967576671 | 1 | 1441 passed, 1 failed (UA8 T_GAS registrationOf msig-pq gen 2: D1's per-set pin, re-pinned in 5c3668fa4), 3 skipped; U4h-1 / U4h-2 tests 5/5
+at-set sensitive n2560-kmax16384 | 967576671 | 1 | 1434 passed, 2 failed (UA8 T_GAS as n2048, re-pinned; test_debitMinGas_isTheCheapestLogDebit "the measurement rounded up, no more: 1055 >= 1000": the debit got cheaper, set.toml debit_min_gas is the owner's, not changed), 9 skipped; U4h tests 5/5
+at-set sensitive n2816-kmax65536 | 967576671 | 1 | 1423 passed, 1 failed (UA8 T_GAS as n2048, re-pinned), 21 skipped; U4h tests 5/5
+UA8 T_GAS at the three sets after the re-pin | 5c3668fa4 | 0 | test_T_GAS_* 3/3 at each of n2048, n2560, n2816 (6 pins moved, in the commit)
+Measured (forge):
+- uncached FIPS-key verify, its own tx, regular: mldsa44 11,632,672; mldsa65 19,299,937 (over 2^24); mldsa87 32,553,838 (over 2^24)
+- verifyCached, its own tx, regular: 4,229,844 / 5,973,619 / 8,858,365
+- worst accepting input (pq_kat row, pq_signatures PoP + 2 signatures, mldsa_cache.json's 16-signature batch and its
+  exactly-omega-hint signature), least working gas with cold pointers: 44 4,187,757; 65 5,910,464 (omega row); 87 8,772,934
+  (omega row) -> caps 4,250,000 / 5,950,000 / 8,850,000 (least multiple of 50,000 at least 30,000 above)
+- cache part tx regular (lastCallGas x 64/63) / state: 44 8,769,083 / 31,715,370; 65 6,593,807 / 23,783,850 and 9,225,226 /
+  33,282,090; 87 9,194,507 / 33,184,170, 9,194,372 / 33,184,170, 9,681,280 / 34,848,810
+- cache part least working gas limit, regular share (DeployGas, + 100,000 rounded up to 10,000): 44 9,630,460; 65 7,190,993,
+  10,125,976; 87 10,082,105, 10,081,942, 10,621,914; largest part total x 1.05 = 47,857,750 (87 part 2)
+- register after the cache, regular: 4,418,232 / 6,184,131 / 9,092,254
+- MD-13 single-key bound at the cached mldsa87 cap 8,850,000: 16,372,788 / 16,588,788 / 16,801,788 / 17,042,788 at the four
+  sets (2^24 = 16,777,216): a PQZ holder at n2048-kmax1024 and n2304-kmax4096 only
+- PQZ_DEBIT_MIN_GAS form at n2304-kmax4096: 7,515,239 -> 7,515,096 (pin 7,516,000 unchanged)
+- signed rollover with a cached mldsa87 holder (stand-ins at the worst accepting gas), n2304-kmax4096: mtxExecute 14,677,095 (n 1)
+  .. 16,038,715 (n 16), under 2^24, over 0.75 x 2^24; uaExecute with a cached mldsa65 fee UA 20,632,756 .. 21,994,375
