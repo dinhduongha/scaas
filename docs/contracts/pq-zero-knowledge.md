@@ -2873,7 +2873,10 @@ transfers move for every class.
   `Refused` (K3-7 step 6), as are `seal`'s own refusals. In memory and caller-owned, at most 4,096 seeds, then `Full`
   (never evicts); every error gives no opening; it keeps a SHA3-256 hash of `seed_enc` only. Caller rule: one `Sealer`
   per wallet process, for its life. Limit: one process; a restart forgets, and across processes
-  [CTR-PQZ-19](#CTR-PQZ-19)'s fresh salt stays the guarantee. Openings are byte-identical to `seal`'s, which the holder
+  [CTR-PQZ-19](#CTR-PQZ-19)'s fresh salt stays the guarantee: a repeat needs the same counter and the same 16 random
+  salt bytes (about 2^-128 with a working RNG). No deterministic per-credit `seed_enc` (owner 2026-11-15): it is already
+  per credit and randomized; without the salt a re-proof at one counter with another amount would reuse `r`, and the
+  amount in `info` would make the sender remember amounts. Openings are byte-identical to `seal`'s, which the holder
   check keeps using. **Library API only: no wallet builder uses it yet** (clientkeys `sealOpening`, ua-rs: the
   clients' round).
 

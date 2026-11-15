@@ -89,9 +89,9 @@ GCM key and nonce (Codex U2 point 2). The same repeat also reuses the PQZ random
 (CTR-PQZ-19), so the guard keys on `seed_enc`, not only on `seed_leg`.
 
 **Change** (`ffi/src/opening.rs`, as designed):
-- **Repeat:** one `seed_enc` presented for a second, different credit. Credit fingerprint =
-  `keccak256("SCAAS-PQZ-SEAL-GUARD-V1" ‖ chainUid ‖ token ‖ toUA ‖ keccak256(pk_t) ‖ P(u) ‖ P(v_t) ‖ [P(v_a)])`. Not a
-  repeat: the recipient's and the auditor's opening of the same credit, or the same opening again.
+- **Repeat:** one `seed_enc` presented for a second, different credit (fingerprint: CTR-PQZ-40; widened by the Fable
+  review F-2, below). Not a repeat: the recipient's and the auditor's opening of the same credit, or the same opening
+  again.
 - **Scope:** `Sealer`, caller-owned, in memory; no global state, nothing persisted; at most `SEALER_CAP` = 4,096 seeds,
   then it refuses (never evicts).
 - **Where:** `Sealer::seal_leg(seed_enc, role, credit)` takes the party from the credit (`to`, or its auditor), derives
@@ -104,8 +104,7 @@ GCM key and nonce (Codex U2 point 2). The same repeat also reuses the PQZ random
   clients' round.
 
 **Stated limit (owner 2026-11-15):** it catches a repeat within one process only; a restart forgets. Across processes
-the guarantee stays CTR-PQZ-19's fresh salt with CTR-PQZ-38 (release builds take no caller salt). A deterministic
-per-credit `seed_enc` would close it fully but changes the format: a group 2 candidate, not now.
+the guarantee stays CTR-PQZ-19's fresh salt with CTR-PQZ-38 (release builds take no caller salt). Rationale (owner 2026-11-15): a deterministic per-credit `seed_enc` will not be done. `seed_enc` is already per credit and randomized (CTR-PQZ-19: `HKDF-SHA256(ikm = pqzKeySeed, info = chainUid ‖ token ‖ fromUA ‖ be32(sendCounter) ‖ salt)`, a fresh 16-byte random salt per build, published in the payload and the statement header); dropping the salt would reuse `r` on a re-proof at the same counter with another amount (leaking `Δ·(m − m′)`), which is why the salt exists; the amount in `info` instead would make the sender remember amounts, against the design. A repeat needs the same counter and the same 16 random bytes (about 2^-128 with a working RNG); the `Sealer` covers the residual within one process.
 
 **Test.** `sealer_refuses_a_repeated_seed_enc`: control (O_t, O_a equal to `seal`'s), the same opening again;
 `SeedReused` for another amount, another recipient UA, another token; the first credit still seals after the refusals;
@@ -138,7 +137,7 @@ handler logged inside the `catch`, so a throwing logger escaped the sibling `cat
 line (Keccak, formatting), wrote stderr and the logger before `Environment.Exit`, and the caller formatted `e.Message`
 first. Any of these could throw and reach Nethermind, which makes a failed call of it.
 
-**Order of operations on a fault (both precompiles, as built):**
+**Order of operations on a fault (both precompiles, as built):** (amended by the Fable review F-1: the watchdog now starts before step 3's diagnostic; its bound is `PQZ_EXIT_WATCHDOG_MS`, F-7)
 1. The whole operation is inside one boundary: ML-DSA's output allocation, length check, slicing, import and verify
    (PQZ's `Run` already wrapped `RunUnguarded`, allocation included).
 2. `catch (Exception e)` (PQZ: `when (e is not DllNotFoundException)`, unchanged) calls `NodeFault(where, e, input)`;
@@ -180,6 +179,24 @@ CTR-PQZ-40's normative text. `docs_check.py check`: 0 errors.
 **Mutants** (`plugin_mutants.py`): see the gate table. The output allocation before the `try` has no injection point; it
 is closed by structure.
 
+## Fable review of group 1 (2026-11-15; 0 P0, 0 P1, 3 P2, 8 P3; owner: fix all)
+
+Report kept outside the repository (Fable 5.2 high, `ebd6eb4a9..1d523b890`). Each finding → change → evidence.
+
+| Finding | Change | Evidence |
+|---|---|---|
+| F-1 (P2) a diagnostic that blocks never reaches the watchdog | `Fault` calls `StartWatchdog()` first, then the `try` (diagnostic), then `ExitNow()` from the `finally` | children `blocking-stderr`, `blocking-logger` (a writer / logger that sleep forever): ended by the watchdog after ≥ 3,000 ms (bound via `PQZ_EXIT_WATCHDOG_MS`), the watchdog line, never a word; mutant F1b (watchdog started in the `finally`, after the diagnostic): red, both children killed by their own bound |
+| F-2 (P2) the `Sealer` fingerprint missed inputs | fingerprint = `chainUid ‖ token ‖ P(u) ‖ party(to) ‖ [party(auditor)] ‖ P(u_f) ‖ P(v_f)`, `party = ua ‖ be8(keyVersion) ‖ keccak(pk) ‖ keccak(kemPk) ‖ P(v)` (each reader's AAD inputs; both roles of one credit share it); `seal_leg` takes `own_u`, `own_v` | new `SeedReused` cases, both roles each: another new balance (`v_f` only; the leg unchanged, asserted), recipient key version, auditor key version, auditor UA; mutants Se4 (own part removed), Se5 (key versions removed), Se6 (auditor UA replaced): red |
+| F-3 (P2) docs: the `Sealer` read as active; decisions entry structure | CTR-PQZ-40 normative text and decisions entry: "library API only: no wallet builder uses it yet (clientkeys `sealOpening`, ua-rs: the clients' round)"; decisions CTR-PQZ-40: Status corrected (contract side SPECIFIED, `pqz-ffi`'s opening code BUILT), the Change moved after Source | docs_check 0 errors |
+| F-4 (P3) stack residues (C, Rust) | C: `rej_standard` / `rej_bimodal` / `rej_onetime` clear `t1` / `t2`; `lnp_tbox_prove` clears `tmp`. Rust: the same dots cleared in `rand/rejection.rs`; `t` (tbox) and `g1` (quad) in `Wiped`. `abdlop_prove` has no caller: not touched | no proof byte change: kat, tbox, sv, fnv (C = Rust = wasm32), rust (gate rows below) |
+| F-5 (P3) AES / GHASH key schedule, X25519, hash states | `aes-gcm` `zeroize`, plus `aes` / `ghash` / `polyval` with `zeroize` (the versions aes-gcm resolves, direct deps under `prove`), `curve25519-dalek` `zeroize`; the hash states (`combine`, `coins`, `kek`, the `Sealer` key) named in the module doc as not reached | lockfiles of pqz-ffi, offchain, wallet-wasm, wasm, fresh-proofs, the EVM wallet script: only `zeroize` dependency edges and pqz-ffi's three new direct deps, no new package or version; opening.json byte-identical (vectors row) |
+| F-6 (P3) the PQZ input-panic warning unguarded | `WarnPanic` swallows a logger failure as `WarnCrypto` does: the word stays `…00`; Run's catch is now reached through a call seam (`Run(input, s, CallFn)`, as `MlDsa.VerifyFn`) | child `panic-logger` (the panic hook + a throwing logger): word `…00`, exit 0; the PQZ `message` child through the seam: exit 120 with the fallback line; mutant F6 (warning unguarded): red |
+| F-7 (P3) watchdog in a real node; bound; core dumps | the bound is `PQZ_EXIT_WATCHDOG_MS` (1 .. 600,000, default 10,000; local, consensus-irrelevant); ops.md and RUNBOOK: keep core dumps off on sealers; `watchdog_drill.sh` | drill on a local copy (2026-11-15T09:27Z): the signer, producing block 15, logged `PQZ-NODE-FAULT ML-DSA-65 InvalidOperationException: drill` and **exited 120 after 146 ms**; the watchdog did not fire; the follower kept running (the block was never sealed). So in a node the usual outcome is 120; 134 only when a shutdown handler or a diagnostic blocks (the Harness children) |
+| F-8 (P3) `Full` is permanent; the seed is not checked against the credit | the caller rule next to `SEALER_CAP` (one `Sealer` per process for its life; `Full` is permanent; across processes the fresh salt); `seal_leg` refuses (`Refused`) a `seed_enc` whose leg expansion does not give `c.u` (one extra `Enc`, K3-7 step 6; its masks cleared) | case "seed_enc not the credit's": `Refused`, and the refusal takes no slot; the `Full` case now builds a real credit per seed; mutant Se7 (the check removed): red |
+| F-9 (P3) `engine-pqz.json` and the hand-run check | `matrix.sh`'s `COPY_ENGINE` default (that line only), RUNBOOK's `E=` and the spec's cite → `engine-pqz-provisional-n2304.json` until the next calibration (owner's go); `SpecTests.Engine_pqz_json_passes_the_id_check_or_is_refused_by_name`; `chain/check-provisional-ids.py` as a step of the `pqz` CI job | test green (refused by name today); the script: 4 files ok, `engine-pqz.json` reported refused (`046859a8`, `ef1ffbcb`); control: the pre-fix n2048 file → FAIL, rc 1 |
+| F-10 (P3) wipe control reach | `name_buf` (a no-op without `test-hooks`) names every `Wiped` heap buffer of the prover: s3 / s4, y3 / y4, s3c / s4c, z3v / rs3 / z4v / rs4, the `intvec` / `coeffvec` copies, sv, quad's y1 .. w0, s1 / m / s2 / tA2, the digits; `wipe.rs` also on an R_TXS split row (fixture moved to `tests/common/split_fx.rs`, shared with `split.rs`) | R_REG 41–97, R_TXS 64–140 named buffers per prove, 0 dirty; mutants W-a, W-b (z3v, z4v in place), W-c, W-d (the IntVec and PolyVec wipes emptied): 4 / 4 red |
+| F-11 (P3) one place per rule | exit-code values only in CTR-PQZ-10 (pq-zero-knowledge.md); ops.md and RUNBOOK say "134 with the watchdog line: treat as 120" and link; the fingerprint text only in CTR-PQZ-40, decisions links it | docs_check 0 errors |
+
 ## Gate
 
 Affected steps only (owner: the full gate runs once, later, on the final core tree). Logs are local, git-ignored.
@@ -207,6 +224,14 @@ Affected steps only (owner: the full gate runs once, later, on the final core tr
 | plugin full suite, with the PQZ-seam children | c3bb8a6a (tree) | 0 | 66 / 66 at n2304-kmax4096 |
 | plugin mutants (ML-DSA tests + PQZ-seam children) | c3bb8a6a (tree) | 0 | W1 red (30 s bound); F1 red (6 failed: 3 ML-DSA, 3 PQZ); C1 red; P1 `PqzPrecompile.Run` without its catch: red (`message`: the exception escapes); 4 / 4 |
 | docs_check | c3bb8a6a (tree) | 0 | 0 errors (7 warnings, 16 notes, unchanged); test_docs_check ok |
+| **Fable fixes:** kat, tbox, sv, fnv, vectors, ffi, rust, fuzz | e33cfc75 | 0 | gate 3zh-core-g1c PASS (summary `runs/gate/3zh-core-g1c-summary.txt`): KAT 19 / 19; fix checks ok; C = Rust = wasm32 on 16 relations; `pqz-vectors --check` 18 files same, pqz_kat ok, tamper 212 / 225, wasm32 replay 63 cases 0 fails; ffi 33 passed, native = wasm32, wallet-wasm 8 / 8; rust 22 binaries 69 passed 0 failed (wipe on R_REG and R_TXS, split with the C oracle); 4 fuzz targets 60 s, no FINDING |
+| plugin full suite (Fable fixes) | a19517e6 | 0 | 70 / 70 at n2304-kmax4096 |
+| plugin mutants (Fable fixes) | a19517e6 | 0 | W1, F1, C1, P1, F1b, F6: 6 / 6 red (F6 re-run after its first form did not compile: the runner now reports a build failure as INVALID, not GREEN) |
+| opening + Sealer mutants (Fable fixes) | 6cc5a7f5 | 0 | Ma–Md, Se1–Se7: 11 / 11 red |
+| wipe mutants | 57a9ac85 | 0 | W-a, W-b, W-c, W-d: 4 / 4 red |
+| check-provisional-ids.py | a19517e6 | 0 | 4 files ok; control (pre-fix n2048 file): rc 1 |
+| watchdog drill (local copy) | e33cfc75 | 0 | signer exit 120 after 146 ms; watchdog not fired; follower running |
+| docs_check | this commit | 0 | 0 errors |
 
 Not run here (not touched, or the full gate's): ct, ub, diff, cargo (pqz-stmt, Ligero), xcheck, the other three sets
 (the plugin's full suite at n2304-kmax4096 only).
