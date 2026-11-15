@@ -1,20 +1,27 @@
 #!/bin/bash
 # Run a heavy command (cargo/forge/anvil/npm/odoo gate) in its own systemd
 # scope capped at 4 GB, so systemd-oomd kills this command, not the terminal.
-# At most CAPPED_SLOTS (default 2, owner 2026-10-15; was 1 after repeated OOM)
-# capped commands run machine-wide; the rest wait for a free slot.
+# At most CAPPED_SLOTS (default 3, owner 2026-11-10; was 2 from 2026-10-15, 1 after repeated OOM)
+# capped commands run machine-wide; the rest wait for a free slot, saying so once on stderr
+# (owner 2026-11-15: a wait is never silent; `fuser ~/.cache/r3-locks/heavy*` names the holders).
 # Slot 1 is the historical lock file `heavy`, so `fuser heavy` still finds a job.
-slots=${CAPPED_SLOTS:-2}
+slots=${CAPPED_SLOTS:-3}
 # CAPPED_MEM overrides the per-job cap (default 4G; owner 2026-10-19: fuzz campaigns may run 3 at once at 3G).
 dir="$HOME/.cache/r3-locks"
+said=
 while :; do
   for ((i = 1; i <= slots; i++)); do
     f="$dir/heavy"; ((i > 1)) && f="$dir/heavy.$i"
     exec {fd}>"$f"
     if flock -n "$fd"; then
+      [ -z "$said" ] || echo "[capped] slot $i free after $((SECONDS - said)) s: $1" >&2
       exec systemd-run --user --scope --quiet -p MemoryMax="${CAPPED_MEM:-4G}" -p MemorySwapMax=2G -- "$@"
     fi
     exec {fd}>&-
   done
+  if [ -z "$said" ]; then
+    said=$SECONDS
+    echo "[capped] waiting for a free slot: all $slots busy (fuser $dir/heavy*): $1" >&2
+  fi
   sleep 2
 done
