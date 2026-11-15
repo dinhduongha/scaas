@@ -1,21 +1,28 @@
 #!/bin/sh
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 # Group 3l T104 (spec 2026-11-10-wrap-limits.md §11), group `wraplimits` of the on-chain matrix: WrapLimits.s.sol in seven
-# forge runs on one node (setup, p1-p6), the chain's clock set between them to the time the previous run wrote
-# (evm_setNextBlockTimestamp + evm_mine: a forge script's vm.warp moves only its own simulation), each run's negatives by
-# eth_call at its end (coverage.py neg), then the records, the trace, the coverage of the contracts it touched (their
-# static views by eth_call too) and the summary (step | commit | rc | counts, every row with its gas and hash). Local
-# target only: the windows, the notice and the decay need a clock the run moves (another target: listed as not run).
-# From smartcontracts/evm, through scripts/capped, in the foreground (matrix.sh sets the environment):
+# forge runs on one node (setup, p1-p6), each started at or after the time the previous run wrote, plus the time that
+# run's broadcast took (its transactions land after its simulation's time): on the local anvil the clock is set to it
+# (evm_setNextBlockTimestamp + evm_mine: a forge script's vm.warp moves only its own simulation); on a remote chain the
+# run waits for a block at that time (bounded: the time needed + 300 s, then a named FAIL; a line every 30 s). Each
+# run's negatives by eth_call at its end (coverage.py neg), then the records, the trace (local, or ONCHAIN_TRACE=1), the
+# coverage of the contracts it touched (their static views by eth_call too) and the summary (step | commit | rc |
+# counts, every row with its gas and hash).
+# WRAPLIMITS_PROFILE (owner 2026-11-15; read by setup, kept in the state file): full (default; notice 1 hour, windows
+# 1 hour / 1 day, decay 2 days) or short (the SCaaS testnet: notice 5 min, windows 5 min / 15 min, decay 1 day; on anvil
+# a block every 10 s, the testnet's pace). WRAPLIMITS_PHASES (default all seven): the runs of this call, in order; a
+# list without setup continues the state of an earlier call (deployments/wraplimits-<net>-*, the same MATRIX_OUT), so
+# the decay runs p5 (H/2: 12 h after p2 on short) and p6 (H) can run later; the phases left are written to
+# $OUTD/pending.txt with the earliest start of the next one.
+# From smartcontracts/evm (matrix.sh sets the environment; a local target through scripts/capped, a remote one under
+# matrix.sh's memory scope, compiled first: ONCHAIN_REMOTE=1, forge must skip compilation):
 #   NET=local RPC=<url> DEPLOY_JSON=deployments/<key>.json ONCHAIN_K1=… ONCHAIN_K2=… ONCHAIN_K3=… sh script/onchain/wraplimits.sh
 # Output: $MATRIX_OUT/wraplimits/ (default runs/<today>-matrix/wraplimits; summary.txt, records-<net>-wraplimits.jsonl, coverage.json,
 # table-<net>.txt; the log git-ignored). Keys are never printed.
 set -eu
 : "${NET:?}" "${RPC:?}" "${ONCHAIN_K1:?}"
-if [ "$NET" != local ]; then
-  echo "not run: wraplimits on $NET (its windows, notice and decay need a clock the run moves: local only)"
-  exit 0
-fi
+REMOTE=${ONCHAIN_REMOTE:-0}
+PROFILE=${WRAPLIMITS_PROFILE:-full}
 OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix}/wraplimits # its own coverage list and table, under matrix.sh's run dir (MATRIX_OUT), else today's
 CHAIN=$(cast chain-id --rpc-url "$RPC")
 B=broadcast/WrapLimits.s.sol/$CHAIN
@@ -23,47 +30,120 @@ R=$OUTD/records-$NET-wraplimits.jsonl
 NEXT=deployments/wraplimits-$NET-next.txt
 SENDER=$(cast wallet address --private-key "$ONCHAIN_K1")
 L=$OUTD/wraplimits-$NET.log
-PHASES="setup p1 p2 p3 p4 p5 p6"
+ALL="setup p1 p2 p3 p4 p5 p6"
+PHASES=${WRAPLIMITS_PHASES:-$ALL}
+NEG=$OUTD/neg-$NET.jsonl # every run's negatives, kept between calls
+WL=$OUTD/wl-$NET.txt     # the views' read-back lines, kept between calls
+say() { echo "[$NET/wraplimits] $1"; }
 T=$(mktemp -d)
-trap 'rm -rf "$T"' EXIT INT TERM
+trap 'rm -rf "$T"' EXIT
+trap 'exit 1' INT TERM # stop on a signal (a long wait must end when stopped), then the EXIT cleanup
 mkdir -p "$OUTD"
-: > "$L"
-rm -f "$R" "$NEXT"
-# each block 1 s after the last, whatever the wall clock: a run writes the next start as its simulation's time + the
-# notice + 300 s, and a slow broadcast (--slow, one block per transaction) on a loaded machine outran that margin
-# (stacked gate: p1 at setup + 3,900 s, the releases usable at setup + 4,282 s, VersionNotYetUsable)
-cast rpc --rpc-url "$RPC" anvil_setBlockTimestampInterval 1 > /dev/null
-rc=0 runs=
+case $PROFILE in full|short) ;; *) say "FAIL WRAPLIMITS_PROFILE is full or short, not $PROFILE"; exit 1 ;; esac
+first=${PHASES%% *}
+if [ "$first" = setup ]; then
+  : > "$L"
+  : > "$WL"
+  : > "$NEG"
+  rm -f "$R" "$NEXT" "$OUTD/pending.txt"
+  for p in $ALL; do rm -f "$B/$p-latest.json"; done
+else
+  # a later call: the earlier one's state, its next start and its run dir
+  [ -s "$NEXT" ] && [ -s "deployments/wraplimits-$NET-state.json" ] && [ -f "$NEG" ] && [ -s "$WL" ] ||
+    { say "FAIL $first: no state of an earlier call ($NEXT, deployments/wraplimits-$NET-state.json, $NEG: the same MATRIX_OUT)"; exit 1; }
+  rm -f "$R"
+fi
+say "profile $PROFILE, phases $PHASES"
+if [ "$REMOTE" != 1 ]; then
+  # each block a fixed step after the last, whatever the wall clock (full: 1 s; short: 10 s, the SCaaS testnet's pace of
+  # ~2 Clique blocks per transaction, so the short windows see the testnet's spread); the broadcast's span is added to
+  # the next start either way (the stacked gate's slow --slow broadcast outran a fixed margin: VersionNotYetUsable)
+  cast rpc --rpc-url "$RPC" anvil_setBlockTimestampInterval "$([ "$PROFILE" = short ] && echo 10 || echo 1)" > /dev/null
+fi
+ts() { cast block latest --rpc-url "$RPC" -f timestamp; }
+utc() { date -u -d "@$1" '+%Y-%m-%d %H:%M:%S UTC'; }
+# remote: wait for a block at or after $1, bounded (the time needed + 300 s), a line every 30 s
+wait_for() {
+  now=$(ts)
+  [ "$now" -lt "$1" ] || return 0
+  dl=$(($(date +%s) + $1 - now + 300)) i=0
+  say "$p: waiting for a block at $1 ($(utc "$1")), $(($1 - now)) s"
+  while [ "$now" -lt "$1" ]; do
+    [ "$(date +%s)" -le "$dl" ] || { say "FAIL $p: no block at $1 ($(utc "$1")) by $(utc "$dl"), head at $now"; return 1; }
+    sleep 5
+    i=$((i + 5))
+    now=$(ts)
+    [ $((i % 30)) != 0 ] || say "$p: waiting for $1 ($(utc "$1")), $(($1 - now)) s left"
+  done
+}
+SLOW=--slow; [ "$REMOTE" != 1 ] || SLOW=
+. script/onchain/fee.sh
+rc=0 done_=
 for p in $PHASES; do
   if [ -s "$NEXT" ]; then
-    cast rpc --rpc-url "$RPC" evm_setNextBlockTimestamp "$(cat "$NEXT")" > /dev/null
-    cast rpc --rpc-url "$RPC" evm_mine > /dev/null
-    rm -f "$NEXT"
+    if [ "$REMOTE" = 1 ]; then
+      wait_for "$(cat "$NEXT")" || { rc=1; break; }
+    else
+      cast rpc --rpc-url "$RPC" evm_setNextBlockTimestamp "$(cat "$NEXT")" > /dev/null
+      cast rpc --rpc-url "$RPC" evm_mine > /dev/null
+    fi
+    mv "$NEXT" "$T/prev" # back if this run fails (a retry of the same phase)
   fi
-  echo "## wraplimits $p at $(cast block latest --rpc-url "$RPC" -f timestamp)" | tee -a "$L"
+  t0=$(ts) w0=$(date +%s)
+  echo "## wraplimits $p at $t0" >> "$L"
+  say "$p: forge at block time $t0 ($(utc "$t0")) …"
   tc=WrapLimits
   [ "$p" != setup ] || tc=WrapLimitsSetup
   rm -f "$B/$p-latest.json"
-  ONCHAIN_NET=$NET forge script script/onchain/WrapLimits.s.sol --tc "$tc" --sig "$p()" --rpc-url "$RPC" --broadcast --slow \
-    --sender "$SENDER" --disable-code-size-limit --out out/onchain-wraplimits --cache-path cache/onchain-wraplimits \
-    > "$T/$p.log" 2>&1 || rc=$?
+  remote_fee "$RPC" # a remote target: a fee with headroom (fee.sh)
+  ONCHAIN_NET=$NET WRAPLIMITS_PROFILE=$PROFILE forge script script/onchain/WrapLimits.s.sol --tc "$tc" --sig "$p()" \
+    --rpc-url "$RPC" --broadcast $SLOW --sender "$SENDER" --disable-code-size-limit --out out/onchain-wraplimits \
+    --cache-path cache/onchain-wraplimits > "$T/$p.log" 2>&1 || rc=$?
   cat "$T/$p.log" >> "$L"
-  sed -n 's/^  \(wl .*\)/\1/p' "$T/$p.log" | tee -a "$T/wl.txt"
+  if [ "$REMOTE" = 1 ] && ! grep -q 'No files changed, compilation skipped' "$T/$p.log"; then
+    say "FAIL $p: forge did not skip compilation (a remote run compiles under scripts/capped first)"
+    rc=1
+  fi
+  sed -n 's/^  \(wl .*\)/\1/p' "$T/$p.log" | tee -a "$WL" >> "$L"
   if [ "$rc" != 0 ]; then
+    say "FAIL $p: $(grep -E '^Error|revert|require' "$T/$p.log" | tail -1 | cut -c1-160)"
     tail -30 "$T/$p.log"
+    # the start of this phase again (the failed run may have written the next one's); a failed setup: none
+    if [ -f "$T/prev" ]; then mv "$T/prev" "$NEXT"; else rm -f "$NEXT"; fi
     break
   fi
-  runs="$runs $B/$p-latest.json"
+  # the next start written by the run (its simulation's time) + the span of its broadcast on chain
+  t1=$(ts)
+  if [ -s "$NEXT" ]; then
+    echo $(($(cat "$NEXT") + t1 - t0)) > "$T/next" && mv "$T/next" "$NEXT"
+  fi
+  done_="$done_ $p"
   python3 -I script/onchain/coverage.py --out "$OUTD" neg "$NET" wraplimits "$RPC" > "$T/neg.txt" 2>&1 || rc=1
   cat "$T/neg.txt" >> "$L"
-  grep '^BAD\|^negatives' "$T/neg.txt" || true
+  [ ! -f "$R" ] || { cat "$R" >> "$NEG"; rm -f "$R"; }
+  grep '^BAD' "$T/neg.txt" | sed "s/^/[$NET\/wraplimits] FAIL /" || true
+  n=$(python3 -I -c "import json, sys; print(len(json.load(open(sys.argv[1]))['receipts']))" "$B/$p-latest.json")
+  say "$p ok: $n tx, block time $t0 -> $t1, $(($(date +%s) - w0)) s$(grep '^negatives' "$T/neg.txt" | tail -1 | sed 's/^/, /')"
+  [ "$rc" = 0 ] || break
 done
+# the phases left after the last one run, and the earliest start of the next
+last=${done_##* } left= seen=
+for p in $ALL; do [ -z "$seen" ] || left="$left $p"; [ "$p" != "$last" ] || seen=1; done
+left=${left# }
+[ -z "$last" ] || rm -f "$OUTD/pending.txt"
+if [ -n "$last" ] && [ -n "$left" ] && [ -s "$NEXT" ]; then
+  echo "$left pending: ${left%% *} from $(cat "$NEXT") ($(utc "$(cat "$NEXT")"))" > "$OUTD/pending.txt"
+  say "$(cat "$OUTD/pending.txt")"
+fi
+# every run of this call and the earlier ones (their broadcast files; a call with setup removed the older ones)
+runs=
+for p in $ALL; do [ ! -f "$B/$p-latest.json" ] || runs="$runs $B/$p-latest.json"; done
 [ -n "$runs" ] || exit 1
-# the negatives' rows (appended run by run) after the transactions' (coverage.py forge writes the file anew)
-[ ! -f "$R" ] || mv "$R" "$T/neg.jsonl"
-python3 -I script/onchain/coverage.py --out "$OUTD" forge "$NET" "deployments/onchain-$NET-wraplimits.json" $runs
-[ ! -f "$T/neg.jsonl" ] || cat "$T/neg.jsonl" >> "$R"
-python3 -I script/onchain/coverage.py --out "$OUTD" trace "$NET" wraplimits "$RPC" >> "$L"
+# the negatives' rows (run by run) after the transactions' (coverage.py forge writes the file anew)
+python3 -I script/onchain/coverage.py --out "$OUTD" forge "$NET" "deployments/onchain-$NET-wraplimits.json" $runs >> "$L"
+[ ! -f "$NEG" ] || cat "$NEG" >> "$R"
+[ "${ONCHAIN_TRACE:-$([ "$NET" = local ] && echo 1)}" != 1 ] ||
+  python3 -I script/onchain/coverage.py --out "$OUTD" trace "$NET" wraplimits "$RPC" >> "$L"
 # the coverage of the contracts this group touched (their labels in its book), from this build
 python3 -I - "$NET" "$T/groups.json" << 'EOF'
 import json, sys
@@ -77,14 +157,15 @@ python3 -I script/onchain/coverage.py --out "$OUTD" views "$NET" "$RPC" >> "$L"
 python3 -I script/onchain/coverage.py --out "$OUTD" table --net "$NET" > "$OUTD/table-$NET.txt"
 # the summary: every row of every run (its label from the run's rows file, in send order; forge's own CREATE2 library
 # deploys listed apart), the gas by row type, the negatives; the records' `what` set to the row
-python3 -I - "$OUTD" "$NET" "$CHAIN" "$rc" "$(git rev-parse --short HEAD)" "$PHASES" "$T/wl.txt" << 'EOF'
+python3 -I - "$OUTD" "$NET" "$CHAIN" "$rc" "$(git rev-parse --short HEAD)" "$ALL" "$WL" "$PROFILE" << 'EOF'
 import collections, json, os, sys
-outd, net, chain, rc, commit, phases, wl = sys.argv[1:8]
-rows, libs = [], []
+outd, net, chain, rc, commit, phases, wl, profile = sys.argv[1:9]
+rows, libs, ran = [], [], []
 for p in phases.split():
     f = f"broadcast/WrapLimits.s.sol/{chain}/{p}-latest.json"
     if not os.path.exists(f):
         continue
+    ran.append(p)
     b = json.load(open(f))
     rec = {x["transactionHash"]: x for x in b["receipts"]}
     lab = [l.rstrip("\n").split(" | ") for l in open(f"deployments/wraplimits-{net}-{p}-rows.txt")]
@@ -108,12 +189,15 @@ open(rp, "w").writelines(json.dumps(r) + "\n" for r in recs)
 neg = [r for r in recs if r["what"].startswith("negative")]
 ok = sum(r[5] == 1 for r in rows) + sum(x[4] == 1 for x in libs)
 asks = [r[3] for r in rows] + [x[2] for x in libs]
+prof = {"full": "notice 1 hour, windows 1 hour / 1 day, decay 2 days", "short": "notice 5 min, windows 5 min / 15 min, decay 1 day"}
+pend = open(os.path.join(outd, "pending.txt")).read().strip() if os.path.exists(os.path.join(outd, "pending.txt")) else "none"
 out = ["# Group 3l T104: group `wraplimits` of the on-chain matrix (spec 2026-11-10-wrap-limits.md §11), target " + net,
-       "# (a fresh anvil, chain " + chain + ", Amsterdam; this group's own factory, noticePeriod() 1 hour; the clock set between",
-       "# the runs). Hybrids H1 (kind 1), H5 (kind 5), H13 (kind 13; the PQZ kinds in the OFFCHAIN verify mode). Q = 10^4 raw",
-       "# units of the 6-decimal leg (unitExp 4). UNAUDITED.", "",
+       f"# (chain {chain}; this group's own factory; profile {profile}: {prof[profile]}; "
+       + ("the clock set between the runs" if net == "local" else "the run waits for the chain's clock") + ").",
+       "# Hybrids H1 (kind 1), H5 (kind 5), H13 (kind 13; the PQZ kinds in the OFFCHAIN verify mode). Q = 10^4 raw",
+       f"# units of the 6-decimal leg (unitExp 4). Runs: {' '.join(ran)}; pending: {pend}. UNAUDITED.", "",
        "step | commit | rc | counts",
-       f"matrix.sh {net} (MATRIX_GROUPS=wraplimits) | {commit} | {rc} | {len(rows) + len(libs)} transactions ({ok} status 1;"
+       f"matrix.sh {net} (MATRIX_GROUPS=wraplimits, {' '.join(ran)}) | {commit} | {rc} | {len(rows) + len(libs)} transactions ({ok} status 1;"
        f" {len(libs)} forge library deploys), {len(neg)} negatives ({sum(r['status'] == 2 for r in neg)} refused as"
        f" expected), the largest ask {max(asks):,} gas", "",
        "## gas by row type: the receipts' gasUsed min / max; the largest ask (the row measured on the fork, regular + EIP-8037",

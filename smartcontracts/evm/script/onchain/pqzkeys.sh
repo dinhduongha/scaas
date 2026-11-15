@@ -10,6 +10,7 @@ set -eu
 # --slow (one transaction per receipt) on a local chain only; a remote target sends each forge run at once (owner 2026-11-15:
 # a run is one unit, the groups stay sequential)
 SLOW=--slow; [ "${ONCHAIN_REMOTE:-0}" != 1 ] || SLOW=
+. script/onchain/fee.sh
 : "${NET:?}" "${RPC:?}" "${ONCHAIN_K1:?}"
 GN=pqzkeys SCR=PqzKeys TS=PqzKeysSetup TR=PqzKeysRoll
 [ -z "${PQZW:-}" ] || GN=pqzwallet SCR=PqzWallet TS=PqzWalletSetup TR=PqzWalletRoll
@@ -59,6 +60,7 @@ for p in setup roll; do
   echo "[$NET/$GN] $p: forge $tc …"
   t0=$(date +%s)
   rm -f "$B/$p-latest.json"
+  remote_fee "$RPC" # a remote target: a fee with headroom (fee.sh)
   # the simulation runs the whole script as one call: its ML-DSA verifications and ~600 ops pass foundry.toml's 2^33 budget
   # (a late CREATE starved); the transactions sent still ask each its own estimate
   FOUNDRY_GAS_LIMIT=${PQZKEYS_SIM_GAS:-40000000000} ONCHAIN_NET=$NET forge script script/onchain/$SCR.s.sol --tc "$tc" --sig "$p()" --rpc-url "$RPC" --broadcast $SLOW \

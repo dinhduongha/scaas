@@ -82,9 +82,10 @@ trap 'exit 1' INT TERM
 ADDRS= PQ_ADDRS=
 txs() { s=0; for a in $2; do s=$((s + $(cast nonce --rpc-url "$1" "$a" 2> /dev/null || echo 0))); done; echo $s; }
 # step <label> <rpc> <accounts> <cmd…>: the command in the background, its output in $LOG, a heartbeat every 30 s;
-# sets SECS and NTX (the accounts' transactions during the step)
+# sets SECS and NTX (the accounts' transactions during the step); wraplimits: its latest own line too (a remote run
+# waits for the chain's clock between its runs)
 step() {
-  l=$1 sr=$2 sa=$3
+  l=$1 sr=$2 sa=$3 wl0=
   shift 3
   t0=$(date +%s) n0=$(txs "$sr" "$sa") i=0
   $SCOPE "$@" >> "$LOG" 2>&1 &
@@ -93,6 +94,10 @@ step() {
     sleep 1
     i=$((i + 1))
     [ $((i % 30)) != 0 ] || say "$l" "… ${sa:+$(($(txs "$sr" "$sa") - n0)) txs, }$(($(date +%s) - t0))s"
+    if [ $((i % 30)) = 0 ] && [ "$l" = /wraplimits ]; then
+      w=$(grep "^\[$tgt/wraplimits\] " "$LOG" | tail -1)
+      [ -z "$w" ] || [ "$w" = "$wl0" ] || { echo "$w"; wl0=$w; }
+    fi
   done
   e=0
   wait "$P" || e=$?
@@ -107,7 +112,8 @@ result() {
 import glob, json, os, re, sys
 out, tgt, g, log = sys.argv[1:]
 pat = f"records-{tgt}-{g}{'*' if g == 'zether' else ''}.jsonl"  # zether: its four scripts' records
-r = [json.loads(x) for p in glob.glob(os.path.join(out, pat)) for x in open(p)]
+# wraplimits writes under its own subdirectory
+r = [json.loads(x) for p in glob.glob(os.path.join(out, pat)) + glob.glob(os.path.join(out, g, pat)) for x in open(p)]
 t = [x for x in r if x.get("tx")]
 n = [x for x in r if str(x.get("what", "")).startswith("negative")]
 bad = [x for x in r if x.get("status") == 0]
@@ -294,6 +300,10 @@ if [ -n "$SCOPE" ]; then
       step "/$g" "" "" ../../scripts/capped forge build src script/onchain/Rescue.s.sol --out out/onchain-rescue \
         --cache-path cache/onchain-rescue || fail "forge build Rescue.s.sol"
       say "/$g" "compiled (${SECS}s)" ;;
+    wraplimits)
+      step "/$g" "" "" ../../scripts/capped forge build src script/onchain/WrapLimits.s.sol --out out/onchain-wraplimits \
+        --cache-path cache/onchain-wraplimits || fail "forge build WrapLimits.s.sol"
+      say "/$g" "compiled (${SECS}s)" ;;
     pqchat)
       step "/$g" "" "" ../../scripts/capped forge build src script/onchain/PqChat.s.sol --out out/onchain-pqchat \
         --cache-path cache/onchain-pqchat || fail "forge build PqChat.s.sol"
@@ -383,12 +393,16 @@ for g in $GROUPS; do
       step "/$g" "" "" $capw sh -c "cd script/pqz/wallet && cargo build --release -j 2" || r=1
       [ "$r" != 0 ] || step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" PQZW=1 sh script/onchain/pqzkeys.sh || r=1
     fi ;;
-  # last: it moves the chain's clock by two days (local only; its own outputs, wraplimits.sh)
+  # last: local, it moves the chain's clock by two days (the full profile; its own outputs, wraplimits.sh); a remote
+  # target runs the short profile (owner 2026-11-15) in real time, setup and p1-p4 (~1 h) unless WRAPLIMITS_PHASES says
+  # otherwise: p5 and p6 (the decay at H/2 and H, 12 h and 24 h after p2) by a later call with WRAPLIMITS_PHASES and the
+  # same MATRIX_OUT, the earliest start in the summary row
   wraplimits)
-    if [ "$tgt" != local ]; then
-      res="not run" why="local only: the run moves the chain's clock"
-    else
+    if [ "$tgt" = local ]; then
       step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" sh script/onchain/wraplimits.sh || r=1
+    else
+      step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" WRAPLIMITS_PROFILE="${WRAPLIMITS_PROFILE:-short}" \
+        WRAPLIMITS_PHASES="${WRAPLIMITS_PHASES:-setup p1 p2 p3 p4}" sh script/onchain/wraplimits.sh || r=1
     fi ;;
   *) r=1; echo "unknown group $g" >> "$LOG" ;;
   esac
@@ -399,6 +413,11 @@ for g in $GROUPS; do
   else
     res=fail rc=1
     say "/$g" "FAIL $(MATRIX_FAILED=1 result "$g") (${SECS}s)"
+  fi
+  pf=$OUTD/wraplimits/pending.txt
+  if [ "$g" = wraplimits ] && [ "$res" != "not run" ] && [ -s "$pf" ]; then
+    res="$res, $(cat "$pf")"
+    say "/$g" "$(cat "$pf")"
   fi
   row "$g" "$res"
   [ "$res" = "not run" ] || [ "$tgt" = local ] || [ "$g" = verify ] || verify "$g"
