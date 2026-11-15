@@ -1,0 +1,29 @@
+# gate 3zh-g2-n2304-kmax4096 (set n2304-kmax4096): aaa1aff905b13a6d06bf2b2e2440265575d159ea, 2026-11-15T15:08Z
+set n2304-kmax4096
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== ct
+   ok
+== ub
+   ok
+== diff
+   ok
+== fnv
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   ok
+== cargo
+   ok
+== xcheck
+   ok
+== fuzz
+   ok
+gate 3zh-g2-n2304-kmax4096 (set n2304-kmax4096): PASS

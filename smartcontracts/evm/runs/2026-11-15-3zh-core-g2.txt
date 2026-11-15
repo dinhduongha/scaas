@@ -29,3 +29,4 @@ scaas-node cargo test | aaa1aff90 | 0 | 772 passed, 17 binaries (a first run wit
 scaas-node cargo test --test e2e -- --ignored | - | - | NOT RUN: needs CAPPED_MEM=6G alone, the pqz-core gates held the machine
 nethermind run-tests.sh n2304-kmax4096 | da4f61d87 tree | 0 | 71 / 71 (item 1); n2048 / n2560 / n2816 filter Library_sha256 | Provisional_schedule 2 / 2 each (item 6)
 pqz-core gate.sh n2048-kmax1024 (label 3zh-g2-n2048-kmax1024) | aaa1aff90 | 0 | PASS, 13 / 13 steps
+pqz-core gate.sh n2304-kmax4096 (label 3zh-g2-n2304-kmax4096) | aaa1aff90 | 0 | PASS, 13 / 13 steps
