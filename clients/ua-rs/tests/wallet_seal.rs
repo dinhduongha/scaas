@@ -472,8 +472,15 @@ fn release_link_round_trip() {
     assert_eq!(scaas_ua::wallet::seal_container(&rec, "scaas/link/v1", &ContainerSigner::Key(&native), session.start(), b"", Some("1")).err(), Some(Error::Argument));
     let expect = ContainerExpect { purpose: "scaas/link/v1", sender: ExpectedSender::Ua(key.ua().unwrap()), recipient: session.recipient() };
     let none = |_: [u8; 32]| None;
+    // `from_link` itself wipes the session key (the seal.json rows run `vectors_from_link_at`, a clock of their own: T21 batch D)
+    #[cfg(feature = "vectors")]
+    let probe = session.vectors_key();
+    #[cfg(feature = "vectors")]
+    assert!(probe.decaps(&c.sealed.mlkem_ct, &c.sealed.x25519_eph).is_ok()); // control
     let linked = Wallet::from_link(session, &SealedContainer::from_json(c.to_json().as_bytes()).unwrap(), &expect, &none, None, "").unwrap();
     assert_eq!(linked.ua_key(0x0102, 0, 0).unwrap().ua(), key.ua());
+    #[cfg(feature = "vectors")]
+    assert_eq!(probe.decaps(&c.sealed.mlkem_ct, &c.sealed.x25519_eph).err(), Some(Error::KeyRevoked));
 }
 fn w_entropy(id: &str) -> Vec<u8> {
     let k = load("keys.json");
