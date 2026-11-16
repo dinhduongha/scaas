@@ -156,6 +156,9 @@ impl qobject::UaWallet {
             let k = key(id)?;
             let td = wallet(uw::TypedData::from_json(String::from(typed_data_json).as_bytes()))?;
             let expect = wallet(uw::Expect::from_json(String::from(expect_json).as_bytes()))?;
+            if matches!(expect, uw::Expect::Any(_)) {
+                return Err("UAPolicyRefused".into()); // the contract above: no `Any` typed data for QML (T21 L51)
+            }
             wallet(native_key(&k)?.sign_typed(&td, expect))
         })
     }
