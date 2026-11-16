@@ -177,8 +177,12 @@ names start each message):
 
 ## 9. Other users
 
-`smartcontracts/evm/script/pqz/wallet` (the on-chain matrix's wallet simulator, a test tool) builds `scaas-ua` with `vectors`
-for `vectors_from_seed` and opens the debit with `open_debit` only (F4, Codex 3): the request carries no `T`; the own part comes
+`smartcontracts/evm/script/pqz/wallet` (the on-chain matrix's wallet simulator, a test tool) builds the release `scaas-ua`
+(owner 2026-11-17, "ok, as proposed", option (b): no `vectors` in any normal dependency, `scripts/check_test_features.py`): each
+record names its test wallet's BIP-39 entropy, the tool restores it with `Wallet::from_mnemonic` and takes the handle from
+`Wallet::pqz_scoped_key`, so the matrix runs the shipped API; the auditor tool (pqz-ffi `check_auditor`, no handle entry) takes
+the same mnemonic's opening KEM seed through pqz-ffi (equal to the wallet's, the tool's test). It opens the debit with
+`open_debit` only (F4, Codex 3): the request carries no `T`; the own part comes
 from the account's last debit blob (`window.ownCode`) and `window.shieldIn` is named. `PqzWallet.s.sol` compares the handle's `T`
 with the debit statement's `T`, and after the refresh runs the own branch on chain: the matrix's refresh (a verdict over stand-in
 bytes) wrote an own part no key of the holder tagged, so the next debit is `OwnTag`, the seed unused. No C ABI or binding exports

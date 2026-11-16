@@ -55,3 +55,10 @@ mutants (2026-11-16-pqz3k-handle-mutants.txt) | 9b71bb80c | 1 | 52 rows: 48 kill
 # n2048 / n2048v ran first red (2 tests: the KAT own rows are pqz3k_kat.json's n2304 set; the new length gate refuses them at
 # n2048 first), then green after those two tests ran at that set only (both cells and pqz3k default / vectors / clippy re-run);
 # the mutants and the other cells ran before that test-only edit, which changes nothing at n2304.
+
+# owner 2026-11-17 option (b): the matrix tool on the release scaas-ua (no vectors); code tree = the commit after fa9f5c7d9
+pqz-wallet-sim cargo build --locked --release | tool commit | 0 | built (Cargo.lock: the bip39 edge only)
+pqz-wallet-sim cargo test --locked --release | tool commit | 0 | 2 passed (auditor_kem_seed_is_the_wallets, wallet_opens_the_gated_parts_only)
+python3 scripts/check_test_features.py | tool commit | 0 | ok (both positive controls found their findings)
+forge build script/onchain/PqzWallet.s.sol | tool commit | 0 | built
+docs_check check; test_docs_check | tool commit + docs | 0 | 0 errors

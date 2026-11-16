@@ -37,8 +37,8 @@ abstract contract PqzWalletKit is PqzKeysKit {
     bytes32 internal daveMl;
     bytes32 internal erin;
     bytes32 internal erinMl;
-    bytes internal dave64; // the BIP-39 seeds of the PQZ keys (test only)
-    bytes internal erin64;
+    bytes internal daveEntropy; // the BIP-39 entropy of the PQZ keys' test wallets (32 bytes; the tool restores the mnemonic)
+    bytes internal erinEntropy;
 
     function _wstate() internal view returns (string memory) {
         return string.concat("deployments/pqzwallet-", net, "-state.json");
@@ -58,8 +58,8 @@ abstract contract PqzWalletKit is PqzKeysKit {
         return IPqzToken(t).pqzVerifyConfig().pqzOwnKey ? t : address(0);
     }
 
-    function _rec(bytes memory seed64, bytes32 ua, address scope) internal view returns (string memory) {
-        return string.concat('"seed":"', vm.toString(seed64), '","ua":"', vm.toString(ua), '","chainUid":"',
+    function _rec(bytes memory entropy, bytes32 ua, address scope) internal view returns (string memory) {
+        return string.concat('"entropy":"', vm.toString(entropy), '","ua":"', vm.toString(ua), '","chainUid":"',
             vm.toString(IUARegistry(registry).chainUid()), '","scope":', scope == address(0) ? "null" : string.concat('"',
             vm.toString(scope), '"'), ',"version":0');
     }
@@ -117,15 +117,15 @@ contract PqzWalletSetup is PqzWalletKit {
         (carol, carolSeed) = (vm.parseJsonBytes32(j, ".carol"), vm.parseJsonBytes32(j, ".carolSeed"));
         (daveMl, dave) = _holder("dave");
         (erinMl, erin) = _holder("erin");
-        dave64 = abi.encodePacked(keccak256(abi.encode(runSalt, "dave64a")), keccak256(abi.encode(runSalt, "dave64b")));
-        erin64 = abi.encodePacked(keccak256(abi.encode(runSalt, "erin64a")), keccak256(abi.encode(runSalt, "erin64b")));
-        _real(dave, daveMl, dave64, address(0));
-        _real(erin, erinMl, erin64, address(0)); // class 2 reads the auditor's scope-0 record at init
+        daveEntropy = abi.encodePacked(keccak256(abi.encode(runSalt, "daveEntropy")));
+        erinEntropy = abi.encodePacked(keccak256(abi.encode(runSalt, "erinEntropy")));
+        _real(dave, daveMl, daveEntropy, address(0));
+        _real(erin, erinMl, erinEntropy, address(0)); // class 2 reads the auditor's scope-0 record at init
         c2w = _tok(false, "c2w");
         c3w = _tok(true, "c3w");
-        _real(dave, daveMl, dave64, c3w);
-        _real(erin, erinMl, erin64, c3w);
-        _real(bob, bobSeed, abi.encodePacked(keccak256(abi.encode(runSalt, "bob64a")), keccak256(abi.encode(runSalt, "bob64b"))), c3w);
+        _real(dave, daveMl, daveEntropy, c3w);
+        _real(erin, erinMl, erinEntropy, c3w);
+        _real(bob, bobSeed, abi.encodePacked(keccak256(abi.encode(runSalt, "bobEntropy"))), c3w);
         _credits(c2w, true);
         _credits(c3w, false);
         _wsave();
@@ -133,8 +133,8 @@ contract PqzWalletSetup is PqzWalletKit {
     }
 
     /// `ua`'s record of `scope` with its real PQZ key and opening KEM key from the wallet (`keys`), signed by its ML-DSA key.
-    function _real(bytes32 ua, bytes32 mlSeed_, bytes memory seed64, address scope) internal {
-        string memory o = _tool(string.concat('{"cmd":"keys",', _rec(seed64, ua, scope), "}"));
+    function _real(bytes32 ua, bytes32 mlSeed_, bytes memory entropy, address scope) internal {
+        string memory o = _tool(string.concat('{"cmd":"keys",', _rec(entropy, ua, scope), "}"));
         bytes memory key = vm.parseJsonBytes(o, ".pqzKey");
         bytes memory kp = vm.parseJsonBytes(o, ".openKem");
         IUARegistry.KemKey memory k;
@@ -229,8 +229,8 @@ contract PqzWalletSetup is PqzWalletKit {
         vm.serializeBytes32("pw", "daveMl", daveMl);
         vm.serializeBytes32("pw", "erin", erin);
         vm.serializeBytes32("pw", "erinMl", erinMl);
-        vm.serializeBytes("pw", "dave64", dave64);
-        string memory j = vm.serializeBytes("pw", "erin64", erin64);
+        vm.serializeBytes("pw", "daveEntropy", daveEntropy);
+        string memory j = vm.serializeBytes("pw", "erinEntropy", erinEntropy);
         vm.writeJson(j, _wstate());
     }
 }
@@ -245,7 +245,7 @@ contract PqzWalletRoll is PqzWalletKit {
         (c2w, c3w) = (vm.parseJsonAddress(j, ".c2w"), vm.parseJsonAddress(j, ".c3w"));
         (dave, daveMl, erin, erinMl) = (vm.parseJsonBytes32(j, ".dave"), vm.parseJsonBytes32(j, ".daveMl"),
             vm.parseJsonBytes32(j, ".erin"), vm.parseJsonBytes32(j, ".erinMl"));
-        (dave64, erin64) = (vm.parseJsonBytes(j, ".dave64"), vm.parseJsonBytes(j, ".erin64"));
+        (daveEntropy, erinEntropy) = (vm.parseJsonBytes(j, ".daveEntropy"), vm.parseJsonBytes(j, ".erinEntropy"));
         _honest(c2w, 8); // 5 + 3 accepted; six planted credits marked first
         _modified(c3w); // unmarked past its unreadable credit: the auditor's `unreadable, taken`
     }
@@ -284,7 +284,7 @@ contract PqzWalletRoll is PqzWalletKit {
     /// gated parts, the own part (`ownCode`, the last debit's blob) sent once dave has debited; no `T` in the request.
     function _wallet(address t) internal returns (string memory) {
         IPqzToken.AccountState memory s = IPqzToken(t).pqzAccount(dave, 0);
-        return _tool(string.concat('{"cmd":"wallet",', _rec(dave64, dave, _scope(t)), ',"token":"', vm.toString(t), '","entries":',
+        return _tool(string.concat('{"cmd":"wallet",', _rec(daveEntropy, dave, _scope(t)), ',"token":"', vm.toString(t), '","entries":',
             _wEntries(t), ',"reads":{"block":', vm.toString(block.number), ',"finalized":true,"strictMajority":true},"window":{"from":',
             vm.toString(s.rolled), ',"to":', vm.toString(s.pendingCount), ',"lastDebit":', vm.toString(s.lastDebit),
             ',"shieldIn":0,"ownCode":"', vm.toString(s.lastDebit > 0 ? s.accBlob.code : bytes("")), '"}}'));
@@ -300,7 +300,7 @@ contract PqzWalletRoll is PqzWalletKit {
     function _audit(address t) internal returns (string memory) {
         address sc = _scope(t);
         IPqzToken.AccountState memory s = IPqzToken(t).pqzAccount(dave, 0);
-        return _tool(string.concat('{"cmd":"audit",', _rec(erin64, erin, sc), ',"pk":"', vm.toString(_keyOf(erin, sc)), '","token":"',
+        return _tool(string.concat('{"cmd":"audit",', _rec(erinEntropy, erin, sc), ',"pk":"', vm.toString(_keyOf(erin, sc)), '","token":"',
             vm.toString(t), '","rolled":', vm.toString(s.rolled), ',"floor":', vm.toString(s.floor), ',"recipient":{"ua":"',
             vm.toString(dave), '","pk":"', vm.toString(_keyOf(dave, sc)), '","kemPk":"', vm.toString(_kemOf(dave, sc)), '"},"entries":',
             _wEntries(t), "}"));

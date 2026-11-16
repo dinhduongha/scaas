@@ -10,9 +10,11 @@ description = "The matrix's wallet for opening tokens (three-key round, spec §1
 # (check -> acceptance, open_debit, marks) so the matrix exercises the client rule "no bare class-2 decrypt"; the
 # sender side and the auditor tool call pqz-ffi's opening module (no PQZ secret there).
 [dependencies]
-# `vectors`: the handle's test constructor from a raw seed (`PqzKeyHandle::vectors_from_seed`, T21 O5 (b)); the matrix's
-# wallets are test seeds, and a release build of scaas-ua takes no raw seed
-scaas-ua = { path = "../../../../../clients/ua-rs", features = ["vectors"] }
+# the release build of scaas-ua (owner 2026-11-17, option (b): no `vectors`, scripts/check_test_features.py): the handle through
+# `Wallet::from_mnemonic` + `Wallet::pqz_scoped_key`, the shipped API
+scaas-ua = { path = "../../../../../clients/ua-rs" }
+# the test wallets' mnemonic from their entropy, and the auditor tool's BIP-39 seed (the pin of scaas-ua)
+bip39 = { version = "=2.2.2", default-features = false, features = ["alloc"] }
 pqz-ffi = { path = "../../../../../pqz-core/ffi", features = ["prove"] }
 serde_json = "=1.0.145"
 
