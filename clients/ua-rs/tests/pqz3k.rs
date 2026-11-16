@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! `scaas_ua::pqz3k` against the shared rows: pq_kat.json `pqzScopedSeeds` and `memoHashOpening` (clientkeys), opening.json's
 //! `openKemSeeds` and leg seeds (pqz-ffi), typed_ops.json's `PqzRollOver` row (clientkeys; the contract pins its typehash).
+//! The handle and the raw derivations take the BIP-39 seed: `pub` under `vectors` only (T21 O5), so those rows run in that cell.
+#![cfg_attr(not(feature = "vectors"), allow(dead_code, unused_imports))]
 use scaas_ua::{keccak256, pqz3k};
 use serde_json::Value;
 
@@ -45,6 +47,7 @@ const L: pqz3k::Layout = pqz3k::Layout::of(2304, 46);
 /// pq_kat.json's scoped seeds through the handle (its commitment; the seed never leaves it) and, for a token without the opening,
 /// the one raw export; the opening `memoHash`.
 #[test]
+#[cfg(feature = "vectors")] // the raw-seed entry points are `vectors` only (T21 O5)
 fn scoped_seeds_and_memo_hash() {
     let k = load("ua/pq_kat.json");
     let seed = bip39_seed(k["mnemonic"].as_str().unwrap());
@@ -74,6 +77,7 @@ fn own<'a>(r: &Value, puf: &'a [u8], pvf: &'a [u8]) -> pqz3k::Own<'a> {
 }
 
 #[test]
+#[cfg(feature = "vectors")] // the raw-seed entry points are `vectors` only (T21 O5)
 fn client_rows() {
     let k = load("ua/pqz3k_kat.json");
     let seed = bip39_seed(k["mnemonic"].as_str().unwrap());
@@ -126,6 +130,7 @@ fn client_rows() {
 }
 
 #[test]
+#[cfg(feature = "vectors")] // the raw-seed entry points are `vectors` only (T21 O5)
 fn open_kem_seeds_and_leg_seeds_equal_pqz_ffi() {
     let o = load("pqz/opening.json");
     let seed: [u8; 64] = a(&o["bip39_seed"]);
@@ -206,6 +211,7 @@ const READF: pqz3k::Reads = pqz3k::Reads { block: 90, finalized: true, strict_ma
 /// it unmarked is refused, counter 0; marked, the next window loads it once. Control: an honest credit is accepted and its
 /// window loads the seed. A window entry accepted by another handle, at another index or with other bytes is refused.
 #[test]
+#[cfg(feature = "vectors")] // the raw-seed entry points are `vectors` only (T21 O5)
 fn key_handle_gates_the_secret() {
     use pqz3k::{Checked, Credit, PqzKeyHandle, Refused, WindowEntry};
     let seed = [7u8; 64];

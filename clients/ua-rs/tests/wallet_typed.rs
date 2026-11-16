@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! ua-rs-sign T4: the EIP-712 hasher (faithful: the values as supplied, spec §5.3, C-04), the SCaaS builders' canonical step
 //! (unbound `relayer` / `feeRecipient` zeroed, nested too, never on `Any`), and the `Expect` policy in front of
-//! `NativeKey::sign_typed` (MD-9: one variant per clientkeys `check*`, `PolicyRefused`; the checked path refuses a non-zero
+//! `NativeKey::sign_typed` (MD-9: one variant per clientkeys `check*`, `checkLiquidityOrder` included since T21 L40, plus
+//! `Erc7739`, the ERC-7739 nest of T21 O6; `PolicyRefused`; the checked path refuses a non-zero
 //! unbound `relayer` / `feeRecipient`, owner 2026-11-05, spec §5.4), against smartcontracts/vectors/{typed/typed_ops.json,
 //! ua/portable.json, ua/nested.json, ua/sign.json} (written by clientkeys). UNAUDITED.
 use scaas_ua::ua8::PORTABLE_DOMAIN_SEPARATOR;
@@ -277,6 +278,18 @@ fn typed_data_bounds() {
     let fixed = |k: usize| td(&types_td(json!({"S": [{"name": "v", "type": format!("uint8[{k}]")}]}), "S", json!({}))).map(|_| ());
     assert!(fixed(1024).is_ok());
     assert_eq!(fixed(1025).err(), Some(Error::Argument));
+    // T21 L38: the absent values one digest zero-fills, all levels counted, at most 2,048 (clientkeys the same rows)
+    let filled = |ty: &str, v: Value| digest(&types_td(json!({"S": [{"name": "v", "type": ty}]}), "S", json!({"v": v}))).map(|_| ());
+    assert!(filled("uint8[1024]", Value::Null).is_ok());
+    assert!(filled("uint8[32][32]", Value::Null).is_ok(), "1 + 32 + 1,024 absent values");
+    assert_eq!(filled("uint8[1024][2]", Value::Null).err(), Some(Error::Argument), "1 + 2 + 2,048");
+    assert_eq!(filled("uint8[1024][2]", json!([null, null])).err(), Some(Error::Argument), "nulls inside a supplied array");
+    assert!(filled("uint8[1024][2]", json!([vec![0; 1024], null])).is_ok(), "one row supplied");
+    // the ~200-byte request whose zero-fill is 1024^7 encodings: from_json takes it (depth 8), the digest refuses at once
+    let huge = br#"{"types":{"S":[{"name":"v","type":"uint8[1024][1024][1024][1024][1024][1024][1024]"}]},"primaryType":"S","domain":{},"message":{}}"#;
+    assert!(huge.len() < 200);
+    let t = TypedData::from_json(huge).unwrap();
+    assert_eq!(t.digest().err(), Some(Error::Argument));
 }
 
 /// The `EIP712Domain` type is the fields present in `domain`, in EIP-712 order: a supplied `EIP712Domain` in another order, or
@@ -882,5 +895,222 @@ fn proof_path_rows_canon() {
             m["args"]["ownTag"] = json!(format!("0x{}", "0d".repeat(32)));
         }
         assert_ne!(build(&m), b32(&d["digest"]), "{name}: ownTag / next is signed");
+    }
+}
+
+/// T21 L33: a PERCENT-class call takes its fee basis at word `amountArg`, counted in checked `usize` (32 × 2^27 wraps to 0 on
+/// wasm32): one past the calldata, 2^27 and `u32::MAX` are `PolicyRefused` (positive control: `amountArg` 0, the one word).
+#[test]
+fn call_amount_arg_past_the_calldata_is_refused() {
+    let s = load("ua/sign.json");
+    let w = wallet();
+    let key = w.native_key(Network::Evm, 0, None).unwrap();
+    let r = policy_row(&s, "call cancelNonce");
+    let run = |arg: u64| {
+        let (mut t, mut e) = (r["td"].clone(), r["expect"].clone());
+        t["message"]["mode"] = json!(0x10);
+        t["message"]["fee"] = json!("100");
+        e["allowlist"][0]["feeClass"] = json!(2);
+        e["allowlist"][0]["amountArg"] = json!(arg);
+        key.sign_typed(&td(&t).unwrap(), expect(&e).unwrap()).map(|_| ())
+    };
+    assert!(run(0).is_ok(), "positive control");
+    for arg in [1, 1 << 27, u32::MAX as u64] {
+        assert_eq!(run(arg).err(), Some(Error::PolicyRefused), "{arg}");
+    }
+}
+
+/// T21 L36: `"maxFee": null` reads as absent (`"0"`), as every other optional input, not `Argument` from a key left behind.
+#[test]
+fn max_fee_null_is_absent() {
+    let s = load("ua/sign.json");
+    let w = wallet();
+    let key = w.native_key(Network::Evm, 0, None).unwrap();
+    let r = policy_row(&s, "call cancelNonce");
+    let mut e = r["expect"].clone();
+    e.as_object_mut().unwrap().remove("maxFee");
+    assert!(key.sign_typed(&td(&r["td"]).unwrap(), expect(&e).unwrap()).is_ok(), "positive control: absent");
+    e["maxFee"] = Value::Null;
+    assert!(key.sign_typed(&td(&r["td"]).unwrap(), expect(&e).unwrap()).is_ok());
+}
+
+/// T21 O6 (owner 2026-11-16, "ok, as proposed"): clientkeys `erc7739TypedData` / `erc7739Signature` ported, against forge's KAT
+/// `evm/test/vectors/erc7739_kat.json` (AccountKat.t.sol): implicit mode (a token's `UAMetaTransfer` for a `SmartKeyAccount`)
+/// and explicit mode (`Order` nesting `Asset` for a `MandateWallet`); the contents names the wallet refuses; `Expect::Erc7739`
+/// signs the nest of the confirmed app typed data and nothing else (the app digest itself, another wallet: `PolicyRefused`).
+#[test]
+fn erc7739_kat_and_expect() {
+    use scaas_ua::wallet::Erc7739Wallet;
+    let k = load("../evm/test/vectors/erc7739_kat.json");
+    let chain_id: u64 = k["chain_id"].as_str().unwrap().parse().unwrap();
+    let salt = b32(&k["salt"]);
+    let s = &k["smart_key_account"];
+    let app = scaas_typed_data("UAMetaTransfer", Some(s["app_name"].as_str().unwrap()), &b20(&s["app_contract"]), chain_id, &salt,
+        &json!({"from": s["from"], "to": s["to"], "value": s["value"], "entryRef": s["entry_ref"], "batch": s["batch"],
+            "validUntil": s["valid_until"]}))
+    .unwrap();
+    let mut want = vec![0x19, 0x01];
+    want.extend(bytes(&s["app_separator"]));
+    want.extend(bytes(&s["contents"]));
+    assert_eq!(app.digest().unwrap(), keccak256(&want), "the app hash is 0x1901 ‖ separator ‖ contents");
+    let nested = app.erc7739(Erc7739Wallet::SmartKeyAccount, &b20(&s["wallet"]), chain_id, &salt).unwrap();
+    assert_eq!(nested.digest().unwrap(), b32(&s["digest"]));
+    let sig = bytes(&s["signature"]);
+    let n = sig.len();
+    let blob = &sig[..n - 66 - ((sig[n - 2] as usize) << 8 | sig[n - 1] as usize)];
+    assert_eq!(blob.len(), 256, "abi.encode(0, [], 65-byte ECDSA)");
+    assert_eq!(app.erc7739_signature(blob).unwrap(), sig);
+    assert!(native_ecdsa(&b20(&s["signer_key"]), &b32(&s["digest"]), &blob[160..225]));
+    let other = app.erc7739(Erc7739Wallet::SmartKeyAccount, &[0x33; 20], chain_id, &salt).unwrap();
+    assert_ne!(other.digest().unwrap(), nested.digest().unwrap(), "bound to the wallet");
+
+    let m = &k["mandate_wallet"];
+    let order = td(&json!({
+        "types": {"EIP712Domain": [{"name": "name", "type": "string"}, {"name": "version", "type": "string"},
+            {"name": "chainId", "type": "uint256"}, {"name": "verifyingContract", "type": "address"}],
+            "Order": [{"name": "give", "type": "Asset"}, {"name": "nonce", "type": "uint256"}],
+            "Asset": [{"name": "token", "type": "address"}, {"name": "amount", "type": "uint256"}]},
+        "primaryType": "Order",
+        "domain": {"name": m["app_name"], "version": m["app_version"], "chainId": chain_id.to_string(), "verifyingContract": m["app_contract"]},
+        "message": {"give": {"token": m["token"], "amount": m["amount"]}, "nonce": m["nonce"]},
+    }))
+    .unwrap();
+    let n2 = order.erc7739(Erc7739Wallet::MandateWallet, &b20(&m["wallet"]), chain_id, &salt).unwrap();
+    assert_eq!(n2.digest().unwrap(), b32(&m["digest"]));
+    let msig = bytes(&m["signature"]);
+    assert_eq!(order.erc7739_signature(&msig[..65]).unwrap(), msig, "explicit mode: contentsType ‖ Order");
+    assert!(std::str::from_utf8(&msig[65 + 64..msig.len() - 2]).unwrap().ends_with(")Order"));
+    let mut named = 0; // the names the typed data itself admits (a lower-case start) reach the ERC-7739 check; the others are
+    // already refused as struct names
+    for bad in ["", "order", "Or der", "Or,der", "Or(der", "Or)der", "Or\0der"] {
+        let mut v = order.to_value();
+        v["primaryType"] = json!(bad);
+        v["types"][bad] = v["types"]["Order"].clone();
+        if let Ok(t) = TypedData::from_json(&serde_json::to_vec(&v).unwrap()) {
+            assert_eq!(t.erc7739(Erc7739Wallet::MandateWallet, &[1; 20], chain_id, &salt).err(), Some(Error::Argument), "{bad:?}");
+            named += 1;
+        }
+    }
+    assert!(named >= 1);
+    assert_eq!(n2.erc7739(Erc7739Wallet::MandateWallet, &[1; 20], chain_id, &salt).err(), Some(Error::Argument), "TypedDataSign twice");
+
+    // Expect::Erc7739: the vector wallet's EVM key signs the nest for its wallet; the app digest itself or another wallet: refused
+    let w = wallet();
+    let key = w.native_key(Network::Evm, 0, None).unwrap();
+    let address = evm_address(&w);
+    let expect = |addr: [u8; 20]| Expect::Erc7739 { app: Box::new(order.clone()), wallet: Erc7739Wallet::MandateWallet, address: addr,
+        chain_id, chain_uid: salt };
+    let mine = order.erc7739(Erc7739Wallet::MandateWallet, &b20(&m["wallet"]), chain_id, &salt).unwrap();
+    let sig = key.sign_typed(&mine, expect(b20(&m["wallet"]))).unwrap();
+    assert!(native_ecdsa(&address, &mine.digest().unwrap(), &sig), "positive control");
+    assert_eq!(key.sign_typed(&order, expect(b20(&m["wallet"]))).err(), Some(Error::PolicyRefused), "the raw app digest");
+    assert_eq!(key.sign_typed(&mine, expect([0x44; 20])).err(), Some(Error::PolicyRefused), "another wallet");
+    let smart = order.erc7739(Erc7739Wallet::SmartKeyAccount, &b20(&m["wallet"]), chain_id, &salt).unwrap();
+    assert_eq!(key.sign_typed(&smart, expect(b20(&m["wallet"]))).err(), Some(Error::PolicyRefused), "another wallet kind");
+}
+
+fn liquidity_expect(v: &Value, r: &Value, f: impl FnOnce(&mut Value)) -> Result<Expect, Error> {
+    let mut e = json!({"check": "LiquidityOrder", "account": r["order"]["from"], "chainId": v["chainId"], "chainUid": v["chainUid"],
+        "order": r["order"], "dexes": [v["dex"]], "liquidityDexes": [v["dex"]],
+        "readers": {"0x7070000000000000000000000000000000000707": ["0x4e4e0000000000000000000000000000000004e4"]},
+        "scaasTokens": [v["tokenA"], v["tokenB"]], "now": 1_800_000_000u64});
+    f(&mut e);
+    expect(&e)
+}
+
+/// T21 L40: `liquidity_order_typed_data` against `vectors/ua/liquidity_kat.json` (each row's typed data and the rebuild from its
+/// order hash to its `h`, the native rows' signatures recover their signer), and `Expect::LiquidityOrder` (clientkeys
+/// `checkLiquidityOrder`): every row accepted but the structural `eight_inputs`, and each refusal of clientkeys' test.
+#[test]
+fn liquidity_kat_and_check() {
+    use scaas_ua::wallet::liquidity_order_typed_data;
+    let v = load("ua/liquidity_kat.json");
+    let (dex, cid, cu) = (b20(&v["dex"]), v["chainId"].as_u64().unwrap(), b32(&v["chainUid"]));
+    let w = wallet();
+    let key = w.native_key(Network::Evm, 0, None).unwrap();
+    let mut accepted = 0;
+    for r in arr(&v, "rows") {
+        let name = r["name"].as_str().unwrap();
+        assert_eq!(digest(&r["typedData"]).unwrap(), b32(&r["h"]), "{name}");
+        let built = liquidity_order_typed_data(&dex, cid, &cu, &r["order"]).unwrap();
+        assert_eq!(built.digest().unwrap(), b32(&r["h"]), "{name}: the rebuild");
+        assert_eq!(built.struct_hash().unwrap(), b32(&r["hashOrder"]), "{name}");
+        if bytes(&r["auth"]["keyData"]).is_empty() {
+            assert!(native_ecdsa(&b32(&r["signer"])[12..].try_into().unwrap(), &b32(&r["h"]), &bytes(&r["auth"]["signature"])), "{name}");
+        }
+        if name == "eight_inputs" {
+            continue; // its tokens are not on the profile: a structural row only
+        }
+        let t = td(&r["typedData"]).unwrap();
+        assert!(key.sign_typed(&t, liquidity_expect(&v, r, |_| ()).unwrap()).is_ok(), "{name}");
+        accepted += 1;
+    }
+    assert_eq!(accepted, 6);
+    // an int24 tick out of range: refused, never zero-extended
+    let neg = arr(&v, "rows").iter().find(|r| r["name"] == "v4_mint_negative_tick").unwrap();
+    let mut o = neg["order"].clone();
+    o["tickLower"] = json!((1 << 24) - 600);
+    assert_eq!(liquidity_order_typed_data(&dex, cid, &cu, &o).err(), Some(Error::Argument));
+    // the refusals: the server's typed data is the changed order's own (so its digest matches) and the check alone refuses it
+    let row = |n: &str| arr(&v, "rows").iter().find(|r| r["name"] == n).unwrap().clone();
+    let add = row("v2_add");
+    let refused = |r: &Value, f: &dyn Fn(&mut Value)| {
+        let mut e = liquidity_expect(&v, r, |_| ()).unwrap();
+        let mut j = json!({"check": "LiquidityOrder", "account": r["order"]["from"], "chainId": v["chainId"], "chainUid": v["chainUid"],
+            "order": r["order"], "dexes": [v["dex"]], "liquidityDexes": [v["dex"]],
+            "readers": {"0x7070000000000000000000000000000000000707": ["0x4e4e0000000000000000000000000000000004e4"]},
+            "scaasTokens": [v["tokenA"], v["tokenB"]], "now": 1_800_000_000u64});
+        f(&mut j);
+        let t = liquidity_order_typed_data(&dex, cid, &cu, &j["order"]).unwrap_or_else(|_| td(&r["typedData"]).unwrap());
+        assert!(key.sign_typed(&t, e.clone()).is_ok() || t.digest().unwrap() != b32(&r["h"]), "positive control: the row's own expect");
+        e = expect(&j).unwrap();
+        assert_eq!(key.sign_typed(&t, e).err(), Some(Error::PolicyRefused), "{}", serde_json::to_string(&j).unwrap());
+    };
+    refused(&add, &|e| e["liquidityDexes"] = json!([]));
+    refused(&add, &|e| e["dexes"] = json!([]));
+    refused(&add, &|e| e["order"]["fee"] = json!("10001"));
+    refused(&add, &|e| e["order"]["inputs"] = json!([add["order"]["inputs"][0], add["order"]["inputs"][0]]));
+    refused(&add, &|e| e["order"]["recipient"] = json!(format!("0x{}{}", "00".repeat(12), &v["lp"].as_str().unwrap()[2..])));
+    refused(&add, &|e| e["order"]["inputs"] = json!(vec![add["order"]["inputs"][0].clone(); 9]));
+    refused(&add, &|e| e["order"]["flags"] = json!(1));
+    refused(&add, &|e| e["order"]["inputs"][0]["amount"] = json!("0"));
+    refused(&add, &|e| e["now"] = json!(1_800_000_300u64)); // the deadline passed
+    let whole = row("v4_withdraw_whole");
+    refused(&whole, &|e| e["partial"] = json!(true));
+    let derived = row("derived_p256");
+    refused(&derived, &|e| e["order"]["inputs"] = json!([{"token": "0x9999999999999999999999999999999999999999", "amount": "1"}]));
+    refused(&add, &|e| e["order"]["recipient"] = derived["order"]["from"].clone());
+    let mint = row("v4_mint_negative_tick");
+    refused(&mint, &|e| e["readers"] = json!({}));
+    refused(&mint, &|e| e["order"]["minLiquidity"] = json!("0"));
+    // the server's typed data of another order than the one confirmed
+    let mut other = add["typedData"].clone();
+    other["message"]["outputs"][0]["amount"] = json!("1");
+    assert_eq!(key.sign_typed(&td(&other).unwrap(), liquidity_expect(&v, &add, |_| ()).unwrap()).err(), Some(Error::PolicyRefused));
+}
+
+/// T21 L40: `rescue_vault_typed_data` against `vectors/governance/rescue_vault_kat.json` (forge's `RescueVault.t.sol`): the two
+/// typehashes and digests; seq 0, a zero rescuer, a zero or non-native admin refused.
+#[test]
+fn rescue_vault_kat() {
+    use scaas_ua::wallet::{rescue_vault_typed_data, RescueVaultOp};
+    let k = load("governance/rescue_vault_kat.json");
+    let vault = b20(&k["vault"]);
+    let (s, r) = (&k["setRescuer"], &k["rotateAdmin"]);
+    let set = rescue_vault_typed_data(&vault, RescueVaultOp::SetRescuer { seq: s["seq"].as_u64().unwrap(), new_rescuer: b20(&s["newRescuer"]) })
+        .unwrap();
+    assert_eq!(set.digest().unwrap(), b32(&s["digest"]));
+    assert_eq!(keccak256(set.encode_type().as_bytes()), b32(&k["setRescuerTypehash"]));
+    let rot = rescue_vault_typed_data(&vault, RescueVaultOp::RotateAdmin { seq: r["seq"].as_u64().unwrap(), new_admin: b32(&r["newAdmin"]) })
+        .unwrap();
+    assert_eq!(rot.digest().unwrap(), b32(&r["digest"]));
+    assert_eq!(keccak256(rot.encode_type().as_bytes()), b32(&k["rotateAdminTypehash"]));
+    for op in [
+        RescueVaultOp::SetRescuer { seq: 0, new_rescuer: [1; 20] },
+        RescueVaultOp::SetRescuer { seq: 1, new_rescuer: [0; 20] },
+        RescueVaultOp::RotateAdmin { seq: 1, new_admin: [0; 32] },
+        RescueVaultOp::RotateAdmin { seq: 1, new_admin: [1; 32] },
+    ] {
+        assert_eq!(rescue_vault_typed_data(&vault, op).err(), Some(Error::Argument), "{op:?}");
     }
 }

@@ -58,7 +58,10 @@ mod vault;
 mod webauthn;
 
 pub use aead::{aead_open, aead_seal, hkdf_expand_sha256, hkdf_sha256, hmac_sha256, Alg};
-pub use eip712::{pqz_verdict_typed_data, scaas_typed_data, TypedData};
+pub use eip712::{
+    liquidity_order_typed_data, pqz_verdict_typed_data, rescue_vault_typed_data, scaas_typed_data, Erc7739Wallet, RescueVaultOp,
+    TypedData,
+};
 #[cfg(any(feature = "zether", feature = "pqz"))]
 pub(crate) use eip712::{from_hex, to_hex};
 pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
@@ -74,7 +77,7 @@ pub use service_pull::{service_pull, RelayFeeWrap, ServicePull};
 pub(crate) use seal::now;
 pub use seal::{
     seal, seal_container, AcceptedJson, ContainerExpect, ContainerExpectJson, ContainerSigner, ExpectedSender, LinkSession,
-    MembersJson, Recipient, RecipientId, Sealed, SealedContainer, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
+    MembersJson, Recipient, RecipientId, Sealed, SealedContainer, LINK_SKEW, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
 };
 pub use sign::{sign_digest_by, sign_key_proof_by};
 #[cfg(feature = "vectors")]
@@ -290,8 +293,8 @@ fn parse_mnemonic(words: &str) -> Result<bip39::Mnemonic> {
     if words.len() > 1024 {
         return Err(Error::Argument);
     }
-    let nfkd = Zeroizing::new(words.nfkd().collect::<String>());
-    let lower = Zeroizing::new(nfkd.to_lowercase());
+    let nfkd = sized(|| words.nfkd());
+    let lower = sized(|| nfkd.chars().flat_map(char::to_lowercase));
     if lower.split_whitespace().count() > 24 {
         return Err(Error::Argument);
     }
@@ -299,10 +302,18 @@ fn parse_mnemonic(words: &str) -> Result<bip39::Mnemonic> {
     bip39::Mnemonic::parse_in_normalized(bip39::Language::English, &joined).map_err(|_| Error::Argument)
 }
 
+/// `chars()` collected into a buffer of its exact size (counted on a first pass), so no reallocation frees an unwiped copy of
+/// a secret string (T21 L32).
+pub(crate) fn sized<I: Iterator<Item = char>>(chars: impl Fn() -> I) -> Zeroizing<String> {
+    let mut s = Zeroizing::new(String::with_capacity(chars().map(char::len_utf8).sum()));
+    s.extend(chars());
+    s
+}
+
 /// The 64-byte BIP-39 seed of `entropy` with the passphrase (NFKD).
 fn seed_of(entropy: &[u8], bip39_passphrase: &str) -> Result<Zeroizing<[u8; 64]>> {
     let m = bip39::Mnemonic::from_entropy(entropy).map_err(|_| Error::Argument)?;
-    let pass = Zeroizing::new(bip39_passphrase.nfkd().collect::<String>());
+    let pass = sized(|| bip39_passphrase.nfkd());
     Ok(Zeroizing::new(m.to_seed_normalized(&pass)))
 }
 
@@ -331,17 +342,22 @@ pub struct SeedBackup {
     asked: [usize; 3],
 }
 
+/// The capacity of [`SeedBackup::reveal`]'s buffer: 24 words of at most 8 letters, each with its space.
+const REVEAL_CAP: usize = 24 * 9;
+
 impl SeedBackup {
     fn words(&self) -> Result<bip39::Mnemonic> {
         bip39::Mnemonic::from_entropy(self.entropy.as_deref().ok_or(Error::Argument)?).map_err(|_| Error::Argument)
     }
 
-    /// The words, once (`Argument` after).
+    /// The words, once (`Argument` after), in a buffer of capacity 24 × 9 reserved before they are written.
     pub fn reveal(&mut self) -> Result<Zeroizing<String>> {
         if self.state != BackupState::Fresh {
             return Err(Error::Argument);
         }
-        let words = Zeroizing::new(self.words()?.to_string());
+        // 24 English words of at most 8 letters and their spaces fit 24 × 9 bytes: reserved, so the buffer never moves (T21 L32)
+        let mut words = Zeroizing::new(String::with_capacity(REVEAL_CAP));
+        std::fmt::Write::write_fmt(&mut *words, format_args!("{}", self.words()?)).map_err(|_| Error::Argument)?;
         self.state = BackupState::Revealed;
         Ok(words)
     }
@@ -384,7 +400,7 @@ impl SeedBackup {
         let m = self.words()?;
         let words: Vec<&str> = m.words().collect();
         let ok = answers.len() == self.asked.len()
-            && self.asked.iter().zip(answers).all(|(i, a)| words.get(*i) == Some(&Zeroizing::new(a.trim().to_lowercase()).as_str()));
+            && self.asked.iter().zip(answers).all(|(i, a)| words.get(*i) == Some(&sized(|| a.trim().chars().flat_map(char::to_lowercase)).as_str()));
         if ok {
             self.state = BackupState::Verified;
         }

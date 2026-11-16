@@ -39,6 +39,10 @@ test('refusals by the registry error names, beside each kind boundary', () => {
     assert.equal(code(() => ua.cacheExpandedKeyCall(kind, pk, parts - 1)), 'none');
     assert.equal(code(() => ua.cacheExpandedKeyCall(kind, pk, parts)), 'UAKeyCache');
     assert.equal(code(() => ua.cacheExpandedKeyCall(kind, pk, -1)), 'UAKeyCache');
+    // T21 L65: a malformed part is refused, never read as part 0 (control: part 0 as a decimal string)
+    assert.equal(code(() => ua.cacheExpandedKeyCall(kind, pk, '0')), 'none');
+    for (const bad of ['', null, false, ' 0 ', undefined, []]) assert.equal(code(() => ua.cacheExpandedKeyCall(kind, pk, bad)), 'UAKeyCache', String(bad));
+    for (const bad of ['', null, false]) assert.equal(code(() => ua.cacheExpandedKeyCall(bad, pk, 0)), 'UAKeyCache', `kind ${bad}`);
     assert.equal(code(() => ua.cacheExpandedKeyCall(kind, pk.subarray(1), 0)), 'UAKeyData');
     assert.equal(code(() => ua.cacheExpandedKeyCall(kind, new Uint8Array(len + 1), 0)), 'UAKeyData');
   }

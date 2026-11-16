@@ -341,6 +341,33 @@ Future<String> pqzCheck({required String requestJson}) =>
 Future<void> pqzCheckSet({required String deployedJson}) =>
     ScaasUa.instance.api.crateApiWalletPqzCheckSet(deployedJson: deployedJson);
 
+/// Group 3g (T15o): the PQZ key of `account` / `index` at key `version` (0 the info without a suffix, v >= 1 with be64(v)). A free
+/// function, as [`key_kem_key`]: the Dart facade refuses a version outside u64 before frb's 64-bit encoding wraps it (T21 L54).
+Future<UaPqzKey> walletPqzKeyVersion({
+  required UaWallet w,
+  required int account,
+  required int index,
+  required BigInt version,
+}) => ScaasUa.instance.api.crateApiWalletWalletPqzKeyVersion(
+  w: w,
+  account: account,
+  index: index,
+  version: version,
+);
+
+/// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4); a free function for the same reason.
+Future<SecretBytes> walletExportPqzLeafRawVersion({
+  required UaWallet w,
+  required int account,
+  required int index,
+  required BigInt version,
+}) => ScaasUa.instance.api.crateApiWalletWalletExportPqzLeafRawVersion(
+  w: w,
+  account: account,
+  index: index,
+  version: version,
+);
+
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>>
 abstract class SecretBytes implements RustOpaqueInterface {
   /// The address of the first byte, for Dart's in-place write or read; the same for the buffer's life.
@@ -363,10 +390,17 @@ abstract class SecretBytes implements RustOpaqueInterface {
     }
   }
 
-  /// A view of [s] in Rust memory, no copy; valid until [s] is disposed (a view kept past that reads freed memory).
-  static Uint8List view(SecretBytes s) => ffi.Pointer<ffi.Uint8>.fromAddress(
-    s.addr().toInt(),
-  ).asTypedList(s.size());
+  /// A view of [s] in Rust memory, no copy; valid until [s] is disposed (a view kept past that reads freed memory). The view
+  /// keeps [s] reachable (an Expando entry), so the GC never drops the handle, and with it the block, under a live view (T21 L55).
+  static Uint8List view(SecretBytes s) {
+    final v = ffi.Pointer<ffi.Uint8>.fromAddress(
+      s.addr().toInt(),
+    ).asTypedList(s.size());
+    _views[v] = s;
+    return v;
+  }
+
+  static final _views = Expando<SecretBytes>();
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaKemKey>>
@@ -493,13 +527,6 @@ abstract class UaWallet implements RustOpaqueInterface {
     required int index,
   });
 
-  /// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4).
-  Future<SecretBytes> exportPqzLeafRawVersion({
-    required int account,
-    required int index,
-    required BigInt version,
-  });
-
   Future<UaKey> importedKey({required String networkName, required int n});
 
   /// T20c (owner 2026-11-08): the UA of imported key `n`, `kind` the derived kind of its own scheme (0x0108 secp256k1, 0x0102
@@ -530,13 +557,6 @@ abstract class UaWallet implements RustOpaqueInterface {
   });
 
   Future<UaPqzKey> pqzKey({required int account, required int index});
-
-  /// Group 3g (T15o): the PQZ key of `account` / `index` at key `version` (0 the info without a suffix, v >= 1 with be64(v)).
-  Future<UaPqzKey> pqzKeyVersion({
-    required int account,
-    required int index,
-    required BigInt version,
-  });
 
   Future<UaKey> uaKey({
     required int kind,

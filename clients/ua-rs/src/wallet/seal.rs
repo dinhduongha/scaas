@@ -73,8 +73,12 @@ pub const PURPOSE_BACKUP: &str = "scaas/backup/v1";
 pub const PURPOSE_LINK: &str = "scaas/link/v1";
 /// The largest plaintext of a seal: 1 MiB.
 pub const MAX_PT: usize = 1 << 20;
-/// A link container's `created` lies in `[session start, start + LINK_WINDOW]` (seconds; 10 minutes).
+/// A link session opens a container for `LINK_WINDOW` seconds (10 minutes) on the opener's clock after its start
+/// (T21 O3, owner 2026-11-16).
 pub const LINK_WINDOW: u64 = 600;
+/// The skew allowed between the sender's clock and the opener's: a container's `created` lies in
+/// `[start − LINK_SKEW, start + LINK_WINDOW + LINK_SKEW]` (seconds; T21 O3, owner 2026-11-16).
+pub const LINK_SKEW: u64 = 120;
 
 const CT: usize = 1568;
 const TAG: usize = 16;
@@ -551,8 +555,11 @@ fn msig_ok(id: &[u8; 32], d: &[u8], m0: &[u8; 32], slots: &[MemberSig], members:
 }
 
 /// A link session on the new device (spec §6.3, C-11): an ephemeral KEM key in a store of its own, the short code both screens
-/// show (8 decimal digits, OS RNG), its start (seconds); a container opens when `created` lies in `[start, start + 600]`, once:
-/// [`Wallet::from_link`] takes the session by value and wipes its key.
+/// show (8 decimal digits, OS RNG), its start (seconds, the opener's clock); a container opens while the opener's clock is at
+/// most `start + 600` and its `created` lies in `[start − 120, start + 720]` (the sender's clock, 120 s of skew), once:
+/// [`Wallet::from_link`] takes the session by value and wipes its key. The short code binds the container to the session's
+/// screens; it does not protect the payload against a swapped `kemPk` (CLI-UAL-12): the key must reach the existing device
+/// over an authenticated channel.
 pub struct LinkSession {
     key: KemKeyPair,
     short_code: String,
@@ -611,29 +618,32 @@ pub(crate) fn now() -> Result<u64> {
 
 fn link_install(
     s: &LinkSession, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>,
-    bip39_passphrase: &str,
+    bip39_passphrase: &str, now: u64,
 ) -> Result<Wallet> {
     if expect.purpose != PURPOSE_LINK {
         return Err(Error::Argument);
     }
-    if c.created < s.start || c.created > s.start.saturating_add(LINK_WINDOW) {
+    let end = s.start.saturating_add(LINK_WINDOW);
+    if now > end || c.created < s.start.saturating_sub(LINK_SKEW) || c.created > end.saturating_add(LINK_SKEW) {
         return Err(Error::ContainerReplay);
     }
     let pt = open_container_with(&s.key, c, expect, members, accepted, Some(&s.short_code))?;
-    super::manifest::install_link(&pt, bip39_passphrase)
+    super::manifest::install_link(&pt, &c.sender_ua, bip39_passphrase)
 }
 
 impl Wallet {
     /// The wallet a link container carries to `session` (spec §6.3, C-11): `expect.purpose` must be `scaas/link/v1`
-    /// (`Argument`), `created` in the session's window (`ContainerReplay`), then [`KemKeyPair::open_container`]'s acceptance with
+    /// (`Argument`), the opener's clock at most 10 minutes past the session's start and `created` within 120 s of the window
+    /// (`ContainerReplay`), then [`KemKeyPair::open_container`]'s acceptance with
     /// the session's short code in the `aad`; the payload (a `BackupPayload`: `Argument` if malformed) builds the wallet: its
-    /// entropy (with `bip39_passphrase`, never carried), imported keys, manifest entries and generation.
+    /// entropy (with `bip39_passphrase`, never carried; it must derive the sender's UA at the entry naming it, else
+    /// `ContainerSender`), imported keys, manifest entries and generation.
     /// The session is consumed and its key wiped whatever the outcome, so a second install cannot be expressed.
     pub fn from_link(
         session: LinkSession, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>,
         bip39_passphrase: &str,
     ) -> Result<Wallet> {
-        let r = link_install(&session, c, expect, members, accepted, bip39_passphrase);
+        let r = now().and_then(|t| link_install(&session, c, expect, members, accepted, bip39_passphrase, t));
         session.key.wipe_own_store();
         r
     }
@@ -781,6 +791,18 @@ mod vectors {
         /// A second handle of the session's key, to observe its wipe.
         pub fn vectors_key(&self) -> KemKeyPair {
             self.key.dup()
+        }
+    }
+
+    impl Wallet {
+        /// [`Wallet::from_link`] with the opener's clock at `now` (a vector row's).
+        pub fn vectors_from_link_at(
+            session: LinkSession, c: &SealedContainer, expect: &ContainerExpect, members: &Members, accepted: Option<&Accepted>,
+            bip39_passphrase: &str, now: u64,
+        ) -> Result<Wallet> {
+            let r = super::link_install(&session, c, expect, members, accepted, bip39_passphrase, now);
+            session.key.wipe_own_store();
+            r
         }
     }
 }

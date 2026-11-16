@@ -170,7 +170,8 @@ EVM browser wallets are used only through open standards (EIP-1193, EIP-6963, EI
    invalid signature cannot execute on chain. A key of a `SmartKeyAccount` or a `MandateWallet` owner signs the
    ERC-7739 `erc7739TypedData(td, {wallet, address, chainId, chainUid})` of the app's typed data (its fields stay readable),
    never the digest itself, and sends `erc7739Signature(inner, td)` ([accounts.md CTR-ACC-02](../contracts/accounts.md#erc1271-wrap));
-   the account's own entries are signed as they are.
+   the account's own entries are signed as they are. `ua-rs` the same (owner 2026-11-16, T21 O6): `TypedData::erc7739` /
+   `erc7739_signature`, signed through `Expect::Erc7739` (the nest of the confirmed app typed data only), same KAT.
 
 <a id="CLI-SGN-06"></a>**CLI-SGN-06** — **WalletConnect v2 is a seam behind a configuration flag; no SDK is loaded by the
 core.** A `providerFactories` registry; the WalletConnect option appears only when a project id is configured **and** an
@@ -857,7 +858,7 @@ len(purpose) ‖ purpose ‖ keccak256(kemPk), L = 32)`, AES-256-GCM under a zer
 the OS RNG inside the library). `purpose` is ASCII `[a-z0-9./-]`, 1 to 64 B; `pt` may be empty, at most 1 MiB; no length hiding. Any failure of
 `open`: `SealOpen`; another version or scheme: `SealVersion`. **Seal authenticates no sender.** The **container** (named fields, base64url, JSON) carries
 `{v, purpose, recipient, sender: {ua, auth}, created, sealed}`; `aad = u8 v ‖ be16 len(purpose) ‖ purpose ‖ recipientId ‖ be64 version ‖ senderUa ‖ be64 created`, rebuilt by
-the opener; `scaas/link/v1` appends `sha256(shortCode)`. `sender.auth` is a full `UASig` of the sender over `uaMessage(kind, seal, keccak256(aad ‖ wire form))` under
+the opener; `scaas/link/v1` appends `sha256(shortCode)` (it binds the code, not the key: the link key needs an authenticated channel, [CLI-UAL-12](ua-libraries.md#CLI-UAL-12)). `sender.auth` is a full `UASig` of the sender over `uaMessage(kind, seal, keccak256(aad ‖ wire form))` under
 `scaas.ua.purpose.seal.v1`, an **off-chain purpose**, never in a contract's list and outside `PURPOSES` (`seal_purpose_tag()`, clientkeys `SEAL_TAG`). Purposes
 today: `scaas/backup/v1`, `scaas/link/v1`, `scaas/pqz-share/v1`. Acceptance, trust anchors, replay and rollback: [CLI-UAL-11](ua-libraries.md#CLI-UAL-11),
 [CLI-UAL-12](ua-libraries.md#CLI-UAL-12). The backup payload: `{v, generation, entropy, secrets, manifest}` in this field order; malformed is `Argument`. BUILT.
@@ -1119,7 +1120,11 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
 
 - **Key handle** (owner 2026-11-14, the Change of this rule in `decisions.md`; Fable review of the round P1-1). Status:
   **SPECIFIED** until the round's client gates are green: the handle refuses mislabelled credits; it holds the PQZ secret of its
-  record, but no binding in this repository proves through it yet. "No bare class-2 decrypt" is enforced here, in the clients,
+  record, but no binding in this repository proves through it yet. **In `ua-rs` the handle is not built** (owner 2026-11-16, T21
+  O5): it takes the raw BIP-39 seed and lives outside the wallet's store (not revoked by `lock()`), and no `Wallet` method makes
+  one, so `PqzKeyHandle::new`, `open_kem_seed` and `pqz_token_key_seed_without_opening` are `pub` under the test feature
+  `vectors` only (a release build cannot name them; `compile_fail` checks); the store-held handle with one gated debit entry is
+  its own task before the freeze. "No bare class-2 decrypt" is enforced here, in the clients,
   not in pqz-ffi. `clientkeys` `pqzKeyHandle` and `ua-rs` `pqz3k::PqzKeyHandle`, one per key with the opening
   (`offchain-shared`, or `offchain-token` of a token with the opening) and key version:
   - It derives and holds that key's PQZ seed and its opening KEM secret; no member returns either. The scoped seed of a key
@@ -1173,7 +1178,11 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
   seed commitments, `ownTag` over `u_f`, `h(i)` and `entriesHash`, the `UAPqzScopedKey` / `UAPqzScopedKeyRecord` digests and
   both messages, and an opening blob with its offsets; read by `clientkeys` and `ua-rs` and checked against the contracts by
   `test/pqz/PqzClientRows.t.sol`. The K3-7 differential of spec §14.19 between `clientkeys` and `ua-rs` waits for a client that
-  carries steps 5–7; today both hand them to pqz-ffi.
+  carries steps 5–7; today both hand them to pqz-ffi. `ua-rs` runs no K3-7 row of `pqz/opening.json` `rejects` this round (its
+  handle is not built, above; owner 2026-11-16, T21 O5); `clientkeys` (JS and the wasm module) reads every one. The rows hold
+  §14.19's named cases (T21 L66b: a low-order X25519 point, an `mlkemCt` of another UA's key, the auditor's sealed seed given to
+  the recipient), a flipped `mlkemCt` bit, an `aad` of another chain and of another key version, and a malformed auditor
+  `kemPk`, beside the wrong lengths, the flipped tag, `O_a` under role 0's coins and the malformed recipient `kemPk`.
 - Inputs are public bytes and the opening KEM secret; `s` is not an input. No error detail, step number or timing class leaves
   the wallet. The PQZ secret is applied only to the holder's own `(u_f, v_f)` after its `ownTag` verifies, and to a `T` whose
   every part is that, an accepted credit, a TRIVIAL entry or a marked slot (zero); the prover refuses a window with an

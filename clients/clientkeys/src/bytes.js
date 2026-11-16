@@ -51,6 +51,16 @@ export function addressWord(address) {
   return concatBytes(new Uint8Array(12), a);
 }
 
+/** An integer as given (T21 L65): a bigint, a safe integer `number`, or decimal digits with no sign, space or leading zero;
+ *  anything else is refused, never changed (`BigInt('')`, `BigInt(false)`, `Number(null)` are 0; `BigInt(' 7 ')` is 7). The
+ *  caller checks the range. */
+export function intOf(v, what) {
+  if (typeof v === 'bigint') return v;
+  if (typeof v === 'number' && Number.isSafeInteger(v)) return BigInt(v);
+  if (typeof v === 'string' && /^(0|[1-9][0-9]*)$/.test(v)) return BigInt(v);
+  throw new Error(`${what}: not an integer (a bigint, a safe integer, or decimal digits)`);
+}
+
 export function bytes32(v) {
   const b = v instanceof Uint8Array ? v : fromHex(v);
   if (b.length !== 32) throw new Error('bytes32 must be 32 bytes');

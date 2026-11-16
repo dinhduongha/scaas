@@ -11,7 +11,7 @@ import { p256 } from '@noble/curves/nist.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
-import { keccak_256, concatBytes, utf8ToBytes, fromHex, hex, word } from './bytes.js';
+import { keccak_256, concatBytes, utf8ToBytes, fromHex, hex, word, intOf } from './bytes.js';
 import { encodeType, checksumAddress } from './evm.js';
 
 /** An error whose `code` every implementation and the vector files share. */
@@ -784,7 +784,9 @@ const MLDSA_CACHE = new Map([[0x0130, [1312, 1]], [0x0131, [1952, 2]], [0x0134, 
 const CACHE_SELECTOR = keccak_256(utf8ToBytes('cacheExpandedKey(uint16,bytes,uint256)')).subarray(0, 4);
 
 /** The cache part count of `kind`: 1 / 2 / 3 for mldsa44 / mldsa65 / mldsa87, 0 for every other kind (no cache). */
-export const mldsaCacheParts = (kind) => MLDSA_CACHE.get(Number(kind))?.[1] ?? 0;
+// T21 L65: the kind and the part read strictly (`Number(null)` is 0, `Number('')` too): a malformed one is refused
+const cacheInt = (v, what) => { try { return Number(intOf(v, what)); } catch (e) { return fail('UAKeyCache', e.message); } };
+export const mldsaCacheParts = (kind) => MLDSA_CACHE.get(cacheInt(kind, 'kind'))?.[1] ?? 0;
 
 /**
  * One cache part transaction: `cacheExpandedKey(kind, pk, part)` on the registry, a plain call (no signature; the subject or
@@ -794,11 +796,11 @@ export const mldsaCacheParts = (kind) => MLDSA_CACHE.get(Number(kind))?.[1] ?? 0
  * `mldsa<x>_path` = `cache`); with a precompile the registry refuses it (`UAKeyCache`). UNAUDITED.
  */
 export function cacheExpandedKeyCall(kind, pk, part) {
-  const k = Number(kind);
+  const k = cacheInt(kind, 'kind');
   const c = MLDSA_CACHE.get(k) ?? fail('UAKeyCache', `0x${k.toString(16).padStart(4, '0')} has no expanded-key cache`);
   const key = bytes(pk);
   if (key.length !== c[0]) fail('UAKeyData', `${key.length} bytes, kind 0x${k.toString(16).padStart(4, '0')} takes ${c[0]}`);
-  const n = Number(part);
+  const n = cacheInt(part, 'part');
   if (!Number.isInteger(n) || n < 0 || n >= c[1]) fail('UAKeyCache', `part ${part}: kind 0x${k.toString(16).padStart(4, '0')} has ${c[1]} part(s)`);
   const data = concatBytes(CACHE_SELECTOR, word(k), word(96), word(n), word(key.length), key, new Uint8Array(pad32(key.length) - key.length));
   return { entry: 'cacheExpandedKey', args: { kind: k, pk: hex(key), part: String(n) }, data: hex(data) };

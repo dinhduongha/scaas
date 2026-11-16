@@ -1756,6 +1756,8 @@ class WalletCustody(WalletCase):
         n = sz(MNEMONIC_MAX - 1)
         self.assertEqual(L.seed_backup_reveal(s, C.create_string_buffer(MNEMONIC_MAX), C.byref(n)), ERR_BUFFER)
         self.assertEqual(n.value, MNEMONIC_MAX, 'a short buffer reveals nothing')
+        n = sz(MNEMONIC_MAX)
+        self.assertEqual(L.seed_backup_reveal(s, None, C.byref(n)), ERR_ARGUMENT, 'NULL out (T21 L50)')
         words = text(L.seed_backup_reveal, s).split()
         self.assertEqual(len(words), 24)
         self.assertEqual(sig_of(L.seed_backup_reveal, s)[0], 'UAArgument', 'shown once')

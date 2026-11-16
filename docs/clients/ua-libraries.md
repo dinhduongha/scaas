@@ -331,13 +331,20 @@ decryption the payload's entropy must derive `sender.ua`, else `ContainerSender`
 from the old device's screen, never from the container. BUILT, clientkeys and `ua-rs`.
 
 <a id="CLI-UAL-12"></a>**CLI-UAL-12** — **`open` gives no replay protection; link and restore carry their own.** Link:
-`LinkSession::new()` makes the ephemeral key, an 8-digit short code from the OS RNG and a window; `created` outside session start +
-10 minutes is `ContainerReplay`; `from_link` takes the session by value and consumes it, so a second install cannot be expressed (C:
-the handle stays allocated, later calls `KEY_REVOKED`; a malformed JSON does not consume it). The short code's hash is in the link
-`aad`. Restore: the payload's `generation` (raised by each `backup_seal`; a link raises none) lower than the recorded one over a wallet
+`LinkSession::new()` makes the ephemeral key, an 8-digit short code from the OS RNG and a window; the window is measured on the
+opener's clock (owner 2026-11-16): an open after session start + 10 minutes on the opener's clock, or a `created` (the sender's clock)
+outside `[start − 120 s, start + 10 minutes + 120 s]`, is `ContainerReplay` (`LINK_WINDOW` 600, `LINK_SKEW` 120); `from_link` takes the
+session by value and consumes it, so a second install cannot be expressed (C: the handle stays allocated, later calls `KEY_REVOKED`; a
+malformed JSON does not consume it). The short code's hash is in the link `aad`. **The short code does not protect the payload
+against a swapped key** (owner 2026-11-16): the AEAD key depends on the session's `kemPk`, not on the `aad`, so whoever substitutes
+its own `kemPk` reads the seed whatever code the user types. The session's `kemPk` must reach the existing device over an
+authenticated channel: a direct QR scan of the new device's screen, or a screen of the same user; never a relay, a deep link or a
+pasted string. Restore: the payload's `generation` (raised by each `backup_seal`; a link raises none) lower than the recorded one over a wallet
 already held is `BackupRollback`, unless the caller passes the marker `AllowRollback` (JS `allowRollback: true`; C its own name,
-`scaas_ua_wallet_restore_backup_rollback`) after the user confirmed; an equal generation installs nothing. Reading an old backup is
-not refused; installing it over newer state is. BUILT, clientkeys and `ua-rs`.
+`scaas_ua_wallet_restore_backup_rollback`) after the user confirmed; an equal generation is treated as the same backup and installs
+nothing (owner 2026-11-16): generations order the backups of one device only, so after a link two devices can seal different backups
+at one generation and the second one restored over the other is skipped. Reading an old backup is not refused; installing it over
+newer state is. BUILT, clientkeys and `ua-rs`.
 
 <a id="CLI-UAL-13"></a>**CLI-UAL-13** — **The EIP-712 hasher is faithful; the canonical step belongs to checked SCaaS records.** The
 generic hasher hashes the values supplied and never rewrites a field. `scaas_typed_data` (the SCaaS builders) writes an unbound

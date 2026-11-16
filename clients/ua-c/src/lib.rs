@@ -1102,7 +1102,8 @@ pub extern "C" fn scaas_ua_encode_msig(
 // ---------------------------------------------------------------------------------------------------------------------------
 // ABI 6 (ua-rs-sign T12, spec §9.2): the wallet, its key handles, signing, KEM, seal / open, containers, vault, AEAD / HKDF /
 // HMAC, WebAuthn, build discovery. Every JSON argument is read by scaas-ua's bounded decoders (spec §9.3: length and depth
-// before any parse); no callback crosses the ABI.
+// before any parse), the JSON calls above too (`scaas_ua::json`: 1 MiB / depth 6, a service pull 64 KiB / depth 7, `inner`
+// 64 KiB / depth 1; T21 L48); no callback crosses the ABI.
 // ---------------------------------------------------------------------------------------------------------------------------
 
 /// `scaas_ua_features()` bits: what this build holds. A binding checks them (and `scaas_ua_abi_version()`) at load.
@@ -1758,13 +1759,16 @@ pub extern "C" fn scaas_ua_wallet_from_link(
     })
 }
 
-/// The recovery phrase, once, into a buffer of at least SCAAS_UA_MNEMONIC_MAX bytes (smaller: SCAAS_UA_ERR_BUFFER, nothing
-/// revealed); SCAAS_UA_ERR_ARGUMENT after. The caller zeroizes it.
+/// The recovery phrase, once, into a buffer of at least SCAAS_UA_MNEMONIC_MAX bytes (smaller: SCAAS_UA_ERR_BUFFER; `out` NULL:
+/// SCAAS_UA_ERR_ARGUMENT; both with nothing revealed); SCAAS_UA_ERR_ARGUMENT after. The caller zeroizes it.
 #[no_mangle]
 pub extern "C" fn scaas_ua_seed_backup_reveal(b: *const ScaasUaSeedBackup, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
     run(|| {
         let b = handle(b)?;
         need(out_len, SCAAS_UA_MNEMONIC_MAX)?;
+        if out.is_null() {
+            return Err(argument("NULL")); // before `reveal`, which shows the words once (T21 L50)
+        }
         let words = lock(&b.0)?.reveal()?;
         write_secret_str(out, out_len, &words)
     })

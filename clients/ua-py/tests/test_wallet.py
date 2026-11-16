@@ -621,6 +621,9 @@ class Vault(Case):
         v = w.seal_vault(secret('correct horse 9'))
         self.assertEqual(code(lambda: w.seal_vault(secret('12345678'))), 'UAArgument', 'the new-passphrase policy')
         self.assertFalse(W.vault_needs_rewrap(v))
+        # T21 L53: a NUL inside a secret or a string is refused before the library reads up to it
+        self.assertEqual(code(lambda: w.seal_vault(secret('correct horse 9\0tail'))), 'UAArgument', 'NUL in a passphrase')
+        self.assertEqual(code(lambda: W.vault_needs_rewrap(v + '\0x')), 'UAArgument', 'NUL in a string')
         v2 = W.vault_rewrap_pin(v, secret('correct horse 9'), secret('battery staple 7'))
         v3 = W.vault_enable_prf(v2, secret('battery staple 7'), bytearray(range(32)), 'cred-1', b'salt')
         want = self.key('twelve_words', 0x0102).key_data()

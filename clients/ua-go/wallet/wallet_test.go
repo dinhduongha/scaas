@@ -987,6 +987,13 @@ func TestVaultJSON(t *testing.T) {
 	if must(VaultNeedsRewrap(v1)) {
 		t.Fatal("rewrap")
 	}
+	// T21 L53: a NUL inside a secret or a string is refused before the library reads up to it
+	if _, err := tw.SealVault([]byte("correct horse 9\x00tail")); code(err) != "UAArgument" {
+		t.Fatal("NUL in a passphrase:", err)
+	}
+	if _, err := VaultNeedsRewrap(v1 + "\x00x"); code(err) != "UAArgument" {
+		t.Fatal("NUL in a string:", err)
+	}
 	v2 := must(VaultRewrapPin(v1, []byte("correct horse 9"), []byte("battery staple 7")))
 	prf := make([]byte, 32)
 	for i := range prf {

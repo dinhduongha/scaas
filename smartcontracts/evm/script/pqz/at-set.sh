@@ -51,6 +51,8 @@ fi
 SRC=$SETS/$S/PqzSet.sol
 DST=$EVM/src/pqz/PqzSet.sol
 [ -f "$SRC" ] || { echo "at-set.sh: no PqzSet.sol for set $S ($SRC)" >&2; exit 2; }
+# T21 L67: the gas table's inputs (test/vectors/pqz-gas/<set>.json) equal what gas-inputs.py makes of the precompile rows
+python3 -I "$EVM/script/pqz/gas-inputs.py" --check || { echo "at-set.sh: run gas-inputs.py and commit the pqz-gas files" >&2; exit 1; }
 git -C "$EVM" diff --quiet HEAD -- src/pqz/PqzSet.sol ||
   { echo "at-set.sh: src/pqz/PqzSet.sol is not the committed one (another run, or one killed?)" >&2; exit 2; }
 LEG=$EVM/runs/2026-11-11-stacked-gate/legacy-at-set.sh

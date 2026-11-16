@@ -10,7 +10,7 @@ import { hex, fromHex } from '../src/bytes.js';
 import { pqzKeySeed } from '../src/pq.js';
 import { pqzTokenKeySeedWithoutOpening, openKemSeed, openKemKey, legSeedOfKeyHash, openingCoins, sealOpening, openOpening,
   pqzOpeningMemoHash, pqzKeyHandle, pqzLayout, pqzMarks, pqzOpeningAad, pqzEntryHash, pqzEntriesHash, pqzOpeningBlobOf,
-  pqzScopedKeyMessages, SKIP } from '../src/pqzopen.js';
+  pqzScopedKeyMessages, pqzScopedKeyDigest, pqzScopedKeyRecordDigest, SKIP } from '../src/pqzopen.js';
 import { seedFromWords } from '../src/seed.js';
 import { concatBytes } from '../src/bytes.js';
 
@@ -228,14 +228,22 @@ test('U2-2: opening.json rejects: a malformed opening opens to null, O_a under r
   assert.equal(hex(open(T, h0(r1.opening_t), h0(r1.aad_t))), h0(r1.seed_leg));
   assert.equal(hex(open(A, h0(r1.opening_a), h0(r1.aad_a))), h0(r1.seed_leg));
   assert.equal(hex(sealOpening({ seedLeg: fromHex(h0(r1.seed_leg)), role: 0, kemPk: T.kemPk, aad: h0(r1.aad_t) }).bytes), h0(r1.opening_t));
-  assert.ok(K.rejects.length >= 15);
+  assert.ok(K.rejects.length >= 22);
   const seen = new Set();
   for (const x of K.rejects) {
     seen.add(x.field);
     assert.equal(x.recipient, 'skip', x.case);
-    if (x.field === 'to.kemPk') {
+    if (x.field === 'to.kemPk' || x.field === 'auditor.kemPk') {
+      const au = x.field === 'auditor.kemPk';
       assert.equal(x.seal, 'refused', x.case);
-      assert.throws(() => sealOpening({ seedLeg: fromHex(h0(r1.seed_leg)), role: 0, kemPk: h0(x.value), aad: h0(r1.aad_t) }), undefined, x.case);
+      assert.throws(() => sealOpening({ seedLeg: fromHex(h0(r1.seed_leg)), role: au ? 1 : 0, kemPk: h0(x.value), aad: h0(au ? r1.aad_a : r1.aad_t) }), undefined, x.case);
+      continue;
+    }
+    if (x.field === 'chainUid' || x.field === 'to.keyVersion') {
+      // T21 L66b: the honest O_t under the edited credit's aad (the row's, pqz-ffi's) opens to nothing
+      assert.notEqual(h0(x.aad), h0(r1.aad_t), x.case);
+      assert.equal(open(T, h0(r1.opening_t), h0(x.aad)), null, x.case);
+      assert.equal(x.open, 'none', x.case);
       continue;
     }
     const to = x.field === 'to.opening';
@@ -252,7 +260,12 @@ test('U2-2: opening.json rejects: a malformed opening opens to null, O_a under r
       assert.notEqual(k36, h0(x.value), x.case);
     }
   }
-  assert.deepEqual([...seen].sort(), ['auditor.opening', 'to.kemPk', 'to.opening']);
+  assert.deepEqual([...seen].sort(), ['auditor.kemPk', 'auditor.opening', 'chainUid', 'to.kemPk', 'to.keyVersion', 'to.opening']);
+  // T21 L66b: spec §14.19's named cases are rows of the shared corpus (both readers run them)
+  for (const c of ['O_t low-order X25519 point', "O_t mlkemCt of another UA's key", "O_t the auditor's sealed seed", 'O_t mlkemCt bit flipped',
+    'aad of another chain', 'aad of another key version', 'auditor kemPk 100 bytes']) {
+    assert.ok(K.rejects.some((x) => x.case === c), c);
+  }
 });
 
 test('U4h-3: malformed hex and out-of-range integers are refused, never changed; valid controls', () => {
@@ -273,6 +286,19 @@ test('U4h-3: malformed hex and out-of-range integers are refused, never changed;
   assert.equal(hex(pqzEntryHash(0, SLOT, '0x00')), hex(pqzEntryHash(0n, SLOT, '0x00')), 'control: index 0');
   for (const bad of [-1, 1n << 256n]) assert.throws(() => pqzEntryHash(bad, SLOT, '0x00'), /uint256/, `entry index ${bad}`);
   assert.throws(() => pqzEntryHash(0, SLOT, '0x0'), /code: not hex/, 'an odd code');
+  // T21 L65: an empty string, null, false or a padded number is refused, never read as 0 (or 7)
+  const rec = { ua: '0x' + '11'.repeat(32), keyClass: 2, chainUid: CU[0], token: '0x' + '00'.repeat(20), version: 0,
+    pqzKeyHash: '0x' + '22'.repeat(32), pqzPopHash: '0x' + '33'.repeat(32), openKemHash: '0x' + '44'.repeat(32), validUntilBlock: '7' };
+  assert.ok(pqzScopedKeyDigest(rec) && pqzScopedKeyRecordDigest(rec) && pqzKeyHandle(SEED, at), 'control');
+  assert.equal(hex(pqzEntryHash('7', SLOT, '0x00')), hex(pqzEntryHash(7n, SLOT, '0x00')), 'control: decimal digits');
+  for (const bad of ['', null, false, ' 7 ', '+7', '07', '0x7', 1.5, undefined]) {
+    const s = JSON.stringify(bad) ?? 'undefined';
+    assert.throws(() => pqzKeyHandle(SEED, { ...at, version: bad }), /version: not an integer/, `version ${s}`);
+    assert.throws(() => pqzScopedKeyDigest({ ...rec, version: bad }), /version: not an integer/, `record version ${s}`);
+    assert.throws(() => pqzScopedKeyDigest({ ...rec, keyClass: bad }), /keyClass: not an integer/, `keyClass ${s}`);
+    assert.throws(() => pqzScopedKeyRecordDigest({ ...rec, validUntilBlock: bad }), /validUntilBlock: not an integer/, `validUntilBlock ${s}`);
+    assert.throws(() => pqzEntryHash(bad, SLOT, '0x00'), /entry index: not an integer/, `entry index ${s}`);
+  }
 });
 
 test('P2-1: an audited credit checked against the auditor\'s key of another version is a skip that a single read cannot mark', () => {

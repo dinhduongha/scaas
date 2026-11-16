@@ -4,8 +4,10 @@
 //! its wallet's store, a generation and a slot, never secret bytes. Secret **inputs** (mnemonic, passphrases, PRF secret, an
 //! imported key, the seed-backup answers) cross as `&mut [u8]` and are zeroized here before the call returns, whatever its
 //! outcome; secret **outputs** (an opened plaintext, a shared secret, a revealed phrase, the PQZ leaf) cross as `rust::Vec`
-//! that the C++ `Secret` wipes. Every call runs in `guard` (no unwind into C++). An error is its code (`"UAKeyRevoked"`);
-//! no error carries an input. UNAUDITED.
+//! that the C++ `Secret` wipes. Every call that returns a `Result` runs in `guard` (a panic is `UAInternal`); the infallible
+//! getters (`wallet_manifest_json`, `key_data`, `key_kind`, `kem_pk`, `hmac_sha256`, `pqz_pk`, `pqz_set`, ...) do not, and a panic
+//! there is cxx's abort, never an unwind into C++ (T21 L58). An error is its code (`"UAKeyRevoked"`); no error carries an input.
+//! UNAUDITED.
 use crate::{guard, UaErr, R};
 use scaas_ua as ua;
 use std::collections::BTreeMap;
@@ -490,7 +492,7 @@ fn restored_installed(r: &Restored) -> bool {
     r.0.is_some()
 }
 fn restored_take(r: &mut Restored) -> R<Box<Wallet>> {
-    r.0.take().map(|w| Box::new(Wallet(w, Live::new()))).ok_or_else(argument)
+    guard(|| r.0.take().map(|w| Box::new(Wallet(w, Live::new()))).ok_or_else(argument))
 }
 fn wallet_link_seal(w: &Wallet, sender: &Key, session_kem_pk: &[u8], short_code: &str) -> R<String> {
     guard(|| Ok(w.0.link_seal(ua_key(sender)?, session_kem_pk, short_code)?.to_json()))
@@ -563,7 +565,7 @@ fn key_data(k: &Key) -> Vec<u8> {
     }
 }
 fn key_ua(k: &Key) -> R<Vec<u8>> {
-    ua_key(k)?.ua().map(|u| u.to_vec()).ok_or_else(argument)
+    guard(|| ua_key(k)?.ua().map(|u| u.to_vec()).ok_or_else(argument))
 }
 fn key_network(k: &Key) -> String {
     match &*k.0 {
@@ -572,7 +574,7 @@ fn key_network(k: &Key) -> String {
     }
 }
 fn key_address(k: &Key) -> R<String> {
-    native_key(k)?.address().ok_or_else(argument)
+    guard(|| native_key(k)?.address().ok_or_else(argument))
 }
 fn sign_ua(k: &Key, purpose: &[u8], digest: &[u8]) -> R<Vec<u8>> {
     guard(|| Ok(ua_key(k)?.sign_ua(&a(purpose)?, &a(digest)?)?))
@@ -660,7 +662,7 @@ fn link_session_new() -> R<Box<LinkSession>> {
     guard(|| Ok(Box::new(LinkSession(Mutex::new(Some(uw::LinkSession::new()?)), Live::new()))))
 }
 fn session<T>(s: &LinkSession, f: impl FnOnce(&uw::LinkSession) -> T) -> R<T> {
-    s.0.lock().map_err(|_| argument())?.as_ref().map(f).ok_or_else(|| UaErr("UAKeyRevoked".into()))
+    guard(|| s.0.lock().map_err(|_| argument())?.as_ref().map(f).ok_or_else(|| UaErr("UAKeyRevoked".into())))
 }
 fn link_session_kem_pk(s: &LinkSession) -> R<Vec<u8>> {
     session(s, uw::LinkSession::kem_pk)

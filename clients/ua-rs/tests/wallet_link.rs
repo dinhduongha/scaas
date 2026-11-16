@@ -43,6 +43,26 @@ fn link_seal_then_from_link_installs() {
     assert_eq!(linked.manifest().backup_generation, w.manifest().backup_generation, "a link raises no generation");
 }
 
+/// T21 L29 (scenario B): the source wallet has a BIP-39 passphrase; `from_link` without it derives none of the payload's
+/// entries: `ContainerSender` (positive control: the passphrase given).
+#[test]
+fn from_link_refuses_another_bip39_passphrase() {
+    let k = load("keys.json");
+    let m = k["mnemonics"].as_array().unwrap().iter().find(|m| m["id"] == "twelve_words").unwrap().clone();
+    let w = Wallet::from_mnemonic(m["words"].as_str().unwrap(), "pass-a").unwrap();
+    let key = w.ua_key(0x0102, 0, 0).unwrap();
+    for (pass, ok) in [("", false), ("pass-b", false), ("pass-a", true)] {
+        let session = LinkSession::new().unwrap();
+        let x = expect(&key, &session);
+        let c = w.link_seal(&key, &session.kem_pk(), &session.short_code()).unwrap();
+        let r = Wallet::from_link(session, &reread(&c), &x, &none, None, pass);
+        match ok {
+            true => assert_eq!(r.unwrap().ua_key(0x0102, 0, 0).unwrap().ua(), key.ua()),
+            false => assert_eq!(r.err(), Some(Error::ContainerSender), "{pass:?}"),
+        }
+    }
+}
+
 #[test]
 fn link_seal_with_a_wrong_short_code_is_refused() {
     let w = wallet("twelve_words");

@@ -114,16 +114,12 @@ internal static unsafe class Native
 
     static Native() => NativeLibrary.SetDllImportResolver(typeof(Native).Assembly, Resolve);
 
-    static IntPtr Resolve(string name, Assembly asm, DllImportSearchPath? path)
+    /// <summary>SCAAS_UA_C_LIB when set, else .NET's default probing (the library beside the application first). No walk up the
+    /// directory tree: a library planted in an ancestor would get every secret (T21 L52); the test project sets SCAAS_UA_C_LIB.</summary>
+    internal static IntPtr Resolve(string name, Assembly asm, DllImportSearchPath? path)
     {
         if (name != L) return IntPtr.Zero;
         if (Environment.GetEnvironmentVariable("SCAAS_UA_C_LIB") is { Length: > 0 } env) return NativeLibrary.Load(env);
-        var file = OperatingSystem.IsWindows() ? "scaas_ua_c.dll" : OperatingSystem.IsMacOS() ? "libscaas_ua_c.dylib" : "libscaas_ua_c.so";
-        for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
-        {
-            var p = Path.Combine(d.FullName, "clients", "ua-c", "target", "release", file);
-            if (File.Exists(p)) return NativeLibrary.Load(p);
-        }
         return IntPtr.Zero;
     }
 
@@ -229,10 +225,11 @@ internal sealed unsafe class Args : IDisposable
         return Addr(b);
     }
 
-    /// <summary>A public string, NUL-terminated; null is NULL.</summary>
+    /// <summary>A public string, NUL-terminated; null is NULL; a NUL inside is UAArgument (the library would read up to it, T21 L53).</summary>
     public byte* Str(string? s)
     {
         if (s is null) return null;
+        if (s.Contains('\0')) throw new WalletException(UaLib.ErrArgument, "UAArgument", "a NUL inside a string");
         var a = GC.AllocateArray<byte>(Encoding.UTF8.GetByteCount(s) + 1, pinned: true);
         Encoding.UTF8.GetBytes(s, a);
         _keep.Add(a);
@@ -241,10 +238,12 @@ internal sealed unsafe class Args : IDisposable
 
     readonly List<byte[]> _keep = []; // pinned-heap arrays: alive (and in place) until the call returns
 
-    /// <summary>A NUL-terminated copy of a secret (from the <see cref="UaLib.SecretBuf"/> hook), zeroed on Dispose; null is NULL.</summary>
+    /// <summary>A NUL-terminated copy of a secret (from the <see cref="UaLib.SecretBuf"/> hook), zeroed on Dispose; null is NULL; a
+    /// NUL inside is UAArgument, never a secret cut at it (T21 L53).</summary>
     public byte* Secret(byte[]? b)
     {
         if (b is null) return null;
+        if (Array.IndexOf(b, (byte)0) >= 0) throw new WalletException(UaLib.ErrArgument, "UAArgument", "a NUL inside a secret");
         var x = UaLib.SecretBuf(b.Length + 1);
         b.CopyTo(x, 0);
         _wipes.Add(x);
@@ -285,7 +284,7 @@ public static unsafe class UaLib
     public const uint ZetherUseConf = 7, ZetherUseViewing = 8;
     /// <summary>SCAAS_UA_PQZ_OUT_MAX: a PQZ answer's buffer (never sized by a size query).</summary>
     public const int PqzOutMax = 1052672;
-    internal const int ErrKeyData = 1, ErrBuffer = 9;
+    internal const int ErrKeyData = 1, ErrArgument = 8, ErrBuffer = 9;
 
     static readonly Lock LoadLock = new();
     static bool _loaded;

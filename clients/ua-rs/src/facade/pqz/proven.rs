@@ -31,13 +31,6 @@ use std::collections::{BTreeMap, BTreeSet};
 /// The most key records of one credit (op 7: 8 legs and the auditor, and the sender's).
 const KEY_RECORDS_MAX: usize = 10;
 /// `ZetherTypes.TransferMode` (`HASH` 0, `BUNDLE` 1) as `PqzCore._bindMode` encodes it.
-fn mode_word(m: Mode) -> Word {
-    u64_word(match m {
-        Mode::Hash => 0,
-        Mode::Bundle => 1,
-    })
-}
-
 /// A request's SSTORE2 codes `(address, code)`, each address once.
 pub(super) type Codes = Vec<([u8; 20], Vec<u8>)>;
 
@@ -443,12 +436,6 @@ fn t_k(rec: &Record, window: &[(u64, Word)], blobs: &mut Blobs) -> Result<Vec<u8
     }
     add_trivial_mod(&mut c, rec.shield_in);
     Ok(c.iter().flat_map(|x| x.to_be_bytes()).collect())
-}
-
-/// `keccak256(abi.encode(binding == 0 ? TAG_DIRECT_MODE : binding, uint8(mode)))` (`PqzCore._bindMode`).
-fn bind_mode(binding: &Word, mode: Mode) -> Word {
-    let b = if *binding == [0; 32] { crate::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1") } else { *binding };
-    crate::keccak256(&[b, mode_word(mode)].concat())
 }
 
 impl PqzKey {

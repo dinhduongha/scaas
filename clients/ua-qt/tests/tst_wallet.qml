@@ -102,10 +102,14 @@ TestCase {
             else compare(got.length, r.signature.length, r.name)
         }
         const evm = fixture.native("pq_kat", "evm", 0)
-        let signed = 0, refused = 0
+        let signed = 0, refused = 0, any = 0
         for (const r of sign.policy) {
             const got = UaWallet.signTyped(evm, JSON.stringify(r.td), JSON.stringify(r.expect))
-            if (r.refused !== undefined) {
+            if (r.refused === undefined && r.expect.check === "Any") {
+                // T21 L51: the `Any` row ua-rs signs is refused to QML
+                compare([got, UaWallet.lastError], ["", "UAPolicyRefused"], r.id)
+                any++
+            } else if (r.refused !== undefined) {
                 compare(got, "", r.id)
                 compare(UaWallet.lastError, "UAPolicyRefused", r.id)
                 refused++
@@ -114,7 +118,10 @@ TestCase {
                 signed++
             }
         }
-        compare([signed, refused], [10, 14])
+        compare([signed, refused, any], [9, 14, 1])
+        const td = sign.policy.find(r => r.expect.check === "Any" && r.refused === undefined).td
+        compare(UaWallet.signTyped(evm, JSON.stringify(td), '{"check":"Any","allowAnyTypedData":true}'), "", "Any by its marker")
+        compare(UaWallet.lastError, "UAPolicyRefused", "Any by its marker")
         for (const r of sign.tx.rows) {
             const id = fixture.native(r.signer.mnemonic, r.signer.network, r.signer.index)
             compare(UaWallet.signTransaction(id, JSON.stringify(r.tx)), r.raw, "type " + r.tx.type)

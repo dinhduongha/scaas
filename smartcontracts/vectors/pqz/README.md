@@ -113,6 +113,12 @@ disclosure statement view, the statements' `memoHash` words, and T19c's `scaas.p
 runs give the same bytes. `pqz_kat.py` rebuilds every `T`, `entryRef` and leg from the words (`check_state`); ua-rs's words
 commands reproduce them (`clients/ua-rs/tests/facade_pqz_state.rs`).
 
+### Wallet rows (`<set>/wallet_state.json`)
+
+**Not a cross-language known answer.** ua-rs writes it on its own simulated chain (`clients/ua-rs/tests/pqz_chain`,
+`tests/pqz_wallet_rows.rs`) and only ua-rs or its bindings read it, so it pins the bindings' call paths, not the bytes of a
+debit; the authority for those stays this directory's `pqz-vectors` rows and the forge writer's `state.json`.
+
 ### Op 7 (`R_TXM`)
 
 Sender F, auditor A and `T` as the scenario (`T = Enc_F(1,000,000; 0x61…) + Trivial(1,000)`); recipient j = KeyGen(`0x60

@@ -7,9 +7,29 @@
 //! handle's gated entries. UNAUDITED.
 use crate::keccak;
 use hmac::{Hmac, Mac};
+
+/// T21 O5 (owner 2026-11-16, "ok, as proposed"): the entry points that take or return a raw BIP-39-derived seed (the handle's
+/// seed constructor, the two raw derivations) are `pub` under the test feature `vectors` only and `pub(crate)` otherwise; the
+/// handle is SPECIFIED, not built in ua-rs (no `Wallet` method makes one; signers-clientkeys.md#CLI-SGN-51). A release build
+/// cannot name them (the `compile_fail` checks on [`PqzKeyHandle`]).
+macro_rules! vectors_pub {
+    ($(#[$m:meta])* fn $name:ident $($rest:tt)*) => {
+        #[cfg(feature = "vectors")]
+        $(#[$m])* pub fn $name $($rest)*
+        #[cfg(not(feature = "vectors"))]
+        #[allow(dead_code)]
+        $(#[$m])* pub(crate) fn $name $($rest)*
+    };
+}
 use sha2::Sha256;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::Shake256;
+
+/// Equality of two 32-byte words in constant time (T21 L42): every byte is folded, no early exit, and the fold is hidden from
+/// the optimiser. `pqz3k` builds in every cell, `subtle` only with `pqz` (so the lockfiles over ua-rs stay as they are).
+fn ct_eq32(a: &[u8; 32], b: &[u8; 32]) -> bool {
+    core::hint::black_box(a.iter().zip(b).fold(0u8, |d, (x, y)| d | (x ^ y))) == 0
+}
 
 fn hmac(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
     let mut m = <Hmac<Sha256> as Mac>::new_from_slice(key).expect("any key length");
@@ -42,22 +62,27 @@ fn scoped_key_seed(seed: &[u8; 64], account: u32, index: u32, chain_uid: &[u8; 3
     o
 }
 
+vectors_pub! {
 /// K3-2, class `offchain-token` of a token WITHOUT the opening only: the accepted exposure of CTR-PQZ-37 (owner 2026-11-13; the
 /// wallet decrypts that token's credits as on `PRECOMPILE`). A token with the opening, and every `offchain-shared` key, go
-/// through a [`PqzKeyHandle`].
-pub fn pqz_token_key_seed_without_opening(seed: &[u8; 64], account: u32, index: u32, chain_uid: &[u8; 32], token: &[u8; 20], v: u64)
+/// through a [`PqzKeyHandle`]. `pub` under `vectors` only (T21 O5).
+fn pqz_token_key_seed_without_opening(seed: &[u8; 64], account: u32, index: u32, chain_uid: &[u8; 32], token: &[u8; 20], v: u64)
     -> [u8; 32]
 {
     scoped_key_seed(seed, account, index, chain_uid, Some(token), v)
 }
+}
 
-/// K3-6b: the opening KEM seed of a scoped record, 96 bytes (ML-KEM `d ‖ z`, then the X25519 secret).
-pub fn open_kem_seed(seed: &[u8; 64], ua: &[u8; 32], chain_uid: &[u8; 32], token: Option<&[u8; 20]>, v: u64) -> [u8; 96] {
+vectors_pub! {
+/// K3-6b: the opening KEM seed of a scoped record, 96 bytes (ML-KEM `d ‖ z`, then the X25519 secret). `pub` under `vectors`
+/// only (T21 O5).
+fn open_kem_seed(seed: &[u8; 64], ua: &[u8; 32], chain_uid: &[u8; 32], token: Option<&[u8; 20]>, v: u64) -> [u8; 96] {
     let label: &[u8] = if token.is_some() { b"scaas.kem.pqz-opening-token.1" } else { b"scaas.kem.pqz-opening.1" };
     let info = [label, ua, chain_uid, token.map_or(&[][..], |t| &t[..]), &v.to_be_bytes()].concat();
     let mut o = [0u8; 96];
     hkdf(b"scaas.ua.kem.v1", seed, &info, &mut o);
     o
+}
 }
 
 /// K3-4: `seed_leg = SHAKE256("SCAAS-PQZ-ENC-LEG-V1" ‖ seed_enc ‖ be4(0) ‖ toUA ‖ keccak256(pk_t))[0..32)`, `keccak256(pk_t)` given.
@@ -360,6 +385,21 @@ pub struct Own<'a> {
 /// or skip-marked, and [`Self::with_secret_keygen`] (the public key and the `R_REG` proof of registration). [`Self::check`]
 /// hands the opening KEM seed to the binding's K3-7 check (pqz-ffi `opening::check_recipient`) with the `aad` the handle
 /// builds, and returns an acceptance bound to the entry's bytes. UNAUDITED.
+#[cfg_attr(not(feature = "vectors"), doc = r#"
+A release build names no raw-seed entry point (T21 O5; positive control first):
+```
+let _ = scaas_ua::pqz3k::Layout::of(2304, 46);
+```
+```compile_fail,E0624
+let _ = scaas_ua::pqz3k::PqzKeyHandle::new(&[0; 64], 0, 0, &[0; 32], &[0; 32], None, 0, scaas_ua::pqz3k::Layout::of(2304, 46));
+```
+```compile_fail,E0603
+let _ = scaas_ua::pqz3k::open_kem_seed(&[0; 64], &[0; 32], &[0; 32], None, 0);
+```
+```compile_fail,E0603
+let _ = scaas_ua::pqz3k::pqz_token_key_seed_without_opening(&[0; 64], 0, 0, &[0; 32], &[0; 20], 0);
+```
+"#)]
 pub struct PqzKeyHandle {
     class: KeyClass,
     scope: [u8; 20],
@@ -375,10 +415,11 @@ pub struct PqzKeyHandle {
 }
 
 impl PqzKeyHandle {
+    vectors_pub! {
     /// `token` `None`: `offchain-shared`; `Some`: `offchain-token` of that token, which must carry the opening (a token without
-    /// it uses [`pqz_token_key_seed_without_opening`]).
+    /// it uses `pqz_token_key_seed_without_opening`). From the raw BIP-39 seed: `pub` under `vectors` only (T21 O5).
     #[allow(clippy::too_many_arguments)]
-    pub fn new(seed: &[u8; 64], account: u32, index: u32, ua: &[u8; 32], chain_uid: &[u8; 32], token: Option<&[u8; 20]>, version: u64,
+    fn new(seed: &[u8; 64], account: u32, index: u32, ua: &[u8; 32], chain_uid: &[u8; 32], token: Option<&[u8; 20]>, version: u64,
         layout: Layout) -> Self
     {
         let (class, scope) = match token {
@@ -390,6 +431,7 @@ impl PqzKeyHandle {
             pqz_seed: scoped_key_seed(seed, account, index, chain_uid, token, version),
             open_kem_seed: open_kem_seed(seed, ua, chain_uid, token, version),
             loads: core::cell::Cell::new(0), keygens: core::cell::Cell::new(0) }
+    }
     }
 
     pub fn class(&self) -> KeyClass {
@@ -464,7 +506,9 @@ impl PqzKeyHandle {
         if !self.token_ok(&own.token) {
             return Err(Refused::NotThisHandle);
         }
-        if own_tag(&self.pqz_seed, &self.chain_uid, &own.token, &self.ua, own.send_counter, own.pu, own.pvf) != own.own_tag {
+        // constant time, as path (B)'s `ct_eq` (T21 L42): the tag gates the seed for a ciphertext a node supplies
+        let want = own_tag(&self.pqz_seed, &self.chain_uid, &own.token, &self.ua, own.send_counter, own.pu, own.pvf);
+        if !ct_eq32(&want, &own.own_tag) {
             return Err(Refused::OwnTag);
         }
         self.loads.set(self.loads.get() + 1);
