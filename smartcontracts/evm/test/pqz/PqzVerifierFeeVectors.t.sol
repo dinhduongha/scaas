@@ -201,38 +201,55 @@ contract PqzVerifierFeeVectorsTest is PqzOffchainBase {
             uint64 vf = pre ? 0 : fees[i];
             if (!pre) (t,) = _tokens(vf);
             for (uint256 mode; mode < 2; ++mode) {
-                IPqzToken.PqzTransferArgs memory a = _ts(_payload(_p(t), 0, alice, bob, 0, _out(11, false), mode == 0 ? _memo() : bytes("")));
-                bytes memory st1 = t.transferSingleStatement(a, 0);
-                bytes32 w1 = bytes32(_wd(st1, 544));
-                uint256 fee1 = _wd(st1, 256);
-                bytes32 w7 = bytes32(_wd(t.transferStatement(_multiA(t, 0, 2), 0), 544));
-                if (mode == 0) w7 = bytes32(_wd(t.transferStatement(_hashMulti(t), 0), 544));
-                bytes32 want = pre ? keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE, uint8(mode)))
-                    : keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE_VF, uint8(mode), uint256(vf)));
-                assertEq(w1, want, "op 1 word 544");
-                assertEq(w7, want, "op 7 word 544");
-                assertEq(fee1, vf, "op 1 fee word: vf alone");
-                if (!write) _checkBinding(pin, n, pre, mode, vf, w1, w7, fee1);
+                Bind memory b = _bindingRow(t, pre, mode, vf);
+                if (!write) _checkBinding(pin, n, b);
                 ++n;
-                s = string.concat(s, bytes(s).length == 0 ? "" : ", ", "{\"pqzVerifyMode\": \"", pre ? "PRECOMPILE" : "OFFCHAIN",
-                    "\", \"mode\": \"", mode == 0 ? "HASH" : "BUNDLE", "\", \"modeByte\": ", vm.toString(mode), ", \"verifierFee\": ",
-                    vm.toString(vf), ", \"op1Word544\": \"", vm.toString(w1), "\", \"op7Word544\": \"", vm.toString(w7),
-                    "\", \"op1FeeWord\": ", vm.toString(fee1), "}");
+                s = string.concat(s, bytes(s).length == 0 ? "" : ", ", _bindingJson(b));
             }
         }
         if (!write) assertEq(pin.readUint(".bindingCount"), n, "binding count");
     }
 
-    function _checkBinding(string memory pin, uint256 i, bool pre, uint256 mode, uint64 vf, bytes32 w1, bytes32 w7, uint256 fee1)
-        internal view
-    {
+    /// One binding row: the token's verification, the mode, `vf`, and what the contract gives (word 544 of op 1 and op 7, op 1's
+    /// fee word).
+    struct Bind {
+        bool pre;
+        uint256 mode;
+        uint64 vf;
+        bytes32 w1;
+        bytes32 w7;
+        uint256 fee1;
+    }
+
+    function _bindingRow(NormalPqzToken t, bool pre, uint256 mode, uint64 vf) internal view returns (Bind memory b) {
+        (b.pre, b.mode, b.vf) = (pre, mode, vf);
+        IPqzToken.PqzTransferArgs memory a = _ts(_payload(_p(t), 0, alice, bob, 0, _out(11, false), mode == 0 ? _memo() : bytes("")));
+        bytes memory st1 = t.transferSingleStatement(a, 0);
+        (b.w1, b.fee1) = (bytes32(_wd(st1, 544)), _wd(st1, 256));
+        b.w7 = bytes32(_wd(t.transferStatement(mode == 0 ? _hashMulti(t) : _multiA(t, 0, 2), 0), 544));
+        bytes32 want = pre ? keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE, uint8(mode)))
+            : keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE_VF, uint8(mode), uint256(vf)));
+        assertEq(b.w1, want, "op 1 word 544");
+        assertEq(b.w7, want, "op 7 word 544");
+        assertEq(b.fee1, vf, "op 1 fee word: vf alone");
+    }
+
+    function _bindingJson(Bind memory b) internal pure returns (string memory) {
+        return string.concat("{\"pqzVerifyMode\": \"", b.pre ? "PRECOMPILE" : "OFFCHAIN", "\", \"mode\": \"",
+            b.mode == 0 ? "HASH" : "BUNDLE", "\", \"modeByte\": ", vm.toString(b.mode), ", \"verifierFee\": ", vm.toString(b.vf),
+            ", \"op1Word544\": \"", vm.toString(b.w1), "\", \"op7Word544\": \"", vm.toString(b.w7), "\", \"op1FeeWord\": ",
+            vm.toString(b.fee1), "}");
+    }
+
+    function _checkBinding(string memory pin, uint256 i, Bind memory b) internal view {
         string memory k = string.concat(".binding[", vm.toString(i), "]");
-        assertEq(keccak256(bytes(pin.readString(string.concat(k, ".pqzVerifyMode")))), keccak256(pre ? bytes("PRECOMPILE") : bytes("OFFCHAIN")), k);
-        assertEq(pin.readUint(string.concat(k, ".modeByte")), mode, k);
-        assertEq(pin.readUint(string.concat(k, ".verifierFee")), vf, k);
-        assertEq(pin.readBytes32(string.concat(k, ".op1Word544")), w1, string.concat(k, " op1Word544"));
-        assertEq(pin.readBytes32(string.concat(k, ".op7Word544")), w7, string.concat(k, " op7Word544"));
-        assertEq(pin.readUint(string.concat(k, ".op1FeeWord")), fee1, string.concat(k, " op1FeeWord"));
+        assertEq(keccak256(bytes(pin.readString(string.concat(k, ".pqzVerifyMode")))),
+            keccak256(b.pre ? bytes("PRECOMPILE") : bytes("OFFCHAIN")), k);
+        assertEq(pin.readUint(string.concat(k, ".modeByte")), b.mode, k);
+        assertEq(pin.readUint(string.concat(k, ".verifierFee")), b.vf, k);
+        assertEq(pin.readBytes32(string.concat(k, ".op1Word544")), b.w1, string.concat(k, " op1Word544"));
+        assertEq(pin.readBytes32(string.concat(k, ".op7Word544")), b.w7, string.concat(k, " op7Word544"));
+        assertEq(pin.readUint(string.concat(k, ".op1FeeWord")), b.fee1, string.concat(k, " op1FeeWord"));
     }
 
     function _hashMulti(NormalPqzToken t) internal view returns (IPqzToken.PqzMultiArgs memory) {
