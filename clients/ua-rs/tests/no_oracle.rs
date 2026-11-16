@@ -524,39 +524,35 @@ fn unpack_lanes(stored: &[u8]) -> Vec<u64> {
 }
 
 /// T21 O5 (b) (ARCH-POS-13 on the three-key handle, spec §14.18): the 2·K crafted queries, laid out wherever a ciphertext enters
-/// `pqz3k::PqzKeyHandle` (a class-2 handle of the holder's wallet): as the debit's own part with a tag that is not the holder's
-/// (zero, and the holder's tag of another counter), as an unaccepted window entry, and as a credit through `check` (an opening
-/// op 1 blob holding the query as `u ‖ v_t`, a junk opening). Each is refused (`OwnTag`, `Window`) or a skip, and the PQZ seed
-/// never reaches a closure. Positive control: the same bytes as the holder's own part under its true tag open.
+/// `pqz3k::PqzKeyHandle` (a class-2 handle of the holder's wallet): as the debit's own part with a tag that is not the holder's,
+/// as an unaccepted window entry, and as a credit through `check` (an opening op 1 blob holding the query as `u ‖ v_t` at the op 1
+/// offsets, a junk opening). Each is refused (`OwnTag`, `Window`) or a skip, and the PQZ seed is never used. A release build has
+/// no entry that hands the seed to caller code (owner decision (a)): the debit opens inside the handle, on the gated parts only.
+/// Positive control (`vectors`: the tag needs the seed): an honest own ciphertext under its true tag opens to its amount, and
+/// the crafted query under the holder's tag of another counter is still `OwnTag`.
 #[test]
 fn three_key_handle_refuses_the_crafted_query() {
-    use scaas_ua::facade::pqz_pack::pack;
+    use scaas_ua::facade::pqz_pack::{pack, PKP};
     use scaas_ua::pqz3k::{Checked, Credit, Debit, Own, Reads, Refused, Scope, WindowEntry};
-    use scaas_ua::wallet::{hkdf_sha256, hmac_sha256};
     unlock();
     let w = Wallet::from_mnemonic(WORDS, "").unwrap();
     let (cu, token) = ([0xC1u8; 32], [0x70u8; 20]);
     let h = w.pqz_scoped_key(&Scope { account: 0, index: 0, ua: A, chain_uid: cu, token: None, version: 0 }).unwrap();
-    let seed32 = h.with_secret_keygen(|s| *s).unwrap();
-    let tag = |pu: &[u8], pvf: &[u8], ctr: u32| {
-        let k = hkdf_sha256(&seed32, &[], b"PQZ/owntag/v1", 32).unwrap();
-        hmac_sha256(&k, &[&cu[..], &token, &A, &ctr.to_be_bytes(), &scaas_ua::keccak256(&[pu, pvf].concat())].concat())
-    };
-    let mut slot = [0u8; 32];
-    slot[23] = 200; // a credit (length 200), unmarked
+    let mut slot = [0u8; 32]; // a credit at the op 1 offsets (16, 16 + P(u)), unmarked
+    slot[21] = 16;
+    slot[22..24].copy_from_slice(&((16 + PKP) as u16).to_be_bytes());
     let reads = Reads { block: 1, finalized: true, strict_majority: true };
     let mut n = 0;
     for j in 0..K {
         for off in [0, -1] {
             let (u, v) = query(j, off);
             let (pu, pv) = (pack(&u).unwrap(), pack(&v).unwrap());
-            let own = |own_tag| Debit { token, last_debit: 1, own: Some(Own { pu: &pu, pvf: &pv, own_tag }), window: &[] };
-            assert_eq!(h.with_secret_debit(&own([0; 32]), |_| ()), Err(Refused::OwnTag), "a zero tag");
-            assert_eq!(h.with_secret_debit(&own(tag(&pu, &pv, 1)), |_| ()), Err(Refused::OwnTag), "the tag of another counter");
+            let own = |own_tag| Debit { token, last_debit: 1, own: Some(Own { pu: &pu, pvf: &pv, own_tag }), window: &[], shield_in: 0 };
+            assert_eq!(h.open_debit(&own([0; 32])).err(), Some(Refused::OwnTag), "a zero tag");
             let code = [&[0u8][..], &[0x5a; 16], &pu, &pv, &A, &pu, &pv, &[0x33; scaas_ua::pqz3k::OPENING], &[0; 32], &0u64.to_be_bytes(), &[1]].concat();
             let win = [WindowEntry { token, index: 0, slot, code: Some(&code), accepted: None }];
-            let d = Debit { token, last_debit: 0, own: None, window: &win };
-            assert_eq!(h.with_secret_debit(&d, |_| ()), Err(Refused::Window), "an unaccepted window entry");
+            let d = Debit { token, last_debit: 0, own: None, window: &win, shield_in: 0 };
+            assert_eq!(h.open_debit(&d).err(), Some(Refused::Window), "an unaccepted window entry");
             let c = Credit { token, index: 0, slot, code: &code, auditor: None, reads };
             assert!(matches!(h.check(&c), Ok(Checked::Skip(_))), "a credit holding the query is a skip, never a decryption");
             n += 1;
@@ -564,9 +560,25 @@ fn three_key_handle_refuses_the_crafted_query() {
     }
     assert_eq!(n, 2 * K);
     assert_eq!(h.secret_loads(), 0, "no query reached the seed");
-    let (u, v) = query(0, 0);
-    let (pu, pv) = (pack(&u).unwrap(), pack(&v).unwrap());
-    let d = Debit { token, last_debit: 1, own: Some(Own { pu: &pu, pvf: &pv, own_tag: tag(&pu, &pv, 0) }), window: &[] };
-    assert_eq!(h.with_secret_debit(&d, |_| ()), Ok(()), "control: the holder's own part under its true tag");
-    assert_eq!(h.secret_loads(), 1);
+    #[cfg(feature = "vectors")]
+    {
+        use scaas_ua::wallet::{hkdf_sha256, hmac_sha256};
+        let seed32 = h.with_secret_keygen(|s| *s).unwrap();
+        let tag = |pu: &[u8], pvf: &[u8], ctr: u32| {
+            let k = hkdf_sha256(&seed32, &[], b"PQZ/owntag/v1", 32).unwrap();
+            hmac_sha256(&k, &[&cu[..], &token, &A, &ctr.to_be_bytes(), &scaas_ua::keccak256(&[pu, pvf].concat())].concat())
+        };
+        let (u, v) = query(0, 0);
+        let (pu, pv) = (pack(&u).unwrap(), pack(&v).unwrap());
+        let d = Debit { token, last_debit: 1, own: Some(Own { pu: &pu, pvf: &pv, own_tag: tag(&pu, &pv, 1) }), window: &[], shield_in: 0 };
+        assert_eq!(h.open_debit(&d).err(), Some(Refused::OwnTag), "the holder's tag of another counter");
+        let pk: Box<[u8; PK_BYTES]> = h.pk().into_boxed_slice().try_into().unwrap();
+        let mut dg = [0u8; 16];
+        dg[0] = 9;
+        let e = pqz_ffi::pqzl::enc(&[&pk], &[dg], &[0x44; 32]).unwrap();
+        let (pu, pv) = (pack(&e.u[..]).unwrap(), pack(&e.vs[0]).unwrap());
+        let d = Debit { token, last_debit: 1, own: Some(Own { pu: &pu, pvf: &pv, own_tag: tag(&pu, &pv, 0) }), window: &[], shield_in: 0 };
+        assert_eq!(h.open_debit(&d).map(|o| o.balance), Ok(9), "control: the holder's own ciphertext under its true tag decrypts");
+        assert_eq!(h.secret_loads(), 1);
+    }
 }

@@ -138,10 +138,10 @@ mod handle {
     use super::{a, b, bip39_seed, load, n};
     use pqz_ffi::opening::{self as op, AuditorOutcome, Party, Role};
     use pqz_ffi::pqzl;
-    use pqz_ffi::stmt::PK_BYTES;
+    use pqz_ffi::stmt::{K_MAX, PK_BYTES};
     use scaas_ua::keccak256;
     use scaas_ua::pqz3k::{
-        self, AuditorKeys, Checked, Credit, Debit, Own, PqzKeyHandle, Reads, Refused, Scope, WindowEntry,
+        self, AuditorKeys, Checked, Credit, Debit, Own, PqzKeyHandle, Reads, Refused, Scope, WindowEntry, LAYOUT,
     };
     use scaas_ua::wallet::{Error, Unlock, Wallet};
     use serde_json::Value;
@@ -165,6 +165,7 @@ mod handle {
     fn kat() -> (Value, Wallet, [u8; 32], [u8; 32]) {
         unlock();
         let k = load("ua/pqz3k_kat.json");
+        assert_eq!(k["set"]["name"].as_str(), Some("n2304-kmax4096"), "pqz3k_kat.json's own rows are of one set");
         let w = Wallet::from_mnemonic(k["mnemonic"].as_str().unwrap(), "").unwrap();
         let (ua, cu) = (a::<32>(&k["ua"]), a::<32>(&k["chainUid"]));
         (k, w, ua, cu)
@@ -242,14 +243,18 @@ mod handle {
         code_of(ua, &[h.version()], &leg)
     }
 
-    const SLOT: [u8; 32] = {
+    /// A credit's slot word `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` at the offsets an op 1 credit has (the review's F1).
+    const fn slot_at(u_off: usize, v_off: usize) -> [u8; 32] {
         let mut w = [0u8; 32];
         w[0] = 0x5e; // blob address high byte
-        w[21] = 16; // offset 16
-        w[23] = 200; // length 200
+        w[20] = (u_off >> 8) as u8;
+        w[21] = u_off as u8;
+        w[22] = (v_off >> 8) as u8;
+        w[23] = v_off as u8;
         w[31] = 7; // block 7
         w
-    };
+    }
+    const SLOT: [u8; 32] = slot_at(16, 16 + LAYOUT.pkp);
     fn marked(s: [u8; 32]) -> [u8; 32] {
         let mut m = s;
         m[24] |= 0x80;
@@ -257,7 +262,7 @@ mod handle {
     }
     const TRIVIAL: [u8; 32] = {
         let mut w = [0u8; 32];
-        w[19] = 100; // amount in the address field, length 0
+        w[19] = 100; // amount 100 in the low 64 bits of the blob field, vOff 0
         w[31] = 9;
         w
     };
@@ -269,7 +274,10 @@ mod handle {
         WindowEntry { token, index, slot, code, accepted }
     }
     fn deb<'a>(token: [u8; 20], last_debit: u64, own: Option<Own<'a>>, window: &'a [WindowEntry<'a>]) -> Debit<'a> {
-        Debit { token, last_debit, own, window }
+        Debit { token, last_debit, own, window, shield_in: 0 }
+    }
+    fn balance(r: Result<pqz3k::OpenedDebit, Refused>) -> Result<u64, Refused> {
+        r.map(|o| o.balance)
     }
 
     fn accepted(r: Result<Checked, Refused>, amount: u64) -> pqz3k::Accepted {
@@ -280,9 +288,13 @@ mod handle {
     }
 
     /// pq_kat.json `pqzScopedSeeds` and pqz3k_kat.json `handles` through `Wallet::pqz_scoped_key` (the store derivation equals
-    /// clientkeys' rows: the commitment and `keccak256(kemPk)`), and `ownTagOpening` through `with_secret_debit`.
+    /// clientkeys' rows: the commitment and `keccak256(kemPk)`), and `ownTagOpening` through the debit's own-part gate (a release
+    /// build opens the debit; the row's `P(u_f)` is no ciphertext of the key, so its balance is not asserted: the gate is).
     #[test]
     fn kat_rows() {
+        if pqz_ffi::stmt::SET != "n2304-kmax4096" {
+            return; // its own rows (`P(u_f)`, `P(v_f)`) are pqz3k_kat.json's set's; the other tests run at every set
+        }
         unlock();
         let k = load("ua/pq_kat.json");
         let w = Wallet::from_mnemonic(k["mnemonic"].as_str().unwrap(), "").unwrap();
@@ -303,32 +315,47 @@ mod handle {
             let token = a::<20>(&r["token"]);
             let class3 = r["keyClass"] == "offchain-token";
             let h = w.pqz_scoped_key(&scope(ua, cu, class3.then_some(token), 0)).unwrap();
-            let (mut puf, pvf, tag, last) = (b(&r["puf"]), b(&r["pvf"]), a::<32>(&r["ownTag"]), n(&r["sendCounter"]) + 1);
-            assert_eq!(h.with_secret_debit(&deb(token, last, Some(Own { pu: &puf, pvf: &pvf, own_tag: tag }), &[]), |_| 1), Ok(1), "control: the own part alone");
-            assert_eq!(h.with_secret_debit(&deb(token, last + 1, Some(Own { pu: &puf, pvf: &pvf, own_tag: tag }), &[]), |_| 2), Err(Refused::OwnTag), "the counter off by one");
+            let (puf, pvf, tag, last) = (b(&r["puf"]), b(&r["pvf"]), a::<32>(&r["ownTag"]), n(&r["sendCounter"]) + 1);
+            let own = |pu| Some(Own { pu, pvf: &pvf, own_tag: tag });
+            let ok = h.open_debit(&deb(token, last, own(&puf[..]), &[]));
+            assert!(!matches!(ok, Err(Refused::OwnTag)), "control: the own part alone passes the tag: {ok:?}");
+            assert_eq!(h.open_debit(&deb(token, last + 1, own(&puf[..]), &[])).err(), Some(Refused::OwnTag), "the counter off by one");
             let other = w.pqz_scoped_key(&scope(ua, cu, class3.then_some(token), 1)).unwrap();
-            assert_eq!(other.with_secret_debit(&deb(token, last, Some(Own { pu: &puf, pvf: &pvf, own_tag: tag }), &[]), |_| 3), Err(Refused::OwnTag), "a foreign key's tag");
-            puf[7] ^= 1;
-            assert_eq!(h.with_secret_debit(&deb(token, last, Some(Own { pu: &puf, pvf: &pvf, own_tag: tag }), &[]), |_| 4), Err(Refused::OwnTag), "u_f alone differs");
-            assert_eq!((h.secret_loads(), other.secret_loads()), (1, 0));
+            assert_eq!(other.open_debit(&deb(token, last, own(&puf[..]), &[])).err(), Some(Refused::OwnTag), "a foreign key's tag");
+            let acc1 = w.pqz_scoped_key(&Scope { account: 1, ..scope(ua, cu, class3.then_some(token), 0) }).unwrap();
+            assert_eq!(acc1.open_debit(&deb(token, last, own(&puf[..]), &[])).err(), Some(Refused::OwnTag), "another account's tag");
+            let mut flipped = puf.clone();
+            flipped[7] ^= 1;
+            assert_eq!(h.open_debit(&deb(token, last, own(&flipped[..]), &[])).err(), Some(Refused::OwnTag), "u_f alone differs");
+            assert_eq!((h.secret_loads(), other.secret_loads(), acc1.secret_loads()), (1, 0, 0));
         }
     }
 
     /// §14.1 / §14.18 on a class-2 and a class-3 handle of the KAT wallet, real pqz-ffi credits: three planted variants skip and
-    /// never load the PQZ seed; a window holding one unmarked is refused, marked it opens. The debit's gates one change at a
-    /// time, each with its positive control; the acceptance is bound to the handle, the token, the index and the bytes.
+    /// never load the PQZ seed; a window holding one unmarked is refused, marked it opens to the accepted amounts. The debit's
+    /// gates one change at a time, each with its positive control; the acceptance is bound to the handle (its keys and
+    /// derivation path), the token, the index and the bytes; the slot's offsets are an op 1 credit's.
     #[test]
     fn debit_gates_the_secret() {
+        if pqz_ffi::stmt::SET != "n2304-kmax4096" {
+            return; // its own rows (`P(u_f)`, `P(v_f)`) are pqz3k_kat.json's set's; the other tests run at every set
+        }
         let (k, w, ua, cu) = kat();
         let t2 = [0xa2u8; 20];
         for r in k["ownTagOpening"].as_array().unwrap() {
             let t1 = a::<20>(&r["token"]);
             let class3 = r["keyClass"] == "offchain-token";
-            let h = w.pqz_scoped_key(&scope(ua, cu, class3.then_some(t1), 0)).unwrap();
+            let sc = scope(ua, cu, class3.then_some(t1), 0);
+            let h = w.pqz_scoped_key(&sc).unwrap();
             let other = w.pqz_scoped_key(&scope(ua, cu, class3.then_some(t1), 1)).unwrap();
             let good = credit_to(&h, &ua, &cu, &t1, 0x1234, Plant::Honest, 1);
             let acc = accepted(h.check(&credit(t1, 0, &good)), 0x1234);
             assert_eq!((acc.token(), acc.index(), acc.entry_hash()), (t1, 0, pqz3k::entry_hash(0, &SLOT, Some(&good))));
+            // F1: the slot's offsets bound (control: SLOT above)
+            for (u_off, v_off, what) in [(17, 16 + LAYOUT.pkp, "uOff + 1"), (16, 17 + LAYOUT.pkp, "vOff + 1"), (16, 200, "vOff 200")] {
+                let c = Credit { slot: slot_at(u_off, v_off), ..credit(t1, 0, &good) };
+                assert!(matches!(h.check(&c), Err(Refused::Input(_))), "{what}");
+            }
             let mut skips = vec![];
             let mut bad = vec![];
             for (i, p) in [Plant::Junk, Plant::WrongSeed, Plant::CraftedV].into_iter().enumerate() {
@@ -343,46 +370,83 @@ mod handle {
             let (puf, pvf, tag, last) = (b(&r["puf"]), b(&r["pvf"]), a::<32>(&r["ownTag"]), n(&r["sendCounter"]) + 1);
             let own = Some(Own { pu: &puf, pvf: &pvf, own_tag: tag });
             let w0 = win(SLOT);
-            assert_eq!(h.with_secret_debit(&deb(t1, last, own, &w0), |_| ()), Err(Refused::Window), "an unaccepted unmarked credit");
+            assert_eq!(h.open_debit(&deb(t1, last, own, &w0)).err(), Some(Refused::Window), "an unaccepted unmarked credit");
             assert_eq!(h.secret_loads(), 0, "the secret was never loaded");
             // a skip read from one node at an unfinalized block is no reason to mark (Fable P2-1)
             assert_eq!(PqzKeyHandle::marks(&skips), Err(Refused::Unconfirmed));
             let again: Vec<_> = skips.iter().map(|s| pqz3k::Skip { reads: READF, ..s.clone() }).collect();
             assert_eq!(PqzKeyHandle::marks(&again), Ok(vec![1]));
             let wm = win(marked(SLOT));
-            assert_eq!(h.with_secret_debit(&deb(t1, last, own, &wm), |s| s.len()), Ok(32), "the mark landed: own part and window");
-            assert_eq!(h.with_secret_debit(&deb(t1, last, own, &[]), |_| ()), Ok(()), "control: the own part alone");
-            assert_eq!(h.with_secret_debit(&deb(t1, 0, None, &wm), |_| ()), Ok(()), "control: a first debit, the window alone");
+            // the KAT's own part passes its tag but is no ciphertext of this key: that it opened is the seed's use (counted)
+            let opens = |d: &Debit| {
+                let n = h.secret_loads();
+                let _ = h.open_debit(d);
+                h.secret_loads() == n + 1
+            };
+            assert!(opens(&deb(t1, last, own, &wm)), "the mark landed: own part and window");
+            assert!(opens(&deb(t1, last, own, &[])), "control: the own part alone");
+            assert_eq!(balance(h.open_debit(&deb(t1, 0, None, &wm))), Ok(0x1234 + 100), "control: a first debit, the window alone");
             assert_eq!(h.secret_loads(), 3);
             // the own part's gates (T21 L43): no empty-window bypass
-            assert_eq!(h.with_secret_debit(&deb(t1, last, None, &[]), |_| ()), Err(Refused::OwnRequired), "lastDebit > 0, zero entries");
-            assert_eq!(h.with_secret_debit(&deb(t1, last, None, &wm), |_| ()), Err(Refused::OwnRequired), "lastDebit > 0, no own part");
-            assert!(matches!(h.with_secret_debit(&deb(t1, 0, own, &wm), |_| ()), Err(Refused::Input(_))), "an own part at lastDebit 0");
-            assert_eq!(h.with_secret_debit(&deb(t1, 0, None, &[]), |_| ()), Err(Refused::EmptyDebit), "nothing gated");
+            assert_eq!(h.open_debit(&deb(t1, last, None, &[])).err(), Some(Refused::OwnRequired), "lastDebit > 0, zero entries");
+            assert_eq!(h.open_debit(&deb(t1, last, None, &wm)).err(), Some(Refused::OwnRequired), "lastDebit > 0, no own part");
+            assert!(matches!(h.open_debit(&deb(t1, 0, own, &wm)), Err(Refused::Input(_))), "an own part at lastDebit 0");
+            assert_eq!(h.open_debit(&deb(t1, 0, None, &[])).err(), Some(Refused::EmptyDebit), "nothing gated");
             let mut far = deb(t1, last, own, &[]);
             far.last_debit = (1 << 32) + 1;
-            assert!(matches!(h.with_secret_debit(&far, |_| ()), Err(Refused::Input(_))), "a counter at 2^32");
-            // the window's tokens (T21 L47)
+            assert!(matches!(h.open_debit(&far), Err(Refused::Input(_))), "a counter at 2^32");
+            far.last_debit = 1 << 32;
+            assert!(!matches!(h.open_debit(&far), Err(Refused::Input(_))), "control: counter 2^32 - 1 is no Input");
+            // owner 2026-11-16: a first debit of Trivial(shieldIn) alone
+            let sh = Debit { shield_in: 7, ..deb(t1, 0, None, &[]) };
+            let o = h.open_debit(&sh).unwrap();
+            assert_eq!(o.balance, 7, "a shielded-in-only first debit");
+            assert_eq!(o.t.len(), pqzl::CT_BYTES);
+            assert!(o.t[..PK_BYTES].iter().all(|x| *x == 0), "u of Trivial(shieldIn) is zero");
+            assert_eq!(balance(h.open_debit(&Debit { shield_in: 7, ..deb(t1, 0, None, &wm) })), Ok(0x1234 + 100 + 7), "and beside a window");
+            // the window's tokens (T21 L47), order and count (the review's F2)
             let mut e = wm;
             e[2].token = t2;
-            assert_eq!(h.with_secret_debit(&deb(t1, last, own, &e), |_| ()), Err(Refused::Window), "a TRIVIAL entry of another token");
+            assert_eq!(h.open_debit(&deb(t1, last, own, &e)).err(), Some(Refused::Window), "a TRIVIAL entry of another token");
             let mut e = wm;
             e[0].token = t2;
-            assert_eq!(h.with_secret_debit(&deb(t1, last, own, &e), |_| ()), Err(Refused::Window), "an accepted entry of another token");
+            assert_eq!(h.open_debit(&deb(t1, last, own, &e)).err(), Some(Refused::Window), "an accepted entry of another token");
+            let dup = [wm[0], wm[0]];
+            assert_eq!(h.open_debit(&deb(t1, 0, None, &dup)).err(), Some(Refused::Window), "an accepted entry twice");
+            let desc = [wm[2], wm[1]];
+            assert_eq!(h.open_debit(&deb(t1, 0, None, &desc)).err(), Some(Refused::Window), "indexes descending");
+            let many: Vec<_> = (0..K_MAX as u64 - 1).map(|i| we(t1, i, TRIVIAL, None, None)).collect();
+            assert_eq!(h.open_debit(&deb(t1, 0, None, &many)).err(), Some(Refused::Window), "K_MAX - 1 entries");
+            let ok = h.open_debit(&deb(t1, 0, None, &many[..K_MAX - 2]));
+            assert_eq!(balance(ok), Ok(100 * (K_MAX as u64 - 2)), "control: K_MAX - 2 entries");
             // the acceptance is bound to the handle, the token, the index and the bytes
-            assert_eq!(other.with_secret_debit(&deb(t1, 0, None, &wm[..1]), |_| ()), Err(Refused::Window), "another handle's acceptance");
+            assert_eq!(other.open_debit(&deb(t1, 0, None, &wm[..1])).err(), Some(Refused::Window), "another version's acceptance");
+            let a1 = w.pqz_scoped_key(&Scope { account: 1, ..sc }).unwrap();
+            assert_eq!(a1.open_debit(&deb(t1, 0, None, &wm[..1])).err(), Some(Refused::Window), "account 1 given account 0's acceptance");
+            let w2 = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "").unwrap();
+            let o2 = w2.pqz_scoped_key(&sc).unwrap();
+            assert_eq!(o2.open_debit(&deb(t1, 0, None, &wm[..1])).err(), Some(Refused::Window), "another wallet's key, the same scope");
+            let short = Own { pu: &puf[1..], pvf: &pvf, own_tag: tag };
+            assert!(matches!(h.open_debit(&deb(t1, last, Some(short), &[])), Err(Refused::Input(_))), "a short P(u_f)");
+            let i1 = w.pqz_scoped_key(&Scope { index: 1, ..sc }).unwrap();
+            assert_eq!(i1.open_debit(&deb(t1, 0, None, &wm[..1])).err(), Some(Refused::Window), "index 1 given index 0's acceptance");
+            let g1 = credit_to(&a1, &ua, &cu, &t1, 0x31, Plant::Honest, 12);
+            let acc_a1 = accepted(a1.check(&credit(t1, 0, &g1)), 0x31);
+            let e = [we(t1, 0, SLOT, Some(&g1), Some(&acc_a1))];
+            assert_eq!(balance(a1.open_debit(&deb(t1, 0, None, &e))), Ok(0x31), "control: account 1's own acceptance");
+            assert_eq!(h.open_debit(&deb(t1, 0, None, &e)).err(), Some(Refused::Window), "account 0 given account 1's acceptance");
             let mut e = wm[0];
             e.index = 3;
-            assert_eq!(h.with_secret_debit(&deb(t1, 0, None, &[e]), |_| ()), Err(Refused::Window), "another index");
+            assert_eq!(h.open_debit(&deb(t1, 0, None, &[e])).err(), Some(Refused::Window), "another index");
             let mut e = wm[0];
             e.code = Some(bad);
-            assert_eq!(h.with_secret_debit(&deb(t1, 0, None, &[e]), |_| ()), Err(Refused::Window), "other bytes");
+            assert_eq!(h.open_debit(&deb(t1, 0, None, &[e])).err(), Some(Refused::Window), "other bytes");
             let mut e = wm[0];
             e.code = None;
-            assert_eq!(h.with_secret_debit(&deb(t1, 0, None, &[e]), |_| ()), Err(Refused::Window), "no code");
+            assert_eq!(h.open_debit(&deb(t1, 0, None, &[e])).err(), Some(Refused::Window), "no code");
             if class3 {
                 let d = Debit { token: t2, ..deb(t1, 0, None, &[]) };
-                assert_eq!(h.with_secret_debit(&d, |_| ()), Err(Refused::NotThisHandle), "a class-3 debit of another token");
+                assert_eq!(h.open_debit(&d).err(), Some(Refused::NotThisHandle), "a class-3 debit of another token");
                 let c = Credit { token: t2, ..credit(t1, 0, good) };
                 assert_eq!(h.check(&c).err(), Some(Refused::NotThisHandle), "a class-3 handle given another token's credit");
             } else {
@@ -391,11 +455,11 @@ mod handle {
                 let acc2 = accepted(h.check(&credit(t2, 0, &g2)), 0x55);
                 assert_eq!(acc2.token(), t2);
                 let e = [WindowEntry { token: t1, index: 0, slot: SLOT, code: Some(&g2), accepted: Some(&acc2) }];
-                assert_eq!(h.with_secret_debit(&deb(t1, 0, None, &e), |_| ()), Err(Refused::Window), "an acceptance of another token");
+                assert_eq!(h.open_debit(&deb(t1, 0, None, &e)).err(), Some(Refused::Window), "an acceptance of another token");
                 let e = [WindowEntry { token: t2, ..e[0] }];
-                assert_eq!(h.with_secret_debit(&Debit { token: t2, ..deb(t1, 0, None, &e) }, |_| ()), Ok(()), "control: its own token");
+                assert_eq!(balance(h.open_debit(&deb(t2, 0, None, &e))), Ok(0x55), "control: its own token");
             }
-            assert_eq!(h.secret_loads(), 3 + u32::from(!class3), "no refusal loaded the secret");
+            assert_eq!(h.secret_loads(), 6 + u32::from(!class3), "no refusal loaded the secret");
             // not this handle's credit, or incomplete inputs: refused before the check
             let to_other = credit_to(&h, &[0x22; 32], &cu, &t1, 1, Plant::Honest, 10);
             let other_kv = credit_to(&other, &ua, &cu, &t1, 1, Plant::Honest, 11);
@@ -405,17 +469,33 @@ mod handle {
             assert!(matches!(h.check(&credit(t1, 0, &good[..good.len() - 1])), Err(Refused::Input(_))), "a short blob");
             assert!(matches!(h.check(&credit(t1, 0, &good[1..])), Err(Refused::Input(_))), "no STOP byte");
             assert!(matches!(h.check(&Credit { slot: TRIVIAL, ..credit(t1, 0, good) }), Err(Refused::Input(_))), "a TRIVIAL entry");
-            // keygen is counted apart; Debug shows no secret
-            assert_eq!(h.with_secret_keygen(|s| pqzl::keygen(s).unwrap().pk.to_vec()), Ok(h.pk()));
-            assert_eq!(h.keygens(), 1);
             let d = format!("{h:?}");
             assert!(!d.contains("seed") && d.contains("PqzKeyHandle"), "{d}");
         }
     }
 
-    /// Spec §8.2 for the handle: a handle of `pqz_scoped_key` works, then `lock()` revokes every entry before its input is used
-    /// (`KeyRevoked`, the closure never runs); a locked wallet makes none (`WalletLocked`); an unlock does not revive the old
-    /// handle, and a new one has the same commitment.
+    /// Owner decision (a): the handle proves its own record's `R_REG` (the message from its own fields, the proof verified by
+    /// pqz-ffi's verifier); another build's proof system is `Input`; counted in `keygens`.
+    #[test]
+    fn prove_reg_proves_the_handles_own_record() {
+        let (k, w, ua, cu) = kat();
+        let t1 = a::<20>(&k["ownTagOpening"][1]["token"]);
+        for token in [None, Some(t1)] {
+            let h = w.pqz_scoped_key(&scope(ua, cu, token, 1)).unwrap();
+            let r = h.prove_reg(&pqz_ffi::PQZL_ID).unwrap();
+            let kh = scaas_ua::key_hash_of(scaas_ua::PQZ_SCHEME, &h.pk()).unwrap().unwrap();
+            let kd = pqz3k::scoped_key_digest(&ua, if token.is_some() { 3 } else { 2 }, &cu, &token.unwrap_or([0; 20]), 1, &kh);
+            assert_eq!((r.pqz_key_hash, r.message), (kh, scaas_ua::ua_message(0x0142, &pqz3k::purpose_pqz_scoped_key(), &kd).unwrap()));
+            assert_eq!(pqzl::verify_fast(3, &r.stmt, &r.proof).ok(), Some(true), "the R_REG proof verifies");
+            assert!(r.stmt.windows(32).any(|x| x == r.message), "over the handle's message");
+            assert!(matches!(h.prove_reg(&[0x77; 32]), Err(Refused::Input(_))), "another build's proof system");
+            assert_eq!(h.keygens(), 1);
+        }
+    }
+
+    /// Spec §8.2 for the handle: a handle of `pqz_scoped_key` works, then `lock()` revokes every entry before its input is read
+    /// (`KeyRevoked` first, even for an input it would refuse otherwise); a locked wallet makes none (`WalletLocked`); an
+    /// unlock does not revive the old handle, and a new one has the same commitment.
     #[test]
     fn lock_revokes_the_handle() {
         let (k, w, ua, cu) = kat();
@@ -423,20 +503,24 @@ mod handle {
         let t1 = a::<20>(&k["ownTagOpening"][0]["token"]);
         let h = w.pqz_scoped_key(&scope(ua, cu, None, 0)).unwrap();
         let good = credit_to(&h, &ua, &cu, &t1, 7, Plant::Honest, 1);
-        let c = Credit { token: t1, index: 0, slot: SLOT, code: &good, auditor: None, reads: READ1 };
+        let c = credit(t1, 0, &good);
         let acc = accepted(h.check(&c), 7);
-        let win = [WindowEntry { token: t1, index: 0, slot: SLOT, code: Some(&good), accepted: Some(&acc) }];
-        let d = Debit { token: t1, last_debit: 0, own: None, window: &win };
+        let win = [we(t1, 0, SLOT, Some(&good), Some(&acc))];
+        let d = deb(t1, 0, None, &win);
         let before = h.seed_commitment().unwrap();
-        assert_eq!(h.with_secret_debit(&d, |_| 1), Ok(1), "control");
+        assert_eq!(balance(h.open_debit(&d)), Ok(7), "control");
         w.lock();
-        let ran = std::cell::Cell::new(false);
-        assert_eq!(h.with_secret_debit(&d, |_| ran.set(true)), Err(Refused::KeyRevoked));
-        assert_eq!(h.with_secret_keygen(|_| ran.set(true)), Err(Refused::KeyRevoked));
-        assert!(!ran.get(), "no closure ran after lock()");
+        assert_eq!(h.open_debit(&d).err(), Some(Refused::KeyRevoked));
         assert_eq!(h.check(&c).err(), Some(Refused::KeyRevoked));
         assert_eq!(h.seed_commitment(), Err(Refused::KeyRevoked));
-        assert_eq!(h.secret_loads(), 1);
+        assert_eq!(h.prove_reg(&pqz_ffi::PQZL_ID).err(), Some(Refused::KeyRevoked));
+        // KeyRevoked before any other refusal (the review, P3)
+        assert_eq!(h.check(&Credit { slot: TRIVIAL, ..c }).err(), Some(Refused::KeyRevoked), "a TRIVIAL credit");
+        assert_eq!(h.check(&credit(t1, 0, &good[1..])).err(), Some(Refused::KeyRevoked), "a malformed blob");
+        assert_eq!(h.open_debit(&deb(t1, 0, None, &[])).err(), Some(Refused::KeyRevoked), "an empty debit");
+        assert_eq!(h.open_debit(&deb(t1, 5, None, &[])).err(), Some(Refused::KeyRevoked), "no own part");
+        assert_eq!(h.prove_reg(&[0x77; 32]).err(), Some(Refused::KeyRevoked), "another proof system");
+        assert_eq!((h.secret_loads(), h.keygens()), (1, 0));
         assert_eq!(w.pqz_scoped_key(&scope(ua, cu, None, 0)).err(), Some(Error::WalletLocked));
         w.unlock(&vault, Unlock::VaultPassphrase(PASS), "").unwrap();
         assert_eq!(h.seed_commitment(), Err(Refused::KeyRevoked), "unlock does not revive the handle");
@@ -474,28 +558,82 @@ mod handle {
         })
     }
 
-    /// `lock()` during a check (the opening KEM seed's copy) and during a debit's closure (the PQZ seed's copy) waits for it;
-    /// each completes with its whole result; afterwards each is `KeyRevoked`.
+    /// `lock()` during a check (the opening KEM seed's copy) waits for it; afterwards it is `KeyRevoked`. The review's Codex 4:
+    /// `lock()` while a debit's closure runs (inside the use of the seed, after the copy) does not return until the closure
+    /// ends; the closure's result is whole; afterwards the debit is `KeyRevoked`.
     #[cfg(feature = "vectors")]
     #[test]
     fn lock_waits_for_a_leased_check_and_debit() {
+        use std::sync::mpsc;
         let (k, w, ua, cu) = kat();
         let vault = w.seal_vault(PASS, None).unwrap();
         let t1 = a::<20>(&k["ownTagOpening"][0]["token"]);
         let h = w.pqz_scoped_key(&scope(ua, cu, None, 0)).unwrap();
         let good = credit_to(&h, &ua, &cu, &t1, 7, Plant::Honest, 1);
-        let c = Credit { token: t1, index: 0, slot: SLOT, code: &good, auditor: None, reads: READ1 };
+        let c = credit(t1, 0, &good);
         let acc = accepted(lock_during(&w, || h.check(&c)), 7);
         assert_eq!(h.check(&c).err(), Some(Refused::KeyRevoked));
         w.unlock(&vault, Unlock::VaultPassphrase(PASS), "").unwrap();
         let h2 = w.pqz_scoped_key(&scope(ua, cu, None, 0)).unwrap();
         let acc2 = accepted(h2.check(&c), 7);
         assert_eq!(acc.entry_hash(), acc2.entry_hash());
-        let win = [WindowEntry { token: t1, index: 0, slot: SLOT, code: Some(&good), accepted: Some(&acc2) }];
-        let d = Debit { token: t1, last_debit: 0, own: None, window: &win };
+        let win = [we(t1, 0, SLOT, Some(&good), Some(&acc2))];
+        let d = deb(t1, 0, None, &win);
         let want = h2.seed_commitment().unwrap();
-        assert_eq!(lock_during(&w, || h2.with_secret_debit(&d, |s| keccak256(s))), Ok(want));
-        assert_eq!(h2.with_secret_debit(&d, |_| ()), Err(Refused::KeyRevoked));
+        let (in_tx, in_rx) = mpsc::channel();
+        let (go_tx, go_rx) = mpsc::channel::<()>();
+        let (locked_tx, locked_rx) = mpsc::channel();
+        let (early, r) = std::thread::scope(|s| {
+            let (h2, d) = (&h2, &d);
+            let op = s.spawn(move || {
+                h2.with_secret_debit(d, |seed, _t| {
+                    in_tx.send(()).unwrap(); // inside the closure: the seed in use
+                    go_rx.recv().unwrap();
+                    keccak256(seed)
+                })
+            });
+            in_rx.recv().expect("the closure ran");
+            let locker = s.spawn(|| {
+                w.lock();
+                locked_tx.send(()).unwrap();
+            });
+            let early = locked_rx.recv_timeout(std::time::Duration::from_millis(500)).is_ok();
+            go_tx.send(()).unwrap();
+            let r = op.join().unwrap();
+            locker.join().unwrap();
+            (early, r)
+        });
+        assert!(!early, "lock() returned while the closure used the seed");
+        assert_eq!(r, Ok(want));
+        assert_eq!(h2.open_debit(&d).err(), Some(Refused::KeyRevoked));
+    }
+
+    /// `open_debit` with a real own part (`Enc(pk, amount)`, its `ownTag` by the handle's key): the balance is the own amount plus
+    /// the window plus `shieldIn`; `T` equals the closure's `T` (the same gated parts).
+    #[cfg(feature = "vectors")]
+    #[test]
+    fn open_debit_sums_the_gated_parts() {
+        use scaas_ua::wallet::{hkdf_sha256, hmac_sha256};
+        let (k, w, ua, cu) = kat();
+        let t1 = a::<20>(&k["ownTagOpening"][0]["token"]);
+        let h = w.pqz_scoped_key(&scope(ua, cu, None, 0)).unwrap();
+        let pk: Box<[u8; PK_BYTES]> = h.pk().into_boxed_slice().try_into().unwrap();
+        let e = pqzl::enc(&[&pk], &[digits(1000)], &[0x31; 32]).unwrap();
+        let (pu, pvf) = (op::pack(&e.u[..]), op::pack(&e.vs[0]));
+        let seed32 = h.with_secret_keygen(|s| *s).unwrap();
+        let ctr = 4u32;
+        let k_tag = hkdf_sha256(&seed32, &[], b"PQZ/owntag/v1", 32).unwrap();
+        let tag = hmac_sha256(&k_tag, &[&cu[..], &t1, &ua, &ctr.to_be_bytes(), &keccak256(&[&pu[..], &pvf[..]].concat())].concat());
+        let good = credit_to(&h, &ua, &cu, &t1, 0x20, Plant::Honest, 3);
+        let acc = accepted(h.check(&credit(t1, 6, &good)), 0x20);
+        let win = [we(t1, 5, TRIVIAL, None, None), we(t1, 6, SLOT, Some(&good), Some(&acc))];
+        let d = Debit { shield_in: 3, ..deb(t1, u64::from(ctr) + 1, Some(Own { pu: &pu, pvf: &pvf, own_tag: tag }), &win) };
+        let o = h.open_debit(&d).unwrap();
+        assert_eq!(o.balance, 1000 + 100 + 0x20 + 3);
+        assert_eq!(h.with_secret_debit(&d, |_, t| t.to_vec()), Ok(o.t));
+        let mut bad = tag;
+        bad[0] ^= 1;
+        assert_eq!(h.open_debit(&Debit { own: Some(Own { pu: &pu, pvf: &pvf, own_tag: bad }), ..d }).err(), Some(Refused::OwnTag));
     }
 
     /// The reader pieces of opening.json's audited row, rebuilt from its seeds by pqz-ffi's sender side.
@@ -601,7 +739,8 @@ mod handle {
     /// The same rows through `PqzKeyHandle::check` (the handle of the row's recipient from its two secrets): every row whose
     /// field the handle takes from the credit skips (a stored opening of another length is no op 1 blob: `Input`, never an
     /// acceptance); the unchanged credit is accepted with the row's amount. The `to.kemPk` rows do not apply (the handle's
-    /// `kemPk` is its own derivation, equal to the row's reader key).
+    /// `kemPk` is its own derivation, equal to the row's reader key). The review's F6: an audited leg without the auditor's keys,
+    /// and an auditor key of another length, are `Input` (never an acceptance with the auditor unchecked).
     #[cfg(feature = "vectors")]
     #[test]
     fn opening_rejects_through_the_handle() {
@@ -613,14 +752,19 @@ mod handle {
         };
         let h = handle(x.cu, 0);
         assert_eq!((h.pk(), h.open_kem_pk()), (x.pk_t.to_vec(), x.kem_t.clone()));
-        let aud = |kem: &'static [u8]| AuditorKeys { ua: x.a_ua, pk: Box::leak(x.pk_a.to_vec().into_boxed_slice()), kem_pk: kem };
+        let pk_a: &'static [u8] = Box::leak(x.pk_a.to_vec().into_boxed_slice());
+        let aud = |kem: &'static [u8]| AuditorKeys { ua: x.a_ua, pk: pk_a, kem_pk: kem };
         let kem_a: &'static [u8] = Box::leak(x.kem_a.clone().into_boxed_slice());
-        let check = |h: &PqzKeyHandle, leg: &Leg, kv: u64, a: AuditorKeys| {
+        let check_with = |h: &PqzKeyHandle, leg: &Leg, kv: u64, a: Option<AuditorKeys>| {
             let code = code_of(&x.to_ua, &[kv, 0], leg);
-            h.check(&Credit { token: x.token, index: 4, slot: SLOT, code: &code, auditor: Some(a), reads: READ1 })
+            h.check(&Credit { token: x.token, index: 4, slot: SLOT, code: &code, auditor: a, reads: READ1 })
         };
+        let check = |h: &PqzKeyHandle, leg: &Leg, kv: u64, a: AuditorKeys| check_with(h, leg, kv, Some(a));
         let amount = x.digits.iter().enumerate().map(|(i, d)| u64::from(*d) << (4 * i)).sum();
         accepted(check(&h, &x.leg, 0, aud(kem_a)), amount);
+        assert!(matches!(check_with(&h, &x.leg, 0, None), Err(Refused::Input(_))), "an audited leg without the auditor's keys");
+        let short = AuditorKeys { pk: &pk_a[1..], ..aud(kem_a) };
+        assert!(matches!(check(&h, &x.leg, 0, short), Err(Refused::Input(_))), "an auditor key one byte short");
         let mut ran = 0;
         for r in o["rejects"].as_array().unwrap() {
             let (field, v, case) = (r["field"].as_str().unwrap(), b(&r["value"]), r["case"].as_str().unwrap());

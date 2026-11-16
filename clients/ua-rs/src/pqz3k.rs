@@ -114,7 +114,8 @@ pub const SKIP: u64 = 1 << 63;
 /// One stored opening `mlkemCt(1568) ‖ x25519Eph(32) ‖ sealedSeed(48)`.
 pub const OPENING: usize = 1648;
 
-/// A pending slot word `blob(160) ‖ offset(16) ‖ length(16) ‖ block(64)` (big-endian, as `pqzPending` returns it).
+/// A pending slot word `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` (big-endian, as `pqzPending` returns it; `PqzCore.sol`), a
+/// TRIVIAL entry's amount in the low 64 bits of the blob field.
 fn slot_block(slot: &[u8; 32]) -> u64 {
     u64::from_be_bytes(slot[24..].try_into().expect("8 bytes"))
 }
@@ -122,7 +123,7 @@ fn slot_block(slot: &[u8; 32]) -> u64 {
 pub fn slot_marked(slot: &[u8; 32]) -> bool {
     slot_block(slot) & SKIP != 0
 }
-/// The slot is a TRIVIAL entry (no blob: length 0).
+/// The slot is a TRIVIAL entry (`vOff == 0`, no blob).
 pub fn slot_trivial(slot: &[u8; 32]) -> bool {
     slot[22] == 0 && slot[23] == 0
 }
