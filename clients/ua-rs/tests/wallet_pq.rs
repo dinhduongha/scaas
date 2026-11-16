@@ -148,7 +148,7 @@ fn rs_signatures_json_rows() {
         kinds.insert(kind);
     }
     assert_eq!(kinds.into_iter().collect::<Vec<_>>(), [0x0103, 0x0104, 0x0105, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135]);
-    assert_eq!(arr(&f, "rows").len(), 18);
+    assert_eq!(arr(&f, "rows").len(), 27); // 18 + 9 pqz-scoped-key rows (T21 L03)
 }
 
 #[cfg(feature = "vectors")]

@@ -510,7 +510,7 @@ test('rs_signatures.json: ua-rs signatures (Falcon, hedged ML-DSA, randomized SL
     kinds.add(r.kind);
   }
   assert.deepEqual([...kinds].sort((a, b) => a - b), [0x0103, 0x0104, 0x0105, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135]);
-  assert.equal(RS.rows.length, 18);
+  assert.equal(RS.rows.length, 27); // 18 + 9 pqz-scoped-key rows (T21 L03)
   const own = new Set(S.ua.map((r) => r.signature)); // signed by ua-rs, not copied from sign.json
   assert.ok(RS.rows.every((r) => !own.has(r.signature)));
 });
