@@ -469,7 +469,7 @@ The facade, in order, each failure `Argument`:
 
    | Form | `call` fields | `envelopeBinding` word | `memoHash` |
    |---|---|---|---|
-   | op 1, op 7 | `beneficiaryUA`, `fee`, `validUntilBlock`, `mode`, `sealedMemo` on HASH, `binding` | `keccak256(abi.encode(b, uint8(mode)))` (`PqzCore._bindMode`): `b = keccak256("SCAAS-PQZ-DIRECT-MODE-V1")` direct (`binding = 0`), `b = binding` relayed; computed by the facade | `memo = salt ‖ sealedMemo` on HASH, empty on BUNDLE |
+   | op 1, op 7 | `beneficiaryUA`, `fee`, `validUntilBlock`, `mode`, `sealedMemo` on HASH, `binding`, `verificationMode` (`PRECOMPILE` / `OFFCHAIN`, required), `verifierFee` (0 on `PRECOMPILE`) | `PqzCore._bindMode`: relayed (`binding ≠ 0`) `keccak256(abi.encode(binding, uint8(mode)))`; direct on `PRECOMPILE` `keccak256(abi.encode(keccak256("SCAAS-PQZ-DIRECT-MODE-V1"), uint8(mode)))`, direct on `OFFCHAIN` `keccak256(abi.encode(keccak256("SCAAS-PQZ-DIRECT-MODE-VF-V1"), uint8(mode), uint256(verifierFee)))` (T21 L83); computed by the facade | `memo = salt ‖ sealedMemo` on HASH, empty on BUNDLE |
    | burn, refresh | `beneficiaryUA`, `fee`, `amount`, `recipient`, `validUntilBlock`, `binding` | `binding` as given: 0 direct, the envelope's relayed (no `_bindMode`); `opTag` REFRESH when `amount = 0`, else BURN | `keccak256(ownTag)` |
    | unwrap (kind 5) | `beneficiaryUA`, `fee`, `amount`, `recipient`, `validUntilBlock`, `underlying`, `minOut`, `binding` | `unwrapBinding(underlying, minOut) = keccak256(abi.encode(keccak256("SCAAS-PQZ-UNWRAP-V1"), underlying, minOut))` direct (`binding = 0`), `keccak256(abi.encode(binding, unwrapBinding(…)))` relayed; computed by the facade | `keccak256(ownTag)` |
 

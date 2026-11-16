@@ -1151,6 +1151,7 @@ fn balance_proven_against_anvil() {
         [(true, false), (false, true), (false, true), (true, false)], "LOG, NONE direct, NONE relayed, LOG");
     assert_eq!(cs[2]["call"]["binding"], json!(hx(&env_binding)), "the relayed call's envelope binding");
     assert_eq!(cs[1]["call"]["mode"], "HASH");
+    assert_eq!((&cs[1]["call"]["verificationMode"], &cs[1]["call"]["verifierFee"]), (&json!("PRECOMPILE"), &json!(0)), "the token's verification");
     // a node that hides the proof logs; a credit's transaction sent to another contract (its `to` rewritten)
     let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let ev = hx(&scaas_ua::keccak256(b"PqzDebitProof(address,bytes32,uint64,bytes,bytes)"));

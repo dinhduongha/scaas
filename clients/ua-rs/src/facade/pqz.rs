@@ -316,6 +316,9 @@ pub const STATE_LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
     ("sendCounter[U]", 12, 0, 0, 8),
     // the proof path (T20d4, T20d8): a NONE header's fee, a debit's record `debitRec[ua][k]` (`w0`, `w1`)
     ("confidentialFee", 5, 0, 0, 32),
+    // the token's verification (T21 L83): `PRECOMPILE` 0 / `OFFCHAIN` 1, and `OFFCHAIN`'s fee in the fee word (round 3t)
+    ("pqzVerifyMode", 0, 0, 22, 1),
+    ("verifierFee", 20, 0, 0, 8),
     ("debitRec[U][7].w0", 19, 0, 0, 32),
     ("debitRec[U][7].w1", 19, 1, 0, 32),
 ];
