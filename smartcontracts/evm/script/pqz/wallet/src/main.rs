@@ -10,13 +10,17 @@
 //! - `wallet`: the holder side, ALL through ua-rs `pqz3k::PqzKeyHandle` (T21 O5 (b): the handle in a store of its own, the
 //!   test constructor `vectors_from_seed`): each pending credit checked (`check`: the blob read, K3-7 by pqz-ffi
 //!   `check_recipient` inside the handle, an acceptance or a skip), the marks a wallet may sign (`PqzKeyHandle::marks`: reads
-//!   at a finalized block in strict-majority mode), and a debit (`with_secret_debit`: the PQZ secret reaches the decryption
+//!   at a finalized block in strict-majority mode), and a debit (`open_debit`: the PQZ secret reaches the decryption
 //!   of `T` only when every window entry is accepted, TRIVIAL or marked, and the own part, required when `lastDebit > 0`,
-//!   verifies). The acceptances live in this process only, so one call checks and opens the window.
+//!   verifies). Since the review of the handle (owner decision (a)) through `open_debit`: the handle builds `T` from the own
+//!   part (`window.ownCode`, the account's last debit blob), the window and `window.shieldIn`, and decrypts it; the request
+//!   carries no `T`. The acceptances live in this process only, so one call checks and opens the window.
 //! - `audit`: the auditor tool (pqz-ffi `check_auditor` with the auditor's opening KEM seed; never a PQZ secret) and
 //!   `unreadable, taken` from state.
 use pqz_ffi::opening::{self as op, AuditorOutcome, Party, Role};
-use pqz_ffi::pqzl::{self as pl, CT_BYTES, PK_BYTES};
+use pqz_ffi::pqzl::PK_BYTES;
+use scaas_ua::facade::pqz_pack::{PKP, VP};
+use scaas_ua::facade::pqz_path::tail;
 use scaas_ua::pqz3k::{self as k3, AuditorKeys, Checked, Debit, Layout, Own, PqzKeyHandle, Reads, Scope, WindowEntry};
 use serde_json::{json, Value};
 use std::io::Read;
@@ -197,14 +201,20 @@ fn wallet(r: &Value) -> Value {
         let w: Vec<WindowEntry> = es.iter().filter(|e| e.index >= from && e.index < to).map(|e| WindowEntry { token, index: e.index,
             slot: e.slot, code: (!e.code.is_empty()).then_some(&e.code[..]), accepted: accepted.iter().find(|a| a.index() == e.index) })
             .collect();
-        let (pu, pvf) = (unhex(&rw["own"]["pu"]), unhex(&rw["own"]["pvf"]));
-        let own = (!rw["own"].is_null()).then(|| Own { pu: &pu, pvf: &pvf, own_tag: arr(&rw["own"]["ownTag"]) });
-        let t: [u8; CT_BYTES] = arr(&r["t"]);
-        window = match h.with_secret_debit(&Debit { token, last_debit, own, window: &w }, |s| {
-            let key = pl::keygen(s).expect("keygen");
-            pl::dec(&key.s, &t).map(|(m, _)| m.iter().enumerate().map(|(i, x)| (*x as u64) << (4 * i)).sum::<u64>())
-        }) {
-            Ok(b) => json!({"opened": true, "balance": b}),
+        // the own part from the account's last debit blob (`accBlob`'s code), read the way the facade reads it: `R ‖ P(v_f) ‖
+        // ownTag ‖ kv ‖ n`, `u` at 0 (a burn / refresh) or 16 (a transfer, after its salt)
+        let own_code = unhex(&rw["ownCode"]);
+        let own_parts = (!own_code.is_empty()).then(|| {
+            let d = &own_code[1..];
+            let t = tail(d).expect("the own blob's tail");
+            let u_at = if t.r_len == PKP { 0 } else { 16 };
+            (d[u_at..u_at + PKP].to_vec(), d[t.r_len..t.r_len + VP].to_vec(), t.own_tag)
+        });
+        let own = own_parts.as_ref().map(|(pu, pvf, own_tag)| Own { pu, pvf, own_tag: *own_tag });
+        let shield_in = rw["shieldIn"].as_u64().expect("window.shieldIn: a number");
+        // T21 O5 (b) review (Fable F4, Codex 3): the handle builds `T` from the gated parts and decrypts it; no `T` from the request
+        window = match h.open_debit(&Debit { token, last_debit, own, window: &w, shield_in }) {
+            Ok(o) => json!({"opened": true, "balance": o.balance, "t": hex(&o.t)}),
             Err(x) => json!({"opened": false, "why": format!("{x:?}")}),
         };
     }

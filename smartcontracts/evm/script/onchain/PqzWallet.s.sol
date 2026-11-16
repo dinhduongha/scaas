@@ -18,8 +18,8 @@ import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 ///         openings on two opening tokens of the pqzkeys group's factory, class 2 (`offchain-shared`) and class 3 with the
 ///         opening, each with an auditor (`erin`, `OPTIONAL`). The wallet is `script/pqz/wallet` (`pqz-wallet-sim`, through
 ///         `vm.ffi`): the sender side by pqz-ffi (split randomness, the openings, planted bad credits); the holder side ALL through
-///         ua-rs `pqz3k::PqzKeyHandle` (each credit checked into an acceptance or a skip, the marks it may sign, the debit window
-///         that alone hands the PQZ secret to the decryption of `T`); the auditor tool by pqz-ffi `check_auditor`. Two runs
+///         ua-rs `pqz3k::PqzKeyHandle` (each credit checked into an acceptance or a skip, the marks it may sign, the debit opened
+///         inside the handle, `T` built from the gated parts and compared with the statement's); the auditor tool by pqz-ffi `check_auditor`. Two runs
 ///         (`pqzwallet.sh`, after pqzkeys): `setup()` the holders dave (recipient) and erin (auditor) with real scoped keys, the
 ///         tokens, bob's credits to dave (honest; planted: junk opening, a valid KEM ciphertext of another seed, a moved `v_t`;
 ///         with the auditor: honest, junk `O_a`, junk `O_t`, `O_a` under other coins); after `ROLL_AGE` blocks `roll()`: the
@@ -280,11 +280,14 @@ contract PqzWalletRoll is PqzWalletKit {
         for (uint256 i; i < x.length; ++i) x[i] = st[off + i];
     }
 
-    function _wallet(address t, bytes memory st) internal returns (string memory) {
+    /// The wallet on dave's account of `t` (T21 O5 (b) review, owner decision (a)): the debit opened inside the handle from the
+    /// gated parts, the own part (`ownCode`, the last debit's blob) sent once dave has debited; no `T` in the request.
+    function _wallet(address t) internal returns (string memory) {
+        IPqzToken.AccountState memory s = IPqzToken(t).pqzAccount(dave, 0);
         return _tool(string.concat('{"cmd":"wallet",', _rec(dave64, dave, _scope(t)), ',"token":"', vm.toString(t), '","entries":',
             _wEntries(t), ',"reads":{"block":', vm.toString(block.number), ',"finalized":true,"strictMajority":true},"window":{"from":',
-            vm.toString(IPqzToken(t).pqzAccount(dave, 0).rolled), ',"to":', vm.toString(IPqzToken(t).pqzAccount(dave, 0).pendingCount),
-            ',"lastDebit":', vm.toString(IPqzToken(t).pqzAccount(dave, 0).lastDebit), '},"t":"', vm.toString(_t(st)), '"}'));
+            vm.toString(s.rolled), ',"to":', vm.toString(s.pendingCount), ',"lastDebit":', vm.toString(s.lastDebit),
+            ',"shieldIn":0,"ownCode":"', vm.toString(s.lastDebit > 0 ? s.accBlob.code : bytes("")), '"}}'));
     }
 
     function _refresh(address t, IPqzToken.PqzBurnArgs memory b, bytes memory st) internal {
@@ -307,17 +310,24 @@ contract PqzWalletRoll is PqzWalletKit {
     /// signed rollover; the window opened, its balance `want`; a refresh lands; then the auditor tool.
     function _honest(address t, uint256 want) internal {
         (IPqzToken.PqzBurnArgs memory b, bytes memory st) = _refreshArgs(t, 0x9a01);
-        string memory o = _wallet(t, st);
+        string memory o = _wallet(t);
         console2.log(string.concat("pqzwallet ", vm.toString(t), " check: ", o));
         _outcomes(o, ["accepted", "skip", "skip", "skip", "accepted", "skip", "skip", "skip"]);
         require(!vm.parseJsonBool(o, ".window.opened") && vm.parseJsonUint(o, ".secretLoads") == 0, "window refused, no secret");
         _mark(t, vm.parseJsonUintArray(o, ".marks"));
         (b, st) = _refreshArgs(t, 0x9a01);
-        o = _wallet(t, st);
+        o = _wallet(t);
         console2.log(string.concat("pqzwallet ", vm.toString(t), " after the marks: ", o));
         require(vm.parseJsonBool(o, ".window.opened") && vm.parseJsonUint(o, ".secretLoads") == 1, "window opened once");
         require(vm.parseJsonUint(o, ".window.balance") == want, "the balance decrypted = the accepted amounts");
+        require(keccak256(vm.parseJsonBytes(o, ".window.t")) == keccak256(_t(st)), "the handle's T = the debit statement's T");
         _refresh(t, b, st);
+        // the own branch on chain: the matrix's refresh (a verdict over stand-in bytes) wrote an own part no key of dave's tagged,
+        // so the next debit is refused by its ownTag, the secret not used
+        o = _wallet(t);
+        console2.log(string.concat("pqzwallet ", vm.toString(t), " after the refresh: ", o));
+        require(!vm.parseJsonBool(o, ".window.opened") && vm.parseJsonUint(o, ".secretLoads") == 0, "own part refused");
+        require(keccak256(bytes(vm.parseJsonString(o, ".window.why"))) == keccak256("OwnTag"), "refused by its ownTag");
         o = _audit(t);
         console2.log(string.concat("pqzwallet ", vm.toString(t), " auditor: ", o));
         _outcomes(o, ["no auditor leg", "no auditor leg", "no auditor leg", "no auditor leg", "read", "unreadable",
