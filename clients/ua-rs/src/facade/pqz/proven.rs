@@ -719,7 +719,10 @@ fn transfer_header(o: &Open, rec: &Record, from: &Word, k: u64, multi: bool, cal
         (None, Mode::Bundle) => Vec::new(),
         _ => return Err(Error::Argument),
     };
-    let mut hd = header_of(o, rec, from, k, call.beneficiary_ua, call.fee, call.valid_until_block, bind_mode(&call.binding, call.mode))
+    // the request names no verification yet: `PRECOMPILE`'s fold (an `OFFCHAIN` token's mode and fee in the request is LATER,
+    // with T21 L44's fold inside the request and O5 (b); T21 L77)
+    let env = bind_mode(&call.binding, call.mode, Verification::Precompile);
+    let mut hd = header_of(o, rec, from, k, call.beneficiary_ua, call.fee, call.valid_until_block, env)
         .fill(if multi { Multi::header(&o.id, m, aud) } else { Debit::header(if aud { Form::Transfer } else { Form::Transfer0 }, &o.id) });
     let to = if multi { crate::keccak256(&(0..m).map(|j| e.owner(j)).collect::<Result<Vec<_>>>()?.concat()) } else { e.owner(0)? };
     *hd.get_mut(H_TO).ok_or(Error::Argument)? = to;
@@ -1185,7 +1188,7 @@ mod tests {
                     let mode = if n(&r["transferMode"]) == 0 { Mode::Hash } else { Mode::Bundle };
                     let call = Call { beneficiary_ua: w(&r["beneficiaryUA"]), fee: fee(m as u64), valid_until_block: n(&r["validUntilBlock"]),
                         mode, sealed_memo: (mode == Mode::Hash).then(|| h(&r["sealedMemo"])), binding: w(&r["envelopeBinding"]) };
-                    assert_eq!(bind_mode(&call.binding, mode), w(&r["binding"]), "{name}: the binding");
+                    assert_eq!(bind_mode(&call.binding, mode, Verification::Precompile), w(&r["binding"]), "{name}: the binding");
                     transfer_header(&o, &rec, &w(&r["fromUA"]), k, form == "op7", &call, &tl, &e).unwrap()
                 }
                 _ => {
