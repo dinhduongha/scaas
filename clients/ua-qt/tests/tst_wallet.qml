@@ -153,6 +153,16 @@ TestCase {
                 const sig = JSON.parse(got)
                 compare([sig.keyData, sig.signature], ["0x", "0x"], r.case)
                 verify(sig.members.length > 0, r.case)
+                if (built === 0) {
+                    // T21 L78: the id list bounded before any key: 256 ids build (the control), 257 are refused
+                    const req = JSON.stringify({purpose: r.purposeTag, digest: r.digest, msig: m})
+                    const pad = n => JSON.stringify(ids.concat(Array(n - ids.length).fill(ids[0])))
+                    verify(UaWallet.uaSig(req, pad(256)) !== "", "256 ids: " + UaWallet.lastError)
+                    compare(UaWallet.uaSig(req, pad(257)), "", "257 ids")
+                    compare(UaWallet.lastError, "UAArgument", "257 ids")
+                    compare(UaWallet.uaSig(req, "[" + ids.join(",") + " ".repeat(4096) + "]"), "", "4 KiB + of text")
+                    compare(UaWallet.uaSig(req, "[" + JSON.stringify(ids) + "]"), "", "a nested list")
+                }
                 built++
             }
         }

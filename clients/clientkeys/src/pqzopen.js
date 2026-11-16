@@ -140,9 +140,10 @@ export const SKIP = 1n << 63n;
 export const OPENING = 1648;
 const slotOf = (slot) => (typeof slot === 'bigint' ? slot : BigInt(hexOf(asBytes(slot, 32, 'slot'))));
 const hexOf = (b) => '0x' + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
-const w256 = (v, what = 'a uint256 word') => {
+// T21 L79: `bits` the field's declared width (uint8, uint64), refused by name past it; the word itself is 32 bytes
+const w256 = (v, what = 'a uint256 word', bits = 256) => {
   let x = intOf(v, what);
-  if (x < 0n || x >= 1n << 256n) throw new Error('a uint256 word is in [0, 2^256)');
+  if (x < 0n || x >= 1n << BigInt(bits)) throw new Error(bits === 256 ? 'a uint256 word is in [0, 2^256)' : `${what}: a uint${bits} is in [0, 2^${bits})`);
   const o = new Uint8Array(32); for (let i = 31; i >= 0; i--) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
 /** The pending slot `blob(160) ‖ offset(16) ‖ length(16) ‖ block(64)` (a bigint, or 32 bytes / hex) is skip-marked. */
 export const pqzSlotMarked = (slot) => (slotOf(slot) & SKIP) !== 0n;
@@ -203,15 +204,15 @@ const addrW = (a) => concatBytes(new Uint8Array(12), asBytes(a, 20, 'token'));
 /** typed(`UAPqzScopedKey`): what a scoped key's `R_REG` proves over, as `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, ·)`;
  *  `keyClass` 2 (`token` the zero address) or 3. */
 export function pqzScopedKeyDigest({ ua, keyClass, chainUid, token, version, pqzKeyHash }) {
-  return portable(keccak_256(concatBytes(keccak_256(utf8ToBytes(SCOPED_KEY_TYPE)), asBytes(ua, 32, 'ua'), w256(keyClass, 'keyClass'),
-    asBytes(chainUid, 32, 'chainUid'), addrW(token), w256(version, 'version'), asBytes(pqzKeyHash, 32, 'pqzKeyHash'))));
+  return portable(keccak_256(concatBytes(keccak_256(utf8ToBytes(SCOPED_KEY_TYPE)), asBytes(ua, 32, 'ua'), w256(keyClass, 'keyClass', 8),
+    asBytes(chainUid, 32, 'chainUid'), addrW(token), w256(version, 'version', 64), asBytes(pqzKeyHash, 32, 'pqzKeyHash'))));
 }
 /** typed(`UAPqzScopedKeyRecord`): what `setPqzScopedKey`'s `sig` signs, as `uaMessage(kind, PURPOSE_PQZ_SCOPED_KEY, ·)`;
  *  `openKemHash = keccak256(kemPk)` of the opening KEM key, 0 without one. */
 export function pqzScopedKeyRecordDigest({ ua, keyClass, chainUid, token, version, pqzKeyHash, pqzPopHash, openKemHash, validUntilBlock }) {
-  return portable(keccak_256(concatBytes(keccak_256(utf8ToBytes(SCOPED_KEY_RECORD_TYPE)), asBytes(ua, 32, 'ua'), w256(keyClass, 'keyClass'),
-    asBytes(chainUid, 32, 'chainUid'), addrW(token), w256(version, 'version'), asBytes(pqzKeyHash, 32, 'pqzKeyHash'),
-    asBytes(pqzPopHash, 32, 'pqzPopHash'), asBytes(openKemHash, 32, 'openKemHash'), w256(validUntilBlock, 'validUntilBlock'))));
+  return portable(keccak_256(concatBytes(keccak_256(utf8ToBytes(SCOPED_KEY_RECORD_TYPE)), asBytes(ua, 32, 'ua'), w256(keyClass, 'keyClass', 8),
+    asBytes(chainUid, 32, 'chainUid'), addrW(token), w256(version, 'version', 64), asBytes(pqzKeyHash, 32, 'pqzKeyHash'),
+    asBytes(pqzPopHash, 32, 'pqzPopHash'), asBytes(openKemHash, 32, 'openKemHash'), w256(validUntilBlock, 'validUntilBlock', 64))));
 }
 /** The two messages of a scoped record: `message = uaMessage(kind, PURPOSE_PQZ_SCOPED_KEY, recordDigest)` (what the UA signs) and
  *  `regMessage = uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, keyDigest)` (what the key's `R_REG` proves over). */
@@ -345,5 +346,10 @@ export function pqzMarks(skips) {
   if (skips.some((s) => !(s.reads?.finalized && s.reads?.strictMajority))) {
     refuse('a skip read at one node or an unfinalized block is not a reason to mark');
   }
-  return [...new Set(skips.map((s) => intOf(s.index, 'the skip index')))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const index = (s) => {
+    const i = intOf(s.index, 'the skip index');
+    if (i < 0n || i >= 1n << 64n) throw new Error('the skip index: a uint64 is in [0, 2^64)'); // T21 L79: `uint64[] skip`
+    return i;
+  };
+  return [...new Set(skips.map(index))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }

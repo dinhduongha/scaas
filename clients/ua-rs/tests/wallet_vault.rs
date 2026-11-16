@@ -620,7 +620,8 @@ fn backup_whose_entropy_does_not_derive_sender_refused() {
 }
 
 #[cfg(feature = "vectors")]
-/// The link payload installs the manifest and the secrets too (the same `BackupPayload`).
+/// The link payload installs the manifest and the secrets too (the same `BackupPayload`). The opener's clock is the vector's
+/// `now` (T21 L76: the real clock passes the fixed `start` on 2027-01-15).
 #[test]
 fn link_installs_manifest_and_secrets() {
     let s = load("seal.json");
@@ -634,7 +635,7 @@ fn link_installs_manifest_and_secrets() {
     .unwrap();
     let c = SealedContainer::from_json(l["container"].to_string().as_bytes()).unwrap();
     let x = ContainerExpect { purpose: "scaas/link/v1", sender: ExpectedSender::Ua(b32(&l["expect"]["sender"]["ua"])), recipient: session.recipient() };
-    let w = Wallet::from_link(session, &c, &x, &none, None, "").unwrap();
+    let w = Wallet::vectors_from_link_at(session, &c, &x, &none, None, "", num(&o["now"])).unwrap();
     let payload: Value = serde_json::from_slice(&h(l["pt"].as_str().unwrap())).unwrap();
     let entries = arr(&payload["manifest"], "entries");
     assert_eq!(w.manifest().entries.len(), entries.len());

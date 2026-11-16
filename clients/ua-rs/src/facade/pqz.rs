@@ -591,11 +591,27 @@ pub fn envelope_binding(chain_id: u64, chain_uid: &Word, token: &[u8; 20], e: &P
         e.nonce, e.valid_until, e.mode, keep(1, &e.relayer), e.fee, keep(2, &e.fee_recipient)].concat())
 }
 
-/// The header's envelope word of a debit (`PqzCore._bindMode`): `keccak256(abi.encode(binding == 0 ? TAG_DIRECT_MODE :
-/// binding, uint8(mode)))`, `mode` 0 for `Hash`, 1 for `Bundle`. T21 L44: the one copy (path (B) folds with it).
-pub fn bind_mode(binding: &Word, mode: Mode) -> Word {
-    let b = if *binding == [0; 32] { crate::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1") } else { *binding };
-    crate::keccak256(&[b, u64_word(match mode { Mode::Hash => 0, Mode::Bundle => 1 })].concat())
+/// A token's `pqzVerifyMode` (`PqzCore`: `PRECOMPILE` 0, `OFFCHAIN` 1) and, on `OFFCHAIN`, its `verifierFee` in force.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Verification {
+    Precompile,
+    Offchain { verifier_fee: u64 },
+}
+
+/// The header's envelope word of a debit (`PqzCore._bindMode`), `mode` 0 for `Hash`, 1 for `Bundle`: relayed (`binding` ≠ 0)
+/// `keccak256(abi.encode(binding, uint8(mode)))` on either verification; direct on `PRECOMPILE`
+/// `keccak256(abi.encode(TAG_DIRECT_MODE, uint8(mode)))`; direct on `OFFCHAIN`
+/// `keccak256(abi.encode(TAG_DIRECT_MODE_VF, uint8(mode), uint256(verifierFee)))`, at fee 0 too (round 3t). T21 L44: the one
+/// copy (path (B) folds with it); T21 L77: the verification is named; `pqz/<set>/verifier_fee.json` `binding` pins it.
+pub fn bind_mode(binding: &Word, mode: Mode, verification: Verification) -> Word {
+    let m = u64_word(match mode { Mode::Hash => 0, Mode::Bundle => 1 });
+    match verification {
+        _ if *binding != [0; 32] => crate::keccak256(&[*binding, m].concat()),
+        Verification::Precompile => crate::keccak256(&[crate::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1"), m].concat()),
+        Verification::Offchain { verifier_fee } => {
+            crate::keccak256(&[crate::keccak256(b"SCAAS-PQZ-DIRECT-MODE-VF-V1"), m, u64_word(verifier_fee)].concat())
+        }
+    }
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------

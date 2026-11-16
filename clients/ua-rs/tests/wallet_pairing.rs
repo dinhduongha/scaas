@@ -503,6 +503,54 @@ mod vectors {
         assert!(probe.bytes().unwrap().iter().all(|x| *x == 0), "the dropped session's slot is wiped");
     }
 
+    /// T21 L73: a `lock()` during round 2 waits for it (the nonces are used under the store's write lock), and the wallet
+    /// opens no session after it. Positive control: the share computed before `lock()` returned aggregates to a signature
+    /// that verifies.
+    #[test]
+    fn lock_waits_for_frost_round_two() {
+        use rand_chacha::rand_core::SeedableRng;
+        use std::sync::mpsc;
+        use std::time::Duration;
+        type C = Secp256K1Sha256;
+        let w = wallet("pq_kat");
+        let g = dkg::<C, _>(2, 2, &mut rand_chacha::ChaCha20Rng::seed_from_u64(8)).unwrap();
+        let (i1, i2) = (id::<C>(1), id::<C>(2));
+        let (mut s1, mut s2) = (w.frost_session(&g.keys[&i1]).unwrap(), w.frost_session(&g.keys[&i2]).unwrap());
+        let msg = b"lock during round 2";
+        let package = frost_core::SigningPackage::new([(i1, s1.commitments()), (i2, s2.commitments())].into(), msg);
+        let share2 = s2.sign(&package, &g.keys[&i2]).unwrap();
+        let (in_tx, in_rx) = mpsc::channel();
+        let (go_tx, go_rx) = mpsc::channel::<()>();
+        let (locked_tx, locked_rx) = mpsc::channel();
+        let share1 = std::thread::scope(|sc| {
+            let (s1, package, key, w) = (&mut s1, &package, &g.keys[&i1], &w);
+            let a = sc.spawn(move || {
+                s1.vectors_sign_paused(package, key, move || {
+                    in_tx.send(()).unwrap();
+                    go_rx.recv().unwrap();
+                })
+            });
+            in_rx.recv().unwrap();
+            sc.spawn(move || {
+                w.lock();
+                locked_tx.send(()).unwrap();
+            });
+            // read, not asserted here: a failed assert inside the scope would leave round 2 waiting for `go` forever
+            let early = locked_rx.recv_timeout(Duration::from_millis(300)).is_ok();
+            go_tx.send(()).unwrap();
+            let share = a.join().unwrap().unwrap();
+            if !early {
+                locked_rx.recv().unwrap();
+            }
+            (share, early)
+        });
+        let (share1, early) = share1;
+        assert!(!early, "lock() returned while round 2 ran");
+        let sig = frost_core::aggregate(&package, &[(i1, share1), (i2, share2)].into(), &g.public).unwrap();
+        g.public.verifying_key().verify(msg, &sig).unwrap();
+        assert_eq!(w.frost_session(&g.keys[&i1]).err(), Some(Error::WalletLocked));
+    }
+
     /// An unsigned FROST session wipes its nonces' arena slot when dropped.
     #[test]
     fn dropped_frost_session_wipes_its_nonces() {

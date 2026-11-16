@@ -37,11 +37,16 @@ fn kat(index: u32) -> Value {
 
 /// The tool on `args`, `key` on its stdin (none: stdin closed).
 fn cli(args: &[String], key: Option<&Value>) -> Result<Value, String> {
+    cli_raw(args, key.map(|k| k.to_string().into_bytes()).as_deref())
+}
+
+/// [`cli`] with the stdin bytes as given.
+fn cli_raw(args: &[String], input: Option<&[u8]>) -> Result<Value, String> {
     let mut child = Command::new(CLI).args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().unwrap();
     let mut stdin = child.stdin.take().unwrap();
-    if let Some(k) = key {
+    if let Some(k) = input {
         // a refusal before stdin is read breaks the pipe; the exit status carries the verdict
-        let _ = stdin.write_all(k.to_string().as_bytes());
+        let _ = stdin.write_all(k);
     }
     drop(stdin);
     let out = child.wait_with_output().unwrap();
@@ -54,6 +59,28 @@ fn cli(args: &[String], key: Option<&Value>) -> Result<Value, String> {
 
 fn s(v: &[&str]) -> Vec<String> {
     v.iter().map(|x| x.to_string()).collect()
+}
+
+/// T21 L78 (CLI-UAL-03): the stdin key JSON is bounded while it is read, 8 KiB: one byte past it (whitespace) is refused before
+/// any parse; at the cap the read passes on to the key (positive control: the next refusal is not stdin's); a nested member is
+/// refused by the depth bound.
+#[test]
+fn the_key_json_is_bounded_on_stdin() {
+    let url = format!("http://{}", std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap());
+    let (a20, a32) = ("0x00000000000000000000000000000000000000aa", format!("0x{}", "ab".repeat(32)));
+    let args = s(&["--rpc", &url, "--chain-id", "31337", "--chain-uid", &a32, "--factory", a20, "--registry", a20, "--token", a20, "--ua",
+        &a32, "--depth", "1", "--key-version", "0", "--for-op7", "false"]);
+    let padded = |n: usize| {
+        let mut k = kat(0).to_string().into_bytes();
+        k.resize(n, b' ');
+        k
+    };
+    let at = cli_raw(&args, Some(&padded(8 << 10))).unwrap_err();
+    assert!(!at.contains("stdin:"), "at the cap the key is read: {at}");
+    let past = cli_raw(&args, Some(&padded((8 << 10) + 1))).unwrap_err();
+    assert!(past.contains("stdin: the key JSON is over 8192 bytes"), "{past}");
+    let nested = cli_raw(&args, Some(br#"{"mnemonic": ["abandon"], "account": 0, "index": 0}"#)).unwrap_err();
+    assert!(nested.contains("stdin: key JSON expected"), "{nested}");
 }
 
 /// R1–R6: no request goes out without the holder's configuration (the URL's port is closed again, so a build that sent one
