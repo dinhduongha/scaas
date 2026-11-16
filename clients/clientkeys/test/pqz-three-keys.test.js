@@ -299,6 +299,20 @@ test('U4h-3: malformed hex and out-of-range integers are refused, never changed;
     assert.throws(() => pqzScopedKeyRecordDigest({ ...rec, validUntilBlock: bad }), /validUntilBlock: not an integer/, `validUntilBlock ${s}`);
     assert.throws(() => pqzEntryHash(bad, SLOT, '0x00'), /entry index: not an integer/, `entry index ${s}`);
   }
+  // T21 L79: each field's declared width (uint8 keyClass, uint64 version / validUntilBlock, uint64[] skip), its top value the
+  // control
+  const top = (bits) => (1n << BigInt(bits)) - 1n;
+  assert.ok(pqzScopedKeyDigest({ ...rec, keyClass: 255, version: top(64) }), 'control: uint8 / uint64 top');
+  assert.ok(pqzScopedKeyRecordDigest({ ...rec, keyClass: top(8), version: top(64), validUntilBlock: top(64) }), 'control: record tops');
+  for (const d of [pqzScopedKeyDigest, pqzScopedKeyRecordDigest]) {
+    assert.throws(() => d({ ...rec, keyClass: 256 }), /keyClass: a uint8/, `${d.name} keyClass 256`);
+    assert.throws(() => d({ ...rec, version: 1n << 64n }), /version: a uint64/, `${d.name} version 2^64`);
+    assert.throws(() => d({ ...rec, version: -1n }), /version: a uint64/, `${d.name} version -1`);
+  }
+  assert.throws(() => pqzScopedKeyRecordDigest({ ...rec, validUntilBlock: 1n << 64n }), /validUntilBlock: a uint64/, 'validUntilBlock 2^64');
+  const reads = { block: 90, finalized: true, strictMajority: true };
+  assert.deepEqual(pqzMarks([{ index: top(64), reads }, { index: 0, reads }]), [0n, top(64)], 'control: skip 0 and 2^64 - 1');
+  for (const bad of [-1n, 1n << 64n]) assert.throws(() => pqzMarks([{ index: bad, reads }]), /skip index: a uint64/, `skip ${bad}`);
 });
 
 test('P2-1: an audited credit checked against the auditor\'s key of another version is a skip that a single read cannot mark', () => {
