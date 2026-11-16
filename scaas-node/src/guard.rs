@@ -1479,6 +1479,13 @@ pub fn over_cap(reason: &str) -> bool {
         || reason.contains(" above the 2^24 gas limit of a transaction"))
 }
 
+/// NODE-JOB-29 (owner O8, 2026-11-16): a refusal of [`gas`] by this lane's own cap (`max_gas_per_tx`) or by its RPC's gas cap
+/// ([`crate::chain::classify_sim`]'s message, which cannot tell the RPC's cap from the 2^24 regular gas: read as the RPC's, so a part
+/// that may still land is never `dead`), not by the chain (`TX_EXCEEDS_CHAIN_LIMIT`) or the call itself: another sender may cure it.
+pub fn lane_cap(reason: &str) -> bool {
+    !reason.starts_with(TX_EXCEEDS_CHAIN_LIMIT) && (over_cap(reason) || reason.contains("or the RPC gas cap: "))
+}
+
 pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
     let block = chain.block_gas().await.map_err(|e| SimError::Transport(format!("block gas limit: {e:#}")))?;
     let floor = calldata_floor(w.data.len());

@@ -719,6 +719,11 @@ impl Submitter {
             let Some(g) = self.digests.try_acquire(p.call_key()) else { continue };
             let gas = match guard::gas(&self.chain, &p, self.cfg.max_gas_per_tx).await {
                 Ok(gas) => gas,
+                // owner O8: anyone may still send the part; NODE-JOB-24's precedent (`PROOF_STORE_OVER_LANE_CAP`)
+                Err(SimError::Revert(r)) if guard::lane_cap(&r) => {
+                    return self.requeue(&w, format!("{}: part {part} over this lane's cap ({r}); the register waits for the part from \
+                        another sender; {reason}", guard::UA_KEY_NOT_CACHED)).await;
+                }
                 Err(SimError::Revert(r)) => {
                     return self.fail(&w, format!("{}: part {part} refused: {r}; {reason}", guard::UA_KEY_NOT_CACHED)).await;
                 }
@@ -2948,6 +2953,27 @@ pub(crate) mod tests {
         // `ua8_writes`' register: a pop of filler bytes
         let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, ua8_writes(0).remove(0))], tn).await;
         assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("UA_REGISTER_POP_REFUSED: "), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+    }
+
+    /// NODE-JOB-29 (owner O8, 2026-11-16): a part over this lane's `max_gas_per_tx` or its RPC's gas cap may still land from another
+    /// sender (the row is PERMISSIONLESS): the register waits `queued` by name, nothing sent, never `dead`. Only the part's own revert
+    /// and the chain's limit are `dead` (`mldsa_register_cache_refusals_by_name`).
+    #[tokio::test]
+    async fn mldsa_cache_part_over_the_lane_cap_waits() {
+        let reg = Address::repeat_byte(0x5e);
+        let ok = || Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() };
+        // the default cap (3 M) under a 40 M part; then the RPC's gas cap (Nethermind's "gas required exceeds allowance")
+        for (e, why) in [(ok(), "gas 40000000 above max_gas_per_tx 3000000"), (Evm { sim: Some("estimate_oog"), ..ok() }, "the RPC gas cap")] {
+            let (r, rpc) = outcomes(e, vec![call_job(9, reg, mldsa65_register())], |c| c.ua_registry = Some(reg)).await;
+            assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("UA_KEY_NOT_CACHED: part 0 over this lane's cap")
+                && r[0].1.contains(why), "{r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+        // the chain's own limit stays `dead`: a 70 M estimate over a 60 M block under a 200 M lane cap
+        let (r, rpc) = outcomes(Evm { estimate: Some(70_000_000), block_gas: Some(60_000_000), ..ok() }, vec![call_job(9, reg, mldsa65_register())],
+            |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 200_000_000; }).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.contains("part 0 refused: TX_EXCEEDS_CHAIN_LIMIT: gas 70000000"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
     }
 
