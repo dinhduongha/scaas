@@ -508,7 +508,12 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   completeness, eth_calls; the port of `pqzkeys` / `pqzwallet` and of the ML-DSA rows of `tokens` / `pqchat` to real-transaction
   scripts runs against it later on the same chain). This is one rule on every chain, not a split: on / off is a deploy-time
   setting chosen by the chain's precompile availability ([NET-EVM-11](#NET-EVM-11)'s `pq_verifiers.py` step); a chain
-  with the precompiles ships `mldsa-on`, and the second set exists for the test matrix of a test chain. Tests
+  with the precompiles ships `mldsa-on`, and the second set exists for the test matrix of a test chain. Two full sets
+  (owner 2026-11-16, "agreed"; a test-only layout): each set is a whole deploy with its own `OpenFactory`, UA registry,
+  `GovernanceRouter`, releases and tokens; the one-`GovernanceRouter`-per-chain rule (owner 2026-11-04) applies per deploy
+  set; a mainnet or a customer chain carries one set, chosen by the chain's precompile availability. The two sets share the
+  chain, its genesis, the RescueVault genesis alloc ([NET-EVM-14](#NET-EVM-14)) and Blockscout, nothing else: a UA of one
+  set is unknown to the other's registry. Tests
   `script/test_deploybook.py`, `script/onchain/test_vcheck.py`, `runs/2026-11-16-scaas-testnet-reset5/prepa-anvil.sh sets`.
 - **The relayer's gas share.** A relayed op crosses more call frames (a PQZ op: clone, implementation, P, the self-call,
   clone, implementation, Q, its library, the precompile: 7 frames against 5), and each frame keeps 1/64 of the gas it passes
