@@ -638,6 +638,9 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
     Ok(Words { request, adds, block, hash: r.hash, key_code })
 }
 
+/// The stdin key JSON's cap: a mnemonic (1 KiB at most), its passphrase and two numbers.
+const KEY_JSON_MAX: usize = 8 << 10;
+
 /// The wallet and the key's `account`, `index` of the stdin JSON `{mnemonic, passphrase?, account, index}`.
 fn key(v: &Value) -> Result<(scaas_ua::wallet::Wallet, u32, u32), String> {
     let o = v.as_object().ok_or("stdin: a JSON object")?;
@@ -1134,9 +1137,14 @@ fn run(a: &Args) -> Result<Value, String> {
     if std::io::stdin().is_terminal() {
         return Err("pipe the key JSON on stdin (pqz-read … < key.json); a terminal would echo it".into());
     }
-    let mut input = Zeroizing::new(String::new());
-    std::io::stdin().read_to_string(&mut input).map_err(|e| e.to_string())?;
-    let mut kv: Value = serde_json::from_str(&input).map_err(|_| "stdin: key JSON expected".to_string())?;
+    // T21 L78 (CLI-UAL-03): bounded while read (one byte past the cap is the refusal; the buffer never grows), then the
+    // shared length / depth reader: the envelope is one flat object
+    let mut input = Zeroizing::new(Vec::with_capacity(KEY_JSON_MAX + 1));
+    std::io::stdin().take(KEY_JSON_MAX as u64 + 1).read_to_end(&mut input).map_err(|e| e.to_string())?;
+    if input.len() > KEY_JSON_MAX {
+        return Err(format!("stdin: the key JSON is over {KEY_JSON_MAX} bytes"));
+    }
+    let mut kv = scaas_ua::wallet::bounded::json(&input, KEY_JSON_MAX, 1).map_err(|_| "stdin: key JSON expected".to_string())?;
     let handle = key(&kv);
     wipe(&mut kv);
     let (wallet, account, index) = handle?;
