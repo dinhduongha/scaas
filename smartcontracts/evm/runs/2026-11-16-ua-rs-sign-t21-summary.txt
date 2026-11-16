@@ -1,23 +1,23 @@
-# 2026-11-16-ua-rs-sign-t21 at commit 5d7475727 (the T21 merges: fix waves 1-3; final gate after 9b52d61c7)
+# 2026-11-16-ua-rs-sign-t21 at commit e169a426c (the T21 merges: fix waves 1-3, then pqz3k-handle (O5 (b)) in 2179f8b32)
 step | commit | rc | counts
-docs | 9c12e1aac | 0 | -
-clientkeys | 9c12e1aac | 0 | -
-vectors-check | 9c12e1aac | 0 | 4 passed 0 failed 0 ignored (cargo)
+docs | 2179f8b32 | 0 | -
+clientkeys | 2179f8b32 | 0 | -
+vectors-check | 2179f8b32 | 0 | 4 passed 0 failed 0 ignored (cargo)
 forge-ua | 9c12e1aac | 0 | -
-ua-rs-nodefault | 9c12e1aac | 0 | 87 passed 0 failed 0 ignored (cargo)
-ua-rs-wallet | d36c12749 | 0 | 336 passed 0 failed 0 ignored (cargo)
-ua-rs | 9c12e1aac | 0 | 453 passed 0 failed 3 ignored (cargo)
-ua-rs-pq | 9c12e1aac | 0 | 38 passed 0 failed 0 ignored (cargo)
-ua-rs-signers | 9c12e1aac | 0 | 4 passed 0 failed 0 ignored (cargo)
-ua-rs-json | 9c12e1aac | 0 | 7 passed 0 failed 0 ignored (cargo)
-ua-rs-vectors | 9c12e1aac | 0 | 542 passed 0 failed 5 ignored (cargo)
-ua-rs-zether | d36c12749 | 0 | 21 passed 0 failed 0 ignored (cargo)
-ua-rs-pqz | 9c12e1aac | 0 | 88 passed 0 failed 3 ignored (cargo)
-ua-rs-pqz-n2048 | 9c12e1aac | 0 | 172 passed 0 failed 3 ignored (cargo)
+ua-rs-nodefault | 2179f8b32 | 0 | 84 passed 0 failed 0 ignored (cargo)
+ua-rs-wallet | 2179f8b32 | 0 | 333 passed 0 failed 0 ignored (cargo)
+ua-rs | 2179f8b32 | 0 | 463 passed 0 failed 3 ignored (cargo)
+ua-rs-pq | 2179f8b32 | 0 | 38 passed 0 failed 0 ignored (cargo)
+ua-rs-signers | 2179f8b32 | 0 | 4 passed 0 failed 0 ignored (cargo)
+ua-rs-json | 2179f8b32 | 0 | 7 passed 0 failed 0 ignored (cargo)
+ua-rs-vectors | 2179f8b32 | 0 | 551 passed 0 failed 5 ignored (cargo)
+ua-rs-zether | 2179f8b32 | 0 | 21 passed 0 failed 0 ignored (cargo)
+ua-rs-pqz | 2179f8b32 | 0 | 88 passed 0 failed 3 ignored (cargo)
+ua-rs-pqz-n2048 | 2179f8b32 | 0 | 174 passed 0 failed 3 ignored (cargo)
 ua-deny | 9c12e1aac | 0 | -
 ua-fuzz | 9c12e1aac | 0 | -
-ua-sizes | 5d7475727 | 0 | -
-ua-c | 9c12e1aac | 0 | 9 passed 0 failed 0 ignored (cargo)
+ua-sizes | e169a426c | 0 | -
+ua-c | 2179f8b32 | 0 | 9 passed 0 failed 0 ignored (cargo)
 ua-cxx | 9c12e1aac | 0 | -
 ua-qt | 9c12e1aac | 0 | -
 ua-dart-frb | 9c12e1aac | 0 | 3 passed 0 failed 0 ignored (cargo)
@@ -28,22 +28,20 @@ ua-dart | 9c12e1aac | 0 | -
 cargo-zether-prover | 9c12e1aac | 0 | 176 passed 0 failed 4 ignored (cargo)
 wasm-zether-prover | 9c12e1aac | 0 | -
 scaas-ct | 9c12e1aac | 0 | 9 passed 0 failed 0 ignored (cargo)
-no-oracle | 9c12e1aac | 0 | 17 passed 0 failed 1 ignored (cargo)
-no-oracle-n2048 | 9c12e1aac | 0 | 13 passed 0 failed 0 ignored (cargo)
-no-oracle-ua-py | 9c12e1aac | 0 | -
-wallet-rows | 9c12e1aac | 0 | 2 passed 0 failed 0 ignored (cargo)
-test-features | 9c12e1aac | 0 | -
-mutant-logs | 9c12e1aac | 0 | -
-pqz-read | 9c12e1aac | 0 | 13 passed 0 failed 0 ignored (cargo)
+no-oracle | 2179f8b32 | 0 | 19 passed 0 failed 1 ignored (cargo)
+no-oracle-n2048 | 2179f8b32 | 0 | 15 passed 0 failed 0 ignored (cargo)
+no-oracle-ua-py | 2179f8b32 | 0 | -
+wallet-rows | 2179f8b32 | 0 | 2 passed 0 failed 0 ignored (cargo)
+test-features | 2179f8b32 | 1 | -
+mutant-logs | 2179f8b32 | 0 | -
+pqz-read | 2179f8b32 | 0 | 13 passed 0 failed 0 ignored (cargo)
 read-balance | 9c12e1aac | 0 | 19 passed 0 failed 0 ignored (cargo)
-named-tests | 5d7475727 | 0 | -
-scaas-node cargo test | 9c12e1aac | 0 | 787 passed 0 failed 72 ignored (cargo; lib 782)
+named-tests | 2179f8b32 | 0 | -
+scaas-node cargo test | 9c12e1aac | 0 | 787 passed 0 failed 72 ignored (cargo; lib 782); no node change since
 scaas-node clippy --all-targets -D warnings | 9c12e1aac | 0 | -
-scaas-node e2e (--ignored, CAPPED_MEM=6G) | 5d7475727 | 137 | killed by systemd-oomd at the first test: machine-wide memory pressure from other sessions' jobs (not a test failure); to re-run alone
+scaas-node e2e (--ignored, alone) | 10452efd7 | 0 | passed (the coordinator's run after 5d7475727's oomd kill); no node or contract change since
 
-# reds of this round, each fixed in its own commit and the step re-run: ua-rs-signers (f2ccc44b1), vectors-check (95a4789f2),
-# ua-go (6f4321bcf, 0ab3ce717), mutant-logs (547cc7ee0, 07a217010, 0d4b971cf, c2df38f9c; t8 M31 survived once: test 3233a91f0),
-# named-tests (7efc7d9de), ua-sizes (36892e6b5, 5d7475727), ua-rs-wallet / ua-rs-zether (d36c12749). Code after the rows' commits:
-# d36c12749 (a cfg on two re-exports, re-run in ua-rs-wallet and ua-rs-zether), 5d7475727 (size baseline only).
-scaas-node cargo test --test e2e -- --ignored --test-threads=1 (CAPPED_MEM=6G, alone) | 88107c6f9 | 101 | 23 passed, 1 failed: plain_rows_match_the_forge_abi counted 36 plain rows against its pin 35 (every row's ABI matched forge); the 36th is the registry's cacheExpandedKey (NODE-JOB-29, MD-14 2064e707d), whose unit-test pins moved then but this e2e pin did not
-scaas-node e2e plain_rows_match_the_forge_abi after the pin 35 -> 36 (reason in the assertion) | e2e pin fix | 0 | 1 passed (the other 23 passed in the run above)
+# red at the tip: test-features (2179f8b32): smartcontracts/evm/script/pqz/wallet/Cargo.toml (pqz-wallet-sim, merged from
+# pqz3k-handle 8db6f2e6c) enables scaas-ua/vectors in [dependencies]; check_test_features.py FINDING; not fixed (owner's call).
+# steps not re-run after 2179f8b32 (their inputs unchanged by pqz3k-handle): forge-ua, ua-deny, ua-fuzz, ua-cxx, ua-qt,
+# ua-dart-frb, ua-py, ua-go, ua-cs, ua-dart, zether-prover x2, scaas-ct, read-balance (rows at 9c12e1aac).
