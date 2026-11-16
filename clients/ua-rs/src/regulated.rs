@@ -24,6 +24,8 @@ pub const REGULATED_OPS: [(&str, &str); 8] = [
     ("UAOperatorTransfer", "bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid"),
 ];
 
+/// The error of the positional form (`params: &[[u8; 32]]`, T21 L45: backed up to `legacy/ua-rs-sign/router_ops_positional.rs`);
+/// the typed ops below cannot be malformed, so nothing here returns it now. Kept: never drop an API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RouterOpError {
     /// Not one of the eight.
@@ -47,6 +49,97 @@ pub struct Envelope {
     pub fee_recipient: [u8; 20],
 }
 
+/// A field's value as the one word EIP-712 hashes for it: a static field its ABI word (`uintN` / `bool` as the number,
+/// `address` right-aligned, `bytes4` left-aligned, `bytes32` / `uint256` as given), a `string` the `keccak256` of its bytes,
+/// an array the `keccak256` of its elements' words. The Rust type is the field's Solidity type, so a value over its type
+/// cannot be built.
+pub trait FieldWord {
+    fn field_word(&self) -> [u8; 32];
+}
+impl FieldWord for [u8; 32] {
+    fn field_word(&self) -> [u8; 32] {
+        *self
+    }
+}
+impl FieldWord for [u8; 20] {
+    fn field_word(&self) -> [u8; 32] {
+        address_word(self)
+    }
+}
+impl FieldWord for [u8; 4] {
+    fn field_word(&self) -> [u8; 32] {
+        let mut w = [0u8; 32];
+        w[..4].copy_from_slice(self);
+        w
+    }
+}
+macro_rules! uint_field_word {
+    ($($t:ty),*) => {$(
+        impl FieldWord for $t {
+            fn field_word(&self) -> [u8; 32] {
+                word(*self as u64)
+            }
+        }
+    )*};
+}
+uint_field_word!(u8, u16, u32, u64, bool);
+impl FieldWord for String {
+    fn field_word(&self) -> [u8; 32] {
+        keccak256(self.as_bytes())
+    }
+}
+impl<T: FieldWord> FieldWord for Vec<T> {
+    fn field_word(&self) -> [u8; 32] {
+        let w: Vec<[u8; 32]> = self.iter().map(FieldWord::field_word).collect();
+        keccak(&w.iter().map(|x| &x[..]).collect::<Vec<_>>())
+    }
+}
+
+/// A router op signed as `UA<Op>(bytes32 from,address target,<fields>,<E>)`: `NAME` the `UA<Op>`, `FIELDS` its own fields in
+/// the type string's order (Rust names), `field_words` their words in that order (T21 L45, owner option (b): one struct per
+/// signed type with named fields, so two fields cannot be passed in each other's place).
+pub trait RouterOp {
+    const NAME: &'static str;
+    const FIELDS: &'static [&'static str];
+    fn field_words(&self) -> Vec<[u8; 32]>;
+}
+/// One of the eight regulated ops (`REGULATED_OPS`), hashed by `struct_hash` / `digest` here.
+pub trait RegulatedOp: RouterOp {}
+
+/// `$kind` op structs: `pub struct UA<Op> { pub field: Type, .. }` hashed in declaration order (the type string's).
+macro_rules! router_ops {
+    ($kind:ident; $( $(#[$m:meta])* $name:ident { $($f:ident : $t:ty),* $(,)? } )*) => {$(
+        $(#[$m])*
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub struct $name { $(pub $f: $t),* }
+        impl $crate::regulated::RouterOp for $name {
+            const NAME: &'static str = stringify!($name);
+            const FIELDS: &'static [&'static str] = &[$(stringify!($f)),*];
+            fn field_words(&self) -> Vec<[u8; 32]> {
+                #[allow(unused_imports)]
+                use $crate::regulated::FieldWord;
+                vec![$(self.$f.field_word()),*]
+            }
+        }
+        impl $kind for $name {}
+    )*};
+}
+pub(crate) use router_ops;
+
+router_ops! { RegulatedOp;
+    /// `UAFreeze`: `uint256` fields are big-endian words throughout.
+    UAFreeze { account: [u8; 32], r#ref: [u8; 32], record_id: [u8; 32], chain_uid: [u8; 32] }
+    UAUnfreeze { account: [u8; 32], r#ref: [u8; 32], chain_uid: [u8; 32] }
+    UAForceTransfer { record_id: [u8; 32], amount: [u8; 32], chain_uid: [u8; 32] }
+    UAPause { r#ref: [u8; 32], until: u64, chain_uid: [u8; 32] }
+    UAUnpause { r#ref: [u8; 32], chain_uid: [u8; 32] }
+    UARecordOrder { order_id: [u8; 32], document_hash: [u8; 32], subject: [u8; 32], beneficiary: [u8; 32], max_amount: [u8; 32],
+        freeze_until: u64, chain_uid: [u8; 32] }
+    UARevokeOrder { record_id: [u8; 32], reason_ref: [u8; 32], chain_uid: [u8; 32] }
+    /// `account` the moved account, `to` the receiver (`from`, the envelope's, the signer).
+    UAOperatorTransfer { account: [u8; 32], to: [u8; 32], amount: [u8; 32], r#ref: [u8; 32], chain_uid: [u8; 32] }
+}
+
 fn params_of(op: &str) -> Option<&'static str> {
     REGULATED_OPS.iter().find(|(n, _)| *n == op).map(|(_, p)| *p)
 }
@@ -56,23 +149,20 @@ pub fn type_string(op: &str) -> Option<String> {
     params_of(op).map(|p| format!("{op}(bytes32 from,address target,{p},{ENVELOPE})"))
 }
 
-/// `hashStruct(UA<Op>)` over `params` (one ABI word each, in order), `relayer` hashed as 0 unless `mode & 1`,
-/// `feeRecipient` as 0 unless `mode & 2` (`MetaTxLib.canon`).
-pub fn struct_hash(op: &str, e: &Envelope, target: &[u8; 20], params: &[[u8; 32]]) -> Result<[u8; 32], RouterOpError> {
-    let list = params_of(op).ok_or(RouterOpError::UnknownOp)?;
-    let types: Vec<&str> = list.split(',').map(|f| f.split_once(' ').map_or(f, |(t, _)| t)).collect();
-    if types.len() != params.len() {
-        return Err(RouterOpError::Params);
-    }
-    if types.iter().zip(params).any(|(t, w)| *t == "uint64" && w[..24] != [0; 24]) {
-        return Err(RouterOpError::Range);
-    }
+/// The words after the type hash: `from`, `target`, the op's own, then the envelope with `relayer` hashed as 0 unless
+/// `mode & 1`, `feeRecipient` as 0 unless `mode & 2` (`MetaTxLib.canon`). Shared with `admin`.
+pub(crate) fn router_struct_hash(type_string: &str, e: &Envelope, target: &[u8; 20], own: Vec<[u8; 32]>) -> [u8; 32] {
     let canon = |bound: bool, a: &[u8; 20]| if bound { address_word(a) } else { [0; 32] };
-    let mut words: Vec<[u8; 32]> = vec![keccak256(type_string(op).unwrap().as_bytes()), e.from, address_word(target)];
-    words.extend_from_slice(params);
+    let mut words: Vec<[u8; 32]> = vec![keccak256(type_string.as_bytes()), e.from, address_word(target)];
+    words.extend(own);
     words.extend([e.batch, e.nonce, e.valid_until, word(e.mode as u64), canon(e.mode & 1 != 0, &e.relayer), e.fee,
         canon(e.mode & 2 != 0, &e.fee_recipient)]);
-    Ok(keccak(&words.iter().map(|w| &w[..]).collect::<Vec<_>>()))
+    keccak(&words.iter().map(|w| &w[..]).collect::<Vec<_>>())
+}
+
+/// `hashStruct(UA<Op>)` of one of the eight typed ops (`UAFreeze` .. `UAOperatorTransfer`).
+pub fn struct_hash<O: RegulatedOp>(op: &O, e: &Envelope, target: &[u8; 20]) -> [u8; 32] {
+    router_struct_hash(&type_string(O::NAME).expect("a RegulatedOp is in REGULATED_OPS"), e, target, op.field_words())
 }
 
 /// The router's domain: `("SCaaS GovernanceRouter", "1", chainId, router, salt = chainUid)`.
@@ -88,10 +178,8 @@ pub fn router_domain_separator(chain_id: u64, router: &[u8; 20], chain_uid: &[u8
 }
 
 /// `keccak256(0x1901 ‖ domainSeparator ‖ structHash)`: what the holder signs.
-pub fn digest(op: &str, domain_separator: &[u8; 32], e: &Envelope, target: &[u8; 20], params: &[[u8; 32]])
-    -> Result<[u8; 32], RouterOpError>
-{
-    Ok(keccak(&[&[0x19, 0x01], domain_separator, &struct_hash(op, e, target, params)?]))
+pub fn digest<O: RegulatedOp>(op: &O, domain_separator: &[u8; 32], e: &Envelope, target: &[u8; 20]) -> [u8; 32] {
+    keccak(&[&[0x19, 0x01], domain_separator, &struct_hash(op, e, target)])
 }
 
 /// `recordId = keccak256(abi.encode(orderId, subject, beneficiary))` (spec §3.1).

@@ -9465,6 +9465,19 @@ It said: Custody tier A/B, HSM or MPC; replaced by CLI-SGN-32.
 **Cost if wrong.** A type-string change regenerates `typed_ops.json` and the contract tests that read it.
 **Source.** plan `superpowers/plans/2026-10-31-typed-signing.md` (C1, C7).
 
+**Change (owner 2026-11-16, owner: yes, T21 L45, "ok, L45 option (b)"; BUILT, UNAUDITED).** Fable part 4 finding 7: `ua-rs`
+`regulated::struct_hash` / `digest` took the eight regulated router ops' fields as `params: &[[u8; 32]]` and `admin::struct_hash` /
+`digest` the 18 admin ops' as `&[Param]`, positional, against the explicit-parameters rule. Option (b): both functions stay (no API
+dropped) and take one typed struct per signed type with named fields (`regulated::UAFreeze` .. `UAOperatorTransfer`,
+`admin::UATransferAdmin` .. `UARevokeApproval`, `admin::ChainEntries`; trait `regulated::RouterOp` with the op's `NAME` and
+`FIELDS`), so swapping `account` and `to` cannot be written; each field's Rust type is its Solidity type, so the old `Params` /
+`Range` refusals cannot arise (`RouterOpError` is kept). Digests are byte-identical: `tests/regulated.rs` and `tests/admin.rs`
+build every one of the 26 `typed_ops.json` rows by name and assert the same type string, struct hash and digest as before, check
+each struct's fields against the type string, and under feature `vectors` the named op table (`wallet::scaas_typed_data`) gives
+the same digest; seven mutants (two fields swapped in a struct, in its words, in `ChainEntries`, in the envelope; the `vectors`
+assertion inverted) fail. The verify-only build keeps both modules. The positional form is backed up in
+`clients/ua-rs/legacy/ua-rs-sign/router_ops_positional.rs` (not compiled).
+
 ### CLI-SGN-43 — The UA KEM key is derived per UA and version; only `ss` reaches a caller
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/signers-clientkeys.md#CLI-SGN-43 · superseded-by: —
 
