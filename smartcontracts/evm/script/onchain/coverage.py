@@ -323,6 +323,10 @@ def note(a):
                     miss += not why
                     out.append(f"{g} | {lb} | {e['sig']} | {why or 'NO REASON RECORDED'}")
         out.append(f"({miss} without a reason)")
+        gaps = [g for k in (n, "*") for g in rs.get("_gaps", {}).get(k, [])]
+        if gaps:  # a known gap of this net's rows (owner 2026-11-16, D3: recorded, not a missing entry)
+            out.append(f"\n## {n}: known gaps")
+            out += [f"gap | {g}" for g in gaps]
         neg = [r for r in recs if r["what"].startswith("negative")]
         out.append(f"\n## {n}: negatives ({len(neg)}; refused as expected = status 2)")
         out += [f"{'ok ' if r['status'] == 2 else 'BAD'} | {r.get('label', '')} | {r['what']} | expected {r.get('expected', '')}"
