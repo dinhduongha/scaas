@@ -30,9 +30,10 @@ impl From<ua::json::JsonError> for UaErr {
 }
 pub type R<T> = Result<T, UaErr>;
 
-/// Run `f`, turning a (never expected) panic into an error instead of unwinding into C++.
+/// Run `f`, turning a (never expected) panic into an error instead of unwinding into C++: `UAInternal`, as ua-c and ua-qt
+/// (never `UAKeyData`, which a caller reads as bad input: T21 L57).
 fn guard<T>(f: impl FnOnce() -> R<T>) -> R<T> {
-    catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|_| Err(UaErr("UAKeyData: internal".into())))
+    catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|_| Err(UaErr("UAInternal: panic".into())))
 }
 fn a<const N: usize>(b: &[u8]) -> R<[u8; N]> {
     b.try_into().map_err(|_| UaErr("UAKeyData: length".into()))
