@@ -153,6 +153,10 @@ name = "wallet_pairing"
 required-features = ["wallet"]
 
 [[test]]
+name = "wallet_nonce_wipe"
+required-features = ["vectors"]
+
+[[test]]
 name = "wallet_uasig"
 required-features = ["wallet"]
 
