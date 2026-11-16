@@ -11,7 +11,7 @@ import {
   zetherRollOverCalldata, zetherRollOverDigest, zetherSetRollOverModeTypedData, zetherSetRollOverModeCalldata, zetherSetRollOverModeDigest,
 } from '../src/zether.js';
 import { deriveKey, seedFromWords, NETWORKS } from '../src/seed.js';
-import { fromHex, hex, abiEncode, keccak_256, concatBytes, utf8ToBytes } from '../src/bytes.js';
+import { fromHex, hex, abiEncode, keccak_256, concatBytes, utf8ToBytes, b64url, fromB64url } from '../src/bytes.js';
 import { hashTypedData, hashStruct, TYPED_OPS } from '../src/evm.js';
 import { uaMessage, purposeTag, holderPopMessage, portableRecordDigest, registrationDigest, POP_V2_TAG } from '../src/ua.js';
 import { dir } from './ua-vectors-dir.js';
@@ -224,7 +224,11 @@ for (const curve of ['bls12381']) {
     const box = await sealBalanceCache(curve, x, entries);
     assert.deepEqual(await openBalanceCache(curve, x, box), entries);
     assert.deepEqual(await openBalanceCache(curve, x + 1n, box), {});
-    assert.deepEqual(await openBalanceCache(curve, x, { ...box, ct: box.ct.slice(0, -2) + 'AA' }), {});
+    // the tamper always changes a byte (its last one XOR 0x5a; writing 'AA' kept a ct that already ended in it, 1 in 4096)
+    const ct = fromB64url(box.ct);
+    ct[ct.length - 1] ^= 0x5a;
+    assert.notEqual(b64url(ct), box.ct);
+    assert.deepEqual(await openBalanceCache(curve, x, { ...box, ct: b64url(ct) }), {});
     assert.deepEqual(await openBalanceCache(curve, x, undefined), {});
     assert.ok(!JSON.stringify(box).includes(String((1n << 54n) - 1n)), 'balance is not stored in clear');
   });
