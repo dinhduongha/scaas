@@ -844,6 +844,12 @@ too. Fixed by freeing disk (owner 2026-11-16, finished work trees removed: 215 G
 at 10:15:56 / 10:15:59 UTC on the same chain (head advancing, genesis unchanged), nothing pending lost. Watch item: keep the
 stack's filesystem above the node's free-space check (`df -h` of the data directory beside `watch.sh`'s RestartCount).
 
+**Results** (summary `smartcontracts/evm/runs/2026-11-16-reset5.txt`): the matrix on `mldsa-off` green in every group that runs on
+a remote target (pqzwallet local only), the `mldsa-on` rows (`mldsa_on.py`) 547 records, 0 failures; wraplimits p5 / p6 pending
+in their windows (provisionally accepted by the owner, not a pass). The Blockscout verify paused at 377 / 743: kind 13's modules
+cannot be verified while the `sc-verifier` container keeps its 768 MiB limit (OOM-killed compiling them); raise it, then re-run
+`verify.sh scaas-testnet`, which resumes.
+
 ## 7622 node layout and access (owner 2026-10-31)
 
 Two nodes since the node split (owner 2026-10-31, [NET-EVM-10](../../../docs/networks/evm.md#NET-EVM-10)): `sealer`
