@@ -23,6 +23,7 @@ use crate::guard::{self, Guard, Refusal};
 use crate::metatx::{Mtx, UaMtx};
 use crate::nonce::{bump, plan, replaceable, Inflight};
 use crate::odoo::{Job, Odoo, Report};
+use crate::store::{State, Store};
 use crate::typed::{hex_refused, parse, Op, Typed};
 
 /// A 0-value self-transfer: 21,000 before Amsterdam, 12,000 under EIP-2780 (no recipient charge for the sender
@@ -203,7 +204,17 @@ struct Sent {
     orphan: Option<i64>,
     /// A priced relay-fee job's fee ceiling (review I1): replacements never sign a max fee above it.
     ceiling: Option<u128>,
+    /// T21 L63b: the store row (`uid`, namespace [`OWN_NAMESPACE`]) of the lane's own job at this nonce.
+    own: Option<i64>,
 }
+
+/// T21 L63b (owner O8, 2026-11-16): the node store's namespace of the lane's own jobs, the ML-DSA cache parts it sends for a
+/// `register` (NODE-JOB-29): each has a journal row of its own, so after a restart the lane tracks and bumps its nonce.
+pub const OWN_NAMESPACE: &str = "~node";
+
+/// NODE-JOB-29: a cache part whose simulation reads "over the 2^24 regular gas of a transaction or the RPC gas cap" this many times
+/// in a row is taken as the chain's limit (Nethermind answers EIP-7825's cap with the RPC cap's words): the registration is `dead`.
+pub const PART_CAP_WAITS: u32 = 3;
 
 /// CTR-MTX-86, one rule on every family (the EVM lanes here, the other adapters' `step_once`): a job carrying `receiver_fee`
 /// (the old name) or `payee_fee` is refused by name, never relayed without the payee's fee authorization. The node builds no
@@ -361,11 +372,22 @@ pub struct Submitter {
     /// Fable recheck 4 R4-1: [`Chain::failover_answers`] when the job in hand started ([`Submitter::submit`]); [`Submitter::fail`]
     /// requeues when it moved.
     failover_mark: u64,
+    /// T21 L63b: the node store and this lane's label in it, the journal of the lane's own jobs ([`OWN_NAMESPACE`]); `None`: none.
+    journal: Option<(Store, String)>,
+    /// NODE-JOB-29: [`guard::rpc_cap`] refusals in a row per cache part (its call key), bounded by [`PART_CAP_WAITS`].
+    cap_waits: HashMap<B256, u32>,
 }
 
 impl Submitter {
     /// `digests`: tập in-flight CHUNG của chain (G2) — mọi lane của chain nhận cùng một bản.
     pub async fn start(chain: Chain, odoo: Odoo, cfg: ChainCfg, node_id: String, digests: InflightSet) -> Result<Self> {
+        Self::start_with(chain, odoo, cfg, node_id, digests, None).await
+    }
+
+    /// [`Submitter::start`] with the lane's own journal (`store`, this lane's label there): its rows in flight are tracked too.
+    pub async fn start_with(chain: Chain, odoo: Odoo, cfg: ChainCfg, node_id: String, digests: InflightSet,
+        journal: Option<(Store, String)>) -> Result<Self>
+    {
         // `worker` lọc job đã claim mà chưa ký về đúng lane này (nhiều lane cùng chain — R62).
         let nc = odoo
             .node_config_ref(serde_json::json!(cfg.evm_chain_number), Some(format!("{:#x}", chain.address())), Some(node_id.clone()))
@@ -378,7 +400,13 @@ impl Submitter {
             .iter()
             .map(|j| Inflight { job_id: j.job_id, nonce: j.nonce, state: j.state.clone() })
             .collect();
-        let p = plan(pending, nc.journal_max_nonce, &jobs);
+        // T21 L63b: the lane's own journal beside the legacy path's
+        let (own_max, own) = match &journal {
+            Some((st, label)) => (st.journal_max(&cfg.chain_key(), label).await?, st.lane_journal(&cfg.chain_key(), label).await?),
+            None => (None, Vec::new()),
+        };
+        let own_max = own_max.map(u64::try_from).transpose()?;
+        let p = plan(pending, nc.journal_max_nonce.max(own_max), &jobs);
         let breaker = Arc::new(Mutex::new(Breaker::new(cfg.breaker.clone())));
         let tokens = std::sync::RwLock::new(nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect());
         let guard = Guard::new(&cfg, Arc::new(tokens))?;
@@ -398,6 +426,8 @@ impl Submitter {
             tripped: None,
             guard,
             failover_mark: 0,
+            journal,
+            cap_waits: HashMap::new(),
         };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
@@ -481,7 +511,10 @@ impl Submitter {
             let hold = work.as_ref().and_then(|w| me.guard.subject(w)).and_then(|(k, relay)| me.digests.hold_subject(k, relay));
             let guard = me.digests.with_hold(guard, hold);
             let orphan = work.is_none().then_some(j.job_id);
-            me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan, ceiling });
+            me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan, ceiling, own: None });
+        }
+        for r in own.into_iter().filter(|r| r.namespace == OWN_NAMESPACE) {
+            me.track_own(r, pending).await?;
         }
         info!(chain = me.cfg.evm_chain_number, chain_uid = %uid, next = me.next, tracked = me.inflight.len(), "submit ready");
         Ok(me)
@@ -573,7 +606,7 @@ impl Submitter {
         if let Err(e) = self.chain.send_raw(&raw).await {
             warn!(nonce, "gap-fill send: {e:#}");
         }
-        self.inflight.insert(nonce, Sent { work: None, hashes: vec![hash], gas: GAP_FILL_GAS, fees, at: Instant::now(), _guard: None, orphan: None, ceiling: None });
+        self.inflight.insert(nonce, Sent { work: None, hashes: vec![hash], gas: GAP_FILL_GAS, fees, at: Instant::now(), _guard: None, orphan: None, ceiling: None, own: None });
         warn!(nonce, "gap-filled");
         Ok(())
     }
@@ -678,7 +711,7 @@ impl Submitter {
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => return self.requeue(&w, format!("simulate: {reason}")).await,
         };
-        self.dispatch(w, guard, gas).await
+        self.dispatch(w, guard, gas, None).await;
     }
 
     /// NODE-JOB-29: the `register` of an ML-DSA key whose simulation reverted `UAKeyNotCached` (the registry reverts it only when
@@ -688,6 +721,15 @@ impl Submitter {
     /// (it can never land) makes the registration `dead` by name.
     async fn cache_parts(&mut self, w: Work, kind: u16, pk: Bytes, reason: String) {
         use crate::abi::IUARegistry::{expandedKeyOfCall, uaOfCall};
+        // owner O7: the lane pays a part only for a registration that can pass once cached
+        if let Err(e) = guard::register_pop(&w.data) {
+            return self.fail(&w, format!("{}: off-chain check refused the record: {e}; no cache part sent", guard::UA_REGISTER_POP_REFUSED)).await;
+        }
+        // owner O7: the parts are the `call` share of the breaker's budget, so registry writes cannot stop payments
+        if self.breaker.lock().is_ok_and(|mut k| k.calls_stopped(now())) {
+            return self.requeue(&w, format!("{}: the call share of this hour's gas budget is spent (breaker.call_budget_pct); no part \
+                sent; {reason}", guard::UA_KEY_NOT_CACHED)).await;
+        }
         let parts = guard::mldsa_cache(kind).map_or(0, |(_, n)| n);
         let stored = match self.chain.call_view(w.to, uaOfCall { kind, keyData: pk.clone() }).await {
             Ok(ua) => self.chain.call_view(w.to, expandedKeyOfCall { ua }).await,
@@ -699,7 +741,7 @@ impl Submitter {
                 return self.requeue(&w, format!("{}: expandedKeyOf unread: {e}; {reason}", guard::UA_KEY_NOT_CACHED)).await;
             }
         };
-        let mut sent = Vec::new();
+        let (mut sent, mut flying) = (Vec::new(), Vec::new());
         for part in (0..parts).filter(|p| stored[*p as usize] == Address::ZERO) {
             let op = guard::cache_part_op(w.to, kind, &pk, part, w.valid_until);
             let p = match work_of_op(None, &op, None) {
@@ -707,9 +749,35 @@ impl Submitter {
                 Err(e) => return self.fail(&w, format!("{}: part {part}: {e:#}", guard::UA_KEY_NOT_CACHED)).await,
             };
             // in flight on this or another lane: its receipt comes, the register's next simulation tells
-            let Some(g) = self.digests.try_acquire(p.call_key()) else { continue };
+            let Some(g) = self.digests.try_acquire(p.call_key()) else {
+                flying.push(part);
+                continue;
+            };
+            let key = p.call_key();
             let gas = match guard::gas(&self.chain, &p, self.cfg.max_gas_per_tx).await {
-                Ok(gas) => gas,
+                Ok(gas) => {
+                    self.cap_waits.remove(&key);
+                    gas
+                }
+                // Nethermind answers EIP-7825's 2^24 with the RPC cap's words: a few in a row are the chain's limit, not a cap of ours
+                Err(SimError::Revert(r)) if guard::rpc_cap(&r) && {
+                    // ponytail: cleared wholesale past 1,024 parts (registers that expired keep their counts until then)
+                    if self.cap_waits.len() > 1024 {
+                        self.cap_waits.clear();
+                    }
+                    let n = self.cap_waits.entry(key).or_default();
+                    *n += 1;
+                    *n >= PART_CAP_WAITS
+                } => {
+                    self.cap_waits.remove(&key);
+                    return self.fail(&w, format!("{}: part {part} refused: {}: {PART_CAP_WAITS} simulations in a row over the 2^24 \
+                        regular gas of a transaction or the RPC gas cap ({r}); {reason}", guard::UA_KEY_NOT_CACHED, guard::TX_EXCEEDS_CHAIN_LIMIT)).await;
+                }
+                // owner O8: anyone may still send the part; NODE-JOB-24's precedent (`PROOF_STORE_OVER_LANE_CAP`)
+                Err(SimError::Revert(r)) if guard::lane_cap(&r) => {
+                    return self.requeue(&w, format!("{}: part {part} over this lane's cap ({r}); the register waits for the part from \
+                        another sender; {reason}", guard::UA_KEY_NOT_CACHED)).await;
+                }
                 Err(SimError::Revert(r)) => {
                     return self.fail(&w, format!("{}: part {part} refused: {r}; {reason}", guard::UA_KEY_NOT_CACHED)).await;
                 }
@@ -717,28 +785,32 @@ impl Submitter {
                     return self.requeue(&w, format!("{}: part {part}: simulate: {r}; {reason}", guard::UA_KEY_NOT_CACHED)).await;
                 }
             };
-            self.dispatch(p, Some(g), gas).await;
-            sent.push(part);
+            // T21 batch G: listed only when sent (a job-less part's give-up is only logged)
+            if self.dispatch(p, Some(g), gas, Some(&op)).await {
+                sent.push(part);
+            }
         }
-        self.requeue(&w, format!("{}: {reason}; parts sent now {sent:?} of {parts}; the register waits for every part",
+        self.requeue(&w, format!("{}: {reason}; parts sent now {sent:?} of {parts}, in flight {flying:?}; the register waits for every part",
             guard::UA_KEY_NOT_CACHED)).await
     }
 
-    /// Sign and send `w` at `gas` (sized by [`guard::gas`]); `guard` follows it into `Sent`.
-    async fn dispatch(&mut self, w: Work, guard: Option<InflightGuard>, gas: u64) {
+    /// Sign and send `w` at `gas` (sized by [`guard::gas`]); `guard` follows it into `Sent`. `true` once the transaction is
+    /// journaled and handed to the RPC (tracked from then on); every other exit reported (a job) or only logged (job-less work).
+    /// `own`: the lane's own job's named op, journaled in the node store first (T21 L63b).
+    async fn dispatch(&mut self, w: Work, guard: Option<InflightGuard>, gas: u64, own: Option<&serde_json::Value>) -> bool {
         let fees = match self.chain.fees().await {
             Ok(f) => f,
-            Err(e) => return self.requeue(&w, format!("fees: {e:#}")).await,
+            Err(e) => { self.requeue(&w, format!("fees: {e:#}")).await; return false; },
         };
         let priced = match self.guard.relay_priced(self.chain.address(), &w) {
             Ok(p) => p,
-            Err(Refusal::Policy(r)) => return self.fail(&w, r).await,
-            Err(Refusal::Transport(r)) => return self.requeue(&w, r).await,
+            Err(Refusal::Policy(r)) => { self.fail(&w, r).await; return false; },
+            Err(Refusal::Transport(r)) => { self.requeue(&w, r).await; return false; },
         };
         let nonce = self.next;
         let (raw, hash) = match self.chain.sign(nonce, w.to, w.data.clone(), gas, fees).await {
             Ok(x) => x,
-            Err(e) => return self.requeue(&w, format!("{e:#}")).await,
+            Err(e) => { self.requeue(&w, format!("{e:#}")).await; return false; },
         };
         // review I1 / I3: a priced relay fee covers the quote at the job's fee ceiling (FEE_HEADROOM x this max fee,
         // which every replacement stays under) plus the L1 data fee of this very transaction; nothing is sent otherwise
@@ -750,8 +822,8 @@ impl Submitter {
             };
             match covered {
                 Ok(()) => {}
-                Err(Refusal::Policy(r)) => return self.fail(&w, r).await,
-                Err(Refusal::Transport(r)) => return self.requeue(&w, r).await,
+                Err(Refusal::Policy(r)) => { self.fail(&w, r).await; return false; },
+                Err(Refusal::Transport(r)) => { self.requeue(&w, r).await; return false; },
             }
         }
         let ceiling = priced.then_some(ceiling);
@@ -760,20 +832,113 @@ impl Submitter {
         if let Some(id) = w.job_id {
             if !self.report(id, "signed", Some(hash), Some(nonce), None).await {
                 self.retry.push_back((w, guard));
-                return;
+                return false;
             }
         }
+        // T21 L63b: the lane's own job journals its row first; no row, no send (its register sends it again)
+        let own = match own {
+            None => None,
+            Some(op) => match self.journal_own(op, &w, nonce, hash).await {
+                Ok(uid) => uid,
+                Err(e) => {
+                    warn!(nonce, "own journal: {e:#}; not sent");
+                    return false;
+                }
+            },
+        };
         self.next += 1;
         match self.chain.send_raw(&raw).await {
             Ok(()) => {
                 if let Some(id) = w.job_id {
                     self.report(id, "broadcast", None, None, None).await;
                 }
+                if let Some(uid) = own {
+                    self.own_to(uid, State::Broadcast, None, None).await;
+                }
             }
             // Không trả nonce lại: tx đã ký nằm trong journal; vòng `track` sẽ thay thế nó.
             Err(e) => warn!(nonce, "send failed, will replace: {e:#}"),
         }
-        self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None, ceiling });
+        self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None, ceiling, own });
+        true
+    }
+
+    /// T21 L63b: the journal row of the lane's own job `op` (`~node`, a `call`), `signed` at `nonce` / `hash` on this lane; `None`
+    /// without a journal. A row left behind by a failed step is closed `dead`.
+    async fn journal_own(&self, op: &serde_json::Value, w: &Work, nonce: u64, hash: B256) -> Result<Option<i64>> {
+        use crate::store::{Accept, Fields, NewJob, Origin, Transition};
+        let Some((st, label)) = &self.journal else { return Ok(None) };
+        let payload = serde_json::to_vec(op)?;
+        let job = NewJob {
+            namespace: OWN_NAMESPACE.into(),
+            origin: Origin { scope: "node".into(), producer: label.clone(), key: format!("{nonce}:{hash:#x}"), generation: 0 },
+            client_ref: None,
+            chain_key: self.cfg.chain_key(),
+            kind: "call".into(),
+            digest: None,
+            payload_hash: alloy::primitives::keccak256(&payload).0,
+            payload,
+            valid_until: i64::try_from(w.valid_until)?,
+            lane_hint: Some(label.clone()),
+            bus_scope: "restricted".into(),
+            private_window_secs: 0,
+        };
+        let now = crate::store::now_ms();
+        let uid = match st.accept(&job, now).await? {
+            Accept::Created(r) => r.uid,
+            a => anyhow::bail!("accept: {a:?}"),
+        };
+        let lease = Fields { lane_label: Some(label.clone()), ..Default::default() };
+        let sign = Fields { lane_label: Some(label.clone()), outer_nonce: Some(i64::try_from(nonce)?), tx_hash: Some(format!("{hash:#x}")),
+            ..Default::default() };
+        for (from, to, f) in [(State::Queued, State::Leased, lease), (State::Leased, State::Signed, sign)] {
+            let t = st.transition(uid, from, to, &f, now).await;
+            if !matches!(t, Ok(Transition::Ok { .. })) {
+                self.own_to(uid, State::Dead, Some("journal not written; not sent".into()), None).await;
+                anyhow::bail!("{} -> {}: {t:?}", from.as_str(), to.as_str());
+            }
+        }
+        Ok(Some(uid))
+    }
+
+    /// T21 L63b: the own row `uid` to `to` from the live state it is in; a store error is only logged (the chain stays the truth,
+    /// the next start reads the row again).
+    async fn own_to(&self, uid: i64, to: State, error: Option<String>, hash: Option<B256>) {
+        use crate::store::{Fields, StoreError, Transition};
+        let Some((st, _)) = &self.journal else { return };
+        let f = Fields { error, tx_hash: hash.map(|h| format!("{h:#x}")), ..Default::default() };
+        for from in [State::Broadcast, State::Signed, State::Leased, State::Queued] {
+            match st.transition(uid, from, to, &f, crate::store::now_ms()).await {
+                Ok(Transition::Moved { .. }) | Err(StoreError::Illegal { .. }) => continue,
+                Ok(Transition::Ok { .. }) => return,
+                r => return warn!(uid, to = to.as_str(), "own journal: {r:?}"),
+            }
+        }
+    }
+
+    /// T21 L63b: a row of the lane's own journal at start. Below `pending` the chain holds its transaction (a block or the mempool):
+    /// tracked as a job is (receipt, bump, settle). At or above it the transaction is gone and [`plan`] gap-fills the nonce: `dead`.
+    async fn track_own(&mut self, r: crate::store::JobRow, pending: u64) -> Result<()> {
+        let n = u64::try_from(r.outer_nonce.unwrap_or(-1)).ok();
+        let h = r.tx_hash.as_deref().and_then(|h| h.parse::<B256>().ok());
+        let (Some(n), Some(h)) = (n, h) else {
+            warn!(uid = r.uid, "own journal row without a nonce or hash; skipped");
+            return Ok(());
+        };
+        if n >= pending {
+            self.own_to(r.uid, State::Dead, Some("nonce gap-filled at start: the transaction never reached the chain".into()), None).await;
+            return Ok(());
+        }
+        let work = r.payload.as_deref().and_then(|b| serde_json::from_slice::<serde_json::Value>(b).ok())
+            .and_then(|op| work_of_op(None, &op, None).ok()).map(|(w, _)| w);
+        let fees = self.chain.fees().await?;
+        let gas = match self.chain.tx_fees(h).await? {
+            Some((g, _)) => g,
+            None => guard::total_cap(self.cfg.max_gas_per_tx, self.chain.block_gas().await?),
+        };
+        let g = work.as_ref().and_then(|w| self.digests.try_acquire(w.call_key()));
+        self.inflight.insert(n, Sent { work, hashes: vec![h], gas, fees, at: Instant::now(), _guard: g, orphan: None, ceiling: None, own: Some(r.uid) });
+        Ok(())
     }
 
     /// A refused simulation, classified by [`guard::revert_verdict`] (the one classifier of every EVM runner, Fable E N-1):
@@ -890,6 +1055,9 @@ impl Submitter {
             if count > n {
                 // Nonce vỏ đã dùng bởi một tx ta không còn giữ hash (vd. bản thay thế trước khi khởi động lại).
                 let s = self.inflight.remove(&n).expect("present");
+                if let Some(uid) = s.own {
+                    self.own_to(uid, State::Consumed, Some("nonce used by a transaction this lane does not hold".into()), None).await;
+                }
                 if let Some(w) = s.work.filter(|w| w.meta.is_some()) {
                     self.report_consumed(&w).await;
                 }
@@ -938,6 +1106,10 @@ impl Submitter {
                 (Some(w), None) => w.job_id,
                 _ => None,
             };
+            let (own, expired_own) = match (&s.work, &live) {
+                (Some(_), None) => (None, s.own),
+                _ => (s.own, None),
+            };
             let stuck_gas = s.gas;
             // Fable 3r3s3t P3-3 (spec 3t §10, the fee pre-check "again before every send"): a stuck PQZ debit's replacement
             // runs the fill first (the fee word, the verdict; a renewed verdict extends the work's deadline, R-1); refused by
@@ -971,6 +1143,9 @@ impl Submitter {
             if let Some(id) = expired_job {
                 self.report(id, "dead", None, None, Some("expired while stuck; nonce gap-filled".into())).await;
             }
+            if let Some(uid) = expired_own {
+                self.own_to(uid, State::Dead, Some("expired while stuck; nonce gap-filled".into()), None).await;
+            }
             if let Some((w, Refusal::Policy(r) | Refusal::Transport(r))) = refused {
                 self.requeue(&w, format!("{r}; nonce gap-filled")).await;
             }
@@ -991,6 +1166,9 @@ impl Submitter {
                 if let Some(id) = live.as_ref().and_then(|w| w.job_id) {
                     self.report(id, "broadcast", Some(h), None, None).await;
                 }
+                if let Some(uid) = own.filter(|_| live.is_some()) {
+                    self.own_to(uid, State::Broadcast, None, Some(h)).await;
+                }
                 info!(nonce = n, "replaced");
             }
             if let Some(s) = self.inflight.get_mut(&n) {
@@ -998,6 +1176,9 @@ impl Submitter {
                 if let Some(h) = replaced {
                     s.hashes.push(h);
                     (s.work, s.gas, s.fees) = (live, gas, fees);
+                }
+                if expired_own.is_some() {
+                    s.own = None;
                 }
                 s.at = Instant::now();
             }
@@ -1020,6 +1201,7 @@ impl Submitter {
     async fn settle(&mut self, n: u64, h: B256, rc: TransactionReceipt) {
         let work = self.inflight.get(&n).and_then(|s| s.work.clone());
         let orphan = self.inflight.get(&n).and_then(|s| Some((s.orphan?, s.hashes.first() == Some(&h))));
+        let own = self.inflight.get(&n).and_then(|s| Some((s.own?, s.hashes.first() == Some(&h))));
         let consumed = match &work {
             Some(w) if !rc.status() => match self.consumed(w).await {
                 Ok(c) => c,
@@ -1034,6 +1216,14 @@ impl Submitter {
         let paid = u128::from(rc.gas_used).saturating_mul(rc.effective_gas_price);
         if let Ok(mut k) = self.breaker.lock() {
             k.spend(now(), paid);
+        }
+        // T21 L63b: the part's own row; one whose payload did not rebuild at start is the part only on its first hash
+        if let Some((uid, first)) = own {
+            match (work.is_some() || first, rc.status()) {
+                (true, true) => self.own_to(uid, State::Mined, None, None).await,
+                (true, false) => self.own_to(uid, State::Reverted, None, None).await,
+                (false, _) => self.own_to(uid, State::Dead, Some("nonce gap-filled".into()), None).await,
+            }
         }
         let Some(w) = work else {
             match orphan {
@@ -1052,11 +1242,16 @@ impl Submitter {
             (true, _, Some(id)) => _ = self.report(id, "mined", Some(h), None, None).await,
             (false, false, Some(id)) => {
                 // NODE-JOB-29: an ML-DSA registration that reverted for its cache (a part dropped by a reorg) waits for the parts
+                // T21 batch G: unread, or passing now (mined before its last part), it may still land: back in the queue too
                 if guard::mldsa_register(&w.data).is_some() {
-                    if let Err(SimError::Revert(r)) = self.chain.simulate(w.to, w.data.clone()).await {
-                        if r.starts_with("UAKeyNotCached") {
-                            return self.requeue(&w, format!("{}: the receipt reverted; {r}", guard::UA_KEY_NOT_CACHED)).await;
-                        }
+                    let why = match self.chain.simulate(w.to, w.data.clone()).await {
+                        Err(SimError::Revert(r)) if r.starts_with("UAKeyNotCached") => Some(r),
+                        Err(SimError::Transport(e)) => Some(format!("simulate unread: {e}")),
+                        Ok(_) => Some("mined before its cache; the register passes now".into()),
+                        Err(SimError::Revert(_)) => None,
+                    };
+                    if let Some(r) = why {
+                        return self.requeue(&w, format!("{}: the receipt reverted; {r}", guard::UA_KEY_NOT_CACHED)).await;
                     }
                 }
                 _ = self.report(id, "reverted", None, None, None).await
@@ -1248,6 +1443,10 @@ pub(crate) mod tests {
         ek: Option<[bool; 3]>,
         /// `cacheExpandedKey` reverts (the chain refuses the part).
         ek_refuse: bool,
+        /// `eth_feeHistory` fails (a transport error): no fee, nothing signed.
+        fees_down: bool,
+        /// `eth_getTransactionCount` at `latest` (default `count`: nothing in the mempool).
+        latest: Option<u64>,
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -1275,6 +1474,7 @@ pub(crate) mod tests {
             let word = |v: U256| Value::String(format!("0x{}", alloy::hex::encode(v.abi_encode())));
             e.calls.push(r["method"].as_str().unwrap().to_string());
             let out: Result<Value, Value> = match r["method"].as_str().unwrap() {
+                "eth_getTransactionCount" if p[1] == "latest" => Ok(json!(format!("{:#x}", e.latest.unwrap_or(e.count)))),
                 "eth_getTransactionCount" => Ok(json!(format!("{:#x}", e.count))),
                 // Nethermind 2.2.0's estimate-stage answer for a call over 2^24 regular gas (at its 100 M RPC gas cap)
                 "eth_estimateGas" if e.sim == Some("estimate_oog") => Err(err(-32000, "gas required exceeds allowance (100000000)", None)),
@@ -1289,6 +1489,7 @@ pub(crate) mod tests {
                     t
                 })),
                 "eth_getBlockByNumber" if p[0] == "latest" && e.block_err => Err(err(-32000, "upstream timeout", None)),
+                "eth_feeHistory" if e.fees_down => Err(err(-32000, "upstream timeout", None)),
                 "eth_feeHistory" => Ok(json!({"oldestBlock": "0x1", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
@@ -2820,7 +3021,7 @@ pub(crate) mod tests {
         assert!(r[0].0 == "dead" && !r[0].1.contains("UA_REGISTER_SPLIT"), "{r:?}");
     }
 
-    /// NODE-JOB-29: an ML-DSA-65 `register` (`ua8_writes`' bare one: 1,952-byte key) on a registry without the precompile, its
+    /// NODE-JOB-29: an ML-DSA-65 `register` (portable.json's `mldsa65#1`: 1,952-byte key, a valid `pop`) on a registry without the precompile, its
     /// cache empty: the lane sends both parts first, as the named `cacheExpandedKey` op's calldata, each at its estimate × 1.05
     /// (NET-EVM-11), and the `register` waits `queued` under `UA_KEY_NOT_CACHED`; the parts in flight are not sent again; once
     /// both landed the `register` goes.
@@ -2828,7 +3029,7 @@ pub(crate) mod tests {
     async fn mldsa_register_sends_its_cache_parts_first() {
         use crate::abi::IUARegistry::cacheExpandedKeyCall;
         let reg = Address::repeat_byte(0x5e);
-        let bare = ua8_writes(0).remove(0);
+        let bare = mldsa65_register(); // owner O7: a valid pop (the parts are sent only for one)
         let pk = crate::abi::IUARegistry::registerCall::abi_decode(&bare).unwrap().keyData;
         let part = |p: u64| cacheExpandedKeyCall { kind: 0x0131, pk: pk.clone(), part: U256::from(p) }.abi_encode();
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() }).await;
@@ -2864,7 +3065,7 @@ pub(crate) mod tests {
         use crate::abi::IUARegistry::{cacheExpandedKeyCall, registerCall};
         let reg = Address::repeat_byte(0x5e);
         let tn = move |c: &mut ChainCfg| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; };
-        let bare = ua8_writes(0).remove(0);
+        let bare = mldsa65_register(); // owner O7: a valid pop (the parts are sent only for one)
         let pk = registerCall::abi_decode(&bare).unwrap().keyData;
         let ok = || Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ..Default::default() };
         // part 0 stored: only part 1 goes
@@ -2899,13 +3100,223 @@ pub(crate) mod tests {
         assert_eq!((e.sent[0].2.to_vec(), e.gas[0]), (p0, 42_000_000));
     }
 
+    /// portable.json's `mldsa65#1` registration (the JS reference's key and valid `pop`) as `register` calldata.
+    fn mldsa65_register() -> Vec<u8> {
+        use crate::abi::IUARegistry::{registerCall, KemKey, UAAttrs};
+        let p: Value = serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"),
+            "/../smartcontracts/vectors/ua/portable.json")).unwrap()).unwrap();
+        let a = &p["registrations"].as_array().unwrap().iter().find(|r| r["name"] == "mldsa65#1").unwrap()["args"];
+        let hx = |v: &Value| Bytes::from(alloy::hex::decode(v.as_str().unwrap()).unwrap());
+        let b32 = |v: &Value| v.as_str().unwrap().parse::<B256>().unwrap();
+        let (t, k) = (&a["attrs"], &a["attrs"]["kem"]);
+        registerCall { kind: a["kind"].as_u64().unwrap() as u16, keyData: hx(&a["keyData"]),
+            attrs: UAAttrs { pqzKey: hx(&t["pqzKey"]), pqzPopHash: b32(&t["pqzPopHash"]),
+                kem: KemKey { scheme: k["scheme"].as_u64().unwrap() as u8, mlkemEk: hx(&k["mlkemEk"]), x25519: b32(&k["x25519"]) },
+                kemPkHash: b32(&t["kemPkHash"]) },
+            pop: hx(&a["pop"]), pqzPop: hx(&a["pqzPop"]) }.abi_encode()
+    }
+
+    /// NODE-JOB-29 (owner O7, 2026-11-16): before the first part the lane checks the register's `pop` off chain (`ua8::check_registration`,
+    /// the registry's own check once the key is cached); a `pop` that does not verify is `dead` by name and no part is sent. The positive:
+    /// the same register with its valid `pop` gets its parts.
+    #[tokio::test]
+    async fn mldsa_register_with_a_bad_pop_sends_no_part() {
+        use crate::abi::IUARegistry::registerCall;
+        let reg = Address::repeat_byte(0x5e);
+        let tn = move |c: &mut ChainCfg| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; };
+        let ok = || Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() };
+        let good = mldsa65_register();
+        let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, good.clone())], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.contains("parts sent now [0, 1] of 2"), "{r:?}");
+        assert_eq!(rpc.lock().unwrap().sent.len(), 2);
+        // one bit of the pop flipped
+        let mut c = registerCall::abi_decode(&good).unwrap();
+        let mut pop = c.pop.to_vec();
+        pop[100] ^= 1;
+        c.pop = pop.into();
+        let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, c.abi_encode())], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("UA_REGISTER_POP_REFUSED: ") && r[0].1.contains("UAPoP"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty(), "no part for a pop that cannot pass");
+        // `ua8_writes`' register: a pop of filler bytes
+        let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, ua8_writes(0).remove(0))], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("UA_REGISTER_POP_REFUSED: "), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+    }
+
+    /// NODE-JOB-29 (T21 batch G): the register's status names only the parts the lane sent: a part whose send gave up (here the fee
+    /// read) is not listed, and one skipped while it is in flight is listed as such.
+    #[tokio::test]
+    async fn mldsa_cache_part_status_names_only_parts_sent() {
+        let reg = Address::repeat_byte(0x5e);
+        let ok = || Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() };
+        let tn = move |c: &mut ChainCfg| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; };
+        let (r, rpc) = outcomes(Evm { fees_down: true, ..ok() }, vec![call_job(9, reg, mldsa65_register())], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.contains("parts sent now [] of 2, in flight []"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        // sent, then in flight on the next poll
+        let (url, rpc) = fake_evm(ok()).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), repeat: true, ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), tn).await.unwrap();
+        for want in ["parts sent now [0, 1] of 2, in flight []", "parts sent now [] of 2, in flight [0, 1]"] {
+            s.poll_outbox().await;
+            let r = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert!(r["error"].as_str().unwrap().contains(want), "{want}: {r}");
+        }
+        assert_eq!(rpc.lock().unwrap().sent.len(), 2);
+    }
+
+    /// T21 L63b (owner O8, 2026-11-16): each cache part the lane sends has a journal row of its own in the node store (`~node`, a
+    /// `call`, `signed` then `broadcast` at its nonce). After a restart the lane tracks the parts' nonces (receipt, bump, settle)
+    /// instead of leaving them untracked under `pending` (the contrast: a lane without the journal tracks none); a part whose nonce
+    /// the chain no longer holds is gap-filled and its row `dead`. A journal that cannot be written: nothing sent.
+    #[tokio::test]
+    async fn mldsa_cache_parts_are_journaled_across_a_restart() {
+        use crate::store::{ConfigSet, LaneRow};
+        let reg = Address::repeat_byte(0x5e);
+        let dir = std::env::temp_dir().join(format!("scaas-own-{}-{:016x}", std::process::id(), rand::random::<u64>()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let st = crate::store::create(&format!("sqlite://{}", dir.join("node.db").display()), "test").await.unwrap();
+        let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap();
+        let label = format!("{:#x}", signer.address());
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() }).await;
+        let mut cfg = test_cfg(&url);
+        (cfg.ua_registry, cfg.max_gas_per_tx) = (Some(reg), 64_000_000);
+        let key = cfg.chain_key();
+        let lanes = vec![LaneRow { chain_key: key.clone(), label: label.clone(), account_index: 0, journal_max: None }];
+        crate::store::bootstrap(st.as_ref(), &ConfigSet { chains: vec![cfg.chain_row()], lanes, ..Default::default() }, 1).await.unwrap();
+        let start = |journal: Option<(Store, String)>, jobs: Vec<Value>| {
+            let (cfg, signer) = (cfg.clone(), signer.clone());
+            async move {
+                let (odoo, _) = fake_odoo(Fake { jobs, tokens: toks(), ..Default::default() }).await;
+                Submitter::start_with(Chain::with_signer(&cfg, signer).unwrap(), odoo, cfg, "t#1".into(), InflightSet::default(), journal)
+                    .await.unwrap()
+            }
+        };
+        let journal = || Some((st.clone(), label.clone()));
+        // a journal that cannot be written (a lane the store does not know): no part sent
+        let mut s = start(Some((st.clone(), "0x00000000000000000000000000000000000000ee".into())), vec![call_job(9, reg, mldsa65_register())]).await;
+        s.poll_outbox().await;
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        drop(s);
+        let mut s = start(journal(), vec![call_job(9, reg, mldsa65_register())]).await;
+        s.poll_outbox().await;
+        let sent = rpc.lock().unwrap().sent.clone();
+        let rows = |st: &Store| { let (st, key, label) = (st.clone(), key.clone(), label.clone());
+            async move { st.lane_journal(&key, &label).await.unwrap() } };
+        let r = rows(&st).await;
+        assert_eq!(r.iter().map(|r| (r.namespace.as_str(), r.kind.as_str(), r.outer_nonce, r.state, r.tx_hash.clone())).collect::<Vec<_>>(),
+            [(OWN_NAMESPACE, "call", Some(0), State::Broadcast, Some(format!("{:#x}", sent[0].0))),
+             (OWN_NAMESPACE, "call", Some(1), State::Broadcast, Some(format!("{:#x}", sent[1].0)))]);
+        drop(s);
+        // restart, both parts in the mempool (pending 2, latest 0), the legacy journal knows neither
+        (rpc.lock().unwrap().count, rpc.lock().unwrap().latest) = (2, Some(0));
+        assert_eq!(start(None, vec![]).await.inflight_count(), 0, "without its journal a part's nonce is untracked");
+        let mut s = start(journal(), vec![]).await;
+        assert_eq!(s.inflight_count(), 2, "both parts tracked");
+        s.track().await;
+        let e = rpc.lock().unwrap().sent.clone();
+        assert_eq!(e[2..].iter().map(|(_, to, d)| (*to, d.clone())).collect::<Vec<_>>(),
+            [(sent[0].1, sent[0].2.clone()), (sent[1].1, sent[1].2.clone())], "each part bumped at its nonce, as itself");
+        assert_eq!(rows(&st).await[0].tx_hash, Some(format!("{:#x}", e[2].0)), "the replacement's hash journaled");
+        // part 0 mined: its row settles
+        rpc.lock().unwrap().receipts.insert(e[2].0, true);
+        s.track().await;
+        let r = rows(&st).await;
+        assert_eq!((r.len(), r[0].outer_nonce), (1, Some(1)));
+        let (uid0, uid1) = (r[0].uid - 1, r[0].uid);
+        assert_eq!(st.job(uid0).await.unwrap().unwrap().state, State::Mined);
+        drop(s);
+        // restart, part 1 gone from the mempool (pending = latest = 1): its nonce is gap-filled, its row dead
+        (rpc.lock().unwrap().count, rpc.lock().unwrap().latest) = (1, None);
+        let s = start(journal(), vec![]).await;
+        assert_eq!(s.inflight_count(), 1, "the gap-fill only");
+        let last = rpc.lock().unwrap().sent.last().cloned().unwrap();
+        assert!(last.2.is_empty() && last.1 == signer.address(), "a 0-value self-transfer at nonce 1");
+        assert_eq!(st.job(uid1).await.unwrap().unwrap().state, State::Dead);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// NODE-JOB-29 (owner O8, 2026-11-16): a part over this lane's `max_gas_per_tx` or its RPC's gas cap may still land from another
+    /// sender (the row is PERMISSIONLESS): the register waits `queued` by name, nothing sent, never `dead`. Only the part's own revert
+    /// and the chain's limit are `dead` (`mldsa_register_cache_refusals_by_name`).
+    #[tokio::test]
+    async fn mldsa_cache_part_over_the_lane_cap_waits() {
+        let reg = Address::repeat_byte(0x5e);
+        let ok = || Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() };
+        // the default cap (3 M) under a 40 M part; then the RPC's gas cap (Nethermind's "gas required exceeds allowance")
+        for (e, why) in [(ok(), "gas 40000000 above max_gas_per_tx 3000000"), (Evm { sim: Some("estimate_oog"), ..ok() }, "the RPC gas cap")] {
+            let (r, rpc) = outcomes(e, vec![call_job(9, reg, mldsa65_register())], |c| c.ua_registry = Some(reg)).await;
+            assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("UA_KEY_NOT_CACHED: part 0 over this lane's cap")
+                && r[0].1.contains(why), "{r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+        // the chain's own limit stays `dead`: a 70 M estimate over a 60 M block under a 200 M lane cap
+        let (r, rpc) = outcomes(Evm { estimate: Some(70_000_000), block_gas: Some(60_000_000), ..ok() }, vec![call_job(9, reg, mldsa65_register())],
+            |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 200_000_000; }).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.contains("part 0 refused: TX_EXCEEDS_CHAIN_LIMIT: gas 70000000"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+    }
+
+    /// NODE-JOB-29 (O8; coordinator 2026-11-16): Nethermind answers EIP-7825's 2^24 cap with the same "gas required exceeds
+    /// allowance" as an RPC gas cap, so that answer requeues only [`PART_CAP_WAITS`] times in a row; then the registration is `dead`
+    /// as the chain's limit (`TX_EXCEEDS_CHAIN_LIMIT`), nothing sent. A `max_gas_per_tx` refusal (the lane's own, unambiguous) keeps
+    /// waiting to the job's deadline.
+    #[tokio::test]
+    async fn mldsa_cache_part_rpc_cap_waits_are_bounded() {
+        let reg = Address::repeat_byte(0x5e);
+        let tn = move |c: &mut ChainCfg| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; };
+        for (e, dies) in [(Some("estimate_oog"), true), (None, false)] {
+            let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), sim: e, ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), repeat: true, ..Default::default() }).await;
+            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), move |c| { tn(c); if !dies { c.max_gas_per_tx = 3_000_000; } }).await.unwrap();
+            for i in 1..=PART_CAP_WAITS + 1 {
+                s.poll_outbox().await;
+                let r = o.lock().unwrap().reports.last().cloned().unwrap();
+                let (st, why) = (r["chain_state"].as_str().unwrap(), r["error"].as_str().unwrap());
+                if dies && i >= PART_CAP_WAITS {
+                    assert!(st == "dead" && why.starts_with("UA_KEY_NOT_CACHED: part 0 refused: TX_EXCEEDS_CHAIN_LIMIT: "), "{i}: {r}");
+                    break;
+                }
+                assert!(st == "queued" && why.contains("over this lane's cap"), "{e:?} {i}: {r}");
+            }
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
+    /// NODE-JOB-29 (owner O7): the lane's cache parts are the `call` share of the EVM spend breaker: past `call_budget_pct` of the
+    /// hour's `gas_budget_per_hour` no part is sent and the register waits by name; under it the parts go. Payments run to the whole budget.
+    #[tokio::test]
+    async fn mldsa_cache_parts_stop_at_the_call_share() {
+        let reg = Address::repeat_byte(0x5e);
+        for (spent, parts) in [(49u128, 2usize), (50, 0)] {
+            let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+                c.ua_registry = Some(reg);
+                c.max_gas_per_tx = 64_000_000;
+                c.breaker.gas_budget_per_hour = Some(100);
+                c.breaker.call_budget_pct = 50;
+            }).await.unwrap();
+            s.breaker().lock().unwrap().spend(now(), spent);
+            assert!(s.accepting(), "the budget itself is not spent");
+            s.poll_outbox().await;
+            let r = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(r["chain_state"], "queued", "{r}");
+            assert_eq!(rpc.lock().unwrap().sent.len(), parts, "spent {spent}: {r}");
+            assert_eq!(parts == 0, r["error"].as_str().unwrap().contains("call share of this hour's gas budget"), "{r}");
+        }
+    }
+
     /// NODE-JOB-29: a registration whose receipt reverted while its cache is incomplete (a part dropped by a reorg) waits `queued`
-    /// under `UA_KEY_NOT_CACHED`, never `reverted`; with the cache complete a reverted receipt stays `reverted`.
+    /// under `UA_KEY_NOT_CACHED`, never `reverted`; so does one whose re-simulation cannot be read, or now passes (it was mined before
+    /// its last part: the same bytes land now; T21 batch G). Only another revert of the re-simulation leaves it `reverted`.
     #[tokio::test]
     async fn mldsa_register_reverted_for_its_cache_waits() {
         let reg = Address::repeat_byte(0x5e);
         let bare = ua8_writes(0).remove(0);
-        for (ek, want) in [([false, true, false], "queued"), ([true, true, false], "reverted")] {
+        let done = [true, true, false];
+        for (ek, sim, want, why) in [([false, true, false], None, "queued", "; UAKeyNotCached"), (done, Some("transport"), "queued", "simulate unread"),
+            (done, None, "queued", "the register passes now"), (done, Some("revert"), "reverted", "")] {
             let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ek: Some([true, true, false]), ..Default::default() }).await;
             let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, bare.clone())], tokens: toks(), ..Default::default() }).await;
             let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; })
@@ -2915,10 +3326,12 @@ pub(crate) mod tests {
             let h = rpc.lock().unwrap().sent[0].0;
             rpc.lock().unwrap().receipts.insert(h, false);
             rpc.lock().unwrap().ek = Some(ek);
+            rpc.lock().unwrap().sim = sim;
             s.track().await;
             let r = o.lock().unwrap().reports.last().cloned().unwrap();
-            assert_eq!(r["chain_state"].as_str(), Some(want), "{r}");
-            assert_eq!(want == "queued", r["error"].as_str().is_some_and(|e| e.starts_with("UA_KEY_NOT_CACHED: the receipt reverted")), "{r}");
+            assert_eq!(r["chain_state"].as_str(), Some(want), "{sim:?}: {r}");
+            assert_eq!(want == "queued", r["error"].as_str().is_some_and(|e| e.starts_with("UA_KEY_NOT_CACHED: the receipt reverted")
+                && e.contains(why)), "{sim:?}: {r}");
         }
     }
 

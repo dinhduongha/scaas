@@ -434,7 +434,8 @@ pub struct BreakerCfg {
     #[serde(serialize_with = "amount_text", skip_serializing_if = "Option::is_none")]
     pub min_relayer_balance: Option<u128>,
     /// Soroban: `call` jobs stop at this share (%) of `gas_budget_per_hour`, every other kind runs to 100 %, so free registry
-    /// writes cannot spend the whole hour's budget and stop payments.
+    /// writes cannot spend the whole hour's budget and stop payments. EVM: the ML-DSA cache parts the lane sends for a `register`
+    /// (NODE-JOB-29, owner O7 2026-11-16) stop at it.
     #[serde(default = "default_call_pct")]
     pub call_budget_pct: u8,
 }
@@ -846,25 +847,7 @@ impl Config {
         let mut set = store::ConfigSet::default();
         for (c, labels) in self.chains.iter().zip(lane_labels) {
             let key = c.chain_key();
-            set.chains.push(store::ChainRow {
-                chain_key: key.clone(),
-                family: c.family.clone(),
-                state: "active".into(),
-                profile: c.profile.clone(),
-                finality_mode: c.finality.mode.clone(),
-                finality_depth: c.finality.depth as i64,
-                finality_quorum: c.finality.quorum as i64,
-                fee_recipient: c.fee_recipient.map(|a| format!("{a:#x}")),
-                poll_ms: c.poll_ms as i64,
-                stuck_after_secs: c.stuck_after_secs as i64,
-                max_gas_per_tx: c.max_gas_per_tx as i64,
-                max_fee_cap_gwei: c.max_fee_cap_gwei as i64,
-                max_index_lag: c.max_index_lag as i64,
-                breaker: serde_json::to_string(&c.breaker).unwrap_or_default(),
-                dex: c.dex.map(|a| format!("{a:#x}")),
-                gossip: c.gossip,
-                exclusive_ms: c.exclusive_ms as i64,
-            });
+            set.chains.push(c.chain_row());
             for t in &c.tokens {
                 // One spelling per family (Odoo `addresses.canonical`), so byte-exact keys never split one token
                 // in two and R95 client token subsets match. `validate` refused anything that does not parse.
@@ -1084,6 +1067,29 @@ impl ChainCfg {
 
     /// `evm:7622`, `hedera:296`, `sui:localnet`… — khoá chung với Odoo `blockchain.chain.chain_key`
     /// (EVM/Hedera: luôn theo `evm_chain_number`, `network` bị bỏ qua như ở Odoo).
+    /// The store's `chain` row of this chain (R95 bootstrap), `state` `active`.
+    pub fn chain_row(&self) -> store::ChainRow {
+        store::ChainRow {
+            chain_key: self.chain_key(),
+            family: self.family.clone(),
+            state: "active".into(),
+            profile: self.profile.clone(),
+            finality_mode: self.finality.mode.clone(),
+            finality_depth: self.finality.depth as i64,
+            finality_quorum: self.finality.quorum as i64,
+            fee_recipient: self.fee_recipient.map(|a| format!("{a:#x}")),
+            poll_ms: self.poll_ms as i64,
+            stuck_after_secs: self.stuck_after_secs as i64,
+            max_gas_per_tx: self.max_gas_per_tx as i64,
+            max_fee_cap_gwei: self.max_fee_cap_gwei as i64,
+            max_index_lag: self.max_index_lag as i64,
+            breaker: serde_json::to_string(&self.breaker).unwrap_or_default(),
+            dex: self.dex.map(|a| format!("{a:#x}")),
+            gossip: self.gossip,
+            exclusive_ms: self.exclusive_ms as i64,
+        }
+    }
+
     pub fn chain_key(&self) -> String {
         match &self.network {
             Some(n) if !self.is_evm() => format!("{}:{n}", self.family),

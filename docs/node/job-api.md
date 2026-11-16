@@ -36,8 +36,8 @@ plus code-specific fields (the gateway's contract is
 ## <a id="namespaces"></a>1. Namespaces
 
 <a id="namespaces"></a><a id="NODE-JOB-03"></a>**NODE-JOB-03** — **Namespaces are the node's tenant unit**
-(`[a-z0-9-]{3,40}`; names starting `~` are reserved: `~gateway`, `~mesh`, `~dex`, and `~lane` — a booking label only,
-for gap-fillers of adopted nonces, never a job namespace). A namespace has granted chains and a token subset pushed by
+(`[a-z0-9-]{3,40}`; names starting `~` are reserved: `~gateway`, `~mesh`, `~dex`, `~node` — the lane's own jobs, the
+[NODE-JOB-29](#NODE-JOB-29) cache parts —, and `~lane` — a booking label only, for gap-fillers of adopted nonces, never a job namespace). A namespace has granted chains and a token subset pushed by
 the client ([NODE-JOB-12](#NODE-JOB-12)). The node has no notion of company or legal entity (owner: "the node doesn't know companies"): a client maps its own
 tenants to a node endpoint + namespace credential. A namespace shared by several of a client's entities sees their
 combined feed; the client routes by `origin`.
@@ -634,7 +634,8 @@ global (a digest is the intent's identity; a call hash is not). An earlier key `
 with `allow_call` hold another tenant's retry at `409 DUPLICATE_CALL`. Two tenants may each queue the same call; the target
 refuses the second.
 
-<a id="NODE-JOB-29"></a>**NODE-JOB-29** (BUILT on the lane, branch `ua-rs-sign` `2064e707d`, owner 2026-11-15, TODO 3zh MD-14; the gateway
+<a id="NODE-JOB-29"></a>**NODE-JOB-29** (BUILT on the lane, branch `ua-rs-sign` `2064e707d`, owner 2026-11-15, TODO 3zh MD-14; the T21 fixes of 2026-11-16
+on branch `t21-fix-node`; the gateway
 route `POST /v1/ua/register` is itself SPECIFIED, [NODE-GW-03](gateway.md#NODE-GW-03), and hands its `register` to the same lane
 step; UNAUDITED) — **An ML-DSA registration on a registry without the precompile is preceded by its cache parts**
 ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)'s Change: `register` reverts `UAKeyNotCached` before every part is stored). For a
@@ -648,15 +649,33 @@ on a precompile registry the `register` goes at once and no part is sent. It the
 skips a part already stored and a part in flight (once node-wide, the lanes' in-flight set), sends every other part with an
 explicit gas limit ([NET-EVM-11](../networks/evm.md#NET-EVM-11): the part's estimate, regular + state, × 1.05, within the block
 gas limit, else `TX_EXCEEDS_CHAIN_LIMIT`, and within `max_gas_per_tx`; 40–48 M), and puts the `register` back `queued` under
-`UA_KEY_NOT_CACHED`; the `register` is sent only once its simulation passes, i.e. after every part landed. A part the chain refuses
-can never land: the registration is `dead` as `UA_KEY_NOT_CACHED: part <n> refused: …`. The row is `PERMISSIONLESS` (anyone may
+`UA_KEY_NOT_CACHED` (its status names the parts sent now and the parts in flight, never a part whose send gave up); the `register`
+is sent only once its simulation passes, i.e. after every part landed. Before the first part (T21, owner 2026-11-16, O7): the
+node checks the `register`'s `pop` and attributes off chain (`scaas-ua` `ua8::check_registration`, the registry's own check once the
+key is cached; an extra check, the contract stays the guard); refused, the registration is `dead` as `UA_REGISTER_POP_REFUSED: …`
+and no part is sent. The parts are the `call` share of the EVM spend breaker: past `breaker.call_budget_pct` of
+`gas_budget_per_hour` no part is sent and the `register` waits `UA_KEY_NOT_CACHED` (payments run to the whole budget). `dead`
+only for what no sender can cure (O8): the part's own contract revert (`UAKeyCache`, `UAKeyData`) and the chain's limit
+(`TX_EXCEEDS_CHAIN_LIMIT`: the block gas limit, EIP-7825's 2^24), as `UA_KEY_NOT_CACHED: part <n> refused: …`. A part over this
+lane's `max_gas_per_tx` or over its RPC's gas cap may still land from another sender: the `register` goes back `queued` as
+`UA_KEY_NOT_CACHED: part <n> over this lane's cap (…)`, as [NODE-JOB-24](submit-lanes.md#NODE-JOB-24)'s `PROOF_STORE_OVER_LANE_CAP` does (the RPC's
+"gas required exceeds allowance" / "out of gas" cannot be told from 2^24 regular gas, so it is read as the RPC's cap, but only
+`PART_CAP_WAITS` = 3 simulations in a row: Nethermind answers EIP-7825's cap with the same words, so the third is the chain's limit and
+the registration is `dead` as `UA_KEY_NOT_CACHED: part <n> refused: TX_EXCEEDS_CHAIN_LIMIT: …`; a refusal by `max_gas_per_tx` waits to
+the job's deadline). Each part
+the lane sends has a journal row of its own in the node store (namespace `~node`, a `call` job, `signed` at its nonce and hash
+before the send; no row, no send): after a restart the lane tracks, bumps and settles it like a job, and a part whose nonce the
+chain no longer holds is gap-filled and its row `dead` ([submit-lanes.md#journal](submit-lanes.md#journal)). The row is `PERMISSIONLESS` (anyone may
 send a part; it writes only what the registry derives from `pk`): a consumer's own `cacheExpandedKey` `call` job takes the same
 row and the same gas, its `kind`, `pk` length and `part` refused by name before any simulation (`BAD_PAYLOAD: args.kind` /
 `args.pk` / `args.part`); the allow-lists (`guard.rs`, the [call table](#call-table), `typed.rs`) hold it in both directions against
 the contract's entries (`selector_audit.json`). `UAKeyNotCached(ua)` on any simulation maps to `UA_KEY_NOT_CACHED` (the job stays
 `queued` while a part may still land, never `dead`); so does a reverted receipt of such a registration whose re-simulation reverts
-it (a part dropped by a reorg). Tests: `submit.rs` `mldsa_register_sends_its_cache_parts_first`,
-`mldsa_register_cache_refusals_by_name`, `mldsa_register_reverted_for_its_cache_waits`; `typed.rs` `cache_parts_are_bounded`;
+it (a part dropped by a reorg), cannot be read, or passes (it was mined before its last part); only another revert of the
+re-simulation leaves it `reverted`. Tests: `submit.rs` `mldsa_register_sends_its_cache_parts_first`,
+`mldsa_register_cache_refusals_by_name`, `mldsa_register_reverted_for_its_cache_waits`, `mldsa_register_with_a_bad_pop_sends_no_part`,
+`mldsa_cache_parts_stop_at_the_call_share`, `mldsa_cache_part_over_the_lane_cap_waits`, `mldsa_cache_part_status_names_only_parts_sent`,
+`mldsa_cache_parts_are_journaled_across_a_restart`; `store` `lane_journal_lists_the_lanes_rows_in_flight`; `typed.rs` `cache_parts_are_bounded`;
 `guard.rs` `the_plain_rows_are_pinned`, `allow_lists_equal_the_selector_audit_both_directions`. Clients build the part transactions
 and the cache-then-register order for a subject that sends them itself: `clientkeys` `cacheExpandedKeyCall`, `mldsaCacheCalls`,
 `cacheThenRegister` (`src/ua.js`); `ua-rs` `mldsa_cache::{part_call, part_calls, cache_then_register}`; both read
