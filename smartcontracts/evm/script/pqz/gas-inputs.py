@@ -68,7 +68,7 @@ def main(argv):
         p, t = os.path.join(OUT, f"{n}.json"), table(n)
         if "--check" in argv:
             if not os.path.exists(p) or open(p).read() != t:
-                print(f"gas-inputs.py --check: {p} differs")
+                print(f"gas-inputs.py --check: {os.path.relpath(p, REPO)} differs")  # relative: a gate summary holds no machine path
                 bad = 1
         else:
             open(p, "w").write(t)
