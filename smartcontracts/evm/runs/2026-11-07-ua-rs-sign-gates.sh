@@ -69,7 +69,7 @@ extra_step() { # this branch's own steps (the base runner calls it for a step it
     ua-rs-wallet) uars --no-default-features --features wallet,mlock ;;
     ua-rs) uars ;;
     ua-rs-pq) uars --no-default-features --features pq -- --test pq --test ua8 ;;
-    ua-rs-signers) uars --no-default-features --features signers -- --test groups ;;
+    ua-rs-signers) uars --no-default-features --features signers -- --test groups_verify ;; # as CI's signers cell (T21 L11: groups.rs, the generator, needs vectors)
     ua-rs-json) uars --no-default-features --features json -- --test json ;;
     ua-rs-vectors) uars --features vectors ;;
     ua-rs-zether) uars --no-default-features --features wallet,zether,mlock -- --lib --test facade_zether ;;
