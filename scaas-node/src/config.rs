@@ -434,7 +434,8 @@ pub struct BreakerCfg {
     #[serde(serialize_with = "amount_text", skip_serializing_if = "Option::is_none")]
     pub min_relayer_balance: Option<u128>,
     /// Soroban: `call` jobs stop at this share (%) of `gas_budget_per_hour`, every other kind runs to 100 %, so free registry
-    /// writes cannot spend the whole hour's budget and stop payments.
+    /// writes cannot spend the whole hour's budget and stop payments. EVM: the ML-DSA cache parts the lane sends for a `register`
+    /// (NODE-JOB-29, owner O7 2026-11-16) stop at it.
     #[serde(default = "default_call_pct")]
     pub call_budget_pct: u8,
 }

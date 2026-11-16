@@ -688,6 +688,15 @@ impl Submitter {
     /// (it can never land) makes the registration `dead` by name.
     async fn cache_parts(&mut self, w: Work, kind: u16, pk: Bytes, reason: String) {
         use crate::abi::IUARegistry::{expandedKeyOfCall, uaOfCall};
+        // owner O7: the lane pays a part only for a registration that can pass once cached
+        if let Err(e) = guard::register_pop(&w.data) {
+            return self.fail(&w, format!("{}: off-chain check refused the record: {e}; no cache part sent", guard::UA_REGISTER_POP_REFUSED)).await;
+        }
+        // owner O7: the parts are the `call` share of the breaker's budget, so registry writes cannot stop payments
+        if self.breaker.lock().is_ok_and(|mut k| k.calls_stopped(now())) {
+            return self.requeue(&w, format!("{}: the call share of this hour's gas budget is spent (breaker.call_budget_pct); no part \
+                sent; {reason}", guard::UA_KEY_NOT_CACHED)).await;
+        }
         let parts = guard::mldsa_cache(kind).map_or(0, |(_, n)| n);
         let stored = match self.chain.call_view(w.to, uaOfCall { kind, keyData: pk.clone() }).await {
             Ok(ua) => self.chain.call_view(w.to, expandedKeyOfCall { ua }).await,
@@ -2820,7 +2829,7 @@ pub(crate) mod tests {
         assert!(r[0].0 == "dead" && !r[0].1.contains("UA_REGISTER_SPLIT"), "{r:?}");
     }
 
-    /// NODE-JOB-29: an ML-DSA-65 `register` (`ua8_writes`' bare one: 1,952-byte key) on a registry without the precompile, its
+    /// NODE-JOB-29: an ML-DSA-65 `register` (portable.json's `mldsa65#1`: 1,952-byte key, a valid `pop`) on a registry without the precompile, its
     /// cache empty: the lane sends both parts first, as the named `cacheExpandedKey` op's calldata, each at its estimate × 1.05
     /// (NET-EVM-11), and the `register` waits `queued` under `UA_KEY_NOT_CACHED`; the parts in flight are not sent again; once
     /// both landed the `register` goes.
@@ -2828,7 +2837,7 @@ pub(crate) mod tests {
     async fn mldsa_register_sends_its_cache_parts_first() {
         use crate::abi::IUARegistry::cacheExpandedKeyCall;
         let reg = Address::repeat_byte(0x5e);
-        let bare = ua8_writes(0).remove(0);
+        let bare = mldsa65_register(); // owner O7: a valid pop (the parts are sent only for one)
         let pk = crate::abi::IUARegistry::registerCall::abi_decode(&bare).unwrap().keyData;
         let part = |p: u64| cacheExpandedKeyCall { kind: 0x0131, pk: pk.clone(), part: U256::from(p) }.abi_encode();
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() }).await;
@@ -2864,7 +2873,7 @@ pub(crate) mod tests {
         use crate::abi::IUARegistry::{cacheExpandedKeyCall, registerCall};
         let reg = Address::repeat_byte(0x5e);
         let tn = move |c: &mut ChainCfg| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; };
-        let bare = ua8_writes(0).remove(0);
+        let bare = mldsa65_register(); // owner O7: a valid pop (the parts are sent only for one)
         let pk = registerCall::abi_decode(&bare).unwrap().keyData;
         let ok = || Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ..Default::default() };
         // part 0 stored: only part 1 goes
@@ -2897,6 +2906,73 @@ pub(crate) mod tests {
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         let e = rpc.lock().unwrap();
         assert_eq!((e.sent[0].2.to_vec(), e.gas[0]), (p0, 42_000_000));
+    }
+
+    /// portable.json's `mldsa65#1` registration (the JS reference's key and valid `pop`) as `register` calldata.
+    fn mldsa65_register() -> Vec<u8> {
+        use crate::abi::IUARegistry::{registerCall, KemKey, UAAttrs};
+        let p: Value = serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"),
+            "/../smartcontracts/vectors/ua/portable.json")).unwrap()).unwrap();
+        let a = &p["registrations"].as_array().unwrap().iter().find(|r| r["name"] == "mldsa65#1").unwrap()["args"];
+        let hx = |v: &Value| Bytes::from(alloy::hex::decode(v.as_str().unwrap()).unwrap());
+        let b32 = |v: &Value| v.as_str().unwrap().parse::<B256>().unwrap();
+        let (t, k) = (&a["attrs"], &a["attrs"]["kem"]);
+        registerCall { kind: a["kind"].as_u64().unwrap() as u16, keyData: hx(&a["keyData"]),
+            attrs: UAAttrs { pqzKey: hx(&t["pqzKey"]), pqzPopHash: b32(&t["pqzPopHash"]),
+                kem: KemKey { scheme: k["scheme"].as_u64().unwrap() as u8, mlkemEk: hx(&k["mlkemEk"]), x25519: b32(&k["x25519"]) },
+                kemPkHash: b32(&t["kemPkHash"]) },
+            pop: hx(&a["pop"]), pqzPop: hx(&a["pqzPop"]) }.abi_encode()
+    }
+
+    /// NODE-JOB-29 (owner O7, 2026-11-16): before the first part the lane checks the register's `pop` off chain (`ua8::check_registration`,
+    /// the registry's own check once the key is cached); a `pop` that does not verify is `dead` by name and no part is sent. The positive:
+    /// the same register with its valid `pop` gets its parts.
+    #[tokio::test]
+    async fn mldsa_register_with_a_bad_pop_sends_no_part() {
+        use crate::abi::IUARegistry::registerCall;
+        let reg = Address::repeat_byte(0x5e);
+        let tn = move |c: &mut ChainCfg| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; };
+        let ok = || Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() };
+        let good = mldsa65_register();
+        let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, good.clone())], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.contains("parts sent now [0, 1] of 2"), "{r:?}");
+        assert_eq!(rpc.lock().unwrap().sent.len(), 2);
+        // one bit of the pop flipped
+        let mut c = registerCall::abi_decode(&good).unwrap();
+        let mut pop = c.pop.to_vec();
+        pop[100] ^= 1;
+        c.pop = pop.into();
+        let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, c.abi_encode())], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("UA_REGISTER_POP_REFUSED: ") && r[0].1.contains("UAPoP"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty(), "no part for a pop that cannot pass");
+        // `ua8_writes`' register: a pop of filler bytes
+        let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, ua8_writes(0).remove(0))], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("UA_REGISTER_POP_REFUSED: "), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+    }
+
+    /// NODE-JOB-29 (owner O7): the lane's cache parts are the `call` share of the EVM spend breaker: past `call_budget_pct` of the
+    /// hour's `gas_budget_per_hour` no part is sent and the register waits by name; under it the parts go. Payments run to the whole budget.
+    #[tokio::test]
+    async fn mldsa_cache_parts_stop_at_the_call_share() {
+        let reg = Address::repeat_byte(0x5e);
+        for (spent, parts) in [(49u128, 2usize), (50, 0)] {
+            let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+                c.ua_registry = Some(reg);
+                c.max_gas_per_tx = 64_000_000;
+                c.breaker.gas_budget_per_hour = Some(100);
+                c.breaker.call_budget_pct = 50;
+            }).await.unwrap();
+            s.breaker().lock().unwrap().spend(now(), spent);
+            assert!(s.accepting(), "the budget itself is not spent");
+            s.poll_outbox().await;
+            let r = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(r["chain_state"], "queued", "{r}");
+            assert_eq!(rpc.lock().unwrap().sent.len(), parts, "spent {spent}: {r}");
+            assert_eq!(parts == 0, r["error"].as_str().unwrap().contains("call share of this hour's gas budget"), "{r}");
+        }
     }
 
     /// NODE-JOB-29: a registration whose receipt reverted while its cache is incomplete (a part dropped by a reorg) waits `queued`

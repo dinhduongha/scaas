@@ -411,6 +411,24 @@ pub fn mldsa_register(data: &[u8]) -> Option<(u16, Bytes)> {
     (mldsa_cache(c.kind)?.0 == c.keyData.len()).then_some((c.kind, c.keyData))
 }
 
+/// NODE-JOB-29 (owner O7, 2026-11-16): an ML-DSA `register` whose `pop` (or attributes) the off-chain check refuses is `dead` under
+/// this name before the lane sends any cache part: the registry runs the same check once the key is cached, so it could never land.
+pub const UA_REGISTER_POP_REFUSED: &str = "UA_REGISTER_POP_REFUSED";
+
+/// `ua8::check_registration` on a `register` calldata (a single key, no `msig` members): what the registry checks at step 6 once
+/// the key's cache is complete. An extra check; the contract stays the guard.
+pub fn register_pop(data: &[u8]) -> Result<(), String> {
+    use alloy::sol_types::SolCall;
+    let c = crate::abi::IUARegistry::registerCall::abi_decode(data).map_err(|e| format!("register calldata: {e}"))?;
+    let a = scaas_ua::ua8::UAAttrs {
+        pqz_key: c.attrs.pqzKey.to_vec(),
+        pqz_pop_hash: c.attrs.pqzPopHash.0,
+        kem: scaas_ua::ua8::KemKey { scheme: c.attrs.kem.scheme, mlkem_ek: c.attrs.kem.mlkemEk.to_vec(), x25519: c.attrs.kem.x25519.0 },
+        kem_pk_hash: c.attrs.kemPkHash.0,
+    };
+    scaas_ua::ua8::check_registration(c.kind, &c.keyData, &a, &c.pop, &c.pqzPop, &|_| None).map_err(|e| e.code().to_string())
+}
+
 /// The node's own cache part job (NODE-JOB-29): the named op `cacheExpandedKey {kind, pk, part}` on `registry`, built by the same
 /// parser as every job's (`typed.rs`'s plain row), so the calldata comes from the named fields.
 pub fn cache_part_op(registry: Address, kind: u16, pk: &[u8], part: u64, valid_until: u64) -> serde_json::Value {
