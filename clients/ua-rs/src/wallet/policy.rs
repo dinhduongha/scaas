@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! The signing policy in front of every typed signature (spec §5.4, MD-9; T4): [`NativeKey::sign_typed`] takes an [`Expect`],
 //! one variant per clientkeys `check*` (`evm.js`: `checkPayment`, `checkPayeeFee`, `checkPayMeta`, `checkOp`, `checkCall`,
-//! `checkOwnerCall`, `checkCancel`, `checkTradeOrder`, `checkWrapOrder`) with the check's named inputs as the user confirmed
+//! `checkOwnerCall`, `checkCancel`, `checkTradeOrder`, `checkWrapOrder`, `checkLiquidityOrder`; T21 L40), `Erc7739` (the
+//! ERC-7739 nest of a confirmed app typed data, T21 O6), with the check's named inputs as the user confirmed
 //! them, or `Any(AllowAnyTypedData)`, the general EVM wallet's opt-in. A check rebuilds what the user asked for with the SCaaS
 //! builders (their canonical step) and compares that digest with the **faithful** digest of the server's typed data: a mismatch
 //! is `PolicyRefused` and nothing is signed. So a server value whose unbound `relayer` (mode bit 1 clear) or `feeRecipient`
@@ -10,7 +11,7 @@
 //! clientkeys. `now` is an input (no clock inside `ua-rs`; wasm32 has none). UNAUDITED.
 use super::eip712::{
     self, eip712_digest, from_hex, op_row, op_types, scaas_typed_data, to_hex, typed_data_of, u256_add, u256_dec, u256_div, u256_from,
-    u256_mul_add, u256_to_dec, Fields, TypedData, U256, ZERO_ADDRESS,
+    u256_mul_add, u256_to_dec, liquidity_order_typed_data, Erc7739Wallet, Fields, TypedData, U256, ZERO_ADDRESS,
 };
 use super::signer::{SignRequest, Signer};
 use super::{bounded, Error, NativeKey, Result};
@@ -175,6 +176,36 @@ pub enum Expect {
         wrappers: Vec<[u8; 20]>,
         now: u64,
         max_window: u64,
+    },
+    /// `checkLiquidityOrder` (T21 L40; spec 2026-11-10-dex-liquidity.md): the `LiquidityOrder` the client built (`order`, the
+    /// fields it set) for `account` (a 32-byte id), on a DEX of `dexes` that is also in `liquidity_dexes`; `readers` the
+    /// position readers of the chain profile per position manager; `scaas_tokens` the tokens with the UA ledger on;
+    /// `extra_tokens` counted in the plan's token list; `partial` a partial withdraw or fee collect (it must receive the
+    /// position back).
+    LiquidityOrder {
+        account: [u8; 32],
+        chain_id: u64,
+        chain_uid: [u8; 32],
+        order: Value,
+        dexes: Vec<[u8; 20]>,
+        liquidity_dexes: Vec<[u8; 20]>,
+        readers: Vec<([u8; 20], Vec<[u8; 20]>)>,
+        scaas_tokens: Vec<[u8; 20]>,
+        extra_tokens: Vec<[u8; 20]>,
+        partial: bool,
+        now: u64,
+        max_window: u64,
+    },
+    /// ERC-7739 (T21 O6, owner 2026-11-16): the `TypedDataSign` nest of `app`, the app's typed data the user confirmed, for the
+    /// wallet `wallet` at `address` ([`TypedData::erc7739`]); any other typed data is refused. The contents are the app's, signed
+    /// as confirmed (no SCaaS check of them). Built by the caller (no JSON form: the app's typed data is deeper than the
+    /// `Expect` JSON's depth 4).
+    Erc7739 {
+        app: Box<TypedData>,
+        wallet: Erc7739Wallet,
+        address: [u8; 20],
+        chain_id: u64,
+        chain_uid: [u8; 32],
     },
     /// No SCaaS check: the standard digest of the values as supplied.
     Any(AllowAnyTypedData),
@@ -426,6 +457,27 @@ impl Expect {
                 now: x.u64("now")?,
                 max_window: x.opt_u64("maxWindow", 30 * DAY)?,
             },
+            "LiquidityOrder" => Expect::LiquidityOrder {
+                account: x.b32("account")?,
+                chain_id: x.u64("chainId")?,
+                chain_uid: x.b32("chainUid")?,
+                order: x.req("order")?,
+                dexes: addrs(x.take("dexes"))?,
+                liquidity_dexes: addrs(x.take("liquidityDexes"))?,
+                readers: match x.take("readers") {
+                    None => vec![],
+                    Some(Value::Object(m)) => m
+                        .iter()
+                        .map(|(k, v)| Ok((In::fixed(&Value::from(k.as_str()))?, addrs(Some(v.clone()))?)))
+                        .collect::<Result<_>>()?,
+                    Some(_) => return Err(Error::Argument),
+                },
+                scaas_tokens: addrs(x.take("scaasTokens"))?,
+                extra_tokens: addrs(x.take("extraTokens"))?,
+                partial: x.flag("partial")?,
+                now: x.u64("now")?,
+                max_window: x.opt_u64("maxWindow", 3600)?,
+            },
             "Any" => {
                 if x.take("allowAnyTypedData") != Some(Value::Bool(true)) {
                     return Err(Error::PolicyRefused);
@@ -535,6 +587,11 @@ fn check(td: &TypedData, e: &Expect) -> Result<[u8; 32]> {
         Expect::WrapOrder { account, chain_id, chain_uid, order, sell_token, wrappers, now, max_window } => {
             wrap_order(td, account, *chain_id, chain_uid, order, sell_token, wrappers, *now, *max_window)
         }
+        Expect::LiquidityOrder {
+            account, chain_id, chain_uid, order, dexes, liquidity_dexes, readers, scaas_tokens, extra_tokens, partial, now, max_window,
+        } => liquidity_order(td, &Liquidity { account, chain_id: *chain_id, chain_uid, order, dexes, liquidity_dexes, readers,
+            scaas_tokens, extra_tokens, partial: *partial, now: *now, max_window: *max_window }),
+        Expect::Erc7739 { app, wallet, address, chain_id, chain_uid } => app.erc7739(*wallet, address, *chain_id, chain_uid)?.digest(),
         Expect::Any(_) => td.digest(),
     }
 }
@@ -912,6 +969,133 @@ fn order_terms(o: &Map<String, Value>, outside: bool) -> Result<()> {
         return refuse();
     }
     Ok(())
+}
+
+/// A plan token of a liquidity order: its address (if one) and its amount.
+type PlanToken<'a> = (Option<[u8; 20]>, Option<&'a Value>);
+
+/// The inputs of [`liquidity_order`], as [`Expect::LiquidityOrder`] names them.
+struct Liquidity<'a> {
+    account: &'a [u8; 32],
+    chain_id: u64,
+    chain_uid: &'a [u8; 32],
+    order: &'a Value,
+    dexes: &'a [[u8; 20]],
+    liquidity_dexes: &'a [[u8; 20]],
+    readers: &'a [([u8; 20], Vec<[u8; 20]>)],
+    scaas_tokens: &'a [[u8; 20]],
+    extra_tokens: &'a [[u8; 20]],
+    partial: bool,
+    now: u64,
+    max_window: u64,
+}
+
+/// clientkeys `checkLiquidityOrder` (T21 L40), the same refusals in the same order (a RelayFeeRouter wrap is not offered here,
+/// so its refusal has no input): the DEX on the profile and liquidity-capable; the order's own terms (nonce below 2^128, fee at
+/// most 1 %, flags 4 only, at most eight tokens per list, no token repeated or shared, no zero input maximum, no zero token and
+/// not the position manager); a position needs its manager; a received position `tickLower < tickUpper`, a minimum liquidity
+/// and a profile reader of its manager, else no position field; a partial withdraw receives the position back; the recipient
+/// (0: `from`) is no plan token, manager or DEX; a derived signer gives and a derived recipient receives SCaaS ledger tokens only
+/// and no position; the deadline near. The digest of the rebuilt order.
+fn liquidity_order(td: &TypedData, l: &Liquidity) -> Result<[u8; 32]> {
+    if td.primary_type() != "LiquidityOrder" {
+        return refuse();
+    }
+    let dex: [u8; 20] = td.domain().get("verifyingContract").and_then(Value::as_str).and_then(from_hex).and_then(|b| b.try_into().ok())
+        .ok_or(Error::PolicyRefused)?;
+    if !l.dexes.contains(&dex) || !l.liquidity_dexes.contains(&dex) {
+        return refuse();
+    }
+    let got = obj(td.message());
+    let Value::Object(given) = l.order else { return refuse() };
+    let mut o = Map::new();
+    for (k, v) in [("inputs", Value::Array(vec![])), ("outputs", Value::Array(vec![])), ("positionManager", ZERO_ADDRESS.into()),
+        ("positionReader", ZERO_ADDRESS.into()), ("positionIn", "0".into()), ("positionPool", ZERO_ID.into()), ("tickLower", 0.into()),
+        ("tickUpper", 0.into()), ("minLiquidity", "0".into()), ("recipient", ZERO_ID.into()), ("fee", "0".into()),
+        ("relayer", ZERO_ADDRESS.into()), ("flags", 0.into()), ("batch", "0".into())]
+    {
+        o.insert(k.to_string(), v);
+    }
+    o.extend(given.clone());
+    o.insert("from".into(), to_hex(l.account).into());
+    let nonce = uint(get(&got, "nonce"))?;
+    o.insert("nonce".into(), dec(&nonce));
+    let valid_until = get(given, "validUntil").or(get(&got, "validUntil")).cloned().unwrap_or(Value::Null);
+    o.insert("validUntil".into(), valid_until);
+    if nonce.get(..16).is_some_and(|h| h.iter().any(|b| *b != 0)) || uint(get(&o, "fee"))? > u256_from(10_000) {
+        return refuse();
+    }
+    if small(&uint(get(&o, "flags"))?).is_none_or(|f| f & !4 != 0) {
+        return refuse();
+    }
+    let addr = |v: Option<&Value>| -> Result<[u8; 20]> {
+        v.and_then(Value::as_str).and_then(from_hex).and_then(|b| b.try_into().ok()).ok_or(Error::PolicyRefused)
+    };
+    let list = |k: &str| -> Result<Vec<PlanToken>> {
+        let Some(Value::Array(a)) = o.get(k) else { return refuse() };
+        Ok(a.iter().map(|t| (addr(t.get("token")).ok(), t.get("amount"))).collect())
+    };
+    let (inputs, outputs) = (list("inputs")?, list("outputs")?);
+    if inputs.len() > 8 || outputs.len() > 8 || l.extra_tokens.len() > 8 {
+        return refuse();
+    }
+    let all: Vec<[u8; 20]> = inputs.iter().chain(&outputs).map(|(t, _)| t.ok_or(Error::PolicyRefused)).chain(l.extra_tokens.iter().copied().map(Ok))
+        .collect::<Result<_>>()?;
+    if all.iter().enumerate().any(|(i, t)| all.iter().take(i).any(|x| x == t)) {
+        return refuse();
+    }
+    for (_, amount) in &inputs {
+        if zero(&uint(*amount)?) {
+            return refuse();
+        }
+    }
+    let pm = addr(get(&o, "positionManager"))?;
+    let pool = get(&o, "positionPool").and_then(Value::as_str).and_then(from_hex).filter(|b| b.len() == 32).ok_or(Error::PolicyRefused)?;
+    let received = pool.iter().any(|b| *b != 0);
+    let given_pos = !zero(&uint(get(&o, "positionIn"))?);
+    if all.iter().any(|t| *t == [0; 20] || *t == pm) || (pm == [0; 20] && (given_pos || received)) {
+        return refuse();
+    }
+    let tick = |k: &str| -> Result<i64> {
+        match get(&o, k) {
+            Some(Value::Number(n)) => n.as_i64().ok_or(Error::PolicyRefused),
+            Some(Value::String(s)) => s.parse().map_err(|_| Error::PolicyRefused),
+            _ => refuse(),
+        }
+    };
+    let (lower, upper, min_liquidity) = (tick("tickLower")?, tick("tickUpper")?, uint(get(&o, "minLiquidity"))?);
+    let reader = addr(get(&o, "positionReader"))?;
+    if received {
+        if lower >= upper || zero(&min_liquidity) || !l.readers.iter().any(|(m, rs)| *m == pm && rs.contains(&reader)) {
+            return refuse();
+        }
+    } else if reader != [0; 20] || lower != 0 || upper != 0 || !zero(&min_liquidity) {
+        return refuse();
+    }
+    if l.partial && given_pos && !received {
+        return refuse();
+    }
+    let rec: [u8; 32] = get(&o, "recipient").and_then(Value::as_str).and_then(from_hex).and_then(|b| b.try_into().ok())
+        .ok_or(Error::PolicyRefused)?;
+    let recipient = if rec == [0; 32] { *l.account } else { rec };
+    let pad = |a: &[u8; 20]| {
+        let mut w = [0u8; 32];
+        w.get_mut(12..).into_iter().for_each(|x| x.copy_from_slice(a));
+        w
+    };
+    if all.iter().chain([&pm, &dex]).any(|a| pad(a) == recipient) {
+        return refuse();
+    }
+    let native = |id: &[u8; 32]| id.get(..12) == Some(&[0; 12][..]);
+    let ledger = |t: &Option<[u8; 20]>| t.is_some_and(|t| l.scaas_tokens.contains(&t));
+    if !native(l.account) && (given_pos || inputs.iter().any(|(t, _)| !ledger(t))) {
+        return refuse();
+    }
+    if !native(&recipient) && (received || outputs.iter().any(|(t, _)| !ledger(t))) {
+        return refuse();
+    }
+    deadline(get(&o, "validUntil"), l.now, l.max_window)?;
+    liquidity_order_typed_data(&dex, l.chain_id, l.chain_uid, &Value::Object(o)).and_then(|t| t.digest()).map_err(|_| Error::PolicyRefused)
 }
 
 /// clientkeys `checkTradeOrder`.

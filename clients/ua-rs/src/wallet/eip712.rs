@@ -527,7 +527,7 @@ impl TypedData {
 
     /// clientkeys `canonical` (the SCaaS builders only): every field present (missing: its zero), `uint` ≤ 32 bits as a JSON number,
     /// wider as a decimal string, `bytes` / `bytesN` lower-case hex, and in each struct with `mode`, `relayer` and `feeRecipient`
-    /// the unbound ones zeroed. No `int` field in a SCaaS struct: refused.
+    /// the unbound ones zeroed. An `int` of at most 32 bits a JSON number (`LiquidityOrder`'s ticks); a wider `int`: refused.
     fn canonical(&self, ty: &str, v: Option<&Value>, c: &Cell<usize>) -> Result<Value> {
         fill(v, c)?;
         if let Some((elem, len)) = outer(ty)? {
@@ -574,11 +574,75 @@ impl TypedData {
                     } else {
                         u256_to_dec(&x).into()
                     }
+                } else if int_bits(ty).is_some_and(|b| b <= 32) {
+                    // `int24` of `LiquidityOrder` (T21 L40): a JSON number, as clientkeys writes it; the range is `encode_atom`'s
+                    match v {
+                        None | Some(Value::Null) => Value::from(0),
+                        Some(Value::Number(n)) => Value::from(n.as_i64().ok_or(Error::Argument)?),
+                        Some(Value::String(s)) => Value::from(s.parse::<i64>().map_err(|_| Error::Argument)?),
+                        _ => return Err(Error::Argument),
+                    }
                 } else {
                     return Err(Error::Argument);
                 }
             }
         })
+    }
+}
+
+/// The two wallets that answer ERC-1271 through ERC-7739 (CTR-ACC-02, owner 2026-11-12: ERC-7739 only), by their domain name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Erc7739Wallet {
+    /// A key of a `SmartKeyAccount` (`SCaaS SmartKeyAccount`).
+    SmartKeyAccount,
+    /// A `MandateWallet`'s (or `HederaMandateWallet`'s) native owner (`SCaaS MandateWallet`).
+    MandateWallet,
+}
+
+impl TypedData {
+    /// clientkeys `erc7739TypedData` (T21 O6, owner 2026-11-16): the ERC-7739 `TypedDataSign` a wallet key signs for the
+    /// wallet's ERC-1271 answer over this app typed data: its message nested as `contents` (its fields stay readable), the
+    /// wallet's own domain fields (`name` of `wallet`, version `"1"`, `chainId`, `verifyingContract` = `address`, `salt` =
+    /// `chainUid`) beside it, in the app's domain. `Argument` when the app's types already define `TypedDataSign`, or for a
+    /// contents name the wallet refuses (empty, starting `a`-`z`, or holding `,` space `(` `)` or NUL: `ERC7739Lib`, EIP-7739).
+    /// Its digest is what the key signs; [`TypedData::erc7739_signature`] wraps the signature.
+    pub fn erc7739(&self, wallet: Erc7739Wallet, address: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32]) -> Result<TypedData> {
+        let name = &self.primary_type;
+        let bad = |c: char| matches!(c, ',' | ' ' | '(' | ')' | '\0');
+        if self.types.contains_key("TypedDataSign") || name.is_empty() || name.starts_with(|c: char| c.is_ascii_lowercase())
+            || name.chars().any(bad)
+        {
+            return Err(Error::Argument);
+        }
+        let wallet_name = match wallet {
+            Erc7739Wallet::SmartKeyAccount => "SCaaS SmartKeyAccount",
+            Erc7739Wallet::MandateWallet => "SCaaS MandateWallet",
+        };
+        let mut types = self.types.clone();
+        types.insert("TypedDataSign".into(), parse_fields(&format!(
+            "{name} contents,string name,string version,uint256 chainId,address verifyingContract,bytes32 salt"))?);
+        let message = serde_json::json!({"contents": self.message, "name": wallet_name, "version": "1",
+            "chainId": chain_id.to_string(), "verifyingContract": to_hex(address), "salt": to_hex(chain_uid)});
+        let td = TypedData { types, primary_type: "TypedDataSign".into(), domain: self.domain.clone(), message };
+        td.validate()?;
+        Ok(td)
+    }
+
+    /// clientkeys `erc7739Signature`: what the wallet's `isValidSignature(digest(app), ·)` takes, `inner ‖ app domain separator
+    /// ‖ hashStruct(contents) ‖ contentsDescription ‖ uint16(len)`. The description is the contents' types sorted by name:
+    /// implicit mode when the primary type sorts first, else explicit (`contentsType ‖ contentsName`). `inner`: the key's
+    /// signature (a `SmartKeyAccount`'s `abi.encode(keyIndex, proof, sig)`). `Argument` past 65,535 bytes of description.
+    pub fn erc7739_signature(&self, inner: &[u8]) -> Result<Vec<u8>> {
+        let mut deps = BTreeSet::new();
+        self.walk(&self.primary_type, &self.primary_type, &mut deps);
+        deps.insert(self.primary_type.clone());
+        let names: Vec<&String> = deps.iter().collect();
+        let mut descr: String = names.iter().filter_map(|t| self.types.get(*t).map(|f| type_string(t, f))).collect();
+        if names.first().map(|n| n.as_str()) != Some(self.primary_type.as_str()) {
+            descr.push_str(&self.primary_type);
+        }
+        let len = u16::try_from(descr.len()).map_err(|_| Error::Argument)?;
+        Ok([inner, &self.domain_separator()?, &self.struct_hash()?, descr.as_bytes(), &len.to_be_bytes()].concat())
     }
 }
 
@@ -688,6 +752,9 @@ const STRUCTS: &[(&str, &str)] = &[
     ("WrapLegLimits", "address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong"),
     ("Env", "address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes"),
     ("ChainEntries", "address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash"),
+    // T21 L40: the DEX's liquidity order (`trade/LiquidityLib.sol`, CTR-DEX-30, -31; [`liquidity_order_typed_data`])
+    ("LiquidityToken", "address token,uint256 amount"),
+    ("LiquidityOrder", "bytes32 from,LiquidityToken[] inputs,LiquidityToken[] outputs,address positionManager,address positionReader,uint256 positionIn,bytes32 positionPool,int24 tickLower,int24 tickUpper,uint128 minLiquidity,bytes32 recipient,uint256 fee,address relayer,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil"),
     // group 3f (PQZ verifier mode spec §5.1): what a PQZ verifier UA signs in the token's domain ([`pqz_verdict_typed_data`])
     ("PqzVerdict", "address token,uint256 chainId,bytes32 proofSystemId,bytes32 statementHash,bytes32 proofHash,uint32 pqzVerifierEpoch,uint64 validUntil"),
 ];
@@ -955,6 +1022,59 @@ pub fn pqz_verdict_typed_data(contract: &[u8; 20], chain_id: u64, chain_uid: &[u
     {
         return Err(Error::Argument);
     }
+    Ok(td)
+}
+
+/// clientkeys `liquidityOrderTypedData` (T21 L40; spec 2026-11-10-dex-liquidity.md §4.2): a `LiquidityOrder` in its DEX's
+/// salted domain `("SCaaS Dex", "1", chain_id, dex, chain_uid)`, ids of 32 bytes (a native address zero-padded), every field
+/// signed (no unbound field to zero), an unset field 0. Pinned by `vectors/ua/liquidity_kat.json`. `Argument` for a value its
+/// type refuses (an `int24` tick out of range is refused, never zero-extended).
+pub fn liquidity_order_typed_data(dex: &[u8; 20], chain_id: u64, chain_uid: &[u8; 32], order: &Value) -> Result<TypedData> {
+    let (primary, own) = STRUCTS.iter().find(|(n, _)| *n == "LiquidityOrder").ok_or(Error::Argument)?;
+    let d = Def { primary, own: own.to_string(), domains: &[DEX], default_name: Some(DEX), envelope: false, amount: None };
+    let td = typed_data_of(&d, None, dex, chain_id, chain_uid, order)?;
+    td.digest()?; // every value in range
+    Ok(td)
+}
+
+/// What a `RescueVault`'s admin signs (CTR-GOV-25; spec 2026-11-12-rescue-vault.md), by its named fields; `seq` is the vault's
+/// shared order, from 1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RescueVaultOp {
+    /// `setRescuer(seq, newRescuer)`: `new_rescuer` not the zero address.
+    SetRescuer { seq: u64, new_rescuer: [u8; 20] },
+    /// `rotateAdmin(seq, newAdmin)`: `new_admin` a native UA (an EOA address in the low 160 bits, not 0).
+    RotateAdmin { seq: u64, new_admin: [u8; 32] },
+}
+
+/// clientkeys `rescueVaultSetRescuerTypedData` / `rescueVaultRotateAdminTypedData` (T21 L40): `SetRescuer(uint64 seq,address
+/// newRescuer)` / `RotateAdmin(uint64 seq,bytes32 newAdmin)` in the vault's chain-neutral domain `("SCaaS RescueVault", "1",
+/// vault)` (no chainId, no salt: one signature serves the vault's address on every chain). Pinned by
+/// `vectors/governance/rescue_vault_kat.json`. `Argument`: `seq` 0, a zero rescuer, a `newAdmin` that is 0 or not a native UA.
+pub fn rescue_vault_typed_data(vault: &[u8; 20], op: RescueVaultOp) -> Result<TypedData> {
+    let (primary, field, ty, seq, value) = match op {
+        RescueVaultOp::SetRescuer { seq, new_rescuer } if new_rescuer != [0; 20] => {
+            ("SetRescuer", "newRescuer", "address", seq, to_hex(&new_rescuer))
+        }
+        RescueVaultOp::RotateAdmin { seq, new_admin } if new_admin.get(..12) == Some(&[0; 12][..]) && new_admin != [0; 32] => {
+            ("RotateAdmin", "newAdmin", "bytes32", seq, to_hex(&new_admin))
+        }
+        _ => return Err(Error::Argument),
+    };
+    if seq == 0 {
+        return Err(Error::Argument);
+    }
+    let mut types = BTreeMap::new();
+    types.insert(primary.to_string(), parse_fields(&format!("uint64 seq,{ty} {field}"))?);
+    let mut domain = Map::new();
+    domain.insert("name".into(), "SCaaS RescueVault".into());
+    domain.insert("version".into(), "1".into());
+    domain.insert("verifyingContract".into(), to_hex(vault).into());
+    let mut message = Map::new();
+    message.insert("seq".into(), seq.to_string().into());
+    message.insert(field.into(), value.into());
+    let td = TypedData { types, primary_type: primary.into(), domain, message: Value::Object(message) };
+    td.validate()?;
     Ok(td)
 }
 

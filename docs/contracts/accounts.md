@@ -2759,7 +2759,7 @@ OpenZeppelin Contracts v5.4.0 `draft-ERC7739Utils`, with the EIP's recommended `
 
 A signature over the raw `hash` is refused; there is no other form (fail closed). **Limit:** the wallet cannot see how `hash`
 was made, so `PersonalSign` accepts whatever `hash` the caller passes; it is meant for EIP-191 hashes, and a client signs
-`PersonalSign` only for an EIP-191 message it rebuilt itself (clientkeys offers `TypedDataSign` only). A hash that is neither
+`PersonalSign` only for an EIP-191 message it rebuilt itself (clientkeys and `ua-rs` offer `TypedDataSign` only). A hash that is neither
 an app's EIP-712 digest nor an EIP-191 hash has no supported form. A key shared by two accounts, or an owner's EOA and its
 `MandateWallet`, answers only for the wallet it signed for. In a batch, each leaf is the ERC-7739 message of its operation
 and each operation carries its own suffix. Every caller of `SigCheck`'s ERC-1271 (tokens, DEX, registry, Zether and PQZ
