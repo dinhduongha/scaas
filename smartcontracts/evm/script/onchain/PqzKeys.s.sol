@@ -689,8 +689,13 @@ contract PqzKeysSetup is PqzKeysKit {
     function _c2(bytes memory init, string memory what) internal returns (address a) {
         bytes32 sl = _salt(what);
         a = vm.computeCreate2Address(sl, keccak256(init), CREATE2_FACTORY);
+        // reset 5: the SCaaS testnet's release gas rule (NET-EVM-06: code x 1,530 + 2^24, the init code bounding the
+        // runtime) within the block; a fixed 30 M fell short of SCaaSDexLiquidityModule's code-deposit state gas (EIP-8037:
+        // 29.85 M at the deploy), which forge's EVM and anvil do not price
+        uint256 gl = init.length * 1_530 + (1 << 24);
+        if (gl > block.gaslimit) gl = block.gaslimit;
         vm.broadcast(k1);
-        (bool ok,) = CREATE2_FACTORY.call{gas: 30_000_000}(abi.encodePacked(sl, init));
+        (bool ok,) = CREATE2_FACTORY.call{gas: gl}(abi.encodePacked(sl, init));
         require(ok && a.code.length != 0, what);
     }
 
@@ -1079,7 +1084,9 @@ contract PqzKeysSetup is PqzKeysKit {
         IERC20(t).transfer(a2, 1_000);
         fA.forwardCall(t, abi.encodeCall(r.freeze, (_pad(a3), ref, bytes32(0), uid)));
         fA.forwardCall(t, abi.encodeCall(r.unfreeze, (_pad(a3), ref, uid)));
-        fA.forwardCall(t, abi.encodeCall(r.pause, (ref, now_ + 1 hours, uid)));
+        // reset 5: + 1 day (within PAUSE_SPAN, 7 days): a forge run simulates first and sends for about an hour on the SCaaS
+        // testnet, so the simulation's now + 1 hour was already past when this send landed (PauseTooLong)
+        fA.forwardCall(t, abi.encodeCall(r.pause, (ref, now_ + 1 days, uid)));
         fA.forwardCall(t, abi.encodeCall(r.unpause, (ref, uid)));
         fB.forwardCall(t, abi.encodeCall(IRegulatedToken.recordOrder, (oid, keccak256("order doc"), _pad(a2), _pad(a3), 100, now_ + 1 days, uid)));
         fA.forwardCall(t, abi.encodeCall(r.freeze, (_pad(a2), ref, rid, uid)));
