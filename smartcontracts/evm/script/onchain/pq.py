@@ -835,6 +835,10 @@ def main():
     os.makedirs(OUTD, exist_ok=True)
     if a.extra_only:
         return standalone(a)
+    # the keys: the genesis test keys 1, 2, 3, or the group's own key set from ONCHAIN_PQ_KEYS (matrix.sh's parallel plan,
+    # owner 2026-11-16), handed to e2e.py by the environment (E2E_KEYS), never on a command line
+    if os.environ.get("ONCHAIN_PQ_KEYS"):
+        os.environ["E2E_KEYS"] = os.environ["ONCHAIN_PQ_KEYS"]
     sys.argv = ["e2e.py", "--rpc", a.rpc, "--split", "--keys", "1,2,3", "--log", os.path.join(OUTD, f"{GROUP}-{NET}.log")]
     if a.offchain:  # group 3f: e2e's deploy on deps = [0x0], its PQZ tokens OFFCHAIN; sections 1-3, then `offchain`
         sys.argv += ["--zero-dep", "--proof-path-only"]

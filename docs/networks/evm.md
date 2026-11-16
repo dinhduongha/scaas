@@ -467,7 +467,12 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   label; each `forge verify-contract` runs in its snapshot outside `capped` in a 1 GiB scope, one at a time, bounded by
   `VERIFY_TIMEOUT`, and a forge run that compiles aborts the step. The explorer's own answer decides, never forge's exit
   code: forge 1.8.5 exits 0 on Blockscout's `Fail - Unable to verify`, so such a contract is submitted once more. The SCaaS testnet's explorer and its first full run:
-  [NET-EVM-09](#NET-EVM-09).
+  [NET-EVM-09](#NET-EVM-09). Change (owner 2026-11-16, "many transactions per block, groups in parallel"; BUILT on `reset5`, UNAUDITED): on a remote
+  target `matrix.sh` runs its groups in waves (`script/onchain/sched.py plan`: a group after the groups it needs, `views`
+  alone after the others, a list against that order refused by name, `GROUP_ORDER`), the groups of a wave at the same time,
+  each with its own key set from the testnet mnemonic file (indexes fixed by the group's name, topped up from index 0 in one
+  batch; the RescueVault and wraplimits groups keep the target's own keys and never run at once), its own log, result line and
+  heartbeat; a failing group stops no other and the run fails. The local target stays sequential (`MATRIX_PARALLEL=0`).
 - <a id="NET-EVM-13"></a>**NET-EVM-13 — An EVM chain is named `<chain>-mainnet` / `<chain>-testnet`, and its deployment book
   by that name** (owner rulings 2026-11-10). **Keys (BUILT, branch `ua-mtx-3q`):** every row of
   [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json) has the key `<chain>-mainnet` or `<chain>-testnet`

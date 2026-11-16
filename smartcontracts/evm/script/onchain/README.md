@@ -45,6 +45,19 @@ files changed, compilation skipped" or the step fails (owner 2026-11-10). A remo
 (wei, default 1 gwei), max fee `ONCHAIN_MAXFEE` (wei, default 2 x the base fee + the tip); forge's own estimate (1 wei on
 a quiet chain) stranded a batch once the base fee rose. A local target keeps forge's fee.
 
+Groups in parallel on a remote target (owner 2026-11-16, "many transactions per block, groups in parallel"; NET-EVM-12's
+Change): `sched.py plan` puts the groups in waves, a group after the ones it needs (`pqzwallet` after `pqzkeys`, `pqoff`
+after `pq`: both write e2e's `deployments/<key>-pqz.json`; `views` alone after the groups whose books it reads; `verify`
+last), and a list that names a group before one it needs is refused (`GROUP_ORDER`). The groups of a wave run at the same
+time, each with its own key set: `ONCHAIN_K1..K3` (and `PRIVATE_KEY` = K1, `ONCHAIN_PQ_KEYS` for e2e.py) from indexes of
+`SCAAS_TESTNET_MNEMONIC_FILE` fixed by the group's name (from index 10; `sched.py plan` prints them), topped up to
+`MATRIX_FUND_ETH` (2) from its index 0 in one batch before the first wave (`sched.py fund`); `rescue` and `wraplimits` keep
+the target's own keys (the vault's genesis admin and rescuer, wraplimits' state) and never run at once. Each group has its own
+log (`matrix-<target>-<group>.log`), result line and 30 s heartbeat; a failing group stops no other, and the run's rc is
+non-zero. `MATRIX_PARALLEL=0` runs one group after the other (the default on `local`: one anvil, wraplimits moves its clock).
+Tests: `sched.py self-test` (no two groups of a wave share a key set, no mnemonic index twice, the order kept, the named
+refusals); `MATRIX_TEST_FAIL=<group>` makes that group's command fail (the scheduler's own check).
+
 ## Local
 
 Fresh chains only; no other RPC is read (`RPC_7622` may point nowhere):

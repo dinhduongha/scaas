@@ -1273,7 +1273,9 @@ def main():
     SKIP_KINDS.update(a.skip_kind)
     PROOF_PATH_ONLY = a.proof_path_only
     PROOF_STORE = 1 if a.proof_store == "log" else 0
-    kd, kr, ke = (int(x) for x in a.keys.split(","))
+    # the keys: --keys (genesis test key numbers, the default 1,2,3), or E2E_KEYS from the environment (0x hex; matrix.sh
+    # parallel groups, owner 2026-11-16): never on a command line, never logged
+    kd, kr, ke = (int(x, 0) for x in (os.environ.get("E2E_KEYS") or a.keys).split(","))
     try:
         run(kd, kr, ke)
     except Exception as e:  # noqa: BLE001
@@ -1299,7 +1301,8 @@ def run(kd, kr, ke):
     book = deploybook.resolve(chain, g["hash"])  # NET-EVM-13: the book's key before anything is sent (a copy: DEPLOY_NAME)
     sd, sr, se = Sender(kd), Sender(kr), Sender(ke)
     VERIFIER[0] = sd
-    log(f"deployer {sd.addr} (key {kd}), relayer {sr.addr} (key {kr}), envelope signer {se.addr} (key {ke})")
+    kn = lambda k: f"key {k}" if k < 1 << 16 else "a key from E2E_KEYS"  # a genesis test key number, never a real key
+    log(f"deployer {sd.addr} ({kn(kd)}), relayer {sr.addr} ({kn(kr)}), envelope signer {se.addr} ({kn(ke)})")
     log("PQZ tokens: " + ("OFFCHAIN on zero-dep releases (deps = [0x0]), verifier UA the deployer EOA, transferable, a "
                           "signed PqzVerdict per proof" if ZERO_DEP else "PRECOMPILE, the empty verdict"))
     st = call(PQZ, bytes.fromhex("0600000000"))
