@@ -518,12 +518,14 @@ impl Wallet {
     /// `pqz-held:<ua>:<version>:<pqzKeyHash>` (that rebuilt PQZ key's `seed32`, T16b), as [`Wallet::seal_vault`]; `Argument`
     /// for another label or a key the wallet does not hold.
     pub fn seal_label_vault(&self, label: &str, vault_passphrase: &str, prf: Option<&PrfEnvelope>) -> Result<Vault> {
+        let _lease = self.store.lease(); // the secret's copy, through the seal (T21 L82)
         let secret = if label == "manifest" {
             Zeroizing::new(self.manifest().to_json().into_bytes())
         } else {
             let h = Held::parse(label)?;
             self.store.with_all(|a, m| h.secret(a, m))?
         };
+        super::store::copied();
         Vault::seal(label, &secret, vault_passphrase, prf)
     }
 
@@ -571,7 +573,9 @@ impl Wallet {
             return Err(Error::Argument);
         }
         let created = now()?;
+        let _lease = self.store.lease(); // the payload's copies, through the seals (T21 L82)
         let pt = self.payload(sender, true)?;
+        super::store::copied();
         let signer = ContainerSigner::Key(sender);
         recipients.iter().map(|r| seal_container(r, PURPOSE_BACKUP, &signer, created, pt.as_bytes(), None)).collect()
     }
@@ -593,7 +597,9 @@ impl Wallet {
         &self, sender: &UaKey, session_kem_pk: &[u8], short_code: &str, created: u64,
         encaps: impl FnOnce(&[u8]) -> Result<Encapsulated>,
     ) -> Result<SealedContainer> {
+        let _lease = self.store.lease(); // the payload's copies, through the seal (T21 L82)
         let pt = self.payload(sender, false)?;
+        super::store::copied();
         let r = Recipient::ephemeral(session_kem_pk);
         seal_container_with(&r, PURPOSE_LINK, &ContainerSigner::Key(sender), created, pt.as_bytes(), Some(short_code), encaps)
     }

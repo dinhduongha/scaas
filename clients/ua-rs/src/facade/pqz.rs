@@ -316,6 +316,9 @@ pub const STATE_LAYOUT: &[(&str, u64, u64, usize, usize)] = &[
     ("sendCounter[U]", 12, 0, 0, 8),
     // the proof path (T20d4, T20d8): a NONE header's fee, a debit's record `debitRec[ua][k]` (`w0`, `w1`)
     ("confidentialFee", 5, 0, 0, 32),
+    // the token's verification (T21 L83): `PRECOMPILE` 0 / `OFFCHAIN` 1, and `OFFCHAIN`'s fee in the fee word (round 3t)
+    ("pqzVerifyMode", 0, 0, 22, 1),
+    ("verifierFee", 20, 0, 0, 8),
     ("debitRec[U][7].w0", 19, 0, 0, 32),
     ("debitRec[U][7].w1", 19, 1, 0, 32),
 ];
@@ -1615,7 +1618,12 @@ impl PqzKey {
         self.pk.clone()
     }
 
-    /// `seed32` in the clear ([`crate::wallet::Wallet::export_pqz_leaf_raw`] only).
+    /// A read lease of the key's store, for a use of `seed32` after its guard (T21 L82).
+    pub(crate) fn lease(&self) -> crate::wallet::Lease<'_> {
+        self.secret.lease()
+    }
+
+    /// `seed32` in the clear ([`crate::wallet::Wallet::export_pqz_leaf_raw`] and the k-of-n backup under a lease only).
     pub(crate) fn leaf(&self) -> Result<Zeroizing<[u8; 32]>> {
         self.secret.with(|s| s.try_into().map(Zeroizing::new).map_err(|_| Error::Argument))?
     }

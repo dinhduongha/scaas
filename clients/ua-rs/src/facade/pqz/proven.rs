@@ -118,6 +118,7 @@ pub(super) struct Call {
     mode: Mode,
     sealed_memo: Option<Vec<u8>>,
     binding: Word,
+    verification: Verification,
 }
 
 /// The handle's one session (§4.14.2): what `PqzCore` keeps while it sums.
@@ -355,13 +356,21 @@ pub(super) fn credits(f: &Fields<'_>) -> Result<(Codes, Vec<Credit>)> {
     Ok((blobs, credits))
 }
 
-/// A NONE transfer's call fields: `beneficiaryUA?`, `fee`, `validUntilBlock`, `mode`, `sealedMemo` (on `HASH` only), `binding`.
+/// A NONE transfer's call fields: `beneficiaryUA?`, `fee`, `validUntilBlock`, `mode`, `sealedMemo` (on `HASH` only), `binding`,
+/// and the token's verification (T21 L83): `verificationMode` `PRECOMPILE` or `OFFCHAIN`, never a default (a missing or other
+/// value is `Argument`), and `verifierFee` the fee in force in the fee word (0 on `PRECOMPILE`, else `Argument`).
 fn call(v: &Value) -> Result<Call> {
-    let c = Fields::new(v.as_object().ok_or(Error::Argument)?, &["beneficiaryUA", "fee", "validUntilBlock", "mode", "sealedMemo", "binding"])?;
+    let c = Fields::new(v.as_object().ok_or(Error::Argument)?, &["beneficiaryUA", "fee", "validUntilBlock", "mode", "sealedMemo", "binding",
+        "verificationMode", "verifierFee"])?;
     let mode = c.mode()?;
     if c.has("sealedMemo") != (mode == Mode::Hash) {
         return Err(Error::Argument);
     }
+    let verification = match (c.get("verificationMode")?.as_str(), c.u64("verifierFee")?) {
+        (Some("PRECOMPILE"), 0) => Verification::Precompile,
+        (Some("OFFCHAIN"), verifier_fee) => Verification::Offchain { verifier_fee },
+        _ => return Err(Error::Argument),
+    };
     Ok(Call {
         beneficiary_ua: c.opt_word("beneficiaryUA")?,
         fee: c.u64("fee")?,
@@ -369,6 +378,7 @@ fn call(v: &Value) -> Result<Call> {
         mode,
         sealed_memo: c.has("sealedMemo").then(|| c.bytes("sealedMemo")).transpose()?,
         binding: c.word("binding")?,
+        verification,
     })
 }
 
@@ -545,6 +555,7 @@ impl PqzKey {
         let Ok(rec) = record(&c.record.0, &c.record.1, c.k) else { return Ok(None) };
         // a migration credit (3g KV-11): the holder's own UA from a version below the handle's, re-encrypted from that seed
         if c.from_ua == o.ua && rec.key_version < o.v && !c.multi {
+            let _lease = self.secret.lease(); // the old seed's copy, through the re-encryption (T21 L82)
             match self.old_seed(o, &rec, c, blobs) {
                 Some(seed) => return Ok(self.reencrypted(o, c, slot, &seed, blobs).ok().map(|ct| (ct, Kind::Migration))),
                 None => return by_proof(&self.pk, o, &rec, c, slot, blobs).map(|r| r.map(|ct| (ct, Kind::Migration))),
@@ -719,9 +730,8 @@ fn transfer_header(o: &Open, rec: &Record, from: &Word, k: u64, multi: bool, cal
         (None, Mode::Bundle) => Vec::new(),
         _ => return Err(Error::Argument),
     };
-    // the request names no verification yet: `PRECOMPILE`'s fold (an `OFFCHAIN` token's mode and fee in the request is LATER,
-    // with T21 L44's fold inside the request and O5 (b); T21 L77)
-    let env = bind_mode(&call.binding, call.mode, Verification::Precompile);
+    // the token's verification as the call names it (T21 L77, L83)
+    let env = bind_mode(&call.binding, call.mode, call.verification);
     let mut hd = header_of(o, rec, from, k, call.beneficiary_ua, call.fee, call.valid_until_block, env)
         .fill(if multi { Multi::header(&o.id, m, aud) } else { Debit::header(if aud { Form::Transfer } else { Form::Transfer0 }, &o.id) });
     let to = if multi { crate::keccak256(&(0..m).map(|j| e.owner(j)).collect::<Result<Vec<_>>>()?.concat()) } else { e.owner(0)? };
@@ -1156,6 +1166,8 @@ mod tests {
     fn none_headers_are_the_contracts() {
         let Some(s) = rows() else { return };
         let rows = s["noneHeaders"].as_array().unwrap();
+        let vf = vf_binding();
+        let mut offchain = 0;
         let mut seen = BTreeSet::new();
         for r in rows {
             let name = r["name"].as_str().unwrap();
@@ -1187,8 +1199,21 @@ mod tests {
                     }
                     let mode = if n(&r["transferMode"]) == 0 { Mode::Hash } else { Mode::Bundle };
                     let call = Call { beneficiary_ua: w(&r["beneficiaryUA"]), fee: fee(m as u64), valid_until_block: n(&r["validUntilBlock"]),
-                        mode, sealed_memo: (mode == Mode::Hash).then(|| h(&r["sealedMemo"])), binding: w(&r["envelopeBinding"]) };
+                        mode, sealed_memo: (mode == Mode::Hash).then(|| h(&r["sealedMemo"])), binding: w(&r["envelopeBinding"]),
+                        verification: Verification::Precompile };
                     assert_eq!(bind_mode(&call.binding, mode, Verification::Precompile), w(&r["binding"]), "{name}: the binding");
+                    // T21 L83: the same direct debit on an `OFFCHAIN` token at each forge-written verifier fee: the header is
+                    // this row's with the fee word raised by `vf` and word 17 the contract's direct word 544 of (mode, `vf`)
+                    for b in vf.iter().filter(|b| r["path"] != "relayed" && b["pqzVerifyMode"] == "OFFCHAIN" && n(&b["modeByte"]) == n(&r["transferMode"])) {
+                        let fee_vf = n(&b["verifierFee"]);
+                        let off = Call { fee: call.fee + fee_vf, verification: Verification::Offchain { verifier_fee: fee_vf }, ..call.clone() };
+                        let mut want = h(&r["header"]);
+                        want[32 * H_FEE..32 * H_FEE + 32].copy_from_slice(&u64_word(off.fee));
+                        want[32 * H_ENVELOPE..32 * H_ENVELOPE + 32].copy_from_slice(&w(&b[if form == "op7" { "op7Word544" } else { "op1Word544" }]));
+                        let got = transfer_header(&o, &rec, &w(&r["fromUA"]), k, form == "op7", &off, &tl, &e).unwrap();
+                        assert_eq!(got.concat(), want, "{name}: OFFCHAIN vf {fee_vf}");
+                        offchain += 1;
+                    }
                     transfer_header(&o, &rec, &w(&r["fromUA"]), k, form == "op7", &call, &tl, &e).unwrap()
                 }
                 _ => {
@@ -1211,5 +1236,43 @@ mod tests {
             seen.insert((form.to_string(), r["path"].as_str().unwrap().to_string()));
         }
         assert_eq!(seen.len(), 10, "every form, direct and relayed: {seen:?}");
+        if !vf.is_empty() {
+            assert_eq!(offchain, 8, "op 1 and op 7 direct at OFFCHAIN vf 0, 1, 7, 10");
+        }
+    }
+
+    /// The forge `binding` rows of `verifier_fee.json` (`PqzVerifierFeeVectors.t.sol`), at the one set that has the file.
+    fn vf_binding() -> Vec<Value> {
+        if st::SET != "n2304-kmax4096" {
+            return vec![];
+        }
+        let path = format!("{}/../../smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json", env!("CARGO_MANIFEST_DIR"));
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        v["binding"].as_array().unwrap().clone()
+    }
+
+    /// T21 L83: the call names the token's verification, never a default: `verificationMode` missing or of another spelling,
+    /// `verifierFee` missing, or a fee on `PRECOMPILE`: `Argument`. Controls: both modes parse.
+    #[test]
+    fn call_names_its_verification() {
+        let base = json!({"fee": 7, "validUntilBlock": 9, "mode": "BUNDLE", "binding": format!("0x{}", "00".repeat(32))});
+        let with = |m: Value, f: Value| {
+            let mut c = base.clone();
+            if !m.is_null() {
+                c["verificationMode"] = m;
+            }
+            if !f.is_null() {
+                c["verifierFee"] = f;
+            }
+            call(&c).map(|c| c.verification)
+        };
+        assert_eq!(with(json!("PRECOMPILE"), json!(0)), Ok(Verification::Precompile));
+        assert_eq!(with(json!("OFFCHAIN"), json!(7)), Ok(Verification::Offchain { verifier_fee: 7 }));
+        assert_eq!(with(json!("OFFCHAIN"), json!(0)), Ok(Verification::Offchain { verifier_fee: 0 }));
+        assert_eq!(with(Value::Null, json!(0)), Err(Error::Argument), "verificationMode missing");
+        assert_eq!(with(json!("OFFCHAIN"), Value::Null), Err(Error::Argument), "verifierFee missing");
+        assert_eq!(with(json!("offchain"), json!(7)), Err(Error::Argument), "another spelling");
+        assert_eq!(with(json!(1), json!(7)), Err(Error::Argument), "a number");
+        assert_eq!(with(json!("PRECOMPILE"), json!(1)), Err(Error::Argument), "a fee on PRECOMPILE");
     }
 }

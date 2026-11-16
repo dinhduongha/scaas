@@ -73,7 +73,7 @@ fn verifier_fee_rows() {
 }
 
 /// T21 L77: `facade::pqz::bind_mode` against the forge writer's `binding` rows (`PqzCore._bindMode` on a direct op 1 and op 7,
-/// word 544): `OFFCHAIN` at verifier fees 0, 1 and 10 (`TAG_DIRECT_MODE_VF`, the fee hashed at 0 too) and `PRECOMPILE`, both
+/// word 544): `OFFCHAIN` at verifier fees 0, 1, 7 and 10 (`TAG_DIRECT_MODE_VF`, the fee hashed at 0 too) and `PRECOMPILE`, both
 /// modes. A relayed binding is the envelope's on either verification (the contract's `binding == 0` branch only).
 #[cfg(feature = "pqz")]
 #[test]

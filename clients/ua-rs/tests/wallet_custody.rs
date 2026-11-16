@@ -398,3 +398,124 @@ fn lock_returns_only_after_operations_in_flight() {
     });
     assert_eq!(key.vectors_with_secret(|_| ()).err(), Some(Error::KeyRevoked));
 }
+
+/// T21 L82: runs `op` on its own thread, paused (the `vectors` hook) where it holds its copy of a store secret, before it uses
+/// the copy; `lock()` from a second thread meanwhile must not return (a bounded wait, no loop) until `op` ended. `op`'s result.
+#[cfg(feature = "vectors")]
+fn lock_during<R: Send>(w: &Wallet, op: impl FnOnce() -> R + Send) -> R {
+    let (in_tx, in_rx) = mpsc::channel();
+    let (go_tx, go_rx) = mpsc::channel::<()>();
+    let (locked_tx, locked_rx) = mpsc::channel();
+    std::thread::scope(|s| {
+        let a = s.spawn(move || {
+            scaas_ua::wallet::vectors_pause_after_copy(move || {
+                in_tx.send(()).unwrap();
+                go_rx.recv().unwrap();
+            });
+            op()
+        });
+        // an `op` that never reaches the hook drops it at its thread's end: this `recv` fails
+        in_rx.recv().expect("the operation reached no leased copy");
+        let locker = s.spawn(move || {
+            w.lock();
+            locked_tx.send(()).unwrap();
+        });
+        // read, not asserted here: a failed assert inside the scope would leave `op` waiting for `go` forever
+        let early = locked_rx.recv_timeout(std::time::Duration::from_millis(500)).is_ok();
+        go_tx.send(()).unwrap();
+        let r = a.join().unwrap();
+        locker.join().unwrap();
+        assert!(!early, "lock() returned while the operation used its copy");
+        r
+    })
+}
+
+/// T21 L82: `lock()` during a seal vault's scrypt waits for it; the vault is complete (it reopens to the same entropy); after
+/// `lock()` the next seal is `WalletLocked`.
+#[cfg(feature = "vectors")]
+#[test]
+fn lock_waits_for_a_leased_seal_vault() {
+    let w = wallet();
+    let entropy = w.vectors_entropy().unwrap();
+    let v = lock_during(&w, || w.seal_vault(PASS, None)).unwrap();
+    assert_eq!(w.seal_vault(PASS, None).err(), Some(Error::WalletLocked));
+    let back = Wallet::open_vault(&v, Unlock::VaultPassphrase(PASS), "").unwrap();
+    assert_eq!(*back.vectors_entropy().unwrap(), *entropy);
+}
+
+/// T21 L82: as above for a label vault (an imported key's copy): it reopens into the unlocked wallet to the same key.
+#[cfg(feature = "vectors")]
+#[test]
+fn lock_waits_for_a_leased_label_vault() {
+    let w = wallet();
+    let seed_vault = w.seal_vault(PASS, None).unwrap();
+    let pk = w.import_native_key(Network::Evm, &[0x11; 32]).unwrap().public_key();
+    let v = lock_during(&w, || w.seal_label_vault("native-import:evm:0", PASS, None)).unwrap();
+    assert_eq!(w.seal_label_vault("native-import:evm:0", PASS, None).err(), Some(Error::WalletLocked));
+    w.unlock(&seed_vault, Unlock::VaultPassphrase(PASS), "").unwrap();
+    w.open_label_vault(&v, Unlock::VaultPassphrase(PASS)).unwrap();
+    assert_eq!(w.imported_key(Network::Evm, 0).unwrap().public_key(), pk);
+}
+
+/// T21 L82: `lock()` while a KEM open holds `ss` (after decapsulation, before the KDF and the AEAD) waits for it; the plaintext
+/// is whole; after `lock()` the next open is `KeyRevoked`.
+#[cfg(feature = "vectors")]
+#[test]
+fn lock_waits_for_a_leased_kem_open() {
+    let w = wallet();
+    let kk = w.ua_key(0x0130, 0, 0).unwrap().kem_key(0).unwrap();
+    let sealed = seal(&kk.kem_pk(), "scaas/test/v1", b"aad", b"pt").unwrap();
+    let pt = lock_during(&w, || kk.open("scaas/test/v1", b"aad", &sealed)).unwrap();
+    assert_eq!(*pt, b"pt");
+    assert_eq!(kk.open("scaas/test/v1", b"aad", &sealed).err(), Some(Error::KeyRevoked));
+}
+
+/// T21 L82: `lock()` during a MuSig2 partial signature (the nonce's copy) waits for it; the partial signature is checked by
+/// BIP-327's own verify inside `sign` (a bad one is `Argument`); after `lock()` a new session is `KeyRevoked`.
+#[cfg(feature = "vectors")]
+#[test]
+fn lock_waits_for_a_leased_musig2_sign() {
+    let w = wallet();
+    let (a, b) = (w.ua_key(0x0112, 0, 0).unwrap(), w.ua_key(0x0112, 1, 0).unwrap());
+    let mut pks = vec![a.key_data(), b.key_data()];
+    mu::key_sort(&mut pks);
+    let (mut sa, sb) = (a.musig2_session(&pks, &[6; 32]).unwrap(), b.musig2_session(&pks, &[6; 32]).unwrap());
+    let agg = mu::nonce_agg::<Bn254>(&[sa.pubnonce(), sb.pubnonce()]).unwrap();
+    assert!(lock_during(&w, || sa.sign(&agg)).is_ok());
+    assert_eq!(a.musig2_session(&pks, &[6; 32]).err(), Some(Error::KeyRevoked));
+}
+
+/// T21 L82: leases do not wait for each other: two KEM opens are both inside their lease at once (each paused at its copy
+/// until both arrived; a bounded wait, no loop); both plaintexts whole.
+#[cfg(feature = "vectors")]
+#[test]
+fn leased_opens_run_at_once() {
+    let w = wallet();
+    let kk = w.ua_key(0x0130, 0, 0).unwrap().kem_key(0).unwrap();
+    let sealed = seal(&kk.kem_pk(), "scaas/test/v1", b"aad", b"pt").unwrap();
+    let (in_tx, in_rx) = mpsc::channel();
+    let (go_tx, go_rx): (Vec<_>, Vec<_>) = (0..2).map(|_| mpsc::channel::<()>()).unzip();
+    let (both, pts) = std::thread::scope(|s| {
+        let ops: Vec<_> = go_rx
+            .into_iter()
+            .map(|go| {
+                let (in_tx, kk, sealed) = (in_tx.clone(), &kk, &sealed);
+                s.spawn(move || {
+                    scaas_ua::wallet::vectors_pause_after_copy(move || {
+                        in_tx.send(()).unwrap();
+                        go.recv().unwrap();
+                    });
+                    kk.open("scaas/test/v1", b"aad", sealed)
+                })
+            })
+            .collect();
+        let t = std::time::Duration::from_secs(10);
+        let both = in_rx.recv_timeout(t).is_ok() && in_rx.recv_timeout(t).is_ok();
+        go_tx.iter().for_each(|g| g.send(()).unwrap());
+        (both, ops.into_iter().map(|h| h.join().unwrap()).collect::<Vec<_>>())
+    });
+    assert!(both, "a lease waited for another");
+    for pt in pts {
+        assert_eq!(*pt.unwrap(), b"pt");
+    }
+}

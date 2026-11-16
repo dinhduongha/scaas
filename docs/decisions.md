@@ -6061,6 +6061,7 @@ Change (2026-10-19): controller proposal (owner may override) — **on-chain rev
 Change (2026-10-20, controller record): **fees and bindings as built** (plan 5h Task 3, `ff4e6948` / `3cbc5f5e`). (1) `multiLegFee` is replaced by the owner's `decoyFee` (CTR-PQZ-06 change): the op 7 payload is `p ‖ validUntil ‖ shieldIn ‖ fromUA ‖ ben ‖ M ‖ decoyFee ‖ salt(16) ‖ UA_0 …` (a 32-byte word before the salt), statement unchanged. (2) D15, review L1 / T18: the mode is folded into every binding — relayed `binding = keccak256(abi.encode(envelopeBinding, uint8(mode)))`, direct `keccak256(abi.encode(TAG_DIRECT_MODE, uint8(mode)))` (value unchanged), a relayed unwrap `keccak256(abi.encode(envelopeBinding, unwrapBinding(u, minOut)))` (direct unchanged; `unshieldUnwrapStatement` uses the same helper), burns keep the envelope binding; a pre-D15 proof of the same envelope and a `…NoBundle`-style proof are both `ProofRejected` (tested). (3) NONE and `…NoBundle` retired (CTR-PQZ-23 change). Status: decided (fee: owner); built.
 
 Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](contracts/pq-zero-knowledge.md#CTR-PQZ-36); controller call on the review's P1-1 under the owner's leave of 2026-11-10; status: BUILT on `ua-mtx-3t`, UNAUDITED): **on an `OFFCHAIN` token the direct transfer's binding also binds the verifier fee in force.** Old: a direct op 1 or op 7 binds `keccak256(abi.encode(TAG_DIRECT_MODE, uint8(mode)))`. New, on `OFFCHAIN` only: `keccak256(abi.encode(TAG_DIRECT_MODE_VF, uint8(mode), uint256(verifierFee)))`, `TAG_DIRECT_MODE_VF = keccak256("SCAAS-PQZ-DIRECT-MODE-VF-V1")` = `0x822f04ee…76a8`, so a fee change of `M·k` cannot be met by a shifted `decoyFee` on a built op; `PRECOMPILE` statements and every relayed binding are unchanged.
+Change (owner 2026-11-16, T21 L83 (L77's rest), "ok, as proposed"; status: BUILT on branch `t21-fix3`, UNAUDITED): the clients follow this binding and the fee word everywhere. `ua-rs` path (B): a NONE op 1 / op 7 credit's `call` names the token's verification, `verificationMode` (`PRECOMPILE` / `OFFCHAIN`, required: a missing or other value is `Argument`, never a default) and `verifierFee` (0 on `PRECOMPILE`), and `bind_mode` folds them as `PqzCore._bindMode`. `pqz-read` reads `pqzVerifyMode` (slot 0 byte 22) and, on `OFFCHAIN`, `verifierFee` (slot 20; both added to `STATE_LAYOUT`, held to the layout pin), adds the verifier fee to the NONE fee word (`call_fee`, as `PqzCore._common`) and writes both fields into the call. `verifier_fee.json` (forge writer) gains the `OFFCHAIN` binding rows at verifier fee 7 and op 1's fee word; every binding row is checked by the writer. Tests: `proven` `none_headers_are_the_contracts` (each direct op 1 / op 7 row at `OFFCHAIN` vf 0, 1, 7, 10: word 17 the forge word 544, the fee word + vf), `call_names_its_verification`; `pqz-read` `call_fee_adds_the_verifier_fee`. clientkeys builds neither path (B) nor this binding (its reader of the file only).
 
 ### CTR-PQZ-26 — R_TXM: the multi-recipient relation and its contract rules
 - old: — · status: current · owner: yes · date: 2026-10-14 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-26 · superseded-by: —
@@ -9811,6 +9812,19 @@ locked wallet opens none (`WalletLocked`), a dropped unsigned session wipes its 
 and `dropped_frost_session_wipes_its_nonces` (`tests/wallet_pairing.rs`), each red on its mutant (nonces kept in the object; no
 `Drop`). (b) The remaining deviation is stated in spec §8.2 and [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-09): the FROST share
 is still the caller's `KeyPackage`, not in store custody; share custody comes with the real DKG work.
+
+**Change (owner 2026-11-16, owner: yes, T21 L82, "ok, as proposed": option (b), the read lease; status: BUILT on
+branch `t21-fix3`, UNAUDITED).** L73 left a class open: `seal_vault` and `KemKeyPair::open` copied a secret out of the store,
+released the guard and kept using the copy (scrypt for seconds; the KDF and AEAD after decapsulation), so `lock()` could return while
+a secret was in use; holding the store lock over scrypt (option (a)) would block every signer for its time. Now every operation that
+uses a copy after its guard holds a read lease of the store for the copy's whole use (the list is in spec §8.2: both vault seals, the
+KEM open and so `open_container`, the backup and link seals, the k-of-n PQZ backup, a PQZ migration credit, MuSig2 `sign`, the FROST
+share, which moves from the write lock onto the lease); leases never wait for each other; `lock()` waits until none is in flight and holds
+the count until the wipe. Lock order: a lease before any store guard, never while one is held. Exports hold none. Tests
+(`tests/wallet_custody.rs`): `lock_waits_for_a_leased_seal_vault`, `…_label_vault`, `…_kem_open`, `…_musig2_sign`,
+`leased_opens_run_at_once`; `lock_waits_for_frost_round_two` unchanged and green. Mutants: `lock()` not waiting (the pre-fix
+behaviour; four custody tests and the FROST test red), the lease dropped after the copy (vault, KEM open: red), a lease waiting for
+another (`leased_opens_run_at_once` red). Normative: [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-09), spec §8.2.
 
 ### CLI-UAL-10 — Memory protection covers the arena, not the object graph
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-10 · superseded-by: —

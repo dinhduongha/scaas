@@ -282,7 +282,9 @@ impl PqzKey {
         }
         let pqz_key_hash = crate::key_hash_of(crate::PQZ_SCHEME, &self.pk())?.ok_or(Error::Argument)?;
         let header = ShareHeader { msig_ua, version, pqz_key_hash, k, n };
+        let _lease = self.lease(); // the leaf's copy and its shares, through the seals (T21 L82)
         let ys = split_with(&*self.leaf()?, &coeffs(k)?, n);
+        crate::wallet::copied();
         let created = crate::wallet::now()?;
         let signer = ContainerSigner::Key(sender);
         let shares = recipients

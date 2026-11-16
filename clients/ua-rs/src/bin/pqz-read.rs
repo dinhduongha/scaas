@@ -91,7 +91,7 @@ use std::process::{Command, ExitCode, Stdio};
 
 use pqz_ffi::pqzl::PK_BYTES;
 use pqz_ffi::stmt::{K_MAX, PQZH_ID};
-use scaas_ua::facade::pqz::{envelope_binding, PqzEnvelope, STATE_LAYOUT};
+use scaas_ua::facade::pqz::{envelope_binding, PqzEnvelope, Verification, STATE_LAYOUT};
 use scaas_ua::facade::pqz_pack::{ACC_WORDS, PKP, VP};
 use scaas_ua::keccak256;
 use serde_json::{json, Value};
@@ -581,7 +581,7 @@ fn read(a: &Args, url: &str, block_at: Option<u64>, pk: Option<&[u8]>) -> Result
             if e[22..24] != [0, 0] && !proven {
                 ptrs.push(low_addr(&e, 12));
             } else if let (true, Some(pp)) = (e[22..24] != [0, 0], proof_path.as_mut()) {
-                let (c, x) = credit(a, url, block, &root, &mut pp.codes, i, &e, &pp.auditor, pp.fee, pp.compact)?;
+                let (c, x) = credit(a, url, block, &root, &mut pp.codes, i, &e, &pp.auditor, pp.fee, pp.verification, pp.compact)?;
                 pp.credits.push(c);
                 pp.ptrs.extend(x);
             }
@@ -933,10 +933,25 @@ fn envelope_of(env: &[Word]) -> Result<PqzEnvelope, String> {
     Ok(PqzEnvelope { from, batch, nonce, valid_until, mode, relayer, fee, fee_recipient })
 }
 
-/// A NONE debit's header `fee` (§4.14.4 step 4): the token's `confidentialFee` when the debit names a beneficiary, else 0, and
-/// `M · decoyFee` on op 7. T62a's rows pin it.
-fn call_fee(beneficiary: &Word, token_fee: u64, m: u64, decoy_fee: u64) -> Option<u64> {
-    (if *beneficiary == [0; 32] { 0 } else { token_fee }).checked_add(m.checked_mul(decoy_fee)?)
+/// A NONE debit's header `fee` (§4.14.4 step 4, `PqzCore._common`): the token's `confidentialFee` when the debit names a
+/// beneficiary, else 0, plus `OFFCHAIN`'s `verifierFee` (round 3t; T21 L83), plus `M · decoyFee` on op 7. T62a's rows and
+/// `verifier_fee.json` pin it.
+fn call_fee(beneficiary: &Word, token_fee: u64, m: u64, decoy_fee: u64, v: Verification) -> Option<u64> {
+    let vf = match v {
+        Verification::Precompile => 0,
+        Verification::Offchain { verifier_fee } => verifier_fee,
+    };
+    (if *beneficiary == [0; 32] { 0 } else { token_fee }).checked_add(vf)?.checked_add(m.checked_mul(decoy_fee)?)
+}
+
+/// The token's verification from its words: `pqzVerifyMode` (slot 0) and, on `OFFCHAIN` only (the contract reads it there
+/// only), `verifierFee` (slot 20).
+fn verification(tok: &dyn Fn(&str) -> Result<Word, String>) -> Result<Verification, String> {
+    match field(&tok("pqzVerifyMode")?, "pqzVerifyMode")? {
+        0 => Ok(Verification::Precompile),
+        1 => Ok(Verification::Offchain { verifier_fee: field(&tok("verifierFee")?, "verifierFee")? }),
+        m => Err(format!("pqzVerifyMode {m}: neither PRECOMPILE nor OFFCHAIN")),
+    }
 }
 
 /// ABI `(bytes header, bytes proof)`, a `PqzDebitProof`'s data: the 20 header words and P.
@@ -980,6 +995,7 @@ fn entry_ref_of(a: &Args, from: &Word, counter: u64) -> Word {
 struct ProofPath<'r, 'u> {
     auditor: Word,
     fee: u64,
+    verification: Verification,
     compact: bool,
     codes: Codes<'r, 'u>,
     credits: Vec<Value>,
@@ -997,6 +1013,7 @@ impl<'r, 'u> ProofPath<'r, 'u> {
         Ok(ProofPath {
             auditor,
             fee: u64::from_be_bytes(fee[24..].try_into().map_err(|_| "fee")?),
+            verification: verification(tok)?,
             compact: field(&mode, "disclosureMode")? == 1,
             codes: Codes { r, got: std::collections::BTreeMap::new() },
             credits: Vec::new(),
@@ -1026,7 +1043,8 @@ fn last_record(a: &Args, r: &Reader<'_>, root: &Word, account: &[Word], acc_blob
 /// whose `entryRef` the log names), then from state its record, the sender's window, the keys by the tail's `kv` (the holder's own
 /// leg left out) and their codes.
 #[allow(clippy::too_many_arguments)]
-fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_>, i: u64, e: &Word, auditor: &Word, fee: u64, compact: bool)
+fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_>, i: u64, e: &Word, auditor: &Word, fee: u64,
+    ver: Verification, compact: bool)
     -> Result<(Value, Vec<[u8; 20]>), String> {
     let r = codes.r;
     let v = a.key_version.ok_or("--key-version")?;
@@ -1061,9 +1079,13 @@ fn credit(a: &Args, url: &str, block: u64, root: &Word, codes: &mut Codes<'_, '_
             let counter = field(&r.word(&a.token, &counter_slot(root, &c.from)?)?, "sendCounter[U]")?;
             let k = (counter.saturating_sub(MAX_COUNTER_SEARCH)..counter).rev().find(|n| er(*n) == entry_ref)
                 .ok_or("NONE: no sendCounter of the call's fromUA gives the Credited entryRef")?;
-            let fee = call_fee(&c.beneficiary, fee, c.m, c.decoy_fee).ok_or("fee")?;
+            let fee = call_fee(&c.beneficiary, fee, c.m, c.decoy_fee, ver).ok_or("fee")?;
+            let (vm, vf) = match ver {
+                Verification::Precompile => ("PRECOMPILE", 0),
+                Verification::Offchain { verifier_fee } => ("OFFCHAIN", verifier_fee),
+            };
             let mut call = json!({"beneficiaryUA": hx(&c.beneficiary), "fee": fee, "validUntilBlock": c.valid_until,
-                "mode": if c.hash { "HASH" } else { "BUNDLE" }, "binding": hx(&c.binding)});
+                "mode": if c.hash { "HASH" } else { "BUNDLE" }, "binding": hx(&c.binding), "verificationMode": vm, "verifierFee": vf});
             if c.hash {
                 call["sealedMemo"] = json!(hx(&c.sealed_memo));
             }
@@ -1265,13 +1287,56 @@ mod tests {
                     relayed += 1;
                 }
                 let m = r["legs"].as_array().map_or(1, |l| l.len() as u64);
-                let fee = call_fee(&w(&r["beneficiaryUA"]), n(&r["confidentialFee"]), m, n(&r["decoyFee"])).unwrap();
+                let fee = call_fee(&w(&r["beneficiaryUA"]), n(&r["confidentialFee"]), m, n(&r["decoyFee"]), Verification::Precompile).unwrap();
                 let header = unhex(r["header"].as_str().unwrap()).unwrap();
                 assert_eq!(be(fee).as_slice(), &header[32 * 8..32 * 9], "{name}: the fee word");
             }
             assert_eq!(relayed, 5, "every form relayed once");
             assert!(envelope_of(&[[0; 32]; 7]).is_err());
         }
+    }
+
+    /// T21 L83: `call_fee` on an `OFFCHAIN` token against `verifier_fee.json` (forge, real token ops): every payout row's fee
+    /// word from its named fields, and each binding row's op 1 fee word (no beneficiary, no decoy fee: the verifier fee alone,
+    /// 7 among them); `PRECOMPILE` adds nothing; the sum past 64 bits is refused. And the token's words: mode 1 reads the fee,
+    /// mode 0 does not, any other mode is refused.
+    #[test]
+    fn call_fee_adds_the_verifier_fee() {
+        let p = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/pqz/n2304-kmax4096/verifier_fee.json");
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
+        let n = |x: &Value| x.as_u64().unwrap();
+        let ben = [0x5a; 32];
+        let rows = v["rows"].as_array().unwrap();
+        assert_eq!(rows.len(), 108);
+        for r in rows {
+            let b = if r["beneficiary"].as_bool().unwrap() { ben } else { [0; 32] };
+            let ver = Verification::Offchain { verifier_fee: n(&r["verifierFee"]) };
+            assert_eq!(call_fee(&b, n(&r["confidentialFee"]), n(&r["legs"]), n(&r["decoyFee"]), ver), Some(n(&r["feeWord"])), "{r}");
+        }
+        let mut seven = 0;
+        for b in v["binding"].as_array().unwrap() {
+            let ver = match b["pqzVerifyMode"].as_str().unwrap() {
+                "OFFCHAIN" => Verification::Offchain { verifier_fee: n(&b["verifierFee"]) },
+                _ => Verification::Precompile,
+            };
+            assert_eq!(call_fee(&[0; 32], 5, 1, 0, ver), Some(n(&b["op1FeeWord"])), "{b}");
+            seven += usize::from(n(&b["op1FeeWord"]) == 7);
+        }
+        assert_eq!(seven, 2, "the fee-7 rows, both modes");
+        assert_eq!(call_fee(&ben, 3, 2, 1, Verification::Precompile), Some(5));
+        assert_eq!(call_fee(&ben, u64::MAX, 0, 0, Verification::Offchain { verifier_fee: 1 }), None);
+        let word = |mode: u8, fee: u64| move |l: &str| -> Result<Word, String> {
+            let mut w = [0u8; 32];
+            match l {
+                "pqzVerifyMode" => w[32 - 22 - 1] = mode,
+                "verifierFee" => w[24..].copy_from_slice(&fee.to_be_bytes()),
+                _ => return Err(l.into()),
+            }
+            Ok(w)
+        };
+        assert_eq!(verification(&word(1, 7)), Ok(Verification::Offchain { verifier_fee: 7 }));
+        assert_eq!(verification(&word(0, 7)), Ok(Verification::Precompile));
+        assert!(verification(&word(2, 7)).is_err());
     }
 
     /// T20d8: the transfer entries' signatures are the contract's, through the typed rows' (`typed_ops.json`: the four relayed

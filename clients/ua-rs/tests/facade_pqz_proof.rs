@@ -96,7 +96,8 @@ impl World {
         d["psid"] = json!(hx(&self.psid));
         d["envelopeBinding"] = json!(hx(&bind(&o.binding, mode)));
         d["shieldIn"] = json!(o.shield_in);
-        let call = json!({"fee": 0, "validUntilBlock": d["validUntilBlock"], "mode": mode, "binding": hx(&o.binding)});
+        let call = json!({"fee": 0, "validUntilBlock": d["validUntilBlock"], "mode": mode, "binding": hx(&o.binding),
+            "verificationMode": "PRECOMPILE", "verifierFee": 0});
         (d, call)
     }
     /// Notes P and settles; `op` 1 or 7.

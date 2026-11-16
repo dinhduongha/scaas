@@ -220,8 +220,7 @@ impl Musig2Session {
     /// The partial signature (BIP-327 Sign) under the aggregate nonce; spends the secret nonce first, so a second call (or a
     /// call after a failed one) is `Argument`.
     pub fn sign(&mut self, aggnonce: &[u8]) -> Result<[u8; 32]> {
-        let k = self.nonce.take().ok_or(Error::Argument)?.take()?;
-        let sec = Zeroizing::new([&k[..], &self.pk].concat());
+        let nonce = self.nonce.take().ok_or(Error::Argument)?;
         let (pks, msg) = (&self.pks, &self.msg);
         let (pk, pubnonce) = (&self.pk, &self.pubnonce);
         // BIP-327 Sign's last step: the own partial signature verifies, else nothing is released (T21 L15)
@@ -232,10 +231,14 @@ impl Musig2Session {
                 _ => Err(Error::Argument),
             }
         }
-        match self.kind {
-            0x0110 => own::<Secp256k1>(&self.key, &sec, aggnonce, pk, pubnonce, pks, msg),
-            _ => own::<Bn254>(&self.key, &sec, aggnonce, pk, pubnonce, pks, msg),
-        }
+        // the nonce's copy is used under a read lease, so `lock()` waits for the partial signature (T21 L82)
+        nonce.take_with(|k| {
+            let sec = Zeroizing::new([k, pk].concat());
+            match self.kind {
+                0x0110 => own::<Secp256k1>(&self.key, &sec, aggnonce, pk, pubnonce, pks, msg),
+                _ => own::<Bn254>(&self.key, &sec, aggnonce, pk, pubnonce, pks, msg),
+            }
+        })?
     }
 }
 
@@ -325,8 +328,9 @@ impl<C: Ciphersuite> FrostSession<C> {
         self.commitments
     }
 
-    /// Round 2's signature share; spends the nonces first (wiped in the arena as they are read). Round 2 runs under the
-    /// store's write lock, so the wallet's `lock()` waits for it; after `lock()`: `KeyRevoked` (spec §8.2, T21 L73).
+    /// Round 2's signature share; spends the nonces first (wiped in the arena as they are read). Round 2 runs under a read
+    /// lease of the store, so the wallet's `lock()` waits for it while other signers run; after `lock()`: `KeyRevoked` (spec
+    /// §8.2, T21 L73, L82).
     pub fn sign(&mut self, package: &SigningPackage<C>, key: &KeyPackage<C>) -> Result<SignatureShare<C>> {
         self.sign_paused(package, key, || ())
     }

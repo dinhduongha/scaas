@@ -264,9 +264,12 @@ fn parse(v: &Value) -> Option<Vault> {
 impl Wallet {
     /// The seed vault (label `seed`) of this wallet's entropy at its own length, a new DEK, the pin envelope under
     /// `vault_passphrase` (the new-passphrase policy, `Argument`) and the PRF envelope if given; `WalletLocked` while locked.
-    /// The BIP-39 passphrase is not in it.
+    /// The BIP-39 passphrase is not in it. The entropy's copy is used under a read lease, so `lock()` waits for the seal
+    /// (T21 L82).
     pub fn seal_vault(&self, vault_passphrase: &str, prf: Option<&PrfEnvelope>) -> Result<Vault> {
+        let _lease = self.store.lease();
         let entropy = self.store.with_arena(|a| Ok(Zeroizing::new(a.entropy()?.to_vec())))?;
+        super::store::copied();
         Vault::seal("seed", &entropy, vault_passphrase, prf)
     }
 
