@@ -2792,12 +2792,17 @@ fn generate() -> (Vec<(String, String)>, bool) {
 /// is the one set whose directory holds the file (T-05: verdict.json and verifier_fee.json live in pqz/n2304-kmax4096/
 /// only), `None` every set (T-41: state.json at all four); a file at another set is `EXTRA`, a missing one `MISSING`.
 /// Keep equal to `OTHER_WRITERS` in `smartcontracts/vectors/pqz/pqz_kat.py`.
-const OTHER_WRITERS: [(&str, &str, Option<&str>); 3] = [
+const OTHER_WRITERS: [(&str, &str, Option<&str>); 4] = [
     ("state.json", "written by forge PqzStateVectors.t.sol, checked by pqz_kat.py check_state and ua-rs", None),
     ("verdict.json", "written by forge PqzVerdictVectors.t.sol, checked by clientkeys pqz-verdict.test.js and scaas-node pqz.rs", Some("n2304-kmax4096")),
     (
         "verifier_fee.json",
         "written by forge PqzVerifierFeeVectors.t.sol, checked by clientkeys pqz-verifier-fee.test.js, ua-rs tests/pqzfee.rs and scaas-node pqz.rs",
+        Some("n2304-kmax4096"),
+    ),
+    (
+        "wallet_state.json",
+        "written by gen_wallet_state.sh (ua-rs tests/pqz_wallet_rows.rs write_wallet_rows), read by every binding's wallet rows",
         Some("n2304-kmax4096"),
     ),
 ];
