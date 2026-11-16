@@ -449,7 +449,7 @@ group() {
 # owner 2026-11-16 ("many transactions per block, groups in parallel"): a remote target runs the groups in waves
 # (script/onchain/sched.py plan: a group after the groups it needs, views alone after the others), the groups of a wave at
 # the same time, each with its OWN key set (ONCHAIN_K1..K3, PRIVATE_KEY = K1: indexes of SCAAS_TESTNET_MNEMONIC_FILE fixed by
-# the group's name, topped up to MATRIX_FUND_ETH (2) from its index 0 in one batch; rescue and wraplimits keep the target's
+# the group's name, topped up to its group's budget (sched.py FUND) from its index 0 in one batch; rescue and wraplimits keep the target's
 # own keys, never two of them at once), its own log ($OUTD/matrix-<target>-<group>.log), its result line and heartbeat; a
 # failing group stops no other, the run's rc is non-zero. MATRIX_PARALLEL=0: one group after the other, as before (local:
 # the default, one anvil). MATRIX_TEST_FAIL=<group>: that group's command is `false` (the scheduler's own test).
@@ -469,11 +469,11 @@ if [ "$PAR" = 1 ]; then
       gn=${x%%=*} ks=
       for i in $(echo "${x#*=}" | tr ',' ' '); do ks="$ks $(mk "$i")"; done
       eval "KS_$gn=\"\$ks\""
-      for k in $ks; do FA="$FA $(cast wallet address --private-key "$k")"; done
+      for k in $ks; do FA="$FA $gn=$(cast wallet address --private-key "$k")"; done
     done
     FUND_KEY=$(mk 0) && rm -f "$T/m"
-    say "" "fund the groups' key sets (index 0 -> ${MATRIX_FUND_ETH:-2} ETH each) …"
-    FUND_KEY=$FUND_KEY python3 -I script/onchain/sched.py fund "$RPC" "$(cast to-wei "${MATRIX_FUND_ETH:-2}")" $FA >> "$LOG" 2>&1 ||
+    say "" "fund the groups' key sets from index 0 (sched.py's budget per group) …"
+    FUND_KEY=$FUND_KEY python3 -I script/onchain/sched.py fund "$RPC" $FA >> "$LOG" 2>&1 ||
       fail "fund: $(tail -1 "$LOG")"
     FUND_KEY=
     say "" "$(tail -1 "$LOG" | sed 's/^\[fund\] //')"

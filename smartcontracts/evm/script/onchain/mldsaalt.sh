@@ -22,6 +22,10 @@ if [ "${DEPLOY_SET:-}" = mldsa-off ]; then
   alt=off
   echo "[$NET/mldsaalt] deploy set mldsa-off: the throwaway registry off; the on side is the deploy set mldsa-on (real transactions)"
 fi
+# reset 5: the main deploy's PqzKeyVerifier for the throwaway registry's 0x0142 (DeployBase's gen-1 gate refuses a registry
+# without it where the PQZ precompile answers); none in a book without one (anvil)
+PQZ_KEY_VERIFIER=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1])).get("pqz_key_verifier", ""))' "$DEPLOY_JSON")
+[ -n "$PQZ_KEY_VERIFIER" ] && export PQZ_KEY_VERIFIER || unset PQZ_KEY_VERIFIER
 MLDSAALT_SALT=$(cast keccak "scaas.onchain.mldsaalt.$NET.$(date +%s).$$")
 export MLDSAALT_SALT MLDSA_PRECOMPILE=$alt
 echo "[$NET/mldsaalt] main deploy MLDSA_PRECOMPILE=$main: the throwaway registry $alt"

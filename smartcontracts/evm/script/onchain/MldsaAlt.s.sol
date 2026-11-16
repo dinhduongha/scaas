@@ -35,6 +35,9 @@ contract MldsaAlt is OnchainBase, DeployBase {
         mldsa44Verifier = vm.envOr("MLDSA44_VERIFIER", address(0));
         mldsa65Verifier = vm.envOr("MLDSA65_VERIFIER", address(0));
         mldsa87Verifier = vm.envOr("MLDSA87_VERIFIER", address(0));
+        // reset 5: a chain whose PQZ precompile answers needs 0x0142 in every gen-1 registry (DeployBase's gate); the
+        // throwaway one takes the main deploy's PqzKeyVerifier (mldsaalt.sh, the book's pqz_key_verifier)
+        pqzKeyVerifier = vm.envOr("PQZ_KEY_VERIFIER", address(0));
         pj = vm.readFile("../vectors/ua/pq_signatures.json");
         mc = vm.readFile("../vectors/ua/mldsa_cache.json");
         vm.startBroadcast(k1);

@@ -51,7 +51,8 @@ after `pq`: both write e2e's `deployments/<key>-pqz.json`; `views` alone after t
 last), and a list that names a group before one it needs is refused (`GROUP_ORDER`). The groups of a wave run at the same
 time, each with its own key set: `ONCHAIN_K1..K3` (and `PRIVATE_KEY` = K1, `ONCHAIN_PQ_KEYS` for e2e.py) from indexes of
 `SCAAS_TESTNET_MNEMONIC_FILE` fixed by the group's name (from index 10; `sched.py plan` prints them), topped up to
-`MATRIX_FUND_ETH` (2) from its index 0 in one batch before the first wave (`sched.py fund`); `rescue` and `wraplimits` keep
+the group's budget (`sched.py` `FUND`: twice the busiest key's measured spend, at least 2 ETH; `MATRIX_FUND_ETH` overrides; the
+pqoff group's e2e deployer key spent ~2 ETH in its first 67 transactions on the SCaaS testnet) from its index 0 in one batch before the first wave (`sched.py fund`); `rescue` and `wraplimits` keep
 the target's own keys (the vault's genesis admin and rescuer, wraplimits' state) and never run at once. Each group has its own
 log (`matrix-<target>-<group>.log`), result line and 30 s heartbeat; a failing group stops no other, and the run's rc is
 non-zero. `MATRIX_PARALLEL=0` runs one group after the other (the default on `local`: one anvil, wraplimits moves its clock).
