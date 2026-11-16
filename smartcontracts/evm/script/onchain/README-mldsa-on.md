@@ -1,6 +1,6 @@
 # Deploy set `mldsa-on`: the real-transaction rows
 
-Status: groups `mldsa`, `tokens`, `pqchat` **BUILT** (green on local anvil, set `mldsa-off`; the precompile path on an own Nethermind copy, set `mldsa-on`, see the commits); `pqzkeys` **BUILT** (`mldsa_on_pqz.py`, green on the own Nethermind copy, set `mldsa-on`; not yet on local anvil, set `mldsa-off`); `pqzwallet` **PLANNED** (in progress). Their run on the live set waits for reset 5. Test chains only. **UNAUDITED.**
+Status: groups `mldsa`, `tokens`, `pqchat` **BUILT** (green on local anvil, set `mldsa-off`; the precompile path on an own Nethermind copy, set `mldsa-on`, see the commits); `pqzkeys`, `pqzwallet` **BUILT** (`mldsa_on_pqz.py`, green on the own Nethermind copy, set `mldsa-on`; not yet on local anvil, set `mldsa-off`). Their run on the live set waits for reset 5. Test chains only. **UNAUDITED.**
 
 Owner 2026-11-16 ("Ok, cách 2, một chain hai bộ deploy"; "Ok, cách 1, bắt đầu viết ngay"): reset 5 deploys the same build twice on
 the SCaaS testnet, set `mldsa-off` (`MLDSA_PRECOMPILE=off`, the registry's expanded-key cache) for the whole forge matrix
@@ -85,6 +85,9 @@ Their `_pq` rows run in `PqzKeysSetup` (`_pqOn`: a token of each PQZ kind config
 set `mldsa-on` in `tokens` here, on tokens of those kinds.
 
 ### `pqzwallet` (PqzWallet.s.sol)
+
+**BUILT** (`mldsa_on_pqz.py` `g_pqzwallet`; the own Nethermind copy, set `mldsa-on`: 26 / 26 txs, 8 checks of the wallet and
+auditor outcomes as forge's, 5 records unproven by D3, each a status-3 `gap:` row).
 
 After `pqzkeys` (its holders, bob's records): dave and erin (`_holder` 85-99), their records with the real keys of
 `pqz-wallet-sim keys` (`_real` 136-167), the two tokens `c2w`, `c3w`, bob's honest and planted credits (`_credits`, `_credit`

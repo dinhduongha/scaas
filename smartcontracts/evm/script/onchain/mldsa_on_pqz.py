@@ -772,3 +772,208 @@ def owner_ops(sd, sr, t, router):
             fn = "mtx" + op[2:]
             sr.send(gr, M.cdx(M.fsig("GovernanceRouter.sol/GovernanceRouter", fn), e, t, *vs, uid, native(sd.key, d)), f"{lab(t)} router {fn}")
     E.check(cfg_word(t, 1) == 0, f"{lab(t)}: the verifier revoked")
+
+
+# ------------------------------------------------------------------ group pqzwallet (PqzWallet.s.sol)
+
+def gap_row(ua, scope, reg):
+    """D3: the record row of a scoped record stored without its R_REG (the wallet has no prover)."""
+    return {"net": M.NET, "group": M.GROUP, "set": M.ARGS.set if M.ARGS else "", "to": reg.lower(),
+            "sel": E.sel(sigs().store_scoped).hex(), "tx": "", "gas": 0, "status": 3,
+            "what": f"gap: 0x{ua.hex()} scope {scope} record unproven (D3)"}
+
+
+def d3_skip(rreg):
+    """D3: skip `storePqzScopedPop` exactly where the registry checks R_REG (a filler there is refused `UAPoP`)."""
+    return bool(rreg)
+
+
+def tool(q):
+    """One `pqz-wallet-sim` call, its JSON on stdin (as forge's `_tool`)."""
+    path = TOOL if os.path.isabs(TOOL) else os.path.join(M.EVM, TOOL)
+    out = subprocess.run([path], input=json.dumps(q), capture_output=True, text=True)
+    if out.returncode or not out.stdout.startswith("{"):
+        raise RuntimeError(f"pqz-wallet-sim {q.get('cmd')}: rc {out.returncode} {out.stderr.strip()[-300:]}")
+    return json.loads(out.stdout)
+
+
+def rec(seed64, h, scope):
+    return {"seed": "0x" + seed64.hex(), "ua": "0x" + h.ua.hex(), "chainUid": "0x" + E.CTX[1].hex(),
+            "scope": None if int(scope, 16) == 0 else scope, "version": 0}
+
+
+def key_of(h, scope):
+    ptr = "0x" + E.words(view(E.REG[0], sigs().scoped_at, h.ua, scope, 0))[0][12:].hex()
+    return E.hb(E.rpc("eth_getCode", [ptr, "latest"]))[1:]
+
+
+def kem_at(h, scope):
+    r = E.hb(view(E.REG[0], sigs().open_kem, h.ua, scope, 0))
+    o = int.from_bytes(r[:32], "big")
+    sch, eo, x = int.from_bytes(r[o:o + 32], "big"), int.from_bytes(r[o + 32:o + 64], "big"), r[o + 64:o + 96]
+    n = int.from_bytes(r[o + eo:o + eo + 32], "big")
+    return kem_pk([sch, r[o + eo + 32:o + eo + 32 + n], x])
+
+
+def scope_of(t):
+    return t if own(t) else E.ZERO
+
+
+def real(pq, sd, h, seed64, scope, gaps):
+    """forge `_real`: `h`'s record of `scope` with its real key and opening KEM key from the wallet (`keys`), signed by its
+    ML-DSA key. D3: no R_REG prover in the wallet; on a registry that checks R_REG the record stays unproven (no
+    `storePqzScopedPop`), recorded as a gap row."""
+    reg = E.REG[0]
+    o = tool({"cmd": "keys", **rec(seed64, h, scope)})
+    key, kp = E.hb(o["pqzKey"]), E.hb(o["openKem"])
+    k = [kp[0], kp[1:1569], kp[1569:1601]]
+    pop = E.kc(E.encs(["w", "w", "w", "b"], [E.kc(P.RUN), h.ua, scope, b"wallet"]))
+    vb = vub()
+    d, _ = rec_digest(h, scope, 0, key, E.kc(pop), k, vb, E.CTX[1])
+    nm = f"{h.name} scope {scope[:10]}…"
+    sd.send(reg, M.cdx(sigs().set_scoped, h.ua, scope, 0, key, E.kc(pop), k, vb, E.ml_sig(pq, h, P.P_SCOPED, d)), f"setPqzScopedKey {nm} (wallet key)")
+    if d3_skip(gaps):
+        E.log(f"      {nm}: record unproven (D3: no R_REG prover in the wallet; storePqzScopedPop not sent)")
+        M.REC.append(gap_row(h.ua, scope, reg))
+    else:
+        sd.send(reg, M.cdx(sigs().store_scoped, h.ua, scope, 0, pop), f"storePqzScopedPop {nm} (filler, unchecked)")
+
+
+def wtoken(sd, own_, what):
+    """forge `_tok`: kind 4 with the opening, auditor erin (OPTIONAL), class 3 (`own_`) or 2."""
+    t = create(sd, 4, f"Onchain PQZ wallet {what}", "oPQW", 1 << PAYABLE | 1 << PQZ_PROOF, f"pqzwallet-{what}",
+               conf(own_, 1, auditor=S["erin"].ua, amode=2), supply=10**15)
+    S["label"][t] = what
+    return t
+
+
+def g_pqzwallet(pq, sd, sr, s3):
+    """PqzWalletSetup.setup(), then after ROLL_AGE + 1 blocks PqzWalletRoll.roll(); after pqzkeys (its bob)."""
+    _bind()
+    if "bob" not in S:
+        raise M.Stop("PQZKEYS_FIRST: pqzwallet needs pqzkeys' holders in the same run (--groups pqzkeys,pqzwallet)")
+    gaps = rreg_on()
+    for n in ("dave", "erin"):
+        S[n] = M.ml_ua(pq, sd, n, E.MLDSA65, E.kc(PRE, P.RUN, b"wallet", n))
+        S[n + "64"] = E.kc(PRE, P.RUN, n, b"64a") + E.kc(PRE, P.RUN, n, b"64b")
+    S["bob64"] = E.kc(PRE, P.RUN, b"bob", b"64a") + E.kc(PRE, P.RUN, b"bob", b"64b")
+    dave, erin, bob = S["dave"], S["erin"], S["bob"]
+    real(pq, sd, dave, S["dave64"], E.ZERO, gaps)
+    real(pq, sd, erin, S["erin64"], E.ZERO, gaps)  # class 2 reads the auditor's scope-0 record at init
+    S["c2w"], S["c3w"] = wtoken(sd, 0, "c2w"), wtoken(sd, 1, "c3w")
+    for h in (dave, erin, bob):
+        real(pq, sd, h, S[h.name + "64"], S["c3w"], gaps)
+    credits(pq, sd, sr, S["c2w"], True)
+    credits(pq, sd, sr, S["c3w"], False)
+    save()
+    b0 = head()
+    h = wait_roll(b0)
+    M.say(f"roll wait over: block {h} ≥ {b0} + {E.ROLL_AGE + 1}")
+    honest(pq, sr, S["c2w"], 8)
+    modified(pq, sr, S["c3w"])
+
+
+def credits(pq, sd, sr, t, every):
+    """forge `_credits`: bob shielded 200, then his op 1 credits to dave: without the auditor (class 2: all four), with it."""
+    shield(sd, t, S["bob"], 200)
+    for v in ("honest", "junk", "wrongseed", "craftedv")[:4 if every else 2]:
+        credit(pq, sr, t, v, False, 5)
+    for v in ("honest", "junk_oa", "junk_ot", "oa_coins")[:4 if every else 2]:
+        credit(pq, sr, t, v, True, 3)
+
+
+def credit(pq, sr, t, variant, aud, amount):
+    """forge `_credit`: the wallet's sender side builds the ciphertexts and openings (honest or planted), bob sends op 1."""
+    bob, dave, erin = S["bob"], S["dave"], S["erin"]
+    sc = scope_of(t)
+    hx = lambda b: "0x" + b.hex()  # noqa: E731
+    q = {"cmd": "credit", "chainUid": hx(E.CTX[1]), "token": t, "toUA": hx(dave.ua), "toVersion": 0, "pkT": hx(key_of(dave, sc)),
+         "kemPkT": hx(kem_at(dave, sc)), "pkF": hx(key_of(bob, sc)), "balanceF": 0, "amount": amount,
+         "seedEnc": hx(E.kc(P.RUN, t.encode(), variant.encode(), bytes([aud]))), "variant": variant,
+         "auditor": {"ua": hx(erin.ua), "version": 0, "pk": hx(key_of(erin, sc)), "kemPk": hx(kem_at(erin, sc))} if aud else None}
+    o = tool(q)
+    op = lambda k: [E.hb(o[k]["mlkemCt"]), E.hb(o[k]["x25519Eph"]), E.hb(o[k]["sealedSeed"])]  # noqa: E731
+    a = [acct(t, bob.ua)["pendingCount"], vub(), 0, bob.ua, 0, dave.ua, E.ZERO32, E.kc(P.RUN, variant.encode(), bytes([aud]))[:16] + bytes(16),
+         E.ZERO32, E.hb(o["u"]), E.hb(o["vTo"]), E.hb(o["vFrom"]), E.hb(o["vAuditor"]) if aud else b"", E.hb(o["uFrom"]), b"",
+         op("openingTo"), op("openingAuditor") if aud else E.NO_OPENING]
+    send1(pq, sr, t, bob, a, False, f"bob → dave {variant}{' (auditor)' if aud else ''}")
+    E.log(f"      credit {variant} to dave at index {acct(t, dave.ua)['pendingCount'] - 1}")
+
+
+def w_entries(t):
+    sc = scope_of(t)
+    erin, dave = S["erin"], S["dave"]
+    aud = {"ua": "0x" + erin.ua.hex(), "pk": "0x" + key_of(erin, sc).hex(), "kemPk": "0x" + kem_at(erin, sc).hex()}
+    out = []
+    for i in range(acct(t, dave.ua)["pendingCount"]):
+        w = u(view(t, sigs().pending, dave.ua, 0, i))
+        code = E.rpc("eth_getCode", ["0x" + (w >> 96).to_bytes(20, "big").hex(), "latest"]) if (w >> 64) & 0xFFFF else "0x"
+        cb = E.hb(code)
+        out.append({"index": i, "slot": "0x" + w.to_bytes(32, "big").hex(), "code": code,
+                    "auditor": aud if len(cb) > 1 and cb[-1] == 2 else None})
+    return out
+
+
+def refresh_args(t, seed):
+    b = burn_args(t, S["dave"], seed)
+    return b, stmt(t, 2, [b, 0, E.ZERO32])
+
+
+def t_of(st):
+    """forge `_t`: T of a debit statement (header ‖ pk_f ‖ [pk_a] ‖ T ‖ u ‖ v_f ‖ [v_a])."""
+    pk = K.PK_BYTES
+    off = 640 + pk + (pk if len(st) > 640 + 2 * pk + K.CT_BYTES + K.V_BYTES else 0)
+    return st[off:off + K.CT_BYTES]
+
+
+def wallet(t, st):
+    dave = S["dave"]
+    a = acct(t, dave.ua)
+    return tool({"cmd": "wallet", **rec(S["dave64"], dave, scope_of(t)), "token": t, "entries": w_entries(t),
+                 "reads": {"block": head(), "finalized": True, "strictMajority": True},
+                 "window": {"from": a["rolled"], "to": a["pendingCount"]}, "t": "0x" + t_of(st).hex()})
+
+
+def refresh(pq, sr, t, b, st):
+    sr.send(t, E.cd(E.API["unshield"], [E.BURN_T, "w", "w"] + E.AUTH_T + [E.SV_T], b, 0, E.ZERO32, VPROOF,
+                    auth(pq, S["dave"], 2, st), b"", E.verdict(t, st, VPROOF)), f"{lab(t)} refresh by dave")
+
+
+def audit(t):
+    sc, dave, erin = scope_of(t), S["dave"], S["erin"]
+    a = acct(t, dave.ua)
+    return tool({"cmd": "audit", **rec(S["erin64"], erin, sc), "pk": "0x" + key_of(erin, sc).hex(), "token": t, "rolled": a["rolled"],
+                 "floor": a["floor"], "recipient": {"ua": "0x" + dave.ua.hex(), "pk": "0x" + key_of(dave, sc).hex(),
+                                                    "kemPk": "0x" + kem_at(dave, sc).hex()}, "entries": w_entries(t)})
+
+
+def outcomes(o, want, what):
+    got = [x["outcome"] for x in o["entries"]][:len(want)]
+    E.check(got == list(want), f"{what}: outcomes {got}" + ("" if got == list(want) else f" (want {list(want)})"))
+
+
+def honest(pq, sr, t, want):
+    """forge `_honest`: the window refused (no secret loaded) while skips are unmarked; dave's signed marks (n = 0); the
+    window opened, its balance `want`; a refresh; the auditor tool."""
+    dave = S["dave"]
+    b, st = refresh_args(t, 0x9A01)
+    o = wallet(t, st)
+    outcomes(o, ["accepted", "skip", "skip", "skip", "accepted", "skip", "skip", "skip"], f"{lab(t)} wallet check")
+    E.check(not o["window"]["opened"] and o["secretLoads"] == 0, f"{lab(t)}: window refused, no secret loaded")
+    marks = [int(x) for x in o["marks"]]
+    vb = vub()
+    sr.send(t, roll_cd(dave, 0, marks, vb, roll_sig(pq, t, dave, 0, marks, vb)), f"{lab(t)} dave's marks {marks} (signed, n = 0)")
+    E.check(all(skipped(t, dave, i) for i in marks), f"{lab(t)}: every mark on chain")
+    b, st = refresh_args(t, 0x9A01)
+    o = wallet(t, st)
+    E.check(o["window"]["opened"] and o["secretLoads"] == 1 and int(o["window"]["balance"]) == want,
+            f"{lab(t)}: window opened once, balance {o['window'].get('balance')} = the accepted {want}")
+    refresh(pq, sr, t, b, st)
+    outcomes(audit(t), ["no auditor leg"] * 4 + ["read", "unreadable", "recipient-unreadable", "unreadable"], f"{lab(t)} auditor")
+
+
+def modified(pq, sr, t):
+    """forge `_modified`: a modified wallet refreshes past the credits unmarked; the auditor then reports `unreadable, taken`."""
+    b, st = refresh_args(t, 0x9B01)
+    refresh(pq, sr, t, b, st)
+    outcomes(audit(t), ["no auditor leg", "no auditor leg", "read", "unreadable, taken"], f"{lab(t)} auditor after a modified wallet")

@@ -21,7 +21,7 @@ import pq as P  # noqa: E402  (imports e2e.py as P.E, with pq.py's recording pat
 E = P.E
 EVM, VEC = P.EVM, os.path.abspath(os.path.join(P.EVM, "../vectors"))
 SETS = {"mldsa-off": "off", "mldsa-on": "on"}  # label -> the deploy's MLDSA_PRECOMPILE (reset 5, deploybook.py SETS)
-GROUPS = ("mldsa", "tokens", "pqchat", "pqzkeys")
+GROUPS = ("mldsa", "tokens", "pqchat", "pqzkeys", "pqzwallet")
 CAP_7825 = 1 << 24  # EIP-7825: the chain caps a transaction's regular gas here
 REC, SENDERS, NEGS = [], [], [0, 0]
 DEP = {}  # the set's book entries

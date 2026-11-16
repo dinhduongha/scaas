@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """No chain: mldsa_on.py's set selection (each refusal by name beside its control, one field changed) and its envelope
 canonicalisation (`MetaTxLib.canon`: a non-zero unbound relayer / fee recipient is signed as zero), and mldsa_on_pqz.py's
-roll wait (bounded, `ROLL_WAIT`; `evm_mine` on anvil) and forge's filler bytes; each test run against a mutant of what it guards, which
+roll wait (bounded, `ROLL_WAIT`; `evm_mine` on anvil), D3's unproven wallet records (no `storePqzScopedPop` where the
+registry checks R_REG, a gap row instead) and forge's filler bytes; each test run against a mutant of what it guards, which
 it must catch.  python3 -I script/onchain/test_mldsa_on.py"""
 import os
 import sys
@@ -162,6 +163,46 @@ def mutant_no_mine(b0, n=None, limit=300, rpc=None, sleep=None, clock=None):
     return h
 
 
+class Sd:
+    addr, key = "0x" + "01" * 20, 1
+
+    def __init__(self):
+        self.sent = []
+
+    def send(self, to, data, what, gas=None):
+        self.sent.append(what)
+
+
+def t_real(real):
+    """True iff `real` (a wallet record, D3) sends setPqzScopedKey alone and appends one gap row where the registry checks
+    R_REG, and (control) both transactions and no gap row where it does not. Tool, signer and views stubbed."""
+    E = Q.E
+    kp = b"\x01" + bytes(1568) + bytes(32)
+    saved = (Q.tool, Q.rec_digest, Q.vub, E.ml_sig, E.REG[0], E.CTX[:])
+    Q.tool = lambda q: {"pqzKey": "0x" + bytes(64).hex(), "openKem": "0x" + kp.hex()}
+    Q.rec_digest = lambda *a: (bytes(32), bytes(32))
+    Q.vub = lambda: 1
+    E.ml_sig = lambda pq, h, p, d: [b"", b"s", []]
+    E.REG[0], E.CTX[:] = "0x" + "0c" * 20, [1337, bytes(32)]
+    out = []
+    try:
+        for gaps in (True, False):
+            sd, n0 = Sd(), len(M.REC)
+            real(None, sd, E.UA(name="dave", ua=bytes(31) + b"\x07"), bytes(64), E.ZERO, gaps)
+            out.append((sd.sent, M.REC[n0:]))
+            del M.REC[n0:]
+    finally:
+        Q.tool, Q.rec_digest, Q.vub, E.ml_sig, E.REG[0], E.CTX[:] = saved
+    (s1, g1), (s2, g2) = out
+    rows = [
+        len(s1) == 1 and s1[0].startswith("setPqzScopedKey"),
+        len(g1) == 1 and g1[0]["status"] == 3 and g1[0]["tx"] == "" and g1[0]["sel"] == E.sel(Q.sigs().store_scoped).hex()
+        and g1[0]["what"].startswith("gap: 0x" + "00" * 31 + "07 scope ") and g1[0]["what"].endswith("record unproven (D3)"),
+        len(s2) == 2 and s2[1].startswith("storePqzScopedPop") and g2 == [],
+    ]
+    return all(rows)
+
+
 def t_blob(b):
     x, y = b(0x7C01, 18_432), b(0x7C02, 18_432)
     lanes = [int.from_bytes(x[i:i + 8], "big") for i in range(0, len(x), 8)]
@@ -178,6 +219,10 @@ if __name__ == "__main__":
     check(t_wait(Q.wait_roll), "wait_roll: every row")
     check(not t_wait(mutant_unbounded), "mutant: wait_roll without its bound is caught")
     check(not t_wait(mutant_no_mine), "mutant: wait_roll without evm_mine on anvil is caught")
+    check(t_real(Q.real), "real (D3): a gap row, no storePqzScopedPop where R_REG is checked; control without it")
+    d3, Q.d3_skip = Q.d3_skip, lambda r: not r
+    check(not t_real(Q.real), "mutant: D3 inverted (storePqzScopedPop sent on an R_REG registry) is caught")
+    Q.d3_skip = d3
     check(t_blob(Q.blob), "blob: forge's filler, every 64-bit lane < 2^40")
     check(not t_blob(lambda seed, n: b"".join(Q.E.kc(Q.W(seed), Q.W(i)) for i in range(0, n, 32))[:n]),
           "mutant: blob without the lane mask is caught")
