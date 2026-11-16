@@ -118,4 +118,3 @@ export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua
     wipe() { if (pqzSeed) pqzSeed.fill(0); pqzSeed = null; kem.dk.fill(0); kem.x25519Secret.fill(0); okSeed.fill(0); },
   });
 }
-
