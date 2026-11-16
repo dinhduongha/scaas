@@ -229,6 +229,14 @@ pub(crate) struct Handle {
     slot: Slot,
 }
 
+/// `WalletMismatch` if `m` has a first entry and `seed` does not derive its UA; an empty manifest has nothing to compare.
+fn seed_matches(seed: &[u8; 64], m: &Manifest) -> Result<()> {
+    match m.entries.first() {
+        Some(e) if entry_ua(seed, e)? != e.ua => Err(Error::WalletMismatch),
+        _ => Ok(()),
+    }
+}
+
 impl SecretStore {
     pub(crate) fn new() -> Arc<SecretStore> {
         Arc::new(SecretStore(RwLock::new(Inner { generation: 0, arena: None, manifest: Manifest::default() })))
@@ -252,12 +260,24 @@ impl SecretStore {
         if g.arena.is_some() {
             return Err(Error::Argument);
         }
-        if let Some(e) = g.manifest.entries.first() {
-            if entry_ua(seed, e)? != e.ua {
+        seed_matches(seed, &g.manifest)?;
+        g.arena = Some(Arena::new(entropy, seed)?);
+        Ok(())
+    }
+
+    /// Replaces the manifest (a `manifest` vault opened). While unlocked, under the write lock and before it moves:
+    /// `WalletMismatch` if the open seed does not derive the UA of `m`'s first entry (as [`SecretStore::open`]), or if `m`
+    /// lists an import the arena holds under another network than the current manifest (CLI-SGN-11: the held key keeps its
+    /// network). Locked, `m` is kept and [`SecretStore::open`] checks it at the next unlock.
+    pub(crate) fn set_manifest(&self, m: Manifest) -> Result<()> {
+        let mut g = self.write();
+        if let Some(a) = &g.arena {
+            seed_matches(&Zeroizing::new(a.get(a.seed)?.try_into().map_err(|_| Error::Argument)?), &m)?;
+            if m.imports.iter().any(|e| a.secret(KeyId::Import(e.n)).is_some() && !g.manifest.imports.contains(e)) {
                 return Err(Error::WalletMismatch);
             }
         }
-        g.arena = Some(Arena::new(entropy, seed)?);
+        g.manifest = m;
         Ok(())
     }
 

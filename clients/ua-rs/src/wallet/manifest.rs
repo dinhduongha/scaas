@@ -335,24 +335,26 @@ impl BackupPayload {
     /// `{v, generation, entropy, secrets: [{label, bytes}], manifest: {entries: [{kind, account, index, ua}]}}`, the bytes
     /// base64url: clientkeys `encodeBackup`'s bytes.
     fn to_json(&self) -> Zeroizing<String> {
-        let mut s = Zeroizing::new(String::with_capacity(256));
-        s.push_str(&format!("{{\"v\":1,\"generation\":{},\"entropy\":\"", self.generation));
-        s.push_str(&Zeroizing::new(Base64UrlUnpadded::encode_string(&self.entropy)));
-        s.push_str("\",\"secrets\":[");
+        // the parts first (each its own exact buffer, the secret ones wiped), then one buffer of their summed size: a buffer
+        // that grew would free its earlier copy unwiped (T21 L32)
+        let mut parts: Vec<Zeroizing<String>> = Vec::with_capacity(4 + 4 * self.secrets.len());
+        parts.push(Zeroizing::new(format!("{{\"v\":1,\"generation\":{},\"entropy\":\"", self.generation)));
+        parts.push(Zeroizing::new(Base64UrlUnpadded::encode_string(&self.entropy)));
+        parts.push(Zeroizing::new("\",\"secrets\":[".into()));
         for (n, (e, b)) in self.secrets.iter().enumerate() {
-            s.push_str(if n == 0 { "{\"label\":\"" } else { ",{\"label\":\"" });
-            s.push_str(&e.label());
-            s.push_str("\",\"bytes\":\"");
-            s.push_str(&Zeroizing::new(Base64UrlUnpadded::encode_string(b)));
-            s.push_str("\"}");
+            parts.push(Zeroizing::new(format!("{}{}\",\"bytes\":\"", if n == 0 { "{\"label\":\"" } else { ",{\"label\":\"" }, e.label())));
+            parts.push(Zeroizing::new(Base64UrlUnpadded::encode_string(b)));
+            parts.push(Zeroizing::new("\"}".into()));
         }
-        s.push_str("],\"manifest\":{\"entries\":[");
-        s.push_str(&self.entries.iter().map(entry_json).collect::<Vec<_>>().join(","));
+        let mut tail = format!("],\"manifest\":{{\"entries\":[{}", self.entries.iter().map(entry_json).collect::<Vec<_>>().join(","));
         if !self.imported_uas.is_empty() {
-            s.push_str("],\"importedUas\":[");
-            s.push_str(&self.imported_uas.iter().map(imported_ua_json).collect::<Vec<_>>().join(","));
+            tail.push_str("],\"importedUas\":[");
+            tail.push_str(&self.imported_uas.iter().map(imported_ua_json).collect::<Vec<_>>().join(","));
         }
-        s.push_str("]}}");
+        tail.push_str("]}}");
+        parts.push(Zeroizing::new(tail));
+        let mut s = Zeroizing::new(String::with_capacity(parts.iter().map(|p| p.len()).sum()));
+        parts.iter().for_each(|p| s.push_str(p));
         s
     }
 
@@ -452,8 +454,7 @@ impl Wallet {
     /// listed in the manifest and the backup. `Argument` for another length or an invalid secret; `WalletLocked` while locked.
     // ponytail: raw 32-byte secrets only; a Stellar `S…` strkey or a 64-byte Solana keypair is the caller's to split.
     pub fn import_native_key(&self, network: Network, secret: &[u8]) -> Result<NativeKey> {
-        let n = self.store.manifest().imports.iter().map(|i| i.n.saturating_add(1)).max().unwrap_or(0);
-        self.import_at(ImportEntry { network, n }, secret)?;
+        let n = self.import_at(network, None, secret)?;
         self.imported_key(network, n)
     }
 
@@ -487,14 +488,17 @@ impl Wallet {
         Ok(UaKey { kind, account: u32::MAX, index: u32::MAX, key_data, ua: Some(ua), secret, imported: true })
     }
 
-    /// `secret` as import `e`: already held with the same bytes, a no-op; listed (a manifest vault opened first) and not held,
-    /// installed; another network or other bytes under the same `n`: `Argument`.
-    fn import_at(&self, e: ImportEntry, secret: &[u8]) -> Result<()> {
+    /// `secret` as import `n` of `network` (`None`: the next free number, picked under the store's write lock, so two imports at
+    /// once get two numbers): already held with the same bytes, a no-op; listed (a manifest vault opened first) and not held,
+    /// installed; another network or other bytes under the same `n`: `Argument`. Returns `n`.
+    fn import_at(&self, network: Network, n: Option<u32>, secret: &[u8]) -> Result<u32> {
         if secret.len() != 32 {
             return Err(Error::Argument);
         }
-        let public = derive::native_public(e.network, secret)?;
+        let public = derive::native_public(network, secret)?;
         self.store.with_all(|a, m| {
+            let n = n.unwrap_or_else(|| m.imports.iter().map(|i| i.n.saturating_add(1)).max().unwrap_or(0));
+            let e = ImportEntry { network, n };
             if m.imports.iter().any(|i| i.n == e.n && i.network != e.network) {
                 return Err(Error::Argument);
             }
@@ -506,7 +510,7 @@ impl Wallet {
             if !m.imports.contains(&e) {
                 m.imports.push(e);
             }
-            Ok(())
+            Ok(n)
         })
     }
 
@@ -523,15 +527,15 @@ impl Wallet {
         Vault::seal(label, &secret, vault_passphrase, prf)
     }
 
-    /// Opens a vault of [`Wallet::seal_label_vault`] into this wallet: `manifest` replaces the manifest, `native-import:…`
+    /// Opens a vault of [`Wallet::seal_label_vault`] into this wallet: `manifest` replaces the manifest (while unlocked only
+    /// if this wallet's seed derives its first entry's UA and it names each held import under that import's network, else
+    /// `WalletMismatch` and the manifest stays as it was; locked, the next unlock checks it), `native-import:…`
     /// installs that key, `pqz-held:…` installs that PQZ key only if its `seed32` gives a key of the label's `pqzKeyHash`
     /// (`Argument` otherwise, nothing held; `KindUnavailable` on a build without `pqz`). `Argument` for another label (the
     /// seed vault opens with [`Wallet::open_vault`]); errors of the vault as [`Wallet::open_vault`].
     pub fn open_label_vault(&self, vault: &Vault, unlock: Unlock) -> Result<()> {
         if vault.label() == "manifest" {
-            let m = Manifest::from_json(&vault.open(unlock)?)?;
-            self.store.note(|x| *x = m);
-            return Ok(());
+            return self.store.set_manifest(Manifest::from_json(&vault.open(unlock)?)?);
         }
         let h = Held::parse(vault.label())?;
         self.install_held(h, &vault.open(unlock)?)
@@ -539,7 +543,7 @@ impl Wallet {
 
     fn install_held(&self, h: Held, secret: &[u8]) -> Result<()> {
         match h {
-            Held::Import(e) => self.import_at(e, secret),
+            Held::Import(e) => self.import_at(e.network, Some(e.n), secret).map(|_| ()),
             Held::Pqz(p) => self.install_pqz_held(p, secret),
         }
     }
@@ -578,7 +582,9 @@ impl Wallet {
     /// opener's check), signed by `sender` as [`Wallet::backup_seal`]'s, over the same `BackupPayload` (the entropy, the
     /// imported keys, the manifest entries with `sender`'s, the current `backup_generation`: a link raises none). `Argument`
     /// for a sender of another wallet or of a kind that does not sign containers, or an empty short code; `KemCheck` for the
-    /// key; `WalletLocked` while locked. The BIP-39 passphrase is never in it.
+    /// key; `WalletLocked` while locked. The BIP-39 passphrase is never in it. The short code does not protect the payload
+    /// against a swapped key: `session_kem_pk` must reach this device over an authenticated channel (a direct QR scan of the new
+    /// device's screen), never a relay, deep link or pasted string (CLI-UAL-12, owner 2026-11-16).
     pub fn link_seal(&self, sender: &UaKey, session_kem_pk: &[u8], short_code: &str) -> Result<SealedContainer> {
         self.link_seal_with(sender, session_kem_pk, short_code, now()?, kem_encaps)
     }
@@ -666,9 +672,14 @@ fn install(p: BackupPayload, bip39_passphrase: &str) -> Result<Wallet> {
     Ok(w)
 }
 
-/// The wallet of a link payload (the same `BackupPayload`; [`Wallet::from_link`]).
-pub(super) fn install_link(pt: &[u8], bip39_passphrase: &str) -> Result<Wallet> {
-    install(BackupPayload::from_json(pt)?, bip39_passphrase)
+/// The wallet of a link payload (the same `BackupPayload`; [`Wallet::from_link`]): its entropy (with `bip39_passphrase`) must
+/// derive `sender` at the entry naming it, as [`Wallet::restore_backup`]'s (`ContainerSender`).
+pub(super) fn install_link(pt: &[u8], sender: &[u8; 32], bip39_passphrase: &str) -> Result<Wallet> {
+    let p = BackupPayload::from_json(pt)?;
+    if !derives_sender(&p, sender, bip39_passphrase) {
+        return Err(Error::ContainerSender);
+    }
+    install(p, bip39_passphrase)
 }
 
 /// Test-only (feature `vectors`): the link seal at a given clock, `m` and `e`.

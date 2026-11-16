@@ -33,7 +33,7 @@ import { PQ_MNEMONIC } from './ua-signers.mjs';
 import { readPinned } from './pinned.mjs';
 import { kemKeyOf, kemEncapsVector, ephemeralVector } from '../src/kem.js';
 import {
-  PURPOSE as SEAL_PURPOSE, MAX_PT, LINK_WINDOW, sealVector, open as openSealed, wireForm, fromWire, sealContainer, sealBackup, openContainer, openLink,
+  PURPOSE as SEAL_PURPOSE, MAX_PT, LINK_WINDOW, LINK_SKEW, sealVector, open as openSealed, wireForm, fromWire, sealContainer, sealBackup, openContainer, openLink,
   linkSessionVector, restoreBackup, encodeBackup, containerAad,
 } from '../src/seal.js';
 import { createVault, rewrapPin, openSeedVault, seal as boxSeal } from '../src/vault.js';
@@ -918,7 +918,8 @@ const backupC = async (label, payload, sender = wKey, extra = {}) => sealBackup(
 const expectBackup = { purpose: SEAL_PURPOSE.backup, sender: { ua: H(wKey.ua) }, recipient: { ua: R0.ua, version: 0 } };
 const backup2 = await backupC('backup.g2', payloadOf(2));
 const backup1 = await backupC('backup.g1', payloadOf(1));
-const SESSION = { seed: stream1b('link.session', 96), shortCode: '48151623', start: NOW };
+// `now`: the opener's clock when it opens the link (owner 2026-11-16 T21 O3: the window is measured on the opener's clock)
+const SESSION = { seed: stream1b('link.session', 96), shortCode: '48151623', start: NOW, now: NOW + 60 };
 const session = () => linkSessionVector(SESSION.seed, SESSION.shortCode, SESSION.start);
 const S0 = session();
 const linkPt = encodeBackup(payloadOf(2));
@@ -952,7 +953,7 @@ const expectOf = (id) => ({ purpose: SEAL_PURPOSE.backup, sender: { ua: H(id) },
 const containerRows = [
   { id: 'backup generation 2', container: backup2, expect: expectBackup, opener: { kem: R0 },
     pt: H(encodeBackup(payloadOf(2))), sender: W_ID, m: H(fx('backup.g2').m), e: H(fx('backup.g2').e) },
-  { id: 'link', container: link, expect: expectLink, opener: { session: { seed: H(SESSION.seed), shortCode: SESSION.shortCode, start: SESSION.start } },
+  { id: 'link', container: link, expect: expectLink, opener: { session: { seed: H(SESSION.seed), shortCode: SESSION.shortCode, start: SESSION.start, now: SESSION.now } },
     pt: H(linkPt), sender: W_ID, m: H(fx('link').m), e: H(fx('link').e) },
   { id: 'msig sender: flat {p256, ed25519}', container: flatC, expect: expectOf(flatUa), members: flatMembers, accepted: FLAT_ACCEPTED, opener: { kem: R0 },
     pt: H(msigPt), sender: { msig: FLAT_SENDER }, m: H(fx('msig.flat').m), e: H(fx('msig.flat').e) },
@@ -960,7 +961,7 @@ const containerRows = [
     pt: H(msigPt), sender: { msig: NESTED_SENDER }, m: H(fx('msig.nested').m), e: H(fx('msig.nested').e) },
 ];
 must(H(await openContainer(K0, backup2, expectBackup)) === containerRows[0].pt, 'backup opens');
-must(H(await openLink(session(), link, expectLink)) === containerRows[1].pt, 'link opens');
+must(H(await openLink(session(), link, expectLink, undefined, undefined, { now: SESSION.now })) === containerRows[1].pt, 'link opens');
 for (const r of containerRows.slice(2)) must(H(await openContainer(K0, r.container, r.expect, lookup(r.members), acceptedOf(r.accepted))) === r.pt, `${r.id} opens`);
 must(nestedC.sender.auth.members.some((s) => s.members.length === 2), 'the nested sender signs through its inner msig');
 
@@ -1026,7 +1027,7 @@ const openerKey = (o) => (o.kem ? kemOf(o.kem) : null);
 for (const x of acceptance) {
   let e = null;
   try {
-    if (x.link) await openLink(linkSessionVector(SESSION.seed, x.link.shortCode, SESSION.start), x.container, x.expect, lookup(x.members), acceptedOf(x.accepted));
+    if (x.link) await openLink(linkSessionVector(SESSION.seed, x.link.shortCode, SESSION.start), x.container, x.expect, lookup(x.members), acceptedOf(x.accepted), { now: SESSION.now });
     else if (x.restore) await restoreBackup(openerKey(x.opener), x.container, x.expect, lookup(x.members), acceptedOf(x.accepted));
     else await openContainer(openerKey(x.opener), x.container, x.expect, lookup(x.members), acceptedOf(x.accepted));
   } catch (err) { e = err; }
@@ -1034,20 +1035,24 @@ for (const x of acceptance) {
 }
 // replay and rollback (C-11)
 const replay = [
-  { id: 'link created after the window', container: await linkC('link.late', NOW + LINK_WINDOW + 1), error: 'ContainerReplay' },
-  { id: 'link created before the session', container: await linkC('link.early', NOW - 1), error: 'ContainerReplay' },
-  { id: 'link created at the window\'s end (accepted)', container: await linkC('link.edge', NOW + LINK_WINDOW), error: null },
+  // `now` is the opener's clock; `created` the sender's (owner 2026-11-16 T21 O3: the window on the opener's clock, LINK_SKEW = 120 s)
+  { id: 'link created more than the skew after the window (sender ahead by 121 s)', container: await linkC('link.late', NOW + LINK_WINDOW + LINK_SKEW + 1), now: NOW + LINK_WINDOW, error: 'ContainerReplay' },
+  { id: 'link created the skew after the window (sender ahead by 120 s, accepted)', container: await linkC('link.late.skew', NOW + LINK_WINDOW + LINK_SKEW), now: NOW + LINK_WINDOW, error: null },
+  { id: 'link created more than the skew before the session (sender behind by 121 s)', container: await linkC('link.early', NOW - LINK_SKEW - 1), now: NOW + 10, error: 'ContainerReplay' },
+  { id: 'link created 60 s before the session (sender behind by 60 s, accepted)', container: await linkC('link.early.skew', NOW - 60), now: NOW + 10, error: null },
+  { id: 'link created at the window\'s end (accepted)', container: await linkC('link.edge', NOW + LINK_WINDOW), now: NOW + LINK_WINDOW, error: null },
+  { id: 'link opened after the window on the opener\'s clock', container: link, now: NOW + LINK_WINDOW + 1, error: 'ContainerReplay' },
 ].map((x) => ({ kind: 'link', expect: expectLink, ...x }));
 for (const x of replay) {
   let e = null;
-  try { await openLink(session(), x.container, x.expect); } catch (err) { e = err; }
+  try { await openLink(session(), x.container, x.expect, undefined, undefined, { now: x.now }); } catch (err) { e = err; }
   must(x.error ? e?.code === x.error : !e, `replay ${x.id}`);
 }
 {
   const s = session();
-  await openLink(s, link, expectLink);
+  await openLink(s, link, expectLink, undefined, undefined, { now: SESSION.now });
   let e = null;
-  try { await openLink(s, link, expectLink); } catch (err) { e = err; }
+  try { await openLink(s, link, expectLink, undefined, undefined, { now: SESSION.now }); } catch (err) { e = err; }
   must(e?.code === 'ContainerReplay', 'second use of a session');
 }
 const rollback = [
@@ -1112,7 +1117,7 @@ const sealOut = {
     + 'the set, auth.keyData derives sender.ua (msig, or one single-key kind), then the UASig (an msig\'s member keys from '
     + 'members(id), re-derived; its signers accepted at both levels, CTR-UA-37: the weight of the signing slots whose '
     + 'accepted(id, index) is true reaches the threshold, a row\'s accepted lists each msig\'s accepted indices, no accepted '
-    + 'for an msig sender is refused, a single key needs none) and the seal; ContainerSender / SealOpen / SealVersion. Link: created in [start, start + 600 s], one use '
+    + 'for an msig sender is refused, a single key needs none) and the seal; ContainerSender / SealOpen / SealVersion. Link: the opener\'s clock now (session.now, a replay row\'s now) at most start + 600 s, created in [start - 120 s, start + 720 s] (the sender\'s clock, 120 s of skew), one use '
     + '(ContainerReplay). Backup payload: JSON {v, generation, entropy, secrets, manifest: {entries: [{kind, account, index, ua}]}}; '
     + 'restore: the entropy (BIP-39 passphrase empty) derives sender.ua at its manifest entry (else ContainerSender), an older '
     + 'generation over the same wallet is BackupRollback unless allowRollback, an equal one installs nothing. imported (ua-rs-sign '

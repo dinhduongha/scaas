@@ -290,6 +290,31 @@ fn imported_key_refused_for_another_family() {
     assert_eq!(m.imports.iter().map(|i| (i.network, i.n)).collect::<Vec<_>>(), vec![(Network::Evm, 0), (Network::Stellar, 1)]);
 }
 
+/// T21 L34: the import number is picked under the store's write lock: two imports at once both succeed, as 0 and 1 (before, both
+/// could read the same next `n` and the second was `Argument`).
+#[test]
+fn two_imports_at_once_get_two_numbers() {
+    for _ in 0..50 {
+        let w = wallet("twelve_words");
+        let b = std::sync::Barrier::new(2);
+        let mut ns: Vec<u32> = std::thread::scope(|s| {
+            let hs: Vec<_> = [[3u8; 32], [4u8; 32]]
+                .into_iter()
+                .map(|secret| {
+                    let (w, b) = (&w, &b);
+                    s.spawn(move || {
+                        b.wait();
+                        w.import_native_key(Network::Evm, &secret).map(|k| k.index())
+                    })
+                })
+                .collect();
+            hs.into_iter().map(|h| h.join().unwrap().unwrap()).collect()
+        });
+        ns.sort_unstable();
+        assert_eq!(ns, [0, 1]);
+    }
+}
+
 /// An imported key goes into its own vault label `native-import:<network>:<n>` and comes back into another session of the
 /// wallet; the manifest into `manifest`. A label the wallet does not hold: `Argument`.
 #[test]
@@ -724,5 +749,32 @@ mod regen {
             "backups": [backup, backup2],
         });
         std::fs::write(path("rs_vault.json"), serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
+    }
+}
+
+/// T21 L35: RFC 7914 §12 known answers for the `scrypt` crate the pin envelope runs (the vault rows compare with noble only):
+/// `N = 16, r = 1, p = 1` over empty inputs, and `N = 16384, r = 8, p = 1` over "pleaseletmein" / "SodiumChloride", 64 bytes.
+#[test]
+fn scrypt_rfc7914_known_answers() {
+    let rows = [
+        ("", "", 4, 1, 1, "77d6576238657b203b19ca42c18a0497f16b4844e3074ae8dfdffa3fede21442fcd0069ded0948f8326a753a0fc81f17e8d3e0fb2e0d3628cf35e20c38d18906"),
+        ("pleaseletmein", "SodiumChloride", 14, 8, 1, "7023bdcb3afd7348461c06cd81fd38ebfda8fbba904f8e3ea9b543f6545da1f2d5432955613f0fcf62d49705242a9af9e61e85dc0d651e40dfcf017b45575887"),
+    ];
+    for (pw, salt, log_n, r, p, want) in rows {
+        let mut out = [0u8; 64];
+        scrypt::scrypt(pw.as_bytes(), salt.as_bytes(), &scrypt::Params::new(log_n, r, p, 64).unwrap(), &mut out).unwrap();
+        assert_eq!(hex::encode(out), want, "{pw:?}");
+    }
+}
+
+/// T21 L32: `reveal` writes the words into a buffer reserved at 24 × 9 bytes (24 words of at most 8 letters and their spaces),
+/// so it never grows and frees an unwiped partial copy of the phrase.
+#[test]
+fn reveal_writes_into_a_reserved_buffer() {
+    for _ in 0..4 {
+        let (_, mut backup) = Wallet::generate().unwrap();
+        let words = backup.reveal().unwrap();
+        assert_eq!(words.split(' ').count(), 24);
+        assert_eq!(words.capacity(), 24 * 9);
     }
 }

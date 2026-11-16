@@ -264,7 +264,12 @@ fn seal_json_imported_rows() {
             assert_eq!(k.ua(), Some(e.ua), "{}", r["id"]);
         }
         #[cfg(feature = "vectors")]
-        assert_eq!(scaas_ua::wallet::vectors_backup_payload(&h(&r["pt"])).unwrap().as_bytes(), &h(&r["pt"])[..], "{}", r["id"]);
+        {
+            let pt = scaas_ua::wallet::vectors_backup_payload(&h(&r["pt"])).unwrap();
+            assert_eq!(pt.as_bytes(), &h(&r["pt"])[..], "{}", r["id"]);
+            // T21 L32: written into one buffer of its final size (a grown buffer frees an unwiped copy); rows past 256 bytes
+            assert!(pt.len() > 256 && pt.capacity() == pt.len(), "{}: {} / {}", r["id"], pt.len(), pt.capacity());
+        }
         ok += 1;
     }
     assert_eq!((ok, refused), (2, 5));

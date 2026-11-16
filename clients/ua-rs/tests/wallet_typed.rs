@@ -884,3 +884,39 @@ fn proof_path_rows_canon() {
         assert_ne!(build(&m), b32(&d["digest"]), "{name}: ownTag / next is signed");
     }
 }
+
+/// T21 L33: a PERCENT-class call takes its fee basis at word `amountArg`, counted in checked `usize` (32 × 2^27 wraps to 0 on
+/// wasm32): one past the calldata, 2^27 and `u32::MAX` are `PolicyRefused` (positive control: `amountArg` 0, the one word).
+#[test]
+fn call_amount_arg_past_the_calldata_is_refused() {
+    let s = load("ua/sign.json");
+    let w = wallet();
+    let key = w.native_key(Network::Evm, 0, None).unwrap();
+    let r = policy_row(&s, "call cancelNonce");
+    let run = |arg: u64| {
+        let (mut t, mut e) = (r["td"].clone(), r["expect"].clone());
+        t["message"]["mode"] = json!(0x10);
+        t["message"]["fee"] = json!("100");
+        e["allowlist"][0]["feeClass"] = json!(2);
+        e["allowlist"][0]["amountArg"] = json!(arg);
+        key.sign_typed(&td(&t).unwrap(), expect(&e).unwrap()).map(|_| ())
+    };
+    assert!(run(0).is_ok(), "positive control");
+    for arg in [1, 1 << 27, u32::MAX as u64] {
+        assert_eq!(run(arg).err(), Some(Error::PolicyRefused), "{arg}");
+    }
+}
+
+/// T21 L36: `"maxFee": null` reads as absent (`"0"`), as every other optional input, not `Argument` from a key left behind.
+#[test]
+fn max_fee_null_is_absent() {
+    let s = load("ua/sign.json");
+    let w = wallet();
+    let key = w.native_key(Network::Evm, 0, None).unwrap();
+    let r = policy_row(&s, "call cancelNonce");
+    let mut e = r["expect"].clone();
+    e.as_object_mut().unwrap().remove("maxFee");
+    assert!(key.sign_typed(&td(&r["td"]).unwrap(), expect(&e).unwrap()).is_ok(), "positive control: absent");
+    e["maxFee"] = Value::Null;
+    assert!(key.sign_typed(&td(&r["td"]).unwrap(), expect(&e).unwrap()).is_ok());
+}

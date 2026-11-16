@@ -857,7 +857,7 @@ len(purpose) ‖ purpose ‖ keccak256(kemPk), L = 32)`, AES-256-GCM under a zer
 the OS RNG inside the library). `purpose` is ASCII `[a-z0-9./-]`, 1 to 64 B; `pt` may be empty, at most 1 MiB; no length hiding. Any failure of
 `open`: `SealOpen`; another version or scheme: `SealVersion`. **Seal authenticates no sender.** The **container** (named fields, base64url, JSON) carries
 `{v, purpose, recipient, sender: {ua, auth}, created, sealed}`; `aad = u8 v ‖ be16 len(purpose) ‖ purpose ‖ recipientId ‖ be64 version ‖ senderUa ‖ be64 created`, rebuilt by
-the opener; `scaas/link/v1` appends `sha256(shortCode)`. `sender.auth` is a full `UASig` of the sender over `uaMessage(kind, seal, keccak256(aad ‖ wire form))` under
+the opener; `scaas/link/v1` appends `sha256(shortCode)` (it binds the code, not the key: the link key needs an authenticated channel, [CLI-UAL-12](ua-libraries.md#CLI-UAL-12)). `sender.auth` is a full `UASig` of the sender over `uaMessage(kind, seal, keccak256(aad ‖ wire form))` under
 `scaas.ua.purpose.seal.v1`, an **off-chain purpose**, never in a contract's list and outside `PURPOSES` (`seal_purpose_tag()`, clientkeys `SEAL_TAG`). Purposes
 today: `scaas/backup/v1`, `scaas/link/v1`, `scaas/pqz-share/v1`. Acceptance, trust anchors, replay and rollback: [CLI-UAL-11](ua-libraries.md#CLI-UAL-11),
 [CLI-UAL-12](ua-libraries.md#CLI-UAL-12). The backup payload: `{v, generation, entropy, secrets, manifest}` in this field order; malformed is `Argument`. BUILT.

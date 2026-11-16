@@ -235,8 +235,10 @@ impl In {
             _ => Err(Error::Argument),
         }
     }
+    /// [`In::dec`], `"0"` when absent or `null` (the key taken either way, as the other optional readers).
     fn opt_dec(&mut self, k: &str) -> Result<String> {
         if self.0.get(k).is_none_or(Value::is_null) {
+            self.0.remove(k);
             return Ok("0".into());
         }
         self.dec(k)
@@ -838,8 +840,9 @@ fn call(
         return refuse();
     }
     let Some(row) = allowlist.iter().find(|r| r.selector == selector) else { return refuse() };
-    let at = 4 + 32 * row.amount_arg as usize;
-    let basis = (row.fee_class == 2).then(|| data.get(at..at + 32).and_then(|w| <U256>::try_from(w).ok())).flatten();
+    // checked in `usize`: `32 * amountArg` wraps on a 32-bit target (wasm32); past the calldata, no basis (a PERCENT fee refused)
+    let word = usize::try_from(row.amount_arg).ok().and_then(|a| a.checked_mul(32)?.checked_add(4)).and_then(|at| data.get(at..at.checked_add(32)?));
+    let basis = (row.fee_class == 2).then(|| word.and_then(|w| <U256>::try_from(w).ok())).flatten();
     fee_policy(&m, max_fee, fee_recipient, relayer, basis.as_ref())?;
     deadline(get(&m, "validUntil"), now, max_window)?;
     let mut msg = m.clone();

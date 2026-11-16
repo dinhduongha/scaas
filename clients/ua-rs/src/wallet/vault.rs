@@ -82,7 +82,7 @@ pub struct PrfEnvelope<'a> {
 /// The policy of a **new** passphrase (clientkeys `checkPassphrase`): after NFKC at least 8 characters, not only digits and
 /// white space; else `Argument`. Opening never checks it.
 pub fn check_passphrase(p: &str) -> Result<()> {
-    let p = Zeroizing::new(p.nfkc().collect::<String>());
+    let p = super::sized(|| p.nfkc());
     // JS `\d` is ASCII, `\s` Unicode white space and U+FEFF
     let other = p.chars().any(|c| !(c.is_ascii_digit() || c.is_whitespace() || c == '\u{feff}'));
     if p.chars().count() < 8 || !other {
@@ -118,7 +118,7 @@ fn key32(v: Zeroizing<Vec<u8>>, e: Error) -> Result<Zeroizing<[u8; 32]>> {
 
 /// scrypt(NFKC(pin), salt, 2^log_n, 8, 1, 32).
 fn pin_kek(pin: &str, salt: &[u8], log_n: u8) -> Result<Zeroizing<[u8; 32]>> {
-    let pw = Zeroizing::new(pin.nfkc().collect::<String>());
+    let pw = super::sized(|| pin.nfkc());
     let params = scrypt::Params::new(log_n, 8, 1, 32).map_err(|_| Error::VaultParams)?;
     let mut kek = Zeroizing::new([0u8; 32]);
     scrypt::scrypt(pw.as_bytes(), salt, &params, &mut *kek).map_err(|_| Error::VaultParams)?;

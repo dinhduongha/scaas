@@ -452,7 +452,8 @@ fn msig_recipient_refused() {
 }
 
 /// A release container (OS randomness) from a wallet's identity key to a link session, installed by `from_link`: the new wallet
-/// derives the sender's keys; a native key cannot sign a container.
+/// derives the sender's keys; a native key cannot sign a container. The payload names the sender's entry, as `link_seal` writes it
+/// (T21 L29: the install checks that the entropy derives the sender there, as a restore does).
 #[test]
 fn release_link_round_trip() {
     let w = wallet("twelve_words");
@@ -462,8 +463,9 @@ fn release_link_round_trip() {
     let rec = Recipient::ephemeral(&session.kem_pk());
     let entropy = hex::encode(w_entropy("twelve_words"));
     let pt = format!(
-        "{{\"v\":1,\"generation\":1,\"entropy\":\"{}\",\"secrets\":[],\"manifest\":{{\"entries\":[]}}}}",
-        b64url(&hex::decode(entropy).unwrap())
+        "{{\"v\":1,\"generation\":1,\"entropy\":\"{}\",\"secrets\":[],\"manifest\":{{\"entries\":[{{\"kind\":258,\"account\":0,\"index\":0,\"ua\":\"0x{}\"}}]}}}}",
+        b64url(&hex::decode(entropy).unwrap()),
+        hex::encode(key.ua().unwrap())
     );
     let c = scaas_ua::wallet::seal_container(&rec, "scaas/link/v1", &ContainerSigner::Key(&key), session.start(), pt.as_bytes(), Some(&session.short_code())).unwrap();
     let native = w.native_key(scaas_ua::wallet::Network::Evm, 0, None).unwrap();
@@ -500,10 +502,14 @@ mod vectors {
         let code = short_code.unwrap_or(s["shortCode"].as_str().unwrap());
         LinkSession::vectors_new(&bytes(&s["seed"]).try_into().unwrap(), code, num(&s["start"])).unwrap()
     }
+    /// The opener's clock of a link row: its own `now` (a `replay` row), else the session's.
+    fn opener_now(v: &Value, r: &Value) -> u64 {
+        num(r.get("now").unwrap_or(&arr(v, "containers")[1]["opener"]["session"]["now"]))
+    }
     fn link(v: &Value, r: &Value, code: Option<&str>) -> Result<Wallet, Error> {
         let e = Expect::of(&r["expect"]);
         let none = |_: [u8; 32]| None;
-        Wallet::from_link(session(v, code), &container(&r["container"])?, &e.get(), &none, None, "")
+        Wallet::vectors_from_link_at(session(v, code), &container(&r["container"])?, &e.get(), &none, None, "", opener_now(v, r))
     }
 
     /// seal.json `seal`: with the row's `m` and `e`, `(mlkemCt, x25519Eph, ciphertext)` and the wire form byte-equal; the link
@@ -607,7 +613,8 @@ mod vectors {
         assert_eq!(link(&v, r, r["link"]["shortCode"].as_str()).err(), Some(Error::SealOpen));
     }
 
-    /// seal.json `replay` (link rows): `created` outside `[start, start + 600]` is `ContainerReplay`, the window's end accepted.
+    /// seal.json `replay` (link rows, T21 O3): the opener's clock past `start + 600`, or `created` outside `[start − 120, start +
+    /// 720]`, is `ContainerReplay`; 60 s behind, 120 s past the window's end and the window's end are accepted.
     #[test]
     fn seal_json_replay_link() {
         let v = load("seal.json");
@@ -616,7 +623,7 @@ mod vectors {
             assert_eq!(link(&v, r, None).err().map(|e| e.code()), r["error"].as_str(), "{}", r["id"]);
             n += 1;
         }
-        assert_eq!(n, 3);
+        assert_eq!(n, 6);
         // a link session opens scaas/link/v1 only
         let r = &arr(&v, "containers")[0];
         assert_eq!(link(&v, r, None).err(), Some(Error::Argument));
@@ -634,11 +641,12 @@ mod vectors {
         assert!(probe.decaps(&ct, &eph).is_ok()); // control
         let e = Expect::of(&r["expect"]);
         let none = |_: [u8; 32]| None;
-        Wallet::from_link(s, &c, &e.get(), &none, None, "").unwrap();
+        let now = opener_now(&v, r);
+        Wallet::vectors_from_link_at(s, &c, &e.get(), &none, None, "", now).unwrap();
         assert_eq!(probe.decaps(&ct, &eph).err(), Some(Error::KeyRevoked));
         let s = session(&v, Some("00000000"));
         let probe = s.vectors_key();
-        assert_eq!(Wallet::from_link(s, &c, &e.get(), &none, None, "").err(), Some(Error::SealOpen));
+        assert_eq!(Wallet::vectors_from_link_at(s, &c, &e.get(), &none, None, "", now).err(), Some(Error::SealOpen));
         assert_eq!(probe.decaps(&ct, &eph).err(), Some(Error::KeyRevoked));
     }
 }

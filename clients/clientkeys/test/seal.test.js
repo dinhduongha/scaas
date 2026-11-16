@@ -80,7 +80,7 @@ test('seal.json containers: backup, link and msig senders reproduce byte for byt
     assert.deepEqual(again, c, r.id);
     assert.equal(hex(sender.ua), hex(B(r.expect.sender.ua)));
     if (r.opener.kem) assert.equal(hex(await SL.openContainer(openerOf(r.opener), c, r.expect, lookup(r.members), acceptedOf(r.accepted))), r.pt, r.id);
-    else assert.equal(hex(await SL.openLink(sessionOf(r.opener.session), c, r.expect, lookup(r.members), acceptedOf(r.accepted))), r.pt, r.id);
+    else assert.equal(hex(await SL.openLink(sessionOf(r.opener.session), c, r.expect, lookup(r.members), acceptedOf(r.accepted), { now: r.opener.session.now })), r.pt, r.id);
   }
   // sender.auth is a full UASig (owner 2026-11-05): a single key carries its key data and signature, an msig its members only
   const [single, msig] = [S.containers[0].container.sender.auth, S.containers[2].container.sender.auth];
@@ -113,7 +113,7 @@ test('seal.json acceptance: each refusal from an otherwise valid container (C-03
   for (const x of S.acceptance) {
     let got;
     const a = acceptedOf(x.accepted);
-    if (x.link) got = await codeOf(() => SL.openLink(sessionOf(S.containers[1].opener.session, x.link.shortCode), x.container, x.expect, lookup(x.members), a));
+    if (x.link) got = await codeOf(() => SL.openLink(sessionOf(S.containers[1].opener.session, x.link.shortCode), x.container, x.expect, lookup(x.members), a, { now: S.containers[1].opener.session.now }));
     else if (x.restore) got = await codeOf(() => SL.restoreBackup(openerOf(x.opener), x.container, x.expect, lookup(x.members), a));
     else got = await codeOf(() => SL.openContainer(openerOf(x.opener), x.container, x.expect, lookup(x.members), a));
     assert.equal(got, x.error, x.id);
@@ -151,9 +151,11 @@ test('msig sender acceptance (CTR-UA-37): only a true answer accepts, a single k
 
 test('seal.json replay and rollback (C-11): link window and one use, backup generation', async () => {
   const session = S.containers[1].opener.session;
+  let links = 0;
   for (const x of S.replay) {
     if (x.kind === 'link') {
-      assert.equal(await codeOf(() => SL.openLink(sessionOf(session), x.container, x.expect)), x.error, x.id);
+      assert.equal(await codeOf(() => SL.openLink(sessionOf(session), x.container, x.expect, undefined, undefined, { now: x.now })), x.error, x.id);
+      links += 1;
     } else {
       let r = null;
       const got = await codeOf(async () => {
@@ -165,9 +167,14 @@ test('seal.json replay and rollback (C-11): link window and one use, backup gene
   }
   const link = S.containers[1];
   const s = sessionOf(session);
-  await SL.openLink(s, link.container, link.expect);
-  assert.equal(await codeOf(() => SL.openLink(s, link.container, link.expect)), 'ContainerReplay', 'a session is one use');
+  const now = { now: session.now };
+  await SL.openLink(s, link.container, link.expect, undefined, undefined, now);
+  assert.equal(await codeOf(() => SL.openLink(s, link.container, link.expect, undefined, undefined, now)), 'ContainerReplay', 'a session is one use');
   assert.equal(SL.LINK_WINDOW, 600);
+  assert.equal(SL.LINK_SKEW, 120);
+  // T21 O3: six link rows (sender 60 s behind / 120 s ahead accepted, 121 s either way refused, the window's end, the opener's clock
+  // past the window); the default clock is this device's: the vector session (start in 2027) opens now only while now <= start + 600
+  assert.equal(links, 6);
 });
 
 test('12-word wallet round trip (C-10): mnemonic, signing key and KEM key equal before and after, through the vault and a sealed backup', async () => {

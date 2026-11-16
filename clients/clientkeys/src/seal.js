@@ -19,8 +19,12 @@ import { seedFromEntropy } from './seed.js';
 const fail = (code, reason) => { throw new ua.UAError(code, reason); };
 export const PURPOSE = Object.freeze({ backup: 'scaas/backup/v1', link: 'scaas/link/v1' });
 export const MAX_PT = 1 << 20;
-/** A link container's `created` lies in [session start, start + LINK_WINDOW] (seconds; owner 2026-11-05: 10 minutes). */
+/** A link session opens a container for LINK_WINDOW seconds on the opener's clock after its start (owner 2026-11-05: 10 minutes;
+ *  measured by the opener, owner 2026-11-16 T21 O3). */
 export const LINK_WINDOW = 600;
+/** The skew allowed between the sender's clock and the opener's: `created` lies in [start - LINK_SKEW, start + LINK_WINDOW +
+ *  LINK_SKEW] (seconds; owner 2026-11-16 T21 O3). */
+export const LINK_SKEW = 120;
 const SEAL_INFO = utf8ToBytes('scaas/seal/v1');
 const CT = 1568;
 const ENTROPY = [16, 20, 24, 28, 32];
@@ -238,8 +242,10 @@ export async function openContainer(kemKey, c, expect, members, accepted, { shor
 
 // --- link ---
 
-/** A link session on the new device: an ephemeral KEM key, the short code both screens show, the window [start, start + 10 min];
- *  one use (`openLink` consumes it). */
+/** A link session on the new device: an ephemeral KEM key, the short code both screens show, the window [start, start + 10 min]
+ *  on this device's clock; one use (`openLink` consumes it). The short code binds the container to the session's screens; it does
+ *  not protect the payload against a swapped `kemPk` (CLI-UAL-12): the key must reach the existing device over an authenticated
+ *  channel (a direct QR scan). */
 export function linkSession(now = Math.floor(Date.now() / 1000)) {
   const n = crypto.getRandomValues(new Uint32Array(1))[0] % 100_000_000;
   return newSession(generateEphemeral(), String(n).padStart(8, '0'), now);
@@ -251,12 +257,14 @@ export const linkSessionVector = (bytes96, shortCode, start) => newSession(ephem
 const newSession = (kemKey, shortCode, start) => ({ kemKey, kemPk: kemKey.kemPk, recipient: kemKey.recipient, shortCode, start,
   end: start + LINK_WINDOW, used: false });
 
-/** The plaintext of a link container to `session`: `created` in the window (else `ContainerReplay`), the acceptance of
+/** The plaintext of a link container to `session`: the opener's clock `now` (seconds; default this device's) at most
+ *  `session.end`, `created` in [start - LINK_SKEW, end + LINK_SKEW] (else `ContainerReplay`), the acceptance of
  *  `openContainer`; on success the session is used up and its key wiped (a second call: `ContainerReplay`). */
-export async function openLink(session, c, expect, members, accepted) {
+export async function openLink(session, c, expect, members, accepted, { now = Math.floor(Date.now() / 1000) } = {}) {
   if (session.used) fail('ContainerReplay', 'the session is used up');
   if (expect?.purpose !== PURPOSE.link) fail('Argument', 'a link session opens scaas/link/v1 only');
-  if (!Number.isSafeInteger(c?.created) || c.created < session.start || c.created > session.end) {
+  if (!Number.isSafeInteger(now) || now > session.end) fail('ContainerReplay', 'the session is older than its window');
+  if (!Number.isSafeInteger(c?.created) || c.created < session.start - LINK_SKEW || c.created > session.end + LINK_SKEW) {
     fail('ContainerReplay', 'created outside the session window');
   }
   const pt = await openContainer(session.kemKey, c, expect, members, accepted, { shortCode: session.shortCode });

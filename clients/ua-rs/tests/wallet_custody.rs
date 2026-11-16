@@ -126,6 +126,43 @@ fn unlock_refuses_a_vault_of_another_wallet() {
     assert_eq!(w.ua_key(0x0102, 0, 0).unwrap().key_data(), key.key_data());
 }
 
+/// T21 L29 (cold start): the seed vault opened with a mistyped BIP-39 passphrase gives another seed; the manifest vault opened
+/// into it is `WalletMismatch` and the manifest stays empty (positive control: the right passphrase).
+#[test]
+fn manifest_vault_refuses_another_seed() {
+    let w = Wallet::from_mnemonic(&words(), "pass-a").unwrap();
+    w.ua_key(0x0102, 0, 0).unwrap();
+    let (vs, vm) = (w.seal_vault(PASS, None).unwrap(), w.seal_label_vault("manifest", PASS, None).unwrap());
+    let wrong = Wallet::open_vault(&vs, Unlock::VaultPassphrase(PASS), "pass-b").unwrap();
+    assert_eq!(wrong.open_label_vault(&vm, Unlock::VaultPassphrase(PASS)).err(), Some(Error::WalletMismatch));
+    assert!(wrong.manifest().entries.is_empty(), "the refused manifest is not installed");
+    let right = Wallet::open_vault(&vs, Unlock::VaultPassphrase(PASS), "pass-a").unwrap();
+    right.open_label_vault(&vm, Unlock::VaultPassphrase(PASS)).unwrap();
+    assert_eq!(right.manifest(), w.manifest());
+    // locked, the manifest is kept and the next unlock checks it
+    right.lock();
+    right.open_label_vault(&vm, Unlock::VaultPassphrase(PASS)).unwrap();
+    assert_eq!(right.unlock(&vs, Unlock::VaultPassphrase(PASS), "pass-b").err(), Some(Error::WalletMismatch));
+}
+
+/// T21 L29 (scenario C): a manifest listing `{evm, 0}` over a held ed25519 import 0 is `WalletMismatch`; the held key keeps its
+/// network (positive control: the wallet's own manifest).
+#[test]
+fn manifest_vault_refuses_another_network_for_a_held_import() {
+    let w = wallet();
+    w.ua_key(0x0102, 0, 0).unwrap();
+    let evm = wallet();
+    evm.ua_key(0x0102, 0, 0).unwrap();
+    evm.import_native_key(Network::Evm, &[3; 32]).unwrap();
+    let foreign = evm.seal_label_vault("manifest", PASS, None).unwrap();
+    w.import_native_key(Network::Solana, &[3; 32]).unwrap();
+    let own = w.seal_label_vault("manifest", PASS, None).unwrap();
+    assert_eq!(w.open_label_vault(&foreign, Unlock::VaultPassphrase(PASS)).err(), Some(Error::WalletMismatch));
+    assert_eq!(w.imported_key(Network::Evm, 0).err(), Some(Error::Argument));
+    assert_eq!(w.imported_key(Network::Solana, 0).unwrap().network(), Network::Solana);
+    w.open_label_vault(&own, Unlock::VaultPassphrase(PASS)).unwrap();
+}
+
 #[test]
 fn unlock_with_an_empty_manifest_has_nothing_to_compare() {
     // no UA key derived yet: the manifest names no UA, so any seed vault reopens the wallet (documented on `unlock`)
