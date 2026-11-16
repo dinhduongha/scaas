@@ -659,7 +659,10 @@ only for what no sender can cure (O8): the part's own contract revert (`UAKeyCac
 (`TX_EXCEEDS_CHAIN_LIMIT`: the block gas limit, EIP-7825's 2^24), as `UA_KEY_NOT_CACHED: part <n> refused: …`. A part over this
 lane's `max_gas_per_tx` or over its RPC's gas cap may still land from another sender: the `register` goes back `queued` as
 `UA_KEY_NOT_CACHED: part <n> over this lane's cap (…)`, as [NODE-JOB-24](submit-lanes.md#NODE-JOB-24)'s `PROOF_STORE_OVER_LANE_CAP` does (the RPC's
-"gas required exceeds allowance" / "out of gas" cannot be told from 2^24 regular gas, so it is read as the RPC's cap). Each part
+"gas required exceeds allowance" / "out of gas" cannot be told from 2^24 regular gas, so it is read as the RPC's cap, but only
+`PART_CAP_WAITS` = 3 simulations in a row: Nethermind answers EIP-7825's cap with the same words, so the third is the chain's limit and
+the registration is `dead` as `UA_KEY_NOT_CACHED: part <n> refused: TX_EXCEEDS_CHAIN_LIMIT: …`; a refusal by `max_gas_per_tx` waits to
+the job's deadline). Each part
 the lane sends has a journal row of its own in the node store (namespace `~node`, a `call` job, `signed` at its nonce and hash
 before the send; no row, no send): after a restart the lane tracks, bumps and settles it like a job, and a part whose nonce the
 chain no longer holds is gap-filled and its row `dead` ([submit-lanes.md#journal](submit-lanes.md#journal)). The row is `PERMISSIONLESS` (anyone may

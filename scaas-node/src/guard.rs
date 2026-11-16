@@ -1483,7 +1483,13 @@ pub fn over_cap(reason: &str) -> bool {
 /// ([`crate::chain::classify_sim`]'s message, which cannot tell the RPC's cap from the 2^24 regular gas: read as the RPC's, so a part
 /// that may still land is never `dead`), not by the chain (`TX_EXCEEDS_CHAIN_LIMIT`) or the call itself: another sender may cure it.
 pub fn lane_cap(reason: &str) -> bool {
-    !reason.starts_with(TX_EXCEEDS_CHAIN_LIMIT) && (over_cap(reason) || reason.contains("or the RPC gas cap: "))
+    !reason.starts_with(TX_EXCEEDS_CHAIN_LIMIT) && (over_cap(reason) || rpc_cap(reason))
+}
+
+/// [`crate::chain::classify_sim`]'s gas message: the RPC's gas cap or the chain's 2^24 regular gas, which no answer tells apart
+/// (Nethermind's words are the same for both).
+pub fn rpc_cap(reason: &str) -> bool {
+    reason.contains("or the RPC gas cap: ")
 }
 
 pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {

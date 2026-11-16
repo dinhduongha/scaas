@@ -212,6 +212,10 @@ struct Sent {
 /// `register` (NODE-JOB-29): each has a journal row of its own, so after a restart the lane tracks and bumps its nonce.
 pub const OWN_NAMESPACE: &str = "~node";
 
+/// NODE-JOB-29: a cache part whose simulation reads "over the 2^24 regular gas of a transaction or the RPC gas cap" this many times
+/// in a row is taken as the chain's limit (Nethermind answers EIP-7825's cap with the RPC cap's words): the registration is `dead`.
+pub const PART_CAP_WAITS: u32 = 3;
+
 /// CTR-MTX-86, one rule on every family (the EVM lanes here, the other adapters' `step_once`): a job carrying `receiver_fee`
 /// (the old name) or `payee_fee` is refused by name, never relayed without the payee's fee authorization. The node builds no
 /// payee fee: it goes as the named EVM entry `mtxPayWithPayeeFee` (an `op`); the other families have no such entry.
@@ -370,6 +374,8 @@ pub struct Submitter {
     failover_mark: u64,
     /// T21 L63b: the node store and this lane's label in it, the journal of the lane's own jobs ([`OWN_NAMESPACE`]); `None`: none.
     journal: Option<(Store, String)>,
+    /// NODE-JOB-29: [`guard::rpc_cap`] refusals in a row per cache part (its call key), bounded by [`PART_CAP_WAITS`].
+    cap_waits: HashMap<B256, u32>,
 }
 
 impl Submitter {
@@ -421,6 +427,7 @@ impl Submitter {
             guard,
             failover_mark: 0,
             journal,
+            cap_waits: HashMap::new(),
         };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
@@ -746,8 +753,26 @@ impl Submitter {
                 flying.push(part);
                 continue;
             };
+            let key = p.call_key();
             let gas = match guard::gas(&self.chain, &p, self.cfg.max_gas_per_tx).await {
-                Ok(gas) => gas,
+                Ok(gas) => {
+                    self.cap_waits.remove(&key);
+                    gas
+                }
+                // Nethermind answers EIP-7825's 2^24 with the RPC cap's words: a few in a row are the chain's limit, not a cap of ours
+                Err(SimError::Revert(r)) if guard::rpc_cap(&r) && {
+                    // ponytail: cleared wholesale past 1,024 parts (registers that expired keep their counts until then)
+                    if self.cap_waits.len() > 1024 {
+                        self.cap_waits.clear();
+                    }
+                    let n = self.cap_waits.entry(key).or_default();
+                    *n += 1;
+                    *n >= PART_CAP_WAITS
+                } => {
+                    self.cap_waits.remove(&key);
+                    return self.fail(&w, format!("{}: part {part} refused: {}: {PART_CAP_WAITS} simulations in a row over the 2^24 \
+                        regular gas of a transaction or the RPC gas cap ({r}); {reason}", guard::UA_KEY_NOT_CACHED, guard::TX_EXCEEDS_CHAIN_LIMIT)).await;
+                }
                 // owner O8: anyone may still send the part; NODE-JOB-24's precedent (`PROOF_STORE_OVER_LANE_CAP`)
                 Err(SimError::Revert(r)) if guard::lane_cap(&r) => {
                     return self.requeue(&w, format!("{}: part {part} over this lane's cap ({r}); the register waits for the part from \
@@ -3230,6 +3255,32 @@ pub(crate) mod tests {
             |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 200_000_000; }).await;
         assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.contains("part 0 refused: TX_EXCEEDS_CHAIN_LIMIT: gas 70000000"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
+    }
+
+    /// NODE-JOB-29 (O8; coordinator 2026-11-16): Nethermind answers EIP-7825's 2^24 cap with the same "gas required exceeds
+    /// allowance" as an RPC gas cap, so that answer requeues only [`PART_CAP_WAITS`] times in a row; then the registration is `dead`
+    /// as the chain's limit (`TX_EXCEEDS_CHAIN_LIMIT`), nothing sent. A `max_gas_per_tx` refusal (the lane's own, unambiguous) keeps
+    /// waiting to the job's deadline.
+    #[tokio::test]
+    async fn mldsa_cache_part_rpc_cap_waits_are_bounded() {
+        let reg = Address::repeat_byte(0x5e);
+        let tn = move |c: &mut ChainCfg| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; };
+        for (e, dies) in [(Some("estimate_oog"), true), (None, false)] {
+            let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), sim: e, ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), repeat: true, ..Default::default() }).await;
+            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), move |c| { tn(c); if !dies { c.max_gas_per_tx = 3_000_000; } }).await.unwrap();
+            for i in 1..=PART_CAP_WAITS + 1 {
+                s.poll_outbox().await;
+                let r = o.lock().unwrap().reports.last().cloned().unwrap();
+                let (st, why) = (r["chain_state"].as_str().unwrap(), r["error"].as_str().unwrap());
+                if dies && i >= PART_CAP_WAITS {
+                    assert!(st == "dead" && why.starts_with("UA_KEY_NOT_CACHED: part 0 refused: TX_EXCEEDS_CHAIN_LIMIT: "), "{i}: {r}");
+                    break;
+                }
+                assert!(st == "queued" && why.contains("over this lane's cap"), "{e:?} {i}: {r}");
+            }
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
     }
 
     /// NODE-JOB-29 (owner O7): the lane's cache parts are the `call` share of the EVM spend breaker: past `call_budget_pct` of the
