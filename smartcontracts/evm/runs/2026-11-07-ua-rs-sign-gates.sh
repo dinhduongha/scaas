@@ -649,7 +649,7 @@ ua-rs|cargo|right_message_wrong_dst_refused
 ua-rs|cargo|release_randomness_per_kind
 ua-rs|cargo|locked_wallet_pairing_handles_sign_nothing
 ua-rs|cargo|second_sign_on_a_session_errors
-ua-rs|cargo|frost_session_nonce_signs_once
+ua-rs-vectors|cargo|frost_session_nonce_signs_once
 ua-rs-vectors|cargo|sign_json_fixed_aux_rows
 ua-rs-vectors|cargo|nonce_map_rows
 ua-rs-vectors|cargo|bls_pop_and_sig_through_the_trait
