@@ -1066,11 +1066,16 @@ impl Submitter {
             (true, _, Some(id)) => _ = self.report(id, "mined", Some(h), None, None).await,
             (false, false, Some(id)) => {
                 // NODE-JOB-29: an ML-DSA registration that reverted for its cache (a part dropped by a reorg) waits for the parts
+                // T21 batch G: unread, or passing now (mined before its last part), it may still land: back in the queue too
                 if guard::mldsa_register(&w.data).is_some() {
-                    if let Err(SimError::Revert(r)) = self.chain.simulate(w.to, w.data.clone()).await {
-                        if r.starts_with("UAKeyNotCached") {
-                            return self.requeue(&w, format!("{}: the receipt reverted; {r}", guard::UA_KEY_NOT_CACHED)).await;
-                        }
+                    let why = match self.chain.simulate(w.to, w.data.clone()).await {
+                        Err(SimError::Revert(r)) if r.starts_with("UAKeyNotCached") => Some(r),
+                        Err(SimError::Transport(e)) => Some(format!("simulate unread: {e}")),
+                        Ok(_) => Some("mined before its cache; the register passes now".into()),
+                        Err(SimError::Revert(_)) => None,
+                    };
+                    if let Some(r) = why {
+                        return self.requeue(&w, format!("{}: the receipt reverted; {r}", guard::UA_KEY_NOT_CACHED)).await;
                     }
                 }
                 _ = self.report(id, "reverted", None, None, None).await
@@ -3002,12 +3007,15 @@ pub(crate) mod tests {
     }
 
     /// NODE-JOB-29: a registration whose receipt reverted while its cache is incomplete (a part dropped by a reorg) waits `queued`
-    /// under `UA_KEY_NOT_CACHED`, never `reverted`; with the cache complete a reverted receipt stays `reverted`.
+    /// under `UA_KEY_NOT_CACHED`, never `reverted`; so does one whose re-simulation cannot be read, or now passes (it was mined before
+    /// its last part: the same bytes land now; T21 batch G). Only another revert of the re-simulation leaves it `reverted`.
     #[tokio::test]
     async fn mldsa_register_reverted_for_its_cache_waits() {
         let reg = Address::repeat_byte(0x5e);
         let bare = ua8_writes(0).remove(0);
-        for (ek, want) in [([false, true, false], "queued"), ([true, true, false], "reverted")] {
+        let done = [true, true, false];
+        for (ek, sim, want, why) in [([false, true, false], None, "queued", "; UAKeyNotCached"), (done, Some("transport"), "queued", "simulate unread"),
+            (done, None, "queued", "the register passes now"), (done, Some("revert"), "reverted", "")] {
             let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ek: Some([true, true, false]), ..Default::default() }).await;
             let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, bare.clone())], tokens: toks(), ..Default::default() }).await;
             let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; })
@@ -3017,10 +3025,12 @@ pub(crate) mod tests {
             let h = rpc.lock().unwrap().sent[0].0;
             rpc.lock().unwrap().receipts.insert(h, false);
             rpc.lock().unwrap().ek = Some(ek);
+            rpc.lock().unwrap().sim = sim;
             s.track().await;
             let r = o.lock().unwrap().reports.last().cloned().unwrap();
-            assert_eq!(r["chain_state"].as_str(), Some(want), "{r}");
-            assert_eq!(want == "queued", r["error"].as_str().is_some_and(|e| e.starts_with("UA_KEY_NOT_CACHED: the receipt reverted")), "{r}");
+            assert_eq!(r["chain_state"].as_str(), Some(want), "{sim:?}: {r}");
+            assert_eq!(want == "queued", r["error"].as_str().is_some_and(|e| e.starts_with("UA_KEY_NOT_CACHED: the receipt reverted")
+                && e.contains(why)), "{sim:?}: {r}");
         }
     }
 
