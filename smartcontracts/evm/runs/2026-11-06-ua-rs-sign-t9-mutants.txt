@@ -51,3 +51,7 @@ killed   | M4 NFKC dropped | src/wallet/vault.rs | rc=101 | 1 failed: vault_json
 killed   | M26 link installs the entropy only | src/wallet/manifest.rs | rc=101 | 1 failed: link_installs_manifest_and_secrets | at 07a217010
 killed   | M28 SeedBackup revealed twice | src/wallet/mod.rs | rc=101 | 1 failed: seed_backup_shown_once_and_confirmed | at 07a217010
 # t21 re-run: 3 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)
+# t21 wave 3 re-run (2026-11-16, after t21-fix3): L82 moved the code of M5, M6; replacements brought to HEAD (c2df38f9c), run again:
+killed   | M5 64-byte seed stored for the entropy | src/wallet/vault.rs | rc=101 | 4 failed: bip39_passphrase_absent_from_every_payload, prf_envelope, twelve_word_wallet_round_trips_vault_and_backup, vault_seal_open_round_trip | at c2df38f9c
+killed   | M6 entropy padded to 32 bytes (vault) | src/wallet/vault.rs | rc=101 | 3 failed: prf_envelope, twelve_word_wallet_round_trips_vault_and_backup, vault_seal_open_round_trip | at c2df38f9c
+# t21 wave 3 re-run: 2 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)

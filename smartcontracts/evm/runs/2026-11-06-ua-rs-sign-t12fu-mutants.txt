@@ -18,3 +18,6 @@ mutants M1-M12 of 12: 12 killed, 0 survived, 0 not loaded
 # rebuilt PQZ keys); the mutant now filters held(m) by `raise` (a link payload without them), run again:
 killed     | M4 the link payload without the imported keys | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: link_seal_then_from_link_installs | at 760119d8 | rc=0, git diff --exit-code 0
 # T18 re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
+# t21 wave 3 re-run (2026-11-16, after t21-fix3): L82 moved the code of M1; replacements brought to HEAD (c2df38f9c), run again:
+killed     | M1 link_seal raises the backup generation | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: vectors::link_seal_equals_clientkeys_link_row | at c2df38f9c
+# t21 wave 3 re-run: 1 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)
