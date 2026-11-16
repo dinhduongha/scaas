@@ -10,6 +10,7 @@ import { keccak_256, shake256 } from '@noble/hashes/sha3.js';
 import { gcm } from '@noble/ciphers/aes.js';
 import { ml_kem1024 } from '@noble/post-quantum/ml-kem.js';
 import { x25519 } from '@noble/curves/ed25519.js';
+import { equalBytes } from '@noble/curves/utils.js';
 import { concatBytes, utf8ToBytes, fromHex } from './bytes.js';
 import { encaps, combine, checkKemPk, kemKey } from './pqchat.js';
 import { pqzOwnTag } from './evm.js';
@@ -310,7 +311,8 @@ export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua
       const s = live();
       const { key, ownTag: want } = pqzOwnTag({ seed32: s, chainUid: cu, token: hexOf(asBytes(t, 20, 'token')), fromUA: uaB, sendCounter, pu, pvf });
       key.fill(0);
-      if (want.toLowerCase() !== hexOf(asBytes(ownTag, 32, 'ownTag'))) refuse('the ownTag does not verify under this key');
+      // constant time (T21 L42), as ua-rs: the tag gates the seed for a ciphertext a node supplies
+      if (!equalBytes(fromHex(want), asBytes(ownTag, 32, 'ownTag'))) refuse('the ownTag does not verify under this key');
       loads += 1;
       return f(s);
     },

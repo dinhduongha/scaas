@@ -464,7 +464,9 @@ impl PqzKeyHandle {
         if !self.token_ok(&own.token) {
             return Err(Refused::NotThisHandle);
         }
-        if own_tag(&self.pqz_seed, &self.chain_uid, &own.token, &self.ua, own.send_counter, own.pu, own.pvf) != own.own_tag {
+        // constant time, as path (B)'s `ct_eq` (T21 L42): the tag gates the seed for a ciphertext a node supplies
+        let want = own_tag(&self.pqz_seed, &self.chain_uid, &own.token, &self.ua, own.send_counter, own.pu, own.pvf);
+        if !bool::from(subtle::ConstantTimeEq::ct_eq(&want[..], &own.own_tag[..])) {
             return Err(Refused::OwnTag);
         }
         self.loads.set(self.loads.get() + 1);

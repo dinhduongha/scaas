@@ -17,6 +17,7 @@ use super::signer::SignRequest;
 use super::{bounded, Error, Result};
 use crate::{keccak256, Domain, REGISTRY_NAME};
 use serde_json::{Map, Value};
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
 const MAX_LEN: usize = 64 * 1024;
@@ -25,6 +26,21 @@ const MAX_TYPES: usize = 32;
 const MAX_FIELDS: usize = 64;
 const MAX_TYPE_DEPTH: usize = 8;
 const MAX_ARRAY: usize = 1024;
+/// The absent values (missing or `null`: a zero-filled `T[k]` item, a missing field, an absent struct or array) one digest or
+/// canonical pass encodes, all levels counted; past it `Argument`. The caps per dimension and depth do not bound the product of
+/// fixed dimensions an absent value expands to (`uint8[1024]…[1024]` with `{}`); this does (T21 L38; clientkeys `MAX_FILL`).
+const MAX_FILL: usize = 2048;
+
+/// One more absent value of a pass; `Argument` past [`MAX_FILL`].
+fn fill(v: Option<&Value>, n: &Cell<usize>) -> Result<()> {
+    if matches!(v, None | Some(Value::Null)) {
+        n.set(n.get() + 1);
+        if n.get() > MAX_FILL {
+            return Err(Error::Argument);
+        }
+    }
+    Ok(())
+}
 
 const DOMAIN: &str = "EIP712Domain";
 /// The `EIP712Domain` fields in EIP-712 order.
@@ -442,7 +458,7 @@ impl TypedData {
         }
     }
 
-    fn hash_struct(&self, name: &str, v: Option<&Value>) -> Result<[u8; 32]> {
+    fn hash_struct(&self, name: &str, v: Option<&Value>, n: &Cell<usize>) -> Result<[u8; 32]> {
         let fields = self.types.get(name).ok_or(Error::Argument)?;
         let empty = Map::new();
         let o = match v {
@@ -454,23 +470,24 @@ impl TypedData {
             return Err(Error::Argument);
         }
         let mut enc = keccak256(self.encode_type_of(name).as_bytes()).to_vec();
-        for (n, ty) in fields {
-            enc.extend_from_slice(&self.encode_value(ty, o.get(n))?);
+        for (f, ty) in fields {
+            enc.extend_from_slice(&self.encode_value(ty, o.get(f), n)?);
         }
         Ok(keccak256(&enc))
     }
 
-    fn encode_value(&self, ty: &str, v: Option<&Value>) -> Result<[u8; 32]> {
+    fn encode_value(&self, ty: &str, v: Option<&Value>, n: &Cell<usize>) -> Result<[u8; 32]> {
+        fill(v, n)?;
         if let Some((elem, len)) = outer(ty)? {
             let items = items(v, len)?;
             let mut enc = Vec::with_capacity(32 * items.len());
             for x in items {
-                enc.extend_from_slice(&self.encode_value(elem, x)?);
+                enc.extend_from_slice(&self.encode_value(elem, x, n)?);
             }
             return Ok(keccak256(&enc));
         }
         if self.types.contains_key(ty) {
-            return self.hash_struct(ty, v);
+            return self.hash_struct(ty, v, n);
         }
         encode_atom(ty, v)
     }
@@ -486,7 +503,7 @@ impl TypedData {
     }
     /// `hashStruct(primaryType, message)`.
     pub fn struct_hash(&self) -> Result<[u8; 32]> {
-        self.hash_struct(&self.primary_type, Some(&self.message))
+        self.hash_struct(&self.primary_type, Some(&self.message), &Cell::new(0))
     }
     /// `keccak256(0x1901 ‖ domain separator ‖ struct hash)`: the digest a signature is over.
     pub fn digest(&self) -> Result<[u8; 32]> {
@@ -511,9 +528,10 @@ impl TypedData {
     /// clientkeys `canonical` (the SCaaS builders only): every field present (missing: its zero), `uint` ≤ 32 bits as a JSON number,
     /// wider as a decimal string, `bytes` / `bytesN` lower-case hex, and in each struct with `mode`, `relayer` and `feeRecipient`
     /// the unbound ones zeroed. No `int` field in a SCaaS struct: refused.
-    fn canonical(&self, ty: &str, v: Option<&Value>) -> Result<Value> {
+    fn canonical(&self, ty: &str, v: Option<&Value>, c: &Cell<usize>) -> Result<Value> {
+        fill(v, c)?;
         if let Some((elem, len)) = outer(ty)? {
-            return items(v, len)?.into_iter().map(|x| self.canonical(elem, x)).collect::<Result<Vec<_>>>().map(Value::Array);
+            return items(v, len)?.into_iter().map(|x| self.canonical(elem, x, c)).collect::<Result<Vec<_>>>().map(Value::Array);
         }
         if let Some(fields) = self.types.get(ty) {
             let empty = Map::new();
@@ -527,7 +545,7 @@ impl TypedData {
             }
             let mut m = Map::new();
             for (n, t) in fields {
-                m.insert(n.clone(), self.canonical(t, o.get(n))?);
+                m.insert(n.clone(), self.canonical(t, o.get(n), c)?);
             }
             if ["mode", "relayer", "feeRecipient"].iter().all(|k| m.contains_key(*k)) {
                 let mode = uint_value(m.get("mode"))?.last().copied().unwrap_or(0);
@@ -959,6 +977,6 @@ pub(crate) fn typed_data_of(
     domain.insert("salt".into(), to_hex(chain_uid).into());
     let mut td = TypedData { types, primary_type: d.primary.to_string(), domain, message: Value::Null };
     td.validate()?;
-    td.message = td.canonical(d.primary, Some(message))?;
+    td.message = td.canonical(d.primary, Some(message), &Cell::new(0))?;
     Ok(td)
 }

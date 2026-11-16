@@ -277,6 +277,18 @@ fn typed_data_bounds() {
     let fixed = |k: usize| td(&types_td(json!({"S": [{"name": "v", "type": format!("uint8[{k}]")}]}), "S", json!({}))).map(|_| ());
     assert!(fixed(1024).is_ok());
     assert_eq!(fixed(1025).err(), Some(Error::Argument));
+    // T21 L38: the absent values one digest zero-fills, all levels counted, at most 2,048 (clientkeys the same rows)
+    let filled = |ty: &str, v: Value| digest(&types_td(json!({"S": [{"name": "v", "type": ty}]}), "S", json!({"v": v}))).map(|_| ());
+    assert!(filled("uint8[1024]", Value::Null).is_ok());
+    assert!(filled("uint8[32][32]", Value::Null).is_ok(), "1 + 32 + 1,024 absent values");
+    assert_eq!(filled("uint8[1024][2]", Value::Null).err(), Some(Error::Argument), "1 + 2 + 2,048");
+    assert_eq!(filled("uint8[1024][2]", json!([null, null])).err(), Some(Error::Argument), "nulls inside a supplied array");
+    assert!(filled("uint8[1024][2]", json!([vec![0; 1024], null])).is_ok(), "one row supplied");
+    // the ~200-byte request whose zero-fill is 1024^7 encodings: from_json takes it (depth 8), the digest refuses at once
+    let huge = br#"{"types":{"S":[{"name":"v","type":"uint8[1024][1024][1024][1024][1024][1024][1024]"}]},"primaryType":"S","domain":{},"message":{}}"#;
+    assert!(huge.len() < 200);
+    let t = TypedData::from_json(huge).unwrap();
+    assert_eq!(t.digest().err(), Some(Error::Argument));
 }
 
 /// The `EIP712Domain` type is the fields present in `domain`, in EIP-712 order: a supplied `EIP712Domain` in another order, or

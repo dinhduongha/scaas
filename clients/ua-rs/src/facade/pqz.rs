@@ -560,9 +560,42 @@ impl Header {
 /// `memoHash = keccak256(ownTag)` (release 3h, `PqzCore._parseMulti`).
 /// The token's `disclosureMode` decides which one a caller may use; the facade does not guess it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Mode {
+pub enum Mode {
     Hash,
     Bundle,
+}
+
+/// A relayed debit's `UAEnvelope` words as the transfer entry's calldata carries them (every field but `data`; uints and
+/// addresses as ABI words).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PqzEnvelope {
+    pub from: Word,
+    pub batch: Word,
+    pub nonce: Word,
+    pub valid_until: Word,
+    pub mode: Word,
+    pub relayer: Word,
+    pub fee: Word,
+    pub fee_recipient: Word,
+}
+
+/// The request's `envelopeBinding` of a relayed debit (`PqzLayer._uaEnvelopeBinding`): keccak256 of the tag
+/// `SCAAS-PQZ-UA-ENVELOPE-V1`, `chainId`, `chainUid`, the token and the envelope's words, `relayer` and `feeRecipient` hashed
+/// as 0 unless `mode` binds them (bits 1, 2: `MetaTxLib.canon`). A direct debit's binding is 0. T21 L44: the one copy (the
+/// `pqz-read` binary reads it); T62a's rows pin it.
+pub fn envelope_binding(chain_id: u64, chain_uid: &Word, token: &[u8; 20], e: &PqzEnvelope) -> Word {
+    let keep = |bit: u8, w: &Word| if e.mode[31] & bit != 0 { *w } else { [0; 32] };
+    let mut tok = [0u8; 32];
+    tok[12..].copy_from_slice(token);
+    crate::keccak256(&[crate::keccak256(b"SCAAS-PQZ-UA-ENVELOPE-V1"), u64_word(chain_id), *chain_uid, tok, e.from, e.batch,
+        e.nonce, e.valid_until, e.mode, keep(1, &e.relayer), e.fee, keep(2, &e.fee_recipient)].concat())
+}
+
+/// The header's envelope word of a debit (`PqzCore._bindMode`): `keccak256(abi.encode(binding == 0 ? TAG_DIRECT_MODE :
+/// binding, uint8(mode)))`, `mode` 0 for `Hash`, 1 for `Bundle`. T21 L44: the one copy (path (B) folds with it).
+pub fn bind_mode(binding: &Word, mode: Mode) -> Word {
+    let b = if *binding == [0; 32] { crate::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1") } else { *binding };
+    crate::keccak256(&[b, u64_word(match mode { Mode::Hash => 0, Mode::Bundle => 1 })].concat())
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------

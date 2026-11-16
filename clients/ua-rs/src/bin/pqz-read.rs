@@ -91,7 +91,7 @@ use std::process::{Command, ExitCode, Stdio};
 
 use pqz_ffi::pqzl::PK_BYTES;
 use pqz_ffi::stmt::{K_MAX, PQZH_ID};
-use scaas_ua::facade::pqz::STATE_LAYOUT;
+use scaas_ua::facade::pqz::{envelope_binding, PqzEnvelope, STATE_LAYOUT};
 use scaas_ua::facade::pqz_pack::{ACC_WORDS, PKP, VP};
 use scaas_ua::keccak256;
 use serde_json::{json, Value};
@@ -905,7 +905,7 @@ fn called(a: &Args, input: &[u8], compact_token: bool) -> Result<Called, String>
     let (t_head, proof_head, binding) = if e.relayed {
         let env: Vec<Word> = (0..8).map(|i| aw(d, 32 * i)).collect::<Result<_, _>>()?;
         au(d, 32 * 4)?; // the mode is a uint32
-        (32 * 8, 32 * 9, envelope_binding(a.chain_id, &a.chain_uid, &a.token, &env)?)
+        (32 * 8, 32 * 9, envelope_binding(a.chain_id, &a.chain_uid, &a.token, &envelope_of(&env)?))
     } else {
         (0, 32, [0; 32])
     };
@@ -923,13 +923,11 @@ fn called(a: &Args, input: &[u8], compact_token: bool) -> Result<Called, String>
     Ok(Called { from: w(3)?, multi: e.multi, beneficiary, valid_until, hash: e.compact || compact_token, sealed_memo, binding, decoy_fee, m, proof })
 }
 
-/// `PqzLayer._uaEnvelopeBinding` of a relayed debit's envelope words `(from, batch, nonce, validUntil, mode, relayer, fee,
-/// feeRecipient)`: `relayer` and `feeRecipient` hashed as 0 unless `mode` binds them (bits 1, 2). T62a's rows pin it.
-fn envelope_binding(chain_id: u64, chain_uid: &Word, token: &[u8; 20], env: &[Word]) -> Result<Word, String> {
-    let [from, batch, nonce, valid, mode, relayer, fee, fee_to] = env else { return Err("an envelope of other than 8 words".into()) };
-    let keep = |bit: u8, w: &Word| if mode[31] & bit != 0 { *w } else { [0; 32] };
-    Ok(keccak256(&[keccak256(b"SCAAS-PQZ-UA-ENVELOPE-V1"), be(chain_id), *chain_uid, addr_word(token), *from, *batch, *nonce, *valid,
-        *mode, keep(1, relayer), *fee, keep(2, fee_to)].concat()))
+/// A relayed debit's envelope words `(from, batch, nonce, validUntil, mode, relayer, fee, feeRecipient)` by name; its binding is
+/// the library's [`envelope_binding`] (`PqzLayer._uaEnvelopeBinding`, T21 L44: one copy). T62a's rows pin it.
+fn envelope_of(env: &[Word]) -> Result<PqzEnvelope, String> {
+    let [from, batch, nonce, valid_until, mode, relayer, fee, fee_recipient] = *env else { return Err("an envelope of other than 8 words".into()) };
+    Ok(PqzEnvelope { from, batch, nonce, valid_until, mode, relayer, fee, fee_recipient })
 }
 
 /// A NONE debit's header `fee` (§4.14.4 step 4): the token's `confidentialFee` when the debit names a beneficiary, else 0, and
@@ -1254,7 +1252,7 @@ mod tests {
                     let env = [w(&e["from"]), be(n(&e["batch"])), be(n(&e["nonce"])), be(n(&e["validUntil"])), be(n(&e["mode"])),
                         addr_word(&unhex(e["relayer"].as_str().unwrap()).unwrap().try_into().unwrap()), be(n(&e["fee"])),
                         addr_word(&unhex(e["feeRecipient"].as_str().unwrap()).unwrap().try_into().unwrap())];
-                    let got = envelope_binding(n(&r["chainId"]), &w(&r["chainUid"]), &token, &env).unwrap();
+                    let got = envelope_binding(n(&r["chainId"]), &w(&r["chainUid"]), &token, &envelope_of(&env).unwrap());
                     assert_eq!(hx(&got), r["envelopeBinding"].as_str().unwrap(), "{name}");
                     relayed += 1;
                 }
@@ -1264,7 +1262,7 @@ mod tests {
                 assert_eq!(be(fee).as_slice(), &header[32 * 8..32 * 9], "{name}: the fee word");
             }
             assert_eq!(relayed, 5, "every form relayed once");
-            assert!(envelope_binding(1, &[0; 32], &[0; 20], &[[0; 32]; 7]).is_err());
+            assert!(envelope_of(&[[0; 32]; 7]).is_err());
         }
     }
 

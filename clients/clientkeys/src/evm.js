@@ -41,17 +41,28 @@ export function encodeType(types, primary) {
   return [primary, ...structDeps(types, primary)].map((t) => encodeOne(types, t)).join('');
 }
 
+/** The absent values (missing or null: a zero-filled `T[k]` item, a missing field, an absent struct or array) one digest
+ *  encodes, all levels counted; past it refused. The product of fixed dimensions an absent value expands to is otherwise
+ *  unbounded (`uint8[1024][1024]…` with `{}`) (T21 L38; ua-rs `MAX_FILL`, the same refusal set). */
+export const MAX_FILL = 2048;
+const fill = (value, budget) => {
+  if ((value === undefined || value === null) && ++budget.n > MAX_FILL) throw new Error(`EIP-712: more than ${MAX_FILL} absent values`);
+};
+
 /** EIP-712 `encodeData` of one value, faithful: the value supplied, never rewritten (no canonical zeroing here: that is a
  *  step of the SCaaS builders, `opTypedData`, ua-rs-sign spec §5.3). A missing value is the type's zero value; `int<N>` is
- *  two's complement; `T[k]` must hold k items. */
-function encodeValue(type, value, types) {
+ *  two's complement; `T[k]` must hold k items. `budget` counts the absent values of one digest (`MAX_FILL`). */
+function encodeValue(type, value, types, budget) {
+  fill(value, budget);
   const arr = /^(.*)\[(\d*)\]$/.exec(type);
   if (arr) {
+    // an absent T[k] spends k more of the budget: refused before its k items are allocated
+    if ((value === undefined || value === null) && arr[2] !== '' && budget.n + Number(arr[2]) > MAX_FILL) fill(value, { n: MAX_FILL });
     const items = value ?? (arr[2] === '' ? [] : Array(Number(arr[2])).fill(undefined));
     if (!Array.isArray(items) || (arr[2] !== '' && items.length !== Number(arr[2]))) throw new Error(`EIP-712 ${type}: wrong length`);
-    return keccak_256(concatBytes(...items.map((v) => encodeValue(arr[1], v, types))));
+    return keccak_256(concatBytes(...items.map((v) => encodeValue(arr[1], v, types, budget))));
   }
-  if (types && types[type]) return hashStruct(types, type, value ?? {});
+  if (types && types[type]) return hashStruct(types, type, value ?? {}, budget);
   if (type === 'string') return keccak_256(utf8ToBytes(String(value ?? '')));
   if (type === 'bytes') return keccak_256(value instanceof Uint8Array ? value : fromHex(value ?? '0x'));
   if (type === 'address') return addressWord(value ?? '0x' + '00'.repeat(20));
@@ -74,13 +85,13 @@ export function intWord(type, value) {
   return word(BigInt.asUintN(256, v));
 }
 
-export function hashStruct(types, primary, data) {
+export function hashStruct(types, primary, data, budget = { n: 0 }) {
   for (const k of Object.keys(data ?? {})) {
     if (!types[primary].some((f) => f.name === k)) throw new Error(`EIP-712: ${k} is not a field of ${primary}`);
   }
   return keccak_256(concatBytes(
     keccak_256(utf8ToBytes(encodeType(types, primary))),
-    ...types[primary].map((f) => encodeValue(f.type, data?.[f.name], types)),
+    ...types[primary].map((f) => encodeValue(f.type, data?.[f.name], types, budget)),
   ));
 }
 
