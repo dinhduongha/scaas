@@ -5,6 +5,9 @@
 # Each run's negatives checked by `coverage.py neg` against the chain at its end; both runs' transactions recorded for the
 # matrix's table (records-<net>-pqzkeys.jsonl in matrix.sh's run dir). From smartcontracts/evm, under matrix.sh (local only:
 # anvil mines the blocks between the runs; a remote chain makes them: the run waits for them, bounded). Short lines on stdout; forge's output in the git-ignored log.
+# Owner 2026-11-16 (D1): first `PqzKeysPublic.pub()`, the rows with no ML-DSA signer and no R_REG proof (they send on any chain,
+# the SCaaS testnet's set mldsa-off too); PQZK_PHASES names the runs (default `public setup roll`; a remote target `public`:
+# its ML-DSA / 0x0142 rows are mldsa_on.py's, README-mldsa-on.md).
 # PQZW=1: the group `pqzwallet` the same way (PqzWallet.s.sol, PqzWalletSetup.setup() then PqzWalletRoll.roll()).
 set -eu
 # --slow (one transaction per receipt) on a local chain only; a remote target sends each forge run at once (owner 2026-11-15:
@@ -12,8 +15,8 @@ set -eu
 SLOW=--slow; [ "${ONCHAIN_REMOTE:-0}" != 1 ] || SLOW=
 . script/onchain/fee.sh
 : "${NET:?}" "${RPC:?}" "${ONCHAIN_K1:?}"
-GN=pqzkeys SCR=PqzKeys TS=PqzKeysSetup TR=PqzKeysRoll
-[ -z "${PQZW:-}" ] || GN=pqzwallet SCR=PqzWallet TS=PqzWalletSetup TR=PqzWalletRoll
+GN=pqzkeys SCR=PqzKeys TS=PqzKeysSetup TR=PqzKeysRoll PH=${PQZK_PHASES:-public setup roll}
+[ -z "${PQZW:-}" ] || GN=pqzwallet SCR=PqzWallet TS=PqzWalletSetup TR=PqzWalletRoll PH="setup roll"
 OUTD=${MATRIX_OUT:-runs/$(date +%Y-%m-%d)-matrix}
 CHAIN=$(cast chain-id --rpc-url "$RPC")
 B=broadcast/$SCR.s.sol/$CHAIN
@@ -37,7 +40,7 @@ nonces() { for a in $SENT_A; do cast nonce --rpc-url "$RPC" "$a" 2> /dev/null ||
 SENT0=$( [ -n "$SENT_A" ] && nonces || echo 0)
 sent() { [ -n "$SENT_A" ] && echo ", $(( $(nonces) - SENT0 )) tx on chain" || true; }
 rc=0 runs=
-for p in setup roll; do
+for p in $PH; do
   if [ "$p" = roll ]; then
     if [ "$NET" = local ]; then
       for i in 1 2 3 4 5 6; do cast rpc --rpc-url "$RPC" evm_mine > /dev/null; done
@@ -55,15 +58,17 @@ for p in setup roll; do
     # block's timestamp is stale, and the simulation's `block.timestamp + 1 hours` (a pause's end) is already past on chain
     cast rpc --rpc-url "$RPC" evm_mine > /dev/null
   fi
-  tc=$TR
+  tc=$TR sig="$p()"
   [ "$p" != setup ] || tc=$TS
+  [ "$p" != public ] || tc=PqzKeysPublic sig="pub()"
+  bf=${sig%"()"} # forge's broadcast file: the entry's name
   echo "[$NET/$GN] $p: forge $tc …"
   t0=$(date +%s)
-  rm -f "$B/$p-latest.json"
+  rm -f "$B/$bf-latest.json"
   remote_fee "$RPC" # a remote target: a fee with headroom (fee.sh)
   # the simulation runs the whole script as one call: its ML-DSA verifications and ~600 ops pass foundry.toml's 2^33 budget
   # (a late CREATE starved); the transactions sent still ask each its own estimate
-  FOUNDRY_GAS_LIMIT=${PQZKEYS_SIM_GAS:-40000000000} ONCHAIN_NET=$NET forge script script/onchain/$SCR.s.sol --tc "$tc" --sig "$p()" --rpc-url "$RPC" --broadcast $SLOW \
+  FOUNDRY_GAS_LIMIT=${PQZKEYS_SIM_GAS:-40000000000} ONCHAIN_NET=$NET forge script script/onchain/$SCR.s.sol --tc "$tc" --sig "$sig" --rpc-url "$RPC" --broadcast $SLOW \
     --ffi --sender "$SENDER" --disable-code-size-limit --gas-estimate-multiplier "${ONCHAIN_GAS_MULTIPLIER:-200}" \
     --out out/onchain-pqzkeys --cache-path cache/onchain-pqzkeys > "$T/$p.log" 2>&1 &
   F=$!
@@ -79,7 +84,7 @@ for p in setup roll; do
     echo "[$NET/$GN] FAIL $p: $(grep -E '^Error|revert' "$T/$p.log" | tail -1 | cut -c1-160)"
     break
   fi
-  runs="$runs $B/$p-latest.json"
+  runs="$runs $B/$bf-latest.json"
   python3 -I script/onchain/coverage.py neg "$NET" $GN "$RPC" > "$T/neg.txt" 2>&1 || rc=1
   cat "$T/neg.txt" >> "$L"
   grep '^BAD' "$T/neg.txt" | sed "s/^/[$NET\/$GN] FAIL /" || true

@@ -72,9 +72,11 @@ blocks (~30 s at the testnet's Clique period of 5 s; bounded, a named stop), on 
 (`_signed`, `_rollByAddress`, `_signedBob` with their negatives), the public rollovers, the debit over the rolled `acc`, the
 owner's ops.
 
-Not here (no ML-DSA, no 0x0142; decision D1 below): `_publicLayer` 600-612 but its `_pq` rows, `_trades` 630-662, `_pull`,
-`_regulatedPowers` 1070-1096, `_wrapLimits` 1122-1153, `_factoryNegatives` 1212-1226. `_pq` on the PQZ kinds 4, 5, 12, 13 (the
-public layer's ML-DSA rows) is in `tokens`, on tokens of those kinds.
+Not here (no ML-DSA, no 0x0142): the rows of `PqzKeysPublic.pub()` (owner 2026-11-16, D1: PqzKeysSetup split, forge
+runs them on any chain, the SCaaS testnet's set `mldsa-off` too): the factory and its releases, the public layer of the PQZ
+kinds but its `_pq` rows (`Tokens.skipPq`), `_trades`, `_pull`, `_regulatedPowers`, `_wrapLimits`, `_factoryNegatives`.
+Their `_pq` rows run in `PqzKeysSetup` (`_pqOn`: a token of each PQZ kind configured as the sweep's, then `_pq`), and on
+set `mldsa-on` in `tokens` here, on tokens of those kinds.
 
 ### `pqzwallet` (PqzWallet.s.sol)
 
@@ -127,15 +129,17 @@ ua-rs `pqz3k::PqzKeyHandle`) is driven as forge drives it, by its JSON on stdin.
   (matrix.sh's local Nethermind copy has both precompiles: a local deploy of set `mldsa-on` on it would check them before the
   testnet.)
 
-## Decisions asked (2026-11-16, to the coordinator)
+## Decisions (owner 2026-11-16, "ĐỒNG Ý")
 
-- **D1** The EOA-signed rows of pqzkeys on the PQZ kinds (public layer but `_pq`, trades, pulls, regulated powers, wrap limits,
-  factory negatives) need no precompile but run nowhere on the testnet: PqzKeysSetup is one forge run and stops at its first
-  ML-DSA / 0x0142 step. Per the ruling they are not ported (forge runs them on anvil). Default: local only, listed in
-  `notrun.json` with that reason.
+- **D1** PqzKeysSetup split: `PqzKeysPublic.pub()` holds the rows with no ML-DSA signer and no `R_REG` proof (above), a run of
+  its own before `setup()` (pqzkeys.sh `PQZK_PHASES`, default `public setup roll`; matrix.sh runs `public` alone on a remote
+  target). What each row asserts is unchanged; `_pq` moves from the sweep to `_pqOn` in `setup()` (same token configuration,
+  test key 1 funding the signer as before).
 - **D2** Settled by the code: pqzkeys' tokens on the set's factory, `OFFCHAIN` (above).
-- **D3** pqzwallet's real keys live in the wallet (ua-rs `PqzKeyHandle`), which has no `R_REG` prover; forge stores filler bytes
-  (anvil does not check them), which set `mldsa-on`'s registry refuses (`UAPoP`). An `OFFCHAIN` token reads an unproven record
-  (`PqzCore._usable`: `OFFCHAIN` any stored key, its verifier checks `R_REG` off chain), so the wallet rows need no proof. Default: pqzwallet writes its records without `storePqzScopedPop` on a
-  registry with a `PqzKeyVerifier` (the record stays unproven, logged), the proven-record rows being pqzkeys'. The other way: a
-  `rreg` command in `pqz-wallet-sim` (a tool change, its own review).
+- **D3** pqzwallet's real keys live in the wallet (ua-rs `PqzKeyHandle`), which has no `R_REG` prover; set `mldsa-on`'s
+  registry refuses forge's filler bytes (`UAPoP`). An `OFFCHAIN` token reads an unproven record (`PqzCore._usable`: any
+  stored key, its verifier checks `R_REG` off chain), so on a registry with a `PqzKeyVerifier` pqzwallet writes its records
+  without `storePqzScopedPop`, each logged unproven; the proven-record rows are pqzkeys'. The gap is recorded in each run's
+  records (status 3, `gap:`) and in the coverage note (`notrun.json` `_gaps`). No `rreg` command in `pqz-wallet-sim` now.
+- **Local Nethermind first:** before the live set, a local set `mldsa-on` on an own single-node Nethermind copy (both
+  precompiles; own container, data dir and port, docker `--memory`), removed after the run.

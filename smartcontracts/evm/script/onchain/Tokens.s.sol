@@ -76,6 +76,7 @@ contract Tokens is OnchainBase {
     bytes keyD; // its key data (x ‖ y): its UASig carries it
     bytes32 uaM; // an ML-DSA-65 UA on the Step 5 registry: the PQ signer of a relayed transfer on every kind
     bytes32 mlSeed;
+    bool skipPq; // the sweep without `_pq` (PqzKeysPublic, owner 2026-11-16 D1: a run with no ML-DSA signer)
     MockERC20 m1; // W1's leg
     MockERC20 m2; // W2's first leg
     MockERC20 stray; // what `rescue` sends back
@@ -241,13 +242,17 @@ contract Tokens is OnchainBase {
 
     // ------------------------------------------------------------------ the normal kinds 0, 2, 8, 10
 
-    function _normalKind(uint8 kind) internal {
-        IFactoryToken.TokenConfig memory c = _base(kind, "oN");
+    function _normalCfg(uint8 kind) internal view returns (IFactoryToken.TokenConfig memory c) {
+        c = _base(kind, "oN");
         c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.MINTABLE | 1 << GovernanceBits.BURNABLE
             | 1 << GovernanceBits.RESCUABLE;
         c.roles.minter = _pad(a1);
         (c.initialSupply, c.initialHolder, c.rescueTo) = (1e15, a1, a3);
         if (_regulated(kind)) _reg(c);
+    }
+
+    function _normalKind(uint8 kind) internal {
+        IFactoryToken.TokenConfig memory c = _normalCfg(kind);
         (t, k) = (_create(kind, c, string.concat("normal", vm.toString(kind))), kind);
         if (kind == 0) base = t;
         if (kind == 8) t8 = t;
@@ -289,9 +294,9 @@ contract Tokens is OnchainBase {
 
     // ------------------------------------------------------------------ the wrapped kinds 1, 3, 9, 11
 
-    function _wrappedKind(uint8 kind) internal {
-        // W1: one MockERC20 leg 1:1, a hybrid (MINTABLE, maxSupply), rescuable
-        IFactoryToken.TokenConfig memory c = _base(kind, "oW1");
+    /// @dev W1: one MockERC20 leg 1:1, a hybrid (MINTABLE, maxSupply), rescuable
+    function _w1Cfg(uint8 kind) internal view returns (IFactoryToken.TokenConfig memory c) {
+        c = _base(kind, "oW1");
         c.features = 1 << GovernanceBits.PAYABLE | 1 << GovernanceBits.MINTABLE | 1 << GovernanceBits.RESCUABLE
             | uint256(1) << GovernanceBits.SUPPLY_CAP_ADJUSTABLE;
         c.roles.minter = _pad(a1);
@@ -299,6 +304,10 @@ contract Tokens is OnchainBase {
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(m1), 1, 1);
         if (_regulated(kind)) _reg(c);
+    }
+
+    function _wrappedKind(uint8 kind) internal {
+        IFactoryToken.TokenConfig memory c = _w1Cfg(kind);
         (t, k) = (_create(kind, c, string.concat("w1-", vm.toString(kind))), kind);
         _w1();
         _common();
@@ -419,7 +428,7 @@ contract Tokens is OnchainBase {
 
     function _common() internal {
         _direct();
-        _pq();
+        if (!skipPq) _pq(); // PqzKeysPublic: no ML-DSA signer there (its `_pq` rows run in PqzKeysSetup, `_pqOn`)
         _executeMeta();
         _transfers();
         _generic();
@@ -459,6 +468,20 @@ contract Tokens is OnchainBase {
         vm.broadcast(k2);
         n.mtxTransferWithFee(uaM, x.to, 1_000, 0, x.nonce, vu, FIXED_FEE, address(0), 5, a3, s);
         require(n.balanceOfUA(uaM) == 10_000 - 100 - 1_000 - 5, "PQ signer balance");
+    }
+
+    /// @dev `_pq` on a token of `kind` configured as the sweep's (`_normalCfg`, or W1's `_w1Cfg` with 1e9 wrapped by test key 1):
+    ///      the PQ signer's rows of a sweep run without them (`skipPq`), in a run that has the ML-DSA signer.
+    function _pqOn(uint8 kind, string memory what) internal {
+        bool w = kind % 2 == 1;
+        (t, k) = (_create(kind, w ? _w1Cfg(kind) : _normalCfg(kind), what), kind);
+        if (w) {
+            vm.startBroadcast(k1);
+            m1.approve(t, type(uint256).max);
+            WrappedToken(payable(t)).wrap(uint256(1e9));
+            vm.stopBroadcast();
+        }
+        _pq();
     }
 
     /// @dev The address `MetaTransaction` (v3) of `cancelNonce(77)`, signed by test key 1, relayed.
