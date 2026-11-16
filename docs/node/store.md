@@ -373,7 +373,8 @@ Store identity: `restore_epoch` (in `meta`) is incremented by the CLI `scaas-nod
 mandatory after any restore; the same audited transaction **sets every chain `paused`** and runs the retention purge
 ([NODE-RUN-02](runbooks.md#NODE-RUN-02)), so nothing is leased before clients reconcile. `incarnation` is a random
 16-byte hex written at every open. `store init` creates the store once (file mode 0600; refuses an existing one) and
-the reserved namespaces `~gateway`, `~mesh`, `~dex` with `all_tokens = 1`; a missing store refuses to start, so an
+the reserved namespaces `~gateway`, `~mesh`, `~dex`, `~node` (the lane's own jobs, [NODE-JOB-29](job-api.md#NODE-JOB-29)'s cache
+parts; BUILT) with `all_tokens = 1`; a missing store refuses to start, so an
 unmounted volume or a typo'd url never becomes a fresh store with a new `store_id`.
 
 The job state machine is in [job-api.md#states](job-api.md#states); DEX tables in

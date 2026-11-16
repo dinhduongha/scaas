@@ -199,7 +199,12 @@ local-directory journal: failover is "restore the store on another host", and a 
 owner lock ([NET-SUI-10](../networks/sui.md#NET-SUI-10)).
 
 Transitional (BUILT): the journal is the client's job row, written by a `signed` report over the pull protocol before
-`send_raw`; a failed report puts the work in the `retry` queue without sending.
+`send_raw`; a failed report puts the work in the `retry` queue without sending. The lane's own jobs, which have no client row
+(the [NODE-JOB-29](job-api.md#NODE-JOB-29) cache parts), are journaled in the store already (T21, owner 2026-11-16, O8; BUILT on
+the EVM lane): a job row in namespace `~node`, `queued → leased → signed` with its nonce and hash before `send_raw` (no row, no
+send), then `broadcast` (a replacement's hash), `mined` / `reverted` at its receipt, `dead` when gap-filled. At start the lane plans
+with `max(legacy journal, lane.journal_max)` and reads the lane's `signed` / `broadcast` rows: one below `pending` is tracked as a
+job is, one at or above it is gap-filled and closed `dead`.
 
 <a id="legacy-pull"></a><a id="NODE-LANE-02"></a>**NODE-LANE-02** — **Legacy pull: the `signed` report is idempotent
 and the nonce is held.** A `signed` report repeated with the same `(tx_hash, outer_nonce, signer_address)` (per signer: `(tx_hash,
