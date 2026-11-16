@@ -102,6 +102,22 @@ def main(rpc):
             raise SystemExit(1)
         out["PQZ_KEY_VERIFIER"] = a
         say(f"PqzKeyVerifier ok {a} (PQZ {E.PQZ}, PQZL {E.PQZL_ID.hex()[:16]}...)")
+    def held_call(to, data, gas):
+        """`to`'s answer to `data` with `gas` for the call itself, as the registry holds it (F-6), by an eth_call to code
+        put at a throwaway address by state override (nothing deployed): STATICCALL(gas, to, calldata) and its success,
+        return-data size and first word. The transaction's own gas is not the hold: a chain with the calldata floor
+        (EIP-7623 / EIP-7976) refuses an eth_call whose gas is below the floor of its calldata (reset 5, 2026-11-16: the
+        ML-DSA-44 KAT verify, 3,812 B of calldata, "gas below floor data cost: have 203174, want 265112"). The word only for
+        a good STATICCALL returning 32 bytes, else -1."""
+        at = "0x" + E.keccak256(b"scaas.pq_verifiers.held-call")[12:].hex()
+        code = "365f5f37" + "60205f365f73" + to[2:].lower() + "63" + f"{gas:08x}" + "fa" + "602052" + "3d604052" + "60605ff3"
+        # the outer call's gas: the block's limit, at most EIP-7825's per-transaction cap (eth_call too on a node with it)
+        tx = min(int(E.rpc("eth_getBlockByNumber", ["latest", False])["gasLimit"], 16), 1 << 24)
+        w = E.words(E.rpc("eth_call", [{"to": at, "data": "0x" + data.hex(), "gas": hex(tx)}, "latest",
+                                       {at: {"code": "0x" + code}}]))
+        ok, rds, word = (int.from_bytes(x, "big") for x in (w[1], w[2], w[0]))
+        return word if ok == 1 and rds == 32 else -1
+
     mode = os.environ.get("MLDSA_PRECOMPILE", "on")
     if mode not in ("on", "off"):
         raise SystemExit("[deploy] pq-verifiers FAIL MLDSA_PRECOMPILE: on or off")
@@ -135,8 +151,7 @@ def main(rpc):
         for m, want in ((msg, 1), (bytes(b ^ 0xFF for b in msg), 0)):
             data = E.cd("verify(bytes,bytes32,bytes)", ["b", "w", "b"], bytes.fromhex(k["pk"][2:]), m, bytes.fromhex(k["sig"][2:]))
             try:
-                r = E.rpc("eth_call", [{"to": a, "data": "0x" + data.hex(), "gas": hex(cap + cap // 63)}, "latest"])
-                verdict = int(r, 16) if r not in ("0x", None) else -1
+                verdict = held_call(a, data, cap + cap // 63)
             except RuntimeError:
                 verdict = -1
             good = verdict == want

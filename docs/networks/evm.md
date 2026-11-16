@@ -419,7 +419,8 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   ([gen-1 kind gate](../contracts/accounts.md#gen1-kind-gate)). Change (owner 2026-11-15, TODO 3zh; BUILT on `3zh-mldsa`):
   with `MLDSA_PRECOMPILE=on` (the default) the same step builds `MldsaVerifier` 0x0130 / 0x0131 / 0x0134 on the chain's ML-DSA
   precompiles where each probe passes (EIP-8355's `0x12` / `0x13` / `0x14`, then `0x…5caa0012` / `13` / `14`), each checked by
-  `verify` of its `pq_kat.json` row within `cap + cap / 63` gas, and hands them over as `MLDSA44_VERIFIER` / `MLDSA65_VERIFIER`
+  `verify` of its `pq_kat.json` row within `cap + cap / 63` gas (the verifier's call itself held to it, by an eth_call to a
+  state-override caller: the calldata floor of EIP-7623 / EIP-7976 applies to the transaction, not to the hold; reset 5 fix), and hands them over as `MLDSA44_VERIFIER` / `MLDSA65_VERIFIER`
   / `MLDSA87_VERIFIER`; `MLDSA_PRECOMPILE=off` builds none and every ML-DSA kind is on the registry's expanded-key cache. The
   cache's part transactions are gated at deploy time as this rule's inclusion check
   ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)'s Change, MD-5; `script/DeployGas.sol`). Every line of the run on stdout is short (`[deploy] …`, one
