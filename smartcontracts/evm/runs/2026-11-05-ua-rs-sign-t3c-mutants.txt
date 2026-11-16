@@ -26,3 +26,6 @@ killed   | M1 nonce reduced from 256 bits | src/wallet/pairing.rs | rc=101 | 2 f
 killed   | M17 MuSig2 session keeps its nonce (read, not spent) | src/wallet/pairing.rs | rc=101 | 1 failed: second_sign_on_a_session_errors | at 07a217010
 killed   | M18 FROST session keeps its nonces | src/wallet/pairing.rs | rc=101 | 1 failed: frost_session_nonce_signs_once | at 07a217010
 # t21 re-run: 3 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)
+# t21 wave 2 re-run (2026-11-16, after t21-fix2-client): L73 moved the code of M18; its replacement brought to HEAD (0d4b971cf), the mutant run again:
+killed   | M18 FROST session keeps its nonces | src/wallet/pairing.rs | rc=101 | 1 failed: frost_session_nonce_signs_once | at 0d4b971cf
+# t21 wave 2 re-run: 1 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)

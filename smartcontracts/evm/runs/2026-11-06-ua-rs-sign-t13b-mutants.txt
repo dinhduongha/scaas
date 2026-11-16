@@ -12,3 +12,6 @@ killed     | M6 uaSig keys in reverse order | clients/ua-qt/src/ua_wallet.rs | r
 killed     | M7 lastError not cleared before a call | clients/ua-qt/src/ua_wallet.rs | rc=3 | 3 failed: UaWallet::test_load_refuses_wrong_abi_or_features, UaWallet::test_seal_to_a_public_key, UaWallet::test_sign_by_handle_id | Totals: 35 passed, 3 failed, 0 skipped, 0 blacklisted, 768ms
 killed     | M8 a revoked key's error code dropped (lastError UAArgument) | clients/ua-qt/src/ua_wallet.rs | rc=4 | 4 failed: UaWallet::test_revoked_after_lock_public_data_readable, UaWallet::test_seal_to_a_public_key, UaWallet::test_sign_by_handle_id, UaWallet::test_uasig_msig_by_handle_ids | Totals: 34 passed, 4 failed, 0 skipped, 0 blacklisted, 701ms
 mutants M1-M8 of 8: 8 killed, 0 survived, 0 not loaded
+# t21 wave 2 re-run (2026-11-16, after t21-fix2-client): L78 moved the code of M6; its replacement brought to HEAD (0d4b971cf), the mutant run again:
+killed     | M6 uaSig keys in reverse order | clients/ua-qt/src/ua_wallet.rs | rc=1 | 1 failed: UaWallet::test_uasig_msig_by_handle_ids | Totals: 40 passed, 1 failed, 0 skipped, 0 blacklisted, 786ms | at 0d4b971cf
+# t21 wave 2 re-run: 1 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)
