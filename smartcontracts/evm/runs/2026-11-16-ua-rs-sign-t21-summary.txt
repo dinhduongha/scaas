@@ -1,0 +1,43 @@
+# 2026-11-16-ua-rs-sign-t21 at commit 84e5c702a (partial: stopped by the owner 17:25, machine off; see the rows still to run below)
+step | commit | rc | counts
+vectors-check | 84e5c702a | 0 | 4 passed 0 failed 0 ignored (cargo)
+ua-rs-vectors | 84e5c702a | 0 | 535 passed 0 failed 5 ignored (cargo)
+ua-rs | 84e5c702a | 0 | 451 passed 0 failed 3 ignored (cargo)
+ua-rs-wallet | 84e5c702a | 0 | 336 passed 0 failed 0 ignored (cargo)
+ua-rs-nodefault | 84e5c702a | 0 | 87 passed 0 failed 0 ignored (cargo)
+ua-rs-pq | 84e5c702a | 0 | 38 passed 0 failed 0 ignored (cargo)
+ua-rs-signers | 84e5c702a | 0 | 4 passed 0 failed 0 ignored (cargo)
+ua-rs-json | 84e5c702a | 0 | 7 passed 0 failed 0 ignored (cargo)
+ua-rs-zether | 84e5c702a | 0 | 21 passed 0 failed 0 ignored (cargo)
+ua-rs-pqz | 628918d84 | 0 | 84 passed 0 failed 3 ignored (cargo)
+ua-rs-pqz-n2048 | f2ccc44b1 | 0 | 167 passed 0 failed 3 ignored (cargo)
+clientkeys | 36892e6b5 | 0 | -
+ua-qt | 628918d84 | 0 | -
+ua-c | 95a4789f2 | 0 | 9 passed 0 failed 0 ignored (cargo)
+ua-cxx | 95a4789f2 | 0 | -
+ua-py | 95a4789f2 | 0 | -
+ua-go | 0ab3ce717 | 0 | -
+ua-cs | 628918d84 | 0 | -
+ua-dart-frb | 7efc7d9de | 0 | 3 passed 0 failed 0 ignored (cargo)
+ua-dart | 628918d84 | 0 | -
+no-oracle | 95a4789f2 | 0 | 17 passed 0 failed 1 ignored (cargo)
+no-oracle-n2048 | 95a4789f2 | 0 | 13 passed 0 failed 0 ignored (cargo)
+no-oracle-ua-py | 95a4789f2 | 0 | -
+ua-deny | 95a4789f2 | 0 | -
+ua-fuzz | 95a4789f2 | 0 | -
+wallet-rows | 6f4321bcf | 0 | 2 passed 0 failed 0 ignored (cargo)
+test-features | 6f4321bcf | 0 | -
+pqz-read | 6f4321bcf | 0 | 11 passed 0 failed 0 ignored (cargo)
+docs | 6f4321bcf | 0 | -
+mutant-logs | dc9216d36 | 0 | -
+ua-sizes | 36892e6b5 | 0 | -
+named-tests | 7efc7d9de | 0 | -
+forge-ua | f2ccc44b1 | 0 | -
+cargo-zether-prover | 6f4321bcf | 0 | 176 passed 0 failed 4 ignored (cargo)
+wasm-zether-prover | 6f4321bcf | 0 | -
+scaas-ct | 6f4321bcf | 0 | 9 passed 0 failed 0 ignored (cargo)
+read-balance | 6f4321bcf | 0 | 19 passed 0 failed 0 ignored (cargo)
+scaas-node cargo test | 84e5c702a | 0 | 787 passed 0 failed 72 ignored (cargo; lib 782)
+scaas-node clippy --all-targets -D warnings | 84e5c702a | 0 | -
+
+# commits 84e5c702a and later: rows at an earlier commit re-run at the tip before the review (merge-resume.md)
