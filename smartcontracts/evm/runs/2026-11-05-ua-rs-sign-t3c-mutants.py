@@ -21,8 +21,8 @@ BLIND = "let kp = blind(k.as_ref(), P::ScalarField::MODULUS.as_ref(), &rho);"
 LOOP = "    for limb in kp.iter().rev() {\n        for j in (0..64).rev() {\n"
 M = [
     # the plan's T3c list
-    ("nonce reduced from 256 bits", P, [("    hash_to_scalar(&keccak(&[NONCE_TAG, sk, y, ua_msg, aux]))",
-                                         "    F::from_be_bytes_mod_order(&keccak(&[NONCE_TAG, sk, y, ua_msg, aux]))")]),
+    ("nonce reduced from 256 bits", P, [("    hash_to_scalar_wide(&d, &mut w);\n    F::from_be_bytes_mod_order(&w[..])",
+                                         "    let _ = &mut w;\n    F::from_be_bytes_mod_order(&d[..])")]),
     ("Y left out of the nonce", P, [("&[NONCE_TAG, sk, y, ua_msg, aux]", "&[NONCE_TAG, sk, ua_msg, aux]")]),
     ("secret_mul replaced by Projective * Fr (blinding erased)", CT, [
         ("    let mut rho = Zeroizing::new([0u64; 2]);\n", "    return Ok(base * *secret);\n    #[allow(unreachable_code)]\n    let mut rho = Zeroizing::new([0u64; 2]);\n")]),
@@ -54,9 +54,10 @@ M = [
     ("masked swap swaps nothing", CT, [("            u64::conditional_swap(x, y, c);\n", "            let _ = (x, y, c);\n")]),
     ("rho the same every call", CT, [(BLIND, "let kp = blind(k.as_ref(), P::ScalarField::MODULUS.as_ref(), &[1, 0]);")]),
     ("MuSig2 session keeps its nonce (read, not spent)", P, [
-        ("let k = self.nonce.take().ok_or(Error::Argument)?.take()?;",
-         "let k = self.nonce.as_ref().ok_or(Error::Argument)?.with(|b| Zeroizing::new(b.to_vec()))?;")]),
-    ("FROST session keeps its nonces", P, [("let n = self.nonces.take().ok_or(Error::Argument)?;", "let n = self.nonces.clone().ok_or(Error::Argument)?;")]),
+        ("let k = self.nonce.take().ok_or(Error::Argument)?.take()?;\n        let sec = Zeroizing::new",
+         "let k = self.nonce.as_ref().ok_or(Error::Argument)?.with(|b| Zeroizing::new(b.to_vec()))?;\n        let sec = Zeroizing::new")]),
+    ("FROST session keeps its nonces", P, [("let k = self.nonce.take().ok_or(Error::Argument)?.take()?;\n        let (hiding, binding)",
+       "let k = self.nonce.as_ref().ok_or(Error::Argument)?.with(|b| Zeroizing::new(b.to_vec()))?;\n        let (hiding, binding)")]),  # t21 O1: the nonces in the arena
     ("MuSig2 session without its own key accepted", P, [("        if !pks.contains(&self.key_data) {\n            return Err(Error::Argument);\n        }\n", "")]),
     ("Schnorr challenge without Y", P, [("&[SCHNORR_TAG, &sig, y, ua_msg]", "&[SCHNORR_TAG, &sig, ua_msg]")]),
     ("Schnorr z = k - e*sk", P, [("Zeroizing::new(*k + e * *sk)", "Zeroizing::new(*k - e * *sk)")]),

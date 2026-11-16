@@ -15,7 +15,7 @@ import subprocess
 UA = "clients/ua-rs/"
 U = UA + "src/wallet/uasig.rs"
 SUITE = [os.path.abspath("scripts/capped"), "cargo", "test", "-j2", "--locked", "--features", "vectors", "--test", "wallet_uasig"]
-L1 = "if !msig_slots_minimal(key_data, &slots.iter().map(Slot::index).collect::<Vec<_>>())? {"
+L1 = "if !msig_slots_minimal(&key_data, &indexes)? {"  # t21 L01: key_data / indexes of the current structure
 L2 = "if !msig_slots_minimal(&d, &members.iter().map(|(j, _)| *j).collect::<Vec<_>>())? {"
 M = [
     # the plan's T3d list
@@ -30,7 +30,7 @@ M = [
     ("memberDigest over the wrong structure (level 2: the inner message without the outer memberDigest)", U, [
         ("&purpose_tag(\"member\")?, &member_digest(ua, msg))?", "&purpose_tag(\"member\")?, msg)?")]),
     ("slots unsorted (level 1: sorted before the check, emitted as given)", U, [
-        (L1, "if !msig_slots_minimal(key_data, &{ let mut v = slots.iter().map(Slot::index).collect::<Vec<_>>(); v.sort(); v })? {")]),
+        (L1, "if !msig_slots_minimal(&key_data, &{ let mut v = indexes.clone(); v.sort(); v })? {")]),
     ("slots unsorted (level 2: sorted before the check, emitted as given)", U, [
         (L2, "if !msig_slots_minimal(&d, &{ let mut v = members.iter().map(|(j, _)| *j).collect::<Vec<_>>(); v.sort(); v })? {")]),
     ("slots unsorted (emitted in reverse)", U, [("plans.iter().map(|p| sign(p, &ua, &msg, &native))", "plans.iter().rev().map(|p| sign(p, &ua, &msg, &native))")]),
@@ -39,12 +39,12 @@ M = [
     ("acceptance under the purpose member", U, [("&purpose_tag(\"membership\")?", "&purpose_tag(\"member\")?")]),
     ("slot key not checked against its member", U, [("    if ok {\n        Ok(())\n    } else {", "    if ok || true {\n        Ok(())\n    } else {")]),
     ("inner key data not checked against the member id", U, [
-        ("            if derive_ua(MSIG, &d, false).ok() != Some(member.id) {", "            if false {")]),
+        ("            if derive_ua(MSIG, &first, false).ok() != Some(member.id) {", "            if false {")]),
     ("each slot signed as it is checked (a refused set signs)", U, [
         # the slots before the first refused one are signed, then the refusal is returned
-        ("    let plans = slots.iter().map(|s| plan(&structure, s, inner)).collect::<Result<Vec<_>>>()?;\n",
+        ("    let plans = slots.iter().map(|s| plan(&structure, s, inner, current)).collect::<Result<Vec<_>>>()?;\n",
          "    let mut refused = None;\n"
-         "    let plans = slots.iter().map_while(|s| plan(&structure, s, inner).map_err(|e| refused = Some(e)).ok()).collect::<Vec<_>>();\n"),
+         "    let plans = slots.iter().map_while(|s| plan(&structure, s, inner, current).map_err(|e| refused = Some(e)).ok()).collect::<Vec<_>>();\n"),
         ("    let members = plans.iter().map(|p| sign(p, &ua, &msg, &native)).collect::<Result<Vec<_>>>()?;\n",
          "    let members = plans.iter().map(|p| sign(p, &ua, &msg, &native)).collect::<Result<Vec<_>>>()?;\n"
          "    if let Some(e) = refused {\n        return Err(e);\n    }\n")]),

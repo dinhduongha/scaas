@@ -47,15 +47,16 @@ M = [
     ("Y left out of the nonce", UAKEY, "be(sk, 32), Y, uaMsg, aux)), r);", "be(sk, 32), uaMsg, aux)), r);"),
     ("BLS12-381 role ignored (always SIG)", UAKEY, "DST: BLS_DST[role === 'pop' ? 'pop' : 'sig']", "DST: BLS_DST.sig"),
     ("BLS-bn254 role ignored (always SIG)", UAKEY, "BN_LABEL[role === 'pop' ? 'pop' : 'sig']", "BN_LABEL.sig"),
-    ("kem not a PoP role", UAKEY, "[ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG]", "[ua.POP_V2_TAG, ua.PQZ_KEY_TAG]"),
+    ("kem not a PoP role", "clients/clientkeys/src/ua.js", "PORTABLE_RECORD_TAGS = Object.freeze([POP_V2_TAG, KEM_TAG, PQZ_KEY_TAG, PQZ_SCOPED_KEY_TAG]);",
+     "PORTABLE_RECORD_TAGS = Object.freeze([POP_V2_TAG, PQZ_KEY_TAG, PQZ_SCOPED_KEY_TAG]);"),  # t21: L03 moved the list to ua.js
     ("purpose check skipped", UAKEY, "!PURPOSE_TAGS.has(hex(tag))", "false"),
     # typed data
     ("unbound relayer hashed (canon dropped on mode bit 1)", EVM, "if (!(BigInt(m.mode) & 1n)) m.relayer = ZERO_ADDRESS;", ""),
     ("canon skipped on a nested struct", EVM, "const m = Object.fromEntries(types[type].map((f) => [f.name, canonical(f.type, v?.[f.name], types)]));",
      "const m = Object.fromEntries(types[type].map((f) => [f.name, types[f.type] ? v?.[f.name] : canonical(f.type, v?.[f.name], types)]));"),
-    ("canon applied in the generic hasher (unrelated Order)", EVM, "...types[primary].map((f) => encodeValue(f.type, data?.[f.name], types)),",
+    ("canon applied in the generic hasher (unrelated Order)", EVM, "...types[primary].map((f) => encodeValue(f.type, data?.[f.name], types, budget)),",
      "...types[primary].map((f) => encodeValue(f.type, (['relayer', 'feeRecipient'].includes(f.name) && data && 'mode' in data"
-     " && !(BigInt(data.mode) & (f.name === 'relayer' ? 1n : 2n))) ? '0x' + '00'.repeat(20) : data?.[f.name], types)),"),
+     " && !(BigInt(data.mode) & (f.name === 'relayer' ? 1n : 2n))) ? '0x' + '00'.repeat(20) : data?.[f.name], types, budget)),"),
     ("unknown field accepted by the hasher", EVM, "if (!types[primary].some((f) => f.name === k)) throw new Error(`EIP-712: ${k} is not a field of ${primary}`);", ""),
     ("int two's complement wrong", EVM, "return word(BigInt.asUintN(256, v));", "return word(v < 0n ? -v : v);"),
     ("policy check skipped (Payment)", EVM, "  Payment: (td, x) => checkPayment(td, x).digest,", "  Payment: (td) => digestOf(td),"),

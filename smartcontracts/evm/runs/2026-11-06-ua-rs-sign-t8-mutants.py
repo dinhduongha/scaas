@@ -24,7 +24,7 @@ SINGLE = "        auth.members.is_empty() && crate::verify::verify(kind, &auth.k
 MSIG_OK = "        auth.signature.is_empty() && msig_ok(&c.sender_ua, &auth.key_data, &m0, &auth.members, members, accepted)?"
 ACC1 = "    accepted_ok(id, d, slots.iter().map(|s| s.index), accepted)?;\n"
 ACC2 = "            accepted_ok(&m.id, key, s.members.iter().map(|x| x.index), accepted)?;\n"
-WINDOW = "    if c.created < s.start || c.created > s.start.saturating_add(LINK_WINDOW) {"
+WINDOW = "    if now > end || c.created < s.start.saturating_sub(LINK_SKEW) || c.created > end.saturating_add(LINK_SKEW) {"  # t21 O3
 MIN1 = "    if !msig_slots_minimal(key_data, &slots.iter().map(|s| s.index).collect::<Vec<_>>())? {\n        return Ok(false);"
 MIN2 = "            if !msig_slots_minimal(&d, &s.members.iter().map(|x| x.index).collect::<Vec<_>>())? {"
 M = [
@@ -54,8 +54,8 @@ M = [
         "    let derives = |k: &u16| derive_ua(*k, &auth.key_data, false).is_ok();")], SUITE),
     ("link window not checked", [(S, WINDOW, "    if false {")], SUITE),
     # the controller's
-    ("link window: lower bound only", [(S, WINDOW, "    if c.created < s.start {")], SUITE),
-    ("link window: upper bound only", [(S, WINDOW, "    if c.created > s.start.saturating_add(LINK_WINDOW) {")], SUITE),
+    ("link window: lower bound only", [(S, WINDOW, "    if c.created < s.start.saturating_sub(LINK_SKEW) {")], SUITE),
+    ("link window: upper bound only", [(S, WINDOW, "    if now > end || c.created > end.saturating_add(LINK_SKEW) {")], SUITE),
     ("scheme byte of the HKDF info changed (2)", [(S, INFO, INFO.replace("&[1]", "&[2]"))], SUITE),
     ("seal version / scheme not checked by open", [(S, "        if s.version != 1 || s.scheme != 1 {\n            return Err(Error::SealVersion);",
         "        if false {\n            return Err(Error::SealVersion);")], SUITE),
@@ -69,7 +69,7 @@ M = [
     ("approved sender set unbounded", [(S, "        ExpectedSender::Set(s) if s.len() <= SET_MAX => s,", "        ExpectedSender::Set(s) if true => s,")], SUITE),
     ("MD-11: Recipient::ua accepts a non-holder (an msig)", [(S, "        if !is_kem_holder(kind) {\n            return Err(Error::KemHolder);",
         "        if !is_kem_holder(kind) && kind != 0x0120 {\n            return Err(Error::KemHolder);")], SUITE),
-    ("link session key not wiped", [(S, "        session.key.wipe_own_store();\n", "")], SUITE),
+    ("link session key not wiped", [(S, "bip39_passphrase, t));\n        session.key.wipe_own_store();\n", "bip39_passphrase, t));\n")], SUITE),
     ("GCM-SIV computed as GCM", [(A, "        Alg::Aes256GcmSiv => aes_gcm_siv::Aes256GcmSiv::new_from_slice(key).map_err(|_| Error::Argument)?.encrypt(nonce.into(), p),",
         "        Alg::Aes256GcmSiv => aes_gcm::Aes256Gcm::new_from_slice(key).map_err(|_| Error::Argument)?.encrypt(nonce.into(), p),")], SUITE),
     ("HMAC key ignored", [(A, "    let Ok(mut m) = <Hmac<Sha256> as Mac>::new_from_slice(key) else { return [0; 32] };",

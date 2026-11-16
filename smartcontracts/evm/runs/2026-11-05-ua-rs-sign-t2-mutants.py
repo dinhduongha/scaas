@@ -29,8 +29,8 @@ M = [
     ("wrong kindNo (kind + 1)", D, [(TREE, TREE.replace("u32::from(kind) | HARDENED", "(u32::from(kind) + 1) | HARDENED"))]),
     ("TAG(kind) for utf8(tag) in the HKDF info", D, [("let info = [tag.as_bytes(),", "let info = [&crate::keccak256(tag.as_bytes())[..],")]),
     ("account >= 2^31 accepted", D, [("    range(account)?;\n    range(index)?;\n    crate::kind_info", "    range(index)?;\n    crate::kind_info")]),
-    ("NFKD dropped (mnemonic)", MOD, [("Zeroizing::new(words.nfkd().collect::<String>())", "Zeroizing::new(words.to_string())")]),
-    ("depth bound removed", BD, [("if depth > max_depth {", "if false {")]),
+    ("NFKD dropped (mnemonic)", MOD, [("let nfkd = sized(|| words.nfkd());", "let nfkd = sized(|| words.chars());")]),
+    ("depth bound removed", "clients/ua-rs/src/json.rs", [("if depth > max_depth {", "if false {")]),
     ("index 1 accepted for an EIP-2333 kind", D, [("if index == 0 { Ok([root, 0, account, u32::from(kind)]) }", "if true { Ok([root, 0, account, u32::from(kind)]) }")]),
     ("imported entropy padded to 32 bytes", MOD, [("a.get(..len).ok_or(Error::Argument)", "a.get(..32).ok_or(Error::Argument)")]),
     ("a key's bytes copied into its handle", ST, [
@@ -45,7 +45,7 @@ M = [
     ("dropping the wallet does not lock it", MOD, [("    fn drop(&mut self) {\n        self.store.lock();\n    }", "    fn drop(&mut self) {}")]),
     ("nist256p1 child retry over the wrong bytes", D, [("*data = [&[1u8][..], &ir[..], &ser].concat();", "*data = [&[1u8][..], &il[..], &ser].concat();")]),
     ("nist256p1 seed retry dropped", D, [("while curve == Curve::Nist256p1 && p256_key(&halves(&i).0).is_none() {", "while false {")]),
-    ("lower case dropped (mnemonic)", MOD, [("Zeroizing::new(nfkd.to_lowercase())", "Zeroizing::new(nfkd.to_string())")]),
+    ("lower case dropped (mnemonic)", MOD, [("let lower = sized(|| nfkd.chars().flat_map(char::to_lowercase));", "let lower = sized(|| nfkd.chars());")]),
 ]
 bad = 0
 assert len({m[0] for m in M}) == len(M)

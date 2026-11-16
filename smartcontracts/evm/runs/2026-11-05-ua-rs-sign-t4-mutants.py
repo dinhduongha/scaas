@@ -23,9 +23,9 @@ ZEROED = ("\n/// mutant: the server's value canonicalised\npub(crate) fn zeroed(
 M = [
     # the plan's T4 list
     ("unbound relayer hashed (the builders keep it)", [(E, "                if mode & 1 == 0 {", "                if false {")]),
-    ("canon skipped on a nested struct", [(E, "                m.insert(n.clone(), self.canonical(t, o.get(n))?);",
+    ("canon skipped on a nested struct", [(E, "                m.insert(n.clone(), self.canonical(t, o.get(n), c)?);",
         "                m.insert(n.clone(), if self.types.contains_key(t.as_str()) { o.get(n).cloned().unwrap_or(Value::Null) } "
-        "else { self.canonical(t, o.get(n))? });")]),
+        "else { self.canonical(t, o.get(n), c)? });")]),
     ("canon applied on Any (every request canonicalised)", [(E,
         "    Ok(SignRequest::Eip712 { domain_separator: td.domain_separator()?, struct_hash: td.struct_hash()?, typed_data: Box::new(td.clone()) })",
         "    let td = &TypedData { message: td.canonical(&td.primary_type, Some(&td.message))?, ..td.clone() };\n"
@@ -69,7 +69,7 @@ M = [
     ("native record not checked against the digest", [(U,
         "            if r.domain_separator()? != PORTABLE_DOMAIN_SEPARATOR || r.digest()? != *digest {",
         "            if r.domain_separator()? != PORTABLE_DOMAIN_SEPARATOR {")]),
-    ("native UASig in a portable purpose", [(U, "        if is_portable_purpose(purpose) {\n            return Err(Error::Argument);\n        }\n        let td = eip712::ua_auth",
+    ("native UASig in a portable purpose", [(U, "        if is_portable_purpose(purpose) || portable_record_purposes().contains(purpose) {\n            return Err(Error::Argument);\n        }\n        let td = eip712::ua_auth",
         "        let td = eip712::ua_auth")]),
 ]
 assert len({m[0] for m in M}) == len(M)

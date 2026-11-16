@@ -38,7 +38,7 @@ M = [
     ("derive_ua recomputation skipped", SEAL, "find((k) => derives(k, auth.keyData, senderUa));",
      "find((k) => derives(k, auth.keyData, ua.deriveUA(k, auth.keyData)));"),
     ("container sender signature unchecked", SEAL, "if (!ok) fail('SealOpen', 'sender signature');", ""),
-    ("link window not checked", SEAL, "if (!Number.isSafeInteger(c?.created) || c.created < session.start || c.created > session.end) {", "if (false) {"),
+    ("link window not checked", SEAL, "if (!Number.isSafeInteger(c?.created) || c.created < session.start - LINK_SKEW || c.created > session.end + LINK_SKEW) {", "if (false) {"),
     ("link session not used up", SEAL, "  session.used = true;\n", ""),
     ("generation compare skipped", SEAL, "if (payload.generation < current.generation && allowRollback !== true) fail(", "if (false) fail("),
     ("seed payload length not checked", VAULT, "if (!SEED_LENGTHS.includes(entropy.length)) {", "if (false) {"),

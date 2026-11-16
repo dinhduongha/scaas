@@ -72,7 +72,7 @@ M = [
     ("the link session not consumed on a failed install", [(LIB, "        let taken = lock(&s.0)?.take().ok_or_else(|| fail(SCAAS_UA_ERR_KEY_REVOKED))?;",
         "        let taken = uw::LinkSession::new()?;\n        drop(lock(&s.0)?);")], py("WalletSeal.test_link_session_is_consumed")),
     ("seed_backup_reveal without its capacity check (a short buffer reveals)", [(LIB,
-        "        need(out_len, SCAAS_UA_MNEMONIC_MAX)?;\n        let words = lock(&b.0)?.reveal()?;", "        let words = lock(&b.0)?.reveal()?;")],
+        "        need(out_len, SCAAS_UA_MNEMONIC_MAX)?;\n        if out.is_null() {", "        if out.is_null() {")],
      py("WalletCustody.test_seed_backup_sequence")),
     ("the mlock bit never set", [(LIB, "            | on(b::MLOCK, SCAAS_UA_FEATURE_MLOCK)", "            | on(false, SCAAS_UA_FEATURE_MLOCK)")], LIBTEST),
     ("expect / members / accepted JSON past 16 KiB read", [(SEAL, "const LOOKUP_JSON: usize = 16 << 10;", "const LOOKUP_JSON: usize = 16 << 20;")], CAPS),
@@ -81,9 +81,9 @@ M = [
     ("UASig request depth 7 read", [(UASIG, "const REQUEST_DEPTH: usize = 6;", "const REQUEST_DEPTH: usize = 7;")], CAPS),
     ("expect_json read past an unknown key", [(SEAL, "    let o = only(v, &[\"purpose\", \"sender\", \"recipient\"])?;", "    let o = v.as_object()?;")], CAPS),
     ("UASig request: msig slots in another order than given (sorted)", [(UASIG,
-        "            By::Msig { key_data: h(m.get(\"keyData\")?)?, inner, slots: slots.iter().map(slot).collect::<Option<_>>()? }",
+        "            By::Msig { key_data: h(m.get(\"keyData\")?)?, inner, current, slots: slots.iter().map(slot).collect::<Option<_>>()? }",
         "            let mut slots: Vec<(u16, SlotBy)> = slots.iter().map(slot).collect::<Option<_>>()?;\n            slots.sort_by_key(|s| s.0);\n"
-        "            By::Msig { key_data: h(m.get(\"keyData\")?)?, inner, slots }")], py("WalletSign.test_sign_json_msig_rows_through_uasig")),
+        "            By::Msig { key_data: h(m.get(\"keyData\")?)?, inner, current, slots }")], py("WalletSign.test_sign_json_msig_rows_through_uasig")),
 ]
 
 if sys.argv[1:] == ["check"]:
