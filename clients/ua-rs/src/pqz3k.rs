@@ -25,6 +25,12 @@ use sha2::Sha256;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::Shake256;
 
+/// Equality of two 32-byte words in constant time (T21 L42): every byte is folded, no early exit, and the fold is hidden from
+/// the optimiser. `pqz3k` builds in every cell, `subtle` only with `pqz` (so the lockfiles over ua-rs stay as they are).
+fn ct_eq32(a: &[u8; 32], b: &[u8; 32]) -> bool {
+    core::hint::black_box(a.iter().zip(b).fold(0u8, |d, (x, y)| d | (x ^ y))) == 0
+}
+
 fn hmac(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
     let mut m = <Hmac<Sha256> as Mac>::new_from_slice(key).expect("any key length");
     for p in parts {
@@ -502,7 +508,7 @@ impl PqzKeyHandle {
         }
         // constant time, as path (B)'s `ct_eq` (T21 L42): the tag gates the seed for a ciphertext a node supplies
         let want = own_tag(&self.pqz_seed, &self.chain_uid, &own.token, &self.ua, own.send_counter, own.pu, own.pvf);
-        if !bool::from(subtle::ConstantTimeEq::ct_eq(&want[..], &own.own_tag[..])) {
+        if !ct_eq32(&want, &own.own_tag) {
             return Err(Refused::OwnTag);
         }
         self.loads.set(self.loads.get() + 1);

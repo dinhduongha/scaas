@@ -167,7 +167,7 @@ fn container_json_inputs_read_the_vector_rows() {
             n += 1;
         }
     }
-    assert_eq!(n, 4 + 29 + 9);
+    assert_eq!(n, 4 + 29 + 12); // replay: 6 link rows since T21 O3 (the opener's clock, the skew), 6 backup rows
     let ua = format!("\"0x{}\"", "11".repeat(32));
     let set = |k: usize| format!("{{\"purpose\":\"scaas/backup/v1\",\"sender\":{{\"set\":[{}]}},\"recipient\":{{\"kemPkHash\":{ua}}}}}", vec![ua.clone(); k].join(","));
     assert!(ContainerExpectJson::from_json(set(64).as_bytes()).is_ok(), "64 UAs (control)");
