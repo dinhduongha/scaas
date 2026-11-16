@@ -522,3 +522,51 @@ fn proof_path_negatives() {
 fn unpack_lanes(stored: &[u8]) -> Vec<u64> {
     scaas_ua::facade::pqz_pack::unpack(stored).unwrap().chunks_exact(8).map(|c| u64::from_be_bytes(c.try_into().unwrap())).collect()
 }
+
+/// T21 O5 (b) (ARCH-POS-13 on the three-key handle, spec §14.18): the 2·K crafted queries, laid out wherever a ciphertext enters
+/// `pqz3k::PqzKeyHandle` (a class-2 handle of the holder's wallet): as the debit's own part with a tag that is not the holder's
+/// (zero, and the holder's tag of another counter), as an unaccepted window entry, and as a credit through `check` (an opening
+/// op 1 blob holding the query as `u ‖ v_t`, a junk opening). Each is refused (`OwnTag`, `Window`) or a skip, and the PQZ seed
+/// never reaches a closure. Positive control: the same bytes as the holder's own part under its true tag open.
+#[test]
+fn three_key_handle_refuses_the_crafted_query() {
+    use scaas_ua::facade::pqz_pack::pack;
+    use scaas_ua::pqz3k::{Checked, Credit, Debit, Own, Reads, Refused, Scope, WindowEntry};
+    use scaas_ua::wallet::{hkdf_sha256, hmac_sha256};
+    unlock();
+    let w = Wallet::from_mnemonic(WORDS, "").unwrap();
+    let (cu, token) = ([0xC1u8; 32], [0x70u8; 20]);
+    let h = w.pqz_scoped_key(&Scope { account: 0, index: 0, ua: A, chain_uid: cu, token: None, version: 0 }).unwrap();
+    let seed32 = h.with_secret_keygen(|s| *s).unwrap();
+    let tag = |pu: &[u8], pvf: &[u8], ctr: u32| {
+        let k = hkdf_sha256(&seed32, &[], b"PQZ/owntag/v1", 32).unwrap();
+        hmac_sha256(&k, &[&cu[..], &token, &A, &ctr.to_be_bytes(), &scaas_ua::keccak256(&[pu, pvf].concat())].concat())
+    };
+    let mut slot = [0u8; 32];
+    slot[23] = 200; // a credit (length 200), unmarked
+    let reads = Reads { block: 1, finalized: true, strict_majority: true };
+    let mut n = 0;
+    for j in 0..K {
+        for off in [0, -1] {
+            let (u, v) = query(j, off);
+            let (pu, pv) = (pack(&u).unwrap(), pack(&v).unwrap());
+            let own = |own_tag| Debit { token, last_debit: 1, own: Some(Own { pu: &pu, pvf: &pv, own_tag }), window: &[] };
+            assert_eq!(h.with_secret_debit(&own([0; 32]), |_| ()), Err(Refused::OwnTag), "a zero tag");
+            assert_eq!(h.with_secret_debit(&own(tag(&pu, &pv, 1)), |_| ()), Err(Refused::OwnTag), "the tag of another counter");
+            let code = [&[0u8][..], &[0x5a; 16], &pu, &pv, &A, &pu, &pv, &[0x33; scaas_ua::pqz3k::OPENING], &[0; 32], &0u64.to_be_bytes(), &[1]].concat();
+            let win = [WindowEntry { token, index: 0, slot, code: Some(&code), accepted: None }];
+            let d = Debit { token, last_debit: 0, own: None, window: &win };
+            assert_eq!(h.with_secret_debit(&d, |_| ()), Err(Refused::Window), "an unaccepted window entry");
+            let c = Credit { token, index: 0, slot, code: &code, auditor: None, reads };
+            assert!(matches!(h.check(&c), Ok(Checked::Skip(_))), "a credit holding the query is a skip, never a decryption");
+            n += 1;
+        }
+    }
+    assert_eq!(n, 2 * K);
+    assert_eq!(h.secret_loads(), 0, "no query reached the seed");
+    let (u, v) = query(0, 0);
+    let (pu, pv) = (pack(&u).unwrap(), pack(&v).unwrap());
+    let d = Debit { token, last_debit: 1, own: Some(Own { pu: &pu, pvf: &pv, own_tag: tag(&pu, &pv, 0) }), window: &[] };
+    assert_eq!(h.with_secret_debit(&d, |_| ()), Ok(()), "control: the holder's own part under its true tag");
+    assert_eq!(h.secret_loads(), 1);
+}
