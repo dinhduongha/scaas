@@ -131,10 +131,10 @@ async fn migrations_create_identity_and_counters() {
     let v: String = sqlx::query_scalar("SELECT value FROM meta WHERE name = 'schema_version'")
         .fetch_one(&s.pool).await.unwrap();
     assert_eq!(v, "2");
-    // reserved namespaces exist (R90)
-    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM namespace WHERE name IN ('~gateway', '~mesh', '~dex')")
+    // reserved namespaces exist (R90; `~node`, T21 L63b)
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM namespace WHERE name IN ('~gateway', '~mesh', '~dex', '~node')")
         .fetch_one(&s.pool).await.unwrap();
-    assert_eq!(n, 3);
+    assert_eq!(n, 4);
 }
 
 #[tokio::test]
@@ -454,6 +454,26 @@ async fn journal_max_is_monotonic_with_out_of_order_writes() {
     assert_eq!(s.journal_max(CHAIN, LANE).await.unwrap(), Some(9));
     assert_eq!(s.journal_max(CHAIN, "0xBB").await.unwrap(), None, "per lane");
     assert!(s.bump_journal_max(CHAIN, "0xNOPE", 1).await.is_err(), "unknown lane");
+}
+
+/// T21 L63b: a lane's journal in flight is its `signed` and `broadcast` rows, by nonce; another lane's, a leased or a final row is not.
+#[tokio::test]
+async fn lane_journal_lists_the_lanes_rows_in_flight() {
+    let t = tmp();
+    let s = open_seeded(&t.url).await;
+    let a = leased_job(&s, "a", 1).await;
+    let b = leased_job(&s, "b", 2).await;
+    let c = leased_job(&s, "c", 3).await;
+    let _leased = leased_job(&s, "d", 4).await;
+    s.transition(a.uid, Leased, Signed, &signed(7, "0x07"), 12).await.unwrap();
+    s.transition(b.uid, Leased, Signed, &signed(5, "0x05"), 13).await.unwrap();
+    s.transition(b.uid, Signed, Broadcast, &Fields::default(), 14).await.unwrap();
+    s.transition(c.uid, Leased, Signed, &signed(6, "0x06"), 15).await.unwrap();
+    s.transition(c.uid, Signed, Mined, &Fields::default(), 16).await.unwrap();
+    let rows = s.lane_journal(CHAIN, LANE).await.unwrap();
+    assert_eq!(rows.iter().map(|r| (r.uid, r.outer_nonce, r.state)).collect::<Vec<_>>(),
+        [(b.uid, Some(5), Broadcast), (a.uid, Some(7), Signed)]);
+    assert!(s.lane_journal(CHAIN, "0xBB").await.unwrap().is_empty(), "per lane");
 }
 
 #[tokio::test]
@@ -795,7 +815,7 @@ async fn bootstrap_imports_absent_entries_and_reports_drift() {
     assert!(audits.iter().all(|a| a.actor_kind == "bootstrap"));
     let loaded = s.load_config().await.unwrap();
     let mut want = base_set();
-    want.namespaces.extend(["~dex", "~gateway", "~mesh"].map(|n| NamespaceRow {
+    want.namespaces.extend(["~dex", "~gateway", "~mesh", "~node"].map(|n| NamespaceRow {
         name: n.into(), state: "active".into(), allow_call: false, max_live_jobs: 10_000, chains: vec![] }));
     want.namespaces.sort_by(|a, b| a.name.cmp(&b.name));
     want.chains.sort_by(|a, b| a.chain_key.cmp(&b.chain_key));

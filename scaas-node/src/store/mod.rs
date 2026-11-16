@@ -630,6 +630,10 @@ pub trait Backend: Send + Sync {
     /// Đầu vào `plan()` (R18): `lane.journal_max`, không bao giờ là aggregate trên dòng job (purge được).
     async fn journal_max(&self, chain_key: &str, lane: &str) -> Result<Option<i64>>;
 
+    /// The lane's journaled rows in flight (`signed`, `broadcast`), by nonce: what the lane tracks at start besides the legacy
+    /// path's journal (T21 L63b, owner O8 2026-11-16: the node's own jobs, namespace `~node`).
+    async fn lane_journal(&self, chain_key: &str, lane: &str) -> Result<Vec<JobRow>>;
+
     /// `max(journal_max, n)` có fencing — cho báo cáo `signed` của đường legacy (R104).
     async fn bump_journal_max(&self, chain_key: &str, lane: &str, nonce: i64) -> Result<()>;
 

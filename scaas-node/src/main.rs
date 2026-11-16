@@ -218,7 +218,9 @@ async fn main() -> Result<()> {
                     first_tx = Some(tx);
                 }
                 let worker = format!("{node_id}#{}", cc.lanes[lane]);
-                let s = submit::Submitter::start(c, relay.clone(), cc.clone(), worker, digests.clone()).await?;
+                // T21 L63b: the store journals the lane's own jobs (NODE-JOB-29 cache parts, `~node`)
+                let journal = Some((st.clone(), lane_label(cc, &signers[lane])));
+                let s = submit::Submitter::start_with(c, relay.clone(), cc.clone(), worker, digests.clone(), journal).await?;
                 probe_lanes.push(LaneProbe { lane: format!("{:#x}", s.address()), breaker: s.breaker() });
                 if first_breaker.is_none() {
                     first_breaker = Some(s.breaker());
