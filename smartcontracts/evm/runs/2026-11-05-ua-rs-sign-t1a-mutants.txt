@@ -49,3 +49,7 @@ mutants M1-M43 of 43, survived or not loaded: 0
 # sync7 re-run (2026-11-16, ua-rs-sign at 565c8d9c0, after the seventh / eighth syncs with ua-mtx-merge; harness strings moved in 458b7c0e2), each alone on a clean tree:
 killed   | M33 int two's complement wrong | src/evm.js | rc=1 | 1 failed: typed rows with arrays and a negative int; missing field is zero, unknown field refused | at 565c8d9c0 | git diff --exit-code 0
 # sync7 re-run: 1 killed, 0 survived, 0 not loaded (the other mutants above stand; `check`: every replacement found once at HEAD)
+# t21 re-run (2026-11-16, after the T21 merges): the fixes moved the code of M27, M31; their replacement strings brought to HEAD (07a217010), the mutants run again:
+killed   | M27 kem not a PoP role | src/ua.js | rc=1 | 2 failed: portable record purposes follow the contract | at 07a217010
+killed   | M31 canon applied in the generic hasher (unrelated Order) | src/evm.js | rc=1 | 4 failed: policy rows: accepted and refused, from the check* functions | at 07a217010
+# t21 re-run: 2 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)

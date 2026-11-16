@@ -41,3 +41,6 @@ killed   | M37 msig sender: weight counted over the signers, not the accepted on
 killed   | M38 msig sender: a missing accepted lookup treated as all accepted | src/seal.js | rc=1 | 2 failed: msig sender acceptance
 killed   | M39 msig sender: an answer other than false treated as accepted | src/seal.js | rc=1 | 1 failed: msig sender acceptance
 mutants M1-M39 of 39, survived or not loaded: 0
+# t21 re-run (2026-11-16, after the T21 merges): the fixes moved the code of M23; their replacement strings brought to HEAD (07a217010), the mutants run again:
+killed   | M23 link window not checked | src/seal.js | rc=1 | 1 failed: seal.json replay and rollback | at 07a217010
+# t21 re-run: 1 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)

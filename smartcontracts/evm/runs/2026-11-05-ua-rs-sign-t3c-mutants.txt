@@ -21,3 +21,8 @@ killed   | M20 Schnorr challenge without Y | src/wallet/pairing.rs | rc=101 | 4 
 killed   | M21 Schnorr z = k - e*sk | src/wallet/pairing.rs | rc=101 | 4 failed: release_randomness_per_kind, sign_json_pairing_rows, vectors::nonce_map_rows, vectors::sign_json_fixed_aux_rows
 killed   | M22 BLS bn254 label of the other role | src/wallet/pairing.rs | rc=101 | 4 failed: release_randomness_per_kind, right_message_wrong_dst_refused, sign_json_pairing_rows, vectors::bls_pop_and_sig_through_the_trait
 mutants M1-M22 of 22, survived or not loaded: 0
+# t21 re-run (2026-11-16, after the T21 merges): the fixes moved the code of M1, M17, M18; their replacement strings brought to HEAD (07a217010), the mutants run again:
+killed   | M1 nonce reduced from 256 bits | src/wallet/pairing.rs | rc=101 | 2 failed: vectors::nonce_map_rows, vectors::sign_json_fixed_aux_rows | at 07a217010
+killed   | M17 MuSig2 session keeps its nonce (read, not spent) | src/wallet/pairing.rs | rc=101 | 1 failed: second_sign_on_a_session_errors | at 07a217010
+killed   | M18 FROST session keeps its nonces | src/wallet/pairing.rs | rc=101 | 1 failed: frost_session_nonce_signs_once | at 07a217010
+# t21 re-run: 3 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)

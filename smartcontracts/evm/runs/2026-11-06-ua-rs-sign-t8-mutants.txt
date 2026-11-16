@@ -43,3 +43,11 @@ mutants M1-M35 of 35, survived or not loaded: 0
 # M35 (container JSON bound 4 -> 64 MiB): 5 MiB of spaces is malformed JSON, Argument either way; container_json_bounds
 #   now pads a valid container to exactly 4 MiB (reads, control) and one byte past it (Argument).
 # T18 (2026-11-07): the run above stands, no re-run (check at HEAD: every replacement found once): mutants M1-M35 of 35, survived or not loaded: 0
+# t21 re-run (2026-11-16, after the T21 merges): the fixes moved the code of M19, M20, M21, M31; their replacement strings brought to HEAD (07a217010), the mutants run again:
+killed   | M19 link window not checked | src/wallet/seal.rs | rc=101 | 1 failed: vectors::seal_json_replay_link | at 07a217010
+killed   | M20 link window: lower bound only | src/wallet/seal.rs | rc=101 | 1 failed: vectors::seal_json_replay_link | at 07a217010
+killed   | M21 link window: upper bound only | src/wallet/seal.rs | rc=101 | 1 failed: vectors::seal_json_replay_link | at 07a217010
+SURVIVED | M31 link session key not wiped | src/wallet/seal.rs | rc=0 | 0 failed:  | at 07a217010
+# t21: M31 survived above (from_link's wipe had lost its test in batch D); test added in 3233a91f0, M31 again:
+killed   | M31 link session key not wiped | src/wallet/seal.rs | rc=101 | 1 failed: release_link_round_trip | at 3233a91f0
+# t21 re-run: 4 killed, 0 survived, 0 not loaded (M31 at 3233a91f0, after it survived once at 07a217010, see above; git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)

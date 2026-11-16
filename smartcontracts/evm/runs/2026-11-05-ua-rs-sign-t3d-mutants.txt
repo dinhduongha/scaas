@@ -24,3 +24,9 @@ killed   | M8 slots unsorted (emitted in reverse) | src/wallet/uasig.rs | rc=101
 killed   | M11 slot key not checked against its member | src/wallet/uasig.rs | rc=101 | 1 failed: slot_must_match_its_member | at f6c91730 | rc=0, git diff --exit-code 0
 killed   | M13 each slot signed as it is checked (a refused set signs) | src/wallet/uasig.rs | rc=101 | 1 failed: slot_must_match_its_member | at f6c91730 | rc=0, git diff --exit-code 0
 # T20 re-run: 5 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
+# t21 re-run (2026-11-16, after the T21 merges): the fixes moved the code of M1, M6, M12, M13; their replacement strings brought to HEAD (07a217010), the mutants run again:
+killed   | M1 minimal check skipped (level 1) | src/wallet/uasig.rs | rc=101 | 5 failed: msig_updated_rows_through_the_builder, non_minimal_set_refused_at_level_2, pq_signatures_json_treasury, sign_json_msig_rows, slots_sorted | at 07a217010
+killed   | M6 slots unsorted (level 1: sorted before the check, emitted as given) | src/wallet/uasig.rs | rc=101 | 2 failed: sign_json_msig_rows, slots_sorted | at 07a217010
+killed   | M12 inner key data not checked against the member id | src/wallet/uasig.rs | rc=101 | 1 failed: slot_must_match_its_member | at 07a217010
+killed   | M13 each slot signed as it is checked (a refused set signs) | src/wallet/uasig.rs | rc=101 | 1 failed: slot_must_match_its_member | at 07a217010
+# t21 re-run: 4 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)

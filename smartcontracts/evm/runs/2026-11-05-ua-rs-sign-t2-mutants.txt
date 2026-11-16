@@ -24,3 +24,8 @@ mutants M1-M19 of 19, survived or not loaded: 0
 # check to four more store functions, so the string was found 5 times); anchored on `Handle::with`, run again alone:
 killed   | M15 generation check skipped in Handle::with | src/wallet/store.rs | rc=101 | 1 failed: vectors::lock_wipes_and_revokes_unlock_never_revives | at f6c91730 | rc=0, git diff --exit-code 0
 # T20 re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
+# t21 re-run (2026-11-16, after the T21 merges): the fixes moved the code of M9, M10, M19; their replacement strings brought to HEAD (07a217010), the mutants run again:
+killed   | M9 NFKD dropped (mnemonic) | src/wallet/mod.rs | rc=101 | 2 failed: normalization_rows_nfkd, vectors::keys_json_mnemonic_rows_entropy_and_seed | at 07a217010
+killed   | M10 depth bound removed | src/json.rs | rc=101 | 1 failed: bounded_json_refuses_depth_9 | at 07a217010
+killed   | M19 lower case dropped (mnemonic) | src/wallet/mod.rs | rc=101 | 1 failed: normalization_rows_nfkd | at 07a217010
+# t21 re-run: 3 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)

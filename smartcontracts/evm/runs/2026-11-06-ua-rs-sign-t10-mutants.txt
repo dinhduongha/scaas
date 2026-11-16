@@ -26,3 +26,6 @@ mutants M1-M19 of 19, survived or not loaded: 0
 # the string brought to HEAD, run again:
 killed   | M14 unlock of an unlocked wallet replaces its arena | src/wallet/store.rs | rc=101 | 1 failed: unlock_reopens_the_vault | at 760119d8 | rc=0, git diff --exit-code 0
 # T18 re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
+# t21 re-run (2026-11-16, after the T21 merges): the fixes moved the code of M14; their replacement strings brought to HEAD (07a217010), the mutants run again:
+killed   | M14 unlock of an unlocked wallet replaces its arena | src/wallet/store.rs | rc=101 | 1 failed: unlock_reopens_the_vault | at 07a217010
+# t21 re-run: 1 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)

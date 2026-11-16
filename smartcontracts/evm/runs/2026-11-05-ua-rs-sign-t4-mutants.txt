@@ -30,3 +30,7 @@ mutants M1-M24 of 24: 24 killed, 0 survived, 0 not loaded
 # indent less); the string brought to HEAD, that mutant run again, one per call, restored:
 killed   | M4 the checked path zeroes a non-zero unbound field instead of refusing it | src/wallet/eip712.rs, src/wallet/policy.rs | rc=101 | 2 failed: checked_path_refuses_nonzero_unbound_relayer_and_fee_recipient, sign_json_policy_rows | at 760119d8 | rc=0, git diff --exit-code 0
 # T18 re-run: 1 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
+# t21 re-run (2026-11-16, after the T21 merges): the fixes moved the code of M2, M24; their replacement strings brought to HEAD (07a217010), the mutants run again:
+killed   | M2 canon skipped on a nested struct | src/wallet/eip712.rs | rc=101 | 2 failed: nested_metatransfer_zeroed, sign_json_canon_rows | at 07a217010
+killed   | M24 native UASig in a portable purpose | src/wallet/uasig.rs | rc=101 | 1 failed: native_ua_sig_r17 | at 07a217010
+# t21 re-run: 2 killed, 0 survived, 0 not loaded (git diff --exit-code 0; the other mutants above stand, every string checked at HEAD)
