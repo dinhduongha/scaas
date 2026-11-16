@@ -1,4 +1,4 @@
-# SCaaS testnet (scaas-testnet) reset 5, 2026-11-16 (owner 2026-11-16 "Ok, reset 5 before PR #18"). PARTIAL. Branch reset5 from ua-mtx-merge
+# SCaaS testnet (scaas-testnet) reset 5, 2026-11-16 (owner 2026-11-16 "Ok, reset 5 before PR #18"). PARTIAL (stopped 2026-11-16 ~10:25 UTC, the machine off). Branch reset5 from ua-mtx-merge
 # f13d322e2 (tree == 3zh-core fefedb3af). UNAUDITED. Full output in git-ignored .log files (runs/2026-11-16-scaas-testnet-reset5/).
 # Mainnet 22776 not touched.
 step | commit | rc | counts
@@ -30,7 +30,9 @@ P1 parallel matrix: script/onchain/sched.py (waves, own key sets, fund batch), m
 M4 pq (matrix run 3, sequential) | c182aff15 | 0 | txs 241/241, negatives 10/10 (2,641 s); pqoff started and was stopped before any send (owner: parallel first)
 M5 parallel run (matrix run 4: pqoff verifiers mldsaalt pqchat rescue pqzkeys pqzwallet views; 15 key top-ups in one batch) | 297cf9feb | 1 | verifiers ok calls 32/32, negatives 32/32; rescue ok 25/25, 6/6; pqchat ok 36/36, 10/10; pqoff FAIL after 67/67 txs: its deployer key out of funds (2 ETH; fixed 3d6fb1f97, budgets per group); mldsaalt FAIL: its throwaway registry without 0x0142 (DeployBase's gen-1 gate; fixed 3d6fb1f97); pqzkeys FAIL at 1,275 s (a receipt lost: the nodes went down); pqzwallet not run (local only); views FAIL (connection reset: the nodes went down)
 M6 mldsa_on.py on set mldsa-on (keys mnemonic 60-62, own funding) | 297cf9feb | 1 | ran in parallel with M5 (other contracts, other keys); 137 records, 4 failures at the outage (connection reset); re-run later
-X1 the SCaaS testnet down from ~10:12 UTC | - | - | sealer and rpc restart-loop (RestartCount 10, no OOM): Nethermind "Not enough free disk space in '/nethermind/nethermind_datadir' ... at least 45.82 GB"; /home 19 GB free (99 %); nothing deleted, the stack's config not changed: owner step; the earlier connection-reset windows likely the same check
+X1 the SCaaS testnet down from ~10:12 UTC | - | - | sealer and rpc restart-loop (RestartCount 10, no OOM): Nethermind "Not enough free disk space in '/nethermind/nethermind_datadir' ... at least 45.82 GB"; /home 19 GB free (99 %); nothing deleted, the stack's config not changed: owner step; the earlier connection-reset windows likely the same check; fixed by freeing disk (owner "remove the finished work trees": finished work trees removed, 215 GB free); nodes back 10:15:56 / 10:15:59 UTC, same chain, nothing pending
+M7 parallel re-run after the outage (pqoff mldsaalt pqzkeys pqzwallet views; 8 top-ups in one batch) | 3d6fb1f97 | stopped | mldsaalt ok txs 35/35, negatives 5/5; pqoff cut at ~36 txs, pqzkeys cut at ~34 txs (owner "stop now", the machine goes off): both re-run fully; pqzwallet, views not reached
+M8 mldsa_on.py on set mldsa-on, try 2 | 3d6fb1f97 | stopped | 37 ok lines when stopped; re-run fully
 Prep B finding (2026-11-16): forge's local EVM has neither the PQZ nor the ML-DSA precompile, and since 3zh the deploy's
 default MLDSA_PRECOMPILE=on puts the main registry's mldsa44 / mldsa65 / mldsa87 on MldsaVerifiers that call the chain's
 precompiles. A forge script simulates every call first, so on the SCaaS testnet any group that registers or signs with an

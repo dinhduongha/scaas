@@ -834,6 +834,16 @@ chainspec's header, params and alloc did not move, only engine.Pqz: `chain-uids.
 verifiers step: the KAT check gave the transaction, not the verifier call, the `cap + cap / 63` gas, below the calldata floor
 (fixed in `script/pq_verifiers.py`). Matrix, verify and the wraplimits p5 / p6 times: the summary.
 
+**Outage during the matrix (2026-11-16, ~10:12-10:16 UTC; earlier short windows ~07:2x UTC).** Both nodes restart-looped
+(`restart: unless-stopped`, RestartCount 10, no OOM): Nethermind refuses to start, and so to keep running after a restart,
+with less free space on its data directory's filesystem than its check asks ("Not enough free disk space in
+'/nethermind/nethermind_datadir' to safely run a node - please provide at least 45.82 GB"); `/home` was at 99 % (19 GB free),
+filled by the host's work trees, not by the chain (data dirs under 100 MB each). Clients saw it as connection resets on the
+RPC port ("connection closed before message completed", "Connection reset by peer"), the explanation of the earlier windows
+too. Fixed by freeing disk (owner 2026-11-16, finished work trees removed: 215 GB free); the nodes came back by themselves
+at 10:15:56 / 10:15:59 UTC on the same chain (head advancing, genesis unchanged), nothing pending lost. Watch item: keep the
+stack's filesystem above the node's free-space check (`df -h` of the data directory beside `watch.sh`'s RestartCount).
+
 ## 7622 node layout and access (owner 2026-10-31)
 
 Two nodes since the node split (owner 2026-10-31, [NET-EVM-10](../../../docs/networks/evm.md#NET-EVM-10)): `sealer`
