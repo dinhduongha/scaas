@@ -206,6 +206,15 @@ struct Sent {
     ceiling: Option<u128>,
     /// T21 L63b: the store row (`uid`, namespace [`OWN_NAMESPACE`]) of the lane's own job at this nonce.
     own: Option<i64>,
+    /// T21 L81: a `call`-share send's fee exposure (the largest gas limit x max fee any of its versions was signed at, a restart's
+    /// read of the tracked transaction), counted by [`Submitter::calls_stopped`] until the nonce settles; 0 for every other send.
+    reserve: u128,
+}
+
+/// T21 L81 (owner O7): the EVM lane's `call` share: a cache part (NODE-JOB-29), the lane's own or a producer's named job.
+fn in_call_share(w: &Work) -> bool {
+    use alloy::sol_types::SolCall;
+    w.meta.is_none() && w.data.get(..4) == Some(&crate::abi::IUARegistry::cacheExpandedKeyCall::SELECTOR[..])
 }
 
 /// T21 L63b (owner O8, 2026-11-16): the node store's namespace of the lane's own jobs, the ML-DSA cache parts it sends for a
@@ -215,6 +224,10 @@ pub const OWN_NAMESPACE: &str = "~node";
 /// NODE-JOB-29: a cache part whose simulation reads "over the 2^24 regular gas of a transaction or the RPC gas cap" this many times
 /// in a row is taken as the chain's limit (Nethermind answers EIP-7825's cap with the RPC cap's words): the registration is `dead`.
 pub const PART_CAP_WAITS: u32 = 3;
+
+/// T21 L81: why a `call`-share send waits ([`Submitter::calls_stopped`]).
+const CALL_SHARE_SPENT: &str = "the call share of this hour's gas budget is spent (breaker.call_budget_pct; the parts in flight count at \
+    their gas limit x max fee)";
 
 /// CTR-MTX-86, one rule on every family (the EVM lanes here, the other adapters' `step_once`): a job carrying `receiver_fee`
 /// (the old name) or `payee_fee` is refused by name, never relayed without the payee's fee authorization. The node builds no
@@ -511,7 +524,12 @@ impl Submitter {
             let hold = work.as_ref().and_then(|w| me.guard.subject(w)).and_then(|(k, relay)| me.digests.hold_subject(k, relay));
             let guard = me.digests.with_hold(guard, hold);
             let orphan = work.is_none().then_some(j.job_id);
-            me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan, ceiling, own: None });
+            // T21 L81: a producer's cache part keeps its reservation across the restart
+            let reserve = match &work {
+                Some(w) if in_call_share(w) => u128::from(gas).saturating_mul(sent.and_then(|s| s.1).unwrap_or(fees.0).max(fees.0)),
+                _ => 0,
+            };
+            me.inflight.insert(n, Sent { work, hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan, ceiling, own: None, reserve });
         }
         for r in own.into_iter().filter(|r| r.namespace == OWN_NAMESPACE) {
             me.track_own(r, pending).await?;
@@ -606,7 +624,7 @@ impl Submitter {
         if let Err(e) = self.chain.send_raw(&raw).await {
             warn!(nonce, "gap-fill send: {e:#}");
         }
-        self.inflight.insert(nonce, Sent { work: None, hashes: vec![hash], gas: GAP_FILL_GAS, fees, at: Instant::now(), _guard: None, orphan: None, ceiling: None, own: None });
+        self.inflight.insert(nonce, Sent { work: None, hashes: vec![hash], gas: GAP_FILL_GAS, fees, at: Instant::now(), _guard: None, orphan: None, ceiling: None, own: None, reserve: 0 });
         warn!(nonce, "gap-filled");
         Ok(())
     }
@@ -725,10 +743,10 @@ impl Submitter {
         if let Err(e) = guard::register_pop(&w.data) {
             return self.fail(&w, format!("{}: off-chain check refused the record: {e}; no cache part sent", guard::UA_REGISTER_POP_REFUSED)).await;
         }
-        // owner O7: the parts are the `call` share of the breaker's budget, so registry writes cannot stop payments
-        if self.breaker.lock().is_ok_and(|mut k| k.calls_stopped(now())) {
-            return self.requeue(&w, format!("{}: the call share of this hour's gas budget is spent (breaker.call_budget_pct); no part \
-                sent; {reason}", guard::UA_KEY_NOT_CACHED)).await;
+        // owner O7: the parts are the `call` share of the breaker's budget, so registry writes cannot stop payments (T21 L81: the
+        // parts in flight count; `dispatch` asks again before each part)
+        if self.calls_stopped() {
+            return self.requeue(&w, format!("{}: {CALL_SHARE_SPENT}; no part sent; {reason}", guard::UA_KEY_NOT_CACHED)).await;
         }
         let parts = guard::mldsa_cache(kind).map_or(0, |(_, n)| n);
         let stored = match self.chain.call_view(w.to, uaOfCall { kind, keyData: pk.clone() }).await {
@@ -798,6 +816,13 @@ impl Submitter {
     /// journaled and handed to the RPC (tracked from then on); every other exit reported (a job) or only logged (job-less work).
     /// `own`: the lane's own job's named op, journaled in the node store first (T21 L63b).
     async fn dispatch(&mut self, w: Work, guard: Option<InflightGuard>, gas: u64, own: Option<&serde_json::Value>) -> bool {
+        // T21 L81: every `call`-share send is admitted here (the lane's own parts and a producer's named job), against the settled
+        // spend plus the exposure of those in flight; replacements of a signed one never come here
+        let share = in_call_share(&w);
+        if share && self.calls_stopped() {
+            self.requeue(&w, format!("{}: {CALL_SHARE_SPENT}; not sent", guard::UA_KEY_NOT_CACHED)).await;
+            return false;
+        }
         let fees = match self.chain.fees().await {
             Ok(f) => f,
             Err(e) => { self.requeue(&w, format!("fees: {e:#}")).await; return false; },
@@ -859,8 +884,20 @@ impl Submitter {
             // Không trả nonce lại: tx đã ký nằm trong journal; vòng `track` sẽ thay thế nó.
             Err(e) => warn!(nonce, "send failed, will replace: {e:#}"),
         }
-        self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None, ceiling, own });
+        let reserve = if share { u128::from(gas).saturating_mul(fees.0) } else { 0 };
+        self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None, ceiling, own, reserve });
         true
+    }
+
+    /// T21 L81: the fee exposure of this lane's `call`-share transactions in flight ([`Sent::reserve`]).
+    fn reserved(&self) -> u128 {
+        self.inflight.values().fold(0, |a, s| a.saturating_add(s.reserve))
+    }
+
+    /// T21 L81 (owner O7): the `call` share is spent: the window's settled spend plus [`Submitter::reserved`].
+    fn calls_stopped(&self) -> bool {
+        let reserved = self.reserved();
+        self.breaker.lock().is_ok_and(|mut k| k.calls_stopped(now(), reserved))
     }
 
     /// T21 L63b: the journal row of the lane's own job `op` (`~node`, a `call`), `signed` at `nonce` / `hash` on this lane; `None`
@@ -932,12 +969,14 @@ impl Submitter {
         let work = r.payload.as_deref().and_then(|b| serde_json::from_slice::<serde_json::Value>(b).ok())
             .and_then(|op| work_of_op(None, &op, None).ok()).map(|(w, _)| w);
         let fees = self.chain.fees().await?;
-        let gas = match self.chain.tx_fees(h).await? {
-            Some((g, _)) => g,
-            None => guard::total_cap(self.cfg.max_gas_per_tx, self.chain.block_gas().await?),
+        let (gas, max_fee) = match self.chain.tx_fees(h).await? {
+            Some((g, f)) => (g, f),
+            None => (guard::total_cap(self.cfg.max_gas_per_tx, self.chain.block_gas().await?), None),
         };
+        // T21 L81: the part's reservation, restored from its row (a part whose fee is unknown: at this round's)
+        let reserve = u128::from(gas).saturating_mul(max_fee.unwrap_or(fees.0).max(fees.0));
         let g = work.as_ref().and_then(|w| self.digests.try_acquire(w.call_key()));
-        self.inflight.insert(n, Sent { work, hashes: vec![h], gas, fees, at: Instant::now(), _guard: g, orphan: None, ceiling: None, own: Some(r.uid) });
+        self.inflight.insert(n, Sent { work, hashes: vec![h], gas, fees, at: Instant::now(), _guard: g, orphan: None, ceiling: None, own: Some(r.uid), reserve });
         Ok(())
     }
 
@@ -1176,6 +1215,10 @@ impl Submitter {
                 if let Some(h) = replaced {
                     s.hashes.push(h);
                     (s.work, s.gas, s.fees) = (live, gas, fees);
+                    // T21 L81: any version may land: a call-share send reserves its largest
+                    if s.reserve > 0 {
+                        s.reserve = s.reserve.max(u128::from(gas).saturating_mul(fees.0));
+                    }
                 }
                 if expired_own.is_some() {
                     s.own = None;
@@ -3209,10 +3252,13 @@ pub(crate) mod tests {
              (OWN_NAMESPACE, "call", Some(1), State::Broadcast, Some(format!("{:#x}", sent[1].0)))]);
         drop(s);
         // restart, both parts in the mempool (pending 2, latest 0), the legacy journal knows neither
-        (rpc.lock().unwrap().count, rpc.lock().unwrap().latest) = (2, Some(0));
+        (rpc.lock().unwrap().count, rpc.lock().unwrap().latest, rpc.lock().unwrap().tx_gas) = (2, Some(0), Some(42_000_000));
         assert_eq!(start(None, vec![]).await.inflight_count(), 0, "without its journal a part's nonce is untracked");
         let mut s = start(journal(), vec![]).await;
         assert_eq!(s.inflight_count(), 2, "both parts tracked");
+        // T21 L81: the parts' call-share reservations come back with their rows (gas limit read back x this round's max fee)
+        let (gas, fees) = { let r = rpc.lock().unwrap(); (r.gas.clone(), r.fees.clone()) };
+        assert_eq!(s.reserved(), 2 * u128::from(gas[0]) * fees[0], "both parts reserved again");
         s.track().await;
         let e = rpc.lock().unwrap().sent.clone();
         assert_eq!(e[2..].iter().map(|(_, to, d)| (*to, d.clone())).collect::<Vec<_>>(),
@@ -3221,6 +3267,8 @@ pub(crate) mod tests {
         // part 0 mined: its row settles
         rpc.lock().unwrap().receipts.insert(e[2].0, true);
         s.track().await;
+        let fees = rpc.lock().unwrap().fees.clone();
+        assert_eq!(s.reserved(), u128::from(gas[0]) * fees.last().unwrap(), "part 1 alone, at its last replacement's max fee");
         let r = rows(&st).await;
         assert_eq!((r.len(), r[0].outer_nonce), (1, Some(1)));
         let (uid0, uid1) = (r[0].uid - 1, r[0].uid);
@@ -3304,6 +3352,83 @@ pub(crate) mod tests {
             assert_eq!(r["chain_state"], "queued", "{r}");
             assert_eq!(rpc.lock().unwrap().sent.len(), parts, "spent {spent}: {r}");
             assert_eq!(parts == 0, r["error"].as_str().unwrap().contains("call share of this hour's gas budget"), "{r}");
+        }
+    }
+
+    /// T21 L81 (Codex part 5 finding 2): the parts in flight count in the `call` share at their gas limit x max fee, before any
+    /// receipt: with the share at one part's exposure `e`, the first part goes and the second waits; the register's next poll
+    /// waits by name; the first part's receipt settles its reservation (its fee paid, 21,000 wei here) and the second goes. The
+    /// positive: a share of two parts sends both at once.
+    #[tokio::test]
+    async fn mldsa_cache_parts_in_flight_count_in_the_call_share() {
+        let reg = Address::repeat_byte(0x5e);
+        let ok = || Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() };
+        let run = |budget: Option<u128>| async move {
+            let (url, rpc) = fake_evm(ok()).await;
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), repeat: true, ..Default::default() }).await;
+            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+                (c.ua_registry, c.max_gas_per_tx) = (Some(reg), 64_000_000);
+                (c.breaker.gas_budget_per_hour, c.breaker.call_budget_pct) = (budget, 50);
+            }).await.unwrap();
+            s.poll_outbox().await;
+            (s, rpc, o)
+        };
+        let (_, rpc, _) = run(None).await;
+        let e = { let r = rpc.lock().unwrap(); u128::from(r.gas[0]) * r.fees[0] };
+        let (s, rpc, _) = run(Some(4 * e)).await;
+        assert_eq!((rpc.lock().unwrap().sent.len(), s.reserved()), (2, 2 * e), "a share of two parts");
+        let (mut s, rpc, o) = run(Some(2 * e)).await;
+        let why = |o: &Shared| o.lock().unwrap().reports.last().unwrap()["error"].as_str().unwrap().to_string();
+        assert_eq!((rpc.lock().unwrap().sent.len(), s.reserved()), (1, e), "{}", why(&o));
+        assert!(why(&o).contains("parts sent now [0] of 2"), "{}", why(&o));
+        s.poll_outbox().await;
+        assert!(why(&o).contains("call share of this hour's gas budget is spent") && why(&o).contains("no part sent"), "{}", why(&o));
+        assert_eq!(rpc.lock().unwrap().sent.len(), 1);
+        // part 0 lands: its reservation goes, its fee is spent, part 1 goes
+        let h = rpc.lock().unwrap().sent[0].0;
+        rpc.lock().unwrap().receipts.insert(h, true);
+        rpc.lock().unwrap().ek = Some([true, false, false]);
+        s.track().await;
+        assert_eq!((s.reserved(), s.breaker().lock().unwrap().spent()), (0, 21_000));
+        s.poll_outbox().await;
+        assert_eq!(rpc.lock().unwrap().sent.len(), 2, "{}", why(&o));
+        assert!(why(&o).contains("parts sent now [1] of 2"), "{}", why(&o));
+    }
+
+    /// T21 L81: a producer's named `cacheExpandedKey` job is in the `call` share too: admitted at `dispatch`, so past the share it
+    /// waits `queued` by name and nothing is sent; under it, it goes.
+    #[tokio::test]
+    async fn named_cache_part_job_stops_at_the_call_share() {
+        use crate::abi::IUARegistry::{cacheExpandedKeyCall, registerCall};
+        let reg = Address::repeat_byte(0x5e);
+        let pk = registerCall::abi_decode(&mldsa65_register()).unwrap().keyData;
+        let p0 = cacheExpandedKeyCall { kind: 0x0131, pk, part: U256::ZERO }.abi_encode();
+        for (spent, sent) in [(49u128, 1usize), (50, 0)] {
+            let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, p0.clone())], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+                (c.ua_registry, c.max_gas_per_tx) = (Some(reg), 64_000_000);
+                (c.breaker.gas_budget_per_hour, c.breaker.call_budget_pct) = (Some(100), 50);
+            }).await.unwrap();
+            s.breaker().lock().unwrap().spend(now(), spent);
+            s.poll_outbox().await;
+            let r = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(rpc.lock().unwrap().sent.len(), sent, "spent {spent}: {r}");
+            if sent == 0 {
+                assert!(r["chain_state"] == "queued" && r["error"].as_str().unwrap().contains("call share of this hour's gas budget is spent"), "{r}");
+            } else {
+                assert_eq!(states(&o), ["signed", "broadcast"]);
+            }
+        }
+        // tracked after a restart (the legacy journal): its reservation comes back at its gas limit x its signed max fee; a payment's is 0
+        let tracked = |payload: Value| json!([{"job_id": 9, "nonce": 0, "state": "broadcast",
+            "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": payload}]);
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, tx_gas: Some(42_000_000), tx_max_fee: Some(1 << 50), ..Default::default() }).await;
+        for (payload, reserved) in [(call_job(9, reg, p0.clone()), 42_000_000u128 << 50), (job(9), 0)] {
+            let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(payload), ..Default::default() }).await;
+            let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; })
+                .await.unwrap();
+            assert_eq!((s.inflight_count(), s.reserved()), (1, reserved));
         }
     }
 

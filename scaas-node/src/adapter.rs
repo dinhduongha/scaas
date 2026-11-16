@@ -557,7 +557,7 @@ pub fn call_share_by_kind(j: &Job) -> bool {
 }
 
 fn calls_stopped(adapter: &dyn ChainAdapter, breaker: Option<&Mutex<Breaker>>) -> bool {
-    adapter.family() == Family::Soroban && breaker.is_some_and(|k| k.lock().is_ok_and(|mut k| k.calls_stopped(now())))
+    adapter.family() == Family::Soroban && breaker.is_some_and(|k| k.lock().is_ok_and(|mut k| k.calls_stopped(now(), 0)))
 }
 
 pub(crate) async fn step_once(
