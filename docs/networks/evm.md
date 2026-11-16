@@ -429,7 +429,22 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   keeps every cheatcode call's input, and reading the dry-run file field by field per transaction held transactions × plan
   size (153 transactions, a 6.8 MB plan: past the 4 GB cap; now 377 MB peak). The scripts' own gas budget
   (`FOUNDRY_GAS_LIMIT`, default 2^36 in `deploy.sh`; not a chain figure, `block.gaslimit` stays the fork's) covers each
-  transaction run twice, measured then sent: at 2^33 DeploySend ran short at the 108th transaction.
+  transaction run twice, measured then sent: at 2^33 DeploySend ran short at the 108th transaction. Change (owner 2026-11-15,
+  reset 5 prep; BUILT on `reset5`, UNAUDITED): DeploySend sends the plan **in batches** (`DEPLOY_BATCH`, default 16), one forge
+  run per batch without `--slow` (`DeploySend.run(string,uint256,uint256)`, the window `[from, to)` refused by name outside the
+  plan, `BatchOutOfRange`): each transaction of a batch is measured on the fork of the chain as the batches before it left it,
+  then the batch is sent at once (receipts awaited up to `DEPLOY_TX_TIMEOUT`, 600 s; forge stopped and the batch failed by name past
+  `DEPLOY_BATCH_LIMIT`, 1800 s, as forge keeps waiting on a receipt that never comes). After each batch `deploy.sh` reads every
+  receipt (`script/deploy_batch.py check`): one short line per transaction (its address and tx hash) and `batch k/n ok`; the
+  next batch starts only when every transaction forge sent maps to a plan row of the batch and has a receipt with status 1,
+  else a named stop at the first failure (`FAIL <phase> tx <i>/<N> … tx <hash>`); between the lines a 30 s heartbeat counts
+  the sender's nonce. The release-done check stays (a release already there: a `skip` line, nothing sent). **Mainnet fee
+  gate**: before every batch (and before the verifiers step) the fee forge signs is read (`script/onchain/fee.sh`: tip
+  `ONCHAIN_TIP`, default 1 gwei; max fee `ONCHAIN_MAXFEE`, default 2 × base fee + tip) and compared with `MAX_FEE_GWEI`,
+  default 0.1 gwei on a mainnet (a chain key ending `-mainnet`, NET-EVM-13), none on a testnet unless set; above it a named
+  stop before the batch (`FEE_OVER_MAX`, nothing of that batch sent); a re-run skips the releases already there. Evidence
+  `smartcontracts/evm/runs/2026-11-16-reset5.txt` (anvil: 117 transactions in 8 batches; the fee stop at nonce 0; a stop at
+  batch 2 with no batch 3 sent).
 - <a id="NET-EVM-12"></a>**NET-EVM-12 — Every contract a remote deploy leaves on a chain is source-verified on that chain's
   explorer** (owner ruling 2026-11-10; BUILT on branch `ua-mtx-merge`: `smartcontracts/evm/script/onchain/verify.sh` and
   `vcheck.py`, offline tests in `test_vcheck.py`; the Etherscan and Sourcify request shapes are tested offline only, no public

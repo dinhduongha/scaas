@@ -40,18 +40,32 @@
 #                            on the registry's expanded-key cache. MLDSA_PRECOMPILE=off (owner 2026-11-15): every ML-DSA kind
 #                            on the cache, as a chain without a precompile (the deploy JSON's mldsa<x>_path says which). DEPLOY_PQZ=1 publishes the PQZ releases 4, 5, 12, 13 on this factory (on for the SCaaS
 #                            testnet; script/pqz/e2e.py keeps its own factory for its harness runs).
+#                            Batches (NET-EVM-11 Change, owner 2026-11-15): DeploySend sends the plan in batches of
+#                            DEPLOY_BATCH (default 16) transactions, one forge run each without --slow
+#                            (`run(string,uint256,uint256)`: each transaction measured on the fork of the chain as the
+#                            batches before left it), receipts awaited up to DEPLOY_TX_TIMEOUT (600 s), the batch bounded by
+#                            DEPLOY_BATCH_LIMIT (1800 s: forge is stopped past it, a named fail); after each batch
+#                            every receipt is read (script/deploy_batch.py check) and the next batch starts only if every
+#                            transaction forge sent has a receipt with status 1, else a named stop at the first failure;
+#                            a release already there is skipped (DeploySend's release-done check, a `skip` line). Fees:
+#                            before each batch (and before the pq-verifiers step) script/onchain/fee.sh's fee (tip
+#                            ONCHAIN_TIP, default 1 gwei; max fee ONCHAIN_MAXFEE, default 2 x base fee + tip) and the fee
+#                            gate MAX_FEE_GWEI (default 0.1 on a mainnet, the chain key's -mainnet; none on a testnet unless
+#                            set): a max fee above it stops by name before the batch (FEE_OVER_MAX); a re-run skips the
+#                            releases already there.
 #                            Progress (owner 2026-11-15, runs never silent): short [deploy] lines on stdout: simulate
-#                            start / ok <N> txs, est gas; one line per transaction as its receipt lands (send <i>/<N>
-#                            <phase> <contract> gas <used> <address> tx <hash>; the phase from the plan: libraries,
-#                            verifiers, registry, router, factory, configureChain, releases, pqchat, zether, …); a 30 s
-#                            heartbeat; ok <N> txs <s>s book <path>; FAIL <phase> tx <i>/<N> <contract> rc <rc> <address>
-#                            tx <hash> (the transaction without a good receipt; the hash when forge recorded one). Forge's
-#                            full output in DEPLOY_LOG (default runs/<date>-deploy-<key>.log, git-ignored). Never a key.
+#                            start / ok <N> txs, est gas; after each batch one line per transaction from its receipts (send
+#                            <i>/<N> <phase> <contract> gas <used> <address> tx <hash>; the phase from the plan: libraries,
+#                            verifiers, registry, router, factory, configureChain, releases, pqchat, zether, …) and batch
+#                            <k>/<n> ok; a 30 s heartbeat with the sender's nonce count; ok <N> txs <s>s book <path>; FAIL
+#                            <phase> tx <i>/<N> <contract> <why> <address> tx <hash> (the transaction without a good
+#                            receipt; the hash when forge recorded one). Every batch's transactions and receipts in
+#                            broadcast/DeploySend.s.sol/<chain>/run-batches.json. Forge's full output in DEPLOY_LOG (default
+#                            runs/<date>-deploy-<key>.log, git-ignored). Never a key.
 #                            DEPLOY_ZETHER=1 (any chain but Hedera) adds the Zether stack. DEPLOY_PQCHAT=1 adds PqChat
 #                            (plan 3c T92: its body module PqChatTopics by CREATE2, class env (3, 0) with the module in libs,
 #                            release 1, the switch on; one instance when NOTICE_PERIOD=0; JSON pqchat_topics,
-#                            pqchat_implementation, pqchat_instance), replayed by DeploySend.s.sol like every other transaction. --slow always (one tx per
-#                            block: anvil automine can strand a large tx).
+#                            pqchat_implementation, pqchat_instance), replayed by DeploySend.s.sol like every other transaction.
 #                            T66b: each token release and the DEX come with their body modules (P, T, A, W, Z, Q; the
 #                            DEX's D), each its own CREATE2 transaction through the deterministic deployer with DEPLOY_SALT
 #                            (the same address on every chain) and its own gate, pinned in the release's env after the
@@ -109,75 +123,40 @@ case "$FAMILY" in
            Q="broadcast/Deploy.s.sol/$C/dry-run/send-plan.json" # DeploySend.plan's arrays, written from $P
            rm -f "$P" "$Q" "$B" # never a stale plan, never a previous run's receipts
            DL="${DEPLOY_LOG:-runs/$(date -u +%F)-deploy-$K.log}"; mkdir -p "$(dirname "$DL")"; : > "$DL"
-           W="$(mktemp)"; trap 'rm -f "$W"' EXIT
            say() { echo "[deploy] $*"; }
            fail() { say "FAIL $1 rc $2 (forge's output: $DL)"; [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; }
-           # prog <plan> <receipts> <state> [fail <rc>]: one line per receipt not yet seen; with fail, the line of the
-           # transaction that failed (the first status 0, else the next one)
-           prog() { python3 -I - "$@" 2>> "$DL" <<'PY2'
-import json, os, sys, time
-plan, rec, state = sys.argv[1:4]
-t = json.load(open(plan))["transactions"]
-def phase(x):
-    n, f = x.get("contractName") or "", (x.get("function") or "").split("(")[0]
-    if f == "configureChain": return "configureChain"
-    if f == "setChainEntries": return "directory entries"
-    if f in ("createToken", "transfer"): return "demo tokens"
-    if f in ("publishClassEnv", "deployImplementation", "setClassKindEnabled", "createInstance") or n.startswith("PqChat"): return "pqchat"
-    if f or "Token" in n or n.startswith("SCaaSDex"):
-        z = "Zether" in n or any("Zether" in (a.get("contractName") or "") for a in x.get("additionalContracts") or [])
-        if not z and f and phase.last in ("releases", "zether releases"):
-            return phase.last  # publishTokenEnv / setTokenKindEnabled: the release they belong to
-        return "zether releases" if z else "releases"
-    if n.endswith("Lib"): return "libraries"
-    if n.endswith("Verifier"): return "verifiers"  # the UA kind verifiers, ZetherSchnorrBls12381Verifier included
-    if n.startswith("Zether"): return "zether"
-    return {"SmartKeyAccountFactory": "SKA factory", "RelayFeeRouter": "relay fee router", "UARegistry": "registry",
-            "GovernanceRouter": "router", "ComplianceRegistry": "compliance registry", "OpenFactory": "factory"}.get(n, n or "other")
-phase.last = None
-ph = []
-for x in t:
-    ph.append(phase(x)); phase.last = ph[-1]
-st = json.load(open(state)) if os.path.getsize(state) else {"n": 0, "t": time.time(), "gas": 0}
-try:
-    r = json.load(open(rec)).get("receipts", []) if os.path.exists(rec) else []
-except ValueError:  # forge is writing it
-    r = []
-by = {x.get("hash"): x for x in t}
-for i in range(st["n"], len(r)):
-    x, tx = r[i], by.get(r[i]["transactionHash"], t[i] if i < len(t) else {})
-    a = x.get("contractAddress") or tx.get("contractAddress") or tx.get("transaction", {}).get("to")
-    name = tx.get("contractName") or (tx.get("function") or "call").split("(")[0]
-    bad = "" if x.get("status") == "0x1" else f" STATUS {x.get('status')}"
-    print(f"[deploy] send {i + 1}/{len(t)} {ph[i]} {name} gas {int(x['gasUsed'], 16)}{bad} {a} tx {x['transactionHash']}")
-    st["n"] = i + 1
-if len(sys.argv) > 5:
-    i = next((j for j, x in enumerate(r) if x.get("status") != "0x1"), len(r))
-    tx = t[i] if i < len(t) else {}
-    a = (r[i].get("contractAddress") if i < len(r) else None) or tx.get("contractAddress") or tx.get("transaction", {}).get("to") or ""
-    h = r[i]["transactionHash"] if i < len(r) else tx.get("hash")
-    name = tx.get("contractName") or (tx.get("function") or "?").split("(")[0]
-    print(f"[deploy] FAIL {ph[i] if i < len(t) else 'send'} tx {i + 1}/{len(t)} {name} rc {sys.argv[5]} {a}" + (f" tx {h}" if h else ""))
-else:
-    print(f"#{st['n']}/{len(t)}")
-json.dump(st, open(state, "w"))
-PY2
-           }
-           # follow <pid> [plan]: wait for forge, a heartbeat every 30 s; with the plan, a line per receipt as it lands
+           # follow <pid> [batch label]: wait for forge, a heartbeat every 30 s; for a batch, the sender's nonce count and a
+           # wall bound (DEPLOY_BATCH_LIMIT, default 1800 s: forge waits on a receipt that never comes past its --timeout),
+           # past it forge is stopped and the batch fails (rc 124)
            follow() {
-             local t0=$SECONDS h=$SECONDS c=
+             local t0=$SECONDS h=$SECONDS
              while kill -0 "$1" 2> /dev/null; do
                sleep 2
-               [ -z "${2:-}" ] || { c="$(DL="$DL" prog "$P" "$B" "$W")"; printf '%s\n' "$c" | grep -v '^#' | grep . || true; }
-               [ $((SECONDS - h)) -lt 30 ] || { h=$SECONDS; say "… ${c:+$(printf '%s\n' "$c" | sed -n 's/^#//p'), }$((SECONDS - t0))s"; }
+               [ $((SECONDS - h)) -lt 30 ] || { h=$SECONDS
+                 say "… ${2:+$2, nonce +$(($(cast nonce --rpc-url "$NET" "$S" 2> /dev/null || echo "$N0") - N0)), }$((SECONDS - t0))s"; }
+               if [ -n "${2:-}" ] && [ $((SECONDS - t0)) -ge "${DEPLOY_BATCH_LIMIT:-1800}" ]; then
+                 say "$2: forge still running after $((SECONDS - t0))s (DEPLOY_BATCH_LIMIT), stopped"
+                 kill "$1" 2> /dev/null; wait "$1" 2> /dev/null; return 124
+               fi
              done
              wait "$1"
+           }
+           # the fee of every transaction forge signs (fee.sh: tip ONCHAIN_TIP, default 1 gwei; max fee 2 x base fee + tip),
+           # read before each batch; the fee gate (owner 2026-11-15): MAX_FEE_GWEI, default 0.1 on a mainnet (the key's
+           # -mainnet), none on a testnet; above it a named stop before the batch (a re-run skips the releases already there)
+           . script/onchain/fee.sh
+           case "$K" in *-mainnet) MF="${MAX_FEE_GWEI-0.1}" ;; *) MF="${MAX_FEE_GWEI:-}" ;; esac
+           feegate() {
+             ONCHAIN_REMOTE=1 remote_fee "$NET"
+             [ -z "$MF" ] || python3 -I script/deploy_batch.py fee "$MF" "$ETH_GAS_PRICE" | sed "s/fee gate/fee gate $1/" \
+               || { [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; }
            }
            T0=$SECONDS
            # owner 2026-11-15: the verifiers whose constructors probe the chain's own precompiles (PqzKeyVerifier 0x0142, the
            # MldsaVerifiers 0x0130 / 0x0131 / 0x0134 with MLDSA_PRECOMPILE=on), on the real chain before the simulation (forge's EVM has no such precompile),
            # by CREATE2 with DEPLOY_SALT (script/pq_verifiers.py, e2e.py's builders); their addresses reach Deploy.s.sol by
            # env. A precompile the chain lacks: that verifier is skipped by name (DeployBase's gate then requires nothing).
+           feegate pq-verifiers
            say "pq-verifiers start"
            forge build src/pqz/PqzKeyVerifier.sol src/ua/MlDsa.sol >> "$DL" 2>&1 || fail pq-verifiers $?
            PV="$(python3 -I script/pq_verifiers.py "$NET" 2>> "$DL")" || { printf '%s\n' "$PV" | grep '^\[deploy\]' || true; tail -n 3 "$DL" | sed 's/^/[deploy] pq-verifiers: /'; fail pq-verifiers 1; }
@@ -195,16 +174,31 @@ t = [x["transaction"] for x in json.load(open(sys.argv[1]))["transactions"]]
 json.dump({"from": [x["from"] for x in t], "to": [x.get("to") or "0x" + "00" * 20 for x in t],
            "value": [x.get("value") or "0x0" for x in t], "input": [x.get("input") or "0x" for x in t]}, open(sys.argv[2], "w"))' "$P" "$Q" \
              || fail plan $?
-           forge script script/DeploySend.s.sol --sig 'run(string)' "$Q" \
-             --rpc-url "$NET" --broadcast --slow "${Z[@]}" --sender "$S" "$@" >> "$DL" 2>&1 &
-           rc=0; follow $! plan || rc=$?
-           if [ "$rc" != 0 ]; then
-             DL="$DL" prog "$P" "$B" "$W" fail $rc | grep -v '^#'
-             [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; say "forge's output: $DL"; exit 1
-           fi
-           DL="$DL" prog "$P" "$B" "$W" | grep -v '^#' || true
+           # NET-EVM-11 Change (owner 2026-11-15): the plan in batches of DEPLOY_BATCH (16) without --slow, one forge run each
+           # (DeploySend.run(string,uint256,uint256): measured on the fork of the chain as the batches before left it, then
+           # sent at once); after each batch one line per transaction from its receipts, every status 1 checked before the
+           # next batch, a named stop at the first failure
+           N="$(python3 -I -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["to"]))' "$Q")" BS="${DEPLOY_BATCH:-16}"
+           NB=$(((N + BS - 1) / BS)) AL="broadcast/DeploySend.s.sol/$C/run-batches.json"
+           rm -f "$AL"
+           for ((k = 1; k <= NB; k++)); do
+             lo=$(((k - 1) * BS)) hi=$((k * BS < N ? k * BS : N))
+             feegate "batch $k/$NB"
+             rm -f "$B"
+             N0="$(cast nonce --rpc-url "$NET" "$S")"; tb=$SECONDS
+             forge script script/DeploySend.s.sol --sig 'run(string,uint256,uint256)' "$Q" "$lo" "$hi" \
+               --rpc-url "$NET" --broadcast --timeout "${DEPLOY_TX_TIMEOUT:-600}" "${Z[@]}" --sender "$S" "$@" >> "$DL" 2>&1 &
+             rc=0; follow $! "batch $k/$NB" || rc=$?
+             if [ "$rc" != 0 ]; then
+               python3 -I script/deploy_batch.py check "$P" "$Q" "$B" "$lo" "$hi" "$AL" fail "$rc" 2>> "$DL" || true
+               [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; say "forge's output: $DL"; exit 1
+             fi
+             python3 -I script/deploy_batch.py check "$P" "$Q" "$B" "$lo" "$hi" "$AL" 2>> "$DL" \
+               || { [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; say "forge's output: $DL"; exit 1; }
+             say "batch $k/$NB ok: txs $((lo + 1))-$hi/$N, nonce +$(($(cast nonce --rpc-url "$NET" "$S") - N0)), $((SECONDS - tb))s"
+           done
            rm -f "$J.prev"
-           say "ok $(python3 -I -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["receipts"]))' "$B") txs $((SECONDS - T0))s book $J"
+           say "ok $(python3 -I -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["receipts"]))' "$AL" 2> /dev/null || echo 0) txs $((SECONDS - T0))s book $J"
            # NET-EVM-12: a remote deploy is source-verified on the chain's explorer, VERIFY_TARGET naming its config
            # (scaas-testnet, or VERIFY_EXPLORER / VERIFY_URL / VERIFY_API_KEY_ENV); chain 31337 or VERIFY_TARGET=local
            # is local; VERIFY=none needs VERIFY_REASON; an unconfigured target fails VERIFY_NOT_CONFIGURED (exit 1)
