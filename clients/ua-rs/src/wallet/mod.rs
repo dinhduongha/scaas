@@ -94,7 +94,9 @@ pub use vectors::{vectors_chunks_released, vectors_pause_after_copy};
 use crate::UAError;
 use rand_core::{OsRng, RngCore};
 use std::sync::Arc;
-pub(crate) use store::{copied, Handle, Lease, SecretStore};
+pub(crate) use store::{Handle, SecretStore};
+#[cfg(feature = "pqz")] // the PQZ facade's lease (T21 L82); unused, and so a -D warnings error, in a build without `pqz`
+pub(crate) use store::{copied, Lease};
 pub use store::{protect, MemoryProtection};
 use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
