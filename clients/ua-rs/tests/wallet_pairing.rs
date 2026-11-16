@@ -208,12 +208,12 @@ fn musig2_session_refuses_lists_the_registry_refuses() {
 #[cfg(feature = "vectors")]
 #[test]
 fn frost_session_nonce_signs_once() {
-    fn run<C: frost_core::Ciphersuite>() {
+    fn run<C: frost_core::Ciphersuite>(w: &Wallet) {
         use rand_chacha::rand_core::SeedableRng;
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(3);
         let g = dkg::<C, _>(2, 3, &mut rng).unwrap();
         let signers = [id::<C>(1), id::<C>(3)];
-        let mut sessions: BTreeMap<_, _> = signers.iter().map(|i| (*i, FrostSession::new(&g.keys[i]))).collect();
+        let mut sessions: BTreeMap<_, FrostSession<C>> = signers.iter().map(|i| (*i, w.frost_session(&g.keys[i]).unwrap())).collect();
         let commitments = sessions.iter().map(|(i, s)| (*i, s.commitments())).collect();
         let msg = b"frost session";
         let package = frost_core::SigningPackage::new(commitments, msg);
@@ -224,6 +224,28 @@ fn frost_session_nonce_signs_once() {
         }
         let sig = frost_core::aggregate(&package, &shares, &g.public).unwrap();
         g.public.verifying_key().verify(msg, &sig).unwrap();
+    }
+    let w = wallet("pq_kat");
+    run::<Bn254Keccak256>(&w);
+    run::<Secp256K1Sha256>(&w);
+}
+
+/// A FROST session is a store handle (spec §8.2, owner O1 2026-11-16): one opened before `lock()` signs nothing after it
+/// (`KeyRevoked`), as its MuSig2 twin; a locked wallet opens none (`WalletLocked`). Positive control: the same flow without
+/// `lock()` signs (`frost_session_nonce_signs_once`).
+#[cfg(feature = "vectors")]
+#[test]
+fn frost_session_after_lock_signs_nothing() {
+    fn run<C: frost_core::Ciphersuite>() {
+        use rand_chacha::rand_core::SeedableRng;
+        let w = wallet("pq_kat");
+        let g = dkg::<C, _>(2, 2, &mut rand_chacha::ChaCha20Rng::seed_from_u64(6)).unwrap();
+        let (i1, i2) = (id::<C>(1), id::<C>(2));
+        let (mut s1, s2) = (w.frost_session(&g.keys[&i1]).unwrap(), w.frost_session(&g.keys[&i2]).unwrap());
+        let package = frost_core::SigningPackage::new([(i1, s1.commitments()), (i2, s2.commitments())].into(), b"after lock");
+        w.lock();
+        assert_eq!(s1.sign(&package, &g.keys[&i1]).err(), Some(Error::KeyRevoked));
+        assert_eq!(w.frost_session(&g.keys[&i1]).err(), Some(Error::WalletLocked));
     }
     run::<Bn254Keccak256>();
     run::<Secp256K1Sha256>();
@@ -481,6 +503,19 @@ mod vectors {
         assert!(probe.bytes().unwrap().iter().all(|x| *x == 0), "the dropped session's slot is wiped");
     }
 
+    /// An unsigned FROST session wipes its nonces' arena slot when dropped.
+    #[test]
+    fn dropped_frost_session_wipes_its_nonces() {
+        use rand_chacha::rand_core::SeedableRng;
+        let w = wallet("pq_kat");
+        let g = dkg::<Secp256K1Sha256, _>(2, 2, &mut rand_chacha::ChaCha20Rng::seed_from_u64(7)).unwrap();
+        let s = w.frost_session(&g.keys[&id::<Secp256K1Sha256>(1)]).unwrap();
+        let probe = s.vectors_nonce_probe().unwrap();
+        assert!(probe.bytes().unwrap().iter().any(|x| *x != 0), "control: the slot holds the nonces");
+        drop(s);
+        assert!(probe.bytes().unwrap().iter().all(|x| *x == 0), "the dropped session's slot is wiped");
+    }
+
     /// FROST-BN254 through the `Bn254Group` element newtype: two sessions of one fixed RNG give one pair of commitments
     /// through blinded integers of the hiding and binding nonces.
     #[test]
@@ -491,10 +526,11 @@ mod vectors {
         let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(4);
         let g = dkg::<Bn254Keccak256, _>(2, 2, &mut rng).unwrap();
         let key = &g.keys[&id::<Bn254Keccak256>(1)];
+        let w = wallet("pq_kat");
         trace::take();
-        let s1 = FrostSession::vectors_with_rng(key, &mut rand_chacha::ChaCha20Rng::seed_from_u64(5));
+        let s1 = w.vectors_frost_session_with_rng(key, &mut rand_chacha::ChaCha20Rng::seed_from_u64(5)).unwrap();
         let t1 = trace::take();
-        let s2 = FrostSession::vectors_with_rng(key, &mut rand_chacha::ChaCha20Rng::seed_from_u64(5));
+        let s2 = w.vectors_frost_session_with_rng(key, &mut rand_chacha::ChaCha20Rng::seed_from_u64(5)).unwrap();
         let t2 = trace::take();
         assert_eq!(s1.commitments(), s2.commitments());
         let ks = blinded::<ark_bn254::Fr>("FROST-BN254 commitments", &t1, &t2, None);

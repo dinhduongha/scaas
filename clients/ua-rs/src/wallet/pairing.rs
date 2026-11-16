@@ -11,13 +11,13 @@
 //! - BLS min-sig `0x0106` / `0x0107`: `sk·H(ua_msg)` under the domain of the request's [`SigRole`] (`verify.rs`'s DSTs and
 //!   labels: SIG for `Authorization`, POP for `Pop`).
 //! - [`Musig2Session`]: a wallet participant key's BIP-327 session, its secret nonce in the wallet's arena, wiped by the first
-//!   `sign`; [`FrostSession`]: RFC 9591 round 1 / round 2 over a caller's key package, its nonces used once.
+//!   `sign`; [`FrostSession`]: RFC 9591 round 1 / round 2 over a caller's key package, its nonces in the arena, used once.
 //!
 //! Residual (spec §12): arkworks field arithmetic, point-addition special cases and the signature's scalar arithmetic
 //! (`k + e·sk mod r`) branch on values. UNAUDITED.
 use super::signer::SigRole;
 use super::store::Handle;
-use super::{Error, Result, UaKey};
+use super::{Error, Result, UaKey, Wallet};
 use crate::keccak;
 use crate::musig2::{self, Bn254, Curve, Secp256k1};
 use crate::verify::{hash_to_g1_bls12381, hash_to_scalar, map_to_g1_bn254};
@@ -26,7 +26,7 @@ use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup, PrimeGroup};
 use ark_ff::{BigInteger, PrimeField, Zero};
 use frost_core::keys::KeyPackage;
-use frost_core::round1::{SigningCommitments, SigningNonces};
+use frost_core::round1::{Nonce, SigningCommitments, SigningNonces};
 use frost_core::round2::SignatureShare;
 use frost_core::{Ciphersuite, SigningPackage};
 use rand_core::{CryptoRng, OsRng, RngCore};
@@ -287,34 +287,52 @@ impl UaKey {
     }
 }
 
-/// An RFC 9591 FROST signing session (round 1 → round 2) of one participant's key package, either ciphersuite: its nonces
-/// (OS RNG) sign once; a second [`FrostSession::sign`] is `Argument`. No `Clone`.
-// ponytail: the nonces live in this object (frost-core's `SigningNonces`, zeroized on drop), not in a wallet arena: the share
-// itself is the caller's `KeyPackage` until the vault (T9) keeps FROST shares; both move into the store then.
+/// An RFC 9591 FROST signing session (round 1 → round 2) of one participant's key package, either ciphersuite, opened by
+/// [`Wallet::frost_session`]: its nonces (OS RNG) live in the wallet's arena (spec §8.2; owner O1 2026-11-16) and sign once;
+/// a second [`FrostSession::sign`] is `Argument`; after the wallet's `lock()`: `KeyRevoked`; dropped unsigned, its slot is
+/// wiped. No `Clone`. The share itself is still the caller's `KeyPackage` (no FROST share in store custody this round: it
+/// comes with the real DKG; spec §8.2, ua-libraries.md).
 pub struct FrostSession<C: Ciphersuite> {
-    nonces: Option<SigningNonces<C>>,
+    nonce: Option<Handle>,
     commitments: SigningCommitments<C>,
 }
 
+impl Wallet {
+    /// A FROST session of `key`: round 1's nonces from the OS RNG, kept in this wallet's arena. `WalletLocked` while locked.
+    pub fn frost_session<C: Ciphersuite>(&self, key: &KeyPackage<C>) -> Result<FrostSession<C>> {
+        self.frost_session_with(key, &mut OsRng)
+    }
+
+    fn frost_session_with<C: Ciphersuite>(&self, key: &KeyPackage<C>, rng: &mut (impl RngCore + CryptoRng)) -> Result<FrostSession<C>> {
+        // `SigningNonces` zeroizes on drop; its two scalars go to the arena as `hiding ‖ binding`
+        let n = SigningNonces::new(key.signing_share(), rng);
+        let bytes = Zeroizing::new([n.hiding().serialize(), n.binding().serialize()].concat());
+        Ok(FrostSession { nonce: Some(self.store.put(&bytes)?), commitments: *n.commitments() })
+    }
+}
+
 impl<C: Ciphersuite> FrostSession<C> {
-    pub fn new(key: &KeyPackage<C>) -> FrostSession<C> {
-        FrostSession::with_rng(key, &mut OsRng)
-    }
-
-    fn with_rng(key: &KeyPackage<C>, rng: &mut (impl RngCore + CryptoRng)) -> FrostSession<C> {
-        let (n, c) = frost_core::round1::commit(key.signing_share(), rng);
-        FrostSession { nonces: Some(n), commitments: c }
-    }
-
     /// Round 1's commitments, for the coordinator.
     pub fn commitments(&self) -> SigningCommitments<C> {
         self.commitments
     }
 
-    /// Round 2's signature share; spends the nonces first.
+    /// Round 2's signature share; spends the nonces first (wiped in the arena as they are read).
     pub fn sign(&mut self, package: &SigningPackage<C>, key: &KeyPackage<C>) -> Result<SignatureShare<C>> {
-        let n = self.nonces.take().ok_or(Error::Argument)?;
+        let k = self.nonce.take().ok_or(Error::Argument)?.take()?;
+        let (hiding, binding) = k.split_at(k.len() / 2);
+        let nonce = |b: &[u8]| Nonce::<C>::deserialize(b).map_err(|_| Error::Argument);
+        let n = SigningNonces::from_nonces(nonce(hiding)?, nonce(binding)?);
         frost_core::round2::sign(package, &n, key).map_err(|_| Error::Argument)
+    }
+}
+
+/// An unsigned session wipes its nonces' slot when dropped.
+impl<C: Ciphersuite> Drop for FrostSession<C> {
+    fn drop(&mut self) {
+        if let Some(h) = self.nonce.take() {
+            let _ = h.take(); // `KeyRevoked` after `lock()`: the arena is gone already
+        }
     }
 }
 
@@ -350,9 +368,18 @@ mod vectors {
     }
 
     impl<C: Ciphersuite> FrostSession<C> {
-        /// `new` with the caller's RNG.
-        pub fn vectors_with_rng(key: &KeyPackage<C>, rng: &mut (impl RngCore + CryptoRng)) -> FrostSession<C> {
-            FrostSession::with_rng(key, rng)
+        /// The probe of this session's nonce slot, `None` once the nonces are spent.
+        pub fn vectors_nonce_probe(&self) -> Option<NonceSlotProbe> {
+            self.nonce.as_ref().map(|h| NonceSlotProbe(h.dup()))
+        }
+    }
+
+    impl Wallet {
+        /// `frost_session` with the caller's RNG.
+        pub fn vectors_frost_session_with_rng<C: Ciphersuite>(
+            &self, key: &KeyPackage<C>, rng: &mut (impl RngCore + CryptoRng),
+        ) -> Result<FrostSession<C>> {
+            self.frost_session_with(key, rng)
         }
     }
 }

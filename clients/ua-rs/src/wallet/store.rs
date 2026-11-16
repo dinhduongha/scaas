@@ -303,6 +303,15 @@ impl SecretStore {
         Ok((Handle { store: self.clone(), generation, slot }, public))
     }
 
+    /// A one-use secret put into the open arena at the store's generation (a FROST session's nonces, spec §8.2), under the
+    /// write lock: its handle, revoked by `lock()` as every other. `WalletLocked` while locked.
+    pub(crate) fn put(self: &Arc<Self>, bytes: &[u8]) -> Result<Handle> {
+        let mut g = self.write();
+        let generation = g.generation;
+        let slot = g.arena.as_mut().ok_or(Error::WalletLocked)?.put(bytes)?;
+        Ok(Handle { store: self.clone(), generation, slot })
+    }
+
     /// A store of its own holding only `secret` (an ephemeral KEM key, spec §8.2), and the secret's handle.
     pub(crate) fn single(secret: &[u8]) -> Result<Handle> {
         let mut arena = Arena::empty();

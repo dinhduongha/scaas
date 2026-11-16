@@ -9783,6 +9783,15 @@ Rules of the `ua-rs` wallet surface and its facades, then the records of the dec
 **Status.** BUILT: T2 `b3e051a5`, T10 `b2c56d53`, `5b7eef3a` (`WalletMismatch`), T12 `b62cb2b4` (C, ASan).
 **Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §8.2; [Codex review](research/ua-rs-sign-codex-review.md).
 
+**Change (owner 2026-11-16, T21 ledger O1 / L18, "ok, as proposed": options (a) and (b); BUILT, UNAUDITED).** Fable part 2 finding 1:
+`FrostSession` held frost-core's `SigningNonces` on the plain heap, had no generation and still signed after `lock()`, against this
+rule and spec §8.2. (a) Built: `Wallet::frost_session(&KeyPackage)` replaces `FrostSession::new`; the session's two nonces are put
+into the wallet's arena (`SecretStore::put`), `sign` takes them out (wiped as read), `lock()` revokes the session (`KeyRevoked`), a
+locked wallet opens none (`WalletLocked`), a dropped unsigned session wipes its slot; tests `frost_session_after_lock_signs_nothing`
+and `dropped_frost_session_wipes_its_nonces` (`tests/wallet_pairing.rs`), each red on its mutant (nonces kept in the object; no
+`Drop`). (b) The remaining deviation is stated in spec §8.2 and [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-09): the FROST share
+is still the caller's `KeyPackage`, not in store custody; share custody comes with the real DKG work.
+
 ### CLI-UAL-10 — Memory protection covers the arena, not the object graph
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-10 · superseded-by: —
 
