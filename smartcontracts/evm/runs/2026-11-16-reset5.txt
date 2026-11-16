@@ -1,0 +1,27 @@
+# SCaaS testnet (scaas-testnet) reset 5, 2026-11-16 (owner 2026-11-16 "Ok, reset 5 before PR #18"). PARTIAL. Branch reset5 from ua-mtx-merge
+# f13d322e2 (tree == 3zh-core fefedb3af). UNAUDITED. Full output in git-ignored .log files (runs/2026-11-16-scaas-testnet-reset5/).
+# Mainnet 22776 not touched.
+step | commit | rc | counts
+A1 DeploySend batches: run(string,uint256,uint256), BatchOutOfRange | 5c51d200b | 0 | DeploySendPlan 11 passed (6 + 5 new batch tests)
+A2 deploy.sh evm batches of 16 without --slow, receipts checked per batch (script/deploy_batch.py), nonce heartbeat, DEPLOY_BATCH_LIMIT, fee gate MAX_FEE_GWEI | 5c51d200b | 0 | deploy_batch.py self-test ok (15 cases); anvil (prepa-anvil.sh): good: plan 117, 117 send lines, 8 batches, ok 117 txs, 142 s; fee (MAX_FEE_GWEI 0.000000001): FEE_OVER_MAX before the verifiers step, deployer nonce 0; stop (automine off after batch 1): FAIL relay fee router tx 17/117 rc 124 no receipt, 16 send lines, nonce 16, pending 32 (no batch 3)
+A2 mutants | 5c51d200b | - | 5 / 5 caught: status never checked (self-test FAIL), a missing receipt passes (self-test FAIL), batch() accepts any window (4 forge tests FAIL), fee gate off (anvil fee case FAIL: rc 0, nonce 117), no stop after a failed batch (anvil stop case FAIL: 8 FAIL lines, it went on)
+A3 forge, whole suite at the default set (capped; compiled in stages per test directory: one solc job over the whole tree passed the 4 GB + 2 GB swap cap, killed by the cgroup OOM twice) | 5c51d200b | 0 | 423 suites: 4,349 passed, 24 failed, 16 skipped; the 24 = test/modules/Diff* without out/t66b-legacy (git-ignored, a fresh worktree; legacy_artifacts.py build), re-run: 9 suites 24 passed, 0 failed
+A3 size gate (src unchanged) | 5c51d200b | 0 | 0 errors, 170 contracts (note OpenFactory 35,040 > T-2 33,516, as the base)
+A3 docs: NET-EVM-11 Change (networks/evm.md), decisions.md Change | 5c51d200b | 0 | docs_check 0 errors (7 warnings = base)
+B0 prep B as first stated (pqzkeys / pqzwallet to e2e.py) | - | stopped | owner decision asked (finding below); ruling 2026-11-16 "ok, option 2, one chain, two deploy sets": the port is the follow-up against the set mldsa-on, not a reset-5 blocker
+B1 deploy sets: deploybook.py set-check / set-merge / set-book; deploy.sh, matrix.sh, verify.sh, vcheck.py, coverage.py DEPLOY_SET; mldsaalt off side on mldsa-off; NET-EVM-13 Change | f2725fb98 | 0 | test_deploybook ok (18 set cases), test_vcheck ok (set_books: all, one set, DEPLOY_SET_UNKNOWN, DEPLOY_SET_MISSING); anvil (prepa-anvil.sh sets): DEPLOY_SET=mldsa-x and mldsa-off without MLDSA_PRECOMPILE=off refused before any send (nonce 0), mldsa-on rc 0, mldsa-off rc 0 (101 tx: the CREATE2 libraries and the relay pair reused), the book holds both, mldsa-off on top, distinct registries and factories
+B1 mutants | f2725fb98 | - | 2 / 2 caught: an unknown label accepted (test_deploybook and test_vcheck FAIL), the mode check removed (test_deploybook FAIL)
+
+C1 image scaas/nethermind-pqz:2.2.0-pqz11 (build-image.sh, capped) | f2725fb98 | 1, then 0 | try 1 (library from this tree): sha256 ab4eac8c... != the reviewed n2304 pin f397d9c1... (the only library-source changes since the reviewed build 9ddc814e9: test-hooks-only code in pqzl lib.rs / tbox.rs, 15b4e187a, which moves source lines; the pin not edited); try 2 FFI_REV=9ddc814e9 (the reviewed library's commit, build-image.sh's own path), plugin from this tree: sha256:33eb6d5d...; library f397d9c1... = ExpectedLibrarySha256; selftest label d6c01fbc...; test-hook names 0
+C2 chainspec (patch-chainspec --testnet-reset on the live genesis, its RescueVault alloc already there; add-schedule --mldsa) | this commit | 0 | schedule 0 = chain/engine-pqz.json (26 calibrated rows, three-key ids, selftestGas 2,012,000); schedule 1 at 1794801450 = the same rows + ML-DSA 59,000 / 100,000 / 135,000; params, header, alloc unchanged (patch-chainspec: params changed none, header none, alloc none)
+C3 throwaway node (pqz11, the new chainspec, mining off, no ports) | this commit | 0 | PQZ-START sha256 f397d9c1... selftest d6c01fbc...; genesis 0x9ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b13 = reset 4's (chain-uids.json unchanged)
+Prep B finding (2026-11-16): forge's local EVM has neither the PQZ nor the ML-DSA precompile, and since 3zh the deploy's
+default MLDSA_PRECOMPILE=on puts the main registry's mldsa44 / mldsa65 / mldsa87 on MldsaVerifiers that call the chain's
+precompiles. A forge script simulates every call first, so on the SCaaS testnet any group that registers or signs with an
+ML-DSA UA in a forge script is refused in its simulation (UAPoP), nothing sent: tokens, pqchat, pqzkeys, pqzwallet (misc's
+mldsa44 row turns into its precompile-path negative, run by eth_call on the node: fine; mldsaalt's throwaway registry is then
+off: fine). Evidence (read only, reset 4b chain): MldsaVerifier(0x0134) 0xc514bbc3e178e21acf13ac736ca4d7f3262f2528
+.verify(pq_kat mldsa87 row): the node's eth_call true; the same call executed locally on a fork (cast call --trace, forge's
+EVM) false (the precompile address has no code: Stop, word 0). pqzkeys / pqzwallet additionally store scoped PQZ records with
+filler proofs (storePqzScopedPop), which the testnet's real PqzKeyVerifier refuses even as a real transaction: a port to
+e2e.py needs real R_REG proofs per record (pqz_prove), beside the ~1,700 lines of PqzKeys.s.sol / PqzWallet.s.sol rows.
