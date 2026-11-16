@@ -45,3 +45,5 @@ scaas-node e2e (--ignored, CAPPED_MEM=6G) | 5d7475727 | 137 | killed by systemd-
 # ua-go (6f4321bcf, 0ab3ce717), mutant-logs (547cc7ee0, 07a217010, 0d4b971cf, c2df38f9c; t8 M31 survived once: test 3233a91f0),
 # named-tests (7efc7d9de), ua-sizes (36892e6b5, 5d7475727), ua-rs-wallet / ua-rs-zether (d36c12749). Code after the rows' commits:
 # d36c12749 (a cfg on two re-exports, re-run in ua-rs-wallet and ua-rs-zether), 5d7475727 (size baseline only).
+scaas-node cargo test --test e2e -- --ignored --test-threads=1 (CAPPED_MEM=6G, alone) | 88107c6f9 | 101 | 23 passed, 1 failed: plain_rows_match_the_forge_abi counted 36 plain rows against its pin 35 (every row's ABI matched forge); the 36th is the registry's cacheExpandedKey (NODE-JOB-29, MD-14 2064e707d), whose unit-test pins moved then but this e2e pin did not
+scaas-node e2e plain_rows_match_the_forge_abi after the pin 35 -> 36 (reason in the assertion) | e2e pin fix | 0 | 1 passed (the other 23 passed in the run above)
