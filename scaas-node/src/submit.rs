@@ -954,7 +954,9 @@ impl Submitter {
     }
 
     /// T21 L63b: a row of the lane's own journal at start. Below `pending` the chain holds its transaction (a block or the mempool):
-    /// tracked as a job is (receipt, bump, settle). At or above it the transaction is gone and [`plan`] gap-fills the nonce: `dead`.
+    /// tracked as a job is (receipt, bump, settle). T21 L80: at or above it this endpoint has none, but the original may still land
+    /// (another peer, behind a gap): [`plan`] gap-fills the nonce and the row is tracked beside the gap-fill, its hash kept, until a
+    /// receipt settles it ([`Submitter::settle`]); never `dead` here.
     async fn track_own(&mut self, r: crate::store::JobRow, pending: u64) -> Result<()> {
         let n = u64::try_from(r.outer_nonce.unwrap_or(-1)).ok();
         let h = r.tx_hash.as_deref().and_then(|h| h.parse::<B256>().ok());
@@ -962,12 +964,6 @@ impl Submitter {
             warn!(uid = r.uid, "own journal row without a nonce or hash; skipped");
             return Ok(());
         };
-        if n >= pending {
-            self.own_to(r.uid, State::Dead, Some("nonce gap-filled at start: the transaction never reached the chain".into()), None).await;
-            return Ok(());
-        }
-        let work = r.payload.as_deref().and_then(|b| serde_json::from_slice::<serde_json::Value>(b).ok())
-            .and_then(|op| work_of_op(None, &op, None).ok()).map(|(w, _)| w);
         let fees = self.chain.fees().await?;
         let (gas, max_fee) = match self.chain.tx_fees(h).await? {
             Some((g, f)) => (g, f),
@@ -975,6 +971,15 @@ impl Submitter {
         };
         // T21 L81: the part's reservation, restored from its row (a part whose fee is unknown: at this round's)
         let reserve = u128::from(gas).saturating_mul(max_fee.unwrap_or(fees.0).max(fees.0));
+        if n >= pending {
+            let s = self.inflight.entry(n).or_insert_with(|| Sent { work: None, hashes: Vec::new(), gas: GAP_FILL_GAS, fees, at: Instant::now(),
+                _guard: None, orphan: None, ceiling: None, own: None, reserve: 0 });
+            s.hashes.insert(0, h);
+            (s.own, s.reserve) = (Some(r.uid), s.reserve.max(reserve));
+            return Ok(());
+        }
+        let work = r.payload.as_deref().and_then(|b| serde_json::from_slice::<serde_json::Value>(b).ok())
+            .and_then(|op| work_of_op(None, &op, None).ok()).map(|(w, _)| w);
         let g = work.as_ref().and_then(|w| self.digests.try_acquire(w.call_key()));
         self.inflight.insert(n, Sent { work, hashes: vec![h], gas, fees, at: Instant::now(), _guard: g, orphan: None, ceiling: None, own: Some(r.uid), reserve });
         Ok(())
@@ -1145,10 +1150,9 @@ impl Submitter {
                 (Some(w), None) => w.job_id,
                 _ => None,
             };
-            let (own, expired_own) = match (&s.work, &live) {
-                (Some(_), None) => (None, s.own),
-                _ => (s.own, None),
-            };
+            // T21 L80: a part stuck past its register's deadline is gap-filled, its row live (the cache entry has no deadline: the
+            // original may still land); the gap-fill's hash is never journaled as the part's
+            let own = s.own;
             let stuck_gas = s.gas;
             // Fable 3r3s3t P3-3 (spec 3t §10, the fee pre-check "again before every send"): a stuck PQZ debit's replacement
             // runs the fill first (the fee word, the verdict; a renewed verdict extends the work's deadline, R-1); refused by
@@ -1181,9 +1185,6 @@ impl Submitter {
             };
             if let Some(id) = expired_job {
                 self.report(id, "dead", None, None, Some("expired while stuck; nonce gap-filled".into())).await;
-            }
-            if let Some(uid) = expired_own {
-                self.own_to(uid, State::Dead, Some("expired while stuck; nonce gap-filled".into()), None).await;
             }
             if let Some((w, Refusal::Policy(r) | Refusal::Transport(r))) = refused {
                 self.requeue(&w, format!("{r}; nonce gap-filled")).await;
@@ -1220,9 +1221,6 @@ impl Submitter {
                         s.reserve = s.reserve.max(u128::from(gas).saturating_mul(fees.0));
                     }
                 }
-                if expired_own.is_some() {
-                    s.own = None;
-                }
                 s.at = Instant::now();
             }
         }
@@ -1244,7 +1242,7 @@ impl Submitter {
     async fn settle(&mut self, n: u64, h: B256, rc: TransactionReceipt) {
         let work = self.inflight.get(&n).and_then(|s| s.work.clone());
         let orphan = self.inflight.get(&n).and_then(|s| Some((s.orphan?, s.hashes.first() == Some(&h))));
-        let own = self.inflight.get(&n).and_then(|s| Some((s.own?, s.hashes.first() == Some(&h))));
+        let own = self.inflight.get(&n).and_then(|s| s.own);
         let consumed = match &work {
             Some(w) if !rc.status() => match self.consumed(w).await {
                 Ok(c) => c,
@@ -1260,12 +1258,13 @@ impl Submitter {
         if let Ok(mut k) = self.breaker.lock() {
             k.spend(now(), paid);
         }
-        // T21 L63b: the part's own row; one whose payload did not rebuild at start is the part only on its first hash
-        if let Some((uid, first)) = own {
-            match (work.is_some() || first, rc.status()) {
-                (true, true) => self.own_to(uid, State::Mined, None, None).await,
-                (true, false) => self.own_to(uid, State::Reverted, None, None).await,
-                (false, _) => self.own_to(uid, State::Dead, Some("nonce gap-filled".into()), None).await,
+        // T21 L63b / L80: the part's own row: the gap-fill is the lane's 0-value self-transfer, any other receipt at this nonce is the
+        // part's (its first hash or a replacement, before or after a restart or an expiry)
+        if let Some(uid) = own {
+            match (rc.to == Some(self.chain.address()), rc.status()) {
+                (true, _) => self.own_to(uid, State::Dead, Some("nonce gap-filled: the gap-fill landed, no version of the part".into()), None).await,
+                (false, true) => self.own_to(uid, State::Mined, None, None).await,
+                (false, false) => self.own_to(uid, State::Reverted, None, None).await,
             }
         }
         let Some(w) = work else {
@@ -1490,6 +1489,8 @@ pub(crate) mod tests {
         fees_down: bool,
         /// `eth_getTransactionCount` at `latest` (default `count`: nothing in the mempool).
         latest: Option<u64>,
+        /// T21 L80: `eth_sendRawTransaction` fails (a transport error; nothing recorded).
+        send_down: bool,
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -1740,6 +1741,7 @@ pub(crate) mod tests {
                         }
                     }
                 }
+                "eth_sendRawTransaction" if e.send_down => Err(err(-32000, "upstream timeout", None)),
                 "eth_sendRawTransaction" => {
                     let raw = alloy::hex::decode(p[0].as_str().unwrap()).unwrap();
                     let tx = TxEnvelope::decode_2718(&mut raw.as_slice()).unwrap();
@@ -1751,6 +1753,8 @@ pub(crate) mod tests {
                 }
                 "eth_getTransactionReceipt" => {
                     let h: B256 = p[0].as_str().unwrap().parse().unwrap();
+                    // the sent transaction's own `to` (T21 L80: a gap-fill's is the lane), else `TOKEN`
+                    let to = e.sent.iter().find(|s| s.0 == h).map_or(TOKEN, |s| s.1);
                     Ok(match e.receipts.get(&h) {
                         None => Value::Null,
                         Some(ok) => json!({"type": "0x2", "status": if *ok { "0x1" } else { "0x0" },
@@ -1758,7 +1762,7 @@ pub(crate) mod tests {
                             "transactionHash": format!("{h:#x}"), "transactionIndex": "0x0",
                             "blockHash": format!("0x{}", "11".repeat(32)), "blockNumber": "0x1", "gasUsed": "0x5208",
                             "effectiveGasPrice": "0x1", "from": format!("{:#x}", Address::ZERO),
-                            "to": format!("{TOKEN:#x}"), "contractAddress": null}),
+                            "to": format!("{to:#x}"), "contractAddress": null}),
                     })
                 }
                 m => panic!("unexpected {m}"),
@@ -3274,13 +3278,82 @@ pub(crate) mod tests {
         let (uid0, uid1) = (r[0].uid - 1, r[0].uid);
         assert_eq!(st.job(uid0).await.unwrap().unwrap().state, State::Mined);
         drop(s);
-        // restart, part 1 gone from the mempool (pending = latest = 1): its nonce is gap-filled, its row dead
+        // restart, part 1 gone from this endpoint (pending = latest = 1): its nonce is gap-filled; T21 L80: its row stays live beside
+        // the gap-fill (the original may still land), no longer `dead` at start (old assertion: State::Dead here)
+        let part1 = rows(&st).await[0].tx_hash.clone();
         (rpc.lock().unwrap().count, rpc.lock().unwrap().latest) = (1, None);
-        let s = start(journal(), vec![]).await;
-        assert_eq!(s.inflight_count(), 1, "the gap-fill only");
+        let mut s = start(journal(), vec![]).await;
+        assert_eq!(s.inflight_count(), 1, "the gap-fill, the part's row beside it");
         let last = rpc.lock().unwrap().sent.last().cloned().unwrap();
         assert!(last.2.is_empty() && last.1 == signer.address(), "a 0-value self-transfer at nonce 1");
-        assert_eq!(st.job(uid1).await.unwrap().unwrap().state, State::Dead);
+        let r1 = st.job(uid1).await.unwrap().unwrap();
+        assert_eq!((r1.state, r1.tx_hash.clone()), (State::Broadcast, part1.clone()), "live, its part's hash kept");
+        // the original lands after the gap-fill attempt: the row settles `mined`
+        rpc.lock().unwrap().receipts.insert(part1.unwrap().parse().unwrap(), true);
+        s.track().await;
+        assert_eq!((s.inflight_count(), st.job(uid1).await.unwrap().unwrap().state), (0, State::Mined));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// T21 L80 (Codex part 5 finding 1): a part's `~node` row is never `dead` while a version of it may still land. A part stuck past its
+    /// register's deadline is gap-filled and its row stays live; a replacement of the part (not its first hash) landing settles it `mined`.
+    /// After a restart whose gap-fill send fails, the row is still tracked; the bumped gap-fill landing settles it `dead` by name.
+    #[tokio::test]
+    async fn own_rows_live_until_a_receipt() {
+        use crate::store::{ConfigSet, LaneRow};
+        let reg = Address::repeat_byte(0x5e);
+        let dir = std::env::temp_dir().join(format!("scaas-own-{}-{:016x}", std::process::id(), rand::random::<u64>()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let st = crate::store::create(&format!("sqlite://{}", dir.join("node.db").display()), "test").await.unwrap();
+        let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap();
+        let label = format!("{:#x}", signer.address());
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() }).await;
+        let mut cfg = test_cfg(&url);
+        (cfg.ua_registry, cfg.max_gas_per_tx) = (Some(reg), 64_000_000);
+        let key = cfg.chain_key();
+        let lanes = vec![LaneRow { chain_key: key.clone(), label: label.clone(), account_index: 0, journal_max: None }];
+        crate::store::bootstrap(st.as_ref(), &ConfigSet { chains: vec![cfg.chain_row()], lanes, ..Default::default() }, 1).await.unwrap();
+        let start = |jobs: Vec<Value>| {
+            let (cfg, signer, journal) = (cfg.clone(), signer.clone(), Some((st.clone(), label.clone())));
+            async move {
+                let (odoo, _) = fake_odoo(Fake { jobs, tokens: toks(), ..Default::default() }).await;
+                Submitter::start_with(Chain::with_signer(&cfg, signer).unwrap(), odoo, cfg, "t#1".into(), InflightSet::default(), journal)
+                    .await.unwrap()
+            }
+        };
+        let row = |uid: i64| { let st = st.clone(); async move { st.job(uid).await.unwrap().unwrap() } };
+        let mut s = start(vec![call_job(9, reg, mldsa65_register())]).await;
+        s.poll_outbox().await;
+        s.track().await; // both parts bumped once
+        let r = st.lane_journal(&key, &label).await.unwrap();
+        let (uid0, uid1) = (r[0].uid, r[1].uid);
+        let e = rpc.lock().unwrap().sent.clone();
+        assert_eq!(e.len(), 4);
+        // the register expired: nonce 0 is gap-filled, its row live with the part's last hash
+        s.inflight.get_mut(&0).unwrap().work.as_mut().unwrap().valid_until = 0;
+        s.track().await;
+        let g = rpc.lock().unwrap().sent[4].clone();
+        assert!(g.2.is_empty() && g.1 == signer.address(), "a gap-fill at nonce 0");
+        let r0 = row(uid0).await;
+        assert_eq!((r0.state, r0.tx_hash), (State::Broadcast, Some(format!("{:#x}", e[2].0))), "live after the expiry");
+        // the part's replacement lands (not its first hash): `mined`
+        rpc.lock().unwrap().receipts.insert(e[2].0, true);
+        s.track().await;
+        assert_eq!(row(uid0).await.state, State::Mined);
+        drop(s);
+        // restart, nonce 1 gone from this endpoint, the gap-fill's send fails: the row is still tracked
+        (rpc.lock().unwrap().count, rpc.lock().unwrap().send_down) = (1, true);
+        let mut s = start(vec![]).await;
+        assert_eq!((s.inflight_count(), row(uid1).await.state), (1, State::Broadcast), "tracked after a failed gap-fill send");
+        rpc.lock().unwrap().send_down = false;
+        s.track().await;
+        let g = rpc.lock().unwrap().sent.last().cloned().unwrap();
+        assert!(g.2.is_empty() && g.1 == signer.address(), "the gap-fill bumped and sent");
+        assert_eq!(row(uid1).await.state, State::Broadcast);
+        rpc.lock().unwrap().receipts.insert(g.0, true);
+        s.track().await;
+        let r1 = row(uid1).await;
+        assert_eq!((r1.state, r1.last_error.as_deref()), (State::Dead, Some("nonce gap-filled: the gap-fill landed, no version of the part")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
