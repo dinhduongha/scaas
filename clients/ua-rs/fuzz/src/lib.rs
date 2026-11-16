@@ -23,7 +23,11 @@
 //! - T15: `pqz_cmd`, the PQZ facade's command decoder (1 MiB, depth 8, an allow-list per command, typed values): the first byte
 //!   names the command (its index in `facade::pqz::COMMANDS`, modulo one more than their count), the rest is the JSON; the extra
 //!   index is the balance-cache box reader (2 MiB, depth 1), opened with a fixed wallet's PQZ key (never opens a fuzzed box). An
-//!   accepted command reads back to itself and holds no `key` member at any depth. No proof is made (decoding only). UNAUDITED.
+//!   accepted command reads back to itself and holds no `key` member at any depth. No proof is made (decoding only).
+//!
+//! - T21 L48: `json_calls`, the JSON calls of `scaas_ua::json` (ua-c's `json_call`, ua-cxx, ua-qt, ua-dart-frb) under their caps:
+//!   the first byte names the call (its index in `JSON_CALLS`, modulo their count), the rest is the text (non-UTF-8: skipped,
+//!   the C ABI refuses it before the call). UNAUDITED.
 use scaas_ua::wallet::{
     bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, EvmTx, Expect, KemKeyPair, Manifest, MembersJson,
     Sealed, SealedContainer, TypedData, UaSigRequest, Vault, Wallet,
@@ -49,6 +53,22 @@ const ZCMD: (usize, usize) = (1 << 20, 8);
 const ZBOX: (usize, usize) = (2 << 20, 1);
 const QCMD: (usize, usize) = (1 << 20, 8);
 const QBOX: (usize, usize) = (2 << 20, 1);
+/// `json_calls`: the call and its `(length cap, depth cap)`, in the order of `fuzz/seeds.py`'s `JCALLS`.
+type JsonCall = fn(&str) -> scaas_ua::json::JsonResult<String>;
+const JSON_CALLS: [(JsonCall, (usize, usize)); 9] = {
+    use scaas_ua::json::*;
+    [
+        (registration_args_json, (1 << 20, 6)),
+        (set_kem_key_args_json, (1 << 20, 6)),
+        (set_pqz_key_args_json, (1 << 20, 6)),
+        (set_pqz_key_version_args_json, (1 << 20, 6)),
+        (msig_update_json, (1 << 20, 6)),
+        (pay_digest_json, (1 << 20, 6)),
+        (meta_pay_id_json, (1 << 20, 6)),
+        (service_pull_json, (64 * 1024, 7)),
+        (|t| inner_json(t).map(|v| v.len().to_string()), (64 * 1024, 1)),
+    ]
+};
 /// `version ‖ scheme ‖ mlkemCt (1,568) ‖ x25519Eph (32)` and a 16-byte tag.
 const SEALED_MIN: usize = 2 + 1568 + 32 + 16;
 
@@ -260,9 +280,19 @@ fn one(t: &str, data: &[u8]) {
                 }
             }
         }
+        "json_calls" => {
+            let Some((&b, rest)) = data.split_first() else { return };
+            let Ok(t) = std::str::from_utf8(rest) else { return };
+            let (f, caps) = JSON_CALLS[usize::from(b) % JSON_CALLS.len()];
+            if let Some(out) = json(rest, caps, |_| f(t).map_err(|_| scaas_ua::wallet::Error::Argument)) {
+                if serde_json::from_str::<serde_json::Value>(&out).is_err() {
+                    die("an accepted call's output is not JSON");
+                }
+            }
+        }
         _ => die(
             "UA_FUZZ_TARGET: typed_data | expect | tx | vault | manifest | container | sealed | kem_pk | mnemonic | container_expect | \
-             members | accepted | uasig | zether_cmd | pqz_cmd",
+             members | accepted | uasig | zether_cmd | pqz_cmd | json_calls",
         ),
     }
 }
