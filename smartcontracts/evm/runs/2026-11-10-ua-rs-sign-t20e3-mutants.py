@@ -20,6 +20,7 @@ import sys
 
 R = "clients/ua-rs/"
 PR, RD = R + "src/facade/pqz/proven.rs", R + "src/bin/pqz-read.rs"
+FP = R + "src/facade/pqz.rs"  # T21 L44 (63d2d8b82): bind_mode moved here from proven.rs, one copy
 CAPPED = os.path.abspath("scripts/capped")
 ENV = {"CARGO_NET_OFFLINE": "true", "CARGO_BUILD_JOBS": "2"}
 C = [CAPPED, "cargo", "test", "--locked", "--offline", "-j2"]
@@ -27,7 +28,7 @@ TF = (R, C + ["--lib", "none_headers_are_the_contracts"])
 TR = (R, C + ["--bin", "pqz-read", "none_header_rows_envelope_and_fee"])
 
 M = [
-    ("the direct tag for a relayed binding", [(PR, 'let b = if *binding == [0; 32] { crate::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1") } else { *binding };',
+    ("the direct tag for a relayed binding", [(FP, 'let b = if *binding == [0; 32] { crate::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1") } else { *binding };',
                                                'let b = crate::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1"); let _ = binding;')], TF),
     ("the unwrap binding unwrapped", [(PR, "if bc.binding == [0; 32] { w } else { crate::keccak256(&[bc.binding, w].concat()) }",
                                        "if bc.binding == [0; 32] { w } else { bc.binding }")], TF),
@@ -39,8 +40,8 @@ M = [
                                            "    let f = if form == OwnForm::Refresh || bc.amount == 0")], TF),
     ("op 1 under op 7's header", [(PR, "if multi { Multi::header(&o.id, m, aud) } else { Debit::header(if aud { Form::Transfer } else { Form::Transfer0 }, &o.id) }",
                                    "if multi || m == 1 { Multi::header(&o.id, m, aud) } else { Debit::header(if aud { Form::Transfer } else { Form::Transfer0 }, &o.id) }")], TF),
-    ("the unbound relayer kept", [(RD, "*mode, keep(1, relayer), *fee, keep(2, fee_to)]", "*mode, *relayer, *fee, keep(2, fee_to)]")], TR),
-    ("the unbound fee recipient kept", [(RD, "*mode, keep(1, relayer), *fee, keep(2, fee_to)]", "*mode, keep(1, relayer), *fee, *fee_to]")], TR),
+    ("the unbound relayer kept", [(FP, "e.mode, keep(1, &e.relayer), e.fee, keep(2, &e.fee_recipient)]", "e.mode, e.relayer, e.fee, keep(2, &e.fee_recipient)]")], TR),
+    ("the unbound fee recipient kept", [(FP, "e.mode, keep(1, &e.relayer), e.fee, keep(2, &e.fee_recipient)]", "e.mode, keep(1, &e.relayer), e.fee, e.fee_recipient]")], TR),
     ("the fee without the beneficiary rule", [(RD, "(if *beneficiary == [0; 32] { 0 } else { token_fee }).checked_add", "token_fee.checked_add")], TR),
     ("decoyFee once, not per leg", [(RD, "checked_add(m.checked_mul(decoy_fee)?)", "checked_add(decoy_fee + 0 * m)")], TR),
 ]
