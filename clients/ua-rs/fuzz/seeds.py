@@ -15,7 +15,8 @@ witness flag, the disclosure cases, the envelope; T14b, the words commands over 
 index after the last, zether.json's cache boxes); T15: pqz_cmd (one byte, the
 command's index in facade::pqz::COMMANDS, then its JSON: requests built from smartcontracts/vectors/pqz/n2304-kmax4096/, the
 default set's statement files (keys and T sliced from the statements) and, T15e, its state.json rows (raw words); the index after the last, a well-formed box that opens
-under no key).
+under no key); T21 L48: json_calls (one byte, the call's index in JCALLS, then its JSON: portable.json's registration, record and
+msig update rows, typed_ops.json's UARelayFee, paymeta.json, servicepull.json, nested.json's `inner` maps).
 """
 import json
 import os
@@ -196,6 +197,46 @@ def pqz_seeds():
     return out
 
 
+# fuzz/src/lib.rs JSON_CALLS, in its order: (name, depth cap)
+JCALLS = [("registration_args", 6), ("set_kem_key_args", 6), ("set_pqz_key_args", 6), ("set_pqz_key_version_args", 6),
+          ("msig_update", 6), ("pay_digest", 6), ("meta_pay_id", 6), ("service_pull", 7), ("inner", 1)]
+
+
+def json_calls_seeds():
+    p, nv = load("portable.json"), load("nested.json")
+    with open(os.path.join(V, "../metatx/paymeta.json"), encoding="utf-8") as f:
+        paymeta = json.load(f)
+    with open(os.path.join(V, "../metatx/servicepull.json"), encoding="utf-8") as f:
+        pulls = json.load(f)["rows"]
+    with open(os.path.join(V, "../typed/typed_ops.json"), encoding="utf-8") as f:
+        fee = json.load(f)["ops"]["UARelayFee"]
+
+    def sig(r):  # tests/json.rs record_sig
+        return {"members": r["args"]["sig"]["members"]} if r["kind"] == 0x0120 else {"signature": r["sig"]}
+
+    def pull(r):  # tests/service_pull.rs args
+        t = r["t"]
+        return {"name": r["token"]["name"], "token": r["token"]["address"], "chainId": r["chainId"], "chainUid": r["token"]["salt"],
+                "entry": r["entry"], "op": r["typedData"], "from": t["from"], "amount": t["value"], "batch": t["batch"],
+                "nonce": t["nonce"], "validUntil": t["validUntil"]}
+
+    rows = {
+        "registration_args": [{"kind": r["kind"], "keyData": r["keyData"], "pqzKey": r["attrs"]["pqzKey"], "pqzPopHash": r["attrs"]["pqzPopHash"],
+                               "pqzPop": r["pqzPop"], "kemPk": r["attrs"]["kemPk"], "pop": r["args"]["pop"]} for r in p["registrations"]],
+        "set_kem_key_args": [{"ua": r["ua"], "version": r["version"], "kemPk": r["kemPk"], "sig": sig(r)} for r in p["kemRecords"]],
+        "set_pqz_key_args": [{"ua": r["ua"], "pqzKey": r["pqzKey"], "pqzPopHash": r["pqzPopHash"], "sig": sig(r)} for r in p["pqzKeyRecords"]],
+        "set_pqz_key_version_args": [{"ua": r["ua"], "version": r["version"], "pqzKey": r["pqzKey"], "pqzPopHash": r["pqzPopHash"],
+                                      "sig": sig(r)} for r in p["pqzKeyVersions"]],
+        "msig_update": [{k: r[k] for k in ("ua", "chainUid", "registry", "version", "threshold", "members", "enabled", "validUntilBlock")}
+                        | {"sigs": r["args"]["sigs"]} for r in p["msigUpdates"]],
+        "pay_digest": [{"struct": "UARelayFee", "domain": fee["domains"]["token"]["domain"], "message": fee["message"]}],
+        "meta_pay_id": paymeta,
+        "service_pull": [pull(r) for r in pulls],
+        "inner": [r["inner"] for r in nv["eligibility"]],
+    }
+    return [bytes([i]) + js(v) for i, (name, _) in enumerate(JCALLS) for v in rows[name]]
+
+
 def seeds():
     t = sign["typed"]
     yield "typed_data", [js(r["td"]) for k in ("generic", "canon", "refusals") for r in t[k]] + [js(r["td"]) for r in sign["policy"]]
@@ -213,6 +254,7 @@ def seeds():
     yield "uasig", [js(uasig(r)) for r in sign["msig"]] + [js({"purpose": r["purposeTag"], "digest": r["digest"], "key": 0}) for r in sign["ua"][:4]]
     yield "zether_cmd", zether_seeds()
     yield "pqz_cmd", pqz_seeds()
+    yield "json_calls", json_calls_seeds()
 
 
 def nest(n):
@@ -258,6 +300,8 @@ def regress():
         "pqz_cmd/cmd-over-depth-9.bin": bytes([QCMDS.index("proveRegister")]) + over(
             {"proofSystemId": "0x" + pload("proof_pqzl.json")["proof_system_id"], "kind": 0x0131, "ua": "0x" + "11" * 32}, 8),
         "pqz_cmd/box-over-depth-2.bin": bytes([QBOX]) + over({"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}, 1),
+        # T21 L48: each JSON call one level past its depth cap, behind its index byte
+        **{f"json_calls/{n}-over-depth-{d + 1}.bin": bytes([i]) + over({}, d) for i, (n, d) in enumerate(JCALLS)},
     }
 
 

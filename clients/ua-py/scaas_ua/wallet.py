@@ -200,11 +200,14 @@ class _Secrets:
         return b
 
     def bytes_in(self, v, nul=False, n=None):
-        """A copy of the secret ``v`` (bytes-like; NUL-terminated with ``nul``), or None."""
+        """A copy of the secret ``v`` (bytes-like; NUL-terminated with ``nul``, a NUL inside UAArgument: never cut at it, T21 L53),
+        or None."""
         if v is None:
             return None
         if isinstance(v, str):
             raise TypeError('a secret is bytes-like (a bytearray, wiped after use): a str cannot be wiped')
+        if nul and 0 in memoryview(v).cast('B'):
+            raise WalletError(ERR_ARGUMENT, 'UAArgument', 'a NUL inside a secret')
         k = len(v)
         if n is not None and k != n:
             _refuse(f'a {n}-byte secret')
@@ -228,10 +231,13 @@ def _fixed(v, n, what):
 
 
 def _text(v):
-    """A public text input: str, bytes, or a JSON value (dumped); None stays None (NULL)."""
-    if v is None or isinstance(v, bytes):
+    """A public text input: str, bytes, or a JSON value (dumped); None stays None (NULL); a NUL inside is UAArgument (T21 L53)."""
+    if v is None:
         return v
-    return (v if isinstance(v, str) else json.dumps(v)).encode()
+    t = v if isinstance(v, bytes) else (v if isinstance(v, str) else json.dumps(v)).encode()
+    if 0 in t:
+        raise WalletError(ERR_ARGUMENT, 'UAArgument', 'a NUL inside a string')
+    return t
 
 
 def _var(fn, *args, cap=4096):

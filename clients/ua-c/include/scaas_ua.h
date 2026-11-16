@@ -1247,8 +1247,8 @@ ScaasUaStatus scaas_ua_wallet_from_link(const ScaasUaLinkSession *session,
                                         ScaasUaWallet **out);
 
 /**
- * The recovery phrase, once, into a buffer of at least SCAAS_UA_MNEMONIC_MAX bytes (smaller: SCAAS_UA_ERR_BUFFER, nothing
- * revealed); SCAAS_UA_ERR_ARGUMENT after. The caller zeroizes it.
+ * The recovery phrase, once, into a buffer of at least SCAAS_UA_MNEMONIC_MAX bytes (smaller: SCAAS_UA_ERR_BUFFER; `out` NULL:
+ * SCAAS_UA_ERR_ARGUMENT; both with nothing revealed); SCAAS_UA_ERR_ARGUMENT after. The caller zeroizes it.
  */
 ScaasUaStatus scaas_ua_seed_backup_reveal(const ScaasUaSeedBackup *b,
                                           char *out,

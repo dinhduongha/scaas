@@ -290,3 +290,38 @@ fn pqz_inputs_past_their_caps_are_refused_unparsed() {
     assert_eq!(k.open_balance_cache(&ok).err(), Some(Error::Argument), "2 MiB + 1");
     assert_eq!(bounded::vectors_parsed(), before, "2 MiB + 1: unparsed");
 }
+
+/// T21 L48: the JSON calls of `scaas_ua::json` (ua-c's `json_call`, ua-cxx, ua-qt, ua-dart-frb) read through the bounded reader.
+/// At each cap the text reaches `serde_json` once (`{}` padded with spaces, or a key `x` nested to the cap); one byte or one
+/// level past it is refused before. The calls refuse `{}` afterwards: only the parse count shows where the bound is.
+#[test]
+fn json_calls_past_their_caps_are_refused_unparsed() {
+    use scaas_ua::json::*;
+    let inner = |t: &str| inner_json(t).map(|v| v.len().to_string());
+    type Call<'a> = &'a dyn Fn(&str) -> JsonResult<String>;
+    let calls: [(&str, Call, usize, usize); 9] = [
+        ("registration_args_json", &registration_args_json, 1 << 20, 6),
+        ("set_kem_key_args_json", &set_kem_key_args_json, 1 << 20, 6),
+        ("set_pqz_key_args_json", &set_pqz_key_args_json, 1 << 20, 6),
+        ("set_pqz_key_version_args_json", &set_pqz_key_version_args_json, 1 << 20, 6),
+        ("msig_update_json", &msig_update_json, 1 << 20, 6),
+        ("pay_digest_json", &pay_digest_json, 1 << 20, 6),
+        ("meta_pay_id_json", &meta_pay_id_json, 1 << 20, 6),
+        ("service_pull_json", &service_pull_json, 64 << 10, 7),
+        ("inner_json", &inner, 64 << 10, 1),
+    ];
+    let pad = |n: usize| format!("{{}}{}", " ".repeat(n - 2));
+    // `{"x": 0}` is depth 1, each `[` one more
+    let nest = |d: usize| format!("{{\"x\":{}0{}}}", "[".repeat(d - 1), "]".repeat(d - 1));
+    for (name, f, len, depth) in calls {
+        let parses = |t: &str| {
+            let before = bounded::vectors_parsed();
+            let r = f(t);
+            (r.is_ok(), bounded::vectors_parsed() - before)
+        };
+        assert_eq!(parses(&pad(len)).1, 1, "{name}: {len} B parsed");
+        assert_eq!(parses(&pad(len + 1)), (false, 0), "{name}: {len} + 1 B refused unparsed");
+        assert_eq!(parses(&nest(depth)).1, 1, "{name}: depth {depth} parsed");
+        assert_eq!(parses(&nest(depth + 1)), (false, 0), "{name}: depth {depth} + 1 refused unparsed");
+    }
+}

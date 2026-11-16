@@ -8,6 +8,8 @@
 //! with the selector. [`set_kem_key_args_json`] in: `{ua, version, kemPk, sig}`; [`set_pqz_key_args_json`] in: `{ua, pqzKey,
 //! pqzPopHash, sig}`, `sig` the `UASig` `{keyData, signature, members: [{index, members, sig}]}`; out: portable.json
 //! `kemRecords[i].args` / `pqzKeyRecords[i].args`.
+//! Every input is read by `bounded` (spec §9.3): [`JSON_MAX`] / [`JSON_DEPTH`], `inner` [`INNER_JSON_MAX`] / depth 1, a service pull
+//! [`SERVICE_PULL_MAX`] / [`SERVICE_PULL_DEPTH`]; past a cap `Argument` before any parse.
 use crate::ua8::{registration_args, replayed_member_sig, InnerSig, KemKey, MemberSig, RegisterArgs, RegistrationInput, SetKemKeyArgs, UASig, UAAttrs};
 use crate::UAError;
 use serde_json::{json, Value};
@@ -40,12 +42,13 @@ fn unhex(v: &Value) -> JsonResult<Vec<u8>> {
 fn u16_of(v: &Value) -> JsonResult<u16> {
     v.as_u64().and_then(|n| u16::try_from(n).ok()).ok_or(Argument)
 }
+/// At most 256 entries, the `msig` member bound of [`msig_update_json`] (`Argument` otherwise).
 fn members_in(v: &Value) -> JsonResult<Vec<MemberSig>> {
     if v.is_null() {
         return Ok(vec![]);
     }
     let m = |s: &Value| Ok(MemberSig { index: u16_of(&s["index"])?, members: inner_in(&s["members"])?, sig: unhex(&s["sig"])? });
-    v.as_array().ok_or(Argument)?.iter().map(m).collect()
+    v.as_array().filter(|a| a.len() <= 256).ok_or(Argument)?.iter().map(m).collect()
 }
 /// At most 16 entries, the type's two levels: nothing here recurses.
 fn inner_in(v: &Value) -> JsonResult<Vec<InnerSig>> {
@@ -56,7 +59,7 @@ fn inner_in(v: &Value) -> JsonResult<Vec<InnerSig>> {
     v.as_array().filter(|a| a.len() <= 16).ok_or(Argument)?.iter().map(m).collect()
 }
 /// `{id: keyData}`: at most 16 entries of at most `4 + 36 × 16` bytes each, an `msig` of 16 members (`Argument` otherwise). A value is a
-/// string, so the object is the one level; serde_json's recursion limit bounds the parse.
+/// string, so the object is the one level.
 pub(crate) fn inners_in(v: &Value) -> JsonResult<Vec<([u8; 32], Vec<u8>)>> {
     if v.is_null() {
         return Ok(vec![]);
@@ -68,16 +71,14 @@ pub(crate) fn inners_in(v: &Value) -> JsonResult<Vec<([u8; 32], Vec<u8>)>> {
 /// The longest `inner` text [`inner_json`] reads: 16 entries in hex are about 20 KB, the rest is room for whitespace.
 pub const INNER_JSON_MAX: usize = 65_536;
 /// `inner` alone, `{id: keyData}` as [`registration_args_json`] takes it: the `msig` members' structures for the `_with` calls of ua-c,
-/// ua-cxx, ua-qt and ua-dart-frb (no callback crosses their ABI). "" or `null` is none; over [`INNER_JSON_MAX`] bytes, more than 16
-/// entries or key data over 580 bytes is `Argument`. A missing entry, or one that holds an `msig` (a third level), is then `MemberUnknown`.
+/// ua-cxx, ua-qt and ua-dart-frb (no callback crosses their ABI). "" or `null` is none; over [`INNER_JSON_MAX`] bytes, nesting past
+/// depth 1, more than 16 entries or key data over 580 bytes is `Argument`. A missing entry, or one that holds an `msig` (a third
+/// level), is then `MemberUnknown`.
 pub fn inner_json(t: &str) -> JsonResult<Vec<([u8; 32], Vec<u8>)>> {
     if t.is_empty() {
         return Ok(vec![]);
     }
-    if t.len() > INNER_JSON_MAX {
-        return Err(Argument);
-    }
-    inners_in(&parse(t)?)
+    inners_in(&read(t, INNER_JSON_MAX, 1)?)
 }
 /// The `inner` lookup of the `_with` calls over [`inner_json`]'s entries.
 pub fn lookup(inner: &[([u8; 32], Vec<u8>)]) -> impl Fn([u8; 32]) -> Option<Vec<u8>> + '_ {
@@ -87,8 +88,67 @@ pub fn lookup(inner: &[([u8; 32], Vec<u8>)]) -> impl Fn([u8; 32]) -> Option<Vec<
 pub fn replayed_member_sig_json(key_data: &[u8], index: u16, stored: &[u8]) -> JsonResult<String> {
     Ok(members_json(&[replayed_member_sig(key_data, index, stored)?])[0].to_string())
 }
+/// The longest text of every JSON call here but [`inner_json`] and [`service_pull_json`]: 1 MiB covers a `registerFrost` or `pqzPop`
+/// input (spec §9.3; T21 L48).
+pub const JSON_MAX: usize = 1 << 20;
+/// Their deepest nesting: a `sig` `{members: [{members: [{index, sig}]}]}` inside the input object.
+pub const JSON_DEPTH: usize = 6;
+/// [`service_pull_json`]'s caps: the typed-data cap's 64 KiB, and the depth of `relayFee.feeAuth`'s `UASig`.
+pub const SERVICE_PULL_MAX: usize = 64 << 10;
+pub const SERVICE_PULL_DEPTH: usize = 7;
+
+/// The bounded reader of outside JSON (spec §9.3), here under feature `json` so these calls have it without `wallet`, and
+/// `wallet::bounded::json` reads through it: `bytes` as JSON if `bytes.len() ≤ max_len` and no array or object nests deeper
+/// than `max_depth` (`[1]` is depth 1), else `None`; the depth counted by a flat scan (no recursion, strings and escapes
+/// skipped) before `serde_json` sees a byte, so its own recursion stays far below its limit. Malformed JSON is `None`.
+pub(crate) fn bounded(bytes: &[u8], max_len: usize, max_depth: usize) -> Option<Value> {
+    if bytes.len() > max_len {
+        return None;
+    }
+    let (mut depth, mut in_string, mut escaped) = (0usize, false, false);
+    for &b in bytes {
+        if in_string {
+            match (escaped, b) {
+                (true, _) => escaped = false,
+                (false, b'\\') => escaped = true,
+                (false, b'"') => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match b {
+            b'"' => in_string = true,
+            b'[' | b'{' => {
+                depth += 1;
+                if depth > max_depth {
+                    return None;
+                }
+            }
+            b']' | b'}' => depth = depth.checked_sub(1)?,
+            _ => {}
+        }
+    }
+    #[cfg(feature = "vectors")]
+    PARSED.with(|n| n.set(n.get() + 1));
+    serde_json::from_slice(bytes).ok()
+}
+
+#[cfg(feature = "vectors")]
+thread_local! {
+    static PARSED: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+/// Test-only (feature `vectors`): how many inputs on this thread passed both bounds of [`bounded`] and reached `serde_json`.
+#[cfg(feature = "vectors")]
+pub(crate) fn vectors_parsed() -> usize {
+    PARSED.with(|n| n.get())
+}
+
+fn read(t: &str, max_len: usize, max_depth: usize) -> JsonResult<Value> {
+    bounded(t.as_bytes(), max_len, max_depth).ok_or(Argument)
+}
 fn parse(t: &str) -> JsonResult<Value> {
-    serde_json::from_str(t).map_err(|_| Argument)
+    read(t, JSON_MAX, JSON_DEPTH)
 }
 fn ua_in(v: &Value) -> JsonResult<[u8; 32]> {
     unhex(v)?.try_into().map_err(|_| Argument)
@@ -273,10 +333,11 @@ fn uint_in(v: &Value) -> JsonResult<[u8; 32]> {
 fn addr_in(v: &Value) -> JsonResult<[u8; 20]> {
     unhex(v)?.try_into().map_err(|_| Argument)
 }
+/// A small uint, a number or a string of ASCII digits as [`uint_in`] takes them (no sign, not empty: T21 L49); `Argument` past `T`.
 fn small_in<T: TryFrom<u64>>(v: &Value) -> JsonResult<T> {
     let n = match v {
         Value::Number(n) => n.as_u64(),
-        Value::String(s) => s.parse().ok(),
+        Value::String(s) if !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit()) => s.parse().ok(),
         _ => None,
     };
     n.and_then(|n| T::try_from(n).ok()).ok_or(Argument)
@@ -342,10 +403,10 @@ pub fn meta_pay_id_json(t: &str) -> JsonResult<String> {
 /// data in the service's domain), then `auth` (the payer's `UASig` over `digest`) and `relayFee` `{name?, feeToken, router,
 /// executor, value, batch, nonce, validUntil, feeAuth?}` as the payer signs. Out: `{service, entryRef, typedData, digest, selector,
 /// prompt}`; with `auth` `calldata` and `job`; with `relayFee` too `relayFee: {relayRef, callDataHash, typedData, digest}` and,
-/// with its `feeAuth`, `relayCalldata`. `Argument` for any refusal.
+/// with its `feeAuth`, `relayCalldata`. `Argument` for any refusal, over [`SERVICE_PULL_MAX`] bytes or [`SERVICE_PULL_DEPTH`] too.
 #[cfg(feature = "wallet")]
 pub fn service_pull_json(t: &str) -> JsonResult<String> {
-    let mut v = parse(t)?;
+    let mut v = read(t, SERVICE_PULL_MAX, SERVICE_PULL_DEPTH)?;
     let o = v.as_object_mut().ok_or(Argument)?;
     let (auth, fee) = (o.remove("auth"), o.remove("relayFee"));
     let p = crate::wallet::service_pull(&v).map_err(|_| Argument)?;

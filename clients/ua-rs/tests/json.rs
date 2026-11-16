@@ -158,3 +158,28 @@ fn refusals() {
     assert_eq!(bad_pqz(json!({ "ua": ua, "pqzPopHash": pop, "sig": { "members": "0x" } })), JsonError::Argument);
     assert_eq!(bad_kem(json!({ "ua": ua, "version": 1, "sig": [] })), JsonError::Argument);
 }
+
+/// T21 L48: a `UASig`'s member list holds at most 256 entries (the `msig` member bound of `msig_update_json`), at every place it is
+/// read (`sig.members`, an msig `pop`, `sigs`).
+#[test]
+fn member_lists_past_256_are_refused() {
+    let (ua, pop) = (format!("0x{}", "11".repeat(32)), format!("0x{}", "22".repeat(32)));
+    let members = |n: usize| (0..n).map(|i| json!({ "index": i, "members": [], "sig": "0x" })).collect::<Vec<_>>();
+    for (n, ok) in [(256, true), (257, false)] {
+        let i = json!({ "ua": ua, "pqzPopHash": pop, "sig": { "members": members(n) } });
+        assert_eq!(set_pqz_key_args_json(&i.to_string()).is_ok(), ok, "{n} members");
+    }
+}
+
+/// T21 L49: a small uint as a string is ASCII digits only, as `uint_in` and the node read it: `"+0"` and `""` are refused.
+#[test]
+fn small_uints_as_strings_are_digits_only() {
+    use scaas_ua::json::meta_pay_id_json;
+    let id = |schema: Value| meta_pay_id_json(&json!({ "salt": format!("0x{}", "11".repeat(32)), "schema": schema, "body": "0x" }).to_string());
+    let want = id(json!(0)).unwrap();
+    assert_eq!(id(json!("0")).unwrap(), want, "digits");
+    assert_eq!(id(json!("00")).unwrap(), want, "leading zeros, as uint_in");
+    for bad in ["+0", "", " 0", "-0", "0x0"] {
+        assert_eq!(id(json!(bad)), Err(JsonError::Argument), "{bad:?}");
+    }
+}

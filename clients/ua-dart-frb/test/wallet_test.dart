@@ -689,7 +689,7 @@ void main() {
     final w = await walletOf('pq_kat');
     final ws = load_('../pqz/n2304-kmax4096/wallet_state.json');
     for (final r in ws['rows']) {
-      final q = await w.pqzKeyVersion(account: r['account'], index: r['index'], version: BigInt.from(r['version']));
+      final q = await walletPqzKeyVersion(w: w, account: r['account'], index: r['index'], version: BigInt.from(r['version']));
       expect(jsonDecode(await q.call(cmd: 'balance', requestJson: jsonEncode(r['request'])))['value'], r['value'], reason: r['name']);
     }
     // T20d9 (C-PP-8): the proof path's commands are in COMMANDS; each proven row end to end, the quorum's row by pqzCheck
@@ -697,7 +697,7 @@ void main() {
       expect(release, contains(c));
     }
     for (final r in ws['proven']) {
-      final q = await w.pqzKeyVersion(account: r['account'], index: r['index'], version: BigInt.from(r['version']));
+      final q = await walletPqzKeyVersion(w: w, account: r['account'], index: r['index'], version: BigInt.from(r['version']));
       final o = jsonDecode(await q.call(cmd: 'provenOpen', requestJson: jsonEncode(r['open'])));
       final add = Map<String, dynamic>.from(r['add'])..['session'] = o['session'];
       expect(jsonDecode(await q.call(cmd: 'provenAdd', requestJson: jsonEncode(add)))['accepted'], o['need'], reason: r['name']);
@@ -719,13 +719,37 @@ void main() {
     final pks = <String>{};
     for (final r in load_('pq_kat.json')['pqzSeeds']) {
       final v = BigInt.from(r['version']);
-      final leaf = await w.exportPqzLeafRawVersion(account: r['account'], index: r['index'], version: v);
+      final leaf = await walletExportPqzLeafRawVersion(w: w, account: r['account'], index: r['index'], version: v);
       expect(hx(view(leaf)), r['seed32'], reason: 'version $v');
       leaf.dispose();
-      pks.add(hx((await w.pqzKeyVersion(account: r['account'], index: r['index'], version: v)).pk()));
+      pks.add(hx((await walletPqzKeyVersion(w: w, account: r['account'], index: r['index'], version: v)).pk()));
     }
     expect(pks.length, 3, reason: 'one key per version');
     expect(pks, contains(hx((await w.pqzKey(account: 0, index: 0)).pk())), reason: 'version 0 is pqzKey');
+  });
+
+  // T21 L54: a key version outside 0 ... 2^64 - 1 is refused, never wrapped by frb's toSigned(64) to another version
+  test('pqz_key_version_range', () async {
+    final w = await walletOf('pq_kat');
+    for (final v in [(BigInt.one << 64) + BigInt.one, -BigInt.one]) {
+      expect(await code(() => walletPqzKeyVersion(w: w, account: 0, index: 0, version: v)), 'UAArgument', reason: '$v');
+      expect(await code(() => walletExportPqzLeafRawVersion(w: w, account: 0, index: 0, version: v)), 'UAArgument', reason: '$v');
+    }
+  });
+
+  // T21 L55: a view keeps its SecretBytes alive; once the GC drops an unreachable handle, Rust wipes and frees the block
+  test('secret_bytes_view_keeps_its_handle', () async {
+    Uint8List lone() => SecretBytes.view(SecretBytes.take(Uint8List.fromList(List.filled(64, 7))));
+    final v = lone();
+    var sink = 0;
+    for (var i = 0; i < 200; i++) {
+      for (var j = 0; j < 10000; j++) {
+        sink += List<int>.filled(16, j).length; // garbage: scavenges find the handle unreachable
+      }
+      await Future<void>.delayed(Duration.zero); // a finalizer that runs from the event loop
+    }
+    expect(sink, greaterThan(0));
+    expect(v.every((b) => b == 7), isTrue, reason: 'the block under the view was wiped');
   });
 
   test('pqz_facade', () async {
