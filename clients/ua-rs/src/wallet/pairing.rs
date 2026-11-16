@@ -308,9 +308,13 @@ impl Wallet {
     }
 
     fn frost_session_with<C: Ciphersuite>(&self, key: &KeyPackage<C>, rng: &mut (impl RngCore + CryptoRng)) -> Result<FrostSession<C>> {
-        // `SigningNonces` zeroizes on drop; its two scalars go to the arena as `hiding ‖ binding`
+        // `SigningNonces` zeroizes on drop; its two scalars go to the arena as `hiding ‖ binding`, each serialized copy wiped
+        // (T21 L75)
         let n = SigningNonces::new(key.signing_share(), rng);
-        let bytes = Zeroizing::new([n.hiding().serialize(), n.binding().serialize()].concat());
+        let (h, b) = (Zeroizing::new(n.hiding().serialize()), Zeroizing::new(n.binding().serialize()));
+        let mut bytes = Zeroizing::new(Vec::with_capacity(h.len() + b.len()));
+        bytes.extend_from_slice(&h);
+        bytes.extend_from_slice(&b);
         Ok(FrostSession { nonce: Some(self.store.put(&bytes)?), commitments: *n.commitments() })
     }
 }
@@ -321,13 +325,21 @@ impl<C: Ciphersuite> FrostSession<C> {
         self.commitments
     }
 
-    /// Round 2's signature share; spends the nonces first (wiped in the arena as they are read).
+    /// Round 2's signature share; spends the nonces first (wiped in the arena as they are read). Round 2 runs under the
+    /// store's write lock, so the wallet's `lock()` waits for it; after `lock()`: `KeyRevoked` (spec §8.2, T21 L73).
     pub fn sign(&mut self, package: &SigningPackage<C>, key: &KeyPackage<C>) -> Result<SignatureShare<C>> {
-        let k = self.nonce.take().ok_or(Error::Argument)?.take()?;
-        let (hiding, binding) = k.split_at(k.len() / 2);
-        let nonce = |b: &[u8]| Nonce::<C>::deserialize(b).map_err(|_| Error::Argument);
-        let n = SigningNonces::from_nonces(nonce(hiding)?, nonce(binding)?);
-        frost_core::round2::sign(package, &n, key).map_err(|_| Error::Argument)
+        self.sign_paused(package, key, || ())
+    }
+
+    fn sign_paused(&mut self, package: &SigningPackage<C>, key: &KeyPackage<C>, pause: impl FnOnce()) -> Result<SignatureShare<C>> {
+        self.nonce.take().ok_or(Error::Argument)?.take_with(|k| {
+            let (hiding, binding) = k.split_at(k.len() / 2);
+            let nonce = |b: &[u8]| Nonce::<C>::deserialize(b).map_err(|_| Error::Argument);
+            let n = SigningNonces::from_nonces(nonce(hiding)?, nonce(binding)?);
+            let share = frost_core::round2::sign(package, &n, key).map_err(|_| Error::Argument);
+            pause();
+            share
+        })?
     }
 }
 
@@ -375,6 +387,13 @@ mod vectors {
         /// The probe of this session's nonce slot, `None` once the nonces are spent.
         pub fn vectors_nonce_probe(&self) -> Option<NonceSlotProbe> {
             self.nonce.as_ref().map(|h| NonceSlotProbe(h.dup()))
+        }
+
+        /// `sign` that runs `pause` inside round 2, after the share is computed (T21 L73: `lock()` meanwhile).
+        pub fn vectors_sign_paused(
+            &mut self, package: &SigningPackage<C>, key: &KeyPackage<C>, pause: impl FnOnce(),
+        ) -> Result<SignatureShare<C>> {
+            self.sign_paused(package, key, pause)
         }
     }
 

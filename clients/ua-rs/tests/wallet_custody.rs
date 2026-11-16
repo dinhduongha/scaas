@@ -163,6 +163,21 @@ fn manifest_vault_refuses_another_network_for_a_held_import() {
     w.open_label_vault(&own, Unlock::VaultPassphrase(PASS)).unwrap();
 }
 
+/// T21 L74: a manifest sealed before an import leaves the held key out: `WalletMismatch`, the key stays listed (so every later
+/// backup carries it). Positive control: the wallet's own current manifest opens.
+#[test]
+fn manifest_vault_refuses_to_leave_out_a_held_import() {
+    let w = wallet();
+    w.ua_key(0x0102, 0, 0).unwrap();
+    let older = w.seal_label_vault("manifest", PASS, None).unwrap();
+    w.import_native_key(Network::Solana, &[3; 32]).unwrap();
+    let own = w.seal_label_vault("manifest", PASS, None).unwrap();
+    assert_eq!(w.open_label_vault(&older, Unlock::VaultPassphrase(PASS)).err(), Some(Error::WalletMismatch));
+    assert_eq!(w.manifest().imports.len(), 1);
+    assert_eq!(w.imported_key(Network::Solana, 0).unwrap().network(), Network::Solana);
+    w.open_label_vault(&own, Unlock::VaultPassphrase(PASS)).unwrap();
+}
+
 #[test]
 fn unlock_with_an_empty_manifest_has_nothing_to_compare() {
     // no UA key derived yet: the manifest names no UA, so any seed vault reopens the wallet (documented on `unlock`)

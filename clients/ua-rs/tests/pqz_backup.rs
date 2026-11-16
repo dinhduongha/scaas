@@ -439,6 +439,25 @@ fn a_rebuilt_key_survives_lock_and_unlock_through_its_vault() {
     assert!(w.backup_seal(&wk, &[g.recipient(1)]).is_ok(), "held again: the backup builds");
 }
 
+/// T21 L74: a manifest sealed before the rebuild leaves the held key out: `WalletMismatch`, the key stays listed and held (so
+/// every later backup carries it). Positive control: the current manifest opens.
+#[test]
+fn an_older_manifest_cannot_drop_a_rebuilt_key() {
+    unlock();
+    let g = group(2);
+    let b = g.deal(None);
+    let kh = g.key_hash();
+    let w = &g.members[0].0;
+    let older = w.seal_label_vault("manifest", PIN, None).unwrap();
+    let cs: Vec<SealedContainer> = (0..2).map(|i| g.to_rebuilder(&b, i)).collect();
+    g.rebuild(&cs, &g.msig_ua, 0, &kh).unwrap();
+    let own = w.seal_label_vault("manifest", PIN, None).unwrap();
+    assert_eq!(w.open_label_vault(&older, Unlock::VaultPassphrase(PIN)).err(), Some(Error::WalletMismatch));
+    assert_eq!(w.manifest().pqz_held.len(), 1);
+    assert!(w.pqz_held_key(&kh).is_ok());
+    w.open_label_vault(&own, Unlock::VaultPassphrase(PIN)).unwrap();
+}
+
 /// The rebuilder's backup (and so its link) carries the key under its label: the restored wallet holds and lists it.
 #[test]
 fn the_rebuilders_backup_carries_the_key() {

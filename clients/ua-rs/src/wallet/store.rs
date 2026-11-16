@@ -229,6 +229,19 @@ pub(crate) struct Handle {
     slot: Slot,
 }
 
+/// Whether `old` and `new` give every secret the arena holds outside the derivations the same entry: none left out, none
+/// listed under another entry (T21 L29, L74).
+fn keeps_held(a: &Arena, old: &Manifest, new: &Manifest) -> bool {
+    fn same<E: PartialEq>(a: &Arena, old: &[E], new: &[E], id: impl Fn(&E) -> KeyId) -> bool {
+        let held = |e: &&E| a.secret(id(e)).is_some();
+        old.iter().filter(held).all(|e| new.contains(e)) && new.iter().filter(held).all(|e| old.contains(e))
+    }
+    let imports = same(a, &old.imports, &new.imports, |e| KeyId::Import(e.n));
+    #[cfg(feature = "pqz")]
+    let imports = imports && same(a, &old.pqz_held, &new.pqz_held, |p| KeyId::PqzHeld(p.pqz_key_hash));
+    imports
+}
+
 /// `WalletMismatch` if `m` has a first entry and `seed` does not derive its UA; an empty manifest has nothing to compare.
 fn seed_matches(seed: &[u8; 64], m: &Manifest) -> Result<()> {
     match m.entries.first() {
@@ -266,14 +279,16 @@ impl SecretStore {
     }
 
     /// Replaces the manifest (a `manifest` vault opened). While unlocked, under the write lock and before it moves:
-    /// `WalletMismatch` if the open seed does not derive the UA of `m`'s first entry (as [`SecretStore::open`]), or if `m`
-    /// lists an import the arena holds under another network than the current manifest (CLI-SGN-11: the held key keeps its
-    /// network). Locked, `m` is kept and [`SecretStore::open`] checks it at the next unlock.
+    /// `WalletMismatch` if the open seed does not derive the UA of `m`'s first entry (as [`SecretStore::open`]), or if the
+    /// entries of the secrets the arena holds outside the derivations (imports, rebuilt PQZ keys) differ between `m` and the
+    /// current manifest, in either direction: `m` lists a held key under another entry (CLI-SGN-11: the held key keeps its
+    /// network), or leaves a held key out (it would drop out of every later backup; T21 L74). Locked, `m` is kept and
+    /// [`SecretStore::open`] checks it at the next unlock.
     pub(crate) fn set_manifest(&self, m: Manifest) -> Result<()> {
         let mut g = self.write();
         if let Some(a) = &g.arena {
             seed_matches(&Zeroizing::new(a.get(a.seed)?.try_into().map_err(|_| Error::Argument)?), &m)?;
-            if m.imports.iter().any(|e| a.secret(KeyId::Import(e.n)).is_some() && !g.manifest.imports.contains(e)) {
+            if !keeps_held(a, &g.manifest, &m) {
                 return Err(Error::WalletMismatch);
             }
         }
@@ -458,6 +473,12 @@ impl Handle {
 
     /// The secret's bytes, wiped in the arena as they are read (under the write lock): a one-use secret's only read.
     pub(crate) fn take(&self) -> Result<Zeroizing<Vec<u8>>> {
+        self.take_with(|s| Zeroizing::new(s.to_vec()))
+    }
+
+    /// `f` over the secret's bytes, wiped in the arena as they are read, with the write lock held until `f` returns: a
+    /// one-use secret's whole use, so `lock()` waits for it (spec §8.2, T21 L73). `f` must not touch this store.
+    pub(crate) fn take_with<R>(&self, f: impl FnOnce(&[u8]) -> R) -> Result<R> {
         let mut g = self.store.write();
         if g.generation != self.generation {
             return Err(Error::KeyRevoked);
@@ -465,7 +486,7 @@ impl Handle {
         let s = g.arena.as_mut().ok_or(Error::KeyRevoked)?.get_mut(self.slot)?;
         let out = Zeroizing::new(s.to_vec());
         s.zeroize();
-        Ok(out)
+        Ok(f(&out))
     }
 
     /// `f` over the secret's bytes, under the store's read guard: `KeyRevoked` once the store's generation moved.
