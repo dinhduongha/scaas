@@ -2,20 +2,22 @@
 //! `pqz-wallet-sim`: the matrix's wallet for opening tokens (spec 2026-11-13-pqz-three-keys §15.2; CLI-SGN-51). One JSON
 //! object on stdin, one on stdout. UNAUDITED test tool: test seeds only.
 //!
-//! - `keys`: a holder's PQZ public key (through `PqzKeyHandle::with_secret_keygen`) and opening KEM key of one record.
+//! - `keys`: a holder's PQZ public key and opening KEM key of one record (the handle's public data, `PqzKeyHandle::pk` /
+//!   `open_kem_pk`).
 //! - `credit`: the sender side of an op 1 on an opening token (pqz-ffi `enc_split`, `seal`): `u`, `vTo`, `[vAuditor]`, `uFrom`,
 //!   `vFrom`, the openings; `variant` plants a bad credit (`junk`, `wrongseed`, `craftedv`; with the auditor `junk_oa`,
 //!   `junk_ot`, `oa_coins`).
-//! - `wallet`: the holder side, ALL through ua-rs `pqz3k::PqzKeyHandle`: each pending credit checked (`check`: the blob read,
-//!   the aads built, the K3-7 arithmetic of pqz-ffi `check_recipient` inside the closure, an acceptance or a skip), the marks
-//!   a wallet may sign (`PqzKeyHandle::marks`: reads at a finalized block in strict-majority mode), and a debit window
-//!   (`with_secret_window`: the PQZ secret reaches the decryption of `T` only when every entry is accepted, TRIVIAL or marked).
-//!   The acceptances live in this process only, so one call checks and opens the window.
+//! - `wallet`: the holder side, ALL through ua-rs `pqz3k::PqzKeyHandle` (T21 O5 (b): the handle in a store of its own, the
+//!   test constructor `vectors_from_seed`): each pending credit checked (`check`: the blob read, K3-7 by pqz-ffi
+//!   `check_recipient` inside the handle, an acceptance or a skip), the marks a wallet may sign (`PqzKeyHandle::marks`: reads
+//!   at a finalized block in strict-majority mode), and a debit (`with_secret_debit`: the PQZ secret reaches the decryption
+//!   of `T` only when every window entry is accepted, TRIVIAL or marked, and the own part, required when `lastDebit > 0`,
+//!   verifies). The acceptances live in this process only, so one call checks and opens the window.
 //! - `audit`: the auditor tool (pqz-ffi `check_auditor` with the auditor's opening KEM seed; never a PQZ secret) and
 //!   `unreadable, taken` from state.
 use pqz_ffi::opening::{self as op, AuditorOutcome, Party, Role};
 use pqz_ffi::pqzl::{self as pl, CT_BYTES, PK_BYTES};
-use scaas_ua::pqz3k::{self as k3, AuditorKeys, Checked, Layout, PqzKeyHandle, Reads, WindowEntry};
+use scaas_ua::pqz3k::{self as k3, AuditorKeys, Checked, Debit, Layout, Own, PqzKeyHandle, Reads, Scope, WindowEntry};
 use serde_json::{json, Value};
 use std::io::Read;
 
@@ -85,18 +87,15 @@ impl Rec {
         Rec { seed: arr(&r["seed"]), ua: arr(&r["ua"]), cu: arr(&r["chainUid"]), scope: opt20(&r["scope"]), version: num(&r["version"]) }
     }
     fn handle(&self) -> PqzKeyHandle {
-        PqzKeyHandle::new(&self.seed, 0, 0, &self.ua, &self.cu, self.scope.as_ref(), self.version, layout())
-    }
-    fn kem_pk(&self) -> Vec<u8> {
-        op::open_kem_pk(&k3::open_kem_seed(&self.seed, &self.ua, &self.cu, self.scope.as_ref(), self.version))
+        let s = Scope { account: 0, index: 0, ua: self.ua, chain_uid: self.cu, token: self.scope, version: self.version };
+        PqzKeyHandle::vectors_from_seed(&self.seed, &s).expect("the handle")
     }
 }
 
 fn keys(r: &Value) -> Value {
     let rec = Rec::of(r);
     let h = rec.handle();
-    let pk = h.with_secret_keygen(|s| pl::keygen(s).expect("keygen").pk.clone());
-    json!({"pqzKey": hex(&pk[..]), "openKem": hex(&rec.kem_pk()), "seedCommitment": hex(&h.seed_commitment())})
+    json!({"pqzKey": hex(&h.pk()), "openKem": hex(&h.open_kem_pk()), "seedCommitment": hex(&h.seed_commitment().expect("open"))})
 }
 
 fn credit(r: &Value) -> Value {
@@ -149,7 +148,7 @@ fn credit(r: &Value) -> Value {
 fn wallet(r: &Value) -> Value {
     let rec = Rec::of(r);
     let h = rec.handle();
-    let pk: Box<[u8; PK_BYTES]> = h.with_secret_keygen(|s| pl::keygen(s).expect("keygen").pk.clone());
+    let pk = h.pk();
     let token: [u8; 20] = arr(&r["token"]);
     let rd = &r["reads"];
     let reads = Reads { block: num(&rd["block"]), finalized: rd["finalized"].as_bool().unwrap_or(false),
@@ -173,22 +172,7 @@ fn wallet(r: &Value) -> Value {
         }
         let auditor = e.aud.as_ref().map(|(ua, pk, kem)| AuditorKeys { ua: *ua, pk, kem_pk: kem });
         let c = k3::Credit { token, index: e.index, slot: e.slot, code: &e.code, auditor, reads };
-        let r = h.check(&c, |kem, inp| {
-            // K3-7 steps 3-9 in pqz-ffi, on the bytes the handle read from the blob; the handle's closure gets no PQZ secret
-            let (u, v_t) = (unpack(inp.blob.pu), unpack(inp.blob.pvt));
-            let kem_pk = op::open_kem_pk(kem);
-            let (u, v_t): ([u8; PK_BYTES], [u8; 128]) = (u.try_into().ok()?, v_t.try_into().ok()?);
-            let to = Party { ua: &rec.ua, key_version: rec.version, pk: &pk, kem_pk: &kem_pk, v: &v_t, opening: inp.blob.o_t };
-            let va: Option<[u8; 128]> = inp.blob.pva.and_then(|p| unpack(p).try_into().ok());
-            let apk: Option<[u8; PK_BYTES]> = inp.auditor.and_then(|a| a.pk.try_into().ok());
-            let aud = match (inp.auditor.as_ref(), apk.as_ref(), va.as_ref(), inp.blob.o_a) {
-                (Some(a), Some(pk), Some(v), Some(o)) => Some(Party { ua: &a.ua, key_version: inp.blob.kv[1], pk, kem_pk: a.kem_pk, v,
-                    opening: o }),
-                _ => None,
-            };
-            let fc = op::Credit { chain_uid: &rec.cu, token: &token, u: &u, to, auditor: aud };
-            op::check_recipient(kem, &fc).map(|d| amount(&d))
-        });
+        let r = h.check(&c);
         match r {
             Ok(Checked::Accepted(a, amt)) => {
                 out.push(json!({"index": e.index, "outcome": "accepted", "amount": amt, "entryHash": hex(&a.entry_hash())}));
@@ -207,12 +191,16 @@ fn wallet(r: &Value) -> Value {
     };
     let mut window = Value::Null;
     if !r["window"].is_null() {
-        let (from, to) = (num(&r["window"]["from"]), num(&r["window"]["to"]));
-        let w: Vec<WindowEntry> = es.iter().filter(|e| e.index >= from && e.index < to).map(|e| WindowEntry { index: e.index,
+        let rw = &r["window"];
+        let (from, to) = (num(&rw["from"]), num(&rw["to"]));
+        let last_debit = rw["lastDebit"].as_u64().expect("window.lastDebit: the account's, a number");
+        let w: Vec<WindowEntry> = es.iter().filter(|e| e.index >= from && e.index < to).map(|e| WindowEntry { token, index: e.index,
             slot: e.slot, code: (!e.code.is_empty()).then_some(&e.code[..]), accepted: accepted.iter().find(|a| a.index() == e.index) })
             .collect();
+        let (pu, pvf) = (unhex(&rw["own"]["pu"]), unhex(&rw["own"]["pvf"]));
+        let own = (!rw["own"].is_null()).then(|| Own { pu: &pu, pvf: &pvf, own_tag: arr(&rw["own"]["ownTag"]) });
         let t: [u8; CT_BYTES] = arr(&r["t"]);
-        window = match h.with_secret_window(&w, |s| {
+        window = match h.with_secret_debit(&Debit { token, last_debit, own, window: &w }, |s| {
             let key = pl::keygen(s).expect("keygen");
             pl::dec(&key.s, &t).map(|(m, _)| m.iter().enumerate().map(|(i, x)| (*x as u64) << (4 * i)).sum::<u64>())
         }) {

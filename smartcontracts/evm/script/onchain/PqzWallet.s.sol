@@ -284,7 +284,7 @@ contract PqzWalletRoll is PqzWalletKit {
         return _tool(string.concat('{"cmd":"wallet",', _rec(dave64, dave, _scope(t)), ',"token":"', vm.toString(t), '","entries":',
             _wEntries(t), ',"reads":{"block":', vm.toString(block.number), ',"finalized":true,"strictMajority":true},"window":{"from":',
             vm.toString(IPqzToken(t).pqzAccount(dave, 0).rolled), ',"to":', vm.toString(IPqzToken(t).pqzAccount(dave, 0).pendingCount),
-            '},"t":"', vm.toString(_t(st)), '"}'));
+            ',"lastDebit":', vm.toString(IPqzToken(t).pqzAccount(dave, 0).lastDebit), '},"t":"', vm.toString(_t(st)), '"}'));
     }
 
     function _refresh(address t, IPqzToken.PqzBurnArgs memory b, bytes memory st) internal {
