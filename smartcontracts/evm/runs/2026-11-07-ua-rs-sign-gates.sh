@@ -113,7 +113,7 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
     ua-py) release_ua_c && cd clients/ua-py && python3 -m unittest -v tests.test_vectors tests.test_wallet ;;
     # -count=1: Go's test cache does not recheck a file outside the module (the shared vectors), so a cached PASS hid a red row
     ua-go) release_ua_c && cd clients/ua-go && # LD_LIBRARY_PATH as CI's ua-go job: no build rpath since T21 L56
-      cap sh -c 'go vet ./... && LD_LIBRARY_PATH=../ua-c/target/release go test -count=1 -v ./...' ;;
+      cap sh -c 'go vet ./... && LD_LIBRARY_PATH=$PWD/../ua-c/target/release go test -count=1 -v ./...' ;;
     ua-cs) release_ua_c || return 1
       cd clients/ua-cs && cap dotnet test Scaas.Ua.Tests --logger 'console;verbosity=normal'; local rc=$?
       dotnet build-server shutdown > /dev/null 2>&1; return $rc ;; # VBCSCompiler would keep the capped slot
