@@ -1,0 +1,788 @@
+## Coverage per contract (state-changing called = a transaction of this net called the entry and succeeded;
+## reached = it also ran inside another call, by the trace (local only); views reached = answered an eth_call)
+# deploy set: mldsa-off
+group | contract | entries | state-changing | scaas-testnet: state-changing called / reached / views reached
+tokens | NormalToken | 89 | 38 | 31 / 31 / 47
+tokens | WrappedToken | 129 | 60 | 50 / 50 / 60
+tokens | NormalZetherToken | 125 | 56 | 49 / 49 / 64
+tokens | WrappedZetherToken | 169 | 82 | 72 / 72 / 77
+tokens | NormalPqzToken | 140 | 60 | 48 / 48 / 68
+tokens | WrappedPqzToken | 186 | 86 | 61 / 61 / 82
+tokens | NormalRegulatedToken | 112 | 53 | 39 / 39 / 55
+tokens | WrappedRegulatedToken | 152 | 75 | 57 / 57 / 68
+tokens | NormalZetherRegulatedToken | 148 | 71 | 56 / 56 / 72
+tokens | WrappedZetherRegulatedToken | 192 | 97 | 79 / 79 / 85
+tokens | NormalPqzRegulatedToken | 163 | 75 | 48 / 48 / 76
+tokens | WrappedPqzRegulatedToken | 209 | 101 | 61 / 61 / 90
+dex | SCaaSDex | 62 | 26 | 23 / 23 / 33
+dex | SCaaSDexGovernanceModule | 28 | 13 | 0 / 0 / 3 | via SCaaSDex
+dex | SCaaSDexLiquidityModule | 8 | 3 | 0 / 0 / 2 | via SCaaSDex
+relay | RelayFeeRouter | 4 | 2 | 2 / 2 / 1
+relay | RelayFeeExecutor | 2 | 1 | 0 / 0 / 1
+governance | GovernanceRouter | 75 | 65 | 60 / 60 / 9
+registry | UARegistry | 76 | 13 | 12 / 12 / 53
+registry | UARegistryCoreLib | 15 | 13 | 0 / 0 / 0 | via UARegistry
+registry | UARegistryAuxLib | 26 | 19 | 0 / 0 / 7 | via UARegistry
+factory | OpenFactory | 80 | 25 | 16 / 16 / 51
+accounts | SmartKeyAccountFactory | 5 | 1 | 1 / 1 / 4
+accounts | SmartKeyAccount | 40 | 21 | 13 / 13 / 16
+wallets | MandateWallet | 33 | 17 | 16 / 16 / 14
+wallets | HederaMandateWallet | 33 | 17 | 0 / 0 / 0 | needs Hedera
+compliance | ComplianceRegistry | 12 | 4 | 1 / 1 / 8
+reference | RefServiceEscrow | 13 | 3 | 3 / 3 / 9
+verifiers | Secp256k1Verifier | 2 | 0 | 0 / 0 / 2
+verifiers | Ed25519Verifier | 3 | 0 | 0 / 0 / 2
+verifiers | Bip340Verifier | 2 | 0 | 0 / 0 / 2
+verifiers | P256Verifier | 3 | 0 | 0 / 0 / 3
+verifiers | WebAuthnP256Verifier | 3 | 0 | 0 / 0 / 3
+verifiers | SchnorrBn254Verifier | 4 | 0 | 0 / 0 / 3
+verifiers | SchnorrBls12381Verifier | 4 | 0 | 0 / 0 / 3
+verifiers | BlsMinSigBls12381Verifier | 4 | 0 | 0 / 0 / 3
+verifiers | BlsMinSigBn254Verifier | 4 | 0 | 0 / 0 / 3
+verifiers | ZetherSchnorrBls12381Verifier | 4 | 0 | 0 / 0 / 3
+verifiers | Musig2Secp256k1Verifier | 2 | 0 | 0 / 0 / 0
+verifiers | FrostSecp256k1Verifier | 2 | 0 | 0 / 0 / 0
+verifiers | Musig2Bn254Verifier | 5 | 0 | 0 / 0 / 2
+verifiers | FrostBn254Verifier | 2 | 0 | 0 / 0 / 0
+verifiers | MldsaVerifier | 10 | 0 | 0 / 0 / 5
+verifiers | FndsaVerifier | 3 | 0 | 0 / 0 / 3
+verifiers | SlhdsaVerifier | 3 | 0 | 0 / 0 / 3
+verifiers | PqzKeyVerifier | 5 | 0 | 0 / 0 / 3
+zether | ZetherStatements | 5 | 0 | 0 / 0 / 1
+zether | ZetherDisclosure | 2 | 0 | 0 / 0 / 0
+zether | ZetherTransferVerifierBls12381 | 19 | 0 | 0 / 0 / 12
+zether | ZetherBurnVerifierBls12381 | 10 | 0 | 0 / 0 / 9
+zether | ZetherInnerProductVerifierBls12381 | 10 | 0 | 0 / 0 / 8
+libraries | GovernanceLib | 15 | 14 | 0 / 0 / 1 | via GovernanceRouter, tokens
+libraries | HederaLib | 1 | 0 | 0 / 0 / 0 | needs Hedera | via tokens
+libraries | ZetherLib | 16 | 11 | 0 / 0 / 0 | via NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherWrappedLib | 4 | 2 | 0 / 0 / 0 | via WrappedZetherToken, WrappedZetherRegulatedToken
+libraries | WrappedLib | 29 | 18 | 0 / 0 / 3 | via WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | 15 | 14 | 0 / 0 / 0 | via NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | MtxPipelineLib | 16 | 7 | 0 / 0 / 2 | via tokens
+libraries | TradeLib | 6 | 4 | 0 / 0 / 0 | via tokens, SCaaSDex
+libraries | PqzStateLib | 15 | 10 | 0 / 0 / 4 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzViewLib | 11 | 0 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzWrappedLib | 2 | 1 | 0 / 0 / 1 | via WrappedPqzToken, WrappedPqzRegulatedToken
+libraries | PqzBurnLib | 1 | 1 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzTransferLib | 2 | 2 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+rescue | RescueVault | 11 | 3 | 3 / 3 / 8
+pqchat | PqChat | 60 | 15 | 13 / 13 / 36
+pqchat | PqChatTopics | 21 | 6 | 0 / 0 / 12 | via PqChat
+
+## scaas-testnet: per record file (txs, status 1, the heaviest gasUsed; eth_calls answered; negatives refused as expected)
+records | txs | status 1 | max gasUsed | calls ok | negatives
+dex | 117 | 117 | 4,194,299 | 0 / 0 | 15 / 15
+gov | 170 | 170 | 5,907,325 | 0 / 0 | 27 / 27
+liquidity | 23 | 23 | 12,799,205 | 0 / 0 | 6 / 6
+misc | 103 | 103 | 54,621,499 | 0 / 0 | 25 / 25
+mldsa-on | 3 | 3 | 332,696 | 0 / 0 | 9 / 9
+mldsaalt | 35 | 35 | 50,451,294 | 0 / 0 | 5 / 5
+pq | 241 | 241 | 56,577,145 | 0 / 0 | 10 / 10
+pqchat-on | 29 | 29 | 12,425,432 | 0 / 0 | 10 / 10
+pqchat | 36 | 36 | 42,363,732 | 0 / 0 | 10 / 10
+pqoff | 215 | 215 | 54,621,499 | 0 / 0 | 17 / 17
+pqzkeys-on | 267 | 267 | 50,611,255 | 0 / 0 | 26 / 26
+pqzkeys | 422 | 422 | 54,621,499 | 0 / 0 | 3 / 3
+pqzwallet-on | 26 | 26 | 48,554,258 | 0 / 5 | 0 / 0
+rescue | 25 | 25 | 4,086,355 | 0 / 0 | 6 / 6
+tokens-on | 160 | 160 | 9,513,301 | 0 / 0 | 12 / 12
+tokens | 536 | 536 | 42,363,176 | 0 / 0 | 13 / 13
+verifiers | 0 | 0 | 0 | 32 / 32 | 32 / 32
+views | 0 | 0 | 0 | 10462 / 20095 | 0 / 0
+zethere2e | 21 | 21 | 12,755,254 | 0 / 0 | 0 / 0
+zethermore | 64 | 64 | 7,025,924 | 0 / 0 | 1 / 1
+zetherrege2e | 21 | 21 | 12,758,793 | 0 / 0 | 0 / 0
+zetherregmore | 64 | 64 | 7,029,594 | 0 / 0 | 1 / 1
+views | 0 | 0 | 0 | 1381 / 2700 | 0 / 0
+wraplimits | 129 | 129 | 54,640,720 | 0 / 0 | 51 / 51
+
+## scaas-testnet: state-changing entries not called by a transaction, with the reason
+tokens | NormalToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | NormalToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedToken | cancelRate(bytes32) | NO REASON RECORDED
+tokens | WrappedToken | executeRate(bytes32) | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | WrappedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedToken | proposeRate(address,uint96,uint96,bytes32) | NO REASON RECORDED
+tokens | WrappedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | NormalZetherToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalZetherToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalZetherToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | cancelRate(bytes32) | NO REASON RECORDED
+tokens | WrappedZetherToken | executeRate(bytes32) | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedZetherToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | WrappedZetherToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedZetherToken | proposeRate(address,uint96,uint96,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedZetherToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalPqzToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalPqzToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | NormalPqzToken | mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalPqzToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalPqzToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | cancelRate(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | executeRate(bytes32) | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedPqzToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | WrappedPqzToken | mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxShield(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzToken | pqzCancelVerifier(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | pqzRevokeVerifier(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | pqzSetVerifier(bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | proposeRate(address,uint96,uint96,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedPqzToken | setProofStore(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | forceTransfer(bytes32,uint256,bytes32) | NO REASON RECORDED
+tokens | NormalRegulatedToken | freeze(bytes32,bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalRegulatedToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | NormalRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalRegulatedToken | pause(bytes32,uint64,bytes32) | NO REASON RECORDED
+tokens | NormalRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32) | NO REASON RECORDED
+tokens | NormalRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | revokeOrder(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalRegulatedToken | unfreeze(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalRegulatedToken | unpause(bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | cancelRate(bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | executeRate(bytes32) | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedRegulatedToken | forceTransfer(bytes32,uint256,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | freeze(bytes32,bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | WrappedRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | pause(bytes32,uint64,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | proposeRate(address,uint96,uint96,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | revokeOrder(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | unfreeze(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedRegulatedToken | unpause(bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | forceTransfer(bytes32,uint256,bytes32) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | freeze(bytes32,bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | NormalZetherRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | pause(bytes32,uint64,bytes32) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | revokeOrder(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | setAllowed(bytes32[],bool,bytes32) | refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (gov), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind
+tokens | NormalZetherRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | unfreeze(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalZetherRegulatedToken | unpause(bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | cancelRate(bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | executeRate(bytes32) | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedZetherRegulatedToken | forceTransfer(bytes32,uint256,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | freeze(bytes32,bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | WrappedZetherRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | pause(bytes32,uint64,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | proposeRate(address,uint96,uint96,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | revokeOrder(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | setAllowed(bytes32[],bool,bytes32) | refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (gov), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind
+tokens | WrappedZetherRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | unfreeze(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedZetherRegulatedToken | unpause(bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | forceTransfer(bytes32,uint256,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | freeze(bytes32,bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | NormalPqzRegulatedToken | mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | pause(bytes32,uint64,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | pqzCancelVerifier(bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | pqzRevokeVerifier(bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | pqzSetVerifier(bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | revokeOrder(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | setAllowed(bytes32[],bool,bytes32) | refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (pq), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind
+tokens | NormalPqzRegulatedToken | setProofStore(uint8,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | unfreeze(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | NormalPqzRegulatedToken | unpause(bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | approve(address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | cancelRate(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | executeRate(bytes32) | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+tokens | WrappedPqzRegulatedToken | forceTransfer(bytes32,uint256,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | freeze(bytes32,bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes32,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxLiquidityPull((bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxPrepareAcc(bytes32,uint64,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxRollOver(bytes32,uint64,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxRollOverSigned(bytes32,uint64,uint64,uint64[],uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxShield(bytes32,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address)) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | mtxWrapShield((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | pause(bytes32,uint64,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | pqzCancelVerifier(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | pqzRevokeVerifier(bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | pqzSetVerifier(bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | proposeRate(address,uint96,uint96,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | revokeOrder(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | setAllowed(bytes32[],bool,bytes32) | refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (pq), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind
+tokens | WrappedPqzRegulatedToken | setProofStore(uint8,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | transferFrom(address,address,uint256) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | unfreeze(bytes32,bytes32,bytes32) | NO REASON RECORDED
+tokens | WrappedPqzRegulatedToken | unpause(bytes32,bytes32) | NO REASON RECORDED
+dex | SCaaSDex | exchangeOne((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,uint256)[],address[]),(address,bytes)[],address) | NO REASON RECORDED
+dex | SCaaSDex | initialize(bytes32,uint64,bytes) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+dex | SCaaSDex | settleOne((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256),(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256)[]),address) | NO REASON RECORDED
+dex | SCaaSDexGovernanceModule | acceptAdmin() | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | cancelGrant(uint8,bytes32,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | disableFeature(uint8,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | grantRole(uint8,bytes32,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | renounceAdmin(bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | renounceRole(uint8,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | revokeRole(uint8,bytes32,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | setExchangeTarget(address,bool,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | setFeeSplit(uint32,address,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | setListedOnly(bool,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | setMarket(address,address,bool,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexGovernanceModule | transferAdmin(bytes32,bytes32) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexLiquidityModule | mtxCancelOrders((address,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256))[],bytes[]) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexLiquidityModule | mtxInvalidateNonces(address,uint256,uint256,bytes) | a library / module entry: runs only through SCaaSDex
+dex | SCaaSDexLiquidityModule | mtxLiquidity((bytes32,(bytes32,(address,uint256)[],(address,uint256)[],address,address,uint256,bytes32,int24,int24,uint128,bytes32,uint256,address,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256[],uint256,address[]),(address,bytes)[]) | a library / module entry: runs only through SCaaSDex
+relay | RelayFeeExecutor | exec(address,bytes) | NO REASON RECORDED
+governance | GovernanceRouter | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)
+governance | GovernanceRouter | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)
+governance | GovernanceRouter | mtxCreateInstance((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint16,uint16,uint64,bytes,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs a class release on the deploy's factory, and deploy.sh publishes none (misc's own factory runs createInstance directly); through the router: its negative ReleaseUnknown runs (gov)
+governance | GovernanceRouter | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)
+governance | GovernanceRouter | mtxExecuteRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | waits the token's rate delay (2 days) after mtxProposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (gov)
+registry | UARegistry | storePqzScopedPop(bytes32,address,uint64,bytes) | NO REASON RECORDED
+registry | UARegistryCoreLib | acceptMembership(bytes32,IUARegistry.MemberSig) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | keyUa(uint16,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | portableOk(uint16,bytes,bytes32,bytes32,bytes32,IUARegistry.UASig) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | pqzHolder(uint16,bytes,bytes32,bool) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | pqzProof(bytes32,uint64,bytes,bytes,bytes32,bytes32) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | register(uint16,bytes,IUARegistry.UAAttrs,bytes,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | registerFrost(uint16,IUARegistry.FrostKey,IUARegistry.UAAttrs,bytes,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | registerMsig(IUARegistry.MsigStructure,IUARegistry.UAAttrs,IUARegistry.MemberSig[],bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | registerMuSig2(uint16,IUARegistry.MuSig2Key,IUARegistry.UAAttrs,bytes,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | registerWebAuthn(IUARegistry.WebAuthnKey,IUARegistry.UAAttrs,bytes,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | registrationOf(bytes32) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | requirePortable(bytes32,bytes32,bytes32,IUARegistry.UASig) | a library / module entry: runs only through UARegistry
+registry | UARegistryCoreLib | uaCount(uint16) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | cacheExpandedKey(uint16,bytes,uint256) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | popOf(bytes32) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | popSlotsOf(bytes32) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | pqzKeySigOf(bytes32,uint64) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | pqzOpenKemAt(bytes32,address,uint64) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | pqzPopOf(bytes32,uint64) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | pqzScopedAt(address,uint256) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | pqzScopedCount(address) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | pqzScopedKeyLatest(bytes32,address) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | pqzScopedPopOf(bytes32,address,uint64) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | setKemKey(bytes32,uint64,IUARegistry.KemKey,IUARegistry.UASig) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | setPqzKey(bytes32,uint64,bytes,bytes32,IUARegistry.UASig) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | setPqzScopedKey(bytes32,address,uint64,bytes,bytes32,IUARegistry.KemKey,uint64,IUARegistry.UASig) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | storePqzPop(bytes32,uint64,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | storePqzScopedPop(bytes32,address,uint64,bytes) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | uaAt(uint16,uint256) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | uaIndex(bytes32) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | uaPage(uint16,uint256,uint256) | a library / module entry: runs only through UARegistry
+registry | UARegistryAuxLib | webAuthnKeyOf(bytes32) | a library / module entry: runs only through UARegistry
+factory | OpenFactory | acceptAdmin() | NO REASON RECORDED
+factory | OpenFactory | approveDexRelease(uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64) | NO REASON RECORDED
+factory | OpenFactory | approveRelease((uint16,uint16,uint64),uint16,bytes4,bytes4,bytes32,bytes32,bytes32,address,uint32,uint64) | NO REASON RECORDED
+factory | OpenFactory | approveTokenRelease(uint8,uint64,uint16,bytes32,bytes32,bytes32,address,uint32,uint64) | NO REASON RECORDED
+factory | OpenFactory | deprecateDex(uint64,bytes32,string) | NO REASON RECORDED
+factory | OpenFactory | deprecateRelease((uint16,uint16,uint64),bytes32,string) | NO REASON RECORDED
+factory | OpenFactory | renounceAdmin(bytes32) | ends the factory's administration for ever (CTR-GOV-23 Q1: no env, release or deprecation after it), so no matrix factory renounces; its refusals (before configureChain, a non-admin) and its effect are forge's (test/v2/FactoryAdmin.t.sol)
+factory | OpenFactory | revokeApproval(bytes32,bytes32) | NO REASON RECORDED
+factory | OpenFactory | setChainEntries((address,bytes32,bytes32,address,bytes32,address,bytes32,address,bytes32),bytes32) | NO REASON RECORDED
+accounts | SmartKeyAccount | addKey((uint8,bytes32,bytes32,bytes32,bytes32)) | NO REASON RECORDED
+accounts | SmartKeyAccount | cancelRecovery() | NO REASON RECORDED
+accounts | SmartKeyAccount | completeRecovery((uint8,bytes32,bytes32,bytes32,bytes32)) | waits RECOVERY_DELAY (2 days) after initiateRecovery; a real chain cannot skip time: its negative runs (gov)
+accounts | SmartKeyAccount | execute(address,uint256,bytes) | NO REASON RECORDED
+accounts | SmartKeyAccount | initialize((uint8,bytes32,bytes32,bytes32,bytes32),address) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+accounts | SmartKeyAccount | removeKey(uint256) | NO REASON RECORDED
+accounts | SmartKeyAccount | rotateKey(uint256,(uint8,bytes32,bytes32,bytes32,bytes32)) | NO REASON RECORDED
+accounts | SmartKeyAccount | setGuardian(address) | NO REASON RECORDED
+wallets | MandateWallet | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | refused by design (an address meta-transaction: none is taken); its negative runs (misc)
+wallets | HederaMandateWallet | cancelNonce(uint256) | needs Hedera
+wallets | HederaMandateWallet | execute(address,uint256,bytes) | needs Hedera
+wallets | HederaMandateWallet | executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes) | needs Hedera
+wallets | HederaMandateWallet | mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[]) | needs Hedera
+wallets | HederaMandateWallet | mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxDelegateRevoke((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxExecute((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxPayUnderMandate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint256,bytes32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes)) | needs Hedera
+wallets | HederaMandateWallet | mtxRevokeMandate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxSetMandate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint128,uint128,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | mtxSetPayee((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | needs Hedera
+wallets | HederaMandateWallet | payUnderMandate(address,bytes32,uint256,bytes32,uint64,(bytes32,bytes32,bool,uint16,bytes)) | needs Hedera
+wallets | HederaMandateWallet | revoke(address) | needs Hedera
+wallets | HederaMandateWallet | revoke(address,uint64) | needs Hedera
+wallets | HederaMandateWallet | setMandate(address,bytes32,uint128,uint128,uint64,uint64) | needs Hedera
+wallets | HederaMandateWallet | setPayee(address,bytes32,bool) | needs Hedera
+compliance | ComplianceRegistry | acceptAdmin() | NO REASON RECORDED
+compliance | ComplianceRegistry | setKycProvider(bytes32,bool,bytes32) | NO REASON RECORDED
+compliance | ComplianceRegistry | transferAdmin(bytes32,bytes32) | NO REASON RECORDED
+libraries | GovernanceLib | acceptAdmin(bytes32) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | cancelGrant(uint8,bytes32,bytes32) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | disableFeature(uint8,bytes32,uint256) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | enableFeature(uint8,bytes32,uint256) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | grantRole(uint8,bytes32,bytes32,uint256,uint256,address) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | init(uint256,uint256,bytes32,uint64,address,GovernanceLib.Roles,uint256,uint256,uint256,address) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | initHolder(uint8,bytes32,uint256,uint256,address) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | renounceAdmin(bytes32,uint256) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | renounceRole(uint8,bytes32,uint256) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | rescue(address) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | revokeRole(uint8,bytes32,bytes32,uint256) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | setGrant(uint8,bytes32,IGovernance.GrantTerms,bytes32,uint256,uint256,uint256,uint256,address,uint256) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | transferAdmin(bytes32,bytes32) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | GovernanceLib | useLimited(uint8,bytes32,uint256) | a library / module entry: runs only through GovernanceRouter, tokens
+libraries | ZetherLib | init(IFactoryToken.ConfidentialConfig,IZetherVerifier) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | initNormal(bytes,uint8) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | initNormalConf(bytes,IZetherVerifier) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | rollOver(bytes32) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | rollOverBatch(bytes32[]) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | rollOverSigned(bytes32,uint64,uint64,IUARegistry.UASig,ZetherLib.Env) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | setRollOverMode(bytes32,ZetherTypes.RollOverMode,uint64,IUARegistry.UASig,ZetherLib.Env) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | shield(bytes32,uint256,address,address) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | transferMulti(IZetherToken.ZetherMulti,bytes) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | transferSingle(IZetherToken.ZetherSingle,bytes) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherLib | unshield(IZetherToken.ZetherBurn,uint256,bytes32,bytes) | a library / module entry: runs only through NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherWrappedLib | init(bytes,IZetherVerifier,address,uint8,uint256,uint256,uint256) | a library / module entry: runs only through WrappedZetherToken, WrappedZetherRegulatedToken
+libraries | ZetherWrappedLib | unshieldUnwrap(IZetherToken.ZetherBurn,IConfidentialWrappedToken.Unwrap,bytes) | a library / module entry: runs only through WrappedZetherToken, WrappedZetherRegulatedToken
+libraries | WrappedLib | addReserve(uint256,uint256,address,uint256) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | cancelRate(bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | controlsOff(uint8) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | disableWrap(address,bytes32,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | dropPending() | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | executeRate(bytes32,uint256) | waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)
+libraries | WrappedLib | initToken(IFactoryToken.TokenConfig,bool,uint8,uint256,uint256,uint256,address) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | payOut(uint256,address,uint256,uint256,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | payOutTo(uint256,bytes32,uint256,uint256,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | payOutToUA(uint256,bytes32,uint256,uint256,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | proposeRate(address,uint96,uint96,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | rescue(address) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | setMaxSupply(uint256,bytes32,uint256) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | setMaxWrapSupply(uint256,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | setWrapLimits(IWrappedToken.WrapLegLimits[],bool,bool,bool,bytes32,address) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | setWrapMember(bytes32,bool,bool,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | wrap(uint256,uint256,address,uint256,uint256,bytes32) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | WrappedLib | wrapBySigUA(address,ITradeToken.UAWrapOrder,IUARegistry.UASig,address,uint256) | a library / module entry: runs only through WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | directTaxed(bytes32,bytes32,bytes32,bytes32,uint256,uint8,uint256) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | forceTransfer(bytes32,uint256,bytes32) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | freeze(bytes32,bytes32,bytes32,bytes32) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | init(bytes,uint256,bytes32,address,address) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | operatorTransfer(bytes32,bytes32,uint256,bytes32,bytes32,address) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | pause(bytes32,uint64,bytes32) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64,bytes32) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | revokeOrder(bytes32,bytes32,bytes32) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | setList(uint8,uint8,bytes32[],bool,bytes32) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | setTaxRate(uint32,address,bytes32) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | setTaxRecipient(bytes32,bytes32,address) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | taxed(bytes32,bytes32,bytes32,bytes32,uint8,uint256,bytes32) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | unfreeze(bytes32,bytes32,bytes32) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | unpause(bytes32,bytes32) | a library / module entry: runs only through NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | MtxPipelineLib | payMeta(bytes32,MetaTxLib.PayMeta) | a library / module entry: runs only through tokens
+libraries | MtxPipelineLib | payRecord(bytes32,bytes32,uint256) | a library / module entry: runs only through tokens
+libraries | MtxPipelineLib | preCall(MtxPipelineLib.Ctx,MtxPipelineLib.Envelope,MtxPipelineLib.CallFacts,bytes) | a library / module entry: runs only through tokens
+libraries | MtxPipelineLib | preCallUA(MtxPipelineLib.Ctx,MtxPipelineLib.Envelope,MtxPipelineLib.CallFacts,IUARegistry.UASig) | a library / module entry: runs only through tokens
+libraries | MtxPipelineLib | preNamed(MtxPipelineLib.Ctx,bytes32,MtxPipelineLib.Envelope,bytes,MtxPipelineLib.CallFacts,bytes) | a library / module entry: runs only through tokens
+libraries | MtxPipelineLib | preNamedUA(MtxPipelineLib.Ctx,bytes32,MtxPipelineLib.Envelope,bytes,MtxPipelineLib.CallFacts,IUARegistry.UASig) | a library / module entry: runs only through tokens
+libraries | MtxPipelineLib | preTransferUA(MtxPipelineLib.Ctx,MetaTxLib.UAMetaTransfer,bytes32,uint256,IUARegistry.UASig) | a library / module entry: runs only through tokens
+libraries | TradeLib | cancel(bytes32,uint256,bytes32,bool) | a library / module entry: runs only through tokens, SCaaSDex
+libraries | TradeLib | invalidate(bytes32,uint256,uint256,bool) | a library / module entry: runs only through tokens, SCaaSDex
+libraries | TradeLib | record(ITradeToken.UATradeOrder,ITradeToken.TradeFill,bytes32,bool) | a library / module entry: runs only through tokens, SCaaSDex
+libraries | TradeLib | restore(ITradeToken.UATradeOrder,bytes32,uint256,address) | a library / module entry: runs only through tokens, SCaaSDex
+libraries | PqzStateLib | cancelVerifier(bytes32) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | init(IFactoryToken.ConfidentialConfig,address,address,address) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | prepareAcc(bytes32,uint64,uint256,address) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | revokeVerifier(bytes32) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | rollOver(bytes32,uint64,uint256) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | rollOverSigned(PqzCore.Env,bytes32,uint64,uint64,uint64[],uint64,IUARegistry.UASig) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | setProofStore(uint8) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | setVerifier(bytes32,bytes32,address) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | setVerifierFee(uint64,bytes32) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzStateLib | shield(bytes32,uint256,address,address) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzWrappedLib | init(bytes,address,address,address,uint8,uint256,uint256,uint256) | a library / module entry: runs only through WrappedPqzToken, WrappedPqzRegulatedToken
+libraries | PqzBurnLib | unshield(PqzCore.Env,IPqzToken.PqzBurnArgs,bytes,bytes,IUARegistry.UASig,IPqzToken.PqzSignedVerdict) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzTransferLib | transfer(PqzCore.Env,IPqzToken.PqzTransferArgs,bytes,bytes,IUARegistry.UASig,IPqzToken.PqzSignedVerdict) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzTransferLib | transferMulti(PqzCore.Env,IPqzToken.PqzMultiArgs,bytes,bytes,IUARegistry.UASig,IPqzToken.PqzSignedVerdict) | a library / module entry: runs only through NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+pqchat | PqChat | addWraps(bytes32,uint32,(bytes32,uint64,bytes,bytes32,bytes)[]) | NO REASON RECORDED
+pqchat | PqChat | initialize(bytes32) | the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)
+pqchat | PqChatTopics | createTopic((bytes32,uint64,bytes32,address,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | editEntry((bytes32,bytes32,uint64,uint32,string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | postEntry((bytes32,bytes32,uint64,bytes32,(bytes32,address,bytes32,bytes32),string,bytes),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | setTopicWriter((bytes32,bytes32,bool,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | updateTopic((bytes32,uint64,string,bytes,bool),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+pqchat | PqChatTopics | voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])) | a library / module entry: runs only through PqChat
+(203 without a reason)
+
+## scaas-testnet: known gaps
+gap | pqzwallet on a registry with a PqzKeyVerifier (set mldsa-on): the wallet's scoped records are written without storePqzScopedPop and stay unproven (owner 2026-11-16, D3: ua-rs PqzKeyHandle has no R_REG prover; an OFFCHAIN token reads an unproven record); the proven-record rows are pqzkeys' (mldsa_on.py, README-mldsa-on.md)
+
+## scaas-testnet: negatives (279; refused as expected = status 2)
+ok  | SCaaSDex | negative: mtxHybrid on dexC (closed), A / W not listed | expected 0x69fb943f0000000000000000000000000606c1ddb2816f46521f050f30e64275b024a09e000000000000000000000000cf9bf72b1cf2f1570b0f99575f2b426e34d01761 got 0x69fb943f0000000000000000000000000606c1ddb2816f46521f050f30e64275b024a09e000000000000000000000000cf9bf72b1cf2f1570b0f99575f2b426e34d01761
+ok  | SCaaSDex | negative: mtxExchange on dexC (closed), W in no listed market | expected 0xa274598e000000000000000000000000cf9bf72b1cf2f1570b0f99575f2b426e34d01761 got 0xa274598e000000000000000000000000cf9bf72b1cf2f1570b0f99575f2b426e34d01761
+ok  | SCaaSDex | negative: enableFeature(29) on dexO after its disable: no such entry on the DEX (bit 29 never comes back) | expected 0x got 0x
+ok  | SCaaSDex | negative: mtxExchange on dexO: FOT credited 1882 < 1900 | expected 0x04a716480000000000000000000000003d6cd2622340c3d6befc23916d65fbbba9891a26 got 0x04a716480000000000000000000000003d6cd2622340c3d6befc23916d65fbbba9891a26
+ok  | NormalRegulatedToken | negative: renounceRole on kind 8 by a holder, a sibling's chain word | expected 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939 got 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939
+ok  | SCaaSDex | negative: disableFeature on a DEX by its admin, a sibling's chain word | expected 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939 got 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939
+ok  | SCaaSDex | negative: renounceRole on a DEX by a holder, a sibling's chain word | expected 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939 got 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939
+ok  | SCaaSDex | negative: mtxExchange of a cancelled order | expected 0x1f27d9b5 got 0x1f27d9b5
+ok  | SCaaSDex | negative: mtxExchange of an outside order with a bad signature | expected 0x252d5ca1 got 0x252d5ca1
+ok  | SCaaSDex | negative: mtxExchange through an unlisted target, listed-only on | expected 0xf6167aa1 got 0xf6167aa1
+ok  | SCaaSDex | negative: settleOne called directly | expected 0x29c3b7ee got 0x29c3b7ee
+ok  | SCaaSDex | negative: exchangeOne called directly | expected 0x29c3b7ee got 0x29c3b7ee
+ok  | SCaaSDex | negative: initialize called directly | expected 0x32cc7236 got 0x32cc7236
+ok  | NormalToken | negative: mtxTrade called by a non-DEX | expected 0x9042adf7 got 0x9042adf7
+ok  | SCaaSDex | negative: setMarket on dex2 after disableFeature(LISTING) | expected 0xac3b5a80 got 0xac3b5a80
+ok  | NormalZetherRegulatedToken | negative: setAllowed on kind 10 (bit 8 outside the mask: no holder) | expected 0x8aed6512 got 0x8aed6512
+ok  | NormalZetherRegulatedToken | negative: enableFeature(ALLOWLIST) on kind 10 | expected 0x63c2d1a5 got 0x63c2d1a5
+ok  | WrappedZetherRegulatedToken | negative: setAllowed on kind 11 (bit 8 outside the mask: no holder) | expected 0x8aed6512 got 0x8aed6512
+ok  | WrappedZetherRegulatedToken | negative: enableFeature(ALLOWLIST) on kind 11 | expected 0x63c2d1a5 got 0x63c2d1a5
+ok  | WrappedRegulatedToken | negative: transfer from a frozen account (kind 9) | expected 0xc1c3af34 got 0xc1c3af34
+ok  | NormalRegulatedToken | negative: transfer to an account the ComplianceRegistry does not attest (kind 8, KYC) | expected 0xd29f84a7 got 0xd29f84a7
+ok  | NormalRegulatedToken | negative: grantRole by a non-owner (kind 8) | expected 0xba963c12 got 0xba963c12
+ok  | GovernanceRouter | negative: router op whose signature is not its from's | expected 0x0bdf5a6b got 0x0bdf5a6b
+ok  | GovernanceRouter | negative: mtxExecuteRate before the eta 1794983279 | expected 0x272aa3ae got 0x272aa3ae
+ok  | GovernanceRouter | negative: mtxCreateInstance with no class release on this factory | expected 0x917d36d3 got 0x917d36d3
+ok  | GovernanceRouter | negative: router mtxExecute (no generic path) | expected 0x80bec470 got 0x80bec470
+ok  | GovernanceRouter | negative: router mtxBatch (no generic path) | expected 0x80bec470 got 0x80bec470
+ok  | GovernanceRouter | negative: router executeMetaTransaction (no generic path) | expected 0x80bec470 got 0x80bec470
+ok  | SmartKeyAccount | negative: completeRecovery before RECOVERY_DELAY | expected 0xf1c34de9 got 0xf1c34de9
+ok  | SmartKeyAccount | negative: initialize by another caller than the factory | expected 0x32cc7236 got 0x32cc7236
+ok  | GovernanceRouter | negative: mtxSetAllowed by a UA without bit 8 (kind 9) | expected 0x8aed6512 got 0x8aed6512
+ok  | GovernanceRouter | negative: router mtxSetMaxSupply again before its eta 1794896879 (grantDelay 1 day): GrantNotReady(31) | expected 0x8e434eb4 got 0x8e434eb4
+ok  | GovernanceRouter | negative: router mtxSetMaxSupply, a sibling's chain word | expected 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939 got 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939
+ok  | GovernanceRouter | negative: router mtxSetMaxSupply after mtxDisableFeature(31): FeatureNotSet(31) | expected 0xac3b5a80000000000000000000000000000000000000000000000000000000000000001f got 0xac3b5a80000000000000000000000000000000000000000000000000000000000000001f
+ok  | GovernanceRouter | negative: router mtxSetMaxWrapSupply again before its eta 1794896879 (grantDelay 1 day): GrantNotReady(31) | expected 0x8e434eb4 got 0x8e434eb4
+ok  | GovernanceRouter | negative: router mtxSetMaxWrapSupply, a sibling's chain word | expected 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939 got 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939
+ok  | GovernanceRouter | negative: router mtxSetMaxWrapSupply after mtxDisableFeature(31): FeatureNotSet(31) | expected 0xac3b5a80000000000000000000000000000000000000000000000000000000000000001f got 0xac3b5a80000000000000000000000000000000000000000000000000000000000000001f
+ok  | ComplianceRegistry | negative: setKycProvider by a non-admin | expected 0xba963c12 got 0xba963c12
+ok  | ComplianceRegistry | negative: ComplianceRegistry.setCompliance by a KYC provider, a sibling's chain word | expected 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939 got 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939
+ok  | GovernanceRouter | negative: router mtxSetKycProvider (the registry admin's op), a sibling's chain word | expected 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939 got 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939
+ok  | GovernanceRouter | negative: router mtxRenounceRole (a holder's own, kind 9), a sibling's chain word | expected 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939 got 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939
+ok  | OpenFactory | negative: OpenFactory.setTokenKindEnabled by its admin, a sibling's chain word | expected 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939 got 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939
+ok  | SCaaSDex | negative: liquidity: a replay of an executed order | expected 0x1f27d9b5 got 0x1f27d9b5
+ok  | SCaaSDex | negative: liquidity: an unlisted position reader | expected 0xc161e93e got 0xc161e93e
+ok  | SCaaSDexLiquidityModule | negative: liquidity: the module called directly | expected 0x9ccd6d76 got 0x9ccd6d76
+ok  | NormalToken | negative: liquidity: a token's mtxLiquidityPull called by an EOA | expected 0x0d8ea5ec got 0x0d8ea5ec
+ok  | MockOldDex | negative: liquidity: a contract without liquidityOrderDigest cannot make a token pull | expected 0x0e46ff74 got 0x0e46ff74
+ok  | SCaaSDex | negative: liquidity: mtxLiquidityPull inside an interaction | expected 0xc1162d35 got 0xc1162d35
+ok  | UARegistry | negative: registry: setKemKey on a kind that holds no KEM key | expected 0x8bbf5386 got 0x8bbf5386
+ok  | UARegistry | negative: registry: register an id twice | expected 0xefbca4cf got 0xefbca4cf
+ok  | UARegistry | negative: registry: register with another key's PoP | expected 0x93f2c82c got 0x93f2c82c
+ok  | UARegistry | negative: registry: cacheExpandedKey of a kind without a cache | expected 0x7548dea6 got 0x7548dea6
+ok  | OpenFactory | negative: factory: createDex of a deprecated release | expected 0xa7dcbd49 got 0xa7dcbd49
+ok  | OpenFactory | negative: factory: createInstance of a deprecated release | expected 0xe660c266 got 0xe660c266
+ok  | OpenFactory | negative: factory: createInstance of a kind with no release | expected 0x917d36d3 got 0x917d36d3
+ok  | OpenFactory | negative: factory: a release whose modules its env does not pin (approved through the router: `_factoryRouter`) | expected 0xd29339a1 got 0xd29339a1
+ok  | OpenFactory | negative: factory: createToken of a deprecated release | expected 0x44ffb348 got 0x44ffb348
+ok  | OpenFactory | negative: factory: a disabled kind | expected 0xe58179cf got 0xe58179cf
+ok  | OpenFactory | negative: factory: a kind outside the catalogue | expected 0xd474a90e got 0xd474a90e
+ok  | OpenFactory | negative: factory: publishTokenEnv by another than the admin | expected 0xba963c12 got 0xba963c12
+ok  | OpenFactory | negative: factory: configureChain by the former admin (the msig is the admin: `_factoryRouter`) | expected 0xba963c12 got 0xba963c12
+ok  | OpenFactory | negative: factory: deployTokenImplementation with a sibling's chain word | expected 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939 got 0x14767f459ae9048bfd6165d6b25290fa9295ad14e38c3e158371b80049d9a554341e5b138350001a609a56a4b99a2db4d4dde7880a61dce79edc28ee8121021cbe36d939
+ok  | OpenFactory | negative: factory: publishTokenEnv by the former admin (key 1) | expected 0xba963c12 got 0xba963c12
+ok  | OpenFactory | negative: factory: the former admin's deploy without an approval | expected 0x83a9bf5f got 0x83a9bf5f
+ok  | OpenFactory | negative: factory: a DEX release whose approval the msig revoked | expected 0x83a9bf5f got 0x83a9bf5f
+ok  | MandateWallet | negative: wallet: setMandate by another than the owner | expected 0x30cd7471 got 0x30cd7471
+ok  | MandateWallet | negative: wallet: payUnderMandate after the revoke | expected 0x8814cafb got 0x8814cafb
+ok  | MandateWallet | negative: wallet: an address meta-transaction (none is taken) | expected 0x80bec470 got 0x80bec470
+ok  | RefServiceEscrow | negative: escrow k0: a deposit replayed | expected 0x14b5a650 got 0x14b5a650
+ok  | RefServiceEscrow | negative: escrow k0: a release twice | expected 0xafd025f5 got 0xafd025f5
+ok  | NormalRegulatedToken | negative: transfer to an account on the deny list (kind 8, DENYLIST switched on at once) | expected 0x09dd64d7 got 0x09dd64d7
+ok  | RefServiceEscrow | negative: escrow k8: a deposit replayed | expected 0x14b5a650 got 0x14b5a650
+ok  | RefServiceEscrow | negative: escrow k8: a release twice | expected 0xafd025f5 got 0xafd025f5
+ok  |  | negative: mldsa44 requireAuthorized: the metatx signature under purpose member | expected 0x1a66f1c1 got 
+ok  |  | negative: mldsa44 requireAuthorized: one signature byte changed | expected 0x1a66f1c1 got 
+ok  |  | negative: mldsa44 cacheExpandedKey on the precompile path | expected 0x7548dea6 got 
+ok  |  | negative: mldsa65 requireAuthorized: the metatx signature under purpose member | expected 0x1a66f1c1 got 
+ok  |  | negative: mldsa65 requireAuthorized: one signature byte changed | expected 0x1a66f1c1 got 
+ok  |  | negative: mldsa65 cacheExpandedKey on the precompile path | expected 0x7548dea6 got 
+ok  |  | negative: mldsa87 requireAuthorized: the metatx signature under purpose member | expected 0x1a66f1c1 got 
+ok  |  | negative: mldsa87 requireAuthorized: one signature byte changed | expected 0x1a66f1c1 got 
+ok  |  | negative: mldsa87 cacheExpandedKey on the precompile path | expected 0x7548dea6 got 
+ok  | UARegistry | negative: mldsaalt: register of mldsa44 without its cache | expected 0x0be352c8ea360be7c160d233b2277a6f1a1e64dd0e78d45f3596ba384323a0a426446ddf got 0x0be352c8ea360be7c160d233b2277a6f1a1e64dd0e78d45f3596ba384323a0a426446ddf
+ok  | UARegistry | negative: mldsaalt: register of mldsa65 without its cache | expected 0x0be352c869c1a66142409e50ac109a23a24a14fe1389375d8009c16e3843950b0f900f46 got 0x0be352c869c1a66142409e50ac109a23a24a14fe1389375d8009c16e3843950b0f900f46
+ok  | UARegistry | negative: mldsaalt: register of mldsa65 with part 0 only | expected 0x0be352c8b5a35359defcb40a1487dec4cfd97e6a9c10383c450d51bbddb1db3548fc029e got 0x0be352c8b5a35359defcb40a1487dec4cfd97e6a9c10383c450d51bbddb1db3548fc029e
+ok  | UARegistry | negative: mldsaalt: register of mldsa87 without its cache | expected 0x0be352c8141298ae335a0e89fc4cbbf387281068e52844571d0bb30d1c4b7880dcf46b29 got 0x0be352c8141298ae335a0e89fc4cbbf387281068e52844571d0bb30d1c4b7880dcf46b29
+ok  | UARegistry | negative: mldsaalt: register of mldsa87 with part 0 only | expected 0x0be352c89bc9c3cbf9f857c05890cc30a1569aa1faa8ab73112eef716adcf2a3f5f753ae got 0x0be352c89bc9c3cbf9f857c05890cc30a1569aa1faa8ab73112eef716adcf2a3f5f753ae
+ok  | NormalPqzToken | negative: pqUSD (PRECOMPILE) setVerifierFee(1) | expected 0xbb2bf818 got 
+ok  | NormalPqzRegulatedToken | negative: pqR12 setAllowed (bit 8 outside the mask: no holder) | expected 0x8aed6512 got 
+ok  | NormalPqzRegulatedToken | negative: pqR12 enableFeature(ALLOWLIST) | expected 0x63c2d1a5 got 
+ok  | WrappedPqzRegulatedToken | negative: pqR13 setAllowed (bit 8 outside the mask: no holder) | expected 0x8aed6512 got 
+ok  | WrappedPqzRegulatedToken | negative: pqR13 enableFeature(ALLOWLIST) | expected 0x63c2d1a5 got 
+ok  | NormalToken | negative: pqN0 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  | NormalPqzToken | negative: pqUSD mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  | WrappedPqzToken | negative: pqW mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  | NormalPqzRegulatedToken | negative: pqR12 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  | WrappedPqzRegulatedToken | negative: pqR13 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: pqchat: createSession with a used (creator, nonce) | expected 0xf89eeec1 got 
+ok  |  | negative: pqchat: a second child at home (the P9 removal attack) | expected 0x683ad3f6 got 
+ok  |  | negative: pqchat: postMessage with a used counter | expected 0xf89eeec1 got 
+ok  |  | negative: pqchat: postMessage by a non-member | expected 0x4af7706d got 
+ok  |  | negative: pqchat: postMessage under a superseded epoch | expected 0x683ad3f6 got 
+ok  |  | negative: pqchat: remove replayed | expected 0xf89eeec1 got 
+ok  |  | negative: pqchat: the removed member's rekey | expected 0x4af7706d got 
+ok  |  | negative: pqchat: a child keeping a removed member | expected 0xad08b15c got 
+ok  |  | negative: pqchat: storeMessage of a version other than 1 | expected 0x0c92e8bd got 
+ok  |  | negative: pqchat: a vote value of 2 | expected 0xfdbde166 got 
+ok  | PqChat | negative: pqchat: createSession with a used (creator, nonce) | expected 0xf89eeec1 got 0xf89eeec1
+ok  | PqChat | negative: pqchat: a second child at home (the P9 removal attack) | expected 0x683ad3f6 got 0x683ad3f6
+ok  | PqChat | negative: pqchat: postMessage with a used (epoch, sender, device) counter | expected 0xf89eeec1 got 0xf89eeec1
+ok  | PqChat | negative: pqchat: postMessage by a non-member | expected 0x4af7706d got 0x4af7706d
+ok  | PqChat | negative: pqchat: postMessage under a superseded epoch (Fable P1-1) | expected 0x683ad3f6 got 0x683ad3f6
+ok  | PqChat | negative: pqchat: remove replayed | expected 0xf89eeec1 got 0xf89eeec1
+ok  | PqChat | negative: pqchat: the removed member's rekey (the race of the Fable review P1-2) | expected 0x4af7706d got 0x4af7706d
+ok  | PqChat | negative: pqchat: a child keeping a removed member | expected 0xad08b15c got 0xad08b15c
+ok  | PqChat | negative: pqchat: storeMessage of a version other than 1 | expected 0x0c92e8bd got 0x0c92e8bd
+ok  | PqChat | negative: pqchat: a vote value of 2 | expected 0xfdbde166 got 0xfdbde166
+ok  | NormalPqzToken | negative: pqOF op 1 without a verdict | expected 0x331c66f6 got 
+ok  | NormalPqzToken | negative: pqOF op 1 with a verdict over another statement | expected 0x331c66f6 got 
+ok  | NormalPqzToken | negative: pqOF op 1 with a verdict signed by a non-verifier (key 3) | expected 0x3a949c7b got 
+ok  | NormalPqzToken | negative: pqOF the five-argument verifyTransferAmount on an OFFCHAIN token | expected 0xa153caa8 got 
+ok  | NormalPqzToken | negative: pqOF pqzSetVerifier on a fixed verifier | expected 0x8fe682a6 got 
+ok  | GovernanceRouter | negative: pqOT the confirm before the notice ends | expected 0x6bcebc14 got 
+ok  | NormalPqzToken | negative: pqOT a verdict by the replaced verifier | expected 0x3a949c7b got 
+ok  | NormalPqzToken | negative: pqOT op 1 after the revocation (every OFFCHAIN proof refused) | expected 0xb00d6ffb got 
+ok  | NormalPqzToken | negative: pqVF op 1 built at the old fee, after the decrease | expected 0x735babb3 got 
+ok  | NormalPqzToken | negative: pqVF direct op 7 resubmitted with d 1 after Δvf = +2 | expected 0x735babb3 got 
+ok  | NormalPqzToken | negative: pqVF direct op 7 resubmitted with d 3 after Δvf = -2 | expected 0x735babb3 got 
+ok  | NormalPqzToken | negative: pqVFN the confirm before eta | expected 0x7c735c30 got 
+ok  | NormalPqzToken | negative: pqVFN setVerifierFee(3): the current value, nothing pending | expected 0xd24bcb0e got 
+ok  | NormalPqzToken | negative: pqVFN setVerifierFee(7): above the cap | expected 0xd6a6babf got 
+ok  | NormalPqzToken | negative: pqVFN setVerifierFee by a stranger | expected 0xba963c12 got 
+ok  | WrappedPqzRegulatedToken | negative: pqVF13 op 1 while the verifier is frozen, vf set | expected 0x8b739212 got 
+ok  | WrappedPqzRegulatedToken | negative: pqVF13 op 1: the restored fee halts it again | expected 0x8b739212 got 
+ok  |  | negative: c2: op 7 with the opening on | expected 0x74ed589e got 
+ok  |  | negative: c3o: op 7 with the opening on | expected 0x74ed589e got 
+ok  |  | negative: burn by a non-holder with a balance (kind 4, BURNER): MissingRole(30, id) | expected 0x8aed6512000000000000000000000000000000000000000000000000000000000000001e00000000000000000000000073466c5ca13cac0837dbecbf9db1f03a33509e79 got 
+ok  |  | negative: burn by a non-holder with a balance (kind 12, BURNER): MissingRole(30, id) | expected 0x8aed6512000000000000000000000000000000000000000000000000000000000000001e00000000000000000000000073466c5ca13cac0837dbecbf9db1f03a33509e79 got 
+ok  |  | negative: class 2 record without openKem | expected 0x8c63d53d0000000000000000000000000000000000000000000000000000000000000000 got 
+ok  |  | negative: class 2 record signed for another chainUid | expected 0x1a66f1c1c5a31676bfa5361df32fedbd1bdef696fffa548a37c79e74785a9f74d7ba76f5 got 
+ok  |  | negative: class 2 record expired | expected 0x1da9698bc5a31676bfa5361df32fedbd1bdef696fffa548a37c79e74785a9f74d7ba76f5 got 
+ok  |  | negative: class 2 version 1 of another key length | expected 0xe94721760000000000000000000000000000000000000000000000000000000000000142 got 
+ok  |  | negative: class 3 opening on: record without openKem | expected 0x8c63d53d0000000000000000000000000ac46dce4640dc1cd5fc13f68d01c0241158bead got 
+ok  |  | negative: class 3 opening on: another chainUid | expected 0x1a66f1c1c5a31676bfa5361df32fedbd1bdef696fffa548a37c79e74785a9f74d7ba76f5 got 
+ok  |  | negative: class 3 opening off: record with openKem | expected 0x8c63d53d0000000000000000000000005585ba4b0f3c6844bf2666dc4858c972aceec79c got 
+ok  |  | negative: class 3 opening off: another chainUid | expected 0x1a66f1c1c5a31676bfa5361df32fedbd1bdef696fffa548a37c79e74785a9f74d7ba76f5 got 
+ok  |  | negative: class 3: the record of another token | expected 0x1a66f1c1c5a31676bfa5361df32fedbd1bdef696fffa548a37c79e74785a9f74d7ba76f5 got 
+ok  |  | negative: class 2: an msig holds no shared key (ruling 9) | expected 0x5c98ad178657511e22e16cca491de15a7003485ed733aa884eed34ef3a9aacd3a01a74b4 got 
+ok  |  | negative: class 3 opening on: the msig's record without openKem | expected 0x8c63d53d0000000000000000000000000ac46dce4640dc1cd5fc13f68d01c0241158bead got 
+ok  |  | negative: c2: the public rollover with the opening on | expected 0x00457cf2 got 
+ok  |  | negative: c3o: the public rollover with the opening on | expected 0x00457cf2 got 
+ok  |  | negative: c3: the signed rollover without the opening | expected 0x74ed589e got 
+ok  |  | negative: c2: a RECEIVER_X disclosure with the opening on | expected 0x74ed589e got 
+ok  |  | negative: c2: a AUDITOR disclosure with the opening on | expected 0x74ed589e got 
+ok  |  | negative: c2: the mark-only call replayed (rollSeq moved) | expected 0x735babb3 got 
+ok  |  | negative: c2: a stale entriesHash | expected 0x735babb3 got 
+ok  |  | negative: c2: a mark on a TRIVIAL entry | expected 0x861baf670000000000000000000000000000000000000000000000000000000000000002 got 
+ok  |  | negative: c3o: the mark-only call replayed (rollSeq moved) | expected 0x735babb3 got 
+ok  |  | negative: c3o: a stale entriesHash | expected 0x735babb3 got 
+ok  |  | negative: c3o: a mark on a TRIVIAL entry | expected 0x861baf670000000000000000000000000000000000000000000000000000000000000002 got 
+ok  | OpenFactory | negative: OFFCHAIN class 2 without the opening (pqzOpening = false) | expected 0xbb2bf818 got 0xbb2bf818
+ok  | OpenFactory | negative: PRECOMPILE with pqzOwnKey | expected 0xbb2bf818 got 0xbb2bf818
+ok  | OpenFactory | negative: PRECOMPILE with pqzOpening | expected 0xbb2bf818 got 0xbb2bf818
+ok  | RescueVault | negative: setRescuer seq 5 (expected 4) | expected 0x7e700d2500000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000005 got 0x7e700d2500000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000005
+ok  | RescueVault | negative: setRescuer seq 3 replayed | expected 0x7e700d2500000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000003 got 0x7e700d2500000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000003
+ok  | RescueVault | negative: setRescuer signed by the old admin | expected 0x37e8456b got 0x37e8456b
+ok  | RescueVault | negative: rotateAdmin to key 3 with the admin's signature for key 1 | expected 0x37e8456b got 0x37e8456b
+ok  | RescueVault | negative: setRescuer to 0 | expected 0xa7825396 got 0xa7825396
+ok  | RescueVault | negative: rotateAdmin to a non-native UA | expected 0x6b111edc0000000000000000000000017e5f4552091a69125d5dfcb7b8c2659029395bdf got 0x6b111edc0000000000000000000000017e5f4552091a69125d5dfcb7b8c2659029395bdf
+ok  |  | negative: moK0 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: moK1 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: moK2 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: moK3 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: moK8 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: moK9 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: moK10 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: moK11 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: moK4 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: moK5 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: moK12 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  |  | negative: moK13 mtxExecuteTransfer with an ML-DSA signature over another digest | expected 0x1a66f1c1 got 
+ok  | OnchainForwarder | negative: executeRate before the 2-day delay (eta 1794977894) | expected 0x272aa3ae got 0x272aa3ae
+ok  | NormalToken | negative: burn beyond a limited bit-30 grant (kind 0): GrantExhausted(1) | expected 0x72c373670000000000000000000000000000000000000000000000000000000000000001 got 0x72c373670000000000000000000000000000000000000000000000000000000000000001
+ok  | NormalToken | negative: burn by a non-holder with a balance (kind 0): MissingRole(30, id) | expected 0x8aed6512000000000000000000000000000000000000000000000000000000000000001e0000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf got 0x8aed6512000000000000000000000000000000000000000000000000000000000000001e0000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf
+ok  | NormalToken | negative: the seat's burn after disableFeature(30) (kind 0): FeatureNotSet(2) | expected 0xac3b5a800000000000000000000000000000000000000000000000000000000000000002 got 0xac3b5a800000000000000000000000000000000000000000000000000000000000000002
+ok  | NormalToken | negative: the seat's mtxBurn after disableFeature(30) (kind 0): FeatureNotSet(2) | expected 0xac3b5a800000000000000000000000000000000000000000000000000000000000000002 got 0xac3b5a800000000000000000000000000000000000000000000000000000000000000002
+ok  | NormalRegulatedToken | negative: burn beyond a limited bit-30 grant (kind 8): GrantExhausted(1) | expected 0x72c373670000000000000000000000000000000000000000000000000000000000000001 got 0x72c373670000000000000000000000000000000000000000000000000000000000000001
+ok  | NormalRegulatedToken | negative: burn by a non-holder with a balance (kind 8): MissingRole(30, id) | expected 0x8aed6512000000000000000000000000000000000000000000000000000000000000001e0000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf got 0x8aed6512000000000000000000000000000000000000000000000000000000000000001e0000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf
+ok  | NormalRegulatedToken | negative: the seat's burn after disableFeature(30) (kind 8): FeatureNotSet(2) | expected 0xac3b5a800000000000000000000000000000000000000000000000000000000000000002 got 0xac3b5a800000000000000000000000000000000000000000000000000000000000000002
+ok  | NormalRegulatedToken | negative: the seat's mtxBurn after disableFeature(30) (kind 8): FeatureNotSet(2) | expected 0xac3b5a800000000000000000000000000000000000000000000000000000000000000002 got 0xac3b5a800000000000000000000000000000000000000000000000000000000000000002
+ok  | NormalToken | negative: mtxTransfer signed by another key | expected 0x0bdf5a6b got 0x0bdf5a6b
+ok  | NormalToken | negative: transferFrom by an EOA (CTR-TOK-01) | expected 0x39045af8 got 0x39045af8
+ok  | NormalRegulatedToken | negative: mint by a non-minter (kind 8, MINTABLE set) | expected 0x8aed6512 got 0x8aed6512
+ok  | NormalToken | negative: wrap(uint256) on a NORMAL token: empty revert | expected 0x got 0x
+ok  | WebAuthnP256Verifier | negative: WebAuthnP256Verifier.verifyPop(PoP) webauthn-p256, message flipped | expected  got False
+ok  | WebAuthnP256Verifier | negative: WebAuthnP256Verifier.verify(signature) webauthn-p256, message flipped | expected  got False
+ok  | P256Verifier | negative: P256Verifier.verifyPop(PoP) p256, message flipped | expected  got False
+ok  | P256Verifier | negative: P256Verifier.verify(signature) p256, message flipped | expected  got False
+ok  | Bip340Verifier | negative: Bip340Verifier.verifyPop(PoP) bip340, message flipped | expected  got False
+ok  | Bip340Verifier | negative: Bip340Verifier.verify(signature) bip340, message flipped | expected  got False
+ok  | SchnorrBn254Verifier | negative: SchnorrBn254Verifier.verifyPop(PoP) schnorr-bn254, message flipped | expected  got False
+ok  | SchnorrBn254Verifier | negative: SchnorrBn254Verifier.verify(signature) schnorr-bn254, message flipped | expected  got False
+ok  | SchnorrBls12381Verifier | negative: SchnorrBls12381Verifier.verifyPop(PoP) schnorr-bls12381, message flipped | expected  got False
+ok  | SchnorrBls12381Verifier | negative: SchnorrBls12381Verifier.verify(signature) schnorr-bls12381, message flipped | expected  got False
+ok  | BlsMinSigBls12381Verifier | negative: BlsMinSigBls12381Verifier.verifyPop(PoP) bls12381-minsig, message flipped | expected  got False
+ok  | BlsMinSigBls12381Verifier | negative: BlsMinSigBls12381Verifier.verify(signature) bls12381-minsig, message flipped | expected  got False
+ok  | BlsMinSigBn254Verifier | negative: BlsMinSigBn254Verifier.verifyPop(PoP) bls-bn254-minsig, message flipped | expected  got False
+ok  | BlsMinSigBn254Verifier | negative: BlsMinSigBn254Verifier.verify(signature) bls-bn254-minsig, message flipped | expected  got False
+ok  | Ed25519Verifier | negative: Ed25519Verifier.verifyPop(PoP) ed25519, message flipped | expected  got False
+ok  | Ed25519Verifier | negative: Ed25519Verifier.verify(signature) ed25519, message flipped | expected  got False
+ok  | Secp256k1Verifier | negative: Secp256k1Verifier.verifyPop(PoP) secp256k1, message flipped | expected  got False
+ok  | Secp256k1Verifier | negative: Secp256k1Verifier.verify(signature) secp256k1, message flipped | expected  got False
+ok  | ZetherSchnorrBls12381Verifier | negative: ZetherSchnorrBls12381Verifier.verifyPop(PoP) zether-bls12381, message flipped | expected  got False
+ok  | ZetherSchnorrBls12381Verifier | negative: ZetherSchnorrBls12381Verifier.verify(signature) zether-bls12381, message flipped | expected  got False
+ok  | MldsaVerifier | negative: MldsaVerifier.verifyCached(PoP) mldsa44, message flipped | expected  got False
+ok  | MldsaVerifier | negative: MldsaVerifier.verifyCached(signature) mldsa44, message flipped | expected  got False
+ok  | MldsaVerifier | negative: MldsaVerifier.verifyCached(PoP) mldsa65, message flipped | expected  got False
+ok  | MldsaVerifier | negative: MldsaVerifier.verifyCached(signature) mldsa65, message flipped | expected  got False
+ok  | FndsaVerifier | negative: FndsaVerifier.verifyPop(PoP) fndsa512, message flipped | expected  got False
+ok  | FndsaVerifier | negative: FndsaVerifier.verify(signature) fndsa512, message flipped | expected  got False
+ok  | SlhdsaVerifier | negative: SlhdsaVerifier.verifyPop(PoP) slhdsa128s, message flipped | expected  got False
+ok  | SlhdsaVerifier | negative: SlhdsaVerifier.verify(signature) slhdsa128s, message flipped | expected  got False
+ok  | MldsaVerifier | negative: MldsaVerifier.verifyCached(PoP) mldsa87, message flipped | expected  got False
+ok  | MldsaVerifier | negative: MldsaVerifier.verifyCached(signature) mldsa87, message flipped | expected  got False
+ok  | FndsaVerifier | negative: FndsaVerifier.verifyPop(PoP) fndsa1024, message flipped | expected  got False
+ok  | FndsaVerifier | negative: FndsaVerifier.verify(signature) fndsa1024, message flipped | expected  got False
+ok  | NormalZetherToken | negative: burn by a non-holder with a balance (Zether, BURNER): MissingRole(30, id) | expected 0x8aed6512000000000000000000000000000000000000000000000000000000000000001e0000000000000000000000007190fa0db9c87f86ad96bda9954232c628dadbde got 0x8aed6512000000000000000000000000000000000000000000000000000000000000001e0000000000000000000000007190fa0db9c87f86ad96bda9954232c628dadbde
+ok  | NormalZetherRegulatedToken | negative: burn by a non-holder with a balance (Zether, BURNER): MissingRole(30, id) | expected 0x8aed6512000000000000000000000000000000000000000000000000000000000000001e0000000000000000000000007190fa0db9c87f86ad96bda9954232c628dadbde got 0x8aed6512000000000000000000000000000000000000000000000000000000000000001e0000000000000000000000007190fa0db9c87f86ad96bda9954232c628dadbde
+ok  | OpenFactory | negative: wraplimits p1 kind 1: a pure-wrap token with bit 25: WrapControlNeedsHybrid | expected 0x014dd0950000000000000000000000000000000000000000000000000000000000000019 got 0x014dd0950000000000000000000000000000000000000000000000000000000000000019
+ok  | OpenFactory | negative: wraplimits p1 kind 1: a pure-wrap token with bit 26: WrapControlNeedsHybrid | expected 0x014dd095000000000000000000000000000000000000000000000000000000000000001a got 0x014dd095000000000000000000000000000000000000000000000000000000000000001a
+ok  | OpenFactory | negative: wraplimits p1 kind 1: a pure-wrap token with bit 27: WrapControlNeedsHybrid | expected 0x014dd095000000000000000000000000000000000000000000000000000000000000001b got 0x014dd095000000000000000000000000000000000000000000000000000000000000001b
+ok  | OpenFactory | negative: wraplimits p1 kind 5: a pure-wrap token with bit 25: WrapControlNeedsHybrid | expected 0x014dd0950000000000000000000000000000000000000000000000000000000000000019 got 0x014dd0950000000000000000000000000000000000000000000000000000000000000019
+ok  | OpenFactory | negative: wraplimits p1 kind 5: a pure-wrap token with bit 26: WrapControlNeedsHybrid | expected 0x014dd095000000000000000000000000000000000000000000000000000000000000001a got 0x014dd095000000000000000000000000000000000000000000000000000000000000001a
+ok  | OpenFactory | negative: wraplimits p1 kind 5: a pure-wrap token with bit 27: WrapControlNeedsHybrid | expected 0x014dd095000000000000000000000000000000000000000000000000000000000000001b got 0x014dd095000000000000000000000000000000000000000000000000000000000000001b
+ok  | OpenFactory | negative: wraplimits p1 kind 13: a pure-wrap token with bit 25: WrapControlNeedsHybrid | expected 0x014dd0950000000000000000000000000000000000000000000000000000000000000019 got 0x014dd0950000000000000000000000000000000000000000000000000000000000000019
+ok  | OpenFactory | negative: wraplimits p1 kind 13: a pure-wrap token with bit 26: WrapControlNeedsHybrid | expected 0x014dd095000000000000000000000000000000000000000000000000000000000000001a got 0x014dd095000000000000000000000000000000000000000000000000000000000000001a
+ok  | OpenFactory | negative: wraplimits p1 kind 13: a pure-wrap token with bit 27: WrapControlNeedsHybrid | expected 0x014dd095000000000000000000000000000000000000000000000000000000000000001b got 0x014dd095000000000000000000000000000000000000000000000000000000000000001b
+ok  | WrappedToken | negative: wraplimits p1 H1: a wrap over the short per-user cap: WrapLimitExceeded | expected 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000000000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000000000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedToken | negative: wraplimits p1 H1: a wrap over the short token-wide cap: WrapCapExceeded | expected 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedPqzToken | negative: wraplimits p1 H5: a wrap over the short per-user cap: WrapLimitExceeded | expected 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000000000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000000000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedPqzToken | negative: wraplimits p1 H5: a wrap over the short token-wide cap: WrapCapExceeded | expected 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p1 H13: a wrap over the short per-user cap: WrapLimitExceeded | expected 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000000000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000000000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p1 H13: a wrap over the short token-wide cap: WrapCapExceeded | expected 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | GovernanceRouter | negative: wraplimits p1 H1: the unwrap tightening confirmed before the notice: GrantNotReady | expected 0x8e434eb4 got 0x8e434eb4
+ok  | GovernanceRouter | negative: wraplimits p1 H5: the unwrap tightening confirmed before the notice: GrantNotReady | expected 0x8e434eb4 got 0x8e434eb4
+ok  | GovernanceRouter | negative: wraplimits p1 H13: the unwrap tightening confirmed before the notice: GrantNotReady | expected 0x8e434eb4 got 0x8e434eb4
+ok  | WrappedToken | negative: wraplimits p2 H1: a wrap over the long per-user cap (the short has room): WrapLimitExceeded | expected 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000010000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000010000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedToken | negative: wraplimits p2 H1: an unwrap over the short per-user cap: WrapLimitExceeded | expected 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000020000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000020000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedToken | negative: wraplimits p2 H1: an unwrap over the short token-wide cap: WrapCapExceeded | expected 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000186a0000000000000000000000000000000000000000000000000000000000000c350 got 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000186a0000000000000000000000000000000000000000000000000000000000000c350
+ok  | WrappedToken | negative: wraplimits p2 H1: an unwrap of units received by transfer (the net rule): UnwrapAboveNetWrapped | expected 0x12b4f58a00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000a5a5000000000000000000000000000000000000000000000000000000000000c3500000000000000000000000000000000000000000000000000000000000000000 got 0x12b4f58a00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000a5a5000000000000000000000000000000000000000000000000000000000000c3500000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedToken | negative: wraplimits p2 H1: the redeemer past its budget (15 of 18 Q spent): GrantExhausted | expected 0x72c373670000000000000000000000000000000000000000000000000000000000000002 got 0x72c373670000000000000000000000000000000000000000000000000000000000000002
+ok  | WrappedToken | negative: wraplimits p2 H1: disableFeature(25) with the limits on: WrapControlActive | expected 0xf69140ab0000000000000000000000000000000000000000000000000000000000000019 got 0xf69140ab0000000000000000000000000000000000000000000000000000000000000019
+ok  | WrappedToken | negative: wraplimits p2 H1: disableFeature(27) with a holder: WrapControlActive | expected 0xf69140ab000000000000000000000000000000000000000000000000000000000000001b got 0xf69140ab000000000000000000000000000000000000000000000000000000000000001b
+ok  | WrappedPqzToken | negative: wraplimits p2 H5: a wrap over the long per-user cap (the short has room): WrapLimitExceeded | expected 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000010000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000010000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedPqzToken | negative: wraplimits p2 H5: an unwrap over the short per-user cap: WrapLimitExceeded | expected 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000020000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000020000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedPqzToken | negative: wraplimits p2 H5: an unwrap over the short token-wide cap: WrapCapExceeded | expected 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000186a0000000000000000000000000000000000000000000000000000000000000c350 got 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000186a0000000000000000000000000000000000000000000000000000000000000c350
+ok  | WrappedPqzToken | negative: wraplimits p2 H5: an unwrap of units received by transfer (the net rule): UnwrapAboveNetWrapped | expected 0x12b4f58a00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000a5a5000000000000000000000000000000000000000000000000000000000000c3500000000000000000000000000000000000000000000000000000000000000000 got 0x12b4f58a00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000a5a5000000000000000000000000000000000000000000000000000000000000c3500000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedPqzToken | negative: wraplimits p2 H5: the redeemer past its budget (15 of 18 Q spent): GrantExhausted | expected 0x72c373670000000000000000000000000000000000000000000000000000000000000002 got 0x72c373670000000000000000000000000000000000000000000000000000000000000002
+ok  | WrappedPqzToken | negative: wraplimits p2 H5: disableFeature(25) with the limits on: WrapControlActive | expected 0xf69140ab0000000000000000000000000000000000000000000000000000000000000019 got 0xf69140ab0000000000000000000000000000000000000000000000000000000000000019
+ok  | WrappedPqzToken | negative: wraplimits p2 H5: disableFeature(27) with a holder: WrapControlActive | expected 0xf69140ab000000000000000000000000000000000000000000000000000000000000001b got 0xf69140ab000000000000000000000000000000000000000000000000000000000000001b
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p2 H13: a wrap over the long per-user cap (the short has room): WrapLimitExceeded | expected 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000010000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000010000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p2 H13: an unwrap over the short per-user cap: WrapLimitExceeded | expected 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000020000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000 got 0x2ef7dc5500000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b900000000000000000000000000000000000000000000000000000000000000020000000000000000000000002b5ad5c4795c026514f8317c7a215e218dccd6cf00000000000000000000000000000000000000000000000000000000000027100000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p2 H13: an unwrap over the short token-wide cap: WrapCapExceeded | expected 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000186a0000000000000000000000000000000000000000000000000000000000000c350 got 0x04465bfb00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000186a0000000000000000000000000000000000000000000000000000000000000c350
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p2 H13: an unwrap of units received by transfer (the net rule): UnwrapAboveNetWrapped | expected 0x12b4f58a00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000a5a5000000000000000000000000000000000000000000000000000000000000c3500000000000000000000000000000000000000000000000000000000000000000 got 0x12b4f58a00000000000000000000000083c67efcc63e1ec07f564ac15bc724aff39189b9000000000000000000000000000000000000000000000000000000000000a5a5000000000000000000000000000000000000000000000000000000000000c3500000000000000000000000000000000000000000000000000000000000000000
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p2 H13: the redeemer past its budget (15 of 18 Q spent): GrantExhausted | expected 0x72c373670000000000000000000000000000000000000000000000000000000000000002 got 0x72c373670000000000000000000000000000000000000000000000000000000000000002
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p2 H13: disableFeature(25) with the limits on: WrapControlActive | expected 0xf69140ab0000000000000000000000000000000000000000000000000000000000000019 got 0xf69140ab0000000000000000000000000000000000000000000000000000000000000019
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p2 H13: disableFeature(27) with a holder: WrapControlActive | expected 0xf69140ab000000000000000000000000000000000000000000000000000000000000001b got 0xf69140ab000000000000000000000000000000000000000000000000000000000000001b
+ok  | WrappedToken | negative: wraplimits p3 H1: a wrap by an id not on the wrapper list: WrapperNotListed | expected 0x8238ebc00000000000000000000000006813eb9362372eef6200f3b1dbc3f819671cba69 got 0x8238ebc00000000000000000000000006813eb9362372eef6200f3b1dbc3f819671cba69
+ok  | WrappedToken | negative: wraplimits p3 H1: disableFeature(26) with a list on: WrapControlActive | expected 0xf69140ab000000000000000000000000000000000000000000000000000000000000001a got 0xf69140ab000000000000000000000000000000000000000000000000000000000000001a
+ok  | WrappedPqzToken | negative: wraplimits p3 H5: a wrap by an id not on the wrapper list: WrapperNotListed | expected 0x8238ebc00000000000000000000000006813eb9362372eef6200f3b1dbc3f819671cba69 got 0x8238ebc00000000000000000000000006813eb9362372eef6200f3b1dbc3f819671cba69
+ok  | WrappedPqzToken | negative: wraplimits p3 H5: disableFeature(26) with a list on: WrapControlActive | expected 0xf69140ab000000000000000000000000000000000000000000000000000000000000001a got 0xf69140ab000000000000000000000000000000000000000000000000000000000000001a
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p3 H13: a wrap by an id not on the wrapper list: WrapperNotListed | expected 0x8238ebc00000000000000000000000006813eb9362372eef6200f3b1dbc3f819671cba69 got 0x8238ebc00000000000000000000000006813eb9362372eef6200f3b1dbc3f819671cba69
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p3 H13: disableFeature(26) with a list on: WrapControlActive | expected 0xf69140ab000000000000000000000000000000000000000000000000000000000000001a got 0xf69140ab000000000000000000000000000000000000000000000000000000000000001a
+ok  | GovernanceRouter | negative: wraplimits p3 H1: the wrap relaxation confirmed before the notice: GrantNotReady | expected 0x8e434eb4 got 0x8e434eb4
+ok  | GovernanceRouter | negative: wraplimits p3 H5: the wrap relaxation confirmed before the notice: GrantNotReady | expected 0x8e434eb4 got 0x8e434eb4
+ok  | GovernanceRouter | negative: wraplimits p3 H13: the wrap relaxation confirmed before the notice: GrantNotReady | expected 0x8e434eb4 got 0x8e434eb4
+ok  | WrappedToken | negative: wraplimits p4 H1: an unwrap by an id not on the unwrapper list: UnwrapperNotListed | expected 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5 got 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5
+ok  | WrappedPqzToken | negative: wraplimits p4 H5: an unwrap by an id not on the unwrapper list: UnwrapperNotListed | expected 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5 got 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p4 H13: an unwrap by an id not on the unwrapper list: UnwrapperNotListed | expected 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5 got 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5
+
+## scaas-testnet: transactions 2707, status 1: 2707; the heaviest ten
+56,577,145 | 0xcaed32a7b2966453aa46bba96331a6140a817de160c2d9d55f9b8432fdc9a028 | WrappedPqzToken | pqW mtxConfidentialTransfer (op 7) alice→M = 8 (bob 30, seven decoys), auditor off, commit-reveal (two groups)
+54,640,720 | 0xafe5ecb615d9892d7781a52a5841fc5641b3ce7cbdc0244354c0afede6037026 | OpenFactory | factory: this group's OpenFactory: 
+54,621,499 | 0x2195642401ca818444877934c7a07ee78b762e1c2fc9a880b2efd3cb9c3519c9 | OpenFactory | OpenFactory
+54,621,499 | 0xd4e888a0288a04d28895bbd5e4a18a1ccdd0cf8e1b2ab6211cd278e1f5ffa257 |  | deploy OpenFactory
+54,621,499 | 0xd0e0bed5e5f881c05b5ae01cb2131387631d0905b06f8faa376afca24698aa82 |  | deploy OpenFactory
+54,621,499 | 0x844b41bd6f6dd1892edf37a006315d5e0f40fded6c19a06eb9943ce9892f6b60 |  | OpenFactory#notice
+54,621,499 | 0x9058693ce7ebcd550b5c7cc3d65ebe7710cc6729a617469cc9c79c7f9b871ce2 | OpenFactory | OpenFactory
+52,839,690 | 0x97c1b41636fc363e1dcb21c7fd0201048c6e574abaa9f46d497cf51cd1664cd4 | OpenFactory | deployDexImplementation(uint64,uint16,bytes,bytes,bytes32)
+52,839,690 | 0xd3e7f50d1370844af893a5e0f612bb87a10aadc121d37748df7e2b4a5c923d07 | OpenFactory | deployDexImplementation(uint64,uint16,bytes,bytes,bytes32)
+52,471,404 | 0x0410a7323c386d5ee77af96780ffdccd892381778a45c3df0adc2318d7915a66 |  | library UARegistryCoreLib
