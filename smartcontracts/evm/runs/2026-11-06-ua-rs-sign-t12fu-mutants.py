@@ -43,8 +43,8 @@ LINK_PY = "WalletSeal.test_link_seal_round_trip"
 IMPORT_PY = "WalletCustody.test_imported_key_after_unlock"
 M = [
     # 1. the link seal
-    ("link_seal raises the backup generation", [(MAN, "        let pt = self.payload(sender, false)?;\n        let r = Recipient::ephemeral",
-        "        let pt = self.payload(sender, true)?;\n        let r = Recipient::ephemeral")], link("link_seal_equals_clientkeys_link_row")),
+    ("link_seal raises the backup generation", [(MAN, "        let pt = self.payload(sender, false)?;\n        super::store::copied();\n        let r = Recipient::ephemeral",  # t21 L82
+        "        let pt = self.payload(sender, true)?;\n        super::store::copied();\n        let r = Recipient::ephemeral")], link("link_seal_equals_clientkeys_link_row")),
     ("link_seal under the backup purpose", [(MAN, "        seal_container_with(&r, PURPOSE_LINK, &ContainerSigner::Key(sender), created, pt.as_bytes(), Some(short_code), encaps)",
         "        let _ = PURPOSE_LINK;\n        seal_container_with(&r, PURPOSE_BACKUP, &ContainerSigner::Key(sender), created, pt.as_bytes(), None, encaps)")],
      link("link_seal_then_from_link_installs")),

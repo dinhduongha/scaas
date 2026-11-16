@@ -21,7 +21,7 @@ K = UA + "src/wallet/kem.rs"
 SUITE = [os.path.abspath("scripts/capped"), "cargo", "test", "-j2", "--locked", "--features", "vectors", "--test", "wallet_vault"]
 LOGN = "                let log_n = LOG_N.iter().find(|l| 1u64 << **l == p.n).filter(|_| p.kdf == \"scrypt\" && p.r == 8 && p.p == 1);"
 KEK = "                (pin_kek(pin, &p.salt, *log_n.ok_or(Error::VaultParams)?)?, &p.sealed, \"pin\")"
-SEAL_E = "        let entropy = self.store.with_arena(|a| Ok(Zeroizing::new(a.entropy()?.to_vec())))?;\n        Vault::seal(\"seed\", &entropy,"
+SEAL_E = "        let entropy = self.store.with_arena(|a| Ok(Zeroizing::new(a.entropy()?.to_vec())))?;\n        super::store::copied();\n        Vault::seal(\"seed\", &entropy,"  # t21 L82
 ROLL = "            if p.generation < m.backup_generation && rollback.is_none() {\n                return Err(Error::BackupRollback);\n            }\n"
 EQ = "            if p.generation == m.backup_generation {\n                return Ok(None);\n            }\n"
 M = [
@@ -30,7 +30,7 @@ M = [
     ("stored scrypt parameters ignored (N of a new envelope)", [(V, KEK, KEK.replace("*log_n.ok_or(Error::VaultParams)?", "{ log_n.ok_or(Error::VaultParams)?; LOG_N_NEW }"))], SUITE),
     ("bounds check removed (any N, r, p)", [(V, LOGN, "                let log_n = Some(&(p.n.trailing_zeros() as u8));")], SUITE),
     ("NFKC dropped", [(V, "    let pw = super::sized(|| pin.nfkc());", "    let pw = super::sized(|| pin.chars());")], SUITE),
-    ("64-byte seed stored for the entropy", [(V, SEAL_E, "        let entropy = self.store.seed().map(|s| Zeroizing::new(s.to_vec()))?;\n        Vault::seal(\"seed\", &entropy[..],")], SUITE),
+    ("64-byte seed stored for the entropy", [(V, SEAL_E, "        let entropy = self.store.seed().map(|s| Zeroizing::new(s.to_vec()))?;\n        super::store::copied();\n        Vault::seal(\"seed\", &entropy[..],")], SUITE),
     ("entropy padded to 32 bytes (vault)", [(V, SEAL_E, SEAL_E.replace("a.entropy()?.to_vec()", "{ let mut e = a.entropy()?.to_vec(); e.resize(32, 0); e }"))], SUITE),
     ("entropy padded to 32 bytes (backup payload)", [(F, "            let entropy = Zeroizing::new(a.entropy()?.to_vec());",
         "            let entropy = Zeroizing::new({ let mut e = a.entropy()?.to_vec(); e.resize(32, 0); e });")], SUITE),

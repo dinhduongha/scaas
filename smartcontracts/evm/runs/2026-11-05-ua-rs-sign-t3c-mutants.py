@@ -54,8 +54,8 @@ M = [
     ("masked swap swaps nothing", CT, [("            u64::conditional_swap(x, y, c);\n", "            let _ = (x, y, c);\n")]),
     ("rho the same every call", CT, [(BLIND, "let kp = blind(k.as_ref(), P::ScalarField::MODULUS.as_ref(), &[1, 0]);")]),
     ("MuSig2 session keeps its nonce (read, not spent)", P, [
-        ("let k = self.nonce.take().ok_or(Error::Argument)?.take()?;\n        let sec = Zeroizing::new",
-         "let k = self.nonce.as_ref().ok_or(Error::Argument)?.with(|b| Zeroizing::new(b.to_vec()))?;\n        let sec = Zeroizing::new")]),
+        ("let nonce = self.nonce.take().ok_or(Error::Argument)?;\n        let (pks, msg)", "let nonce = self.nonce.as_ref().ok_or(Error::Argument)?;\n        let (pks, msg)"),
+        ("        nonce.take_with(|k| {\n            let sec", "        nonce.with(|k| {\n            let sec")]),  # t21 L82: spent under a read lease
     ("FROST session keeps its nonces", P, [("self.nonce.take().ok_or(Error::Argument)?.take_with(|k| {\n            let (hiding, binding)",
        "self.nonce.as_ref().ok_or(Error::Argument)?.with(|k| {\n            let (hiding, binding)")]),  # t21 O1: the nonces in the arena
     ("MuSig2 session without its own key accepted", P, [("        if !pks.contains(&self.key_data) {\n            return Err(Error::Argument);\n        }\n", "")]),
