@@ -389,6 +389,33 @@ def scan(chain, genesis, head):
 
 # ---------------------------------------------------------------- discovery
 
+def set_books(books, ds):
+    """Deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET `all` (verify.sh's default)
+    reads every set of the chain's book (`sets.<label>`) and each set's releases book (`releases_json`) beside the books;
+    a label reads that set only (its entries, its releases book); an unknown label DEPLOY_SET_UNKNOWN, a label the book
+    lacks DEPLOY_SET_MISSING. A book without sets is read as it is (DEPLOY_SET `all` only)."""
+    if ds != "all":
+        deploybook.set_label(ds)
+        if not any(b.get("sets") for b in books):
+            raise deploybook.BookError(f"DEPLOY_SET_MISSING: the chain's book has no deploy sets (DEPLOY_SET={ds})")
+    out, rels = [], []
+    for b in books:
+        sets = b.get("sets") or {}
+        if ds != "all":
+            if not sets:
+                continue  # a releases book of the default set: the chosen set names its own
+            sets = {ds: deploybook.set_book(b, ds)}
+        else:
+            out.append({k: v for k, v in b.items() if k != "sets"})
+        for v in sets.values():
+            out.append(v)
+            rj = v.get("releases_json")
+            if rj and rj not in rels and os.path.exists(os.path.join(EVM, rj)):
+                rels.append(rj)
+                out.append(deploybook.load(rj))
+    return out
+
+
 def discover(chain, books, net, head, st):
     listed, inits, hint, first = set(), {}, {}, {}  # book / broadcast addresses, init codes, names, first block
 
@@ -584,6 +611,7 @@ def main():
         rel = os.environ.get("RELEASES_JSON") or deploybook.find(
             chain, genesis, "-t66b-releases.json" if NET == "scaas-testnet" else "-releases.json")
         books = [deploybook.load(p) for p in (deploybook.find(chain, genesis), rel) if os.path.exists(os.path.join(EVM, p))]
+        books = set_books(books, os.environ.get("DEPLOY_SET") or "all")
     except deploybook.BookError as e:
         say(f"FAIL {e}")
         sys.exit(1)

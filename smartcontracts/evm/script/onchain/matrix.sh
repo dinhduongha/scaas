@@ -18,6 +18,8 @@
 #                             plain names when it is the only named target), or else indices 0-3 of
 #                             SCAAS_TESTNET_MNEMONIC_FILE; deploy.sh first if deployments/<key>.json is missing and
 #                             MATRIX_DEPLOY=1
+# DEPLOY_SET: the deploy set of a book with sets (owner 2026-11-16: one chain, two deploy sets), default the book's default
+# set mldsa-off; DEPLOY_SET_UNKNOWN / DEPLOY_SET_MISSING stop the target.
 # Books by the chain's key (NET-EVM-13, script/deploybook.py: chain-uids.json by (chain id, genesis hash); a chain not in
 # it needs DEPLOY_NAME), DEPLOY_JSON = deployments/<key>.json, RELEASES_JSON = deployments/<key>-releases.json; a book
 # still named by chain id stops the target (BOOK_OLD_NAME: rename it).
@@ -224,6 +226,23 @@ rs=-releases.json
 [ "$tgt" != scaas-testnet ] || rs=-t66b-releases.json
 DEPLOY_JSON=$(python3 -I script/deploybook.py path "$CHAIN" "$G" 2>&1) || fail "$DEPLOY_JSON"
 RELEASES_JSON=$(python3 -I script/deploybook.py path "$CHAIN" "$G" "$rs" 2>&1) || fail "$RELEASES_JSON"
+# deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): a book with sets is read as the set DEPLOY_SET
+# names, default its default set (mldsa-off, the forge matrix's): another set's entries and releases book from the book
+# (deploybook.py set-book); an unknown label, or a label the book lacks, stops the target by name
+MSET=
+if [ -f "$DEPLOY_JSON" ] && python3 -I -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1])).get("sets") else 1)' "$DEPLOY_JSON"; then
+  dset=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["default_set"])' "$DEPLOY_JSON")
+  MSET=${DEPLOY_SET:-$dset}
+  if [ "$MSET" != "$dset" ]; then
+    python3 -I script/deploybook.py set-book "$DEPLOY_JSON" "$MSET" "$T/book-$MSET.json" 2>> "$LOG" || fail "$(tail -1 "$LOG")"
+    RELEASES_JSON=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1])).get("releases_json") or "")' "$T/book-$MSET.json")
+    DEPLOY_JSON=$T/book-$MSET.json
+  fi
+  export DEPLOY_SET=$MSET
+elif [ -n "${DEPLOY_SET:-}" ]; then
+  python3 -I script/deploybook.py set-check "$DEPLOY_SET" >> "$LOG" 2>&1 || fail "$(tail -1 "$LOG")"
+  fail "DEPLOY_SET_MISSING: the book ${DEPLOY_JSON} has no deploy sets (DEPLOY_SET=$DEPLOY_SET)"
+fi
 # a remote target: compile under scripts/capped first; then every broadcast step under a memory scope without a slot
 # (MATRIX_REMOTE_MEM, default 1G, no swap), forge refusing any recompile there (run.sh, zether.sh: ONCHAIN_REMOTE)
 SCOPE=
@@ -234,7 +253,7 @@ fi
 for k in "$PRIVATE_KEY" "$ONCHAIN_K1" "$ONCHAIN_K2" "$ONCHAIN_K3"; do ADDRS="$ADDRS $(cast wallet address --private-key "$k")"; done
 ADDRS=$(printf '%s\n' $ADDRS | sort -u | tr '\n' ' ')  # the deployer may be a signer (the SCaaS testnet: key 1)
 for k in 1 2 3; do PQ_ADDRS="$PQ_ADDRS $(cast wallet address --private-key "$(printf '0x%064x' "$k")")"; done
-say "" "start (chain $CHAIN, PQZ $PQZ${PQ_RPC:+ on chain $(cast chain-id --rpc-url "$PQ_RPC" 2> /dev/null || echo '?')})"
+say "" "start (chain $CHAIN, PQZ $PQZ${PQ_RPC:+ on chain $(cast chain-id --rpc-url "$PQ_RPC" 2> /dev/null || echo '?')}${MSET:+, deploy set $MSET})"
 say "" "deployer and signers:$ADDRS"
 export ONCHAIN_RPC=$RPC DEPLOY_JSON RELEASES_JSON
 if [ "${MATRIX_DEPLOY:-0}" = 1 ] && { [ "$tgt" = local ] || [ ! -f "$DEPLOY_JSON" ]; }; then
@@ -322,7 +341,7 @@ if [ -n "$SCOPE" ]; then
 fi
 python3 -I script/onchain/basebook.py "$tgt" >> "$LOG"
 rc=0
-PQZK_WHY="local only: forge's EVM has no PQZ precompile, so this chain's PqzKeyVerifier (0x0142) cannot be simulated; the precompile path runs in group pq (e2e.py); moves to e2e.py after 3zh-core group 2 (TODO 3zh)"
+PQZK_WHY="local only: forge's EVM has no PQZ precompile, so this chain's PqzKeyVerifier (0x0142) cannot be simulated; the precompile path runs in group pq (e2e.py); the port to real-transaction scripts runs later against the deploy set mldsa-on (owner 2026-11-16: one chain, two deploy sets)"
 STAGE=groups
 for g in $GROUPS; do
   r=0 res=ok SECS=0 why=

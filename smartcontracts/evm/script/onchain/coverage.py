@@ -221,6 +221,10 @@ def _records(out, n):
 
 
 def table(a):
+    if a.set:  # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): the set these runs targeted
+        sys.path.insert(0, os.path.join(EVM, "script"))
+        import deploybook
+        print(f"# deploy set: {deploybook.set_label(a.set)}")
     # fail closed: a net with no book would recount its records unlabelled and write empty runs over the tally
     missing = [n for n in a.net if not glob.glob(os.path.join(EVM, f"deployments/onchain-{n}-*.json"))]
     if missing:
@@ -359,8 +363,10 @@ def main():
     p.add_argument("rpc")
     p = sp.add_parser("table")
     p.add_argument("--net", action="append", default=[])
+    p.add_argument("--set", default=os.environ.get("DEPLOY_SET", ""), help="the deploy set (DEPLOY_SET; refused unknown)")
     p = sp.add_parser("note")
     p.add_argument("--net", action="append", default=[])
+    p.add_argument("--set", default=os.environ.get("DEPLOY_SET", ""), help="the deploy set (DEPLOY_SET; refused unknown)")
     p.add_argument("--reasons", default=os.path.join(HERE, "notrun.json"))
     p.add_argument("--txs", action="store_true", help="also list every transaction")
     a = ap.parse_args()

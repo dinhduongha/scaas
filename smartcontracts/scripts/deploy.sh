@@ -52,7 +52,12 @@
 #                            ONCHAIN_TIP, default 1 gwei; max fee ONCHAIN_MAXFEE, default 2 x base fee + tip) and the fee
 #                            gate MAX_FEE_GWEI (default 0.1 on a mainnet, the chain key's -mainnet; none on a testnet unless
 #                            set): a max fee above it stops by name before the batch (FEE_OVER_MAX); a re-run skips the
-#                            releases already there.
+#                            releases already there. DEPLOY_SET? (owner 2026-11-16, "ok, option 2, one chain, two deploy
+#                            sets"): this deploy's set label, mldsa-off (MLDSA_PRECOMPILE=off) or mldsa-on (on), its own
+#                            DEPLOY_SALT and RELEASES_JSON; an unknown label or one that is not the deploy's mode refused
+#                            by name before anything is sent (DEPLOY_SET_UNKNOWN, DEPLOY_SET_MISMATCH); the book then holds
+#                            every set of the chain under sets.<label>, its top level the default set mldsa-off
+#                            (deploybook.py set-merge); unset: one deploy, one book, as before.
 #                            Progress (owner 2026-11-15, runs never silent): short [deploy] lines on stdout: simulate
 #                            start / ok <N> txs, est gas; after each batch one line per transaction from its receipts (send
 #                            <i>/<N> <phase> <contract> gas <used> <address> tx <hash>; the phase from the plan: libraries,
@@ -114,7 +119,13 @@ case "$FAMILY" in
            export FOUNDRY_GAS_LIMIT="${FOUNDRY_GAS_LIMIT:-68719476736}"
            C="$(cast chain-id --rpc-url "$NET")"; S="$(cast wallet address --private-key "$PRIVATE_KEY")"
            # NET-EVM-13: the book by the chain's key (DEPLOY_NAME for a chain not in chain-uids.json), a named fail first
-           K="$(python3 -I script/deploybook.py key "$C" "$(cast block 0 --field hash --rpc-url "$NET")")"
+           G0="$(cast block 0 --field hash --rpc-url "$NET")"; K="$(python3 -I script/deploybook.py key "$C" "$G0")"
+           # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET names this deploy's set
+           # (mldsa-off with MLDSA_PRECOMPILE=off, mldsa-on with on), refused by name before anything is sent; the book then
+           # keeps every set of this chain (deploybook.py set-merge)
+           DS="${DEPLOY_SET:-}"
+           [ -z "$DS" ] || python3 -I script/deploybook.py set-check "$DS" "${MLDSA_PRECOMPILE:-}" > /dev/null \
+             || { echo "[deploy] FAIL DEPLOY_SET $DS refused, nothing sent"; exit 1; }
            # forge writes the JSON in the simulation, before the broadcast: keep the previous one until it succeeds
            J="deployments/$K.json"; [ -f "$J" ] && cp "$J" "$J.prev"
            # NET-EVM-11: Deploy.s.sol simulated on the RPC's fork, nothing sent (the JSON, the release list, the plan in
@@ -122,7 +133,7 @@ case "$FAMILY" in
            P="broadcast/Deploy.s.sol/$C/dry-run/run-latest.json" B="broadcast/DeploySend.s.sol/$C/run-latest.json"
            Q="broadcast/Deploy.s.sol/$C/dry-run/send-plan.json" # DeploySend.plan's arrays, written from $P
            rm -f "$P" "$Q" "$B" # never a stale plan, never a previous run's receipts
-           DL="${DEPLOY_LOG:-runs/$(date -u +%F)-deploy-$K.log}"; mkdir -p "$(dirname "$DL")"; : > "$DL"
+           DL="${DEPLOY_LOG:-runs/$(date -u +%F)-deploy-$K${DS:+-$DS}.log}"; mkdir -p "$(dirname "$DL")"; : > "$DL"
            say() { echo "[deploy] $*"; }
            fail() { say "FAIL $1 rc $2 (forge's output: $DL)"; [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; }
            # follow <pid> [batch label]: wait for forge, a heartbeat every 30 s; for a batch, the sender's nonce count and a
@@ -179,7 +190,7 @@ json.dump({"from": [x["from"] for x in t], "to": [x.get("to") or "0x" + "00" * 2
            # sent at once); after each batch one line per transaction from its receipts, every status 1 checked before the
            # next batch, a named stop at the first failure
            N="$(python3 -I -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["to"]))' "$Q")" BS="${DEPLOY_BATCH:-16}"
-           NB=$(((N + BS - 1) / BS)) AL="broadcast/DeploySend.s.sol/$C/run-batches.json"
+           NB=$(((N + BS - 1) / BS)) AL="broadcast/DeploySend.s.sol/$C/run-batches${DS:+-$DS}.json"
            rm -f "$AL"
            for ((k = 1; k <= NB; k++)); do
              lo=$(((k - 1) * BS)) hi=$((k * BS < N ? k * BS : N))
@@ -197,6 +208,12 @@ json.dump({"from": [x["from"] for x in t], "to": [x.get("to") or "0x" + "00" * 2
                || { [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; say "forge's output: $DL"; exit 1; }
              say "batch $k/$NB ok: txs $((lo + 1))-$hi/$N, nonce +$(($(cast nonce --rpc-url "$NET" "$S") - N0)), $((SECONDS - tb))s"
            done
+           if [ -n "$DS" ]; then  # this set beside the chain's other sets (a previous book of another chain is not kept)
+             PB=-; [ -f "$J.prev" ] && [ "$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1])).get("chainUid", ""))' "$J.prev")" = "$(echo "$G0" | tr A-F a-f)" ] && PB="$J.prev"
+             python3 -I script/deploybook.py set-merge "$J" "$PB" "$DS" "${RELEASES_JSON:-}" \
+               || { say "FAIL set-merge: $J stays this deploy's book alone, the previous one in $J.prev"; exit 1; }
+             say "set $DS in $J (sets: $(python3 -I -c 'import json, sys; b = json.load(open(sys.argv[1])); print(", ".join(b["sets"]), "default", b["default_set"])' "$J"))"
+           fi
            rm -f "$J.prev"
            say "ok $(python3 -I -c 'import json, sys; print(len(json.load(open(sys.argv[1]))["receipts"]))' "$AL" 2> /dev/null || echo 0) txs $((SECONDS - T0))s book $J"
            # NET-EVM-12: a remote deploy is source-verified on the chain's explorer, VERIFY_TARGET naming its config

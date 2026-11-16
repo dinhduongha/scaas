@@ -27,6 +27,9 @@ if [ "${VERIFY:-}" = none ]; then
   echo "[$tgt/verify] not verified: VERIFY=none (${VERIFY_REASON:?VERIFY=none needs VERIFY_REASON})"
   exit 0
 fi
+# deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): DEPLOY_SET all (the default: every set of the
+# chain's book) or one label (vcheck.py reads that set's entries); an unknown label stops by name (DEPLOY_SET_UNKNOWN)
+[ "${DEPLOY_SET:-all}" = all ] || python3 -I script/deploybook.py set-check "$DEPLOY_SET" > /dev/null || exit 1
 python3 -I script/onchain/vcheck.py "$tgt" --config  # VERIFY_NOT_CONFIGURED: exit 1
 export FOUNDRY_PROFILE=${FOUNDRY_PROFILE:-scaas-testnet}
 CAPPED=$(git rev-parse --show-toplevel)/scripts/capped

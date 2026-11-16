@@ -9,7 +9,16 @@ reader checks network against the key's suffix (a key without one, e.g. ethereum
 BOOK_NETWORK_MISMATCH. An old book by chain id with none by the key: BOOK_OLD_NAME (rename it). A book is written in
 the form of json.dumps(…, indent=2), the header first. script/DeployBook.sol is the same rule for the forge scripts.
   python3 -I script/deploybook.py key <chainId> <chainUid>               the key
-  python3 -I script/deploybook.py path <chainId> <chainUid> [<suffix>]   deployments/<key><suffix> (default .json)"""
+  python3 -I script/deploybook.py path <chainId> <chainUid> [<suffix>]   deployments/<key><suffix> (default .json)
+Deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"; NET-EVM-11 Change): one chain may carry more
+than one deploy of the same build, each with its own DEPLOY_SALT, named by a set label (SETS: `mldsa-off`, the deploy with
+MLDSA_PRECOMPILE=off, the default set; `mldsa-on`, MLDSA_PRECOMPILE=on). The chain's one book then holds every set under
+`sets.<label>` (the set's own entries, its `releases_json`), and its top level stays the default set's entries
+(`default_set`), so a reader without a set reads the default set. An unknown label: DEPLOY_SET_UNKNOWN; a label the book
+lacks: DEPLOY_SET_MISSING; a label that is not the deploy's MLDSA_PRECOMPILE: DEPLOY_SET_MISMATCH.
+  python3 -I script/deploybook.py set-check <label> [<MLDSA_PRECOMPILE>]   the label known (and the deploy's mode its own)
+  python3 -I script/deploybook.py set-merge <book> <previous book | -> <label> <releases json>   the new set into the book
+  python3 -I script/deploybook.py set-book <book> <label> <out>   header + that set's entries in <out> (a reader's book)"""
 import json
 import os
 import re
@@ -88,11 +97,71 @@ def find(chain_id, chain_uid, suffix=".json", env=os.environ):
     return new
 
 
+SETS = {"mldsa-off": "off", "mldsa-on": "on"}  # label -> the deploy's MLDSA_PRECOMPILE
+DEFAULT_SET = "mldsa-off"
+
+
+def set_label(label, mode=None):
+    """A known set label; with `mode` (the deploy's MLDSA_PRECOMPILE, default on), the label's own mode."""
+    if label not in SETS:
+        raise BookError(f"DEPLOY_SET_UNKNOWN: {label!r} is not a deploy set ({', '.join(SETS)})")
+    if mode is not None and (mode or "on") != SETS[label]:
+        raise BookError(f"DEPLOY_SET_MISMATCH: set {label} is MLDSA_PRECOMPILE={SETS[label]}, the deploy's is {mode or 'on'}")
+    return label
+
+
+def set_merge(new, prev, label, releases):
+    """The book after a deploy of set `label`: `new` (forge's book of this deploy, flat) under `sets.<label>`, beside the
+    sets of `prev` (the chain's book before it, or None); the top level the default set's entries (else this set's)."""
+    set_label(label)
+    check(new, "the new book")
+    sets = {}
+    if prev is not None:
+        check(prev, "the previous book")
+        if (prev["key"], prev["chainUid"]) != (new["key"], new["chainUid"]):
+            raise BookError(f"BOOK_SET_CHAIN: the previous book is {prev['key']} {prev['chainUid'][:10]}…, the new "
+                            f"{new['key']} {new['chainUid'][:10]}…")
+        sets = dict(prev.get("sets") or {})
+    body = {k: v for k, v in new.items() if k not in HEADER and k not in ("sets", "default_set")}
+    sets[label] = dict(body, set=label, releases_json=releases)
+    top = DEFAULT_SET if DEFAULT_SET in sets else label
+    out = {k: new[k] for k in HEADER}
+    out["default_set"] = top
+    out.update({k: v for k, v in sets[top].items() if k not in ("set", "releases_json")})
+    out["sets"] = sets
+    return out
+
+
+def set_book(book, label):
+    """A reader's book of set `label`: the header and that set's entries."""
+    set_label(label)
+    check(book, "the book")
+    if label not in (book.get("sets") or {}):
+        raise BookError(f"DEPLOY_SET_MISSING: the book has no set {label} (sets: {', '.join(book.get('sets') or {}) or 'none'})")
+    out = {k: book[k] for k in HEADER}
+    out.update(book["sets"][label])
+    return out
+
+
 if __name__ == "__main__":
     a = sys.argv[1:]
     if a[:1] == ["key"] and len(a) == 3:
         print(resolve(a[1], a[2])[0])
     elif a[:1] == ["path"] and len(a) in (3, 4):
         print(find(a[1], a[2], *a[3:]))
+    elif a[:1] == ["set-check"] and len(a) in (2, 3):
+        print(set_label(a[1], *a[2:]))
+    elif a[:1] == ["set-merge"] and len(a) == 5:
+        new = json.load(open(a[1]))
+        prev = None if a[2] == "-" else json.load(open(a[2]))
+        out = set_merge(new, prev, a[3], a[4])
+        with open(a[1], "w") as f:
+            json.dump(out, f, indent=2)
+            f.write("\n")
+    elif a[:1] == ["set-book"] and len(a) == 4:
+        out = set_book(json.load(open(a[1])), a[2])
+        with open(a[3], "w") as f:
+            json.dump(out, f, indent=2)
+            f.write("\n")
     else:
         sys.exit(__doc__)

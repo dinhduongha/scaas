@@ -138,4 +138,20 @@ assert v.classify(CODE, so("exact_match"))[0] == "verified" and v.classify(CODE,
 assert v.classify(CODE, v.normalize("sourcify", {}, CODE))[0] == "unverified"
 assert v.classify(CLONE, v.normalize("sourcify", {}, CLONE), True)[0] == "linked clone"  # the code is the link
 assert v.classify(CLONE, v.normalize("etherscan", {"result": [{}]}, CLONE), False)[0] == "unverified"
+# deploy sets (owner 2026-11-16): every set's entries with DEPLOY_SET all, one set's with a label, named refusals
+import deploybook as _db  # noqa: E402
+_h = _db.header("scaas-testnet", "SCaaS testnet", 7622, "0x" + "9a" * 32, "testnet")
+_on, _off = dict(_h, ua_registry="0x" + "0a" * 20), dict(_h, ua_registry="0x" + "0b" * 20)
+_bk = _db.set_merge(_off, _db.set_merge(_on, None, "mldsa-on", ""), "mldsa-off", "")
+_rel = dict(_h, NormalToken={"address": "0x" + "0c" * 20})
+_addrs = lambda bs: {v for b in bs for v in b.values() if isinstance(v, str) and len(v) == 42}
+assert {"0x" + "0a" * 20, "0x" + "0b" * 20} <= _addrs(v.set_books([_bk, _rel], "all"))
+assert "0x" + "0a" * 20 in _addrs(v.set_books([_bk, _rel], "mldsa-on"))
+assert "0x" + "0b" * 20 not in _addrs(v.set_books([_bk, _rel], "mldsa-on"))
+for _ds, _name in (("mldsa-x", "DEPLOY_SET_UNKNOWN"), ("mldsa-on", "DEPLOY_SET_MISSING")):
+    try:
+        v.set_books([_rel] if _name == "DEPLOY_SET_MISSING" else [_bk], _ds)
+        raise AssertionError(_name + " expected")
+    except _db.BookError as e:
+        assert str(e).startswith(_name + ":"), str(e)
 print("test_vcheck: ok")

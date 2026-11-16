@@ -491,7 +491,24 @@ BUILT on branch `ua-mtx-merge`, UNAUDITED).
   `zether.sh`, `basebook.py`, `vcheck.py`, `zether_reg.py`, `pqz/e2e.py`); tests `script/test_deploybook.py`,
   `test/governance/DeployBook.t.sol`, `test/governance/ReleaseList.t.sol`. A local anvil is named by the script that starts
   it, `local-<chain id>-testnet` (`matrix.sh local`, `e2e-zether.sh`, the node e2e). forge's own
-  `broadcast/<Script>/<chainid>/` stays.
+  `broadcast/<Script>/<chainid>/` stays. Change (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"; BUILT on `reset5`,
+  UNAUDITED): **deploy sets.** One chain may carry two deploys of the same build, each with its own `DEPLOY_SALT` and releases
+  book, named by a set label: `mldsa-off` (`MLDSA_PRECOMPILE=off`: every ML-DSA kind on the registry's expanded-key cache) and
+  `mldsa-on` (`MLDSA_PRECOMPILE=on`, the shipped default: `MldsaVerifier` 0x0130 / 0x0131 / 0x0134 on the chain's
+  precompiles). `deploy.sh evm` takes the label as `DEPLOY_SET` and refuses an unknown one (`DEPLOY_SET_UNKNOWN`) or one that
+  is not the deploy's mode (`DEPLOY_SET_MISMATCH`) before anything is sent; the chain's one book then holds every set under
+  `sets.<label>` (the set's entries, `set`, `releases_json`) and keeps the default set `mldsa-off` at its top level
+  (`default_set`), so every reader without a set reads `mldsa-off`. `matrix.sh` targets `DEPLOY_SET` (default the book's
+  default set; another set's book extracted by `deploybook.py set-book`; `DEPLOY_SET_MISSING` for a label the book lacks),
+  `verify.sh` and `vcheck.py` read every set (`DEPLOY_SET=all`, the default) or the one named, `coverage.py table` / `note`
+  print the set. Why two sets: forge's local EVM has no ML-DSA or PQZ precompile, so a forge script that registers or signs
+  with an ML-DSA UA is refused in its simulation against `mldsa-on` (the verifier's precompile call returns nothing there);
+  the forge matrix runs against `mldsa-off`, and `mldsa-on` is checked by real transactions only (the live checks,
+  completeness, eth_calls; the port of `pqzkeys` / `pqzwallet` and of the ML-DSA rows of `tokens` / `pqchat` to real-transaction
+  scripts runs against it later on the same chain). This is one rule on every chain, not a split: on / off is a deploy-time
+  setting chosen by the chain's precompile availability ([NET-EVM-11](#NET-EVM-11)'s `pq_verifiers.py` step); a chain
+  with the precompiles ships `mldsa-on`, and the second set exists for the test matrix of a test chain. Tests
+  `script/test_deploybook.py`, `script/onchain/test_vcheck.py`, `runs/2026-11-16-scaas-testnet-reset5/prepa-anvil.sh sets`.
 - **The relayer's gas share.** A relayed op crosses more call frames (a PQZ op: clone, implementation, P, the self-call,
   clone, implementation, Q, its library, the precompile: 7 frames against 5), and each frame keeps 1/64 of the gas it passes
   on, about 10.4 % of the gas sent against 7.6 % before. A relayer that sets its limit from `eth_estimateGas` changes nothing;

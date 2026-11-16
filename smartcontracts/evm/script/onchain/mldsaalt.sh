@@ -15,6 +15,13 @@ L=$OUTD/mldsaalt-$NET.log
 main=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1])).get("mldsa_precompile", "on"))' "$DEPLOY_JSON")
 alt=on
 [ "$main" = on ] && alt=off
+# deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): on a chain with both sets the on side is the set
+# mldsa-on itself, checked by real transactions (a forge script is refused against it in its simulation: no ML-DSA
+# precompile in forge's EVM); the forge matrix's set mldsa-off runs the off side here
+if [ "${DEPLOY_SET:-}" = mldsa-off ]; then
+  alt=off
+  echo "[$NET/mldsaalt] deploy set mldsa-off: the throwaway registry off; the on side is the deploy set mldsa-on (real transactions)"
+fi
 MLDSAALT_SALT=$(cast keccak "scaas.onchain.mldsaalt.$NET.$(date +%s).$$")
 export MLDSAALT_SALT MLDSA_PRECOMPILE=$alt
 echo "[$NET/mldsaalt] main deploy MLDSA_PRECOMPILE=$main: the throwaway registry $alt"
