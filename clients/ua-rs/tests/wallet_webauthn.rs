@@ -37,7 +37,7 @@ fn sha(parts: &[&[u8]]) -> [u8; 32] {
     h.finalize().into()
 }
 fn word(b: &[u8], o: usize) -> usize {
-    usize::from_be_bytes(b[o + 24..o + 32].try_into().unwrap())
+    usize::try_from(u64::from_be_bytes(b[o + 24..o + 32].try_into().unwrap())).unwrap() // any usize width (wasm32: T21 L04)
 }
 /// `(authData, clientDataJSON, r, s)` of a canonical `abi.encode(bytes, bytes, uint256, uint256)`.
 fn fields(blob: &[u8]) -> (Vec<u8>, Vec<u8>, [u8; 32], [u8; 32]) {
@@ -345,4 +345,56 @@ fn passkey_signs_through_the_uasig_builder() {
     let md = member_digest(&ua, &ua_message(0x0120, &purpose, &digest).unwrap());
     let member_msg = ua_message(0x0100, &purpose_tag("member").unwrap(), &md).unwrap();
     assert!(verify(0x0100, &k.key_data(), &member_msg, &s.members[0].sig, false));
+}
+
+/// `abi.encode(bytes a, bytes c, uint256 r, uint256 s)`.
+fn encode(a: &[u8], c: &[u8], r: &[u8; 32], s: &[u8; 32]) -> Vec<u8> {
+    let w = |n: usize| {
+        let mut x = [0u8; 32];
+        x[24..].copy_from_slice(&(n as u64).to_be_bytes());
+        x
+    };
+    let field = |d: &[u8]| [&w(d.len())[..], d, &vec![0; d.len().div_ceil(32) * 32 - d.len()]].concat();
+    [&w(0x80)[..], &w(0xa0 + a.len().div_ceil(32) * 32), r, s, &field(a), &field(c)].concat()
+}
+
+/// T21 L04: a canonical assertion with bit 32 set in either offset or either length word (bytes 24-27 of the word) is refused:
+/// the verifier reads the full word, as `WebAuthnP256Verifier` (on wasm32 a 32-bit fold dropped those bytes). Positive control:
+/// the canonical blob verifies. Native builds refused these before too; the wasm32 run is the probe in the T21 fix notes.
+#[test]
+fn abi_words_are_read_in_full() {
+    let v = load("sign.json");
+    let r = &v["webauthn"]["accepted"][0];
+    let (kd, ch, blob) = (bytes(&r["keyData"]), b32(&r["expectedChallenge"]), bytes(&r["assertion"]));
+    assert!(verify(0x0100, &kd, &ch, &blob, false), "control");
+    let oc = word(&blob, 32);
+    for (what, at) in [("offset a", 0), ("offset c", 32), ("length a", 0x80), ("length c", oc)] {
+        let mut b = blob.clone();
+        b[at + 27] |= 1; // + 2^32
+        assert!(!verify(0x0100, &kd, &ch, &b, false), "{what}");
+    }
+}
+
+/// T21 L05 (C1-2, `WebAuthnClientData.sol`): sign.json `cross-origin-false-unclosed` / `-comma-unclosed` (the tails of
+/// `SmartKeyAccount.t.sol` `test_C1_2_unterminatedTailRefused`): a member after `,"crossOrigin":false` and no closing brace. The
+/// passkey signature is valid over the row (control), the builder refuses it and the verifier refuses its canonical blob.
+#[test]
+fn unclosed_client_data_refused() {
+    let v = load("sign.json");
+    let mut n = 0;
+    for r in v["webauthn"]["refusals"].as_array().unwrap().iter().filter(|r| r["case"].as_str().unwrap().ends_with("-unclosed")) {
+        let (kd, ch, ad, cd) = (bytes(&r["keyData"]), b32(&r["expectedChallenge"]), bytes(&r["authData"]), bytes(&r["clientDataJSON"]));
+        assert_ne!(cd.last(), Some(&b'}'), "{}", r["case"]);
+        let h = sha(&[&ad, &sha(&[&cd])]);
+        let mut sec1 = [4u8; 65];
+        sec1[1..].copy_from_slice(&kd[..64]);
+        use p256::ecdsa::signature::hazmat::PrehashVerifier;
+        let sig = p256::ecdsa::Signature::from_slice(&[bytes(&r["r"]), bytes(&r["s"])].concat()).unwrap();
+        assert!(p256::ecdsa::VerifyingKey::from_sec1_bytes(&sec1).unwrap().verify_prehash(&h, &sig).is_ok(), "control: {}", r["case"]);
+        assert_eq!(row_assertion(r).err(), Some(Error::WebAuthnAssertion), "{}", r["case"]);
+        let s: [u8; 32] = sig.normalize_s().s().to_bytes().into();
+        assert!(!verify(0x0100, &kd, &ch, &encode(&ad, &cd, &b32(&r["r"]), &s), false), "{}", r["case"]);
+        n += 1;
+    }
+    assert_eq!(n, 2);
 }

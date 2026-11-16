@@ -40,7 +40,8 @@ export function clientDataOk(cd, challenge) {
   const cross = ',"crossOrigin":false';
   const after = end + 1 + cross.length;
   if (after >= n || s.slice(end + 1, after) !== cross) return false;
-  return s[after] === '}' ? after + 1 === n : s[after] === ',';
+  // C1-2 (WebAuthnClientData.sol): after `,"crossOrigin":false,` the object must still close (T21 L05)
+  return s[after] === '}' ? after + 1 === n : s[after] === ',' && s[n - 1] === '}';
 }
 /** `[authenticatorData, clientDataJSON]` only if `blob` is their canonical `abi.encode(authenticatorData, clientDataJSON,
  *  r, s)` (owner 2026-10-30, CTR-UA-33 C; WebAuthnP256Verifier._fields): heads 0x80 and 0xa0 + pad32(len a), each field

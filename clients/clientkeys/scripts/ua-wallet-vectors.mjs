@@ -677,6 +677,9 @@ const waRefusals = [
   ['s-zero', { ...assertionOf(D1), s: hex(new Uint8Array(32)) }],
   ['flipped-signature', { ...assertionOf(D1), r: hex(be(int(fromHex(assertionOf(D1).r)) ^ 1n, 32)) }],
   ['uv-flag-missing', assertionOf(D1, {}, 0x01)],
+  // C1-2 (T21 L05): a member after `,"crossOrigin":false` and no closing brace; the tails of SmartKeyAccount.t.sol test_C1_2
+  ['cross-origin-false-unclosed', assertionOf(D1, { raw: (ch) => cdj(ch, { tail: ',"crossOrigin":false,"x":1' }).subarray(0, -1) })],
+  ['cross-origin-false-comma-unclosed', assertionOf(D1, { raw: (ch) => cdj(ch, { tail: ',"crossOrigin":false,' }).subarray(0, -1) })],
   ['another-key', { ...assertionOf(D1), keyData: hex(concatBytes(p256.getPublicKey(be(waSk + 1n, 32), false).subarray(1), sha256(utf8ToBytes(RP_ID)))) }],
   // a 0xff in the origin: the chains' byte rule passes it (control below), the builder refuses (ua-rs parity, 2026-11-06)
   ['client-data-not-utf8', assertionOf(D1, { raw: (ch) => concatBytes(cdj(ch).subarray(0, -2), Uint8Array.of(0xff), utf8ToBytes('"}')) })],

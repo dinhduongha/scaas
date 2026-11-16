@@ -66,8 +66,12 @@ fn sign_scheme(scheme: Scheme, secret: &[u8], msg: &[u8], aux: Option<&[u8; 32]>
         }
         Scheme::Bip340 => {
             let sk = k256::schnorr::SigningKey::from_slice(secret).map_err(|_| Error::Argument)?;
-            let sig = sk.sign_raw(msg, aux.ok_or(Error::Argument)?).map_err(|_| Error::Argument)?;
-            Ok(sig.to_bytes().to_vec())
+            let sig = sk.sign_raw(msg, aux.ok_or(Error::Argument)?).map_err(|_| Error::Argument)?.to_bytes();
+            // BIP-340 Sign's last step (k256 runs it under `debug_assertions` only): a faulty signature never leaves (T21 L08)
+            if !crate::verify::bip340(&sk.verifying_key().to_bytes(), arr32(msg)?, &sig) {
+                return Err(Error::Argument);
+            }
+            Ok(sig.to_vec())
         }
     }
 }

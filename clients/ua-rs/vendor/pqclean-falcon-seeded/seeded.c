@@ -88,6 +88,7 @@ out:
     wipe(f, sizeof f);
     wipe(g, sizeof g);
     wipe(F, sizeof F);
+    wipe(&rng, sizeof rng); /* the SHAKE state after the seed: it gives the seed back (T21 L06) */
     return ret;
 }
 
@@ -108,6 +109,7 @@ static int do_sign(uint8_t *nonce, uint8_t *sigbuf, size_t sigbuflen, const uint
     size_t u, v;
     int ret = -1;
 
+    memset(&sc, 0, sizeof sc); /* defined for the early `goto out`, which wipes it */
     if (sk[0] != 0x50 + LOGN) {
         return -1;
     }
@@ -164,6 +166,7 @@ out:
     wipe(F, sizeof F);
     wipe(G, sizeof G);
     wipe(&r, sizeof r);
+    wipe(&sc, sizeof sc); /* the sampler's stream state (T21 L06) */
     return ret;
 }
 

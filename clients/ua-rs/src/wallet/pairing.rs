@@ -20,7 +20,7 @@ use super::store::Handle;
 use super::{Error, Result, UaKey, Wallet};
 use crate::keccak;
 use crate::musig2::{self, Bn254, Curve, Secp256k1};
-use crate::verify::{hash_to_g1_bls12381, hash_to_scalar, map_to_g1_bn254};
+use crate::verify::{hash_to_g1_bls12381, hash_to_scalar, hash_to_scalar_wide, map_to_g1_bn254};
 use crate::verify::{BLS12381_DST_POP, BLS12381_DST_SIG, BN254_LABEL_POP, BN254_LABEL_SIG, SCHNORR_TAG};
 use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup, PrimeGroup};
@@ -127,8 +127,12 @@ pub(crate) fn key_data(kind: u16, s: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// The scaas Schnorr nonce `hashToScalar(keccak256("scaas.ua.schnorr.nonce.v1" ‖ be32(sk) ‖ Y ‖ ua_msg ‖ aux))`.
+/// The digest and the 64 bytes before reduction each give `k`: both wiped (T21 L07).
 fn nonce<F: PrimeField>(sk: &[u8], y: &[u8], ua_msg: &[u8; 32], aux: &[u8; 32]) -> F {
-    hash_to_scalar(&keccak(&[NONCE_TAG, sk, y, ua_msg, aux]))
+    let d = Zeroizing::new(keccak(&[NONCE_TAG, sk, y, ua_msg, aux]));
+    let mut w = Zeroizing::new([0u8; 64]);
+    hash_to_scalar_wide(&d, &mut w);
+    F::from_be_bytes_mod_order(&w[..])
 }
 
 /// scaas Schnorr of `ua_msg` by the secret `sk` whose key data is `y`; `fixed` replaces the OS `aux` (feature `vectors`,
