@@ -228,17 +228,18 @@ export function pqzScopedKeyMessages(kind, r) {
 const refuse = (why) => { throw new Error(`Refusing: ${why}.`); };
 const ZERO20 = new Uint8Array(20);
 const eq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
-const ACCEPTED = new WeakMap(); // acceptance object -> { handle, index, content }: only a handle's check makes one
+const ACCEPTED = new WeakMap(); // acceptance object -> { handle, token, index, content }: only a handle's check makes one
 
 /** Owner ruling 2026-11-14 (CLI-SGN-51's Change: "no bare class-2 decrypt", enforced in the clients; spec §6, §14.1, §14.18;
  *  Fable P1-1): the wallet's handle of one PQZ key with the opening, `offchain-shared` (`token` omitted) or `offchain-token` of
  *  a token with the opening, at one key version. It derives and holds that key's PQZ seed and its opening KEM secret; no member
- *  returns either. The PQZ seed reaches a function only through three gated entries, each counted: `withSecretOwn(own, f)`
- *  after the holder's own `ownTag` verifies, `withSecretWindow(entries, f)` when every entry is skip-marked, TRIVIAL or accepted
- *  by this handle with the same bytes, and `withSecretKeygen(f)` (the public key and the `R_REG` proof of registration).
+ *  returns either. The PQZ seed reaches a function only through two gated entries, each counted (T21 O5 (b), owner 2026-11-16
+ *  "ok, as proposed": the entry shape of ua-rs `with_secret_debit`): `withSecretDebit(debit, f)`, the debit's own part and its
+ *  window together (below), and `withSecretKeygen(f)` (the public key and the `R_REG` proof of registration), counted apart.
  *  `check(credit, verify)` runs K3-7 steps 2-4, 8 and the auditor's opening of step 9 here (the blob read, `aad`s built from the
  *  blob's own bytes, open `O_t`, `O_t` and `O_a` recomputed from `seed_leg`), then hands `seed_leg` to the binding's `verify`
- *  for the PQZ arithmetic of steps 5-7 and `v_a` (pqz-ffi `check_recipient`); `{ accepted, value }` or `{ skip }`, one outcome.
+ *  for the PQZ arithmetic of steps 5-7 and `v_a` (pqz-ffi `check_recipient`); `{ accepted, value }` (`accepted = { token, index, entryHash }`, the token named:
+ *  T21 L47) or `{ skip }`, one outcome.
  *  `verify` may be a wallet of `loadPqzWallet` (src/pqzopenWasm.js; TODO 3zf): the handle then hands its opening KEM seed and
  *  the credit read from the blob (`u`, `v` unpacked, `credit.pk` the holder's own PQZ key of this version) to the module's
  *  `check_recipient`, which runs K3-7 steps 3-9 again; `value` = `{ digits, amount }`. The seed goes to no other `verify`.
@@ -294,39 +295,54 @@ export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua
           v: lanes(b.pva), opening: b.oA } : null })
       : verify(seedLeg, { blob: b, aadT, aadA, auditor: credit.auditor ?? null }) ?? null;
     if (value === null) return skip();
-    const accepted = Object.freeze({ index: intOf(credit.index, 'the entry index'), entryHash: hexOf(content) });
-    ACCEPTED.set(accepted, { handle: id, index: accepted.index, content });
+    const accepted = Object.freeze({ token: hexOf(tok), index: intOf(credit.index, 'the entry index'), entryHash: hexOf(content) });
+    ACCEPTED.set(accepted, { handle: id, token: tok, index: accepted.index, content });
     return { accepted, value };
   }
 
   return Object.freeze({
     kind, scope: hexOf(scope), version: v, openKem: kemPk,
     check,
-    /** How many times the PQZ seed reached `withSecretOwn` / `withSecretWindow`; `withSecretKeygen` apart. */
+    /** How many times the PQZ seed reached `withSecretDebit`; `withSecretKeygen` apart. */
     get secretLoads() { return loads; },
     get keygens() { return keygens; },
     /** `keccak256(seed32)`: the KAT's view of the derivation, never the seed. */
     seedCommitment: () => hexOf(keccak_256(live())),
-    withSecretOwn({ token: t, sendCounter, pu, pvf, ownTag }, f) {
-      if (!tokenOk(t)) refuse(`the ciphertext is not this ${kind} handle's token`);
-      const s = live();
-      const { key, ownTag: want } = pqzOwnTag({ seed32: s, chainUid: cu, token: hexOf(asBytes(t, 20, 'token')), fromUA: uaB, sendCounter, pu, pvf });
-      key.fill(0);
-      // constant time (T21 L42), as ua-rs: the tag gates the seed for a ciphertext a node supplies
-      if (!equalBytes(fromHex(want), asBytes(ownTag, 32, 'ownTag'))) refuse('the ownTag does not verify under this key');
-      loads += 1;
-      return f(s);
-    },
-    withSecretWindow(entries, f) {
-      for (const e of entries) {
+    /** T21 O5 (b): the PQZ seed for one debit (CTR-PQZ-33: `T = own (u_f, v_f) + Σ pending[p_last, p) + Trivial(shieldIn)`),
+     *  `{ token, lastDebit, own: { pu, pvf, ownTag } | undefined, window: [{ token, index, slot, code, accepted }] }`, every
+     *  field named and required but `own`. Refused, in this order (ua-rs `with_secret_debit`): another token than the handle's;
+     *  `lastDebit > 0` without `own` (OwnRequired: no empty-window bypass); `own` at `lastDebit = 0`; no `own` and no window
+     *  entry (EmptyDebit); a window entry of another token, or neither skip-marked, TRIVIAL nor accepted by this handle for that
+     *  token, index and bytes; the own part's `ownTag` at counter `lastDebit − 1` (the last own debit's), compared in constant
+     *  time. Then `f(seed32)`, counted. */
+    withSecretDebit({ token: t, lastDebit, own, window }, f) {
+      const tok = asBytes(t, 20, 'token');
+      if (!tokenOk(tok)) refuse(`the debit is not this ${kind} handle's token`);
+      const last = intOf(lastDebit, 'lastDebit');
+      if (last < 0n || last >= 1n << 64n) refuse('lastDebit: a uint64');
+      if (!Array.isArray(window)) refuse('the window: an array of entries (empty for none)');
+      if (last > 0n && !own) refuse('OwnRequired: lastDebit > 0 and no own part');
+      if (last === 0n && own) refuse('an own part on an account that never debited (lastDebit 0)');
+      if (last === 0n && window.length === 0) refuse('EmptyDebit: no own part and no window entry');
+      if (own && last - 1n >= 1n << 32n) refuse('lastDebit − 1 at or above 2^32');
+      for (const e of window) {
+        if (!eq(asBytes(e.token, 20, 'the window entry\'s token'), tok)) refuse('a window entry of another token than the debit\'s');
         const slot = slotOf(e.slot);
         if (pqzSlotMarked(slot) || pqzSlotTrivial(slot)) continue;
         const a = e.accepted && ACCEPTED.get(e.accepted);
-        if (!a || !eq(a.handle, id) || a.index !== intOf(e.index, 'the entry index') || !e.code || !eq(a.content, pqzEntryHash(e.index, slot, e.code))) {
-          refuse('a window entry is neither accepted by this handle, TRIVIAL nor skip-marked');
+        if (!a || !eq(a.handle, id) || !eq(a.token, tok) || a.index !== intOf(e.index, 'the entry index') || !e.code
+          || !eq(a.content, pqzEntryHash(e.index, slot, e.code))) {
+          refuse('a window entry is neither accepted by this handle for its token, TRIVIAL nor skip-marked');
         }
       }
       const s = live();
+      if (own) {
+        const { key, ownTag: want } = pqzOwnTag({ seed32: s, chainUid: cu, token: hexOf(tok), fromUA: uaB, sendCounter: last - 1n,
+          pu: own.pu, pvf: own.pvf });
+        key.fill(0);
+        // constant time (T21 L42), as ua-rs: the tag gates the seed for a ciphertext a node supplies
+        if (!equalBytes(fromHex(want), asBytes(own.ownTag, 32, 'ownTag'))) refuse('the ownTag does not verify under this key');
+      }
       loads += 1;
       return f(s);
     },

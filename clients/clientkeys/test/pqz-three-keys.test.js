@@ -13,6 +13,7 @@ import { pqzTokenKeySeedWithoutOpening, openKemSeed, openKemKey, legSeedOfKeyHas
   pqzScopedKeyMessages, pqzScopedKeyDigest, pqzScopedKeyRecordDigest, SKIP } from '../src/pqzopen.js';
 import { seedFromWords } from '../src/seed.js';
 import { concatBytes } from '../src/bytes.js';
+import { pqzOwnTag } from '../src/evm.js';
 
 const ROOT = new URL('../../../', import.meta.url);
 const K = JSON.parse(readFileSync(new URL('smartcontracts/vectors/pqz/opening.json', ROOT), 'utf8'));
@@ -118,11 +119,16 @@ test('client rows: handle commitments, ownTag over u_f, h(i) / entriesHash, scop
   for (const r of k.handles) assert.equal(pqzKeyHandle(seed, { ...at, token: r.token, version: r.version }).seedCommitment(), r.seedCommitment);
   for (const r of k.ownTagOpening) {
     const h = pqzKeyHandle(seed, { ...at, token: r.keyClass === 'offchain-token' ? r.token : undefined, version: r.version });
-    const own = (puf) => ({ token: r.token, sendCounter: r.sendCounter, pu: puf, pvf: r.pvf, ownTag: r.ownTag });
-    assert.equal(h.withSecretOwn(own(r.puf), (s) => s.length), 32);
+    // T21 O5 (b): the own part through the debit entry, its counter the account's (`lastDebit − 1`)
+    const deb = (puf, lastDebit = r.sendCounter + 1) => ({ token: r.token, lastDebit, own: { pu: puf, pvf: r.pvf, ownTag: r.ownTag }, window: [] });
+    assert.equal(h.withSecretDebit(deb(r.puf), (s) => s.length), 32, 'control: the own part alone');
+    assert.throws(() => h.withSecretDebit(deb(r.puf, r.sendCounter + 2), () => 0), /ownTag/, 'the counter off by one');
+    const other = pqzKeyHandle(seed, { ...at, token: r.keyClass === 'offchain-token' ? r.token : undefined, version: 1 });
+    assert.throws(() => other.withSecretDebit(deb(r.puf), () => 0), /ownTag/, 'a foreign key\'s tag');
     const p = fromHex(r.puf); p[7] ^= 1;
-    assert.throws(() => h.withSecretOwn(own(p), () => 0), /ownTag/, 'u_f alone differs');
+    assert.throws(() => h.withSecretDebit(deb(p), () => 0), /ownTag/, 'u_f alone differs');
     assert.equal(h.secretLoads, 1);
+    assert.equal(other.secretLoads, 0);
   }
   const hs = k.entries.rows.map((r) => {
     const x = pqzEntryHash(r.index, r.slot, r.code ? k.entries.code : undefined);
@@ -169,7 +175,7 @@ test('pqzKeyHandle: the planted probe never loads the secret; a mark lets the wi
     const h = pqzKeyHandle(SEED, { ...at0, token });
     const other = pqzKeyHandle(SEED, { ...at0, token, version: 1 });
     assert.deepEqual(Object.keys(h).sort(), ['check', 'keygens', 'kind', 'openKem', 'scope', 'secretLoads', 'seedCommitment', 'version',
-      'wipe', 'withSecretKeygen', 'withSecretOwn', 'withSecretWindow'].sort());
+      'wipe', 'withSecretDebit', 'withSecretKeygen'].sort());
     assert.ok(Object.isFrozen(h) && !('decrypt' in h) && !('open' in h), 'no decrypt, no bare open');
     const seedLeg = filled(32, 0x5e);
     const tok = TOK[0];
@@ -182,6 +188,7 @@ test('pqzKeyHandle: the planted probe never loads the secret; a mark lets the wi
     assert.equal(ok.value, 42n);
     assert.equal(hex(seen.s), hex(seedLeg));
     assert.equal(ok.accepted.entryHash, hex(pqzEntryHash(0, SLOT, good)));
+    assert.equal(ok.accepted.token, hex(fromHex(tok)), 'the acceptance names the token (T21 L47)');
     // the planted probe, three variants: one outcome (skip); the binding never runs on the first, refuses the other two
     const v1 = h.check(credit(1, blob({ h, token: tok, seedLeg, junk: true, fill: 7 })), () => { throw new Error('ran on junk'); });
     const v2 = h.check(credit(1, blob({ h, token: tok, seedLeg, wrongSeed: filled(32, 0x77), fill: 7 })), (s) => (s[0] === 0x77 ? null : 1n));
@@ -190,18 +197,48 @@ test('pqzKeyHandle: the planted probe never loads the secret; a mark lets the wi
     const v4 = h.check(credit(1, blob({ h, token: tok, seedLeg, role: 1, fill: 7 })), () => 1n);
     for (const v of [v1, v2, v3, v4]) assert.ok(v.skip && v.skip.index === 1n);
     const bad = blob({ h, token: tok, seedLeg, fill: 7 });
-    const w = (slot1) => [{ index: 0, slot: SLOT, code: good, accepted: ok.accepted }, { index: 1, slot: slot1, code: bad },
-      { index: 2, slot: TRIV }];
-    assert.throws(() => h.withSecretWindow(w(SLOT), () => 0), /neither accepted/, 'an unaccepted unmarked credit');
+    const w = (slot1) => [{ token: tok, index: 0, slot: SLOT, code: good, accepted: ok.accepted },
+      { token: tok, index: 1, slot: slot1, code: bad }, { token: tok, index: 2, slot: TRIV }];
+    const deb = (lastDebit, window, own) => ({ token: tok, lastDebit, own, window });
+    // the holder's own part of a debit at counter 4 (lastDebit 5), its tag by the handle's own key
+    const own = { pu: filled(L.pkp, 0x0f), pvf: filled(L.vp, 0x0e) };
+    own.ownTag = h.withSecretKeygen((s) => pqzOwnTag({ seed32: s, chainUid: CU[0], token: tok, fromUA: UA, sendCounter: 4, ...own }).ownTag);
+    assert.throws(() => h.withSecretDebit(deb(5, w(SLOT), own), () => 0), /neither accepted/, 'an unaccepted unmarked credit');
     assert.equal(h.secretLoads, 0, 'the secret was never loaded');
     assert.throws(() => pqzMarks([v1.skip]), /not a reason to mark/, 'a single unfinalized read');
     assert.deepEqual(pqzMarks([v1, v2, v3].map((v) => ({ ...v.skip, reads: { block: 90, finalized: true, strictMajority: true } }))), [1n]);
-    assert.equal(h.withSecretWindow(w(MARKED), (s) => s.length), 32, 'marked: the window proves');
-    assert.equal(h.secretLoads, 1);
-    assert.throws(() => other.withSecretWindow([w(SLOT)[0]], () => 0), /neither accepted/, 'another handle\'s acceptance');
-    assert.throws(() => h.withSecretWindow([{ ...w(SLOT)[0], index: 3 }], () => 0), /neither accepted/, 'another index');
-    assert.throws(() => h.withSecretWindow([{ ...w(SLOT)[0], code: bad }], () => 0), /neither accepted/, 'other bytes');
-    assert.throws(() => h.withSecretWindow([{ ...w(SLOT)[0], accepted: { ...ok.accepted } }], () => 0), /neither accepted/, 'a copied token');
+    assert.equal(h.withSecretDebit(deb(5, w(MARKED), own), (s) => s.length), 32, 'marked: own part and window');
+    assert.equal(h.withSecretDebit(deb(5, [], own), (s) => s.length), 32, 'control: the own part alone');
+    assert.equal(h.withSecretDebit(deb(0, w(MARKED)), (s) => s.length), 32, 'control: a first debit, the window alone');
+    assert.equal(h.secretLoads, 3);
+    // the own part's gates (T21 L43): no empty-window bypass; every field named
+    assert.throws(() => h.withSecretDebit(deb(5, []), () => 0), /OwnRequired/, 'lastDebit > 0, zero entries');
+    assert.throws(() => h.withSecretDebit(deb(5, w(MARKED)), () => 0), /OwnRequired/, 'lastDebit > 0, no own part');
+    assert.throws(() => h.withSecretDebit(deb(0, w(MARKED), own), () => 0), /never debited/, 'an own part at lastDebit 0');
+    assert.throws(() => h.withSecretDebit(deb(0, []), () => 0), /EmptyDebit/, 'nothing gated');
+    assert.throws(() => h.withSecretDebit(deb(6, [], own), () => 0), /ownTag/, 'the own part at another counter');
+    assert.throws(() => h.withSecretDebit({ token: tok, lastDebit: 0 }, () => 0), /the window: an array/, 'a missing window');
+    assert.throws(() => h.withSecretDebit({ token: tok, window: w(MARKED) }, () => 0), /lastDebit: not an integer/, 'a missing lastDebit');
+    assert.throws(() => h.withSecretDebit({ lastDebit: 0, window: w(MARKED) }, () => 0), /token/, 'a missing token');
+    // the window's tokens (T21 L47)
+    assert.throws(() => h.withSecretDebit(deb(0, [{ ...w(MARKED)[2], token: TOK[1] }]), () => 0), /another token than the debit/, 'a TRIVIAL entry of another token');
+    assert.throws(() => h.withSecretDebit(deb(0, [{ ...w(MARKED)[0], token: TOK[1] }]), () => 0), /another token than the debit/, 'an accepted entry of another token');
+    if (!token) {
+      // a class-2 key serves every token; its acceptance names the token it was checked for
+      const g1 = blob({ h, token: TOK[1], seedLeg });
+      const a1 = h.check(credit(0, g1, { token: TOK[1] }), () => 3n);
+      assert.equal(a1.accepted.token, hex(fromHex(TOK[1])));
+      const e = { token: tok, index: 0, slot: SLOT, code: g1, accepted: a1.accepted };
+      assert.throws(() => h.withSecretDebit(deb(0, [e]), () => 0), /neither accepted/, 'an acceptance of another token');
+      assert.equal(h.withSecretDebit({ token: TOK[1], lastDebit: 0, window: [{ ...e, token: TOK[1] }] }, () => 7), 7, 'control: its own token');
+    } else {
+      assert.throws(() => h.withSecretDebit({ ...deb(0, w(MARKED)), token: TOK[1] }, () => 0), /not this offchain-token handle's/, 'a class-3 debit of another token');
+    }
+    assert.equal(h.secretLoads, token ? 3 : 4, 'no refusal loaded the secret');
+    assert.throws(() => other.withSecretDebit(deb(0, [w(SLOT)[0]]), () => 0), /neither accepted/, 'another handle\'s acceptance');
+    assert.throws(() => h.withSecretDebit(deb(0, [{ ...w(SLOT)[0], index: 3 }]), () => 0), /neither accepted/, 'another index');
+    assert.throws(() => h.withSecretDebit(deb(0, [{ ...w(SLOT)[0], code: bad }]), () => 0), /neither accepted/, 'other bytes');
+    assert.throws(() => h.withSecretDebit(deb(0, [{ ...w(SLOT)[0], accepted: { ...ok.accepted } }]), () => 0), /neither accepted/, 'a copied acceptance');
     // not this handle's, or incomplete: refused before the check
     const never = () => { throw new Error('the check ran'); };
     assert.throws(() => h.check(credit(0, good, { slot: TRIV }), never), /TRIVIAL/);
@@ -210,10 +247,11 @@ test('pqzKeyHandle: the planted probe never loads the secret; a mark lets the wi
     if (token) assert.throws(r, /not this offchain-token handle's/);
     else assert.ok(r().skip, 'class 2 serves every token; the aad binds the token: another token is a skip');
     assert.equal(h.withSecretKeygen((s) => s.length), 32);
-    assert.equal(h.keygens, 1);
+    assert.equal(h.keygens, 2);
     // U4h-4: after wipe the honest credit that was accepted above is refused locally, never a (markable) skip
     h.wipe();
     assert.throws(() => h.withSecretKeygen(() => 0), /wiped/);
+    assert.throws(() => h.withSecretDebit(deb(0, w(MARKED)), () => 0), /wiped/, 'a wiped handle refuses the debit');
     assert.throws(() => h.check(credit(0, good), never), /wiped/, 'a wiped handle refuses the check');
   }
 });
