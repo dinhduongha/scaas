@@ -68,6 +68,10 @@ pub struct UaWalletRust {
 /// An error code ("UAKeyRevoked"); never an input.
 type Res<T> = Result<T, String>;
 const ARG: &str = "UAArgument";
+/// `uaSig`'s key list: a request names at most 16 slots of at most 16 members (`UaSigRequest::from_json`), so 256 positions;
+/// its JSON text (256 ids of 11 characters and their commas) within 4 KiB.
+const IDS_MAX: usize = 256;
+const IDS_JSON_MAX: usize = 4096;
 
 fn code(e: UaErr) -> String {
     let s = e.to_string();
@@ -174,8 +178,11 @@ impl qobject::UaWallet {
     }
     pub fn ua_sig(self: Pin<&mut Self>, request_json: &QString, ids_json: &QString) -> QString {
         self.text(|| {
-            let ids: Vec<i32> = serde_json::from_str(&String::from(ids_json)).map_err(|_| String::from(ARG))?;
-            let keys = ids.into_iter().map(key).collect::<Res<Vec<Key>>>()?;
+            // T21 L78 (CLI-UAL-03): the ids through the bounded reader (4 KiB, one flat array), at most `IDS_MAX`, before any key
+            let ids = wallet(uw::bounded::json(String::from(ids_json).as_bytes(), IDS_JSON_MAX, 1))?;
+            let ids = ids.as_array().filter(|l| l.len() <= IDS_MAX).ok_or_else(|| String::from(ARG))?;
+            let id = |v: &serde_json::Value| v.as_i64().and_then(|i| i32::try_from(i).ok()).ok_or_else(|| String::from(ARG));
+            let keys = ids.iter().map(|v| id(v).and_then(key)).collect::<Res<Vec<Key>>>()?;
             let req = wallet(uw::UaSigRequest::from_json(String::from(request_json).as_bytes()))?;
             let signers: Vec<&dyn uw::Signer> = keys.iter().map(Key::signer).collect();
             Ok(scaas_ua::json::uasig_json(&wallet(req.sign(&signers))?))
