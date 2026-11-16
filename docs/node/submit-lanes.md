@@ -202,9 +202,12 @@ Transitional (BUILT): the journal is the client's job row, written by a `signed`
 `send_raw`; a failed report puts the work in the `retry` queue without sending. The lane's own jobs, which have no client row
 (the [NODE-JOB-29](job-api.md#NODE-JOB-29) cache parts), are journaled in the store already (T21, owner 2026-11-16, O8; BUILT on
 the EVM lane): a job row in namespace `~node`, `queued → leased → signed` with its nonce and hash before `send_raw` (no row, no
-send), then `broadcast` (a replacement's hash), `mined` / `reverted` at its receipt, `dead` when gap-filled. At start the lane plans
-with `max(legacy journal, lane.journal_max)` and reads the lane's `signed` / `broadcast` rows: one below `pending` is tracked as a
-job is, one at or above it is gap-filled and closed `dead`.
+send), then `broadcast` (a replacement's hash), `mined` / `reverted` at the receipt of any of its hashes, `dead` at the gap-fill's receipt (T21 L80: never before: the original
+may still land). At start the lane plans with `max(legacy journal, lane.journal_max)` and reads the lane's `signed` / `broadcast`
+rows: one below `pending` is tracked as a job is; one at or above it is gap-filled and tracked beside the gap-fill, its hash kept,
+so whichever lands settles it (a failed gap-fill send is bumped like any stuck nonce). A part whose `register` expired while it is stuck
+is gap-filled the same way, its row live. A nonce the chain used for a transaction whose hash the lane does not hold closes it
+`consumed`.
 
 <a id="legacy-pull"></a><a id="NODE-LANE-02"></a>**NODE-LANE-02** — **Legacy pull: the `signed` report is idempotent
 and the nonce is held.** A `signed` report repeated with the same `(tx_hash, outer_nonce, signer_address)` (per signer: `(tx_hash,
