@@ -678,7 +678,7 @@ impl Submitter {
             Err(SimError::Revert(reason)) => return self.refused(&w, reason).await,
             Err(SimError::Transport(reason)) => return self.requeue(&w, format!("simulate: {reason}")).await,
         };
-        self.dispatch(w, guard, gas).await
+        self.dispatch(w, guard, gas).await;
     }
 
     /// NODE-JOB-29: the `register` of an ML-DSA key whose simulation reverted `UAKeyNotCached` (the registry reverts it only when
@@ -708,7 +708,7 @@ impl Submitter {
                 return self.requeue(&w, format!("{}: expandedKeyOf unread: {e}; {reason}", guard::UA_KEY_NOT_CACHED)).await;
             }
         };
-        let mut sent = Vec::new();
+        let (mut sent, mut flying) = (Vec::new(), Vec::new());
         for part in (0..parts).filter(|p| stored[*p as usize] == Address::ZERO) {
             let op = guard::cache_part_op(w.to, kind, &pk, part, w.valid_until);
             let p = match work_of_op(None, &op, None) {
@@ -716,7 +716,10 @@ impl Submitter {
                 Err(e) => return self.fail(&w, format!("{}: part {part}: {e:#}", guard::UA_KEY_NOT_CACHED)).await,
             };
             // in flight on this or another lane: its receipt comes, the register's next simulation tells
-            let Some(g) = self.digests.try_acquire(p.call_key()) else { continue };
+            let Some(g) = self.digests.try_acquire(p.call_key()) else {
+                flying.push(part);
+                continue;
+            };
             let gas = match guard::gas(&self.chain, &p, self.cfg.max_gas_per_tx).await {
                 Ok(gas) => gas,
                 // owner O8: anyone may still send the part; NODE-JOB-24's precedent (`PROOF_STORE_OVER_LANE_CAP`)
@@ -731,28 +734,31 @@ impl Submitter {
                     return self.requeue(&w, format!("{}: part {part}: simulate: {r}; {reason}", guard::UA_KEY_NOT_CACHED)).await;
                 }
             };
-            self.dispatch(p, Some(g), gas).await;
-            sent.push(part);
+            // T21 batch G: listed only when sent (a job-less part's give-up is only logged)
+            if self.dispatch(p, Some(g), gas).await {
+                sent.push(part);
+            }
         }
-        self.requeue(&w, format!("{}: {reason}; parts sent now {sent:?} of {parts}; the register waits for every part",
+        self.requeue(&w, format!("{}: {reason}; parts sent now {sent:?} of {parts}, in flight {flying:?}; the register waits for every part",
             guard::UA_KEY_NOT_CACHED)).await
     }
 
-    /// Sign and send `w` at `gas` (sized by [`guard::gas`]); `guard` follows it into `Sent`.
-    async fn dispatch(&mut self, w: Work, guard: Option<InflightGuard>, gas: u64) {
+    /// Sign and send `w` at `gas` (sized by [`guard::gas`]); `guard` follows it into `Sent`. `true` once the transaction is
+    /// journaled and handed to the RPC (tracked from then on); every other exit reported (a job) or only logged (job-less work).
+    async fn dispatch(&mut self, w: Work, guard: Option<InflightGuard>, gas: u64) -> bool {
         let fees = match self.chain.fees().await {
             Ok(f) => f,
-            Err(e) => return self.requeue(&w, format!("fees: {e:#}")).await,
+            Err(e) => { self.requeue(&w, format!("fees: {e:#}")).await; return false; },
         };
         let priced = match self.guard.relay_priced(self.chain.address(), &w) {
             Ok(p) => p,
-            Err(Refusal::Policy(r)) => return self.fail(&w, r).await,
-            Err(Refusal::Transport(r)) => return self.requeue(&w, r).await,
+            Err(Refusal::Policy(r)) => { self.fail(&w, r).await; return false; },
+            Err(Refusal::Transport(r)) => { self.requeue(&w, r).await; return false; },
         };
         let nonce = self.next;
         let (raw, hash) = match self.chain.sign(nonce, w.to, w.data.clone(), gas, fees).await {
             Ok(x) => x,
-            Err(e) => return self.requeue(&w, format!("{e:#}")).await,
+            Err(e) => { self.requeue(&w, format!("{e:#}")).await; return false; },
         };
         // review I1 / I3: a priced relay fee covers the quote at the job's fee ceiling (FEE_HEADROOM x this max fee,
         // which every replacement stays under) plus the L1 data fee of this very transaction; nothing is sent otherwise
@@ -764,8 +770,8 @@ impl Submitter {
             };
             match covered {
                 Ok(()) => {}
-                Err(Refusal::Policy(r)) => return self.fail(&w, r).await,
-                Err(Refusal::Transport(r)) => return self.requeue(&w, r).await,
+                Err(Refusal::Policy(r)) => { self.fail(&w, r).await; return false; },
+                Err(Refusal::Transport(r)) => { self.requeue(&w, r).await; return false; },
             }
         }
         let ceiling = priced.then_some(ceiling);
@@ -774,7 +780,7 @@ impl Submitter {
         if let Some(id) = w.job_id {
             if !self.report(id, "signed", Some(hash), Some(nonce), None).await {
                 self.retry.push_back((w, guard));
-                return;
+                return false;
             }
         }
         self.next += 1;
@@ -788,6 +794,7 @@ impl Submitter {
             Err(e) => warn!(nonce, "send failed, will replace: {e:#}"),
         }
         self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None, ceiling });
+        true
     }
 
     /// A refused simulation, classified by [`guard::revert_verdict`] (the one classifier of every EVM runner, Fable E N-1):
@@ -1267,6 +1274,8 @@ pub(crate) mod tests {
         ek: Option<[bool; 3]>,
         /// `cacheExpandedKey` reverts (the chain refuses the part).
         ek_refuse: bool,
+        /// `eth_feeHistory` fails (a transport error): no fee, nothing signed.
+        fees_down: bool,
     }
     /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
     const PSID: B256 = B256::repeat_byte(0x9d);
@@ -1308,6 +1317,7 @@ pub(crate) mod tests {
                     t
                 })),
                 "eth_getBlockByNumber" if p[0] == "latest" && e.block_err => Err(err(-32000, "upstream timeout", None)),
+                "eth_feeHistory" if e.fees_down => Err(err(-32000, "upstream timeout", None)),
                 "eth_feeHistory" => Ok(json!({"oldestBlock": "0x1", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
@@ -2959,6 +2969,28 @@ pub(crate) mod tests {
         let (r, rpc) = outcomes(ok(), vec![call_job(9, reg, ua8_writes(0).remove(0))], tn).await;
         assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("UA_REGISTER_POP_REFUSED: "), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
+    }
+
+    /// NODE-JOB-29 (T21 batch G): the register's status names only the parts the lane sent: a part whose send gave up (here the fee
+    /// read) is not listed, and one skipped while it is in flight is listed as such.
+    #[tokio::test]
+    async fn mldsa_cache_part_status_names_only_parts_sent() {
+        let reg = Address::repeat_byte(0x5e);
+        let ok = || Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() };
+        let tn = move |c: &mut ChainCfg| { c.ua_registry = Some(reg); c.max_gas_per_tx = 64_000_000; };
+        let (r, rpc) = outcomes(Evm { fees_down: true, ..ok() }, vec![call_job(9, reg, mldsa65_register())], tn).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.contains("parts sent now [] of 2, in flight []"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        // sent, then in flight on the next poll
+        let (url, rpc) = fake_evm(ok()).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), repeat: true, ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), tn).await.unwrap();
+        for want in ["parts sent now [0, 1] of 2, in flight []", "parts sent now [] of 2, in flight [0, 1]"] {
+            s.poll_outbox().await;
+            let r = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert!(r["error"].as_str().unwrap().contains(want), "{want}: {r}");
+        }
+        assert_eq!(rpc.lock().unwrap().sent.len(), 2);
     }
 
     /// NODE-JOB-29 (owner O8, 2026-11-16): a part over this lane's `max_gas_per_tx` or its RPC's gas cap may still land from another
