@@ -1137,22 +1137,29 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
     **without** the opening keeps one, `pqzTokenKeySeedWithoutOpening` / `pqz_token_key_seed_without_opening` (the accepted
     exposure of [CTR-PQZ-37](../contracts/pq-zero-knowledge.md#CTR-PQZ-37)). The KAT reads the handle's
     `seedCommitment = keccak256(seed32)`.
-  - `check(credit)` reads the blob itself (`pqzOpeningBlobOf` / `pqz3k::opening_blob`), refuses a credit of another token
-    (class 3), recipient or key version, and builds both `aad`s from the blob's own bytes; `clientkeys` runs steps 2–4, 8 and the
+  - `check(credit)` reads the blob itself (`pqzOpeningBlobOf` / `pqz3k::opening_blob`), refuses a slot whose offsets are not an op
+    1 credit's (`uOff = 16`, `vOff = 16 + P(u)`, as the contract writes them), a credit of another token (class 3), recipient or
+    key version, and builds both `aad`s from the blob's own bytes; `clientkeys` runs steps 2–4, 8 and the
     auditor's opening of step 9 itself, the binding's check (pqz-ffi `opening::check_recipient`) the PQZ arithmetic of steps
     5–7 and `v_a`; `ua-rs` runs pqz-ffi `opening::check_recipient` itself on the blob's bytes, its own `pk` and opening KEM key
     and the auditor's keys as given (no caller code sees the opening KEM seed). The result is an **acceptance** bound to the
     handle, the token, the index and `h(i)` (slot and blob bytes), or a skip.
-  - The PQZ seed reaches a function only through two gated entries, counted. **`withSecretDebit` / `with_secret_debit`**, one
-    per debit, the own part and the window together (`T = own (u_f, v_f) + Σ pending[p_last, p) + Trivial(shieldIn)`,
-    [CTR-PQZ-33](../contracts/pq-zero-knowledge.md#CTR-PQZ-33)): `{ token, lastDebit, own: { pu, pvf, ownTag } | none,
-    window: [{ token, index, slot, code, accepted }] }`, refused in this order: another token than the handle's; `lastDebit > 0`
-    without the own part (`OwnRequired`: a window of zero entries never skips it); an own part at `lastDebit = 0`; no own part
-    and no window entry (`EmptyDebit`); a window entry of another token than the debit's, or neither skip-marked, TRIVIAL nor
-    accepted by this handle for that token, index and bytes; the own part's `ownTag` at counter `lastDebit − 1` (the last own
-    debit's) not verifying under the handle's key, compared in constant time. **`withSecretKeygen` / `with_secret_keygen`**
-    (the public key and the `R_REG` proof of registration), counted apart. A closure is the binding's prover code: the gates
-    decide which ciphertexts the seed may meet; the binding builds `T` from exactly the parts it passed.
+  - **The debit** (the review of the handle, owner 2026-11-16 "ok, as proposed", decision (a): in `ua-rs` no caller code sees the PQZ seed in a
+    release build). One entry per debit, the own part and the window together (`T = own (u_f, v_f) + Σ pending[p_last, p) +
+    Trivial(shieldIn)`, [CTR-PQZ-33](../contracts/pq-zero-knowledge.md#CTR-PQZ-33)): `{ token, lastDebit, own: { pu, pvf, ownTag }
+    | none, window: [{ token, index, slot, code, accepted }], shieldIn }`, refused in this order: revoked (`KeyRevoked`, first
+    for every entry); another token than the handle's (`NotThisHandle`); `lastDebit > 0` without the own part (`OwnRequired`: a
+    window of zero entries never skips it); an own part at `lastDebit = 0` (`Input`); no own part, no window entry and `shieldIn =
+    0` (`EmptyDebit`; a first debit of `Trivial(shieldIn)` alone passes); the own part's counter `lastDebit − 1` at or above 2^32
+    or its parts not of the set's lengths (`Input`); more than `K_MAX − 2` window entries, an entry of another token, indexes not
+    strictly ascending, or an entry neither skip-marked, TRIVIAL nor accepted by this handle for that token, index and bytes
+    (`Window`); the own part's `ownTag` at counter `lastDebit − 1` not verifying under the handle's key, compared in constant time
+    (`OwnTag`). `ua-rs` `open_debit` then builds `T` from exactly those parts and decrypts it inside the handle (`{ t, balance }`),
+    and `prove_reg(id)` proves the record's own `R_REG` message inside; the seed-taking closures (`with_secret_debit(d, f(seed,
+    T))`, `with_secret_keygen`) are test-only (`vectors`). `clientkeys` `withSecretDebit(debit, f)` and `withSecretKeygen(f)` keep
+    the closure (clientkeys has no PQZ arithmetic; its custody is CLI-SGN-02's). The handle's id binds its class, derivation
+    account and index and its keys (`keccak256(pk)` in `ua-rs`, the seed commitment in `clientkeys`, `keccak256(kemPk)`), so an
+    acceptance of one key never opens another's debit. Nothing inside an entry may lock (or wipe) the same wallet.
 - <a id="pqz-wallet-wasm"></a>**The browser wallet's check** (TODO 3zf, owner 2026-11-15). Status: **BUILT**, **UNAUDITED**. A
   browser wallet holds an opening token through the wallet module: `pqz-core/ffi/wallet-wasm` (pqz-ffi
   `opening::check_recipient` / `check_auditor` in wasm32, one module per parameter set, built by its `build.sh`; no built `.wasm`

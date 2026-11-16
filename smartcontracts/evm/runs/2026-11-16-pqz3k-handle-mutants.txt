@@ -20,3 +20,66 @@ killed   | M17 clientkeys: window entry of another token | clients/clientkeys/sr
 killed   | M18 clientkeys: acceptance's token not compared | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
 killed   | M19 clientkeys: own counter lastDebit | clients/clientkeys/src/pqzopen.js | rc=1 | 2 failed: client rows: handle commitments, ownTag over u_f, h(i) / entriesHash, scoped record messages, the opening blob, pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; ac
 # 19 killed, 0 survived, 0 not loaded (the tree restored byte for byte after each; check: every replacement found once)
+
+# round 2 (2026-11-16, the Fable + Codex review of a8927561e): the whole list re-run (M1-M19 strings brought to the new code, M20-M52 new;
+# suites as above, ua-rs now --no-fail-fast); each new mutant is the code before its fix:
+killed   | M1 debit of another token than a class-3 handle's | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M2 OwnRequired removed (the empty-window bypass back) | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M3 own part at lastDebit 0 taken | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M4 EmptyDebit removed | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M5 window entry of another token than the debit's | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M6 acceptance's token not compared | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M7 acceptance's handle not compared | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M8 ownTag not compared | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 4 failed: handle::debit_gates_the_secret, handle::kat_rows, handle::open_debit_sums_the_gated_parts, three_key_handle_refuses_the_crafted_query
+killed   | M9 own counter lastDebit, not lastDebit - 1 | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 4 failed: handle::debit_gates_the_secret, handle::kat_rows, handle::open_debit_sums_the_gated_parts, three_key_handle_refuses_the_crafted_query
+killed   | M10 lease dropped before the copy's use | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::lock_waits_for_a_leased_check_and_debit
+killed   | M11 check: another token's credit on a class-3 handle | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M12 check: the recipient's key version not compared | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M13 check: a skip of pqz-ffi taken as an acceptance | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 3 failed: handle::debit_gates_the_secret, handle::opening_rejects_through_the_handle, three_key_handle_refuses_the_crafted_query
+killed   | M14 check: the acceptance names no token | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 4 failed: handle::debit_gates_the_secret, handle::lock_revokes_the_handle, handle::lock_waits_for_a_leased_check_and_debit, handle::open_debit_sums_the_gated_parts
+killed   | M15 clientkeys: OwnRequired removed | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M16 clientkeys: EmptyDebit removed | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M17 clientkeys: window entry of another token | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M18 clientkeys: acceptance's token not compared | clients/clientkeys/src/pqzopen.js | rc=1 | 2 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes, the review
+killed   | M19 clientkeys: own counter lastDebit | clients/clientkeys/src/pqzopen.js | rc=1 | 2 failed: client rows: handle commitments, ownTag over u_f, h(i) / entriesHash, scoped record messages, the opening blob, pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; ac
+killed   | M20 F1: check does not bind the slot's offsets | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M21 Codex 1: the id names no key (pk, kemPk) | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+SURVIVED | M22 Codex 1: the id names no derivation path | clients/ua-rs/src/pqz3k/handle.rs | rc=0 | 0 failed: 
+killed   | M23 F2: window indexes not required ascending | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M24 F2: no K_MAX bound on the window | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M25 owner: shield_in ignored by EmptyDebit | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M26 open_debit: Trivial(shieldIn) not added | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 2 failed: handle::debit_gates_the_secret, handle::open_debit_sums_the_gated_parts
+killed   | M27 open_debit: a TRIVIAL entry's amount not added | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 2 failed: handle::debit_gates_the_secret, handle::open_debit_sums_the_gated_parts
+killed   | M28 open_debit: the own part not added | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 2 failed: handle::open_debit_sums_the_gated_parts, three_key_handle_refuses_the_crafted_query
+killed   | M29 P3: check answers KeyRevoked last | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::lock_revokes_the_handle
+killed   | M30 P3: the debit answers KeyRevoked last | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::lock_revokes_the_handle
+killed   | M31 Codex 4: the lease released right before the use | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::lock_waits_for_a_leased_check_and_debit
+killed   | M32 F6: an audited leg without the auditor's keys checked as unaudited | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::opening_rejects_through_the_handle
+killed   | M33 F6: the auditor's key length not refused | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::opening_rejects_through_the_handle
+killed   | M34 F10: an unaccepted unmarked entry passes | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 2 failed: handle::debit_gates_the_secret, three_key_handle_refuses_the_crafted_query
+SURVIVED | M35 F10: the acceptance's index not compared | clients/ua-rs/src/pqz3k/handle.rs | rc=0 | 0 failed: 
+killed   | M36 F10: the acceptance's bytes not compared | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M37 F10: check's recipient not compared | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M38 F10: the 2^32 counter bound | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M39 prove_reg: the message not of the handle's version | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::prove_reg_proves_the_handles_own_record
+killed   | M40 clientkeys F1: the slot's offsets not bound | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M41 clientkeys Codex 1: the id names no key | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+SURVIVED | M42 clientkeys Codex 1: the id names no derivation path | clients/clientkeys/src/pqzopen.js | rc=0 | 0 failed: 
+killed   | M43 clientkeys Codex 2: the acceptance keeps the caller's token buffer | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: the review
+killed   | M44 clientkeys F2: indexes not required ascending | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M45 clientkeys F2: no kMax bound | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M46 clientkeys owner: shieldIn ignored by EmptyDebit | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M47 clientkeys P3: the debit answers KeyRevoked last | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M48 clientkeys F10: the acceptance's handle not compared | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+SURVIVED | M49 clientkeys F10: the acceptance's index not compared | clients/clientkeys/src/pqzopen.js | rc=0 | 0 failed: 
+killed   | M50 clientkeys F10: the acceptance's bytes not compared | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M51 clientkeys F10: the ownTag not compared | clients/clientkeys/src/pqzopen.js | rc=1 | 2 failed: client rows: handle commitments, ownTag over u_f, h(i) / entriesHash, scoped record messages, the opening blob, pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; ac
+killed   | M52 clientkeys F10: a class-3 debit of another token | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+# 48 killed, 4 survived, 0 not loaded. The 4 are equivalent mutants, not gaps:
+#   M22 / M42 (the id without account / index): the id also binds the key (ua-rs keccak256(pk), clientkeys the seed commitment), a
+#     function of (seed, account, index); account 1 / index 1 are refused by the key alone (the tests' rows). Kept in the id as the owner asked.
+#   M35 / M49 (the acceptance's index not compared): the acceptance's h(i) = keccak256(abi.encode(i, slot, codehash)) binds the index;
+#     the row 'another index' is refused by h(i). Kept as a second, explicit compare.
+# Not given a row (equivalent): check's TRIVIAL refusal (a TRIVIAL slot has vOff 0, so the offsets check refuses it as Input too); the
+# own part's length check (total() refuses the same lengths as Input before the seed); the class byte in the id (the class changes the
+# seed's label, so pk).

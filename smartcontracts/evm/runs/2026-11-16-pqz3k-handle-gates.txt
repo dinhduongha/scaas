@@ -24,3 +24,34 @@ forge build script/onchain/PqzWallet.s.sol | 8db6f2e6c | 0 | built
 docs_check check; test_docs_check | 8db6f2e6c + docs | 0 | 0 errors (7 page-length warnings, all pre-existing)
 mutants (2026-11-16-pqz3k-handle-mutants.txt) | 8db6f2e6c | 0 | 19 killed, 0 survived
 # the steps default/vectors/verify-only/wallet-mlock/n2048 (and the mutants) ran before a comment-only edit of wallet/mod.rs and an unused-import removal in tests/pqz3k.rs (aligned with ua-rs-sign d36c12749); the later steps ran on the committed code
+
+# the review of a8927561e fixed (owner 2026-11-16 "ok, as proposed"): code tree = 9b71bb80c; the same steps again
+ua-rs default clippy | 9b71bb80c | 0 | clean
+ua-rs vectors clippy | 9b71bb80c | 0 | clean
+ua-rs verify-only clippy | 9b71bb80c | 0 | clean
+ua-rs wallet-mlock clippy | 9b71bb80c | 0 | clean
+ua-rs zether clippy | 9b71bb80c | 0 | clean
+ua-rs n2048 clippy | 9b71bb80c | 0 | clean
+ua-rs n2048v clippy | 9b71bb80c | 0 | clean
+ua-rs signers clippy | 9b71bb80c | 0 | clean
+ua-rs json clippy | 9b71bb80c | 0 | clean
+ua-rs pq clippy | 9b71bb80c | 0 | clean
+ua-rs default test | 9b71bb80c | 0 | 46 binaries, 463 passed, 0 failed
+ua-rs vectors test | 9b71bb80c | 0 | 51 binaries, 551 passed, 0 failed
+ua-rs verify-only test | 9b71bb80c | 0 | 18 binaries, 84 passed, 0 failed
+ua-rs wallet-mlock test | 9b71bb80c | 0 | 36 binaries, 333 passed, 0 failed
+ua-rs zether test | 9b71bb80c | 0 | 2 binaries, 21 passed, 0 failed
+ua-rs n2048 test | 9b71bb80c | 0 | 8 binaries, 84 passed, 0 failed
+ua-rs n2048v test | 9b71bb80c | 0 | 5 binaries, 78 passed, 0 failed
+ua-rs signers test | 9b71bb80c | 0 | 1 binaries, 4 passed, 0 failed
+ua-rs json test | 9b71bb80c | 0 | 1 binaries, 7 passed, 0 failed
+ua-rs pq test | 9b71bb80c | 0 | 2 binaries, 38 passed, 0 failed
+ua-c clippy, build, cargo test (header drift), unittest tests.test_vectors | 9b71bb80c | 0 | 2 binaries, 9 passed, 0 failed; unittest 95 OK; header unchanged
+clientkeys npm test | 9b71bb80c | 0 | 425 tests, 420 pass, 0 fail, 5 skipped (wasm modules not built)
+pqz-wallet-sim cargo build --locked --release | 9b71bb80c | 0 | built
+forge build script/onchain/PqzWallet.s.sol | 9b71bb80c | 0 | built
+docs_check check; test_docs_check | 9b71bb80c + docs | 0 | 0 errors (7 page-length warnings, pre-existing)
+mutants (2026-11-16-pqz3k-handle-mutants.txt) | 9b71bb80c | 1 | 52 rows: 48 killed, 4 survived, all 4 equivalent (stated there)
+# n2048 / n2048v ran first red (2 tests: the KAT own rows are pqz3k_kat.json's n2304 set; the new length gate refuses them at
+# n2048 first), then green after those two tests ran at that set only (both cells and pqz3k default / vectors / clippy re-run);
+# the mutants and the other cells ran before that test-only edit, which changes nothing at n2304.
