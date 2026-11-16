@@ -288,6 +288,16 @@ pub fn boc_serialize(root: &Arc<Cell>) -> Vec<u8> {
     out
 }
 
+/// T21 L72 (the class of L04): a BOC header or ref field (`size` ≤ 4, `off` ≤ 8 bytes) read at its full width into a u64 and bounded
+/// by `max` before it becomes a `usize`: nothing is dropped on a 32-bit target, and a count, index or size past the BOC is refused.
+fn boc_uint(b: &[u8], max: usize, what: &str) -> Result<usize> {
+    if b.len() > 8 {
+        bail!("BOC {what}: {} bytes", b.len());
+    }
+    let v = b.iter().fold(0u64, |a, x| (a << 8) | u64::from(*x));
+    usize::try_from(v).ok().filter(|v| *v <= max).ok_or_else(|| anyhow!("BOC {what} {v} over {max}"))
+}
+
 /// Parse a BOC (any flags; first root). Cells with a level (pruned/merkle) are refused.
 pub fn boc_parse(data: &[u8]) -> Result<Arc<Cell>> {
     let mut p = 0usize;
@@ -305,15 +315,15 @@ pub fn boc_parse(data: &[u8]) -> Result<Arc<Cell>> {
     if size == 0 || size > 4 || off == 0 || off > 8 {
         bail!("bad BOC header");
     }
-    let num = |b: &[u8]| b.iter().fold(0usize, |a, x| (a << 8) | *x as usize);
-    let cells = num(take(size)?);
-    let roots = num(take(size)?);
-    let _absent = num(take(size)?);
-    let _total = num(take(off)?);
-    if roots == 0 || cells == 0 || cells > 4096 {
+    let bounded = boc_uint;
+    let cells = bounded(take(size)?, 4096, "cell count")?;
+    let roots = bounded(take(size)?, cells, "root count")?;
+    let _absent = bounded(take(size)?, cells, "absent count")?;
+    let total = bounded(take(off)?, data.len(), "cells size")?;
+    if roots == 0 || cells == 0 {
         bail!("bad BOC counts");
     }
-    let root = num(take(size)?);
+    let root = bounded(take(size)?, cells - 1, "root index")?;
     for _ in 1..roots {
         take(size)?;
     }
@@ -321,6 +331,7 @@ pub fn boc_parse(data: &[u8]) -> Result<Arc<Cell>> {
         take(cells.checked_mul(off).ok_or_else(|| anyhow!("BOC index"))?)?;
     }
     let mut raw = Vec::with_capacity(cells);
+    let mut used = 0usize;
     for _ in 0..cells {
         let d = take(2)?;
         let (d1, d2) = (d[0], d[1] as usize);
@@ -328,11 +339,15 @@ pub fn boc_parse(data: &[u8]) -> Result<Arc<Cell>> {
             bail!("BOC cells with a level or stored hashes are not supported");
         }
         let body = take(d2.div_ceil(2))?.to_vec();
-        let refs: Vec<usize> = (0..(d1 & 7)).map(|_| take(size).map(num)).collect::<Result<_>>()?;
+        let refs: Vec<usize> = (0..(d1 & 7)).map(|_| bounded(take(size)?, cells - 1, "ref index")).collect::<Result<_>>()?;
         if refs.len() > 4 {
             bail!("too many refs");
         }
+        used += 2 + body.len() + refs.len() * size;
         raw.push((d2, body, refs, d1 & 8 != 0));
+    }
+    if used != total {
+        bail!("BOC cells size {total}, the cells take {used}");
     }
     let mut built: Vec<Option<Arc<Cell>>> = vec![None; cells];
     for i in (0..cells).rev() {
@@ -2072,6 +2087,29 @@ mod tests {
         assert!(m.relayer.is_none());
         // our serializer round-trips; for this tree it is byte-identical to @ton/core
         assert_eq!(alloy::hex::encode(boc_serialize(&c)), s(&v, "/metaop/boc"));
+    }
+
+    /// T21 L72 (the class of ua-rs L04): BOC fields are read at full width and bounded. A header rewritten with 8-byte fields
+    /// (canonical: a field's width is the header's) parses to the same cell; a cells size off by one, or with high bytes set, is
+    /// refused (both were read and ignored before); a 5-byte value keeps its high byte (a 32-bit fold would make 2^32 zero).
+    #[test]
+    fn boc_fields_are_read_at_full_width_and_bounded() {
+        let v = vectors();
+        let b = alloy::hex::decode(s(&v, "/metaop/boc")).unwrap();
+        let (size, off) = (b[4] as usize, b[5] as usize);
+        let field = |at: usize, n: usize| b[at..at + n].iter().fold(0u64, |a, x| a << 8 | u64::from(*x));
+        let total = field(6 + 3 * size, off);
+        let tail = &b[6 + 3 * size + off..];
+        let wide = |t: u64| [&b[..4], &[size as u8, 8], &b[6..6 + 3 * size], &t.to_be_bytes()[..], tail].concat();
+        assert_eq!(boc_parse(&wide(total)).unwrap().hash(), boc_parse(&b).unwrap().hash());
+        for t in [total + 1, total - 1, total | 1 << 40] {
+            let e = boc_parse(&wide(t)).unwrap_err().to_string();
+            assert!(e.contains("cells size"), "{t}: {e}");
+        }
+        #[cfg(target_pointer_width = "64")]
+        assert_eq!(boc_uint(&[1, 0, 0, 0, 0], usize::MAX, "x").unwrap(), 1 << 32);
+        assert!(boc_uint(&[1, 0, 0, 0, 0], u32::MAX as usize, "x").is_err());
+        assert!(boc_uint(&[0; 9], usize::MAX, "x").is_err());
     }
 
     #[test]
