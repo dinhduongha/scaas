@@ -32,8 +32,8 @@ M = [
                                                     "            let _ = expect;\n            wallet(native_key(&k)?.sign_typed(&td, uw::Expect::Any(uw::AllowAnyTypedData)))")]),
     ("seal ignores the aad", [(QW, "            let s = wallet(uw::seal(&bytes(kem_pk)?, &String::from(purpose), &bytes(aad)?, &pt))?;",
                                "            let _ = bytes(aad)?;\n            let s = wallet(uw::seal(&bytes(kem_pk)?, &String::from(purpose), &[], &pt))?;")]),
-    ("uaSig keys in reverse order", [(QW, "            let keys = ids.into_iter().map(key).collect::<Res<Vec<Key>>>()?;",
-                                      "            let keys = ids.into_iter().rev().map(key).collect::<Res<Vec<Key>>>()?;")]),
+    ("uaSig keys in reverse order", [(QW, "            let keys = ids.iter().map(|v| id(v).and_then(key)).collect::<Res<Vec<Key>>>()?;",  # t21 L78
+                                      "            let keys = ids.iter().rev().map(|v| id(v).and_then(key)).collect::<Res<Vec<Key>>>()?;")]),
     ("lastError not cleared before a call", [(QW, "        self.as_mut().set_last_error(QString::default());\n", "")]),
     ("a revoked key's error code dropped (lastError UAArgument)", [(QW, "fn wallet<T>(r: uw::Result<T>) -> Res<T> {\n    r.map_err(|e| code(e.into()))",
                                                                   "fn wallet<T>(r: uw::Result<T>) -> Res<T> {\n    r.map_err(|_| ARG.to_string())")]),

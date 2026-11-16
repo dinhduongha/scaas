@@ -56,8 +56,8 @@ M = [
     ("MuSig2 session keeps its nonce (read, not spent)", P, [
         ("let k = self.nonce.take().ok_or(Error::Argument)?.take()?;\n        let sec = Zeroizing::new",
          "let k = self.nonce.as_ref().ok_or(Error::Argument)?.with(|b| Zeroizing::new(b.to_vec()))?;\n        let sec = Zeroizing::new")]),
-    ("FROST session keeps its nonces", P, [("let k = self.nonce.take().ok_or(Error::Argument)?.take()?;\n        let (hiding, binding)",
-       "let k = self.nonce.as_ref().ok_or(Error::Argument)?.with(|b| Zeroizing::new(b.to_vec()))?;\n        let (hiding, binding)")]),  # t21 O1: the nonces in the arena
+    ("FROST session keeps its nonces", P, [("self.nonce.take().ok_or(Error::Argument)?.take_with(|k| {\n            let (hiding, binding)",
+       "self.nonce.as_ref().ok_or(Error::Argument)?.with(|k| {\n            let (hiding, binding)")]),  # t21 O1: the nonces in the arena
     ("MuSig2 session without its own key accepted", P, [("        if !pks.contains(&self.key_data) {\n            return Err(Error::Argument);\n        }\n", "")]),
     ("Schnorr challenge without Y", P, [("&[SCHNORR_TAG, &sig, y, ua_msg]", "&[SCHNORR_TAG, &sig, ua_msg]")]),
     ("Schnorr z = k - e*sk", P, [("Zeroizing::new(*k + e * *sk)", "Zeroizing::new(*k - e * *sk)")]),

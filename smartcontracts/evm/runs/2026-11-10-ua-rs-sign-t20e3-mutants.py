@@ -28,8 +28,8 @@ TF = (R, C + ["--lib", "none_headers_are_the_contracts"])
 TR = (R, C + ["--bin", "pqz-read", "none_header_rows_envelope_and_fee"])
 
 M = [
-    ("the direct tag for a relayed binding", [(FP, 'let b = if *binding == [0; 32] { crate::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1") } else { *binding };',
-                                               'let b = crate::keccak256(b"SCAAS-PQZ-DIRECT-MODE-V1"); let _ = binding;')], TF),
+    ("the direct tag for a relayed binding", [(FP, '        _ if *binding != [0; 32] => crate::keccak256(&[*binding, m].concat()),',
+                                               '        _ if false && *binding != [0; 32] => crate::keccak256(&[*binding, m].concat()),')], TF),  # t21 L77: bind_mode's three forms
     ("the unwrap binding unwrapped", [(PR, "if bc.binding == [0; 32] { w } else { crate::keccak256(&[bc.binding, w].concat()) }",
                                        "if bc.binding == [0; 32] { w } else { bc.binding }")], TF),
     ("the memo without the salt", [(PR, "(Some(s), Mode::Hash) if s.len() + 16 == pqz_ffi::memo::memo_len(m) => [salt, s].concat(),",
