@@ -105,8 +105,15 @@ import 'dart:ffi' as ffi;
     }
   }
 
-  /// A view of [s] in Rust memory, no copy; valid until [s] is disposed (a view kept past that reads freed memory).
-  static Uint8List view(SecretBytes s) => ffi.Pointer<ffi.Uint8>.fromAddress(s.addr().toInt()).asTypedList(s.size());
+  /// A view of [s] in Rust memory, no copy; valid until [s] is disposed (a view kept past that reads freed memory). The view
+  /// keeps [s] reachable (an Expando entry), so the GC never drops the handle, and with it the block, under a live view (T21 L55).
+  static Uint8List view(SecretBytes s) {
+    final v = ffi.Pointer<ffi.Uint8>.fromAddress(s.addr().toInt()).asTypedList(s.size());
+    _views[v] = s;
+    return v;
+  }
+
+  static final _views = Expando<SecretBytes>();
 ")]
 pub struct SecretBytes {
     mem: Box<[Block]>,
@@ -508,14 +515,15 @@ impl UaWallet {
     pub fn export_pqz_leaf_raw(&self, account: u32, index: u32) -> R<SecretBytes> {
         out(&*self.0.export_pqz_leaf_raw(account, index, fpqz::AllowSecretExport)?)
     }
-    /// Group 3g (T15o): the PQZ key of `account` / `index` at key `version` (0 the info without a suffix, v >= 1 with be64(v)).
-    pub fn pqz_key_version(&self, account: u32, index: u32, version: u64) -> R<UaPqzKey> {
-        Ok(UaPqzKey(self.0.pqz_key_version(account, index, version)?, Live::new()))
-    }
-    /// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4).
-    pub fn export_pqz_leaf_raw_version(&self, account: u32, index: u32, version: u64) -> R<SecretBytes> {
-        out(&*self.0.export_pqz_leaf_raw_version(account, index, version, fpqz::AllowSecretExport)?)
-    }
+}
+/// Group 3g (T15o): the PQZ key of `account` / `index` at key `version` (0 the info without a suffix, v >= 1 with be64(v)). A free
+/// function, as [`key_kem_key`]: the Dart facade refuses a version outside u64 before frb's 64-bit encoding wraps it (T21 L54).
+pub fn wallet_pqz_key_version(w: &UaWallet, account: u32, index: u32, version: u64) -> R<UaPqzKey> {
+    Ok(UaPqzKey(w.0.pqz_key_version(account, index, version)?, Live::new()))
+}
+/// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4); a free function for the same reason.
+pub fn wallet_export_pqz_leaf_raw_version(w: &UaWallet, account: u32, index: u32, version: u64) -> R<SecretBytes> {
+    out(&*w.0.export_pqz_leaf_raw_version(account, index, version, fpqz::AllowSecretExport)?)
 }
 
 impl UaSeedBackup {

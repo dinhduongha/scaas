@@ -181,6 +181,15 @@ Future<List<String>> walletBackupSeal(
 Future<g.UaKemKey> keyKemKey({required g.UaKey k, required BigInt version}) =>
     _loaded(() => g.keyKemKey(k: k, version: _u64(version)));
 
+/// Group 3g: the PQZ key of [account] / [index] at key [version] (outside 0 ... 2^64 - 1: `UAArgument`, T21 L54).
+Future<g.UaPqzKey> walletPqzKeyVersion({required g.UaWallet w, required int account, required int index, required BigInt version}) =>
+    _loaded(() => g.walletPqzKeyVersion(w: w, account: account, index: index, version: _u64(version)));
+
+/// The PQZ leaf `seed32` of a key version, the explicit export (spec §8.4; a version outside u64: `UAArgument`).
+Future<SecretBytes> walletExportPqzLeafRawVersion(
+        {required g.UaWallet w, required int account, required int index, required BigInt version}) =>
+    _loaded(() => g.walletExportPqzLeafRawVersion(w: w, account: account, index: index, version: _u64(version)));
+
 /// The answers, in the challenged order; the call consumes them (each disposed).
 Future<bool> seedBackupVerify({required g.UaSeedBackup b, required List<SecretBytes> answers}) =>
     _loaded(() => g.seedBackupVerify(b: b, answers: answers));
