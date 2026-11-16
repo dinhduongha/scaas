@@ -179,3 +179,40 @@ test('RFC 9591 E.5, the ZF DKG vector, T-FROST', () => {
     assert.equal(ok, r.valid, r.name);
   }
 });
+
+// T21 L20: group kinds as msig members (groups.json msigMembers, written by ua-rs). The library's verifyAuthorization has no group
+// verifier and says so (UANotVerifiable, fail closed); here the msig id and member digest are recomputed with ua.js and each
+// secp256k1 group slot is checked as the registry checks a member: against its stored vk (key data's first 33 bytes), pop false.
+// The EOA is slot 0: a changed EOA signature is UAUnauthorized before any group slot is reached.
+test('group kinds as msig members: id, member digest, secp256k1 group slots; the library refuses to judge', async () => {
+  const { verifyAuthorization } = await import('../src/ua-verify.js');
+  const v = V.msigMembers;
+  const kd = B(v.keyData);
+  assert.equal(hex(ua.uaOf(0x0120, kd)), v.ua);
+  const md = ua.memberDigest(B(v.ua), ua.uaMessage(0x0120, B(v.purposeTag), B(v.digest)));
+  assert.equal(hex(md), v.memberDigest);
+  const st = ua.msigStructure(kd);
+  assert.deepEqual(st.members.map((m) => m.kind), v.members.map((m) => m.kind));
+  const byId = (id) => v.members.find((m) => m.ua === id);
+  const mm = (kind) => ua.uaMessage(kind, ua.purposeTag('member'), md);
+  let n = 0;
+  for (const row of [...v.authorizations, ...v.negatives]) {
+    for (const s of row.slots) {
+      const m = byId(st.members[s.index].id);
+      if (!SECP.includes(m.kind)) continue;
+      const ok = verify(m.kind, B(m.keyData).subarray(0, 33), mm(m.kind), B(s.sig));
+      const changed = !row.valid && row.name.startsWith(`slot ${s.index} `);
+      assert.equal(ok, !changed, `${row.name}: slot ${s.index}`);
+      n++;
+    }
+    const members = (id) => {
+      if (id === v.ua) return { kind: 0x0120, keyData: v.keyData };
+      const m = byId(id);
+      return m && m.kind !== 1 ? { kind: m.kind, keyData: m.keyData } : undefined;
+    };
+    const domain = { generation: 1, ...V.contexts.A };
+    assert.throws(() => verifyAuthorization({ ua: v.ua, purposeTag: v.purposeTag, digest: v.digest, sig: row.uaSig },
+      members, domain, () => true), (e) => e.code === (row.name.endsWith('(0x0001) signature changed') ? 'UAUnauthorized' : 'UANotVerifiable'), row.name);
+  }
+  assert.equal(n, 12);
+});

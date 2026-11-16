@@ -31,7 +31,7 @@
 #   clients/ua-rs:         one matrix cell per feature set (ua-rs-sign MD-5, T18), each: cargo clippy --locked --all-targets <features> -- -D warnings; cargo test --locked <features> [<tests>]:
 #                          default (wallet + zether + pqz at n2304-kmax4096, the release cell; no_oracle, pqz_wallet_rows; then pqz_read --bin pqz-read -- --include-ignored against anvil),
 #                          vectors (--features vectors: the test hooks, the vector rows both ways, no_oracle's positive control), verify-only (--no-default-features),
-#                          signers (--test groups), json (--test json), pq (--test pq --test ua8), wallet-mlock (wallet,mlock), zether-only (wallet,zether,mlock: --lib --test facade_zether),
+#                          signers (--test groups_verify; tests/groups.rs, the generator, runs in the vectors cell), json (--test json), pq (--test pq --test ua8), wallet-mlock (wallet,mlock), zether-only (wallet,zether,mlock: --lib --test facade_zether),
 #                          pqz-n2048 (wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock: --lib --bin pqz-read --test pqz_read facade_pqz_state facade_pqz pqz_backup no_oracle) and the same + vectors
 #                          (facade_pqz_state facade_pqz pqz_backup no_oracle); the vectors cell also: cargo test --features vectors --test pqz_wallet_rows -- --ignored --exact write_wallet_rows; git diff --exit-code (wallet_state.json stays what its generator writes)
 #   ua-rs-targets:         compile only, no run (MD-5, plan T0 / T18), wasm32-unknown-unknown, aarch64-linux-android (NDK clang, API 24), aarch64-apple-ios (macOS): cargo build --locked --lib --target <t> <cell> in ua-rs
@@ -607,7 +607,7 @@ jobs:
             features: --no-default-features
           - cell: signers
             features: --no-default-features --features signers
-            tests: --test groups
+            tests: --test groups_verify
           - cell: json
             features: --no-default-features --features json
             tests: --test json

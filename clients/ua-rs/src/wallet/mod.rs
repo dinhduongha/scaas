@@ -66,6 +66,8 @@ pub use kem::{is_kem_holder, kem_encaps, KemKeyPair};
 pub use manifest::vectors_backup_payload;
 pub use manifest::{AllowRollback, ImportEntry, ImportedUaEntry, KemEntry, Manifest, ManifestEntry, NativeEntry, PqzHeldEntry};
 pub use pairing::{FrostSession, Musig2Session};
+#[cfg(feature = "vectors")]
+pub use pairing::NonceSlotProbe;
 pub use policy::{sign_typed_by, AllowAnyTypedData, AllowRow, Expect, Invalidate, SubjectKey};
 pub use service_pull::{service_pull, RelayFeeWrap, ServicePull};
 #[cfg(feature = "pqz")]

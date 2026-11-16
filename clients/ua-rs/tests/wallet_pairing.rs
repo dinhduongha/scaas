@@ -6,13 +6,18 @@
 //! smartcontracts/vectors/ua/sign.json (written by clientkeys). The `vectors` tests use the test-only entry points (fixed
 //! `aux` / randomness, raw secrets) and the ladder's record (the **structural test**: per secret path, two calls with one
 //! secret give one point and two blinded integers, each `≥ r`, `≡ k (mod r)`, 384 iterations). UNAUDITED.
+#[cfg(feature = "vectors")]
 use scaas_ua::frost::{dkg, id, Bn254Keccak256, Secp256K1Sha256};
 use scaas_ua::musig2::{self as mu, Bn254, Curve, Secp256k1};
 use scaas_ua::verify::verify;
-use scaas_ua::wallet::{Error, FrostSession, Wallet};
+use scaas_ua::wallet::{Error, Wallet};
+#[cfg(feature = "vectors")]
+use scaas_ua::wallet::FrostSession;
 use scaas_ua::{purpose_tag, purpose_tag_v, ua_message};
 use serde_json::Value;
-use std::collections::{BTreeMap, HashMap};
+#[cfg(feature = "vectors")]
+use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 fn load(path: &str) -> Value {
     let path = format!("{}/../../smartcontracts/vectors/ua/{path}", env!("CARGO_MANIFEST_DIR"));
@@ -124,7 +129,8 @@ fn locked_wallet_pairing_handles_sign_nothing() {
     let w = wallet("pq_kat");
     let keys: Vec<_> = PAIRING.iter().map(|k| w.ua_key(*k, 0, 0).unwrap()).collect();
     let (a, b) = (w.ua_key(0x0112, 0, 0).unwrap(), w.ua_key(0x0112, 1, 0).unwrap());
-    let pks = vec![a.key_data(), b.key_data()];
+    let mut pks = vec![a.key_data(), b.key_data()];
+    mu::key_sort(&mut pks); // a registrable list (T21 L16)
     let msg = [6u8; 32];
     let (mut sa, sb) = (a.musig2_session(&pks, &msg).unwrap(), b.musig2_session(&pks, &msg).unwrap());
     let agg = mu::nonce_agg::<Bn254>(&[sa.pubnonce(), sb.pubnonce()]).unwrap();
@@ -170,7 +176,36 @@ fn second_sign_on_a_session_errors() {
     assert_eq!(other.musig2_session(&[other.key_data()], &[0u8; 32]).err(), Some(Error::Argument));
 }
 
-/// FROST sessions on both ciphersuites: the nonces sign once; the shares aggregate to a signature that verifies.
+/// A MuSig2 session takes only a key list the registry takes (T21 L16; `validate_key_data`'s MuSig2 rule): 2 <= n <= 16,
+/// strictly increasing. Positive controls: the sorted pair and 16 keys open a session.
+#[test]
+fn musig2_session_refuses_lists_the_registry_refuses() {
+    fn run(kind: u16, w: &Wallet) {
+        let mut all: Vec<Vec<u8>> = (0..17).map(|i| w.ua_key(kind, i, 0).unwrap().key_data()).collect();
+        mu::key_sort(&mut all);
+        let a = (0..17).map(|i| w.ua_key(kind, i, 0).unwrap()).find(|k| k.key_data() == all[0]).unwrap();
+        let msg = [8u8; 32];
+        assert!(a.musig2_session(&all[..2], &msg).is_ok(), "{kind:#06x}: sorted pair");
+        assert!(a.musig2_session(&all[..16], &msg).is_ok(), "{kind:#06x}: n = 16");
+        let refused: [(&str, Vec<Vec<u8>>); 5] = [
+            ("n = 1", all[..1].to_vec()),
+            ("n = 17", all.clone()),
+            ("duplicate", vec![all[0].clone(), all[0].clone()]),
+            ("unsorted", vec![all[1].clone(), all[0].clone()]),
+            ("empty", vec![]),
+        ];
+        for (what, pks) in refused {
+            assert_eq!(a.musig2_session(&pks, &msg).err(), Some(Error::Argument), "{kind:#06x}: {what}");
+        }
+    }
+    let w = wallet("pq_kat");
+    run(0x0110, &w);
+    run(0x0112, &w);
+}
+
+/// FROST sessions on both ciphersuites: the nonces sign once; the shares aggregate to a signature that verifies (the key
+/// packages come from the test-only DKG of feature `vectors`).
+#[cfg(feature = "vectors")]
 #[test]
 fn frost_session_nonce_signs_once() {
     fn run<C: frost_core::Ciphersuite>() {
@@ -406,7 +441,8 @@ mod vectors {
     fn structural_musig2_bn254() {
         let w = wallet("pq_kat");
         let (a, b) = (w.ua_key(0x0112, 0, 0).unwrap(), w.ua_key(0x0112, 1, 0).unwrap());
-        let pks = vec![a.key_data(), b.key_data()];
+        let mut pks = vec![a.key_data(), b.key_data()];
+        mu::key_sort(&mut pks); // a registrable list (T21 L16)
         let (msg, rand) = ([3u8; 32], [11u8; 32]);
         let agg_pk = Bn254::agg_bytes(&mu::key_agg::<Bn254>(&pks).unwrap().q);
         let (sec, _) = mu::nonce_gen::<Bn254>(&rand, Some(&secret(&a)), &a.key_data(), Some(&agg_pk), Some(&msg), None).unwrap();
@@ -429,6 +465,20 @@ mod vectors {
         assert_eq!(p1, p2);
         blinded::<ark_bn254::Fr>("MuSig2-bn254 sign", &t1, &t2, Some(&[secret(&a)]));
         assert_eq!(t1.len(), 1);
+    }
+
+    /// An unsigned MuSig2 session wipes its nonce's arena slot when dropped (T21 L17); a signed one wiped it already.
+    #[test]
+    fn dropped_musig2_session_wipes_its_nonce() {
+        let w = wallet("pq_kat");
+        let (a, b) = (w.ua_key(0x0110, 0, 0).unwrap(), w.ua_key(0x0110, 1, 0).unwrap());
+        let mut pks = vec![a.key_data(), b.key_data()];
+        mu::key_sort(&mut pks);
+        let s = a.musig2_session(&pks, &[1u8; 32]).unwrap();
+        let probe = s.vectors_nonce_probe().unwrap();
+        assert!(probe.bytes().unwrap().iter().any(|x| *x != 0), "control: the slot holds the nonce");
+        drop(s);
+        assert!(probe.bytes().unwrap().iter().all(|x| *x == 0), "the dropped session's slot is wiped");
     }
 
     /// FROST-BN254 through the `Bn254Group` element newtype: two sessions of one fixed RNG give one pair of commitments

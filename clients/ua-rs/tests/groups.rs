@@ -1,7 +1,7 @@
 //! smartcontracts/vectors/ua/groups.json (accounts.md §1.16, UA-2c) — the generator and its byte-for-byte check, plus the
 //! signers against the official vectors: BIP-327 (bitcoin/bips bip-0327/vectors, vendored in tests/data/bip327), RFC 9591
 //! Appendix E.5 (tests/data/rfc9591_e5.json) and the ZF frost-secp256k1 3.0.0 DKG vector (tests/data/zf_frost_secp256k1_dkg.json).
-//! Regenerate: `cargo test --features signers --test groups -- --ignored write_groups_json`.
+//! Regenerate: `cargo test --features vectors --test groups -- --ignored write_groups_json`.
 //! Every row is deterministic: secrets are tagged hashes of the row label, randomness is ChaCha20 seeded by the label.
 use frost_core::{Ciphersuite, Element, Field, Group, Scalar};
 use rand_chacha::ChaCha20Rng;
@@ -626,6 +626,95 @@ fn t_frost(groups: &[Value], bip340_official: &Value, e5: &Value) -> Vec<Value> 
     out
 }
 
+// ---------- group kinds as msig members (T21 L20) ----------
+
+const EVM_EOA: u16 = 0x0001;
+const MSIG: u16 = 0x0120;
+/// The `msig` of `msigMembers`: its `UAAuth` domain (context A, generation 1).
+fn msig_domain(a: &Ctx) -> scaas_ua::Domain {
+    scaas_ua::Domain { generation: 1, chain_id: a.chain_id, registry: a.registry, chain_uid: a.uid }
+}
+
+/// An `msig` whose members are one group of each kind (MuSig2 / FROST, secp256k1 / bn254) next to an `evm-eoa`, threshold all
+/// five, and its authorization under `metatx` over the shared digest: a group slot signs `ua_message(kind, member, md)`
+/// against its stored `vk` (the first 33 / 64 bytes of its key data, `pop` false; `UARegistryCoreLib._memberOk`), the EOA
+/// `UAAuth(id, member, md)` in the domain. `negatives`: one slot's signature changed in its last byte each.
+fn msig_members_section(e: &Env) -> Value {
+    use scaas_ua::ua8::{encode_member_sigs, MemberSig, MsigMember, MsigStructure};
+    let (purpose, digest) = (purpose_tag("metatx").unwrap(), e.digest);
+    let mut r = rng("msig-members");
+    let ms = Musig::<Secp256k1>::sorted("msig-members/musig2-secp256k1", 2);
+    let mb = Musig::<Bn254>::sorted("msig-members/musig2-bn254", 2);
+    let fs: Dkg<Secp256K1Sha256> = dkg(2, 3, &mut r).unwrap();
+    let fb: Dkg<Bn254Keccak256> = dkg(2, 3, &mut r).unwrap();
+    let eoa = k256::ecdsa::SigningKey::from_bytes(&Secp256k1::s_bytes(&Secp256k1::secret("msig-members/evm-eoa", 0)).into()).unwrap();
+    let addr = keccak256(&eoa.verifying_key().to_sec1_point(false).as_bytes()[1..])[12..].to_vec();
+    let eoa_id: [u8; 32] = [vec![0u8; 12], addr].concat().try_into().unwrap();
+    let groups = [(MUSIG_SECP, ms.key_data()), (FROST_SECP, fs.key_data()), (MUSIG_BN, mb.key_data()), (FROST_BN, fb.key_data())];
+    let mut members: Vec<(u16, [u8; 32], Vec<u8>)> = groups.iter().map(|(k, kd)| (*k, ua_of(*k, kd).unwrap(), kd.clone())).collect();
+    members.push((EVM_EOA, eoa_id, vec![]));
+    members.sort_by_key(|m| m.1);
+    let st = MsigStructure { threshold: 5, members: members.iter().map(|m| MsigMember { kind: m.0, id: m.1, weight: 1 }).collect() };
+    let kd = st.key_data();
+    let ua = ua_of(MSIG, &kd).unwrap();
+    let md = member_digest(&ua, &ua_message(MSIG, &purpose, &digest).unwrap());
+    let mt = purpose_tag("member").unwrap();
+    let slots: Vec<MemberSig> = members.iter().enumerate().map(|(i, (k, id, _))| {
+        let mm = ua_message(*k, &mt, &md).unwrap_or([0; 32]);
+        let sig = match *k {
+            MUSIG_SECP => ms.sign(&mm, &mut r),
+            MUSIG_BN => mb.sign(&mm, &mut r),
+            FROST_SECP => fs.sign(&[1, 3], &mm, &mut r).unwrap().serialize().unwrap(),
+            FROST_BN => fb.sign(&[2, 3], &mm, &mut r).unwrap().serialize().unwrap(),
+            _ => {
+                let h = ua_auth_digest(&msig_domain(&e.a), id, &mt, &md);
+                let (sig, rec) = eoa.sign_prehash_recoverable(&h);
+                [sig.to_bytes().to_vec(), vec![27 + rec.to_byte()]].concat()
+            }
+        };
+        MemberSig { index: i as u16, members: vec![], sig }
+    }).collect();
+    let row = |name: &str, s: &[MemberSig], valid: bool| json!({ "name": name, "valid": valid, "uaSig": hx(&encode_member_sigs(s)),
+        "slots": s.iter().map(|x| json!({ "index": x.index, "sig": hx(&x.sig) })).collect::<Vec<_>>() });
+    let negs: Vec<Value> = members.iter().enumerate().map(|(i, (k, ..))| {
+        let mut bad = slots.clone();
+        bad[i].sig = flip_last(&bad[i].sig);
+        row(&format!("slot {i} ({k:#06x}) signature changed"), &bad, false)
+    }).collect();
+    json!({
+        "comment": "Group kinds as msig members (T21 L20): a derived group member signs ua_message(kind, member, md) against its stored vk (key data's first 33 / 64 bytes, pop false), the evm-eoa member UAAuth(id, member, md) in the domain; every slot accepted. Not registered here: the members' registrations are the groups[] rows' shape.",
+        "domain": { "generation": 1, "context": "A" },
+        "members": members.iter().map(|(k, id, d)| json!({ "kind": k, "ua": hx(id), "keyData": hx(d) })).collect::<Vec<_>>(),
+        "threshold": st.threshold, "keyData": hx(&kd), "ua": hx(&ua),
+        "purpose": "metatx", "purposeTag": hx(&purpose), "digest": hx(&digest), "memberDigest": hx(&md),
+        "authorizations": [row("all five", &slots, true)], "negatives": negs,
+    })
+}
+
+#[test]
+fn msig_group_members() {
+    use scaas_ua::ua8::{check_authorization, decode_member_sigs};
+    let v = &read_json(OUT)["msigMembers"];
+    let s = read_json("../../smartcontracts/vectors/ua/signatures.json");
+    let c = &s["contexts"]["A"];
+    let a = Ctx { chain_id: c["chainId"].as_u64().unwrap(), uid: unhex(&c["chainUid"]).try_into().unwrap(), registry: unhex(&c["registry"]).try_into().unwrap() };
+    let members: Vec<(u16, [u8; 32], Vec<u8>)> = v["members"].as_array().unwrap().iter()
+        .map(|m| (m["kind"].as_u64().unwrap() as u16, unhex(&m["ua"]).try_into().unwrap(), unhex(&m["keyData"]))).collect();
+    assert_eq!(members.iter().filter(|m| (MUSIG_SECP..=FROST_BN).contains(&m.0)).count(), 4);
+    let lookup = |id: [u8; 32]| members.iter().find(|m| m.1 == id && m.0 != EVM_EOA).map(|m| (m.0, m.2.clone()));
+    let (kd, ua) = (unhex(&v["keyData"]), unhex(&v["ua"]).try_into().unwrap());
+    let (purpose, digest) = (unhex(&v["purposeTag"]).try_into().unwrap(), unhex(&v["digest"]).try_into().unwrap());
+    let all = |_: [u8; 32], _: u16| true;
+    let (mut ok, mut no) = (0, 0);
+    for row in v["authorizations"].as_array().unwrap().iter().chain(v["negatives"].as_array().unwrap()) {
+        let slots = decode_member_sigs(&unhex(&row["uaSig"])).unwrap();
+        let r = check_authorization(&kd, &ua, &purpose, &digest, &slots, &msig_domain(&a), &lookup, Some(&all));
+        assert_eq!(r.is_ok(), row["valid"].as_bool().unwrap(), "{}: {r:?}", row["name"]);
+        if r.is_ok() { ok += 1 } else { no += 1 }
+    }
+    assert_eq!((ok, no), (1, 5));
+}
+
 // ---------- the file ----------
 
 fn generate() -> String {
@@ -647,7 +736,7 @@ fn generate() -> String {
     let sigs = read_json("../../smartcontracts/vectors/ua/signatures.json");
     let tf = t_frost(&groups, &sigs["bip340Official"], &e5);
     let v = json!({
-        "note": "Generated by clients/ua-rs tests/groups.rs (feature signers: BIP-327 MuSig2 over k256 + the bn254 port, ZF frost-core 3.0.0 / frost-secp256k1 3.0.0 + the FROST(bn254, keccak256) ciphersuite); never edit by hand. Schema: SCHEMA in the UA-2c plan (groups[] rows, negatives with entry/error, bip327, rfc9591E5, zfDkg, tFrost). The secp256k1 rows are re-verified by clientkeys test/ua-groups.test.js (noble); musig2-bn254 (our BIP-327 port) and FROST(bn254, keccak256) have no independent second implementation: clients/ua-rs agreeing on them is self-consistency only (accounts.md §1.16).",
+        "note": "Generated by clients/ua-rs tests/groups.rs (feature vectors: BIP-327 MuSig2 over k256 + the bn254 port, ZF frost-core 3.0.0 / frost-secp256k1 3.0.0 + the FROST(bn254, keccak256) ciphersuite); never edit by hand. Schema: SCHEMA in the UA-2c plan (groups[] rows, negatives with entry/error, bip327, rfc9591E5, zfDkg, tFrost). The secp256k1 rows are re-verified by clientkeys test/ua-groups.test.js (noble); musig2-bn254 (our BIP-327 port) and FROST(bn254, keccak256) have no independent second implementation: clients/ua-rs agreeing on them is self-consistency only (accounts.md §1.16).",
         "version": 1,
         "context": "A",
         "contextOther": "B",
@@ -666,6 +755,7 @@ fn generate() -> String {
         "rfc9591E5": e5,
         "zfDkg": zf_dkg_section(),
         "tFrost": tf,
+        "msigMembers": msig_members_section(&env),
     });
     serde_json::to_string_pretty(&v).unwrap() + "\n"
 }
@@ -724,6 +814,7 @@ fn contribution(e: &Value) -> mu::Error {
             "pubkey" => "pubkey",
             "pubnonce" => "pubnonce",
             "aggnonce" => "aggnonce",
+            "psig" => "psig",
             other => panic!("{other}"),
         }),
         _ => mu::Error::Value(match e["message"].as_str().unwrap() {
@@ -763,7 +854,7 @@ fn bip327_nonce_gen_and_agg() {
         let opt = |k: &str| (!c[k].is_null()).then(|| unhex(&c[k]));
         let (sk, agg, msg, extra) = (opt("sk"), opt("aggpk"), opt("msg"), opt("extra_in"));
         let (sec, pubn) = mu::nonce_gen::<Secp256k1>(&unhex(&c["rand_"]).try_into().unwrap(), sk.as_deref(), &unhex(&c["pk"]), agg.as_deref(), msg.as_deref(), extra.as_deref()).unwrap();
-        assert_eq!(sec, unhex(&c["expected_secnonce"]));
+        assert_eq!(*sec, unhex(&c["expected_secnonce"]));
         assert_eq!(pubn, unhex(&c["expected_pubnonce"]));
     }
     let v = bip("nonce_agg_vectors");
@@ -809,6 +900,78 @@ fn bip327_sign_and_verify() {
         let r = mu::partial_sig_verify::<Secp256k1>(&unhex(&c["sig"]), &nonces, &keys, msg, c["signer_index"].as_u64().unwrap() as usize);
         assert_eq!(r.err().unwrap(), contribution(&c["error"]), "{}", c["comment"]);
     }
+}
+
+/// BIP-327 `sig_agg_vectors.json` (T21 L21): bitcoin/bips at `BIP327_COMMIT`, `bip-0327/vectors/`, verbatim (BIP-327 is
+/// BSD-3-Clause; sha256 pinned below; not part of groups.json's `official` set). The valid cases without tweaks give the
+/// expected signature; the error case (a psig ≥ n) is `invalid_contribution` by signer 1: its tweaks change only `Q`, not the
+/// psig check, so it runs untweaked.
+#[test]
+fn bip327_sig_agg() {
+    use sha2::Digest;
+    let text = std::fs::read(root("tests/data/bip327/sig_agg_vectors.json")).unwrap();
+    assert_eq!(hx(&sha2::Sha256::digest(&text)), "0x15f14c034fb2a5739d7ce638be94c5b37ea675a2e01159092dd93b59d69c3439");
+    let v: Value = serde_json::from_slice(&text).unwrap();
+    let (pks, psigs, msg) = (list(&v["pubkeys"]), list(&v["psigs"]), unhex(&v["msg"]));
+    let ps = |c: &Value| -> Vec<[u8; 32]> { pick(&psigs, &c["psig_indices"]).into_iter().map(|p| p.try_into().unwrap()).collect() };
+    let mut n = 0;
+    for c in v["valid_test_cases"].as_array().unwrap() {
+        if !c["tweak_indices"].as_array().unwrap().is_empty() {
+            continue; // tweaks: not implemented (the registry has none)
+        }
+        let sig = mu::partial_sig_agg::<Secp256k1>(&ps(c), &unhex(&c["aggnonce"]), &pick(&pks, &c["key_indices"]), &msg).unwrap();
+        assert_eq!(sig, unhex(&c["expected"]));
+        n += 1;
+    }
+    assert_eq!(n, 2);
+    for c in v["error_test_cases"].as_array().unwrap() {
+        let r = mu::partial_sig_agg::<Secp256k1>(&ps(c), &unhex(&c["aggnonce"]), &pick(&pks, &c["key_indices"]), &msg);
+        assert_eq!(r.err().unwrap(), contribution(&c["error"]), "{}", c["comment"]);
+    }
+}
+
+/// T21 L12, L13, both curves: `partial_sig_verify_internal` refuses a key outside the session although its equation holds
+/// (BIP-327 GetSessionKeyAggCoeff); a member's psig verifies, `s + 1` does not. `nonce_agg` refuses a public nonce one byte
+/// long or short at either signer, so a peer's malformed nonce fails the verification of another signer too.
+#[test]
+fn musig2_membership_and_nonce_length() {
+    fn run<C: MusigKind>() {
+        let d: Vec<C::S> = (0..3).map(|i| C::secret("t21-l12", i)).collect();
+        let pk = |s: &C::S| C::ser(&(C::g() * *s));
+        let (pks, out, msg) = (vec![pk(&d[0]), pk(&d[1])], pk(&d[2]), [5u8; 32]);
+        let agg = C::agg_bytes(&mu::key_agg::<C>(&pks).unwrap().q);
+        let n: Vec<_> = (0..3)
+            .map(|i| mu::nonce_gen::<C>(&[i as u8 + 1; 32], Some(&C::s_bytes(&d[i])), &pk(&d[i]), Some(&agg), Some(&msg), None).unwrap())
+            .collect();
+        let pubnonces = vec![n[0].1.clone(), n[1].1.clone()];
+        let aggnonce = mu::nonce_agg::<C>(&pubnonces).unwrap();
+        let p0 = mu::sign::<C>(&n[0].0, &C::s_bytes(&d[0]), &aggnonce, &pks, &msg).unwrap();
+        assert!(mu::partial_sig_verify_internal::<C>(&p0, &pubnonces[0], &pks[0], &aggnonce, &pks, &msg).unwrap(), "member");
+        let p0_1 = C::s_bytes(&(C::s_parse(&p0).unwrap() + C::one()));
+        assert!(!mu::partial_sig_verify_internal::<C>(&p0_1, &pubnonces[0], &pks[0], &aggnonce, &pks, &msg).unwrap(), "s + 1");
+        // the outsider's partial signature by the BIP-327 equation with its own coefficient; the control shows it holds
+        let (ka, b, r, e) = mu::session::<C>(&aggnonce, &pks, &msg).unwrap();
+        let k = |o: usize| C::s_parse(&n[2].0[o..o + 32]).unwrap();
+        let (k1, k2) = if C::even(&r) { (k(0), k(32)) } else { (-k(0), -k(32)) };
+        let g = if C::even(&ka.q) { C::one() } else { -C::one() };
+        let s = C::s_bytes(&(k1 + b * k2 + e * ka.coef(&out) * g * d[2]));
+        let (r1, r2) = (C::parse(&n[2].1[..C::PLEN]).unwrap(), C::parse(&n[2].1[C::PLEN..]).unwrap());
+        let re = if C::even(&r) { r1 + r2 * b } else { -(r1 + r2 * b) };
+        assert!(C::g() * C::s_parse(&s).unwrap() == re + C::parse(&out).unwrap() * (e * ka.coef(&out) * g), "control");
+        assert!(mu::partial_sig_verify_internal::<C>(&s, &n[2].1, &out, &aggnonce, &pks, &msg).is_err(), "key outside the session");
+        for i in 0..2 {
+            for longer in [true, false] {
+                let mut bad = pubnonces.clone();
+                if longer { bad[i].push(0xff) } else { bad[i].pop(); }
+                assert_eq!(mu::nonce_agg::<C>(&bad).err(), Some(mu::Error::Contribution(Some(i), "pubnonce")), "signer {i}, longer {longer}");
+                if i == 1 {
+                    assert!(mu::partial_sig_verify::<C>(&p0, &bad, &pks, &msg, 0).is_err(), "peer's nonce, longer {longer}");
+                }
+            }
+        }
+    }
+    run::<Secp256k1>();
+    run::<Bn254>();
 }
 
 /// An RNG replaying fixed bytes: frost-core's `commit` draws the hiding then the binding nonce randomness (32 bytes each).
@@ -905,7 +1068,7 @@ fn signers_refuse_malformed_input() {
     let (_, pubn2) = mu::nonce_gen::<S>(&r2, Some(&sk2), &pk2, None, None, None).unwrap();
     let pubnonces = vec![pubn.clone(), pubn2];
     let agg = mu::nonce_agg::<S>(&pubnonces).unwrap();
-    let long_sec = [sec.clone(), vec![0]].concat();
+    let long_sec = [sec.to_vec(), vec![0]].concat();
     for bad in [&[][..], &sec[..32], &sec[..64], &sec[..96], &long_sec[..]] {
         assert!(mu::sign::<S>(bad, &sk, &agg, &pks, &msg).is_err(), "secnonce of {} bytes", bad.len());
     }

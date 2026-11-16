@@ -219,11 +219,28 @@ impl Musig2Session {
         let k = self.nonce.take().ok_or(Error::Argument)?.take()?;
         let sec = Zeroizing::new([&k[..], &self.pk].concat());
         let (pks, msg) = (&self.pks, &self.msg);
-        let r = match self.kind {
-            0x0110 => self.key.with(|sk| musig2::sign::<Secp256k1>(&sec, sk, aggnonce, pks, msg))?,
-            _ => self.key.with(|sk| musig2::sign::<Bn254>(&sec, sk, aggnonce, pks, msg))?,
-        };
-        r.map_err(musig2_error)
+        let (pk, pubnonce) = (&self.pk, &self.pubnonce);
+        // BIP-327 Sign's last step: the own partial signature verifies, else nothing is released (T21 L15)
+        fn own<C: Curve>(key: &Handle, sec: &[u8], aggnonce: &[u8], pk: &[u8], pn: &[u8], pks: &[Vec<u8>], msg: &[u8]) -> Result<[u8; 32]> {
+            let psig = key.with(|sk| musig2::sign::<C>(sec, sk, aggnonce, pks, msg))?.map_err(musig2_error)?;
+            match musig2::partial_sig_verify_internal::<C>(&psig, pn, pk, aggnonce, pks, msg) {
+                Ok(true) => Ok(psig),
+                _ => Err(Error::Argument),
+            }
+        }
+        match self.kind {
+            0x0110 => own::<Secp256k1>(&self.key, &sec, aggnonce, pk, pubnonce, pks, msg),
+            _ => own::<Bn254>(&self.key, &sec, aggnonce, pk, pubnonce, pks, msg),
+        }
+    }
+}
+
+/// An unsigned session wipes its secret nonce's slot when dropped (T21 L17).
+impl Drop for Musig2Session {
+    fn drop(&mut self) {
+        if let Some(h) = self.nonce.take() {
+            let _ = h.take(); // `KeyRevoked` after `lock()`: the arena is gone already
+        }
     }
 }
 
@@ -245,6 +262,11 @@ impl UaKey {
     }
 
     fn session<C: Curve>(&self, pks: &[Vec<u8>], msg: &[u8], rand: &[u8; 32]) -> Result<Musig2Session> {
+        // the registry's MuSig2 key-data rule (2 <= n <= 16, valid points, strictly increasing; T21 L16) before KeyAgg: the
+        // first key stands in for `Q`, which KeyAgg computes below
+        let n = u16::try_from(pks.len()).map_err(|_| Error::Argument)?;
+        let first = pks.first().ok_or(Error::Argument)?;
+        crate::validate_key_data(self.kind, &[&first[..], &n.to_be_bytes(), &pks.concat()].concat(), false).map_err(|_| Error::Argument)?;
         if !pks.contains(&self.key_data) {
             return Err(Error::Argument);
         }
@@ -252,7 +274,6 @@ impl UaKey {
         let pk = &self.key_data;
         let (sec, pubnonce) =
             self.secret.with(|sk| musig2::nonce_gen::<C>(rand, Some(sk), pk, Some(&agg), Some(msg), None))?.map_err(musig2_error)?;
-        let sec = Zeroizing::new(sec);
         let nonce = self.secret.put(sec.get(..64).ok_or(Error::Argument)?)?;
         Ok(Musig2Session {
             kind: self.kind,
@@ -299,6 +320,9 @@ impl<C: Ciphersuite> FrostSession<C> {
 
 /// Test-only entry points (feature `vectors`, never in a release build): fixed randomness, the nonce map.
 #[cfg(feature = "vectors")]
+pub use vectors::NonceSlotProbe;
+
+#[cfg(feature = "vectors")]
 mod vectors {
     use super::*;
 
@@ -306,6 +330,22 @@ mod vectors {
         /// `musig2_session` with a fixed `rand'`.
         pub fn vectors_musig2_session(&self, pks: &[Vec<u8>], msg: &[u8], rand: &[u8; 32]) -> Result<Musig2Session> {
             self.musig2_session_with(pks, msg, rand)
+        }
+    }
+
+    /// A second handle on a session's secret-nonce slot in the arena, to read the slot after the session is gone (T21 L17).
+    pub struct NonceSlotProbe(Handle);
+
+    impl NonceSlotProbe {
+        pub fn bytes(&self) -> Result<Vec<u8>> {
+            self.0.with(|s| s.to_vec())
+        }
+    }
+
+    impl Musig2Session {
+        /// The probe of this session's nonce slot, `None` once the nonce is spent.
+        pub fn vectors_nonce_probe(&self) -> Option<NonceSlotProbe> {
+            self.nonce.as_ref().map(|h| NonceSlotProbe(h.dup()))
         }
     }
 
