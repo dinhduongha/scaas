@@ -46,3 +46,6 @@ killed   | M41 WebAuthn high-s kept | src/uakey.js | rc=1 | 1 failed: WebAuthn a
 killed   | M42 msig minimal check skipped | src/uakey.js | rc=1 | 1 failed: msig rows: minimal sets signed at both levels, non-minimal and unsorted sets refused
 killed   | M43 msig level-2 members sign the outer digest | src/uakey.js | rc=1 | 1 failed: msig rows: minimal sets signed at both levels, non-minimal and unsorted sets refused
 mutants M1-M43 of 43, survived or not loaded: 0
+# sync7 re-run (2026-11-16, ua-rs-sign at 565c8d9c0, after the seventh / eighth syncs with ua-mtx-merge; harness strings moved in 458b7c0e2), each alone on a clean tree:
+killed   | M33 int two's complement wrong | src/evm.js | rc=1 | 1 failed: typed rows with arrays and a negative int; missing field is zero, unknown field refused | at 565c8d9c0 | git diff --exit-code 0
+# sync7 re-run: 1 killed, 0 survived, 0 not loaded (the other mutants above stand; `check`: every replacement found once at HEAD)

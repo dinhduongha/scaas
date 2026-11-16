@@ -41,3 +41,7 @@ killed     | M1 op 4: a caller's amount on the allow-list | clients/ua-rs/src/fa
 killed     | M2 op 4: the leg's v not compared with the re-derivation (u only) | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: sender_disclosure_negatives | at 8d1449c3 | rc=0, git diff --exit-code 0
 killed     | M6 op 4: the leg owner's key taken from the sender's record | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: sender_disclosure_over_rebuilt_words | at 8d1449c3 | rc=0, git diff --exit-code 0
 # T15o re-run: 3 killed, 0 survived, 0 not loaded (0 superseded; the other mutants above stand, every string checked at HEAD)
+# sync7 re-run (2026-11-16, ua-rs-sign at 565c8d9c0, after the seventh / eighth syncs with ua-mtx-merge; harness strings moved in 458b7c0e2, the facade's sender_enc of 8fcccd044), each alone on a clean tree:
+killed     | M3 op 4: the leg's index inside its group ignored | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: sender_disclosure_over_rebuilt_words | at 565c8d9c0 | git diff --exit-code 0
+killed     | M4 op 4: group 0's seed for every group | clients/ua-rs/src/facade/pqz.rs | rc=101 | 1 failed: sender_disclosure_over_rebuilt_words | at 565c8d9c0 | git diff --exit-code 0
+# sync7 re-run: 2 killed, 0 survived, 0 not loaded (the other mutants above stand; `check`: every replacement found once at HEAD)

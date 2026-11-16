@@ -13,3 +13,6 @@ killed     | M11 pqz-read: 3 account slots read | clients/ua-rs/src/bin/pqz-read
 killed     | M12 pqz-read: the release probe skipped | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 2 failed: decoys_against_anvil, reading_layer_against_anvil | called `Result::unwrap_err()` on an `Ok` value: Object {"decoys": Array [Object {"ua": String("0x0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0 | at c62c3e48
 killed     | M13 pqz-read: any answer of proofStore() taken | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: reading_layer_against_anvil | want R5: the token is of a release before 3h: error: ua-rs refused the words: PqzSetMismatch | at c62c3e48
 mutants M1-M13 of 13: 13 killed, 0 survived, 0 not loaded
+# sync7 re-run (2026-11-16, ua-rs-sign at 565c8d9c0, after the seventh / eighth syncs with ua-mtx-merge; harness strings moved in 458b7c0e2), each alone on a clean tree:
+killed     | M8 UASetProofStore dropped | clients/ua-rs/src/wallet/eip712.rs | rc=101 | 2 failed: proof_path_rows_canon, typed_ops_json_rows | called `Result::unwrap()` on an `Err` value: Argument | at 565c8d9c0 | git diff --exit-code 0
+# sync7 re-run: 1 killed, 0 survived, 0 not loaded (the other mutants above stand; `check`: every replacement found once at HEAD)

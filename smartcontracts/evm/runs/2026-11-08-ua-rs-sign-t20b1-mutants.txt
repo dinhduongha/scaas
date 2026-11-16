@@ -15,3 +15,6 @@ killed     | M13 schema 2: no canonical form | clients/ua-rs/src/wallet/policy.r
 killed     | M14 schema 3: any length | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: pay_meta_v2_body_rules | assertion `left == right` failed: a bound call of 64 bytes | at f4b64a53
 killed     | M15 pqz-read: pqzVersions one slot off | clients/ua-rs/src/bin/pqz-read.rs | rc=101 | 1 failed: tests::registry_slots_are_the_layout_pin | assertion `left == right` failed: pqzVersions | at f4b64a53
 mutants M1-M15 of 15: 15 killed, 0 survived, 0 not loaded
+# sync7 re-run (2026-11-16, ua-rs-sign at 565c8d9c0, after the seventh / eighth syncs with ua-mtx-merge; harness strings moved in 458b7c0e2), each alone on a clean tree:
+killed     | M7 receiver fee: the address ReceiverFee | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: sign_json_policy_rows | "payee fee": PolicyRefused | at 565c8d9c0 | git diff --exit-code 0
+# sync7 re-run: 1 killed, 0 survived, 0 not loaded (the other mutants above stand; `check`: every replacement found once at HEAD)
