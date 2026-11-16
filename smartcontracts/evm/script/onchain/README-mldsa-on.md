@@ -1,6 +1,6 @@
 # Deploy set `mldsa-on`: the real-transaction rows
 
-Status: groups `mldsa`, `tokens`, `pqchat` **BUILT** (green on local anvil, set `mldsa-off`; the precompile path on an own Nethermind copy, set `mldsa-on`, see the commits); `pqzkeys`, `pqzwallet` **PLANNED** (in progress). Their run on the live set waits for reset 5. Test chains only. **UNAUDITED.**
+Status: groups `mldsa`, `tokens`, `pqchat` **BUILT** (green on local anvil, set `mldsa-off`; the precompile path on an own Nethermind copy, set `mldsa-on`, see the commits); `pqzkeys` **BUILT** (`mldsa_on_pqz.py`, green on the own Nethermind copy, set `mldsa-on`; not yet on local anvil, set `mldsa-off`); `pqzwallet` **PLANNED** (in progress). Their run on the live set waits for reset 5. Test chains only. **UNAUDITED.**
 
 Owner 2026-11-16 ("Ok, cách 2, một chain hai bộ deploy"; "Ok, cách 1, bắt đầu viết ngay"): reset 5 deploys the same build twice on
 the SCaaS testnet, set `mldsa-off` (`MLDSA_PRECOMPILE=off`, the registry's expanded-key cache) for the whole forge matrix
@@ -55,6 +55,12 @@ The set's release and instance (`pqchat_implementation`, `pqchat_instance`), thr
 `eth_call` with its runtime code placed by the call's state override, never sent and never a Python reproducer.
 
 ### `pqzkeys`: the three-key model (PqzKeys.s.sol)
+
+**BUILT** (`mldsa_on_pqz.py` `g_pqzkeys`; the own Nethermind copy, set `mldsa-on`: 267 / 267 txs, 26 / 26 negatives, 9 controls,
+48 view checks, 27 real `R_REG` proofs, every scoped record and carol's registry key `proven`). The typed digests the
+contracts have no view for come from clientkeys: the holder's `PqzRollOver` (`pqzEntryHash` over each slot and its blob's code),
+the address `MetaTransaction` of `executeMetaTransaction`, the msig's `membershipMessage`. A record control's `eth_call` asks the
+block's gas limit: a record with an opening KEM key writes ~20 KB by SSTORE2, above a fixed 30 M of EIP-8037 state gas.
 
 Holders `uaM`, `bob`, `carol` (ML-DSA-65, `_holder` 488-504), the msig `mu` (`_msig` 506-527: `registerMsig`, `acceptMembership`,
 member signatures by ML-DSA). PQZ tokens of kinds 4, 5, 12, 13 created **on the set's factory** (its PQZ releases, DEPLOY_PQZ) in
