@@ -654,7 +654,11 @@ is sent only once its simulation passes, i.e. after every part landed. Before th
 node checks the `register`'s `pop` and attributes off chain (`scaas-ua` `ua8::check_registration`, the registry's own check once the
 key is cached; an extra check, the contract stays the guard); refused, the registration is `dead` as `UA_REGISTER_POP_REFUSED: …`
 and no part is sent. The parts are the `call` share of the EVM spend breaker: past `breaker.call_budget_pct` of
-`gas_budget_per_hour` no part is sent and the `register` waits `UA_KEY_NOT_CACHED` (payments run to the whole budget). `dead`
+`gas_budget_per_hour` no part is sent and the `register` waits `UA_KEY_NOT_CACHED` (payments run to the whole budget). The share counts
+the window's settled spend plus each part still in flight at its gas limit × max fee (the largest any of its versions was signed at; read
+back after a restart from its journal row or its tracked job), released at its receipt (T21 L81, 2026-11-16); the lane asks it before
+every part's send, a producer's named `cacheExpandedKey` job included (`queued` as `UA_KEY_NOT_CACHED: the call share … is spent …;
+not sent`); a part already signed is still tracked and replaced. `dead`
 only for what no sender can cure (O8): the part's own contract revert (`UAKeyCache`, `UAKeyData`) and the chain's limit
 (`TX_EXCEEDS_CHAIN_LIMIT`: the block gas limit, EIP-7825's 2^24), as `UA_KEY_NOT_CACHED: part <n> refused: …`. A part over this
 lane's `max_gas_per_tx` or over its RPC's gas cap may still land from another sender: the `register` goes back `queued` as
@@ -665,7 +669,9 @@ the registration is `dead` as `UA_KEY_NOT_CACHED: part <n> refused: TX_EXCEEDS_C
 the job's deadline). Each part
 the lane sends has a journal row of its own in the node store (namespace `~node`, a `call` job, `signed` at its nonce and hash
 before the send; no row, no send): after a restart the lane tracks, bumps and settles it like a job, and a part whose nonce the
-chain no longer holds is gap-filled and its row `dead` ([submit-lanes.md#journal](submit-lanes.md#journal)). The row is `PERMISSIONLESS` (anyone may
+endpoint no longer holds is gap-filled, its row live beside the gap-fill, since the original may still land (another peer, behind a
+gap): the part's receipt settles it `mined` / `reverted`, the gap-fill's `dead` (T21 L80, 2026-11-16); a part stuck past its `register`'s
+deadline is gap-filled the same way and its row stays live (the cache entry has no deadline) ([submit-lanes.md#journal](submit-lanes.md#journal)). The row is `PERMISSIONLESS` (anyone may
 send a part; it writes only what the registry derives from `pk`): a consumer's own `cacheExpandedKey` `call` job takes the same
 row and the same gas, its `kind`, `pk` length and `part` refused by name before any simulation (`BAD_PAYLOAD: args.kind` /
 `args.pk` / `args.part`); the allow-lists (`guard.rs`, the [call table](#call-table), `typed.rs`) hold it in both directions against

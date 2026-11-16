@@ -111,9 +111,11 @@ impl Breaker {
     }
 
     /// The jobs of the `call` share (`ChainAdapter::in_call_share`) stop here, at `call_budget_pct` of the hour's budget; all others run to `gas_budget`.
-    pub fn calls_stopped(&mut self, now: u64) -> bool {
+    /// `reserved`: the fee exposure of the share's transactions still in flight (T21 L81, the EVM lane's cache parts; 0 elsewhere).
+    pub fn calls_stopped(&mut self, now: u64, reserved: u128) -> bool {
         self.roll(now);
-        self.cfg.gas_budget_per_hour.is_some_and(|b| self.spent.saturating_mul(100) >= b.saturating_mul(self.cfg.call_budget_pct.into()))
+        let used = self.spent.saturating_add(reserved);
+        self.cfg.gas_budget_per_hour.is_some_and(|b| used.saturating_mul(100) >= b.saturating_mul(self.cfg.call_budget_pct.into()))
     }
 
     /// Tên cầu dao đầu tiên đang mở, hoặc `None` = được nhận việc mới.
