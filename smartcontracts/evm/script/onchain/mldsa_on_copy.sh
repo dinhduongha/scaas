@@ -3,7 +3,9 @@
 # A local deploy set `mldsa-on` on an own single-node Nethermind copy (both precompiles), for mldsa_on.py before the live set
 # (owner 2026-11-16). Its own container, data dir and port: never the live stack, never copy.sh's pqzcopy-* project. From
 # smartcontracts/evm:
-#   MO_COPY=<dir> sh script/onchain/mldsa_on_copy.sh init     copy.sh init + genesis0 + copygen.py into <dir> (Clique period 2 s)
+#   MO_COPY=<dir> sh script/onchain/mldsa_on_copy.sh init     copy.sh init + genesis0 + copygen.py into <dir> (Clique period 2 s;
+#                                                             chain id MO_CHAIN, default 1337 (a local dev chain of DeployBase._isTestChain): not 7622,
+#                                                             whose chain_uid DeployBase requires there, NET-ALL-22)
 #   MO_COPY=<dir> sh script/onchain/mldsa_on_copy.sh up       docker run (--memory 1700m) the signer, its RPC on 127.0.0.1:$MO_PORT
 #   MO_COPY=<dir> ../../scripts/capped sh script/onchain/mldsa_on_copy.sh deploy   deploy.sh evm, MLDSA_PRECOMPILE=on, DEPLOY_PQZ=1
 #   MO_COPY=<dir> ../../scripts/capped sh script/onchain/mldsa_on_copy.sh run [groups]   mldsa_on.py --set mldsa-on
@@ -19,12 +21,12 @@ K() { printf '0x%064x' "$1"; }
 cmd=${1:?init, up, deploy, run or down}
 case $cmd in
 init)
-  C=${MO_COPY:?MO_COPY: the copy's directory (git-ignored, e.g. scratchpad/)}
+  C=${MO_COPY:?MO_COPY: the copy directory (git-ignored, e.g. scratchpad/)}
   COPY=$C sh $CS/copy.sh init
   COPY=$C sh $CS/copy.sh genesis0 "${MO_ENGINE:-$CS/engine-pqz.json}"
   python3 -I script/onchain/copygen.py "$C"
-  python3 -I -c 'import json,sys; p=sys.argv[1]; g=json.load(open(p)); g["engine"]["Clique"]["params"]["period"]=2; json.dump(g,open(p,"w"),indent=1)' \
-    "$C/genesis.pqz0.json" ;;
+  python3 -I -c 'import json,sys; p=sys.argv[1]; g=json.load(open(p)); g["engine"]["Clique"]["params"]["period"]=2; c=hex(int(sys.argv[2]))
+g["params"]["chainId"]=g["params"]["networkID"]=c; json.dump(g,open(p,"w"),indent=1)' "$C/genesis.pqz0.json" "${MO_CHAIN:-1337}" ;;
 up)
   C=$(cd "${MO_COPY:?MO_COPY}" && pwd)
   docker run -d --name "$NAME" --memory 1700m --memory-swap 1700m --cpus 2 -p "127.0.0.1:$PORT:8545" \

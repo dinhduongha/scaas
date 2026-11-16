@@ -1,6 +1,6 @@
 # Deploy set `mldsa-on`: the real-transaction rows
 
-Status: **PLANNED** (inventory, 2026-11-16; branch `mldsa-on-e2e`). Test chains only. **UNAUDITED.**
+Status: groups `mldsa`, `tokens`, `pqchat` **BUILT** (green on local anvil, set `mldsa-off`; the precompile path on an own Nethermind copy, set `mldsa-on`, see the commits); `pqzkeys`, `pqzwallet` **PLANNED** (in progress). Their run on the live set waits for reset 5. Test chains only. **UNAUDITED.**
 
 Owner 2026-11-16 ("Ok, cách 2, một chain hai bộ deploy"; "Ok, cách 1, bắt đầu viết ngay"): reset 5 deploys the same build twice on
 the SCaaS testnet, set `mldsa-off` (`MLDSA_PRECOMPILE=off`, the registry's expanded-key cache) for the whole forge matrix
