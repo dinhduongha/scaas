@@ -1340,7 +1340,7 @@ impl Draw {
     }
 }
 
-fn os32() -> Result<[u8; 32]> {
+pub(crate) fn os32() -> Result<[u8; 32]> {
     let mut b = [0u8; 32];
     OsRng.try_fill_bytes(&mut b).map_err(|_| Error::Rng)?;
     Ok(b)
@@ -1570,6 +1570,17 @@ impl zeroize::ZeroizeOnDrop for PqzKey {}
 fn keygen(seed32: &[u8]) -> Result<Sk> {
     let seed: &[u8; 32] = seed32.try_into().map_err(|_| Error::Argument)?;
     Ok(Sk(pqzl::keygen(seed).ok_or(Error::Argument)?))
+}
+
+/// Op 3 `R_REG` over `message` of the key of `seed32` under proof system `id` (this build's): `(stmt, proof)`. The three-key handle's
+/// registration (T21 O5 (b), owner decision (a): the handle runs it, no caller code sees the seed); its seed copied under the
+/// store's lease by the caller.
+pub(crate) fn register_proof(seed32: &[u8], id: &Word, message: &Word, rnd32: &[u8; 32]) -> Result<(Vec<u8>, Vec<u8>)> {
+    let id = system(id)?;
+    let sk = keygen(seed32)?;
+    let stmt = Stmt::Register(Register { words: [Form::Register.op_tag(), id, *message], pk: &sk.0.pk[..] }).encode().map_err(|_| Error::Argument)?;
+    let proof = prove(Form::Register.op(), &stmt, &Zeroizing::new(wit_key(&sk.0)), rnd32)?;
+    Ok((stmt, proof))
 }
 
 /// [`crate::wallet::Wallet::pqz_key_version`].

@@ -249,7 +249,8 @@ for (const set of SETS) {
     const layout = pqzLayout((fromHex(x.pu).length * 8) / packBits, packBits);
     const h = pqzKeyHandle(BIP39, { chainUid: c.chainUid, ua: c.to.ua, version: 0, layout });
     assert.equal(hex(h.openKem), c.to.kemPk, 'the handle\'s opening KEM key is the credit\'s');
-    const SLOT = '0x' + (BigInt('0x5e' + '00'.repeat(19)) << 96n | 16n << 80n | 200n << 64n | 7n).toString(16).padStart(64, '0');
+    // an op 1 credit's offsets (16, 16 + P(u)): the handle binds them (T21 O5 (b) review, F1)
+    const SLOT = '0x' + (BigInt('0x5e' + '00'.repeat(19)) << 96n | 16n << 80n | BigInt(16 + layout.pkp) << 64n | 7n).toString(16).padStart(64, '0');
     const filled = (k, v) => new Uint8Array(k).fill(v);
     const blob = ({ pu = fromHex(x.pu), oT = fromHex(c.to.opening), oA = fromHex(c.auditor.opening) } = {}) => concatBytes(
       Uint8Array.of(0), filled(16, 3), pu, fromHex(x.pvt), fromHex(x.pva), fromHex(c.to.ua), filled(layout.pkp, 4), filled(layout.vp, 5),

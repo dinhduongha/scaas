@@ -287,6 +287,10 @@ pub(crate) enum KeyId {
     /// A PQZ `seed32` rebuilt from an `msig`'s k-of-n backup, by its key hash (T16a, feature `pqz`).
     #[cfg(feature = "pqz")]
     PqzHeld([u8; 32]),
+    /// A three-key PQZ handle's slot `seed32 ‖ openKemSeed` of `account` / `index` / UA / chainUid / token (`None`:
+    /// `offchain-shared`) / key version (T21 O5 (b), feature `pqz`).
+    #[cfg(feature = "pqz")]
+    PqzScoped(u32, u32, [u8; 32], [u8; 32], Option<[u8; 20]>, u64),
 }
 
 /// A mnemonic as clientkeys `normalizeMnemonic` (NFKD, lower case, single spaces), at most 1 KiB and 24 words (spec §9.3),
@@ -588,6 +592,14 @@ impl Wallet {
     /// `msig` operator draws each version's `seed32` fresh instead, never from this). `WalletLocked` while locked.
     pub fn pqz_key_version(&self, account: u32, index: u32, version: u64) -> Result<crate::facade::pqz::PqzKey> {
         crate::facade::pqz::derive(&self.store, account, index, version)
+    }
+
+    /// The three-key handle of a PQZ key with the opening (T21 O5 (b), owner 2026-11-16 "ok, as proposed"; CLI-SGN-51):
+    /// `offchain-shared` (`scope.token` `None`) or `offchain-token` of a token with the opening, at `scope.version`. Its PQZ seed
+    /// (K3-2) and its opening KEM seed (K3-6b) are derived from this wallet's seed into its arena (`lock()` revokes the handle);
+    /// `pk` and the opening KEM key come out. `WalletLocked` while locked.
+    pub fn pqz_scoped_key(&self, scope: &crate::pqz3k::Scope) -> Result<crate::pqz3k::PqzKeyHandle> {
+        crate::pqz3k::derive(&self.store, scope)
     }
 
     /// The PQZ key of an `msig` rebuilt from its k-of-n backup (T16a, owner 2026-11-06; [`crate::facade::pqz_backup`]): the

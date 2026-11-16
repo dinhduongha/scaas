@@ -1118,29 +1118,48 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
    skip. So no credit is spendable by an honest wallet while the auditor is blinded.
 10. Accept.
 
-- **Key handle** (owner 2026-11-14, the Change of this rule in `decisions.md`; Fable review of the round P1-1). Status:
-  **SPECIFIED** until the round's client gates are green: the handle refuses mislabelled credits; it holds the PQZ secret of its
-  record, but no binding in this repository proves through it yet. **In `ua-rs` the handle is not built** (owner 2026-11-16, T21
-  O5): it takes the raw BIP-39 seed and lives outside the wallet's store (not revoked by `lock()`), and no `Wallet` method makes
-  one, so `PqzKeyHandle::new`, `open_kem_seed` and `pqz_token_key_seed_without_opening` are `pub` under the test feature
-  `vectors` only (a release build cannot name them; `compile_fail` checks); the store-held handle with one gated debit entry is
-  its own task before the freeze. "No bare class-2 decrypt" is enforced here, in the clients,
-  not in pqz-ffi. `clientkeys` `pqzKeyHandle` and `ua-rs` `pqz3k::PqzKeyHandle`, one per key with the opening
-  (`offchain-shared`, or `offchain-token` of a token with the opening) and key version:
-  - It derives and holds that key's PQZ seed and its opening KEM secret; no member returns either. The scoped seed of a key
-    with the opening is no public export (`pqzScopedKeySeed` / `pqz_scoped_key_seed` removed); only an `offchain-token` key of a
-    token **without** the opening keeps one, `pqzTokenKeySeedWithoutOpening` / `pqz_token_key_seed_without_opening` (the accepted
+- **Key handle** (owner 2026-11-14, the Change of this rule in `decisions.md`; Fable review of the round P1-1; in the wallet's
+  store owner 2026-11-16, T21 O5 (b), "ok, as proposed"; design [2026-11-16-pqz3k-handle-store.md](../superpowers/specs/2026-11-16-pqz3k-handle-store.md)).
+  Status: **BUILT**, **UNAUDITED**; no binding in this repository proves through it yet (the matrix's wallet simulator
+  `smartcontracts/evm/script/pqz/wallet` decrypts its `T` through it). "No bare class-2 decrypt" is enforced here, in the
+  clients, not in pqz-ffi. `clientkeys` `pqzKeyHandle` and `ua-rs` `pqz3k::PqzKeyHandle` (feature `pqz`), one per key with the
+  opening (`offchain-shared`, or `offchain-token` of a token with the opening) and key version:
+  - It derives and holds that key's PQZ seed and its opening KEM secret; no member returns either. In `ua-rs` only
+    `Wallet::pqz_scoped_key(&Scope { account, index, ua, chain_uid, token, version })` makes one: both seeds are derived from the
+    wallet's seed into its `SecretStore` arena (one slot, `KeyId::PqzScoped`), the handle holds a store handle and public data
+    (`pk`, the opening KEM key), and `lock()` revokes it for good (`Refused::KeyRevoked`; spec §8.2). Every entry that uses a
+    secret holds a read lease of the store for its copy's whole use, so `lock()` waits for it
+    ([CLI-UAL-09](ua-libraries.md#CLI-UAL-09)'s read lease, T21 L82). The raw-seed derivations `open_kem_seed` and
+    `pqz_token_key_seed_without_opening` and the test constructors `PqzKeyHandle::vectors_from_seed` / `vectors_from_secrets`
+    are `pub` under the test feature `vectors` only (a release build cannot name them; `compile_fail` checks). `clientkeys`
+    keeps its constructor from the BIP-39 seed (its custody is [CLI-SGN-02](#CLI-SGN-02)'s). The scoped seed of a key with the
+    opening is no public export (`pqzScopedKeySeed` / `pqz_scoped_key_seed` removed); only an `offchain-token` key of a token
+    **without** the opening keeps one, `pqzTokenKeySeedWithoutOpening` / `pqz_token_key_seed_without_opening` (the accepted
     exposure of [CTR-PQZ-37](../contracts/pq-zero-knowledge.md#CTR-PQZ-37)). The KAT reads the handle's
     `seedCommitment = keccak256(seed32)`.
-  - `check(credit)` reads the blob itself (`pqzOpeningBlobOf` / `pqz3k::opening_blob`), refuses a credit of another token
-    (class 3), recipient or key version, and builds both `aad`s from the blob's own bytes; `clientkeys` runs steps 2–4, 8 and the
+  - `check(credit)` reads the blob itself (`pqzOpeningBlobOf` / `pqz3k::opening_blob`), refuses a slot whose offsets are not an op
+    1 credit's (`uOff = 16`, `vOff = 16 + P(u)`, as the contract writes them), a credit of another token (class 3), recipient or
+    key version, and builds both `aad`s from the blob's own bytes; `clientkeys` runs steps 2–4, 8 and the
     auditor's opening of step 9 itself, the binding's check (pqz-ffi `opening::check_recipient`) the PQZ arithmetic of steps
-    5–7 and `v_a`; `ua-rs` hands the opening KEM seed and those inputs to the binding's check. The result is an **acceptance**
-    bound to the handle, the index and `h(i)` (slot and blob bytes), or a skip.
-  - The PQZ seed reaches a function only through three gated entries, counted: `withSecretOwn` / `with_secret_own` after the
-    holder's own `ownTag` verifies under the handle's key; `withSecretWindow` / `with_secret_window` when every window entry is
-    skip-marked, TRIVIAL or accepted by this handle with the same index and bytes, else refused before the seed is touched;
-    `withSecretKeygen` / `with_secret_keygen` (the public key and the `R_REG` proof of registration), counted apart.
+    5–7 and `v_a`; `ua-rs` runs pqz-ffi `opening::check_recipient` itself on the blob's bytes, its own `pk` and opening KEM key
+    and the auditor's keys as given (no caller code sees the opening KEM seed). The result is an **acceptance** bound to the
+    handle, the token, the index and `h(i)` (slot and blob bytes), or a skip.
+  - **The debit** (the review of the handle, owner 2026-11-16 "ok, as proposed", decision (a): in `ua-rs` no caller code sees the PQZ seed in a
+    release build). One entry per debit, the own part and the window together (`T = own (u_f, v_f) + Σ pending[p_last, p) +
+    Trivial(shieldIn)`, [CTR-PQZ-33](../contracts/pq-zero-knowledge.md#CTR-PQZ-33)): `{ token, lastDebit, own: { pu, pvf, ownTag }
+    | none, window: [{ token, index, slot, code, accepted }], shieldIn }`, refused in this order: revoked (`KeyRevoked`, first
+    for every entry); another token than the handle's (`NotThisHandle`); `lastDebit > 0` without the own part (`OwnRequired`: a
+    window of zero entries never skips it); an own part at `lastDebit = 0` (`Input`); no own part, no window entry and `shieldIn =
+    0` (`EmptyDebit`; a first debit of `Trivial(shieldIn)` alone passes); the own part's counter `lastDebit − 1` at or above 2^32
+    or its parts not of the set's lengths (`Input`); more than `K_MAX − 2` window entries, an entry of another token, indexes not
+    strictly ascending, or an entry neither skip-marked, TRIVIAL nor accepted by this handle for that token, index and bytes
+    (`Window`); the own part's `ownTag` at counter `lastDebit − 1` not verifying under the handle's key, compared in constant time
+    (`OwnTag`). `ua-rs` `open_debit` then builds `T` from exactly those parts and decrypts it inside the handle (`{ t, balance }`),
+    and `prove_reg(id)` proves the record's own `R_REG` message inside; the seed-taking closures (`with_secret_debit(d, f(seed,
+    T))`, `with_secret_keygen`) are test-only (`vectors`). `clientkeys` `withSecretDebit(debit, f)` and `withSecretKeygen(f)` keep
+    the closure (clientkeys has no PQZ arithmetic; its custody is CLI-SGN-02's). The handle's id binds its class, derivation
+    account and index and its keys (`keccak256(pk)` in `ua-rs`, the seed commitment in `clientkeys`, `keccak256(kemPk)`), so an
+    acceptance of one key never opens another's debit. Nothing inside an entry may lock (or wipe) the same wallet.
 - <a id="pqz-wallet-wasm"></a>**The browser wallet's check** (TODO 3zf, owner 2026-11-15). Status: **BUILT**, **UNAUDITED**. A
   browser wallet holds an opening token through the wallet module: `pqz-core/ffi/wallet-wasm` (pqz-ffi
   `opening::check_recipient` / `check_auditor` in wasm32, one module per parameter set, built by its `build.sh`; no built `.wasm`
@@ -1178,8 +1197,10 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
   seed commitments, `ownTag` over `u_f`, `h(i)` and `entriesHash`, the `UAPqzScopedKey` / `UAPqzScopedKeyRecord` digests and
   both messages, and an opening blob with its offsets; read by `clientkeys` and `ua-rs` and checked against the contracts by
   `test/pqz/PqzClientRows.t.sol`. The K3-7 differential of spec §14.19 between `clientkeys` and `ua-rs` waits for a client that
-  carries steps 5–7; today both hand them to pqz-ffi. `ua-rs` runs no K3-7 row of `pqz/opening.json` `rejects` this round (its
-  handle is not built, above; owner 2026-11-16, T21 O5); `clientkeys` (JS and the wasm module) reads every one. The rows hold
+  carries steps 5–7; today both hand them to pqz-ffi. Every row of `pqz/opening.json` `rejects` is read by `clientkeys` (JS and
+  the wasm module) and by `ua-rs` (T21 O5 (b), `tests/pqz3k.rs`: pqz-ffi `check_recipient` / `check_auditor` on the row's credit
+  rebuilt from its seeds, both outcomes the row's; the rows whose field the handle takes from the credit also through
+  `PqzKeyHandle::check`, a skip on each, the unchanged credit accepted). The rows hold
   §14.19's named cases (T21 L66b: a low-order X25519 point, an `mlkemCt` of another UA's key, the auditor's sealed seed given to
   the recipient), a flipped `mlkemCt` bit, an `aad` of another chain and of another key version, and a malformed auditor
   `kemPk`, beside the wrong lengths, the flipped tag, `O_a` under role 0's coins and the malformed recipient `kemPk`.
