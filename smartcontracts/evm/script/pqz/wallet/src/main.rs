@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! `pqz-wallet-sim`: the matrix's wallet for opening tokens (spec 2026-11-13-pqz-three-keys §15.2; CLI-SGN-51). One JSON
-//! object on stdin, one on stdout. UNAUDITED test tool: test seeds only.
+//! object on stdin, one on stdout. UNAUDITED test tool: test wallets only (each record names its BIP-39 `entropy`), through
+//! scaas-ua's release API (`Wallet::from_mnemonic`, `Wallet::pqz_scoped_key`; no `vectors`, owner 2026-11-17).
 //!
 //! - `keys`: a holder's PQZ public key and opening KEM key of one record (the handle's public data, `PqzKeyHandle::pk` /
 //!   `open_kem_pk`).
@@ -8,7 +9,7 @@
 //!   `vFrom`, the openings; `variant` plants a bad credit (`junk`, `wrongseed`, `craftedv`; with the auditor `junk_oa`,
 //!   `junk_ot`, `oa_coins`).
 //! - `wallet`: the holder side, ALL through ua-rs `pqz3k::PqzKeyHandle` (T21 O5 (b): the handle in a store of its own, the
-//!   test constructor `vectors_from_seed`): each pending credit checked (`check`: the blob read, K3-7 by pqz-ffi
+//!   release path `Wallet::pqz_scoped_key`): each pending credit checked (`check`: the blob read, K3-7 by pqz-ffi
 //!   `check_recipient` inside the handle, an acceptance or a skip), the marks a wallet may sign (`PqzKeyHandle::marks`: reads
 //!   at a finalized block in strict-majority mode), and a debit (`open_debit`: the PQZ secret reaches the decryption
 //!   of `T` only when every window entry is accepted, TRIVIAL or marked, and the own part, required when `lastDebit > 0`,
@@ -21,6 +22,7 @@ use pqz_ffi::opening::{self as op, AuditorOutcome, Party, Role};
 use pqz_ffi::pqzl::PK_BYTES;
 use scaas_ua::facade::pqz_pack::{PKP, VP};
 use scaas_ua::facade::pqz_path::tail;
+use scaas_ua::wallet::Wallet;
 use scaas_ua::pqz3k::{self as k3, AuditorKeys, Checked, Debit, Layout, Own, PqzKeyHandle, Reads, Scope, WindowEntry};
 use serde_json::{json, Value};
 use std::io::Read;
@@ -79,8 +81,12 @@ fn amount(d: &[u8; 16]) -> u64 {
     d.iter().enumerate().map(|(i, x)| (*x as u64) << (4 * i)).sum()
 }
 
+/// One record's inputs: the holder's BIP-39 entropy (the matrix's test wallet; `entropy`, 16 to 32 bytes), its UA, the chain,
+/// the scope and the key version. Owner 2026-11-17 ("ok, as proposed", option (b)): the handle comes through the release path, a
+/// `Wallet` restored from the entropy's mnemonic and `Wallet::pqz_scoped_key`; this tool builds scaas-ua without `vectors`.
 struct Rec {
-    seed: [u8; 64],
+    words: String,
+    bip39_seed: [u8; 64],
     ua: [u8; 32],
     cu: [u8; 32],
     scope: Option<[u8; 20]>,
@@ -88,17 +94,28 @@ struct Rec {
 }
 impl Rec {
     fn of(r: &Value) -> Self {
-        Rec { seed: arr(&r["seed"]), ua: arr(&r["ua"]), cu: arr(&r["chainUid"]), scope: opt20(&r["scope"]), version: num(&r["version"]) }
+        let m = bip39::Mnemonic::from_entropy(&unhex(&r["entropy"])).expect("entropy: 16 to 32 bytes, a multiple of 4");
+        Rec { words: m.to_string(), bip39_seed: m.to_seed_normalized(""), ua: arr(&r["ua"]), cu: arr(&r["chainUid"]), scope: opt20(&r["scope"]), version: num(&r["version"]) }
     }
-    fn handle(&self) -> PqzKeyHandle {
+    /// The holder's wallet (kept alive beside its handle: dropping a wallet locks it).
+    fn wallet(&self) -> Wallet {
+        Wallet::from_mnemonic(&self.words, "").expect("the wallet")
+    }
+    fn handle(&self, w: &Wallet) -> PqzKeyHandle {
         let s = Scope { account: 0, index: 0, ua: self.ua, chain_uid: self.cu, token: self.scope, version: self.version };
-        PqzKeyHandle::vectors_from_seed(&self.seed, &s).expect("the handle")
+        w.pqz_scoped_key(&s).expect("the handle")
+    }
+    /// The auditor tool's opening KEM seed (the auditor tool is pqz-ffi's `check_auditor`, which takes it; no handle entry): the
+    /// BIP-39 seed of the same mnemonic through pqz-ffi's K3-6b, equal to the wallet's (`auditor_kem_seed_is_the_wallets`).
+    fn open_kem_seed(&self) -> [u8; 96] {
+        op::open_kem_seed(&self.bip39_seed, &self.ua, &self.cu, self.scope.as_ref(), self.version)
     }
 }
 
 fn keys(r: &Value) -> Value {
     let rec = Rec::of(r);
-    let h = rec.handle();
+    let w = rec.wallet();
+    let h = rec.handle(&w);
     json!({"pqzKey": hex(&h.pk()), "openKem": hex(&h.open_kem_pk()), "seedCommitment": hex(&h.seed_commitment().expect("open"))})
 }
 
@@ -151,7 +168,8 @@ fn credit(r: &Value) -> Value {
 
 fn wallet(r: &Value) -> Value {
     let rec = Rec::of(r);
-    let h = rec.handle();
+    let w = rec.wallet();
+    let h = rec.handle(&w);
     let pk = h.pk();
     let token: [u8; 20] = arr(&r["token"]);
     let rd = &r["reads"];
@@ -224,7 +242,7 @@ fn wallet(r: &Value) -> Value {
 
 fn audit(r: &Value) -> Value {
     let rec = Rec::of(r);
-    let kem = k3::open_kem_seed(&rec.seed, &rec.ua, &rec.cu, rec.scope.as_ref(), rec.version);
+    let kem = rec.open_kem_seed();
     let kem_pk = op::open_kem_pk(&kem);
     let token: [u8; 20] = arr(&r["token"]);
     let (rolled, floor) = (num(&r["rolled"]), num(&r["floor"]));
@@ -278,4 +296,48 @@ fn main() {
         c => json!({"error": format!("unknown cmd {c}")}),
     };
     println!("{out}");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rec(scope: serde_json::Value) -> Value {
+        json!({"entropy": hex(&[0x5d; 32]), "ua": hex(&[0x11; 32]), "chainUid": hex(&[0xc1; 32]), "scope": scope, "version": 0})
+    }
+
+    /// The handle through the release path; the auditor tool's KEM seed (pqz-ffi, from the same mnemonic) is the wallet's: the
+    /// opening KEM key the handle registers is the one the auditor tool opens with; `keys` repeats (a deterministic wallet).
+    #[test]
+    fn auditor_kem_seed_is_the_wallets() {
+        for scope in [Value::Null, json!(hex(&[0x70; 20]))] {
+            let r = Rec::of(&rec(scope.clone()));
+            let w = r.wallet();
+            let h = r.handle(&w);
+            assert_eq!(h.open_kem_pk(), op::open_kem_pk(&r.open_kem_seed()));
+            let mut q = rec(scope);
+            q["cmd"] = json!("keys");
+            assert_eq!(keys(&q), keys(&q));
+            assert_eq!(keys(&q)["openKem"], json!(hex(&h.open_kem_pk())));
+        }
+    }
+
+    /// `wallet`: a TRIVIAL entry and `shieldIn`, opened inside the handle: balance 100 + 5, the seed used once; a request with
+    /// `lastDebit > 0` and no own blob is refused `OwnRequired`, the seed unused.
+    #[test]
+    fn wallet_opens_the_gated_parts_only() {
+        let mut slot = [0u8; 32];
+        slot[19] = 100;
+        slot[31] = 9;
+        let mut q = rec(Value::Null);
+        q["token"] = json!(hex(&[0x70; 20]));
+        q["entries"] = json!([{"index": 0, "slot": hex(&slot), "code": "0x", "auditor": null}]);
+        q["reads"] = json!({"block": 1, "finalized": true, "strictMajority": true});
+        q["window"] = json!({"from": 0, "to": 1, "lastDebit": 0, "shieldIn": 5, "ownCode": "0x"});
+        let o = wallet(&q);
+        assert_eq!((o["window"]["opened"].clone(), o["window"]["balance"].clone(), o["secretLoads"].clone()), (json!(true), json!(105), json!(1)));
+        q["window"]["lastDebit"] = json!(3);
+        let o = wallet(&q);
+        assert_eq!((o["window"]["why"].clone(), o["secretLoads"].clone()), (json!("OwnRequired"), json!(0)));
+    }
 }
