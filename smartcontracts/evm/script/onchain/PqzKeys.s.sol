@@ -89,6 +89,19 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
         vA = _pad(vm.addr(vk));
     }
 
+    function _deps() internal {
+        _init("pqzkeys");
+        _vInit();
+        f = OpenFactory(_dep("token_factory"));
+        router = _dep("relay_fee_router");
+        registry = _dep("ua_registry");
+        compliance = _dep("compliance_registry");
+        _book(address(f), "OpenFactory");
+        _book(router, "RelayFeeRouter");
+        _book(_dep("relay_fee_executor"), "RelayFeeExecutor");
+        _book(registry, "UARegistry");
+    }
+
     function _state() internal view returns (string memory) {
         return string.concat("deployments/pqzkeys-", net, "-state.json");
     }
@@ -451,35 +464,22 @@ abstract contract PqzKeysKit is Tokens, PqzArgs {
 ///         confidential layer per class, the negatives.
 contract PqzKeysSetup is PqzKeysKit {
     function setup() external {
-        _init("pqzkeys");
-        _vInit();
-        f = OpenFactory(_dep("token_factory"));
-        router = _dep("relay_fee_router");
-        registry = _dep("ua_registry");
-        compliance = _dep("compliance_registry");
-        _book(address(f), "OpenFactory");
-        _book(router, "RelayFeeRouter");
-        _book(_dep("relay_fee_executor"), "RelayFeeExecutor");
-        _book(registry, "UARegistry");
+        _deps();
+        string memory j = vm.readFile(_state()); // PqzKeysPublic's run: its factory and leg
+        (fp, leg) = (OpenFactory(vm.parseJsonAddress(j, ".fp")), MockERC20(vm.parseJsonAddress(j, ".leg")));
         _fixtures();
-        _registerDerived();
         _registerMl();
         (bobSeed, bob) = _holder("bob");
         (carolSeed, carol) = _holder("carol");
         _msig();
-        _factory();
-        _publicLayer();
-        _trades();
+        // the public layer's `_pq` rows (PqzKeysPublic ran the sweep without them)
+        uint8[4] memory pk = [uint8(4), 12, 5, 13];
+        for (uint256 i; i < 4; ++i) _pqOn(pk[i], string.concat("pqzkeys-pq", vm.toString(pk[i])));
         _confidential();
         _registryKeys();
-        _regulatedPowers(12);
-        _regulatedPowers(13);
         _burnerPqz(4);
         _burnerPqz(12);
-        uint8[3] memory wk = [uint8(3), 9, 11];
-        for (uint256 i; i < 3; ++i) _wrapLimits(wk[i]);
         _registryNegatives();
-        _factoryNegatives();
         _save();
         _writeBook();
     }
@@ -1245,6 +1245,31 @@ contract PqzKeysSetup is PqzKeysKit {
         vm.serializeAddress("pk", "registry", registry);
         string memory j = vm.serializeBytes32("pk", "carolSeed", carolSeed);
         vm.writeJson(j, _state());
+    }
+}
+
+/// @notice Run 0 (owner 2026-11-16, D1): the rows with no ML-DSA signer and no `R_REG` proof, so this run sends on any chain
+///         whose forge simulation lacks the ML-DSA and PQZ precompiles (the SCaaS testnet's set `mldsa-off`): the factory and
+///         its releases (`pub()`), the public layer of the PQZ kinds (`Tokens`' sweep without `_pq`: `skipPq`), the trades and pulls,
+///         the regulated powers on 12 and 13, the wrap limits, the factory negatives. Its factory and leg go to the state
+///         file for `PqzKeysSetup` (whose helpers it inherits; its `setup()` is the next run).
+contract PqzKeysPublic is PqzKeysSetup {
+    function pub() external {
+        _deps();
+        _fixtures();
+        _registerDerived();
+        _factory();
+        skipPq = true;
+        _publicLayer();
+        _trades();
+        _regulatedPowers(12);
+        _regulatedPowers(13);
+        uint8[3] memory wk = [uint8(3), 9, 11];
+        for (uint256 i; i < 3; ++i) _wrapLimits(wk[i]);
+        _factoryNegatives();
+        vm.serializeAddress("pk0", "fp", address(fp));
+        vm.writeJson(vm.serializeAddress("pk0", "leg", address(leg)), _state());
+        _writeBook();
     }
 }
 

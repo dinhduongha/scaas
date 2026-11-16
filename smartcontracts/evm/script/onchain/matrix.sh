@@ -341,7 +341,7 @@ if [ -n "$SCOPE" ]; then
 fi
 python3 -I script/onchain/basebook.py "$tgt" >> "$LOG"
 rc=0
-PQZK_WHY="local only: forge's EVM has no PQZ precompile, so this chain's PqzKeyVerifier (0x0142) cannot be simulated; the precompile path runs in group pq (e2e.py); the port to real-transaction scripts runs later against the deploy set mldsa-on (owner 2026-11-16: one chain, two deploy sets)"
+PQZK_WHY="local only: forge's EVM has no PQZ precompile, so this chain's PqzKeyVerifier (0x0142) cannot be simulated; the rows run by mldsa_on.py on set mldsa-on (README-mldsa-on.md)"
 STAGE=groups
 for g in $GROUPS; do
   r=0 res=ok SECS=0 why=
@@ -395,11 +395,10 @@ for g in $GROUPS; do
   # The precompile path runs on such a chain in group pq (e2e.py, no simulation); pqzkeys / pqzwallet move to e2e.py after
   # 3zh-core's group 2 (TODO 3zh, owner 2026-11-15).
   pqzkeys)
-    if [ "$tgt" != local ]; then
-      res="not run" why="$PQZK_WHY"
-    else
-      step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" sh script/onchain/pqzkeys.sh || r=1
-    fi ;;
+    # owner 2026-11-16 (D1): a remote target runs PqzKeysPublic alone (no ML-DSA signer, no R_REG proof); the ML-DSA and
+    # 0x0142 rows are mldsa_on.py's on set mldsa-on (README-mldsa-on.md)
+    ph=; [ "$tgt" = local ] || ph=public
+    step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" ${ph:+PQZK_PHASES=$ph} sh script/onchain/pqzkeys.sh || r=1 ;;
   # the wallet-side rows of the three-key model (after pqzkeys: its factory and holders), two forge runs
   pqzwallet)
     if [ "$tgt" != local ]; then

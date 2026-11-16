@@ -274,13 +274,13 @@ def public(pq, sd, sr, alice, bob, toks, tusd, router):
     E.log("\n## 9. (T66b Step 5b) the public entries of kinds 0, 4, 5, 12, 13 signed by an ML-DSA-65 UA, and a relay fee on each")
     for tok, nm in toks:
         k = u(E.call(tok, E.cd("kind()", [])))
-        if k in (1, 5, 13):  # a wrapped kind: wrapped units to alice's UA from tUSD
+        if k % 2 == 1:  # a wrapped kind (1, 3, 5, 9, 11, 13): wrapped units to alice's UA from tUSD
             sd.send(tusd, E.cd("approve(address,uint256)", ["w", "w"], tok, 10**12), f"tUSD approve {nm}")
             sd.send(tok, E.cd("wrapToUA(address,uint256,bytes32)", ["w", "w", "w"], tusd, 1_000, alice.ua),
                     f"{nm} wrapToUA(tUSD 1,000, alice)")
         else:
             sd.send(tok, E.cd("mintToUA(bytes32,uint256,bytes32)", ["w", "w", "w"], alice.ua, 1_000, E.chain_word(tok)), f"{nm} mintToUA(alice, 1,000)")
-        ml_classical(pq, sr, tok, nm, alice, bob, burn=k not in (1, 5, 13))
+        ml_classical(pq, sr, tok, nm, alice, bob, burn=k % 2 == 0)
         relay_fee(pq, sr, tok, nm, alice, bob, router)
 
 
