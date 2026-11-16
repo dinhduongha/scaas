@@ -2,6 +2,8 @@
 // Scaas.Ua's P/Invoke binding (Wallet.cs) against smartcontracts/vectors/ua/{keys,sign,kem,seal,vault,zether}.json,
 // clients/zether-prover/vectors/ and the PQZ facade; the load check, handle freeing and secret wiping of the binding itself.
 // Needs libscaas_ua_c (cargo build --release in clients/ua-c, or SCAAS_UA_C_LIB). dotnet test Scaas.Ua.Tests
+// The binding loads SCAAS_UA_C_LIB or the library beside the application (T21 L52); LibUnderTest points SCAAS_UA_C_LIB at this
+// repository's build when unset: the walk up the tree is the test project's, never the shipped assembly's.
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
@@ -11,6 +13,24 @@ using System.Text.RegularExpressions;
 using Xunit;
 
 namespace Scaas.Ua.Tests;
+
+static class LibUnderTest
+{
+    internal static readonly string File = OperatingSystem.IsWindows() ? "scaas_ua_c.dll" : OperatingSystem.IsMacOS() ? "libscaas_ua_c.dylib" : "libscaas_ua_c.so";
+
+#pragma warning disable CA2255 // a test assembly: SCAAS_UA_C_LIB before the first P/Invoke
+    [System.Runtime.CompilerServices.ModuleInitializer]
+#pragma warning restore CA2255
+    internal static void Init()
+    {
+        if (Environment.GetEnvironmentVariable("SCAAS_UA_C_LIB") is { Length: > 0 }) return;
+        for (var d = new DirectoryInfo(AppContext.BaseDirectory); d is not null; d = d.Parent)
+        {
+            var p = Path.Combine(d.FullName, "clients", "ua-c", "target", "release", File);
+            if (System.IO.File.Exists(p)) { Environment.SetEnvironmentVariable("SCAAS_UA_C_LIB", p); return; }
+        }
+    }
+}
 
 // one collection: the load test swaps the ABI hook, which every other test's constructor reads
 [CollectionDefinition("wallet", DisableParallelization = true)]
@@ -44,6 +64,20 @@ public class WalletTests : IDisposable
     static bool Has(JsonElement e, string k) => e.TryGetProperty(k, out var v) && v.ValueKind != JsonValueKind.Null;
     static string? J(JsonElement e, string k) => Has(e, k) ? e.GetProperty(k).GetRawText() : null;
     static IEnumerable<JsonElement> Rows(JsonElement e, string k) => e.GetProperty(k).EnumerateArray();
+
+    /// <summary>T21 L52: the resolver loads SCAAS_UA_C_LIB, else leaves the load to .NET's default probing; it never walks up to
+    /// the repository's build, which sits in an ancestor of this test binary.</summary>
+    [Fact]
+    public void ResolverTakesTheEnvOrDefaultProbingNeverAnAncestor()
+    {
+        var lib = Environment.GetEnvironmentVariable("SCAAS_UA_C_LIB")!;
+        Assert.True(File.Exists(Path.Combine(Root, "clients", "ua-c", "target", "release", LibUnderTest.File)), "the build an ancestor walk would find");
+        var asm = typeof(Wallet).Assembly;
+        Assert.NotEqual(IntPtr.Zero, Scaas.Ua.Native.Resolve("scaas_ua_c", asm, null));
+        Environment.SetEnvironmentVariable("SCAAS_UA_C_LIB", null);
+        try { Assert.Equal(IntPtr.Zero, Scaas.Ua.Native.Resolve("scaas_ua_c", asm, null)); }
+        finally { Environment.SetEnvironmentVariable("SCAAS_UA_C_LIB", lib); }
+    }
 
     /// <summary>The status name a call throws, "" if it returns.</summary>
     static string Code(Action a)
@@ -578,6 +612,9 @@ public class WalletTests : IDisposable
         var v1 = tw.SealVault(Utf8("correct horse 9"));
         Assert.Equal("UAArgument", Code(() => tw.SealVault(Utf8("12345678"))));
         Assert.False(UaLib.VaultNeedsRewrap(v1));
+        // T21 L53: a NUL inside a secret or a string is refused before the library reads up to it
+        Assert.Equal("UAArgument", Code(() => tw.SealVault(Utf8("correct horse 9\0tail"))));
+        Assert.Equal("UAArgument", Code(() => UaLib.VaultNeedsRewrap(v1 + "\0x")));
         var v2 = UaLib.VaultRewrapPin(v1, Utf8("correct horse 9"), Utf8("battery staple 7"));
         var prf32 = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
         var v3 = UaLib.VaultEnablePrf(v2, Utf8("battery staple 7"), prf32, "cred-1", Utf8("salt"));

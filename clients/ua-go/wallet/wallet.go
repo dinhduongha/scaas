@@ -8,12 +8,13 @@
 // (ErrLibraryMismatch otherwise). Secrets: secret inputs are []byte (a string cannot be wiped); a NUL-terminated copy this
 // package makes of one is wiped after the call; secret outputs are []byte the caller wipes with Wipe. Handles: each type owns
 // one library handle, freed once by Close or by its finalizer; Close waits for calls in flight on it. The library is linked from
-// clients/ua-c/target/release (CGO_LDFLAGS may name another). UNAUDITED.
+// clients/ua-c/target/release (CGO_LDFLAGS may name another) with no run-time search path of the build machine (T21 L56): a
+// program finds libscaas_ua_c.so where it is installed, or by LD_LIBRARY_PATH (the tests). UNAUDITED.
 package wallet
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/../../ua-c/include
-#cgo LDFLAGS: -L${SRCDIR}/../../ua-c/target/release -lscaas_ua_c -Wl,-rpath,${SRCDIR}/../../ua-c/target/release
+#cgo LDFLAGS: -L${SRCDIR}/../../ua-c/target/release -lscaas_ua_c
 #include "scaas_ua.h"
 */
 import "C"
@@ -22,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"unsafe"
 )
@@ -65,6 +67,7 @@ const (
 	ZetherUseViewing       = 8
 	PqzOutMax              = 1052672 // SCAAS_UA_PQZ_OUT_MAX: a PQZ answer's buffer (never sized by a size query)
 	errKeyData       int32 = 1
+	errArgument      int32 = 8
 	errBuffer        int32 = 9
 )
 
@@ -129,10 +132,22 @@ func Features() uint64 { return uint64(C.scaas_ua_features()) }
 // StatusName is the static name of a status ("UAOk", "UAKeyData" ...).
 func StatusName(s int32) string { return C.GoString(C.scaas_ua_status_name(C.ScaasUaStatus(s))) }
 
+// nulInside is args.str's / args.secret's refusal of a NUL inside its input, raised while the call's arguments are built, so
+// before the library reads the C string up to it (a secret cut there would be accepted: T21 L53); call turns it into UAArgument.
+type nulInside struct{}
+
 // call runs one status-returning call on a locked OS thread, so that its last-error detail (per thread) is this call's.
-func call(f func() C.ScaasUaStatus) error {
+func call(f func() C.ScaasUaStatus) (err error) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(nulInside); !ok {
+				panic(r)
+			}
+			err = &Error{Status: errArgument, Code: "UAArgument", Detail: "a NUL inside a string or secret"}
+		}
+	}()
 	s := f()
 	if s == 0 {
 		return nil
@@ -165,7 +180,11 @@ type args struct {
 	pin   runtime.Pinner
 }
 
+// str is a NUL-terminated copy of s, freed by done; a NUL inside s is UAArgument (inside call only).
 func (a *args) str(s string) *C.char {
+	if strings.IndexByte(s, 0) >= 0 {
+		panic(nulInside{})
+	}
 	c := C.CString(s)
 	a.frees = append(a.frees, unsafe.Pointer(c))
 	return c
@@ -179,10 +198,15 @@ func (a *args) opt(s string) *C.char {
 	return a.str(s)
 }
 
-// secret is a NUL-terminated copy of a secret, wiped by done; nil is NULL.
+// secret is a NUL-terminated copy of a secret, wiped by done; nil is NULL; a NUL inside b is UAArgument (inside call only).
 func (a *args) secret(b []byte) *C.char {
 	if b == nil {
 		return nil
+	}
+	for _, c := range b {
+		if c == 0 {
+			panic(nulInside{})
+		}
 	}
 	x := secretBuf(len(b) + 1)
 	copy(x, b)
@@ -764,12 +788,12 @@ func (b *SeedBackup) Verify(answers [][]byte) (ok bool, err error) {
 	var a args
 	defer a.done()
 	ws := make([]*C.char, len(answers)+1)
-	for i, x := range answers {
-		ws[i] = a.secret(x)
-	}
 	var r C.bool
 	err = b.h.use(func(p unsafe.Pointer) error {
 		return call(func() C.ScaasUaStatus {
+			for i, x := range answers {
+				ws[i] = a.secret(x)
+			}
 			return C.scaas_ua_seed_backup_verify(sbp(p), &ws[0], C.size_t(len(answers)), &r)
 		})
 	})
