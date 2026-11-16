@@ -4,7 +4,12 @@
 //! in it as bytes. A handle holds the `Arc`, the generation at its creation and its slot: no secret bytes. Every secret
 //! operation runs under the read guard and refuses `KeyRevoked` when its generation is not the store's; `lock` takes the
 //! write lock (it waits for every operation in flight), wipes the arena and raises the generation, so no earlier handle works
-//! again; `open` builds a new arena at the raised generation. The store also holds the wallet's public manifest (spec §8.3),
+//! again; `open` builds a new arena at the raised generation. An operation that copies a secret out of the arena and uses the
+//! copy after the guard is gone (a vault's scrypt and AEAD, a seal's KDF and AEAD after decapsulation, a backup's split and
+//! seals, a group round 2) holds a read lease ([`Lease`]) for the copy's whole use: leases never wait for each other, and
+//! `lock` waits until none is in flight before it wipes (T21 L82, owner 2026-11-16 "ok, as proposed"). Lock order: a lease is
+//! taken before any guard of its store, never while one is held; `lock` holds the lease count from the moment it is zero
+//! until the arena is wiped, then the write lock. The store also holds the wallet's public manifest (spec §8.3),
 //! outside the arena: `lock` keeps it. Memory protection (T10, feature `mlock`, best effort): each chunk is locked in RAM
 //! (`mlock`) and, on Linux and Android, excluded from core dumps (`MADV_DONTDUMP`) at allocation; at release it is wiped,
 //! unmarked and unlocked. A refused call is counted in [`MemoryProtection`], never an error. Outside that coverage: the crates'
@@ -16,7 +21,7 @@
 use super::manifest::{entry_ua, Manifest};
 use super::{Error, KeyId, Result};
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Condvar, Mutex, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use zeroize::{Zeroize, Zeroizing};
 
 /// The chunk size and alignment: the largest page of a listed target (16 KiB on Apple aarch64 and 16 KiB Android), so a
@@ -138,6 +143,27 @@ pub(crate) mod vectors {
     pub fn chunks_released() -> (usize, usize) {
         (RELEASED.load(Ordering::SeqCst), NONZERO.load(Ordering::SeqCst))
     }
+
+    std::thread_local! {
+        static PAUSE: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = std::cell::RefCell::new(None);
+    }
+
+    /// `f` runs once, on this thread, at the next point where a leased operation holds its copy of a store secret (T21 L82).
+    pub fn pause_after_copy(f: impl FnOnce() + 'static) {
+        PAUSE.with(|p| *p.borrow_mut() = Some(Box::new(f)));
+    }
+
+    pub(super) fn copied() {
+        if let Some(f) = PAUSE.with(|p| p.borrow_mut().take()) {
+            f();
+        }
+    }
+}
+
+/// The point where a leased operation holds its copy of a store secret: the test-only pause (feature `vectors`), else nothing.
+pub(crate) fn copied() {
+    #[cfg(feature = "vectors")]
+    vectors::copied();
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -220,7 +246,29 @@ struct Inner {
     manifest: Manifest,
 }
 
-pub(crate) struct SecretStore(RwLock<Inner>);
+pub(crate) struct SecretStore {
+    inner: RwLock<Inner>,
+    leases: Mutex<usize>, // leases in flight
+    ended: Condvar,       // signalled when the last lease ends
+}
+
+/// A read lease of a store (T21 L82): held by an operation for the whole use of a secret it copied out of the arena. Leases
+/// do not wait for each other (a lease begun while `lock` waits is let in: no lease waits for another, so nested leases
+/// cannot deadlock); `lock` waits until none is in flight. A lease checks nothing itself: the store access inside it refuses
+/// after `lock` (`WalletLocked`, `KeyRevoked`). `lock` on a thread that holds a lease of the same store never returns.
+// ponytail: reader-preferring, so a stream of overlapping leases delays `lock` until a gap; a writer-preferring count if a
+// wallet ever runs leased operations back to back on many threads.
+pub(crate) struct Lease<'a>(&'a SecretStore);
+
+impl Drop for Lease<'_> {
+    fn drop(&mut self) {
+        let mut n = self.0.leases.lock().unwrap_or_else(PoisonError::into_inner);
+        *n -= 1;
+        if *n == 0 {
+            self.0.ended.notify_all();
+        }
+    }
+}
 
 /// A secret's place in a store: what a key handle holds instead of its bytes.
 pub(crate) struct Handle {
@@ -252,16 +300,26 @@ fn seed_matches(seed: &[u8; 64], m: &Manifest) -> Result<()> {
 
 impl SecretStore {
     pub(crate) fn new() -> Arc<SecretStore> {
-        Arc::new(SecretStore(RwLock::new(Inner { generation: 0, arena: None, manifest: Manifest::default() })))
+        Self::of(Inner { generation: 0, arena: None, manifest: Manifest::default() })
+    }
+
+    fn of(inner: Inner) -> Arc<SecretStore> {
+        Arc::new(SecretStore { inner: RwLock::new(inner), leases: Mutex::new(0), ended: Condvar::new() })
+    }
+
+    /// A read lease of this store (taken before any of its guards, never while one is held).
+    pub(crate) fn lease(&self) -> Lease<'_> {
+        *self.leases.lock().unwrap_or_else(PoisonError::into_inner) += 1;
+        Lease(self)
     }
 
     // a panic under the lock cannot leave a half-written arena that a reader would trust: every write path below either
     // completes or returns before it touches the arena, so a poisoned lock is taken as it is
     fn read(&self) -> RwLockReadGuard<'_, Inner> {
-        self.0.read().unwrap_or_else(PoisonError::into_inner)
+        self.inner.read().unwrap_or_else(PoisonError::into_inner)
     }
     fn write(&self) -> RwLockWriteGuard<'_, Inner> {
-        self.0.write().unwrap_or_else(PoisonError::into_inner)
+        self.inner.write().unwrap_or_else(PoisonError::into_inner)
     }
 
     /// The arena from the entropy and its seed, at the current generation; `Argument` while one is open (a second arena would
@@ -296,8 +354,11 @@ impl SecretStore {
         Ok(())
     }
 
-    /// Waits for every operation in flight (the write lock), wipes the arena, raises the generation.
+    /// Waits for every lease in flight, then for every operation under the guard (the write lock), wipes the arena, raises
+    /// the generation. The lease count stays held until the wipe, so no lease begins in between.
     pub(crate) fn lock(&self) {
+        let n = self.leases.lock().unwrap_or_else(PoisonError::into_inner);
+        let _n = self.ended.wait_while(n, |n| *n > 0).unwrap_or_else(PoisonError::into_inner);
         let mut g = self.write();
         g.arena = None;
         g.generation += 1;
@@ -352,7 +413,7 @@ impl SecretStore {
         let mut arena = Arena::empty();
         let slot = arena.put(secret)?;
         let inner = Inner { generation: 0, arena: Some(arena), manifest: Manifest::default() };
-        Ok(Handle { store: Arc::new(SecretStore(RwLock::new(inner))), generation: 0, slot })
+        Ok(Handle { store: Self::of(inner), generation: 0, slot })
     }
 
     /// `f` over the open arena under the read guard; `WalletLocked` while locked.
@@ -418,6 +479,11 @@ impl Handle {
         Arc::ptr_eq(&self.store, s)
     }
 
+    /// A read lease of this handle's store ([`Lease`]).
+    pub(crate) fn lease(&self) -> Lease<'_> {
+        self.store.lease()
+    }
+
     /// `f` over this handle's store's manifest (a KEM key written at its first use).
     pub(crate) fn note(&self, f: impl FnOnce(&mut Manifest)) {
         self.store.note(f);
@@ -476,16 +542,22 @@ impl Handle {
         self.take_with(|s| Zeroizing::new(s.to_vec()))
     }
 
-    /// `f` over the secret's bytes, wiped in the arena as they are read, with the write lock held until `f` returns: a
-    /// one-use secret's whole use, so `lock()` waits for it (spec §8.2, T21 L73). `f` must not touch this store.
+    /// `f` over the secret's bytes, wiped in the arena as they are read (under the write lock), with a read lease held until
+    /// `f` returns: a one-use secret's whole use, so `lock()` waits for it while other signers run (spec §8.2, T21 L73, L82).
+    /// `f` may read this store; it must not `lock()` it.
     pub(crate) fn take_with<R>(&self, f: impl FnOnce(&[u8]) -> R) -> Result<R> {
-        let mut g = self.store.write();
-        if g.generation != self.generation {
-            return Err(Error::KeyRevoked);
-        }
-        let s = g.arena.as_mut().ok_or(Error::KeyRevoked)?.get_mut(self.slot)?;
-        let out = Zeroizing::new(s.to_vec());
-        s.zeroize();
+        let _lease = self.lease();
+        let out = {
+            let mut g = self.store.write();
+            if g.generation != self.generation {
+                return Err(Error::KeyRevoked);
+            }
+            let s = g.arena.as_mut().ok_or(Error::KeyRevoked)?.get_mut(self.slot)?;
+            let out = Zeroizing::new(s.to_vec());
+            s.zeroize();
+            out
+        };
+        copied();
         Ok(f(&out))
     }
 

@@ -545,6 +545,7 @@ impl PqzKey {
         let Ok(rec) = record(&c.record.0, &c.record.1, c.k) else { return Ok(None) };
         // a migration credit (3g KV-11): the holder's own UA from a version below the handle's, re-encrypted from that seed
         if c.from_ua == o.ua && rec.key_version < o.v && !c.multi {
+            let _lease = self.secret.lease(); // the old seed's copy, through the re-encryption (T21 L82)
             match self.old_seed(o, &rec, c, blobs) {
                 Some(seed) => return Ok(self.reencrypted(o, c, slot, &seed, blobs).ok().map(|ct| (ct, Kind::Migration))),
                 None => return by_proof(&self.pk, o, &rec, c, slot, blobs).map(|r| r.map(|ct| (ct, Kind::Migration))),

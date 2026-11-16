@@ -89,12 +89,12 @@ pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
 pub use webauthn::{webauthn_assertion, webauthn_challenge};
 pub use zeroize::ZeroizeOnDrop;
 #[cfg(feature = "vectors")]
-pub use vectors::vectors_chunks_released;
+pub use vectors::{vectors_chunks_released, vectors_pause_after_copy};
 
 use crate::UAError;
 use rand_core::{OsRng, RngCore};
 use std::sync::Arc;
-pub(crate) use store::{Handle, SecretStore};
+pub(crate) use store::{copied, Handle, Lease, SecretStore};
 pub use store::{protect, MemoryProtection};
 use unicode_normalization::UnicodeNormalization;
 use zeroize::{Zeroize, Zeroizing};
@@ -723,6 +723,13 @@ mod vectors {
     /// `(released, released with a non-zero byte)`: the arena chunks released in this process (each wiped before it goes back).
     pub fn vectors_chunks_released() -> (usize, usize) {
         store::vectors::chunks_released()
+    }
+
+    /// `f` runs once, on this thread, where the next leased operation holds its copy of a store secret, before it uses the
+    /// copy (a vault's or a seal's KDF, a backup's seals, a group round): `lock()` from another thread meanwhile must wait
+    /// (T21 L82).
+    pub fn vectors_pause_after_copy(f: impl FnOnce() + 'static) {
+        store::vectors::pause_after_copy(f)
     }
 
     impl Wallet {

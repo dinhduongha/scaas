@@ -198,6 +198,11 @@ impl KemKeyPair {
         KemKeyPair { kem_pk: self.kem_pk.clone(), recipient: self.recipient, secret: self.secret.dup() }
     }
 
+    /// A read lease of the key's store (T21 L82).
+    pub(super) fn lease(&self) -> super::store::Lease<'_> {
+        self.secret.lease()
+    }
+
     /// Wipes the key's store and revokes every handle of it: a link session's own store (spec §6.3), never a wallet's.
     pub(super) fn wipe_own_store(&self) {
         self.secret.revoke_store();

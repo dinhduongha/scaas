@@ -9812,6 +9812,19 @@ and `dropped_frost_session_wipes_its_nonces` (`tests/wallet_pairing.rs`), each r
 `Drop`). (b) The remaining deviation is stated in spec §8.2 and [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-09): the FROST share
 is still the caller's `KeyPackage`, not in store custody; share custody comes with the real DKG work.
 
+**Change (owner 2026-11-16, owner: yes, T21 L82, "ok, as proposed": option (b), the read lease; status: BUILT on
+branch `t21-fix3`, UNAUDITED).** L73 left a class open: `seal_vault` and `KemKeyPair::open` copied a secret out of the store,
+released the guard and kept using the copy (scrypt for seconds; the KDF and AEAD after decapsulation), so `lock()` could return while
+a secret was in use; holding the store lock over scrypt (option (a)) would block every signer for its time. Now every operation that
+uses a copy after its guard holds a read lease of the store for the copy's whole use (the list is in spec §8.2: both vault seals, the
+KEM open and so `open_container`, the backup and link seals, the k-of-n PQZ backup, a PQZ migration credit, MuSig2 `sign`, the FROST
+share, which moves from the write lock onto the lease); leases never wait for each other; `lock()` waits until none is in flight and holds
+the count until the wipe. Lock order: a lease before any store guard, never while one is held. Exports hold none. Tests
+(`tests/wallet_custody.rs`): `lock_waits_for_a_leased_seal_vault`, `…_label_vault`, `…_kem_open`, `…_musig2_sign`,
+`leased_opens_run_at_once`; `lock_waits_for_frost_round_two` unchanged and green. Mutants: `lock()` not waiting (the pre-fix
+behaviour; four custody tests and the FROST test red), the lease dropped after the copy (vault, KEM open: red), a lease waiting for
+another (`leased_opens_run_at_once` red). Normative: [ua-libraries.md](clients/ua-libraries.md#CLI-UAL-09), spec §8.2.
+
 ### CLI-UAL-10 — Memory protection covers the arena, not the object graph
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-10 · superseded-by: —
 

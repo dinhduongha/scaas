@@ -170,7 +170,8 @@ pub fn seal(kem_pk: &[u8], purpose: &str, aad: &[u8], pt: &[u8]) -> Result<Seale
 impl KemKeyPair {
     /// The plaintext of `s` under `purpose` and `aad`: `SealVersion` for a version or scheme other than 1, `Argument` for the
     /// purpose, `SealOpen` for any other failure (decapsulation checks, tag), `KeyRevoked` once the key's store was locked. **No
-    /// replay protection**: a valid seal opens again.
+    /// replay protection**: a valid seal opens again. `ss` is used under a read lease of the key's store, so `lock()` waits
+    /// for the open (T21 L82).
     pub fn open(&self, purpose: &str, aad: &[u8], s: &Sealed) -> Result<Zeroizing<Vec<u8>>> {
         if s.version != 1 || s.scheme != 1 {
             return Err(Error::SealVersion);
@@ -179,7 +180,9 @@ impl KemKeyPair {
         if s.ciphertext.len() > MAX_PT + TAG {
             return Err(Error::SealOpen);
         }
+        let _lease = self.lease();
         let ss = self.decaps(&s.mlkem_ct, &s.x25519_eph).map_err(|e| if e == Error::KemCheck { Error::SealOpen } else { e })?;
+        super::store::copied();
         let key = seal_key(&ss, p, &self.kem_pk())?;
         aead_open(Alg::Aes256Gcm, &key, &[0; 12], aad, &s.ciphertext).map_err(|_| Error::SealOpen)
     }

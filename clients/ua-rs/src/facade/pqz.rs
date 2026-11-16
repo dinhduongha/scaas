@@ -1615,7 +1615,12 @@ impl PqzKey {
         self.pk.clone()
     }
 
-    /// `seed32` in the clear ([`crate::wallet::Wallet::export_pqz_leaf_raw`] only).
+    /// A read lease of the key's store, for a use of `seed32` after its guard (T21 L82).
+    pub(crate) fn lease(&self) -> crate::wallet::Lease<'_> {
+        self.secret.lease()
+    }
+
+    /// `seed32` in the clear ([`crate::wallet::Wallet::export_pqz_leaf_raw`] and the k-of-n backup under a lease only).
     pub(crate) fn leaf(&self) -> Result<Zeroizing<[u8; 32]>> {
         self.secret.with(|s| s.try_into().map(Zeroizing::new).map_err(|_| Error::Argument))?
     }
