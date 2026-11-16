@@ -221,6 +221,10 @@ def _records(out, n):
 
 
 def table(a):
+    if a.set:  # deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): the set these runs targeted
+        sys.path.insert(0, os.path.join(EVM, "script"))
+        import deploybook
+        print(f"# deploy set: {deploybook.set_label(a.set)}")
     # fail closed: a net with no book would recount its records unlabelled and write empty runs over the tally
     missing = [n for n in a.net if not glob.glob(os.path.join(EVM, f"deployments/onchain-{n}-*.json"))]
     if missing:
@@ -323,6 +327,10 @@ def note(a):
                     miss += not why
                     out.append(f"{g} | {lb} | {e['sig']} | {why or 'NO REASON RECORDED'}")
         out.append(f"({miss} without a reason)")
+        gaps = [g for k in (n, "*") for g in rs.get("_gaps", {}).get(k, [])]
+        if gaps:  # a known gap of this net's rows (owner 2026-11-16, D3: recorded, not a missing entry)
+            out.append(f"\n## {n}: known gaps")
+            out += [f"gap | {g}" for g in gaps]
         neg = [r for r in recs if r["what"].startswith("negative")]
         out.append(f"\n## {n}: negatives ({len(neg)}; refused as expected = status 2)")
         out += [f"{'ok ' if r['status'] == 2 else 'BAD'} | {r.get('label', '')} | {r['what']} | expected {r.get('expected', '')}"
@@ -359,8 +367,10 @@ def main():
     p.add_argument("rpc")
     p = sp.add_parser("table")
     p.add_argument("--net", action="append", default=[])
+    p.add_argument("--set", default=os.environ.get("DEPLOY_SET", ""), help="the deploy set (DEPLOY_SET; refused unknown)")
     p = sp.add_parser("note")
     p.add_argument("--net", action="append", default=[])
+    p.add_argument("--set", default=os.environ.get("DEPLOY_SET", ""), help="the deploy set (DEPLOY_SET; refused unknown)")
     p.add_argument("--reasons", default=os.path.join(HERE, "notrun.json"))
     p.add_argument("--txs", action="store_true", help="also list every transaction")
     a = ap.parse_args()

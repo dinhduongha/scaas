@@ -31,5 +31,10 @@
   "*": {
     "initialize(*": "the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)",
     "executeRate(*": "waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)"
+  },
+  "_gaps": {
+    "*": [
+      "pqzwallet on a registry with a PqzKeyVerifier (set mldsa-on): the wallet's scoped records are written without storePqzScopedPop and stay unproven (owner 2026-11-16, D3: ua-rs PqzKeyHandle has no R_REG prover; an OFFCHAIN token reads an unproven record); the proven-record rows are pqzkeys' (mldsa_on.py, README-mldsa-on.md)"
+    ]
   }
 }

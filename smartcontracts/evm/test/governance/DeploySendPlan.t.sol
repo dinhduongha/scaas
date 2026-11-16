@@ -5,7 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {DeploySend} from "../../script/DeploySend.s.sol";
 
 /// `DeploySend.plan` (NET-EVM-11): the send plan's four arrays read in four calls; a CREATE (zero `to`), another sender,
-/// a value or arrays that do not line up refused by index.
+/// a value or arrays that do not line up refused by index; a batch `[from, to)` of `deploy.sh evm` within the plan, else
+/// `BatchOutOfRange` (NET-EVM-11 Change, owner 2026-11-15).
 contract DeploySendPlanTest is Test {
     DeploySend ds;
     address constant S = 0x85528c7E75Ab86B58A166E263A49449927b15b02;
@@ -67,5 +68,32 @@ contract DeploySendPlanTest is Test {
             abi.encodeWithSelector(DeploySend.PlanTxNotSendable.selector, type(uint256).max, "the plan's fields do not line up")
         );
         ds.plan(_p(_three(F, F, F), _three(A, B, A), '"0x0","0x0"', '"0x01","0x02","0x03"'), S);
+    }
+
+    function test_batch_acceptsEveryWindowWithinThePlan() public view {
+        ds.batch(3, 0, 3);
+        ds.batch(3, 0, 1);
+        ds.batch(3, 2, 3);
+        ds.batch(40, 32, 40); // the last, short batch of 16
+    }
+
+    function test_batch_refusesAnEmptyWindow() public {
+        vm.expectRevert(abi.encodeWithSelector(DeploySend.BatchOutOfRange.selector, 2, 2, 3));
+        ds.batch(3, 2, 2);
+    }
+
+    function test_batch_refusesAReversedWindow() public {
+        vm.expectRevert(abi.encodeWithSelector(DeploySend.BatchOutOfRange.selector, 2, 1, 3));
+        ds.batch(3, 2, 1);
+    }
+
+    function test_batch_refusesAnEndPastThePlan() public {
+        vm.expectRevert(abi.encodeWithSelector(DeploySend.BatchOutOfRange.selector, 0, 4, 3));
+        ds.batch(3, 0, 4);
+    }
+
+    function test_batch_refusesAnEmptyPlan() public {
+        vm.expectRevert(abi.encodeWithSelector(DeploySend.BatchOutOfRange.selector, 0, 1, 0));
+        ds.batch(0, 0, 1);
     }
 }

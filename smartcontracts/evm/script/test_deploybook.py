@@ -89,4 +89,31 @@ with tempfile.TemporaryDirectory() as t:
     open(os.path.join(t, "deployments/fixture-testnet-releases.json"), "w").write("{}")
     assert d.find(31337, OTHER, "-releases.json", env=env) == "deployments/fixture-testnet-releases.json"
 
+# deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): the labels, the merge, a reader's book
+H = d.header("scaas-testnet", "SCaaS testnet", 7622, SCAAS[1], "testnet")
+assert d.set_label("mldsa-off") == "mldsa-off" and d.set_label("mldsa-on", "on") == "mldsa-on"
+assert d.set_label("mldsa-on", "") == "mldsa-on"  # MLDSA_PRECOMPILE unset: on (deploy.sh's default)
+fails("DEPLOY_SET_UNKNOWN", d.set_label, "mldsa")
+fails("DEPLOY_SET_UNKNOWN", d.set_label, "MLDSA-OFF")
+fails("DEPLOY_SET_UNKNOWN", d.set_label, "")
+fails("DEPLOY_SET_MISMATCH", d.set_label, "mldsa-off", "on")
+fails("DEPLOY_SET_MISMATCH", d.set_label, "mldsa-off", "")
+fails("DEPLOY_SET_MISMATCH", d.set_label, "mldsa-on", "off")
+on = dict(H, ua_registry="0x" + "0a" * 20, mldsa_precompile="on")
+off = dict(H, ua_registry="0x" + "0b" * 20, mldsa_precompile="off")
+b1 = d.set_merge(on, None, "mldsa-on", "deployments/scaas-testnet-mldsa-on-t66b-releases.json")
+assert b1["default_set"] == "mldsa-on" and b1["ua_registry"] == on["ua_registry"]  # no default set yet: this one on top
+assert list(b1)[:5] == list(d.HEADER) and set(b1["sets"]) == {"mldsa-on"}
+b2 = d.set_merge(off, b1, "mldsa-off", "deployments/scaas-testnet-t66b-releases.json")
+assert b2["default_set"] == "mldsa-off" and b2["ua_registry"] == off["ua_registry"]  # the default set on top
+assert b2["sets"]["mldsa-on"]["ua_registry"] == on["ua_registry"] and b2["sets"]["mldsa-off"]["set"] == "mldsa-off"
+b3 = d.set_merge(dict(on, ua_registry="0x" + "0c" * 20), b2, "mldsa-on", "r.json")  # a set again: replaced, the default kept
+assert b3["ua_registry"] == off["ua_registry"] and b3["sets"]["mldsa-on"]["ua_registry"] == "0x" + "0c" * 20
+r = d.set_book(b2, "mldsa-on")
+assert r["ua_registry"] == on["ua_registry"] and r["set"] == "mldsa-on" and "sets" not in r and d.check(r, "r")
+fails("DEPLOY_SET_MISSING", d.set_book, b1, "mldsa-off")
+fails("DEPLOY_SET_UNKNOWN", d.set_book, b2, "mldsa-x")
+fails("DEPLOY_SET_UNKNOWN", d.set_merge, on, None, "mldsa-x", "r.json")
+fails("BOOK_SET_CHAIN", d.set_merge, on, dict(b1, chainUid=OTHER), "mldsa-on", "r.json")
+
 print("test_deploybook: ok")

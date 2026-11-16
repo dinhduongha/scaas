@@ -21,15 +21,43 @@ import {Vm} from "forge-std/Vm.sol";
 contract DeploySend is Script {
     error TxGasOverBlockLimit(uint256 index, uint256 regular, uint256 state, uint256 blockGasLimit);
     error PlanTxNotSendable(uint256 index, string why);
+    error BatchOutOfRange(uint256 from, uint256 to, uint256 n);
 
+    /// The whole plan in one run (`deploy.sh evm` sends it in batches, `run(string,uint256,uint256)`).
     function run(string calldata planFile) external {
+        _run(planFile, 0, type(uint256).max);
+    }
+
+    /// Change (owner 2026-11-15, NET-EVM-11): the plan's transactions `[from, to)` only, a batch of `deploy.sh evm`, which
+    /// runs this once per batch after every receipt of the batch before has status 1: each transaction of the batch is
+    /// measured on this run's fork of the chain as it is after those (the batches before it on chain), then sent.
+    function run(string calldata planFile, uint256 from, uint256 to) external {
+        _run(planFile, from, to);
+    }
+
+    function _run(string calldata planFile, uint256 from, uint256 to) internal {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address sender = vm.addr(pk);
-        (address[] memory to, bytes[] memory input) = plan(vm.readFile(planFile), sender);
-        uint256 n = to.length;
-        uint256[] memory limit = new uint256[](n);
+        (address[] memory tos, bytes[] memory input) = plan(vm.readFile(planFile), sender);
+        if (to == type(uint256).max) {
+            if (tos.length == 0) return; // the whole of an empty plan: nothing to send
+            to = tos.length;
+        }
+        batch(tos.length, from, to);
+        _send(pk, sender, tos, input, from, to);
+    }
+
+    /// @notice A batch `[from, to)` of a plan of `n` transactions: `from < to <= n`, else `BatchOutOfRange`.
+    function batch(uint256 n, uint256 from, uint256 to) public pure {
+        if (from >= to || to > n) revert BatchOutOfRange(from, to, n);
+    }
+
+    function _send(uint256 pk, address sender, address[] memory to, bytes[] memory input, uint256 from, uint256 end)
+        internal
+    {
+        uint256[] memory limit = new uint256[](end);
         uint256 snap = vm.snapshotState();
-        for (uint256 i; i < n; ++i) {
+        for (uint256 i = from; i < end; ++i) {
             if (_done(to[i], input[i], i)) continue; // limit[i] = 0: not sent
             vm.prank(sender, sender);
             (bool ok,) = to[i].call(input[i]);
@@ -44,7 +72,7 @@ contract DeploySend is Script {
         }
         vm.revertToStateAndDelete(snap);
         vm.startBroadcast(pk);
-        for (uint256 i; i < n; ++i) {
+        for (uint256 i = from; i < end; ++i) {
             if (limit[i] == 0 || _done(to[i], input[i], i)) continue; // per send: a release landed since (P3-5)
             (bool ok,) = to[i].call{gas: limit[i]}(input[i]);
             if (!ok) revert PlanTxNotSendable(i, "reverts at its limit");

@@ -18,11 +18,14 @@
 #                             plain names when it is the only named target), or else indices 0-3 of
 #                             SCAAS_TESTNET_MNEMONIC_FILE; deploy.sh first if deployments/<key>.json is missing and
 #                             MATRIX_DEPLOY=1
+# DEPLOY_SET: the deploy set of a book with sets (owner 2026-11-16: one chain, two deploy sets), default the book's default
+# set mldsa-off; DEPLOY_SET_UNKNOWN / DEPLOY_SET_MISSING stop the target.
 # Books by the chain's key (NET-EVM-13, script/deploybook.py: chain-uids.json by (chain id, genesis hash); a chain not in
 # it needs DEPLOY_NAME), DEPLOY_JSON = deployments/<key>.json, RELEASES_JSON = deployments/<key>-releases.json; a book
 # still named by chain id stops the target (BOOK_OLD_NAME: rename it).
 # ONCHAIN_PQZ: precompile (the node answers OP_SELFTEST), offchain (only the OFFCHAIN group), off (no PQ group).
-# MATRIX_GROUPS: the groups to run (default all). Outputs are named by target: records-<target>-<group>.jsonl,
+# MATRIX_GROUPS: the groups to run (default all); a remote target runs them in parallel waves (sched.py; MATRIX_PARALLEL=0:
+# one after the other). Outputs are named by target: records-<target>-<group>.jsonl,
 # deployments/onchain-<target>-<group>.json. Stdout: one short line per event ([target] / [target/group] start, ok, FAIL,
 # a heartbeat every 30 s; public ids only: chain id, addresses, tx hashes); every step's full output goes to the
 # git-ignored runs/…/matrix-<target>.log. Never a key or a mnemonic.
@@ -87,6 +90,7 @@ txs() { s=0; for a in $2; do s=$((s + $(cast nonce --rpc-url "$1" "$a" 2> /dev/n
 step() {
   l=$1 sr=$2 sa=$3 wl0=
   shift 3
+  [ -z "${MATRIX_TEST_FAIL:-}" ] || [ "$l" != "/$MATRIX_TEST_FAIL" ] || set -- false
   t0=$(date +%s) n0=$(txs "$sr" "$sa") i=0
   $SCOPE "$@" >> "$LOG" 2>&1 &
   P=$!
@@ -224,6 +228,23 @@ rs=-releases.json
 [ "$tgt" != scaas-testnet ] || rs=-t66b-releases.json
 DEPLOY_JSON=$(python3 -I script/deploybook.py path "$CHAIN" "$G" 2>&1) || fail "$DEPLOY_JSON"
 RELEASES_JSON=$(python3 -I script/deploybook.py path "$CHAIN" "$G" "$rs" 2>&1) || fail "$RELEASES_JSON"
+# deploy sets (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"): a book with sets is read as the set DEPLOY_SET
+# names, default its default set (mldsa-off, the forge matrix's): another set's entries and releases book from the book
+# (deploybook.py set-book); an unknown label, or a label the book lacks, stops the target by name
+MSET=
+if [ -f "$DEPLOY_JSON" ] && python3 -I -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1])).get("sets") else 1)' "$DEPLOY_JSON"; then
+  dset=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1]))["default_set"])' "$DEPLOY_JSON")
+  MSET=${DEPLOY_SET:-$dset}
+  if [ "$MSET" != "$dset" ]; then
+    python3 -I script/deploybook.py set-book "$DEPLOY_JSON" "$MSET" "$T/book-$MSET.json" 2>> "$LOG" || fail "$(tail -1 "$LOG")"
+    RELEASES_JSON=$(python3 -I -c 'import json, sys; print(json.load(open(sys.argv[1])).get("releases_json") or "")' "$T/book-$MSET.json")
+    DEPLOY_JSON=$T/book-$MSET.json
+  fi
+  export DEPLOY_SET=$MSET
+elif [ -n "${DEPLOY_SET:-}" ]; then
+  python3 -I script/deploybook.py set-check "$DEPLOY_SET" >> "$LOG" 2>&1 || fail "$(tail -1 "$LOG")"
+  fail "DEPLOY_SET_MISSING: the book ${DEPLOY_JSON} has no deploy sets (DEPLOY_SET=$DEPLOY_SET)"
+fi
 # a remote target: compile under scripts/capped first; then every broadcast step under a memory scope without a slot
 # (MATRIX_REMOTE_MEM, default 1G, no swap), forge refusing any recompile there (run.sh, zether.sh: ONCHAIN_REMOTE)
 SCOPE=
@@ -234,7 +255,7 @@ fi
 for k in "$PRIVATE_KEY" "$ONCHAIN_K1" "$ONCHAIN_K2" "$ONCHAIN_K3"; do ADDRS="$ADDRS $(cast wallet address --private-key "$k")"; done
 ADDRS=$(printf '%s\n' $ADDRS | sort -u | tr '\n' ' ')  # the deployer may be a signer (the SCaaS testnet: key 1)
 for k in 1 2 3; do PQ_ADDRS="$PQ_ADDRS $(cast wallet address --private-key "$(printf '0x%064x' "$k")")"; done
-say "" "start (chain $CHAIN, PQZ $PQZ${PQ_RPC:+ on chain $(cast chain-id --rpc-url "$PQ_RPC" 2> /dev/null || echo '?')})"
+say "" "start (chain $CHAIN, PQZ $PQZ${PQ_RPC:+ on chain $(cast chain-id --rpc-url "$PQ_RPC" 2> /dev/null || echo '?')}${MSET:+, deploy set $MSET})"
 say "" "deployer and signers:$ADDRS"
 export ONCHAIN_RPC=$RPC DEPLOY_JSON RELEASES_JSON
 if [ "${MATRIX_DEPLOY:-0}" = 1 ] && { [ "$tgt" = local ] || [ ! -f "$DEPLOY_JSON" ]; }; then
@@ -322,9 +343,12 @@ if [ -n "$SCOPE" ]; then
 fi
 python3 -I script/onchain/basebook.py "$tgt" >> "$LOG"
 rc=0
-PQZK_WHY="local only: forge's EVM has no PQZ precompile, so this chain's PqzKeyVerifier (0x0142) cannot be simulated; the precompile path runs in group pq (e2e.py); moves to e2e.py after 3zh-core group 2 (TODO 3zh)"
+PQZK_WHY="local only: forge's EVM has no PQZ precompile, so this chain's PqzKeyVerifier (0x0142) cannot be simulated; the rows run by mldsa_on.py on set mldsa-on (README-mldsa-on.md)"
 STAGE=groups
-for g in $GROUPS; do
+# group <g>: one group, its result line, summary row and (remote) verify step; its result also in $T/res-<g> (a parallel
+# group runs in a subshell)
+group() {
+  g=$1
   r=0 res=ok SECS=0 why=
   say "/$g" "start"
   case $g in
@@ -354,7 +378,7 @@ for g in $GROUPS; do
       step "/$g" "$PQ_RPC" "$PQ_ADDRS" env EVM_OUT="${EVM_OUT:-out/t66b-e2e}" ${dn:+DEPLOY_NAME=$dn} \
         python3 -I script/onchain/pq.py --net "$tgt" --rpc "$PQ_RPC" $o || r=1
     fi ;;
-  verify) verify verify; continue ;;
+  verify) verify verify; echo ok > "$T/res-$g"; return 0 ;;
   verifiers) step "/$g" "$RPC" "" python3 -I script/onchain/verifiers.py "$tgt" "$RPC" || r=1 ;;
   # round 3zh (MD-8): precompile against cache on this chain, a throwaway registry in the opposite MLDSA_PRECOMPILE mode
   mldsaalt)
@@ -376,11 +400,10 @@ for g in $GROUPS; do
   # The precompile path runs on such a chain in group pq (e2e.py, no simulation); pqzkeys / pqzwallet move to e2e.py after
   # 3zh-core's group 2 (TODO 3zh, owner 2026-11-15).
   pqzkeys)
-    if [ "$tgt" != local ]; then
-      res="not run" why="$PQZK_WHY"
-    else
-      step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" sh script/onchain/pqzkeys.sh || r=1
-    fi ;;
+    # owner 2026-11-16 (D1): a remote target runs PqzKeysPublic alone (no ML-DSA signer, no R_REG proof); the ML-DSA and
+    # 0x0142 rows are mldsa_on.py's on set mldsa-on (README-mldsa-on.md)
+    ph=; [ "$tgt" = local ] || ph=public
+    step "/$g" "$RPC" "$ADDRS" env NET="$tgt" RPC="$RPC" ${ph:+PQZK_PHASES=$ph} sh script/onchain/pqzkeys.sh || r=1 ;;
   # the wallet-side rows of the three-key model (after pqzkeys: its factory and holders), two forge runs
   pqzwallet)
     if [ "$tgt" != local ]; then
@@ -421,7 +444,66 @@ for g in $GROUPS; do
   fi
   row "$g" "$res"
   [ "$res" = "not run" ] || [ "$tgt" = local ] || [ "$g" = verify ] || verify "$g"
-done
+  echo "$res" > "$T/res-$g"
+}
+# owner 2026-11-16 ("many transactions per block, groups in parallel"): a remote target runs the groups in waves
+# (script/onchain/sched.py plan: a group after the groups it needs, views alone after the others), the groups of a wave at
+# the same time, each with its OWN key set (ONCHAIN_K1..K3, PRIVATE_KEY = K1: indexes of SCAAS_TESTNET_MNEMONIC_FILE fixed by
+# the group's name, topped up to its group's budget (sched.py FUND) from its index 0 in one batch; rescue and wraplimits keep the target's
+# own keys, never two of them at once), its own log ($OUTD/matrix-<target>-<group>.log), its result line and heartbeat; a
+# failing group stops no other, the run's rc is non-zero. MATRIX_PARALLEL=0: one group after the other, as before (local:
+# the default, one anvil). MATRIX_TEST_FAIL=<group>: that group's command is `false` (the scheduler's own test).
+PAR=${MATRIX_PARALLEL:-}
+[ -n "$PAR" ] || { [ "$tgt" = local ] && PAR=0 || PAR=1; }
+if [ "$PAR" = 1 ]; then
+  STAGE=plan
+  PLAN=$(python3 -I script/onchain/sched.py plan $GROUPS 2>&1) || fail "$PLAN"
+  if printf '%s\n' "$PLAN" | grep -q ' mnemonic:'; then
+    [ -n "${SCAAS_TESTNET_MNEMONIC_FILE:-}" ] ||
+      fail "PARALLEL_KEYS: the groups' own key sets need SCAAS_TESTNET_MNEMONIC_FILE (or MATRIX_PARALLEL=0)"
+    (umask 077; sed -n 's/^mnemonic:[[:space:]]*//p' "$SCAAS_TESTNET_MNEMONIC_FILE" > "$T/m")
+    [ -s "$T/m" ] || (umask 077; grep -v '^#' "$SCAAS_TESTNET_MNEMONIC_FILE" > "$T/m")
+    mk() { cast wallet private-key --mnemonic "$T/m" --mnemonic-index "$1"; }
+    FA=
+    for x in $(printf '%s\n' "$PLAN" | awk '$3 ~ /^mnemonic:/ {print $2 "=" substr($3, 10)}'); do
+      gn=${x%%=*} ks=
+      for i in $(echo "${x#*=}" | tr ',' ' '); do ks="$ks $(mk "$i")"; done
+      eval "KS_$gn=\"\$ks\""
+      for k in $ks; do FA="$FA $gn=$(cast wallet address --private-key "$k")"; done
+    done
+    FUND_KEY=$(mk 0) && rm -f "$T/m"
+    say "" "fund the groups' key sets from index 0 (sched.py's budget per group) …"
+    FUND_KEY=$FUND_KEY python3 -I script/onchain/sched.py fund "$RPC" $FA >> "$LOG" 2>&1 ||
+      fail "fund: $(tail -1 "$LOG")"
+    FUND_KEY=
+    say "" "$(tail -1 "$LOG" | sed 's/^\[fund\] //')"
+  fi
+  for w in $(printf '%s\n' "$PLAN" | awk '{print $1}' | sort -un); do
+    wg=$(printf '%s\n' "$PLAN" | awk -v w="$w" '$1 == w {print $2}' | tr '\n' ' ')
+    say "" "wave $w: $wg"
+    pids=
+    for g in $wg; do
+      (
+        eval "ks=\${KS_$g:-}"
+        if [ -n "$ks" ]; then
+          set -- $ks
+          ONCHAIN_K1=$1 ONCHAIN_K2=$2 ONCHAIN_K3=$3 PRIVATE_KEY=$1 ONCHAIN_PQ_KEYS="$1,$2,$3"
+          export ONCHAIN_K1 ONCHAIN_K2 ONCHAIN_K3 PRIVATE_KEY ONCHAIN_PQ_KEYS
+          ADDRS=$(for k in $ks; do cast wallet address --private-key "$k"; done | tr '\n' ' ') PQ_ADDRS=$ADDRS
+        fi
+        LOG=$OUTD/matrix-$tgt-$g.log
+        : > "$LOG"
+        trap - EXIT
+        group "$g"
+      ) &
+      pids="$pids $!"
+    done
+    for p in $pids; do wait "$p" || true; done
+  done
+else
+  for g in $GROUPS; do group "$g"; done
+fi
+for f in "$T"/res-*; do [ ! -f "$f" ] || case $(cat "$f") in fail*) rc=1 ;; esac; done
 STAGE=table
 # coverage.py refuses a target with no book and leaves coverage.json as it was; the table file is replaced only on success
 if python3 -I script/onchain/coverage.py table --net "$tgt" > "$T/table.txt" 2>> "$LOG"; then
