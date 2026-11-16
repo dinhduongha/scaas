@@ -846,8 +846,10 @@ fn opening_file() -> (String, String) {
          U2-2): one-change edits of the audited row's credit, field (to.opening, auditor.opening, to.kemPk) = value, \
          with pqz-ffi's native outcomes of check_recipient (skip / accepted:<digits>) and check_auditor (read:<digits> / \
          recipient-unreadable / unreadable); open: none = the edited opening opens to nothing for its reader (its \
-         openKemSeeds key, aad_t / aad_a), else the seed_leg it opens to (then it is not K3-6's opening of its role: the \
-         auditor's Unreadable branch after the opening); seal: refused = seal to the edited kemPk refuses.",
+         openKemSeeds key, aad_t / aad_a, or the row's aad), else the seed_leg it opens to (then it is not K3-6's opening of \
+         its role: the auditor's Unreadable branch after the opening); seal: refused = seal to the edited kemPk refuses. \
+         Fields: to.opening, auditor.opening, to.kemPk, auditor.kemPk, chainUid and to.keyVersion (value be8; aad the \
+         edited credit's aad_t, under which the honest O_t opens to nothing).",
         vec![("bip39_seed", hx(&bip39)), ("openKemSeeds", J::A(seeds)), ("rows", J::A(rows)), ("rejects", J::A(rejects))],
     )
 }
@@ -913,6 +915,44 @@ fn opening_rejects(c: &pqz_ffi::opening::Credit, seed_leg: &[u8; 32], seed_t: &[
         let x = Credit { to: q, ..*c };
         out.push(row(n, "to.kemPk", k, &x, ("seal", J::from("refused"))));
     }
+    // T21 L66b (spec §14.19's named cases, review F5#7): a low-order X25519 point in O_t (the order-8 point of RFC 7748's
+    // list), an mlkemCt valid for another UA's key (O_t sealed to the auditor's opening KEM key), the auditor's sealed seed
+    // given to the recipient, a flipped mlkemCt bit (implicit rejection), an aad of another chain and of another key
+    // version (the honest O_t under the edited credit's aad_t, given as `aad`), a malformed auditor kemPk
+    const low: [u8; 32] = [
+        0xe0, 0xeb, 0x7a, 0x7c, 0x3b, 0x41, 0xb8, 0xae, 0x16, 0x56, 0xe3, 0xfa, 0xf1, 0x9f, 0xc4, 0x6a, 0xda, 0x09, 0x8d, 0xeb,
+        0x9c, 0x32, 0xb1, 0xfd, 0x86, 0x62, 0x05, 0x16, 0x5f, 0x49, 0xb8, 0x00,
+    ];
+    let mut lo = c.to.opening.to_vec();
+    lo[op::MLKEM_CT..op::MLKEM_CT + 32].copy_from_slice(&low);
+    let other_ua = op::seal(Role::Recipient, c, &Party { kem_pk: a.kem_pk, ..c.to }, seed_leg).expect("seal to another key");
+    let mut ct = c.to.opening.to_vec();
+    ct[0] ^= 1;
+    for (n, b) in [("O_t low-order X25519 point", &lo), ("O_t mlkemCt of another UA's key", &other_ua),
+        ("O_t the auditor's sealed seed", &a.opening.to_vec()), ("O_t mlkemCt bit flipped", &ct)]
+    {
+        let x = Credit { to: Party { opening: b, ..c.to }, ..*c };
+        out.push(row(n, "to.opening", b, &x, ("open", none())));
+    }
+    let chain = [0xC2u8; 32];
+    let x = Credit { chain_uid: &chain, ..*c };
+    let mut r = row("aad of another chain", "chainUid", &chain, &x, ("open", none()));
+    if let J::O(kv) = &mut r {
+        kv.push(("aad".into(), hx(&op::aad(&x, &x.to))));
+    }
+    out.push(r);
+    let x = Credit { to: Party { key_version: 1, ..c.to }, ..*c };
+    let mut r = row("aad of another key version", "to.keyVersion", &1u64.to_be_bytes(), &x, ("open", none()));
+    if let J::O(kv) = &mut r {
+        kv.push(("aad".into(), hx(&op::aad(&x, &x.to))));
+    }
+    out.push(r);
+    let mut ak = a.kem_pk.to_vec();
+    ak.truncate(100);
+    let q = Party { kem_pk: &ak, ..a };
+    assert!(op::seal(Role::Auditor, c, &q, seed_leg).is_none(), "a malformed auditor kemPk");
+    let x = Credit { auditor: Some(q), ..*c };
+    out.push(row("auditor kemPk 100 bytes", "auditor.kemPk", &ak, &x, ("seal", J::from("refused"))));
     out
 }
 

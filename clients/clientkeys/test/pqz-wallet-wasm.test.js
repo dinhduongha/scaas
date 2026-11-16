@@ -89,12 +89,16 @@ for (const set of SETS) {
   test(`${set}: opening.json's rejects (review 3w-delta U2-2): wasm = the native outcomes the generator recorded`, async () => {
     const w = await loadPqzWallet(bytes);
     const x = C.rows.find((y) => y.auditorOn);
-    assert.ok(K.rejects.length >= 15);
+    assert.ok(K.rejects.length >= 22);
     for (const r of K.rejects) {
       const c = structuredClone(x.credit);
-      const [who, f] = r.field.split('.');
-      assert.ok((who === 'to' || who === 'auditor') && (f === 'opening' || f === 'kemPk'), r.field);
-      c[who][f] = h0(r.value);
+      if (r.field === 'chainUid') c.chainUid = h0(r.value); // T21 L66b: an aad of another chain or key version
+      else if (r.field === 'to.keyVersion') c.to.keyVersion = Number(BigInt(h0(r.value)));
+      else {
+        const [who, f] = r.field.split('.');
+        assert.ok((who === 'to' || who === 'auditor') && (f === 'opening' || f === 'kemPk'), r.field);
+        c[who][f] = h0(r.value);
+      }
       assert.equal(outcomeR(w.checkRecipient(x.openKemSeedT, c)), r.recipient, r.case);
       assert.equal(outcomeA(w.checkAuditor(x.openKemSeedA, c)), r.auditor, r.case);
     }

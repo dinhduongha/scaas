@@ -1179,7 +1179,10 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
   both messages, and an opening blob with its offsets; read by `clientkeys` and `ua-rs` and checked against the contracts by
   `test/pqz/PqzClientRows.t.sol`. The K3-7 differential of spec §14.19 between `clientkeys` and `ua-rs` waits for a client that
   carries steps 5–7; today both hand them to pqz-ffi. `ua-rs` runs no K3-7 row of `pqz/opening.json` `rejects` this round (its
-  handle is not built, above; owner 2026-11-16, T21 O5); `clientkeys` (JS and the wasm module) reads every one.
+  handle is not built, above; owner 2026-11-16, T21 O5); `clientkeys` (JS and the wasm module) reads every one. The rows hold
+  §14.19's named cases (T21 L66b: a low-order X25519 point, an `mlkemCt` of another UA's key, the auditor's sealed seed given to
+  the recipient), a flipped `mlkemCt` bit, an `aad` of another chain and of another key version, and a malformed auditor
+  `kemPk`, beside the wrong lengths, the flipped tag, `O_a` under role 0's coins and the malformed recipient `kemPk`.
 - Inputs are public bytes and the opening KEM secret; `s` is not an input. No error detail, step number or timing class leaves
   the wallet. The PQZ secret is applied only to the holder's own `(u_f, v_f)` after its `ownTag` verifies, and to a `T` whose
   every part is that, an accepted credit, a TRIVIAL entry or a marked slot (zero); the prover refuses a window with an
