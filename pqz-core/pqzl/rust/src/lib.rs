@@ -518,6 +518,25 @@ std::thread_local! {
     static CHEAT: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
 }
 
+/// Test hook (3zh, owner 2026-11-16, `tests/wipe.rs`): the z3 / z4 tries of this thread's proves since the last call,
+/// the accepted one included (one prove with no rejected try counts 1; cheat mode 4 rejects the first, so 2 or more).
+/// Lets the test see the retry path run directly, not through a count of named buffers (the honest proves' own
+/// retries vary with the set). Only with test-hooks.
+#[cfg(feature = "test-hooks")]
+pub fn take_z34_tries() -> u64 {
+    Z34_TRIES.with(|c| c.replace(0))
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn z34_tries_add(n: u64) {
+    Z34_TRIES.with(|c| c.set(c.get() + n))
+}
+
+#[cfg(feature = "test-hooks")]
+std::thread_local! {
+    static Z34_TRIES: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
+}
+
 /// the mode `set_cheat` gave this thread; only with test-hooks (8a review m3: no production build has it, so no
 /// cheating step can be reached from one)
 #[cfg(feature = "test-hooks")]

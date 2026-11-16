@@ -1,0 +1,33 @@
+3zh-core group 2 (owner 2026-11-15: parameters and tests only; TODO 3zh / 3zg), the gate on the final tree aaa1aff90.
+Forge 1.8.5, solc 0.8.37, Amsterdam, isolate; FOUNDRY_SPARSE_MODE per test directory (a full compile needs > 6 GB of solc).
+EVM and clients ran in detached worktrees at aaa1aff90 (at-set.sh rewrites PqzSet.sol; the pqz-core gate hashes the tree).
+Full output in git-ignored logs; this file holds the summary only. UNAUDITED.
+
+item | commit | figures
+1 3zg mldsa65Gas | da4f61d87 | 68,000 -> 100,000; forge ML-DSA-65 stand-in 68,006 -> 100,006; 65 precompile-path fixture caps 100,000 -> 200,000
+2 debit_min_gas | 0d58c03a0 | measured / pin (was): n2048 7,363,504 / 7,364,000 (7,300,000); n2304 6,073,179 / 6,074,000 (7,516,000; calibrated rows); n2560 7,792,377 / 7,793,000 (7,729,000); n2816 8,032,724 / 8,033,000 (7,970,000)
+3 MD-13 | ed4e70ca8, 4aa051799 | cached mldsa87 bound 16,436,788 / 15,146,788 / 16,865,788 / 17,105,788 (holder at n2048, n2304 only, unchanged); {fndsa512 x 4}, t = 4 now fits at n2304 (owner ruling: fixture moved, per-set test added)
+4 U2-2 opening.json rejects | aaa1aff90 | 15 rows at four sets; clientkeys + wallet module read them
+5 U4h-3 / U4h-4 | fa377bf48 | clientkeys pqzopen.js
+6 library pins | e03eb1b5d | n2048 16b4b0cb..., n2560 a5c1a706..., n2816 911818ec...; n2304 f397d9c1... rebuilt equal
+
+step | commit | rc | counts
+forge default set (n2304-kmax4096), 22 test dirs | aaa1aff90 | 0 | 4,368 passed, 0 failed, 16 skipped
+forge at-set n2048-kmax1024, 22 dirs | aaa1aff90 | 0 | 4,371 passed, 0 failed, 13 skipped
+forge at-set n2560-kmax16384, 22 dirs | aaa1aff90 | 0 | 4,365 passed, 0 failed, 19 skipped (modules re-run: the first run's pre-split restore lacked the default build, a setup slip; tests 35 / 35 both times)
+forge at-set n2816-kmax65536, 22 dirs | aaa1aff90 | 0 | 4,353 passed, 0 failed, 31 skipped
+forge --isolate UAGas + UARegistryGroups | aaa1aff90 | 0 | 22 passed
+size gate (size_gate.py, size-baseline.json) | aaa1aff90 | 0 | 0 errors, 170 contracts
+clientkeys npm test | aaa1aff90 | 0 | 356 tests, 352 passed, 4 skipped (the wallet module's: run by wallet-wasm/run.sh in the gate's ffi step)
+ua-rs cargo test | aaa1aff90 | 0 | 95 passed
+ua-go go test ./... | aaa1aff90 | 0 | ok
+ua-py unittest tests.test_vectors | aaa1aff90 | 0 | 30 OK
+ua-cs dotnet test Scaas.Ua.Tests | aaa1aff90 | 0 | 29 passed
+ua-dart dart test | aaa1aff90 | 0 | 30 passed
+scaas-node cargo clippy --all-targets -D warnings | aaa1aff90 | 0 | -
+scaas-node cargo test | aaa1aff90 | 0 | 772 passed, 17 binaries (a first run without smartcontracts/algorand/out in the fresh worktree: 20 algorand adapter tests could not read the programs; setup)
+scaas-node cargo test --test e2e -- --ignored | - | - | NOT RUN: needs CAPPED_MEM=6G alone, the pqz-core gates held the machine
+nethermind run-tests.sh n2304-kmax4096 | da4f61d87 tree | 0 | 71 / 71 (item 1); n2048 / n2560 / n2816 filter Library_sha256 | Provisional_schedule 2 / 2 each (item 6)
+pqz-core gate.sh n2048-kmax1024 (label 3zh-g2-n2048-kmax1024) | aaa1aff90 | 0 | PASS, 13 / 13 steps
+pqz-core gate.sh n2304-kmax4096 (label 3zh-g2-n2304-kmax4096) | aaa1aff90 | 0 | PASS, 13 / 13 steps
+pqz-core gate.sh n2560-kmax16384 (label 3zh-g2-n2560-kmax16384) | aaa1aff90 | 1 | FAIL: 12 / 13 steps ok; rust: one part, rust/test-wipe (pqzl/rust/tests/wipe.rs rejected_z34_cleared_before_free, group 1's F-10 test): "the retry path was not exercised (mode 0 61, mode 4 57)", named buffers per prove [(0, 47), (0, 61), (4, 77), (4, 69), (4, 57)]; every freed secret buffer was clean (the dirty-buffer asserts passed), the test's retry-count heuristic fails at this set; split_row_cleared_before_free ok; reported, not changed
