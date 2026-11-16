@@ -3332,11 +3332,13 @@ pub(crate) mod tests {
     }
 
     /// NODE-JOB-29 (owner O7): the lane's cache parts are the `call` share of the EVM spend breaker: past `call_budget_pct` of the
-    /// hour's `gas_budget_per_hour` no part is sent and the register waits by name; under it the parts go. Payments run to the whole budget.
+    /// hour's `gas_budget_per_hour` no part is sent and the register waits by name; under it a part goes. Payments run to the whole budget.
+    /// T21 L81: the first part in flight counts (its 42 M x max fee is past the 100 wei budget's share), so the second waits (old
+    /// assertion: both parts at spent 49).
     #[tokio::test]
     async fn mldsa_cache_parts_stop_at_the_call_share() {
         let reg = Address::repeat_byte(0x5e);
-        for (spent, parts) in [(49u128, 2usize), (50, 0)] {
+        for (spent, parts) in [(49u128, 1usize), (50, 0)] {
             let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), estimate: Some(40_000_000), ek: Some([false; 3]), ..Default::default() }).await;
             let (odoo, o) = fake_odoo(Fake { jobs: vec![call_job(9, reg, mldsa65_register())], tokens: toks(), ..Default::default() }).await;
             let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
