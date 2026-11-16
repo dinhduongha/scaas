@@ -300,10 +300,11 @@ per-transfer secrets (a leak of those reveals that transfer's amounts, never `x`
 
 <a id="CLI-UAL-09"></a>**CLI-UAL-09** — **One secret store per wallet; `lock()` revokes every handle for good.** The store is a
 read-write lock over `{generation, arena}`, shared by `Arc`. Every handle (`UaKey`, `NativeKey`, a derived `KemKeyPair`, a group
-session, `ZetherKey`, `PqzKey`) holds the `Arc`, its generation and its slot, and no secret bytes. Every secret operation takes the
+session, `ZetherKey`, `PqzKey`, the three-key `pqz3k::PqzKeyHandle`) holds the `Arc`, its generation and its slot, and no secret bytes. Every secret operation takes the
 read lock, refuses `KeyRevoked` when the generation is old, and runs under the guard. An operation that copies a secret out under
 the guard and uses the copy after it (a vault's scrypt and AEAD, a seal's KDF and AEAD after decapsulation, a backup's or a k-of-n
-split's seals, a MuSig2 or FROST partial signature, a PQZ migration's re-encryption) holds a **read lease** of the store for the copy's whole
+split's seals, a MuSig2 or FROST partial signature, a PQZ migration's re-encryption, the three-key handle's check and its debit
+and keygen closures) holds a **read lease** of the store for the copy's whole
 use: leases never wait for each other, so signers stay concurrent, and the store guard inside still refuses once locked. `lock()`
 waits until no lease is in flight, then takes the write lock (so it waits for calls in flight), wipes the arena and raises the
 generation; no lease begins between the two. Lock order: a lease before any guard of its store, never while one is held (owner

@@ -1,0 +1,22 @@
+# 2026-11-16 T21 O5 (b) pqz3k handle mutants: python3 -I smartcontracts/evm/runs/2026-11-16-pqz3k-handle-mutants.py (from the worktree root; runs 1-2, then 3-19), on the tree of the commit that adds this file;
+# suites: (ua-rs) scripts/capped cargo test -j2 --locked --features vectors --test pqz3k --test no_oracle -- handle:: three_key; (clientkeys) scripts/capped node --test test/pqz-three-keys.test.js.
+killed   | M1 debit of another token than a class-3 handle's | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M2 OwnRequired removed (the empty-window bypass back) | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M3 own part at lastDebit 0 taken | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M4 EmptyDebit removed | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M5 window entry of another token than the debit's | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M6 acceptance's token not compared | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M7 acceptance's handle not compared | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M8 ownTag not compared | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: three_key_handle_refuses_the_crafted_query
+killed   | M9 own counter lastDebit, not lastDebit - 1 | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: three_key_handle_refuses_the_crafted_query
+killed   | M10 lease dropped before the copy's use | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::lock_waits_for_a_leased_check_and_debit
+killed   | M11 check: another token's credit on a class-3 handle | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M12 check: the recipient's key version not compared | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: handle::debit_gates_the_secret
+killed   | M13 check: a skip of pqz-ffi taken as an acceptance | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 1 failed: three_key_handle_refuses_the_crafted_query
+killed   | M14 check: the acceptance names no token | clients/ua-rs/src/pqz3k/handle.rs | rc=101 | 3 failed: handle::debit_gates_the_secret, handle::lock_revokes_the_handle, handle::lock_waits_for_a_leased_check_and_debit
+killed   | M15 clientkeys: OwnRequired removed | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M16 clientkeys: EmptyDebit removed | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M17 clientkeys: window entry of another token | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M18 clientkeys: acceptance's token not compared | clients/clientkeys/src/pqzopen.js | rc=1 | 1 failed: pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; acceptance bound to handle and bytes
+killed   | M19 clientkeys: own counter lastDebit | clients/clientkeys/src/pqzopen.js | rc=1 | 2 failed: client rows: handle commitments, ownTag over u_f, h(i) / entriesHash, scoped record messages, the opening blob, pqzKeyHandle: the planted probe never loads the secret; a mark lets the window prove; ac
+# 19 killed, 0 survived, 0 not loaded (the tree restored byte for byte after each; check: every replacement found once)

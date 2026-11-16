@@ -1,0 +1,26 @@
+# 2026-11-16 T21 O5 (b) pqz3k handle gates: step | commit | rc | counts (full output in git-ignored local logs)
+# code tree = 8db6f2e6c (the commit after it adds docs and these run files, no code); scripts/capped, foreground, -j2; clippy steps: --all-targets -- -D warnings
+ua-rs default-clippy | 8db6f2e6c | 0 | clean
+ua-rs vectors-clippy | 8db6f2e6c | 0 | clean
+ua-rs verify-only-clippy | 8db6f2e6c | 0 | clean
+ua-rs wallet-mlock-clippy | 8db6f2e6c | 0 | clean
+ua-rs n2048-clippy | 8db6f2e6c | 0 | clean
+ua-rs n2048v-clippy | 8db6f2e6c | 0 | clean
+ua-rs zether-clippy | 8db6f2e6c | 0 | clean
+ua-rs default-test | 8db6f2e6c | 0 | 46 binaries, 460 passed, 0 failed
+ua-rs vectors-test | 8db6f2e6c | 0 | 51 binaries, 549 passed, 0 failed
+ua-rs verify-only-test | 8db6f2e6c | 0 | 18 binaries, 84 passed, 0 failed
+ua-rs wallet-mlock-test | 8db6f2e6c | 0 | 36 binaries, 333 passed, 0 failed
+ua-rs n2048-test | 8db6f2e6c | 0 | 8 binaries, 83 passed, 0 failed
+ua-rs n2048v-test | 8db6f2e6c | 0 | 5 binaries, 76 passed, 0 failed
+ua-rs zether-test | 8db6f2e6c | 0 | 2 binaries, 21 passed, 0 failed
+ua-rs signers (clippy + CI tests) | 8db6f2e6c | 0 | 1 binaries, 4 passed, 0 failed
+ua-rs json (clippy + CI tests) | 8db6f2e6c | 0 | 1 binaries, 7 passed, 0 failed
+ua-rs pq (clippy + CI tests) | 8db6f2e6c | 0 | 2 binaries, 38 passed, 0 failed
+ua-c clippy, build, cargo test (header drift), unittest tests.test_vectors | 8db6f2e6c | 0 | 2 binaries, 9 passed, 0 failed; unittest 95 OK; header unchanged
+clientkeys npm test | 8db6f2e6c | 0 | 424 tests, 419 pass, 0 fail, 5 skipped (wasm modules not built)
+pqz-wallet-sim cargo build --locked --release | 8db6f2e6c | 0 | built
+forge build script/onchain/PqzWallet.s.sol | 8db6f2e6c | 0 | built
+docs_check check; test_docs_check | 8db6f2e6c + docs | 0 | 0 errors (7 page-length warnings, all pre-existing)
+mutants (2026-11-16-pqz3k-handle-mutants.txt) | 8db6f2e6c | 0 | 19 killed, 0 survived
+# the steps default/vectors/verify-only/wallet-mlock/n2048 (and the mutants) ran before a comment-only edit of wallet/mod.rs and an unused-import removal in tests/pqz3k.rs (aligned with ua-rs-sign d36c12749); the later steps ran on the committed code
