@@ -935,10 +935,16 @@ fn enc_one(t: &T) -> Vec<u8> {
         T::Arr(v) => [be(v.len() as u64).to_vec(), enc(v)].concat(),
     }
 }
-const PA: &str = "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes)";
+// `PqzTransferArgs` of the three-key model: `uFrom` before `sealedMemo`, then `openingTo` and `openingAuditor` (`PqzOpening`)
+const PA: &str =
+    "(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes32,bytes,bytes,bytes,bytes,bytes,bytes,(bytes,bytes32,bytes),(bytes,bytes32,bytes))";
 const UA_ENV: &str = "(bytes32,uint256,uint256,uint256,uint32,address,uint256,address)";
 const UA_SIG: &str = "(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])";
 const VERDICT: &str = "((address,uint256,bytes32,bytes32,bytes32,uint32,uint64),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))";
+/// An empty `PqzOpening` (every field empty or 0: a token without the opening).
+fn opening() -> T {
+    T::Tup(vec![T::B(vec![]), T::W([0; 32]), T::B(vec![])])
+}
 fn sig() -> T {
     T::Tup(vec![T::B(vec![]), T::B(vec![]), T::Arr(vec![])])
 }
@@ -1046,7 +1052,8 @@ fn balance_proven_against_anvil() {
             // the entry's calldata: op 1 single, direct or relayed (its envelope inline first)
             let memo = p.get("memo").map(h).map(|m| m[16..].to_vec()).unwrap_or_default();
             let t = T::Tup(vec![T::W(be(0)), T::W(be(d["validUntilBlock"].as_u64().unwrap())), T::W(be(0)), T::W(ua), T::W(be(0)), T::W(ua_b),
-                T::W([0; 32]), T::W([0; 32]), T::W(c.own_tag), T::B(vec![]), T::B(vec![]), T::B(vec![]), T::B(vec![]), T::B(memo)]);
+                T::W([0; 32]), T::W([0; 32]), T::W(c.own_tag), T::B(vec![]), T::B(vec![]), T::B(vec![]), T::B(vec![]), T::B(vec![]), T::B(memo),
+                opening(), opening()]);
             // HASH on this BUNDLE token: the Compact entry (commit-reveal on every token)
             let name = if mode == 0 { "mtxConfidentialTransferSingleCompact" } else { "mtxConfidentialTransferSingle" };
             let (sig_s, args) = match envelope {
