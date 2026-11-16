@@ -13,7 +13,7 @@ import { x25519 } from '@noble/curves/ed25519.js';
 import { concatBytes, utf8ToBytes, fromHex } from './bytes.js';
 import { encaps, combine, checkKemPk, kemKey } from './pqchat.js';
 import { pqzOwnTag } from './evm.js';
-import { uaMessage, portableDomainSeparator } from './ua.js';
+import { uaMessage, portableDomainSeparator, PQZ_SCOPED_KEY_TAG } from './ua.js';
 import { isPqzWallet, pqzUnpack } from './pqzopenWasm.js';
 
 // review 3w-delta U4h-3: a malformed value is refused, never changed (an odd nibble, a non-hex pair, an out-of-range integer).
@@ -193,7 +193,7 @@ export function pqzOpeningAad({ chainUid, token, ua, keyVersion, pu, pv }) {
 }
 
 /** K3-3 (CTR-UA-43): `keccak256("scaas.ua.purpose.pqz-scoped-key.v1")`. */
-export const PURPOSE_PQZ_SCOPED_KEY = keccak_256(utf8ToBytes('scaas.ua.purpose.pqz-scoped-key.v1'));
+export const PURPOSE_PQZ_SCOPED_KEY = PQZ_SCOPED_KEY_TAG;
 const SCOPED_KEY_TYPE = 'UAPqzScopedKey(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,bytes32 pqzKeyHash)';
 const SCOPED_KEY_RECORD_TYPE = 'UAPqzScopedKeyRecord(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,'
   + 'bytes32 pqzKeyHash,bytes32 pqzPopHash,bytes32 openKemHash,uint64 validUntilBlock)';

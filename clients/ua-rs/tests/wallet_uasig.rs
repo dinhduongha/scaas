@@ -8,11 +8,13 @@
 //! the fixed key of typed_ops.json (no wallet key), signed here through a test `Signer` (the phase-2 external-key path). Rows with a
 //! member that is no key here (the fixed-seed classical keys of signatures.json) are counted apart. UNAUDITED.
 use scaas_ua::ua8::{
-    check_authorization, check_kem_record_with, check_membership_with, check_pqz_key_record_with, check_registration_with,
-    decode_member_sigs, encode_member_sigs, membership_digest, pop_v2_tag, InnerSig, KemKey, MemberSig, MsigStructure, UAAttrs, UASig,
+    check_authorization, check_authorization_current, check_kem_record_with, check_membership_current, check_membership_with,
+    check_pqz_key_record_with, check_registration_with, decode_member_sigs, encode_member_sigs, membership_digest, msig_update_digest,
+    msig_update_message, pop_v2_tag, InnerSig, KemKey, MemberSig, MsigMember, MsigStructure, MsigUpdate, UAAttrs, UASig,
 };
 use scaas_ua::verify::{native_ecdsa, verify};
-use scaas_ua::wallet::{membership_sig, msig_sig, ua_sig, Error, KeyRef, Network, SignRequest, Signer, Slot, TypedData, UaKey, Wallet};
+use scaas_ua::wallet::{
+    membership_sig, membership_sig_current, msig_sig, msig_sig_current, msig_update_typed_data, ua_sig, Error, KeyRef, Network, SignRequest, Signer, Slot, TypedData, UaKey, Wallet};
 use scaas_ua::{derive_ua, keccak256, purpose_tag, ua_auth_digest, ua_message, Domain, UAError};
 use serde_json::Value;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -725,4 +727,137 @@ fn slot_must_match_its_member() {
     assert_eq!(msig_sig(&kd, &inner, &[9; 32], &digest, None, None, &good).err(), Some(Error::Ua(UAError::PurposeUnknown)));
     // acceptance: the slot past the members
     assert_eq!(membership_sig(&kd, &inner, &Slot::Member { index: 9, key: bls }).err(), Some(Error::Argument));
+}
+
+/// T21 L03: a single key's `UASig` for `setPqzScopedKey` (`_portableOk`: `keyData` empty, the kind's `verifyPop`) under
+/// `pqz-scoped-key`: no key data, a signature that verifies with role Pop (BLS: the PoP domain), for the derived kinds; the
+/// same key under `metatx` carries its key data (positive control); a native EVM key has no portable record (`Argument`).
+#[test]
+fn pqz_scoped_key_uasig_is_bare_and_pop() {
+    let w = wallet();
+    let p = scaas_ua::pqz3k::purpose_pqz_scoped_key();
+    let d = [9u8; 32];
+    for kind in [0x0101u16, 0x0102, 0x0106, 0x0107, 0x0108] {
+        let key = w.ua_key(kind, 0, 0).unwrap();
+        let s = ua_sig(&key, None, &p, &d).unwrap();
+        assert!(s.key_data.is_empty() && s.members.is_empty(), "{kind:#06x}");
+        let m = ua_message(kind, &p, &d).unwrap();
+        assert!(verify(kind, &key.key_data(), &m, &s.signature, true), "{kind:#06x}: verifyPop");
+        assert_eq!(ua_sig(&key, None, &purpose_tag("metatx").unwrap(), &d).unwrap().key_data, key.key_data(), "{kind:#06x}");
+    }
+    let native = w.native_key(Network::Evm, 0, None).unwrap();
+    assert_eq!(ua_sig(&native, None, &p, &d).err(), Some(Error::Argument));
+}
+
+/// `enabled` of a vector row (a decimal uint256) as its big-endian word.
+fn word_of(v: &Value) -> [u8; 32] {
+    let mut w = [0u8; 32];
+    let mut n: u128 = v.as_str().unwrap().parse().unwrap();
+    for b in w.iter_mut().rev() {
+        *b = n as u8;
+        n >>= 8;
+    }
+    w
+}
+
+/// T21 L01 (CTR-UA-44): `portable.json` `msigUpdated` (ml2 disabled, fndsa512 appended and accepted). Through the builder on the
+/// current structure: the current quorum (native + the appended slot) authorizes `metatx` and the signature passes
+/// `check_authorization_current`, every member digest over the first structure's id; a set with the disabled slot is `Argument`
+/// before anything is signed; the appended slot's acceptance passes `check_membership_current`, which the first-structure builder
+/// cannot even name (`Argument`).
+#[test]
+fn msig_updated_rows_through_the_builder() {
+    let p = load("portable.json");
+    let u = &p["msigUpdated"];
+    let w = wallet();
+    let keys = Keys::new(&w);
+    let (first, now, ua) = (bytes(&u["keyData"]), bytes(&u["current"]), b32(&u["ua"]));
+    let enabled = word_of(&u["enabled"]);
+    let current = |id: [u8; 32]| (id == ua).then(|| (now.clone(), enabled));
+    let records = [(0x0120u16, first.clone())];
+    let members = keys.members(&records);
+    let none = |_: [u8; 32]| None;
+    let domain = context_a();
+    let cur = MsigStructure::from_key_data(&now).unwrap().members;
+    let key = |i: usize| keys.get(&cur[i].id).unwrap_or_else(|| panic!("slot {i} is no key here"));
+    let row = |n: &str| u["rows"].as_array().unwrap().iter().find(|r| r["name"] == n).unwrap().clone();
+    let r = row("authorized-by-current-quorum");
+    let (purpose, digest) = (b32(&r["purposeTag"]), b32(&r["digest"]));
+    let quorum: Vec<u16> = decode_member_sigs(&bytes(&r["sig"])).unwrap().iter().map(|s| s.index).collect();
+    let signers: Vec<S> = quorum.iter().map(|i| key(*i as usize)).collect();
+    let slots: Vec<Slot> = quorum.iter().zip(&signers).map(|(i, k)| Slot::Member { index: *i, key: k }).collect();
+    let got = msig_sig_current(&first, &current, &none, &purpose, &digest, Some(&domain), None, &slots).unwrap();
+    let ok = check_authorization_current(&first, &ua, &purpose, &digest, &got.members, &domain, &members, &current, Some(&all_accepted));
+    assert!(ok.is_ok(), "{ok:?}");
+    // the first-structure builder cannot reach the appended slot
+    assert!(msig_sig(&first, &none, &purpose, &digest, Some(&domain), None, &slots) == POP);
+    // a set with the disabled slot (the row refused on chain)
+    let r = row("refused-with-disabled-slot");
+    let old: Vec<u16> = decode_member_sigs(&bytes(&r["sig"])).unwrap().iter().map(|s| s.index).collect();
+    let signers: Vec<S> = old.iter().map(|i| key(*i as usize)).collect();
+    let counted: Vec<Count> = signers.iter().map(|k| Count(k, AtomicUsize::new(0))).collect();
+    let slots: Vec<Slot> = old.iter().zip(&counted).map(|(i, k)| Slot::Member { index: *i, key: k }).collect();
+    assert_eq!(msig_sig_current(&first, &current, &none, &purpose, &digest, Some(&domain), None, &slots).err(), Some(Error::Argument));
+    assert!(counted.iter().all(|c| c.1.load(Ordering::SeqCst) == 0), "nothing signed");
+    // the appended slot accepts
+    let r = row("appended-slot-accepts");
+    let index = u16_of(&r["index"]);
+    let k = key(index as usize);
+    let slot = Slot::Member { index, key: &k };
+    let got = membership_sig_current(&first, &current, &none, &slot).unwrap();
+    let ok = check_membership_current(&first, &ua, &got, &members, &current, Some(&all_accepted));
+    assert!(ok.is_ok(), "{ok:?}");
+    assert_eq!(membership_sig(&first, &none, &slot).err(), Some(Error::Argument));
+}
+
+/// T21 L02: `portable.json` `msigUpdates` `disable-append` through the builder under `msig-update`: the native member signs the
+/// `UAMsigUpdate` typed digest itself (`UARegistryAuxLib.updateMsig`), not `UAAuth`; the derived member signs `member` over the
+/// update's member digest; `msig_update_typed_data` gives the row's digest; byte-equal with feature `vectors` (ML-DSA rnd = 0).
+/// Positive control: the same native slot under `metatx` signs `UAAuth`.
+#[test]
+fn msig_update_rows_native_signs_the_update_digest() {
+    let p = load("portable.json");
+    let r = p["msigUpdates"].as_array().unwrap().iter().find(|r| r["name"] == "disable-append").unwrap();
+    let w = wallet();
+    let keys = Keys::new(&w);
+    let members: Vec<MsigMember> = r["members"].as_array().unwrap().iter()
+        .map(|m| MsigMember { kind: u16_of(&m["kind"]), id: b32(&m["id"]), weight: u16_of(&m["weight"]) }).collect();
+    let n = |v: &Value| v.as_u64().or_else(|| v.as_str().and_then(|s| s.parse().ok())).unwrap();
+    let u = MsigUpdate { ua: b32(&r["ua"]), chain_uid: b32(&r["chainUid"]), registry: bytes(&r["registry"]).try_into().unwrap(),
+        version: n(&r["version"]), structure: MsigStructure { threshold: u16_of(&r["threshold"]), members }, enabled: word_of(&r["enabled"]),
+        valid_until_block: n(&r["validUntilBlock"]) };
+    let (digest, _, md) = msig_update_message(&u).unwrap();
+    assert_eq!(digest, b32(&r["digest"]));
+    assert_eq!(digest, msig_update_digest(&u));
+    let td = msig_update_typed_data(&u).unwrap();
+    assert_eq!(td.digest().unwrap(), typed(&r["typedData"]).digest().unwrap());
+    let stored = bytes(&r["stored"]);
+    let structure = MsigStructure::from_key_data(&stored).unwrap().members;
+    let idx: Vec<u16> = r["signers"].as_array().unwrap().iter().map(|i| i.as_u64().unwrap() as u16).collect();
+    let signers: Vec<S> = idx.iter().map(|i| keys.get(&structure[*i as usize].id).unwrap()).collect();
+    let slots: Vec<Slot> = idx.iter().zip(&signers).map(|(i, k)| Slot::Member { index: *i, key: k }).collect();
+    let tag = purpose_tag("msig-update").unwrap();
+    let none = |_: [u8; 32]| None;
+    let domain = context_a();
+    let got = msig_sig(&stored, &none, &tag, &digest, Some(&domain), Some(&td), &slots).unwrap();
+    let native_at = idx.iter().position(|i| structure[*i as usize].kind == 0x0001).unwrap();
+    let addr: [u8; 20] = structure[idx[native_at] as usize].id[12..].try_into().unwrap();
+    assert!(native_ecdsa(&addr, &digest, &got.members[native_at].sig), "the native member signs the update digest");
+    for (s, i) in got.members.iter().zip(&idx).filter(|(_, i)| structure[**i as usize].kind != 0x0001) {
+        let m = &structure[*i as usize];
+        let kd = keys.get(&m.id).unwrap().key_ref();
+        let KeyRef::Ua { key_data, .. } = kd else { panic!() };
+        assert!(verify(m.kind, &key_data, &ua_message(m.kind, &purpose_tag("member").unwrap(), &md).unwrap(), &s.sig, false));
+    }
+    if signers.iter().all(|s| exact(s.kind())) {
+        assert_eq!(hex::encode(encode_member_sigs(&got.members)), hex::encode(bytes(&r["sigs"])));
+    }
+    // positive control: under `metatx` the same native slot signs UAAuth(id, member, md)
+    let mt = purpose_tag("metatx").unwrap();
+    let auth = msig_sig(&stored, &none, &mt, &digest, Some(&domain), None, &slots).unwrap();
+    let md2 = scaas_ua::member_digest(&u.ua, &ua_message(0x0120, &mt, &digest).unwrap());
+    let h = ua_auth_digest(&domain, &structure[idx[native_at] as usize].id, &purpose_tag("member").unwrap(), &md2);
+    assert!(native_ecdsa(&addr, &h, &auth.members[native_at].sig));
+    // without the update record the native slot has nothing to sign
+    assert_eq!(msig_sig(&stored, &none, &tag, &digest, Some(&domain), None, &slots).err(), Some(Error::Argument));
 }

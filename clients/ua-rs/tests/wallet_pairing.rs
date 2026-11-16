@@ -72,7 +72,7 @@ fn sign_json_pairing_rows() {
         }
         n += 1;
     }
-    assert_eq!((n, bls), (14, 6));
+    assert_eq!((n, bls), (20, 8)); // T21 L03: + the pqz-scoped-key rows
 }
 
 /// `sign.json` `refusals`: a BLS signature of the right message under the other role's domain does not verify; the control
@@ -87,7 +87,7 @@ fn bls_wrong_dst_refusal_rows() {
         assert!(verify(kind, &kd, &m, &sig, r["signedAs"] == "pop"), "{r}");
         n += 1;
     }
-    assert_eq!(n, 4);
+    assert_eq!(n, 6); // T21 L03: + the pqz-scoped-key rows
 }
 
 /// The BLS kinds sign under the domain of the request's role: an authorization signature does not verify as a PoP and the
@@ -270,7 +270,7 @@ mod vectors {
             assert_eq!(hex::encode(sig), hex::encode(bytes(&r["signature"])), "{r}");
             n += 1;
         }
-        assert_eq!(n, 4);
+        assert_eq!(n, 6); // T21 L03: + the pqz-scoped-key rows
     }
 
     fn be32<F: PrimeField>(f: F) -> [u8; 32] {

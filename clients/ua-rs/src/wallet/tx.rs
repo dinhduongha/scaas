@@ -94,7 +94,7 @@ pub enum EvmTx {
     },
 }
 
-/// A signed transaction: the envelope to broadcast (`raw`) and the signature parts.
+/// A signed transaction: its signed envelope (`raw`) and the signature parts.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SignedTx {
     pub tx_type: u8,
@@ -102,6 +102,9 @@ pub struct SignedTx {
     pub y_parity: u8,
     pub r: [u8; 32],
     pub s: [u8; 32],
+    /// The canonical signed envelope: what types 0 to 2 broadcast as they are. Type 3 (EIP-4844): the block form
+    /// `0x03 ‖ rlp(tx_payload_body)`, not the network form; the caller wraps it with the blob sidecar
+    /// (`0x03 ‖ rlp([tx_payload_body, blobs, commitments, proofs])`) to broadcast (T21 L09). The sidecar is never signed.
     pub raw: Vec<u8>,
 }
 

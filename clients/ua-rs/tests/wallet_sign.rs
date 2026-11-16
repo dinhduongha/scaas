@@ -76,7 +76,7 @@ fn sign_json_ua_rows() {
         }
         n += 1;
     }
-    assert_eq!(n, 14);
+    assert_eq!(n, 19); // T21 L03: + the pqz-scoped-key rows
 }
 
 #[cfg(feature = "vectors")]
@@ -301,6 +301,33 @@ mod vectors {
         assert_eq!(role, SigRole::Pop);
         let SignRequest::UaMsg { role, .. } = key.vectors_member_request(&[1; 32], &[2; 32]).unwrap() else { panic!() };
         assert_eq!(role, SigRole::Authorization);
+        // T21 L03: the portable record purposes as the contract lists them (`UARegistryCoreLib._portablePurpose`, each tag's
+        // string from `UAKinds.sol`): every one but `pqchat` (its round is PLANNED) signs with role Pop, BLS under the PoP domain
+        let src = |f: &str| std::fs::read_to_string(format!("{}/../../smartcontracts/evm/src/ua/{f}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let (core, kinds) = (src("UARegistryCoreLib.sol"), src("UAKinds.sol"));
+        let body = &core[core.find("function _portablePurpose").unwrap()..];
+        let body = &body[..body.find("revert").unwrap()];
+        let names: Vec<&str> = body.split("UAKinds.").skip(1).map(|t| t.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).next().unwrap()).collect();
+        let tag = |name: &str| {
+            let at = kinds.find(&format!("constant {name} = keccak256(\"")).unwrap_or_else(|| panic!("{name}"));
+            let rest = &kinds[at..];
+            let s = &rest[rest.find('"').unwrap() + 1..];
+            keccak256(&s.as_bytes()[..s.find('"').unwrap()])
+        };
+        let contract: Vec<[u8; 32]> = names.iter().filter(|n| **n != "PURPOSE_PQCHAT").map(|n| tag(n)).collect();
+        assert_eq!(names.len(), 5, "{names:?}");
+        let mut ours = scaas_ua::ua8::portable_record_purposes().to_vec();
+        let mut theirs = contract.clone();
+        ours.sort();
+        theirs.sort();
+        assert_eq!(ours, theirs, "the portable record purposes drifted from the contract's {names:?}");
+        for k in [0x0106u16, 0x0107, 0x0108] {
+            let key = w.ua_key(k, 0, 0).unwrap();
+            for t in &contract {
+                let SignRequest::UaMsg { role, .. } = key.vectors_request(t, &[0; 32]).unwrap() else { panic!() };
+                assert_eq!(role, SigRole::Pop, "{k:#06x}");
+            }
+        }
     }
 
     /// One key, one kind (CLI-SGN-29): a request built for another kind is refused by the key; the same request is signed

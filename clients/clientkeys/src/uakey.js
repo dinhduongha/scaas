@@ -81,11 +81,11 @@ export function uaKeyPath(kind, account = 0, index = 0) {
   return fail('Argument', NOT_DERIVED[kind] ?? `${info.name} is a native kind: deriveKey`);
 }
 
-/** `pop` for the portable purposes the registry verifies with `verifyPop` (`pop` v2, `kem`, `pqz-key`; `_sigOk`), else
- *  `authorization` (spec §9.4). The BLS kinds sign under the DST of the role. */
+/** `pop` for the portable record purposes the registry verifies with `verifyPop` (`ua.PORTABLE_RECORD_TAGS`: `pop` v2, `kem`,
+ *  `pqz-key`, `pqz-scoped-key`; `_sigOk`), else `authorization` (spec §9.4). The BLS kinds sign under the DST of the role. */
 export const sigRole = (purposeTag) =>
-  ([ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG].some((t) => hex(t) === hex(purposeTag)) ? 'pop' : 'authorization');
-const PURPOSE_TAGS = new Set([...ua.PURPOSES.map((p) => hex(ua.purposeTag(p))), hex(ua.POP_V2_TAG)]);
+  (ua.PORTABLE_RECORD_TAGS.some((t) => hex(t) === hex(purposeTag)) ? 'pop' : 'authorization');
+const PURPOSE_TAGS = new Set([...ua.PURPOSES.map((p) => hex(ua.purposeTag(p))), ...ua.PORTABLE_RECORD_TAGS.map(hex)]);
 const purposeOf = (tag) => {
   if (!(tag instanceof Uint8Array) || tag.length !== 32 || !PURPOSE_TAGS.has(hex(tag))) fail('UAPurposeUnknown', 'not a purpose of PURPOSES');
   return tag;
@@ -254,12 +254,27 @@ export function webauthnAssertion({ keyData, expectedChallenge, authData, client
 
 /** `abi.encode(MemberSig[])` of an `msig` UA `ua` (key data `keyData`) over `(purposeTag, digest)`: `slots` are
  *  `[{index, key}]` for a derived member and `[{index, members: [{index, key}]}]` for an `msig` member (`inner(id)` gives its key
- *  data). A set that is not minimal at both levels (or not strictly increasing) is `UAPoP`, the registry's verdict. */
-export const msigMemberSigs = ({ ua: id, keyData, purposeTag, digest, slots, inner }) =>
-  encodeMemberSigs(memberSlots({ ua: id, keyData, slots, inner }, ua.uaMessage(0x0120, purposeOf(purposeTag), digest)));
+ *  data). A set that is not minimal at both levels (or not strictly increasing) is `UAPoP`, the registry's verdict. An updated
+ *  `msig` (CTR-UA-44, T21 L01, as ua-rs `msig_sig_current`): `ua` stays the id (the first structure's), `keyData` and `inner(id)`
+ *  give the structures that authorize now (`msigOf`), `enabledOf(id)` the `msigStateOf` `enabled` word of the record or of an
+ *  `msig` member (a bigint or a decimal / `0x` string; undefined: never updated, every slot); a disabled slot, at either level, is
+ *  `Argument` before anything is signed. */
+export const msigMemberSigs = ({ ua: id, keyData, purposeTag, digest, slots, inner, enabledOf }) =>
+  encodeMemberSigs(memberSlots({ ua: id, keyData, slots, inner, enabledOf }, ua.uaMessage(0x0120, purposeOf(purposeTag), digest)));
+
+/** Slot `index` of the `msig` `id` is enabled (`enabledOf(id)`, bit i = slot i; none: every slot). */
+const slotOn = (enabledOf, id, index) => {
+  const en = enabledOf?.(typeof id === 'string' ? id.toLowerCase() : hex(id));
+  return en === undefined || en === null || (index < 256 && ((BigInt(en) >> BigInt(index)) & 1n) === 1n);
+};
 
 /** The `MemberSig[]` of an `msig` over its `ua_msg` `md` (`msigMemberSigs`, `signContainer`): minimal at both levels, else `UAPoP`. */
-function memberSlots({ ua: id, keyData, slots, inner }, md) {
+function memberSlots({ ua: id, keyData, slots, inner, enabledOf }, md) {
+  for (const s of slots) {
+    if (!slotOn(enabledOf, id, s.index)) fail('Argument', `slot ${s.index} is disabled`);
+    const m = ua.msigStructure(keyData).members[s.index];
+    for (const x of s.members ?? []) if (m && !slotOn(enabledOf, m.id, x.index)) fail('Argument', `slot ${x.index} of ${m.id} is disabled`);
+  }
   const list = slots.map((s) => ({ index: s.index, members: s.members?.map((m) => ({ index: m.index })) }));
   if (!ua.msigSigMinimal(keyData, list, inner)) fail('UAPoP', 'the member set is not minimal');
   const all = ua.msigStructure(keyData).members;

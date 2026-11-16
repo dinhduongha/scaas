@@ -181,6 +181,13 @@ export const PQZ_KEY_TAG = purposeTag('pqz-key');
  *  native verifier over `uaAuthDigest`, a derived one over `uaMessage`. In `PURPOSES` since ua-rs-sign's T20b sync with 3f, so
  *  the purpose rows of vectors/ua/kinds.json, which every `ua-*` binding reads, carry it. */
 export const PQZ_VERDICT_TAG = purposeTag('pqz-verdict');
+/** A scoped PQZ key's record (`setPqzScopedKey`, CTR-UA-43, K3-3): its purpose (`UAKinds.PURPOSE_PQZ_SCOPED_KEY`). Not in `PURPOSES`
+ *  (the kinds.json purpose table): a portable record purpose only. */
+export const PQZ_SCOPED_KEY_TAG = tagHash('scaas.ua.purpose.pqz-scoped-key.v1');
+/** The portable record purposes a single key signs for the registry's `verifyPop` (`UARegistryCoreLib._portablePurpose`): `pop` v2,
+ *  `kem`, `pqz-key`, `pqz-scoped-key`; `pqchat` joins with its round (PLANNED). One list (T21 L03, as ua-rs `portable_record_purposes`):
+ *  the signer's role (`pop`, the BLS PoP domain) and the purpose check read it. */
+export const PORTABLE_RECORD_TAGS = Object.freeze([POP_V2_TAG, KEM_TAG, PQZ_KEY_TAG, PQZ_SCOPED_KEY_TAG]);
 /** A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): its purpose. */
 export const MEMBERSHIP_TAG = purposeTag('membership');
 /** An `msig`'s structure update (`updateMsig`, CTR-UA-44): its purpose. Not a `requirePortable` purpose. */
