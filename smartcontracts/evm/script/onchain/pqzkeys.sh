@@ -94,6 +94,9 @@ done
 [ -n "$runs" ] || exit 1
 python3 -I script/onchain/coverage.py forge "$NET" "deployments/onchain-$NET-$GN.json" $runs >> "$L" 2>&1
 for f in "$T"/neg-*.jsonl; do [ ! -f "$f" ] || cat "$f" >> "$R"; done
-python3 -I script/onchain/coverage.py trace "$NET" $GN "$RPC" >> "$L" 2>&1
+# the frames by debug_traceTransaction: local only by default, as run.sh (a remote node keeps its Debug namespace closed;
+# reset 5: the SCaaS testnet refused it after all 422 sends and their negatives had passed)
+[ "${ONCHAIN_TRACE:-$([ "$NET" = local ] && echo 1)}" != 1 ] ||
+  python3 -I script/onchain/coverage.py trace "$NET" $GN "$RPC" >> "$L" 2>&1
 echo "[$NET/$GN] $([ $rc = 0 ] && echo ok || echo FAIL) $(grep -c . "$R" 2> /dev/null || echo 0) records"
 exit $rc
