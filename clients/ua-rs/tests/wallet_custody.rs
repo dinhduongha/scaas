@@ -147,7 +147,8 @@ fn derive_lock_then_sign_decaps_open_prove_are_KeyRevoked() {
     let kk = holder.kem_key(0).unwrap();
     let native = w.native_key(Network::Evm, 0, None).unwrap();
     let (a, b) = (w.ua_key(0x0112, 0, 0).unwrap(), w.ua_key(0x0112, 1, 0).unwrap());
-    let pks = vec![a.key_data(), b.key_data()];
+    let mut pks = vec![a.key_data(), b.key_data()];
+    mu::key_sort(&mut pks); // a registrable list (T21 L16)
     let (mut sa, sb) = (a.musig2_session(&pks, &[6; 32]).unwrap(), b.musig2_session(&pks, &[6; 32]).unwrap());
     let agg = mu::nonce_agg::<Bn254>(&[sa.pubnonce(), sb.pubnonce()]).unwrap();
     let (ct, eph, ss) = kem_encaps(&kk.kem_pk()).unwrap();
@@ -226,7 +227,8 @@ fn wallet_dropped_with_children_retained() {
     let native = w.native_key(Network::Evm, 0, None).unwrap();
     let imported = w.import_native_key(Network::Stellar, &[1; 32]).unwrap();
     let (a, b) = (w.ua_key(0x0112, 0, 0).unwrap(), w.ua_key(0x0112, 1, 0).unwrap());
-    let pks = vec![a.key_data(), b.key_data()];
+    let mut pks = vec![a.key_data(), b.key_data()];
+    mu::key_sort(&mut pks); // a registrable list (T21 L16)
     let (mut sa, sb) = (a.musig2_session(&pks, &[6; 32]).unwrap(), b.musig2_session(&pks, &[6; 32]).unwrap());
     let agg = mu::nonce_agg::<Bn254>(&[sa.pubnonce(), sb.pubnonce()]).unwrap();
     let (ct, eph, _) = kem_encaps(&kk.kem_pk()).unwrap();

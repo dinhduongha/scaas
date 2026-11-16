@@ -82,9 +82,14 @@ fn p256_ok(xy: &[u8], hash: &[u8; 32], rs: &[u8]) -> bool {
 
 // --- WebAuthn ---
 
+/// The ABI uint256 word at `o` as a `usize`, `None` unless it fits: every byte above the low 8 zero, and the low 8 within
+/// `usize` (T21 L04: on wasm32 a fold into a 32-bit `usize` dropped bytes 24-27, so a non-canonical blob read as canonical).
 pub(crate) fn word_usize(b: &[u8], o: usize) -> Option<usize> {
     let w = b.get(o..o.checked_add(32)?)?;
-    w[..24].iter().all(|x| *x == 0).then(|| w[24..].iter().fold(0usize, |a, x| (a << 8) | *x as usize))
+    if !w[..24].iter().all(|x| *x == 0) {
+        return None;
+    }
+    usize::try_from(u64::from_be_bytes(w[24..].try_into().ok()?)).ok()
 }
 /// `(authenticatorData, clientDataJSON)` of the WebAuthn blob, only if `sig` is their canonical
 /// `abi.encode(authenticatorData, clientDataJSON, r, s)` (owner 2026-10-30, CTR-UA-33 C; `WebAuthnP256Verifier._fields`):
@@ -116,7 +121,7 @@ fn base64url(data: &[u8]) -> String {
 }
 
 /// `SmartKeyAccount._clientDataOk` without the origin comparison: the fixed prefix with type and challenge, any origin up
-/// to the next `"`, then `}` at the end, or `,"crossOrigin":false` followed by `}` at the end or by `,`.
+/// to the next `"`, then `}` at the end, or `,"crossOrigin":false` followed by `}` at the end or by `,` with `}` at the end.
 pub(crate) fn client_data_ok(cd: &[u8], challenge: &[u8; 32]) -> bool {
     let prefix = format!("{{\"type\":\"webauthn.get\",\"challenge\":\"{}\",\"origin\":\"", base64url(challenge));
     let (p, n) = (prefix.len(), cd.len());
@@ -135,7 +140,8 @@ pub(crate) fn client_data_ok(cd: &[u8], challenge: &[u8; 32]) -> bool {
     if after >= n || &cd[end + 1..after] != cross {
         return false;
     }
-    if cd[after] == b'}' { after + 1 == n } else { cd[after] == b',' }
+    // C1-2 (`WebAuthnClientData.sol`): after `,"crossOrigin":false,` the object must still close (T21 L05)
+    if cd[after] == b'}' { after + 1 == n } else { cd[after] == b',' && cd[n - 1] == b'}' }
 }
 
 /// `abi.encode(bytes authenticatorData, string clientDataJSON, uint256 r, uint256 s)`, canonical only (checked first).
@@ -198,7 +204,15 @@ where
 /// The scaas 512-bit map `hashToScalar(s) = (keccak(s ‖ 0x02) · 2^256 + keccak(s ‖ 0x03)) mod r` (accounts.md §1.9): the one
 /// copy, for the verifier's challenge and the signer's nonce and challenge alike (spec §3).
 pub fn hash_to_scalar<F: PrimeField>(s: &[u8; 32]) -> F {
-    F::from_be_bytes_mod_order(&[keccak(&[s, &[2]]), keccak(&[s, &[3]])].concat())
+    let mut w = [0u8; 64];
+    hash_to_scalar_wide(s, &mut w);
+    F::from_be_bytes_mod_order(&w)
+}
+/// The 64 bytes [`hash_to_scalar`] reduces, `keccak(s ‖ 0x02) ‖ keccak(s ‖ 0x03)`, into the caller's buffer: the signer's nonce
+/// keeps them in a wiped one (T21 L07).
+pub(crate) fn hash_to_scalar_wide(s: &[u8; 32], out: &mut [u8; 64]) {
+    out[..32].copy_from_slice(&keccak(&[s, &[2]]));
+    out[32..].copy_from_slice(&keccak(&[s, &[3]]));
 }
 
 /// scaas Schnorr: `R ‖ z`, `e = hashToScalar(keccak256(tag ‖ R ‖ Y ‖ m))` ([`hash_to_scalar`]); accept iff `z < r`, `R ≠ O`,

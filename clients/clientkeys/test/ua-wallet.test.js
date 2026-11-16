@@ -235,7 +235,7 @@ test('BLS ordinary and PoP rows, right message under the wrong DST refused', () 
     }
   }
   const refusals = S.refusals.filter((x) => x.case === 'bls-wrong-dst');
-  assert.equal(refusals.length, 4);
+  assert.equal(refusals.length, 6); // T21 L03: + the pqz-scoped-key rows
   for (const x of refusals) assert.equal(kindVerify(x.kind, x.keyData, x.uaMsg, x.signature, x.pop), false, JSON.stringify(x.kind));
 });
 
@@ -513,4 +513,43 @@ test('rs_signatures.json: ua-rs signatures (Falcon, hedged ML-DSA, randomized SL
   assert.equal(RS.rows.length, 18);
   const own = new Set(S.ua.map((r) => r.signature)); // signed by ua-rs, not copied from sign.json
   assert.ok(RS.rows.every((r) => !own.has(r.signature)));
+});
+
+// T21 L03: the portable record purposes as the contract lists them (UARegistryCoreLib._portablePurpose, each tag's string from
+// UAKinds.sol) equal ua.PORTABLE_RECORD_TAGS (pqchat apart: its round is PLANNED), and each signs with role pop.
+test('portable record purposes follow the contract', async () => {
+  const sol = (f) => readFileSync(new URL(`../../../smartcontracts/evm/src/ua/${f}`, import.meta.url), "utf8");
+  const core = sol('UARegistryCoreLib.sol');
+  const kinds = sol('UAKinds.sol');
+  const body = core.slice(core.indexOf('function _portablePurpose')).split('revert')[0];
+  const names = [...body.matchAll(/UAKinds\.(PURPOSE_[A-Z0-9_]+)/g)].map((m) => m[1]);
+  assert.equal(names.length, 5, names.join());
+  const tag = (n) => hex(keccak_256(new TextEncoder().encode(kinds.match(new RegExp(`constant ${n} = keccak256\\("([^"]+)"\\)`))[1])));
+  const theirs = names.filter((n) => n !== 'PURPOSE_PQCHAT').map(tag).sort();
+  assert.deepEqual(ua.PORTABLE_RECORD_TAGS.map(hex).sort(), theirs);
+  for (const t of ua.PORTABLE_RECORD_TAGS) assert.equal(U.sigRole(t), 'pop');
+});
+
+// T21 L01 (CTR-UA-44): an updated msig signs only with enabled slots. The sign.json msig rows with every slot enabled give the
+// same bytes (positive control); a used slot disabled, at either level, is Argument before anything is signed.
+test('msigMemberSigs refuses a disabled slot at either level', () => {
+  let outer = 0, inner2 = 0;
+  for (const m of S.msig.filter((x) => x.memberSigs)) {
+    const slots = m.slots.map((s) => ({ index: s.index, key: s.key && keyOf(s.key),
+      members: s.members?.map((i) => ({ index: i.index, key: keyOf(i.key) })) }));
+    const inner = (id) => m.inner?.[id];
+    const call = (enabledOf) => U.msigMemberSigs({ ua: B(m.ua), keyData: B(m.keyData), purposeTag: B(m.purposeTag), digest: B(m.digest),
+      slots, inner, enabledOf });
+    assert.equal(hex(call(() => (1n << 256n) - 1n)), m.memberSigs, m.case);
+    const off = (id0, i) => (id) => (id === id0 ? ((1n << 256n) - 1n) ^ (1n << BigInt(i)) : undefined);
+    assert.throws(() => call(off(m.ua.toLowerCase(), slots[0].index)), (e) => e.code === 'Argument' && /disabled/.test(e.message), m.case);
+    outer++;
+    const nested = slots.find((s) => s.members);
+    if (nested) {
+      const id = ua.msigStructure(B(m.keyData)).members[nested.index].id.toLowerCase();
+      assert.throws(() => call(off(id, nested.members[0].index)), (e) => e.code === 'Argument' && /disabled/.test(e.message), m.case);
+      inner2++;
+    }
+  }
+  assert.ok(outer > 0 && inner2 > 0, `${outer} outer, ${inner2} inner`);
 });

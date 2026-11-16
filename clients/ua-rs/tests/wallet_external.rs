@@ -102,7 +102,7 @@ fn sign_json_rows_through_an_external_key_equal_the_internal_ones() {
         }
         n += 1;
     }
-    assert!(n >= 44 && exact == 16, "{n} rows, {exact} byte-equal");
+    assert!(n >= 65 && exact == 21, "{n} rows, {exact} byte-equal"); // T21 L03: + one pqz-scoped-key row per kind
     let member = purpose_tag("member").unwrap();
     for r in arr(&s, "member") {
         let kind = r["kind"].as_u64().unwrap() as u16;

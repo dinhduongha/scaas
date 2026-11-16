@@ -79,7 +79,7 @@ fn sign_json_pq_rows() {
         assert!(pq::verify(kind, &key.key_data(), &ua_msg, &mine), "{r}");
         n += 1;
     }
-    assert_eq!(n, 20);
+    assert_eq!(n, 30); // T21 L03: + the pqz-scoped-key rows
 }
 
 /// A release signature is randomized for every PQ kind: two signatures of one request differ and both verify.
@@ -175,7 +175,7 @@ mod vectors {
             assert_eq!(hex::encode(sig), hex::encode(bytes(&r["signature"])), "{r}");
             n += 1;
         }
-        assert_eq!(n, 8);
+        assert_eq!(n, 12); // T21 L03: + the pqz-scoped-key rows
     }
 
     /// pq_kat.json: the deterministic ML-DSA / SLH-DSA signature of each kind's `ua_msg`, byte-equal; Falcon's (noble's own

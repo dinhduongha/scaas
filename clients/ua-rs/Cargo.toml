@@ -107,7 +107,7 @@ vectors = ["wallet", "scaas-ct/vectors", "ml-kem/hazmat", "zether-prover?/hazmat
 # T10: the arena's chunks `mlock`ed and no-dump (Linux, Android), best effort, reported by `Wallet::memory_protection`; a no-op
 # off Unix (wasm32: compiled out)
 mlock = ["wallet", "dep:libc"]
-signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha", "dep:scaas-ct"]
+signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha", "dep:scaas-ct", "dep:zeroize"]
 json = ["dep:serde_json"]
 pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc"]
 
@@ -123,9 +123,10 @@ serde_json = { version = "1", features = ["preserve_order"] }
 [target.'cfg(unix)'.dev-dependencies]
 libc = "0.2"
 
+# T21 L11 (CLI-UAL-02): the groups.json generator signs with fixed randomness, the test-only entry points of `vectors`
 [[test]]
 name = "groups"
-required-features = ["signers"]
+required-features = ["vectors"]
 
 [[test]]
 name = "json"

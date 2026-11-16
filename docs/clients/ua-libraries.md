@@ -153,7 +153,7 @@ Claude), no external audit.
 |---|---|---|
 | Wallet and keys | `wallet/mod.rs`, `derive.rs`, `store.rs` | `Wallet::{generate, from_mnemonic, open_vault, seal_vault, lock, unlock, manifest, memory_protection, ua_key, native_key}`; derivation as [signers-clientkeys §9](signers-clientkeys.md#9-derivation-and-role-keys) |
 | Single-key signing | `sign.rs`, `pqsign.rs`, `pairing.rs`, `signer.rs` | `UaKey::{sign_ua, sign_member}`, `NativeKey::{sign_typed, sign_transaction, sign_key_proof, sign_digest}`, the `Signer` trait |
-| `UASig` and groups | `uasig.rs`, `pairing.rs` | `ua_sig`, `msig_sig`, `membership_sig` (`msig` sets minimal at both levels, `UAPoP` otherwise); MuSig2 and FROST sessions, a secret nonce used once |
+| `UASig` and groups | `uasig.rs`, `pairing.rs` | `ua_sig`, `msig_sig`, `membership_sig` (`msig` sets minimal at both levels, `UAPoP` otherwise); an updated `msig` (CTR-UA-44): `msig_sig_current`, `membership_sig_current` (the id from the first structure, slots, weights, threshold and minimality from the current one, a disabled slot `Argument`; the JSON request's `current`), `msig_update_typed_data` (a native member signs the `UAMsigUpdate` digest itself under `msig-update`); `pqz-scoped-key` signs with role Pop and an empty `keyData`, as the other portable record purposes; MuSig2 sessions (`UaKey::musig2_session`) and FROST sessions (`Wallet::frost_session`): store handles, a secret nonce in the arena used once, revoked by `lock()`; the FROST share stays the caller's `KeyPackage` until the real DKG work ([CLI-UAL-09](#CLI-UAL-09)) |
 | EIP-712, policy, transactions | `eip712.rs`, `policy.rs`, `tx.rs` | `TypedData`, `scaas_typed_data`, `pqz_verdict_typed_data` (the `PqzVerdict` a PQZ verifier UA signs under `pqz-verdict`, group 3f), `Expect`; `EvmTx` types 0 to 3 (`alloy-rlp`; type 4 has no variant, chain id 0 refused) |
 | WebAuthn | `webauthn.rs` | `webauthn_challenge`, `webauthn_assertion` |
 | Factory addresses | `factory.rs` | `create3_salt`, `create3_address`: a creation's chain-neutral CREATE3 address (chain-neutral spec §4, `vectors/factory/create3_kat.json`), shown before a router create op |
@@ -306,7 +306,7 @@ calls in flight), wipes the arena and raises the generation. `unlock` reopens th
 never revives an old handle; a vault of another wallet is `WalletMismatch`. A wallet call that needs secrets while locked is
 `WalletLocked`; the public manifest stays. Freeing the wallet is `lock()` plus the release of its reference: a child returns
 `KeyRevoked` until its own `_free`. An imported or rebuilt key is listed after `unlock` and held only once its label vault is opened
-(`backup_seal` refuses until then). An ephemeral `KemKeyPair` and a `LinkSession` have a store of their own. BUILT.
+(`backup_seal` refuses until then). An ephemeral `KemKeyPair` and a `LinkSession` have a store of their own. A FROST session is such a handle (its nonces in the arena); its share is not yet: the caller's `KeyPackage` until share custody comes with the real DKG work (owner 2026-11-16). BUILT.
 
 <a id="CLI-UAL-10"></a>**CLI-UAL-10** — **Memory protection covers the arena, not the object graph.** The arena is page-aligned 16 KiB
 chunks that never move or grow, each `mlock`ed and `MADV_DONTDUMP` (Linux, Android) at allocation, wiped, unmarked and unlocked at

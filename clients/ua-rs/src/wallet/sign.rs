@@ -9,7 +9,7 @@
 //! `pairing` (T3c). UNAUDITED.
 use super::signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 use super::{derive, pairing, pqsign, Error, NativeKey, Result, UaKey};
-use crate::{keccak256, member_digest, purpose_tag, ua_message, ua8::pop_v2_tag, UAError, PURPOSES};
+use crate::{keccak256, member_digest, purpose_tag, ua_message, ua8::portable_record_purposes, UAError, PURPOSES};
 use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
 
@@ -66,8 +66,12 @@ fn sign_scheme(scheme: Scheme, secret: &[u8], msg: &[u8], aux: Option<&[u8; 32]>
         }
         Scheme::Bip340 => {
             let sk = k256::schnorr::SigningKey::from_slice(secret).map_err(|_| Error::Argument)?;
-            let sig = sk.sign_raw(msg, aux.ok_or(Error::Argument)?).map_err(|_| Error::Argument)?;
-            Ok(sig.to_bytes().to_vec())
+            let sig = sk.sign_raw(msg, aux.ok_or(Error::Argument)?).map_err(|_| Error::Argument)?.to_bytes();
+            // BIP-340 Sign's last step (k256 runs it under `debug_assertions` only): a faulty signature never leaves (T21 L08)
+            if !crate::verify::bip340(&sk.verifying_key().to_bytes(), arr32(msg)?, &sig) {
+                return Err(Error::Argument);
+            }
+            Ok(sig.to_vec())
         }
     }
 }
@@ -79,19 +83,18 @@ pub(super) fn os_aux() -> Result<[u8; 32]> {
     Ok(aux)
 }
 
-/// The registry's role of a purpose: `verifyPop` for the portable purposes.
+/// The registry's role of a purpose: `verifyPop` for the portable record purposes (`ua8::portable_record_purposes`).
 fn role_of(purpose: &[u8; 32]) -> SigRole {
-    let pop = *purpose == pop_v2_tag() || ["kem", "pqz-key"].iter().any(|p| purpose_tag(p).is_ok_and(|t| t == *purpose));
-    if pop {
+    if portable_record_purposes().contains(purpose) {
         SigRole::Pop
     } else {
         SigRole::Authorization
     }
 }
 
-/// `purpose` a tag of `PURPOSES` (v1) or `pop` v2, else `UAPurposeUnknown`.
+/// `purpose` a tag of `PURPOSES` (v1) or a portable record purpose (`pop` v2, `pqz-scoped-key`), else `UAPurposeUnknown`.
 pub(super) fn check_purpose(purpose: &[u8; 32]) -> Result<()> {
-    let known = *purpose == pop_v2_tag() || PURPOSES.iter().any(|p| purpose_tag(p).is_ok_and(|t| t == *purpose));
+    let known = portable_record_purposes().contains(purpose) || PURPOSES.iter().any(|p| purpose_tag(p).is_ok_and(|t| t == *purpose));
     if !known {
         return Err(Error::Ua(UAError::PurposeUnknown));
     }

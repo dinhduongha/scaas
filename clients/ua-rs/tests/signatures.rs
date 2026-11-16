@@ -112,7 +112,8 @@ fn native_uaauth() {
 
 fn word(b: &[u8], o: usize) -> Option<usize> {
     let w = b.get(o..o + 32)?;
-    w[..24].iter().all(|x| *x == 0).then(|| w[24..].iter().fold(0usize, |a, x| (a << 8) | *x as usize))
+    // the full low 8 bytes, any usize width (the class of T21 L04)
+    w[..24].iter().all(|x| *x == 0).then(|| usize::try_from(u64::from_be_bytes(w[24..].try_into().unwrap())).ok()).flatten()
 }
 fn dyn_bytes(b: &[u8], base: usize, head: usize) -> Option<&[u8]> {
     let o = base + word(b, head)?;
