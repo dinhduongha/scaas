@@ -374,3 +374,146 @@ only through `ua-rs`.
    repo (the licence of item 6 follows the code).
 8. **SFrame format for calls:** RFC 9605 as P22 says (own frame transform) or LiveKit's built-in E2EE format (a spec
    change).
+9. **UI toolkit for `scaas-app` given the 2026-11-16 direction (Flutter or a Rust UI, Status QML as the design
+   reference):** Flutter + `ua-dart-frb`, Slint, Tauri or Dioxus (§11.3); whether to run the two-toolkit spike of §11.5
+   first; whether screens are re-implemented only, or some files translated closely and kept MPL-2.0 (§11.2).
+
+## 11. UI toolkit for scaas-app: Flutter or Rust, learning from Status's QML source (2026-11-16)
+
+**Owner 2026-11-16 [F, owner]:** the end-user app (wallet and PqChat; `scaas-wallet` in §9) is **`scaas-app`**, built
+before the freeze (the freeze moved after P6-PUB); it signs only through `ua-rs`; wallet services in Rust (W3, §7). The
+owner asks for a direction: the UI in **Flutter or in Rust**, learning the UI from the **Status app's QML source**: read
+the source, never capture screenshots. SDK and app work start on the owner's word; this section is research only.
+Status facts: `status-im/status-app` `master` at `0c1b85ec`, read through the GitHub API on 2026-11-16 (7,050 paths,
+2,192 `.qml` files). Toolkit facts: each project's repository (GitHub API: licence, stars, releases), README, docs and
+CHANGELOG, read 2026-11-16.
+
+### 11.1 What "learning from Status" means
+
+Map from Status QML to `scaas-app` screens (paths under `ui/app/AppLayouts/` unless noted) [F paths, I for the right column]:
+
+| scaas-app screen | Status source to read | What changes for SCaaS [I] |
+|---|---|---|
+| Onboarding, UA creation | `Onboarding/OnboardingFlow.qml`, `CreateNewProfileFlow.qml`, `UseRecoveryPhraseFlow.qml`, `LoginBySyncingFlow.qml`, `OnboardingStackView.qml`; `pages/WelcomePage`, `CreatePasswordPage`, `SeedphrasePage`, `BackupSeedphrase{Intro,Reveal,Verify,KeepOrDelete,Outro}`, `LoginScreen` | Status profile becomes UA kind choice, seed and keys through `ua-rs`, registration job through the node, KEM key; Keycard pages dropped |
+| Accounts and assets | `Wallet/WalletLayout.qml`, `views/LeftTabView.qml`, `RightTabView.qml`, `AssetsDetailView.qml`, `panels/WalletAccountHeader.qml`, `ManageAssetsPanel.qml`; `stores/RootStore.qml`, `WalletAssetsStore.qml`, `TokensStore.qml` | UA accounts per chain, factory tokens; PQZ and Zether balances later |
+| Send and signing review | `Wallet/popups/simpleSend/SimpleSendModal.qml`, `SendSignModal.qml`, `popups/SignTransactionModalBase.qml`, `panels/SignInfoBox.qml`, `SignAccountInfoBox.qml`, `SimpleTransactionsFees.qml`, `RecipientSelectorPanel.qml` | the review lists every named field of the typed `mtx*` record and the signer kind before `ua-rs` signs; a fee of 0 is a normal case |
+| Receive | `Wallet/popups/ReceiveModal.qml` | UA and QR |
+| Activity | `Wallet/panels/ActivityFilterPanel.qml`, `popups/ActivityFilterMenu.qml`, `ui/imports/shared/views/HistoryView.qml` | history from the node's indexer; job states as the node reports them |
+| Chat list | `Chat/ChatLayout.qml`, `views/ContactsColumnView.qml`; StatusQ `StatusChatList`, `StatusChatListItem`, `StatusChatListAndCategories` | PqChat sessions as rows; categories dropped |
+| Conversation | `Chat/views/ChatView.qml`, `ChatColumnView.qml`, `ChatMessagesView.qml`, `ChatHeaderContentView.qml`, `ui/imports/shared/views/chat/MessageView.qml`; StatusQ `StatusMessage`, `StatusMessageHeader`, `StatusDateGroupLabel` | per-message store state (Matrix, HCS, chain, Waku), P19 order, epoch markers |
+| Composer | `ui/imports/shared/status/StatusChatInput.qml` (+ `…ImageArea`, `…ReplyPanel`, `…ToolBar`, `…SendButton`) | cost and "public forever" warnings per store (P4, P5); attachments (P28) |
+| Members | `Chat/views/CreateChatView.qml`, `MembersSelectorView.qml`, `MembersEditSelectorView.qml`; StatusQ `StatusMemberListItem` | members by UA, KEM fingerprints, rekey on change |
+| Settings | `Profile/ProfileLayout.qml`, `views/SettingsLeftTabView.qml`, `AppearanceView`, `LanguageView`, `NotificationsView`, `PrivacyAndSecurityView`, `ContactsView`, `MessagingView`, `WalletView`, `AdvancedView`, `AboutView` | plus stores per session and the RPC node list ([ARCH-POS-15](../decisions.md#ARCH-POS-15)) |
+| Backup, device link | `Profile/views/BackupView.qml`, `SyncingView.qml`, `popups/SyncDeviceCustomizationPopup.qml`; StatusQ `StatusSyncDeviceDelegate`, `StatusQrCodeScanner`, `StatusQrCodeCapture` | seed backup, QR device linking (P6), opt-in epoch-key export (O5) |
+
+**Drop [I]:** `Communities`, `Browser` (+ `Profile/views/BrowserView`, `WhitelistedDomainsView`), `Market`, `HomePage`,
+`ActivityCenter` (unless notifications need it), ENS (`Profile/views/Ens*.qml`), stickers (`Chat/stores/StickersStore.qml`),
+Keycard (`Onboarding/pages/Keycard*`, `Profile/views/KeycardViewNew`), swap and buy (`Wallet/popups/swap`, `buy`,
+`BuyCryptoStore`), collectibles (unless W1), traffic dashboards (`WakuTrafficDashboard`, `HttpTrafficDashboard`),
+`Chat/popups/PaymentRequestModal.qml` (maybe later).
+
+**StatusQ [F]:** `ui/StatusQ/src/StatusQ/` holds `Components` (89 QML files), `Controls` (80), `Core` (`Theme/`,
+`StatusListView`, `StatusBaseText` …), `Layout` (`StatusSectionLayout`, `…Landscape`, `…Portrait`: the desktop / phone
+split), `Popups` (`StatusModal`, `StatusStackModal`, `StatusMenu` …) and `Validators`; the palette is C++
+(`ui/StatusQ/src/themepalette.cpp`, `theme.cpp`). The set `scaas-app` needs is about 20 of the 169 [I]: theme tokens,
+`StatusListItem`, `StatusChatListItem`, `StatusMessage`, `StatusInput` / `StatusBaseInput`, the `StatusButton` family,
+`StatusModal`, `StatusMenu`, `StatusSectionLayout`, `StatusSmartIdenticon`, `StatusAmountInput`, `StatusSeedPhraseInput`,
+`StatusQrCodeScanner`, `StatusToastMessage`.
+
+**How a team works from the source [I]:** (1) per screen, read the layout file, its `qmldir`, the store it binds
+(`stores/RootStore.qml`) and `adaptors/`, and list the model roles and actions it reads: that list is the screen's
+view-model contract in `scaas-app`, fed by `ua-rs`, `pqchat-core` and the wallet module; (2) read each flow
+(`OnboardingFlow.qml`, `SimpleSendModal.qml`) as a state machine and write it as named steps before code; (3) read the
+storybook: `storybook/pages/` (418 pages) instantiates components over `storybook/stubs/` models, the clearest record
+of each component's properties and roles without Nim [F dirs]; (4) re-implement in the target toolkit with our own
+names, palette and icon; (5) drop screens first, then build components. The top-level `screenshots/` directory is not
+used (owner rule).
+
+### 11.2 Licence and brand rules
+
+Not legal advice. **[F]** `LICENSE.md` at the repository root is MPL-2.0 (GitHub SPDX `MPL-2.0`); under `ui/` only three
+other licence files exist (below).
+
+- **Design and flows** (what a screen shows, the order of steps, layout ideas): re-implemented in Dart or Rust from a
+  reading, the code is ours and takes our licence; copyright covers expression, not flows or functional layout [I].
+- **Close translation:** a file translated line by line from a Status QML or C++ file is treated as a Modification
+  (MPL-2.0 §1.10): it keeps the MPL-2.0 header and attribution, its source is published (§3.1, §3.2), and it sits in a
+  Vegan-licensed app as a Larger Work (§3.3, §4 table) [I, cautious]. Rule for the team [I]: a file is either
+  re-implemented (our licence) or translated (MPL-2.0), never mixed; a theme file holding values copied from
+  `themepalette.cpp` is an MPL file.
+- **Trademark [F, MPL-2.0 §2.3]:** "This License does not grant any rights in the trademarks, service marks, or logos of
+  any Contributor." No Status trademark policy page was found (web search 2026-11-16). Rule [I]: no Status name, logo
+  (`ui/StatusQ/src/assets/png/status-logo*.png`, `status.png`, root `status.png`, `status-512.png`, `status.icns`) or a
+  look that could pass for Status: own palette, own icon.
+
+| Asset directory [F] | What | Licence evidence [F] | Use [I] |
+|---|---|---|---|
+| `ui/StatusQ/src/assets/fonts/` | Inter (`InterVariable*.ttf`), Roboto Mono, `StatusTwemoji-COLRv0.ttf` | `StatusTwemoji-COLRv0.LICENSE`: MIT text (© Jason Sofonia & Justine De Caires, © Twitter); no licence file for Inter or Roboto Mono | take Inter and Roboto Mono from upstream with their own licence (not checked); Twemoji artwork licence upstream not checked |
+| `ui/StatusQ/src/assets/img/icons/` | 545 SVG icons | none beyond the repository's MPL-2.0 | authorship not checked; use an icon set with its own licence, or treat copied icons as MPL files |
+| `ui/StatusQ/src/assets/png/` | brand (`status-logo*`), onboarding, keycard and wallet art, `tokens/` (613 token logos) | none | do not use: brand art and other projects' marks; not checked |
+| `ui/StatusQ/src/assets/dictionaries/` | Hunspell dictionaries | `HUNSPELL_COPYING.MPL` | not needed |
+| `ui/imports/assets/` (`audio/`, `docs/`) | sounds, documents | none | not checked; do not use |
+| `ui/i18n/*.ts` | translations cs, en, es, fr, ko, uk (no Vietnamese) | the repository's MPL-2.0 | write our own strings (English, Vietnamese) |
+
+`ui/StatusQ/src/StatusQ/Core/Backpressure/LICENSE` is Apache-2.0 for that code, not an asset.
+
+### 11.3 Toolkit comparison
+
+Licence, platforms, binding, ecosystem [F with source unless marked; stars from the GitHub API, 2026-11-16]:
+
+| Toolkit | Licence | Platforms, maturity evidence | Calls `ua-rs` / `pqchat-core` | Ecosystem signals |
+|---|---|---|---|---|
+| **Flutter + `ua-dart-frb`** | Flutter BSD-3-Clause; flutter_rust_bridge MIT | Flutter 3.50 [supported platforms](https://docs.flutter.dev/reference/supported-platforms) (page of 2026-11-11): Android 24-37, iOS 15-27, Windows 10/11, macOS 12-27, Debian, Ubuntu, web (Chrome, Firefox, Safari, Edge) | bridge: `clients/ua-dart-frb` is FRB 2.13.0 over `scaas-ua` (feature `json`), `cdylib` + `staticlib`, generated `frb_generated.io.dart` and `.web.dart`; a plain Dart package today (`pubspec.yaml` has no Flutter dependency), tested by `dart test` on a Linux `.so`; Android, iOS, web builds not done. FRB 2.13.0 of 2026-08-23 is the latest stable, 2.14 in beta | 181 k stars; pub.dev; LiveKit Flutter SDK, `flutter_webrtc` (§2); FluffyChat and Cake Wallet ship on it (§2, §3) |
+| **Slint** | [`LICENSE.md`](https://github.com/slint-ui/slint/blob/master/LICENSE.md): GPL-3.0-only **or** Royalty-free 2.0 **or** commercial. Royalty-free: no fee, but show the `AboutSlint` widget in an About screen or the Slint badge on the public download page; excludes embedded systems; may not ship an app "that exposes the APIs" of Slint. GPL conflicts with a Vegan app (§4), so royalty-free or commercial | desktop; Android (`android-activity`); iOS "Initial iOS support" in 1.12 (2025-06-16), C++ iOS and web in 1.19 (2026-11-16, CHANGELOG); web docs: "not recommended for building general-purpose web applications", no screen readers on the web | direct: Rust code, `.slint` markup compiled in; no bridge | 24.6 k stars; one company (SixtyFPS) behind it; 1.x semver, releases every 2-3 months |
+| **Tauri 2** | Apache-2.0 (GitHub; MIT also offered [I]) | Android and iOS since 2.0.0 (2024-10-02); 2.12.6 of 2026-11-16; system WebView per OS | UI in TypeScript; Rust commands over IPC (JSON, named fields); two languages | 112.9 k stars; official plugins |
+| **Dioxus** | Apache-2.0 (GitHub; MIT also offered [I]) | README: web, desktop, mobile via WebView, "experimentally" WGPU or Skia native; stable 0.7.10 (2026-07-30), 0.8.0-alpha.3 (2026-10-16) | direct in process (desktop, mobile); web build is wasm, `ua-rs` PQ crates in wasm not checked | 39.8 k stars; pre-1.0 |
+| egui / eframe | Apache-2.0 (GitHub; MIT also offered [I]) | eframe README: Linux, Mac, Windows, Android, web; no iOS; 0.37.0 (2026-10-15); immediate mode | direct | 32.3 k stars. **Drop:** no iOS, immediate-mode widgets far from Status's look, mobile IME open (#2893) |
+| iced | MIT | README: Windows, macOS, Linux, web; "currently experimental software"; 0.14.0 (2025-12-07) | direct | 32 k stars. **Drop:** no mobile |
+| Makepad | MIT | README: native and web, iOS and Android through `cargo makepad`; no semver releases (tags `release-2026-11-06.*`) | direct | 7.6 k stars; [Robrix](https://github.com/project-robius/robrix) (MIT, a Matrix client on Makepad and matrix-rust-sdk, active 2026-11) with `robius-keychain`, `robius-authentication`. **Watch, not choose:** small, unversioned, accessibility not checked |
+
+Platform services and UI qualities of the four serious options:
+
+| | Secure storage, biometrics | Accessibility | i18n, Vietnamese IME | Virtualized chat list | Theming toward Status's look |
+|---|---|---|---|---|---|
+| Flutter | [`flutter_secure_storage`](https://pub.dev/packages/flutter_secure_storage) 11.2.0 (BSD-3; Keychain, Android KeyStore, libsecret, Windows, web WebCrypto + LocalStorage); [`local_auth`](https://pub.dev/packages/local_auth) 3.0.2 (flutter.dev; Android, iOS, macOS, Windows); or keys kept in Rust (`keyring-rs`) [I] | Semantics tree to each platform's API [I] | `intl` / ARB [I]; platform text input; flutter/flutter issues on Vietnamese input found closed (#59541, 2020; #140694 web, 2023); one unanswered [FlutterFlow forum post](https://community.flutterflow.io/ask-the-community/post/duplicate-charaters-when-typing-telex-vietnamese-on-the-textfield-widget-k1TJ5gHj8FsvoGA) on Telex duplicates on iOS 16: test on devices | `ListView.builder`, slivers build lazily [I] | own widgets over `ThemeData`; nothing Material is forced [I] |
+| Slint | no plugin set: Rust crates (`keyring-rs`, Apache-2.0 per GitHub; `robius-authentication`) [I] | `accessible-*` properties; 1.19 fixes focus in virtualized lists and macOS labels (CHANGELOG); none on the web | `@tr()` and bundled translations [I]; 1.19: Android input methods "treat text fields like native ones"; open: #14032 Chinese IME on iOS `LineEdit` (2026-10-13), #10861 last character dropped during IME composition: Telex / VNI composition is the risk | `ListView` virtualized (CHANGELOG) | custom style in `.slint` markup; declarative like QML (properties, bindings, states) [I]; rich message text to check |
+| Tauri | plugins `biometric` (Android, iOS, macOS; iOS without biometric cryptography), `stronghold`, `store`, `barcode-scanner`, `notification`, `deep-link` ([plugins-workspace](https://github.com/tauri-apps/plugins-workspace)); desktop keychain via `keyring-rs` [I] | the WebView's HTML / ARIA [I] | any web i18n library; the WebView's native text input [I] | web virtual-scroll libraries [I] | CSS: the easiest route to a close look [I]; WebRTC differs per WebView (WebKitGTK, WKWebView, Android WebView) [I] |
+| Dioxus | none official; Rust crates, JNI / Objective-C calls (README) | the WebView's [I] | as Tauri [I] | own code or crates [I] | CSS, as Tauri [I] |
+
+### 11.4 Effort [E]
+
+App part as in §8 (core of §6 and wallet module excluded; wallet screens and general EVM services included, as §9's C
+row 27-47); one developer experienced in the toolkit; the kept screens of §11.1 with Status as the design reference.
+Columns: components (theme plus the ~20 StatusQ equivalents), screens and flows (chat and wallet), platform glue (keys,
+biometrics, QR, notifications, file pick, bridge builds), calls (WebRTC, SFU, SFrame transform). Person-weeks.
+
+| Option | Components | Screens, flows | Glue | Calls | Desktop first | + mobile | Against §8 / §7 |
+|---|---|---|---|---|---|---|---|
+| Flutter + `ua-dart-frb` | 3-5 | 16-26 | 2-4 | 6-10 | **27-45** | +2-4 (FRB Android / iOS builds, device IME) | ≈ C (27-47) |
+| Tauri (TS UI) | 3-5 | 16-26 | 3-5 | 6-10 | **28-46** | +3-6 (WebView WebRTC per OS) | ≈ C; two languages |
+| Dioxus | 3-5 | 18-29 | 4-7 | 6-10 | **31-51** | +4-8 | ≈ C + 10 %; 0.x API changes |
+| Slint | 5-8 (rich text, emoji, media views) | 18-29 | 5-9 (no plugin set) | 8-14 (video frames into Slint images, LiveKit `rust-sdks`) | **36-60** | +5-10 (iOS young, IME bugs) | ≈ C + 25 %; ≈ D (30-52) |
+| for comparison: Status fork B′ (§7) | kept QML | models in C++ | | 6-10 | 28-54 | +4-8 | |
+
+Status as the reference saves design work (no designer, flows decided), not build work: every option still writes
+every screen [I].
+
+### 11.5 Reading and recommendation [I] (not a decision)
+
+- **Flutter + `ua-dart-frb` + Status as the design reference** is the lower-risk path: the binding over `scaas-ua`
+  exists, the platform evidence is the widest, keychain and biometrics plugins exist, and chat and wallet apps ship on it
+  (FluffyChat, Cake Wallet, LiveKit Flutter). Costs: Dart beside Rust, and the FRB mobile and web builds are still to
+  prove. It changes owner answer 5 (Qt), as §10 item 4 says.
+- **A Rust UI** gives one language and no bridge: `ua-rs` and `pqchat-core` types reach the screen directly. Slint is
+  the most complete Rust option (1.x, retained mode, close to QML in structure, so the Status QML reads across most
+  easily), but iOS is about 17 months old, IME composition bugs are open, the web is not recommended by its own docs, and
+  the licence needs the `AboutSlint` / badge attribution. Tauri is the most mature for mobile among Rust-hosted options,
+  but its UI is TypeScript, so one language is lost; Dioxus keeps Rust but is 0.x.
+- **What would change the answer:** Vietnamese Telex / VNI composition broken in Slint on Android or iOS (Flutter); FRB
+  on Android / iOS with `pqchat-core` event streams proving hard (a Rust UI); a web build wanted (Flutter or Tauri); one
+  language valued over plugin breadth (Slint); Qt kept for answer 5 (paths (1) or (4-D), outside this section).
+- **Spike to size it (about 2-3 pw):** chat list, conversation and composer in Flutter (`ua-dart-frb` plus a stub
+  `pqchat-core` event stream) and in Slint (direct Rust), on Linux desktop and Android (iOS with a Mac): a 10,000-message
+  list of mixed heights; Vietnamese input with Telex and VNI (Linux IBus, Android Gboard and Laban Key, iOS Vietnamese
+  keyboard); a screen-reader smoke test (Orca, TalkBack, VoiceOver); seed in the OS keychain behind a biometric unlock;
+  one `mtx*` record signed by `ua-rs` from the UI; binary size. Record the hours per screen to recalibrate §11.4.
