@@ -1,0 +1,6 @@
+# t10 mutants at commit 69b8eda66 (name | outcome | test)
+re-serialise op through a struct | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node bodies_are_sent_byte_for_byte
+drop the body cap | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_body_above_64_kib_is_refused_unsent
+read detail instead of code | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node an_error_is_read_by_code_else_by_error_string
+one shared credential for the list | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_second_gateway_receives_no_credential_of_the_first
+4 mutants, 4 killed, 0 survived, 0 not loaded

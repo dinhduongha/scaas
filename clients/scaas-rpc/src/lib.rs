@@ -10,6 +10,8 @@ pub mod error;
 #[cfg(feature = "evm")]
 pub mod evm;
 pub mod http;
+#[cfg(feature = "node-client")]
+pub mod node;
 pub mod pool;
 
 pub use endpoint::{Class, Endpoint, EndpointAuth, Fanout, Label, ListConfig, NodeList, Policy, Purpose, Secret};

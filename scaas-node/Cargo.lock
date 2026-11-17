@@ -4250,12 +4250,15 @@ name = "scaas-rpc"
 version = "0.1.0"
 dependencies = [
  "alloy",
+ "base64 0.22.1",
  "futures",
  "getrandom 0.2.17",
+ "hmac 0.12.1",
  "reqwest",
  "scaas-ua",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tower",
  "tracing",
  "url",
