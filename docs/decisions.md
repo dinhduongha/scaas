@@ -10801,6 +10801,8 @@ The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the
 **Cost if wrong.** A minority picks the block, splices one field, stalls every read, or sets the fee; or honest nodes a block apart never agree.
 **Source.** ARCH-POS-15 (owner 2026-11-08 "chỉ cần quá bán"); CTR-PQZ-29 Change of 2026-11-11 (R-6); `clients/ua-rs/src/bin/pqz-read.rs` (`agree`, `rechecked`); Fable review 2026-11-17 F6, F7, F11, F12, F14, F16, I1; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.4.
 
+Change (2026-11-17, plan T13 S1, Fable code review of T1–T12; status: BUILT on branch `scaas-sdk`, UNAUDITED): below ⌊n/2⌋ + 1 honest names (always at `n = 2`, at `n = 3` with one honest endpoint down) the (⌊n/2⌋ + 1)-th highest named block was the liar's, so one endpoint chose the age of the state read. Now an endpoint counts at `b` only when `b` is at most `max_lag` below its own named block (default 4: honest endpoints a block or two apart, the fallback round one named number lower, one more of margin; a list setting); the honest endpoints refuse an old block and the read is `EndpointNoMajority` instead.
+
 ### CLI-RPC-06 — A read that feeds a decryption never rests on a discovered endpoint alone
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-06 · superseded-by: —
 

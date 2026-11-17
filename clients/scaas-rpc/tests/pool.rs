@@ -1213,3 +1213,75 @@ async fn discovered_agreeing_first_waits_for_the_named_member() {
         t.elapsed()
     );
 }
+
+// ---------------------------------------------------------------- plan T13 S1: freshness (max_lag)
+
+/// S1: below `need` honest names one endpoint chose the read block (the need-th highest was the liar's old one). An endpoint
+/// counts at `b` only when `b` is within `max_lag` of its own named block: the honest endpoint refuses the liar's old block,
+/// so there is no majority instead of an agreed old state. Controls: two honest out of three agree at the head; honest
+/// endpoints `max_lag` apart still agree, one block more apart do not.
+#[tokio::test]
+async fn one_endpoint_cannot_choose_an_old_block() {
+    let liar = || {
+        let mut l = ep(6);
+        l.tip = 100; // it holds every block: an archive node that answers truthfully at the block it chose
+        l
+    };
+    let f = Fake::new(vec![ep(100), liar()]);
+    let r = agree(&named(2, Policy::StrictMajority), &f, vec![A::V(5); 2]).await;
+    assert!(
+        matches!(r, Err(RpcError::EndpointNoMajority { .. })),
+        "n = 2: {r:?}"
+    );
+    let mut down = ep(100);
+    down.name = None;
+    let f = Fake::new(vec![ep(100), down, liar()]);
+    let r = agree(&named(3, Policy::StrictMajority), &f, vec![A::V(5); 3]).await;
+    assert!(
+        matches!(r, Err(RpcError::EndpointNoMajority { .. })),
+        "n = 3, one honest down: {r:?}"
+    );
+    let f = Fake::new(vec![ep(100), ep(100), liar()]);
+    let a = agree(&named(3, Policy::StrictMajority), &f, vec![A::V(5); 3])
+        .await
+        .unwrap();
+    assert_eq!(
+        (a.number, a.members),
+        (100, vec![0, 1]),
+        "control: two honest"
+    );
+}
+
+#[tokio::test]
+async fn honest_endpoints_max_lag_apart_still_agree() {
+    let lag = scaas_rpc::endpoint::MAX_LAG;
+    let behind = |by: u64| {
+        let mut e = ep(100 - by);
+        e.tip = 100;
+        e
+    };
+    let f = Fake::new(vec![ep(100), behind(lag)]);
+    let a = agree(&named(2, Policy::StrictMajority), &f, vec![A::V(5); 2])
+        .await
+        .unwrap();
+    assert_eq!(
+        a.number,
+        100 - lag,
+        "max_lag apart: the higher one still counts"
+    );
+    let f = Fake::new(vec![ep(100), behind(lag + 1)]);
+    assert!(
+        agree(&named(2, Policy::StrictMajority), &f, vec![A::V(5); 2])
+            .await
+            .is_err(),
+        "one block more: it does not"
+    );
+    let wide = list_of(&[Class::Named; 2], Policy::StrictMajority, 5_000).with_max_lag(lag + 1);
+    let f = Fake::new(vec![ep(100), behind(lag + 1)]);
+    assert!(
+        agree(&Pool::new(&wide, true), &f, vec![A::V(5); 2])
+            .await
+            .is_ok(),
+        "the list's own max_lag"
+    );
+}

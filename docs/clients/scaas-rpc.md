@@ -73,13 +73,16 @@ rules above.
 (ARCH-POS-15, the agreement option; SPECIFIED). `n` is the length of the list, at least 2, with a pinned `chain_uid`. (1) Every
 endpoint passes CLI-RPC-03 and names its block for the read (`head − depth`, by default depth 1; `latest`; or `finalized`).
 (2) The read block `b` is the (⌊n/2⌋ + 1)-th highest named number; it may not be below the highest block the list agreed on
-before (else `BehindHead`, counted as no majority). (3) Each endpoint reads its header at `b` and runs the whole read pinned to that
+before (else `BehindHead`, counted as no majority). An endpoint counts at `b` only when `b` is at most `max_lag` below the number it
+named itself (default 4, a list setting; else `BehindHead` for that endpoint), so a liar below ⌊n/2⌋ + 1 honest names cannot choose an
+old state: the honest endpoints refuse it. (3) Each endpoint reads its header at `b` and runs the whole read pinned to that
 header's hash (EIP-1898, `requireCanonical`). (4) The answers are compared as complete decoded values projected to the fields the
 read defines, the block hash included, never field by field and never as raw JSON text; a revert is a value, compared by its data.
 (5) As soon as ⌊n/2⌋ + 1 endpoints hold equal answers and each still carries that hash at `b`, the read stands and the other
 endpoints are no longer waited for. (6) Otherwise one more round runs at the next lower named number (not below the floor of (2));
 then `EndpointNoMajority`. A failing endpoint counts against the majority. Each request has its timeout and the whole read one
-deadline. A read stands while at most ⌈n/2⌉ − 1 endpoints fail or lie: `n = 2` detects one liar and tolerates no failure,
+deadline. A read stands while at most ⌈n/2⌉ − 1 endpoints fail or lie: `n = 2` detects one liar (on content, and on the block's age
+through `max_lag`) and tolerates no failure,
 tolerance of one needs `n ≥ 3`, an even `n` adds nothing over `n − 1`. Simulations and gas estimates stay failover; under this policy
 a new transaction's nonce is the agreed committed nonce at `b` plus the caller's own count, and fee data is the (⌊n/2⌋ + 1)-th highest
 of the endpoints' values. Under `failover` the caller caps fee and gas from its own configuration, never from the answering

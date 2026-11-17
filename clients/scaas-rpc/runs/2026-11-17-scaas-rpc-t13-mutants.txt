@@ -1,0 +1,3 @@
+# t13 mutants at commit acbbacd2f (name | outcome | test)
+S1 no freshness | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool one_endpoint_cannot_choose_an_old_block
+1 mutants, 1 killed, 0 survived, 0 not loaded

@@ -171,6 +171,12 @@ pub enum Fanout {
 pub const TIMEOUT_MS: u64 = 30_000;
 pub const SLOW_TIMEOUT_MS: u64 = 120_000;
 pub const READ_TIMEOUT_MS: u64 = 60_000;
+/// An agreed read's freshness (T13 S1): an endpoint counts at block `b` only when `b` is at most this many blocks below the
+/// block it named itself. 4: honest endpoints of one chain stand a block or two apart (propagation, a head polled a moment
+/// earlier), the fallback round reads one named number lower, and a margin of one more; an older block is refused by the
+/// honest endpoints themselves, so no endpoint below `need` honest names can choose an old state. A list of a slow-block or
+/// fast-block chain may set its own (`NodeList::with_max_lag`).
+pub const MAX_LAG: u64 = 4;
 
 /// An ordered endpoint list with its policy and timeouts (CLI-RPC-02).
 #[derive(Clone, Debug)]
@@ -180,6 +186,8 @@ pub struct NodeList {
     pub timeout_ms: u64,
     pub slow_timeout_ms: u64,
     pub read_timeout_ms: u64,
+    /// [`MAX_LAG`] unless set (strict majority only)
+    pub max_lag: u64,
 }
 
 impl NodeList {
@@ -216,7 +224,14 @@ impl NodeList {
             timeout_ms,
             slow_timeout_ms,
             read_timeout_ms,
+            max_lag: MAX_LAG,
         })
+    }
+
+    /// The list with another agreed-read freshness ([`MAX_LAG`]).
+    pub fn with_max_lag(mut self, max_lag: u64) -> Self {
+        self.max_lag = max_lag;
+        self
     }
 
     /// A plain list of URL strings (the node's and the verifier's `rpc_urls`): `named`, in order, without credentials, failover,

@@ -123,6 +123,8 @@ pub struct Pool {
     labels: Vec<Option<String>>,
     policy: Policy,
     read_timeout: Duration,
+    /// an agreed read's freshness ([`crate::endpoint::MAX_LAG`], T13 S1)
+    max_lag: u64,
     /// a `chain_uid` is pinned: required by strict majority and by a read that feeds a decryption (CLI-RPC-03)
     pinned: bool,
     /// whether endpoint 0 is identity-checked on its reads (F13; `true` but for the node's pool, see `EvmPool::connect_shared`)
@@ -156,6 +158,7 @@ impl Pool {
                 .collect(),
             policy: list.policy,
             read_timeout: Duration::from_millis(list.read_timeout_ms),
+            max_lag: list.max_lag,
             pinned,
             check_first: true,
             identity: Arc::new(list.endpoints().iter().map(|_| OnceLock::new()).collect()),
@@ -464,7 +467,10 @@ impl Pool {
         let fallback = sorted.iter().copied().find(|&x| x < b && x >= floor);
         let mut largest = 0;
         for number in std::iter::once(b).chain(fallback) {
-            match self.round(probe, number, deadline, need, purpose, &f).await {
+            match self
+                .round(probe, number, &names, deadline, need, purpose, &f)
+                .await
+            {
                 Ok((value, hash, members)) => {
                     self.floor.fetch_max(number, Relaxed);
                     return match value {
@@ -493,11 +499,12 @@ impl Pool {
 
     /// One round at block `number`: (3) each endpoint's header there, (4) the read pinned to it, (5) answers grouped whole, (6)
     /// a group of `need` re-reads its header and decides; the rest are dropped. `Err`: the largest group's size and the failures.
-    #[allow(clippy::type_complexity)]
+    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     async fn round<T, P, F, Fut>(
         &self,
         probe: &P,
         number: u64,
+        names: &[Option<u64>],
         deadline: Option<Instant>,
         need: usize,
         purpose: Purpose,
@@ -510,7 +517,19 @@ impl Pool {
         Fut: Future<Output = Result<T, ReadError>>,
     {
         let n = self.len();
+        // T13 S1: an endpoint counts at `number` only when it named a block and `number` is within `max_lag` of it, so a
+        // group always holds members that call `number` fresh themselves
+        let fresh = |i: usize| names[i].is_some_and(|x| number.saturating_add(self.max_lag) >= x);
+        let mut failures = vec![];
+        for i in (0..n).filter(|&i| names[i].is_some() && !fresh(i)) {
+            failures.push(self.label(EndpointFailure::new(
+                i,
+                FailureKind::BehindHead,
+                &format!("block {number} is more than {} below its own", self.max_lag),
+            )));
+        }
         let mut pending: FuturesUnordered<_> = (0..n)
+            .filter(|&i| fresh(i))
             .map(|i| async move {
                 let r = async {
                     self.identity_ok(probe, i, deadline).await?;
@@ -540,7 +559,6 @@ impl Pool {
             Vec<usize>,
             Vec<usize>,
         )> = vec![];
-        let mut failures = vec![];
         let same = |a: &Result<T, (Vec<u8>, String)>, b: &Result<T, (Vec<u8>, String)>| match (a, b)
         {
             (Ok(x), Ok(y)) => x == y,
