@@ -135,6 +135,12 @@ Key Wallet::uaKey(uint16_t kind, uint32_t account, uint32_t index) const {
 Key Wallet::nativeKey(const std::string& network, uint32_t index, uint32_t coinType) const {
     return call([&] { return adopt<Key>(ffi::wallet_native_key(ffi(), str(network), index, coinType)); });
 }
+Key Wallet::bitcoinKey(const std::string& network, uint32_t coinType, uint32_t change, uint32_t index) const {
+    return call([&] { return adopt<Key>(ffi::wallet_bitcoin_key(ffi(), str(network), coinType, change, index)); });
+}
+Key Wallet::polkadotKey(const std::string& path) const {
+    return call([&] { return adopt<Key>(ffi::wallet_polkadot_key(ffi(), str(path))); });
+}
 Key Wallet::importNativeKey(const std::string& network, Secret& secret) const {
     return call([&] { return adopt<Key>(ffi::wallet_import_native_key(ffi(), str(network), sec(secret))); });
 }
@@ -223,6 +229,29 @@ Bytes Key::signKeyProof(const Bytes& challenge) const {
 }
 Bytes Key::signDigestRaw(const Bytes& digest) const {
     return call([&] { return bytes(ffi::sign_digest_raw(ffi(), sl(digest))); });
+}
+Bytes Key::signMessageRaw(const Bytes& message) const {
+    return call([&] { return bytes(ffi::sign_message_raw(ffi(), sl(message))); });
+}
+Bytes Key::signNearTransaction(const Bytes& txBorsh) const {
+    return call([&] { return bytes(ffi::sign_near_transaction(ffi(), sl(txBorsh))); });
+}
+Bytes Key::signSuiTransaction(const Bytes& txBcs) const {
+    return call([&] { return bytes(ffi::sign_sui_transaction(ffi(), sl(txBcs))); });
+}
+Bytes Key::signStellarTransaction(const Bytes& networkId32, const Bytes& txXdr) const {
+    return call([&] { return bytes(ffi::sign_stellar_transaction(ffi(), sl(networkId32), sl(txXdr))); });
+}
+Bytes Key::signHederaTransaction(const Bytes& bodyBytes) const {
+    return call([&] { return bytes(ffi::sign_hedera_transaction(ffi(), sl(bodyBytes))); });
+}
+std::string Key::ss58Address(uint16_t prefix) const { return call([&] { return std::string(ffi::key_ss58_address(ffi(), prefix)); }); }
+Bytes Key::witnessProgram() const { return call([&] { return bytes(ffi::key_witness_program(ffi())); }); }
+std::vector<std::string> networks() {
+    load();
+    std::vector<std::string> out;
+    for (auto& s : ffi::native_networks()) out.emplace_back(std::string(s));
+    return out;
 }
 KemKey Key::kemKey(uint64_t version) const {
     return call([&] { return adopt<KemKey>(ffi::kem_key(ffi(), version)); });

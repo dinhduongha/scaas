@@ -973,6 +973,102 @@ static void imported_ua_key() {
     }
 }
 
+// --- native.json (ua-rs-native T11a): the four native networks, raw messages, the envelope calls -------------------------
+
+static const json& NATIVE_ROWS() {
+    static json j = vec("../native/native.json");
+    return j;
+}
+static Bytes nmsg(const json& r) {
+    if (r.contains("messageRepeat"))
+        return Bytes(r["messageRepeat"]["length"].get<size_t>(), static_cast<uint8_t>(std::stoi(r["messageRepeat"]["byte"].get<std::string>(), nullptr, 16)));
+    return bytes(r["message"]);
+}
+static const Wallet& NW(const std::string& id) {
+    static std::map<std::string, Wallet> ws;
+    auto it = ws.find(id);
+    if (it != ws.end()) return it->second;
+    for (auto& m : NATIVE_ROWS()["mnemonics"])
+        if (m["id"] == id) {
+            Secret w(m["words"].get<std::string>()), p(m["passphrase"].get<std::string>());
+            return ws.emplace(id, Wallet::fromMnemonic(w, p)).first->second;
+        }
+    throw std::runtime_error("mnemonic " + id);
+}
+static Key nkey(const json& r) {
+    const Wallet& w = NW(r["mnemonic"].get<std::string>());
+    std::string net = r["network"].get<std::string>();
+    uint32_t coin = r.contains("coinType") && !r["coinType"].is_null() ? r["coinType"].get<uint32_t>() : kCoinDefault;
+    if (net == "polkadot") return w.polkadotKey(r.contains("path") ? r["path"].get<std::string>() : "");
+    if (net.rfind("bitcoin", 0) == 0 && r.contains("change") && !r["change"].is_null()) return w.bitcoinKey(net, coin, r["change"].get<uint32_t>(), r["index"].get<uint32_t>());
+    return w.nativeKey(net, r["index"].get<uint32_t>(), coin);
+}
+
+static void native_json() {
+    const json& N = NATIVE_ROWS();
+    size_t n = 0;
+    for (auto& r : N["addresses"]) {
+        Key k = nkey(r);
+        CHECK(hx(k.keyData()) == "0x" + r["publicKey"].get<std::string>(), r["network"].get<std::string>());
+        CHECK(k.address() == r["address"].get<std::string>(), r["network"].get<std::string>());
+        if (!r["witnessProgram"].is_null()) {
+            Bytes wp = k.witnessProgram();
+            CHECK(wp.size() > 1 && wp[0] == r["witnessProgram"]["version"].get<uint8_t>(), "witness version");
+            CHECK(hx(Bytes(wp.begin() + 1, wp.end())) == "0x" + r["witnessProgram"]["program"].get<std::string>(), "witness program");
+        }
+        if (r.contains("ss58"))
+            for (auto& [p, a] : r["ss58"].items()) CHECK(k.ss58Address(static_cast<uint16_t>(std::stoi(p))) == a.get<std::string>(), "ss58 " + p);
+        ++n;
+    }
+    CHECK(n == 114, "address rows");
+    for (auto& r : N["polkadotPaths"])
+        CHECK(hx(NW(r["mnemonic"].get<std::string>()).polkadotKey(r["path"].get<std::string>()).keyData()) == "0x" + r["publicKey"].get<std::string>(), r["path"].get<std::string>());
+    n = 0;
+    for (const char* sec : {"signatures", "envelopes"})
+        for (auto& r : N[sec]) {
+            if (r["mode"] != "deterministic") continue;
+            Key k = nkey(r);
+            Bytes m = nmsg(r), sig;
+            std::string c = r["call"].get<std::string>();
+            if (c == "sign_digest") sig = k.signDigestRaw(m);
+            else if (c == "sign_message") sig = k.signMessageRaw(m);
+            else if (c == "sign_near_transaction") sig = k.signNearTransaction(m);
+            else if (c == "sign_sui_transaction") sig = k.signSuiTransaction(m);
+            else if (c == "sign_stellar_transaction") sig = k.signStellarTransaction(bytes(r["networkId"]), m);
+            else sig = k.signHederaTransaction(m);
+            CHECK(hx(sig) == "0x" + r["signature"].get<std::string>(), r["id"].get<std::string>());
+            ++n;
+        }
+    CHECK(n == 44, "3 P2WPKH, 28 ed25519 messages, a NEAR digest, 12 envelopes");
+    n = 0;
+    for (auto& r : N["refusals"]) {
+        std::string c = r["call"].get<std::string>();
+        auto run = [&](const json& a) {
+            return code_of([&] {
+                if (c == "sign_message") nkey(a).signMessageRaw(nmsg(a));
+                else if (c == "polkadot_key") NW(a["mnemonic"].get<std::string>()).polkadotKey(a["path"].get<std::string>());
+                else if (c == "bitcoin_key") NW(a["mnemonic"].get<std::string>()).bitcoinKey(a["network"].get<std::string>(), kCoinDefault, a["change"].get<uint32_t>(), 0);
+                else if (c == "sign_near_transaction") nkey(a).signNearTransaction(nmsg(a));
+                else if (c == "sign_sui_transaction") nkey(a).signSuiTransaction(nmsg(a));
+                else if (c == "sign_hedera_transaction") nkey(a).signHederaTransaction(nmsg(a));
+                else if (c == "sign_stellar_transaction") nkey(a).signStellarTransaction(bytes(a["networkId"]), nmsg(a));
+            });
+        };
+        bool tx = c.size() > 12 && c.compare(c.size() - 12, 12, "_transaction") == 0;
+        if (c != "sign_message" && c != "polkadot_key" && c != "bitcoin_key" && !tx) continue;
+        CHECK(run(r["args"]) == "UAArgument", r["id"].get<std::string>());
+        CHECK(run(r["accepted"]).empty(), "neighbour of " + r["id"].get<std::string>());
+        ++n;
+    }
+    CHECK(n >= 40, "refusal rows of this surface");
+    Key ua = W("pq_kat").uaKey(0x0102, 0, 0);
+    CHECK(code_of([&] { ua.signMessageRaw(Bytes{1}); }) == "UARawDigestRefused", "a UA key: no raw message");
+    CHECK(code_of([&] { ua.signNearTransaction(Bytes{1}); }) == "UARawDigestRefused", "a UA key: no envelope call");
+    std::vector<std::string> nets;
+    for (auto& s : N["networks"]) nets.push_back(s.get<std::string>());
+    CHECK(nets == networks(), "the network list");
+}
+
 int main(int argc, char** argv) {
     std::map<std::string, void (*)()> tests{
         {"load_refuses_wrong_abi_or_features", load_refuses_wrong_abi_or_features},
@@ -995,7 +1091,8 @@ int main(int argc, char** argv) {
         {"zether_words", zether_words},
         {"pqz_words", pqz_words},
         {"pqz_key_versions", pqz_key_versions},
-        {"imported_ua_key", imported_ua_key}};
+        {"imported_ua_key", imported_ua_key},
+        {"native_json", native_json}};
     if (argc != 2 || !tests.count(argv[1])) {
         std::fprintf(stderr, "usage: wallet_test <name>\n");
         return 2;
