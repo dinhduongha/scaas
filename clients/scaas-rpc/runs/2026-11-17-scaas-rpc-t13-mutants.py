@@ -77,6 +77,8 @@ MUTANTS = [
      T + "--test evm_fakes replaced_under_strict_majority_rests_on_the_finalized_block"),
     ("S9 priority unclamped", [(E, "max_priority_fee_per_gas: prio[need - 1].min(max_fee_per_gas),", "max_priority_fee_per_gas: prio[need - 1],")],
      T + "--lib evm::tests::the_agreed_priority_fee_never_exceeds_the_max_fee"),
+    ("S10 any length is a nonce", [(E, "            let now = match word.len() {\n                32 =>", "            let now = match word.len() {\n                _ if word.len() <= 32 =>")],
+     T + "--test evm_fakes a_nonce_view_of_no_word_is_no_nonce"),
 ]
 
 if __name__ == "__main__":

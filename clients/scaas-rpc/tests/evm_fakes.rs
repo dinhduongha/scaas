@@ -1817,3 +1817,43 @@ async fn failed_for_good_under_strict_majority_rests_on_the_finalized_block() {
     );
     assert!(s.to_string().contains("rests on one endpoint"), "{s}");
 }
+
+/// T13 S10: a nonce view that answers no 32-byte word (an address without code answers `0x`) is the endpoint's malformed answer,
+/// never nonce 0 (with the deadline passed that read as FailedForGood). Control: `a_relayed_operation_ends_on_chain_facts`.
+#[tokio::test]
+async fn a_nonce_view_of_no_word_is_no_nonce() {
+    let q = OpQuery {
+        contract: Address::ZERO,
+        nonce_call: Bytes::new(),
+        nonce: U256::from(3),
+        executed: alloy::rpc::types::Filter::new(),
+        from_block: 1,
+        valid_until: 1,
+    };
+    for word in [
+        "0x",
+        "0x05",
+        "0x00000000000000000000000000000000000000000000000000000000000000050000",
+    ] {
+        let w = word.to_string();
+        let (u, _) = fake_dyn(Arc::new(move |r: &Value| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x20"}),
+            Some("eth_getBlockByNumber") => {
+                json!({"result": block(num(&r["params"][0]), block_hash(num(&r["params"][0])))})
+            }
+            Some("eth_getBlockByHash") => json!({"result": block(0x1f, block_hash(0x1f))}),
+            Some("eth_getLogs") => json!({"result": []}),
+            Some("eth_call") => json!({"result": w}),
+            _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+        }))
+        .await;
+        let e = sdk_pool(&[&u], 2_000)
+            .op_state(&q, depth(1))
+            .await
+            .unwrap_err();
+        assert!(
+            e.to_string().contains("a nonce view of no word"),
+            "{word}: {e}"
+        );
+    }
+}

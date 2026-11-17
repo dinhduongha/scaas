@@ -1574,15 +1574,17 @@ impl EvmPool {
                 .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?
                 .is_empty();
             let word = self.call_at(&at, q.contract, q.nonce_call.clone()).await?;
-            let now =
-                alloy::primitives::U256::try_from_be_slice(word.get(..32).unwrap_or_default())
-                    .ok_or_else(|| {
-                        ReadError::Failure(EndpointFailure::new(
-                            at.endpoint,
-                            FailureKind::AnswerMalformed,
-                            "a nonce view of no word",
-                        ))
-                    })?;
+            // T13 S10: one 32-byte word (an empty answer, an address without code, is no nonce 0)
+            let now = match word.len() {
+                32 => alloy::primitives::U256::from_be_slice(&word),
+                _ => {
+                    return Err(ReadError::Failure(EndpointFailure::new(
+                        at.endpoint,
+                        FailureKind::AnswerMalformed,
+                        "a nonce view of no word",
+                    )))
+                }
+            };
             let ts = p
                 .get_block_by_hash(at.hash)
                 .await

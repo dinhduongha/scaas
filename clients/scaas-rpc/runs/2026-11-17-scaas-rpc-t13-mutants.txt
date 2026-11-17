@@ -1,3 +1,3 @@
-# t13 mutants at commit 973ad4576 (name | outcome | test)
-S9 priority unclamped | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib evm::tests::the_agreed_priority_fee_never_exceeds_the_max_fee
+# t13 mutants at commit 9d1b302ea (name | outcome | test)
+S10 any length is a nonce | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_nonce_view_of_no_word_is_no_nonce
 1 mutants, 1 killed, 0 survived, 0 not loaded
