@@ -19,6 +19,45 @@ then "Ok, theo đề xuất, ghi vào plan" (`bytecode_hash = "none"` with F2; t
 
 The other languages were not measured yet; task F0 measures them.
 
+## Where each tool reads its settings
+
+Every setting lives in a committed config file, never only in a command line, so a developer, an editor and CI format the same
+way (owner 2026-11-17: "nhớ đặt trong cấu hình luôn"):
+
+| Language | Config file | Note |
+|---|---|---|
+| Rust | `rustfmt.toml` at the repository root | not `Cargo.toml`: rustfmt reads no Cargo section; it looks for `rustfmt.toml` in the crate's directory and every parent, so one root file covers every crate; the toolchain is already pinned by `rust-toolchain.toml` |
+| Solidity | `[fmt]` in `smartcontracts/evm/foundry.toml` | beside `bytecode_hash = "none"` in `[profile.*]` |
+| JavaScript | `clients/clientkeys/.prettierrc` | Prettier pinned in `package.json` `devDependencies` |
+| Python | `[tool.ruff]` in a root `pyproject.toml`, or `ruff.toml` | one file for every Python directory |
+| Go | none | `gofmt` has no settings |
+| C# | `clients/ua-cs/.editorconfig` | `dotnet format` reads it |
+| Dart | `analysis_options.yaml` of each package (`formatter: page_width`) | |
+| C / C++ / Qt | `.clang-format` at the repository root | clang-format looks in parent directories too |
+
+## Bundled: `setAuditor` on one governance bit (owner 2026-11-17)
+
+Owner 2026-11-17: "Do format phải chạy lại rất nhiều, tiện thể làm luôn '- setAuditor', dùng 1 bit cho việc này. Gom chung vào
+format code, để chạy gate .v.v. 1 lần" (since formatting forces a long re-run anyway, build `setAuditor` now, on one bit, and
+bundle it with the formatting so the gates run once). This replaces the "no setter" Change of CTR-ZTH-41 (2026-11-17) for the
+built setter; CTR-ZTH-09 changes with it.
+
+| Item | Proposal (controller calls, owner may override) |
+|---|---|
+| Bit | **32 `AUDITOR`**, the next free bit of the global table (`smartcontracts/vectors/governance/governance_bits.json`: 0–31 allocated, 13 and 14 never reused) |
+| Power | the holder replaces the auditor key of a confidential token: the Zether auditor key, the PQZ auditor UA; on the confidential kinds and their regulated twins only, refused (`FeatureInvalidForKind`) elsewhere |
+| Mode | `auditorMode` stays immutable (CTR-ZTH-49, CTR-PQZ-24): a NONE token never gains an auditor; FULL and OPTIONAL keep one, so the new key is never empty |
+| Delay | never delay-relaxed, like `TAX`; the change takes effect after the governance delay that applies to the bit, announced by an event first, so holders can leave before it reads their later amounts |
+| History | every operation records the auditor key version it encrypted to (PQZ already writes the auditor's version in the operation tail; Zether gains an auditor version counter and keeps every earlier key), so a disclosure of an old operation checks against the key of its time |
+| Entries | the token's direct entry (admin and chain word rules of CTR-GOV-27 / CTR-GOV-28) and a router `mtx*` op with its typed struct; node rows, `ua-rs` / clientkeys builders, vectors |
+| Size | `WrappedPqzToken` and the regulated kinds are near the 64 KiB line: count bytes first; a module split is asked of the owner before it is made |
+| Risk, stated | a bit holder can move every later amount's readability to a key of its choice; the delay, the event and an `msig` holder are the guard |
+
+Its own spec section and tasks follow this frame (contract, prover / `zether-prover`, `ua-rs`, clientkeys, node, docs), tests
+first and mutants per check. **One run for everything:** F2 (forge fmt), `bytecode_hash = "none"` and `setAuditor` land together,
+then one compile, one re-pin of every code hash, one full gate (every forge directory, the four PQZ sets, node e2e, clients), one
+SCaaS testnet reset with deploy, verify and matrix, before the pre-freeze tag.
+
 ## Rules for every task
 
 - **Formatting only.** One commit per component, made by the tool alone: `<component>: format (<tool> <version>), no other

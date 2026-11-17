@@ -4361,6 +4361,8 @@ Change (2026-10-27): owner ruling 2026-10-27, C0-1 (ii) — the `AUDITOR` openin
 
 Change (owner 2026-11-17, "Ok, as proposed" on the four points; status: SPECIFIED, no contract change): **no setter for the auditor key** (CTR-ZTH-09 holds). Changing the auditing parties or refreshing the key is done off chain: the threshold key is re-shared (proactive secret sharing) with `Y_a` unchanged, for Zether and for PQZ. On a PQZ token the auditor is a `pqz-mlwe` UA whose key rotates by its PQZ key versions (the token reads the auditor's current version at each operation). A governed `setAuditor` (timelock, notice, a per-operation auditor key version for disclosures) is built only if a regulator requires it; it would give the governance holder the power to read every later amount.
 
+
+Change (owner 2026-11-17, "build setAuditor now, on one bit, bundled with the formatting so the gates run once"; status: PLANNED): the "no setter" Change above is replaced. A governance bit (proposed 32 `AUDITOR`) lets its holder replace the auditor key of a confidential token, `auditorMode` staying immutable, never delay-relaxed, announced by an event, every operation recording the auditor key version it used; CTR-ZTH-09 changes when it is built. Built together with the Solidity formatting and `bytecode_hash = "none"`, one gate run and one testnet reset before the pre-freeze tag (plan `superpowers/plans/2026-11-17-code-format.md`).
 ### CTR-ZTH-42 — The sender may leave the auditor out of one transfer
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-42 · superseded-by: —
 
