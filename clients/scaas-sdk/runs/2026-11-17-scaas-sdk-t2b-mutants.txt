@@ -1,0 +1,6 @@
+# t2b mutants at commit 9726da43c (name | outcome | test)
+drop the duplicate-label check | killed | ../../scripts/capped node --test test/keystore.test.js
+accept words: 13 | killed | ../../scripts/capped node --test test/keystore.test.js
+skip the inner-label comparison | killed | ../../scripts/capped node --test test/keystore.test.js
+accept a missing indexMac | killed | ../../scripts/capped node --test test/keystore.test.js
+4 mutants, 4 killed, 0 survived, 0 not loaded
