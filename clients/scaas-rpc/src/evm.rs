@@ -596,8 +596,20 @@ impl EvmPool {
 
     // ------------------------------------------------------------ first-endpoint reads (F4): endpoint 0 only, never failover
 
+    /// Endpoint 0 may be asked (T13 S3: a dropped endpoint 0 answers no first-endpoint read either).
+    async fn first(&self) -> Result<(), RpcError> {
+        self.pool
+            .admit(self, 0, None)
+            .await
+            .map_err(|f| RpcError::EndpointAllFailed {
+                last: Some(f),
+                failover_revert: None,
+            })
+    }
+
     /// The pending nonce of `who` from endpoint 0 (the lane's own).
     pub async fn first_pending_nonce(&self, who: Address) -> Result<u64, RpcError> {
+        self.first().await?;
         self.providers[0]
             .get_transaction_count(who)
             .pending()
@@ -606,6 +618,7 @@ impl EvmPool {
     }
     /// The committed (`latest`) nonce of `who` from endpoint 0.
     pub async fn first_nonce_at(&self, who: Address) -> Result<u64, RpcError> {
+        self.first().await?;
         self.providers[0]
             .get_transaction_count(who)
             .latest()
@@ -614,6 +627,7 @@ impl EvmPool {
     }
     /// EIP-1559 fees from endpoint 0: (max fee, at least 1; priority fee).
     pub async fn first_fees(&self) -> Result<(u128, u128), RpcError> {
+        self.first().await?;
         let est = self.providers[0]
             .estimate_eip1559_fees()
             .await
@@ -625,6 +639,7 @@ impl EvmPool {
         &self,
         hash: B256,
     ) -> Result<Option<alloy::rpc::types::TransactionReceipt>, RpcError> {
+        self.first().await?;
         self.providers[0]
             .get_transaction_receipt(hash)
             .await
@@ -633,6 +648,7 @@ impl EvmPool {
     /// The gas limit and max fee per gas of transaction `hash` as sent, from endpoint 0; `None` if it does not know it (the fee:
     /// if it gives none, e.g. a legacy transaction).
     pub async fn first_tx_fees(&self, hash: B256) -> Result<Option<(u64, Option<u128>)>, RpcError> {
+        self.first().await?;
         let t: serde_json::Value = self.providers[0]
             .raw_request("eth_getTransactionByHash".into(), (hash,))
             .await
@@ -651,6 +667,7 @@ impl EvmPool {
     }
     /// The `finalized` block's number from endpoint 0 (`None`: unread or none).
     pub async fn first_finalized_number(&self) -> Option<u64> {
+        self.first().await.ok()?;
         self.providers[0]
             .get_block_by_number(BlockNumberOrTag::Finalized)
             .await
@@ -1105,6 +1122,7 @@ impl EvmPool {
         let need = n / 2 + 1;
         let deadline = Some(self.pool.deadline());
         let got = futures::future::join_all(order.iter().map(|&i| async move {
+            self.pool.admit(self, i, deadline).await?;
             self.at(i, deadline)
                 .estimate_eip1559_fees()
                 .await
@@ -1285,6 +1303,9 @@ impl EvmPool {
         let outcomes = futures::future::join_all(to.iter().map(|&i| {
             let hex = hex.clone();
             async move {
+                if let Err(failure) = self.pool.admit(self, i, None).await {
+                    return (i, SendOutcome::Unreachable { failure });
+                }
                 let a = self
                     .http
                     .json_rpc(

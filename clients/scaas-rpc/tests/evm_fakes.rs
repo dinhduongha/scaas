@@ -1494,3 +1494,74 @@ async fn a_relayed_operation_ends_on_chain_facts() {
         "the deadline not yet passed"
     );
 }
+
+// ---------------------------------------------------------------- plan T13 S3: a dropped endpoint is never asked again
+
+/// An endpoint of another chain (chain id 1), answering everything as a healthy node would.
+fn healthy(r: &Value) -> Value {
+    match r["method"].as_str() {
+        Some("eth_blockNumber") => json!({"result": "0x20"}),
+        Some("eth_getTransactionCount") => json!({"result": "0x7"}),
+        Some("eth_getTransactionReceipt") | Some("eth_getTransactionByHash") => {
+            json!({"result": null})
+        }
+        Some("eth_feeHistory") => fee_rpc(10_000_000),
+        Some("eth_sendRawTransaction") => {
+            json!({"result": format!("{:#x}", alloy::primitives::keccak256(
+            alloy::hex::decode(r["params"][0].as_str().unwrap()).unwrap()))})
+        }
+        _ => json!({"result": "0x0"}),
+    }
+}
+
+/// S3: identity applies outside the pool's reads too. Endpoint 0 of another chain: the first-endpoint reads refuse it and ask
+/// it nothing but its identity, `broadcast` sends it nothing, and under strict majority its fee does not count. Controls: the
+/// same reads on endpoint 0 of this chain answer.
+#[tokio::test]
+async fn a_dropped_endpoint_is_never_asked_again() {
+    let (other, other_n) = fake_rpc_on(healthy, 1, genesis()).await;
+    let (good, _) = fake_rpc(healthy).await;
+    let p = sdk_pool(&[&other, &good], 2_000);
+    let a = Address::repeat_byte(1);
+    assert!(p.first_pending_nonce(a).await.is_err());
+    assert!(p.first_nonce_at(a).await.is_err());
+    assert!(p.first_fees().await.is_err());
+    assert!(p.first_receipt(B256::ZERO).await.is_err());
+    assert!(p.first_tx_fees(B256::ZERO).await.is_err());
+    assert_eq!(p.first_finalized_number().await, None);
+    match p.broadcast(RAW, Fanout::All).await.unwrap() {
+        BroadcastOutcome::Sent {
+            accepted, others, ..
+        } => {
+            assert_eq!(accepted, vec![1]);
+            assert!(
+                matches!(others[..], [(0, SendOutcome::Unreachable { .. })]),
+                "{others:?}"
+            );
+        }
+        o => panic!("{o:?}"),
+    }
+    assert_eq!(
+        other_n.load(SeqCst),
+        0,
+        "nothing but its chain id and block 0 was asked"
+    );
+    let ok = sdk_pool(&[&good], 2_000);
+    assert_eq!(ok.first_pending_nonce(a).await.unwrap(), 7, "control");
+    // strict majority: the other chain's high fee is not one of the values
+    let (low1, _) = fake_rpc(fees_low).await;
+    let (low2, _) = fake_rpc(fees_low).await;
+    let (high_other, high_n) = fake_rpc_on(fees_high, 1, genesis()).await;
+    let honest = sdk_pool(&[&low1], 2_000)
+        .fees(Purpose::Plain)
+        .await
+        .unwrap();
+    assert_eq!(
+        strict(&[&high_other, &low1, &low2])
+            .fees(Purpose::Plain)
+            .await
+            .unwrap(),
+        honest
+    );
+    assert_eq!(high_n.load(SeqCst), 0, "its fee was never asked");
+}

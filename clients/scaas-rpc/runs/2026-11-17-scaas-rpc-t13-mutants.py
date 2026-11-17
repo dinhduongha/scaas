@@ -19,6 +19,14 @@ MUTANTS = [
     ("S2 one floor for every choice", [(P, "        let floor = self.agreed_floor(choice);\n",
                                         "        let floor = self.floor.lock().map(|f| f.values().copied().max().unwrap_or(0)).unwrap_or(0);\n")],
      T + "--test pool reads_of_every_block_choice_mix_on_one_pool"),
+    ("S3 first_* without identity", [(E, "    pub async fn first_pending_nonce(&self, who: Address) -> Result<u64, RpcError> {\n        self.first().await?;\n",
+                                      "    pub async fn first_pending_nonce(&self, who: Address) -> Result<u64, RpcError> {\n")],
+     T + "--test evm_fakes a_dropped_endpoint_is_never_asked_again"),
+    ("S3 broadcast without identity", [(E, "                if let Err(failure) = self.pool.admit(self, i, None).await {\n",
+                                        "                if let Err(failure) = Ok::<(), EndpointFailure>(()) {\n")],
+     T + "--test evm_fakes a_dropped_endpoint_is_never_asked_again"),
+    ("S3 strict fee without identity", [(E, "            self.pool.admit(self, i, deadline).await?;\n", "")],
+     T + "--test evm_fakes a_dropped_endpoint_is_never_asked_again"),
 ]
 
 if __name__ == "__main__":

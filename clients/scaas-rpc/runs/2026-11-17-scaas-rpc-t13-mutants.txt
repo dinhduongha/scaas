@@ -1,3 +1,5 @@
-# t13 mutants at commit 9419b1322 (name | outcome | test)
-S2 one floor for every choice | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool reads_of_every_block_choice_mix_on_one_pool
-1 mutants, 1 killed, 0 survived, 0 not loaded
+# t13 mutants at commit 1e48c9fbb (name | outcome | test)
+S3 first_* without identity | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_dropped_endpoint_is_never_asked_again
+S3 broadcast without identity | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_dropped_endpoint_is_never_asked_again
+S3 strict fee without identity | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_dropped_endpoint_is_never_asked_again
+3 mutants, 3 killed, 0 survived, 0 not loaded
