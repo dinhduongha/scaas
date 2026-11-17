@@ -60,13 +60,39 @@ const pqzKeyLengths = <int>[16384, 18432, 20480, 22528];
 const schemes = <Kind>[Kind(0x0142, 'pqz-mlwe', false, pqzKeyLengths, 'pqz-mlwe')];
 
 const groups = <String>[
-  'p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
-  'fndsa512', 'slhdsa128s', 'mldsa87', 'fndsa1024', 'pqz-mlwe',
+  'p256',
+  'ed25519',
+  'secp256k1',
+  'bn254-g1',
+  'bls12381-g1',
+  'bls12381-g2',
+  'bn254-g2',
+  'mldsa44',
+  'mldsa65',
+  'fndsa512',
+  'slhdsa128s',
+  'mldsa87',
+  'fndsa1024',
+  'pqz-mlwe',
 ];
 
 const purposes = <String>[
-  'pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'payee-fee', 'vp',
-  'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update', 'pqz-verdict',
+  'pop',
+  'metatx',
+  'metatx-cancel',
+  'member',
+  'zether-auth',
+  'zether-owner',
+  'keyop',
+  'payee-fee',
+  'vp',
+  'vc-anchor',
+  'trade',
+  'kem',
+  'pqz-key',
+  'membership',
+  'msig-update',
+  'pqz-verdict',
 ];
 
 /// The governance bits 0-31 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the app
@@ -74,9 +100,22 @@ const purposes = <String>[
 const governanceBits = <(String, String)>[
   ('PAYABLE', 'capability'), ('MINTABLE', 'power'), ('BURNABLE', 'capability'), ('RATE_ADJUSTABLE', 'power'),
   ('WRAP_DISABLEABLE', 'power'), ('FREEZE', 'power'), ('FORCE', 'power'), ('PAUSE', 'power'), ('ALLOWLIST', 'power'),
-  ('DENYLIST', 'power'), ('RECORD', 'power'), ('LISTING', 'power'), ('FEE_ROUTING', 'power'), ('', 'unused'), ('', 'unused'),
-  ('ARBITRATE', 'reserved'), ('CORRECT', 'reserved'), ('RESCUABLE', 'capability'), ('PUBLISH', 'power'), ('DEPRECATE', 'power'),
-  ('ENABLE_KIND', 'power'), ('MODERATE', 'power'), ('OPERATOR_TRANSFER', 'power'), ('TAX', 'power'), ('PQZ_PROOF', 'power'),
+  ('DENYLIST', 'power'),
+  ('RECORD', 'power'),
+  ('LISTING', 'power'),
+  ('FEE_ROUTING', 'power'),
+  ('', 'unused'),
+  ('', 'unused'),
+  ('ARBITRATE', 'reserved'),
+  ('CORRECT', 'reserved'),
+  ('RESCUABLE', 'capability'),
+  ('PUBLISH', 'power'),
+  ('DEPRECATE', 'power'),
+  ('ENABLE_KIND', 'power'),
+  ('MODERATE', 'power'),
+  ('OPERATOR_TRANSFER', 'power'),
+  ('TAX', 'power'),
+  ('PQZ_PROOF', 'power'),
   // group 3l (wrap limits spec 2026-11-10 §2): the hybrids' wrap controls
   ('WRAP_LIMIT', 'capability'), ('WRAP_LIST', 'power'), ('REDEEMER', 'power'),
   // round 3s (CTR-GOV-24): 8, 9 the token's lists (powers), 28 the compliance registry check
@@ -103,6 +142,7 @@ bool isSigning(int kind) => kind == 0x0120 || kind == 0x0141 || _single(kind);
 /// Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024 (CTR-UA-39 / -40; an msig per
 /// [msigPqzEligible]).
 bool isPqzHolder(int kind) => (kind >= 0x0130 && kind <= 0x0132) || kind == 0x0134 || kind == 0x0135;
+
 /// An msig too, one level down: a record that holds one is refused as a member by the registry.
 bool isMember(int kind, [bool hederaNative = false]) =>
     _single(kind) || kind == 0x0120 || kind == 0x0001 || kind == 0x0002 || (hederaNative && kind == 0x0003);
