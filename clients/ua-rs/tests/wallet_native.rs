@@ -87,7 +87,8 @@ fn native_json_sign_message_refusal_rows_of_the_nine() {
         assert!(w.native_key(nok, 0, None).unwrap().sign_message(&msg(ok), AllowRawDigest).is_ok(), "neighbour of {}", r["id"]);
         n += 1;
     }
-    assert_eq!(n, 5, "0 B, 131,073 B, two envelopes on solana, evm");
+    // spec §8.1 appended the two EVM-prefix rows on solana (native.json grows by appending only)
+    assert_eq!(n, 7, "0 B, 131,073 B, two envelopes on solana, evm, 0x05, 0x19 0x01");
 }
 
 #[test]
@@ -209,4 +210,63 @@ fn near_scheme_and_no_scheme_kind() {
     assert_eq!(Network::from_name("near"), Some(Network::Near));
     assert_eq!(Network::Near.name(), "near");
     assert_eq!((Network::Near.scheme(), Network::Near.scheme_kind()), (NativeScheme::Ed25519, None));
+}
+
+// ------------------------------------------------------------------ T6b: spec §8.1 (after the scaas-sdk review)
+
+#[test]
+fn sign_message_refuses_the_evm_prefixes_beside_their_neighbours() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    let k = w.native_key(Network::Solana, 0, None).unwrap();
+    for (bad, good) in [(&[5u8, 1, 2][..], &[6u8, 1, 2][..]), (&[5], &[4]), (&[0x19, 1, 7], &[0x19, 2, 7]), (&[0x19, 1], &[0x18, 1])] {
+        assert_eq!(k.sign_message(bad, AllowRawDigest).err(), Some(Error::Argument), "{bad:?}");
+        assert!(k.sign_message(good, AllowRawDigest).is_ok(), "{good:?}");
+    }
+    assert!(w.native_key(Network::Evm, 0, None).unwrap().sign_digest(&[5; 32], AllowRawDigest).is_ok(), "digests untouched");
+}
+
+fn envelope(k: &scaas_ua::wallet::NativeKey, call: &str, r: &Value, tx: &[u8]) -> Result<Vec<u8>, Error> {
+    match call {
+        "sign_near_transaction" => k.sign_near_transaction(tx, AllowRawDigest),
+        "sign_sui_transaction" => k.sign_sui_transaction(tx, AllowRawDigest),
+        "sign_stellar_transaction" => {
+            let id = hex::decode(r["networkId"].as_str().unwrap()).unwrap();
+            k.sign_stellar_transaction(&id.try_into().map_err(|_| Error::Argument)?, tx, AllowRawDigest)
+        }
+        "sign_hedera_transaction" => k.sign_hedera_transaction(tx, AllowRawDigest),
+        c => panic!("{c}"),
+    }
+}
+
+#[test]
+fn native_json_envelopes_rows_byte_equal() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    let mut n = 0;
+    for r in arr(&v, "envelopes") {
+        let k = w.native_key(net(r), opt_u32(&r["index"]).unwrap(), None).unwrap();
+        let sig = envelope(&k, r["call"].as_str().unwrap(), r, &msg(r)).unwrap();
+        assert_eq!(hex::encode(&sig), r["signature"].as_str().unwrap(), "{}", r["id"]);
+        let signed = hex::decode(r["signed"].as_str().unwrap()).unwrap();
+        assert!(scaas_ua::verify::ed25519(&k.public_key(), &signed, &sig), "{}", r["id"]);
+        n += 1;
+    }
+    assert_eq!(n, 12, "4 calls x {{1, 200, 1232}} bytes");
+}
+
+#[test]
+fn native_json_envelope_refusal_rows() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    let mut n = 0;
+    for r in arr(&v, "refusals").iter().filter(|r| r["call"].as_str().unwrap().ends_with("_transaction")) {
+        let call = r["call"].as_str().unwrap();
+        let k = w.native_key(net(&r["args"]), 0, None).unwrap();
+        assert_eq!(envelope(&k, call, &r["args"], &msg(&r["args"])).err(), Some(Error::Argument), "{}", r["id"]);
+        let ok = w.native_key(net(&r["accepted"]), 0, None).unwrap();
+        assert!(envelope(&ok, call, &r["accepted"], &msg(&r["accepted"])).is_ok(), "neighbour of {}", r["id"]);
+        n += 1;
+    }
+    assert_eq!(n, 13, "4 calls x {{on solana, 0 B, 131,073 B}} and a 31-byte Stellar network id");
 }

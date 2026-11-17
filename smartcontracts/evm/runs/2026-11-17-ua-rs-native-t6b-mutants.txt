@@ -1,0 +1,7 @@
+killed   | M1 0x05 check removed | clients/ua-rs/src/wallet/sign.rs | rc=101 | 2 failed: native_json_sign_message_refusal_rows_of_the_nine
+killed   | M2 0x19 0x01 check removed | clients/ua-rs/src/wallet/sign.rs | rc=101 | 2 failed: native_json_sign_message_refusal_rows_of_the_nine
+killed   | M3 Sui intent dropped | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: native_json_envelopes_rows_byte_equal
+killed   | M4 Stellar envelope type 5 | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: native_json_envelopes_rows_byte_equal
+killed   | M5 NEAR without the hash | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: native_json_envelopes_rows_byte_equal
+killed   | M6 network check removed | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: native_json_envelope_refusal_rows
+6 mutants, 6 killed, 0 survived, 0 not loaded

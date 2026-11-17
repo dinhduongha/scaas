@@ -60,6 +60,17 @@
 //!     let _ = key.sign_message(&[1, 2, 3], scaas_ua::wallet::AllowRawDigest);
 //! }
 //! ```
+//! The envelope calls (spec §8.1) likewise, on a native key only:
+//! ```no_run
+//! fn f(key: &scaas_ua::wallet::NativeKey) {
+//!     let _ = key.sign_near_transaction(&[1, 2, 3], scaas_ua::wallet::AllowRawDigest);
+//! }
+//! ```
+//! ```compile_fail,E0599
+//! fn f(key: &scaas_ua::wallet::UaKey) {
+//!     let _ = key.sign_near_transaction(&[1, 2, 3], scaas_ua::wallet::AllowRawDigest);
+//! }
+//! ```
 use super::eip712::TypedData;
 use super::tx::EvmTx;
 use super::{Error, NativeScheme, Network, Result};

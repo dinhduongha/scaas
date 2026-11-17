@@ -209,6 +209,36 @@ impl NativeKey {
     pub fn sign_message(&self, message: &[u8], allow: AllowRawDigest) -> Result<Vec<u8>> {
         sign_message_by(self, message, allow)
     }
+
+    /// NEAR (spec §8.1, CLI-UAL-63 (13)): ed25519 over `sha256(tx_borsh)`, the Borsh `Transaction` the app's encoder made.
+    pub fn sign_near_transaction(&self, tx_borsh: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
+        self.envelope(Network::Near, tx_borsh, |t| Sha256::digest(t).to_vec())
+    }
+
+    /// Sui: ed25519 over `blake2b-256(0x00 0x00 0x00 ‖ tx_bcs)` (intent `TransactionData`, `V0`, app `Sui`).
+    pub fn sign_sui_transaction(&self, tx_bcs: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
+        use blake2::Digest as _;
+        self.envelope(Network::Sui, tx_bcs, |t| blake2::Blake2b::<blake2::digest::consts::U32>::digest([&[0u8; 3][..], t].concat()).to_vec())
+    }
+
+    /// Stellar: ed25519 over `sha256(network_id ‖ 0x00000002 ‖ tx_xdr)` (`ENVELOPE_TYPE_TX`; `network_id` = `sha256(passphrase)`).
+    pub fn sign_stellar_transaction(&self, network_id: &[u8; 32], tx_xdr: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
+        self.envelope(Network::Stellar, tx_xdr, |t| Sha256::digest([&network_id[..], &[0, 0, 0, 2], t].concat()).to_vec())
+    }
+
+    /// Hedera Ed25519: ed25519 over the transaction's `bodyBytes` as given.
+    pub fn sign_hedera_transaction(&self, body_bytes: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
+        self.envelope(Network::HederaEd25519, body_bytes, <[u8]>::to_vec)
+    }
+
+    /// The envelope calls' common part: this key's network only, 1 to [`MAX_RAW_MESSAGE`] bytes, the built bytes signed as the
+    /// scheme's message (no GRAM / TON call: CLI-UAL-63 (14)).
+    fn envelope(&self, network: Network, tx: &[u8], build: impl FnOnce(&[u8]) -> Vec<u8>) -> Result<Vec<u8>> {
+        if self.network != network || tx.is_empty() || tx.len() > MAX_RAW_MESSAGE {
+            return Err(Error::Argument);
+        }
+        self.sign_request(&SignRequest::RawMessage { message: build(tx) })
+    }
 }
 
 /// [`NativeKey::sign_key_proof`] by any [`Signer`] (spec §9.4).
@@ -224,7 +254,9 @@ pub fn sign_digest_by(key: &dyn Signer, digest: &[u8; 32], _: AllowRawDigest) ->
 /// [`NativeKey::sign_message`] by any [`Signer`], only with the marker value; the bound and the envelope refusal hold for every
 /// signer (a `UaKey` refuses the request: `Argument`).
 pub fn sign_message_by(key: &dyn Signer, message: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
-    if message.is_empty() || message.len() > MAX_RAW_MESSAGE || ENVELOPES.iter().any(|p| message.starts_with(p)) {
+    // spec §8.1 (CLI-UAL-63 (11)): no message that starts as an EIP-7702 authorization (0x05) or an EIP-712 preimage (0x19 0x01)
+    let evm_prefix = message.first() == Some(&0x05) || message.starts_with(&[0x19, 0x01]);
+    if message.is_empty() || message.len() > MAX_RAW_MESSAGE || ENVELOPES.iter().any(|p| message.starts_with(p)) || evm_prefix {
         return Err(Error::Argument);
     }
     key.sign_request(&SignRequest::RawMessage { message: message.to_vec() })
