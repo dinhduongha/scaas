@@ -462,3 +462,22 @@ test('native.json envelopes rows byte-equal; the appended refusal rows of spec Â
   }
   for (const id of ['sign_message EIP-7702 magic 0x05', 'sign_message EIP-712 prefix 0x19 0x01']) assert.ok(nat.refusals.some((r) => r.id === id), id);
 });
+
+// ------------------------------------------------------------------ T9: rs_native.json (written by ua-rs, read here)
+const RS_NATIVE = new URL('../../../smartcontracts/vectors/native/rs_native.json', import.meta.url);
+
+test('rs_native.json: every ua-rs Taproot and sr25519 row is of its mnemonic\'s key and verifies here', async () => {
+  const sr = await import('@scure/sr25519');
+  const rs = JSON.parse(readFileSync(RS_NATIVE, 'utf8'));
+  assert.ok(rs.rows.length >= 7);
+  for (const r of rs.rows) {
+    const m = mn(r.mnemonic), msg = B(r.message), sig = B(r.signature);
+    if (r.scheme === 'bip340-taproot') {
+      assert.equal(S.deriveKey(m.seed, 'bitcoin_p2tr', r.index, { coinType: r.coinType, change: r.change }).outputKey, r.publicKey, r.id);
+      assert.ok(schnorr.verify(sig, msg, B(r.publicKey)), r.id);
+    } else {
+      assert.equal(P.polkadotKey(m.e, m.passphrase, r.path).publicKey, r.publicKey, r.id);
+      assert.ok(sr.verify(msg, sig, B(r.publicKey)), r.id);
+    }
+  }
+});

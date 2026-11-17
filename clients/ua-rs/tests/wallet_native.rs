@@ -584,3 +584,69 @@ fn network_list_is_native_json_networks() {
     let want: Vec<&str> = arr(&v, "networks").iter().map(|n| n.as_str().unwrap()).collect();
     assert_eq!(names, want);
 }
+
+// ------------------------------------------------------------------ T9: rs_native.json (both ways)
+
+/// The OS-random rows ua-rs writes for clientkeys to verify (spec §12.1, CLI-UAL-47): release Taproot signatures (receive 0 and 1,
+/// change 0) and release sr25519 signatures on the bare, `//Alice` and soft keys. A row that still verifies is kept as it is,
+/// so the file moves only when a key or message does.
+#[cfg(feature = "vectors")]
+#[test]
+#[ignore]
+fn regenerate() {
+    let v = native();
+    let path = format!("{}/../../smartcontracts/vectors/native/rs_native.json", env!("CARGO_MANIFEST_DIR"));
+    let old = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
+    let verifies = |r: &Value| {
+        let (pk, m, s) = (hex::decode(r["publicKey"].as_str().unwrap()).unwrap(), hex::decode(r["message"].as_str().unwrap()).unwrap(), hex::decode(r["signature"].as_str().unwrap()).unwrap());
+        match r["scheme"].as_str().unwrap() {
+            "bip340-taproot" => scaas_ua::verify::verify(0x0103, &pk, &m.try_into().unwrap(), &s, false),
+            _ => sr_verify(&pk, &m, &s),
+        }
+    };
+    let mut rows = Vec::new();
+    let abandon = wallet(&v, "bip39_abandon");
+    for (change, index) in [(0u32, 0u32), (0, 1), (1, 0)] {
+        let k = abandon.bitcoin_key(Network::BitcoinP2tr, None, change, index).unwrap();
+        let m = [change as u8 * 16 + index as u8 + 1; 32];
+        rows.push((serde_json::json!({ "id": format!("p2tr-{change}-{index}"), "scheme": "bip340-taproot", "mnemonic": "bip39_abandon",
+            "network": "bitcoin_p2tr", "coinType": null, "change": change, "index": index, "message": hex::encode(m),
+            "publicKey": hex::encode(k.witness_program().unwrap().1) }), k.sign_digest(&m, AllowRawDigest).unwrap()));
+    }
+    let dev = wallet(&v, "substrate_dev");
+    for p in ["", "//Alice", "/soft", "//Alice/0"] {
+        let k = dev.polkadot_key(p).unwrap();
+        let m = format!("scaas ua-rs-native rs_native {p}").into_bytes();
+        rows.push((serde_json::json!({ "id": format!("sr25519-{p}"), "scheme": "sr25519", "mnemonic": "substrate_dev", "network": "polkadot",
+            "path": p, "message": hex::encode(&m), "publicKey": hex::encode(k.public_key()) }), k.sign_message(&m, AllowRawDigest).unwrap()));
+    }
+    let out: Vec<Value> = rows
+        .into_iter()
+        .map(|(row, fresh)| {
+            let mut r = row.clone();
+            let keep = old.as_ref().and_then(|o| arr(o, "rows").iter().find(|x| {
+                let mut y = (*x).clone();
+                y.as_object_mut().unwrap().remove("signature");
+                y == row && verifies(x)
+            }).cloned());
+            match keep {
+                Some(k) => k,
+                None => {
+                    r["signature"] = Value::String(hex::encode(fresh));
+                    r
+                }
+            }
+        })
+        .collect();
+    for r in &out {
+        assert!(verifies(r), "{}", r["id"]);
+    }
+    let doc = serde_json::json!({
+        "note": "Written by clients/ua-rs/tests/wallet_native.rs regenerate (ua-rs-native T9, feature vectors, ignored) with the release signers \
+                 (OS randomness: Taproot aux, sr25519 r and soft nonce halves); read by clientkeys test/native.test.js, which re-derives each \
+                 public key from its mnemonic and verifies each signature (CLI-UAL-47: randomized rows both ways). A row that still verifies \
+                 is kept. Never edit by hand.",
+        "rows": out,
+    });
+    std::fs::write(&path, serde_json::to_string_pretty(&doc).unwrap() + "\n").unwrap();
+}
