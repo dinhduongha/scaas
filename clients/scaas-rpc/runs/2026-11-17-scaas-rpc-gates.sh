@@ -24,6 +24,7 @@ STEPS=(
   "rpc-clippy|clients/scaas-rpc|$cap cargo clippy $C --all-targets --all-features -- -D warnings"
   "rpc-anvil|clients/scaas-rpc|$cap cargo test $C --features evm --test anvil -- --ignored$TT"
   "rpc-wasm|clients/scaas-rpc|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features evm,node-client"
+  "rpc-deny|clients/scaas-rpc|$cap cargo deny --all-features check"
   "node-test|scaas-node|CAPPED_MEM=6G $cap cargo test $C"
   "node-clippy|scaas-node|$cap cargo clippy $C --all-targets -- -D warnings"
   "node-e2e|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e -- --ignored$TT"

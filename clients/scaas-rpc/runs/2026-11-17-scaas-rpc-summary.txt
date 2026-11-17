@@ -18,7 +18,6 @@ ua-json | 82d9754cd | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 ua-verify | 82d9754cd | 0 | 84 passed, 0 failed, 0 ignored (18 binaries); tree dirty
 ua-default | 82d9754cd | 0 | 25 passed, 0 failed, 0 ignored (2 binaries); tree dirty
 eip1898 | 0557f5ea0 | 0 | nethermind: canonical answered 5/5, made-up refused 5/5: PASS; anvil: canonical answered 5/5, made-up refused 5/5: PASS; hedera-relay: not verified (no local relay); tree dirty
-rpc-anvil | 435318aa3 | 0 | 10 passed, 0 failed, 0 ignored (1 binaries)
 ver-test | 435318aa3 | 0 | 41 passed, 0 failed, 1 ignored (6 binaries)
 ver-clippy | 435318aa3 | 0 | -
 ver-anvil | 435318aa3 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries)
@@ -29,9 +28,11 @@ node-e2e-soroban | 0ed608c33 | 0 | 11 passed, 0 failed, 0 ignored (2 binaries); 
 node-e2e-solana | 23748267c | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 node-e2e-near | 9a31ccf1d | 0 | 12 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 docs | 9a31ccf1d | 0 | -; tree dirty
-rpc-test | d091f1ca8 | 0 | 147 passed, 0 failed, 10 ignored (12 binaries); tree dirty
-rpc-wasm | d091f1ca8 | 0 | -; tree dirty
-rpc-clippy | d091f1ca8 | 0 | -; tree dirty
 node-test | d091f1ca8 | 0 | 804 passed, 0 failed, 72 ignored (18 binaries); tree dirty
 node-clippy | d091f1ca8 | 0 | -; tree dirty
 node-e2e-algorand | d091f1ca8 | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+rpc-test | 2633740cb | 0 | 147 passed, 0 failed, 10 ignored (12 binaries); tree dirty
+rpc-clippy | 2633740cb | 0 | -; tree dirty
+rpc-anvil | 2633740cb | 0 | 10 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+rpc-wasm | 2633740cb | 0 | -; tree dirty
+rpc-deny | 2633740cb | 0 | -; tree dirty
