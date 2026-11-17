@@ -22,7 +22,7 @@ OWN_STEPS="vectors-check ua-rs ua-c ua-dart-frb ua-py ua-go ua-cs"
 # named-tests: no log of these may show a test binary with 0 passed or a skipped suite
 FAMILIES="clientkeys ua-rs-nodefault ua-rs-wallet ua-rs ua-rs-vectors ua-rs-zether ua-rs-pqz no-oracle ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs"
 # the mutant records of this round (one per task that has mutants; extended per task)
-MUTANT_RECORDS=${MUTANT_RECORDS-"2026-11-17-ua-rs-native-t2 2026-11-17-ua-rs-native-t3 2026-11-17-ua-rs-native-t4 2026-11-17-ua-rs-native-t5 2026-11-17-ua-rs-native-t6 2026-11-17-ua-rs-native-t6a 2026-11-17-ua-rs-native-t6b 2026-11-17-ua-rs-native-t7 2026-11-17-ua-rs-native-t8a 2026-11-17-ua-rs-native-t8b 2026-11-17-ua-rs-native-t9 2026-11-17-ua-rs-native-t10 2026-11-17-ua-rs-native-t11d 2026-11-17-ua-rs-native-t11e 2026-11-17-ua-rs-native-t11f 2026-11-17-ua-rs-native-t11a 2026-11-17-ua-rs-native-t11b 2026-11-17-ua-rs-native-t11c"}
+MUTANT_RECORDS=${MUTANT_RECORDS-"2026-11-17-ua-rs-native-t2 2026-11-17-ua-rs-native-t3 2026-11-17-ua-rs-native-t4 2026-11-17-ua-rs-native-t5 2026-11-17-ua-rs-native-t6 2026-11-17-ua-rs-native-t6a 2026-11-17-ua-rs-native-t6b 2026-11-17-ua-rs-native-t7 2026-11-17-ua-rs-native-t8a 2026-11-17-ua-rs-native-t8b 2026-11-17-ua-rs-native-t9 2026-11-17-ua-rs-native-t10 2026-11-17-ua-rs-native-t11d 2026-11-17-ua-rs-native-t11e 2026-11-17-ua-rs-native-t11f 2026-11-17-ua-rs-native-t11a 2026-11-17-ua-rs-native-t11b 2026-11-17-ua-rs-native-t11c 2026-11-17-ua-rs-native-t13-c1"}
 export CAPPED_MEM=${CAPPED_MEM:-4G} # 4G: capped's own default (the base sets 3G)
 C="--locked --offline -j2"
 
@@ -149,7 +149,7 @@ clientkeys|node|native.json polkadotPaths: chain codes and keys of every path
 clientkeys|node|native.json signatures: deterministic and fixed-randomness rows byte-equal, verify-only rows verify
 clientkeys|node|native.json refusals: each refused (Argument), its accepted neighbour accepted
 clientkeys|node|native.json external: BIP-84 / BIP-86 / BIP-143 / BIP-340 / BIP-341 / BIP-350 / substrate-bip39 / subkey / polkadot.js rows
-clientkeys|node|signMessage refuses the EIP-7702 magic 0x05 and the EIP-712 prefix 0x19 0x01, beside their neighbours
+clientkeys|node|signMessage has no first-byte rule: 0x05 and 0x19 0x01 sign on Ed25519 and sr25519 keys (T13 C1)
 clientkeys|node|envelope calls: NEAR sha256, Sui intent + blake2b-256, Stellar network id + ENVELOPE_TYPE_TX, Hedera body bytes
 clientkeys|node|native.json envelopes rows byte-equal; the appended refusal rows of spec §8.1 are present
 clientkeys|node|rs_native.json: every ua-rs Taproot and sr25519 row is of its mnemonic's key and verifies here
@@ -163,7 +163,7 @@ ua-rs-vectors|cargo|external_raw_message_answers_are_verified
 ua-rs|cargo|native_json_near_addresses_and_signatures
 ua-rs|cargo|near_refusals_beside_their_accepted_neighbours
 ua-rs|cargo|near_scheme_and_no_scheme_kind
-ua-rs|cargo|sign_message_refuses_the_evm_prefixes_beside_their_neighbours
+ua-rs|cargo|sign_message_has_no_evm_prefix_rule
 ua-rs|cargo|native_json_envelopes_rows_byte_equal
 ua-rs|cargo|native_json_envelope_refusal_rows
 ua-rs|cargo|native_json_bitcoin_addresses_both_chains_and_coins

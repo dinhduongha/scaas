@@ -294,7 +294,6 @@ export function signMessage(key, message, { allowRawDigest = false, aux } = {}) 
   if (allowRawDigest !== true) fail('Argument', 'signMessage: refused without { allowRawDigest: true }');
   if (!(message instanceof Uint8Array) || message.length < 1 || message.length > MAX_RAW_MESSAGE) fail('Argument', 'message: 1 to 131072 bytes');
   if (ENVELOPES.some((p) => message.length >= p.length && p.every((b, i) => message[i] === b))) fail('Argument', 'message: a SCaaS off-chain envelope');
-  if (message[0] === 0x05 || (message[0] === 0x19 && message[1] === 0x01)) fail('Argument', 'message: an EIP-7702 or EIP-712 prefix');
   if (key.curve === 'ed25519') return ed25519.sign(message, key.privateKey);
   if (key.curve === 'sr25519') return sr25519Sign(key.privateKey, message, aux);
   return fail('Argument', 'signMessage: Ed25519 and sr25519 keys only');

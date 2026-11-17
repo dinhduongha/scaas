@@ -811,7 +811,7 @@ void main() {
         n++;
       }
     }
-    expect(n, 44, reason: '3 P2WPKH, 28 ed25519 messages, a NEAR digest, 12 envelopes');
+    expect(n, 45, reason: '3 P2WPKH, 29 ed25519 messages (T13 C1: one starts 0x05), a NEAR digest, 12 envelopes');
     n = 0;
     for (final r in nat['refusals'] as List) {
       final call = r['call'] as String;

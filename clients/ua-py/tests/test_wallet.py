@@ -1173,7 +1173,7 @@ class Native(unittest.TestCase):
                        'sign_hedera_transaction': lambda: k.sign_hedera_transaction(m)}[r['call']]()
                 self.assertEqual(sig.hex(), r['signature'])
                 n += 1
-        self.assertEqual(n, 44, '3 P2WPKH, 28 ed25519 messages, a NEAR digest, 12 envelopes')
+        self.assertEqual(n, 45, '3 P2WPKH, 29 ed25519 messages (T13 C1: one starts 0x05), a NEAR digest, 12 envelopes')
 
     def test_refusal_rows(self):
         calls = {'sign_message': 'sign_message_raw', 'sign_near_transaction': 'sign_near_transaction',

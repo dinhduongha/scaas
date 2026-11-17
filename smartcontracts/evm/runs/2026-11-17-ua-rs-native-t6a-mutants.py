@@ -16,9 +16,8 @@ T = [os.path.abspath("scripts/capped"), "node", "--test", "test/native.test.js"]
 G = [os.path.abspath("scripts/capped"), "sh", "-c",
      "node scripts/native-vectors.mjs && git diff --exit-code --quiet -- ../../smartcontracts/vectors/native/native.json; r=$?; "
      "git checkout -q -- ../../smartcontracts/vectors/native/native.json 2>/dev/null; exit $r"]
+# T13 C1 withdrew the EVM-prefix rule: its two mutants left with it (the rows that now sign: 2026-11-17-ua-rs-native-t13-c1-mutants.py)
 M = [(n, f, a, b, T, CK) for n, f, a, b in [
-    ("0x05 check removed", SEED, "if (message[0] === 0x05 || (message[0] === 0x19 && message[1] === 0x01))", "if ((message[0] === 0x19 && message[1] === 0x01))"),
-    ("0x19 0x01 check removed", SEED, "if (message[0] === 0x05 || (message[0] === 0x19 && message[1] === 0x01))", "if (message[0] === 0x05)"),
     ("Sui intent dropped", SEED, "(t) => blake2b(concatBytes(new Uint8Array(3), t), { dkLen: 32 }));", "(t) => blake2b(t, { dkLen: 32 }));"),
     ("Stellar envelope type 5", SEED, "new Uint8Array([0, 0, 0, 2]), t)", "new Uint8Array([0, 0, 0, 5]), t)"),
     ("NEAR without the hash", SEED, "envelope(key, 'near', txBorsh, allowRawDigest, (t) => sha256(t));", "envelope(key, 'near', txBorsh, allowRawDigest, (t) => t);"),

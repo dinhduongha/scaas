@@ -48,7 +48,7 @@ fn native_json_ed25519_message_rows_byte_equal() {
         assert_eq!(hex::encode(sig), r["signature"].as_str().unwrap(), "{}", r["id"]);
         n += 1;
     }
-    assert_eq!(n, 24, "6 networks x {{1, 32, 1232, 131072}} bytes");
+    assert_eq!(n, 25, "6 networks x {{1, 32, 1232, 131072}} bytes, and a Solana message with five signers (T13 C1)");
 }
 
 #[test]
@@ -87,8 +87,8 @@ fn native_json_sign_message_refusal_rows_of_the_nine() {
         assert!(w.native_key(nok, 0, None).unwrap().sign_message(&msg(ok), AllowRawDigest).is_ok(), "neighbour of {}", r["id"]);
         n += 1;
     }
-    // spec §8.1 appended the two EVM-prefix rows on solana (native.json grows by appending only)
-    assert_eq!(n, 7, "0 B, 131,073 B, two envelopes on solana, evm, 0x05, 0x19 0x01");
+    // the two EVM-prefix rows on solana left with their rule (T13 C1, the coordinator's one-time exception to append-only)
+    assert_eq!(n, 5, "0 B, 131,073 B, two envelopes on solana, evm");
 }
 
 #[test]
@@ -214,15 +214,24 @@ fn near_scheme_and_no_scheme_kind() {
 
 // ------------------------------------------------------------------ T6b: spec §8.1 (after the scaas-sdk review)
 
+/// T13 C1 (CLI-UAL-63 (11) withdrawn): no first-byte rule on a native message. `0x05` and `0x19 0x01` sign on an Ed25519 and an
+/// sr25519 key; native.json's Polkadot `Balances` row (pallet 5) signs through the release path and verifies.
 #[test]
-fn sign_message_refuses_the_evm_prefixes_beside_their_neighbours() {
+fn sign_message_has_no_evm_prefix_rule() {
     let v = native();
     let w = wallet(&v, "pq_kat");
-    let k = w.native_key(Network::Solana, 0, None).unwrap();
-    for (bad, good) in [(&[5u8, 1, 2][..], &[6u8, 1, 2][..]), (&[5], &[4]), (&[0x19, 1, 7], &[0x19, 2, 7]), (&[0x19, 1], &[0x18, 1])] {
-        assert_eq!(k.sign_message(bad, AllowRawDigest).err(), Some(Error::Argument), "{bad:?}");
-        assert!(k.sign_message(good, AllowRawDigest).is_ok(), "{good:?}");
+    let sol = w.native_key(Network::Solana, 0, None).unwrap();
+    let dot = w.native_key(Network::Polkadot, 0, None).unwrap();
+    for m in [&[5u8, 1, 2][..], &[5], &[5, 0, 0], &[0x19, 1, 7], &[0x19, 1]] {
+        assert!(scaas_ua::verify::ed25519(&sol.public_key(), m, &sol.sign_message(m, AllowRawDigest).unwrap()), "solana {m:?}");
+        assert!(sr_verify(&dot.public_key(), m, &dot.sign_message(m, AllowRawDigest).unwrap()), "polkadot {m:?}");
     }
+    let r = arr(&v, "signatures").iter().find(|r| r["id"] == "sr25519-bare-balances-0500").unwrap();
+    let dev = wallet(&v, "substrate_dev");
+    let k = dev.native_key(Network::Polkadot, 0, None).unwrap();
+    assert_eq!(hex::encode(k.public_key()), r["publicKey"].as_str().unwrap());
+    assert!(sr_verify(&k.public_key(), &msg(r), &k.sign_message(&msg(r), AllowRawDigest).unwrap()), "the Balances row");
+    assert!(sr_verify(&k.public_key(), &msg(r), &hex::decode(r["signature"].as_str().unwrap()).unwrap()), "the row's own signature");
     assert!(w.native_key(Network::Evm, 0, None).unwrap().sign_digest(&[5; 32], AllowRawDigest).is_ok(), "digests untouched");
 }
 

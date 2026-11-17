@@ -3738,6 +3738,33 @@
    "message": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
    "publicKey": "9057db4878163172ea51d570612043a98971737bf608b544991130ac110b0801",
    "signature": "8a319cd89a06a4ff5b1f3dabda56e915bffce83c2c4a6f25c57fa82fee73db62236e1ff96cdda64fbd5f5509e8bb556f82a69db1e2a4bc4bd7540e7bd93ed087"
+  },
+  {
+   "id": "ed25519-solana-five-signers",
+   "mode": "deterministic",
+   "scheme": "ed25519",
+   "call": "sign_message",
+   "mnemonic": "pq_kat",
+   "network": "solana",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "message": "050001c054bcf6c26962c15c676ed359d98d87416ce478cb9a77d00d1f071a82f6ccfe",
+   "publicKey": "266ede43419b39f015e77700e3307e8edb1a9479864ddb53283fc896e07b59b6",
+   "signature": "64cf35a8a012dfaeb3a2b82eeef945946485f24931c8031da35eac295eed90d4a0f4dd1caf3601b8488a56d9cc1ddfa075d2fd18665de48b526f1a677fdf3f04"
+  },
+  {
+   "id": "sr25519-bare-balances-0500",
+   "mode": "fixed-randomness",
+   "scheme": "sr25519",
+   "call": "sign_message",
+   "mnemonic": "substrate_dev",
+   "network": "polkadot",
+   "path": "",
+   "message": "0500008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480700e40b5402",
+   "aux": "404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f",
+   "publicKey": "46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a",
+   "signature": "ced940866382fc1cc6244ad98096baed317e5fada03920bd0c3c5bacc4638014f9541ccee35924959d518688ac6a1c7eebf834956785c6eb434a990709de6383"
   }
  ],
  "refusals": [
@@ -4696,94 +4723,6 @@
     "network": "evm",
     "secret": "0101010101010101010101010101010101010101010101010101010101010101",
     "kind": 264
-   }
-  },
-  {
-   "id": "sign_message EIP-7702 magic 0x05",
-   "call": "sign_message",
-   "args": {
-    "mnemonic": "pq_kat",
-    "network": "solana",
-    "index": 0,
-    "coinType": null,
-    "change": null,
-    "message": "0501"
-   },
-   "error": "Argument",
-   "accepted": {
-    "mnemonic": "pq_kat",
-    "network": "solana",
-    "index": 0,
-    "coinType": null,
-    "change": null,
-    "message": "0601"
-   }
-  },
-  {
-   "id": "sign_message EIP-712 prefix 0x19 0x01",
-   "call": "sign_message",
-   "args": {
-    "mnemonic": "pq_kat",
-    "network": "solana",
-    "index": 0,
-    "coinType": null,
-    "change": null,
-    "message": "1901aa"
-   },
-   "error": "Argument",
-   "accepted": {
-    "mnemonic": "pq_kat",
-    "network": "solana",
-    "index": 0,
-    "coinType": null,
-    "change": null,
-    "message": "1902aa"
-   }
-  },
-  {
-   "id": "sign_message EIP-7702 magic 0x05 on polkadot",
-   "call": "sign_message",
-   "args": {
-    "mnemonic": "pq_kat",
-    "network": "polkadot",
-    "index": 0,
-    "coinType": null,
-    "change": null,
-    "path": "",
-    "message": "0501"
-   },
-   "error": "Argument",
-   "accepted": {
-    "mnemonic": "pq_kat",
-    "network": "polkadot",
-    "index": 0,
-    "coinType": null,
-    "change": null,
-    "path": "",
-    "message": "0601"
-   }
-  },
-  {
-   "id": "sign_message EIP-712 prefix 0x19 0x01 on polkadot",
-   "call": "sign_message",
-   "args": {
-    "mnemonic": "pq_kat",
-    "network": "polkadot",
-    "index": 0,
-    "coinType": null,
-    "change": null,
-    "path": "",
-    "message": "1901aa"
-   },
-   "error": "Argument",
-   "accepted": {
-    "mnemonic": "pq_kat",
-    "network": "polkadot",
-    "index": 0,
-    "coinType": null,
-    "change": null,
-    "path": "",
-    "message": "1902aa"
    }
   },
   {

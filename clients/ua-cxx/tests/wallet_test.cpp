@@ -1039,7 +1039,7 @@ static void native_json() {
             CHECK(hx(sig) == "0x" + r["signature"].get<std::string>(), r["id"].get<std::string>());
             ++n;
         }
-    CHECK(n == 44, "3 P2WPKH, 28 ed25519 messages, a NEAR digest, 12 envelopes");
+    CHECK(n == 45, "3 P2WPKH, 29 ed25519 messages (T13 C1: one starts 0x05), a NEAR digest, 12 envelopes");
     n = 0;
     for (auto& r : N["refusals"]) {
         std::string c = r["call"].get<std::string>();
@@ -1060,7 +1060,7 @@ static void native_json() {
         CHECK(run(r["accepted"]).empty(), "neighbour of " + r["id"].get<std::string>());
         ++n;
     }
-    CHECK(n >= 40, "refusal rows of this surface");
+    CHECK(n >= 37, "refusal rows of this surface (T13 C1: four EVM-prefix rows withdrawn)");
     Key ua = W("pq_kat").uaKey(0x0102, 0, 0);
     CHECK(code_of([&] { ua.signMessageRaw(Bytes{1}); }) == "UARawDigestRefused", "a UA key: no raw message");
     CHECK(code_of([&] { ua.signNearTransaction(Bytes{1}); }) == "UARawDigestRefused", "a UA key: no envelope call");

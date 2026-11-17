@@ -228,9 +228,10 @@ int main(void) {
         uint8_t msg[3] = {1, 2, 3}, s[64];
         size_t s_len = sizeof s;
         CHECK(scaas_ua_sign_message_raw(dot, msg, sizeof msg, s, &s_len) == SCAAS_UA_OK && s_len == 64);
-        uint8_t evm_prefix[2] = {0x19, 0x01};
+        // a Substrate call of pallet 5 (Balances) signs: no first-byte rule on a native message (T13 C1)
+        uint8_t balances[3] = {0x05, 0x00, 0x00};
         s_len = sizeof s;
-        CHECK(scaas_ua_sign_message_raw(dot, evm_prefix, sizeof evm_prefix, s, &s_len) == SCAAS_UA_ERR_ARGUMENT);
+        CHECK(scaas_ua_sign_message_raw(dot, balances, sizeof balances, s, &s_len) == SCAAS_UA_OK && s_len == 64);
         ScaasUaKey *near = NULL;
         CHECK(scaas_ua_wallet_native_key(dw, SCAAS_UA_NETWORK_NEAR, 0, SCAAS_UA_COIN_DEFAULT, &near) == SCAAS_UA_OK);
         s_len = sizeof s;

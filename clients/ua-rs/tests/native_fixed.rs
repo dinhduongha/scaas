@@ -103,7 +103,7 @@ fn native_json_sr25519_fixed_rows_byte_equal_one_read_each() {
         assert_eq!(scaas_ua::wallet::vectors_one_shot_reads(), 1, "{}", r["id"]);
         n += 1;
     }
-    assert_eq!(n, 4, "the bare key: three messages and one digest");
+    assert_eq!(n, 5, "the bare key: three messages, one digest, and the Balances call of T13 C1");
 }
 
 #[test]

@@ -273,17 +273,15 @@ pub fn sign_digest_by(key: &dyn Signer, digest: &[u8; 32], _: AllowRawDigest) ->
 /// [`NativeKey::sign_message`] by any [`Signer`], only with the marker value; the bound and the envelope refusal hold for every
 /// signer (a `UaKey` refuses the request: `Argument`).
 pub fn sign_message_by(key: &dyn Signer, message: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
-    // spec §8.1 (CLI-UAL-63 (11)): no message that starts as an EIP-7702 authorization (0x05) or an EIP-712 preimage (0x19 0x01)
     message_ok(message)?;
     key.sign_request(&SignRequest::RawMessage { message: message.to_vec() })
 }
 
-/// The raw-message checks of [`sign_message_by`]: 1 to [`MAX_RAW_MESSAGE`] bytes, no SCaaS off-chain envelope, no EIP-7702 or
-/// EIP-712 prefix.
+/// The raw-message checks of [`sign_message_by`]: 1 to [`MAX_RAW_MESSAGE`] bytes, no SCaaS off-chain envelope. No first-byte rule
+/// beyond the envelopes: on an Ed25519 or sr25519 key `0x05` or `0x19 0x01` is chain data (a Substrate call of pallet 5, a Solana
+/// message with five signers), and no secp256k1 key reaches this call (CLI-UAL-63 (11) withdrawn, T13 C1).
 fn message_ok(message: &[u8]) -> Result<()> {
-    // spec §8.1 (CLI-UAL-63 (11)): no message that starts as an EIP-7702 authorization (0x05) or an EIP-712 preimage (0x19 0x01)
-    let evm_prefix = message.first() == Some(&0x05) || message.starts_with(&[0x19, 0x01]);
-    if message.is_empty() || message.len() > MAX_RAW_MESSAGE || ENVELOPES.iter().any(|p| message.starts_with(p)) || evm_prefix {
+    if message.is_empty() || message.len() > MAX_RAW_MESSAGE || ENVELOPES.iter().any(|p| message.starts_with(p)) {
         return Err(Error::Argument);
     }
     Ok(())

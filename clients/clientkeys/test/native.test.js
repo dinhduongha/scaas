@@ -406,14 +406,14 @@ test('native.json external: BIP-84 / BIP-86 / BIP-143 / BIP-340 / BIP-341 / BIP-
 import { blake2b } from '@noble/hashes/blake2.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 
-test('signMessage refuses the EIP-7702 magic 0x05 and the EIP-712 prefix 0x19 0x01, beside their neighbours', () => {
+test('signMessage has no first-byte rule: 0x05 and 0x19 0x01 sign on Ed25519 and sr25519 keys (T13 C1)', async () => {
+  const sr = await import('@scure/sr25519');
   for (const k of [S.deriveKey(seed, 'solana', 0), dot('')]) {
-    for (const [bad, good] of [[[0x05, 1, 2], [0x06, 1, 2]], [[0x05], [0x04]], [[0x19, 0x01, 7], [0x19, 0x02, 7]], [[0x19, 0x01], [0x18, 0x01]]]) {
-      assert.equal(codeOf(() => S.signMessage(k, Uint8Array.from(bad), { allowRawDigest: true })), 'Argument', `refused ${bad}`);
-      assert.equal(codeOf(() => S.signMessage(k, Uint8Array.from(good), { allowRawDigest: true })), null, `accepted ${good}`);
+    for (const m of [[0x05, 1, 2], [0x05], [0x05, 0x00, 0x00], [0x19, 0x01, 7], [0x19, 0x01]]) {
+      const msg = Uint8Array.from(m), sig = S.signMessage(k, msg, { allowRawDigest: true });
+      assert.ok(k.curve === 'ed25519' ? ed25519.verify(sig, msg, B(k.publicKey)) : sr.verify(msg, sig, B(k.publicKey)), `${k.network} ${m}`);
     }
   }
-  // digests are untouched
   const evm = S.deriveKey(seed, 'evm', 0);
   assert.equal(S.signDigest(evm, new Uint8Array(32).fill(5), { allowRawDigest: true }).length, 65);
 });
@@ -460,7 +460,9 @@ test('native.json envelopes rows byte-equal; the appended refusal rows of spec Â
     assert.equal(H(sig), r.signature, r.id);
     assert.ok(ed25519.verify(sig, B(r.signed), B(r.publicKey)), `${r.id} signs ${r.signed.slice(0, 16)}`);
   }
-  for (const id of ['sign_message EIP-7702 magic 0x05', 'sign_message EIP-712 prefix 0x19 0x01']) assert.ok(nat.refusals.some((r) => r.id === id), id);
+  // T13 C1: the EVM-prefix refusal rows left with their rule; the rows that sign such messages took their place
+  for (const id of ['sign_message EIP-7702 magic 0x05', 'sign_message EIP-712 prefix 0x19 0x01']) assert.ok(!nat.refusals.some((r) => r.id.startsWith(id)), id);
+  for (const id of ['ed25519-solana-five-signers', 'sr25519-bare-balances-0500']) assert.equal(B(nat.signatures.find((r) => r.id === id).message)[0], 0x05, id);
 });
 
 // ------------------------------------------------------------------ T9: rs_native.json (written by ua-rs, read here)

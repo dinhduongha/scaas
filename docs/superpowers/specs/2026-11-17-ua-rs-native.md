@@ -352,10 +352,14 @@ Fable's review of `scaas-sdk` (F8, blind signing on the raw native path) and the
 concern which keys and digests reach the raw path belong to `scaas-sdk`'s raw entry, not to `ua-rs`'s existing calls. Recorded as
 CLI-UAL-63 (11) to (15), §15.
 
-1. **EVM prefixes on raw messages (in `ua-rs` and clientkeys).** `sign_message` / `signMessage` also refuse (`Argument`) a message
-   whose first byte is `0x05` (the EIP-7702 authorization magic) or whose first two bytes are `0x19 0x01` (the EIP-712 prefix), on
-   every key, beside the same bytes with another first byte accepted. Digests are untouched (a 32-byte hash starts with `0x05` one
-   time in 256).
+1. **EVM prefixes on raw messages: withdrawn (T13 C1, coordinator 2026-11-17).** The rule was: `sign_message` / `signMessage` also
+   refuse a message whose first byte is `0x05` (EIP-7702 magic) or whose first two bytes are `0x19 0x01` (EIP-712). It is removed
+   from `ua-rs` and clientkeys: on the Ed25519 and sr25519 keys this call serves, those bytes are chain data (a Substrate call of
+   pallet 5, `Balances` on the relay chain; one hashed Substrate payload in 256; a Solana message with five signers), and no
+   secp256k1 key reaches the call, so the refusal blocked real transactions and protected no payload. The Solana and Aptos off-chain
+   envelope refusals (§8) stay. `native.json`'s four refusal rows of the rule left the file (the coordinator's one-time exception to
+   item 5's append-only rule, asserted by the generator); two signature rows took their place, a Solana message starting `0x05`
+   (deterministic) and a Polkadot `Balances.transfer_allow_death` call (`0x0500…`, sr25519).
 2. **Not in `ua-rs`:** `sign_digest` on `evm` / `hedera_ecdsa` keys stays (Merkle batch roots, CLI-SGN-40); `scaas-sdk`'s raw entry
    refuses EVM-address keys (EVM goes only through `sign_transaction`). "A bare 32-byte digest only for the Bitcoin sighash" is also
    the SDK's rule; `ua-rs`'s `sign_digest` and its rows (sr25519 and NEAR digests included) stay as they are.
@@ -612,7 +616,7 @@ Defined once, status SPECIFIED until the plan's tasks land:
 9. The Bitcoin change chain (`change` ∈ {0, 1}, `bitcoin_key`) is derived, so an imported mnemonic's change-chain funds are reachable;
    no other account level (§2, §5.1).
 10. No key proof and no import on the four new networks; NEAR without a coin-type override (§4.2, §4.5).
-11. Raw messages starting `0x05` or `0x19 0x01` refused in `ua-rs` and clientkeys; digests untouched (§8.1 item 1).
+11. ~~Raw messages starting `0x05` or `0x19 0x01` refused in `ua-rs` and clientkeys~~: withdrawn (T13 C1, §8.1 item 1).
 12. EVM-address keys keep `sign_digest` in `ua-rs` (CLI-SGN-40); refusing them, and a bare digest only for the Bitcoin sighash, is
     `scaas-sdk`'s raw entry's rule (§8.1 item 2).
 13. The four envelope calls (NEAR, Sui, Stellar, Hedera Ed25519), additive, behind `AllowRawDigest`, own network only (§8.1 item 3).

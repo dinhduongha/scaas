@@ -1772,8 +1772,8 @@ func TestNativeDeterministicRowsAndRefusals(t *testing.T) {
 			n++
 		}
 	}
-	if n != 44 {
-		t.Fatalf("deterministic rows %d (3 P2WPKH, 28 ed25519 messages, a NEAR digest, 12 envelopes)", n)
+	if n != 45 {
+		t.Fatalf("deterministic rows %d (3 P2WPKH, 29 ed25519 messages (T13 C1: one starts 0x05), a NEAR digest, 12 envelopes)", n)
 	}
 	n = 0
 	for _, r := range rows(f.v["refusals"]) {

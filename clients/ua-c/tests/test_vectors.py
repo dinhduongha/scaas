@@ -2430,7 +2430,7 @@ class WalletNative(WalletCase):
                        'sign_hedera_transaction': lambda: var(L.sign_hedera_transaction, k, m, len(m))}[r['call']]()
                 self.assertEqual(sig.hex(), r['signature'])
                 n += 1
-        self.assertEqual(n, 32 + 12, "3 P2WPKH, 28 ed25519 messages, a NEAR digest; 12 envelopes")
+        self.assertEqual(n, 33 + 12, "3 P2WPKH, 29 ed25519 messages (T13 C1: one starts 0x05), a NEAR digest; 12 envelopes")
 
     def test_refusal_rows_of_the_c_surface(self):
         calls = {'sign_message': L.sign_message_raw, 'sign_near_transaction': L.sign_near_transaction, 'sign_sui_transaction': L.sign_sui_transaction,
@@ -2453,7 +2453,7 @@ class WalletNative(WalletCase):
                     else:
                         continue
                     n += 1
-        self.assertGreaterEqual(n, 2 * 40)
+        self.assertGreaterEqual(n, 2 * 36)  # T13 C1: four EVM-prefix rows withdrawn
 
     def test_ua_key_raw_calls_are_RawDigestRefused_native_accepted(self):
         ua = self.key('pq_kat', 0x0102)

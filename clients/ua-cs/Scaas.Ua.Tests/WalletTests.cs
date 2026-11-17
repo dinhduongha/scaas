@@ -1068,7 +1068,7 @@ public class WalletTests : IDisposable
                 Assert.Equal(S(r, "signature"), Convert.ToHexStringLower(NSign(NKey(r), S(r, "call"), r)));
                 n++;
             }
-        Assert.Equal(44, n); // 3 P2WPKH, 28 ed25519 messages, a NEAR digest, 12 envelopes
+        Assert.Equal(45, n); // 3 P2WPKH, 29 ed25519 messages (T13 C1: one starts 0x05), a NEAR digest, 12 envelopes
         n = 0;
         foreach (var r in Rows(Nat, "refusals"))
         {

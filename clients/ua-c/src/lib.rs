@@ -2010,8 +2010,8 @@ pub extern "C" fn scaas_ua_sign_digest_raw(
     })
 }
 
-/// A native key's signature of a raw message (1 to 131,072 bytes; ed25519 and sr25519 keys only; no SCaaS off-chain envelope, no
-/// EIP-7702 / EIP-712 prefix: SCAAS_UA_ERR_ARGUMENT), by this call's own name; a UA key: SCAAS_UA_ERR_RAW_DIGEST_REFUSED.
+/// A native key's signature of a raw message (1 to 131,072 bytes; ed25519 and sr25519 keys only; no SCaaS off-chain envelope:
+/// SCAAS_UA_ERR_ARGUMENT), by this call's own name; a UA key: SCAAS_UA_ERR_RAW_DIGEST_REFUSED.
 #[no_mangle]
 pub extern "C" fn scaas_ua_sign_message_raw(
     k: *const ScaasUaKey,

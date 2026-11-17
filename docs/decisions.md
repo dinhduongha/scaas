@@ -10443,6 +10443,8 @@ The controller's calls of the round are a separate record, CLI-UAL-63.
 **Why.** Each is the smallest choice that keeps one rule per behaviour and lets the app's cross-check pass; (3), (5), (9), (10) answer findings of Fable's spec review; (11) to (15) answer F8 of Fable's scaas-sdk review without moving a pinned byte.
 **Source.** [native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §15, §18; Fable review `20261117-11-fable-fable-high-spec.md` (F1–F24, kept outside the repository; spec §18).
 
+**Change (coordinator 2026-11-17, T13 C1 of Fable's code review; BUILT, UNAUDITED).** (11) withdrawn. Old: `sign_message` / `signMessage` refused a raw message starting `0x05` (EIP-7702 magic) or `0x19 0x01` (EIP-712) on every key. New: no first-byte rule beyond the Solana and Aptos off-chain envelopes of (3), which stay. Reason: the call serves Ed25519 and sr25519 keys only, where those bytes are chain data: a Substrate call of pallet 5 (`Balances` on the relay chain, `0x0500…`), one hashed Substrate payload in 256, a Solana message with five signers; no secp256k1 key reaches the call, so the rule refused real transactions and protected no payload. `native.json`: the four refusal rows of the rule (added at T6a, never merged or consumed) left the file, a one-time exception to (15) granted by the coordinator and asserted by the generator; two signature rows took their place (a Solana message starting `0x05`, a Polkadot `Balances.transfer_allow_death` call signed by sr25519). [Native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §8.1 item 1, §15 item 11.
+
 ## 40. Integration — ERP
 
 ### INT-ERP-01 — 24 h cooling-off for new receiving wallets

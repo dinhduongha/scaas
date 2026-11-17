@@ -143,6 +143,12 @@ for (const path of ['/soft', '//Alice/0']) {
   signatures.push({ id: `sr25519-soft-${path}`, mode: 'verify-only', scheme: 'sr25519', call: 'sign_message', mnemonic: 'substrate_dev', network: 'polkadot', path, ...msgField(32),
     aux: H(sha256(utf8ToBytes(`scaas ua-rs-native soft ${path}`))) });
 }
+// T13 C1 (the prefix rule withdrawn, CLI-UAL-63 (11)): messages starting 0x05 sign on an Ed25519 and an sr25519 key. A legacy
+// Solana message with five signers (header 05 00 01), and a Polkadot Balances.transfer_allow_death call (pallet 5, call 0) to //Bob
+signatures.push({ id: 'ed25519-solana-five-signers', mode: 'deterministic', scheme: 'ed25519', call: 'sign_message', mnemonic: 'pq_kat', network: 'solana',
+  coinType: null, change: null, index: 0, message: H(Uint8Array.of(5, 0, 1, ...sha256(utf8ToBytes('scaas ua-rs-native T13 C1 solana')))) });
+signatures.push({ id: 'sr25519-bare-balances-0500', mode: 'fixed-randomness', scheme: 'sr25519', call: 'sign_message', mnemonic: 'substrate_dev', network: 'polkadot',
+  path: '', message: '050000' + '8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48' + '0700e40b5402', aux: R1 });
 for (const r of signatures) {
   const k = keyOf(r);
   const m = msgOf(r);
@@ -210,14 +216,9 @@ for (const [network, kind] of [['bitcoin_p2wpkh', 0x0108], ['bitcoin_p2tr', 0x01
   ref(`import_native_key ${network}`, 'import_native_key', { network, secret: SECRET }, { network: 'evm', secret: SECRET });
   ref(`imported_ua_key ${network}`, 'imported_ua_key', { network, secret: SECRET, kind }, { network: 'evm', secret: SECRET, kind: 0x0108 });
 }
-// spec §8.1 (after the scaas-sdk review), appended: the EIP-7702 / EIP-712 prefixes on raw messages, the envelope calls' refusals
+// spec §8.1 (after the scaas-sdk review), appended: the envelope calls' refusals. The four EVM-prefix rows that stood here
+// (`sign_message EIP-7702 magic 0x05`, `… EIP-712 prefix 0x19 0x01`, each also `… on polkadot`) left with their rule (T13 C1)
 const STELLAR_TESTNET_ID = H(sha256(utf8ToBytes('Test SDF Network ; September 2015')));
-for (const network of ['solana', 'polkadot']) {
-  const p = network === 'polkadot' ? { path: '' } : {};
-  const on = network === 'solana' ? '' : ` on ${network}`;
-  ref(`sign_message EIP-7702 magic 0x05${on}`, 'sign_message', at(network, { ...p, message: '0501' }), at(network, { ...p, message: '0601' }));
-  ref(`sign_message EIP-712 prefix 0x19 0x01${on}`, 'sign_message', at(network, { ...p, message: '1901aa' }), at(network, { ...p, message: '1902aa' }));
-}
 const ENVELOPE_CALLS = [['sign_near_transaction', 'near'], ['sign_sui_transaction', 'sui'], ['sign_stellar_transaction', 'stellar'], ['sign_hedera_transaction', 'hedera_ed25519']];
 for (const [call, network] of ENVELOPE_CALLS) {
   const id = call === 'sign_stellar_transaction' ? { networkId: STELLAR_TESTNET_ID } : {};
@@ -391,14 +392,19 @@ const out = {
   envelopes,
 };
 // append-only (spec §8.1, CLI-UAL-63 (15)): every value of the committed file is kept; a list may only grow at its end, a new
-// section only after the old ones
+// section only after the old ones. One exception, granted once by the coordinator (T13 C1): the four refusal rows of the
+// withdrawn EVM-prefix rule (added at T6a, never merged or consumed) leave `refusals`; every other committed row stays, in order.
+const WITHDRAWN = new Set(['sign_message EIP-7702 magic 0x05', 'sign_message EIP-712 prefix 0x19 0x01', 'sign_message EIP-7702 magic 0x05 on polkadot',
+  'sign_message EIP-712 prefix 0x19 0x01 on polkadot']);
+must(!out.refusals.some((r) => WITHDRAWN.has(r.id)), 'native.json: the withdrawn prefix rows stay out');
 const committed = join(OUT, 'native.json');
 if (existsSync(committed)) {
   const old = JSON.parse(readFileSync(committed, 'utf8'));
   const keys = Object.keys(old);
   must(JSON.stringify(Object.keys(out).slice(0, keys.length)) === JSON.stringify(keys), 'native.json sections: the old ones first, in order');
   for (const k of keys) {
-    const same = Array.isArray(old[k]) ? JSON.stringify(out[k].slice(0, old[k].length)) === JSON.stringify(old[k]) : JSON.stringify(out[k]) === JSON.stringify(old[k]);
+    const kept = k === 'refusals' ? old[k].filter((r) => !WITHDRAWN.has(r.id)) : old[k];
+    const same = Array.isArray(kept) ? JSON.stringify(out[k].slice(0, kept.length)) === JSON.stringify(kept) : JSON.stringify(out[k]) === JSON.stringify(kept);
     must(same, `native.json ${k}: a committed row changed (append only)`);
   }
 }
