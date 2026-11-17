@@ -277,6 +277,11 @@ impl Opening {
 
 // --- entry points: the Dart facade checks the load -----------------------------------------------------------------------
 
+/// ua-rs-native: every network name in the C ABI's order (clientkeys `NETWORKS`, then `NATIVE_NETWORKS`).
+#[frb(sync)]
+pub fn native_networks() -> Vec<String> {
+    uw::Network::all().iter().map(|n| n.name().to_string()).collect()
+}
 pub fn wallet_generate() -> R<(UaWallet, UaSeedBackup)> {
     let (w, b) = uw::Wallet::generate()?;
     Ok((UaWallet(w, Live::new()), UaSeedBackup(Mutex::new(b), Live::new())))
@@ -483,6 +488,14 @@ impl UaWallet {
     pub fn native_key(&self, network_name: String, index: u32, coin_type: Option<u32>) -> R<UaKey> {
         Ok(key(KeyInner::Native(self.0.native_key(network(&network_name)?, index, coin_type)?)))
     }
+    /// Bitcoin key `index` of chain `change` (0 receive, 1 change); `coin_type` null, 0 or 1 (ua-rs-native).
+    pub fn bitcoin_key(&self, network_name: String, coin_type: Option<u32>, change: u32, index: u32) -> R<UaKey> {
+        Ok(key(KeyInner::Native(self.0.bitcoin_key(network(&network_name)?, coin_type, change, index)?)))
+    }
+    /// The Polkadot key of the junction path `path` ("" the bare account; ua-rs-native).
+    pub fn polkadot_key(&self, path: String) -> R<UaKey> {
+        Ok(key(KeyInner::Native(self.0.polkadot_key(&path)?)))
+    }
     pub fn imported_key(&self, network_name: String, n: u32) -> R<UaKey> {
         Ok(key(KeyInner::Native(self.0.imported_key(network(&network_name)?, n)?)))
     }
@@ -610,9 +623,42 @@ impl UaKey {
     }
     /// A native key only: `UARawDigestRefused` for a UA key.
     pub fn sign_digest_raw(&self, digest: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_digest(&a(&digest)?, uw::AllowRawDigest)?)
+    }
+    /// A native chain's message (1 to 131,072 bytes) on an ed25519 / sr25519 native key (ua-rs-native).
+    pub fn sign_message_raw(&self, message: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_message(&message, uw::AllowRawDigest)?)
+    }
+    /// NEAR: ed25519 over `sha256(tx_borsh)`.
+    pub fn sign_near_transaction(&self, tx_borsh: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_near_transaction(&tx_borsh, uw::AllowRawDigest)?)
+    }
+    /// Sui: ed25519 over `blake2b-256(0x000000 ‖ tx_bcs)`.
+    pub fn sign_sui_transaction(&self, tx_bcs: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_sui_transaction(&tx_bcs, uw::AllowRawDigest)?)
+    }
+    /// Stellar: ed25519 over `sha256(network_id ‖ 0x00000002 ‖ tx_xdr)`.
+    pub fn sign_stellar_transaction(&self, network_id: Vec<u8>, tx_xdr: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_stellar_transaction(&a(&network_id)?, &tx_xdr, uw::AllowRawDigest)?)
+    }
+    /// Hedera Ed25519: ed25519 over the body bytes.
+    pub fn sign_hedera_transaction(&self, body_bytes: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_hedera_transaction(&body_bytes, uw::AllowRawDigest)?)
+    }
+    /// A Polkadot key's SS58 address at `prefix`.
+    #[frb(sync)]
+    pub fn ss58_address(&self, prefix: u16) -> R<String> {
+        Ok(self.native()?.ss58_address(prefix)?)
+    }
+    /// A Bitcoin key's witness program: the version byte, then the program.
+    #[frb(sync)]
+    pub fn witness_program(&self) -> R<Vec<u8>> {
+        self.native()?.witness_program().map(|(v, p)| [&[v][..], &p].concat()).ok_or_else(arg)
+    }
+    fn raw(&self) -> R<&uw::NativeKey> {
         match &*self.0 {
             KeyInner::Ua(_) => Err(UAError { code: "UARawDigestRefused".into(), reason: String::new() }),
-            KeyInner::Native(n) => Ok(n.sign_digest(&a(&digest)?, uw::AllowRawDigest)?),
+            KeyInner::Native(n) => Ok(n),
         }
     }
 }

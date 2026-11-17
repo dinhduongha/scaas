@@ -8,7 +8,7 @@ import 'dart:ffi' as ffi;
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'ua.dart';
 
-// These functions are ignored because they are not marked as `pub`: `a`, `alg`, `alloc`, `arg`, `container`, `get_mut`, `get`, `k32`, `key`, `native`, `network`, `new`, `out`, `read`, `read`, `restore`, `signer`, `text`, `ua`, `unlock`, `with`, `with`
+// These functions are ignored because they are not marked as `pub`: `a`, `alg`, `alloc`, `arg`, `container`, `get_mut`, `get`, `k32`, `key`, `native`, `network`, `new`, `out`, `raw`, `read`, `read`, `restore`, `signer`, `text`, `ua`, `unlock`, `with`, `with`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Block`, `KeyInner`, `Live`, `Opening`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`, `drop`, `from`
 
@@ -23,6 +23,10 @@ BigInt features() => ScaasUa.instance.api.crateApiWalletFeatures();
 
 /// Handles alive now (a test of "freed exactly once").
 PlatformInt64 liveHandles() => ScaasUa.instance.api.crateApiWalletLiveHandles();
+
+/// ua-rs-native: every network name in the C ABI's order (clientkeys `NETWORKS`, then `NATIVE_NETWORKS`).
+List<String> nativeNetworks() =>
+    ScaasUa.instance.api.crateApiWalletNativeNetworks();
 
 Future<(UaWallet, UaSeedBackup)> walletGenerate() =>
     ScaasUa.instance.api.crateApiWalletWalletGenerate();
@@ -447,12 +451,30 @@ abstract class UaKey implements RustOpaqueInterface {
   /// A native key only: `UARawDigestRefused` for a UA key.
   Future<Uint8List> signDigestRaw({required List<int> digest});
 
+  /// Hedera Ed25519: ed25519 over the body bytes.
+  Future<Uint8List> signHederaTransaction({required List<int> bodyBytes});
+
   Future<Uint8List> signKeyProof({required List<int> challenge});
 
   Future<Uint8List> signMember({
     required List<int> structureUa,
     required List<int> structureUaMsg,
   });
+
+  /// A native chain's message (1 to 131,072 bytes) on an ed25519 / sr25519 native key (ua-rs-native).
+  Future<Uint8List> signMessageRaw({required List<int> message});
+
+  /// NEAR: ed25519 over `sha256(tx_borsh)`.
+  Future<Uint8List> signNearTransaction({required List<int> txBorsh});
+
+  /// Stellar: ed25519 over `sha256(network_id ‖ 0x00000002 ‖ tx_xdr)`.
+  Future<Uint8List> signStellarTransaction({
+    required List<int> networkId,
+    required List<int> txXdr,
+  });
+
+  /// Sui: ed25519 over `blake2b-256(0x000000 ‖ tx_bcs)`.
+  Future<Uint8List> signSuiTransaction({required List<int> txBcs});
 
   /// The raw transaction.
   Future<Uint8List> signTransaction({required String txJson});
@@ -471,7 +493,13 @@ abstract class UaKey implements RustOpaqueInterface {
     required List<int> digest,
   });
 
+  /// A Polkadot key's SS58 address at `prefix`.
+  String ss58Address({required int prefix});
+
   Uint8List uaId();
+
+  /// A Bitcoin key's witness program: the version byte, then the program.
+  Uint8List witnessProgram();
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaKeyList>>
@@ -514,6 +542,14 @@ abstract class UaSeedBackup implements RustOpaqueInterface {
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>>
 abstract class UaWallet implements RustOpaqueInterface {
+  /// Bitcoin key `index` of chain `change` (0 receive, 1 change); `coin_type` null, 0 or 1 (ua-rs-native).
+  Future<UaKey> bitcoinKey({
+    required String networkName,
+    int? coinType,
+    required int change,
+    required int index,
+  });
+
   /// JSON `[{index, ua}]`.
   Future<String> discoverCandidates({
     required int kind,
@@ -555,6 +591,9 @@ abstract class UaWallet implements RustOpaqueInterface {
     required int index,
     int? coinType,
   });
+
+  /// The Polkadot key of the junction path `path` ("" the bare account; ua-rs-native).
+  Future<UaKey> polkadotKey({required String path});
 
   Future<UaPqzKey> pqzKey({required int account, required int index});
 
