@@ -1128,8 +1128,8 @@ Additional checks: `amount < 2^n_v = 2^64` (otherwise `amount + r` would also "p
 <a id="CTR-ZTH-09"></a>**CTR-ZTH-09** — **The auditor key is immutable**, set at `initialize` (there is no setter, so no timelock is needed). It follows the immutable `auditorMode` ([CTR-ZTH-49](#CTR-ZTH-49)): none under NONE, required under FULL and OPTIONAL.
 
 **Change (owner 2026-11-17; SPECIFIED; [CTR-ZTH-95](#CTR-ZTH-95)).** Immutable only on a token created without bit 32
-`AUDITOR`. With bit 32 set at creation a holder of the bit replaces the key after the factory's notice period, the earlier keys
-kept for the entries of their epochs ([§14.1](#auditor-replacement)); `auditorMode` stays immutable, so the key is never
+`AUDITOR`. With bit 32 set at creation a holder of the bit replaces the key, with the new auditor's proof of possession, after
+`max(noticePeriod(), grantDelay)`, the earlier keys kept for the entries of their epochs ([§14.1](#auditor-replacement)); `auditorMode` stays immutable, so the key is never
 empty under FULL or OPTIONAL and never set under NONE.
 
 <a id="threshold-auditor"></a>
@@ -1160,37 +1160,48 @@ Status: **SPECIFIED** (owner 2026-11-17; spec [2026-11-17-set-auditor.md](../sup
 nothing built. **UNAUDITED.** The bit itself (kinds, holder, revoke): [CTR-GOV-31](../decisions.md#CTR-GOV-31); the PQZ
 twin: [CTR-PQZ-43](pq-zero-knowledge.md#CTR-PQZ-43).
 
-<a id="CTR-ZTH-95"></a>**CTR-ZTH-95** — **A holder of bit 32 replaces the auditor key after the factory's notice period; every
-audited entry keeps the key of its epoch** (owner 2026-11-17: build `setAuditor` on one bit; the mechanics are controller
-calls, spec §4–§9). On the kinds 2, 3, 10, 11 created with bit 32 (never on a NONE token, CTR-GOV-31):
+<a id="CTR-ZTH-95"></a>**CTR-ZTH-95** — **A holder of bit 32 replaces the auditor key with the new auditor's proof of
+possession, after `max(noticePeriod(), grantDelay)`; every audited entry keeps the key of its epoch** (owner 2026-11-17: build
+`setAuditor` on one bit, any UA as holder, the delay `max(noticePeriod(), grantDelay)`, at once when it is 0; the other
+mechanics are controller calls, spec §4–§9, §15). On the kinds 2, 3, 10, 11 created with bit 32 (never on a NONE token, never
+with admin 0, CTR-GOV-31):
 
-- **Entry.** `setAuditorKey(bytes newKey, bytes32 chainUid_)`: the holder first (`MissingRole(32, caller)`), then its chain word
-  (CTR-GOV-28), then `use(32)`. Router: `mtxSetAuditorKey` over `UASetAuditorKey(bytes32 from,address target,bytes newKey,bytes32
-  chainUid,…)`, fee mode `NONE`, relayable at fee 0.
-- **Two calls.** With no live proposal, a key other than the current proposes it: `eta = now + IOpenFactory(FACTORY).noticePeriod()`,
-  `AuditorKeyProposed(epoch + 1, newKey, proposer, eta)`; `noticePeriod` 0 applies at once. The same key by the same holder in
-  `[eta, eta + noticePeriod]` applies it (`AuditorNotReady(eta)` before `eta`, `NotProposer` for another holder); the current
-  key by the proposer cancels (`AuditorProposalCancelled`); another key while one is live `AuditorPending()`; the current key
-  with none live `AuditorSame()`. A proposal is live only while its proposer keeps the bit without a break (its role epoch is
-  stored); the admin's `revokeRole(32, …)` or `disableFeature(32, …)` ends it at once.
-- **Checks** at the proposal and again at the apply: a valid point of the token's curve, not `O`, of the encoded length
-  (`AuditorKeyInvalid()`); `toUA(newKey)` has no account state on this token (`AuditorIsAccount(ua)`), so the setter cannot
-  stop a holder's transfers through `AuditorKeyAsParty`.
-- **Apply.** The outgoing key is kept as `auditorKeys[epoch]`, `auditorKey` becomes the new key and `auditorEpoch` (a `uint32`
-  in slot 0's free bytes, read with `auditorMode` on every transfer) grows by one: `AuditorKeySet(epoch, previousKey, newKey)`.
-  A transfer reads `auditorKey` as before; no relation, statement or `proofSystemId` changes.
+- **Entry.** `setAuditorKey(bytes newKey, uint32 epoch, bytes pop, bytes32 chainUid_)`: the holder first (`MissingRole(32,
+  caller)`), then its chain word (CTR-GOV-28), then `use(32)` (one use per call), then `epoch` = the current epoch + 1
+  (`AuditorEpochMismatch`). Router: `mtxSetAuditorKey` over `UASetAuditorKey(bytes32 from,address target,bytes newKey,uint32
+  epoch,bytes32 chainUid,…)`, `pop` forwarded beside it; fee mode `NONE`, relayable at fee 0.
+- **Delay and window.** `D = max(IOpenFactory(FACTORY).noticePeriod(), grantDelay)`, at most 30 days (both values are capped at
+  30 days), never `PqzStorage.noticePeriod`. With no live proposal, a key other than the current proposes it: `eta = now + D`,
+  `AuditorKeyProposed(epoch, newKey, proposer, eta)`; `D = 0` applies at once. The same key by the same holder in
+  `[eta, eta + AUDITOR_CONFIRM_WINDOW]`, `AUDITOR_CONFIRM_WINDOW = 7 days` (its own constant, so the window is never empty),
+  applies it (`AuditorNotReady(eta)` before `eta`, `NotProposer` for another holder); the current key by the proposer cancels
+  its own proposal (`AuditorProposalCancelled`); another key while one is live `AuditorPending()`; the current key with none
+  live `AuditorSame()`. A proposal is live only inside its window, while its proposer keeps the bit without a break (its role
+  epoch is stored) and bit 32 is set; an expired or void proposal frees the slot for the next proposal, no cancel needed. The
+  admin's `revokeRole(32, …)` or `disableFeature(32, …)` ends a proposal at once; after an apply neither undoes it (spec §5.3).
+- **Consent and checks**, at the proposal and again at the apply: `pop` is the new auditor's Schnorr proof of possession of
+  `x_a` (`pop = R ‖ be32(z)`, `c = hashToScalar(keccak256("SCAAS-ZETHER-AUDITOR-POP-V1" ‖ d ‖ G ‖ Y_a ‖ R))`, `[z]G − R −
+  [c]Y_a == O`, `z < r`, `c ≠ 0`; `AuditorConsentInvalid()`) over `d`, the token-domain digest of `AuditorConsent(address
+  token,bytes32 auditor,uint32 epoch,bytes32 chainUid)` with `auditor = toUA(newKey)`; so a key nobody holds, or another
+  holder's key without its consent, is never named. `newKey` is a valid point of the token's curve, not `O`, of the encoded
+  length (`AuditorKeyInvalid()`).
+- **Apply.** The outgoing key is kept as `auditorKeys[epoch]` (written once, never rewritten), `auditorKey` becomes the new
+  key and `auditorEpoch` (a `uint32` in slot 0's free bytes, read with `auditorMode` on every transfer) grows by one:
+  `AuditorKeySet(epoch, previousKey, newKey)`. A transfer reads `auditorKey` as before; no relation, statement or
+  `proofSystemId` changes.
 - **Per entry.** A transfer with the auditor on (`Y_a ≠ O`), single or multi-recipient, at an epoch other than 0, writes
   `entryAuditorEpoch[entryRef] = auditorEpoch`; absent means epoch 0, so a token never replaced writes nothing.
-  `auditorKeyOf(entryRef)` returns the key of the entry's epoch; `auditorState()` the epoch and a live proposal (the proposed
-  key's hash, `eta`, the proposer).
-- **Disclosure.** `ZetherDisclosure` checks an `AUDITOR` opening against `auditorKeyOf(entryRef)` ([CTR-ZTH-43](#CTR-ZTH-43)'s
-  Change); `K = Y_a` of that epoch is in the challenge, so no opening verifies across epochs. The sender's recovery and the
-  auditor's reader use the entry's key too.
+  `auditorKeyOf(entryRef)` returns the key of the entry's epoch; `auditorState()` the epoch and the stored proposal with its
+  status (none, waiting, confirmable, expired, void).
+- **Disclosure and readers.** `ZetherDisclosure` checks an `AUDITOR` opening against `auditorKeyOf(entryRef)`
+  ([CTR-ZTH-43](#CTR-ZTH-43)'s Change); `K = Y_a` of that epoch is in the challenge, so no opening verifies across epochs. The
+  sender's recovery uses the entry's key; an auditor's reader refuses an entry of another epoch before it applies its secret
+  ([ARCH-POS-13](../decisions.md#ARCH-POS-13)).
 
 No retroactive reading either way: earlier transfers stay readable by their epoch's key only, and the new key reads from its
-epoch on. Threat and residual (spec §11): the holder can move the readability of every later audited transfer to a key of its
-choice; the guard is a contract or `msig` holder, the public proposal, the notice period, the window and the admin's
-immediate revoke; on a chain whose `noticePeriod` is 0 there is no notice.
+epoch on. Threat and residual (spec §11): any holder of the bit, one single key included, can move the readability of every
+later audited transfer to a consenting key of its choice after `D`; the guard is the consent, the public proposal, the delay,
+the window and the admin's revoke before the apply; when `D` is 0 it applies at once, with no notice, and the wallet says so.
 
 ## 15. Confidential layer
 

@@ -1066,8 +1066,8 @@ in another form.
 **Change (owner 2026-11-13, three-key model; SPECIFIED; [CTR-PQZ-37](#CTR-PQZ-37)).** On an opening token the auditor holds a key of the token's class and scope and an opening KEM key in that scoped record ([CTR-UA-43](accounts.md#CTR-UA-43)); it reads `v_a` from its opening `O_a`, never by applying its PQZ secret, and its outcomes per credit are public and named (`read`, `recipient-unreadable`, `unreadable`, `unreadable, taken`; [CLI-SGN-51](../clients/signers-clientkeys.md#CLI-SGN-51)). The stated guarantee of `FULL` there: an honest recipient cannot spend a credit the auditor cannot read (owner 2026-11-13). On an `offchain-token` the auditor's key is not checked at `init` (the token address does not exist before creation): a transfer with the auditor on reverts `AccountNotRegistered(auditorUA)` until the auditor registers its key for that token.
 
 **Change (owner 2026-11-17; SPECIFIED; [CTR-PQZ-43](#CTR-PQZ-43)).** `auditorMode` stays immutable; `auditorUA` is immutable
-only on a token created without bit 32 `AUDITOR`. With bit 32 a holder replaces the auditor UA after the factory's notice
-period ([§9.7](#auditor-replacement)); a FULL auditor named later reads from its epoch on, so it rebuilds balances only with
+only on a token created without bit 32 `AUDITOR`. With bit 32 a holder replaces the auditor UA, with the new auditor's consent,
+after `max(noticePeriod(), grantDelay)` ([§9.7](#auditor-replacement)); a FULL auditor named later reads from its epoch on, so it rebuilds balances only with
 records handed over off chain.
 
 #### <a id="multi-transfer"></a>7.4.1 Multi-recipient transfer (op 7)
@@ -2987,34 +2987,43 @@ Status: **SPECIFIED** (owner 2026-11-17; spec [2026-11-17-set-auditor.md](../sup
 nothing built. **UNAUDITED.** The bit itself (kinds, holder, revoke): [CTR-GOV-31](../decisions.md#CTR-GOV-31); the
 classical twin, whose state machine this one follows word for word: [CTR-ZTH-95](zether.md#CTR-ZTH-95).
 
-<a id="CTR-PQZ-43"></a>**CTR-PQZ-43** — **A holder of bit 32 replaces the auditor UA after the factory's notice period; every
-audited entry keeps the auditor of its epoch; the new auditor must already hold the token's keys** (owner 2026-11-17: build
-`setAuditor` on one bit; the mechanics are controller calls, spec §4–§10). On the kinds 4, 5, 12, 13 created with bit 32:
+<a id="CTR-PQZ-43"></a>**CTR-PQZ-43** — **A holder of bit 32 replaces the auditor UA with the new auditor's signed consent,
+after `max(noticePeriod(), grantDelay)`; every audited entry keeps the auditor of its epoch; the new auditor must already hold
+the token's keys** (owner 2026-11-17: build `setAuditor` on one bit, any UA as holder, the delay, at once when it is 0, kind
+4's setter in `NormalPqzTokenQ`; the other mechanics are controller calls, spec §4–§10, §15). On the kinds 4, 5, 12, 13
+created with bit 32:
 
-- **Entry.** `setAuditorUA(bytes32 newAuditor, bytes32 chainUid_)`, the same order of checks, two calls, window, cancel,
-  refusals and events as CTR-ZTH-95 with the UA in place of the key (`AuditorUAProposed`, `AuditorUASet`,
-  `AuditorProposalCancelled`; `auditorState()` names the proposed UA). Router: `mtxSetAuditorUA` over `UASetAuditorUA(bytes32
-  from,address target,bytes32 newAuditor,bytes32 chainUid,…)`, fee mode `NONE`, relayable at fee 0.
-- **Checks** at the proposal and again at the apply: the key checks a transfer with the auditor on makes on the auditor
-  (`_keyPtrV`: a key of the token's class and scope, [CTR-PQZ-37](#CTR-PQZ-37); on an opening token also the opening KEM key in
-  that scoped record, [CTR-UA-43](accounts.md#CTR-UA-43)), so a FULL token is never left with an auditor its transfers refuse;
-  unlike `init`, this holds on an `offchain-token` too, so a replacement auditor has registered its key of that token (and
-  accepted its exposure there, CTR-PQZ-37) before it can be named; `newAuditor` has no account state on this token
-  (`AuditorIsAccount(ua)`), so the setter cannot stop a holder's transfers through `AuditorAsParty` / `KeyReused` (F-4), which
-  stay.
+- **Entry.** `setAuditorUA(bytes32 newAuditor, uint32 epoch, IUARegistry.UASig consent, bytes32 chainUid_)`, the same order of
+  checks, delay, 7-day confirm window, expiry, cancel, refusals and events as CTR-ZTH-95 with the UA in place of the key
+  (`AuditorUAProposed`, `AuditorUASet`, `AuditorProposalCancelled`; `auditorState()` names the proposed UA and its status). The
+  delay is never read from `PqzStorage.noticePeriod`, which is 0 on every `PRECOMPILE` token. Router: `mtxSetAuditorUA` over
+  `UASetAuditorUA(bytes32 from,address target,bytes32 newAuditor,uint32 epoch,bytes32 chainUid,…)`, `consent` forwarded
+  beside it; fee mode `NONE`, relayable at fee 0.
+- **Consent and checks** at the proposal and again at the apply: `consent` is `newAuditor`'s signature over the token-domain
+  digest of `AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)`, checked by
+  `requireAuthorized(newAuditor, PURPOSE_ZETHER_AUTH, d, consent)` (the purpose a holder's `PqzAuth` uses; the typehash keeps
+  them apart), so a UA that never signs is never named and nobody can veto the apply by crediting the proposed UA; the key
+  checks a transfer with the auditor on makes on the auditor (`_keyPtrV`: a key of the token's class and scope,
+  [CTR-PQZ-37](#CTR-PQZ-37); on an opening token also the opening KEM key in that scoped record,
+  [CTR-UA-43](accounts.md#CTR-UA-43)), so a FULL token is never left with an auditor its transfers refuse; unlike `init`, this
+  holds on an `offchain-token` too, so a replacement auditor has registered its key of that token (and accepted its exposure
+  there, CTR-PQZ-37) before it can be named; on an `OFFCHAIN` token the new auditor's key record must carry its `R_REG` proof
+  where the registry exposes it, else a consenting UA holding a copy of another holder's public key stops that holder's audited
+  transfers (`KeyReused`), a residual the build reports (spec §5.2, T3). `AuditorAsParty` and `KeyReused` (F-4) stay.
 - **Apply.** The outgoing UA is kept as `auditorUAs[epoch]`, `auditorUA` becomes the new one, `auditorEpoch` (a `uint32` in
   slot 0's free bytes) grows by one. The auditor's own PQZ key versions (CTR-PQZ-31) are a separate counter: the op blob's
   `kv` tail keeps recording the auditor's version ([CTR-PQZ-34](#CTR-PQZ-34)).
 - **Per entry.** Op 1 and op 7 with `auditorOn = 1`, at an epoch other than 0, write `entryAuditorEpoch[entryRef]`;
   `auditorUAOf(entryRef)` returns the entry's auditor. An old entry's auditor key is `(auditorUAOf(entryRef), kv_a)`.
-- **Disclosure.** On a token without the opening the `AUDITOR` kind ([CTR-PQZ-14](#CTR-PQZ-14)) checks against
+- **Disclosure and readers.** On a token without the opening the `AUDITOR` kind ([CTR-PQZ-14](#CTR-PQZ-14)) checks against
   `auditorUAOf(entryRef)` (the leg's owner), `keyVersion` as today. On an opening token the one kind is `SENDER_S`, which names
   no auditor; each `O_a` stays sealed to the opening KEM key of its epoch's auditor. The sender's recovery rebuilds `v_a` with
-  the entry's auditor key.
+  the entry's auditor key, passed in by its caller (no `pqz-core` change). An auditor's reader (`ua-rs` `auditRead`,
+  `proveDisclose AUDITOR`) resolves each entry's auditor and refuses an entry of another epoch before it applies its secret
+  ([ARCH-POS-13](../decisions.md#ARCH-POS-13)).
 
 No relation, statement or `proofSystemId` changes: the transfer statement already takes `pk_a` from the current auditor at
-execution. The setter decrypts nothing and reacts to no ciphertext ([ARCH-POS-13](../decisions.md#ARCH-POS-13)). Threat and
-residual: as CTR-ZTH-95 (spec §11).
+execution. The setter decrypts nothing and reacts to no ciphertext. Threat and residual: as CTR-ZTH-95 (spec §11).
 
 ## 10. Chain integration (Nethermind precompile on the SCaaS testnet)
 
