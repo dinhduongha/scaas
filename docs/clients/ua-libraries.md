@@ -153,6 +153,7 @@ Claude), no external audit.
 |---|---|---|
 | Wallet and keys | `wallet/mod.rs`, `derive.rs`, `store.rs` | `Wallet::{generate, from_mnemonic, open_vault, seal_vault, lock, unlock, manifest, memory_protection, ua_key, native_key}`; derivation as [signers-clientkeys §9](signers-clientkeys.md#9-derivation-and-role-keys) |
 | Single-key signing | `sign.rs`, `pqsign.rs`, `pairing.rs`, `signer.rs` | `UaKey::{sign_ua, sign_member}`, `NativeKey::{sign_typed, sign_transaction, sign_key_proof, sign_digest}`, the `Signer` trait |
+| Native networks (ua-rs-native) | `wallet/mod.rs`, `derive.rs`, `sign.rs`, `substrate.rs` | `Wallet::{bitcoin_key, polkadot_key}`, `NativeKey::{sign_message, sign_near_transaction, sign_sui_transaction, sign_stellar_transaction, sign_hedera_transaction, witness_program, ss58_address}`, `sign_message_by`, `Network::{scheme, all}` ([below](#native-networks-of-the-apps-backend-built)) |
 | `UASig` and groups | `uasig.rs`, `pairing.rs` | `ua_sig`, `msig_sig`, `membership_sig` (`msig` sets minimal at both levels, `UAPoP` otherwise); an updated `msig` (CTR-UA-44): `msig_sig_current`, `membership_sig_current` (the id from the first structure, slots, weights, threshold and minimality from the current one, a disabled slot `Argument`; the JSON request's `current`), `msig_update_typed_data` (a native member signs the `UAMsigUpdate` digest itself under `msig-update`); `pqz-scoped-key` signs with role Pop and an empty `keyData`, as the other portable record purposes; MuSig2 sessions (`UaKey::musig2_session`) and FROST sessions (`Wallet::frost_session`): store handles, a secret nonce in the arena used once, revoked by `lock()`; the FROST share stays the caller's `KeyPackage` until the real DKG work ([CLI-UAL-09](#CLI-UAL-09)) |
 | EIP-712, policy, transactions | `eip712.rs`, `policy.rs`, `tx.rs` | `TypedData`, `scaas_typed_data`, `pqz_verdict_typed_data` (the `PqzVerdict` a PQZ verifier UA signs under `pqz-verdict`, group 3f), `Expect`; `EvmTx` types 0 to 3 (`alloy-rlp`; type 4 has no variant, chain id 0 refused) |
 | WebAuthn | `webauthn.rs` | `webauthn_challenge`, `webauthn_assertion` |
@@ -181,7 +182,10 @@ Every v5 declaration is unchanged. New: the opaque handles `ScaasUaWallet`, `Sca
 `Aead`, `VaultOpen`, `VaultParams`, `VaultVersion`, `RawDigestRefused`, `PolicyRefused`, `ExternalSignature`, `WalletLocked`,
 `KeyRevoked`, `ContainerSender`, `ContainerReplay`, `BackupRollback`, `WebAuthnAssertion`, `KindUnavailable`, `WalletMismatch`,
 `Rng`, `PqzSetMismatch`, then group 3g's `PqzKeyVersion` 41 and `KeyInUse` 42, appended). `scaas_ua_features()` returns the build's bits: 0 `wallet`, 1 `pq`, 2 `falcon`, 3 `zether`, 4 `pqz`,
-5 to 8 the four sets, 9 `external` (clear in this round), 10 `mlock`, 11 `vectors` (a binding refuses it). A size query of a
+5 to 8 the four sets, 9 `external` (clear in this round), 10 `mlock`, 11 `vectors` (a binding refuses it), 12 `native_networks`
+(ua-rs-native: networks 9 to 12, `scaas_ua_sign_message_raw`, the four envelope calls, `scaas_ua_wallet_bitcoin_key`,
+`scaas_ua_wallet_polkadot_key`, `scaas_ua_key_address`, `scaas_ua_key_ss58_address`, `scaas_ua_key_witness_program`; the C-ABI
+bindings refuse a v6 library without it). A size query of a
 proving call runs it again and a proof's length varies, so callers use `SCAAS_UA_PQZ_OUT_MAX` (1,052,672 B) as the buffer.
 
 **Bindings of the wallet surface.** Each checks the ABI version and the features at load and refuses a mismatch. Identity calls
@@ -418,14 +422,15 @@ threshold of recovery UAs) is later work; `backup_seal` to an organisation UA an
 Reproducible builds are for the apps' own stores (`--locked`, `SOURCE_DATE_EPOCH`, `cargo auditable`); no binary goes to GitHub.
 `no_std` is not needed: no listed target asks for it.
 
-## Native networks of the app's backend: SPECIFIED
+## Native networks of the app's backend: BUILT
 
 `ua-rs` as an end-user app's native signing backend ([CLI-UAL-01](#CLI-UAL-01) Scope; owner 2026-11-17, TODO 8c): the networks
 of [CLI-SGN-52](signers-clientkeys.md#CLI-SGN-52) and [CLI-SGN-53](signers-clientkeys.md#CLI-SGN-53), raw messages on Ed25519 and
 sr25519 keys. Encoding stays with the app's backends: `ua-rs` derives, gives addresses and witness programs and signs the digest or
 message it is handed. Spec and plan: [`2026-11-17-ua-rs-native.md`](../superpowers/specs/2026-11-17-ua-rs-native.md),
 [plan](../superpowers/plans/2026-11-17-ua-rs-native.md) (branch `ua-rs-native`); controller calls in
-[CLI-UAL-63](../decisions.md#CLI-UAL-63). Nothing here is built. UNAUDITED.
+[CLI-UAL-63](../decisions.md#CLI-UAL-63). Built on branch `ua-rs-native` (plan T0 `55f5377af` to T11c `17df72db0`; the gates:
+`smartcontracts/evm/runs/2026-11-17-ua-rs-native-summary.txt`). UNAUDITED.
 
 <a id="CLI-UAL-44"></a>**CLI-UAL-44** — **Raw native signing: the marker, native keys only, the scheme's form, a bound.**
 `NativeKey::sign_message(msg, AllowRawDigest)` (C `scaas_ua_sign_message_raw`) signs 1 to 131,072 bytes as the scheme's message, on
@@ -439,7 +444,8 @@ networks); the bound; a message starting with an off-chain envelope a SCaaS fami
 network only, behind the marker: `sign_near_transaction` (`sha256(tx)`), `sign_sui_transaction` (`blake2b-256(0x000000 ‖ tx)`),
 `sign_stellar_transaction` (`sha256(network_id ‖ 0x00000002 ‖ tx)`), `sign_hedera_transaction` (the body bytes); none for GRAM / TON.
 Which keys and digests reach the raw path beyond this (EVM-address keys, a bare digest) is `scaas-sdk`'s raw entry's rule
-([CLI-UAL-63](../decisions.md#CLI-UAL-63) (11) to (15)). The caller's half is [CLI-SGN-54](signers-clientkeys.md#CLI-SGN-54). SPECIFIED.
+([CLI-UAL-63](../decisions.md#CLI-UAL-63) (11) to (15)). The caller's half is [CLI-SGN-54](signers-clientkeys.md#CLI-SGN-54). BUILT (T5
+`dc359c317`, T6b `f93f7f762`; C T10 `4624ff61d`; the bindings T11a–f).
 
 <a id="CLI-UAL-45"></a>**CLI-UAL-45** — **Bitcoin: `ua-rs` signs the sighash it is given and computes none.** The BIP-143 / BIP-341
 sighash needs the whole transaction (outpoints, every spent amount and script, sighash type), which is the app's encoder's; the app
@@ -447,7 +453,7 @@ compares sighashes across its encoders and the signatures over them. P2WPKH: ECD
 grinding, `r ‖ s ‖ v`; the app DER-encodes and appends the hash type. P2TR: BIP-340 with the BIP-86-tweaked key computed inside
 `ua-rs` from the stored BIP-32 key by one pure tweak function (also the address's), `aux` from the OS RNG
 ([CLI-UAL-02](#CLI-UAL-02)), the negated and tweaked scalars wiped before return, verified against `x(Q)` before return.
-`Wallet::bitcoin_key` takes the chain (0 receive, 1 change); `witness_program()` gives `(0, HASH160(pk))` or `(1, x(Q))`. SPECIFIED.
+`Wallet::bitcoin_key` takes the chain (0 receive, 1 change); `witness_program()` gives `(0, HASH160(pk))` or `(1, x(Q))`. BUILT (T7 `cebe014f1`).
 
 <a id="CLI-UAL-46"></a>**CLI-UAL-46** — **The sr25519 signer.** schnorrkel 0.11 (`default-features = false`, feature `getrandom`
 only), signing context `substrate`. Every signature and soft derivation draws its 32 random bytes first through `os_aux()` (`Error::Rng`
@@ -456,7 +462,7 @@ on failure, never a panic) and hands schnorrkel a one-shot RNG that yields exact
 The `substrate-bip39` mini-secret is computed when the store opens (from the entropy and the passphrase, which the store does not
 keep) and lives in the arena beside the seed; Polkadot keys are 64-byte schnorrkel secrets in the arena, revoked by `lock()`
 ([CLI-UAL-09](#CLI-UAL-09)). A junction key is listed in the manifest's `polkadotPaths` (written only when not empty, at most 64, each
-re-parsed on read). Controller clauses: the one-shot RNG, the mini-secret at open, `polkadotPaths`. SPECIFIED.
+re-parsed on read). Controller clauses: the one-shot RNG, the mini-secret at open, `polkadotPaths`. BUILT (T8a `1fd30d957`, T8b `940e9b876`).
 
 <a id="CLI-UAL-47"></a>**CLI-UAL-47** — **Native vectors.** `smartcontracts/vectors/native/native.json` is written by clientkeys first
 (`scripts/native-vectors.mjs`) and read by `ua-rs` and every binding; `ua-rs` writes `rs_native.json` (OS-random Taproot and sr25519
@@ -464,7 +470,8 @@ signatures) that clientkeys verifies, so randomized rows are checked both ways. 
 deterministic schemes; BIP-340 with a fixed `aux` and sr25519 with fixed bytes are byte-equal **test-only** rows (feature `vectors`;
 sr25519 only if both libraries read the bytes alike, else verify-only, and then no row pins sr25519's nonce derivation byte for byte,
 an accepted residual); soft-junction signatures verify-only. Published known answers (BIP-84, BIP-86, BIP-143, BIP-340, BIP-341,
-BIP-350, `substrate-bip39`, `subkey` keys and one `subkey` signature) carry source and sha256. SPECIFIED.
+BIP-350, `substrate-bip39`, `subkey` keys and one `subkey` signature) carry source and sha256. BUILT (T4 `7e752faa2`, appended T6a `290021791`, both ways T9
+`5e4aa392c`).
 
 ## Confidential-token facades: no decryption oracle
 

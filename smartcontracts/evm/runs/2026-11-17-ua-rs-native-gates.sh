@@ -118,8 +118,102 @@ print("baseline cells not measured:", miss or "none"); sys.exit(1 if miss else 0
   esac
 }
 
-# "<step>|<form>|<name>": the tests this branch adds (forms: see the base runner); filled at T12
+# "<step>|<form>|<name>": the tests this branch adds (forms: see the base runner), written at T12 from the test definitions the
+# diff 87a9608ea..HEAD adds, each under the step whose log shows it passed
 NEW_TESTS=$(cat <<'NAMES'
+clientkeys|node|NETWORKS stays the nine; NATIVE_NETWORKS is the four, exported by seed-signer too
+clientkeys|node|BIP-84 receive and change addresses of abandon ×11 about
+clientkeys|node|BIP-86 receive and change addresses, internal key, tweak and output key
+clientkeys|node|BIP-341 scriptPubKey[0] (null scriptTree): taprootTweak gives tweak, output key and address
+clientkeys|node|Bitcoin coin type: 1 gives tb1…, 0 is the default, 2 refused; change 2 refused; change off Bitcoin refused
+clientkeys|node|NEAR: m/44'/397'/i', implicit account id, ed25519:base58 text; no coin-type override
+clientkeys|node|polkadot is not derived by deriveKey (it needs the entropy and the passphrase)
+clientkeys|node|BIP-143 native P2WPKH: signDigest is RFC 6979 with no extra data, r ‖ s ‖ v
+clientkeys|node|BIP-341 keyPathSpending input 0: signDigest on a P2TR key (negate, tweak, BIP-340, aux zero) and verify under x(Q)
+clientkeys|node|P2TR keys of the mnemonic sign under their own output key, both y parities of P
+clientkeys|node|Bitcoin and NEAR keys: no key proof, no EIP-712, no EVM transaction (Argument); evm and solana keep theirs
+clientkeys|node|no import and no imported UA of the four networks (Argument); evm accepted
+clientkeys|node|substrate.js loads
+clientkeys|node|substrate-bip39 VECTORS: the mini-secret is the first half of PBKDF2(entropy, "mnemonic" ‖ "Substrate")
+clientkeys|node|the subkey answers and the junction rows of T0 (hard and soft, 31 / 32 / 63 / 64-byte junctions)
+clientkeys|node|the passphrase as given: NFC and NFD give one BIP-39 seed and two Polkadot keys; the mini-secret is not the seed
+clientkeys|node|path refusals, each beside its accepted neighbour (Argument)
+clientkeys|node|SS58 prefixes: 0, 2, 42, 64 (two-byte form), 16383; 46, 47, 16384 refused
+clientkeys|node|Polkadot: no index, no coin type through deriveKey; no key proof, EIP-712 or EVM transaction (Argument)
+clientkeys|node|signMessage on the ed25519 networks (1 B to 131,072 B): RFC 8032, deterministic
+clientkeys|node|signMessage and signDigest on Polkadot keys verify under @scure/sr25519; fixed randomness is test-only; T0 polkadot.js signature verifies
+clientkeys|node|signMessage refusals (Argument), each beside the call accepted
+clientkeys|node|native.json is tracked (not git-ignored) and lists the thirteen networks in ua-rs's order
+clientkeys|node|native.json addresses: every row re-derived (Bitcoin both chains and coins, NEAR, the bare Polkadot key)
+clientkeys|node|native.json polkadotPaths: chain codes and keys of every path
+clientkeys|node|native.json signatures: deterministic and fixed-randomness rows byte-equal, verify-only rows verify
+clientkeys|node|native.json refusals: each refused (Argument), its accepted neighbour accepted
+clientkeys|node|native.json external: BIP-84 / BIP-86 / BIP-143 / BIP-340 / BIP-341 / BIP-350 / substrate-bip39 / subkey / polkadot.js rows
+clientkeys|node|signMessage refuses the EIP-7702 magic 0x05 and the EIP-712 prefix 0x19 0x01, beside their neighbours
+clientkeys|node|envelope calls: NEAR sha256, Sui intent + blake2b-256, Stellar network id + ENVELOPE_TYPE_TX, Hedera body bytes
+clientkeys|node|native.json envelopes rows byte-equal; the appended refusal rows of spec §8.1 are present
+clientkeys|node|rs_native.json: every ua-rs Taproot and sr25519 row is of its mnemonic's key and verifies here
+ua-rs|cargo|native_json_ed25519_message_rows_byte_equal
+ua-rs|cargo|sign_message_bounds_and_envelopes_beside_their_accepted_neighbours
+ua-rs|cargo|native_json_sign_message_refusal_rows_of_the_nine
+ua-rs|cargo|sign_message_by_a_ua_key_is_refused_a_native_key_accepted
+ua-rs|cargo|schemes_and_scheme_kinds_of_the_nine
+ua-rs|cargo|errors_name_no_input
+ua-rs-vectors|cargo|external_raw_message_answers_are_verified
+ua-rs|cargo|native_json_near_addresses_and_signatures
+ua-rs|cargo|near_refusals_beside_their_accepted_neighbours
+ua-rs|cargo|near_scheme_and_no_scheme_kind
+ua-rs|cargo|sign_message_refuses_the_evm_prefixes_beside_their_neighbours
+ua-rs|cargo|native_json_envelopes_rows_byte_equal
+ua-rs|cargo|native_json_envelope_refusal_rows
+ua-rs|cargo|native_json_bitcoin_addresses_both_chains_and_coins
+ua-rs|cargo|native_json_p2wpkh_signatures_byte_equal_and_bip143
+ua-rs|cargo|p2tr_release_signatures_verify_under_the_output_key_and_differ
+ua-rs|cargo|bitcoin_refusals_beside_their_accepted_neighbours
+ua-rs|cargo|bitcoin_keys_sign_no_evm_record
+ua-rs|cargo|manifest_change_written_only_when_one
+ua-rs|cargo|native_json_polkadot_bare_addresses_and_ss58
+ua-rs-vectors|cargo|native_json_polkadot_mini_secrets
+ua-rs|cargo|substrate_known_answers_and_the_passphrase_as_given
+ua-rs|cargo|polkadot_refusals_beside_their_accepted_neighbours
+ua-rs|cargo|polkadot_signatures_verify_and_differ_the_polkadot_js_row_verifies
+ua-rs|cargo|polkadot_handle_after_lock_is_key_revoked
+ua-rs|cargo|native_json_polkadot_paths_rows
+ua-rs|cargo|native_json_polkadot_key_refusal_rows
+ua-rs|cargo|soft_keys_sign_and_verify
+ua-rs|cargo|manifest_polkadot_paths_written_only_when_not_empty_bounded_on_read
+ua-rs|cargo|a_65th_path_is_refused
+ua-rs|cargo|junction_handle_after_lock_is_key_revoked
+ua-rs|cargo|network_list_is_native_json_networks
+ua-rs-vectors|cargo|native_json_p2tr_fixed_aux_rows_byte_equal
+ua-rs-vectors|cargo|bip341_key_path_spending_null_merkle_root
+ua-rs-vectors|cargo|taproot_self_check_refuses_a_fault_beside_the_right_key
+ua-rs-vectors|cargo|bip340_csv_signing_rows_through_sign_raw
+ua-rs-vectors|cargo|native_json_sr25519_fixed_rows_byte_equal_one_read_each
+ua-rs-vectors|cargo|a_failing_os_rng_is_error_rng_never_a_panic
+ua-rs-vectors|cargo|sr25519_self_verify_refuses_a_wrong_public_key_beside_the_right_one
+ua-rs-vectors|cargo|polkadot_slot_in_the_arena
+ua-rs-vectors|cargo|polkadot_path_past_512_bytes_is_refused
+ua-rs|cargo|one_shot_yields_once
+ua-c|unittest|test_networks_and_feature_bit
+ua-c|unittest|test_addresses_witness_programs_ss58
+ua-c|unittest|test_polkadot_paths
+ua-c|unittest|test_deterministic_signature_and_envelope_rows
+ua-c|unittest|test_refusal_rows_of_the_c_surface
+ua-py|unittest|test_networks_and_load_needs_bit_native_networks
+ua-py|unittest|test_addresses_witness_programs_ss58
+ua-py|unittest|test_polkadot_paths
+ua-py|unittest|test_deterministic_rows
+ua-py|unittest|test_refusal_rows
+ua-py|unittest|test_ua_key_has_no_raw_message_or_envelope_call
+ua-go|go|TestNativeNetworksAndAddresses
+ua-go|go|TestNativeDeterministicRowsAndRefusals
+ua-cs|cs|NativeNetworksAddressesAndPaths
+ua-cs|cs|NativeDeterministicRowsAndRefusals
+ua-cxx|ctest|wallet_native_json
+ua-qt|qt|test_native_addresses_witness_programs_ss58
+ua-dart-frb|dart|native.json: networks, addresses, witness programs, SS58, polkadotPaths
+ua-dart-frb|dart|native.json: deterministic rows, refusals, a UA key refused
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

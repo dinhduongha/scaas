@@ -1,13 +1,14 @@
 # `ua-rs-native`: Bitcoin, NEAR and Polkadot keys and raw native signing in `ua-rs`: design
 
-**Status:** SPECIFIED, nothing built. Branch `ua-rs-native` (from `ua-rs-sign` `d823d61f0`), worktree
+**Status:** BUILT on branch `ua-rs-native` (T0 `55f5377af` to T11c `17df72db0`, T12 the docs and closing gates; summary
+`smartcontracts/evm/runs/2026-11-17-ua-rs-native-summary.txt`); the closing review (T13) waits for the coordinator. Was: SPECIFIED. Branch `ua-rs-native` (from `ua-rs-sign` `d823d61f0`), worktree
 `.claude/worktrees/ua-rs-native`. Work order: TODO item 8c. **Owner 2026-11-17 ("Code luôn, không chờ sau p6h"): the round runs
 now**: spec → Fable review → fixes → code task by task ([plan](../plans/2026-11-17-ua-rs-native.md)). It does not depend on
 `scaas-sdk`. No contract, node or SCaaS signed-record byte format changes; `smartcontracts/vectors/ua/*.json` stay byte for byte.
 **Revised after Fable's review** (2026-11-17, `20261117-11-fable-fable-high-spec.md`, F1–F24, kept outside the repository; every
 finding applied, mapped in §18). Rule ids introduced here (SPECIFIED, defined once in the component docs):
-[CLI-SGN-52, CLI-SGN-53, CLI-SGN-54](../../clients/signers-clientkeys.md#92-native-networks-of-an-apps-native-backend-specified),
-[CLI-UAL-44 to CLI-UAL-47](../../clients/ua-libraries.md#native-networks-of-the-apps-backend-specified), the records
+[CLI-SGN-52, CLI-SGN-53, CLI-SGN-54](../../clients/signers-clientkeys.md#92-native-networks-of-an-apps-native-backend-built),
+[CLI-UAL-44 to CLI-UAL-47](../../clients/ua-libraries.md#native-networks-of-the-apps-backend-built), the records
 [CLI-UAL-62](../../decisions.md#CLI-UAL-62) (owner rulings) and [CLI-UAL-63](../../decisions.md#CLI-UAL-63) (controller calls).
 Rows marked **follows** apply a stated rule; rows marked **proposal** are the controller's and the owner may override them
 (collected in §15). UNAUDITED.

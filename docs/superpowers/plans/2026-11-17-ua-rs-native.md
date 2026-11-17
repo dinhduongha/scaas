@@ -3,7 +3,8 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-11-17):** plan, not executed; nothing is built from it. Spec:
+**Status (2026-11-17):** executed T0 to T12 on branch `ua-rs-native` (commits in the progress of each task's commit message; T12 the
+docs and closing gates); T13 (the closing review) waits for the coordinator. Spec:
 [`2026-11-17-ua-rs-native.md`](../specs/2026-11-17-ua-rs-native.md) (SPECIFIED; revised after Fable's review F1–F24, spec §18).
 UNAUDITED.
 

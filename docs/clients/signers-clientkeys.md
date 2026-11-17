@@ -910,13 +910,14 @@ as for `PayMeta`). Status: clientkeys `buildServicePull` (the JS reference, `ua-
 service off the chain profile's list (§10: the profile has no service list yet), `ua-qt` (its `scaas-ua` is built with `json`
 only) and the native ports (`ua-py`, `ua-go`, `ua-cs`, `ua-dart` carry no pay surface). UNAUDITED.
 
-### 9.2 Native networks of an app's native backend: SPECIFIED
+### 9.2 Native networks of an app's native backend: BUILT
 
 Networks with no SCaaS family, for an end-user app that signs native chains through `ua-rs`
 ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01) Scope). Design and vectors: spec
 [`2026-11-17-ua-rs-native.md`](../superpowers/specs/2026-11-17-ua-rs-native.md); the `ua-rs` side:
-[CLI-UAL-44 to CLI-UAL-47](ua-libraries.md#native-networks-of-the-apps-backend-specified). The controller's clauses below are
-recorded in [CLI-UAL-63](../decisions.md#CLI-UAL-63). Nothing here is built. UNAUDITED.
+[CLI-UAL-44 to CLI-UAL-47](ua-libraries.md#native-networks-of-the-apps-backend-built). The controller's clauses below are
+recorded in [CLI-UAL-63](../decisions.md#CLI-UAL-63). Built in clientkeys (`NATIVE_NETWORKS`, `substrate.js`, `native-vectors.mjs`:
+T2 `d2089cd69`, T3 `ca2fa2e3b`, T4 `7e752faa2`, T6a `290021791`) and `ua-rs` (T5 to T11c). UNAUDITED.
 
 <a id="CLI-SGN-52"></a>**CLI-SGN-52** — **Four native networks, one name per path and scheme.** clientkeys keeps `NETWORKS` (the
 nine networks above, the set of `keys.json`, `importKey` and `importedUAKey`) and adds `NATIVE_NETWORKS` with these four; `ua-rs`
@@ -931,7 +932,8 @@ Bitcoin chain `k` ∈ {0 receive, 1 change}:
 | `polkadot` | the bare mnemonic, optional junctions ([CLI-SGN-53](#CLI-SGN-53)); no index but 0, no coin type | sr25519 (schnorrkel, context `substrate`) | SS58, prefix 0 (any other on request) |
 
 On these four: no key proof, no import of a secret, no imported UA (each refused `Argument`); a Bitcoin key signs a sighash only,
-never an EVM record. Controller clauses: the names, the change chain, the NEAR coin-type refusal, the key-proof refusal. SPECIFIED.
+never an EVM record. Controller clauses: the names, the change chain, the NEAR coin-type refusal, the key-proof refusal. BUILT
+(clientkeys T2; `ua-rs` T6 `1416fc4d9`, T7 `cebe014f1`, T8a `1fd30d957`).
 
 <a id="CLI-SGN-53"></a>**CLI-SGN-53** — **A Polkadot account is the bare mnemonic under `substrate-bip39`, as polkadot.js; junctions
 are an optional per-account setting** (owner 2026-11-17). `mini = PBKDF2-HMAC-SHA512(entropy, "mnemonic" ‖ UTF-8(passphrase), 2048,
@@ -944,7 +946,7 @@ below 64, two bytes at 64); zero-padded to 32 bytes, or BLAKE2b-256 when longer.
 `derived_key_simple`, as `sp-core`. A path is public: it names an account, it is no password. SS58: `base58(pre ‖ pk ‖
 BLAKE2b-512("SS58PRE" ‖ pre ‖ pk)[0..2])`, one-byte `pre` below 64, two bytes to 16,383, 46 and 47 refused; the prefix belongs to a
 chain (0 Polkadot, 42 generic Substrate), not to mainnet / testnet. Mainnet and testnets share the key. Controller clauses: the
-grammar and its bounds. SPECIFIED.
+grammar and its bounds. BUILT (clientkeys T3; `ua-rs` T8a, T8b `940e9b876`).
 
 <a id="CLI-SGN-54"></a>**CLI-SGN-54** — **The caller's half of the guard on raw native signing.** A raw digest or message
 (`signDigest` / `signMessage` with `{ allowRawDigest: true }`, `ua-rs` `sign_digest` / `sign_message` with `AllowRawDigest`) is signed
@@ -955,7 +957,7 @@ transaction hash or an EIP-7702 authorization raw ([CLI-SGN-40](#CLI-SGN-40)); (
 ([CLI-SGN-29](#CLI-SGN-29) Change); (5) signs an off-chain message only inside the chain's own envelope built in-process (a NEP-413
 payload, a Substrate `<Bytes>` wrapping, a Solana off-chain message, an Aptos `APTOS\n` message), never a user's raw bytes: ed25519
 and sr25519 have no domain separation of their own. Item (5) is a controller clause. The libraries enforce the rest:
-[CLI-UAL-44](ua-libraries.md#CLI-UAL-44). SPECIFIED.
+[CLI-UAL-44](ua-libraries.md#CLI-UAL-44). SPECIFIED: a documented obligation of the caller; the library half is BUILT.
 
 ## 10. Connectors
 
