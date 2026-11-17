@@ -17,6 +17,7 @@ EVM = os.path.dirname(os.path.dirname(HERE))
 CAPPED = os.path.join(EVM, "..", "..", "scripts", "capped")
 FORGE = os.path.expanduser("~/.foundry/bin/forge")
 L = "src/ua/UARegistryCoreLib.sol"
+R = "src/ua/UARegistry.sol"
 APP = "UARegistryPortableApp.t.sol"
 
 # id: (file, old, new, match-path glob under test/ua)
@@ -29,6 +30,12 @@ MUTANTS = {
                              "        _portable(ua, purposeTag, typedDigest, auth);", APP),
     "portable-classical-shortcut": (L, "            ok = auth.keyData.length == 0 && auth.signature.length == 0\n                && _msig(",
                                     "            ok = auth.keyData.length == 0 && auth.signature.length == 0 && (!_pqEligible(UAStore.msig(ua, r.keyPtr), false) && auth.members.length == 0 ||\n                _msig(", APP),
+    # owner 2026-11-18 (the pre-change gen 1 compiled from legacy/ua-pre-app/): gen 2's forward broken, two ways; each turns
+    # test_requirePortableApp_gen2PreChangeGen1 red (a void view accepted; a refusal with data instead of empty data)
+    "forward-swallowed": (R, "        if (_elsewhere(ua)) IUARegistry(predecessor).requirePortableApp(ua, appId, typedDigest, auth);\n",
+                          "        if (_elsewhere(ua)) { try IUARegistry(predecessor).requirePortableApp(ua, appId, typedDigest, auth) {} catch {} }\n", APP),
+    "forward-to-requireportable": (R, "        if (_elsewhere(ua)) IUARegistry(predecessor).requirePortableApp(ua, appId, typedDigest, auth);\n",
+                                   "        if (_elsewhere(ua)) IUARegistry(predecessor).requirePortable(ua, UAKinds.appPurpose(appId), typedDigest, auth);\n", APP),
     "sigok-guard-dropped": (L, "    ) internal view returns (bool) {\n        _portablePurpose(ua, purpose);\n        if (kind == UAKinds.MSIG) {",
                             "    ) internal view returns (bool) {\n        if (kind == UAKinds.MSIG) {", "UARegistryUA8.t.sol"),
 }

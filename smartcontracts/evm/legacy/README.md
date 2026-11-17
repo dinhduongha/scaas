@@ -443,3 +443,9 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `MldsaVerifier` constructor reverted `UAMldsaNoPrecompile` for `mldsa87` without a probed precompile, `expandedKeyParts()` was
   1 / 2 / 0 (no `mldsa87` cache) and `verifyCached` read the parts with its own loop. Superseded by the three-part `mldsa87`
   cache (`PqUA.mldsaParts`: 1 / 2 / 3, `MlDsa.readParts`). Not built.
+- `ua-pre-app/`: `src/ua/UARegistry.sol` and every file it imports (its libraries `UARegistryCoreLib`, `UARegistryAuxLib`,
+  `MlDsa`, `PqUA`, the interfaces, `UAKinds`, `UAStore`, `SigCheck`, `SaltedEIP712`, `RescueLib`, `SSTORE2`, `PqzSet`) as of
+  `f655cb0e0`, before `requirePortableApp` (CTR-UA-45, CTR-UA-46); each file named `*.preapp.sol`, its relative imports renamed
+  with it, a header naming the commit, nothing else changed. **The one compiled exception** (owner 2026-11-18, no bytecode in
+  the repository): `test/ua/UARegistryPortableApp.t.sol` imports `UARegistry.preapp.sol` and deploys it as the pre-change gen 1
+  (no entry, no fallback); forge compiles it with that test and links its libraries. Not deployed, not maintained.

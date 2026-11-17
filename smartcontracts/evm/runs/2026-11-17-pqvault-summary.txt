@@ -255,3 +255,8 @@ R3 re-point | p48-admins-excluded | src/pqchat/PqChat.sol: 'for (uint256 i; i < 
 # (33,516), 2,768 B under T-1 (35,286). PqChat 29,152 B (plain; under its 33,516 B T-2 line).
 # R4: docs gates on the R4 tree
 R4 | docs | R4 tree | 0 | docs_check.py check 0 errors; facts check 0 misses; paths 0; test_docs_check ok; no temp path
+# Fixture ruling (owner 2026-11-18, option (b)): the pre-change gen 1 compiled from legacy/ua-pre-app/ (f655cb0e0), the hex
+# fixture deleted; its creation code equals the old fixture but for the library placeholders and the CBOR metadata hash
+fixture | forge-ua | branch head + these files | 0 | 847 passed 0 failed 0 skipped (forge), test_requirePortableApp_gen2PreChangeGen1 included
+fixture mutant | forward-swallowed | test_requirePortableApp_gen2, test_requirePortableApp_gen2PreChangeGen1 | 1
+fixture mutant | forward-to-requireportable | test_requirePortableApp_gen2, test_requirePortableApp_gen2PreChangeGen1 | 1

@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
+import {UARegistry as UARegistryPreApp} from "../../legacy/ua-pre-app/ua/UARegistry.preapp.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UACall} from "./UACall.sol";
 import {UARegistryPortableTest} from "./UARegistryPortable.t.sol";
@@ -15,9 +16,6 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
     bytes32 internal constant APP_A = keccak256("scaas.pqvault.v1"); // PQVAULT_APP_ID
     bytes32 internal constant APP_B = keccak256("scaas.test.app.v1");
     address internal constant REG_G2B = 0x5cA0000000000000000000000000000000000009;
-    /// `UARegistry`'s creation code at f655cb0e0 (before this entry; solc 0.8.37, `forge build`, the library links left as solc
-    /// placeholders): a gen 1 without `requirePortableApp` and without a fallback.
-    string internal constant PRE_APP = "test/ua/fixtures/UARegistryPreApp.creation.hex";
 
     function _app(UARegistry r, bytes32 ua, bytes32 appId, IUARegistry.UASig memory s) internal view {
         r.requirePortableApp(ua, appId, TYPED, s);
@@ -198,36 +196,16 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
         _app(g2p, ua2, APP_A, a);
     }
 
-    /// `PRE_APP` deployed with `cfgs`, its two library links set to this build's `UARegistryCoreLib` and `UARegistryAuxLib` (the
-    /// same external entries: the dispatcher, not the libraries, is what the test is about).
+    /// The pre-change `UARegistry` (legacy/ua-pre-app/: its source and its libraries as of f655cb0e0, compiled with this build;
+    /// owner 2026-11-18, no bytecode in the repository) deployed with `cfgs`, its libraries linked by forge: a gen 1 without
+    /// `requirePortableApp` and without a fallback. Its creation code with the constructor arguments, so the arguments are this
+    /// tree's `KindConfig` (the same struct at f655cb0e0).
     function _preApp(UARegistry.KindConfig[] memory cfgs) internal returns (UARegistry r) {
-        string memory code = vm.replace(vm.readFile(PRE_APP), "\n", "");
-        code = vm.replace(code, _placeholder("src/ua/UARegistryCoreLib.sol:UARegistryCoreLib"),
-            _hex40(deployCode("UARegistryCoreLib.sol:UARegistryCoreLib")));
-        code = vm.replace(code, _placeholder("src/ua/UARegistryAuxLib.sol:UARegistryAuxLib"),
-            _hex40(deployCode("UARegistryAuxLib.sol:UARegistryAuxLib")));
-        assertEq(vm.indexOf(code, "__$"), type(uint256).max, "every link set");
-        bytes memory init = abi.encodePacked(vm.parseBytes(code),
+        bytes memory init = abi.encodePacked(type(UARegistryPreApp).creationCode,
             abi.encode(chainUidA, address(0), false, BUDGET, address(0), true, cfgs));
         assembly ("memory-safe") {
             r := create(0, add(init, 32), mload(init))
         }
         assertTrue(address(r).code.length != 0, "pre-change registry deployed");
-    }
-
-    /// solc's library placeholder: `__$` ‖ the first 34 hex digits of keccak256(fully qualified name) ‖ `$__`.
-    function _placeholder(string memory fqn) internal pure returns (string memory) {
-        bytes memory h = bytes(vm.toString(keccak256(bytes(fqn))));
-        bytes memory s = new bytes(34);
-        for (uint256 i; i < 34; ++i) s[i] = h[2 + i];
-        return string.concat("__$", string(s), "$__");
-    }
-
-    /// An address as 40 lower-case hex digits, no `0x`.
-    function _hex40(address a) internal pure returns (string memory) {
-        bytes memory h = bytes(vm.toString(abi.encodePacked(a)));
-        bytes memory s = new bytes(40);
-        for (uint256 i; i < 40; ++i) s[i] = h[2 + i];
-        return string(s);
     }
 }
