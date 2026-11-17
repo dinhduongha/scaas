@@ -478,6 +478,10 @@ virtual authenticator per family.
 
 <a id="vault"></a>
 
+Several seeds on one device, each a set of v1 vaults below, are kept in the `scaas.keystore` container of
+[CLI-SDK-03](scaas-sdk.md#CLI-SDK-03) (SPECIFIED): the same bytes in clientkeys, `ua-rs`, `scaas-sdk` and scaas-app, each seed's public
+fields authenticated by an index MAC computed in clientkeys and `ua-rs`. The vault v1 format itself does not change.
+
 <a id="CLI-SGN-11"></a>**CLI-SGN-11** — **A non-custodial seed wallet lives on the client, and one subject account holds
 several keys (passkey + seed).** Owner decision ("both passkeys and seed words"). A 24-word BIP-39 mnemonic (256 bits;
 import accepts 12–24 valid words, checksum checked) is generated or imported **on the device**; the mnemonic and keys

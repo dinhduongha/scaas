@@ -377,7 +377,10 @@ nothing lowers it, a restart clears it. It is used only once its `eth_chainId` a
 `chain_uid`, else the first endpoint's block 0), read at first use and kept; another network (another id, or a reset or forked one
 with the same id) is dropped with a log line, an unreadable id or block 0 is logged as such and asked again (recheck 2 P3-5, 3 R3-3).
 The lane's own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum. The strict-majority option
-stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Each request gets `rpc_timeout_ms` (30 s: a read's, each
+stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). PLANNED: this helper and its rules move into the
+shared crate as [CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04) without behaviour change (the lane's nonce, fee and receipt
+reads stay on the first endpoint), and the other families' transaction-building reads take the same failover while their status,
+sequence and fee reads stay on the first endpoint ([scaas-rpc.md](../clients/scaas-rpc.md), SPECIFIED). Each request gets `rpc_timeout_ms` (30 s: a read's, each
 span of a log window, the lane's nonce, fee, send and receipt requests), each request of a simulation `rpc_simulate_timeout_ms` (120
 s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured, generous), per `[[chains]]` table, 0 refused at
 start; an endpoint that accepts and never answers fails the read over (Fable recheck 3 R3-4, recheck 4 R4-3; tests

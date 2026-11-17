@@ -201,6 +201,12 @@ stay as above: `ua-py`, `ua-go`, `ua-cs` and `ua-dart` keep their own ports as t
 Stated gaps: no binding wraps the C calls of the PQZ seed backup ([CLI-SGN-47](signers-clientkeys.md#CLI-SGN-47): `scaas_ua_pqz_seed_backup`, `scaas_ua_pqz_share_reseal`, `scaas_ua_wallet_pqz_reconstruct`,
 `scaas_ua_pqz_seed_backup_warning`, `scaas_ua_wallet_pqz_held_key`), and none marshals an external signer's callback (each passes NULL
 and expects `KindUnavailable`). The wasm-bindgen browser binding is PLANNED (next, after the size and device numbers).
+Apps do not wrap these: they reach SCaaS through `scaas-sdk` and the bindings generated from it
+([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12); SPECIFIED); the wrappers above stay for clients that use the signer without the SDK.
+PLANNED in `ua-rs` for the SDK, each with clientkeys rows first: `SecretBytes` lifted from `ua-dart-frb` (one implementation), the
+master fingerprint, the keystore's index MAC ([CLI-SDK-03](scaas-sdk.md#CLI-SDK-03)), a re-seal of a vault's data under its same data
+key, BIP-85 children with a sealed high-water mark ([CLI-SDK-04](scaas-sdk.md#CLI-SDK-04)), and the named-entry JSON and calldata of
+every typed operation.
 
 **Targets.** CI (`.github/workflows/ci.yml`; its header lists the commands): `ua-rs` runs ten cells, each with clippy and tests;
 `ua-rs-targets` compiles for the other targets; `ua-deps` runs `cargo tree --locked`, `cargo deny`, `cargo audit`;
@@ -558,6 +564,10 @@ requirements; the library's word checks stop a careless caller, never a forger. 
 | 5 (<a id="CLI-UAL-35"></a>CLI-UAL-35) | **Catalogued token**: catalogued by that chain's `OpenFactory` (its configured address) with a PQZ kind for the PQZ facade, a Zether kind for the Zether facade | the factory index's `_rec[token]` read as storage (slot and packing from ua-mtx-merge's pin `test/zether/ZetherStateVectors.t.sol`): `contractClass` TOKEN, `kind` among the facade's kinds; the token's code a clone of a chain-neutral release, its `ChainEnv` read at the fixed offsets (owner 2026-11-08) |
 | 6 (<a id="CLI-UAL-36"></a>CLI-UAL-36) | **The selected leg belongs to the handle**: the leg's recipient UA's registered key equals the handle's (PQZ: `pqzKeyOf(ua)` `proven`, its key hash the handle's; Zether: the registered `Y`); an auditor read: the account is the token's `auditorUA`, `auditorMode` not NONE, an auditor copy on that leg; a disclosure kind allowed by the token's `disclosureMode` | the registry and token words read as storage at the same block; the comparisons above; the registry read is the one the token's `ChainEnv` names (owner 2026-11-08) |
 | 7 (<a id="CLI-UAL-37"></a>CLI-UAL-37) | **Nothing back**: no result, failure, error code, result-dependent timing, follow-up read or log line that depends on a decryption goes back to the source; a result goes to the holder or a viewer the holder names | no request to the source after a decryption depends on its outcome (reviewable in the layer's code) |
+
+A Rust reading layer outside the reference readers takes its endpoint list, failover, strict majority and the discovered-endpoint
+rule from `scaas-rpc` ([CLI-RPC-05](scaas-rpc.md#CLI-RPC-05), [CLI-RPC-06](scaas-rpc.md#CLI-RPC-06); SPECIFIED); requirements 1
+to 7 stay the reading layer's.
 
 Encryption to a public key is public: a debit's `pkT`, `pkA`, the op 7 legs' keys and the Zether `yTo` / `yAud` stay caller
 fields, and a wrong key is refused on chain.
