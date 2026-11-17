@@ -136,11 +136,12 @@ class Load(unittest.TestCase):
             W._abi_hook = None
         self.assertIs(W._lib, lib, 'a refused library is not kept')
         f = W.FEATURE
-        good = f['wallet'] | f['pq'] | f['pqz'] | f['pqz-set-n2304-kmax4096']
+        # ua-rs-native (spec §10.2): a good build carries bit native-networks; an older v6 library without it is refused
+        good = f['wallet'] | f['pq'] | f['pqz'] | f['pqz-set-n2304-kmax4096'] | f['native-networks']
         W.check_build(6, good)
-        W.check_build(6, f['wallet'] | f['pq'])
+        W.check_build(6, f['wallet'] | f['pq'] | f['native-networks'])
         for label, abi, feats in [('abi 5', 5, good), ('abi 7', 7, good), ('no wallet', 6, good & ~f['wallet']),
-                                  ('no pq', 6, good & ~f['pq']), ('an unknown bit', 6, good | 1 << 12),
+                                  ('no pq', 6, good & ~f['pq']), ('an unknown bit', 6, good | 1 << 13), ('an older v6 library (no native-networks)', 6, good & ~f['native-networks']),
                                   ('a vectors build (C1)', 6, good | f['vectors']),
                                   ('two sets', 6, good | f['pqz-set-n2048-kmax1024']), ('pqz without a set', 6, f['wallet'] | f['pq'] | f['pqz']),
                                   ('a set without pqz', 6, f['wallet'] | f['pq'] | f['pqz-set-n2304-kmax4096'])]:
@@ -1106,6 +1107,105 @@ class Pqz(Case):
         self.assertEqual(code(lambda: k.call('proveRegister', self.REQ)), 'UAKeyRevoked')
         self.assertEqual(k.public(), pk)
         self.assertEqual(code(lambda: w.export_pqz_leaf_raw(0, 0)), 'UAWalletLocked')
+
+
+# --- ua-rs-native T11d: smartcontracts/vectors/native/native.json through this binding -------------------------------------
+NATIVE = json.loads((STATE / 'native' / 'native.json').read_text())
+NMN = {m['id']: m for m in NATIVE['mnemonics']}
+
+
+def nmsg(r):
+    return bytes([int(r['messageRepeat']['byte'], 16)]) * r['messageRepeat']['length'] if 'messageRepeat' in r else bytes.fromhex(r['message'])
+
+
+class Native(unittest.TestCase):
+    wallets = {}
+
+    def nw(self, mid):
+        if mid not in self.wallets:
+            self.wallets[mid] = W.Wallet.from_mnemonic(NMN[mid]['words'].encode(), NMN[mid]['passphrase'].encode())
+        return self.wallets[mid]
+
+    def nkey(self, r):
+        w, net = self.nw(r['mnemonic']), r['network']
+        if net == 'polkadot':
+            return w.polkadot_key(r.get('path', ''))
+        if net.startswith('bitcoin') and r.get('change') is not None:
+            return w.bitcoin_key(net, r.get('coinType'), r['change'], r['index'])
+        return w.native_key(net, r['index'], r.get('coinType'))
+
+    def test_networks_and_load_needs_bit_native_networks(self):
+        self.assertEqual(list(W.NETWORKS), NATIVE['networks'])
+        f = W.FEATURE
+        with self.assertRaises(W.LibraryMismatch):
+            W.check_build(6, f['wallet'] | f['pq'])  # an older v6 library: no native-networks bit
+        W.check_build(6, f['wallet'] | f['pq'] | f['native-networks'])
+
+    def test_addresses_witness_programs_ss58(self):
+        n = 0
+        for r in NATIVE['addresses']:
+            with self.subTest(m=r['mnemonic'], net=r['network'], coin=r['coinType'], change=r['change'], index=r['index']):
+                k = self.nkey(r)
+                self.assertEqual(k.key_data().hex(), r['publicKey'])
+                self.assertEqual(k.address(), r['address'])
+                if r['witnessProgram']:
+                    self.assertEqual(k.witness_program(), (r['witnessProgram']['version'], bytes.fromhex(r['witnessProgram']['program'])))
+                for p, a in (r.get('ss58') or {}).items():
+                    self.assertEqual(k.ss58_address(int(p)), a)
+                n += 1
+        self.assertEqual(n, 114)
+
+    def test_polkadot_paths(self):
+        for r in NATIVE['polkadotPaths']:
+            with self.subTest(m=r['mnemonic'], path=r['path']):
+                self.assertEqual(self.nw(r['mnemonic']).polkadot_key(r['path']).key_data().hex(), r['publicKey'])
+
+    def test_deterministic_rows(self):
+        n = 0
+        for r in NATIVE['signatures'] + NATIVE['envelopes']:
+            if r['mode'] != 'deterministic':
+                continue
+            with self.subTest(r['id']):
+                k, m = self.nkey(r), nmsg(r)
+                sig = {'sign_digest': lambda: k.sign_digest_raw(m), 'sign_message': lambda: k.sign_message_raw(m),
+                       'sign_near_transaction': lambda: k.sign_near_transaction(m), 'sign_sui_transaction': lambda: k.sign_sui_transaction(m),
+                       'sign_stellar_transaction': lambda: k.sign_stellar_transaction(bytes.fromhex(r.get('networkId', '')), m),
+                       'sign_hedera_transaction': lambda: k.sign_hedera_transaction(m)}[r['call']]()
+                self.assertEqual(sig.hex(), r['signature'])
+                n += 1
+        self.assertEqual(n, 44, '3 P2WPKH, 28 ed25519 messages, a NEAR digest, 12 envelopes')
+
+    def test_refusal_rows(self):
+        calls = {'sign_message': 'sign_message_raw', 'sign_near_transaction': 'sign_near_transaction',
+                 'sign_sui_transaction': 'sign_sui_transaction', 'sign_hedera_transaction': 'sign_hedera_transaction'}
+        n = 0
+        for r in NATIVE['refusals']:
+            for a, want in ((r['args'], 'UAArgument'), (r['accepted'], '')):
+                with self.subTest(r['id'], want=want):
+                    if r['call'] in calls:
+                        f = lambda: getattr(self.nkey(a), calls[r['call']])(nmsg(a))
+                    elif r['call'] == 'sign_stellar_transaction':
+                        f = lambda: self.nkey(a).sign_stellar_transaction(bytes.fromhex(a['networkId']), nmsg(a))
+                    elif r['call'] == 'polkadot_key':
+                        f = lambda: self.nw(a['mnemonic']).polkadot_key(a['path'])
+                    elif r['call'] == 'bitcoin_key':
+                        f = lambda: self.nw(a['mnemonic']).bitcoin_key(a['network'], None, a['change'], 0)
+                    elif r['call'] == 'ss58':
+                        f = lambda: self.nw(a['mnemonic']).polkadot_key('').ss58_address(a['prefix'])
+                    else:
+                        continue
+                    expect = want
+                    if want and r['call'] == 'sign_stellar_transaction' and len(a['networkId']) != 64:
+                        expect = 'UAKeyData'  # the binding's own size check, before the library
+                    self.assertEqual(code(f), expect)
+                    n += 1
+        self.assertGreaterEqual(n, 2 * 40)
+
+    def test_ua_key_has_no_raw_message_or_envelope_call(self):
+        ua = self.nw('pq_kat').ua_key(0x0102)
+        self.assertEqual(code(lambda: ua.sign_message_raw(b'\x01')), 'UARawDigestRefused')
+        self.assertEqual(code(lambda: ua.sign_near_transaction(b'\x01')), 'UARawDigestRefused')
+        self.assertEqual(code(lambda: self.nw('pq_kat').native_key('solana').sign_message_raw(b'\x01')), '')
 
 
 if __name__ == '__main__':
