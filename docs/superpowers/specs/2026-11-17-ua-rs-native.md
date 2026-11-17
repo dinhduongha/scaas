@@ -693,3 +693,24 @@ by it.
 | F22 §16 against superseded app documents | info | §16 rewritten against the app contract |
 | F23 SS58 prefix per chain | info | §7.4; §16; plan T0 (Paseo's prefix) |
 | F24 byte-equality claims are T0's | info | §12.2 first rule |
+
+## 19. Code review response (Fable, 2026-11-17, T13: C1–C8, I1–I6)
+
+Review `20261117-16-fable-fable-high-code.md` (kept outside the repository), coordinator rulings of 2026-11-17.
+
+| Finding | Severity | Ruling and where it landed |
+|---|---|---|
+| C1 `sign_message` refuses real Polkadot and Solana transactions | P1 | prefix rule withdrawn: §8.1 item 1, §15 item 11, CLI-UAL-63 Change; `native.json` one-time exception (four rows out, two signature rows in) |
+| C2 clientkeys `signDigest` signs any length | P2 | exactly 32 bytes (`Argument`); four refusal rows appended |
+| C3 Taproot signer leaves `d0` unwiped | P2 | `Zeroizing<NonZeroScalar>`; clientkeys wipes the tweaked key in a `finally`, its `BigInt` stated as a limit |
+| C4 ua-py and ua-dart-frb narrow integers | P3 | range checked before the call in both bindings, every integer argument of their wallet surfaces |
+| C5 a Polkadot account changed with the passphrase's normalization | P3 | no code: residual in §7.1; the app contract's warning |
+| C6 `sign_near_transaction` signs NEP-413 / NEP-461 payloads | P3 | the NEP-413 and NEP-366 tags refused (exact tags: a range rule would refuse a pinned row's neighbour); §8.1 item 3; CLI-UAL-63 Change |
+| C7 the manifest accepts `change: 1` and refused coin types | P3 | refused on read: §4.4 |
+| C8 "one `subkey` signature" | P3 | CLI-UAL-47 text names the polkadot.js row |
+| I1 `polkadot_key` at the 64-path cap (error order; check-then-add race) | info | seen, no change (no secret effect) |
+| I2 Bitcoin coin type `None` and `Some(0)` two slots | info | seen, no change |
+| I3 `ua-rs` reads the BIP rows through `addresses` | info | seen, no change |
+| I4 Stellar `network_id` is the caller's | info | seen, no change (no narrower than `sign_digest`, F8 ruling) |
+| I5 older bindings refuse the new library | info | seen, intended (§10.2) |
+| I6 ua-qt has no `bitcoinKey` / `polkadotKey` in QML | info | seen, no change; the code and its test are the consistent pair |
