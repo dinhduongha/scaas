@@ -5115,6 +5115,69 @@
     "change": null,
     "message": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
    }
+  },
+  {
+   "id": "sign_near_transaction a NEP-413 message (2^31 + 413)",
+   "call": "sign_near_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "9d0100800000000000000000"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "400000000000000000000000"
+   }
+  },
+  {
+   "id": "sign_near_transaction a NEP-366 delegate action (2^30 + 366)",
+   "call": "sign_near_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "6e0100400000000000000000"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "400000000000000000000000"
+   }
+  },
+  {
+   "id": "sign_near_transaction the NEP-413 tag, the next value accepted",
+   "call": "sign_near_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "9d0100800000000000000000"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "9e0100800000000000000000"
+   }
   }
  ],
  "external": {

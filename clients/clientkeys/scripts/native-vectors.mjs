@@ -233,6 +233,13 @@ ref('sign_digest 31 bytes', 'sign_digest', at('solana', { message: '5a'.repeat(3
 ref('sign_digest the APTOS\\n envelope (20 bytes)', 'sign_digest', at('aptos', { message: APTOS_ENV }), at('aptos', { message: '5a'.repeat(32) }));
 ref('sign_digest 33 bytes on polkadot', 'sign_digest', at('polkadot', { path: '', message: '5a'.repeat(33) }), at('polkadot', { path: '', message: '5a'.repeat(32) }));
 ref('sign_digest 5 bytes on bitcoin_p2tr', 'sign_digest', at('bitcoin_p2tr', { message: '0102030405' }), at('bitcoin_p2tr', { message: '5a'.repeat(32) }));
+// T13 C6, appended: sign_near_transaction refuses a NEP-461 tagged payload (u32 LE prefix the NEP-413 or NEP-366 tag), beside a
+// Transaction head (signer_id length 64) or the next value
+const NEAR_TAIL = '00'.repeat(8);
+for (const [why, tag, ok] of [['a NEP-413 message (2^31 + 413)', '9d010080', '40000000'], ['a NEP-366 delegate action (2^30 + 366)', '6e010040', '40000000'],
+  ['the NEP-413 tag, the next value accepted', '9d010080', '9e010080']]) {
+  ref(`sign_near_transaction ${why}`, 'sign_near_transaction', at('near', { message: tag + NEAR_TAIL }), at('near', { message: ok + NEAR_TAIL }));
+}
 // every refusal refused here and its neighbour accepted
 // clientkeys' reading of a row's call (ua-rs: Wallet::native_key, bitcoin_key, polkadot_key, …; Polkadot's native_key is the bare key)
 function applyCall(call, a) {

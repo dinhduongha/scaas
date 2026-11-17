@@ -309,8 +309,14 @@ function envelope(key, network, tx, allowRawDigest, build) {
   if (!(tx instanceof Uint8Array) || tx.length < 1 || tx.length > MAX_RAW_MESSAGE) fail('Argument', 'transaction: 1 to 131072 bytes');
   return ed25519.sign(build(tx), key.privateKey);
 }
-/** NEAR: ed25519 over sha256(Borsh(Transaction)). */
-export const signNearTransaction = (key, txBorsh, { allowRawDigest = false } = {}) => envelope(key, 'near', txBorsh, allowRawDigest, (t) => sha256(t));
+// the NEP-461 prefix tags in use: NEP-413 (off-chain message) and NEP-366 (delegate action); exact tags only (ua-rs NEP461_TAGS)
+const NEP461_TAGS = [2 ** 31 + 413, 2 ** 30 + 366];
+/** NEAR: ed25519 over sha256(Borsh(Transaction)). Argument for a NEP-461 tagged payload (first four bytes, little-endian, the
+ *  NEP-413 or NEP-366 tag); a Transaction starts with its signer_id's length, at most 64. */
+export const signNearTransaction = (key, txBorsh, { allowRawDigest = false } = {}) => envelope(key, 'near', txBorsh, allowRawDigest, (t) => {
+  if (t.length >= 4 && NEP461_TAGS.includes(new DataView(t.buffer, t.byteOffset, 4).getUint32(0, true))) fail('Argument', 'a NEP-461 tagged payload');
+  return sha256(t);
+});
 /** Sui: ed25519 over blake2b-256(intent 0x00 0x00 0x00 ‖ TransactionData BCS). */
 export const signSuiTransaction = (key, txBcs, { allowRawDigest = false } = {}) =>
   envelope(key, 'sui', txBcs, allowRawDigest, (t) => blake2b(concatBytes(new Uint8Array(3), t), { dkLen: 32 }));

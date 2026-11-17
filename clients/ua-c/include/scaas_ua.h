@@ -1399,7 +1399,7 @@ ScaasUaStatus scaas_ua_sign_message_raw(const ScaasUaKey *k,
                                         size_t *sig_len);
 
 /**
- * NEAR: ed25519 over `sha256(tx_borsh)`.
+ * NEAR: ed25519 over `sha256(tx_borsh)`; a NEP-413 or NEP-366 tagged payload: SCAAS_UA_ERR_ARGUMENT.
  */
 ScaasUaStatus scaas_ua_sign_near_transaction(const ScaasUaKey *k,
                                              const uint8_t *tx,

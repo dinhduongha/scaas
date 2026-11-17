@@ -376,6 +376,10 @@ CLI-UAL-63 (11) to (15), §15.
 
    The existing raw `sign_digest` / `sign_message` calls and their `native.json` rows stay byte-equal. A UA key has none of them (C:
    `RawDigestRefused`). Not built here: Stellar's fee-bump envelope (type 5), NEP-413, Sui's personal message.
+   `sign_near_transaction` refuses (`Argument`) bytes whose first four, little-endian, are a NEP-461 tag in use: NEP-413's
+   (2^31 + 413, an off-chain message) or NEP-366's (2^30 + 366, a delegate action), so the call named for transactions signs
+   neither (T13 C6; a `Transaction` starts with its `signer_id`'s length, at most 64). Only the two exact tags: a range rule
+   would refuse the accepted neighbour of a pinned refusal row (131,072 bytes of `0xa5`).
 4. **GRAM / TON** stays off every envelope call; `ua-rs` builds no cell hash (the SDK keeps GRAM off its raw entry).
 5. **Residual: Algorand `"MX"`.** The Algorand family signs `"MX" ‖ "scaas.metaop.v1:" ‖ hex(digest)` (more than 32 bytes,
    `docs/networks/algorand.md`); `ua-rs` has no Algorand native key, and the only way to an ed25519 key at `m/44'/283'/i'` is a coin-type

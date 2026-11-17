@@ -1,0 +1,7 @@
+killed   | M1 clientkeys: the tag check removed | clients/clientkeys/src/seed.js | rc=1 | 2 failed: native.json refusals: each refused
+killed   | M2 clientkeys: NEP-366 dropped | clients/clientkeys/src/seed.js | rc=1 | 2 failed: native.json refusals: each refused
+killed   | M3 clientkeys: big-endian read | clients/clientkeys/src/seed.js | rc=1 | 2 failed: native.json refusals: each refused
+killed   | M4 ua-rs: the tag check removed | clients/ua-rs/src/wallet/sign.rs | rc=101 | 2 failed: native_json_envelope_refusal_rows
+killed   | M5 ua-rs: NEP-413 dropped | clients/ua-rs/src/wallet/sign.rs | rc=101 | 2 failed: native_json_envelope_refusal_rows
+killed   | M6 ua-rs: big-endian read | clients/ua-rs/src/wallet/sign.rs | rc=101 | 2 failed: native_json_envelope_refusal_rows
+6 mutants, 6 killed, 0 survived, 0 not loaded
