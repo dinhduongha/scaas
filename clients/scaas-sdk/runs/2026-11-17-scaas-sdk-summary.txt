@@ -8,3 +8,10 @@ baseline ua-test | 4de8a5604 | 0 | 503 passed, 0 failed, 3 ignored (47 binaries)
 baseline ua-clippy | 4de8a5604 | 0 | -
 baseline features | 4de8a5604 | 0 | feature_tree not run (crate absent)
 # latest runs:
+sdk-deny | 4196e20cd | 0 | -; tree dirty
+sdk-test | 4196e20cd | 0 | 15 passed, 0 failed, 0 ignored (5 binaries); tree dirty
+sdk-min | 4196e20cd | 0 | 13 passed, 0 failed, 0 ignored (4 binaries); tree dirty
+sdk-clippy | 4196e20cd | 0 | -; tree dirty
+sdk-wasm | 4196e20cd | 0 | -; tree dirty
+features | 4196e20cd | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+sdk-sets | 4196e20cd | 0 | 6 passed, 0 failed, 0 ignored (3 binaries); tree dirty

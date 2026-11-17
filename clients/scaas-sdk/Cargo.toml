@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+[package]
+name = "scaas-sdk"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+publish = false
+license-file = "../../LICENSE"
+description = "SCaaS SDK: the one API apps call (CLI-SDK-01). Signs only through scaas-ua, talks only through scaas-rpc; no cryptography of its own. UNAUDITED."
+
+# docs/clients/scaas-sdk.md (CLI-SDK-*), spec docs/superpowers/specs/2026-11-17-scaas-sdk.md §3.2, §3.3. Each feature's bit is
+# the table's (`Sdk::features`, src/lib.rs): appended only, never reused (bit 12, the withdrawn `chat`, stays unused).
+# Not defined yet, by the plan: `native-networks` (3) and `raw-native` (23) in T19, `classical-roots` (24) in T6, `app-core` (26)
+# and `pqchat-records` (27) in T21.
+[features]
+default = ["vault", "account", "wallet", "file-store", "mlock"]
+vault = ["scaas-ua/wallet"]
+account = ["vault"]
+wallet = ["vault", "scaas-rpc/evm", "scaas-rpc/node-client"]
+zether = ["vault", "scaas-ua/zether"]
+pqz = ["vault", "scaas-ua/pqz"]
+pqz-set-n2048-kmax1024 = ["scaas-ua/pqz-set-n2048-kmax1024"]
+pqz-set-n2304-kmax4096 = ["scaas-ua/pqz-set-n2304-kmax4096"]
+pqz-set-n2560-kmax16384 = ["scaas-ua/pqz-set-n2560-kmax16384"]
+pqz-set-n2816-kmax65536 = ["scaas-ua/pqz-set-n2816-kmax65536"]
+dex = ["wallet"]
+admin = ["wallet"]
+mlock = ["vault", "scaas-ua/mlock"]
+soroban = ["scaas-rpc/soroban"]
+solana = ["scaas-rpc/solana"]
+near = ["scaas-rpc/near"]
+algorand = ["scaas-rpc/algorand"]
+aptos = ["scaas-rpc/aptos"]
+sui = ["scaas-rpc/sui"]
+cosmos = ["scaas-rpc/cosmos"]
+ton = ["scaas-rpc/ton"]
+file-store = ["vault"]
+opaque-calls = []
+
+[dependencies]
+# default-features = false: scaas-ua's defaults enable `pqz` with one set, so a build asking for another would carry two (§3.2)
+scaas-ua = { path = "../ua-rs", default-features = false }
+scaas-rpc = { path = "../scaas-rpc", default-features = false }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
+
+[[test]]
+name = "sets"
+required-features = ["pqz"]

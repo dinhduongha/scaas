@@ -36,6 +36,7 @@ ARTIFACTS = [
     ("pqz-core/ffi/wasm", []),  # pqz-ffi's wasm32 library (T15l, Fable P3-4)
     ("clients/ua-rs", []),  # pqz-read, the PQZ reference reading layer (T15m): the package's default features
     ("clients/scaas-rpc", ["--all-features"]),  # the network crate (scaas-ua for its depth scan), every feature it ships
+    ("clients/scaas-sdk", ["--all-features"]),  # the SDK apps call (scaas-sdk plan T1), every feature it ships
 ]
 DEP_TABLES = ("dependencies", "build-dependencies")
 
