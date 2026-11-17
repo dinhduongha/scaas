@@ -164,37 +164,6 @@ impl EvmPool {
         chain_id: u64,
         chain_uid: Option<B256>,
     ) -> Result<Self, RpcError> {
-        Self::build(
-            list,
-            chain_id,
-            chain_uid,
-            Shared::default(),
-            default_decode,
-            true,
-        )
-    }
-
-    /// The node's pool: the head and the failover total shared per `[[chains]]` table, reverts decoded by the node's ABI, and
-    /// endpoint 0's identity checked where the node checks it (at lane start, NODE-GW-07), not on each read.
-    #[cfg(feature = "node-internal")]
-    pub fn connect_shared(
-        list: NodeList,
-        chain_id: u64,
-        chain_uid: Option<B256>,
-        shared: Shared,
-        decode: fn(&[u8]) -> String,
-    ) -> Result<Self, RpcError> {
-        Self::build(list, chain_id, chain_uid, shared, decode, false)
-    }
-
-    fn build(
-        list: NodeList,
-        chain_id: u64,
-        chain_uid: Option<B256>,
-        shared: Shared,
-        decode: fn(&[u8]) -> String,
-        check_first: bool,
-    ) -> Result<Self, RpcError> {
         if list.policy == crate::Policy::StrictMajority && chain_uid.is_none() {
             return Err(RpcError::argument(
                 "strict_majority needs a pinned chain_uid",
@@ -205,10 +174,7 @@ impl EvmPool {
             Http::new(list.slow_timeout_ms)?,
         );
         let list = Arc::new(list);
-        let mut pool = Pool::shared(&list, chain_uid.is_some(), shared.head, shared.failover);
-        if !check_first {
-            pool = pool.without_first_identity();
-        }
+        let pool = Pool::new(&list, chain_uid.is_some());
         let set = |h: &Http| {
             (0..list.len())
                 .map(|i| Self::provider(h, &list, i, None))
@@ -224,8 +190,28 @@ impl EvmPool {
             simulators,
             pinned_uid: chain_uid,
             uid: Default::default(),
-            decode,
+            decode: default_decode,
         })
+    }
+
+    /// With the head and the failover total shared per `[[chains]]` table (feature `node-internal`: the node's pools of one chain).
+    /// Every endpoint, the first included, is identity-checked as in [`EvmPool::connect`] (T13 point 6).
+    #[cfg(feature = "node-internal")]
+    pub fn with_shared(mut self, shared: Shared) -> Self {
+        self.pool = Pool::shared(
+            &self.list,
+            self.pinned_uid.is_some(),
+            shared.head,
+            shared.failover,
+        );
+        self
+    }
+
+    /// With reverts decoded by `decode` (feature `node-internal`: the node's ABI).
+    #[cfg(feature = "node-internal")]
+    pub fn with_decode(mut self, decode: fn(&[u8]) -> String) -> Self {
+        self.decode = decode;
+        self
     }
 
     fn provider(

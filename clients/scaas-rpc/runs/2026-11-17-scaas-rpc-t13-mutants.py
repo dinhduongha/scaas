@@ -11,6 +11,7 @@ E = "clients/scaas-rpc/src/evm.rs"
 EP = "clients/scaas-rpc/src/endpoint.rs"
 H = "clients/scaas-rpc/src/http.rs"
 N = "clients/scaas-rpc/src/node.rs"
+NT = "cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::"
 T = "cd clients/scaas-rpc && ../../scripts/capped cargo test --locked --offline -j2 --all-features "
 MUTANTS = [
     ("S1 no freshness", [(P, "let fresh = |i: usize| names[i].is_some_and(|x| number.saturating_add(self.max_lag) >= x);",
@@ -37,6 +38,12 @@ MUTANTS = [
                     &format!("endpoint {i} serves no block 0 and names no checkpoint"),
                 )),''', "                None => Ok(true),")],
      T + "--test evm_fakes an_endpoint_without_block_0_is_refused_unless_it_names_a_checkpoint"),
+    ("point 6 endpoint 0 skipped on reads", [(P, "                self.identity_ok(probe, i, None).await?;\n",
+                                               "                if i != first {\n                    self.identity_ok(probe, i, None).await?;\n                }\n")],
+     NT + "an_endpoint_0_of_another_chain_is_dropped"),
+    ("point 6 endpoint 0 skipped on admit", [(P, "    ) -> Result<(), EndpointFailure> {\n        self.identity_ok(probe, i, deadline).await\n",
+                                               "    ) -> Result<(), EndpointFailure> {\n        if i == 0 {\n            return Ok(());\n        }\n        self.identity_ok(probe, i, deadline).await\n")],
+     NT + "an_endpoint_0_of_another_chain_is_dropped"),
 ]
 
 if __name__ == "__main__":

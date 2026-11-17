@@ -127,8 +127,6 @@ pub struct Pool {
     max_lag: u64,
     /// a `chain_uid` is pinned: required by strict majority and by a read that feeds a decryption (CLI-RPC-03)
     pinned: bool,
-    /// whether endpoint 0 is identity-checked on its reads (F13; `true` but for the node's pool, see `EvmPool::connect_shared`)
-    check_first: bool,
     identity: Arc<Vec<OnceLock<bool>>>,
     /// set beside a `false` identity when the endpoint was refused by name (T13 S16)
     refused: Vec<OnceLock<()>>,
@@ -162,7 +160,6 @@ impl Pool {
             read_timeout: Duration::from_millis(list.read_timeout_ms),
             max_lag: list.max_lag,
             pinned,
-            check_first: true,
             identity: Arc::new(list.endpoints().iter().map(|_| OnceLock::new()).collect()),
             refused: list.endpoints().iter().map(|_| OnceLock::new()).collect(),
             head,
@@ -170,12 +167,6 @@ impl Pool {
             failover: AtomicU64::new(0),
             failover_total,
         }
-    }
-
-    /// Endpoint 0 is not identity-checked per read (its identity is checked by the caller elsewhere).
-    pub fn without_first_identity(mut self) -> Self {
-        self.check_first = false;
-        self
     }
 
     pub fn len(&self) -> usize {
@@ -259,9 +250,6 @@ impl Pool {
         i: usize,
         deadline: Option<Instant>,
     ) -> Result<(), EndpointFailure> {
-        if i == 0 && !self.check_first {
-            return Ok(());
-        }
         self.identity_ok(probe, i, deadline).await
     }
 
@@ -354,9 +342,7 @@ impl Pool {
         let (mut last, mut failover_revert) = (None, None);
         for &i in &order {
             let fresh = async {
-                if i != first || self.check_first || purpose == Purpose::FeedsDecryption {
-                    self.identity_ok(probe, i, None).await?;
-                }
+                self.identity_ok(probe, i, None).await?;
                 if i != first {
                     let floor = self.head.load(Relaxed);
                     let n = probe.head(i, None).await?;

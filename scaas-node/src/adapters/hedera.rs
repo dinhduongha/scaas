@@ -337,6 +337,8 @@ mod tests {
         let id = b["id"].clone();
         let ok = |r: Value| json!({"jsonrpc": "2.0", "id": id, "result": r});
         axum::Json(match b["method"].as_str().unwrap_or_default() {
+            // scaas-rpc T13 point 6 (fixture correction): endpoint 0 is identity-checked now: chain 296's `eth_chainId`
+            "eth_chainId" => ok(json!("0x128")),
             "eth_getBalance" => ok(json!(n.balance)),
             // the recorded testnet block's gasLimit (tests/vectors/hedera_testnet.json): the gas cap reads `latest`
             "eth_getBlockByNumber" if b["params"][0] == "latest" => ok(json!({"gasLimit": "0x8f0d180"})),

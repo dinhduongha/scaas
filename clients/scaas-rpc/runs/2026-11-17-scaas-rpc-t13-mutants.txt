@@ -1,4 +1,4 @@
-# t13 mutants at commit 9fb11c18c (name | outcome | test)
-S16 a pruned endpoint trusted on the pin | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes chain_uid_is_block_zero_and_a_wrong_pin_is_refused
-S16 a pruned endpoint admitted without its checkpoint | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes an_endpoint_without_block_0_is_refused_unless_it_names_a_checkpoint
+# t13 mutants at commit 05e1b8f58 (name | outcome | test)
+point 6 endpoint 0 skipped on reads | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::an_endpoint_0_of_another_chain_is_dropped
+point 6 endpoint 0 skipped on admit | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::an_endpoint_0_of_another_chain_is_dropped
 2 mutants, 2 killed, 0 survived, 0 not loaded

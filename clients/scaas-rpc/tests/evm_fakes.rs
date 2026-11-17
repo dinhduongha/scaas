@@ -17,7 +17,7 @@ fn list(urls: &[&str], timeout_ms: u64, slow_ms: u64) -> NodeList {
     NodeList::new(e, Policy::Failover, timeout_ms, slow_ms, 60_000).unwrap()
 }
 
-/// The node's pool for chain 296 (`connect_shared`: endpoint 0 checked where the node checks it), pinned to [`genesis`].
+/// The node's pool for chain 296 (shared head and failover total), pinned to [`genesis`].
 fn node_pool(urls: &[&str]) -> EvmPool {
     node_pool_with(urls, Some(genesis()), Shared::default(), 30_000, 120_000)
 }
@@ -29,14 +29,9 @@ fn node_pool_with(
     timeout_ms: u64,
     slow_ms: u64,
 ) -> EvmPool {
-    EvmPool::connect_shared(
-        list(urls, timeout_ms, slow_ms),
-        296,
-        pin,
-        shared,
-        scaas_rpc::evm::default_decode,
-    )
-    .unwrap()
+    EvmPool::connect(list(urls, timeout_ms, slow_ms), 296, pin)
+        .unwrap()
+        .with_shared(shared)
 }
 
 /// The SDK's pool: every endpoint identity-checked.
@@ -760,7 +755,12 @@ async fn chain_uid_is_block_zero_and_a_wrong_pin_is_refused() {
     let url = serve(axum::Router::new().route(
         "/",
         axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
-            let b = b.clone();
+            // T13 point 6 (fixture correction): `eth_chainId` is chain 296's, every other request block 0
+            let b = if r["method"] == "eth_chainId" {
+                json!("0x128")
+            } else {
+                b.clone()
+            };
             async move { axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": b})) }
         }),
     ))
@@ -772,7 +772,13 @@ async fn chain_uid_is_block_zero_and_a_wrong_pin_is_refused() {
     let pruned = serve(axum::Router::new().route(
         "/",
         axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
-            axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": null}))
+            // T13 point 6 (fixture correction): chain 296's `eth_chainId`, no block
+            let result = if r["method"] == "eth_chainId" {
+                json!("0x128")
+            } else {
+                Value::Null
+            };
+            axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": result}))
         }),
     ))
     .await;

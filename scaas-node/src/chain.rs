@@ -65,8 +65,11 @@ impl Chain {
         let list = scaas_rpc::NodeList::new(endpoints, scaas_rpc::Policy::Failover, cfg.rpc_timeout_ms, cfg.rpc_simulate_timeout_ms,
             scaas_rpc::endpoint::READ_TIMEOUT_MS).map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.evm_chain_number))?;
         let shared = scaas_rpc::evm::Shared { head: cfg.head.clone(), failover: cfg.failover.clone() };
-        let pool = EvmPool::connect_shared(list, cfg.evm_chain_number, cfg.chain_uid, shared, decode_revert)
-            .map_err(|e| anyhow!("chain {}: {e}", cfg.evm_chain_number))?;
+        // scaas-rpc T13 point 6: endpoint 0 is identity-checked on its reads too, as every other endpoint
+        let pool = EvmPool::connect(list, cfg.evm_chain_number, cfg.chain_uid)
+            .map_err(|e| anyhow!("chain {}: {e}", cfg.evm_chain_number))?
+            .with_shared(shared)
+            .with_decode(decode_revert);
         Ok(Self {
             number: cfg.evm_chain_number,
             chain_ok: pool.pool().identity_cells(),
@@ -343,12 +346,28 @@ pub(crate) mod tests {
         let hash = block["hash"].as_str().unwrap().parse().unwrap();
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
             let block = block.clone();
-            async move { axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": block})) }
+            // scaas-rpc T13 point 6 (fixture correction): `eth_chainId` is chain 296's, every other request block 0
+            let result = if r["method"] == "eth_chainId" { json!("0x128") } else { block };
+            async move { axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": result})) }
         }));
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let url = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         (url, hash)
+    }
+
+    /// Chain 296's answer to `eth_chainId` and to block 0 (the recorded Hedera testnet block, hash [`genesis`]), else none.
+    fn identity_answer(r: &Value) -> Option<Value> {
+        let result = if r["method"] == "eth_chainId" {
+            json!("0x128")
+        } else if r["method"] == "eth_getBlockByNumber" && r["params"][0] == "0x0" {
+            let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+            b["hash"] = json!(format!("{:#x}", genesis()));
+            b
+        } else {
+            return None;
+        };
+        Some(json!({"jsonrpc": "2.0", "id": r["id"], "result": result}))
     }
 
     fn chain(url: &str, pin: Option<B256>) -> Chain {
@@ -540,6 +559,10 @@ pub(crate) mod tests {
     /// its `blockNumber` the request's `fromBlock` and its `logIndex` the span's length.
     fn capped_logs(r: &Value, cap: u64) -> Value {
         let n = |v: &Value| u64::from_str_radix(v.as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+        // scaas-rpc T13 point 6 (fixture correction): chain 296's identity
+        if let Some(a) = identity_answer(r) {
+            return a;
+        }
         match r["method"].as_str() {
             Some("eth_blockNumber") => json!({"result": "0x3000"}),
             Some("eth_getLogs") => {
@@ -623,6 +646,10 @@ pub(crate) mod tests {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
             let n2 = n2.clone();
             async move {
+                // scaas-rpc T13 point 6 (fixture correction): chain 296's identity
+                if let Some(a) = identity_answer(&r) {
+                    return (axum::http::StatusCode::OK, axum::Json(a));
+                }
                 if r["method"] == "eth_getLogs" {
                     n2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                     return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::Json(json!({})));
@@ -664,6 +691,10 @@ pub(crate) mod tests {
         let got = tokio::time::timeout(std::time::Duration::from_secs(20), two.call_raw(Address::ZERO, Bytes::new())).await;
         assert_eq!(got.expect("one timeout, then the next endpoint").unwrap().len(), 32);
         let app = axum::Router::new().route("/", axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
+            // scaas-rpc T13 point 6 (fixture correction): chain 296's identity, answered at once
+            if let Some(a) = identity_answer(&r) {
+                return axum::Json(a);
+            }
             tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
             axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": if r["method"] == "eth_estimateGas" { json!("0x5208") }
                 else { json!("0x") }}))
@@ -718,7 +749,9 @@ pub(crate) mod tests {
         // scaas-rpc T13 S16 (coordinator's call): a pruned RPC (no block 0) is never trusted on the pin alone, and without one
         // there is no chain_uid either
         let app = axum::Router::new().route("/", axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
-            axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": null}))
+            // scaas-rpc T13 point 6 (fixture correction): chain 296's `eth_chainId`, no block
+            let result = if r["method"] == "eth_chainId" { json!("0x128") } else { Value::Null };
+            axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": result}))
         }));
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let pruned = format!("http://{}", l.local_addr().unwrap());
@@ -741,6 +774,10 @@ pub(crate) mod tests {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
             let c2 = c2.clone();
             async move {
+                // scaas-rpc T13 point 6 (fixture correction): chain 296's `eth_chainId` and a block 0
+                if let Some(a) = identity_answer(&r) {
+                    return axum::Json(a);
+                }
                 let at = r["params"][0].as_str().unwrap_or_default().to_lowercase();
                 let code = if at == format!("{:#x}", Address::repeat_byte(0xc0)) { c2 } else { vec![] };
                 axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("0x{}", alloy::hex::encode(code))}))
@@ -771,6 +808,10 @@ pub(crate) mod tests {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
             let s2 = s2.clone();
             async move {
+                // scaas-rpc T13 point 6 (fixture correction): chain 296's `eth_chainId` and a block 0, not kept
+                if let Some(a) = identity_answer(&r) {
+                    return axum::Json(a);
+                }
                 let input = r["params"][0]["input"].as_str().or(r["params"][0]["data"].as_str()).unwrap_or("0x").to_string();
                 s2.lock().unwrap().push(alloy::hex::decode(&input[2..]).unwrap());
                 axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("0x{:064x}", 5)}))
@@ -867,5 +908,27 @@ pub(crate) mod tests {
         assert_eq!(c.finalized_number().await.unwrap(), None);
         assert_eq!(good_n.load(SeqCst), 0, "endpoint 1 is never asked");
         assert_eq!(c.call_raw(Address::ZERO, Bytes::new()).await.unwrap().len(), 32, "control: a view fails over");
+    }
+
+    /// scaas-rpc T13 point 6: endpoint 0 is identity-checked on its reads: of another chain, it is dropped (never asked), a view
+    /// fails over to endpoint 1, and the lane's first-endpoint reads fail. Control: endpoint 0 of chain 296 answers itself.
+    #[tokio::test]
+    async fn an_endpoint_0_of_another_chain_is_dropped() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let f: fn(&Value) -> Value = |r| match r["method"].as_str() {
+            Some("eth_getTransactionCount") => json!({"result": "0x7"}),
+            _ => json!({"result": format!("0x{:064x}", 5)}),
+        };
+        let (other, other_n) = fake_rpc_on(f, 1, genesis()).await;
+        let (good, _) = fake_rpc(f).await;
+        let c = chain_of(&[&other, &good]);
+        assert_eq!(c.call_raw(Address::ZERO, Bytes::new()).await.unwrap().len(), 32, "the view fails over");
+        assert!(c.pending_nonce().await.is_err(), "a lane read stays on endpoint 0, dropped");
+        assert_eq!(other_n.load(SeqCst), 0, "endpoint 0 is never asked");
+        assert_eq!(c.chain_ok[0].get(), Some(&false));
+        let (same, same_n) = fake_rpc_on(f, 296, genesis()).await;
+        let c = chain_of(&[&same, &good]);
+        assert_eq!(c.pending_nonce().await.unwrap(), 7, "control");
+        assert_eq!(same_n.load(SeqCst), 1);
     }
 }

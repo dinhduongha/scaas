@@ -487,6 +487,8 @@ mod tests {
     async fn the_guard_refuses_before_the_simulation() {
         let app = axum::Router::new().route("/", post(|Json(r): Json<Value>| async move {
             Json(match r["method"].as_str().unwrap() {
+                // scaas-rpc T13 point 6 (fixture correction): endpoint 0 is identity-checked now: chain 7's `eth_chainId`
+                "eth_chainId" => json!({"jsonrpc": "2.0", "id": r["id"], "result": "0x7"}),
                 // scaas-rpc T13 S16: block 0 is the pinned chain_uid's (a fixture correction: a node that serves no block 0 is
                 // refused now, never trusted on the pin alone)
                 "eth_getBlockByNumber" if r["params"][0] == "0x0" => json!({"jsonrpc": "2.0", "id": r["id"], "result":
@@ -651,10 +653,15 @@ mod tests {
         let log: Arc<Mutex<Vec<String>>> = Default::default();
         let l2 = log.clone();
         let uid = crate::typed::testkit::vectors()["ops"]["Wrap"]["domains"]["token"]["domain"]["salt"].clone();
+        let chain_id: u64 = crate::typed::testkit::vectors()["ops"]["Wrap"]["domains"]["token"]["domain"]["chainId"].as_str().unwrap().parse().unwrap();
         let reg = format!("0x{}", alloy::hex::encode(<crate::abi::IUALedger::registryCall as alloy::sol_types::SolCall>::SELECTOR));
         let app = axum::Router::new().route("/", post(move |Json(r): Json<Value>| {
             let (l2, uid, reg) = (l2.clone(), uid.clone(), reg.clone());
             async move {
+                // scaas-rpc T13 point 6 (fixture correction): endpoint 0 is identity-checked now: the chain's `eth_chainId`, not logged
+                if r["method"] == "eth_chainId" {
+                    return Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("{chain_id:#x}")}));
+                }
                 let m = r["method"].as_str().unwrap().to_string();
                 l2.lock().unwrap().push(m.clone());
                 let input = r["params"][0]["input"].as_str().or(r["params"][0]["data"].as_str()).unwrap_or("0x").to_string();

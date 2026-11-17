@@ -1655,7 +1655,11 @@ mod tests {
     /// Fable recheck 4 R4-4: only for the vector's `UACreateInstance` release `(contractClass, kind, version)` asked of its
     /// scaas-rpc T13 S16: block 0 with the pinned `uid` as its hash, for `eth_getBlockByNumber("0x0")` (a fixture correction:
     /// a node that serves no block 0 is refused now, never trusted on the pin alone).
-    fn block0_of(r: &serde_json::Value, uid: B256) -> Option<serde_json::Value> {
+    /// scaas-rpc T13 point 6 (fixture correction): and `chain` for `eth_chainId` (endpoint 0 is identity-checked now).
+    fn block0_of(r: &serde_json::Value, uid: B256, chain: u64) -> Option<serde_json::Value> {
+        if r["method"] == "eth_chainId" {
+            return Some(serde_json::json!(format!("{chain:#x}")));
+        }
         if r["method"] != "eth_getBlockByNumber" || r["params"][0] != "0x0" {
             return None;
         }
@@ -1676,7 +1680,7 @@ mod tests {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<serde_json::Value>| {
             let (s2, now) = (s2.clone(), *r2.lock().unwrap());
             async move {
-                if let Some(b) = block0_of(&r, uid) {
+                if let Some(b) = block0_of(&r, uid, 31337) {
                     return axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": r["id"], "result": b}));
                 }
                 let m = r["method"].as_str().unwrap().to_string();
@@ -1943,7 +1947,7 @@ mod tests {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(q): axum::Json<serde_json::Value>| {
             let (entries, sdom, tdom) = (entries.clone(), sdom.clone(), tdom.clone());
             async move {
-                if let Some(b) = block0_of(&q, uid) {
+                if let Some(b) = block0_of(&q, uid, 7622) {
                     return axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": q["id"], "result": b}));
                 }
                 let p = &q["params"][0];
@@ -2673,7 +2677,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     /// As [`bound`], `registry()` answering `registry` (`Address::ZERO`: the UA ledger off, R9).
     async fn bound_with_registry(uid: B256, registry: Address) -> ChainCfg {
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<serde_json::Value>| async move {
-            if let Some(b) = block0_of(&r, uid) {
+            if let Some(b) = block0_of(&r, uid, 31337) {
                 return axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": r["id"], "result": b}));
             }
             let input = r["params"][0]["input"].as_str().or(r["params"][0]["data"].as_str()).unwrap_or("0x").to_string();
@@ -3014,6 +3018,10 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<serde_json::Value>| {
             let (answer, g) = (answer.clone(), g.clone());
             async move {
+                // scaas-rpc T13 point 6 (fixture correction): chain 7's identity, not counted
+                if let Some(b) = block0_of(&r, B256::ZERO, 7) {
+                    return axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": r["id"], "result": b}));
+                }
                 let gas = r["params"][0]["gas"].as_str().map_or(0, |x| u64::from_str_radix(&x[2..], 16).unwrap());
                 g.lock().unwrap().push(gas);
                 let mut out = serde_json::json!({"jsonrpc": "2.0", "id": r["id"]});
@@ -3130,7 +3138,7 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
         let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(q): axum::Json<serde_json::Value>| {
             let (instances, r2) = (instances.clone(), r2.clone());
             async move {
-                if let Some(b) = block0_of(&q, uid) {
+                if let Some(b) = block0_of(&q, uid, 31337) {
                     return axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": q["id"], "result": b}));
                 }
                 let p = &q["params"][0];
