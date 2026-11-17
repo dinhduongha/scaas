@@ -4358,6 +4358,8 @@ Change (2026-10-27): owner ruling 2026-10-27, C0-1 (ii) — the `AUDITOR` openin
 **Cost if wrong.** A single auditor key is one point of compromise or coercion for all transfer amounts.
 **Source.** `history/specs/2026-10-08-zether-multi-recipient-design.md` §2 (Z11).
 
+Change (owner 2026-11-17, "Ok, as proposed" on the four points; status: SPECIFIED, no contract change): **no setter for the auditor key** (CTR-ZTH-09 holds). Changing the auditing parties or refreshing the key is done off chain: the threshold key is re-shared (proactive secret sharing) with `Y_a` unchanged, for Zether and for PQZ. On a PQZ token the auditor is a `pqz-mlwe` UA whose key rotates by its PQZ key versions (the token reads the auditor's current version at each operation). A governed `setAuditor` (timelock, notice, a per-operation auditor key version for disclosures) is built only if a regulator requires it; it would give the governance holder the power to read every later amount.
+
 ### CTR-ZTH-42 — The sender may leave the auditor out of one transfer
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-42 · superseded-by: —
 
@@ -4625,6 +4627,8 @@ Change (2026-10-17): owner — kinds are the same on every chain, so **every der
 **Why.** Native kinds need no registration; derived kinds register once per chain, which is where PoP and one-key-one-purpose are enforced and typos revert.
 **Cost if wrong.** One registration per chain (~75 k gas on bn254).
 **Source.** `history/specs/2026-10-06-universal-account-design.md:125`
+
+Change (owner 2026-11-17, "Ok, as proposed" on the four points; status: BUILT for the refusal, SPECIFIED for the flow): **receiving to an unregistered derived id stays refused** on every family with a UA registry (EVM `UANotRegistered` / `UAKindNotAccepted`, Soroban `receivable`, PQZ `AccountNotRegistered`); a UA id is a key hash, so a typo would burn funds. Onboarding a new receiver is the relayed registration: the registration record is portable and binds no caller (CTR-UA-07), so anyone may submit it, the sender included, paying its gas; the SDK offers that flow ("sponsor the registration", scaas-sdk spec). No escrow for unregistered ids. Families without a UA registry yet (NEAR, Algorand, Solana, Aptos, Sui, Cosmos, TON) have no UA transfers until their UA rounds.
 
 ### CTR-UA-07 — PoP binds the UA, its attributes and the proof hash (portable, no chain)
 - old: R295, UA:Q10, typed-signing:TS-D1, typed-signing:TS-D2, typed-signing:TS-D3, typed-signing:TS-D6, typed-signing:TS-D7 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-07 · superseded-by: —
