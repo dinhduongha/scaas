@@ -10803,6 +10803,8 @@ The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the
 
 Change (2026-11-17, plan T13 S1, Fable code review of T1–T12; status: BUILT on branch `scaas-sdk`, UNAUDITED): below ⌊n/2⌋ + 1 honest names (always at `n = 2`, at `n = 3` with one honest endpoint down) the (⌊n/2⌋ + 1)-th highest named block was the liar's, so one endpoint chose the age of the state read. Now an endpoint counts at `b` only when `b` is at most `max_lag` below its own named block (default 4: honest endpoints a block or two apart, the fallback round one named number lower, one more of margin; a list setting); the honest endpoints refuse an old block and the read is `EndpointNoMajority` instead.
 
+Change (2026-11-17, plan T13 S2, Fable code review; status: BUILT on branch `scaas-sdk`, UNAUDITED): the agreed-block floor was one number for every block choice, so after a read at the head every `Finalized` or deeper read (`tx_state`, `op_state`) was `EndpointNoMajority` for good, and `pending_nonce` (depth 1) failed after `logs_range` (latest) until the next block. The floor is now kept per block choice (`Latest`, `Finalized`, each depth): two agreed reads of one choice never go backwards; reads of different choices mix on one pool.
+
 ### CLI-RPC-06 — A read that feeds a decryption never rests on a discovered endpoint alone
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-06 · superseded-by: —
 

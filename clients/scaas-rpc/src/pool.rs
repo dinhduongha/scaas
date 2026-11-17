@@ -34,7 +34,7 @@ impl<T: ?Sized> MaybeSync for T {}
 
 /// Which block an endpoint names for an agreed read (CLI-RPC-05 step 1): its head minus a depth (the default `Depth(1)`, F6),
 /// its head, or its `finalized` block.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BlockChoice {
     Depth(u64),
     Latest,
@@ -131,8 +131,8 @@ pub struct Pool {
     check_first: bool,
     identity: Arc<Vec<OnceLock<bool>>>,
     head: Arc<AtomicU64>,
-    /// the highest block an agreed read stood at (F12)
-    floor: AtomicU64,
+    /// per block choice, the highest block an agreed read of it stood at (F12; T13 S2)
+    floor: std::sync::Mutex<std::collections::HashMap<BlockChoice, u64>>,
     failover: AtomicU64,
     failover_total: Arc<AtomicU64>,
 }
@@ -163,7 +163,7 @@ impl Pool {
             check_first: true,
             identity: Arc::new(list.endpoints().iter().map(|_| OnceLock::new()).collect()),
             head,
-            floor: AtomicU64::new(0),
+            floor: Default::default(),
             failover: AtomicU64::new(0),
             failover_total,
         }
@@ -211,9 +211,13 @@ impl Pool {
     pub fn failover_total(&self) -> u64 {
         self.failover_total.load(Relaxed)
     }
-    /// The highest block an agreed read stood at.
-    pub fn agreed_floor(&self) -> u64 {
-        self.floor.load(Relaxed)
+    /// The highest block an agreed read of `choice` stood at (T13 S2: one floor per choice; a `Finalized` read is far below
+    /// the head and never held back by a read there).
+    pub fn agreed_floor(&self, choice: BlockChoice) -> u64 {
+        self.floor
+            .lock()
+            .map(|f| f.get(&choice).copied().unwrap_or(0))
+            .unwrap_or(0)
     }
 
     fn label(&self, f: EndpointFailure) -> EndpointFailure {
@@ -448,7 +452,7 @@ impl Pool {
             return Err(no(0, failures));
         }
         // (2) the need-th highest, never below the floor
-        let floor = self.floor.load(Relaxed);
+        let floor = self.agreed_floor(choice);
         let b = sorted[need - 1];
         if b < floor {
             failures.extend(
@@ -472,7 +476,10 @@ impl Pool {
                 .await
             {
                 Ok((value, hash, members)) => {
-                    self.floor.fetch_max(number, Relaxed);
+                    if let Ok(mut f) = self.floor.lock() {
+                        let e = f.entry(choice).or_insert(0);
+                        *e = (*e).max(number);
+                    }
                     return match value {
                         Ok(value) => Ok(Agreed {
                             value,

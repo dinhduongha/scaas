@@ -28,6 +28,6 @@ node-test | 69b8eda66 | 0 | 790 passed, 0 failed, 72 ignored (18 binaries); tree
 node-clippy | 69b8eda66 | 0 | -; tree dirty
 features | af174a787 | 0 | -; tree dirty
 docs | af174a787 | 0 | -; tree dirty
-rpc-test | acbbacd2f | 0 | 113 passed, 0 failed, 10 ignored (7 binaries); tree dirty
-rpc-clippy | acbbacd2f | 0 | -; tree dirty
-rpc-wasm | acbbacd2f | 0 | -; tree dirty
+rpc-test | 9419b1322 | 0 | 115 passed, 0 failed, 10 ignored (7 binaries); tree dirty
+rpc-clippy | 9419b1322 | 0 | -; tree dirty
+rpc-wasm | 9419b1322 | 0 | -; tree dirty

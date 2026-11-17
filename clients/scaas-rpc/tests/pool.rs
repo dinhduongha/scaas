@@ -763,7 +763,7 @@ async fn an_agreement_below_the_last_agreed_block_is_refused() {
     let p = named(3, Policy::StrictMajority);
     let f = Fake::new(vec![ep(100); 3]);
     assert_eq!(agree(&p, &f, vec![A::V(5); 3]).await.unwrap().number, 100);
-    assert_eq!(p.agreed_floor(), 100);
+    assert_eq!(p.agreed_floor(BlockChoice::Depth(1)), 100);
     let mut lag = ep(100);
     lag.name = Some(90);
     let g = Fake::new(vec![lag.clone(), lag, ep(100)]);
@@ -1284,4 +1284,96 @@ async fn honest_endpoints_max_lag_apart_still_agree() {
             .is_ok(),
         "the list's own max_lag"
     );
+}
+
+// ---------------------------------------------------------------- plan T13 S2: one floor per BlockChoice
+
+/// A chain whose endpoints are at `latest[i]` (None: down), finalized at `finalized`, holding every block.
+struct Chain3 {
+    latest: Vec<Option<u64>>,
+    finalized: std::sync::Mutex<u64>,
+}
+
+impl Probe for Chain3 {
+    type Hash = u64;
+    async fn same_chain(&self, _: usize, _: Option<Instant>) -> Result<bool, EndpointFailure> {
+        Ok(true)
+    }
+    async fn head(&self, i: usize, _: Option<Instant>) -> Result<u64, EndpointFailure> {
+        self.latest[i].ok_or_else(|| fail(i))
+    }
+    async fn named(
+        &self,
+        i: usize,
+        c: BlockChoice,
+        d: Option<Instant>,
+    ) -> Result<u64, EndpointFailure> {
+        let h = self.head(i, d).await?;
+        Ok(match c {
+            BlockChoice::Latest => h,
+            BlockChoice::Depth(k) => h.saturating_sub(k),
+            BlockChoice::Finalized => (*self.finalized.lock().unwrap()).min(h),
+        })
+    }
+    async fn header(&self, _: usize, n: u64, _: Option<Instant>) -> Result<u64, EndpointFailure> {
+        Ok(n)
+    }
+}
+
+async fn number_at(p: &Pool, c: &Chain3, choice: BlockChoice) -> Result<u64, RpcError> {
+    p.agree(c, choice, Purpose::Plain, |r: ReadAt<u64>| async move {
+        Ok::<_, ReadError>(r.number)
+    })
+    .await
+    .map(|a| a.number)
+}
+
+/// S2: the agreed-block floor was one number for every choice: after a read at the head every `Finalized` or deeper read (a
+/// transaction's state, a relayed operation's) was refused for good. Each choice keeps its own floor now: reads of every choice
+/// mix on one pool.
+#[tokio::test]
+async fn reads_of_every_block_choice_mix_on_one_pool() {
+    let c = Chain3 {
+        latest: vec![Some(100); 3],
+        finalized: std::sync::Mutex::new(60),
+    };
+    let p = named(3, Policy::StrictMajority);
+    assert_eq!(number_at(&p, &c, BlockChoice::Latest).await.unwrap(), 100);
+    assert_eq!(
+        number_at(&p, &c, BlockChoice::Depth(1)).await.unwrap(),
+        99,
+        "Depth(1) after Latest"
+    );
+    assert_eq!(
+        number_at(&p, &c, BlockChoice::Finalized).await.unwrap(),
+        60,
+        "Finalized after both"
+    );
+    assert_eq!(number_at(&p, &c, BlockChoice::Depth(1)).await.unwrap(), 99);
+    assert_eq!(number_at(&p, &c, BlockChoice::Latest).await.unwrap(), 100);
+}
+
+/// Each choice's own floor still holds: a `Finalized` read never goes below the finalized block agreed before (control: the
+/// head reads are not held back by it).
+#[tokio::test]
+async fn a_finalized_read_never_goes_below_the_last_agreed_finalized_block() {
+    let c = Chain3 {
+        latest: vec![Some(100); 3],
+        finalized: std::sync::Mutex::new(60),
+    };
+    let p = named(3, Policy::StrictMajority);
+    assert_eq!(number_at(&p, &c, BlockChoice::Finalized).await.unwrap(), 60);
+    *c.finalized.lock().unwrap() = 50;
+    let r = number_at(&p, &c, BlockChoice::Finalized).await;
+    assert!(
+        matches!(r, Err(RpcError::EndpointNoMajority { .. })),
+        "{r:?}"
+    );
+    assert_eq!(
+        number_at(&p, &c, BlockChoice::Latest).await.unwrap(),
+        100,
+        "control: Latest"
+    );
+    assert_eq!(p.agreed_floor(BlockChoice::Finalized), 60);
+    assert_eq!(p.agreed_floor(BlockChoice::Latest), 100);
 }

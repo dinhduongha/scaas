@@ -73,7 +73,7 @@ rules above.
 (ARCH-POS-15, the agreement option; SPECIFIED). `n` is the length of the list, at least 2, with a pinned `chain_uid`. (1) Every
 endpoint passes CLI-RPC-03 and names its block for the read (`head − depth`, by default depth 1; `latest`; or `finalized`).
 (2) The read block `b` is the (⌊n/2⌋ + 1)-th highest named number; it may not be below the highest block the list agreed on
-before (else `BehindHead`, counted as no majority). An endpoint counts at `b` only when `b` is at most `max_lag` below the number it
+before for the same block choice (one floor per choice; else `BehindHead`, counted as no majority). An endpoint counts at `b` only when `b` is at most `max_lag` below the number it
 named itself (default 4, a list setting; else `BehindHead` for that endpoint), so a liar below ⌊n/2⌋ + 1 honest names cannot choose an
 old state: the honest endpoints refuse it. (3) Each endpoint reads its header at `b` and runs the whole read pinned to that
 header's hash (EIP-1898, `requireCanonical`). (4) The answers are compared as complete decoded values projected to the fields the
