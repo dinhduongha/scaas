@@ -323,7 +323,8 @@ export function signStellarTransaction(key, networkId, txXdr, { allowRawDigest =
 export const signHederaTransaction = (key, bodyBytes, { allowRawDigest = false } = {}) => envelope(key, 'hedera_ed25519', bodyBytes, allowRawDigest, (t) => t);
 
 /** BIP-86 key-path signature: d = d0 or n − d0 (even y of P), BIP-340 with d + t mod n, then verified under x(Q). `aux`: the
- *  generator's fixed bytes, else 32 fresh bytes from the platform CSPRNG. */
+ *  generator's fixed bytes, else 32 fresh bytes from the platform CSPRNG. The tweaked key's bytes are wiped on every exit; the
+ *  BigInt `d` cannot be wiped in JavaScript (a known limit of this reference, T13 C3; ua-rs wipes every scalar). */
 function signTaproot(d0, digest, aux) {
   const P = secp256k1.getPublicKey(d0, true);
   let d = big(d0);
@@ -331,8 +332,8 @@ function signTaproot(d0, digest, aux) {
   const t = taprootTweak(P.slice(1));
   const tweaked = b32((d + big(t.tweak)) % SECP_N);
   const a = aux ?? crypto.getRandomValues(new Uint8Array(32));
-  const sig = schnorr.sign(digest, tweaked, a);
-  wipe(tweaked);
+  let sig;
+  try { sig = schnorr.sign(digest, tweaked, a); } finally { wipe(tweaked); }
   if (!schnorr.verify(sig, digest, t.outputKey)) throw new Error('Taproot signature failed its own check');
   return sig;
 }

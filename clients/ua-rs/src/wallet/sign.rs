@@ -332,19 +332,20 @@ impl Signer for NativeKey {
 }
 
 /// BIP-86 key-path signature (spec §5.2): `d = d0` or `n − d0` (even `y` of `P`), BIP-340 `Sign(d + t mod n, msg, aux)`, then
-/// BIP-340 Verify against `check` (the output key `x(Q)` in the release path): a faulty signature never leaves. The negated and
-/// tweaked scalars are wiped before return (k256's `schnorr::SigningKey` wipes its own on drop, plan T0).
+/// BIP-340 Verify against `check` (the output key `x(Q)` in the release path): a faulty signature never leaves. The base scalar
+/// `d0` (a `NonZeroScalar`: `Zeroize` but no `Drop`, T13 C3) and the negated and tweaked scalars are wiped as they drop, on every
+/// exit (k256's `schnorr::SigningKey` wipes its own on drop, plan T0).
 fn taproot_sign(d0: &[u8], msg: &[u8], aux: &[u8; 32], check: Option<&[u8; 32]>) -> Result<Vec<u8>> {
     use k256::elliptic_curve::sec1::ToSec1Point as _;
     use k256::elliptic_curve::PrimeField as _;
-    let d0 = k256::NonZeroScalar::try_from(d0).map_err(|_| Error::Argument)?;
+    let d0 = zeroize::Zeroizing::new(k256::NonZeroScalar::try_from(d0).map_err(|_| Error::Argument)?);
     let p = k256::PublicKey::from_secret_scalar(&d0).to_sec1_point(true);
     let x: [u8; 32] = p.as_bytes().get(1..33).ok_or(Error::Argument)?.try_into().map_err(|_| Error::Argument)?;
     let out = derive::taproot_tweak(&x)?;
     let t = Option::<k256::Scalar>::from(k256::Scalar::from_repr(out.tweak.into())).ok_or(Error::Argument)?;
     // the negated and tweaked scalars live in this block only (wiped as they drop, before signing)
     let sk = {
-        let d = zeroize::Zeroizing::new(if p.as_bytes().first() == Some(&3) { -*d0 } else { *d0 });
+        let d = zeroize::Zeroizing::new(if p.as_bytes().first() == Some(&3) { -**d0 } else { **d0 });
         let tweaked = zeroize::Zeroizing::new(*d + t);
         let bytes = zeroize::Zeroizing::new(tweaked.to_repr());
         k256::schnorr::SigningKey::from_bytes(&bytes).map_err(|_| Error::Argument)?
