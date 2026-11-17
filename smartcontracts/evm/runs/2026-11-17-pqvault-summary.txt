@@ -62,3 +62,24 @@ R1 mutant | purpose-without-ns | test_requirePortableApp_appIdZero, test_require
 R1 mutant | requireportable-open | test_requirePortableApp_separation, test_requirePortable_purposes | 1
 R1 mutant | portable-classical-shortcut | test_requirePortableApp_msig, test_requirePortable_msig | 1
 R1 mutant | sigok-guard-dropped | test_ua8_sigOkPortablePurposesOnly | 1
+# R2 (the vectors regenerated: sign.json portableApp 28 rows + member + native + refusal; rs_signatures.json appRows 18, rows unchanged at 27):
+R2 | forge-portableapp | R2 tree | 0 | 16 passed 0 failed 0 skipped (forge)
+R2 | clientkeys | R2 tree | 0 | 456 passed 0 failed (node)
+R2 | ua-rs-default | R2 tree | 0 | 503 passed 0 failed 3 ignored (cargo)
+R2 | ua-rs-vectors | R2 tree | 0 | 602 passed 0 failed 6 ignored (cargo)
+R2 | ua-rs-verify-only | R2 tree | 0 | 84 passed 0 failed 0 ignored (cargo)
+R2 | ua-rs-signers | R2 tree | 0 | 4 passed 0 failed 0 ignored (cargo)
+R2 | ua-rs-json | R2 tree | 0 | 7 passed 0 failed 0 ignored (cargo)
+R2 | ua-rs-pq | R2 tree | 0 | 38 passed 0 failed 0 ignored (cargo)
+R2 | ua-rs-wallet-mlock | R2 tree | 0 | 373 passed 0 failed 0 ignored (cargo)
+R2 | ua-rs-zether-only | R2 tree | 0 | 22 passed 0 failed 0 ignored (cargo)
+R2 | ua-rs-pqz-n2048 | R2 tree | 0 | 78 passed 0 failed 3 ignored (cargo)
+R2 | ua-c | R2 tree | 0 | 9 passed 0 failed 0 ignored (cargo)
+R2 | ua-py | R2 tree | 0 | 99 passed (python)
+R2 | ua-go | R2 tree | 0 | 2 packages ok (go)
+R2 | ua-cs | R2 tree | 0 | 61 passed 0 failed (dotnet)
+R2 | ua-cxx | R2 tree | 0 | 43 passed 0 failed (ctest)
+R2 | ua-dart | R2 tree | 0 | -
+R2 | ua-dart-frb | R2 tree | 0 | -
+R2 | ua-qt | R2 tree | 0 | 1 passed 0 failed (ctest)
+R2 | negative control | R2 tree | 1 | test_appPurpose_pinned red with one hex digit of portableApp.apps[0].purposeTag changed in sign.json (file restored byte-equal)

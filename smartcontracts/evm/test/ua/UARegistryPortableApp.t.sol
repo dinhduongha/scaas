@@ -30,12 +30,25 @@ contract UARegistryPortableAppTest is UARegistryPortableTest {
 
     // ----- the purpose -----
 
-    /// The namespace and the purpose form, pinned against an inline encoding (R2: against the vectors).
-    function test_appPurpose_pinned() public pure {
+    /// The namespace and the purpose form, pinned against an inline encoding and against `vectors/ua/sign.json` `portableApp`
+    /// (written by clientkeys): each app's purpose and one row's `uaMessage` per app.
+    function test_appPurpose_pinned() public view {
         assertEq(UAKinds.APP_PURPOSE_NS, keccak256("scaas.ua.purpose.app.v1"));
         assertEq(UAKinds.appPurpose(APP_A), keccak256(abi.encode(keccak256("scaas.ua.purpose.app.v1"), APP_A)));
-        assertEq(UAKinds.appPurpose(APP_B), keccak256(abi.encode(UAKinds.APP_PURPOSE_NS, APP_B)));
         assertTrue(UAKinds.appPurpose(APP_A) != UAKinds.appPurpose(APP_B));
+        string memory j = vm.readFile("../vectors/ua/sign.json");
+        assertEq(vm.parseJsonBytes32(j, ".portableApp.namespace"), UAKinds.APP_PURPOSE_NS);
+        bytes32[2] memory ids = [APP_A, APP_B];
+        for (uint256 i; i < 2; ++i) {
+            string memory a = string.concat(".portableApp.apps[", vm.toString(i), "]");
+            assertEq(vm.parseJsonBytes32(j, string.concat(a, ".appId")), ids[i]);
+            assertEq(vm.parseJsonBytes32(j, string.concat(a, ".purposeTag")), UAKinds.appPurpose(ids[i]));
+            string memory r = string.concat(".portableApp.rows[", vm.toString(i * 14), "]");
+            assertEq(vm.parseJsonBytes32(j, string.concat(r, ".appId")), ids[i]);
+            uint16 kind = uint16(vm.parseJsonUint(j, string.concat(r, ".kind")));
+            bytes32 digest = vm.parseJsonBytes32(j, string.concat(r, ".digest"));
+            assertEq(vm.parseJsonBytes32(j, string.concat(r, ".uaMsg")), UAKinds.uaMessage(kind, UAKinds.appPurpose(ids[i]), digest));
+        }
     }
 
     // ----- single keys -----

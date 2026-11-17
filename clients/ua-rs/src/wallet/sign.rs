@@ -134,6 +134,12 @@ pub(super) fn seal_request(kind: u16, digest: &[u8; 32]) -> Result<SignRequest> 
     Ok(request(kind, ua_message(kind, &crate::seal_purpose_tag(), digest)?, SigRole::Authorization))
 }
 
+/// CTR-UA-46: the request of a single key over app `app_id`'s portable record, `uaMessage(kind, app_purpose(app_id), digest)`, role
+/// `Pop` (the registry's `requirePortableApp` checks it with the kind's `verifyPop`, as every portable record); `app_id` 0 refused.
+pub(super) fn app_request(kind: u16, app_id: &[u8; 32], digest: &[u8; 32]) -> Result<SignRequest> {
+    Ok(request(kind, ua_message(kind, &crate::ua8::app_purpose(app_id)?, digest)?, SigRole::Pop))
+}
+
 /// The request of `sign_member` for a key of `kind` (the `msig` builder's too): always `Authorization`.
 pub(super) fn member_request(kind: u16, structure_ua: &[u8; 32], structure_ua_msg: &[u8; 32]) -> Result<SignRequest> {
     let digest = member_digest(structure_ua, structure_ua_msg);
@@ -174,6 +180,11 @@ impl UaKey {
     /// The signature of `ua_msg = uaMessage(kind, purpose, digest)`; `purpose` a tag of `PURPOSES` or `pop` v2.
     pub fn sign_ua(&self, purpose: &[u8; 32], digest: &[u8; 32]) -> Result<Vec<u8>> {
         self.sign_ua_msg(&self.ua_request(purpose, digest)?, None)
+    }
+
+    /// CTR-UA-46: the signature of `uaMessage(kind, app_purpose(app_id), digest)`, app `app_id`'s portable record (role `Pop`).
+    pub fn sign_ua_app(&self, app_id: &[u8; 32], digest: &[u8; 32]) -> Result<Vec<u8>> {
+        self.sign_ua_msg(&app_request(self.kind, app_id, digest)?, None)
     }
 
     /// As an `msig` member: the signature of `uaMessage(kind, member, memberDigest(structure_ua, structure_ua_msg))`.

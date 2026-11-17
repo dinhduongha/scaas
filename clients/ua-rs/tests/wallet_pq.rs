@@ -149,6 +149,21 @@ fn rs_signatures_json_rows() {
     }
     assert_eq!(kinds.into_iter().collect::<Vec<_>>(), [0x0103, 0x0104, 0x0105, 0x0130, 0x0131, 0x0132, 0x0133, 0x0134, 0x0135]);
     assert_eq!(arr(&f, "rows").len(), 27); // 18 + 9 pqz-scoped-key rows (T21 L03)
+    // CTR-UA-46: `sign_ua_app` over the sign.json portableApp rows of the same kinds, role pop, under app_purpose(appId)
+    let s = load("sign.json");
+    for r in arr(&f, "appRows") {
+        let kind = kind_of(&r["kind"]);
+        let key = w.ua_key(kind, 0, 0).unwrap();
+        assert_eq!(key.key_data(), bytes(&r["keyData"]), "{r}");
+        let purpose = scaas_ua::ua8::app_purpose(&b32(&r["appId"])).unwrap();
+        assert_eq!(purpose, b32(&r["purposeTag"]), "{r}");
+        let ua_msg = ua_message(kind, &purpose, &b32(&r["digest"])).unwrap();
+        assert_eq!(ua_msg, b32(&r["uaMsg"]), "{r}");
+        assert!(arr(&s["portableApp"], "rows").iter().any(|x| x["uaMsg"] == r["uaMsg"]), "{r}");
+        assert_eq!(r["role"], "pop");
+        assert!(scaas_ua::verify::verify(kind, &key.key_data(), &ua_msg, &bytes(&r["signature"]), true), "{r}");
+    }
+    assert_eq!(arr(&f, "appRows").len(), 18); // 2 apps x the 9 randomized kinds
 }
 
 #[cfg(feature = "vectors")]
@@ -307,14 +322,42 @@ mod vectors {
             row["signature"] = sig;
             rows.push(row);
         }
+        // CTR-UA-46: the portableApp rows of the same kinds, signed by `sign_ua_app` (role pop), kept as the rows are
+        let mut app_rows = Vec::new();
+        for r in arr(&s["portableApp"], "rows").iter().filter(|r| matches!(kind_of(&r["kind"]), 0x0103..=0x0105) || PQ.contains(&kind_of(&r["kind"]))) {
+            let kind = kind_of(&r["kind"]);
+            let key = w.ua_key(kind, 0, 0).unwrap();
+            let (app_id, digest) = (b32(&r["appId"]), b32(&r["digest"]));
+            let ua_msg = b32(&r["uaMsg"]);
+            let mut row = serde_json::json!({
+                "app": r["app"], "appId": r["appId"], "kind": kind, "name": r["name"], "mnemonic": "pq_kat", "account": 0, "index": 0,
+                "keyData": format!("0x{}", hex::encode(key.key_data())), "purposeTag": r["purposeTag"], "digest": r["digest"],
+                "uaMsg": r["uaMsg"], "role": "pop",
+            });
+            let kept = old.as_ref().and_then(|o| {
+                o["appRows"].as_array()?.iter().find(|x| {
+                    let mut x = (*x).clone();
+                    let sig = x.as_object_mut().and_then(|m| m.remove("signature")).unwrap_or(Value::Null);
+                    sig.is_string() && x == row && scaas_ua::verify::verify(kind, &key.key_data(), &ua_msg, &bytes(&sig), true)
+                })
+            });
+            row["signature"] = match kept {
+                Some(x) => x["signature"].clone(),
+                None => Value::String(format!("0x{}", hex::encode(key.sign_ua_app(&app_id, &digest).unwrap()))),
+            };
+            app_rows.push(row);
+        }
         let out = serde_json::json!({
             "note": "Written by clients/ua-rs (tests/wallet_pq.rs, `cargo test --features vectors --test wallet_pq -- --ignored \
                      regenerate`; ua-rs-sign T3b, T3c, MD-7); never edit by hand. Release signatures of ua-rs (`UaKey::sign_ua`, \
                      OS randomness: hedged ML-DSA, randomized SLH-DSA, Falcon-padded, BIP-340 and scaas Schnorr with an OS aux) \
                      over the requests of the sign.json `compare: verify` rows of the pq_kat wallet; read and verified by clientkeys \
                      (test/ua-wallet.test.js), so a bug shared by one crate's signer and verifier cannot pass. A re-run keeps \
-                     every row that is still the same request and still verifies.",
+                     every row that is still the same request and still verifies. appRows (CTR-UA-46): `UaKey::sign_ua_app` over \
+                     the sign.json portableApp rows of the same kinds (role pop), apart from `rows` so that a binding re-signing \
+                     `rows` through its generic `sign_ua` meets no app purpose.",
             "rows": rows,
+            "appRows": app_rows,
         });
         std::fs::write(path("rs_signatures.json"), serde_json::to_string_pretty(&out).unwrap() + "\n").unwrap();
     }

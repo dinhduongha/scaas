@@ -417,3 +417,73 @@ mod vectors {
         assert_eq!(sign_raw(0x0104, &sk, &[2u8; 32], None).err(), Some(Error::Argument)); // a pairing kind (T3c: pairing.rs)
     }
 }
+
+/// CTR-UA-46 (pqvault plan R2): the open portable app namespace against sign.json `portableApp` (written by clientkeys): each app's
+/// purpose, `app_id` 0 refused, every row's `ua_msg`; `ua_sig_app` signs it with role Pop (keyData and members empty) and the
+/// signature fails under the other app; a native key has no portable record. An `msig` by `msig_sig_app`: the derived members'
+/// signatures byte-equal, a native member over the app record itself (byte-equal: RFC 6979), the record's domain exactly
+/// `name, version, salt = app_id`.
+#[test]
+fn portable_app_rows() {
+    use scaas_ua::ua8::{app_purpose, app_purpose_ns, MsigMember, MsigStructure};
+    use scaas_ua::wallet::{msig_sig_app, ua_sig_app, Slot, TypedData};
+    let p = &load("sign.json")["portableApp"];
+    let w = wallet("pq_kat");
+    assert_eq!(app_purpose_ns(), b32(&p["namespace"]));
+    let apps = arr(p, "apps");
+    for a in apps {
+        assert_eq!(keccak256(a["appIdString"].as_str().unwrap().as_bytes()), b32(&a["appId"]));
+        assert_eq!(app_purpose(&b32(&a["appId"])).unwrap(), b32(&a["purposeTag"]));
+    }
+    for x in arr(p, "refusals") {
+        assert_eq!(app_purpose(&b32(&x["appId"])).err(), Some(UAError::Unauthorized));
+        assert!(ua_sig_app(&w.ua_key(0x0108, 0, 0).unwrap(), &b32(&x["appId"]), &[0; 32]).is_err());
+    }
+    let other = |id: &Value| b32(&apps.iter().find(|a| a["appId"] != *id).unwrap()["appId"]);
+    let td = |v: &Value| TypedData::from_json(&serde_json::to_vec(v).unwrap()).unwrap();
+    for r in arr(p, "rows") {
+        let kind = r["kind"].as_u64().unwrap() as u16;
+        let (app_id, digest) = (b32(&r["appId"]), b32(&r["digest"]));
+        assert_eq!(td(&r["typedData"]).digest().unwrap(), digest, "{}", r["name"]);
+        assert_eq!(ua_message(kind, &app_purpose(&app_id).unwrap(), &digest).unwrap(), b32(&r["uaMsg"]));
+        let key = w.ua_key(kind, 0, 0).unwrap();
+        let s = ua_sig_app(&key, &app_id, &digest).unwrap();
+        assert!(s.key_data.is_empty() && s.members.is_empty());
+        assert!(verify(kind, &key.key_data(), &b32(&r["uaMsg"]), &s.signature, true), "{}", r["name"]);
+        let theirs = ua_message(kind, &app_purpose(&other(&r["appId"])).unwrap(), &digest).unwrap();
+        assert!(!verify(kind, &key.key_data(), &theirs, &s.signature, true), "{}: under the other app", r["name"]);
+    }
+    assert_eq!(arr(p, "rows").len(), 28);
+    let native = w.native_key(Network::Evm, 0, None).unwrap();
+    assert_eq!(ua_sig_app(&native, &b32(&apps[0]["appId"]), &[0; 32]).err(), Some(Error::Argument));
+    for (m, n) in arr(p, "member").iter().zip(arr(p, "native")) {
+        for x in arr(m, "members") {
+            let key = w.ua_key(x["kind"].as_u64().unwrap() as u16, 0, 0).unwrap();
+            let sig = key.sign_member(&b32(&m["structureUa"]), &b32(&m["structureUaMsg"])).unwrap();
+            assert_eq!(hex::encode(sig), hex::encode(bytes(&x["signature"])), "{} {}", m["app"], x["name"]);
+        }
+        let app_id = b32(&n["appId"]);
+        let addr: [u8; 20] = bytes(&n["address"]).try_into().unwrap();
+        let mut id = [0u8; 32];
+        id[12..].copy_from_slice(&addr);
+        let kd = MsigStructure { threshold: 1, members: vec![MsigMember { kind: 0x0001, id, weight: 1 }] }.key_data();
+        let slots = [Slot::Member { index: 0, key: &native }];
+        let record = td(&n["typedData"]);
+        let s = msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &record, &slots).unwrap();
+        assert!(s.key_data.is_empty() && s.signature.is_empty() && s.members.len() == 1);
+        assert_eq!(hex::encode(&s.members[0].sig), hex::encode(bytes(&n["signature"])), "{}", n["app"]);
+        assert!(native_ecdsa(&addr, &b32(&n["digest"]), &s.members[0].sig));
+        // the domain: not this app's salt, no salt (the SCaaS portable domain), a field more
+        let mut v = n["typedData"].clone();
+        v["domain"]["salt"] = Value::String(format!("0x{}", hex::encode(other(&n["appId"]))));
+        assert_eq!(msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &td(&v), &slots).err(), Some(Error::Argument));
+        let mut v = n["typedData"].clone();
+        v["domain"].as_object_mut().unwrap().remove("salt");
+        v["types"]["EIP712Domain"].as_array_mut().unwrap().pop();
+        assert_eq!(msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &td(&v), &slots).err(), Some(Error::Argument));
+        let mut v = n["typedData"].clone();
+        v["domain"]["chainId"] = Value::from(7622);
+        v["types"]["EIP712Domain"].as_array_mut().unwrap().insert(2, serde_json::json!({"name": "chainId", "type": "uint256"}));
+        assert_eq!(msig_sig_app(&kd, &|_| None, &|_| None, &app_id, &td(&v), &slots).err(), Some(Error::Argument));
+    }
+}

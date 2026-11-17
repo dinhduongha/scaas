@@ -63,6 +63,11 @@ step() {
     ua-rs-verify-only) T= uars --no-default-features ;;
     ua-rs-pq) T="--test pq --test ua8" uars --no-default-features --features pq ;;
     ua-rs-wallet-mlock) T= uars --no-default-features --features wallet,mlock ;;
+    ua-rs-signers) T="--test groups_verify" uars --no-default-features --features signers ;;
+    ua-rs-json) T="--test json" uars --no-default-features --features json ;;
+    ua-rs-zether-only) T="--lib --test facade_zether" uars --no-default-features --features wallet,zether,mlock ;;
+    ua-rs-pqz-n2048) T="--lib --bin pqz-read --test pqz_read --test facade_pqz_state --test facade_pqz --test pqz_backup --test no_oracle" \
+      uars --no-default-features --features wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock ;;
     ua-c-release) (cd clients/ua-c && "$C" cargo build -j 2 --release --locked) ;; # ua-py, ua-go, ua-cs link it (CI header)
     ua-py) (cd clients/ua-py && python3 -m unittest tests.test_vectors tests.test_wallet) ;;
     ua-go) (cd clients/ua-go && "$C" go vet ./... && LD_LIBRARY_PATH=$PWD/../ua-c/target/release "$C" go test -count=1 ./...) ;;

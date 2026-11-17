@@ -515,6 +515,66 @@ test('rs_signatures.json: ua-rs signatures (Falcon, hedged ML-DSA, randomized SL
   assert.ok(RS.rows.every((r) => !own.has(r.signature)));
 });
 
+// CTR-UA-46 (pqvault plan R2): the open portable app namespace. Each app's purpose from its id, the typed digest of its record, the
+// single keys' uaMsg, an msig's member digest and its derived members' signatures, a native member's ECDSA over the typed digest
+// itself; appId 0 refused; ua-rs's signatures of the randomized kinds (rs_signatures.json appRows) verify here, role pop.
+test('portableApp: app purposes, records, member digests, native members, ua-rs app signatures', () => {
+  const P = S.portableApp;
+  assert.equal(P.namespace, hex(keccak_256(utf8ToBytes('scaas.ua.purpose.app.v1'))));
+  assert.equal(hex(ua.APP_PURPOSE_NS), P.namespace);
+  for (const a of P.apps) {
+    assert.equal(a.appId, hex(keccak_256(utf8ToBytes(a.appIdString))));
+    assert.equal(a.purposeTag, hex(keccak_256(concatBytes(B(P.namespace), B(a.appId)))));
+    assert.equal(hex(ua.appPurpose(B(a.appId))), a.purposeTag);
+    assert.ok(!ua.PORTABLE_RECORD_TAGS.some((t) => hex(t) === a.purposeTag), a.name);
+  }
+  assert.notEqual(P.apps[0].purposeTag, P.apps[1].purposeTag);
+  for (const x of P.refusals) assert.throws(() => ua.appPurpose(B(x.appId)), (e) => e.code === x.error);
+  const purpose = Object.fromEntries(P.apps.map((a) => [a.name, a.purposeTag]));
+  for (const r of P.rows) {
+    assert.equal(r.typedData.domain.salt, r.appId);
+    assert.equal(r.typedData.message.ua, r.ua);
+    assert.equal(hex(evm.hashTypedData(r.typedData)), r.digest);
+    assert.equal(r.purposeTag, purpose[r.app]);
+    assert.equal(hex(ua.uaMessage(r.kind, B(r.purposeTag), B(r.digest))), r.uaMsg);
+    assert.equal(hex(keyOf(r).keyData), r.keyData);
+  }
+  assert.equal(P.rows.length, 28); // 2 apps x 14 signing kinds
+  for (const m of P.member) {
+    assert.equal(hex(evm.hashTypedData(m.typedData)), m.digest);
+    assert.equal(hex(ua.uaMessage(0x0120, B(purpose[m.app]), B(m.digest))), m.structureUaMsg);
+    assert.equal(hex(ua.memberDigest(B(m.structureUa), B(m.structureUaMsg))), m.memberDigest);
+    for (const x of m.members) {
+      assert.equal(hex(ua.uaMessage(x.kind, ua.purposeTag('member'), B(m.memberDigest))), x.uaMsg);
+      assert.ok(kindVerifyAny(x.kind, x.keyData, x.uaMsg, x.signature, false), `${m.app} ${x.name}`);
+      const bad = B(x.signature);
+      bad[1] ^= 1;
+      assert.ok(!kindVerifyAny(x.kind, x.keyData, x.uaMsg, hex(bad), false), `${m.app} ${x.name} flipped`);
+    }
+  }
+  assert.notEqual(P.member[0].members[0].signature, P.member[1].members[0].signature, 'a derived member binds the app');
+  for (const n of P.native) {
+    assert.equal(hex(evm.hashStruct(n.typedData.types, 'EIP712Domain', n.typedData.domain)), n.domainSeparator);
+    assert.equal(hex(evm.hashTypedData(n.typedData)), n.digest);
+    const s = B(n.signature);
+    const pub = secp256k1.recoverPublicKey(concatBytes(Uint8Array.of(s[64] - 27), s.subarray(0, 64)), B(n.digest), { prehash: false });
+    assert.equal(evm.evmAddress(secp256k1.Point.fromBytes(pub).toBytes(false)).toLowerCase(), n.address);
+    assert.ok(BigInt(hex(s.subarray(32, 64))) <= secp256k1.Point.Fn.ORDER / 2n, 'low-s');
+  }
+  const RS = json('rs_signatures.json');
+  const own = new Set(P.rows.map((r) => r.uaMsg));
+  for (const r of RS.appRows) {
+    assert.ok(own.has(r.uaMsg), r.name);
+    assert.equal(hex(ua.uaMessage(r.kind, B(r.purposeTag), B(r.digest))), r.uaMsg);
+    assert.equal(r.role, 'pop');
+    assert.ok(kindVerifyAny(r.kind, r.keyData, r.uaMsg, r.signature, true), `${r.app} ${r.name}`);
+    const bad = B(r.signature);
+    bad[1] ^= 1;
+    assert.ok(!kindVerifyAny(r.kind, r.keyData, r.uaMsg, hex(bad), true), `${r.app} ${r.name} flipped`);
+  }
+  assert.equal(RS.appRows.length, 18); // 2 apps x the 9 randomized kinds
+});
+
 // T21 L03: the portable record purposes as the contract lists them (UARegistryCoreLib._portablePurpose, each tag's string from
 // UAKinds.sol) equal ua.PORTABLE_RECORD_TAGS (pqchat apart: its round is PLANNED), and each signs with role pop.
 test('portable record purposes follow the contract', async () => {

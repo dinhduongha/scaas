@@ -188,6 +188,15 @@ export const PQZ_SCOPED_KEY_TAG = tagHash('scaas.ua.purpose.pqz-scoped-key.v1');
  *  `kem`, `pqz-key`, `pqz-scoped-key`; `pqchat` joins with its round (PLANNED). One list (T21 L03, as ua-rs `portable_record_purposes`):
  *  the signer's role (`pop`, the BLS PoP domain) and the purpose check read it. */
 export const PORTABLE_RECORD_TAGS = Object.freeze([POP_V2_TAG, KEM_TAG, PQZ_KEY_TAG, PQZ_SCOPED_KEY_TAG]);
+/** CTR-UA-46: the namespace word of an app's portable purpose (`UAKinds.APP_PURPOSE_NS`); never a purpose itself. */
+export const APP_PURPOSE_NS = tagHash('scaas.ua.purpose.app.v1');
+/** CTR-UA-46: app `appId`'s portable purpose `keccak256(abi.encode(APP_PURPOSE_NS, appId))` (`UAKinds.appPurpose`), the purpose the
+ *  registry's `requirePortableApp` derives; `appId` 0 is refused there and here (`UAUnauthorized`). */
+export const appPurpose = (appId) => {
+  const id = sized(appId, 32, 'appId');
+  if (id.every((b) => b === 0)) fail('UAUnauthorized', 'appId 0 (requirePortableApp)');
+  return keccak_256(concatBytes(APP_PURPOSE_NS, id));
+};
 /** A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): its purpose. */
 export const MEMBERSHIP_TAG = purposeTag('membership');
 /** An `msig`'s structure update (`updateMsig`, CTR-UA-44): its purpose. Not a `requirePortable` purpose. */

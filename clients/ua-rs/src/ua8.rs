@@ -591,6 +591,21 @@ pub fn portable_record_purposes() -> [[u8; 32]; 4] {
     [pop_v2_tag(), purpose_tag("kem").expect("kem"), purpose_tag("pqz-key").expect("pqz-key"), crate::pqz3k::purpose_pqz_scoped_key()]
 }
 
+/// CTR-UA-46: the namespace word of an app's portable purpose, `keccak256("scaas.ua.purpose.app.v1")` (`UAKinds.APP_PURPOSE_NS`);
+/// never a purpose itself.
+pub fn app_purpose_ns() -> [u8; 32] {
+    keccak256(b"scaas.ua.purpose.app.v1")
+}
+
+/// CTR-UA-46: app `app_id`'s portable purpose `keccak256(abi.encode(APP_PURPOSE_NS, app_id))` (`UAKinds.appPurpose`), the purpose the
+/// registry's `requirePortableApp` derives; `app_id` 0 is `Unauthorized` there and here.
+pub fn app_purpose(app_id: &[u8; 32]) -> Result<[u8; 32]> {
+    if *app_id == [0u8; 32] {
+        return Err(UAError::Unauthorized);
+    }
+    Ok(keccak256(&[app_purpose_ns(), *app_id].concat()))
+}
+
 /// The portable purposes (POP_V2, KEM, PQZ_KEY, MEMBERSHIP): the only ones where a code-less or EIP-7702-designator native msig member
 /// signs the record's typed digest itself (`eth_signTypedData_v4`, 65-byte r ‖ s ‖ v, low-s, v 27 / 28; a contract member
 /// answers ERC-1271 `isValidSignature(typedDigest, sig)`; TS-D4); every other purpose stays UAAuth (CTR-MTX-14).

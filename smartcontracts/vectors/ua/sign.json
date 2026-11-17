@@ -7115,6 +7115,1819 @@
    "refused": "UAPoP"
   }
  ],
+ "portableApp": {
+  "note": "CTR-UA-46: appPurpose(appId) = keccak256(abi.encode(APP_PURPOSE_NS, appId)), APP_PURPOSE_NS = keccak256(\"scaas.ua.purpose.app.v1\"); requirePortableApp(ua, appId, typedDigest, auth) checks requirePortable's rules under it. apps: each app's purpose. rows: a single key over uaMessage(kind, appPurpose, digest), digest the typed digest of AppRecord{ua, data} in the app's portable domain (name, version, salt = appId), role pop (the registry's verifyPop); ua-rs signs the randomized kinds into rs_signatures.json appRows. member: an msig over the same record, memberDigest(structureUa, uaMessage(msig, appPurpose, digest)), the derived members' signatures under member (deterministic kinds). native: an EVM key as an msig member signs the typed digest itself (EIP-712, RFC 6979, low-s): neither the purpose nor the msig is in it. refusals: appId 0.",
+  "namespace": "0x24ebba5844ecbd287b27711504bbf48f664e37c30f7ac070fa924a0d0c12bd3d",
+  "apps": [
+   {
+    "name": "pqvault",
+    "appIdString": "scaas.pqvault.v1",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f"
+   },
+   {
+    "name": "test",
+    "appIdString": "scaas.test.app.v1",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd"
+   }
+  ],
+  "rows": [
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 257,
+    "name": "p256",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0xb05c9b34f3fd58b0cf669b9bbcd308682fcc441964e0081f9f264d45f64aee7d27262554fad1f48fc81ed4be1602fa7ae54efa4a33c72ba5e981a695256a8c57",
+    "ua": "0xe72e1c6c8efe57032334ba136857e2255c442bb791f6b840b0c5e3fe50f09964",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0xe72e1c6c8efe57032334ba136857e2255c442bb791f6b840b0c5e3fe50f09964",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xe985e756eaad91cd77dc7436024509dce5951026a7bced3e4ac91604df929b30",
+    "uaMsg": "0x613d77d7d199ec347ee5b30b4db7c55a41a8d398b1ed57d860f20576fa420465",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 258,
+    "name": "ed25519",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x65435d87e7dce93d12c8e1e00c433a46d05c2e33db28d3e7bced922d7d3ba2a3",
+    "ua": "0x5701872a8745d5b80da053d0357af2220fe2452db92da28d656c9427c4a5af07",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0x5701872a8745d5b80da053d0357af2220fe2452db92da28d656c9427c4a5af07",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xe233eb1a9179a19ac238f41e36bd6a312fb429e5cbd19b1a18dd28295c7e8401",
+    "uaMsg": "0x1335c288c32ce2ebe9d5e3da9ce315a72bb81495e3a15201dfb06c0905a548b0",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 259,
+    "name": "bip340",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x727426e6ff59d2ecdfbe141dc614915db53ef8f1266115966f41fb5aa4a3d119",
+    "ua": "0x68fb70dd504d4f20f30909a20cad147f6d11605c148db9ecbc0200b9e1402104",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0x68fb70dd504d4f20f30909a20cad147f6d11605c148db9ecbc0200b9e1402104",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xb541059cd8c010a7fdb877e8d673b4ef51fe70c55e0a63bd54bf9125b2ac407b",
+    "uaMsg": "0xe8e42df7b17d2b3ab3b24fb88c41c2103367fffdbd40b79d3995f2e358e0d53d",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 260,
+    "name": "schnorr-bn254",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x10e1ab0a69f27d3ea2b51006123ff35f31f6e67efedd51842a084ec6eed95a4607457807acd303307c67a417fb070fc9cb55c77ddc86d7c5389cac177165611c",
+    "ua": "0xcadb6f5c43d67e4be5f6fa36b48a6fc8126175e60574e005f5702cf8f75aa0a6",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0xcadb6f5c43d67e4be5f6fa36b48a6fc8126175e60574e005f5702cf8f75aa0a6",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xca2d10e6b0b4a097d4006342de90b3c0dc29970d8c7429a6f77d16fb0aa7806f",
+    "uaMsg": "0x6bef16a3f4f8b4724d608e8c098c978252bea30cf996236b729d3ba617673185",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 261,
+    "name": "schnorr-bls12381",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x0000000000000000000000000000000003a4a1ef1f04acf989071a9254114d87c76be3ffca848cf97ed878edf5d622b36af4785c1b5a56ee7232cf2860cb2b22000000000000000000000000000000000833106d6a95d9dfd6711a125d8d1ebed138ff01acd04e06ea0533f501e6274e304772109f621ce3f705f73468bc7afc",
+    "ua": "0x3004ed0871a698063cd0a54dbf73e3a1309ac68407dec31b8242d2625f4c2691",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0x3004ed0871a698063cd0a54dbf73e3a1309ac68407dec31b8242d2625f4c2691",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x5a1bd0aa11592ff66a3dfdd08abbac346999a8a064d63e50665ea3fabc758565",
+    "uaMsg": "0xc251b0d4f61ae29066d0abf4fe442fbe53adab886d86611964284efc7b952010",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 262,
+    "name": "bls12381-minsig",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x0000000000000000000000000000000012496e514e983c38afbf591a48918ae15027ccccb345bd9c4c46f6db76753d9e8fa95aa25ed1767c6aa61e6d85a7497a0000000000000000000000000000000007aff3828b06b6c4d5e69459e16eadb3e2805507b58cafd1e4f90dedb24e8e19505f9f13ffd7077d6f78f417d68a6851000000000000000000000000000000001979bfca6a9db2443c6afb1bd719c473e528685f18bef180975bf1b488ad3e6c1bb0c6f2891c67e71db6cbe25760828b0000000000000000000000000000000008b698a117492d05a451f0d96fa0fe958fd84e124bb773388b41b913964784b552d181e48966a55d6aaa7dfe88cd90f9",
+    "ua": "0x96a1133c8f248832097fd9d2e74c6404b7af59b76efa9f1910a90bf4b0773f89",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0x96a1133c8f248832097fd9d2e74c6404b7af59b76efa9f1910a90bf4b0773f89",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xb43145cc151f590d89598a0288e0596058673e94c54866f2a754e26df8776749",
+    "uaMsg": "0x74eac722b61e1331ed3b6f31bb11eeb29f351bf60f75efe4042a1a8336aeb38e",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 263,
+    "name": "bls-bn254-minsig",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x27223f38fa3a6b045301c59647580787c4caf1c178bfafa8cda70bb50f23700a012af4e7d042f7ea5c26ee706c2b4dc0757facda598e15116a45911bbcba8f44194ed054dd0965e5cbc3f18b162954e9053e5dd84a77b594fe6d04c3ed7bfe4010bcf0f2138ff192f97b72ee5ad09e558d082be2f4ad99a7bb1c69072d6878fa",
+    "ua": "0xe6ab84fc68c68219e39bdda205d5730c3d2f5e04843f9496ea32dadcc8eaf3ea",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0xe6ab84fc68c68219e39bdda205d5730c3d2f5e04843f9496ea32dadcc8eaf3ea",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x2a84935729893f0cd4b6fc9a5d444a8d07608a4137715f6db0f8e2dc1367660d",
+    "uaMsg": "0xa006abe2b7e62288b177225059f6ef54f576bf9498ba17861c567785e4337da3",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 264,
+    "name": "secp256k1",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0xa68e010f60c4f9e3721eff45fb47fe06c566b72832bfcee21dc66fb9efbd81567fe358c3be0a30921ff4c469cebbf06d78fce96e1ca92efd397a9cb598e7385e",
+    "ua": "0x27d852f6ac4de0653899ceb64824121195c178702447ebf5a2e27e5c5c3588f6",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0x27d852f6ac4de0653899ceb64824121195c178702447ebf5a2e27e5c5c3588f6",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x5faabad8c399edb2b26aeb0f687d9f9e129703cb9d4511f5e3a7afaf09782630",
+    "uaMsg": "0xba8b1a085a6032fe2191c38eb878974a9d26b42944a4e8857d06d1f308e21845",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 304,
+    "name": "mldsa44",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0xd8354ea0bf0bd53704c58619c613a02d808ff822262a55267d1b7042696fef7c9540476807f9204e7193afb61249820725e9577a38f15bc16ae4bee108ca0c6af8ede316656302d9875b3801028c62d19da0e091ef5f683faafe3e4d1c37dbdb7619a4b5ada686285b98627fd9eb82e3328b68dae890ea1384d82afe9f0d8a5a278864b689ab79e83be27a505d79fdb53733650815959ae5951c2a476d4acd664a1bd5f04c7f93f68c9635eaebb0e0918f15fb05a33e9318fe83e7cf10aa806c0ffd989c21780dc0130e93b352b63d89adcc89c09a025464ae2f69e1ce7262254bbc2ca3fe9d942f0e6ff7c7f553631c61d25d2e85a545d36b9554b171b2b6ada8493b91f4ae413efb64fac4598bd8f70b0f51ed40234ecf4ba019433f8375b7835834b031713dfe93df4e4fd5245ff3eb8d6cb9416df5d12e120e0085438c1a52639aa468c1c024ef9ac371d3a8e3c11c353e974d8e6150f491751edcc0215151b19217ad77981ca761bee44d6b746cf7e93d1160112962aa1dbcc25916fb0101ed2cb8ab160b64bba788d6982dc886192329b3760fb945ba7da9ea6e46874678aef97fcd5f34e9f79c3af950dd679787d16e64b5b7768b8a2740b502250ac4820d4041172371592cdc5345b2ff2bf35937974f3171558544305d48090db52a54c33f065d7196d3dd00881d5ec6c7264b0ace2be4c882c553973c9b1320879693c74f3de034ea5beb22aad340466b46371dd53f5728a8b446e5708e9e8c771ca25745dfa61778f38c56569e957017cae7ea61c20bce96cd10bac171246930aff397b5f55b6c02fd645be444e36f0a92bcb966bd73c8b64b64a6ac726883a902bcd67e297f32b1d0ca138209f72dd9686c7cbc42a4ed0bdc62fce9ff727bc90d2dad3a24e647c0ad19693f35a7ada4b0a2b9d9e23aad0fcb0b97755db5b48d3a6014dfcce36e16782efc016807ae67ad5b82b40fa5b2a75a36a1a6fe87147c343ebc2d20c8299818e4572af57a14892452a4772d91519bda6351b719e7b21511717eeb374e1cde9bd21a2a6c61f6a6b4df25b8fcfba917ce24a820ce24d35ec23885582d288589cfa1392a0c4e57acf39edcb17e569f5b2468000df21529440be2df5c788442d28c33c1948efd2bf73a3f73d7604e44e92be71ab5110f38bc20b562cc8672920ebea90dd3d36d6f74a71812fad79a761ed5d3875325d3771369141c5d2e24ca2630c75619b82326e5711d4200416a2f91e884d56b2f5efcc3d9b92f72afb9d9855a24b69e5dba8ab0483b1212470d4efb69500d7cdf0cddec0b7b146f0f614d187f88f050c479dff1133e917ac490bb21745e0ef145f8e75090a1411eaf9ef0d77b88bd8e69938fb7c19a0da02bf879a06eabcf654997251e4ca72a428c4459c9b942b08098a149e04e31f26b0f743217ff94bac7ec02d0d7352f9b21631cb18745495fdd5e8600e549696fc93a13c44c1d9cfe53483b2191e98db1897e9f1a6f30bf0e865a7624b329f1fc5d46915b7757463cc74a3304876fd24cf0c5fac297ca0edeb7a018eb812a2efe25f3b56cc5cce876277f4138d7c2e1d4be54b7752fb306c8fb24def40740b30b2e93c1ae96eb15cb0df22413779409740caf0c430751b4dd28e4a685102c60fee242e1466d1808ac18d9453f34268efe8e99f8bce014d675c70329ed04804793d5b8863fbd09a5b8ad6ac49444eca7cf960490b084049806f2885edec6a841d642a883aea2e9f17caacf21119df2ad5a020c3a7e9a4e7cecb536ddd60e18db9cb375315469ab6ad7644cc1b6bb1caf4df38bf65698b4f0b5e169bd46b7f0dd8dc272f35adb360b132c90404b4a76",
+    "ua": "0x7e3252de1ec981f8866165c36f8a1ae867eea0155bad53ef8c0058e7fd96885e",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0x7e3252de1ec981f8866165c36f8a1ae867eea0155bad53ef8c0058e7fd96885e",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x0002a77ebdd65ef988257041a989296859ffc3da5dcb1f2ffe2412de003fed1b",
+    "uaMsg": "0xfee9ce1b9660705eed766b3496c714329cf2ca3ab819c99114a1a5d247b40973",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 305,
+    "name": "mldsa65",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x25681cffd4f7abc23aff51259ab86fe0a117ed512c53e7e131b5a471f37816f9fc23726418ba2d4e84d923a86c8927f36ff3ef9f613038f1debc53f40699d6cc18f682692ab934b647723bfa6ad7f3e2790ea2da9b681e04b6ebfdb6c9a41a2c5d8c723e880ccdec449d0caa72b126cbd153737ccbaa45cb753277f5321af6f6fe040530b077660cd732cf75c96ef333a632b7e8355267d66dde28f2447f56ebbc759a4dbe8755a3e3594a3c7088f105a08d577444079bab4e8e93d0fbdbe8f4dc3adfb0fcfd7d9b0847ad51257638ab70eaa798218c81c24f9be38d2567704aa87d74640cce61a55bda40606a66c4e6d2e5c91fef74b5a36e814dccbed2fa0231c2148f612cda3d56047060559ffc1ebac026549b624bc599684bb7737b478bc5d2bef9b9b63b1f153608eb6ea90c4be17fea3d8cce381ad63fe1df55020f38f8eb392f9121347549b3747890ce01c29f4a6de4ce4b915a33f4225e7cbb30868ea44870abcb0f2d6b7e070353d0b5108057d81ff24294925924c806e007ec2dec15e47c59289d331c54c7c3c64bcc9cce5a1f5c6c309c54fc19484fc4ebeac9cc319c2836ac6d02c73632277f39734e7efcd20702727b31b460e5ef43afd039d73c4027bdc8ac8d97191ebc8b847356be800c9bd9f98f159589440c214269eb0352012bf1934b9c31e9619f220d2b3cef2ee2c6731e47a1491c44f8c41f106c284740576491e90f4426476f8c2808e7c0b4d557b4de05afdd176a1c446292b385a047cc7c9901de3e5a6aa966b1e3007ecc112f354d1855dc5c56d5bd0b127c7286ee35c71c02bb145a57889c2a0d5f3c6dccd932af79b9cdfae431c5aadcb375b1361e301f04d9679854df5f20d2b60e2b942832e5e4b39a922ed4c78ece45fa335dffc07ce644e2e37a5c695bd7a408a368fa270f5d3e7fe0a4d39b06af7b36c0e699157d43c7b074045a24965f5c068373c849e7193e03a8cff56a499921bd515ae00a6e32422e4f2089a6bc599b9bd9d3f1555e543f0582a2dbd8f2c482b543ea96cef78d18e24b055bf76b7356b8077e8a4776509a67957f95247fcab295c21dd60db96e292b6350ff6ed3a63f6b47af3c88413a0b8d23c13770aff147bb49026f5d9a65b2d218dd72ddd5e8b25baa705e2499f57b3c7b4ab4fd64d689b83f1d9e8537b22874633260364d7de63a121ab175500023b4515c419a154c31d7cfc530007ebc6abdb1bd62635b881c3941038aa13ad20e5b6d4e3105f435674a1c3290dbe8a90d7b2f4648561672278ec5f3990fae682af663d3b554b00ea0b5481fe25d74570aa189a59058506d33b03c45c1db42dd9a50629471d84ca31cdcbfa7a293b1df2e18d7ec8c43a5d3fc77400eeaaf0e7e3731eece6bf15c9a9ffc5ce6a1d19d247abe19cd8fe25a6ae672d2f0fef8de161bacd97e5f56312d59a59b849c0ff8425cd67812b32788ed28f38a49e18e15222831b46a5e1cdc973f56093127eb65d6135acd5ba4de89a203fdd79ba5c5c333faad55d970278d0f4be3df53ead982269f424d69a90bd199205c44488dc63734341a127c048ae447094e87abc3bb9d7e6df79e02d54df6bfe6476ff6e1b8acd4720f911794bfb7198895a84875256ff54cc2b055c35b4c8463c39cb47d2fcf5d4d746a13e637e23e4128e26afe410bff1e94a2b00fb7fa44996c329f85ae9d0f2975879011a56d4449c41227bb49c9b5b5c5ddb909c6870bb84c438ac65b0798568203e29311ce5a2ef55e0717f3eb05f4180b5361b74ad4349f6545d7b9028cb2629ce90897668a8b30df106620bfbfb7f4be1a75c8e54ed60032d3a7c67c031d184549a5458602052f6cf0408ca206366c32aeb42f274bc78712454f22109f92431997a41f9cc753afde20dac94502b61b159b1690fbb9826bfc3ffeed025cbc0aa9c61aa2358e51250e43f4c2bada1ae642f2f60dfc1c36f9ee8d49c80479ccefd656afcb7946328358d429f5ec8a2a72406d71cb5f1d9a71990dfdf798849b4b035e77a04cc7d01c3a6d768f98c560a47aab0fbb7b515a92fb5245d7077da89405ddbc313e5f65b149445a1133ed43085002c246e254315e347b6e69f4d9aca3705ad7c0a1ef31a457df6504fb470a7ae4019970b0cbb3620da0a6265b7a3e0db61c8a30bbfc8b47536ef910f6cc69a68e6908a97ccd8faad4b57771e99148030a74466114df42d027759402786a1cf7f82e2d08cb748fb351360d587287b605b59b2410d0122c1292f2cd19937a6f51f206f188af3815938761023d938fc92454aed5d085c0898e4b4f484d75aa21777c41d414e362373e4fda069673ef443fa23e95aebdeb9afa2792b3aab2508afd6d890b499f9c0fbad97b73b562a47104eab0c1d23989522c2d8a883d67c314984cbb216c52386f20549b5b524ad77b9f36bf244b5b5c5c2ab7733ea80b0fdf21706b08054a166c3832972c98b6606901739f4580289ddded1f9e1916a46f258e1aba1a68d3662c70b7aba0a9b67b7a1f267dec6a381ddb3b37688c9bd239a32b2f6cde3c92824189aa409b170b889a8aff485ddff94d2eb18058621d3497588f697355f17041f3dcf3c4dfbce71046ff67e6c1d4adbc94acccc522f307aaedb261fc0195837688406c3bbcce8d46f36fc26bd722fbea4647a193a8cbf9e4587961eacbf17df9b89b0c1d4ba0922a6b50d50d463927f2a7e8dc6ff8216251c721cd102995cfaa172a734b7ff022c98dfdb25f501ea27c12",
+    "ua": "0xf0a55b694ab3f58dd5ac8f8508dd1d7699c67fbefd731a22df21326126a8c3c7",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0xf0a55b694ab3f58dd5ac8f8508dd1d7699c67fbefd731a22df21326126a8c3c7",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x09b68f31cb892878c5dbfcf4f89f02312efc8afeb0cc6d65576e7d204591718d",
+    "uaMsg": "0xa705ae1c8864e30ed4a01745b4e78a76652af55561652a5dbe1ad300c6339f7d",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 306,
+    "name": "fndsa512",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x09893c12caf41d948e32f5a11ceca498565b82122da507986cb82c929a928246c7549c32be51b55631df7a016cd7285bcef20286edc102ee253bce76944ceb248696cb33c181ed408458f3e72d961e5cd2488ea551153a73405c2d5d10412dbb7215c31ce8558a4981d110ce2e89e5673c587835dabe2f17af9aed043d46592396ddc1c2ce2d8c56a4566fd5094dc6bf881b9c197d96c9093f2fe88dfa32a4fa67083be26b76c6d66b28e58248af495d08f2b65a5b45f112e24fdabd9cb2322a39c75f55c1647c76d96c8e1ebbd465d8a099595ee4526651854713de07964e8eb75916cf788406b02c96d709252537391074727ea3a49d5071758bae6e6bb06086c44b1474bccb6a3a0f0e6dba1144bd26a13268439618d0951ce8bc588b0a647f1630212d65805a56baa1bbc8381ec2ae816343c951d43198b29f358a81c2bb5fd84104e9e0e90f17a6891130aa2789cd06722cf9f4aac37cc179a3e594f31594c7a6982aab564a7c17a015c16ebae05bd9a1448e3984e6cd8fc52a84a018235331250c336710a4a008e8b75197033eaa18274a86c3ca579ae1ca7c6f3651b9e667bea94849ced3934ce0cbb09214f9498e8816808817da55837b69ed12858a1e26a217a654026f5fbca3d96c46683ba13d913c18500a4824baa320a89ec5cf2a05c8f43ebde737789ff1acd408384ad4708ae9fc90a0155340b504b5b36e2f9f4a52b2859a06644670f7c8e8095db9f9248c2ac974f8269aafd4997542934b62404fbd21f2f7b56ab167953a65cd2a284ececec47122b1a8f62ab8e91c4dbd481601c9665f74903ffa676f0176f8fbe01ad010221284451da6f43b0827c8f1159d40619599bf96e197a269192f1be311e05401f04504af2dae3318e7ba105a3ff22dcf326cec4f0bcc5d4eb414ecd38a294137d039123a6832520efde9a8e00407120d134f05b864c9f9e3f2a38b5f64fd7b30624018566a56999bae6b0087f1a16e6a87b1e6a99844a96929a5a5d21ad60e74e18039de548d35de02445ba2555c5d54cf41245f9618192c53b31af03b01a59fb087f2471a2d865173cc74c63fe6550211759af068de40aee7cb406fe222742648eb55581cdab3d9c201e774fe1704d95ed41a150679c715dd9824582bdb9ec40554c426ae1671bc668b06e3844a151074d62417d01165ef351d93666e78abb656aad03bd29dc3be58fd637cef29c55fde522dc0f613e8a399b463f226136ba3dac8c453ee85a701d6a8e8d286",
+    "ua": "0x806f5d8ec8526802f5d6aa1a763b8bdcd4a70f2b63427506522555e9b80f9936",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0x806f5d8ec8526802f5d6aa1a763b8bdcd4a70f2b63427506522555e9b80f9936",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x79521c31fd5e9a791d5acdbf951576fb630a00253582efb1e1058d05bcb28dba",
+    "uaMsg": "0xe04d78fae3018b29f8d39b90824937789863ffa96cec1de0a0b7bb6fabe8e9f3",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 307,
+    "name": "slhdsa128s",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x7d55db624a6ce7e22796fb2115a9ed527d98bd3e6d0cde7f6f5d319c8a5ba629",
+    "ua": "0x10e6ff932b277c678198ae01934b61a8c59f88100742d767a83a173bb6d3f0a3",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0x10e6ff932b277c678198ae01934b61a8c59f88100742d767a83a173bb6d3f0a3",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x76a97282e53df11160cf9a46e6a646e8c3f024d528d40439647a325a9374e52a",
+    "uaMsg": "0xc64ab887f8b886a6954f2b56bbb6a4e36fd257f9e3c12cc1ea7d4348d47d9d2f",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 308,
+    "name": "mldsa87",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0xcf116d949a67d5bebfa27d2b53c850fadab78acacabae2c9a58009f435f565ec6d02a120f75d525cedd541845a7d60021d4655f977b20196111ce0d2da5a1243d8ec7dd18ee906592ca415cd2c01ab3174cfdab6b2ee5d97ac1b1942579d959bc163e310f94654ddee0ce86ea9900c6d18e54eea31de81c328b13d285525e2a1a91368fc04d8376ab8c7ae9b23315d6f972bb963ffd7e745c9749501638e7e949b62169f713c4be51140f69855527403770083eec05a147e55bbb310269793441a40c8d453d4fffb0885e206d997618082d896eb3daa36bf717eb4328436abc7d4228d9bf6fa1f60a76d52bd8bb37779ebe4bdfc7e0eee1b4ed3383e4a758f38dfd6f309c21eb6fda253a36de26112c770ab4bfbc40c4fe9812c2ce0ab62f5df5f3b2089985d459b03ed8c626d0128dba89783d6a030ab21b2c2a7221d7c1ebd59e58130243244298c0c00a9a25588507c47e618380b5fd41cdc46e66b88fc400c24a7714a81fc0ca96cd025ce4463ca837535c4d96811191088d65de9a4888041752c7db09ca2fcf2f93d85c719fc04d162d951106b303a4ceea3cd4b9c057fb484bd787f52c87d7434800fb08f4ee3a54e8e3688278535644bc9fe008606c47ce6347a34383b2a9c1535398e6aedfc591789d7229ff0c0d46d959e9f611fa201d35710ab10976d2373f891016bc0003bc5e6c07cd8e614695d5c7cadfddd895a3a01e3b60623368117588aba12ca2042f500c2e876240a948b88f660972bb8048320c3616b5a9df4869f5540110714ee7854db64eac59ccce448c7cd83024d681a7f7faabcb3a3a7ee9d89524357b1056e1c9182d1bc7d4fa6029d2143c32344e25072181806935a5d38cc88f4b6ced43620d23a2e9f936566ad2a1a1f3025cd7a31568900f65860df5a81b2f6648e4e2567a9ec88d4425352f847a6adc06143292881b416585810ee0379ae12483af217b62c67d29abb83f53b5d9b449d2d05181991d31daf4c49285bfa3722a2136fc4b925c2fd029cf9cdf84c0f85f658d8222623058b24bc84cadea7fd47547bc11a5177adfdcb4709151a815617e900bee4a11e7d99a2b9266822bc86e4dbba6bdd09ab243f3eb25b64d48db9f16b1c41233515c588758024629a830605ba6af3aa7907b27b361db49704f8a3388d2818dabb05e3e3f8999d23064245517850f5f7a5311fcf70efdcbdf2d86312b364a847e231b83f4c4dddc786a649401ed34e9a9a839899045d4930b0f58dd00299bb04842339acf9086790aaa49329e74053e5c0fc25855a5759549ae454c1ead5b11d5b4905d6bc52aa9eacc9bbf43b352d0ad53519fc6b20259de5d35133312be30c50cdaf19973d1b922b0bb48c1b76fd053179f0343561baf4d9327d06e98ab92d562a98be10f0bc38c97fadc82f60b301980d11f04ca3ba702d2596d92e92210881065917d845d9f89e8ae7cb93fb76b5901770a1fe29c3cc0f45a34d7e2293a1d80589e7b542fc85dd8428068f090a89c77726b513733f775491cdf8b5736b5a14d55dc7c76054d95384a9aa7caf4406d33dd3a4c8ae31a3ce0b0f912f4e678c9f58e99f8605e5540bd618c32d488be8ab119814682f67fce498dcf8e291450d46fe1032cf8e766073eed488e529507d8472496ba570691af6d694e5e252fb33494b183304b525945708feb8c0e260dcb41a7100231a918992b692ed865e17ee3d3052dd24459af77e7454c61d4c5c29888626dfaf0a32c9192a928c6dd10b4299779e1bca81b66ec29103eb23a617db0c7732536dbd4b1c95af5707fe8dcbb2dc6d1ab2a7e37a7f7c83fb8526b4d5d415a7b5a750a4939a364c904534bfae84ca24f99a34c560f2e97a8620c54c3262895a945b1a37a861a9bd54770179da001224f3ac41f32f17358230a9cf2c9fc227ada215f19d5ae58120d16ff240e10dcf092082b4bc029b8ff51e0e41f9aea795a1fb15479d553124550eff0ec10c45b74f730000c54a4e64a0b821882edc1b3c6beb4ccc22f4c500c28cac420392baa54e0eec9fc09c0f3b7f38906ac617df6f471e9e8e6dd30e849ece71c5ab0eb0dc6e5dc30d2b3df687cb01ab116b61030bc96d29c77d89c1b6bb1c2c32608b152a5284a5f7389a3cf325f80a6e926e5c7921dcb37c9b6a831ade6b4e42353791f1fc9babe61ba1159360dbd4c7ee2e0b1ead710cf0a561afc4e80a863510f4e44f908ebdf308d31d9bf90f2b10f8657e0baaf7f91bae13904e5d243c928c343436f53a301d3acf737a8980f8b21ac80911dd143afd447f0a395551eb0380a9d62fd20769bdaf2976835c0604aaf07b0156feb4f285cfa17405e13556ee0d6823627048aebda8c6ba16f2788ef932c6185085472672bae5b3a137d129347117bd9a743c43977e9e0df67510fb8f789311cb74d641bea321e157db7ed6fdb0c77aebbc1d64d232014ab561a2baff1a75a4c51c825b20b87377fdcf4d147857720600112bb2de61c0da421a3ffc3b8d258f90d7bc39e5e6d091a16c557c009da08f5ee4a933cff18f8bc5cdf8c2bb5253a1b76da1ee684b7dae48eb0fb56c5e17bdc754118e730f3ebd563a64e8511ed8149335811ad47b7fdcf09bf0884a7fd2c6395e0357e82a6d0cf9e2f80b5b0f90a804b20e0d22ff0831ab13472bd830da7a95bcfa1fa2579c10fd12677de476f4ad58a589486ebdc689cfdead7a096fca8656886c5e7da389df48a4f3c87a67057f639d7d561dabf9fba5a73711106f78bbc2a66fae66f8178249759feb0c5ef1ce1099d35de44efab1bb72afebb7c736a437f17d2afe3a5ed1fcc05a243f40ec52c4fa09fde2bc5ebf41370303d84fefeee7eaacbdfc06c45c25a93485251254d15a43a1d30c6454c163305e104db2506be2add5165ba5b14911841ba61ce5f52e96b741311526729603549142027f3d7d90400a6b7243ee20c447772dc94ef28b659b58c0201aa92f8fcdc81fb5653e4a16480a8adcf5a99457f872cab4cf2cbb65d6cad765c181feb5cd1db0edb23ad30b2470a967635303431ba07235deba94710b320f84062e51d253d1c3e95449e6366700ade70db15bd0afa76bf97d43efc4a85fb296f081a4de29ebd2c168ff80cbde583bf64f354caef63236d9df52e5d6d78e17a743d8d2f39f1a1411e5e094ab6bc41267d5dd63a7ff42af5726ac1de91a899aee1b6cf140049f8e32e2ae9c85a941aa1e642da3a18f4e04cc7996e6f0f9af4ffefd09ce46ed2cb4b7e434f36c38b2a1f6fe34242ea226c185798b9527998aec6fef63ae48baec6fefe73e21a5cdeec46e3ae517734915c5a7918bd325a24f4b13a6fa07781cad24dd19daccb0aafa7ee1fbbbffaba8cba875334f0bfcab95ec008a35dd658443daca08e15377cb10b6a528dc384204e63f7f63fa37382c6b5f6eabe57e07114e5123ad54b76e2b3e925c599781f7b455b2c4ee01d9c144930fcf2d916d0818169b20813c765ae2225c132f35d1d26f6c40106a375687f80a1c22a78e127e1da9bbd251bf4bdd2ebc971940bfd965c8fc208e0b5c42423ab0b142fce1acf04e8d4271ab1b2dcf62decd48fd17b183a4fbbd8a588e491c296b6d541fdc9ee5fe70cbf8eba07ab9ead6ee39943ce7c223bebb3e6b8888c43eda03b39a8810bdedbaec5bfb",
+    "ua": "0x879137d7d47ce400f6479dd0b1a4bfe96c982520500ac5ac70211cac6485063b",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0x879137d7d47ce400f6479dd0b1a4bfe96c982520500ac5ac70211cac6485063b",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x92344e61d86bb009ec9c189e0b4973db5f9d5b9f861a53e074e0156676ea4813",
+    "uaMsg": "0xc2b9da569b889dc5b379f1beceb7ea84feea121de0503066003ecd66d962c66a",
+    "role": "pop"
+   },
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "kind": 309,
+    "name": "fndsa1024",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x0a1c6432d9c50c19b0de014ad417aaabbeaf304f034e4059d663ad9a966c66297423960e452459278f89f5123d4448989e617db4fd68dc917e0709cfd73b0a1c8732fe8a379d3e28663cc6f9ce0a938241b30803ba18c9531b6e5b93815d9a979fc5387aca0268d956ad4ae24a8b3a1f1a04f9e3aa7d028a028157a4895fe56d1a2804d69e952150e26b0a9e605e50e06b5251b32e3a46387a585b77aa0e15b5c35c67791c3001e6e56926c0594fcb658dbd69b92814a021321887fe5cde5982497270ab4f1b75d5033e08a7a955dec3eca2ce3a14d1a4bed5f7952a4432862671a061ebd489d68a0e9a5b53d6011d44883ba7ee2eb906a12c8647652b2a84d5b27fe04365be117340872f2ff821d1bd154b4595ac0a6d50b56ad4420ae8e9893460f5080a85203e0efb920c550a9e0cbed35cac0aa964de42fc12c01ca5ae942a102f0740a23443aa8d4655c7097ee2637c310594da87e83e21770bbd2e7694fad04766cedd6a5ca0e1d359126c543db6e8a33a207ec3a4f209f13b3a7a939b196c80e8c72744984c48f647caf3e8ef7b3dcb045f661b6bea47b7f0ae9a1ff8c5d14a29564331cbe6f9ad1ab03027f2436a432035f4b1f98ade211cec43aae825befc75c994abc60c2562ca9919af8b22e436128a9d374c2c338c11f6812dc3aafac822203c2522fe002d2495d203c42e7d72618ea50403054f0cf47b35aaf034f2edba8d1f8f96452f133128315700dc5758630f6062fcc0ec5c306a009b51566a861a0552656662ffa930e92746469511716d94772e71040d55b3445b4f041976d572e60e09c960a2268b12aa6eccb6f9d4bc7a4d9cc4b751e6bba26f0787489780b09d429cd8a190c66b5521e61d0ad8fc34cfd6b40be2e6c594132c74168bc85f0a501bcaae017325b59052dee078180977428439f2e1b7b569a035036385442676a71890df4949bf18a7c46d77ce9619672468b349f270a9100a165efc89be0c3db3c051f935d48832582641cce2c2be99ffb5540423a61d3e6845c67194916ec1c9ea10984d3d55d09b9b067932480b61f64cada118c6c834151dc6e0a02256105273dbab0c192ba539b5a4eb73803e63139618c570b22be15517d584784bb9b518979c5600bb38c2f072ead60a95452d41a2a867cfec550564a2a2151f468ea5a9560399ab9d78e300e06a0108ca13b3011dc15295e70389d8b1b38452684091cea70468a62aa2819844ee26449bbc4a724f0a27effa64960a3993a9ddb5bc00c71e2ba37af42cca5dde996cd06b499c6532b3d4b428d6c8277982e3c3d28e1c0c009178a86cd3242175328ed8eb30c0e0fb4c86522d01cdb51dd05c1e8a85838e5bfc4e621d534601f7906476185828fb0dedfd7bcf82553a38863692a0e0143e9024c405d76882b644f79e9d44948b9871d83a999e21fa448516692e553b95d26a5470ecbb454a851b30c287ff440024b08fc40c2b0405c8c80452d9884611d50928a7f912283670434ffeb63a88a3026328a06655377ce0265e9e17d517a5a7b9d009fae41c4136ee741624502d67d43a519a48f3bc5231b8c7a97043766ab9d31d207af07232f120336b6493160be286a9cd4cc436544b0844a56a626a9d47e210f08ee78e095caae56bee2e386575a629980a3305ba19f40a4093499f8199801e2d551088955a2c7fe5f241266a86be995c6329d68f3e6c1a07c6e34d5c584b1250162161ba8fab66a7de8fa46a5a680f720bc63cb22c822f7a8c54d3315e95027e838916a2fe96d454ea83d4439fb9bfd2df659f99e45395c0184c5281d0d85e2f46ab409037fb41ec31e0d2a27000c8126a9b34ad2393a428bbf641cf51823201b9e06d9937193c9ab06d467b4afdb65f830d5142ad808c6d2cae6a1242395ff89fe13330665e2286c0af29b9e7819b55a865d915455b201d25ce223f89d1d3417c173e42d58bc98e29769e38f1744280e49e71d796cc6a89907060781b5999384576b720690305169d577a2aa46a66d358195b760a7cedc229e7c69c7c4a623be1d0612984fa1608ccb9b8d650e105fc283eaf01cf545aa9a99a921308301ff0dbab57401101e5a5d4ac08f72d34309655a19b3d38578167e553099576f9d64ecb7b5ac997cf97a25000a08b8067409184a2e5c7686b0b4e5abaed1bfb2171e8a32b05cc527de7666feff86a5516652307c09051a53a2854628fb66d3276aecb4c0412b96f8dca543ebba0930091a6ed44092f84b8a54d3722b2a6fb21b8da9791ee146e8eabc3fec8f87d005a942fc3ec23ea6515a8dab69e51f8a6942700a43639f8608eeb66ccd566dc1bbe3050270481e076b84d35a7c64457aa8e6a550b67bf615135894a219a22e64f0bf0a8618f7a71d9a49eeb9d14b67312c5f52659ea48ef55c494ca7c334ea85b4f62958685549a55523449e699321cf23eb3a88bac4df5e9c36a28aeaf59ee50fd5ac494ed6901b04d675f9e9d51ee67a8256de83ac49d7421e57ba010412a7f1d400401476a7a52a7e54805a8",
+    "ua": "0xcf5a5a9054ce00ed6ac6c491bbecebff261dada5cee5c05dfe5e31caba097b98",
+    "purposeTag": "0xccf692e22e573f1ea3462c3d49ef3df68ab4188a04fd4d1d852a829a4514098f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0xcf5a5a9054ce00ed6ac6c491bbecebff261dada5cee5c05dfe5e31caba097b98",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xb34d0f55365042ec4b6784a7550a070cecc1bc064778c17aada7b37033764037",
+    "uaMsg": "0x80b53fe15844585a7861f58239f4cbefa84936304eab10b70f2024658af4b82c",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 257,
+    "name": "p256",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0xb05c9b34f3fd58b0cf669b9bbcd308682fcc441964e0081f9f264d45f64aee7d27262554fad1f48fc81ed4be1602fa7ae54efa4a33c72ba5e981a695256a8c57",
+    "ua": "0xe72e1c6c8efe57032334ba136857e2255c442bb791f6b840b0c5e3fe50f09964",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0xe72e1c6c8efe57032334ba136857e2255c442bb791f6b840b0c5e3fe50f09964",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x3daaf6a6af674e60a2083bd08240f8aac5ad4be7a97fe4a649578930c1e2b448",
+    "uaMsg": "0x7495247c2176478157c9bfa2b04cc388e0eafdcbeb911c9af2a81e2582f07fce",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 258,
+    "name": "ed25519",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x65435d87e7dce93d12c8e1e00c433a46d05c2e33db28d3e7bced922d7d3ba2a3",
+    "ua": "0x5701872a8745d5b80da053d0357af2220fe2452db92da28d656c9427c4a5af07",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0x5701872a8745d5b80da053d0357af2220fe2452db92da28d656c9427c4a5af07",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x01d70aa31c61b812c06abe7cadf2152ec186f13f613c1b7fa2fa430c590dc01e",
+    "uaMsg": "0x2943199b355890bdaa7f2555b3c2fc245f17e9d1ef6adbc12585517397e52957",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 259,
+    "name": "bip340",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x727426e6ff59d2ecdfbe141dc614915db53ef8f1266115966f41fb5aa4a3d119",
+    "ua": "0x68fb70dd504d4f20f30909a20cad147f6d11605c148db9ecbc0200b9e1402104",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0x68fb70dd504d4f20f30909a20cad147f6d11605c148db9ecbc0200b9e1402104",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x1f2c30ad4e9654426827b994cae7d854aad70ee8e52d5fe5a1df3a0c990e1cdb",
+    "uaMsg": "0x5e120282152e37e60f5e61f0f464cc2c92fdc49bfe4cd3055f9e429f0e5642b4",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 260,
+    "name": "schnorr-bn254",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x10e1ab0a69f27d3ea2b51006123ff35f31f6e67efedd51842a084ec6eed95a4607457807acd303307c67a417fb070fc9cb55c77ddc86d7c5389cac177165611c",
+    "ua": "0xcadb6f5c43d67e4be5f6fa36b48a6fc8126175e60574e005f5702cf8f75aa0a6",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0xcadb6f5c43d67e4be5f6fa36b48a6fc8126175e60574e005f5702cf8f75aa0a6",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x1d6cf722ea16faf27bc000f16846a305417b6f2667d43cb49c51217b7b56a8e1",
+    "uaMsg": "0x39a9afdc7fca6b8752a8ab35fca6df4ee477f201d119687a4e75b6f8bdd4aea5",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 261,
+    "name": "schnorr-bls12381",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x0000000000000000000000000000000003a4a1ef1f04acf989071a9254114d87c76be3ffca848cf97ed878edf5d622b36af4785c1b5a56ee7232cf2860cb2b22000000000000000000000000000000000833106d6a95d9dfd6711a125d8d1ebed138ff01acd04e06ea0533f501e6274e304772109f621ce3f705f73468bc7afc",
+    "ua": "0x3004ed0871a698063cd0a54dbf73e3a1309ac68407dec31b8242d2625f4c2691",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0x3004ed0871a698063cd0a54dbf73e3a1309ac68407dec31b8242d2625f4c2691",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xf9f1b925668bb76b3cbdea9e4f3e17a1863eb347938a3187cceb313eddecbe65",
+    "uaMsg": "0xe8adb13b811e1b15809e5f9cae9ba491ccaa492ad7f298d4e2ea9f86776a849b",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 262,
+    "name": "bls12381-minsig",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x0000000000000000000000000000000012496e514e983c38afbf591a48918ae15027ccccb345bd9c4c46f6db76753d9e8fa95aa25ed1767c6aa61e6d85a7497a0000000000000000000000000000000007aff3828b06b6c4d5e69459e16eadb3e2805507b58cafd1e4f90dedb24e8e19505f9f13ffd7077d6f78f417d68a6851000000000000000000000000000000001979bfca6a9db2443c6afb1bd719c473e528685f18bef180975bf1b488ad3e6c1bb0c6f2891c67e71db6cbe25760828b0000000000000000000000000000000008b698a117492d05a451f0d96fa0fe958fd84e124bb773388b41b913964784b552d181e48966a55d6aaa7dfe88cd90f9",
+    "ua": "0x96a1133c8f248832097fd9d2e74c6404b7af59b76efa9f1910a90bf4b0773f89",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0x96a1133c8f248832097fd9d2e74c6404b7af59b76efa9f1910a90bf4b0773f89",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x76d6480d603b20023f7554ac18d98d45cc9a3921a091f05e7c64f3cc115869b7",
+    "uaMsg": "0x00a40082d836f1329c02c9555a662d581f583da8e976ec018be3639ab76fd909",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 263,
+    "name": "bls-bn254-minsig",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x27223f38fa3a6b045301c59647580787c4caf1c178bfafa8cda70bb50f23700a012af4e7d042f7ea5c26ee706c2b4dc0757facda598e15116a45911bbcba8f44194ed054dd0965e5cbc3f18b162954e9053e5dd84a77b594fe6d04c3ed7bfe4010bcf0f2138ff192f97b72ee5ad09e558d082be2f4ad99a7bb1c69072d6878fa",
+    "ua": "0xe6ab84fc68c68219e39bdda205d5730c3d2f5e04843f9496ea32dadcc8eaf3ea",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0xe6ab84fc68c68219e39bdda205d5730c3d2f5e04843f9496ea32dadcc8eaf3ea",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x0b7cefd857e7745f1958e9413d7123ca62d85ce9adfb4a537975a6a4ec6a8a8a",
+    "uaMsg": "0x7a3786966f20d85b593903e28164326196bfc7d90ded329e65dfc21479d57a9b",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 264,
+    "name": "secp256k1",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0xa68e010f60c4f9e3721eff45fb47fe06c566b72832bfcee21dc66fb9efbd81567fe358c3be0a30921ff4c469cebbf06d78fce96e1ca92efd397a9cb598e7385e",
+    "ua": "0x27d852f6ac4de0653899ceb64824121195c178702447ebf5a2e27e5c5c3588f6",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0x27d852f6ac4de0653899ceb64824121195c178702447ebf5a2e27e5c5c3588f6",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xf00ac4750982efd9bed3660225b903a339c72da3f47f11be2793037a39687eac",
+    "uaMsg": "0xb21d12108a41b9dc00c2603898f61efc8eb5b828f5abff0ff5c325fa7eae8300",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 304,
+    "name": "mldsa44",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0xd8354ea0bf0bd53704c58619c613a02d808ff822262a55267d1b7042696fef7c9540476807f9204e7193afb61249820725e9577a38f15bc16ae4bee108ca0c6af8ede316656302d9875b3801028c62d19da0e091ef5f683faafe3e4d1c37dbdb7619a4b5ada686285b98627fd9eb82e3328b68dae890ea1384d82afe9f0d8a5a278864b689ab79e83be27a505d79fdb53733650815959ae5951c2a476d4acd664a1bd5f04c7f93f68c9635eaebb0e0918f15fb05a33e9318fe83e7cf10aa806c0ffd989c21780dc0130e93b352b63d89adcc89c09a025464ae2f69e1ce7262254bbc2ca3fe9d942f0e6ff7c7f553631c61d25d2e85a545d36b9554b171b2b6ada8493b91f4ae413efb64fac4598bd8f70b0f51ed40234ecf4ba019433f8375b7835834b031713dfe93df4e4fd5245ff3eb8d6cb9416df5d12e120e0085438c1a52639aa468c1c024ef9ac371d3a8e3c11c353e974d8e6150f491751edcc0215151b19217ad77981ca761bee44d6b746cf7e93d1160112962aa1dbcc25916fb0101ed2cb8ab160b64bba788d6982dc886192329b3760fb945ba7da9ea6e46874678aef97fcd5f34e9f79c3af950dd679787d16e64b5b7768b8a2740b502250ac4820d4041172371592cdc5345b2ff2bf35937974f3171558544305d48090db52a54c33f065d7196d3dd00881d5ec6c7264b0ace2be4c882c553973c9b1320879693c74f3de034ea5beb22aad340466b46371dd53f5728a8b446e5708e9e8c771ca25745dfa61778f38c56569e957017cae7ea61c20bce96cd10bac171246930aff397b5f55b6c02fd645be444e36f0a92bcb966bd73c8b64b64a6ac726883a902bcd67e297f32b1d0ca138209f72dd9686c7cbc42a4ed0bdc62fce9ff727bc90d2dad3a24e647c0ad19693f35a7ada4b0a2b9d9e23aad0fcb0b97755db5b48d3a6014dfcce36e16782efc016807ae67ad5b82b40fa5b2a75a36a1a6fe87147c343ebc2d20c8299818e4572af57a14892452a4772d91519bda6351b719e7b21511717eeb374e1cde9bd21a2a6c61f6a6b4df25b8fcfba917ce24a820ce24d35ec23885582d288589cfa1392a0c4e57acf39edcb17e569f5b2468000df21529440be2df5c788442d28c33c1948efd2bf73a3f73d7604e44e92be71ab5110f38bc20b562cc8672920ebea90dd3d36d6f74a71812fad79a761ed5d3875325d3771369141c5d2e24ca2630c75619b82326e5711d4200416a2f91e884d56b2f5efcc3d9b92f72afb9d9855a24b69e5dba8ab0483b1212470d4efb69500d7cdf0cddec0b7b146f0f614d187f88f050c479dff1133e917ac490bb21745e0ef145f8e75090a1411eaf9ef0d77b88bd8e69938fb7c19a0da02bf879a06eabcf654997251e4ca72a428c4459c9b942b08098a149e04e31f26b0f743217ff94bac7ec02d0d7352f9b21631cb18745495fdd5e8600e549696fc93a13c44c1d9cfe53483b2191e98db1897e9f1a6f30bf0e865a7624b329f1fc5d46915b7757463cc74a3304876fd24cf0c5fac297ca0edeb7a018eb812a2efe25f3b56cc5cce876277f4138d7c2e1d4be54b7752fb306c8fb24def40740b30b2e93c1ae96eb15cb0df22413779409740caf0c430751b4dd28e4a685102c60fee242e1466d1808ac18d9453f34268efe8e99f8bce014d675c70329ed04804793d5b8863fbd09a5b8ad6ac49444eca7cf960490b084049806f2885edec6a841d642a883aea2e9f17caacf21119df2ad5a020c3a7e9a4e7cecb536ddd60e18db9cb375315469ab6ad7644cc1b6bb1caf4df38bf65698b4f0b5e169bd46b7f0dd8dc272f35adb360b132c90404b4a76",
+    "ua": "0x7e3252de1ec981f8866165c36f8a1ae867eea0155bad53ef8c0058e7fd96885e",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0x7e3252de1ec981f8866165c36f8a1ae867eea0155bad53ef8c0058e7fd96885e",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x088e6c6aca0c9be3e7fb717c1a201dd05fb1fac62876de1bf20e66148ffb3dd5",
+    "uaMsg": "0x45635b645e06711c7e5fb6e05d191885c223f59cfcb0806ea95b53725bd741a9",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 305,
+    "name": "mldsa65",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x25681cffd4f7abc23aff51259ab86fe0a117ed512c53e7e131b5a471f37816f9fc23726418ba2d4e84d923a86c8927f36ff3ef9f613038f1debc53f40699d6cc18f682692ab934b647723bfa6ad7f3e2790ea2da9b681e04b6ebfdb6c9a41a2c5d8c723e880ccdec449d0caa72b126cbd153737ccbaa45cb753277f5321af6f6fe040530b077660cd732cf75c96ef333a632b7e8355267d66dde28f2447f56ebbc759a4dbe8755a3e3594a3c7088f105a08d577444079bab4e8e93d0fbdbe8f4dc3adfb0fcfd7d9b0847ad51257638ab70eaa798218c81c24f9be38d2567704aa87d74640cce61a55bda40606a66c4e6d2e5c91fef74b5a36e814dccbed2fa0231c2148f612cda3d56047060559ffc1ebac026549b624bc599684bb7737b478bc5d2bef9b9b63b1f153608eb6ea90c4be17fea3d8cce381ad63fe1df55020f38f8eb392f9121347549b3747890ce01c29f4a6de4ce4b915a33f4225e7cbb30868ea44870abcb0f2d6b7e070353d0b5108057d81ff24294925924c806e007ec2dec15e47c59289d331c54c7c3c64bcc9cce5a1f5c6c309c54fc19484fc4ebeac9cc319c2836ac6d02c73632277f39734e7efcd20702727b31b460e5ef43afd039d73c4027bdc8ac8d97191ebc8b847356be800c9bd9f98f159589440c214269eb0352012bf1934b9c31e9619f220d2b3cef2ee2c6731e47a1491c44f8c41f106c284740576491e90f4426476f8c2808e7c0b4d557b4de05afdd176a1c446292b385a047cc7c9901de3e5a6aa966b1e3007ecc112f354d1855dc5c56d5bd0b127c7286ee35c71c02bb145a57889c2a0d5f3c6dccd932af79b9cdfae431c5aadcb375b1361e301f04d9679854df5f20d2b60e2b942832e5e4b39a922ed4c78ece45fa335dffc07ce644e2e37a5c695bd7a408a368fa270f5d3e7fe0a4d39b06af7b36c0e699157d43c7b074045a24965f5c068373c849e7193e03a8cff56a499921bd515ae00a6e32422e4f2089a6bc599b9bd9d3f1555e543f0582a2dbd8f2c482b543ea96cef78d18e24b055bf76b7356b8077e8a4776509a67957f95247fcab295c21dd60db96e292b6350ff6ed3a63f6b47af3c88413a0b8d23c13770aff147bb49026f5d9a65b2d218dd72ddd5e8b25baa705e2499f57b3c7b4ab4fd64d689b83f1d9e8537b22874633260364d7de63a121ab175500023b4515c419a154c31d7cfc530007ebc6abdb1bd62635b881c3941038aa13ad20e5b6d4e3105f435674a1c3290dbe8a90d7b2f4648561672278ec5f3990fae682af663d3b554b00ea0b5481fe25d74570aa189a59058506d33b03c45c1db42dd9a50629471d84ca31cdcbfa7a293b1df2e18d7ec8c43a5d3fc77400eeaaf0e7e3731eece6bf15c9a9ffc5ce6a1d19d247abe19cd8fe25a6ae672d2f0fef8de161bacd97e5f56312d59a59b849c0ff8425cd67812b32788ed28f38a49e18e15222831b46a5e1cdc973f56093127eb65d6135acd5ba4de89a203fdd79ba5c5c333faad55d970278d0f4be3df53ead982269f424d69a90bd199205c44488dc63734341a127c048ae447094e87abc3bb9d7e6df79e02d54df6bfe6476ff6e1b8acd4720f911794bfb7198895a84875256ff54cc2b055c35b4c8463c39cb47d2fcf5d4d746a13e637e23e4128e26afe410bff1e94a2b00fb7fa44996c329f85ae9d0f2975879011a56d4449c41227bb49c9b5b5c5ddb909c6870bb84c438ac65b0798568203e29311ce5a2ef55e0717f3eb05f4180b5361b74ad4349f6545d7b9028cb2629ce90897668a8b30df106620bfbfb7f4be1a75c8e54ed60032d3a7c67c031d184549a5458602052f6cf0408ca206366c32aeb42f274bc78712454f22109f92431997a41f9cc753afde20dac94502b61b159b1690fbb9826bfc3ffeed025cbc0aa9c61aa2358e51250e43f4c2bada1ae642f2f60dfc1c36f9ee8d49c80479ccefd656afcb7946328358d429f5ec8a2a72406d71cb5f1d9a71990dfdf798849b4b035e77a04cc7d01c3a6d768f98c560a47aab0fbb7b515a92fb5245d7077da89405ddbc313e5f65b149445a1133ed43085002c246e254315e347b6e69f4d9aca3705ad7c0a1ef31a457df6504fb470a7ae4019970b0cbb3620da0a6265b7a3e0db61c8a30bbfc8b47536ef910f6cc69a68e6908a97ccd8faad4b57771e99148030a74466114df42d027759402786a1cf7f82e2d08cb748fb351360d587287b605b59b2410d0122c1292f2cd19937a6f51f206f188af3815938761023d938fc92454aed5d085c0898e4b4f484d75aa21777c41d414e362373e4fda069673ef443fa23e95aebdeb9afa2792b3aab2508afd6d890b499f9c0fbad97b73b562a47104eab0c1d23989522c2d8a883d67c314984cbb216c52386f20549b5b524ad77b9f36bf244b5b5c5c2ab7733ea80b0fdf21706b08054a166c3832972c98b6606901739f4580289ddded1f9e1916a46f258e1aba1a68d3662c70b7aba0a9b67b7a1f267dec6a381ddb3b37688c9bd239a32b2f6cde3c92824189aa409b170b889a8aff485ddff94d2eb18058621d3497588f697355f17041f3dcf3c4dfbce71046ff67e6c1d4adbc94acccc522f307aaedb261fc0195837688406c3bbcce8d46f36fc26bd722fbea4647a193a8cbf9e4587961eacbf17df9b89b0c1d4ba0922a6b50d50d463927f2a7e8dc6ff8216251c721cd102995cfaa172a734b7ff022c98dfdb25f501ea27c12",
+    "ua": "0xf0a55b694ab3f58dd5ac8f8508dd1d7699c67fbefd731a22df21326126a8c3c7",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0xf0a55b694ab3f58dd5ac8f8508dd1d7699c67fbefd731a22df21326126a8c3c7",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0x751c50ac57d58ec43b255d1dfb40370c1397d44561133851fda1585e703fe1bc",
+    "uaMsg": "0x01a60521afb4dc5341ca8cf0f2476d9a40e1b190e82a5464ce3154d537372914",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 306,
+    "name": "fndsa512",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x09893c12caf41d948e32f5a11ceca498565b82122da507986cb82c929a928246c7549c32be51b55631df7a016cd7285bcef20286edc102ee253bce76944ceb248696cb33c181ed408458f3e72d961e5cd2488ea551153a73405c2d5d10412dbb7215c31ce8558a4981d110ce2e89e5673c587835dabe2f17af9aed043d46592396ddc1c2ce2d8c56a4566fd5094dc6bf881b9c197d96c9093f2fe88dfa32a4fa67083be26b76c6d66b28e58248af495d08f2b65a5b45f112e24fdabd9cb2322a39c75f55c1647c76d96c8e1ebbd465d8a099595ee4526651854713de07964e8eb75916cf788406b02c96d709252537391074727ea3a49d5071758bae6e6bb06086c44b1474bccb6a3a0f0e6dba1144bd26a13268439618d0951ce8bc588b0a647f1630212d65805a56baa1bbc8381ec2ae816343c951d43198b29f358a81c2bb5fd84104e9e0e90f17a6891130aa2789cd06722cf9f4aac37cc179a3e594f31594c7a6982aab564a7c17a015c16ebae05bd9a1448e3984e6cd8fc52a84a018235331250c336710a4a008e8b75197033eaa18274a86c3ca579ae1ca7c6f3651b9e667bea94849ced3934ce0cbb09214f9498e8816808817da55837b69ed12858a1e26a217a654026f5fbca3d96c46683ba13d913c18500a4824baa320a89ec5cf2a05c8f43ebde737789ff1acd408384ad4708ae9fc90a0155340b504b5b36e2f9f4a52b2859a06644670f7c8e8095db9f9248c2ac974f8269aafd4997542934b62404fbd21f2f7b56ab167953a65cd2a284ececec47122b1a8f62ab8e91c4dbd481601c9665f74903ffa676f0176f8fbe01ad010221284451da6f43b0827c8f1159d40619599bf96e197a269192f1be311e05401f04504af2dae3318e7ba105a3ff22dcf326cec4f0bcc5d4eb414ecd38a294137d039123a6832520efde9a8e00407120d134f05b864c9f9e3f2a38b5f64fd7b30624018566a56999bae6b0087f1a16e6a87b1e6a99844a96929a5a5d21ad60e74e18039de548d35de02445ba2555c5d54cf41245f9618192c53b31af03b01a59fb087f2471a2d865173cc74c63fe6550211759af068de40aee7cb406fe222742648eb55581cdab3d9c201e774fe1704d95ed41a150679c715dd9824582bdb9ec40554c426ae1671bc668b06e3844a151074d62417d01165ef351d93666e78abb656aad03bd29dc3be58fd637cef29c55fde522dc0f613e8a399b463f226136ba3dac8c453ee85a701d6a8e8d286",
+    "ua": "0x806f5d8ec8526802f5d6aa1a763b8bdcd4a70f2b63427506522555e9b80f9936",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0x806f5d8ec8526802f5d6aa1a763b8bdcd4a70f2b63427506522555e9b80f9936",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xe077048ba91f9584675fa29e5cc125d8ac553fbbc294f2ead1d7ab79b6cde28c",
+    "uaMsg": "0xa05d297ba58c4ed2287d260d2628ccc248dcd7f3fa0dd1d9d74d54fef35b85f1",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 307,
+    "name": "slhdsa128s",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x7d55db624a6ce7e22796fb2115a9ed527d98bd3e6d0cde7f6f5d319c8a5ba629",
+    "ua": "0x10e6ff932b277c678198ae01934b61a8c59f88100742d767a83a173bb6d3f0a3",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0x10e6ff932b277c678198ae01934b61a8c59f88100742d767a83a173bb6d3f0a3",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xb588880ff51b5854641b8543b5e1eaac1ee2dceaa642cd1880301a81a9002e75",
+    "uaMsg": "0x2560e4bee40e34ebc851151656f8eca4be9d72e2ec0233cc9c11d2e58e5cc2ba",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 308,
+    "name": "mldsa87",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0xcf116d949a67d5bebfa27d2b53c850fadab78acacabae2c9a58009f435f565ec6d02a120f75d525cedd541845a7d60021d4655f977b20196111ce0d2da5a1243d8ec7dd18ee906592ca415cd2c01ab3174cfdab6b2ee5d97ac1b1942579d959bc163e310f94654ddee0ce86ea9900c6d18e54eea31de81c328b13d285525e2a1a91368fc04d8376ab8c7ae9b23315d6f972bb963ffd7e745c9749501638e7e949b62169f713c4be51140f69855527403770083eec05a147e55bbb310269793441a40c8d453d4fffb0885e206d997618082d896eb3daa36bf717eb4328436abc7d4228d9bf6fa1f60a76d52bd8bb37779ebe4bdfc7e0eee1b4ed3383e4a758f38dfd6f309c21eb6fda253a36de26112c770ab4bfbc40c4fe9812c2ce0ab62f5df5f3b2089985d459b03ed8c626d0128dba89783d6a030ab21b2c2a7221d7c1ebd59e58130243244298c0c00a9a25588507c47e618380b5fd41cdc46e66b88fc400c24a7714a81fc0ca96cd025ce4463ca837535c4d96811191088d65de9a4888041752c7db09ca2fcf2f93d85c719fc04d162d951106b303a4ceea3cd4b9c057fb484bd787f52c87d7434800fb08f4ee3a54e8e3688278535644bc9fe008606c47ce6347a34383b2a9c1535398e6aedfc591789d7229ff0c0d46d959e9f611fa201d35710ab10976d2373f891016bc0003bc5e6c07cd8e614695d5c7cadfddd895a3a01e3b60623368117588aba12ca2042f500c2e876240a948b88f660972bb8048320c3616b5a9df4869f5540110714ee7854db64eac59ccce448c7cd83024d681a7f7faabcb3a3a7ee9d89524357b1056e1c9182d1bc7d4fa6029d2143c32344e25072181806935a5d38cc88f4b6ced43620d23a2e9f936566ad2a1a1f3025cd7a31568900f65860df5a81b2f6648e4e2567a9ec88d4425352f847a6adc06143292881b416585810ee0379ae12483af217b62c67d29abb83f53b5d9b449d2d05181991d31daf4c49285bfa3722a2136fc4b925c2fd029cf9cdf84c0f85f658d8222623058b24bc84cadea7fd47547bc11a5177adfdcb4709151a815617e900bee4a11e7d99a2b9266822bc86e4dbba6bdd09ab243f3eb25b64d48db9f16b1c41233515c588758024629a830605ba6af3aa7907b27b361db49704f8a3388d2818dabb05e3e3f8999d23064245517850f5f7a5311fcf70efdcbdf2d86312b364a847e231b83f4c4dddc786a649401ed34e9a9a839899045d4930b0f58dd00299bb04842339acf9086790aaa49329e74053e5c0fc25855a5759549ae454c1ead5b11d5b4905d6bc52aa9eacc9bbf43b352d0ad53519fc6b20259de5d35133312be30c50cdaf19973d1b922b0bb48c1b76fd053179f0343561baf4d9327d06e98ab92d562a98be10f0bc38c97fadc82f60b301980d11f04ca3ba702d2596d92e92210881065917d845d9f89e8ae7cb93fb76b5901770a1fe29c3cc0f45a34d7e2293a1d80589e7b542fc85dd8428068f090a89c77726b513733f775491cdf8b5736b5a14d55dc7c76054d95384a9aa7caf4406d33dd3a4c8ae31a3ce0b0f912f4e678c9f58e99f8605e5540bd618c32d488be8ab119814682f67fce498dcf8e291450d46fe1032cf8e766073eed488e529507d8472496ba570691af6d694e5e252fb33494b183304b525945708feb8c0e260dcb41a7100231a918992b692ed865e17ee3d3052dd24459af77e7454c61d4c5c29888626dfaf0a32c9192a928c6dd10b4299779e1bca81b66ec29103eb23a617db0c7732536dbd4b1c95af5707fe8dcbb2dc6d1ab2a7e37a7f7c83fb8526b4d5d415a7b5a750a4939a364c904534bfae84ca24f99a34c560f2e97a8620c54c3262895a945b1a37a861a9bd54770179da001224f3ac41f32f17358230a9cf2c9fc227ada215f19d5ae58120d16ff240e10dcf092082b4bc029b8ff51e0e41f9aea795a1fb15479d553124550eff0ec10c45b74f730000c54a4e64a0b821882edc1b3c6beb4ccc22f4c500c28cac420392baa54e0eec9fc09c0f3b7f38906ac617df6f471e9e8e6dd30e849ece71c5ab0eb0dc6e5dc30d2b3df687cb01ab116b61030bc96d29c77d89c1b6bb1c2c32608b152a5284a5f7389a3cf325f80a6e926e5c7921dcb37c9b6a831ade6b4e42353791f1fc9babe61ba1159360dbd4c7ee2e0b1ead710cf0a561afc4e80a863510f4e44f908ebdf308d31d9bf90f2b10f8657e0baaf7f91bae13904e5d243c928c343436f53a301d3acf737a8980f8b21ac80911dd143afd447f0a395551eb0380a9d62fd20769bdaf2976835c0604aaf07b0156feb4f285cfa17405e13556ee0d6823627048aebda8c6ba16f2788ef932c6185085472672bae5b3a137d129347117bd9a743c43977e9e0df67510fb8f789311cb74d641bea321e157db7ed6fdb0c77aebbc1d64d232014ab561a2baff1a75a4c51c825b20b87377fdcf4d147857720600112bb2de61c0da421a3ffc3b8d258f90d7bc39e5e6d091a16c557c009da08f5ee4a933cff18f8bc5cdf8c2bb5253a1b76da1ee684b7dae48eb0fb56c5e17bdc754118e730f3ebd563a64e8511ed8149335811ad47b7fdcf09bf0884a7fd2c6395e0357e82a6d0cf9e2f80b5b0f90a804b20e0d22ff0831ab13472bd830da7a95bcfa1fa2579c10fd12677de476f4ad58a589486ebdc689cfdead7a096fca8656886c5e7da389df48a4f3c87a67057f639d7d561dabf9fba5a73711106f78bbc2a66fae66f8178249759feb0c5ef1ce1099d35de44efab1bb72afebb7c736a437f17d2afe3a5ed1fcc05a243f40ec52c4fa09fde2bc5ebf41370303d84fefeee7eaacbdfc06c45c25a93485251254d15a43a1d30c6454c163305e104db2506be2add5165ba5b14911841ba61ce5f52e96b741311526729603549142027f3d7d90400a6b7243ee20c447772dc94ef28b659b58c0201aa92f8fcdc81fb5653e4a16480a8adcf5a99457f872cab4cf2cbb65d6cad765c181feb5cd1db0edb23ad30b2470a967635303431ba07235deba94710b320f84062e51d253d1c3e95449e6366700ade70db15bd0afa76bf97d43efc4a85fb296f081a4de29ebd2c168ff80cbde583bf64f354caef63236d9df52e5d6d78e17a743d8d2f39f1a1411e5e094ab6bc41267d5dd63a7ff42af5726ac1de91a899aee1b6cf140049f8e32e2ae9c85a941aa1e642da3a18f4e04cc7996e6f0f9af4ffefd09ce46ed2cb4b7e434f36c38b2a1f6fe34242ea226c185798b9527998aec6fef63ae48baec6fefe73e21a5cdeec46e3ae517734915c5a7918bd325a24f4b13a6fa07781cad24dd19daccb0aafa7ee1fbbbffaba8cba875334f0bfcab95ec008a35dd658443daca08e15377cb10b6a528dc384204e63f7f63fa37382c6b5f6eabe57e07114e5123ad54b76e2b3e925c599781f7b455b2c4ee01d9c144930fcf2d916d0818169b20813c765ae2225c132f35d1d26f6c40106a375687f80a1c22a78e127e1da9bbd251bf4bdd2ebc971940bfd965c8fc208e0b5c42423ab0b142fce1acf04e8d4271ab1b2dcf62decd48fd17b183a4fbbd8a588e491c296b6d541fdc9ee5fe70cbf8eba07ab9ead6ee39943ce7c223bebb3e6b8888c43eda03b39a8810bdedbaec5bfb",
+    "ua": "0x879137d7d47ce400f6479dd0b1a4bfe96c982520500ac5ac70211cac6485063b",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0x879137d7d47ce400f6479dd0b1a4bfe96c982520500ac5ac70211cac6485063b",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xe7eb7e277409b85856ef99cee2317dc6da06fbc1006863dffc99e20289c0cf94",
+    "uaMsg": "0xb20c24a2ed081af5682a71a2484faf3e5ceca3965d7c73c08ef6f261bec6896b",
+    "role": "pop"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "kind": 309,
+    "name": "fndsa1024",
+    "mnemonic": "pq_kat",
+    "account": 0,
+    "index": 0,
+    "keyData": "0x0a1c6432d9c50c19b0de014ad417aaabbeaf304f034e4059d663ad9a966c66297423960e452459278f89f5123d4448989e617db4fd68dc917e0709cfd73b0a1c8732fe8a379d3e28663cc6f9ce0a938241b30803ba18c9531b6e5b93815d9a979fc5387aca0268d956ad4ae24a8b3a1f1a04f9e3aa7d028a028157a4895fe56d1a2804d69e952150e26b0a9e605e50e06b5251b32e3a46387a585b77aa0e15b5c35c67791c3001e6e56926c0594fcb658dbd69b92814a021321887fe5cde5982497270ab4f1b75d5033e08a7a955dec3eca2ce3a14d1a4bed5f7952a4432862671a061ebd489d68a0e9a5b53d6011d44883ba7ee2eb906a12c8647652b2a84d5b27fe04365be117340872f2ff821d1bd154b4595ac0a6d50b56ad4420ae8e9893460f5080a85203e0efb920c550a9e0cbed35cac0aa964de42fc12c01ca5ae942a102f0740a23443aa8d4655c7097ee2637c310594da87e83e21770bbd2e7694fad04766cedd6a5ca0e1d359126c543db6e8a33a207ec3a4f209f13b3a7a939b196c80e8c72744984c48f647caf3e8ef7b3dcb045f661b6bea47b7f0ae9a1ff8c5d14a29564331cbe6f9ad1ab03027f2436a432035f4b1f98ade211cec43aae825befc75c994abc60c2562ca9919af8b22e436128a9d374c2c338c11f6812dc3aafac822203c2522fe002d2495d203c42e7d72618ea50403054f0cf47b35aaf034f2edba8d1f8f96452f133128315700dc5758630f6062fcc0ec5c306a009b51566a861a0552656662ffa930e92746469511716d94772e71040d55b3445b4f041976d572e60e09c960a2268b12aa6eccb6f9d4bc7a4d9cc4b751e6bba26f0787489780b09d429cd8a190c66b5521e61d0ad8fc34cfd6b40be2e6c594132c74168bc85f0a501bcaae017325b59052dee078180977428439f2e1b7b569a035036385442676a71890df4949bf18a7c46d77ce9619672468b349f270a9100a165efc89be0c3db3c051f935d48832582641cce2c2be99ffb5540423a61d3e6845c67194916ec1c9ea10984d3d55d09b9b067932480b61f64cada118c6c834151dc6e0a02256105273dbab0c192ba539b5a4eb73803e63139618c570b22be15517d584784bb9b518979c5600bb38c2f072ead60a95452d41a2a867cfec550564a2a2151f468ea5a9560399ab9d78e300e06a0108ca13b3011dc15295e70389d8b1b38452684091cea70468a62aa2819844ee26449bbc4a724f0a27effa64960a3993a9ddb5bc00c71e2ba37af42cca5dde996cd06b499c6532b3d4b428d6c8277982e3c3d28e1c0c009178a86cd3242175328ed8eb30c0e0fb4c86522d01cdb51dd05c1e8a85838e5bfc4e621d534601f7906476185828fb0dedfd7bcf82553a38863692a0e0143e9024c405d76882b644f79e9d44948b9871d83a999e21fa448516692e553b95d26a5470ecbb454a851b30c287ff440024b08fc40c2b0405c8c80452d9884611d50928a7f912283670434ffeb63a88a3026328a06655377ce0265e9e17d517a5a7b9d009fae41c4136ee741624502d67d43a519a48f3bc5231b8c7a97043766ab9d31d207af07232f120336b6493160be286a9cd4cc436544b0844a56a626a9d47e210f08ee78e095caae56bee2e386575a629980a3305ba19f40a4093499f8199801e2d551088955a2c7fe5f241266a86be995c6329d68f3e6c1a07c6e34d5c584b1250162161ba8fab66a7de8fa46a5a680f720bc63cb22c822f7a8c54d3315e95027e838916a2fe96d454ea83d4439fb9bfd2df659f99e45395c0184c5281d0d85e2f46ab409037fb41ec31e0d2a27000c8126a9b34ad2393a428bbf641cf51823201b9e06d9937193c9ab06d467b4afdb65f830d5142ad808c6d2cae6a1242395ff89fe13330665e2286c0af29b9e7819b55a865d915455b201d25ce223f89d1d3417c173e42d58bc98e29769e38f1744280e49e71d796cc6a89907060781b5999384576b720690305169d577a2aa46a66d358195b760a7cedc229e7c69c7c4a623be1d0612984fa1608ccb9b8d650e105fc283eaf01cf545aa9a99a921308301ff0dbab57401101e5a5d4ac08f72d34309655a19b3d38578167e553099576f9d64ecb7b5ac997cf97a25000a08b8067409184a2e5c7686b0b4e5abaed1bfb2171e8a32b05cc527de7666feff86a5516652307c09051a53a2854628fb66d3276aecb4c0412b96f8dca543ebba0930091a6ed44092f84b8a54d3722b2a6fb21b8da9791ee146e8eabc3fec8f87d005a942fc3ec23ea6515a8dab69e51f8a6942700a43639f8608eeb66ccd566dc1bbe3050270481e076b84d35a7c64457aa8e6a550b67bf615135894a219a22e64f0bf0a8618f7a71d9a49eeb9d14b67312c5f52659ea48ef55c494ca7c334ea85b4f62958685549a55523449e699321cf23eb3a88bac4df5e9c36a28aeaf59ee50fd5ac494ed6901b04d675f9e9d51ee67a8256de83ac49d7421e57ba010412a7f1d400401476a7a52a7e54805a8",
+    "ua": "0xcf5a5a9054ce00ed6ac6c491bbecebff261dada5cee5c05dfe5e31caba097b98",
+    "purposeTag": "0x4f2a55dd4e95aea1b61fab329a987f3503211eb76a181bcaea639b71999e82cd",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0xcf5a5a9054ce00ed6ac6c491bbecebff261dada5cee5c05dfe5e31caba097b98",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xa09eafad6b96bd27a5bb14b387fcc209e63bc700b908af9278018e70a534603e",
+    "uaMsg": "0xa23531498831e1c806d7b17eb77a32631421ea7df557cecfd84a30ca7883c2bd",
+    "role": "pop"
+   }
+  ],
+  "member": [
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "structureUa": "0x0d2cf50c5b5036513b9faf6aed63a1328f449fa69a430e737cac0aba6a820d4f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0x0d2cf50c5b5036513b9faf6aed63a1328f449fa69a430e737cac0aba6a820d4f",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xf02539163c3b97ab761e32c3d251f6d33c280d8090003503e34dbbafa709af27",
+    "structureUaMsg": "0x0258de20492f04e7c447565317ebf44ca4c0cc6da393289721811c32ba058bf5",
+    "memberDigest": "0x1abcc7f11cc33243bef9da5b63a8afcdc4c75ec57f5f7619359771c41d9a7a1c",
+    "members": [
+     {
+      "kind": 257,
+      "name": "p256",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0xb05c9b34f3fd58b0cf669b9bbcd308682fcc441964e0081f9f264d45f64aee7d27262554fad1f48fc81ed4be1602fa7ae54efa4a33c72ba5e981a695256a8c57",
+      "uaMsg": "0xef86f6ed36ccd0e218cc4ac137c274d59eb3375fabdd19af7466cae4b32ec9f0",
+      "role": "authorization",
+      "signature": "0xa2f4b609caa3e7bda431196f1c9468624e33a69a2f6692d412182f2a6059e3297c40ef99923f0ee28fd0615cf021e2b9cc77cc8c0fe24f8bcd3312836e3875de"
+     },
+     {
+      "kind": 258,
+      "name": "ed25519",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0x65435d87e7dce93d12c8e1e00c433a46d05c2e33db28d3e7bced922d7d3ba2a3",
+      "uaMsg": "0x832d7b35e76cc8de46207a68d2162d07a962dcc0bfd16476decdbc6c507ff7cc",
+      "role": "authorization",
+      "signature": "0x8b2736522ac903d58bee1923c878517f6a701a1d57273ea47e195fb91d8a11ef335497b7edb9f7ff78b410e43e7387ff88ed302b0d585d8b39173444bf3a7d07"
+     },
+     {
+      "kind": 262,
+      "name": "bls12381-minsig",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0x0000000000000000000000000000000012496e514e983c38afbf591a48918ae15027ccccb345bd9c4c46f6db76753d9e8fa95aa25ed1767c6aa61e6d85a7497a0000000000000000000000000000000007aff3828b06b6c4d5e69459e16eadb3e2805507b58cafd1e4f90dedb24e8e19505f9f13ffd7077d6f78f417d68a6851000000000000000000000000000000001979bfca6a9db2443c6afb1bd719c473e528685f18bef180975bf1b488ad3e6c1bb0c6f2891c67e71db6cbe25760828b0000000000000000000000000000000008b698a117492d05a451f0d96fa0fe958fd84e124bb773388b41b913964784b552d181e48966a55d6aaa7dfe88cd90f9",
+      "uaMsg": "0x54bf252938f87e209dca059e21e458123af7be5709d0f5076c537cbd650dd3da",
+      "role": "authorization",
+      "signature": "0x000000000000000000000000000000001502e35c706d3ed04afb36880291f5bbcf5233ba8553f59013c313d3febe42c02c79e2af35cb5822f79c81892fd1ad170000000000000000000000000000000005742777671e6bd15a3ac6ca2613034e4ab224fe74461780309e82ecc58015c4f56a9dd776005efc12963a99468d9492"
+     },
+     {
+      "kind": 263,
+      "name": "bls-bn254-minsig",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0x27223f38fa3a6b045301c59647580787c4caf1c178bfafa8cda70bb50f23700a012af4e7d042f7ea5c26ee706c2b4dc0757facda598e15116a45911bbcba8f44194ed054dd0965e5cbc3f18b162954e9053e5dd84a77b594fe6d04c3ed7bfe4010bcf0f2138ff192f97b72ee5ad09e558d082be2f4ad99a7bb1c69072d6878fa",
+      "uaMsg": "0x7f91d10b04d5c88db7b74b1f8daf3ff705b4c1023891a33107c007d127a816d5",
+      "role": "authorization",
+      "signature": "0x05c057b531aea9f3fb42716cb9fb4453e7f74e07543c49f77507024ae86cea762d39154b1a950afa18b5242a977f6ae82c3c87b8e0e9b413bd2a6eeccdf0b1b9"
+     },
+     {
+      "kind": 264,
+      "name": "secp256k1",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0xa68e010f60c4f9e3721eff45fb47fe06c566b72832bfcee21dc66fb9efbd81567fe358c3be0a30921ff4c469cebbf06d78fce96e1ca92efd397a9cb598e7385e",
+      "uaMsg": "0xa4c7d271905337cde1a2b01a634dce88ed27c261a2c11a3399ef53490ab31754",
+      "role": "authorization",
+      "signature": "0xc4ceb742a7d8b591849c6fdfb7ed8d411d0fba67fdd59b5d7b3789a06e61191a686dbb6ebc70daf16ccde9651b0b714da5bfd948cd1b0fb6355d86d8a7268d501b"
+     }
+    ]
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "structureUa": "0x0d2cf50c5b5036513b9faf6aed63a1328f449fa69a430e737cac0aba6a820d4f",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0x0d2cf50c5b5036513b9faf6aed63a1328f449fa69a430e737cac0aba6a820d4f",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "digest": "0xd5b00b9e65f464ff2c2b70e7b818c8847631a27917bae4f8ba73e1e802716708",
+    "structureUaMsg": "0x52280f5aa0cce1e2b060d4da7b73ce9a3c9e00762cb7b66415f6926c79f719c1",
+    "memberDigest": "0x04bc61d73178cdc78c09e683e09c115ca5c2287793610073a1687977696a7cb1",
+    "members": [
+     {
+      "kind": 257,
+      "name": "p256",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0xb05c9b34f3fd58b0cf669b9bbcd308682fcc441964e0081f9f264d45f64aee7d27262554fad1f48fc81ed4be1602fa7ae54efa4a33c72ba5e981a695256a8c57",
+      "uaMsg": "0x1d759c1c6c0b7ce50165ee4d0d2ec934821fb67b532752b88d8d98003fe67637",
+      "role": "authorization",
+      "signature": "0xc2dc56b0337b9da0405b98155bcd89fb26fdf403beb32db71c128be0cb4c4d4d2cc1675a7f29026b360d15641336bba72bd7e5f222710a8225a1455977b286ad"
+     },
+     {
+      "kind": 258,
+      "name": "ed25519",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0x65435d87e7dce93d12c8e1e00c433a46d05c2e33db28d3e7bced922d7d3ba2a3",
+      "uaMsg": "0xa853925a43681adf90a5c018b7eea7fe9763649a9b06b3e311c117eafb124bb2",
+      "role": "authorization",
+      "signature": "0xf47ec45f375a611f65a44c57c76c38fde6827dad8faee09c3b21ae5f58b9655b1f4d4ce28eb31c2783003da11e1db6b8620c096dd798eb2bbec7a2173e7db301"
+     },
+     {
+      "kind": 262,
+      "name": "bls12381-minsig",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0x0000000000000000000000000000000012496e514e983c38afbf591a48918ae15027ccccb345bd9c4c46f6db76753d9e8fa95aa25ed1767c6aa61e6d85a7497a0000000000000000000000000000000007aff3828b06b6c4d5e69459e16eadb3e2805507b58cafd1e4f90dedb24e8e19505f9f13ffd7077d6f78f417d68a6851000000000000000000000000000000001979bfca6a9db2443c6afb1bd719c473e528685f18bef180975bf1b488ad3e6c1bb0c6f2891c67e71db6cbe25760828b0000000000000000000000000000000008b698a117492d05a451f0d96fa0fe958fd84e124bb773388b41b913964784b552d181e48966a55d6aaa7dfe88cd90f9",
+      "uaMsg": "0xdc84e0667b5aded75994bbbcf6c987cbe99c3b98d4c277c3442f9d7528e6e50d",
+      "role": "authorization",
+      "signature": "0x0000000000000000000000000000000002770205a1733de285bae28181feda2058163ab2e15c16659c950d92cbc34df8788e1143b4a6d0355f8dc36dd1245a55000000000000000000000000000000000946dd6077acdd2358262d8262f67deb245f9a2cb46a7c4af889e65f86d0f09aee223579ade49f891cfc296211bf479e"
+     },
+     {
+      "kind": 263,
+      "name": "bls-bn254-minsig",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0x27223f38fa3a6b045301c59647580787c4caf1c178bfafa8cda70bb50f23700a012af4e7d042f7ea5c26ee706c2b4dc0757facda598e15116a45911bbcba8f44194ed054dd0965e5cbc3f18b162954e9053e5dd84a77b594fe6d04c3ed7bfe4010bcf0f2138ff192f97b72ee5ad09e558d082be2f4ad99a7bb1c69072d6878fa",
+      "uaMsg": "0xaa4449e5b5f7077153c06fe5247d18d9474c829462f9f4e72d77a98a680ff739",
+      "role": "authorization",
+      "signature": "0x1f48818247dc53dc5072391f65192c2892340ce000cc74dc03286e0699b92daa22e24ed2dd86d6b7ef1d35c3c84a37d8f6e956363ad521f2a0badf320c1a526e"
+     },
+     {
+      "kind": 264,
+      "name": "secp256k1",
+      "mnemonic": "pq_kat",
+      "account": 0,
+      "index": 0,
+      "keyData": "0xa68e010f60c4f9e3721eff45fb47fe06c566b72832bfcee21dc66fb9efbd81567fe358c3be0a30921ff4c469cebbf06d78fce96e1ca92efd397a9cb598e7385e",
+      "uaMsg": "0x824af13ae6e48ecf8e43119181e9eb41d5fbb96121c3516489b7b4414f6e9e50",
+      "role": "authorization",
+      "signature": "0x4ead37e2d8d648eddbe395f93e52170dfb72aadc79ef414f8657b59b3ecc66ae7cb84582ddf96b7309972ea01ab35b2072ecaa2c56b6b626a177ddebd08114371c"
+     }
+    ]
+   }
+  ],
+  "native": [
+   {
+    "app": "pqvault",
+    "appId": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0",
+    "address": "0x1c6c7ef166c962c2ed755daf726a42cfe4fc77db",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0xbebdf5ae85d22e2594d8d660bce47add63fe70651184e7fca7f4485103c429d0"
+     },
+     "message": {
+      "ua": "0x0d2cf50c5b5036513b9faf6aed63a1328f449fa69a430e737cac0aba6a820d4f",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "domainSeparator": "0x1c8540dc880d0a973d5c02a4ea63df4b18ed6788c71e665a4e651f9fd14c4018",
+    "digest": "0xf02539163c3b97ab761e32c3d251f6d33c280d8090003503e34dbbafa709af27",
+    "signature": "0x713b2882b9f74498ca1ca08ae3a32db605c96ae38abb3541f6169ceb7e2b6ae31ef32e3aa9533e0955d4639ad7caa93d88ac62f1904b1fbfc5f19acccc80033a1b"
+   },
+   {
+    "app": "test",
+    "appId": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d",
+    "address": "0x1c6c7ef166c962c2ed755daf726a42cfe4fc77db",
+    "typedData": {
+     "types": {
+      "EIP712Domain": [
+       {
+        "name": "name",
+        "type": "string"
+       },
+       {
+        "name": "version",
+        "type": "string"
+       },
+       {
+        "name": "salt",
+        "type": "bytes32"
+       }
+      ],
+      "AppRecord": [
+       {
+        "name": "ua",
+        "type": "bytes32"
+       },
+       {
+        "name": "data",
+        "type": "bytes32"
+       }
+      ]
+     },
+     "primaryType": "AppRecord",
+     "domain": {
+      "name": "SCaaS Vectors App",
+      "version": "1",
+      "salt": "0x98dc3ba15add16f06c4af022f9a28b0b10b29e7d62f3430e84fd62cb94716e4d"
+     },
+     "message": {
+      "ua": "0x0d2cf50c5b5036513b9faf6aed63a1328f449fa69a430e737cac0aba6a820d4f",
+      "data": "0x5a66b3357e5f76dc43bd110885c382fc13e78b775e6a1f7eb042fa1f17ce205c"
+     }
+    },
+    "domainSeparator": "0xf0207c873c1d80189964a0c814288e791e8c5f5db3004c022d9c939c43cd1534",
+    "digest": "0xd5b00b9e65f464ff2c2b70e7b818c8847631a27917bae4f8ba73e1e802716708",
+    "signature": "0x8f63c17f4c929b0530a98f5551331017c8790dbb08a18bb0a9dc16713116ff4d069a2d7449d0ba8b736e41c4d2f1687efd11c5598f9ff5474c6f22c05a0f1c501c"
+   }
+  ],
+  "refusals": [
+   {
+    "appId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "error": "UAUnauthorized",
+    "reason": "appId 0 (requirePortableApp)"
+   }
+  ]
+ },
  "chainSeparation": {
   "key": {
    "mnemonic": "pq_kat",
