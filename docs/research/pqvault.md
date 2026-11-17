@@ -6,6 +6,12 @@ Research of 2026-11-17 for the owner. Nothing here is built, specified or decide
 **UNAUDITED**. Tags: **[F]** fact, with its source (a standard, or a repo `file:line` at `d823d61f0`); **[I]** inference;
 **[E]** estimate. Gas figures are paper estimates on the PqChat measurements, not measurements.
 
+**Note (2026-11-17, after this research).** The owner's rulings N1 and N2 change two of §11's decisions; the spec's
+revision 4 carries them: decision V2 (`PURPOSE_PQVAULT` in the registry's closed list) is replaced by an open portable app
+namespace in the registry, with PqVault on both paths, portable and chain-bound; decision V11 (an SDK module `pqvault`) is
+replaced by `pqvault-core` as an app core above `scaas-sdk`. See the spec `docs/superpowers/specs/2026-11-17-pqvault.md`
+§3, §4.1, §5.15, §7 and `decisions.md` CTR-UA-45, CTR-PQV-16, CLI-PQV-01. The text below is kept as written.
+
 **Contents**
 
 0. [Summary](#0-summary)

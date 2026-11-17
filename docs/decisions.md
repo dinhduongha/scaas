@@ -4887,6 +4887,24 @@ Change (2026-11-10, ua-mtx-merge T19; pay-meta-tax spec §10; status: BUILT on b
 **Cost if wrong.** Per registry: on a registry with no update the first structure keeps its power, so a client signs each change for every registry that holds or may hold the `msig`; a disabled member still knows the `msig`'s PQZ secret keys (read, never spend) until the quorum rotates them; an `msig` that is a PQZ verifier freezes its tokens' verifier shape with any update.
 **Source.** Owner, 2026-11-14 (verbatim): "Không, tắt member cũ, thành viên mới cho phép thêm vào. ua chỉ tính fix 1 lần khi đăng ký." [no: disable old members, allow new members to be added; the UA is fixed once, at registration]; "Đồng ý, thêm vào TODO, làm trước reset 4." [agreed, into TODO, before reset 4]; on the open questions: "Đổi được" [threshold and weights may change], "Cho bật lại" [a disabled slot may be enabled again], "Không bắt buộc" [no forced PQZ / KEM rotation]; "Không lấy event (vì có thể bị xóa), Node không liên quan." [no events (they may be deleted), the node is not involved]; "Theo tôi, dùng version (không phải fromVersion) và yêu cầu phải > version cũ." [use `version`, not `fromVersion`, required above the old one]; "Nhưng vẫn lỗi, vì thiếu thì các member ở version trước(2) không có trên chain khác ở version mới hơn (3) => failured. Dùng cách áp từng chain riêng chainUid." [still broken: members of an earlier version missing on another chain at a newer one; apply per chain, `chainUid`]; "Và vì đi theo chain, thế nên version tiếp theo sẽ là version+1 => không cần nhảy." [and since it is per chain, the next version is version + 1, no jump]; "Quá thì tự tách UARegistryAuxLib" [past the size limit, move code into `UARegistryAuxLib` yourself]; "hỏi để chốt và làm luôn cùng Vòng 3zb + 3zc" [settle and build with round 3zb + 3zc]. Controller decisions under the owner's standing go of 2026-11-14 ("Từ giờ làm đi, không cần hỏi lại."): the threshold bound counts enabled and accepted weight (Q1); 16 enabled, 256 in all (Q2); the pointer in `Record.keyPtr` (Q3); a PQ-eligible `msig` stays PQ-eligible, every PQ-eligible target passes the debit bound (Q4); no contract change for an `msig` PQZ verifier, docs and ua-rs warn (Q5, flagged to the owner); `validUntilBlock` and `registry` in the signed struct (Fable P2-1, P2-2); no version → blob history map (P2-6). Spec and reviews kept outside the repository (Fable, 2026-11-14: P0 0, P1 2, P2 6, P3 7, all applied).
 
+### CTR-UA-45 — Apps sign records by two paths, both supported: the open portable app namespace and the chain-bound `requireAuthorized`
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: contracts/accounts.md#CTR-UA-45 · superseded-by: —
+
+**Rule.** Owner 2026-11-17, ruling N1 (in English: "PqVault and later apps go by (A), (B) => support both A and B"): (A) one registry change before the freeze, an open portable app namespace, so any app gets portable (chain-free, replica-able) records without another registry change; (B) the existing chain-bound `requireAuthorized` path, no registry change, one instance, no replicas. PqVault and later apps use either; an app needs no SCaaS registration beyond its users' UAs, with or without `OpenFactory`. It replaces the proposal that `PURPOSE_PQVAULT` join `requirePortable`'s closed list (CTR-PQV-03's V2, withdrawn the same day).
+**Status.** SPECIFIED, nothing built (pqvault plan Part R, tasks R1 and R2). UNAUDITED.
+**Why.** The registry is never upgraded, so a closed portable list makes every later app wait for a registry generation; the chain-bound path is already open to any contract and purpose.
+**Cost if wrong.** One more registry entry in the audit scope before the freeze; a third party's portable records rest on its own domain's design.
+**Source.** owner 2026-11-17 (relayed by the coordinator); spec `superpowers/specs/2026-11-17-pqvault.md` §3 (N1), §4.1.
+
+### CTR-UA-46 — `requirePortableApp`: `requirePortable`'s checks under a purpose the registry derives from an app id
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: contracts/accounts.md#CTR-UA-46 · superseded-by: —
+
+**Rule.** Controller calls (VC20, VC21): `requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, UASig auth)`, a view; `purpose = keccak256(abi.encode(keccak256("scaas.ua.purpose.app.v1"), appId))` computed by the registry, `appId ≠ 0` else `UAUnauthorized(ua)`, otherwise exactly `requirePortable`'s checks (one shared body in `UARegistryCoreLib`; `_portablePurpose` moves from `_sigOk` to the top of `requirePortable`, whose other callers pass fixed portable purposes). (i) No extra comparison against SCaaS purposes: a SCaaS purpose hashes an ASCII string under 64 bytes, an app purpose 64 bytes starting with the namespace word, so equality needs a collision; the closed list refuses every app purpose; new SCaaS purposes keep the string form and the namespace word is never a purpose. (ii) Native `msig` members sign the typed digest itself, so the purpose is not in what they sign: no registry change; an app's portable domain carries `salt = appId`, which names the app in what they sign, and the SDK's app signing call enforces it; refusing native members was weighed and not taken. (iii) Gen 2 forwards to its predecessor's entry; an empty revert (a predecessor without it) is `UAUnauthorized(ua)`, out of gas `UAVerifyGas`. (iv) Size baseline: `UARegistry` 32,334 B (T-2 33,516, T-1 35,286), `UARegistryCoreLib` 33,796 B (T-2 33,903, T-1 35,694); expected about +150–300 B and +80–200 B; no split, a task past a T-1 line stops and asks. (v) Vectors: clientkeys `appPurpose`, `portable-app` rows in `vectors/ua/sign.json`, `rs_signatures.json` regenerated by `ua-rs`, `ua8::app_purpose`. Path (B) uses `appPurpose(appId)` by default (PqVault does); an app may name its own chain-bound purpose, never a SCaaS one (the SDK refuses the `UAKinds` list).
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** An app id instead of a purpose keeps an app from naming a SCaaS purpose through the entry; one shared body keeps the two portable checks equal; the salt binds native members without a change to how they sign.
+**Cost if wrong.** If a hostile contract recomputes another app's digest, a native member's signature passes there too (it gains nothing a plain ECDSA check would not give it); the library's size crosses its T-2 notice line.
+**Source.** controller, 2026-11-17; spec `superpowers/specs/2026-11-17-pqvault.md` §4.1.
+
 ## 25. Contracts — Post-quantum Zether
 
 ### CTR-UA-29 — The registry keeps an on-chain list of the UAs of each kind
@@ -5535,6 +5553,8 @@ Change (owner 2026-11-10, before the SCaaS testnet reset 2; status: BUILT on bra
 
 Change (owner 2026-11-17, "Ok, as proposed, put points 1 and 2 into the spec", after comparing PqVault with Bitwarden and AuthPass; status: SPECIFIED, nothing built): **V9 changed.** Old: no passphrase beyond the seed in v1. New: a vault passphrase is an option, on by default (CLI-PQV-07), and only a PQ-rooted 24-word seed may own a vault (CLI-PQV-06). Why: a stolen seed alone must open nothing whose ciphertext is public for ever. Cost: a forgotten passphrase loses the vault; a seed thief can still guess the passphrase offline.
 
+Change (owner 2026-11-17, rulings N1 and N2, relayed by the coordinator; status: SPECIFIED, nothing built): **V2 and V11 replaced.** N1 ("PqVault and later apps go by (A), (B) => support both A and B"): old V2, `PURPOSE_PQVAULT` joins the registry's closed portable list before the freeze; new, the registry gains one entry before the freeze, the open portable app namespace (CTR-UA-45, CTR-UA-46), PqVault signs under `appId = keccak256("scaas.pqvault.v1")`, and a vault is portable or chain-bound (CTR-PQV-16). N2 ("agreed to reverse the dependency"): old V11, an SDK module `pqvault`; new, `pqvault-core` is an app core above `scaas-sdk`, which knows nothing about PqVault (CLI-PQV-01). Why: the registry is immutable, so a closed list makes every later app wait for a registry change; the SDK stays a generic platform. Cost: one registry entry in the pre-freeze audit; the mode adds about 300–600 B to the contract.
+
 ### CTR-PQV-02 — `PqVault` is a generic factory class of its own, not class 3; namespace `scaas.pqvault`; an owner UA without power
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-02 · superseded-by: —
 
@@ -5550,6 +5570,8 @@ Change (owner 2026-11-17, "Ok, as proposed, put points 1 and 2 into the spec", a
 **Why.** A portable record is the same bytes in every instance; a purpose of its own keeps a vault signature from ever being a chat or registry signature.
 **Cost if wrong.** A type-string change is a new release and new vectors in every client; the flag is public, so an observer learns whether a vault uses a passphrase.
 **Source.** owner 2026-11-17 (V2; P2: "Ok, theo đề xuất, đưa điểm 1 và 2 vào spec"); spec `superpowers/specs/2026-11-17-pqvault.md` §4.1, §5.2. Status: SPECIFIED (the purpose in Part R, the records in Part V).
+
+Change (owner 2026-11-17, ruling N1, "PqVault and later apps go by (A), (B) => support both A and B"; controller calls VC20–VC22; status: SPECIFIED): old, every record signed under `PURPOSE_PQVAULT` in `DS_V` ("SCaaS PqVault", "1") and checked by `requirePortable`, the purpose added to the closed list; new, every record signed under PqVault's app purpose `appPurpose(keccak256("scaas.pqvault.v1"))`, in `DS_V` with `salt = keccak256("scaas.pqvault.v1")` checked by `requirePortableApp` (a portable vault) or in `DS_B` (`chainId`, `verifyingContract`) checked by `requireAuthorized` (a chain-bound vault); `PqVaultCreate` gains `uint8 mode`. The passphrase flag is unchanged. Why: the closed list would make every later app wait for a registry change (CTR-UA-45); the salt names the app in what a native `msig` member signs (CTR-UA-46). Cost: new typehash and domain vectors (nothing built).
 
 ### CTR-PQV-04 — `PqVault` ids hash the signer and a nonce; nonces are per-scope bitmaps: vault, epoch, item
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-04 · superseded-by: —
@@ -5654,6 +5676,24 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqva
 **Source.** controller, 2026-11-17, and the Fable review of the same day (F9); spec `superpowers/specs/2026-11-17-pqvault.md` §4.2. Status: SPECIFIED.
 
 Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqvault spec §14; status: SPECIFIED): **O2 (a)**: the owner confirms that the release-size pins may move with old → new figures, behavioural pins frozen, 55 of 55 mutants, the claim worded "behaviour unchanged".
+
+### CTR-PQV-16 — PqVault supports both paths: a vault is portable or chain-bound from its creation
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-16 · superseded-by: —
+
+**Rule.** Owner 2026-11-17, ruling N1 ("PqVault and later apps go by (A), (B) => support both A and B"): a vault is portable (path A, the registry's open app namespace, replicas) or chain-bound (path B, `requireAuthorized`, one instance, no replica); everything else is shared.
+**Status.** SPECIFIED, nothing built (pqvault plan Part V). UNAUDITED.
+**Why.** PqVault runs on both paths an app can take (CTR-UA-45).
+**Cost if wrong.** About 300–600 B of runtime and one mode read (2,100 gas) per signed write; a chain-bound vault is as available as its one chain.
+**Source.** owner 2026-11-17 (relayed by the coordinator); spec `superpowers/specs/2026-11-17-pqvault.md` §3, §5.15.
+
+### CTR-PQV-17 — The PqVault mode: a signed field fixed at creation, two domains, one check, a chain-bound vault at home only
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-17 · superseded-by: —
+
+**Rule.** Controller calls (VC21–VC23): `uint8 mode` in `PqVaultCreate` (0 portable, 1 chain-bound; other values `PqVaultShape`), `modes[vaultId] = 1` in state for mode 1; mode 0 in `DS_V` with `salt = keccak256("scaas.pqvault.v1")` through `requirePortableApp`, mode 1 in `DS_B` (`chainId`, `verifyingContract`) through `requireAuthorized`, both under PqVault's app purpose; one internal check for all seven signed writes; a mode-1 vault names this instance as its home; clients create mode 0 unless the user picks mode 1 or the registry lacks `requirePortableApp`.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** A signed field cannot be flipped; one check keeps the domain choice in one place; ids can coincide across instances, so a wrong mode read could admit a replayed record, which the vectors and mutants guard.
+**Cost if wrong.** A mode-1 createVault writes one more slot (97,920 state gas); a mode-0 record type with the `mode` field is a new typehash.
+**Source.** controller, 2026-11-17; spec `superpowers/specs/2026-11-17-pqvault.md` §5.2, §5.15.
 
 ### CTR-PQZ-01 — Separate PQZ class gated by the precompile self-test
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
@@ -10501,6 +10541,8 @@ UNAUDITED.
 **Cost if wrong.** A flaw in `ua-rs` reaches the vault too; clientkeys' vectors stay the independent writer.
 **Source.** owner 2026-11-17 (V11); spec `superpowers/specs/2026-11-17-pqvault.md` §7, §8. Status: SPECIFIED.
 
+Change (owner 2026-11-17, ruling N2, "agreed to reverse the dependency", relayed by the coordinator; status: SPECIFIED): old, `pqvault-core` over `ua-rs` and `scaas-rpc`, reached by apps through the `scaas-sdk` module `pqvault` (V11); new, `pqvault-core` is an app core above `scaas-sdk`: it depends on the SDK, the SDK knows nothing about PqVault and has no `pqvault` module, every signature, KEM, KDF and AEAD still runs in `ua-rs` reached through the SDK (CLI-UAL-01 holds), and scaas-app links it in its one Rust library `app-core-rust` with the feature `pqvault` (scaas-app's contract section 12). Why: the SDK is the generic platform any app core uses, a third party's as well as SCaaS's own. Cost: the SDK needs a generic app-core surface (key handles, app signing, reads, submission), which the SDK spec specifies; if its two conditions cannot be met, the code stays inside the SDK (CLI-PQV-12).
+
 ### CLI-PQV-02 — A personal PqVault uses the same random-`K_e` wrap as a shared one; no seed-derived vault key
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/ua-libraries.md#CLI-PQV-02 · superseded-by: —
 
@@ -10543,6 +10585,8 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqva
 **Cost if wrong.** Users of a classical-rooted set must make a 24-word set and migrate before using PqVault; nothing on chain can check another member's seed, so a shared vault is only as quantum-safe as its weakest member's seed.
 **Source.** owner 2026-11-17 ("Ok, theo đề xuất, đưa điểm 1 và 2 vào spec", relayed by the coordinator); spec `superpowers/specs/2026-11-17-pqvault.md` §3, §6.1. Status: SPECIFIED.
 
+Change (owner 2026-11-17, ruling N2; status: SPECIFIED): the refusal is `pqvault-core`'s alone, from the seed set's `class` and warnings that the SDK reports from its authenticated index; the SDK refuses nothing for PqVault, since it knows nothing about it.
+
 ### CLI-PQV-07 — The PqVault passphrase: optional, on by default, combined with the KEM-unwrapped key; never stored
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/ua-libraries.md#CLI-PQV-07 · superseded-by: —
 
@@ -10567,6 +10611,8 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqva
 **Cost if wrong.** Every byte format change is new vectors in every client.
 **Source.** controller, 2026-11-17, and the Fable review of the same day (F5, F15); spec `superpowers/specs/2026-11-17-pqvault.md` §6. Status: SPECIFIED.
 
+Change (controller, 2026-11-17, VC24, for the coordinator's condition that no key byte reaches an app core; status: SPECIFIED): old, `sealedInfo.prev = {epochId, key}` with the earlier `K_v` in the JSON, and a `file` item's `key` in the item JSON; new, `prev = {epochId, keyWrap}`, `keyWrap = n_k ‖ AES-256-GCM-SIV(kPrev, n_k, K_v(prev), aad)` with `kPrev = HKDF(K_v, "scaas/pqvault/v1/prev" ‖ vaultId ‖ epochId ‖ prevEpochId)`, and the file key sealed the same way under the version's `K_v`; `ua-rs` seals and opens a key handle under another. Why: opening `sealedInfo` or an item must hand `pqvault-core` no key. Cost: 60 B per linking epoch; new vector rows (nothing built).
+
 ### CLI-PQV-10 — The PqVault passphrase's mechanics: admin rekeys, the weakest-epoch rule, the parameters, a length minimum
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/ua-libraries.md#CLI-PQV-10 · superseded-by: —
 
@@ -10584,6 +10630,15 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqva
 **Why.** Anyone can name any UA in a vault (Fable F3); a lying node could otherwise hand a client a forged epoch (F4); a shared vault is as safe as its weakest member (F11); one node seeing every vault UA links them (F15).
 **Cost if wrong.** An extra accept step; signature verification work on unlock.
 **Source.** controller, 2026-11-17, and the Fable review of the same day (F3, F4, F11, F15); spec `superpowers/specs/2026-11-17-pqvault.md` §6.9, §9. Status: SPECIFIED.
+
+### CLI-PQV-12 — `pqvault-core` holds key handles only and signs only under PqVault's app purpose; else its code stays inside the SDK
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/ua-libraries.md#CLI-PQV-12 · superseded-by: —
+
+**Rule.** Coordinator conditions (controller calls, VC24, VC25): the KEM-unwrapped epoch key, the passphrase output, the effective key and every key derived from them stay in `ua-rs` behind handles; wrap, unwrap, HKDF, Argon2id, AEAD and key sealing run there; the only bytes out are plaintexts asked for the user, holding no key; `pqvault-core` signs typed data of its own domain only, through the SDK's app signing call, which refuses every SCaaS purpose constant and every SCaaS contract's or the registry's domain by name, requires `salt = appId` on the portable path and a `verifyingContract` the factory lists under class 4 on the chain-bound path; if either condition cannot be met, PqVault's client code stays inside the SDK.
+**Status.** SPECIFIED, nothing built. UNAUDITED.
+**Why.** Moving the core above the SDK must not move a key or a SCaaS signing power out of it: an app core is less trusted code than the signer.
+**Cost if wrong.** A key in an app core's memory or a SCaaS operation signed blind for an app.
+**Source.** coordinator, 2026-11-17; spec `superpowers/specs/2026-11-17-pqvault.md` §3 (VC24, VC25), §7.
 
 ## 40. Integration — ERP
 

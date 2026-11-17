@@ -8,8 +8,9 @@ carries it.
 
 Status: **SPECIFIED, nothing built, UNAUDITED.** Design, parts and order: the spec
 [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md) and its plan
-[`2026-11-17-pqvault.md`](../superpowers/plans/2026-11-17-pqvault.md). The registry's purpose and the base shared with
-PqChat come before the EVM freeze (Part R); the contract may come after (Part V). Clients: [ua-libraries.md](../clients/ua-libraries.md#pqvault-clients).
+[`2026-11-17-pqvault.md`](../superpowers/plans/2026-11-17-pqvault.md). The registry's open portable app namespace
+([CTR-UA-45](accounts.md#CTR-UA-45)) and the base shared with PqChat come before the EVM freeze (Part R); the contract may
+come after (Part V). Clients: [ua-libraries.md](../clients/ua-libraries.md#pqvault-clients).
 Other families: **PLANNED**, each in its own `pqvault-<family>` round.
 
 **Contents**
@@ -23,6 +24,7 @@ Other families: **PLANNED**, each in its own `pqvault-<family>` round.
 7. [Recovery from state alone](#7-recovery-from-state-alone)
 8. [Relaying](#8-relaying)
 9. [The base shared with PqChat](#9-the-base-shared-with-pqchat)
+10. [The two modes](#10-the-two-modes)
 
 ## 1. Overview
 
@@ -42,7 +44,8 @@ its [register entry](../decisions.md#ctr-pqv-01--pqvault-pqchats-group-rules-wit
 - Small secrets live in items, on chain; files stay off chain with their key and hashes inside an item (V7).
 - The contract checks signatures, shapes, membership, the epoch rules, versions and nonces; it runs no KEM, KDF or cipher
   and never reads a ciphertext or `sealedInfo`.
-- The registry's purpose and the shared base land before the freeze; the contract may follow it (V12).
+- The registry's app namespace and the shared base land before the freeze; the contract may follow it (V12, N1).
+- A vault is portable or chain-bound from its creation ([CTR-PQV-16](#CTR-PQV-16)).
 
 ## 2. The release on the factory
 
@@ -61,23 +64,24 @@ PqVault's class with version ≠ 0. Class 3 stays `PqChat`.
 
 ## 3. Records and typed signing
 
-Status: **SPECIFIED** (registry purpose: Part R; records: Part V).
+Status: **SPECIFIED** (registry entry: Part R; records: Part V).
 
-<a id="CTR-PQV-03"></a>**CTR-PQV-03** — **Every record is a typed EIP-712 struct in the portable domain `DS_V` ("SCaaS
-PqVault", "1", no chain id, no address), signed as a `UASig` over `uaMessage(kind, PURPOSE_PQVAULT, typed(record))` and
-checked by the registry's `requirePortable`; `PURPOSE_PQVAULT = keccak256("scaas.ua.purpose.pqvault.v1")` joins the
-registry's closed portable set before the freeze; the vault and epoch records carry the passphrase flag `passKdf` and its
-`passSalt`, nothing else about a passphrase** (owner 2026-11-17, V2; P2 for the flag).
+<a id="CTR-PQV-03"></a>**CTR-PQV-03** — **Every record is a typed EIP-712 struct in its vault's domain, signed as a `UASig`
+over `uaMessage(kind, P_V, typed(record))` with `P_V = appPurpose(keccak256("scaas.pqvault.v1"))`, PqVault's purpose in the
+registry's open app namespace, and checked by `requirePortableApp` (a portable vault) or `requireAuthorized` (a
+chain-bound vault); the vault and epoch records carry the passphrase flag `passKdf` and its `passSalt`, nothing else about
+a passphrase** (owner 2026-11-17, N1, which replaced V2's `PURPOSE_PQVAULT` the same day; P2 for the flag). The domains
+and the choice between them are [CTR-PQV-17](#CTR-PQV-17)'s.
 
 - The type strings are the spec's
-  [§5.2](../superpowers/specs/2026-11-17-pqvault.md#52-domain-purpose-and-records-v2): `MemberKey`, `Wrap` (PqChat's),
+  [§5.2](../superpowers/specs/2026-11-17-pqvault.md#52-domains-purpose-and-records-n1-vc20-vc21-vc22): `MemberKey`, `Wrap` (PqChat's),
   `PqVaultCreate`, `PqVaultEpoch`, `PqVaultLeave`, `PqVaultRemove`, `PqVaultItem`, `PqVaultEdit`, `PqVaultBatch`; pinned by
   `*TypehashIsPinned` against `smartcontracts/vectors/pqvault/`.
 - No fee, deadline or submitter in any record; no write reads `msg.sender` except `initialize`.
 - `passKdf` 0 means no passphrase and then `passSalt` is 0; otherwise `passSalt ≠ 0` (`PqVaultShape`). The contract knows no
   parameter set; clients refuse an id they do not know.
-- `PURPOSE_PQVAULT` is never a registry record's purpose and the reverse; a `PURPOSE_PQCHAT` signature is no `PqVault`
-  signature and the reverse ([accounts.md](accounts.md#require-portable)).
+- `P_V` is never a SCaaS purpose and the reverse ([CTR-UA-46](accounts.md#CTR-UA-46)); a `PURPOSE_PQCHAT` signature is no
+  `PqVault` signature and the reverse.
 
 <a id="CTR-PQV-04"></a>**CTR-PQV-04** — **Ids hash the signer and its nonce under `scaas/pqvault/v1/…` tags; nonces are
 per-scope bitmaps checked after the signature: a vault `(creator)`, an epoch `(vaultId, author)` for rekeys, leaves and
@@ -153,7 +157,8 @@ same record and `sigHash` at the same `(itemId, version)`** (controller calls, o
 PqChat's, [CTR-CHAT-14](pqchat.md#CTR-CHAT-14)). Refusals `PqVaultNotMember`, `PqVaultShape`. The upper bound (the 16,384 B
 padding bucket plus salt and tag) makes `latestRange`'s page bound hold on every chain. A replica takes writes under any
 complete epoch it holds, in its own order; it orders nothing. A member that left an epoch writes no item under it either
-(owner 2026-11-17, the spec's O3 (b); `PqVaultNotMember`).
+(owner 2026-11-17, the spec's O3 (b); `PqVaultNotMember`). A chain-bound vault has no replica
+([CTR-PQV-17](#CTR-PQV-17)).
 
 ## 7. Recovery from state alone
 
@@ -188,3 +193,23 @@ PqChat allow-list test and all 55 of its mutants hold; only the release-size pin
 call, owner may override). The mutant script is the one instrument allowed to change, with an old line → new line table per
 mutant. PqChat's bytecode moves, so it is redeployed and verified at the next reset and its diff is in the audit scope. The
 boundary is the spec's [§4.2](../superpowers/specs/2026-11-17-pqvault.md#42-r-b-the-base-shared-with-pqchat-v3).
+
+## 10. The two modes
+
+Status: **SPECIFIED** (Part V).
+
+<a id="CTR-PQV-16"></a>**CTR-PQV-16** — **PqVault supports both paths an app has: a vault is portable (path A, the
+registry's open app namespace, replicas allowed) or chain-bound (path B, the registry's `requireAuthorized`, one instance,
+no replica), chosen at its creation** (owner 2026-11-17, N1: "support both A and B";
+[CTR-UA-45](accounts.md#CTR-UA-45)). Everything else is shared: ids, scopes, storage, epochs, wraps, roles, items,
+versions, batches, views, events, errors and the key schedule.
+
+<a id="CTR-PQV-17"></a>**CTR-PQV-17** — **The mode is the field `uint8 mode` of `PqVaultCreate` (0 portable, 1
+chain-bound), fixed by the creator's signature and kept in state as `modes[vaultId] = 1` for a chain-bound vault; every
+later record of the vault is checked in that mode's domain by one internal check: mode 0 in `DS_V` ("SCaaS PqVault", "1",
+`salt = keccak256("scaas.pqvault.v1")`, no chain, no address) through `requirePortableApp`, mode 1 in `DS_B` ("SCaaS
+PqVault", "1", `chainId`, `verifyingContract` = the instance) through `requireAuthorized`; a mode-1 vault names this
+instance as its home, else `PqVaultShape`, so no replica of it can exist; clients create mode 0 unless the user chooses
+mode 1 or the chain's registry lacks `requirePortableApp`** (controller calls, owner may override). A mode other than 0 or 1
+is `PqVaultShape`. The design and its costs are the spec's
+[§5.15](../superpowers/specs/2026-11-17-pqvault.md#515-the-two-modes-n1-vc22-vc23).

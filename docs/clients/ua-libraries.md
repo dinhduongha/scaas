@@ -681,12 +681,15 @@ chain, since v7 puts its creation time on chain).
 
 <a id="pqvault-clients"></a>**PqVault** (SPECIFIED, nothing built; the contract is [pqvault.md](../contracts/pqvault.md), the design
 the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)). The rules every PqVault client follows; the
-first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-11 controller calls (owner may override):
+first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-12 controller calls (owner may override):
 
 <a id="CLI-PQV-01"></a>**CLI-PQV-01** — **`pqvault-core`, a Rust crate of its own, builds, encrypts, opens and merges vault
-records and signs only through `ua-rs`; apps reach it through the `scaas-sdk` module `pqvault`, in scaas-app's `scaas` build
-only** (owner 2026-11-17, V11 and the stack as proposed; CLI-UAL-01). SPECIFIED. The SDK's `vault` stays the seed vault; the
-module's calls are the spec's [§8](../superpowers/specs/2026-11-17-pqvault.md#8-the-sdk-module-pqvault).
+records as an app core above `scaas-sdk`: it depends on the SDK, the SDK knows nothing about PqVault, and every signature,
+KEM, KDF and AEAD still runs in `ua-rs`, reached through the SDK ([CLI-UAL-01](#CLI-UAL-01)); scaas-app links it in its one
+Rust library `app-core-rust` with the feature `pqvault` (which implies `scaas`; scaas-app's contract section 12)** (owner
+2026-11-17, N2: "agreed to reverse the dependency", which replaced V11's SDK module `pqvault` the same day). SPECIFIED. The
+SDK's `vault` stays the seed vault; `pqvault-core`'s calls are the spec's
+[§8](../superpowers/specs/2026-11-17-pqvault.md#8-the-app-facing-api-of-pqvault-core).
 
 <a id="CLI-PQV-02"></a>**CLI-PQV-02** — **A personal vault uses the same path as a shared one: a random 32-byte epoch key
 wrapped once to its own UA KEM key (ML-KEM-1024 + X25519); no seed-derived vault key exists; a personal vault is never
@@ -710,8 +713,8 @@ item; it tells its user that a removed member keeps what it read (and lists the 
 item's bytes stay; files go off chain with their key and hashes inside an item, fetched only on the user's action** (owner
 2026-11-17, V5, V7; [ARCH-POS-13](../decisions.md#ARCH-POS-13), [ARCH-POS-15](../decisions.md#ARCH-POS-15)). SPECIFIED.
 
-<a id="CLI-PQV-06"></a>**CLI-PQV-06** — **Only a PQ-rooted 24-word (256-bit) seed owns a vault: `pqvault-core` and the SDK
-refuse, with `SeedNotPqRooted` and before any other work, a classical-rooted seed set (the EOA-signature root, the
+<a id="CLI-PQV-06"></a>**CLI-PQV-06** — **Only a PQ-rooted 24-word (256-bit) seed owns a vault: `pqvault-core` refuses (from the
+seed set's `class` and warnings the SDK reports from its authenticated index), with `SeedNotPqRooted` and before any other work, a classical-rooted seed set (the EOA-signature root, the
 private-key root and their BIP-85 children), a phrase below 24 words and an imported raw key; the vault UA, a per-vault UA
 included, derives from such a seed** (owner 2026-11-17, P1). SPECIFIED. The check binds what a client does for its own user;
 the chain cannot show another member's seed class, so a shared vault is only as quantum-safe as its weakest member's seed.
@@ -732,7 +735,8 @@ data only** (controller call, owner may override). SPECIFIED.
 <a id="CLI-PQV-09"></a>**CLI-PQV-09** — **The key schedule's bytes: wraps under the label `scaas/pqvault/v1/wrap`; `K_v =
 HKDF(K_e ‖ P_k)` with the vault, epoch and parameter id in its info; per version a fresh 16-byte salt and one HKDF giving key
 and nonce, AES-256-GCM-SIV over the padded canonical JSON with the AAD (vault, epoch, item, version, author, home);
-`sealedInfo` under `K_v` with an optional `prev = {epochId, key}`; a personal vault held by `ua_secret(seed, FN-DSA-512 by
+`sealedInfo` under `K_v` with an optional `prev = {epochId, keyWrap}`, the earlier key sealed under `K_v` (a `file` item's key
+sealed the same way); a personal vault held by `ua_secret(seed, FN-DSA-512 by
 default, PQV_ACCOUNT, i)`, index 0 the index vault listing the user's vaults** (controller call, owner may override).
 SPECIFIED. Exact bytes: [spec §6](../superpowers/specs/2026-11-17-pqvault.md#6-cryptography); every client reproduces
 `smartcontracts/vectors/pqvault/`.
@@ -744,6 +748,15 @@ without `prev`; a downgrade is accepted only from a verified admin record; Argon
 set pinned after a measured run; a generated 5-word passphrase offered, a user-chosen one at least 16 characters with a
 strength meter, nothing more enforced; a shared vault's passphrase never equal to the user's personal one** (controller
 call, owner may override). SPECIFIED. Design: [spec §6.5](../superpowers/specs/2026-11-17-pqvault.md#65-the-vault-passphrase-p2).
+
+<a id="CLI-PQV-12"></a>**CLI-PQV-12** — **`pqvault-core` holds key handles only and signs only under PqVault's app purpose:
+the KEM-unwrapped epoch key, the passphrase output, the effective key and every key derived from them stay in `ua-rs`
+behind handles, and wrap, unwrap, HKDF, Argon2id, AEAD and key sealing run there on those handles; the only bytes that
+come out are plaintexts it asks to decrypt for the user, which hold no key (earlier and file keys are sealed); it signs
+typed data of its own domain through the SDK's app signing call, which refuses every SCaaS purpose and every SCaaS
+contract's or the registry's domain by name; if either cannot be met, PqVault's client code stays inside the SDK**
+(coordinator conditions, controller calls, owner may override). SPECIFIED. Design: the spec's
+[§7](../superpowers/specs/2026-11-17-pqvault.md#7-pqvault-core).
 
 <a id="CLI-PQV-11"></a>**CLI-PQV-11** — **Trust what is verified and accepted: a vault the user did not create stays pending
 until the user accepts it after seeing its creator and members, and the accepted set is kept as `vaultRef` items in the
