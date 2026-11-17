@@ -9546,6 +9546,33 @@ paid out, when); a relay fee at the pull's own nonce reverts the whole relay.
 T20e2). The id is the next free one after CLI-SGN-47 (`docs_check.py resolve`, the spec's C6). UNAUDITED.
 **Source.** [service-pull spec](superpowers/specs/2026-11-09-service-pull.md) §3, §10, §11; [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20e2.
 
+### CLI-SGN-52 — Four native networks for an app's native backend: `bitcoin_p2wpkh`, `bitcoin_p2tr`, `near`, `polkadot`
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/signers-clientkeys.md#CLI-SGN-52 · superseded-by: —
+
+**Rule.** (Summary; normative [signers-clientkeys.md](clients/signers-clientkeys.md#CLI-SGN-52).) BIP-84 `m/84'/c'/0'/k/i` (P2WPKH, bech32 v0), BIP-86 `m/86'/c'/0'/k/i` (P2TR, the BIP-341 key-path tweak, bech32m v1), `k` 0 receive or 1 change, coin type 0 or 1; NEAR `m/44'/397'/i'` (ed25519, implicit account id, no coin-type override); Polkadot sr25519 (CLI-SGN-53). clientkeys keeps `NETWORKS` at nine and adds `NATIVE_NETWORKS`. On the four: no key proof, no import, no imported UA.
+**Status.** SPECIFIED (plan `ua-rs-native` T2, T6–T8b). UNAUDITED.
+**Why.** The owner's ruling (the end-user app signs these chains through `ua-rs` in its `scaas` build, owner 2026-11-17, CLI-UAL-62) asks for the networks; the same addresses must come from every backend. Controller clauses (CLI-UAL-63, the owner may override): the names (one per path and scheme, as `hedera_ecdsa` / `hedera_ed25519`), the change chain (an imported mnemonic's change funds stay reachable), NEAR without a coin-type override (it would alias `stellar` / `ton`), no key proof (no family verifies one). NEAR index 0 is `near-seed-phrase`'s default `m/44'/397'/0'`.
+**Cost if wrong.** A path or address that differs from the other backends shows the user another account for the same mnemonic.
+**Source.** TODO 8c; owner 2026-11-17 "ua-rs chưa có Bitcoin, NEAR, Polkadot => cần bổ sung"; [native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §3–§6; Fable review `20261117-11-fable-fable-high-spec.md` (F1–F24, kept outside the repository; spec §18) F1–F4, F7.
+
+### CLI-SGN-53 — A Polkadot account is the bare mnemonic under `substrate-bip39`, as polkadot.js; junctions optional per account
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/signers-clientkeys.md#CLI-SGN-53 · superseded-by: —
+
+**Rule.** (Summary; normative [signers-clientkeys.md](clients/signers-clientkeys.md#CLI-SGN-53).) Mini-secret = the first 32 bytes of PBKDF2-HMAC-SHA512 over the BIP-39 entropy, salt `"mnemonic"` ‖ the passphrase as given, 2048 rounds; schnorrkel `Ed25519` expansion; the bare mnemonic is the account; hard and soft junctions as `sp-core`, with a bounded grammar and one spelling per key; SS58 with a prefix per chain.
+**Status.** SPECIFIED (plan `ua-rs-native` T3, T8a, T8b). UNAUDITED.
+**Why.** Owner rulings of 2026-11-17: sr25519 with `substrate-bip39` like polkadot.js in every backend of the app, the bare mnemonic as the account and junctions an optional setting. The passphrase is taken as given because `substrate-bip39` and polkadot.js do not normalize it. Controller clause (CLI-UAL-63): the junction grammar and its bounds, which refuse the forms the two reference tools read differently (`0x…`, `+n`, numbers past `u64`) and the second spelling of one number (`//007`).
+**Cost if wrong.** A non-ASCII passphrase typed in another Unicode form opens another Polkadot account; a junction read differently by two tools gives two accounts.
+**Source.** TODO 8c (3); owner 2026-11-17 "Polkadot theo đề xuất (b)", "Junction ... theo đề xuất"; [native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §7; Fable review `20261117-11-fable-fable-high-spec.md` (F1–F24, kept outside the repository; spec §18) F8.
+
+### CLI-SGN-54 — The caller's half of the guard on raw native signing
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/signers-clientkeys.md#CLI-SGN-54 · superseded-by: —
+
+**Rule.** (Summary; normative [signers-clientkeys.md](clients/signers-clientkeys.md#CLI-SGN-54).) A raw digest or message is signed only when the caller built it in-process from a transaction of named fields, showed the decoded transaction first, never with a UA key or SCaaS kind, never an EVM transaction hash or 7702 authorization raw, one key per network; an off-chain message only inside the chain's own envelope.
+**Status.** SPECIFIED: a documented obligation of every caller; the library half is CLI-UAL-44. UNAUDITED.
+**Why.** TODO 8c (5), owner 2026-11-17: the preimage only from a transaction the app built in-process, the user reviews the decoded transaction first, raw signing only on native keys. A library cannot see where its bytes came from, so this half is the caller's. Controller clause (CLI-UAL-63): item (5), off-chain messages only inside the chain's envelope (ed25519 and sr25519 have no domain separation of their own).
+**Cost if wrong.** A blind signature over a preimage someone else chose authorizes a transfer the user never saw.
+**Source.** TODO 8c (5); CLI-SGN-40; [native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §9; Fable review `20261117-11-fable-fable-high-spec.md` (F1–F24, kept outside the repository; spec §18) F18.
+
 ## 38. Clients — SCaaS app
 
 ### CLI-APP-01 — One SPA, two halves, one build
@@ -10108,6 +10135,38 @@ no discovery, YAGNI; owner 2026-11-08: confirmed); the default list and discover
 **Status.** Sizes BUILT: T17 `45af3d84` (34 cells: x86-64, aarch64-android, wasm32; `selftest` 11 cases, 8 of 8 mutants killed); aarch64-ios not measured (no Xcode). The bench `ua_bench` BUILT (`12fac582`). Reference timing pending an idle machine; device timing pending, no devices. No timing figure is recorded.
 **Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) MD-12, T17; run record `clients/ua-rs/runs/2026-11-07-ua-rs-sign-t17.md`.
 
+### CLI-UAL-44 — Raw native signing: the marker, native keys only, the scheme's form, a bound
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/ua-libraries.md#CLI-UAL-44 · superseded-by: —
+
+**Why.** The controller's reading of TODO 8c (4), (5) (CLI-UAL-63): the app's encoders hand `ua-rs` preimages longer than 32 bytes (Solana message, Aptos prefix and BCS, Hedera body bytes, a Substrate payload); the same opt-in as `sign_digest` keeps one rule, the key class and scheme checks keep a UA key and a digest-only scheme out of it, and refusing the Solana and Aptos off-chain envelopes keeps the only two SCaaS family payloads longer than 32 bytes off the raw path. Bound 131,072 bytes: Aptos's 64 KiB transaction limit with room.
+**Cost if wrong.** A bound too low refuses a real transaction (`Argument`); a missing class check would let a UA key sign arbitrary bytes (CLI-SGN-29); a family envelope added later with a new prefix must join the refusal list.
+**Status.** SPECIFIED (plan `ua-rs-native` T5, T10, T11). UNAUDITED.
+**Source.** [native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §8, §9; [plan](superpowers/plans/2026-11-17-ua-rs-native.md) T5; Fable review `20261117-11-fable-fable-high-spec.md` (F1–F24, kept outside the repository; spec §18) F13, F17, F18.
+
+### CLI-UAL-45 — Bitcoin: `ua-rs` signs the sighash it is given and computes none
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/ua-libraries.md#CLI-UAL-45 · superseded-by: —
+
+**Why.** Computing the BIP-143 / BIP-341 sighash needs a Bitcoin transaction model, which is an encoder, and encoding stays with the app's backends (CLI-UAL-01 Scope, owner 2026-11-17); the cross-check still compares signed bytes because the app compares the sighashes of its encoders and ECDSA here is deterministic. The change chain and `witness_program` let the app reach an imported wallet's change funds and build scripts (and regtest addresses) without decoding an address. Controller call (CLI-UAL-63).
+**Cost if wrong.** A raw 32-byte sighash hides its preimage: the caller's guard (CLI-SGN-54) carries that risk; a backend that grinds low R gives other bytes (cross-verify instead).
+**Status.** SPECIFIED (plan `ua-rs-native` T7). UNAUDITED.
+**Source.** [native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §5; Fable review `20261117-11-fable-fable-high-spec.md` (F1–F24, kept outside the repository; spec §18) F6, F7, F12, F19.
+
+### CLI-UAL-46 — The sr25519 signer: schnorrkel, context `substrate`, a one-shot RNG over `os_aux()`, self-verify, the mini-secret at open
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/ua-libraries.md#CLI-UAL-46 · superseded-by: —
+
+**Why.** Owner 2026-11-17 (TODO 8c (3)): a new sr25519 signer, schnorrkel, context `substrate`. Controller clauses (CLI-UAL-63): the one-shot RNG over `os_aux()` (merlin reads its randomness with the infallible `fill_bytes`, so drawing first keeps an RNG failure an `Error::Rng`, never a panic, and gives the release and test paths one code path); the mini-secret computed when the store opens (the store keeps neither the passphrase nor anything that gives it back); `polkadotPaths` capped and re-parsed on restore. The OS RNG inside `ua-rs` follows CLI-UAL-02.
+**Cost if wrong.** One more PBKDF2 of 2048 rounds per open; schnorrkel's types outside the arena are wiped as the other curves' key types are.
+**Status.** SPECIFIED (plan `ua-rs-native` T8a, T8b). New dependencies (T0 records the exact lock entries): `schnorrkel` 0.11.5 (BSD-3-Clause, feature `getrandom` only, no `alloc`), `merlin` 3.0.0 (MIT), `getrandom_or_panic` 0.0.3 (BSD-3-Clause), `arrayref` 0.3 (BSD-2-Clause), `arrayvec` 0.7 (MIT OR Apache-2.0); `pbkdf2` 0.12.2 made direct. UNAUDITED.
+**Source.** [native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §4.3, §7, §11; Fable review `20261117-11-fable-fable-high-spec.md` (F1–F24, kept outside the repository; spec §18) F5, F10, F11, F15.
+
+### CLI-UAL-47 — Native vectors: `native.json` first by clientkeys, both ways, fixed randomness test-only
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/ua-libraries.md#CLI-UAL-47 · superseded-by: —
+
+**Why.** The controller's reading of TODO 8c (6) (CLI-UAL-63): vectors in `smartcontracts/vectors/` that every backend reads; clientkeys writes every row first (CLI-UAL-01). A file of its own keeps the `ua/` files and their readers unchanged. Randomized schemes are checked both ways, as `rs_signatures.json`.
+**Cost if wrong.** A bug shared by one library's signer and verifier would pass without the both-ways rows; if sr25519's fixed-randomness rows prove impossible (T0), no row pins its nonce derivation byte for byte.
+**Status.** SPECIFIED (plan `ua-rs-native` T4, T9). UNAUDITED.
+**Source.** [native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §12; Fable review `20261117-11-fable-fable-high-spec.md` (F1–F24, kept outside the repository; spec §18) F6, F8, F9, F24.
+
 <a id="CLI-UAL-50"></a>
 ### CLI-UAL-50 — Owner rulings of the signer work, 2026-11-05
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: decisions.md#CLI-UAL-50 · superseded-by: —
@@ -10362,6 +10421,27 @@ mutant records: `smartcontracts/evm/runs/2026-11-09-ua-rs-sign-t20d*`. Not revie
 (`f721be0e`), the t20d8 harness's string (`5e31b4cf`), the size baseline (`5e41cdbe`, MD-12). Not reviewed as built (plan T21).
 UNAUDITED.
 **Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20e; `smartcontracts/evm/runs/2026-11-10-ua-rs-sign-t20e-summary.txt`.
+
+<a id="CLI-UAL-62"></a>
+### CLI-UAL-62 — Owner rulings of the native round, 2026-11-17
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-UAL-62 · superseded-by: —
+
+**Rule.** The owner's rulings as stated (verbatim on the Source line), with their status.
+1. (Q1) ua-rs has no Bitcoin, NEAR, Polkadot: add them: the six gaps of TODO 8c. SPECIFIED (CLI-SGN-52, CLI-UAL-44 to CLI-UAL-47).
+2. (Q2) Polkadot as proposal (b): sr25519 with `substrate-bip39` like polkadot.js, in every backend of the app. SPECIFIED (CLI-SGN-53, CLI-UAL-46).
+3. (Q3) junctions as proposed: the bare mnemonic is the account, junctions an optional per-account setting. SPECIFIED (CLI-SGN-53).
+4. (Q4) code now, do not wait for P6h: the round runs now on branch `ua-rs-native`, independent of `scaas-sdk`; what lands before the pre-freeze tag is in that audit's target, the rest gets the add-on audit. Plan written.
+The controller's calls of the round are a separate record, CLI-UAL-63.
+**Source.** Owner 2026-11-17 (chat, through the coordinator), verbatim: (Q1) "ua-rs chưa có Bitcoin, NEAR, Polkadot => cần bổ sung"; (Q2) "Polkadot theo đề xuất (b)"; (Q3) "Junction ... theo đề xuất"; (Q4) "Code luôn, không chờ sau p6h". TODO 8c; [native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §1; [plan](superpowers/plans/2026-11-17-ua-rs-native.md).
+
+<a id="CLI-UAL-63"></a>
+### CLI-UAL-63 — Controller calls of the native round, 2026-11-17
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: decisions.md#CLI-UAL-63 · superseded-by: —
+
+**Rule.** The owner may override any. (1) Network names `bitcoin_p2wpkh`, `bitcoin_p2tr`, `near`, `polkadot`, C constants 9 to 12; clientkeys `NETWORKS` kept at nine beside `NATIVE_NETWORKS`. (2) No sighash computed in `ua-rs`. (3) Raw messages 1 to 131,072 bytes; the Solana and Aptos off-chain envelopes refused on the raw path. (4) The junction grammar (printable ASCII, 1 to 64 bytes, no `0x`, no `+`, `u64` digits without a leading zero, 16 junctions, 512 bytes); a path is public. (5) The mini-secret computed at open and kept in the arena; a one-shot RNG over `os_aux()` for sr25519. (6) `polkadotPaths` (at most 64, re-parsed on read) and `change` in the manifest, written only when present. (7) `native.json` its own file, `ua/` files frozen. (8) C ABI 6, additive, feature bit 12 `NATIVE_NETWORKS`, with `scaas_ua_key_address` and `scaas_ua_key_witness_program`. (9) The Bitcoin change chain derived (`bitcoin_key`, `change` 0 or 1), no other account level. (10) No key proof and no import on the four new networks; NEAR without a coin-type override.
+**Status.** SPECIFIED with the rules they belong to.
+**Why.** Each is the smallest choice that keeps one rule per behaviour and lets the app's cross-check pass; (3), (5), (9), (10) answer findings of Fable's spec review.
+**Source.** [native spec](superpowers/specs/2026-11-17-ua-rs-native.md) §15, §18; Fable review `20261117-11-fable-fable-high-spec.md` (F1–F24, kept outside the repository; spec §18).
 
 ## 40. Integration — ERP
 
