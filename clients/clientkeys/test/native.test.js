@@ -291,3 +291,109 @@ test('signMessage refusals (Argument), each beside the call accepted', () => {
   assert.equal(signer.signMessage, S.signMessage);
   assert.equal(signer.MAX_RAW_MESSAGE, 131072);
 });
+
+// ------------------------------------------------------------------ T4: native.json (written by scripts/native-vectors.mjs)
+import { readFileSync } from 'node:fs';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { UAError } from '../src/ua.js';
+const NATIVE = new URL('../../../smartcontracts/vectors/native/native.json', import.meta.url);
+const readNative = () => JSON.parse(readFileSync(NATIVE, 'utf8'));
+const nat = (() => { try { return readNative(); } catch { return null; } })();
+const mn = (id) => { const m = nat.mnemonics.find((x) => x.id === id); return { ...m, e: B(m.entropy), seed: S.seedFromEntropy(B(m.entropy), m.passphrase) }; };
+const msgOf = (r) => (r.messageRepeat ? new Uint8Array(r.messageRepeat.length).fill(parseInt(r.messageRepeat.byte, 16)) : B(r.message));
+function call(c, a) {
+  const m = a.mnemonic && mn(a.mnemonic);
+  const nativeKey = () => {
+    if (a.network !== 'polkadot') return S.deriveKey(m.seed, a.network, a.index, { coinType: a.coinType });
+    if (a.index !== 0 || a.coinType != null) throw new UAError('Argument', 'polkadot: index 0 and no coin type');
+    return P.polkadotKey(m.e, m.passphrase, '');
+  };
+  const key = () => (a.network === 'polkadot' && a.path !== undefined ? P.polkadotKey(m.e, m.passphrase, a.path) : nativeKey());
+  switch (c) {
+    case 'polkadot_key': return P.polkadotKey(m.e, m.passphrase, a.path);
+    case 'ss58': return P.ss58(B(P.polkadotKey(m.e, m.passphrase, '').publicKey), a.prefix);
+    case 'native_key': return nativeKey();
+    case 'bitcoin_key': return S.deriveKey(m.seed, a.network, a.index, { coinType: a.coinType, change: a.change });
+    case 'sign_message': return S.signMessage(key(), msgOf(a), { allowRawDigest: true });
+    case 'sign_key_proof': return S.signKeyProof(key(), B(a.challenge));
+    case 'sign_typed': return S.signTyped(key(), a.typedData);
+    case 'import_native_key': return S.importKey(a.network, B(a.secret));
+    case 'imported_ua_key': return U.importedUAKey({ network: a.network, secret: B(a.secret), kind: a.kind });
+    default: throw new Error(`unknown call ${c}`);
+  }
+}
+
+test('native.json is tracked (not git-ignored) and lists the thirteen networks in ua-rs\'s order', () => {
+  assert.ok(nat, 'smartcontracts/vectors/native/native.json');
+  assert.deepEqual(nat.networks, [...NINE, ...FOUR]);
+});
+
+test('native.json addresses: every row re-derived (Bitcoin both chains and coins, NEAR, the bare Polkadot key)', () => {
+  assert.ok(nat.addresses.length > 0);
+  for (const r of nat.addresses) {
+    const m = mn(r.mnemonic);
+    const k = r.network === 'polkadot' ? P.polkadotKey(m.e, m.passphrase, '') : S.deriveKey(m.seed, r.network, r.index, { coinType: r.coinType, change: r.change });
+    const id = `${r.mnemonic} ${r.network} ${r.coinType}/${r.change}/${r.index}`;
+    assert.equal(k.path, r.path, id); assert.equal(k.publicKey, r.publicKey, id); assert.equal(k.address, r.address, id);
+    assert.deepEqual(k.witnessProgram ?? null, r.witnessProgram, id);
+    if (r.network === 'bitcoin_p2tr') { assert.equal(k.internalKey, r.internalKey); assert.equal(k.tweak, r.tweak); assert.equal(k.outputKey, r.outputKey); }
+    if (r.network === 'near') assert.equal(k.publicKeyText, r.publicKeyText);
+    if (r.network === 'polkadot') {
+      assert.equal(H(P.miniSecretFromEntropy(m.e, m.passphrase)), r.miniSecret, id);
+      for (const [p, a] of Object.entries(r.ss58)) assert.equal(P.ss58(B(k.publicKey), Number(p)), a, `${id} ss58 ${p}`);
+    }
+  }
+});
+
+test('native.json polkadotPaths: chain codes and keys of every path', () => {
+  for (const r of nat.polkadotPaths) {
+    const m = mn(r.mnemonic);
+    assert.deepEqual(P.parsePolkadotPath(r.path).map((j) => ({ hard: j.hard, chainCode: H(j.chainCode) })), r.junctions, r.path);
+    const k = P.polkadotKey(m.e, m.passphrase, r.path);
+    assert.equal(k.publicKey, r.publicKey, `${r.mnemonic} '${r.path}'`); assert.equal(k.address, r.address);
+  }
+});
+
+test('native.json signatures: deterministic and fixed-randomness rows byte-equal, verify-only rows verify', async () => {
+  const sr = await import('@scure/sr25519');
+  for (const r of nat.signatures) {
+    const m = mn(r.mnemonic), msg = msgOf(r);
+    const k = r.network === 'polkadot' ? P.polkadotKey(m.e, m.passphrase, r.path) : S.deriveKey(m.seed, r.network, r.index, { coinType: r.coinType, change: r.change });
+    if (r.mode !== 'verify-only') {
+      const opts = { allowRawDigest: true, ...(r.mode === 'fixed-randomness' ? { aux: B(r.aux) } : {}) };
+      assert.equal(H(r.call === 'sign_digest' ? S.signDigest(k, msg, opts) : S.signMessage(k, msg, opts)), r.signature, r.id);
+    }
+    const sig = B(r.signature), pk = B(r.publicKey);
+    const ok = r.scheme === 'secp256k1-ecdsa' ? secp256k1.verify(sig.subarray(0, 64), msg, pk, { prehash: false, format: 'compact' })
+      : r.scheme === 'bip340-taproot' ? schnorr.verify(sig, msg, pk) : r.scheme === 'ed25519' ? ed25519.verify(sig, msg, pk) : sr.verify(msg, sig, pk);
+    assert.ok(ok, `${r.id} verifies`);
+    assert.equal(r.network === 'bitcoin_p2tr' ? k.outputKey : k.publicKey, r.publicKey, `${r.id} key`);
+  }
+});
+
+test('native.json refusals: each refused (Argument), its accepted neighbour accepted', () => {
+  assert.ok(nat.refusals.length > 0);
+  for (const r of nat.refusals) {
+    assert.equal(codeOf(() => call(r.call, r.args)), r.error, r.id);
+    assert.equal(codeOf(() => call(r.call, r.accepted)), null, `neighbour of ${r.id}`);
+  }
+});
+
+test('native.json external: BIP-84 / BIP-86 / BIP-143 / BIP-340 / BIP-341 / BIP-350 / substrate-bip39 / subkey / polkadot.js rows', async () => {
+  const x = nat.external, ab = mn('bip39_abandon'), dev = mn('substrate_dev');
+  for (const r of x.bip84.rows) assert.equal(S.deriveKey(ab.seed, 'bitcoin_p2wpkh', r.index, { change: r.change }).address, r.address);
+  for (const r of x.bip86.rows) assert.equal(S.deriveKey(ab.seed, 'bitcoin_p2tr', r.index, { change: r.change }).outputKey, r.outputKey);
+  const b143 = S.signDigest({ network: 'bitcoin_p2wpkh', curve: 'secp256k1', privateKey: B(x.bip143.privateKey) }, B(x.bip143.sigHash), { allowRawDigest: true });
+  assert.equal(H(b143.subarray(0, 64)), x.bip143.signature);
+  for (const r of x.bip340.rows.filter((y) => y.secretKey)) assert.equal(H(schnorr.sign(B(r.message), B(r.secretKey), B(r.aux))).toUpperCase(), r.signature);
+  for (const r of x.bip341.scriptPubKey) assert.equal(H(S.taprootTweak(B(r.internalPubkey)).outputKey), r.tweakedPubkey);
+  for (const r of x.bip341.keyPathSpending) {
+    assert.equal(H(S.signDigest({ network: 'bitcoin_p2tr', curve: 'secp256k1', privateKey: B(r.internalPrivkey) }, B(r.sigHash), { allowRawDigest: true, aux: B(r.aux) })), r.signature);
+  }
+  for (const r of x.bip350.rows) assert.equal(S.segwitAddress(r.hrp, r.version, B(r.program)), r.address);
+  for (const r of x.substrateBip39.rows) assert.equal(H(P.miniSecretFromEntropy(B(r.entropy), x.substrateBip39.passphrase)), r.miniSecret);
+  for (const r of x.subkey.rows) assert.equal(P.polkadotKey(dev.e, '', r.path).publicKey, r.publicKey);
+  const sr = await import('@scure/sr25519'), j = x.polkadotJsSignature;
+  assert.ok(sr.verify(B(j.message), B(j.signature), B(j.publicKey)));
+  assert.ok(!sr.verify(new Uint8Array([...B(j.message), 0]), B(j.signature), B(j.publicKey)), 'one byte appended: refused');
+});
