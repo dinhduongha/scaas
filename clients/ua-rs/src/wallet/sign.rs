@@ -189,7 +189,13 @@ impl Signer for UaKey {
 impl NativeKey {
     /// The address as the network prints it (clientkeys `describe`); `None` for `ton` and `hedera_ed25519`.
     pub fn address(&self) -> Option<String> {
-        derive::native_address(self.network, &self.public_key)
+        derive::native_address(self.network, self.coin_type, &self.public_key)
+    }
+
+    /// A Bitcoin key's witness program (ua-rs-native spec §5.1): `(0, HASH160(pk))` (P2WPKH) or `(1, x(Q))` (P2TR), for the
+    /// app's `scriptPubKey` and a regtest address; `None` on every other network.
+    pub fn witness_program(&self) -> Option<(u8, Vec<u8>)> {
+        derive::witness_program(self.network, &self.public_key)
     }
 
     /// The key proof: the signature of `keccak256("scaas-subject-key-proof-v1" ‖ challenge)`.
@@ -293,16 +299,65 @@ impl Signer for NativeKey {
         let scheme = match self.network.scheme() {
             NativeScheme::Secp256k1Ecdsa => Scheme::Secp256k1,
             NativeScheme::Ed25519 => Scheme::Ed25519,
-            NativeScheme::Bip340Taproot | NativeScheme::Sr25519 => return Err(Error::Argument),
+            NativeScheme::Bip340Taproot => {
+                let aux = os_aux()?;
+                return self.secret.with(|s| taproot_sign(s, &bytes, &aux, None))?;
+            }
+            NativeScheme::Sr25519 => return Err(Error::Argument),
         };
         self.secret.with(|s| sign_scheme(scheme, s, &bytes, None))?
     }
+}
+
+/// BIP-86 key-path signature (spec §5.2): `d = d0` or `n − d0` (even `y` of `P`), BIP-340 `Sign(d + t mod n, msg, aux)`, then
+/// BIP-340 Verify against `check` (the output key `x(Q)` in the release path): a faulty signature never leaves. The negated and
+/// tweaked scalars are wiped before return (k256's `schnorr::SigningKey` wipes its own on drop, plan T0).
+fn taproot_sign(d0: &[u8], msg: &[u8], aux: &[u8; 32], check: Option<&[u8; 32]>) -> Result<Vec<u8>> {
+    use k256::elliptic_curve::sec1::ToSec1Point as _;
+    use k256::elliptic_curve::PrimeField as _;
+    let d0 = k256::NonZeroScalar::try_from(d0).map_err(|_| Error::Argument)?;
+    let p = k256::PublicKey::from_secret_scalar(&d0).to_sec1_point(true);
+    let x: [u8; 32] = p.as_bytes().get(1..33).ok_or(Error::Argument)?.try_into().map_err(|_| Error::Argument)?;
+    let out = derive::taproot_tweak(&x)?;
+    let t = Option::<k256::Scalar>::from(k256::Scalar::from_repr(out.tweak.into())).ok_or(Error::Argument)?;
+    // the negated and tweaked scalars live in this block only (wiped as they drop, before signing)
+    let sk = {
+        let d = zeroize::Zeroizing::new(if p.as_bytes().first() == Some(&3) { -*d0 } else { *d0 });
+        let tweaked = zeroize::Zeroizing::new(*d + t);
+        let bytes = zeroize::Zeroizing::new(tweaked.to_repr());
+        k256::schnorr::SigningKey::from_bytes(&bytes).map_err(|_| Error::Argument)?
+    };
+    let sig = sk.sign_raw(msg, aux).map_err(|_| Error::Argument)?.to_bytes();
+    if !crate::verify::bip340(check.unwrap_or(&out.output_key), arr32(msg)?, &sig) {
+        return Err(Error::Argument);
+    }
+    Ok(sig.to_vec())
 }
 
 /// Test-only entry points (feature `vectors`, never in a release build): fixed `aux`, the requests, a raw secret.
 #[cfg(feature = "vectors")]
 mod vectors {
     use super::*;
+
+    impl NativeKey {
+        /// [`NativeKey::sign_digest`] with fixed randomness: the Taproot `aux` (the release path draws it from the OS RNG).
+        pub fn vectors_sign_digest_fixed(&self, digest: &[u8; 32], r: &[u8; 32]) -> Result<Vec<u8>> {
+            match self.network.scheme() {
+                NativeScheme::Bip340Taproot => self.secret.with(|s| taproot_sign(s, digest, r, None))?,
+                _ => self.sign_digest(digest, AllowRawDigest),
+            }
+        }
+    }
+
+    /// The release Taproot signer over a raw internal secret (BIP-341 `keyPathSpending` rows): negate, tweak, BIP-340, self-check.
+    pub fn vectors_taproot_sign(internal_secret: &[u8; 32], sighash: &[u8; 32], aux: &[u8; 32]) -> Result<Vec<u8>> {
+        taproot_sign(internal_secret, sighash, aux, None)
+    }
+
+    /// [`vectors_taproot_sign`] with its self-check against `output_key` (the fault hook: a wrong key must give `Argument`).
+    pub fn vectors_taproot_sign_check(internal_secret: &[u8; 32], sighash: &[u8; 32], aux: &[u8; 32], output_key: &[u8; 32]) -> Result<Vec<u8>> {
+        taproot_sign(internal_secret, sighash, aux, Some(output_key))
+    }
 
     impl UaKey {
         /// `sign_ua` with fixed randomness: BIP-340 and scaas Schnorr `aux` (32 B), ML-DSA `rnd` (32 B, zero = deterministic), SLH-DSA
@@ -325,6 +380,9 @@ mod vectors {
         }
     }
 }
+
+#[cfg(feature = "vectors")]
+pub use vectors::{vectors_taproot_sign, vectors_taproot_sign_check};
 
 /// The scheme primitive of `kind` over `msg` with a raw `secret` (feature `vectors`: the external answers): `0x0101` signs
 /// `sha256(msg)`; `0x0108` and the native EVM kind `0x0001` sign the 32-byte `msg` as it is; `0x0102` ed25519; `0x0103`

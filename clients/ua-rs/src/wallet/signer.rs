@@ -159,7 +159,13 @@ pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> 
                     let (pt, sig) = (pk.to_sec1_point(false), low_s(0x0108, sig));
                     (verify(0x0108, pt.as_bytes().get(1..).ok_or(Error::Argument)?, &digest, &sig, false), sig)
                 }
-                NativeScheme::Bip340Taproot | NativeScheme::Sr25519 => return Err(Error::Argument),
+                NativeScheme::Bip340Taproot => {
+                    let digest: [u8; 32] = bytes.as_slice().try_into().map_err(|_| Error::Argument)?;
+                    let x: [u8; 32] = public_key.get(1..).and_then(|x| x.try_into().ok()).ok_or(Error::Argument)?;
+                    let q = super::derive::taproot_tweak(&x)?.output_key;
+                    (crate::verify::bip340(&q, &digest, &sig), sig)
+                }
+                NativeScheme::Sr25519 => return Err(Error::Argument),
             }
         }
         _ => return Err(Error::Argument),

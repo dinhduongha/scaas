@@ -48,6 +48,8 @@ pub struct NativeEntry {
     pub network: Network,
     pub coin_type: Option<u32>,
     pub index: u32,
+    /// Bitcoin's chain: 0 receive, 1 change (written as `"change": 1` only when 1, so earlier manifests keep their bytes).
+    pub change: u32,
 }
 
 /// A KEM key the wallet used (derived from its UA key: spec §6.1).
@@ -120,8 +122,8 @@ impl Manifest {
             self.entries.push(e);
         }
     }
-    pub(crate) fn add_native(&mut self, network: Network, coin_type: Option<u32>, index: u32) {
-        let e = NativeEntry { network, coin_type, index };
+    pub(crate) fn add_native(&mut self, network: Network, coin_type: Option<u32>, index: u32, change: u32) {
+        let e = NativeEntry { network, coin_type, index, change };
         if !self.natives.contains(&e) {
             self.natives.push(e);
         }
@@ -156,7 +158,8 @@ impl Manifest {
                 .iter()
                 .map(|n| {
                     let c = n.coin_type.map_or("null".to_owned(), |c| c.to_string());
-                    format!("{{\"network\":\"{}\",\"coinType\":{c},\"index\":{}}}", n.network.name(), n.index)
+                    let change = if n.change == 1 { ",\"change\":1" } else { "" };
+                    format!("{{\"network\":\"{}\",\"coinType\":{c},\"index\":{}{change}}}", n.network.name(), n.index)
                 })
                 .collect(),
         );
@@ -233,7 +236,12 @@ fn parse_manifest(v: &Value) -> Option<Manifest> {
                 Value::Null => None,
                 c => Some(u32::try_from(c.as_u64()?).ok().filter(|x| *x < derive::HARDENED)?),
             };
-            Some(NativeEntry { network: network_of(n)?, coin_type, index: u31(n, "index")? })
+            // `change` absent (0) or 1, nothing else
+            let change = match n.get("change") {
+                None => 0,
+                Some(c) => c.as_u64().filter(|c| *c == 1).map(|_| 1)?,
+            };
+            Some(NativeEntry { network: network_of(n)?, coin_type, index: u31(n, "index")?, change })
         })
         .collect::<Option<_>>()?;
     Some(Manifest {
@@ -465,7 +473,7 @@ impl Wallet {
             return Err(Error::Argument);
         }
         let (secret, public_key) = self.store.key(KeyId::Import(n), |_| Err(Error::Argument))?;
-        Ok(NativeKey { network, index: n, coin_type: None, public_key, secret })
+        Ok(NativeKey { network, index: n, coin_type: None, change: 0, public_key, secret })
     }
 
     /// The UA of imported key `n` of `network` (T20c, owner 2026-11-08, the CLI-SGN-29 Change): `kind` must be the derived kind of

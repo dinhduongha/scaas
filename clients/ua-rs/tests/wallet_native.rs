@@ -270,3 +270,121 @@ fn native_json_envelope_refusal_rows() {
     }
     assert_eq!(n, 13, "4 calls x {{on solana, 0 B, 131,073 B}} and a 31-byte Stellar network id");
 }
+
+// ------------------------------------------------------------------ T7: Bitcoin P2WPKH and P2TR
+
+fn btc_key(w: &Wallet, r: &Value) -> scaas_ua::wallet::NativeKey {
+    w.bitcoin_key(net(r), opt_u32(&r["coinType"]), opt_u32(&r["change"]).unwrap(), opt_u32(&r["index"]).unwrap()).unwrap()
+}
+
+#[test]
+fn native_json_bitcoin_addresses_both_chains_and_coins() {
+    let v = native();
+    let mut n = 0;
+    for r in arr(&v, "addresses").iter().filter(|r| r["network"].as_str().unwrap().starts_with("bitcoin")) {
+        let w = wallet(&v, r["mnemonic"].as_str().unwrap());
+        let k = btc_key(&w, r);
+        assert_eq!(hex::encode(k.public_key()), r["publicKey"].as_str().unwrap(), "{r}");
+        assert_eq!(k.address().as_deref(), r["address"].as_str(), "{r}");
+        let (ver, prog) = k.witness_program().unwrap();
+        assert_eq!(u64::from(ver), r["witnessProgram"]["version"].as_u64().unwrap(), "{r}");
+        assert_eq!(hex::encode(prog), r["witnessProgram"]["program"].as_str().unwrap(), "{r}");
+        if r["network"] == "bitcoin_p2tr" {
+            let x: [u8; 32] = hex::decode(r["internalKey"].as_str().unwrap()).unwrap().try_into().unwrap();
+            assert_eq!(&k.public_key()[1..], &x[..], "publicKey is the compressed internal key");
+            assert_eq!(hex::encode(k.witness_program().unwrap().1), r["outputKey"].as_str().unwrap());
+        }
+        if opt_u32(&r["change"]) == Some(0) {
+            let rk = w.native_key(net(r), opt_u32(&r["index"]).unwrap(), opt_u32(&r["coinType"])).unwrap();
+            assert_eq!(rk.public_key(), k.public_key(), "bitcoin_key(.., 0, i) is native_key's slot");
+        }
+        n += 1;
+    }
+    assert_eq!(n, 96, "6 mnemonics x 2 networks x coin {{0, 1}} x change {{0, 1}} x index {{0, 1}}");
+}
+
+#[test]
+fn native_json_p2wpkh_signatures_byte_equal_and_bip143() {
+    let v = native();
+    let w = wallet(&v, "bip39_abandon");
+    let mut n = 0;
+    for r in arr(&v, "signatures").iter().filter(|r| r["network"] == "bitcoin_p2wpkh") {
+        assert_eq!(r["mode"], "deterministic");
+        let k = btc_key(&w, r);
+        let d: [u8; 32] = msg(r).try_into().unwrap();
+        assert_eq!(hex::encode(k.sign_digest(&d, AllowRawDigest).unwrap()), r["signature"].as_str().unwrap(), "{}", r["id"]);
+        n += 1;
+    }
+    assert_eq!(n, 3);
+}
+
+#[test]
+fn p2tr_release_signatures_verify_under_the_output_key_and_differ() {
+    let v = native();
+    let w = wallet(&v, "bip39_abandon");
+    for i in [0, 1] {
+        let k = w.bitcoin_key(Network::BitcoinP2tr, None, 0, i).unwrap();
+        let xq: [u8; 32] = k.witness_program().unwrap().1.try_into().unwrap();
+        let d = [9u8; 32];
+        let (a, b) = (k.sign_digest(&d, AllowRawDigest).unwrap(), k.sign_digest(&d, AllowRawDigest).unwrap());
+        assert_ne!(a, b, "aux from the OS RNG");
+        for s in [&a, &b] {
+            assert!(scaas_ua::verify::verify(0x0103, &xq, &d, s, false), "index {i}");
+        }
+    }
+}
+
+#[test]
+fn bitcoin_refusals_beside_their_accepted_neighbours() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    for n in [Network::BitcoinP2wpkh, Network::BitcoinP2tr] {
+        assert_eq!(w.native_key(n, 0, Some(2)).err(), Some(Error::Argument), "coin 2");
+        assert!(w.native_key(n, 0, Some(1)).is_ok() && w.native_key(n, 0, Some(0)).is_ok() && w.native_key(n, 0, None).is_ok());
+        assert_eq!(w.bitcoin_key(n, None, 2, 0).err(), Some(Error::Argument), "change 2");
+        assert!(w.bitcoin_key(n, None, 1, 0).is_ok());
+        let k = w.native_key(n, 0, None).unwrap();
+        assert_eq!(k.sign_key_proof(&[0; 32]).err(), Some(Error::Argument), "key proof");
+        assert_eq!(k.sign_message(&[1; 32], AllowRawDigest).err(), Some(Error::Argument), "message");
+        assert!(k.sign_digest(&[1; 32], AllowRawDigest).is_ok());
+        assert_eq!(w.import_native_key(n, &[1; 32]).err(), Some(Error::Argument), "import");
+    }
+    assert_eq!(w.bitcoin_key(Network::Near, None, 0, 0).err(), Some(Error::Argument), "bitcoin_key on near");
+    assert_eq!(w.bitcoin_key(Network::Evm, None, 0, 0).err(), Some(Error::Argument), "bitcoin_key on evm");
+    assert!(w.native_key(Network::Evm, 0, None).unwrap().sign_key_proof(&[0; 32]).is_ok());
+}
+
+#[test]
+fn bitcoin_keys_sign_no_evm_record() {
+    use scaas_ua::wallet::{AllowAnyTypedData, EvmTx, Expect, TypedData};
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    let td = TypedData::from_json(&serde_json::to_vec(&v["refusals"].as_array().unwrap().iter().find(|r| r["call"] == "sign_typed").unwrap()["args"]["typedData"]).unwrap()).unwrap();
+    let tx = EvmTx::from_json(br#"{"type":2,"chainId":"1","nonce":"0","maxPriorityFeePerGas":"1","maxFeePerGas":"2","gasLimit":"21000","to":"0x1111111111111111111111111111111111111111","value":"0","data":"0x","accessList":[]}"#).unwrap();
+    for n in [Network::BitcoinP2wpkh, Network::BitcoinP2tr, Network::Near] {
+        let k = w.native_key(n, 0, None).unwrap();
+        assert_eq!(k.sign_typed(&td, Expect::Any(AllowAnyTypedData)).err(), Some(Error::Argument), "{n:?} typed");
+        assert_eq!(k.sign_transaction(&tx).err(), Some(Error::Argument), "{n:?} transaction");
+    }
+    let evm = w.native_key(Network::Evm, 0, None).unwrap();
+    assert!(evm.sign_typed(&td, Expect::Any(AllowAnyTypedData)).is_ok());
+    assert!(evm.sign_transaction(&tx).is_ok());
+}
+
+#[test]
+fn manifest_change_written_only_when_one() {
+    use scaas_ua::wallet::Manifest;
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    w.bitcoin_key(Network::BitcoinP2wpkh, None, 0, 0).unwrap();
+    let j0 = w.manifest().to_json();
+    assert!(!j0.contains("\"change\""), "{j0}");
+    w.bitcoin_key(Network::BitcoinP2tr, Some(1), 1, 3).unwrap();
+    let j1 = w.manifest().to_json();
+    assert!(j1.contains("\"network\":\"bitcoin_p2tr\",\"coinType\":1,\"index\":3,\"change\":1"), "{j1}");
+    assert_eq!(Manifest::from_json(j1.as_bytes()).unwrap(), w.manifest(), "round trip");
+    for bad in ["\"change\":2", "\"change\":0"] {
+        let j = j1.replace("\"change\":1", bad);
+        assert_eq!(Manifest::from_json(j.as_bytes()).err(), Some(Error::Argument), "{bad}");
+    }
+}

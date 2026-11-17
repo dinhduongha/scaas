@@ -265,8 +265,8 @@ pub fn ua_key(kind: u16, s: Zeroizing<Vec<u8>>) -> Result<(Zeroizing<Vec<u8>>, V
 
 /// The secret of `network`'s key `index` (clientkeys `deriveKey`): BIP-32 or SLIP-10 ed25519 at the network's SLIP-44 path,
 /// `coin_type` in place of the network's coin type.
-pub fn native_secret(seed: &[u8], network: Network, index: u32, coin_type: Option<u32>) -> Result<Zeroizing<Vec<u8>>> {
-    let mut path = network.path(range(index)?);
+pub fn native_secret(seed: &[u8], network: Network, index: u32, coin_type: Option<u32>, change: u32) -> Result<Zeroizing<Vec<u8>>> {
+    let mut path = network.path(range(index)?, change);
     if let (Some(c), Some(p)) = (coin_type, path.get_mut(1)) {
         *p = range(c)? | HARDENED;
     }
@@ -283,6 +283,38 @@ pub fn native_public(network: Network, s: &[u8]) -> Result<Vec<u8>> {
         super::NativeScheme::Ed25519 => ed25519_public(s),
         super::NativeScheme::Secp256k1Ecdsa | super::NativeScheme::Bip340Taproot => secp_public(s, true),
         super::NativeScheme::Sr25519 => Err(Error::Argument),
+    }
+}
+
+/// The BIP-86 key-path output of an x-only internal key (BIP-341, no script tree: no Merkle root in the tweak).
+pub struct TaprootOutput {
+    pub tweak: [u8; 32],
+    pub output_key: [u8; 32],
+}
+
+const TAP_TWEAK: &[u8] = b"TapTweak";
+
+/// `t = int(H_TapTweak(x(P)))`, `Q = lift_x(x(P)) + t·G` (one function for the address and the signer); `Argument` for `t ≥ n`,
+/// `Q = ∞` or an `x` not on the curve.
+pub fn taproot_tweak(internal_x: &[u8; 32]) -> Result<TaprootOutput> {
+    use k256::elliptic_curve::PrimeField as _;
+    let tag = Sha256::digest(TAP_TWEAK);
+    let tweak: [u8; 32] = Sha256::new().chain_update(tag).chain_update(tag).chain_update(internal_x).finalize().into();
+    let t = Option::<k256::Scalar>::from(k256::Scalar::from_repr(tweak.into())).ok_or(Error::Argument)?;
+    let p = k256::PublicKey::from_sec1_bytes(&[&[2u8][..], internal_x].concat()).map_err(|_| Error::Argument)?;
+    let q = (p.to_projective() + k256::ProjectivePoint::GENERATOR * t).to_affine();
+    let enc = k256::PublicKey::from_affine(q).map_err(|_| Error::Argument)?.to_sec1_point(true);
+    let b = enc.as_bytes();
+    Ok(TaprootOutput { tweak, output_key: b.get(1..33).ok_or(Error::Argument)?.try_into().map_err(|_| Error::Argument)? })
+}
+
+/// A Bitcoin key's witness program (spec §5.1): `(0, HASH160(pk))` for P2WPKH, `(1, x(Q))` for P2TR; `None` elsewhere.
+pub fn witness_program(network: Network, public_key: &[u8]) -> Option<(u8, Vec<u8>)> {
+    use ripemd::Digest as _;
+    match network {
+        Network::BitcoinP2wpkh => Some((0, ripemd::Ripemd160::digest(Sha256::digest(public_key)).to_vec())),
+        Network::BitcoinP2tr => Some((1, taproot_tweak(public_key.get(1..)?.try_into().ok()?).ok()?.output_key.to_vec())),
+        _ => None,
     }
 }
 
@@ -325,8 +357,18 @@ fn alphabet(a: &[u8; 32], groups: impl IntoIterator<Item = u8>) -> String {
 
 /// BIP-173 bech32 of `data` under `hrp`.
 fn bech32(hrp: &str, data: &[u8]) -> String {
+    bech32_words(hrp, groups5(data), 1)
+}
+
+/// BIP-173 / BIP-350 segwit address (spec §5.1): data `[version] ‖ convertbits(program, 8, 5)`, checksum constant 1 (bech32, v0)
+/// or `0x2bc830a3` (bech32m, v1 to v16).
+pub fn segwit_address(hrp: &str, version: u8, program: &[u8]) -> String {
+    let words = [&[version][..], &groups5(program)].concat();
+    bech32_words(hrp, words, if version == 0 { 1 } else { 0x2bc8_30a3 })
+}
+
+fn bech32_words(hrp: &str, words: Vec<u8>, constant: u32) -> String {
     const GEN: [u32; 5] = [0x3b6a_57b2, 0x2650_8e6d, 0x1ea1_19fa, 0x3d42_33dd, 0x2a14_62b3];
-    let words = groups5(data);
     let mut chk = 1u32;
     let expanded = hrp.bytes().map(|c| c >> 5).chain([0]).chain(hrp.bytes().map(|c| c & 31));
     for v in expanded.chain(words.iter().copied()).chain([0; 6]) {
@@ -338,7 +380,7 @@ fn bech32(hrp: &str, data: &[u8]) -> String {
             }
         }
     }
-    chk ^= 1;
+    chk ^= constant;
     let sum = (0..6).map(|i| ((chk >> (5 * (5 - i))) & 31) as u8);
     format!("{hrp}1{}", alphabet(b"qpzry9x8gf2tvdw0s3jn54khce6mua7l", words.into_iter().chain(sum)))
 }
@@ -359,9 +401,13 @@ fn strkey(pk: &[u8]) -> String {
 /// The address of a native key from its public key (clientkeys `describe`): EIP-55 (`evm`, `hedera_ecdsa`), bech32
 /// `cosmos` of RIPEMD-160(SHA-256(compressed key)), Sui `0x` BLAKE2b-256(`0x00 ‖ key`), Aptos `0x` SHA3-256(`key ‖ 0x00`),
 /// Stellar StrKey, Solana base58, NEAR `hex(key)`; `None` for `ton` and `hedera_ed25519` (clientkeys prints none).
-pub fn native_address(network: Network, public_key: &[u8]) -> Option<String> {
+pub fn native_address(network: Network, coin_type: Option<u32>, public_key: &[u8]) -> Option<String> {
     use sha3::Digest as _;
     match network {
+        Network::BitcoinP2wpkh | Network::BitcoinP2tr => {
+            let (v, program) = witness_program(network, public_key)?;
+            Some(segwit_address(if coin_type == Some(1) { "tb" } else { "bc" }, v, &program))
+        }
         Network::Evm | Network::HederaEcdsa => {
             let pk = k256::PublicKey::from_sec1_bytes(public_key).ok()?;
             eip55(pk.to_sec1_point(false).as_bytes()).ok()

@@ -205,6 +205,11 @@ required-features = ["wallet"]
 name = "wallet_native"
 required-features = ["wallet"]
 
+# ua-rs-native: the fixed-randomness rows (test-only entry points) and the published Taproot answers
+[[test]]
+name = "native_fixed"
+required-features = ["vectors"]
+
 [[test]]
 name = "wallet_memory"
 required-features = ["wallet"]

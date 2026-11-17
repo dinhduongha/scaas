@@ -90,6 +90,8 @@ pub use webauthn::{webauthn_assertion, webauthn_challenge};
 pub use zeroize::ZeroizeOnDrop;
 #[cfg(feature = "vectors")]
 pub use vectors::{vectors_chunks_released, vectors_pause_after_copy};
+#[cfg(feature = "vectors")]
+pub use sign::{vectors_taproot_sign, vectors_taproot_sign_check};
 
 use crate::UAError;
 use rand_core::{OsRng, RngCore};
@@ -219,11 +221,15 @@ pub enum Network {
     Ton,
     Aptos,
     Solana,
+    /// Bitcoin BIP-84 P2WPKH, `m/84'/c'/0'/k/i` (`c` 0 or 1, `k` 0 receive or 1 change), ECDSA over the BIP-143 sighash.
+    BitcoinP2wpkh,
+    /// Bitcoin BIP-86 P2TR key path, `m/86'/c'/0'/k/i`, BIP-340 over the BIP-341 sighash with the tweaked key.
+    BitcoinP2tr,
     /// NEAR, `m/44'/397'/i'` (SLIP-10 ed25519), the implicit account id; no coin-type override.
     Near,
 }
 
-const NETWORK_NAMES: [(Network, &str); 10] = [
+const NETWORK_NAMES: [(Network, &str); 12] = [
     (Network::Evm, "evm"),
     (Network::Cosmos, "cosmos"),
     (Network::HederaEcdsa, "hedera_ecdsa"),
@@ -233,6 +239,8 @@ const NETWORK_NAMES: [(Network, &str); 10] = [
     (Network::Ton, "ton"),
     (Network::Aptos, "aptos"),
     (Network::Solana, "solana"),
+    (Network::BitcoinP2wpkh, "bitcoin_p2wpkh"),
+    (Network::BitcoinP2tr, "bitcoin_p2tr"),
     (Network::Near, "near"),
 ];
 
@@ -248,7 +256,8 @@ impl Network {
     /// one is a compile error where it is not handled, never a silent default.
     pub fn scheme(self) -> NativeScheme {
         match self {
-            Network::Evm | Network::Cosmos | Network::HederaEcdsa => NativeScheme::Secp256k1Ecdsa,
+            Network::Evm | Network::Cosmos | Network::HederaEcdsa | Network::BitcoinP2wpkh => NativeScheme::Secp256k1Ecdsa,
+            Network::BitcoinP2tr => NativeScheme::Bip340Taproot,
             Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana | Network::Near => {
                 NativeScheme::Ed25519
             }
@@ -261,14 +270,18 @@ impl Network {
         match self {
             Network::Evm | Network::Cosmos | Network::HederaEcdsa => Some(0x0108),
             Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana => Some(0x0102),
-            Network::Near => None,
+            Network::BitcoinP2wpkh | Network::BitcoinP2tr | Network::Near => None,
         }
+    }
+    pub(crate) fn bitcoin(self) -> bool {
+        matches!(self, Network::BitcoinP2wpkh | Network::BitcoinP2tr)
     }
     /// The coin-type override this network takes (spec §4.5): NEAR none (it would alias `stellar` / `ton`); the nine any below
     /// 2^31 (checked at derivation).
     fn coin_ok(self, coin_type: Option<u32>) -> Result<()> {
         match (self, coin_type) {
             (Network::Near, Some(_)) => Err(Error::Argument),
+            (Network::BitcoinP2wpkh | Network::BitcoinP2tr, Some(c)) if c > 1 => Err(Error::Argument),
             _ => Ok(()),
         }
     }
@@ -276,8 +289,8 @@ impl Network {
     pub(crate) fn key_proof(self) -> bool {
         self.scheme_kind().is_some()
     }
-    /// The SLIP-44 path of key `i`; element 1 is the coin type.
-    fn path(self, i: u32) -> Vec<u32> {
+    /// The SLIP-44 path of key `i` (Bitcoin: on chain `change`); element 1 is the coin type.
+    fn path(self, i: u32, change: u32) -> Vec<u32> {
         const H: u32 = derive::HARDENED;
         match self {
             Network::Evm => vec![44 | H, 60 | H, H, 0, i],
@@ -289,6 +302,8 @@ impl Network {
             Network::Ton => vec![44 | H, 607 | H, i | H],
             Network::Aptos => vec![44 | H, 637 | H, i | H, H, H],
             Network::Solana => vec![44 | H, 501 | H, i | H, H],
+            Network::BitcoinP2wpkh => vec![84 | H, H, H, change, i],
+            Network::BitcoinP2tr => vec![86 | H, H, H, change, i],
             Network::Near => vec![44 | H, 397 | H, i | H],
         }
     }
@@ -312,6 +327,8 @@ pub enum NativeScheme {
 pub(crate) enum KeyId {
     Ua(u16, u32, u32),
     Native(Network, u32, Option<u32>),
+    /// A Bitcoin key of the change chain: network, coin type, index (the receive chain is `Native`; ua-rs-native spec §4.3).
+    BitcoinChange(Network, Option<u32>, u32),
     /// A UA's KEM key: its UA and the KEM record's version (spec §6.1).
     Kem([u8; 32], u64),
     /// Imported key `n` (`native-import:<network>:<n>`, spec §8.3).
@@ -594,14 +611,28 @@ impl Wallet {
     /// Key `index` of `network` (clientkeys `deriveKey`), `coin_type` in place of the network's (Pi Network: `Stellar`,
     /// 314159); `Argument` for a value ≥ 2^31.
     pub fn native_key(&self, network: Network, index: u32, coin_type: Option<u32>) -> Result<NativeKey> {
+        self.derive_native(network, coin_type, 0, index)
+    }
+
+    /// Bitcoin key `index` of chain `change` (0 receive, 1 change; ua-rs-native spec §5.1): `change` 0 is
+    /// [`Wallet::native_key`]'s slot. `Argument` for another network, `change` outside {0, 1} or a coin type other than 0 / 1.
+    pub fn bitcoin_key(&self, network: Network, coin_type: Option<u32>, change: u32, index: u32) -> Result<NativeKey> {
+        if !network.bitcoin() || change > 1 {
+            return Err(Error::Argument);
+        }
+        self.derive_native(network, coin_type, change, index)
+    }
+
+    fn derive_native(&self, network: Network, coin_type: Option<u32>, change: u32, index: u32) -> Result<NativeKey> {
         network.coin_ok(coin_type)?;
-        let (secret, public_key) = self.store.key(KeyId::Native(network, index, coin_type), |seed| {
-            let s = derive::native_secret(seed, network, index, coin_type)?;
+        let id = if change == 0 { KeyId::Native(network, index, coin_type) } else { KeyId::BitcoinChange(network, coin_type, index) };
+        let (secret, public_key) = self.store.key(id, |seed| {
+            let s = derive::native_secret(seed, network, index, coin_type, change)?;
             let public = derive::native_public(network, &s)?;
             Ok((s, public))
         })?;
-        self.store.note(|m| m.add_native(network, coin_type, index));
-        Ok(NativeKey { network, index, coin_type, public_key, secret })
+        self.store.note(|m| m.add_native(network, coin_type, index, change));
+        Ok(NativeKey { network, index, coin_type, change, public_key, secret })
     }
 }
 
@@ -748,6 +779,8 @@ pub struct NativeKey {
     network: Network,
     index: u32,
     coin_type: Option<u32>,
+    /// Bitcoin's chain: 0 receive, 1 change; 0 elsewhere.
+    change: u32,
     public_key: Vec<u8>,
     secret: Handle,
 }
@@ -762,7 +795,11 @@ impl NativeKey {
     pub fn coin_type(&self) -> Option<u32> {
         self.coin_type
     }
-    /// The compressed secp256k1 key or the ed25519 key.
+    /// Bitcoin's chain of this key: 0 receive, 1 change (0 on every other network).
+    pub fn change(&self) -> u32 {
+        self.change
+    }
+    /// The compressed secp256k1 key (P2TR: the internal key `P`) or the ed25519 key.
     pub fn public_key(&self) -> Vec<u8> {
         self.public_key.clone()
     }
