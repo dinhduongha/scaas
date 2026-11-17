@@ -15,7 +15,8 @@ T = [os.path.abspath("scripts/capped"), "cargo", "test", "--locked", "--offline"
 M = [(n, f, a, b, T, RS) for n, f, a, b in [
     ("index at the coin level", MOD, "Network::Near => vec![44 | H, 397 | H, i | H],", "Network::Near => vec![44 | H, (397 + i) | H, H],"),
     ("upper-case hex address", DERIVE, "Network::Near => Some(hex(public_key)),", "Network::Near => Some(hex(public_key).to_uppercase()),"),
-    ("coin override accepted", MOD, "            (Network::Near, Some(_)) => Err(Error::Argument),\n", ""),
+    # T8a merged the Polkadot guard into this arm: the mutant drops NEAR from it only
+    ("coin override accepted", MOD, "(Network::Near | Network::Polkadot, Some(_)) => Err(Error::Argument),", "(Network::Polkadot, Some(_)) => Err(Error::Argument),"),
     ("key proof accepted on near", MOD, "        self.scheme_kind().is_some()\n", "        self.scheme_kind().is_some() || self == Network::Near\n"),
 ]]
 if __name__ == "__main__":
