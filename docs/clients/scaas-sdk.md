@@ -193,26 +193,35 @@ client (one matrix-rust-sdk stack, one login, one sync loop) lives in the app's 
 SDK starts no Matrix client, links no Matrix SDK, holds no Matrix store and requires no particular runtime. The attachment and
 its release before logout, envelopes kept while a seed is locked, and the runtime shared with the Matrix client are
 `pqchat-core`'s rules ([CTR-CHAT-01](../contracts/pqchat.md#CTR-CHAT-01)). `pqchat-core` reaches every signature, KEM operation,
-container opening and chain read through the SDK under [CLI-SDK-19](#CLI-SDK-19) and [CLI-SDK-20](#CLI-SDK-20).
+container opening and chain read through the SDK under [CLI-SDK-19](#CLI-SDK-19) and [CLI-SDK-20](#CLI-SDK-20): it signs
+`PqChat`'s records through the SDK's named `PqChat` record entries, never through the app signing call, and its ratchet
+needs the HMAC, explicit-destroy, storage-root and ephemeral-wrap calls the spec's §12.2 lists, which the `pqchat-core`
+spec confirms.
 
 <a id="CLI-SDK-19"></a>**CLI-SDK-19** — **App cores sit above the SDK: they depend on it, it names none of them, and an app links
 the SDK and its app cores in one Rust library** (owner 2026-11-17: "agreed to reverse the dependency", then "OK, reverse pqchat-core too"; SPECIFIED).
 An app core (`pqchat-core`, `pqvault-core`, a third party's) depends on `scaas-sdk` with the feature `app-core` and on nothing
-below it that touches a key or a node; the SDK has no module, feature, type, error or event named after an app. scaas-app's one
+below it that touches a key or a node; the SDK names no app core and holds no app logic, while the record types of SCaaS
+contracts (`PqChat`'s among them, behind the feature `pqchat-records`) are named, typed SDK entries as every SCaaS
+contract's are under [CLI-SDK-08](#CLI-SDK-08). scaas-app's one
 library is `app-core-rust` (scaas-app's contract section 12), with the features `native-core` (on by default), `scaas`,
 `pqchat` and `pqvault` (each implying `scaas`); the SDK defines no aggregating crate.
 
 <a id="CLI-SDK-20"></a>**CLI-SDK-20** — **The `app_core` surface gives an app core account handles, app record signing on
-both paths, key handles, reads and relayed submission, under two conditions: secrets stay below the SDK, and nothing SCaaS is
-signed blind for an app; an app core for which either cannot be met stays inside the SDK** (coordinator conditions,
-controller calls, owner may override; SPECIFIED). (1) Key handles only: a KEM-unwrapped key, a derived key, an Argon2id output
-stay in `ua-rs` behind handles without `Clone`, `Debug` or a byte accessor, scoped to their app core and released at the seed's
-lock; wrap, unwrap, HKDF, Argon2id and AEAD run in `ua-rs` on them; the only bytes that leave are plaintexts the app core asks to
-decrypt for the user; labels stay under the app's own declared prefixes. (2) The app signing call takes typed data, never a
-digest, and signs only a portable record under `appPurpose(appId)` with `salt = appId` and no chain fields, or a chain-bound
-record under the app's own purpose with the profile's `chainId` and the app's `verifyingContract`; it refuses by name every
-`UAKinds` purpose constant and every domain of a SCaaS contract or of the registry (by name, by address, by chain), each refusal
-tested with a positive control and a mutant. Reads of ciphertexts the app core decrypts are decryption reads under
+both paths, record verification, key handles, random bytes, reads and relayed submission, under two conditions: secrets
+stay below the SDK, and nothing SCaaS is signed blind for an app; if either cannot be met for an app core, the task stops
+and the owner decides** (coordinator conditions, controller calls, owner may override; SPECIFIED). (1) Key handles only: a
+KEM-unwrapped key, a derived key, an Argon2id output stay in `ua-rs` behind handles of one usage each (`Derive`, `Data`,
+`KeyWrap`, refused for any other use) without `Clone`, `Debug` or a byte accessor, scoped to their app core and released
+by `destroy` or at the seed's lock; wrap, unwrap, HKDF, HMAC, Argon2id, AEAD and key sealing (under a key-wrap constant no
+data seal produces) run in `ua-rs` on them; the only bytes that leave are plaintexts the app core asks to decrypt for the
+user; labels stay under the core's own declared prefixes, no two cores' prefixes overlapping. Scoping avoids collisions; it
+does not isolate: an app holding the user's unlocked seed set acts for that UA in every app namespace, so only reviewed app
+cores are linked. (2) The app signing call takes typed data, never a digest, and signs only a portable record under
+`appPurpose(appId)` whose domain is exactly `name, version, salt` with `salt = appId`, or a chain-bound record under the
+app's own purpose with the profile's `chainId` and the app's `verifyingContract`; it refuses by name every `UAKinds`
+purpose constant (the guard on the chain-bound path) and every domain of a SCaaS contract or of the registry (by name, by
+address, by chain), each refusal tested with a positive control and a mutant. Reads of ciphertexts the app core decrypts are decryption reads under
 [CLI-SDK-10](#CLI-SDK-10); writes are operations under [CLI-SDK-08](#CLI-SDK-08). Design: spec §12.
 
 ## 8. Runtime, events, errors
@@ -238,7 +247,7 @@ by `code`. The SDK's own names include `StoreConflict`, `KeystoreMismatch`, `Key
 `SeedExists`, `LabelTaken`, `ConfirmationMissing`, `VaultPassphraseWeak`, `DerivationPassphraseShort`, `OriginSignature`,
 `AuthenticatorRefused`, `ProfileMismatch`, `FeatureMissing`, `PreparedStale`, `PreparedUnknown`, `OpaqueCallRefused`, `FeeAboveCap`,
 `GasAboveTxCap`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `AppDomainRefused`,
-`AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`. A
+`AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`, `AppKeyUsage`, `AppArenaFull`, `KemKeyGone`. A
 warning (`short_seed`, `imported_key`) comes beside a success, never as an error.
 
 ## 9. Bindings
