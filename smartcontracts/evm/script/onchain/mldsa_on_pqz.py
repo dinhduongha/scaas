@@ -797,8 +797,10 @@ def tool(q):
     return json.loads(out.stdout)
 
 
-def rec(seed64, h, scope):
-    return {"seed": "0x" + seed64.hex(), "ua": "0x" + h.ua.hex(), "chainUid": "0x" + E.CTX[1].hex(),
+def rec(entropy, h, scope):
+    """The tool's key record: the BIP-39 entropy of `h`'s test wallet (32 bytes; the tool restores the mnemonic with the release
+    scaas-ua, as PqzWallet.s.sol `_rec`), its UA, the chain word, the scope."""
+    return {"entropy": "0x" + entropy.hex(), "ua": "0x" + h.ua.hex(), "chainUid": "0x" + E.CTX[1].hex(),
             "scope": None if int(scope, 16) == 0 else scope, "version": 0}
 
 
@@ -819,12 +821,12 @@ def scope_of(t):
     return t if own(t) else E.ZERO
 
 
-def real(pq, sd, h, seed64, scope, gaps):
+def real(pq, sd, h, entropy, scope, gaps):
     """forge `_real`: `h`'s record of `scope` with its real key and opening KEM key from the wallet (`keys`), signed by its
     ML-DSA key. D3: no R_REG prover in the wallet; on a registry that checks R_REG the record stays unproven (no
     `storePqzScopedPop`), recorded as a gap row."""
     reg = E.REG[0]
-    o = tool({"cmd": "keys", **rec(seed64, h, scope)})
+    o = tool({"cmd": "keys", **rec(entropy, h, scope)})
     key, kp = E.hb(o["pqzKey"]), E.hb(o["openKem"])
     k = [kp[0], kp[1:1569], kp[1569:1601]]
     pop = E.kc(E.encs(["w", "w", "w", "b"], [E.kc(P.RUN), h.ua, scope, b"wallet"]))
@@ -855,14 +857,14 @@ def g_pqzwallet(pq, sd, sr, s3):
     gaps = rreg_on()
     for n in ("dave", "erin"):
         S[n] = M.ml_ua(pq, sd, n, E.MLDSA65, E.kc(PRE, P.RUN, b"wallet", n))
-        S[n + "64"] = E.kc(PRE, P.RUN, n, b"64a") + E.kc(PRE, P.RUN, n, b"64b")
-    S["bob64"] = E.kc(PRE, P.RUN, b"bob", b"64a") + E.kc(PRE, P.RUN, b"bob", b"64b")
+        S[n + "Ent"] = E.kc(PRE, P.RUN, n, b"entropy")  # 32 bytes (PqzWallet.s.sol daveEntropy / erinEntropy)
+    S["bobEnt"] = E.kc(PRE, P.RUN, b"bob", b"entropy")
     dave, erin, bob = S["dave"], S["erin"], S["bob"]
-    real(pq, sd, dave, S["dave64"], E.ZERO, gaps)
-    real(pq, sd, erin, S["erin64"], E.ZERO, gaps)  # class 2 reads the auditor's scope-0 record at init
+    real(pq, sd, dave, S["daveEnt"], E.ZERO, gaps)
+    real(pq, sd, erin, S["erinEnt"], E.ZERO, gaps)  # class 2 reads the auditor's scope-0 record at init
     S["c2w"], S["c3w"] = wtoken(sd, 0, "c2w"), wtoken(sd, 1, "c3w")
     for h in (dave, erin, bob):
-        real(pq, sd, h, S[h.name + "64"], S["c3w"], gaps)
+        real(pq, sd, h, S[h.name + "Ent"], S["c3w"], gaps)
     credits(pq, sd, sr, S["c2w"], True)
     credits(pq, sd, sr, S["c3w"], False)
     save()
@@ -926,12 +928,17 @@ def t_of(st):
     return st[off:off + K.CT_BYTES]
 
 
-def wallet(t, st):
+def wallet(t):
+    """forge `_wallet` (T21 O5 (b)): the debit opened inside the handle from the gated parts; the own part (`ownCode`, the
+    account's last debit blob) once dave has debited; no `T` in the request."""
     dave = S["dave"]
     a = acct(t, dave.ua)
-    return tool({"cmd": "wallet", **rec(S["dave64"], dave, scope_of(t)), "token": t, "entries": w_entries(t),
+    blob = "0x%040x" % a["accBlob"]
+    own_code = E.rpc("eth_getCode", [blob, "latest"]) if a["lastDebit"] > 0 else "0x"
+    return tool({"cmd": "wallet", **rec(S["daveEnt"], dave, scope_of(t)), "token": t, "entries": w_entries(t),
                  "reads": {"block": head(), "finalized": True, "strictMajority": True},
-                 "window": {"from": a["rolled"], "to": a["pendingCount"]}, "t": "0x" + t_of(st).hex()})
+                 "window": {"from": a["rolled"], "to": a["pendingCount"], "lastDebit": a["lastDebit"], "shieldIn": 0,
+                            "ownCode": own_code}})
 
 
 def refresh(pq, sr, t, b, st):
@@ -942,7 +949,7 @@ def refresh(pq, sr, t, b, st):
 def audit(t):
     sc, dave, erin = scope_of(t), S["dave"], S["erin"]
     a = acct(t, dave.ua)
-    return tool({"cmd": "audit", **rec(S["erin64"], erin, sc), "pk": "0x" + key_of(erin, sc).hex(), "token": t, "rolled": a["rolled"],
+    return tool({"cmd": "audit", **rec(S["erinEnt"], erin, sc), "pk": "0x" + key_of(erin, sc).hex(), "token": t, "rolled": a["rolled"],
                  "floor": a["floor"], "recipient": {"ua": "0x" + dave.ua.hex(), "pk": "0x" + key_of(dave, sc).hex(),
                                                     "kemPk": "0x" + kem_at(dave, sc).hex()}, "entries": w_entries(t)})
 
@@ -957,7 +964,7 @@ def honest(pq, sr, t, want):
     window opened, its balance `want`; a refresh; the auditor tool."""
     dave = S["dave"]
     b, st = refresh_args(t, 0x9A01)
-    o = wallet(t, st)
+    o = wallet(t)
     outcomes(o, ["accepted", "skip", "skip", "skip", "accepted", "skip", "skip", "skip"], f"{lab(t)} wallet check")
     E.check(not o["window"]["opened"] and o["secretLoads"] == 0, f"{lab(t)}: window refused, no secret loaded")
     marks = [int(x) for x in o["marks"]]
@@ -965,10 +972,16 @@ def honest(pq, sr, t, want):
     sr.send(t, roll_cd(dave, 0, marks, vb, roll_sig(pq, t, dave, 0, marks, vb)), f"{lab(t)} dave's marks {marks} (signed, n = 0)")
     E.check(all(skipped(t, dave, i) for i in marks), f"{lab(t)}: every mark on chain")
     b, st = refresh_args(t, 0x9A01)
-    o = wallet(t, st)
+    o = wallet(t)
     E.check(o["window"]["opened"] and o["secretLoads"] == 1 and int(o["window"]["balance"]) == want,
             f"{lab(t)}: window opened once, balance {o['window'].get('balance')} = the accepted {want}")
+    E.check(E.hb(o["window"]["t"]) == t_of(st), f"{lab(t)}: the handle's T = the debit statement's T")
     refresh(pq, sr, t, b, st)
+    # the own branch on chain (forge `_honest`): the refresh wrote an own part no key of dave's tagged, so the next debit is
+    # refused by its ownTag, the secret not used
+    o = wallet(t)
+    E.check(not o["window"]["opened"] and o["secretLoads"] == 0 and o["window"].get("why") == "OwnTag",
+            f"{lab(t)}: own part refused by its ownTag, no secret loaded")
     outcomes(audit(t), ["no auditor leg"] * 4 + ["read", "unreadable", "recipient-unreadable", "unreadable"], f"{lab(t)} auditor")
 
 
