@@ -5,9 +5,14 @@
 bind = "127.0.0.1:8547"
 # the chain's JSON-RPC endpoints, one or more (ARCH-POS-15): asked in order; one request's reads all come from one node at
 # one block, and the next node starts the request over only when one does not answer. URLs only, no secret.
-# OPERATOR RULE (owner 2026-11-11): every endpoint must be a node you trust, until the strict-majority option exists
-# (scaas-rpc): nodes are not compared, and a lying RPC could pass a key check that OFFCHAIN tokens trust you for.
+# OPERATOR RULE (owner 2026-11-11): under rpc_policy = "failover" every endpoint must be a node you trust: nodes are not
+# compared, and a lying RPC could pass a key check that OFFCHAIN tokens trust you for.
 rpc_urls = ["http://127.0.0.1:8545"]
+# "failover" (the default) or "strict_majority" (two rpc_urls or more, CLI-RPC-12): every read of a request agreed by
+# floor(n/2) + 1 endpoints at one block by hash before the proof is checked; you then trust that fewer than floor(n/2) + 1 lie
+# together (n = 2 detects one liar, tolerates no failure; tolerance of one needs n >= 3); size concurrency, queue and
+# rate_per_minute for its reads-first cost
+rpc_policy = "failover"
 
 # The one chain this process serves, pinned (Fable C-1): the RPC must answer `chain_id` at start, or the service does not
 # start; every served token's code must name `chain_uid` and `registry`, else NOT served (FOREIGN_CHAIN_UID,

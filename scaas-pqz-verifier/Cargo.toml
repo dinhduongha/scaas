@@ -27,6 +27,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
+# tests/anvil.rs: anvil_dumpState is gzipped, --load-state reads its JSON (the strict-majority case, plan T9)
+flate2 = "1"
 tower = { version = "0.5", features = ["util"] }
 # the paused clock of the slow-body test (Fable C-4)
 tokio = { version = "1", features = ["full", "test-util"] }

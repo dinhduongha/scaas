@@ -8,7 +8,8 @@ use alloy::primitives::{Address, Bytes};
 use alloy::providers::{DynProvider, Provider};
 use scaas_rpc::evm::EvmPool;
 use scaas_rpc::{Endpoint, NodeList, Policy};
-use alloy::rpc::types::{BlockId, TransactionRequest};
+use alloy::primitives::B256;
+use alloy::rpc::types::{BlockId, RpcBlockHash, TransactionRequest};
 use alloy::transports::TransportError;
 use async_trait::async_trait;
 use std::future::Future;
@@ -22,14 +23,33 @@ pub enum ChainError {
     Rpc(String),
 }
 
+/// The block a read names: a number (the failover path, as before) or a header's hash (EIP-1898 with `requireCanonical`, every
+/// read of an agreed request, CLI-RPC-12).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Block {
+    Number(u64),
+    Hash(B256),
+}
+
+impl Block {
+    pub fn id(self) -> BlockId {
+        match self {
+            Block::Number(n) => BlockId::number(n),
+            Block::Hash(h) => BlockId::Hash(RpcBlockHash { block_hash: h, require_canonical: Some(true) }),
+        }
+    }
+}
+
 #[async_trait]
 pub trait Chain: Send + Sync {
     /// How many nodes, asked in order `0..nodes()`.
     fn nodes(&self) -> usize;
     /// Node `node`'s latest block number.
     async fn head(&self, node: usize) -> Result<u64, ChainError>;
-    async fn call(&self, node: usize, block: u64, to: Address, data: Bytes) -> Result<Bytes, ChainError>;
-    async fn code(&self, node: usize, block: u64, at: Address) -> Result<Bytes, ChainError>;
+    /// Node `node`'s header hash at `number`.
+    async fn header(&self, node: usize, number: u64) -> Result<B256, ChainError>;
+    async fn call(&self, node: usize, block: Block, to: Address, data: Bytes) -> Result<Bytes, ChainError>;
+    async fn code(&self, node: usize, block: Block, at: Address) -> Result<Bytes, ChainError>;
 }
 
 /// The longest one RPC read may take; past it the node counts as not answering, so the request fails over (Fable R-1).
@@ -79,17 +99,13 @@ impl Rpc {
     }
 }
 
-/// A revert only when the answer says so: revert data, or a message that starts `execution reverted`; any other error
-/// answer (`header not found`, a pruned state, a rate limit) and no answer are the node's, so the request fails over
-/// (Fable R-2).
+/// The crate's classifier (CLI-RPC-50 Q5, `scaas_rpc::evm::classify`): revert data, a "revert", or an execution error that is
+/// not a node's own limit is a revert, its data kept as bytes (possibly empty); any other error answer (`header not found`, a
+/// pruned state, a rate limit, a node's own timeout) and no answer are the node's, so the request fails over.
 fn classify(e: TransportError) -> ChainError {
-    match e.as_error_resp() {
-        Some(p) => match p.as_revert_data() {
-            Some(d) => ChainError::Revert(d),
-            None if p.message.starts_with("execution reverted") => ChainError::Revert(Bytes::new()),
-            None => ChainError::Rpc(e.to_string()),
-        },
-        None => ChainError::Rpc(e.to_string()),
+    match scaas_rpc::evm::classify(&e) {
+        scaas_rpc::evm::SimError::Revert(_) => ChainError::Revert(scaas_rpc::evm::revert_data(&e).unwrap_or_default()),
+        scaas_rpc::evm::SimError::Transport(_) => ChainError::Rpc(e.to_string()),
     }
 }
 
@@ -103,14 +119,26 @@ impl Chain for Rpc {
         timed(self.timeout, async { self.node(node).get_block_number().await.map_err(|e| ChainError::Rpc(e.to_string())) }).await
     }
 
-    async fn call(&self, node: usize, block: u64, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
-        let tx = TransactionRequest::default().with_to(to).with_input(data);
-        timed(self.timeout, async { self.node(node).call(tx).block(BlockId::number(block)).await.map_err(classify) }).await
+    async fn header(&self, node: usize, number: u64) -> Result<B256, ChainError> {
+        let f = async {
+            let b = self.node(node).get_block_by_number(number.into()).await.map_err(|e| ChainError::Rpc(e.to_string()))?
+                .ok_or_else(|| ChainError::Rpc(format!("no block {number}")))?;
+            if b.header.number != number {
+                return Err(ChainError::Rpc(format!("asked block {number}, answered {}", b.header.number)));
+            }
+            Ok(b.header.hash)
+        };
+        timed(self.timeout, f).await
     }
 
-    async fn code(&self, node: usize, block: u64, at: Address) -> Result<Bytes, ChainError> {
+    async fn call(&self, node: usize, block: Block, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
+        let tx = TransactionRequest::default().with_to(to).with_input(data);
+        timed(self.timeout, async { self.node(node).call(tx).block(block.id()).await.map_err(classify) }).await
+    }
+
+    async fn code(&self, node: usize, block: Block, at: Address) -> Result<Bytes, ChainError> {
         let f = async {
-            self.node(node).get_code_at(at).block_id(BlockId::number(block)).await.map_err(|e| ChainError::Rpc(e.to_string()))
+            self.node(node).get_code_at(at).block_id(block.id()).await.map_err(|e| ChainError::Rpc(e.to_string()))
         };
         timed(self.timeout, f).await
     }

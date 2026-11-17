@@ -18,7 +18,6 @@ ua-json | 82d9754cd | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 ua-verify | 82d9754cd | 0 | 84 passed, 0 failed, 0 ignored (18 binaries); tree dirty
 ua-default | 82d9754cd | 0 | 25 passed, 0 failed, 0 ignored (2 binaries); tree dirty
 node-e2e-hedera | 3260902e2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-docs | 3f422e87a | 0 | -
 eip1898 | 0557f5ea0 | 0 | nethermind: canonical answered 5/5, made-up refused 5/5: PASS; anvil: canonical answered 5/5, made-up refused 5/5: PASS; hedera-relay: not verified (no local relay); tree dirty
 node-test | 1ffb4a964 | 0 | 788 passed, 0 failed, 72 ignored (17 binaries); tree dirty
 node-clippy | 1ffb4a964 | 0 | -; tree dirty
@@ -27,7 +26,8 @@ rpc-test | 4a84ebbce | 0 | 93 passed, 0 failed, 10 ignored (6 binaries); tree di
 rpc-wasm | 4a84ebbce | 0 | -; tree dirty
 rpc-anvil | 4a84ebbce | 0 | 10 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 rpc-clippy | 4a84ebbce | 0 | -; tree dirty
-ver-test | df3f7f2e9 | 0 | 31 passed, 0 failed, 1 ignored (6 binaries); tree dirty
-ver-clippy | df3f7f2e9 | 0 | -; tree dirty
-ver-anvil | df3f7f2e9 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 features | df3f7f2e9 | 0 | -; tree dirty
+ver-anvil | 2650ede85 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+ver-test | 2650ede85 | 0 | 40 passed, 0 failed, 1 ignored (6 binaries); tree dirty
+ver-clippy | 2650ede85 | 0 | -; tree dirty
+docs | 2650ede85 | 0 | -; tree dirty

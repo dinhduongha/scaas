@@ -6122,6 +6122,8 @@ Change (owner 2026-11-11, on Fable re-check R-5 of `ua-mtx-fix-verifier`; status
 
 Change (owner 2026-11-11, group 3t, [CTR-PQZ-36](contracts/pq-zero-knowledge.md#CTR-PQZ-36); status: BUILT on `ua-mtx-3t`, UNAUDITED): the statement a verdict hashes carries the verifier fee in its `fee` word, so a `VerifierFeeSet` makes every statement built before it stale: the op refuses (`AuthRejected`, and with a re-signed `pqzAuth` `PqzVerdictMismatch(3)`) and the holder re-proves; `PqzVerdict` and its typehash are unchanged.
 
+Change (2026-11-17, [CLI-RPC-12](clients/scaas-rpc.md#CLI-RPC-12); status: BUILT on branch `scaas-sdk`, plan T9, UNAUDITED): the reference verifier gains `rpc_policy = "strict_majority"` (two `rpc_urls` or more): every read of a `verdict` or `probe` request is made first, pinned by block hash (EIP-1898, `requireCanonical`; R-6 closed under this option), agreed whole by ⌊n/2⌋ + 1 endpoints, then today's checks run in today's order on the agreed values (no endpoint asked after the proof check; `RPC_NO_MAJORITY`, 503, nothing signed). Under it the operator trusts that fewer than ⌊n/2⌋ + 1 endpoints lie together (`n = 2` detects one liar and tolerates no failure; tolerance of one needs `n ≥ 3`); under `failover` (the default) every endpoint must still be a node the operator trusts. Both policies read an error answer by the crate's classifier (CLI-RPC-50 Q5), a revert a refusal by name.
+
 ### CTR-PQZ-30 — OFFCHAIN tokens accept unproven PQZ keys of the set length; the verifier checks them off chain
 - old: — · status: current · owner: yes · date: 2026-11-06 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-30 · superseded-by: —
 
@@ -10478,7 +10480,7 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", the rpc spe
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-12 · superseded-by: —
 
 **Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-12).) Under `failover` the request path is unchanged; `rpc_policy = "strict_majority"` (two endpoints or more): every read of a `verdict` or `probe` request in today's order, pinned by hash, before the proof check, compared whole, then today's checks on the agreed values; `RPC_NO_MAJORITY`; the crate's revert classifier under both policies, a revert a refusal. Until built: trusted nodes only.
-**Status.** SPECIFIED (plan T8, T9). UNAUDITED.
+**Status.** BUILT for EVM on branch `scaas-sdk` (plan T8 transport, T9 the option and the classifier; EIP-1898 verified on anvil and a local Nethermind 2.2.0, plan T0). UNAUDITED.
 **Why.** Owner 2026-11-11: the verifier's strict-majority option is built in `scaas-rpc`; until then its `rpc_urls` point only at nodes its operator trusts. Fable F9: reading first changes the cost before the proof check, so it is limited to the option and its refusal order pinned; F10: the verifier's agreed path must be the crate's EIP-1898 code, for `probe` too. Owner 2026-11-17 (CLI-RPC-50): one classifier.
 **Cost if wrong.** A lying RPC passes an off-chain key check that `OFFCHAIN` tokens trust the verifier for (CTR-PQZ-30); or a garbage proof costs every key read on every endpoint unannounced.
 **Source.** CTR-PQZ-29 Change of 2026-11-11; owner 2026-11-11 "hoãn, ghi rõ chỉ chạy với node của mình", corrected to "node do họ tin cậy"; Fable review 2026-11-17 F9, F10; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §11.2.

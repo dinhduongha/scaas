@@ -2,7 +2,7 @@
 //! scaas-rpc plan T8: the verifier's reads run on the crate's bounded transport (CLI-RPC-07, F5): an answer above 16 MiB is that
 //! node's failure (`ChainError::Rpc`, the request fails over); a redirect is not followed. Controls beside each.
 use alloy::primitives::{Address, Bytes};
-use scaas_pqz_verifier::chain::{Chain, ChainError, Rpc};
+use scaas_pqz_verifier::chain::{Block, Chain, ChainError, Rpc};
 use serde_json::{json, Value};
 
 const CHAIN_ID: u64 = 7622;
@@ -29,7 +29,7 @@ async fn node(code_len: usize, redirect: bool) -> String {
 
 async fn code(url: String) -> Result<Bytes, ChainError> {
     let rpc = Rpc::connect(&[url], CHAIN_ID).await.unwrap();
-    rpc.code(0, 1, Address::ZERO).await
+    rpc.code(0, Block::Number(1), Address::ZERO).await
 }
 
 #[tokio::test]

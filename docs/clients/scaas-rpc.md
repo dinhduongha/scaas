@@ -164,7 +164,8 @@ serves, as a separate feature for server-side clients only, never built into an 
 ## 7. The verifier's agreement option
 
 <a id="CLI-RPC-12"></a>**CLI-RPC-12** — **`scaas-pqz-verifier` reads through the crate and gains the agreement option** (owner
-2026-11-11; SPECIFIED). The verifier's `rpc_urls` become a node list on the crate's bounded transport. Under `failover` (the
+2026-11-11; **BUILT** for EVM, branch `scaas-sdk` (plan T8, T9), verified against anvil and a local Nethermind 2.2.0 for EIP-1898
+(plan T0); UNAUDITED). The verifier's `rpc_urls` become a node list on the crate's bounded transport. Under `failover` (the
 default) its request path is unchanged. `rpc_policy = "strict_majority"` (two endpoints or more) makes every chain read of a
 `verdict` or `probe` request one agreed read ([CLI-RPC-05](#CLI-RPC-05)): every read the request makes, in the order of the failover
 path and pinned by block hash, before the proof is checked, compared whole, then the same checks in the same order on the agreed
@@ -174,7 +175,8 @@ No majority is `RPC_NO_MAJORITY`, nothing signed. Under both policies an error a
 kept as bytes, and a revert is a refusal by name, never a signature (owner 2026-11-17, CLI-RPC-50). Until this is built, every
 `rpc_urls` endpoint of a PQZ verifier must be a node its operator trusts ([ops.md](../node/ops.md#pqz-verifier),
 [CTR-PQZ-29](../contracts/pq-zero-knowledge.md#CTR-PQZ-29)); with it, that holds under `failover`, and under `strict_majority` the
-operator trusts that fewer than ⌊n/2⌋ + 1 endpoints lie together.
+operator trusts that fewer than ⌊n/2⌋ + 1 endpoints lie together (`n = 2` detects one liar and tolerates no failure; tolerance of
+one needs `n ≥ 3`).
 
 ## 8. Errors
 
