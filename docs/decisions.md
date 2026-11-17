@@ -5344,6 +5344,8 @@ Change (2026-11-16, owner, TODO 3zh-core gate; status: BUILT on branch `3zh-core
 
 Change (2026-11-17, owner, the code-format round; status: in force, AGENTS.md): "a code-format change does not need the full gate". A commit that holds only formatter output (no hand edit) in `pqzl`, `pqzh/ligero/src`, `stmt`, `ffi/src` or the C oracle runs the affected steps of `pqz-core/gate.sh` (kat, tbox, sv, fnv, rust, fuzz), `pqz-vectors --check` and `pqz_kat.py --check`, with outputs byte-identical to the baseline; a formatted file that changes any output stops the work. Widths (owner, same day): Rust at rustfmt's default 100, the other languages at 120. Plan: `superpowers/plans/2026-11-17-code-format.md`.
 
+Change (2026-11-17, owner, the code-format round, contracts; status: in force, AGENTS.md): a format-only Solidity commit, with `bytecode_hash = "none"` in force, rebuilds `src` before and after and requires every contract's runtime and init bytecode byte-identical, plus the size gate, instead of the forge suites; a format-only commit to a family contract (Rust) runs that family's own tests, since panic locations move its wasm. PR CI still runs every job.
+
 ### CTR-UA-40 — `fndsa1024` (0x0135): Falcon-1024 (round-3 specification v1.2) as a UA kind, pure Solidity on every EVM chain
 - old: — · status: current · owner: yes · date: 2026-11-04 · normative: contracts/accounts.md#CTR-UA-40 · superseded-by: —
 

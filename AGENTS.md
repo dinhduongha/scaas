@@ -92,6 +92,10 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
   `docs/research/evm-size-levers.md`.
 - **Gas pins move only with old → new figures in the commit.** A set-parameter change is the owner's.
 - **Storage layout is pinned** (`test/v2/layout/`); so are typehashes (`*TypehashIsPinned`).
+- **A format-only Solidity commit** (formatter output only, with `bytecode_hash = "none"` in force) needs no forge suite:
+  rebuild `src` before and after, require every contract's runtime and init bytecode byte-identical, and run the size gate
+  (owner 2026-11-17). PR CI still runs everything. A format-only commit to a family contract (Rust) runs that family's own
+  tests: panic locations move its wasm, so its bytes cannot be compared.
 - A library split is not free: check DELEGATECALL storage, `this`, `msg.sender`, return data, reentrancy guards and `LinkClosure` release pins.
 - **EIP-8037:** a transaction fits only if regular + state gas fits the block limit. `gas_used = max(...)` is accounting, not inclusion. Do not
   conclude from it that a large deploy fits.
