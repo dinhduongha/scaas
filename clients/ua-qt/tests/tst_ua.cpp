@@ -53,6 +53,14 @@ public:
     Q_INVOKABLE int native(const QString& m, const QString& network, int index) {
         return keep(wallet(m).nativeKey(network.toStdString(), uint32_t(index)));
     }
+    // ua-rs-native: a Bitcoin key (chain `change`) and a Polkadot key (junction `path`) of a native.json mnemonic
+    Q_INVOKABLE int bitcoin(const QString& m, const QString& network, int coin, int change, int index) {
+        return keep(nwallet(m).bitcoinKey(network.toStdString(), coin < 0 ? su::kCoinDefault : uint32_t(coin), uint32_t(change), uint32_t(index)));
+    }
+    Q_INVOKABLE int polkadot(const QString& m, const QString& path) { return keep(nwallet(m).polkadotKey(path.toStdString())); }
+    Q_INVOKABLE int nativeOf(const QString& m, const QString& network, int index) {
+        return keep(nwallet(m).nativeKey(network.toStdString(), uint32_t(index)));
+    }
     Q_INVOKABLE bool release(int id) { return su::releaseKey(uint64_t(id)); }
     Q_INVOKABLE bool liveHandlesBalanced() {
         const su::Wallet& w = wallet("pq_kat");
@@ -133,6 +141,17 @@ private:
         if (it == wallets_.end()) it = wallets_.emplace(id, open_mnemonic(id)).first;
         return it->second;
     }
+    const su::Wallet& nwallet(const QString& id) {
+        auto it = nwallets_.find(id);
+        if (it != nwallets_.end()) return it->second;
+        for (const auto& v : file("../native/native.json").object()["mnemonics"].toArray()) {
+            QJsonObject m = v.toObject();
+            if (m["id"].toString() != id) continue;
+            su::Secret w(m["words"].toString().toStdString()), p(m["passphrase"].toString().toStdString());
+            return nwallets_.emplace(id, su::Wallet::fromMnemonic(w, p)).first->second;
+        }
+        throw std::runtime_error("mnemonic");
+    }
     int keep(su::Key k) {
         int id = int(su::registerKey(k));
         keys_.emplace(id, std::move(k));
@@ -142,6 +161,7 @@ private:
     uint64_t (*original_features_)();
     std::map<QString, QJsonObject> mnemonics_;
     std::map<QString, su::Wallet> wallets_;
+    std::map<QString, su::Wallet> nwallets_;
     std::map<int, su::Key> keys_;
     std::unique_ptr<su::Wallet> fresh_;
 };

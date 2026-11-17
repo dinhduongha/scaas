@@ -48,6 +48,8 @@ pub struct NativeEntry {
     pub network: Network,
     pub coin_type: Option<u32>,
     pub index: u32,
+    /// Bitcoin's chain: 0 receive, 1 change (written as `"change": 1` only when 1, so earlier manifests keep their bytes).
+    pub change: u32,
 }
 
 /// A KEM key the wallet used (derived from its UA key: spec §6.1).
@@ -89,6 +91,8 @@ pub struct PqzHeldEntry {
 pub struct Manifest {
     pub entries: Vec<ManifestEntry>,
     pub natives: Vec<NativeEntry>,
+    /// The Polkadot junction paths the wallet used (ua-rs-native spec §4.4): public, at most 64, written only when not empty.
+    pub polkadot_paths: Vec<String>,
     pub kem: Vec<KemEntry>,
     pub imports: Vec<ImportEntry>,
     /// The UAs of imported keys (T20c): one entry per `source`, never in `entries`.
@@ -108,6 +112,8 @@ const MANIFEST_DEPTH: usize = 3;
 const PAYLOAD_DEPTH: usize = 4;
 /// `gap` of [`Wallet::discover_candidates`].
 const GAP_MAX: u32 = 1024;
+/// At most this many `polkadotPaths` (spec §4.4: the manifest is outside input on restore).
+pub(crate) const MAX_POLKADOT_PATHS: usize = 64;
 /// The prefix of an imported key's label.
 const IMPORT: &str = "native-import:";
 /// The prefix of a rebuilt PQZ key's label (T16b).
@@ -120,10 +126,15 @@ impl Manifest {
             self.entries.push(e);
         }
     }
-    pub(crate) fn add_native(&mut self, network: Network, coin_type: Option<u32>, index: u32) {
-        let e = NativeEntry { network, coin_type, index };
+    pub(crate) fn add_native(&mut self, network: Network, coin_type: Option<u32>, index: u32, change: u32) {
+        let e = NativeEntry { network, coin_type, index, change };
         if !self.natives.contains(&e) {
             self.natives.push(e);
+        }
+    }
+    pub(crate) fn add_polkadot_path(&mut self, path: &str) {
+        if !self.polkadot_paths.iter().any(|p| p == path) && self.polkadot_paths.len() < MAX_POLKADOT_PATHS {
+            self.polkadot_paths.push(path.to_owned());
         }
     }
     pub(crate) fn add_kem(&mut self, ua: [u8; 32], version: u64) {
@@ -156,10 +167,18 @@ impl Manifest {
                 .iter()
                 .map(|n| {
                     let c = n.coin_type.map_or("null".to_owned(), |c| c.to_string());
-                    format!("{{\"network\":\"{}\",\"coinType\":{c},\"index\":{}}}", n.network.name(), n.index)
+                    let change = if n.change == 1 { ",\"change\":1" } else { "" };
+                    format!("{{\"network\":\"{}\",\"coinType\":{c},\"index\":{}{change}}}", n.network.name(), n.index)
                 })
                 .collect(),
         );
+        // after natives, only when not empty (earlier manifests keep their bytes)
+        let paths = if self.polkadot_paths.is_empty() {
+            String::new()
+        } else {
+            let p: Vec<String> = self.polkadot_paths.iter().map(|p| serde_json::Value::from(p.as_str()).to_string()).collect();
+            format!(",\"polkadotPaths\":[{}]", p.join(","))
+        };
         let kem = list(self.kem.iter().map(|k| format!("{{\"ua\":\"{}\",\"version\":{}}}", to_hex(&k.ua), k.version)).collect());
         let imports = list(self.imports.iter().map(|i| format!("{{\"network\":\"{}\",\"n\":{}}}", i.network.name(), i.n)).collect());
         let imported_uas = list(self.imported_uas.iter().map(imported_ua_json).collect());
@@ -171,7 +190,7 @@ impl Manifest {
         );
         let senders = list(self.backup_senders.iter().map(|u| format!("\"{}\"", to_hex(u))).collect());
         format!(
-            "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}],\"kem\":[{kem}],\"imports\":[{imports}],\"importedUas\":[{imported_uas}],\"pqzHeld\":[{held}],\"backupGeneration\":{},\
+            "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}]{paths},\"kem\":[{kem}],\"imports\":[{imports}],\"importedUas\":[{imported_uas}],\"pqzHeld\":[{held}],\"backupGeneration\":{},\
              \"backupSenders\":[{senders}]}}",
             self.backup_generation
         )
@@ -194,7 +213,7 @@ fn imported_ua_json(e: &ImportedUaEntry) -> String {
 /// `{kind, source, ua}`: `source` a canonical `native-import:` label, `kind` its network's scheme kind, `ua` canonical.
 fn imported_ua_of(v: &Value) -> Option<ImportedUaEntry> {
     let Held::Import(source) = Held::parse(v.get("source")?.as_str()?).ok()? else { return None };
-    let kind = u16::try_from(v.get("kind")?.as_u64()?).ok().filter(|k| *k == source.network.scheme_kind())?;
+    let kind = u16::try_from(v.get("kind")?.as_u64()?).ok().filter(|k| Some(*k) == source.network.scheme_kind())?;
     Some(ImportedUaEntry { kind, source, ua: ua_of(v.get("ua")?)? })
 }
 /// The UA the imported secret `s` gives under `kind` (CTR-UA-06: `keccak256(TAG(kind) ‖ key_data)`).
@@ -233,12 +252,34 @@ fn parse_manifest(v: &Value) -> Option<Manifest> {
                 Value::Null => None,
                 c => Some(u32::try_from(c.as_u64()?).ok().filter(|x| *x < derive::HARDENED)?),
             };
-            Some(NativeEntry { network: network_of(n)?, coin_type, index: u31(n, "index")? })
+            // `change` absent (0) or 1, nothing else
+            let change = match n.get("change") {
+                None => 0,
+                Some(c) => c.as_u64().filter(|c| *c == 1).map(|_| 1)?,
+            };
+            // only an entry `derive_native` can write (T13 C7): `change` 1 on Bitcoin only, a coin type the network takes
+            let network = network_of(n)?;
+            if (change == 1 && !network.bitcoin()) || network.coin_ok(coin_type).is_err() {
+                return None;
+            }
+            Some(NativeEntry { network, coin_type, index: u31(n, "index")?, change })
         })
         .collect::<Option<_>>()?;
+    // absent in a manifest written before ua-rs-native: none; else at most 64 distinct paths, each a valid junction path
+    let polkadot_paths: Vec<String> = match v.get("polkadotPaths") {
+        None => vec![],
+        Some(_) => list(v, "polkadotPaths")?
+            .iter()
+            .map(|p| p.as_str().filter(|s| super::substrate::parse_path(s).is_ok_and(|j| !j.is_empty())).map(str::to_owned))
+            .collect::<Option<_>>()?,
+    };
+    if polkadot_paths.len() > MAX_POLKADOT_PATHS || polkadot_paths.iter().enumerate().any(|(i, p)| polkadot_paths.get(..i).is_some_and(|b| b.contains(p))) {
+        return None;
+    }
     Some(Manifest {
         entries: list(v, "entries")?.iter().map(entry_of).collect::<Option<_>>()?,
         natives,
+        polkadot_paths,
         kem: list(v, "kem")?.iter().map(|k| Some(KemEntry { ua: ua_of(k.get("ua")?)?, version: k.get("version")?.as_u64()? })).collect::<Option<_>>()?,
         imports: list(v, "imports")?.iter().map(|i| Some(ImportEntry { network: network_of(i)?, n: u32::try_from(i.get("n")?.as_u64()?).ok()? })).collect::<Option<_>>()?,
         // absent in a manifest written before T20c: none
@@ -465,7 +506,7 @@ impl Wallet {
             return Err(Error::Argument);
         }
         let (secret, public_key) = self.store.key(KeyId::Import(n), |_| Err(Error::Argument))?;
-        Ok(NativeKey { network, index: n, coin_type: None, public_key, secret })
+        Ok(NativeKey { network, index: n, coin_type: None, change: 0, public_key, secret })
     }
 
     /// The UA of imported key `n` of `network` (T20c, owner 2026-11-08, the CLI-SGN-29 Change): `kind` must be the derived kind of
@@ -478,7 +519,7 @@ impl Wallet {
     /// link container (`Argument`). `WalletLocked` while locked.
     pub fn imported_ua_key(&self, network: Network, n: u32, kind: u16) -> Result<UaKey> {
         let source = ImportEntry { network, n };
-        if kind != network.scheme_kind() || !self.store.manifest().imports.contains(&source) {
+        if Some(kind) != network.scheme_kind() || !self.store.manifest().imports.contains(&source) {
             return Err(Error::Argument);
         }
         let (secret, _) = self.store.key(KeyId::Import(n), |_| Err(Error::Argument))?;
@@ -492,7 +533,8 @@ impl Wallet {
     /// once get two numbers): already held with the same bytes, a no-op; listed (a manifest vault opened first) and not held,
     /// installed; another network or other bytes under the same `n`: `Argument`. Returns `n`.
     fn import_at(&self, network: Network, n: Option<u32>, secret: &[u8]) -> Result<u32> {
-        if secret.len() != 32 {
+        // the native networks of NATIVE_NETWORKS have no import (ua-rs-native spec §4.1)
+        if secret.len() != 32 || network.scheme_kind().is_none() {
             return Err(Error::Argument);
         }
         let public = derive::native_public(network, secret)?;

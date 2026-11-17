@@ -50,6 +50,8 @@ TestCase {
     // Zether or PQZ call path and no "raw command refused" assertion of its own; ua-cxx's tests hold them.
     function test_no_decaps_no_raw_export_no_handle() {
         for (const n of ["decaps", "open", "openContainer", "kemKey", "exportPqzLeafRaw", "signDigestRaw", "signTypedAny",
+                         "signMessageRaw", "signNearTransaction", "signSuiTransaction", "signStellarTransaction",
+                         "signHederaTransaction", "bitcoinKey", "polkadotKey",
                          "registerKey", "releaseKey", "uaKey", "nativeKey", "fromMnemonic", "openVault", "reveal", "take",
                          "zetherKey", "pqzKey", "call", "openBalanceCache"])
             compare(UaWallet[n], undefined, n)
@@ -202,5 +204,31 @@ TestCase {
         compare(UaWallet.keyData(id), "")
         compare(UaWallet.lastError, "UAArgument", "a released id names nothing")
         compare(fixture.liveHandlesBalanced(), true)
+    }
+
+    // ua-rs-native T11b: the native networks' public data by id (the keys derived on the C++ side); no raw signing in QML
+    property var nativeRows: vectors.load("../native/native.json")
+    function test_native_addresses_witness_programs_ss58() {
+        let n = 0
+        for (const r of nativeRows.addresses) {
+            const id = r.network === "polkadot" ? fixture.polkadot(r.mnemonic, "")
+                : r.network.startsWith("bitcoin") ? fixture.bitcoin(r.mnemonic, r.network, r.coinType === null ? -1 : r.coinType, r.change, r.index)
+                : fixture.nativeOf(r.mnemonic, r.network, r.index)
+            compare(UaWallet.keyData(id), "0x" + r.publicKey, r.network)
+            compare(UaWallet.address(id), r.address, r.network)
+            if (r.witnessProgram)
+                compare(UaWallet.witnessProgram(id), "0x0" + r.witnessProgram.version + r.witnessProgram.program, r.network)
+            if (r.ss58)
+                for (const p in r.ss58) compare(UaWallet.ss58Address(id, Number(p)), r.ss58[p], "ss58 " + p)
+            fixture.release(id)
+            n++
+        }
+        compare(n, 114)
+        const dot = fixture.polkadot("pq_kat", "")
+        compare(UaWallet.ss58Address(dot, 46), "")
+        compare(UaWallet.lastError, "UAArgument")
+        compare(UaWallet.witnessProgram(dot), "")
+        compare(UaWallet.lastError, "UAArgument")
+        for (const n of ["witnessProgram", "ss58Address"]) compare(typeof UaWallet[n], "function", n)
     }
 }

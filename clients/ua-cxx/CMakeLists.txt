@@ -52,7 +52,7 @@ if(BUILD_TESTING)
   foreach(t load_refuses_wrong_abi_or_features secret_buffer_wiped_after_call handle_freed_once keys_json sign_json rs_signatures_json
                  kem_json seal_json backup_link_restore vault_json rs_vault_json custody seed_backup_sequence
                  error_strings_never_contain_an_input aead_hkdf_hmac zether_facade pqz_facade zether_words pqz_words pqz_key_versions
-                 imported_ua_key)
+                 imported_ua_key native_json)
     add_test(NAME wallet_${t} COMMAND wallet_test ${t})
   endforeach()
 endif()

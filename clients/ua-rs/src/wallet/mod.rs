@@ -52,6 +52,7 @@ pub mod sign;
 mod sign;
 mod signer;
 mod store;
+mod substrate;
 mod tx;
 mod uasig;
 mod vault;
@@ -79,7 +80,7 @@ pub use seal::{
     seal, seal_container, AcceptedJson, ContainerExpect, ContainerExpectJson, ContainerSigner, ExpectedSender, LinkSession,
     MembersJson, Recipient, RecipientId, Sealed, SealedContainer, LINK_SKEW, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
 };
-pub use sign::{sign_digest_by, sign_key_proof_by};
+pub use sign::{sign_digest_by, sign_key_proof_by, sign_message_by, MAX_RAW_MESSAGE};
 #[cfg(feature = "vectors")]
 pub use signer::TestExternalKey;
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
@@ -90,6 +91,8 @@ pub use webauthn::{webauthn_assertion, webauthn_challenge};
 pub use zeroize::ZeroizeOnDrop;
 #[cfg(feature = "vectors")]
 pub use vectors::{vectors_chunks_released, vectors_pause_after_copy};
+#[cfg(feature = "vectors")]
+pub use sign::{vectors_fail_os_rng, vectors_one_shot_reads, vectors_taproot_sign, vectors_taproot_sign_check};
 
 use crate::UAError;
 use rand_core::{OsRng, RngCore};
@@ -206,7 +209,8 @@ impl From<UAError> for Error {
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-/// The networks of clientkeys `NETWORKS` (`seed.js`), their SLIP-44 paths.
+/// The networks of clientkeys `NETWORKS` (`seed.js`), their SLIP-44 paths, then those of `NATIVE_NETWORKS` (ua-rs-native spec
+/// §4.1: an app's native backend; no import, no imported UA, no key proof).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Network {
     Evm,
@@ -218,9 +222,18 @@ pub enum Network {
     Ton,
     Aptos,
     Solana,
+    /// Bitcoin BIP-84 P2WPKH, `m/84'/c'/0'/k/i` (`c` 0 or 1, `k` 0 receive or 1 change), ECDSA over the BIP-143 sighash.
+    BitcoinP2wpkh,
+    /// Bitcoin BIP-86 P2TR key path, `m/86'/c'/0'/k/i`, BIP-340 over the BIP-341 sighash with the tweaked key.
+    BitcoinP2tr,
+    /// NEAR, `m/44'/397'/i'` (SLIP-10 ed25519), the implicit account id; no coin-type override.
+    Near,
+    /// Polkadot sr25519 (`substrate-bip39`, the bare account; junction paths through `Wallet::polkadot_key`), SS58; index 0 and
+    /// no coin type only.
+    Polkadot,
 }
 
-const NETWORK_NAMES: [(Network, &str); 9] = [
+const NETWORK_NAMES: [(Network, &str); 13] = [
     (Network::Evm, "evm"),
     (Network::Cosmos, "cosmos"),
     (Network::HederaEcdsa, "hedera_ecdsa"),
@@ -230,9 +243,17 @@ const NETWORK_NAMES: [(Network, &str); 9] = [
     (Network::Ton, "ton"),
     (Network::Aptos, "aptos"),
     (Network::Solana, "solana"),
+    (Network::BitcoinP2wpkh, "bitcoin_p2wpkh"),
+    (Network::BitcoinP2tr, "bitcoin_p2tr"),
+    (Network::Near, "near"),
+    (Network::Polkadot, "polkadot"),
 ];
 
 impl Network {
+    /// Every network, in the C ABI's order (`SCAAS_UA_NETWORK_*`: clientkeys `NETWORKS`, then `NATIVE_NETWORKS`).
+    pub fn all() -> [Network; 13] {
+        NETWORK_NAMES.map(|(n, _)| n)
+    }
     /// The clientkeys name (`evm`, `hedera_ecdsa`, …).
     pub fn from_name(name: &str) -> Option<Network> {
         NETWORK_NAMES.iter().find(|(_, n)| *n == name).map(|(net, _)| *net)
@@ -240,20 +261,46 @@ impl Network {
     pub fn name(self) -> &'static str {
         NETWORK_NAMES.iter().find(|(net, _)| *net == self).map_or("", |(_, n)| n)
     }
-    fn ed25519(self) -> bool {
-        !matches!(self, Network::Evm | Network::Cosmos | Network::HederaEcdsa)
-    }
-    /// The derived UA kind of this network's scheme, the one kind an imported key of it may take (T20c, owner 2026-11-08):
-    /// `ed25519` (`0x0102`) or `secp256k1` (`0x0108`).
-    pub fn scheme_kind(self) -> u16 {
-        if self.ed25519() {
-            0x0102
-        } else {
-            0x0108
+    /// The signature scheme of this network's keys (ua-rs-native spec §4.1): every `match` on it names each scheme, so a new
+    /// one is a compile error where it is not handled, never a silent default.
+    pub fn scheme(self) -> NativeScheme {
+        match self {
+            Network::Evm | Network::Cosmos | Network::HederaEcdsa | Network::BitcoinP2wpkh => NativeScheme::Secp256k1Ecdsa,
+            Network::BitcoinP2tr => NativeScheme::Bip340Taproot,
+            Network::Polkadot => NativeScheme::Sr25519,
+            Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana | Network::Near => {
+                NativeScheme::Ed25519
+            }
         }
     }
-    /// The SLIP-44 path of key `i`; element 1 is the coin type.
-    fn path(self, i: u32) -> Vec<u32> {
+    /// The derived UA kind of this network's scheme, the one kind an imported key of it may take (T20c, owner 2026-11-08):
+    /// `ed25519` (`0x0102`) or `secp256k1` (`0x0108`) for the nine networks of clientkeys `NETWORKS`; `None` for the native
+    /// networks of `NATIVE_NETWORKS`, which have no import and no imported UA (ua-rs-native spec §4.1).
+    pub fn scheme_kind(self) -> Option<u16> {
+        match self {
+            Network::Evm | Network::Cosmos | Network::HederaEcdsa => Some(0x0108),
+            Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana => Some(0x0102),
+            Network::BitcoinP2wpkh | Network::BitcoinP2tr | Network::Near | Network::Polkadot => None,
+        }
+    }
+    pub(crate) fn bitcoin(self) -> bool {
+        matches!(self, Network::BitcoinP2wpkh | Network::BitcoinP2tr)
+    }
+    /// The coin-type override this network takes (spec §4.5): NEAR none (it would alias `stellar` / `ton`); the nine any below
+    /// 2^31 (checked at derivation).
+    fn coin_ok(self, coin_type: Option<u32>) -> Result<()> {
+        match (self, coin_type) {
+            (Network::Near | Network::Polkadot, Some(_)) => Err(Error::Argument),
+            (Network::BitcoinP2wpkh | Network::BitcoinP2tr, Some(c)) if c > 1 => Err(Error::Argument),
+            _ => Ok(()),
+        }
+    }
+    /// A network with a SCaaS family, whose key may sign the key proof (the nine; ua-rs-native spec §4.2).
+    pub(crate) fn key_proof(self) -> bool {
+        self.scheme_kind().is_some()
+    }
+    /// The SLIP-44 path of key `i` (Bitcoin: on chain `change`); element 1 is the coin type.
+    fn path(self, i: u32, change: u32) -> Vec<u32> {
         const H: u32 = derive::HARDENED;
         match self {
             Network::Evm => vec![44 | H, 60 | H, H, 0, i],
@@ -265,8 +312,26 @@ impl Network {
             Network::Ton => vec![44 | H, 607 | H, i | H],
             Network::Aptos => vec![44 | H, 637 | H, i | H, H, H],
             Network::Solana => vec![44 | H, 501 | H, i | H, H],
+            Network::BitcoinP2wpkh => vec![84 | H, H, H, change, i],
+            Network::BitcoinP2tr => vec![86 | H, H, H, change, i],
+            Network::Near => vec![44 | H, 397 | H, i | H],
+            // Polkadot keys come from the substrate-bip39 mini-secret, not from a BIP-32 / SLIP-10 path
+            Network::Polkadot => vec![],
         }
     }
+}
+
+/// The signature scheme of a native network's keys (ua-rs-native spec §4.1, §4.2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NativeScheme {
+    /// ECDSA secp256k1, RFC 6979 (no extra data), low-s, `r ‖ s ‖ v`.
+    Secp256k1Ecdsa,
+    /// BIP-340 over the BIP-341 key-path tweaked key (BIP-86).
+    Bip340Taproot,
+    /// Ed25519 (RFC 8032).
+    Ed25519,
+    /// sr25519 (schnorrkel, context `substrate`).
+    Sr25519,
 }
 
 /// What the store keeps one slot for.
@@ -274,6 +339,10 @@ impl Network {
 pub(crate) enum KeyId {
     Ua(u16, u32, u32),
     Native(Network, u32, Option<u32>),
+    /// A Bitcoin key of the change chain: network, coin type, index (the receive chain is `Native`; ua-rs-native spec §4.3).
+    BitcoinChange(Network, Option<u32>, u32),
+    /// A Polkadot junction path's key: the SHA-256 of the path (one canonical spelling per key; the bare key is `Native`).
+    Polkadot([u8; 32]),
     /// A UA's KEM key: its UA and the KEM record's version (spec §6.1).
     Kem([u8; 32], u64),
     /// Imported key `n` (`native-import:<network>:<n>`, spec §8.3).
@@ -516,9 +585,10 @@ impl Wallet {
         Wallet::from_entropy(&entropy, bip39_passphrase)
     }
 
+    /// The store from the entropy, its BIP-39 seed and its `substrate-bip39` mini-secret (the passphrase as given; spec §4.3).
     fn from_entropy(entropy: &[u8], bip39_passphrase: &str) -> Result<Wallet> {
         let w = Wallet { store: SecretStore::new() };
-        w.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?)?;
+        w.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?, &substrate::mini_secret(entropy, bip39_passphrase))?;
         Ok(w)
     }
 
@@ -535,7 +605,7 @@ impl Wallet {
     /// Reopens a locked wallet from its entropy at the raised generation; earlier handles stay revoked. `Argument` if open.
     /// [`Wallet::unlock`] calls it.
     pub(crate) fn unlock_entropy(&self, entropy: &[u8], bip39_passphrase: &str) -> Result<()> {
-        self.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?)
+        self.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?, &substrate::mini_secret(entropy, bip39_passphrase))
     }
 
     /// The UA key `kind` of `account` / `index` (spec §4): `Argument` for a value ≥ 2^31, index ≠ 0 on an EIP-2333 kind
@@ -556,13 +626,71 @@ impl Wallet {
     /// Key `index` of `network` (clientkeys `deriveKey`), `coin_type` in place of the network's (Pi Network: `Stellar`,
     /// 314159); `Argument` for a value ≥ 2^31.
     pub fn native_key(&self, network: Network, index: u32, coin_type: Option<u32>) -> Result<NativeKey> {
-        let (secret, public_key) = self.store.key(KeyId::Native(network, index, coin_type), |seed| {
-            let s = derive::native_secret(seed, network, index, coin_type)?;
+        self.derive_native(network, coin_type, 0, index)
+    }
+
+    /// Bitcoin key `index` of chain `change` (0 receive, 1 change; ua-rs-native spec §5.1): `change` 0 is
+    /// [`Wallet::native_key`]'s slot. `Argument` for another network, `change` outside {0, 1} or a coin type other than 0 / 1.
+    pub fn bitcoin_key(&self, network: Network, coin_type: Option<u32>, change: u32, index: u32) -> Result<NativeKey> {
+        if !network.bitcoin() || change > 1 {
+            return Err(Error::Argument);
+        }
+        self.derive_native(network, coin_type, change, index)
+    }
+
+    fn derive_native(&self, network: Network, coin_type: Option<u32>, change: u32, index: u32) -> Result<NativeKey> {
+        network.coin_ok(coin_type)?;
+        if network == Network::Polkadot {
+            if index != 0 {
+                return Err(Error::Argument);
+            }
+            return self.polkadot_bare();
+        }
+        let id = if change == 0 { KeyId::Native(network, index, coin_type) } else { KeyId::BitcoinChange(network, coin_type, index) };
+        let (secret, public_key) = self.store.key(id, |seed| {
+            let s = derive::native_secret(seed, network, index, coin_type, change)?;
             let public = derive::native_public(network, &s)?;
             Ok((s, public))
         })?;
-        self.store.note(|m| m.add_native(network, coin_type, index));
-        Ok(NativeKey { network, index, coin_type, public_key, secret })
+        self.store.note(|m| m.add_native(network, coin_type, index, change));
+        Ok(NativeKey { network, index, coin_type, change, public_key, secret })
+    }
+
+    /// The Polkadot key of the junction path `path` (spec §7.3; `sp-core` / polkadot.js): `""` is the bare account
+    /// ([`Wallet::native_key`]'s slot), `//x` a hard junction, `/x` a soft one (a soft step draws a fresh nonce half from the OS
+    /// RNG: its public key and address are reproducible, its signatures not). `Argument` for a path outside the grammar (a
+    /// `///` password part, an empty junction, a byte outside `0x21`–`0x7e`, a junction over 64 bytes, `0x` or `+`, a number
+    /// outside `u64` or with a leading zero, over 16 junctions or 512 bytes), or a 65th path; the path is noted in the manifest's
+    /// `polkadotPaths` (public data).
+    pub fn polkadot_key(&self, path: &str) -> Result<NativeKey> {
+        let junctions = substrate::parse_path(path)?;
+        if junctions.is_empty() {
+            return self.polkadot_bare();
+        }
+        let listed = self.store.manifest().polkadot_paths;
+        if listed.len() >= manifest::MAX_POLKADOT_PATHS && !listed.iter().any(|p| p == path) {
+            return Err(Error::Argument);
+        }
+        use sha2::Digest as _;
+        let id = KeyId::Polkadot(sha2::Sha256::digest(path.as_bytes()).into());
+        let (secret, public_key) = self.store.key_from_mini(id, |mini| {
+            let sk = substrate::derive(&substrate::bare(mini)?[..], &junctions, sign::os_aux)?;
+            let public = substrate::public(&sk[..])?;
+            Ok((Zeroizing::new(sk.to_vec()), public))
+        })?;
+        self.store.note(|m| m.add_polkadot_path(path));
+        Ok(NativeKey { network: Network::Polkadot, index: 0, coin_type: None, change: 0, public_key, secret })
+    }
+
+    /// The bare Polkadot account (spec §7.2): the mini-secret's Ed25519-mode expansion, a 64-byte schnorrkel secret in the arena.
+    fn polkadot_bare(&self) -> Result<NativeKey> {
+        let (secret, public_key) = self.store.key_from_mini(KeyId::Native(Network::Polkadot, 0, None), |mini| {
+            let sk = substrate::bare(mini)?;
+            let public = substrate::public(&sk[..])?;
+            Ok((Zeroizing::new(sk.to_vec()), public))
+        })?;
+        self.store.note(|m| m.add_native(Network::Polkadot, None, 0, 0));
+        Ok(NativeKey { network: Network::Polkadot, index: 0, coin_type: None, change: 0, public_key, secret })
     }
 }
 
@@ -709,6 +837,8 @@ pub struct NativeKey {
     network: Network,
     index: u32,
     coin_type: Option<u32>,
+    /// Bitcoin's chain: 0 receive, 1 change; 0 elsewhere.
+    change: u32,
     public_key: Vec<u8>,
     secret: Handle,
 }
@@ -723,7 +853,11 @@ impl NativeKey {
     pub fn coin_type(&self) -> Option<u32> {
         self.coin_type
     }
-    /// The compressed secp256k1 key or the ed25519 key.
+    /// Bitcoin's chain of this key: 0 receive, 1 change (0 on every other network).
+    pub fn change(&self) -> u32 {
+        self.change
+    }
+    /// The compressed secp256k1 key (P2TR: the internal key `P`) or the ed25519 key.
     pub fn public_key(&self) -> Vec<u8> {
         self.public_key.clone()
     }
@@ -752,6 +886,10 @@ mod vectors {
         }
         pub fn vectors_seed(&self) -> Result<Zeroizing<[u8; 64]>> {
             self.store.seed()
+        }
+        /// The `substrate-bip39` mini-secret the store computed at open (spec §7.1).
+        pub fn vectors_substrate_mini(&self) -> Result<Zeroizing<[u8; 32]>> {
+            self.store.with_arena(|a| Ok(Zeroizing::new(a.mini()?.try_into().map_err(|_| Error::Argument)?)))
         }
         /// Bytes written to the store's arena.
         pub fn vectors_arena_used(&self) -> Result<usize> {

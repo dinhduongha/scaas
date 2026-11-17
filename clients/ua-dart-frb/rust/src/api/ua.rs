@@ -41,7 +41,8 @@ fn arg() -> UAError {
 fn k(kind: i64) -> R<u16> {
     u16::try_from(kind).map_err(|_| UAError { code: "UAKindUnknown".into(), reason: String::new() })
 }
-fn n<T: TryFrom<i64>>(v: i64) -> R<T> {
+/// A Dart `int` into its Rust type, `UAArgument` outside it (frb's own u16 / u32 encoding would wrap, T13 C4).
+pub(crate) fn n<T: TryFrom<i64>>(v: i64) -> R<T> {
     T::try_from(v).map_err(|_| arg())
 }
 

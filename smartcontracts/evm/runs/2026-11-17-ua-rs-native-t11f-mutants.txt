@@ -1,0 +1,3 @@
+killed   | M1 network order swapped (near / polkadot) | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 2 failed: Scaas.Ua.Tests.WalletTests.NativeDeterministicRowsAndRefusals
+killed   | M2 the load check of FeatureNativeNetworks removed | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.LoadRefusesWrongAbiOrFeatures
+2 mutants, 2 killed, 0 survived, 0 not loaded

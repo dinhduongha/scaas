@@ -84,7 +84,7 @@ fn keys_json_imported_rows() {
         let (w, n) = imported(r);
         let key = w.imported_ua_key(net(r), n, num(&r["kind"]) as u16).unwrap();
         assert_eq!(key.kind(), num(&r["kind"]) as u16, "{}", r["network"]);
-        assert_eq!(key.kind(), net(r).scheme_kind());
+        assert_eq!(Some(key.kind()), net(r).scheme_kind());
         assert_eq!(key.key_data(), h(&r["keyData"]), "{}", r["network"]);
         assert_eq!(key.ua(), Some(b32(&r["ua"])), "{}", r["network"]);
         assert_eq!(scaas_ua::derive_ua(key.kind(), &key.key_data(), false).unwrap(), b32(&r["ua"]));

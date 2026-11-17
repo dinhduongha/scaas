@@ -776,4 +776,123 @@ void main() {
     expect(await code(() => k.call(cmd: 'proveRegister', requestJson: jsonEncode(req))), 'UAKeyRevoked');
     expect(await code(() => wl.exportPqzLeafRaw(account: 0, index: 0)), 'UAWalletLocked');
   });
+
+  // ua-rs-native T11c: smartcontracts/vectors/native/native.json through this binding
+  test('native.json: networks, addresses, witness programs, SS58, polkadotPaths', () async {
+    expect(nativeNetworks(), (nat['networks'] as List).cast<String>());
+    var n = 0;
+    for (final r in nat['addresses'] as List) {
+      final k = await nkey(r);
+      expect(hx(k.keyData()), '0x${r['publicKey']}', reason: r['network']);
+      expect(k.address(), r['address'], reason: r['network']);
+      if (r['witnessProgram'] != null) {
+        expect(hx(k.witnessProgram()), '0x0${r['witnessProgram']['version']}${r['witnessProgram']['program']}');
+      }
+      if (r['ss58'] != null) {
+        for (final e in (r['ss58'] as Map).entries) {
+          expect(k.ss58Address(prefix: int.parse(e.key)), e.value);
+        }
+      }
+      n++;
+    }
+    expect(n, 114);
+    for (final r in nat['polkadotPaths'] as List) {
+      final k = await (await nw(r['mnemonic'])).polkadotKey(path: r['path']);
+      expect(hx(k.keyData()), '0x${r['publicKey']}', reason: r['path']);
+    }
+  });
+
+  test('native.json: deterministic rows, refusals, a UA key refused', () async {
+    var n = 0;
+    for (final sec in ['signatures', 'envelopes']) {
+      for (final r in nat[sec] as List) {
+        if (r['mode'] != 'deterministic') continue;
+        expect(hx(await nsign(await nkey(r), r['call'], r)), '0x${r['signature']}', reason: r['id']);
+        n++;
+      }
+    }
+    expect(n, 45, reason: '3 P2WPKH, 29 ed25519 messages (T13 C1: one starts 0x05), a NEAR digest, 12 envelopes');
+    n = 0;
+    for (final r in nat['refusals'] as List) {
+      final call = r['call'] as String;
+      if (!['polkadot_key', 'bitcoin_key', 'ss58', 'sign_message'].contains(call) && !call.endsWith('_transaction')) continue;
+      Future<String?> run(Map a) => code(() async {
+            if (call == 'polkadot_key') {
+              await (await nw(a['mnemonic'])).polkadotKey(path: a['path']);
+            } else if (call == 'bitcoin_key') {
+              await (await nw(a['mnemonic'])).bitcoinKey(networkName: a['network'], coinType: null, change: a['change'], index: 0);
+            } else if (call == 'ss58') {
+              (await (await nw(a['mnemonic'])).polkadotKey(path: '')).ss58Address(prefix: a['prefix']);
+            } else {
+              await nsign(await nkey(a), call, a);
+            }
+          });
+      expect(await run(r['args']), 'UAArgument', reason: r['id']);
+      expect(await run(r['accepted']), null, reason: 'neighbour of ${r['id']}');
+      n++;
+    }
+    expect(n, greaterThanOrEqualTo(40));
+    final ua = await (await nw('pq_kat')).uaKey(kind: 0x0102, account: 0, index: 0);
+    expect(await code(() => ua.signMessageRaw(message: Uint8List.fromList([1]))), 'UARawDigestRefused');
+    expect(await code(() => ua.signNearTransaction(txBorsh: Uint8List.fromList([1]))), 'UARawDigestRefused');
+  });
+
+  // T13 C4: frb wrote a u16 / u32 with putUint16 / putUint32, which wrap (65536 + 42 -> 42); the API takes an int and the
+  // bridge refuses one outside its Rust type
+  test('integers outside their Rust type are UAArgument, not wrapped', () async {
+    final w = await nw('pq_kat');
+    final dot = await w.polkadotKey(path: '');
+    expect(await code(() async => dot.ss58Address(prefix: 42)), null);
+    for (final p in [65536, 65536 + 42, -1]) {
+      expect(await code(() async => dot.ss58Address(prefix: p)), 'UAArgument', reason: '$p');
+    }
+    expect(await code(() => w.bitcoinKey(networkName: 'bitcoin_p2wpkh', coinType: null, change: 1, index: 0)), null);
+    for (final (c, i) in [(4294967297, 0), (0, 4294967296), (-1, 0)]) {
+      expect(await code(() => w.bitcoinKey(networkName: 'bitcoin_p2wpkh', coinType: null, change: c, index: i)), 'UAArgument', reason: '$c $i');
+    }
+    expect(await code(() => w.nativeKey(networkName: 'solana', index: 0, coinType: -1)), 'UAArgument');
+    expect(await code(() => w.nativeKey(networkName: 'solana', index: 4294967296, coinType: null)), 'UAArgument');
+    expect(await code(() => w.uaKey(kind: 0x0102, account: 0, index: 0)), null);
+    expect(await code(() => w.uaKey(kind: 65536 + 0x0102, account: 0, index: 0)), 'UAArgument');
+    expect(await code(() => w.uaKey(kind: 0x0102, account: 4294967296, index: 0)), 'UAArgument');
+  });
+}
+
+final nat = jsonDecode(File('$vectors/../native/native.json').readAsStringSync()) as Map<String, dynamic>;
+final _nws = <String, UaWallet>{};
+Future<UaWallet> nw(String id) async {
+  final m = (nat['mnemonics'] as List).firstWhere((x) => x['id'] == id);
+  return _nws[id] ??= await walletFromMnemonic(words: secs(m['words'] as String), bip39Passphrase: secs(m['passphrase'] as String));
+}
+
+Future<UaKey> nkey(Map r) async {
+  final wl = await nw(r['mnemonic']);
+  final net = r['network'] as String;
+  if (net == 'polkadot') return wl.polkadotKey(path: (r['path'] ?? '') as String);
+  if (net.startsWith('bitcoin') && r['change'] != null) {
+    return wl.bitcoinKey(networkName: net, coinType: r['coinType'], change: r['change'], index: r['index']);
+  }
+  return wl.nativeKey(networkName: net, index: r['index'], coinType: r['coinType']);
+}
+
+Uint8List nmsg(Map r) => r['messageRepeat'] != null
+    ? Uint8List.fromList(List.filled(r['messageRepeat']['length'] as int, int.parse(r['messageRepeat']['byte'] as String, radix: 16)))
+    : bytes(r['message'] as String);
+
+Future<Uint8List> nsign(UaKey k, String call, Map r) {
+  final m = nmsg(r);
+  switch (call) {
+    case 'sign_digest':
+      return k.signDigestRaw(digest: m);
+    case 'sign_message':
+      return k.signMessageRaw(message: m);
+    case 'sign_near_transaction':
+      return k.signNearTransaction(txBorsh: m);
+    case 'sign_sui_transaction':
+      return k.signSuiTransaction(txBcs: m);
+    case 'sign_stellar_transaction':
+      return k.signStellarTransaction(networkId: bytes(r['networkId'] as String), txXdr: m);
+    default:
+      return k.signHederaTransaction(bodyBytes: m);
+  }
 }

@@ -1,0 +1,10 @@
+killed   | M1 the BIP-39 seed in place of the entropy | clients/ua-rs/src/wallet/mod.rs | rc=101 | 1 failed: native_json_sr25519_fixed_rows_byte_equal_one_read_each
+killed   | M2 NFKD the passphrase | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 3 failed: native_json_polkadot_bare_addresses_and_ss58
+killed   | M3 ExpansionMode::Uniform | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 1 failed: native_json_sr25519_fixed_rows_byte_equal_one_read_each
+killed   | M4 context substrat | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 1 failed: native_json_sr25519_fixed_rows_byte_equal_one_read_each
+killed   | M5 SS58 checksum over pk only | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 2 failed: native_json_polkadot_bare_addresses_and_ss58
+killed   | M6 prefix 64 in one byte | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 1 failed: native_json_polkadot_bare_addresses_and_ss58
+killed   | M7 self-verify removed | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 1 failed: sr25519_self_verify_refuses_a_wrong_public_key_beside_the_right_one
+killed   | M8 OsRng's infallible fill_bytes in place of os_aux() | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: a_failing_os_rng_is_error_rng_never_a_panic
+killed   | M9 the one-shot RNG answering a second read | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 1 failed: wallet::substrate::tests::one_shot_yields_once
+9 mutants, 9 killed, 0 survived, 0 not loaded

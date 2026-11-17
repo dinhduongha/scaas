@@ -255,6 +255,9 @@ def seeds():
     yield "zether_cmd", zether_seeds()
     yield "pqz_cmd", pqz_seeds()
     yield "json_calls", json_calls_seeds()
+    # ua-rs-native T8b: the junction paths of native.json
+    with open(os.path.join(HERE, "../../../smartcontracts/vectors/native/native.json"), encoding="utf-8") as f:
+        yield "polkadot_path", [r["path"].encode() for r in json.load(f)["polkadotPaths"] if r["mnemonic"] == "pq_kat"]
 
 
 def nest(n):
@@ -302,6 +305,8 @@ def regress():
         "pqz_cmd/box-over-depth-2.bin": bytes([QBOX]) + over({"iv": "AAAAAAAAAAAAAAAA", "ct": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}, 1),
         # T21 L48: each JSON call one level past its depth cap, behind its index byte
         **{f"json_calls/{n}-over-depth-{d + 1}.bin": bytes([i]) + over({}, d) for i, (n, d) in enumerate(JCALLS)},
+        # ua-rs-native T8b: a junction path of 16 junctions, one byte past the 512-byte cap
+        "polkadot_path/over-513-bytes.txt": ("//" + "x" * 30).encode() * 15 + ("//" + "x" * 31).encode(),
     }
 
 

@@ -208,6 +208,45 @@ int main(void) {
     scaas_ua_zether_key_free(NULL);
     scaas_ua_pqz_key_free(NULL);
 
+    // ua-rs-native T10: one Polkadot key (the subkey answer of the development phrase, its SS58 and a raw message), a NEAR envelope
+    // call, and a UA key refused on the raw-message call
+    {
+        static const char *dev = "bottom drive obey lake curtain smoke basket hold race lonely fit walk";
+        ScaasUaWallet *dw = NULL;
+        ScaasUaKey *dot = NULL, *ua = NULL;
+        CHECK(scaas_ua_features() & SCAAS_UA_FEATURE_NATIVE_NETWORKS);
+        CHECK(scaas_ua_wallet_from_mnemonic(dev, "", &dw) == SCAAS_UA_OK);
+        CHECK(scaas_ua_wallet_polkadot_key(dw, "", &dot) == SCAAS_UA_OK);
+        uint8_t pk[32], want_pk[32];
+        size_t pk_len = sizeof pk;
+        hex("0x46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a", want_pk, 32);
+        CHECK(scaas_ua_key_data(dot, pk, &pk_len) == SCAAS_UA_OK && pk_len == 32 && memcmp(pk, want_pk, 32) == 0);
+        char addr[64];
+        size_t addr_len = sizeof addr;
+        CHECK(scaas_ua_key_ss58_address(dot, 42, addr, &addr_len) == SCAAS_UA_OK);
+        CHECK(strcmp(addr, "5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV") == 0);
+        uint8_t msg[3] = {1, 2, 3}, s[64];
+        size_t s_len = sizeof s;
+        CHECK(scaas_ua_sign_message_raw(dot, msg, sizeof msg, s, &s_len) == SCAAS_UA_OK && s_len == 64);
+        // a Substrate call of pallet 5 (Balances) signs: no first-byte rule on a native message (T13 C1)
+        uint8_t balances[3] = {0x05, 0x00, 0x00};
+        s_len = sizeof s;
+        CHECK(scaas_ua_sign_message_raw(dot, balances, sizeof balances, s, &s_len) == SCAAS_UA_OK && s_len == 64);
+        ScaasUaKey *near = NULL;
+        CHECK(scaas_ua_wallet_native_key(dw, SCAAS_UA_NETWORK_NEAR, 0, SCAAS_UA_COIN_DEFAULT, &near) == SCAAS_UA_OK);
+        s_len = sizeof s;
+        CHECK(scaas_ua_sign_near_transaction(near, msg, sizeof msg, s, &s_len) == SCAAS_UA_OK && s_len == 64);
+        s_len = sizeof s;
+        CHECK(scaas_ua_sign_near_transaction(dot, msg, sizeof msg, s, &s_len) == SCAAS_UA_ERR_ARGUMENT);
+        CHECK(scaas_ua_wallet_ua_key(dw, 0x0102, 0, 0, &ua) == SCAAS_UA_OK);
+        s_len = sizeof s;
+        CHECK(scaas_ua_sign_message_raw(ua, msg, sizeof msg, s, &s_len) == SCAAS_UA_ERR_RAW_DIGEST_REFUSED);
+        scaas_ua_key_free(ua);
+        scaas_ua_key_free(near);
+        scaas_ua_key_free(dot);
+        scaas_ua_wallet_free(dw);
+    }
+
     if (failures) return 1;
     puts("smoke ok");
     return 0;

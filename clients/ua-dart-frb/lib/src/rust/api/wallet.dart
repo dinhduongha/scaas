@@ -8,12 +8,12 @@ import 'dart:ffi' as ffi;
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'ua.dart';
 
-// These functions are ignored because they are not marked as `pub`: `a`, `alg`, `alloc`, `arg`, `container`, `get_mut`, `get`, `k32`, `key`, `native`, `network`, `new`, `out`, `read`, `read`, `restore`, `signer`, `text`, `ua`, `unlock`, `with`, `with`
+// These functions are ignored because they are not marked as `pub`: `a`, `alg`, `alloc`, `arg`, `container`, `get_mut`, `get`, `k32`, `key`, `native`, `network`, `new`, `out`, `raw`, `read`, `read`, `restore`, `signer`, `text`, `ua`, `unlock`, `with`, `with`
 // These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Block`, `KeyInner`, `Live`, `Opening`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`, `drop`, `from`
 
 /// A new secret of `len` zero bytes (`UAArgument` above 16 MiB); Dart's `SecretBytes.take` fills it.
-SecretBytes secretAlloc({required int len}) =>
+SecretBytes secretAlloc({required PlatformInt64 len}) =>
     ScaasUa.instance.api.crateApiWalletSecretAlloc(len: len);
 
 int abiVersion() => ScaasUa.instance.api.crateApiWalletAbiVersion();
@@ -23,6 +23,10 @@ BigInt features() => ScaasUa.instance.api.crateApiWalletFeatures();
 
 /// Handles alive now (a test of "freed exactly once").
 PlatformInt64 liveHandles() => ScaasUa.instance.api.crateApiWalletLiveHandles();
+
+/// ua-rs-native: every network name in the C ABI's order (clientkeys `NETWORKS`, then `NATIVE_NETWORKS`).
+List<String> nativeNetworks() =>
+    ScaasUa.instance.api.crateApiWalletNativeNetworks();
 
 Future<(UaWallet, UaSeedBackup)> walletGenerate() =>
     ScaasUa.instance.api.crateApiWalletWalletGenerate();
@@ -257,7 +261,7 @@ Future<String> uasig({required String requestJson, required UaKeyList keys}) =>
 
 /// `alg` 1 = AES-256-GCM, 2 = AES-256-GCM-SIV; `pt` the plaintext.
 Future<Uint8List> aeadSeal({
-  required int algId,
+  required PlatformInt64 algId,
   required SecretBytes key32,
   required List<int> nonce12,
   required List<int> aad,
@@ -272,7 +276,7 @@ Future<Uint8List> aeadSeal({
 
 /// The plaintext of `data`.
 Future<SecretBytes> aeadOpen({
-  required int algId,
+  required PlatformInt64 algId,
   required SecretBytes key32,
   required List<int> nonce12,
   required List<int> aad,
@@ -290,7 +294,7 @@ Future<SecretBytes> hkdfSha256({
   required SecretBytes ikm,
   required List<int> salt,
   required List<int> info,
-  required int len,
+  required PlatformInt64 len,
 }) => ScaasUa.instance.api.crateApiWalletHkdfSha256(
   ikm: ikm,
   salt: salt,
@@ -345,8 +349,8 @@ Future<void> pqzCheckSet({required String deployedJson}) =>
 /// function, as [`key_kem_key`]: the Dart facade refuses a version outside u64 before frb's 64-bit encoding wraps it (T21 L54).
 Future<UaPqzKey> walletPqzKeyVersion({
   required UaWallet w,
-  required int account,
-  required int index,
+  required PlatformInt64 account,
+  required PlatformInt64 index,
   required BigInt version,
 }) => ScaasUa.instance.api.crateApiWalletWalletPqzKeyVersion(
   w: w,
@@ -358,8 +362,8 @@ Future<UaPqzKey> walletPqzKeyVersion({
 /// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4); a free function for the same reason.
 Future<SecretBytes> walletExportPqzLeafRawVersion({
   required UaWallet w,
-  required int account,
-  required int index,
+  required PlatformInt64 account,
+  required PlatformInt64 index,
   required BigInt version,
 }) => ScaasUa.instance.api.crateApiWalletWalletExportPqzLeafRawVersion(
   w: w,
@@ -447,12 +451,30 @@ abstract class UaKey implements RustOpaqueInterface {
   /// A native key only: `UARawDigestRefused` for a UA key.
   Future<Uint8List> signDigestRaw({required List<int> digest});
 
+  /// Hedera Ed25519: ed25519 over the body bytes.
+  Future<Uint8List> signHederaTransaction({required List<int> bodyBytes});
+
   Future<Uint8List> signKeyProof({required List<int> challenge});
 
   Future<Uint8List> signMember({
     required List<int> structureUa,
     required List<int> structureUaMsg,
   });
+
+  /// A native chain's message (1 to 131,072 bytes) on an ed25519 / sr25519 native key (ua-rs-native).
+  Future<Uint8List> signMessageRaw({required List<int> message});
+
+  /// NEAR: ed25519 over `sha256(tx_borsh)`.
+  Future<Uint8List> signNearTransaction({required List<int> txBorsh});
+
+  /// Stellar: ed25519 over `sha256(network_id ‖ 0x00000002 ‖ tx_xdr)`.
+  Future<Uint8List> signStellarTransaction({
+    required List<int> networkId,
+    required List<int> txXdr,
+  });
+
+  /// Sui: ed25519 over `blake2b-256(0x000000 ‖ tx_bcs)`.
+  Future<Uint8List> signSuiTransaction({required List<int> txBcs});
 
   /// The raw transaction.
   Future<Uint8List> signTransaction({required String txJson});
@@ -471,7 +493,13 @@ abstract class UaKey implements RustOpaqueInterface {
     required List<int> digest,
   });
 
+  /// A Polkadot key's SS58 address at `prefix`.
+  String ss58Address({required PlatformInt64 prefix});
+
   Uint8List uaId();
+
+  /// A Bitcoin key's witness program: the version byte, then the program.
+  Uint8List witnessProgram();
 }
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaKeyList>>
@@ -514,27 +542,38 @@ abstract class UaSeedBackup implements RustOpaqueInterface {
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>>
 abstract class UaWallet implements RustOpaqueInterface {
+  /// Bitcoin key `index` of chain `change` (0 receive, 1 change); `coin_type` null, 0 or 1 (ua-rs-native).
+  Future<UaKey> bitcoinKey({
+    required String networkName,
+    PlatformInt64? coinType,
+    required PlatformInt64 change,
+    required PlatformInt64 index,
+  });
+
   /// JSON `[{index, ua}]`.
   Future<String> discoverCandidates({
-    required int kind,
-    required int account,
-    required int gap,
+    required PlatformInt64 kind,
+    required PlatformInt64 account,
+    required PlatformInt64 gap,
   });
 
   /// The PQZ leaf `seed32`: the explicit export (spec §8.4).
   Future<SecretBytes> exportPqzLeafRaw({
-    required int account,
-    required int index,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   });
 
-  Future<UaKey> importedKey({required String networkName, required int n});
+  Future<UaKey> importedKey({
+    required String networkName,
+    required PlatformInt64 n,
+  });
 
   /// T20c (owner 2026-11-08): the UA of imported key `n`, `kind` the derived kind of its own scheme (0x0108 secp256k1, 0x0102
   /// ed25519), any other `UAArgument`; a UA key (`sign_ua` / `sign_member`), no KEM key, never a backup or link sender.
   Future<UaKey> importedUaKey({
     required String networkName,
-    required int n,
-    required int kind,
+    required PlatformInt64 n,
+    required PlatformInt64 kind,
   });
 
   Future<String> linkSeal({
@@ -552,22 +591,28 @@ abstract class UaWallet implements RustOpaqueInterface {
   /// `network_name` the clientkeys name (`evm`, `hedera_ecdsa`, ...); `coin_type` null = the network's own.
   Future<UaKey> nativeKey({
     required String networkName,
-    required int index,
-    int? coinType,
+    required PlatformInt64 index,
+    PlatformInt64? coinType,
   });
 
-  Future<UaPqzKey> pqzKey({required int account, required int index});
+  /// The Polkadot key of the junction path `path` ("" the bare account; ua-rs-native).
+  Future<UaKey> polkadotKey({required String path});
+
+  Future<UaPqzKey> pqzKey({
+    required PlatformInt64 account,
+    required PlatformInt64 index,
+  });
 
   Future<UaKey> uaKey({
-    required int kind,
-    required int account,
-    required int index,
+    required PlatformInt64 kind,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   });
 
   Future<UaZetherKey> zetherKey({
-    required int coin,
-    required int account,
-    required int keyUse,
+    required PlatformInt64 coin,
+    required PlatformInt64 account,
+    required PlatformInt64 keyUse,
   });
 }
 

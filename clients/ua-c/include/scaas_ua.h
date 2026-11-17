@@ -85,7 +85,14 @@
 #define SCAAS_UA_FEATURE_VECTORS (1 << 11)
 
 /**
- * The networks of `scaas_ua_wallet_native_key` (clientkeys `NETWORKS`).
+ * ua-rs-native (spec 2026-11-17-ua-rs-native §10.2): networks 9 to 12, `scaas_ua_sign_message_raw`, the Bitcoin and Polkadot key
+ * calls, the address / SS58 / witness-program calls and the envelope calls; set in every `wallet` build of this round. A binding
+ * refuses a v6 library without it at load.
+ */
+#define SCAAS_UA_FEATURE_NATIVE_NETWORKS (1 << 12)
+
+/**
+ * The networks of `scaas_ua_wallet_native_key` (clientkeys `NETWORKS`, then `NATIVE_NETWORKS`: 9 to 12, ua-rs-native).
  */
 #define SCAAS_UA_NETWORK_EVM 0
 
@@ -104,6 +111,14 @@
 #define SCAAS_UA_NETWORK_APTOS 7
 
 #define SCAAS_UA_NETWORK_SOLANA 8
+
+#define SCAAS_UA_NETWORK_BITCOIN_P2WPKH 9
+
+#define SCAAS_UA_NETWORK_BITCOIN_P2TR 10
+
+#define SCAAS_UA_NETWORK_NEAR 11
+
+#define SCAAS_UA_NETWORK_POLKADOT 12
 
 /**
  * `coin_type` of `scaas_ua_wallet_native_key`: the network's own SLIP-44 coin type (any other value replaces it: Pi Network is
@@ -1096,6 +1111,25 @@ ScaasUaStatus scaas_ua_wallet_native_key(const ScaasUaWallet *w,
                                          ScaasUaKey **out);
 
 /**
+ * Bitcoin key `index` of chain `change` (0 receive, 1 change) of `network` (SCAAS_UA_NETWORK_BITCOIN_P2WPKH or _P2TR),
+ * `coin_type` SCAAS_UA_COIN_DEFAULT, 0 or 1; anything else SCAAS_UA_ERR_ARGUMENT.
+ */
+ScaasUaStatus scaas_ua_wallet_bitcoin_key(const ScaasUaWallet *w,
+                                          uint32_t network,
+                                          uint32_t coin_type,
+                                          uint32_t change,
+                                          uint32_t index,
+                                          ScaasUaKey **out);
+
+/**
+ * The Polkadot key of the junction path `path` (NUL-terminated UTF-8; "" the bare account): its grammar's refusals and a 65th
+ * path are SCAAS_UA_ERR_ARGUMENT.
+ */
+ScaasUaStatus scaas_ua_wallet_polkadot_key(const ScaasUaWallet *w,
+                                           const char *path,
+                                           ScaasUaKey **out);
+
+/**
  * Imports a 32-byte key of `network` (a secp256k1 secret for evm, cosmos, hedera_ecdsa; an ed25519 seed for the others) as
  * `native-import:<network>:<n>`, listed in the manifest and the backup; its handle into `*out`. The caller zeroizes `secret`.
  */
@@ -1353,6 +1387,78 @@ ScaasUaStatus scaas_ua_sign_digest_raw(const ScaasUaKey *k,
                                        const uint8_t *digest32,
                                        uint8_t *sig,
                                        size_t *sig_len);
+
+/**
+ * A native key's signature of a raw message (1 to 131,072 bytes; ed25519 and sr25519 keys only; no SCaaS off-chain envelope:
+ * SCAAS_UA_ERR_ARGUMENT), by this call's own name; a UA key: SCAAS_UA_ERR_RAW_DIGEST_REFUSED.
+ */
+ScaasUaStatus scaas_ua_sign_message_raw(const ScaasUaKey *k,
+                                        const uint8_t *msg,
+                                        size_t msg_len,
+                                        uint8_t *sig,
+                                        size_t *sig_len);
+
+/**
+ * NEAR: ed25519 over `sha256(tx_borsh)`; a NEP-461 tagged payload (first u32, little-endian, >= 2^30): SCAAS_UA_ERR_ARGUMENT.
+ */
+ScaasUaStatus scaas_ua_sign_near_transaction(const ScaasUaKey *k,
+                                             const uint8_t *tx,
+                                             size_t tx_len,
+                                             uint8_t *sig,
+                                             size_t *sig_len);
+
+/**
+ * Sui: ed25519 over `blake2b-256(0x00 0x00 0x00 ‖ tx_bcs)`.
+ */
+ScaasUaStatus scaas_ua_sign_sui_transaction(const ScaasUaKey *k,
+                                            const uint8_t *tx,
+                                            size_t tx_len,
+                                            uint8_t *sig,
+                                            size_t *sig_len);
+
+/**
+ * Stellar: ed25519 over `sha256(network_id32 ‖ 0x00000002 ‖ tx_xdr)`.
+ */
+ScaasUaStatus scaas_ua_sign_stellar_transaction(const ScaasUaKey *k,
+                                                const uint8_t *network_id32,
+                                                const uint8_t *tx,
+                                                size_t tx_len,
+                                                uint8_t *sig,
+                                                size_t *sig_len);
+
+/**
+ * Hedera Ed25519: ed25519 over the transaction's `bodyBytes`.
+ */
+ScaasUaStatus scaas_ua_sign_hedera_transaction(const ScaasUaKey *k,
+                                               const uint8_t *tx,
+                                               size_t tx_len,
+                                               uint8_t *sig,
+                                               size_t *sig_len);
+
+/**
+ * A native key's address as its network prints it (NUL-terminated); a UA key or a network with no address (`ton`,
+ * `hedera_ed25519`): SCAAS_UA_ERR_ARGUMENT.
+ */
+ScaasUaStatus scaas_ua_key_address(const ScaasUaKey *k,
+                                   char *out,
+                                   size_t *out_len);
+
+/**
+ * A Polkadot key's SS58 address at `prefix` (0 to 16,383, not 46 / 47; NUL-terminated); any other key: SCAAS_UA_ERR_ARGUMENT.
+ */
+ScaasUaStatus scaas_ua_key_ss58_address(const ScaasUaKey *k,
+                                        uint16_t prefix,
+                                        char *out,
+                                        size_t *out_len);
+
+/**
+ * A Bitcoin key's witness program: `*version` 0 and `HASH160(pk)` (P2WPKH) or 1 and `x(Q)` (P2TR); any other key:
+ * SCAAS_UA_ERR_ARGUMENT.
+ */
+ScaasUaStatus scaas_ua_key_witness_program(const ScaasUaKey *k,
+                                           uint8_t *version,
+                                           uint8_t *out,
+                                           size_t *out_len);
 
 /**
  * The `UASig` builder as one JSON call: `request_json` (64 KiB, depth 6) names its signing keys by position in `keys[0..n_keys]`:

@@ -125,10 +125,11 @@ public class WalletTests : IDisposable
             UaLib.AbiVersionHook = v => v;
         }
         UaLib.Load();
-        const ulong good = UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqz | UaLib.FeaturePqzSetN2304Kmax4096;
+        // ua-rs-native (spec §10.2): a good build carries FeatureNativeNetworks; an older v6 library without it is refused
+        const ulong good = UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqz | UaLib.FeaturePqzSetN2304Kmax4096 | UaLib.FeatureNativeNetworks;
         UaLib.CheckBuild(6, good);
-        UaLib.CheckBuild(6, UaLib.FeatureWallet | UaLib.FeaturePq);
-        foreach (var (abi, f) in new (uint, ulong)[] { (5, good), (7, good), (6, good & ~UaLib.FeatureWallet), (6, good & ~UaLib.FeaturePq), (6, good | 1UL << 12), (6, good | UaLib.FeatureVectors),
+        UaLib.CheckBuild(6, UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeatureNativeNetworks);
+        foreach (var (abi, f) in new (uint, ulong)[] { (5, good), (7, good), (6, good & ~UaLib.FeatureWallet), (6, good & ~UaLib.FeaturePq), (6, good | 1UL << 13), (6, good & ~UaLib.FeatureNativeNetworks), (6, good | UaLib.FeatureVectors),
                      (6, good | UaLib.FeaturePqzSetN2048Kmax1024), (6, UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqz),
                      (6, UaLib.FeatureWallet | UaLib.FeaturePq | UaLib.FeaturePqzSetN2304Kmax4096) })
             Assert.Throws<LibraryMismatchException>(() => UaLib.CheckBuild(abi, f));
@@ -1002,5 +1003,93 @@ public class WalletTests : IDisposable
             Assert.Equal("UAArgument", Code(() => w.ImportedUAKey(net, 0, x.GetProperty("kind").GetUInt16())));
             Keep(w.ImportedUAKey(net, 0, r.GetProperty("kind").GetUInt16()));
         }
+    }
+
+    // --- ua-rs-native T11f: smartcontracts/vectors/native/native.json through this binding ---
+
+    static readonly JsonElement Nat = Load("smartcontracts/vectors/native/native.json");
+    static readonly Dictionary<string, JsonElement> NMn = Rows(Nat, "mnemonics").ToDictionary(m => S(m, "id"));
+    readonly Dictionary<string, Wallet> _nws = [];
+    Wallet NW(string mid) => _nws.TryGetValue(mid, out var w) ? w : _nws[mid] = Keep(Wallet.FromMnemonic(Utf8(S(NMn[mid], "words")), Utf8(S(NMn[mid], "passphrase"))));
+    static uint NetIdx(string n) => (uint)Array.IndexOf(UaLib.Networks, n);
+    static uint Coin(JsonElement r) => Has(r, "coinType") ? U(r, "coinType") : UaLib.CoinDefault;
+    WalletKey NKey(JsonElement r)
+    {
+        var (w, net) = (NW(S(r, "mnemonic")), S(r, "network"));
+        if (net == "polkadot") return Keep(w.PolkadotKey(r.TryGetProperty("path", out var p) ? p.GetString()! : ""));
+        if (net.StartsWith("bitcoin") && Has(r, "change")) return Keep(w.BitcoinKey(NetIdx(net), Coin(r), U(r, "change"), U(r, "index")));
+        return Keep(w.NativeKey(NetIdx(net), U(r, "index"), Coin(r)));
+    }
+    static byte[] NMsg(JsonElement r) => r.TryGetProperty("messageRepeat", out var m)
+        ? Enumerable.Repeat(Convert.ToByte(S(m, "byte"), 16), (int)U(m, "length")).ToArray() : B(S(r, "message"));
+    static byte[] NSign(WalletKey k, string call, JsonElement r) => call switch
+    {
+        "sign_digest" => k.SignDigestRaw(NMsg(r)),
+        "sign_message" => k.SignMessageRaw(NMsg(r)),
+        "sign_near_transaction" => k.SignNearTransaction(NMsg(r)),
+        "sign_sui_transaction" => k.SignSuiTransaction(NMsg(r)),
+        "sign_stellar_transaction" => k.SignStellarTransaction(B(S(r, "networkId")), NMsg(r)),
+        _ => k.SignHederaTransaction(NMsg(r)),
+    };
+
+    [Fact]
+    public void NativeNetworksAddressesAndPaths()
+    {
+        Assert.Equal(Rows(Nat, "networks").Select(n => n.GetString()!).ToArray(), UaLib.Networks);
+        Assert.NotEqual(0UL, UaLib.Features() & UaLib.FeatureNativeNetworks);
+        var n = 0;
+        foreach (var r in Rows(Nat, "addresses"))
+        {
+            var k = NKey(r);
+            Assert.Equal(S(r, "publicKey"), Convert.ToHexStringLower(k.KeyData()));
+            Assert.Equal(S(r, "address"), k.Address());
+            if (Has(r, "witnessProgram"))
+            {
+                var (v, p) = k.WitnessProgram();
+                Assert.Equal(U(r.GetProperty("witnessProgram"), "version"), (uint)v);
+                Assert.Equal(S(r.GetProperty("witnessProgram"), "program"), Convert.ToHexStringLower(p));
+            }
+            if (Has(r, "ss58"))
+                foreach (var p in r.GetProperty("ss58").EnumerateObject()) Assert.Equal(p.Value.GetString(), k.Ss58Address(ushort.Parse(p.Name)));
+            n++;
+        }
+        Assert.Equal(114, n);
+        foreach (var r in Rows(Nat, "polkadotPaths"))
+            Assert.Equal(S(r, "publicKey"), Convert.ToHexStringLower(Keep(NW(S(r, "mnemonic")).PolkadotKey(S(r, "path"))).KeyData()));
+    }
+
+    [Fact]
+    public void NativeDeterministicRowsAndRefusals()
+    {
+        var n = 0;
+        foreach (var sec in new[] { "signatures", "envelopes" })
+            foreach (var r in Rows(Nat, sec).Where(r => S(r, "mode") == "deterministic"))
+            {
+                Assert.Equal(S(r, "signature"), Convert.ToHexStringLower(NSign(NKey(r), S(r, "call"), r)));
+                n++;
+            }
+        Assert.Equal(45, n); // 3 P2WPKH, 29 ed25519 messages (T13 C1: one starts 0x05), a NEAR digest, 12 envelopes
+        n = 0;
+        foreach (var r in Rows(Nat, "refusals"))
+        {
+            var call = S(r, "call");
+            if (call is not ("polkadot_key" or "bitcoin_key" or "ss58" or "sign_message") && !call.EndsWith("_transaction")) continue;
+            string Run(JsonElement a) => Code(() =>
+            {
+                if (call == "polkadot_key") Keep(NW(S(a, "mnemonic")).PolkadotKey(S(a, "path")));
+                else if (call == "bitcoin_key") Keep(NW(S(a, "mnemonic")).BitcoinKey(NetIdx(S(a, "network")), UaLib.CoinDefault, U(a, "change"), 0));
+                else if (call == "ss58") Keep(NW(S(a, "mnemonic")).PolkadotKey("")).Ss58Address((ushort)U(a, "prefix"));
+                else NSign(NKey(a), call, a);
+            });
+            var bad = Run(r.GetProperty("args"));
+            // a 31-byte Stellar network id is refused by the binding's own size check (UAKeyData), before the library
+            Assert.Contains(bad, call == "sign_stellar_transaction" && S(r.GetProperty("args"), "networkId").Length != 64 ? new[] { "UAKeyData" } : new[] { "UAArgument" });
+            Assert.Equal("", Run(r.GetProperty("accepted")));
+            n++;
+        }
+        Assert.True(n >= 40, $"{n}");
+        var ua = Key(NW("pq_kat"), 0x0102);
+        Assert.Equal("UARawDigestRefused", Code(() => ua.SignMessageRaw([1])));
+        Assert.Equal("UARawDigestRefused", Code(() => ua.SignNearTransaction([1])));
     }
 }

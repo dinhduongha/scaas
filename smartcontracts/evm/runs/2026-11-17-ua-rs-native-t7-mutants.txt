@@ -1,0 +1,11 @@
+killed   | M1 untweaked key | clients/ua-rs/src/wallet/sign.rs | rc=101 | 3 failed: bip341_key_path_spending_null_merkle_root
+killed   | M2 no odd-y negation | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: native_json_p2tr_fixed_aux_rows_byte_equal
+killed   | M3 Merkle root of 32 zero bytes in the tweak | clients/ua-rs/src/wallet/derive.rs | rc=101 | 3 failed: bip341_key_path_spending_null_merkle_root
+killed   | M4 bech32 on v1 | clients/ua-rs/src/wallet/derive.rs | rc=101 | 1 failed: native_json_bitcoin_addresses_both_chains_and_coins
+killed   | M5 bech32m on v0 | clients/ua-rs/src/wallet/derive.rs | rc=101 | 1 failed: native_json_bitcoin_addresses_both_chains_and_coins
+killed   | M6 bc for coin 1 | clients/ua-rs/src/wallet/derive.rs | rc=101 | 1 failed: native_json_bitcoin_addresses_both_chains_and_coins
+killed   | M7 change ignored | clients/ua-rs/src/wallet/mod.rs | rc=101 | 2 failed: native_json_bitcoin_addresses_both_chains_and_coins
+killed   | M8 witness program of the internal key | clients/ua-rs/src/wallet/derive.rs | rc=101 | 2 failed: native_json_bitcoin_addresses_both_chains_and_coins
+killed   | M9 self-check removed | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: taproot_self_check_refuses_a_fault_beside_the_right_key
+killed   | M10 change written when 0 | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 3 failed: manifest_change_written_only_when_one
+10 mutants, 10 killed, 0 survived, 0 not loaded
