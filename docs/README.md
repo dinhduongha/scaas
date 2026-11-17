@@ -199,6 +199,8 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [signers-clientkeys.md](clients/signers-clientkeys.md) | Signers, key vault, what a wallet checks before signing |
 | [ua-libraries.md](clients/ua-libraries.md) | UA identity layer in Solidity, JS, Rust, Python, Go, C#; C, C++, QML and Dart bindings |
 | [app.md](clients/app.md) | Console and dApp |
+| [scaas-rpc.md](clients/scaas-rpc.md) | The shared network crate: endpoint lists, failover and strict-majority reads, sends to several nodes, the scaas-node client (SPECIFIED) |
+| [scaas-sdk.md](clients/scaas-sdk.md) | The one API apps call: several seeds in a vault v1 keystore, accounts, operations, confidential tokens, chat, generated bindings (SPECIFIED) |
 | [integration.md](integration.md) | Connecting any ERP or back office |
 | [integration-odoo-example.md](integration-odoo-example.md) | One worked ERP connector (example only) |
 

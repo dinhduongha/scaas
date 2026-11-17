@@ -871,7 +871,7 @@ refuse_shield_when_unserved = false                # opt-in
     only, no secret): `rpc_urls` (one or more, asked in order; one request's reads from one node at one block, the next node
     only when one does not answer within 10 s or answers an error that is not a revert,
     [ARCH-POS-15](../decisions.md#ARCH-POS-15) by failover; **every endpoint must be a node the verifier's operator trusts,
-    until the strict-majority option exists (`scaas-rpc`)**, owner ruling 2026-11-11 ([decisions.md](../decisions.md)
+    until the strict-majority option exists (`scaas-rpc`, [CLI-RPC-12](../clients/scaas-rpc.md#CLI-RPC-12), SPECIFIED)**, owner ruling 2026-11-11 ([decisions.md](../decisions.md)
     CTR-PQZ-29 Change): the option is deferred to the shared `scaas-rpc` crate (TODO 8b), the block is pinned by number not
     hash (R-6, deferred with it), and a lying RPC could pass a key check (§6, CTR-PQZ-30: the key record, its stored `pqzPop` bytes, `keyOwner`) that `OFFCHAIN` tokens trust the verifier for), `chain_id` (required; every endpoint must answer it at start or
     the service does not start), `chain_uid`, `registry` and `registry_generation` (1 or 2; at start the registry's

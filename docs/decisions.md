@@ -61,9 +61,11 @@ entries), **Why.**, **Cost if wrong.** and **Source.** Superseded entries keep o
 37. [Clients — signers and clientkeys](#37-clients--signers-and-clientkeys)
 38. [Clients — SCaaS app](#38-clients--scaas-app)
 39. [Clients — UA libraries](#39-clients--ua-libraries)
-40. [Integration — ERP](#40-integration--erp)
-41. [Integration — example connector](#41-integration--example-connector)
-42. [Alias index](#alias-index)
+40. [Clients — network crate (`scaas-rpc`)](#40-clients--network-crate-scaas-rpc)
+41. [Clients — application SDK (`scaas-sdk`)](#41-clients--application-sdk-scaas-sdk)
+42. [Integration — ERP](#42-integration--erp)
+43. [Integration — example connector](#43-integration--example-connector)
+44. [Alias index](#alias-index)
 
 ## 1. Architecture and register policy
 
@@ -5362,6 +5364,8 @@ Change (2026-11-10, controller, plan 3c T94; status: BUILT on branch `ua-mtx-mer
 Change (owner 2026-11-10; status: SPECIFIED, nothing built): **the encrypted content types**, UA-7 spec §6.4.1 (P49). Old: §6.4 named the content types (`text`, `edit`, `redact`, `react`, `receipt`, `typing`, `file`, `callKey`, …) with no fields. New, all inside the plaintext before padding and encryption, so the contract, the records and the envelope do not change: (1) content is canonical JSON with a required `type`; unknown fields are ignored; an unknown `type` (or a content that breaks a bound) is shown as "unsupported" and never acted on; every string has a byte bound; optional `ts` (the P19 tie-break) and `onBehalfOf` (P13). (2) `text`: `mediaType` `text/plain` or `text/markdown`, 1-64 B, absent = `text/plain`; markdown renders with no remote fetch. (3) `file`: `mediaType`, `name`, `size`, `sha256` of the plaintext, `ctSha256` of the ciphertext (the hash that binds it, checked before decryption), `key` (a fresh 32-B AES-256-GCM key that travels only inside this content), and at least one of `store` (one of the session's listed off-chain stores and the object's locator there; today the Matrix media repository, an `mxc://` URI, P28) and `url` (optional, a blob store, P28); the file never goes on chain (P28 and §6.5 unchanged: 1 MiB is about 1.6 G state gas), a chain holds at most the message, with the key, the hashes and the locator inside its ciphertext; no fetch before the user accepts the session, a `url` fetched only on the user's action, as it shows the reader's address to the host. Corrected the same day (owner 2026-11-10, keep the old rule): the first text of this Change made a chain store the default for files and reversed P28; withdrawn. (4) `edit`, `redact`, `react`, `receipt` name their target by the `messageId` of §4.3 (`typed(PqChatMessage)`, the one id of a message on every store, P19); `edit` and `redact` count only from the target's sender UA; receipts are read receipts only; `typing` has no target and goes only to Matrix or Waku. (5) The call types `callMember` (join and leave, membership and transport discovery off Matrix, P21), `callOffer`, `callAnswer`, `callCandidates` and `callKey` (`callId`, `callEpoch`, one `Wrap` per participant, P22) name a call by `callId` and go over the signalling path of P21 only. (6) Not content: `hello` (P30), `sealedInfo` (§4.2), the contact card (O7), device linking (P6, its format PLANNED). (7) No content causes a network call or write before the user accepts the session (P12), and no client sends anything back that depends on whether an unexpected content opened, parsed or checked (ARCH-POS-13). Follow-up (plan 3c, PLANNED): content rows in `smartcontracts/vectors/pqchat/` from the generator, clientkeys encode and decode, the `ua-rs` round.
 Change (owner 2026-11-08, all as recommended; plan T66a part 1; status: BUILT on EVM, UNAUDITED): **O1's `requirePortable` is built, and its purpose set is closed.** `requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig auth)` accepts `PURPOSE_KEM`, `PURPOSE_PQZ_KEY` and the new `PURPOSE_PQCHAT = keccak256("scaas.ua.purpose.pqchat.v1")`; `PURPOSE_POP_V2` and every chain-bound purpose are refused; a new portable purpose waits for the next registry generation; a native id is refused (it has no portable form); gen 2 forwards a gen-1 record and its constructor does not probe gen 1 for the view (a gen 1 without it reverts, a refusal). Controller call kept: the `msig` path is independent of PQ weight. Built in the next registry generation on `ua-mtx-merge` (not on branch `mldsa87`, which merged first): commit `3d150ad6`, tests `test/ua/UARegistryPortable.t.sol` (7), mutants p1–p9 (`smartcontracts/evm/runs/2026-11-08-ua-mtx-merge-t66a-mutants.txt`). Normative text: [contracts/accounts.md](contracts/accounts.md#require-portable).
 
+Change (owner 2026-11-17, "Ok, as proposed (b)" — research `pqchat-client-options.md` open question 5, and "chat: (b)" for scaas-app's default build; status: SPECIFIED, nothing built): **one Matrix stack, matrix-rust-sdk, for every front-end** (Qt, Flutter, the Rust UI, the terminal UI); no libQuotient on the app side (owner answer 5 of the Status-fork path replaced). The Matrix client and its login live in one shared crate below both chat paths, so an app logs in to Matrix once: scaas-app's default build (no SCaaS) offers ordinary Matrix chat with Matrix's own end-to-end encryption (Olm / Megolm, `matrix-sdk` feature `e2e-encryption` on; classical, not post-quantum); the `scaas` build adds PqChat, whose `pqchat-core` sends its envelopes `{v, hint, env}` (already PQ-encrypted, CTR-CHAT-01) through that same client as its Matrix store, and `scaas-sdk`'s `chat` module reaches it through `pqchat-core`. Why: libQuotient serves Qt only and already embeds the Rust Matrix crypto, so a Qt build would carry two Rust Matrix stacks; one login per app. Cost if wrong: matrix-sdk is heavy (tokio, an sqlite store; wasm32 needs its IndexedDB store, unverified); the Qt default build then links a Rust library for Matrix.
+
 ### CTR-CHAT-02 — `PqChat` is class 3, kind 0 on the factory's generic path; chain values from the clone's `ChainEnv`; `initialize` once by the factory; an owner UA without power
 - old: — · status: current · owner: yes · date: 2026-11-07 · normative: contracts/pqchat.md#CTR-CHAT-02 · superseded-by: —
 
@@ -10363,7 +10367,324 @@ mutant records: `smartcontracts/evm/runs/2026-11-09-ua-rs-sign-t20d*`. Not revie
 UNAUDITED.
 **Source.** [plan](superpowers/plans/2026-11-05-ua-rs-sign.md) T20e; `smartcontracts/evm/runs/2026-11-10-ua-rs-sign-t20e-summary.txt`.
 
-## 40. Integration — ERP
+## 40. Clients — network crate (`scaas-rpc`)
+
+The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the [scaas-rpc spec](superpowers/specs/2026-11-17-scaas-rpc.md), reviewed by Fable on 2026-11-17 (findings F1–F28, I1–I3, all applied before any code).
+
+### CLI-RPC-01 — One network crate; no keys, no signing, no lane sends
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-01 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-01).) `scaas-rpc` holds the endpoint list and its rules, a reader per chain family (EVM through alloy first) and the scaas-node client; the node's adapters, `scaas-pqz-verifier` and `scaas-sdk` read through it. No subject or lane key, no signer; the node's lane sends and its `dead` decisions stay in the node; an endpoint's credential goes to that endpoint only.
+**Status.** SPECIFIED (plan `2026-11-17-scaas-rpc`). UNAUDITED.
+**Why.** Owner 2026-11-11 (TODO 8b): the shared network crate, so node, SDK and verifier share one rule; lane-key sending stays in the node. Owner 2026-11-17: the spec now, `scaas-rpc` before `scaas-sdk`.
+**Cost if wrong.** Three copies of the endpoint rule drift apart (the node's EVM reads fail over today, its other families read one endpoint, the verifier fails over without the node's head and identity checks).
+**Source.** TODO 8b; owner 2026-11-17 "Ok, theo đề xuất, viết ngay"; owner 2026-11-16 "Làm sdk + ví trước freeze."; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §1, §2.
+
+### CLI-RPC-02 — An endpoint is `{url, class, label, auth}`; the list keeps its order
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-02 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-02).) Classes `named`, `default`, `discovered` (ARCH-POS-15); `http` or `https` only; a credential per endpoint, none list-wide; duplicates by parsed URL, `strict_majority` with one endpoint and a zero timeout refused; labels capped; no redirect followed; a URL string list is `named` endpoints in order; a read policy per list, `failover` by default.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The same shape as the app's endpoint lists (which follow this crate, CLI-RPC-50), so one configuration model serves the app's default build and its `scaas` build; the node's and the verifier's `rpc_urls` keep their form. Fable F8: one credential for a list hands it to every endpoint, and a followed redirect replays a request with its headers to another host; F11: one endpoint under `strict_majority` decides alone; F22: string comparison misses equal URLs (controller calls).
+**Cost if wrong.** A gateway's secret reaches another operator; a redirect from a discovered endpoint reaches an internal host with a provider key; an operator believes a one-endpoint majority protects them.
+**Source.** ARCH-POS-15; Fable review 2026-11-17 F8, F11, F21, F22; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.1.
+
+### CLI-RPC-03 — An endpoint answers only for the configured chain
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-03 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-03).) Chain id and block 0 hash (EVM, Hedera), the network id elsewhere (NET-ALL-22), read for every endpoint, the first included, before its first answer and kept; another chain dropped; unreadable fails over; `strict_majority` and decryption reads need a pinned `chain_uid`.
+**Status.** SPECIFIED for the crate; BUILT in the node's EVM reads for the endpoints after the first (ARCH-POS-15 Change of 2026-11-12, recheck 3 R3-3). UNAUDITED.
+**Why.** A reset or forked network keeps its chain id; only the genesis hash tells it apart. Fable F13: without a pinned `chain_uid`, a wrong first endpoint defines the chain and every honest endpoint is dropped for the process, and nothing checked the first endpoint outside the node's lane start.
+**Cost if wrong.** An endpoint of another network answers state of that network as this one's.
+**Source.** ARCH-POS-15 Changes of 2026-11-12; Fable review 2026-11-17 F13; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.2.
+
+### CLI-RPC-04 — Failover: one endpoint answers a whole read; status reads stay on the first endpoint
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-04 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-04).) List order; one endpoint per read, never a mix; transport, timeout, any HTTP error status, an error answer, oversize, wrong chain, a head below the first endpoint's highest seen: next endpoint; a revert final only from the first endpoint used, a later one's data kept; failover answers counted, never a verdict; one pass, `EndpointAllFailed`. In every family the lane's status, consumed-operation, nonce or sequence, fee and landed-fee reads stay on the first endpoint; only building (simulations and views) fails over.
+**Status.** SPECIFIED for the crate; BUILT in the node's EVM reads ([submit-lanes.md](node/submit-lanes.md#rpc-failover)); the node's other families read their first endpoint only today and take this rule in the plan's family tasks, after the EVM part's review (CLI-RPC-50). UNAUDITED.
+**Why.** ARCH-POS-15's default, with the node's fixes the owner asked for in 2026-11-12 (Fable rechecks 2 to 7): no failover endpoint's answer makes a job `dead`, and the lane's own sends, nonces, fees and receipts stay on the first endpoint. Fable F3, F4 (2026-11-17): the node's `follow` turns a status value (`Unknown`, `Reverted`) into a verdict, and a lane nonce from a failover endpoint reuses a nonce; both reads must never fail over, in any family. F15 (d): skipping a discovered first endpoint moves the revert rule to the first endpoint used.
+**Cost if wrong.** A lagging failover endpoint kills jobs that would land, a lane signs at a used nonce, or one answer mixes two nodes' state.
+**Source.** ARCH-POS-15 (owner 2026-11-08) and its Changes of 2026-11-12; Fable review 2026-11-17 F3, F4, F15, F25; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.3, §5.3.
+
+### CLI-RPC-05 — Strict majority: the same complete answer at the same block from ⌊n/2⌋ + 1 of the list
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-05 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-05).) `n ≥ 2` with a pinned `chain_uid`; the read block is the (⌊n/2⌋ + 1)-th highest block the endpoints name (default depth 1), never below the last agreed block; each endpoint reads whole at that number pinned by its hash; complete decoded answers compared, block hash included; decided as soon as a majority agrees and passes the re-check; one fallback round at the next lower named block; one deadline per read; else `EndpointNoMajority`. Under this policy the nonce is the agreed committed nonce plus the caller's count and fee data the (⌊n/2⌋ + 1)-th highest value; simulations and estimates stay failover. EVM first; other families PLANNED.
+**Status.** SPECIFIED; BUILT only for the clients it is verified against (anvil, Nethermind; Hedera's relay not verified). UNAUDITED.
+**Why.** ARCH-POS-15 states the majority and the whole-read comparison (owner 2026-11-08). The rest is the controller's, after the Fable review: the reference readers take the smallest named block, which one dishonest endpoint can move back; the (⌊n/2⌋ + 1)-th highest is safe, but one liar naming a far block makes honest heads a block apart fail, so one fallback round and depth 1 restore liveness (F6); the floor stops reads going backwards (F12); deciding early and a whole-read deadline stop one slow endpoint from stalling every read (F7); a pending nonce or a fee from one endpoint lets it set what is signed (F14). Pinning by hash closes the verifier's R-6.
+**Cost if wrong.** A minority picks the block, splices one field, stalls every read, or sets the fee; or honest nodes a block apart never agree.
+**Source.** ARCH-POS-15 (owner 2026-11-08 "chỉ cần quá bán"); CTR-PQZ-29 Change of 2026-11-11 (R-6); `clients/ua-rs/src/bin/pqz-read.rs` (`agree`, `rechecked`); Fable review 2026-11-17 F6, F7, F11, F12, F14, F16, I1; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.4.
+
+### CLI-RPC-06 — A read that feeds a decryption never rests on a discovered endpoint alone
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-06 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-06).) Every read whose bytes enter a decryption (PQZ, Zether, chat ciphertexts) is marked; an unmarked read cannot serve one. Failover skips discovered endpoints for it (`NoTrustedEndpoint` when none is left); strict majority serves it with a discovered endpoint only when `n ≥ 3` (`AgreementNeedsThree`).
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** ARCH-POS-15 as stated (owner 2026-11-08): one unknown node can never put a ciphertext of its choice into a decryption (ARCH-POS-13). Fable F15: chat ciphertexts are decrypted too, and a closure read without a purpose would skip the rule silently.
+**Cost if wrong.** A discovered node feeds a chosen ciphertext to a holder's key.
+**Source.** ARCH-POS-15, ARCH-POS-13; Fable review 2026-11-17 F15; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.5.
+
+Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", the rpc spec's Q6 (b); status: SPECIFIED): under strict majority the agreeing group of a read that feeds a decryption also holds at least one named or default endpoint; a list with none is `NoTrustedEndpoint` before any request; equal answers from discovered endpoints alone decide nothing; a round whose agreeing group has none is `EndpointNoMajority` after the fallback round. It closes a majority of discovered endpoints found from one source (Fable F15).
+
+### CLI-RPC-07 — Every answer is bounded by length and depth before it is decoded
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-07 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-07).) Chunked read to the call's cap (16 MiB default), the EVM providers' answers included through the crate's own transport under alloy; a flat depth scan (64), then one parse; family binary decoders keep their caps; an oversized or deep answer is the endpoint's failure; a log range in at most about 25 requests.
+**Status.** SPECIFIED; BUILT for EVM only once the plan's T4 tests pass through `EvmPool`. Today no non-EVM adapter of the node bounds an answer's length and alloy's transport reads an answer whole; serde_json's recursion limit of 128 is the only depth bound. UNAUDITED.
+**Why.** An unbounded decode of an endpoint's answer can exhaust memory or the stack of the whole process. 16 MiB is the reference reader's `MAX_ANSWER`; the depth scan is `ua-rs`'s, exposed as `depth_within` (CLI-RPC-50). Fable F5: alloy's `connect_reqwest` reads the whole body.
+**Cost if wrong.** One hostile endpoint stops every chain the process serves.
+**Source.** Fable review 2026-11-17 F5, F20; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §5.2, §7; the adapter survey of 2026-11-17 (spec §5.3).
+
+### CLI-RPC-08 — The same signed bytes to one or more endpoints; outcomes merged, never final
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-08 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-08).) The bytes once, to the first endpoint or all; the id computed locally (a blob transaction in network form refused); per endpoint `accepted`, `refused` or `unreachable`; `Sent` when one accepted, else `Rejected` (code `BroadcastRejected`); neither final, no automatic re-send. The same for one operation posted to several scaas-node gateways.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** ARCH-POS-15 (owner 2026-11-08): the same signed bytes to one or more nodes, never re-signed per node. A refusing endpoint may lie or may have relayed the bytes anyway. Fable F24: a blob transaction's network form is not hashed as its id.
+**Cost if wrong.** A re-signed copy lands twice; a refusal read as final makes a user sign again while the first transaction lands.
+**Source.** ARCH-POS-15; Fable review 2026-11-17 F23, F24, F27; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.7.
+
+### CLI-RPC-09 — A transaction ends only on facts from a decisive read at a final block
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-09 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-09).) Decisive: agreed, or under failover answered by the first endpoint when it is not discovered. `Final`: the receipt in a final block, its block hash checked. `Replaced`: in one decisive read, the nonce pinned by hash above, the transaction by hash and its receipt unknown. Elsewhere non-terminal. A relayed operation ends on its executed event, or on its nonce spent without it, or on its deadline passed at a final block. Several nodes: `Landed`, `InFlight` or `GivenUpByEveryNode`, never terminal.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The node never reports `dead` while a transaction may still land. Fable F1: a missing receipt is an absence, not a fact, and a load-balanced or pruning endpoint answers it for a landed transaction; a failover endpoint's terminal state is a verdict R4 forbids. F2: a node's `dead` covers its own transactions only, and a node that timed out on submit may still hold the operation.
+**Cost if wrong.** A wallet tells its user a payment failed; the user pays again and both land.
+**Source.** Fable review 2026-11-17 F1, F2; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.8; job states ([job-api.md](node/job-api.md#states)).
+
+### CLI-RPC-10 — The scaas-node client sends named fields and reads the node's error contract by code
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-10 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-10).) The gateway routes the node serves, bodies as `ua-rs` builds them, a body cap before sending, errors by `code`, `api` 1, auth `none` / `bearer` / `hmac` per endpoint; a job API client comes with its first route, server-side only.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Explicit parameters end to end; one client the SDK, the CLI and services share; job API keys never in an end-user app (NODE-ADM-06); Fable F8: a credential per endpoint.
+**Cost if wrong.** A client that packs or rewrites an operation sends bytes the subject did not sign, or keys a decision on an error's free text.
+**Source.** Fable review 2026-11-17 F8, F27; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §6.
+
+### CLI-RPC-11 — No URL, credential or request body in a log line or an error
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-11 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-11).) Endpoints named by index and label; every `scheme://…` token redacted; an endpoint's text cut to 256 bytes, control characters removed; no signed bytes, ciphertext, proof, credential or header in a log.
+**Status.** SPECIFIED for the crate; the node's redaction is BUILT (NODE-GW-06). UNAUDITED.
+**Why.** An RPC URL often carries a provider key; the node's own redaction (Fable E N-8, R-7) moves with its reads. Fable F21 (2026-11-17): redaction knows only `scheme://`, so an echoed key without one needs the cap.
+**Cost if wrong.** A provider key or an internal host leaks through a job error or an app's log.
+**Source.** NODE-GW-06; Fable review 2026-11-17 F21; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §9.
+
+### CLI-RPC-12 — `scaas-pqz-verifier` reads through the crate and gains the agreement option
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-12 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-rpc.md](clients/scaas-rpc.md#CLI-RPC-12).) Under `failover` the request path is unchanged; `rpc_policy = "strict_majority"` (two endpoints or more): every read of a `verdict` or `probe` request in today's order, pinned by hash, before the proof check, compared whole, then today's checks on the agreed values; `RPC_NO_MAJORITY`; the crate's revert classifier under both policies, a revert a refusal. Until built: trusted nodes only.
+**Status.** SPECIFIED (plan T8, T9). UNAUDITED.
+**Why.** Owner 2026-11-11: the verifier's strict-majority option is built in `scaas-rpc`; until then its `rpc_urls` point only at nodes its operator trusts. Fable F9: reading first changes the cost before the proof check, so it is limited to the option and its refusal order pinned; F10: the verifier's agreed path must be the crate's EIP-1898 code, for `probe` too. Owner 2026-11-17 (CLI-RPC-50): one classifier.
+**Cost if wrong.** A lying RPC passes an off-chain key check that `OFFCHAIN` tokens trust the verifier for (CTR-PQZ-30); or a garbage proof costs every key read on every endpoint unannounced.
+**Source.** CTR-PQZ-29 Change of 2026-11-11; owner 2026-11-11 "hoãn, ghi rõ chỉ chạy với node của mình", corrected to "node do họ tin cậy"; Fable review 2026-11-17 F9, F10; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §11.2.
+
+<a id="CLI-RPC-50"></a>
+### CLI-RPC-50 — Owner rulings on the `scaas-rpc` questions, 2026-11-17
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-RPC-50 · superseded-by: —
+
+**Rule.** Owner 2026-11-17, "Q1–Q5 as proposed": the review's answers to the spec's §15 Q1–Q5 and the depth scan, each as stated.
+1. **Q1:** the crate lives at `clients/scaas-rpc`.
+2. **Q2:** the app contract's endpoint lists follow this crate: `strict_majority` with one endpoint is refused; failover moves on at any HTTP error status, not only 5xx; a failover endpoint's revert is no verdict, its data kept in `EndpointAllFailed`; `BroadcastRejected` and every send outcome are never final, and the app's text says so; the app appends `EndpointListEmpty`, `NoTrustedEndpoint` and `AgreementNeedsThree`; `n = 2` is allowed (it detects one liar, tolerates no failure), three are needed only for a discovered endpoint feeding a decryption.
+3. **Q3:** after this round, the reference readers `pqz-read` and `zether-read-balance` take CLI-RPC-05's block choice (the (⌊n/2⌋ + 1)-th highest) with its fallback round, inside `ua-rs` and `zether-prover`, keeping `curl`; no new dependency below the SDK.
+4. **Q4:** non-EVM failover is in this round, after the EVM part (plan T1–T13) is reviewed, family by family, with the first-endpoint status carve-out of CLI-RPC-04 written and tested first; a family without an e2e baseline gets no step (b).
+5. **Q5:** the verifier takes the crate's (the node's) revert classifier, the revert data kept as bytes; a revert stays a refusal by name in the verifier.
+6. **The depth scan:** `ua-rs` exposes its flat JSON depth scan as `pub fn depth_within`; `bounded` stays crate-private.
+**Status.** SPECIFIED: 1 and 6 in plan T1; 2 is the app contract's, written by its own writer; 3 after this round; 4 plan T14–T22; 5 plan T9. UNAUDITED.
+**Why.** One rule on every consumer; the review's reasons are in the spec's §15.
+**Cost if wrong.** Two endpoint rules between the app's default build and its `scaas` build; reference readers whose block one endpoint can move back.
+**Source.** Owner 2026-11-17 (chat, through the controller), verbatim: "Q1–Q5 theo đề xuất"; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §15; Fable review 2026-11-17 (kept outside the repository).
+
+Change (owner 2026-11-17, "Ok, as proposed, settle the whole table"): **Q6 (b)** settled as recommended; the rule is CLI-RPC-06's Change. No question of the rpc spec is left open.
+
+## 41. Clients — application SDK (`scaas-sdk`)
+
+The rules are in [clients/scaas-sdk.md](clients/scaas-sdk.md); the design is the [scaas-sdk spec](superpowers/specs/2026-11-17-scaas-sdk.md) (Fable's review of 2026-11-17 applied, its §26).
+
+### CLI-SDK-01 — One crate is the only API apps call; it signs through `ua-rs`, talks through `scaas-rpc`, and holds no cryptography of its own
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-01 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-01).) Modules `vault`, `account`, `wallet`, `confidential`, `dex`, `admin`, `chat` (over `pqchat-core`), each module and guarded entry a compile-time feature; derivation, AEAD, KDFs, MACs, signatures and format hashes stay in `ua-rs`; transport stays in `scaas-rpc`; `scaas-ua` without its default features; a future `pqvault` module apart from `vault`; "scaas-wallet" of earlier texts means this crate and its `wallet` module.
+**Status.** SPECIFIED (plan `2026-11-17-scaas-sdk`). UNAUDITED.
+**Why.** Owner 2026-11-11 (TODO 8b): one SDK crate as the only API apps call, separate modules, signing only through `ua-rs`, the 2026-11-05 "scaas-wallet" renamed to this layout. Owner 2026-11-17: CLI-UAL-01 holds from `scaas-sdk` down. No cryptography in the SDK is the controller's reading of both: a second implementation of a format beside `ua-rs` would be a second place for a byte format. `scaas-ua`'s defaults enable one PQZ set, so a build asking for another would enable two (Fable F18).
+**Cost if wrong.** Two signers or two transports drift: a digest or a node-list rule differs between the app and the node.
+**Source.** TODO 8b; owner 2026-11-11, 2026-11-17 "Ok, theo đề xuất, viết ngay"; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §1, §2, §3.
+
+### CLI-SDK-02 — Secrets never leave the SDK; apps hold references
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-02 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-02).) Keys named by plain records with string ids, a hidden set by its own session id; secrets in only as explicit `SecretBytes` inputs (passphrases, words, an imported key, root (c)'s signatures, a PRF output or platform secret), out only as a new seed's one reveal; one `SecretBytes` in `ua-rs`, reached by an id and copy calls, never a generator's codec or a pointer; sealed backup and device link the only other exits; no raw key export; nothing secret, no formatted vault and no hidden-set address in errors, events, logs or `Debug`.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Owner 2026-11-11 ("secrets never leave the SDK, apps get handles") and 2026-11-17 (the `scaas` build opens the vault through the SDK, secrets never leave it). Plain records rather than handle objects is the controller's call: every generator carries them and no handle lifetime crosses a binding. `SecretBytes` follows the `ua-dart-frb` rule (owner 2026-11-06); copy calls instead of a pointer and one implementation in `ua-rs` answer Fable F20, F21.
+**Cost if wrong.** A generator's buffer or a log keeps a passphrase or the words after the call; a finalizer frees memory a pointer still names.
+**Source.** TODO 8b; CLI-UAL-05; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §5.
+
+### CLI-SDK-03 — The keystore holds several seeds, each as vault v1 objects byte for byte, in one authenticated `scaas.keystore` container
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-03 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-03).) `{format: "scaas.keystore", v: 1, rev, seeds}`; per seed id, label, words, fingerprint, origin, class, warnings, backup, the exact vault v1 texts by label, the accounts, `indexMac`; no parent, child index, origin address or hidden set; bounded; a refusing reader never writes; the index MAC computed and checked in `ua-rs` at every unlock, locked seeds' rows unverified; store lock, `rev` compare-and-swap, `keystore.prev`, a rollback anchor; the container a file or IndexedDB through `SecureStore`, the keychain holding only small secrets; clientkeys writes the vectors first.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Owner 2026-11-11: several independent seeds, each with its own label and passphrase, encrypted at rest or in the OS keychain. Owner 2026-11-17: scaas-app's vault IS clientkeys / `ua-rs` vault v1 byte for byte, the default build implements it and is checked by clientkeys' vectors. A vault v1 object holds one secret under an inner label (`seed` for every seed), so the list of seeds needs a container and its public fields need their own authentication (Fable F1: an edited row would redirect a payment while the seed is locked); several processes share one directory (F2); an older copy put back must be seen (F12); keychain items are small (F14). The container shape and these integrity choices are controller calls (spec §25 Q-S2).
+**Cost if wrong.** Two vault formats in one app; a receive address or a label swapped unnoticed; a new seed lost to a concurrent write.
+**Source.** TODO 8b; owner 2026-11-17 "Ok, theo đề xuất, viết ngay"; CLI-SGN-02, CLI-UAL-18; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §6.1–§6.3, §6.8, §6.9.
+
+### CLI-SDK-04 — Seeds are made with 24 words; shorter imports carry a warning; passphrases are the user's
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-04 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-04).) 24 words for every seed made, `backup: pending` until checked; BIP-85 children `24'` only from the parent's main set at the sealed high-water mark `bip85Next`, never reused; imports of 12 to 24 words, 12 to 21 with `short_seed`, inherited by children; no generated passphrase; vault passphrase by vault v1's rule; BIP-39 passphrase never stored, passed as entered; hidden sets session-only, nothing written or emitted; removing an unbacked seed needs a second confirmation.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Owner 2026-11-11: generated seeds always 24 words or more (24 within BIP-39), BIP-85 children included; a 12–21-word import accepted with a warning; no SDK-generated passphrases. The high-water mark (Fable F11: a removed child's words would return), the backup state (F13) and the hidden-set rules (research decision 11's default, F24) are controller calls.
+**Cost if wrong.** A short seed made by the SDK; exposed child words handed out again; a hidden set proven by a file or a log.
+**Source.** Owner 2026-11-11 "Seeds sinh ra luôn dùng 24 words trở lên", "nhận kèm cảnh báo", "đồng ý, sửa theo đó"; TODO 8b; research [sdk-keys-and-derivation.md](research/sdk-keys-and-derivation.md) §1, §3.4, §6.2; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §6.4, §6.5.
+
+### CLI-SDK-05 — A seed set derived from a classical key is marked classical-rooted and may carry every kind
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-05 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-05).) Root (c) EOA signature over typed data `ua-rs` builds, twice and equal, checked, with a mandatory passphrase of 10 or more; root (d) `KDF(privkey, passphrase, label, index)` for a secp256k1 EVM key, passphrase empty or 10 or more, `index` the set number; built in `ua-rs`; `classical-rooted` authenticated and inherited, advisory across devices; PQ, PQZ and KEM keys allowed with the risk shown; the feature absent until the constructions are fixed.
+**Status.** SPECIFIED; the derivations wait for the owner's answer to research decisions 4, 5 and 18. UNAUDITED.
+**Why.** Owner 2026-11-11: the risk is accepted; the passphrase at least 10 characters for (c); (d) offered with the passphrase optional. A feature absent until then (Fable F30), the EVM-key and index reading of root (d) (F39) are controller calls.
+**Cost if wrong.** A classical-rooted set shown as post-quantum strong; or a construction frozen into every key before the owner fixed it.
+**Source.** Owner 2026-11-11 "chỉ mạnh ngang passphrase => Chấp nhận rủi ro này. Yêu cầu passphrase phải đủ dài (10 ký tự) trong trường hợp này. Hoặc có lựa chọn dùng seed' = KDF(privkey, passphrase, nhãn, index)."; research [sdk-keys-and-derivation.md](research/sdk-keys-and-derivation.md) §5, §14; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §6.6.
+
+### CLI-SDK-06 — Seeds unlock and lock one by one; changes are re-sealed under the same data key; biometrics only gate
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-06 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-06).) Passphrase, passkey PRF or a platform secret (Keychain / Keystore HMAC) through vault v1's `prf` envelope; what enforces user verification at unlock stated; signing-key assertions checked in full by `ua-rs`; RP ID per deployment; `ua-rs` re-seals changes under the same data key, both envelopes kept; new vaults take the passphrase (+ PRF); biometrics a gate; the passphrase-change residual stated; heavy work bounded; `lock` revokes every handle, refuses new calls, waits for calls in flight; export only as the sealed backup or the device link.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Vault v1 already has the PRF envelope (CLI-SGN-02), and `ua-rs`'s envelope accepts a Keychain or Keystore HMAC, so biometric unlock needs no new envelope (Fable F15). A passkey session could seal nothing and dropped the PRF envelope on a re-seal (F3), hence the same-DEK re-seal in `ua-rs`. Unlock cost and the lock's wait are stated (F25). Export as sealed forms only keeps CLI-SGN-20.
+**Cost if wrong.** An imported key lost at lock in a passkey session; a seed no longer opening by passkey; a plain export file guessable offline.
+**Source.** CLI-SGN-02, CLI-SGN-20, CLI-UAL-09, CLI-UAL-16, CLI-UAL-19, CLI-APP-14; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §6.7, §6.10, §6.11.
+
+### CLI-SDK-07 — Every account names its seed; keys are derived as clientkeys derives them; passkeys sit beside seeds
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-07 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-07).) `(seed, kind, account, index)` and `(seed, network, index)` as clientkeys; passkey and secure-element keys not derived, signing through the app's `Authenticator` with `ua-rs` building and verifying; imported keys leaves of a seed; one account index per wallet for every registered attribute; an EIP-7702-delegated EOA marked and warned, the "clear delegation" offer a recorded exception.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Owner 2026-11-11: accounts per seed by index and kind as clientkeys and the vectors fix; passkey and hardware keys beside seeds; an account names its seed id. One index per wallet per attribute is research decision 13's default (controller call). CLI-SGN-40 rule 3's offer needs a type-4 transaction, which the SDK never builds (Fable F22).
+**Cost if wrong.** Two wallets tied by one KEM or PQZ key; a key the clientkeys vectors do not reproduce.
+**Source.** TODO 8b; CLI-SGN-40; research [sdk-keys-and-derivation.md](research/sdk-keys-and-derivation.md) §6.3, §7.2; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §5, §7.
+
+### CLI-SDK-08 — One entry point per signed struct and domain; the user reviews every field before it is signed; calls are decoded
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-08 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-08).) Every `(struct, domain kind)` pair has exactly one entry point, its pairs in one module and one feature, `PqzAuth` excluded; an opaque prepared value kept by the SDK (`PreparedUnknown`), its review every field with its source; submit signs exactly that under `ua-rs`'s check; `PreparedStale`; `Execute` / `UAExecute` with decoded calls under the allow-list, an opaque call only behind its feature and marker (`OpaqueCallRefused`); fee 0 everywhere; no caller digest for a UA key; no EIP-7702.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The owner's standing rules: explicit named parameters, one entry point per operation (2026-10-31); every state-changing `mtx*` relayable, fee 0 too (2026-10-20); no EIP-7702 (2026-10-30). The prepare / review split is the TUI's signing screen (owner 2026-11-09: every named field shown). Controller calls on Fable's findings: the pair key (F19), the opaque prepared object and review sources (F16), decoded calls (F7: an arbitrary `data` field is blind signing with the account's full authority).
+**Cost if wrong.** A front-end signs what it did not show, or a binding grows a generic "sign this" call.
+**Source.** AGENTS.md rules; TODO 11 (terminal UI rules); CLI-UAL-13, CLI-SGN-29, CLI-SGN-40; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §13.1, §13.2, §21.
+
+### CLI-SDK-09 — An operation is quoted and confirmed, written ahead, then sent to a gateway that takes it or relayed by the holder
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-09 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-09).) Gateway for door-A entries, the same body to the chosen gateways; self-relay from the holder's own native account for any entry; a reviewed quote (payer, gas, maximum cost), caps from the SDK's configuration (`FeeAboveCap`), `GasAboveTxCap`, the PQ registration split, `PayerDelegated`; job API server-side only; `SubmitPathNone`; sign, write the row with the signed body, then send; a written row sent at restart, a sent row never re-sent automatically, only by `resend` of the same bytes.
+**Status.** SPECIFIED; the node's door A takes token entries only (NODE-GW-03), so `SmartKeyAccount`, mandate-wallet, router and factory entries go by self-relay until the node takes them (spec §25 Q-S1). UNAUDITED.
+**Why.** Every entry is relayable by anyone, so the holder may relay its own signed entry and pay gas; no end-user build holds a job-API key (NODE-ADM-06). Fable F6 (an endpoint's huge fee spent the payer's balance unseen), F5 (a send before the record loses an operation that lands), F22, F23 (no gas assumption: EIP-7825, EIP-8037), F36 (a gateway-queued operation never sent).
+**Cost if wrong.** An entry the app cannot send at all; a payer drained by a lying endpoint; an operation that lands while the SDK has no record of it.
+**Source.** NODE-GW-03, NODE-ADM-06, CLI-RPC-08; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §13.3, §13.4.
+
+### CLI-SDK-10 — The SDK is a reading layer under the seven requirements; a decryption failure never reaches a source; a verdict comes before a send
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-10 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-10).) Proofs in the `ua-rs` facades; decryption reads marked for CLI-RPC-06 and meeting CLI-UAL-31 to CLI-UAL-37 (profile sources, pinned chain pair, one final block by number and hash, storage and code hashes never views, the catalogued token, the leg's key); a fixed word set fetched before any secret-dependent parsing; no failover after a decryption failure; fixed watch schedule; the proof against the same block; the PQZ verdict through `scaas-rpc`'s verifier client, checked, else `VerdictRefused`; `PqzSetMismatch`; no operation that drops a ciphertext.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** ARCH-POS-13 (no decryption oracle) and ARCH-POS-15 (a discovered node never feeds a decryption alone), as stated by the owner; never lose ciphertext. A layer breaking the seven requirements exposes the full key-recovery oracle (CLI-UAL-30); Fable F9 found a decryption failure that would fail over and tell the next source the outcome.
+**Cost if wrong.** A node chooses the ciphertext a holder decrypts and learns from the answer, and recovers the key.
+**Source.** ARCH-POS-13, ARCH-POS-15, CLI-UAL-30, CTR-PQZ-29; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §9.
+
+### CLI-SDK-11 — The SDK is async on tokio and reports by subscription
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-11 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-11).) `async` API; the app's runtime adopted or one started for a binding; every exported async call run on that runtime; heavy work bounded off the async workers; dropped calls defined per class; bounded per-subscriber queues with `Lagged`; bounded watching; no event callback across a binding; `SecureStore` and `Authenticator` the only app-implemented interfaces, with an unexpected-callback error.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** `scaas-rpc`'s transport and the Matrix stack run on tokio; a generator that polls a future from a foreign executor enters no reactor (Fable F10); a pull queue works over every generator, a callback per event does not.
+**Cost if wrong.** A panic for want of a reactor, two runtimes in one app, or a UI thread blocked by a slow subscriber.
+**Source.** [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §14.
+
+### CLI-SDK-12 — Bindings are generated from the SDK's one API; an app links one Rust library
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-12 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-12).) The surface rules (shared module objects, owned types, string ids, no fixed arrays, secrets as `SecretBytes`); FRB 2 for Dart (the platform interfaces as one generated record of closures), UniFFI with `uniffi-bindgen-cpp` for C++ confirmed by an early spike, wasm-bindgen PLANNED; no SDK C ABI this round (`ua-c` the signer's C surface); nothing hand-written per language, no app-facing wrapper over `ua-rs`; no panic across; one Rust static library per app; API version and feature bits checked at load; the existing `ua-rs` wrappers stay.
+**Status.** SPECIFIED; the C++ generator's callbacks and async decided by the plan's spike before the API grows (spec §25 Q-B1). UNAUDITED.
+**Why.** Owner 2026-11-11: bindings (UniFFI / FRB / C ABI / wasm) generated from the SDK, not hand-wrapped over `ua-rs`. The generator per target is the controller's. UniFFI's `extern "C"` layer is an internal protocol, not a C API (Fable F26): a real SDK C header would be hand wrapping, so it waits for the owner's word. One library per process: one allocator, one runtime, one arena.
+**Cost if wrong.** Per-language wrappers drift from the SDK, as hand wrappers over `ua-rs` would; a binding shape found unworkable after the API is built.
+**Source.** TODO 8b; CLI-UAL-05; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §16, §19.
+
+### CLI-SDK-13 — Errors are named, stable codes; the layers below keep their names
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-13 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-13).) `code()` the variant's name, appended only; `ua-rs` and `scaas-rpc` codes pass through by name, `Argument` named per call where the app contract has a name; one meaning per name across the layers; the names shared with scaas-app's contract mean the same; `BroadcastRejected` a send outcome, not an error; a node's `detail` untrusted; the SDK's own list; warnings beside a success.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** One name per failure from the signer to the screen; no logic keys on free text; a hostile gateway's text is no message to show (Fable F31); a send outcome is never final (CLI-RPC-08, the `scaas-rpc` review).
+**Cost if wrong.** An app maps one failure two ways, shows a phishing line from a gateway, or tells the user a send failed for good.
+**Source.** CLI-UAL-04, CLI-RPC-08, CLI-RPC-10; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §15, §22.
+
+### CLI-SDK-14 — `chat` runs `pqchat-core` over the app's live Matrix client
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-14 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-14).) The app's one Matrix client handed to `pqchat-core` as its store, in Rust, inside the app's one library, on the app's runtime (`RuntimeRequired`); detached before logout; no Matrix client or Matrix SDK in the SDK; PqChat signatures, KEM and openings through `ua-rs`; chat ciphertext reads are decryption reads; envelopes arriving while locked processed at unlock, never dropped, no error toward the sender; `PqChat` writes are operations.
+**Status.** PLANNED until `pqchat-core` exists. UNAUDITED.
+**Why.** Owner 2026-11-17 (CTR-CHAT-01 Change): one matrix-rust-sdk stack in a shared crate below both chat paths, one login; `pqchat-core` sends its envelopes through that client. The runtime, lifetime and locked-seed rules answer Fable F27.
+**Cost if wrong.** Two Matrix logins and two sync loops in one app; a store used after the app deleted it; messages lost while locked.
+**Source.** CTR-CHAT-01 Change of 2026-11-17 ("Ok, as proposed (b)"); [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §12.
+
+### CLI-SDK-15 — Chain profiles are the app's pinned data; the chain is asked, never assumed
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-15 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-15).) A profile per chain key with `chain_uid` (pinned on every connection), node lists with credentials per endpoint (never stored by the SDK), the finality rule, the per-transaction gas cap, contracts, reviewed tokens, DEX list and verifiers; a differing `chain_uid` is `ProfileMismatch`; factory-index tokens off the list unlisted, their text bounded and stripped; fees and limits from the chain, under the profile's caps.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** CLI-SGN-33 and NET-ALL-24 put `chain_uid` in the signer's pinned profile; the standing rule forbids a gas price 0 or a block limit of ours; `scaas-rpc`'s review moved credentials into each endpoint (CLI-RPC-02) and requires a pinned `chain_uid` for agreement and decryption reads.
+**Cost if wrong.** A gateway of another network names the domain the user signs in; a provider key sent to another host.
+**Source.** NET-ALL-24, CLI-SGN-33, CLI-SGN-35, CLI-RPC-02, CTR-TOK-27; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §4, §8.2.
+
+### CLI-SDK-16 — EVM keys sign only built transactions; other native chains sign through one guarded entry
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-16 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-16).) EVM native sends built and signed as `EvmTx` in `ua-rs`, quoted and capped, never a raw digest; other chains through one entry behind its own feature and marker, absent from the default generated surface, which itself enforces: native non-EVM keys only; NEAR, Sui, Stellar, Hedera Ed25519 through `ua-rs`'s envelope calls, never a bare digest; GRAM off the entry; `0x05` / `0x19 0x01` prefixes and off-chain envelopes refused by the SDK too; a bare digest only for the Bitcoin sighash (`RawDigestRefused`); the Bitcoin residual recorded.
+**Status.** SPECIFIED; `ua-rs-native` adds only `sign_message`'s prefix refusal and the four envelope calls (coordinator ruling 2026-11-17); the new networks PLANNED with that branch. UNAUDITED.
+**Why.** Owner 2026-11-17 (TODO 8c item 5): the blind-signing guard, raw signing only on native keys from a transaction the app built in-process and the user reviewed. A digest cannot be checked, so a raw entry open to an EVM key signs an EIP-7702 authorization or any SCaaS typed operation, and on Hedera Ed25519, Sui, Soroban and GRAM the native key is the SCaaS identity (Fable F8). Coordinator ruling 2026-11-17 (controller call, owner: no): the restrictions live in the SDK's entry, not in changes to `ua-rs`'s existing calls, since CLI-SGN-40 keeps `sign_digest` on native keys (Merkle batch roots) and pinned rows must not change.
+**Cost if wrong.** A raw-signing call that signs a SCaaS payload or a delegation blind.
+**Source.** TODO 8c; CLI-UAL-01 Scope; CLI-SGN-40; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §8.5, §8.6, §23.3.
+
+### CLI-SDK-17 — The CLI `scaas` is a thin client of the SDK
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-17 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-17).) One subcommand per SDK call with named flags; the review and the quote shown before submitting; secrets from the terminal or a file descriptor, never argv or the environment; no secret printed but the one reveal; the data directory shared under the keystore's lock; no logic of its own.
+**Status.** PLANNED (after the SDK, owner's order). UNAUDITED.
+**Why.** Owner order (TODO 8b): ua-rs-sign → scaas-rpc → scaas-sdk → CLI. A command line and the environment are readable by other processes and kept in shell history.
+**Cost if wrong.** A passphrase in a process list or a history file.
+**Source.** TODO 8b; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §20.
+
+### CLI-SDK-18 — An operation ends only on a chain fact
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-18 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-18).) Terminal from a decisive read at the profile's final block only: `Landed` (the executed event of the digest per contract; a registry write's record present), `Consumed` (the lane nonce spent without that event), `Expired` (`validUntil` passed, nonce unspent); everything else `InFlight` with detail (the gateways' merged state, a failed or replaced self-relay transaction); wait, resend the same bytes, or cancel the lane's nonce; resumed after a restart.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Follows CLI-RPC-09 as revised after the `scaas-rpc` review: a merged node state is never terminal, and a relayed operation's terminal facts are its event, its nonce or its expiry (Fable F4: every gateway `dead` while one had broadcast, or a self-relay transaction out of gas, would otherwise be shown final and paid again).
+**Cost if wrong.** A wallet tells its user a payment failed; the user pays again and both land.
+**Source.** CLI-RPC-09; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §13.5.
+
+### CLI-SDK-30 — Owner rulings of the SDK spec, 2026-11-11 to 2026-11-17
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-SDK-30 · superseded-by: —
+
+**Rule.** The owner's rulings as stated (verbatim on the Source line), with their status. (1) One SDK crate `scaas-sdk` as the only API apps call, modules `account`, `wallet`, `vault`, `confidential`, `dex`, `admin`, `chat` → `pqchat-core`; bindings generated from the SDK, not hand-wrapped over `ua-rs`; signing only through `ua-rs`; order ua-rs-sign → scaas-rpc → scaas-sdk → CLI → bindings → app; "scaas-wallet" renamed to this layout (CLI-SDK-01, CLI-SDK-12). (2) The vault: several independent seeds, each encrypted at rest or in the OS keychain with its own label and passphrase, import / export / remove, accounts by index and kind as clientkeys and the vectors fix, passkey and hardware keys beside seeds, an account names its seed id, secrets never leave the SDK, apps get handles (CLI-SDK-02, CLI-SDK-03, CLI-SDK-07). (3) Generated seeds 24 words, BIP-85 children included; 12–21-word imports accepted with a warning (CLI-SDK-04). (4) Classical-rooted sets (c) and (d) may carry PQ, KEM and PQZ keys, risk accepted, (c)'s passphrase at least 10 characters, (d)'s optional, no SDK-generated passphrase (CLI-SDK-05). (5) KEM keys from the same seed node under their own label: BUILT in `ua-rs` (CLI-UAL-14). (6) The SDK and the app before the freeze; the app is scaas-app, not "wallet". (7) scaas-app's vault IS clientkeys / `ua-rs` vault v1 byte for byte; the default build implements it, checked by clientkeys' vectors; the `scaas` build opens it through the SDK (CLI-SDK-03). (8) CLI-UAL-01 from `scaas-sdk` down; an app may sign other chains' native transactions with its own library. (9) One Matrix stack below both chat paths, one login; `chat` reaches it through `pqchat-core` (CLI-SDK-14). (10) A `scaas-tui` spec after this one. (11) `scaas-rpc` Q1–Q5 as proposed (CLI-RPC-50), which this spec consumes. (12) `pqvault` (TODO 8d): only a PQ-rooted 24-word seed may own one, a vault passphrase on by default (the placeholder reads the authenticated `class`). All SPECIFIED.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** One place for the round's rulings, each with the rule that carries it.
+**Cost if wrong.** A ruling restated from memory with a changed meaning.
+**Source.** TODO 6, 8b, 8c, 8d; owner 2026-11-11 "Seeds sinh ra luôn dùng 24 words trở lên", "nhận kèm cảnh báo", "chỉ mạnh ngang passphrase => Chấp nhận rủi ro này. Yêu cầu passphrase phải đủ dài (10 ký tự) trong trường hợp này. Hoặc có lựa chọn dùng seed' = KDF(privkey, passphrase, nhãn, index).", "đồng ý, sửa theo đó", "wallet(s)"; owner 2026-11-16 "Làm sdk + ví trước freeze.", "Chọn scaas-app"; owner 2026-11-17 "Ok, theo đề xuất, viết ngay", "Ok, theo đề xuất, viết TUI sau SDK", "Ok, as proposed (b)", "Q1–Q5 as proposed", "đưa điểm 1 và 2 vào spec"; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §1.
+
+Change (owner 2026-11-17, "Ok, as proposed, settle the whole table"; status: SPECIFIED): every question of the spec's §25 is answered by its recommendation. **Q-A1 (a)**: in the `scaas` build every native chain signs through the SDK once `ua-rs-native` merges (EVM through `EvmTx`, every other chain through the guarded raw entry), no second holder of the mnemonic. **Q-B1 (a)**: UniFFI with `uniffi-bindgen-cpp`, decided by the spike (plan T3); (b) the fallback if C++ cannot carry the callbacks or async; no SDK C ABI this round. **Q-S1 (a)**: self-relay from the holder's own native EOA now, with the reviewed and capped quote, the delegated-payer check and the PQ registration split; (b), the node adding these entries to door A, asked of the node's next round. **Q-S2 (a)**: one keystore item, vault v1 objects as JSON text strings, `rev`, `backup`, the index MAC, the store lock, `keystore.prev`, the anchor. **Q-S3 (a)**: modules `vault` (seeds) and a future `pqvault` (notes). **Q-S4 (c)**: no parent id, set index or origin address stored; `class`, the origin type and the warnings under the index MAC; the BIP-85 high-water mark in the parent's sealed manifest. **Q-S6 (a)**: the account list public in the container, only with the MAC and the unverified rule. **Q-K4–Q-K18**: the defaults of §25's table, Q-K4 with `m = 128 MiB`; Q-K18's label string and salt constant fixed by plan T6 with vectors. **rpc Q6 (b)** (CLI-RPC-06's Change). The calls CLI-SDK-31 records under these questions ((1), (2), (3), (6), (8), (10), (11)) are owner rulings from this date.
+
+### CLI-SDK-31 — Controller calls of the SDK spec, 2026-11-17
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: decisions.md#CLI-SDK-31 · superseded-by: —
+
+**Rule.** The owner may override any. (1) The container `scaas.keystore` v1 with vault v1 texts as strings, `rev`, `backup`, the per-seed index MAC in `ua-rs`, the store lock, `keystore.prev`, the rollback anchor (Q-S2). (2) The derivation record's middle way: no parent, child index or origin address stored; `class`, origin type and warnings authenticated by the MAC; the BIP-85 high-water mark in the parent's sealed manifest (Q-S4). (3) The account list public in the container, MAC'd, locked seeds' rows unverified and never a receive address or destination (Q-S6). (4) Plain-record key references with string ids, a hidden set's own session id; one `SecretBytes` in `ua-rs` moved by copy calls; the prepared value an opaque object kept by the SDK, the review with field sources. (5) Prepare, review, quote, write ahead, send, follow; decoded `Execute` / `UAExecute`. (6) Submission by gateway or self-relay with reviewed caps, job API server-side only (Q-S1). (7) tokio, every exported call on the SDK's runtime, a pull subscription, no event callback. (8) FRB for Dart, UniFFI with `uniffi-bindgen-cpp` for C++ decided by an early spike, no SDK C ABI this round, wasm-bindgen later; one library per app (Q-B1). (9) Error names shared with scaas-app's contract; `ua-rs` and `scaas-rpc` codes passed through; `BroadcastRejected` an outcome. (10) Module names `vault` and a future `pqvault` (Q-S3). (11) In the `scaas` build every native chain signs through the SDK after `ua-rs-native` merges, EVM through `EvmTx`, the raw entry behind its own feature with its refusals enforced in the SDK and `ua-rs-native` only additive (coordinator ruling 2026-11-17) (Q-A1). (12) The research's §14 defaults for decisions 4–9 and 11–18 until the owner answers, with Fable's notes (Q-K4: consider 128 MiB); (c) and (d) not built before 4, 5 and 18 are answered. (13) The CLI-SGN-40 rule 3 offer not made (no type-4 transaction is built). (14) The operation states of CLI-SDK-18.
+**Status.** SPECIFIED with the rules they belong to.
+**Why.** Each is the smallest choice that keeps one byte format, one signer and one transport per behaviour, after Fable's review (spec §26); the questions with options are in the spec's §25.
+**Source.** [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §25, §26; Fable review `20261117-12-fable-fable-high-spec.md` (P0 0, P1 10, P2 19, P3 10, info 4; kept outside the repository's tracked files).
+
+## 42. Integration — ERP
 
 ### INT-ERP-01 — 24 h cooling-off for new receiving wallets
 - old: R22 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-01 · superseded-by: —
@@ -10556,7 +10877,7 @@ Change (2026-10-08): on the exchange path the record is `ExchangeLegSettled`; th
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 45.
 
 <!-- example:odoo -->
-## 41. Integration — example connector
+## 43. Integration — example connector
 
 ### INT-ODOO-01 — Deploy job precedes pay via prerequisite
 - old: RS4-6 · status: current · owner: no · date: 2026-10-06 · normative: integration-odoo-example.md#INT-ODOO-01 · superseded-by: —
@@ -10666,7 +10987,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 
 <!-- /example -->
 
-## <a id="alias-index"></a>42. Alias index
+## <a id="alias-index"></a>44. Alias index
 
 <!-- BEGIN alias-index (generated by scripts/docs_check.py --write) -->
 | Old id | New id(s) | Status |
