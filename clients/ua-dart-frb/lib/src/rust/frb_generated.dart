@@ -182,7 +182,7 @@ abstract class ScaasUaApi extends BaseApi {
 
   String crateApiWalletUaKeySs58Address({
     required UaKey that,
-    required int prefix,
+    required PlatformInt64 prefix,
   });
 
   Uint8List crateApiWalletUaKeyUaId({required UaKey that});
@@ -226,35 +226,35 @@ abstract class ScaasUaApi extends BaseApi {
   Future<UaKey> crateApiWalletUaWalletBitcoinKey({
     required UaWallet that,
     required String networkName,
-    int? coinType,
-    required int change,
-    required int index,
+    PlatformInt64? coinType,
+    required PlatformInt64 change,
+    required PlatformInt64 index,
   });
 
   Future<String> crateApiWalletUaWalletDiscoverCandidates({
     required UaWallet that,
-    required int kind,
-    required int account,
-    required int gap,
+    required PlatformInt64 kind,
+    required PlatformInt64 account,
+    required PlatformInt64 gap,
   });
 
   Future<SecretBytes> crateApiWalletUaWalletExportPqzLeafRaw({
     required UaWallet that,
-    required int account,
-    required int index,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   });
 
   Future<UaKey> crateApiWalletUaWalletImportedKey({
     required UaWallet that,
     required String networkName,
-    required int n,
+    required PlatformInt64 n,
   });
 
   Future<UaKey> crateApiWalletUaWalletImportedUaKey({
     required UaWallet that,
     required String networkName,
-    required int n,
-    required int kind,
+    required PlatformInt64 n,
+    required PlatformInt64 kind,
   });
 
   Future<String> crateApiWalletUaWalletLinkSeal({
@@ -275,8 +275,8 @@ abstract class ScaasUaApi extends BaseApi {
   Future<UaKey> crateApiWalletUaWalletNativeKey({
     required UaWallet that,
     required String networkName,
-    required int index,
-    int? coinType,
+    required PlatformInt64 index,
+    PlatformInt64? coinType,
   });
 
   Future<UaKey> crateApiWalletUaWalletPolkadotKey({
@@ -286,22 +286,22 @@ abstract class ScaasUaApi extends BaseApi {
 
   Future<UaPqzKey> crateApiWalletUaWalletPqzKey({
     required UaWallet that,
-    required int account,
-    required int index,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   });
 
   Future<UaKey> crateApiWalletUaWalletUaKey({
     required UaWallet that,
-    required int kind,
-    required int account,
-    required int index,
+    required PlatformInt64 kind,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   });
 
   Future<UaZetherKey> crateApiWalletUaWalletZetherKey({
     required UaWallet that,
-    required int coin,
-    required int account,
-    required int keyUse,
+    required PlatformInt64 coin,
+    required PlatformInt64 account,
+    required PlatformInt64 keyUse,
   });
 
   Future<String> crateApiWalletUaZetherKeyCall({
@@ -327,7 +327,7 @@ abstract class ScaasUaApi extends BaseApi {
   int crateApiWalletAbiVersion();
 
   Future<SecretBytes> crateApiWalletAeadOpen({
-    required int algId,
+    required PlatformInt64 algId,
     required SecretBytes key32,
     required List<int> nonce12,
     required List<int> aad,
@@ -335,7 +335,7 @@ abstract class ScaasUaApi extends BaseApi {
   });
 
   Future<Uint8List> crateApiWalletAeadSeal({
-    required int algId,
+    required PlatformInt64 algId,
     required SecretBytes key32,
     required List<int> nonce12,
     required List<int> aad,
@@ -369,7 +369,7 @@ abstract class ScaasUaApi extends BaseApi {
     required SecretBytes ikm,
     required List<int> salt,
     required List<int> info,
-    required int len,
+    required PlatformInt64 len,
   });
 
   Future<Uint8List> crateApiWalletHmacSha256({
@@ -578,7 +578,7 @@ abstract class ScaasUaApi extends BaseApi {
     required SecretBytes pt,
   });
 
-  SecretBytes crateApiWalletSecretAlloc({required int len});
+  SecretBytes crateApiWalletSecretAlloc({required PlatformInt64 len});
 
   Future<bool> crateApiWalletSeedBackupVerify({
     required UaSeedBackup b,
@@ -648,8 +648,8 @@ abstract class ScaasUaApi extends BaseApi {
 
   Future<SecretBytes> crateApiWalletWalletExportPqzLeafRawVersion({
     required UaWallet w,
-    required int account,
-    required int index,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
     required BigInt version,
   });
 
@@ -691,8 +691,8 @@ abstract class ScaasUaApi extends BaseApi {
 
   Future<UaPqzKey> crateApiWalletWalletPqzKeyVersion({
     required UaWallet w,
-    required int account,
-    required int index,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
     required BigInt version,
   });
 
@@ -1679,7 +1679,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   @override
   String crateApiWalletUaKeySs58Address({
     required UaKey that,
-    required int prefix,
+    required PlatformInt64 prefix,
   }) {
     return handler.executeSync(
       SyncTask(
@@ -1689,7 +1689,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             that,
             serializer,
           );
-          sse_encode_u_16(prefix, serializer);
+          sse_encode_i_64(prefix, serializer);
           return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 25)!;
         },
         codec: SseCodec(
@@ -2075,9 +2075,9 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   Future<UaKey> crateApiWalletUaWalletBitcoinKey({
     required UaWallet that,
     required String networkName,
-    int? coinType,
-    required int change,
-    required int index,
+    PlatformInt64? coinType,
+    required PlatformInt64 change,
+    required PlatformInt64 index,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2088,9 +2088,9 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             serializer,
           );
           sse_encode_String(networkName, serializer);
-          sse_encode_opt_box_autoadd_u_32(coinType, serializer);
-          sse_encode_u_32(change, serializer);
-          sse_encode_u_32(index, serializer);
+          sse_encode_opt_box_autoadd_i_64(coinType, serializer);
+          sse_encode_i_64(change, serializer);
+          sse_encode_i_64(index, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -2119,9 +2119,9 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   @override
   Future<String> crateApiWalletUaWalletDiscoverCandidates({
     required UaWallet that,
-    required int kind,
-    required int account,
-    required int gap,
+    required PlatformInt64 kind,
+    required PlatformInt64 account,
+    required PlatformInt64 gap,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2131,9 +2131,9 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             that,
             serializer,
           );
-          sse_encode_u_16(kind, serializer);
-          sse_encode_u_32(account, serializer);
-          sse_encode_u_32(gap, serializer);
+          sse_encode_i_64(kind, serializer);
+          sse_encode_i_64(account, serializer);
+          sse_encode_i_64(gap, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -2161,8 +2161,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   @override
   Future<SecretBytes> crateApiWalletUaWalletExportPqzLeafRaw({
     required UaWallet that,
-    required int account,
-    required int index,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2172,8 +2172,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             that,
             serializer,
           );
-          sse_encode_u_32(account, serializer);
-          sse_encode_u_32(index, serializer);
+          sse_encode_i_64(account, serializer);
+          sse_encode_i_64(index, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -2203,7 +2203,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   Future<UaKey> crateApiWalletUaWalletImportedKey({
     required UaWallet that,
     required String networkName,
-    required int n,
+    required PlatformInt64 n,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2214,7 +2214,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             serializer,
           );
           sse_encode_String(networkName, serializer);
-          sse_encode_u_32(n, serializer);
+          sse_encode_i_64(n, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -2244,8 +2244,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   Future<UaKey> crateApiWalletUaWalletImportedUaKey({
     required UaWallet that,
     required String networkName,
-    required int n,
-    required int kind,
+    required PlatformInt64 n,
+    required PlatformInt64 kind,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2256,8 +2256,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             serializer,
           );
           sse_encode_String(networkName, serializer);
-          sse_encode_u_32(n, serializer);
-          sse_encode_u_16(kind, serializer);
+          sse_encode_i_64(n, serializer);
+          sse_encode_i_64(kind, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -2418,8 +2418,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   Future<UaKey> crateApiWalletUaWalletNativeKey({
     required UaWallet that,
     required String networkName,
-    required int index,
-    int? coinType,
+    required PlatformInt64 index,
+    PlatformInt64? coinType,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2430,8 +2430,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             serializer,
           );
           sse_encode_String(networkName, serializer);
-          sse_encode_u_32(index, serializer);
-          sse_encode_opt_box_autoadd_u_32(coinType, serializer);
+          sse_encode_i_64(index, serializer);
+          sse_encode_opt_box_autoadd_i_64(coinType, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -2499,8 +2499,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   @override
   Future<UaPqzKey> crateApiWalletUaWalletPqzKey({
     required UaWallet that,
-    required int account,
-    required int index,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2510,8 +2510,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             that,
             serializer,
           );
-          sse_encode_u_32(account, serializer);
-          sse_encode_u_32(index, serializer);
+          sse_encode_i_64(account, serializer);
+          sse_encode_i_64(index, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -2540,9 +2540,9 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   @override
   Future<UaKey> crateApiWalletUaWalletUaKey({
     required UaWallet that,
-    required int kind,
-    required int account,
-    required int index,
+    required PlatformInt64 kind,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2552,9 +2552,9 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             that,
             serializer,
           );
-          sse_encode_u_16(kind, serializer);
-          sse_encode_u_32(account, serializer);
-          sse_encode_u_32(index, serializer);
+          sse_encode_i_64(kind, serializer);
+          sse_encode_i_64(account, serializer);
+          sse_encode_i_64(index, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -2583,9 +2583,9 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   @override
   Future<UaZetherKey> crateApiWalletUaWalletZetherKey({
     required UaWallet that,
-    required int coin,
-    required int account,
-    required int keyUse,
+    required PlatformInt64 coin,
+    required PlatformInt64 account,
+    required PlatformInt64 keyUse,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -2595,9 +2595,9 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             that,
             serializer,
           );
-          sse_encode_u_32(coin, serializer);
-          sse_encode_u_32(account, serializer);
-          sse_encode_u_32(keyUse, serializer);
+          sse_encode_i_64(coin, serializer);
+          sse_encode_i_64(account, serializer);
+          sse_encode_i_64(keyUse, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -2819,7 +2819,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
 
   @override
   Future<SecretBytes> crateApiWalletAeadOpen({
-    required int algId,
+    required PlatformInt64 algId,
     required SecretBytes key32,
     required List<int> nonce12,
     required List<int> aad,
@@ -2829,7 +2829,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_u_32(algId, serializer);
+          sse_encode_i_64(algId, serializer);
           sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
             key32,
             serializer,
@@ -2863,7 +2863,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
 
   @override
   Future<Uint8List> crateApiWalletAeadSeal({
-    required int algId,
+    required PlatformInt64 algId,
     required SecretBytes key32,
     required List<int> nonce12,
     required List<int> aad,
@@ -2873,7 +2873,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_u_32(algId, serializer);
+          sse_encode_i_64(algId, serializer);
           sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerSecretBytes(
             key32,
             serializer,
@@ -3109,7 +3109,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
     required SecretBytes ikm,
     required List<int> salt,
     required List<int> info,
-    required int len,
+    required PlatformInt64 len,
   }) {
     return handler.executeNormal(
       NormalTask(
@@ -3121,7 +3121,7 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
           );
           sse_encode_list_prim_u_8_loose(salt, serializer);
           sse_encode_list_prim_u_8_loose(info, serializer);
-          sse_encode_u_32(len, serializer);
+          sse_encode_i_64(len, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -4684,12 +4684,12 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   );
 
   @override
-  SecretBytes crateApiWalletSecretAlloc({required int len}) {
+  SecretBytes crateApiWalletSecretAlloc({required PlatformInt64 len}) {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_u_32(len, serializer);
+          sse_encode_i_64(len, serializer);
           return pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -5238,8 +5238,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   @override
   Future<SecretBytes> crateApiWalletWalletExportPqzLeafRawVersion({
     required UaWallet w,
-    required int account,
-    required int index,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
     required BigInt version,
   }) {
     return handler.executeNormal(
@@ -5250,8 +5250,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             w,
             serializer,
           );
-          sse_encode_u_32(account, serializer);
-          sse_encode_u_32(index, serializer);
+          sse_encode_i_64(account, serializer);
+          sse_encode_i_64(index, serializer);
           sse_encode_u_64(version, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
@@ -5556,8 +5556,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   @override
   Future<UaPqzKey> crateApiWalletWalletPqzKeyVersion({
     required UaWallet w,
-    required int account,
-    required int index,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
     required BigInt version,
   }) {
     return handler.executeNormal(
@@ -5568,8 +5568,8 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
             w,
             serializer,
           );
-          sse_encode_u_32(account, serializer);
-          sse_encode_u_32(index, serializer);
+          sse_encode_i_64(account, serializer);
+          sse_encode_i_64(index, serializer);
           sse_encode_u_64(version, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
@@ -6402,9 +6402,9 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
-  int dco_decode_box_autoadd_u_32(dynamic raw) {
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw as int;
+    return dco_decode_i_64(raw);
   }
 
   @protected
@@ -6555,9 +6555,9 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
-  int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
+    return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
   }
 
   @protected
@@ -7151,9 +7151,9 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
-  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer) {
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return (sse_decode_u_32(deserializer));
+    return (sse_decode_i_64(deserializer));
   }
 
   @protected
@@ -7349,11 +7349,11 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
-  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer) {
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     if (sse_decode_bool(deserializer)) {
-      return (sse_decode_box_autoadd_u_32(deserializer));
+      return (sse_decode_box_autoadd_i_64(deserializer));
     } else {
       return null;
     }
@@ -7997,9 +7997,12 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
-  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer) {
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    sse_encode_u_32(self, serializer);
+    sse_encode_i_64(self, serializer);
   }
 
   @protected
@@ -8191,12 +8194,15 @@ class ScaasUaApiImpl extends ScaasUaApiImplPlatform implements ScaasUaApi {
   }
 
   @protected
-  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer) {
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
     sse_encode_bool(self != null, serializer);
     if (self != null) {
-      sse_encode_box_autoadd_u_32(self, serializer);
+      sse_encode_box_autoadd_i_64(self, serializer);
     }
   }
 
@@ -8585,7 +8591,7 @@ class UaKeyImpl extends RustOpaque implements UaKey {
   );
 
   /// A Polkadot key's SS58 address at `prefix`.
-  String ss58Address({required int prefix}) => ScaasUa.instance.api
+  String ss58Address({required PlatformInt64 prefix}) => ScaasUa.instance.api
       .crateApiWalletUaKeySs58Address(that: this, prefix: prefix);
 
   Uint8List uaId() => ScaasUa.instance.api.crateApiWalletUaKeyUaId(that: this);
@@ -8740,9 +8746,9 @@ class UaWalletImpl extends RustOpaque implements UaWallet {
   /// Bitcoin key `index` of chain `change` (0 receive, 1 change); `coin_type` null, 0 or 1 (ua-rs-native).
   Future<UaKey> bitcoinKey({
     required String networkName,
-    int? coinType,
-    required int change,
-    required int index,
+    PlatformInt64? coinType,
+    required PlatformInt64 change,
+    required PlatformInt64 index,
   }) => ScaasUa.instance.api.crateApiWalletUaWalletBitcoinKey(
     that: this,
     networkName: networkName,
@@ -8753,9 +8759,9 @@ class UaWalletImpl extends RustOpaque implements UaWallet {
 
   /// JSON `[{index, ua}]`.
   Future<String> discoverCandidates({
-    required int kind,
-    required int account,
-    required int gap,
+    required PlatformInt64 kind,
+    required PlatformInt64 account,
+    required PlatformInt64 gap,
   }) => ScaasUa.instance.api.crateApiWalletUaWalletDiscoverCandidates(
     that: this,
     kind: kind,
@@ -8765,27 +8771,29 @@ class UaWalletImpl extends RustOpaque implements UaWallet {
 
   /// The PQZ leaf `seed32`: the explicit export (spec §8.4).
   Future<SecretBytes> exportPqzLeafRaw({
-    required int account,
-    required int index,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   }) => ScaasUa.instance.api.crateApiWalletUaWalletExportPqzLeafRaw(
     that: this,
     account: account,
     index: index,
   );
 
-  Future<UaKey> importedKey({required String networkName, required int n}) =>
-      ScaasUa.instance.api.crateApiWalletUaWalletImportedKey(
-        that: this,
-        networkName: networkName,
-        n: n,
-      );
+  Future<UaKey> importedKey({
+    required String networkName,
+    required PlatformInt64 n,
+  }) => ScaasUa.instance.api.crateApiWalletUaWalletImportedKey(
+    that: this,
+    networkName: networkName,
+    n: n,
+  );
 
   /// T20c (owner 2026-11-08): the UA of imported key `n`, `kind` the derived kind of its own scheme (0x0108 secp256k1, 0x0102
   /// ed25519), any other `UAArgument`; a UA key (`sign_ua` / `sign_member`), no KEM key, never a backup or link sender.
   Future<UaKey> importedUaKey({
     required String networkName,
-    required int n,
-    required int kind,
+    required PlatformInt64 n,
+    required PlatformInt64 kind,
   }) => ScaasUa.instance.api.crateApiWalletUaWalletImportedUaKey(
     that: this,
     networkName: networkName,
@@ -8815,8 +8823,8 @@ class UaWalletImpl extends RustOpaque implements UaWallet {
   /// `network_name` the clientkeys name (`evm`, `hedera_ecdsa`, ...); `coin_type` null = the network's own.
   Future<UaKey> nativeKey({
     required String networkName,
-    required int index,
-    int? coinType,
+    required PlatformInt64 index,
+    PlatformInt64? coinType,
   }) => ScaasUa.instance.api.crateApiWalletUaWalletNativeKey(
     that: this,
     networkName: networkName,
@@ -8828,15 +8836,19 @@ class UaWalletImpl extends RustOpaque implements UaWallet {
   Future<UaKey> polkadotKey({required String path}) => ScaasUa.instance.api
       .crateApiWalletUaWalletPolkadotKey(that: this, path: path);
 
-  Future<UaPqzKey> pqzKey({required int account, required int index}) => ScaasUa
-      .instance
-      .api
-      .crateApiWalletUaWalletPqzKey(that: this, account: account, index: index);
+  Future<UaPqzKey> pqzKey({
+    required PlatformInt64 account,
+    required PlatformInt64 index,
+  }) => ScaasUa.instance.api.crateApiWalletUaWalletPqzKey(
+    that: this,
+    account: account,
+    index: index,
+  );
 
   Future<UaKey> uaKey({
-    required int kind,
-    required int account,
-    required int index,
+    required PlatformInt64 kind,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   }) => ScaasUa.instance.api.crateApiWalletUaWalletUaKey(
     that: this,
     kind: kind,
@@ -8845,9 +8857,9 @@ class UaWalletImpl extends RustOpaque implements UaWallet {
   );
 
   Future<UaZetherKey> zetherKey({
-    required int coin,
-    required int account,
-    required int keyUse,
+    required PlatformInt64 coin,
+    required PlatformInt64 account,
+    required PlatformInt64 keyUse,
   }) => ScaasUa.instance.api.crateApiWalletUaWalletZetherKey(
     that: this,
     coin: coin,

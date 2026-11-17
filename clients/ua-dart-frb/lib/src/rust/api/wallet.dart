@@ -13,7 +13,7 @@ import 'ua.dart';
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `drop`, `drop`, `from`
 
 /// A new secret of `len` zero bytes (`UAArgument` above 16 MiB); Dart's `SecretBytes.take` fills it.
-SecretBytes secretAlloc({required int len}) =>
+SecretBytes secretAlloc({required PlatformInt64 len}) =>
     ScaasUa.instance.api.crateApiWalletSecretAlloc(len: len);
 
 int abiVersion() => ScaasUa.instance.api.crateApiWalletAbiVersion();
@@ -261,7 +261,7 @@ Future<String> uasig({required String requestJson, required UaKeyList keys}) =>
 
 /// `alg` 1 = AES-256-GCM, 2 = AES-256-GCM-SIV; `pt` the plaintext.
 Future<Uint8List> aeadSeal({
-  required int algId,
+  required PlatformInt64 algId,
   required SecretBytes key32,
   required List<int> nonce12,
   required List<int> aad,
@@ -276,7 +276,7 @@ Future<Uint8List> aeadSeal({
 
 /// The plaintext of `data`.
 Future<SecretBytes> aeadOpen({
-  required int algId,
+  required PlatformInt64 algId,
   required SecretBytes key32,
   required List<int> nonce12,
   required List<int> aad,
@@ -294,7 +294,7 @@ Future<SecretBytes> hkdfSha256({
   required SecretBytes ikm,
   required List<int> salt,
   required List<int> info,
-  required int len,
+  required PlatformInt64 len,
 }) => ScaasUa.instance.api.crateApiWalletHkdfSha256(
   ikm: ikm,
   salt: salt,
@@ -349,8 +349,8 @@ Future<void> pqzCheckSet({required String deployedJson}) =>
 /// function, as [`key_kem_key`]: the Dart facade refuses a version outside u64 before frb's 64-bit encoding wraps it (T21 L54).
 Future<UaPqzKey> walletPqzKeyVersion({
   required UaWallet w,
-  required int account,
-  required int index,
+  required PlatformInt64 account,
+  required PlatformInt64 index,
   required BigInt version,
 }) => ScaasUa.instance.api.crateApiWalletWalletPqzKeyVersion(
   w: w,
@@ -362,8 +362,8 @@ Future<UaPqzKey> walletPqzKeyVersion({
 /// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4); a free function for the same reason.
 Future<SecretBytes> walletExportPqzLeafRawVersion({
   required UaWallet w,
-  required int account,
-  required int index,
+  required PlatformInt64 account,
+  required PlatformInt64 index,
   required BigInt version,
 }) => ScaasUa.instance.api.crateApiWalletWalletExportPqzLeafRawVersion(
   w: w,
@@ -494,7 +494,7 @@ abstract class UaKey implements RustOpaqueInterface {
   });
 
   /// A Polkadot key's SS58 address at `prefix`.
-  String ss58Address({required int prefix});
+  String ss58Address({required PlatformInt64 prefix});
 
   Uint8List uaId();
 
@@ -545,32 +545,35 @@ abstract class UaWallet implements RustOpaqueInterface {
   /// Bitcoin key `index` of chain `change` (0 receive, 1 change); `coin_type` null, 0 or 1 (ua-rs-native).
   Future<UaKey> bitcoinKey({
     required String networkName,
-    int? coinType,
-    required int change,
-    required int index,
+    PlatformInt64? coinType,
+    required PlatformInt64 change,
+    required PlatformInt64 index,
   });
 
   /// JSON `[{index, ua}]`.
   Future<String> discoverCandidates({
-    required int kind,
-    required int account,
-    required int gap,
+    required PlatformInt64 kind,
+    required PlatformInt64 account,
+    required PlatformInt64 gap,
   });
 
   /// The PQZ leaf `seed32`: the explicit export (spec §8.4).
   Future<SecretBytes> exportPqzLeafRaw({
-    required int account,
-    required int index,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   });
 
-  Future<UaKey> importedKey({required String networkName, required int n});
+  Future<UaKey> importedKey({
+    required String networkName,
+    required PlatformInt64 n,
+  });
 
   /// T20c (owner 2026-11-08): the UA of imported key `n`, `kind` the derived kind of its own scheme (0x0108 secp256k1, 0x0102
   /// ed25519), any other `UAArgument`; a UA key (`sign_ua` / `sign_member`), no KEM key, never a backup or link sender.
   Future<UaKey> importedUaKey({
     required String networkName,
-    required int n,
-    required int kind,
+    required PlatformInt64 n,
+    required PlatformInt64 kind,
   });
 
   Future<String> linkSeal({
@@ -588,25 +591,28 @@ abstract class UaWallet implements RustOpaqueInterface {
   /// `network_name` the clientkeys name (`evm`, `hedera_ecdsa`, ...); `coin_type` null = the network's own.
   Future<UaKey> nativeKey({
     required String networkName,
-    required int index,
-    int? coinType,
+    required PlatformInt64 index,
+    PlatformInt64? coinType,
   });
 
   /// The Polkadot key of the junction path `path` ("" the bare account; ua-rs-native).
   Future<UaKey> polkadotKey({required String path});
 
-  Future<UaPqzKey> pqzKey({required int account, required int index});
+  Future<UaPqzKey> pqzKey({
+    required PlatformInt64 account,
+    required PlatformInt64 index,
+  });
 
   Future<UaKey> uaKey({
-    required int kind,
-    required int account,
-    required int index,
+    required PlatformInt64 kind,
+    required PlatformInt64 account,
+    required PlatformInt64 index,
   });
 
   Future<UaZetherKey> zetherKey({
-    required int coin,
-    required int account,
-    required int keyUse,
+    required PlatformInt64 coin,
+    required PlatformInt64 account,
+    required PlatformInt64 keyUse,
   });
 }
 

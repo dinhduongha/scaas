@@ -1201,6 +1201,24 @@ class Native(unittest.TestCase):
                     n += 1
         self.assertGreaterEqual(n, 2 * 40)
 
+    def test_integers_outside_their_c_type_are_refused_not_wrapped(self):
+        # T13 C4: ctypes would wrap 65536 + 42 to 42, 2**32 + 1 to 1 and -1 to the coin-type default
+        w = self.nw('pq_kat')
+        dot = w.polkadot_key('')
+        self.assertEqual(code(lambda: dot.ss58_address(42)), '')
+        for p in (65536, 65536 + 42, -1, 2 ** 64):
+            self.assertEqual(code(lambda: dot.ss58_address(p)), 'UAArgument', p)
+        self.assertEqual(code(lambda: w.bitcoin_key('bitcoin_p2wpkh', None, 1, 0)), '')
+        for change, index in ((2 ** 32 + 1, 0), (0, 2 ** 32), (-1, 0)):
+            self.assertEqual(code(lambda: w.bitcoin_key('bitcoin_p2wpkh', None, change, index)), 'UAArgument', (change, index))
+        self.assertEqual(code(lambda: w.native_key('solana', 0, -1)), 'UAArgument', 'coin type -1 is not the default')
+        self.assertEqual(code(lambda: w.native_key('solana', 2 ** 32)), 'UAArgument')
+        self.assertEqual(code(lambda: w.ua_key(0x0102)), '')
+        for kind, account in ((65536 + 0x0102, 0), (0x0102, 2 ** 32)):
+            self.assertEqual(code(lambda: w.ua_key(kind, account)), 'UAArgument', (kind, account))
+        k = w.ua_key(0x0102)
+        self.assertEqual(code(lambda: k.kem_key(2 ** 64)), 'UAArgument')
+
     def test_ua_key_has_no_raw_message_or_envelope_call(self):
         ua = self.nw('pq_kat').ua_key(0x0102)
         self.assertEqual(code(lambda: ua.sign_message_raw(b'\x01')), 'UARawDigestRefused')

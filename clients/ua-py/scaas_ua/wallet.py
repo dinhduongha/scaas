@@ -146,8 +146,24 @@ def load(path=None):
         return lib
 
 
+_UINT_BITS = {u16: 16, u32: 32, u64: 64}
+
+
 def _c(name):
-    return getattr(_lib if _lib is not None else load(), 'scaas_ua_' + name)
+    """The library's function ``name``. ctypes converts a Python int to ``c_uint16`` / ``c_uint32`` / ``c_uint64`` without a range
+    check (``65536 + 42`` becomes 42, ``-1`` the coin-type default): an integer argument outside its C type is ``UAArgument``
+    before the call (ua-rs-native T13 C4), for every function of the table."""
+    f = getattr(_lib if _lib is not None else load(), 'scaas_ua_' + name)
+    bits = [_UINT_BITS.get(t) for t in (f.argtypes or ())]
+    if not any(bits):
+        return f
+
+    def checked(*args):
+        for v, b in zip(args, bits):
+            if b and isinstance(v, int) and not 0 <= v < 1 << b:
+                raise WalletError(ERR_ARGUMENT, 'UAArgument', 'an integer outside its C type')
+        return f(*args)
+    return checked
 
 
 def abi_version():

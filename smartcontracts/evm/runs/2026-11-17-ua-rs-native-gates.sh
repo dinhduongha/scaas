@@ -22,7 +22,7 @@ OWN_STEPS="vectors-check ua-rs ua-c ua-dart-frb ua-py ua-go ua-cs"
 # named-tests: no log of these may show a test binary with 0 passed or a skipped suite
 FAMILIES="clientkeys ua-rs-nodefault ua-rs-wallet ua-rs ua-rs-vectors ua-rs-zether ua-rs-pqz no-oracle ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs"
 # the mutant records of this round (one per task that has mutants; extended per task)
-MUTANT_RECORDS=${MUTANT_RECORDS-"2026-11-17-ua-rs-native-t2 2026-11-17-ua-rs-native-t3 2026-11-17-ua-rs-native-t4 2026-11-17-ua-rs-native-t5 2026-11-17-ua-rs-native-t6 2026-11-17-ua-rs-native-t6a 2026-11-17-ua-rs-native-t6b 2026-11-17-ua-rs-native-t7 2026-11-17-ua-rs-native-t8a 2026-11-17-ua-rs-native-t8b 2026-11-17-ua-rs-native-t9 2026-11-17-ua-rs-native-t10 2026-11-17-ua-rs-native-t11d 2026-11-17-ua-rs-native-t11e 2026-11-17-ua-rs-native-t11f 2026-11-17-ua-rs-native-t11a 2026-11-17-ua-rs-native-t11b 2026-11-17-ua-rs-native-t11c 2026-11-17-ua-rs-native-t13-c1 2026-11-17-ua-rs-native-t13-c2 2026-11-17-ua-rs-native-t13-c6 2026-11-17-ua-rs-native-t13-c7"}
+MUTANT_RECORDS=${MUTANT_RECORDS-"2026-11-17-ua-rs-native-t2 2026-11-17-ua-rs-native-t3 2026-11-17-ua-rs-native-t4 2026-11-17-ua-rs-native-t5 2026-11-17-ua-rs-native-t6 2026-11-17-ua-rs-native-t6a 2026-11-17-ua-rs-native-t6b 2026-11-17-ua-rs-native-t7 2026-11-17-ua-rs-native-t8a 2026-11-17-ua-rs-native-t8b 2026-11-17-ua-rs-native-t9 2026-11-17-ua-rs-native-t10 2026-11-17-ua-rs-native-t11d 2026-11-17-ua-rs-native-t11e 2026-11-17-ua-rs-native-t11f 2026-11-17-ua-rs-native-t11a 2026-11-17-ua-rs-native-t11b 2026-11-17-ua-rs-native-t11c 2026-11-17-ua-rs-native-t13-c1 2026-11-17-ua-rs-native-t13-c2 2026-11-17-ua-rs-native-t13-c6 2026-11-17-ua-rs-native-t13-c7 2026-11-17-ua-rs-native-t13-c4"}
 export CAPPED_MEM=${CAPPED_MEM:-4G} # 4G: capped's own default (the base sets 3G)
 C="--locked --offline -j2"
 
@@ -219,6 +219,8 @@ ua-rs|cargo|native_json_sign_digest_rows_are_32_bytes_by_type
 clientkeys|node|signNearTransaction refuses NEP-461 tagged payloads beside a Transaction head (T13 C6)
 ua-rs|cargo|sign_near_transaction_refuses_nep461_tags_beside_a_transaction
 ua-rs|cargo|manifest_refuses_change_off_bitcoin_and_refused_coin_types
+ua-py|unittest|test_integers_outside_their_c_type_are_refused_not_wrapped
+ua-dart-frb|dart|integers outside their Rust type are UAArgument, not wrapped
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"

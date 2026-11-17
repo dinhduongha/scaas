@@ -836,6 +836,26 @@ void main() {
     expect(await code(() => ua.signMessageRaw(message: Uint8List.fromList([1]))), 'UARawDigestRefused');
     expect(await code(() => ua.signNearTransaction(txBorsh: Uint8List.fromList([1]))), 'UARawDigestRefused');
   });
+
+  // T13 C4: frb wrote a u16 / u32 with putUint16 / putUint32, which wrap (65536 + 42 -> 42); the API takes an int and the
+  // bridge refuses one outside its Rust type
+  test('integers outside their Rust type are UAArgument, not wrapped', () async {
+    final w = await nw('pq_kat');
+    final dot = await w.polkadotKey(path: '');
+    expect(await code(() async => dot.ss58Address(prefix: 42)), null);
+    for (final p in [65536, 65536 + 42, -1]) {
+      expect(await code(() async => dot.ss58Address(prefix: p)), 'UAArgument', reason: '$p');
+    }
+    expect(await code(() => w.bitcoinKey(networkName: 'bitcoin_p2wpkh', coinType: null, change: 1, index: 0)), null);
+    for (final (c, i) in [(4294967297, 0), (0, 4294967296), (-1, 0)]) {
+      expect(await code(() => w.bitcoinKey(networkName: 'bitcoin_p2wpkh', coinType: null, change: c, index: i)), 'UAArgument', reason: '$c $i');
+    }
+    expect(await code(() => w.nativeKey(networkName: 'solana', index: 0, coinType: -1)), 'UAArgument');
+    expect(await code(() => w.nativeKey(networkName: 'solana', index: 4294967296, coinType: null)), 'UAArgument');
+    expect(await code(() => w.uaKey(kind: 0x0102, account: 0, index: 0)), null);
+    expect(await code(() => w.uaKey(kind: 65536 + 0x0102, account: 0, index: 0)), 'UAArgument');
+    expect(await code(() => w.uaKey(kind: 0x0102, account: 4294967296, index: 0)), 'UAArgument');
+  });
 }
 
 final nat = jsonDecode(File('$vectors/../native/native.json').readAsStringSync()) as Map<String, dynamic>;

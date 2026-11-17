@@ -1308,7 +1308,7 @@ fn wire__crate__api__wallet__UaKey_ss58_address_impl(
             let api_that = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaKey>,
             >>::sse_decode(&mut deserializer);
-            let api_prefix = <u16>::sse_decode(&mut deserializer);
+            let api_prefix = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::api::ua::UAError>((move || {
                 let mut api_that_guard = None;
@@ -1906,9 +1906,9 @@ fn wire__crate__api__wallet__UaWallet_bitcoin_key_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
             let api_network_name = <String>::sse_decode(&mut deserializer);
-            let api_coin_type = <Option<u32>>::sse_decode(&mut deserializer);
-            let api_change = <u32>::sse_decode(&mut deserializer);
-            let api_index = <u32>::sse_decode(&mut deserializer);
+            let api_coin_type = <Option<i64>>::sse_decode(&mut deserializer);
+            let api_change = <i64>::sse_decode(&mut deserializer);
+            let api_index = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -1964,9 +1964,9 @@ fn wire__crate__api__wallet__UaWallet_discover_candidates_impl(
             let api_that = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
-            let api_account = <u32>::sse_decode(&mut deserializer);
-            let api_gap = <u32>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
+            let api_account = <i64>::sse_decode(&mut deserializer);
+            let api_gap = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -2021,8 +2021,8 @@ fn wire__crate__api__wallet__UaWallet_export_pqz_leaf_raw_impl(
             let api_that = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
-            let api_account = <u32>::sse_decode(&mut deserializer);
-            let api_index = <u32>::sse_decode(&mut deserializer);
+            let api_account = <i64>::sse_decode(&mut deserializer);
+            let api_index = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -2077,7 +2077,7 @@ fn wire__crate__api__wallet__UaWallet_imported_key_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
             let api_network_name = <String>::sse_decode(&mut deserializer);
-            let api_n = <u32>::sse_decode(&mut deserializer);
+            let api_n = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -2132,8 +2132,8 @@ fn wire__crate__api__wallet__UaWallet_imported_ua_key_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
             let api_network_name = <String>::sse_decode(&mut deserializer);
-            let api_n = <u32>::sse_decode(&mut deserializer);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_n = <i64>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -2400,8 +2400,8 @@ fn wire__crate__api__wallet__UaWallet_native_key_impl(
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
             let api_network_name = <String>::sse_decode(&mut deserializer);
-            let api_index = <u32>::sse_decode(&mut deserializer);
-            let api_coin_type = <Option<u32>>::sse_decode(&mut deserializer);
+            let api_index = <i64>::sse_decode(&mut deserializer);
+            let api_coin_type = <Option<i64>>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -2507,8 +2507,8 @@ fn wire__crate__api__wallet__UaWallet_pqz_key_impl(
             let api_that = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
-            let api_account = <u32>::sse_decode(&mut deserializer);
-            let api_index = <u32>::sse_decode(&mut deserializer);
+            let api_account = <i64>::sse_decode(&mut deserializer);
+            let api_index = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -2562,9 +2562,9 @@ fn wire__crate__api__wallet__UaWallet_ua_key_impl(
             let api_that = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
-            let api_account = <u32>::sse_decode(&mut deserializer);
-            let api_index = <u32>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
+            let api_account = <i64>::sse_decode(&mut deserializer);
+            let api_index = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -2619,9 +2619,9 @@ fn wire__crate__api__wallet__UaWallet_zether_key_impl(
             let api_that = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
-            let api_coin = <u32>::sse_decode(&mut deserializer);
-            let api_account = <u32>::sse_decode(&mut deserializer);
-            let api_key_use = <u32>::sse_decode(&mut deserializer);
+            let api_coin = <i64>::sse_decode(&mut deserializer);
+            let api_account = <i64>::sse_decode(&mut deserializer);
+            let api_key_use = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -2969,7 +2969,7 @@ fn wire__crate__api__wallet__aead_open_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_alg_id = <u32>::sse_decode(&mut deserializer);
+            let api_alg_id = <i64>::sse_decode(&mut deserializer);
             let api_key32 = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
             >>::sse_decode(&mut deserializer);
@@ -3028,7 +3028,7 @@ fn wire__crate__api__wallet__aead_seal_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_alg_id = <u32>::sse_decode(&mut deserializer);
+            let api_alg_id = <i64>::sse_decode(&mut deserializer);
             let api_key32 = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<SecretBytes>,
             >>::sse_decode(&mut deserializer);
@@ -3343,7 +3343,7 @@ fn wire__crate__api__wallet__hkdf_sha256_impl(
             >>::sse_decode(&mut deserializer);
             let api_salt = <Vec<u8>>::sse_decode(&mut deserializer);
             let api_info = <Vec<u8>>::sse_decode(&mut deserializer);
-            let api_len = <u32>::sse_decode(&mut deserializer);
+            let api_len = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
                 transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -5088,7 +5088,7 @@ fn wire__crate__api__wallet__secret_alloc_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_len = <u32>::sse_decode(&mut deserializer);
+            let api_len = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::api::ua::UAError>((move || {
                 let output_ok = crate::api::wallet::secret_alloc(api_len)?;
@@ -5747,8 +5747,8 @@ fn wire__crate__api__wallet__wallet_export_pqz_leaf_raw_version_impl(
             let api_w = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
-            let api_account = <u32>::sse_decode(&mut deserializer);
-            let api_index = <u32>::sse_decode(&mut deserializer);
+            let api_account = <i64>::sse_decode(&mut deserializer);
+            let api_index = <i64>::sse_decode(&mut deserializer);
             let api_version = <u64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
@@ -6167,8 +6167,8 @@ fn wire__crate__api__wallet__wallet_pqz_key_version_impl(
             let api_w = <RustOpaqueMoi<
                 flutter_rust_bridge::for_generated::RustAutoOpaqueInner<UaWallet>,
             >>::sse_decode(&mut deserializer);
-            let api_account = <u32>::sse_decode(&mut deserializer);
-            let api_index = <u32>::sse_decode(&mut deserializer);
+            let api_account = <i64>::sse_decode(&mut deserializer);
+            let api_index = <i64>::sse_decode(&mut deserializer);
             let api_version = <u64>::sse_decode(&mut deserializer);
             deserializer.end();
             move |context| {
@@ -7131,11 +7131,11 @@ impl SseDecode for Option<UaWallet> {
     }
 }
 
-impl SseDecode for Option<u32> {
+impl SseDecode for Option<i64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
-            return Some(<u32>::sse_decode(deserializer));
+            return Some(<i64>::sse_decode(deserializer));
         } else {
             return None;
         }
@@ -8283,12 +8283,12 @@ impl SseEncode for Option<UaWallet> {
     }
 }
 
-impl SseEncode for Option<u32> {
+impl SseEncode for Option<i64> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
-            <u32>::sse_encode(value, serializer);
+            <i64>::sse_encode(value, serializer);
         }
     }
 }
