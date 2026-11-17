@@ -1,0 +1,10 @@
+# scaas-sdk build plan: gate summary (step | commit | rc | counts). Logs: 2026-11-17-scaas-sdk-<step>.log, git-ignored.
+# `tree dirty`: the step ran with uncommitted changes of this round in the tree (the commit named is HEAD at its start).
+# T0 baselines (frozen; a task's "same counts" are these plus its new tests):
+baseline docs | 4de8a5604 | 0 | -
+baseline ck-test | 4de8a5604 | 0 | node: 455 pass, 0 fail, 4 skipped
+baseline rpc-test | 4de8a5604 | 0 | 130 passed, 0 failed, 10 ignored (7 binaries)
+baseline ua-test | 4de8a5604 | 0 | 503 passed, 0 failed, 3 ignored (47 binaries)
+baseline ua-clippy | 4de8a5604 | 0 | -
+baseline features | 4de8a5604 | 0 | feature_tree not run (crate absent)
+# latest runs:
