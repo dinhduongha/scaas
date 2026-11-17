@@ -196,8 +196,8 @@ impl ChainAdapter for EvmAdapter {
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
-        let chain = self.lane(lane)?;
-        Ok(chain.primary().get_transaction_count(chain.address()).latest().await?)
+        // F3: endpoint 0 only, its identity checked (scaas-rpc `first_nonce_at`, T14b)
+        self.lane(lane)?.nonce_at().await
     }
 
     async fn final_head(&self) -> Result<Option<Head>> {
