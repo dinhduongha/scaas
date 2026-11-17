@@ -644,7 +644,12 @@ Status: **PLANNED**.
   [§7](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#7-transports), order messages by
   [§8](../superpowers/specs/2026-10-25-ua7-pq-e2e-sessions.md#8-ordering), and reproduce every row of
   `smartcontracts/vectors/pqchat/`. Their rules land in `docs/clients/` with the client work: what every client does against
-  this contract is in [ua-libraries.md](../clients/ua-libraries.md#pqchat-clients) (SPECIFIED). BUILT today: only the JavaScript
+  this contract is in [ua-libraries.md](../clients/ua-libraries.md#pqchat-clients) (SPECIFIED). The Rust client core is
+  `pqchat-core`, an app core above `scaas-sdk` (owner 2026-11-17): its rules are
+  [clients/pqchat-core.md](../clients/pqchat-core.md) ([CLI-PQC-01](../clients/pqchat-core.md#CLI-PQC-01) to
+  [CLI-PQC-14](../clients/pqchat-core.md#CLI-PQC-14), SPECIFIED), its spec and plan
+  `docs/superpowers/{specs,plans}/2026-11-17-pqchat-core.md`, with a real-crypto end-to-end run as its gate
+  ([CLI-PQC-12](../clients/pqchat-core.md#CLI-PQC-12)); today's on-chain runs use stand-in wraps and test the contract only. BUILT today: only the JavaScript
   reference `clients/clientkeys/src/pqchat.js`, which writes the vectors (plan 3c T84; test `clients/clientkeys/test/pqchat.test.js`).
 - **Other families**: each takes `PqChat` in its own `pqchat-<family>` round (owner 2026-11-04), with the same records,
   ids and epoch rule; until then a family has no `PqChat`.

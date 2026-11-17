@@ -687,7 +687,8 @@ and reproduces every row of `smartcontracts/vectors/pqchat/` (`records.json`, `t
 with every unbound field non-zero in some row (`via`, `device`, `parents`, `ref`). Built today: the JS vector generator
 `clientkeys/src/pqchat.js` (**BUILT**, 3c T84, `test/pqchat.test.js`); `ua-rs` first, then every `ua-*` (PLANNED, UA-7
 T11–T14, T17–T20). Which device-id version a client defaults to is open (a controller proposal: v4 for a device that posts on
-chain, since v7 puts its creation time on chain).
+chain, since v7 puts its creation time on chain). The Rust client core that does all of this above `scaas-sdk`, with key handles only, is
+[`pqchat-core`](pqchat-core.md) (SPECIFIED).
 
 <a id="pqvault-clients"></a>**PqVault** (SPECIFIED, nothing built; the contract is [pqvault.md](../contracts/pqvault.md), the design
 the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)). The rules every PqVault client follows; the
