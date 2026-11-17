@@ -256,9 +256,9 @@ one entry that exists only behind its own feature and marker and is absent from 
 `ua-rs`'s existing calls, enforces the restrictions (`ua-rs` keeps its native-key digest signing for other uses): native keys only,
 never a UA key or a SCaaS kind, never an EVM-address key; NEAR, Sui, Stellar and Hedera Ed25519 through `ua-rs`'s envelope-building
 calls (the transaction bytes in, the chain's envelope built and hashed in `ua-rs`), never as a bare digest; GRAM, whose native key is its
-SCaaS identity and whose signed value has its SCaaS payload's form, kept off the entry; a message starting with an EIP-7702
-authorization's (`0x05`) or an EIP-712 digest's (`0x19 0x01`) prefix, or a refused off-chain envelope, refused by the SDK itself (and by
-`ua-rs`); a bare 32-byte digest only for the Bitcoin sighash. All refusals are `RawDigestRefused`. The preimage is built in the app's
+SCaaS identity and whose signed value has its SCaaS payload's form, kept off the entry; a refused off-chain envelope (Solana OCMS, Aptos `APTOS\n`) refused by the SDK itself
+(and by `ua-rs`), with no first-byte rule (a `0x05` / `0x19 0x01` refusal was withdrawn: it refused real Polkadot and Solana
+transactions and protected no payload); a bare 32-byte digest only for the Bitcoin sighash. All refusals are `RawDigestRefused`. The preimage is built in the app's
 process from the transaction the user reviewed, decoded. **Residual:** a Bitcoin sighash is opaque to
 `ua-rs`, and a Bitcoin key's secret also controls an unfunded EVM address; the defence is the caller's obligation. The Bitcoin, NEAR and
 Polkadot networks join when `ua-rs` has them (PLANNED).
