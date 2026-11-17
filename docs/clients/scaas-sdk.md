@@ -261,8 +261,10 @@ two platform interfaces as one generated record of async closures); UniFFI for K
 `wasm-bindgen` for the browser (PLANNED). **C++ / Qt** (owner 2026-11-18, Q-B1 (b), after the spike showed `uniffi-bindgen-cpp`
 refusing every async item): no C++ binding is generated from the SDK; Qt reaches it through the app's one library's own C ABI
 (scaas-app's `app-core-rust`, cbindgen, as `app-matrix`), whose Rust side owns the one tokio runtime and returns each async call
-through a completion callback that the Qt side posts to its GUI thread. The SDK has no C ABI of its own in this round, and `ua-c`
-stays the signer's C surface. No binding is
+through a completion callback that the Qt side posts to its GUI thread. **Third-party C++ apps** (owner 2026-11-18, (a′)): a sync surface behind the feature `sync-cpp` (off by
+default), generated to C++ by UniFFI with `uniffi-bindgen-cpp`: each exported async call has a `*_blocking` twin over the same
+body (one macro, a test that none is missing), cancellation by an explicit cancel token, the platform interfaces sync, events
+the same pull subscription. The SDK has no C ABI of its own in this round, and `ua-c` stays the signer's C surface. No binding is
 written by hand per language, and no app-facing binding wraps `ua-rs` directly. No panic crosses the boundary (unwinding builds, every
 call caught, a failed task `Internal`). An app links one Rust static library that holds the SDK and its app cores (scaas-app's
 `app-core-rust`, [CLI-SDK-19](#CLI-SDK-19)); two Rust libraries in one process are not allowed. Each generated binding refuses, at load, a library
