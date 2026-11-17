@@ -309,12 +309,12 @@ function envelope(key, network, tx, allowRawDigest, build) {
   if (!(tx instanceof Uint8Array) || tx.length < 1 || tx.length > MAX_RAW_MESSAGE) fail('Argument', 'transaction: 1 to 131072 bytes');
   return ed25519.sign(build(tx), key.privateKey);
 }
-// the NEP-461 prefix tags in use: NEP-413 (off-chain message) and NEP-366 (delegate action); exact tags only (ua-rs NEP461_TAGS)
-const NEP461_TAGS = [2 ** 31 + 413, 2 ** 30 + 366];
+// the lowest prefix NEP-461 reserves: 2^30 to 2^31 − 1 on-chain actions (NEP-366), 2^31 and up off-chain messages (NEP-413)
+const NEP461_MIN = 2 ** 30;
 /** NEAR: ed25519 over sha256(Borsh(Transaction)). Argument for a NEP-461 tagged payload (first four bytes, little-endian, the
- *  NEP-413 or NEP-366 tag); a Transaction starts with its signer_id's length, at most 64. */
+ *  u32 at or above 2^30: NEP-461's reserved ranges); a Transaction starts with its signer_id's Borsh length, at most 64. */
 export const signNearTransaction = (key, txBorsh, { allowRawDigest = false } = {}) => envelope(key, 'near', txBorsh, allowRawDigest, (t) => {
-  if (t.length >= 4 && NEP461_TAGS.includes(new DataView(t.buffer, t.byteOffset, 4).getUint32(0, true))) fail('Argument', 'a NEP-461 tagged payload');
+  if (t.length >= 4 && new DataView(t.buffer, t.byteOffset, 4).getUint32(0, true) >= NEP461_MIN) fail('Argument', 'a NEP-461 tagged payload');
   return sha256(t);
 });
 /** Sui: ed25519 over blake2b-256(intent 0x00 0x00 0x00 ‖ TransactionData BCS). */

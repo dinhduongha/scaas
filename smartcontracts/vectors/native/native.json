@@ -4789,7 +4789,7 @@
     "coinType": null,
     "change": null,
     "messageRepeat": {
-     "byte": "a5",
+     "byte": "00",
      "length": 131072
     }
    }
@@ -5159,7 +5159,7 @@
    }
   },
   {
-   "id": "sign_near_transaction the NEP-413 tag, the next value accepted",
+   "id": "sign_near_transaction the NEP-461 prefix 2^30",
    "call": "sign_near_transaction",
    "args": {
     "mnemonic": "pq_kat",
@@ -5167,7 +5167,7 @@
     "index": 0,
     "coinType": null,
     "change": null,
-    "message": "9d0100800000000000000000"
+    "message": "000000400000000000000000"
    },
    "error": "Argument",
    "accepted": {
@@ -5176,7 +5176,49 @@
     "index": 0,
     "coinType": null,
     "change": null,
-    "message": "9e0100800000000000000000"
+    "message": "400000000000000000000000"
+   }
+  },
+  {
+   "id": "sign_near_transaction the NEP-461 prefix 2^31",
+   "call": "sign_near_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "000000800000000000000000"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "400000000000000000000000"
+   }
+  },
+  {
+   "id": "sign_near_transaction the NEP-461 prefix 2^32 - 1",
+   "call": "sign_near_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "ffffffff0000000000000000"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "400000000000000000000000"
    }
   }
  ],

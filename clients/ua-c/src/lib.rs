@@ -2034,7 +2034,7 @@ fn envelope_key<'a>(k: *const ScaasUaKey) -> R<&'a uw::NativeKey> {
         Key::Native(n) => Ok(n),
     }
 }
-/// NEAR: ed25519 over `sha256(tx_borsh)`; a NEP-413 or NEP-366 tagged payload: SCAAS_UA_ERR_ARGUMENT.
+/// NEAR: ed25519 over `sha256(tx_borsh)`; a NEP-461 tagged payload (first u32, little-endian, >= 2^30): SCAAS_UA_ERR_ARGUMENT.
 #[no_mangle]
 pub extern "C" fn scaas_ua_sign_near_transaction(k: *const ScaasUaKey, tx: *const u8, tx_len: usize, sig: *mut u8, sig_len: *mut usize) -> ScaasUaStatus {
     run(|| write_var(sig, sig_len, &envelope_key(k)?.sign_near_transaction(bytes(tx, tx_len)?, uw::AllowRawDigest)?))

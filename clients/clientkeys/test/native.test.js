@@ -500,11 +500,11 @@ test('signDigest refuses anything but 32 bytes on every scheme, beside 32 bytes 
 });
 
 // ------------------------------------------------------------------ T13 C6: NEAR, no NEP-461 tagged payload
-test('signNearTransaction refuses NEP-461 tagged payloads beside a Transaction head (T13 C6)', () => {
+test('signNearTransaction refuses the NEP-461 ranges beside a Transaction head (T13 C6)', () => {
   const k = S.deriveKey(seed, 'near', 0), opt = { allowRawDigest: true };
   const le = (n) => { const b = new Uint8Array(12); new DataView(b.buffer).setUint32(0, n, true); return b; };
-  for (const tag of [2 ** 31 + 413, 2 ** 30 + 366]) assert.equal(codeOf(() => S.signNearTransaction(k, le(tag), opt)), 'Argument', `${tag}`);
-  for (const len of [0, 2, 64, 2 ** 31 + 414, 2 ** 30 + 365, 0xa5a5a5a5]) assert.equal(codeOf(() => S.signNearTransaction(k, le(len), opt)), null, `${len}`);
+  for (const tag of [2 ** 31 + 413, 2 ** 30 + 366, 2 ** 30, 2 ** 31, 2 ** 32 - 1, 0xa5a5a5a5]) assert.equal(codeOf(() => S.signNearTransaction(k, le(tag), opt)), 'Argument', `${tag}`);
+  for (const len of [0, 2, 64]) assert.equal(codeOf(() => S.signNearTransaction(k, le(len), opt)), null, `${len}`);
   assert.equal(codeOf(() => S.signNearTransaction(k, Uint8Array.of(0x40, 0, 0), opt)), null, 'shorter than four bytes');
   const off = new Uint8Array(16); off.set(le(2 ** 31 + 413), 4);
   assert.equal(codeOf(() => S.signNearTransaction(k, off.subarray(4), opt)), 'Argument', 'a view at an offset');

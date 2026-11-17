@@ -277,7 +277,7 @@ fn native_json_envelope_refusal_rows() {
         assert!(envelope(&ok, call, &r["accepted"], &msg(&r["accepted"])).is_ok(), "neighbour of {}", r["id"]);
         n += 1;
     }
-    assert_eq!(n, 16, "4 calls x {{on solana, 0 B, 131,073 B}}, a 31-byte Stellar network id, three NEP-461 tag rows (T13 C6)");
+    assert_eq!(n, 18, "4 calls x {{on solana, 0 B, 131,073 B}}, a 31-byte Stellar network id, five NEP-461 rows (T13 C6)");
 }
 
 // ------------------------------------------------------------------ T7: Bitcoin P2WPKH and P2TR
@@ -681,16 +681,16 @@ fn native_json_sign_digest_rows_are_32_bytes_by_type() {
 // ------------------------------------------------------------------ T13 C6: NEAR, no NEP-461 tagged payload
 
 #[test]
-fn sign_near_transaction_refuses_nep461_tags_beside_a_transaction() {
+fn sign_near_transaction_refuses_nep461_ranges_beside_a_transaction() {
     let v = native();
     let w = wallet(&v, "pq_kat");
     let k = w.native_key(Network::Near, 0, None).unwrap();
     let tail = [0u8; 8];
-    for tag in [(1u32 << 31) + 413, (1 << 30) + 366] {
+    for tag in [(1u32 << 31) + 413, (1 << 30) + 366, 1 << 30, 1 << 31, u32::MAX, 0xa5a5_a5a5] {
         let tx = [&tag.to_le_bytes()[..], &tail].concat();
         assert_eq!(k.sign_near_transaction(&tx, AllowRawDigest).err(), Some(Error::Argument), "{tag:#x}");
     }
-    for len in [0u32, 2, 64, (1 << 31) + 414, (1 << 30) + 365, 0xa5a5_a5a5] {
+    for len in [0u32, 2, 64] {
         assert!(k.sign_near_transaction(&[&len.to_le_bytes()[..], &tail].concat(), AllowRawDigest).is_ok(), "{len}");
     }
     assert!(k.sign_near_transaction(&[0x40, 0, 0], AllowRawDigest).is_ok(), "shorter than four bytes: no tag to read");

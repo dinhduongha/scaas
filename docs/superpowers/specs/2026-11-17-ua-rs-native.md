@@ -383,10 +383,11 @@ CLI-UAL-63 (11) to (15), §15.
 
    The existing raw `sign_digest` / `sign_message` calls and their `native.json` rows stay byte-equal. A UA key has none of them (C:
    `RawDigestRefused`). Not built here: Stellar's fee-bump envelope (type 5), NEP-413, Sui's personal message.
-   `sign_near_transaction` refuses (`Argument`) bytes whose first four, little-endian, are a NEP-461 tag in use: NEP-413's
-   (2^31 + 413, an off-chain message) or NEP-366's (2^30 + 366, a delegate action), so the call named for transactions signs
-   neither (T13 C6; a `Transaction` starts with its `signer_id`'s length, at most 64). Only the two exact tags: a range rule
-   would refuse the accepted neighbour of a pinned refusal row (131,072 bytes of `0xa5`).
+   `sign_near_transaction` refuses (`Argument`) bytes whose first four, read as a little-endian `u32`, are at or above 2^30:
+   the two ranges NEP-461 reserves, 2^30 to 2^31 − 1 for on-chain actions (a NEP-366 delegate action, 2^30 + 366) and 2^31 to
+   2^32 − 1 for off-chain messages (NEP-413, 2^31 + 413), so the call named for transactions signs neither (T13 C6, coordinator
+   ruling). A `Transaction` starts with its `signer_id`'s Borsh length, at most 64. The accepted 131,072-byte neighbour of the
+   `131,073 bytes` refusal row is `0x00` bytes (a second one-time exception to item 5: `0xa5a5a5a5` is in the range).
 4. **GRAM / TON** stays off every envelope call; `ua-rs` builds no cell hash (the SDK keeps GRAM off its raw entry).
 5. **Residual: Algorand `"MX"`.** The Algorand family signs `"MX" ‖ "scaas.metaop.v1:" ‖ hex(digest)` (more than 32 bytes,
    `docs/networks/algorand.md`); `ua-rs` has no Algorand native key, and the only way to an ed25519 key at `m/44'/283'/i'` is a coin-type
@@ -705,7 +706,7 @@ Review `20261117-16-fable-fable-high-code.md` (kept outside the repository), coo
 | C3 Taproot signer leaves `d0` unwiped | P2 | `Zeroizing<NonZeroScalar>`; clientkeys wipes the tweaked key in a `finally`, its `BigInt` stated as a limit |
 | C4 ua-py and ua-dart-frb narrow integers | P3 | range checked before the call in both bindings, every integer argument of their wallet surfaces |
 | C5 a Polkadot account changed with the passphrase's normalization | P3 | no code: residual in §7.1; the app contract's warning |
-| C6 `sign_near_transaction` signs NEP-413 / NEP-461 payloads | P3 | the NEP-413 and NEP-366 tags refused (exact tags: a range rule would refuse a pinned row's neighbour); §8.1 item 3; CLI-UAL-63 Change |
+| C6 `sign_near_transaction` signs NEP-413 / NEP-461 payloads | P3 | first `u32` at or above 2^30 refused (NEP-461's ranges); `native.json` second exception (the NEAR size neighbour `0x00`, one exact-tag row out); §8.1 item 3; CLI-UAL-63 Change |
 | C7 the manifest accepts `change: 1` and refused coin types | P3 | refused on read: §4.4 |
 | C8 "one `subkey` signature" | P3 | CLI-UAL-47 text names the polkadot.js row |
 | I1 `polkadot_key` at the 64-path cap (error order; check-then-add race) | info | seen, no change (no secret effect) |

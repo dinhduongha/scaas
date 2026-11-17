@@ -216,8 +216,8 @@ ua-dart-frb|dart|native.json: networks, addresses, witness programs, SS58, polka
 ua-dart-frb|dart|native.json: deterministic rows, refusals, a UA key refused
 clientkeys|node|signDigest refuses anything but 32 bytes on every scheme, beside 32 bytes accepted (T13 C2)
 ua-rs|cargo|native_json_sign_digest_rows_are_32_bytes_by_type
-clientkeys|node|signNearTransaction refuses NEP-461 tagged payloads beside a Transaction head (T13 C6)
-ua-rs|cargo|sign_near_transaction_refuses_nep461_tags_beside_a_transaction
+clientkeys|node|signNearTransaction refuses the NEP-461 ranges beside a Transaction head (T13 C6)
+ua-rs|cargo|sign_near_transaction_refuses_nep461_ranges_beside_a_transaction
 ua-rs|cargo|manifest_refuses_change_off_bitcoin_and_refused_coin_types
 ua-py|unittest|test_integers_outside_their_c_type_are_refused_not_wrapped
 ua-dart-frb|dart|integers outside their Rust type are UAArgument, not wrapped

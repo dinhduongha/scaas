@@ -442,7 +442,7 @@ networks); the bound; a message starting with an off-chain envelope a SCaaS fami
 `"APTOS\n"`) refused, so the families' payloads stay with their checked builders; no other first-byte rule (a message may start
 `0x05` or `0x19 0x01`: chain data on these keys, CLI-UAL-63 (11) withdrawn); no coin-type override on NEAR or Polkadot; errors
 without input. Envelope calls, additive, own network only, behind the marker: `sign_near_transaction` (`sha256(tx)`;
-a NEP-413 or NEP-366 tagged payload refused), `sign_sui_transaction` (`blake2b-256(0x000000 ‖ tx)`),
+a NEP-461 tagged payload, first u32 at or above 2^30, refused), `sign_sui_transaction` (`blake2b-256(0x000000 ‖ tx)`),
 `sign_stellar_transaction` (`sha256(network_id ‖ 0x00000002 ‖ tx)`), `sign_hedera_transaction` (the body bytes); none for GRAM / TON.
 Which keys and digests reach the raw path beyond this (EVM-address keys, a bare digest) is `scaas-sdk`'s raw entry's rule
 ([CLI-UAL-63](../decisions.md#CLI-UAL-63) (11) to (15)). The caller's half is [CLI-SGN-54](signers-clientkeys.md#CLI-SGN-54). BUILT (T5

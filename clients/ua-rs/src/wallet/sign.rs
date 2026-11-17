@@ -222,11 +222,11 @@ impl NativeKey {
     }
 
     /// NEAR (spec §8.1, CLI-UAL-63 (13)): ed25519 over `sha256(tx_borsh)`, the Borsh `Transaction` the app's encoder made.
-    /// `Argument` for a NEP-461 tagged payload: first four bytes, little-endian, a NEP-413 message's tag (2^31 + 413) or a NEP-366
-    /// delegate action's (2^30 + 366), the payloads a NEAR verifier accepts under those tags (T13 C6). A `Transaction` starts with
-    /// its `signer_id`'s length, at most 64.
+    /// `Argument` for a NEP-461 tagged payload: first four bytes, little-endian, at or above 2^30 (2^30 to 2^31 − 1 on-chain
+    /// actions such as a NEP-366 delegate action, 2^31 and up off-chain messages such as NEP-413; T13 C6). A `Transaction` starts
+    /// with its `signer_id`'s Borsh length, at most 64.
     pub fn sign_near_transaction(&self, tx_borsh: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
-        if tx_borsh.get(..4).and_then(|b| <[u8; 4]>::try_from(b).ok()).is_some_and(|b| NEP461_TAGS.contains(&u32::from_le_bytes(b))) {
+        if tx_borsh.get(..4).and_then(|b| <[u8; 4]>::try_from(b).ok()).is_some_and(|b| u32::from_le_bytes(b) >= NEP461_MIN) {
             return Err(Error::Argument);
         }
         self.envelope(Network::Near, tx_borsh, |t| Sha256::digest(t).to_vec())
@@ -266,9 +266,9 @@ impl NativeKey {
     }
 }
 
-/// The NEP-461 prefix tags in use: NEP-413 (off-chain message, 2^31 + 413) and NEP-366 (delegate action, 2^30 + 366). Only the
-/// two exact tags: a range rule would refuse the pinned 131,072-byte row of `0xa5` bytes (spec §8.1 item 5).
-const NEP461_TAGS: [u32; 2] = [(1 << 31) + 413, (1 << 30) + 366];
+/// The lowest prefix NEP-461 reserves (on-chain actions from 2^30, off-chain messages from 2^31): no Borsh `Transaction` starts
+/// at or above it.
+const NEP461_MIN: u32 = 1 << 30;
 
 /// [`NativeKey::sign_key_proof`] by any [`Signer`] (spec §9.4).
 pub fn sign_key_proof_by(key: &dyn Signer, challenge: &[u8]) -> Result<Vec<u8>> {

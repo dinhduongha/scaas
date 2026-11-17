@@ -224,7 +224,9 @@ for (const [call, network] of ENVELOPE_CALLS) {
   const id = call === 'sign_stellar_transaction' ? { networkId: STELLAR_TESTNET_ID } : {};
   ref(`${call} on solana`, call, at('solana', { ...id, message: '01' }), at(network, { ...id, message: '01' }));
   ref(`${call} 0 bytes`, call, at(network, { ...id, message: '' }), at(network, { ...id, message: '01' }));
-  ref(`${call} 131,073 bytes`, call, at(network, { ...id, messageRepeat: repeat(0xa5, 131073) }), at(network, { ...id, messageRepeat: repeat(0xa5, 131072) }));
+  // NEAR's accepted neighbour is 0x00 bytes (T13 C6: 0xa5a5a5a5 is a NEP-461 prefix), so it keeps testing the size bound
+  const fill = call === 'sign_near_transaction' ? 0x00 : 0xa5;
+  ref(`${call} 131,073 bytes`, call, at(network, { ...id, messageRepeat: repeat(0xa5, 131073) }), at(network, { ...id, messageRepeat: repeat(fill, 131072) }));
 }
 ref('sign_stellar_transaction a 31-byte network id', 'sign_stellar_transaction', at('stellar', { networkId: '00'.repeat(31), message: '01' }),
   at('stellar', { networkId: '00'.repeat(32), message: '01' }));
@@ -233,11 +235,11 @@ ref('sign_digest 31 bytes', 'sign_digest', at('solana', { message: '5a'.repeat(3
 ref('sign_digest the APTOS\\n envelope (20 bytes)', 'sign_digest', at('aptos', { message: APTOS_ENV }), at('aptos', { message: '5a'.repeat(32) }));
 ref('sign_digest 33 bytes on polkadot', 'sign_digest', at('polkadot', { path: '', message: '5a'.repeat(33) }), at('polkadot', { path: '', message: '5a'.repeat(32) }));
 ref('sign_digest 5 bytes on bitcoin_p2tr', 'sign_digest', at('bitcoin_p2tr', { message: '0102030405' }), at('bitcoin_p2tr', { message: '5a'.repeat(32) }));
-// T13 C6, appended: sign_near_transaction refuses a NEP-461 tagged payload (u32 LE prefix the NEP-413 or NEP-366 tag), beside a
-// Transaction head (signer_id length 64) or the next value
+// T13 C6, appended: sign_near_transaction refuses a NEP-461 tagged payload (u32 LE prefix at or above 2^30), beside a Transaction
+// head (signer_id length 64): the two tags in use, then the ranges' edges 2^30, 2^31 and 2^32 - 1
 const NEAR_TAIL = '00'.repeat(8);
 for (const [why, tag, ok] of [['a NEP-413 message (2^31 + 413)', '9d010080', '40000000'], ['a NEP-366 delegate action (2^30 + 366)', '6e010040', '40000000'],
-  ['the NEP-413 tag, the next value accepted', '9d010080', '9e010080']]) {
+  ['the NEP-461 prefix 2^30', '00000040', '40000000'], ['the NEP-461 prefix 2^31', '00000080', '40000000'], ['the NEP-461 prefix 2^32 - 1', 'ffffffff', '40000000']]) {
   ref(`sign_near_transaction ${why}`, 'sign_near_transaction', at('near', { message: tag + NEAR_TAIL }), at('near', { message: ok + NEAR_TAIL }));
 }
 // every refusal refused here and its neighbour accepted
@@ -405,18 +407,23 @@ const out = {
   envelopes,
 };
 // append-only (spec §8.1, CLI-UAL-63 (15)): every value of the committed file is kept; a list may only grow at its end, a new
-// section only after the old ones. One exception, granted once by the coordinator (T13 C1): the four refusal rows of the
-// withdrawn EVM-prefix rule (added at T6a, never merged or consumed) leave `refusals`; every other committed row stays, in order.
+// section only after the old ones. Two exceptions, each granted once by the coordinator, both rows of this round (never merged
+// or consumed): (T13 C1) the four refusal rows of the withdrawn EVM-prefix rule leave `refusals`; (T13 C6, the NEP-461 range
+// rule) the accepted 131,072-byte neighbour of `sign_near_transaction 131,073 bytes` is filled with 0x00, not 0xa5, and the
+// exact-tag row `… the NEP-413 tag, the next value accepted`, whose neighbour the range refuses, leaves. Every other row stays.
+const NEAR_BOUND = 'sign_near_transaction 131,073 bytes';
+must(out.refusals.find((r) => r.id === NEAR_BOUND).accepted.messageRepeat.byte === '00', 'native.json: the NEAR size neighbour is 0x00 bytes');
 const WITHDRAWN = new Set(['sign_message EIP-7702 magic 0x05', 'sign_message EIP-712 prefix 0x19 0x01', 'sign_message EIP-7702 magic 0x05 on polkadot',
-  'sign_message EIP-712 prefix 0x19 0x01 on polkadot']);
-must(!out.refusals.some((r) => WITHDRAWN.has(r.id)), 'native.json: the withdrawn prefix rows stay out');
+  'sign_message EIP-712 prefix 0x19 0x01 on polkadot', 'sign_near_transaction the NEP-413 tag, the next value accepted']);
+must(!out.refusals.some((r) => WITHDRAWN.has(r.id)), 'native.json: the withdrawn rows stay out');
 const committed = join(OUT, 'native.json');
 if (existsSync(committed)) {
   const old = JSON.parse(readFileSync(committed, 'utf8'));
   const keys = Object.keys(old);
   must(JSON.stringify(Object.keys(out).slice(0, keys.length)) === JSON.stringify(keys), 'native.json sections: the old ones first, in order');
   for (const k of keys) {
-    const kept = k === 'refusals' ? old[k].filter((r) => !WITHDRAWN.has(r.id)) : old[k];
+    const kept = k === 'refusals' ? old[k].filter((r) => !WITHDRAWN.has(r.id)).map((r) => (r.id === NEAR_BOUND && r.accepted.messageRepeat.byte === 'a5'
+      ? { ...r, accepted: { ...r.accepted, messageRepeat: { ...r.accepted.messageRepeat, byte: '00' } } } : r)) : old[k];
     const same = Array.isArray(kept) ? JSON.stringify(out[k].slice(0, kept.length)) === JSON.stringify(kept) : JSON.stringify(out[k]) === JSON.stringify(kept);
     must(same, `native.json ${k}: a committed row changed (append only)`);
   }
