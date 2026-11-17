@@ -63,5 +63,9 @@ g.U8Array32 kemRecordDigest({required g.U8Array32 ua, required BigInt version, r
     g.kemRecordDigest(ua: ua, version: _v(version), kemPk: kemPk);
 
 /// What the UA signs for a KEM record: `ua_message(kind, PURPOSE_KEM, kem_record_digest)`.
-g.U8Array32 kemRecordMessage({required PlatformInt64 kind, required g.U8Array32 ua, required BigInt version, required List<int> kemPk}) =>
-    g.kemRecordMessage(kind: kind, ua: ua, version: _v(version), kemPk: kemPk);
+g.U8Array32 kemRecordMessage({
+  required PlatformInt64 kind,
+  required g.U8Array32 ua,
+  required BigInt version,
+  required List<int> kemPk,
+}) => g.kemRecordMessage(kind: kind, ua: ua, version: _v(version), kemPk: kemPk);
