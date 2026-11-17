@@ -39,7 +39,7 @@ credential. When the list is built it refuses: no endpoint (`EndpointListEmpty`)
 (`EndpointScheme`); two endpoints equal in scheme, host, port and path (`Argument`; whether two URLs of one provider are independent
 is the operator's to judge); a zero timeout (`Argument`); `strict_majority` with one endpoint, or with `rpc_timeout_ms` at or above `rpc_read_timeout_ms` (`Argument`: an agreed read waits for each endpoint's answer, so one hung endpoint would hold it to its deadline). A plain list of URL
 strings (the node's and the verifier's `rpc_urls`) is a list of `named` endpoints in that order, without credentials. No request
-follows a redirect: a 3xx is the endpoint's HTTP failure. The URL may carry a credential in its path or query: it never appears in a
+follows a redirect: a 3xx is the endpoint's HTTP failure. In a browser (wasm32) the fetch follows a redirect before the crate sees it, so there an endpoint with `auth` is refused (`Argument`); a credential in the URL's path or query cannot be told apart and is the caller's to avoid. The URL may carry a credential in its path or query: it never appears in a
 log line, an error or a `Debug` output (§5). A list also names its read policy: `failover` (the default) or `strict_majority`
 ([CLI-RPC-05](#CLI-RPC-05)).
 

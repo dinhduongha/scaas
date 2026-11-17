@@ -10776,6 +10776,8 @@ The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the
 
 Change (2026-11-17, plan T13 S6, Fable code review; the controller's call, the owner may override; status: BUILT on branch `scaas-sdk`, UNAUDITED): a `strict_majority` list with `rpc_timeout_ms` at or above `rpc_read_timeout_ms` is refused when it is built (`Argument`). Step 1 of an agreed read waits for every endpoint's name; with a request timeout at the read's deadline one hung endpoint made every agreed read `EndpointNoMajority`. A `failover` list is unchanged (each request is bounded alone).
 
+Change (2026-11-17, plan T13 S12, Fable code review; the controller's call, the owner may override; status: BUILT on branch `scaas-sdk`, compiled for wasm32 only, UNAUDITED): on wasm32 an endpoint with `auth` is refused (`Argument`). The browser's fetch follows a redirect before the crate's check runs, and reqwest 0.12 sets no redirect mode there, so the credential header and the body would already be at the other host. Nothing runs on wasm32 today; the refusal stays until the fetch can say `redirect: "error"`.
+
 ### CLI-RPC-03 — An endpoint answers only for the configured chain
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-03 · superseded-by: —
 

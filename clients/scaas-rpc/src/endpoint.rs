@@ -94,7 +94,7 @@ impl std::fmt::Debug for Endpoint {
 }
 
 impl Endpoint {
-    /// An `http` or `https` URL (`EndpointScheme` otherwise; `Argument` when it does not parse).
+    /// An `http` or `https` URL (`EndpointScheme` otherwise; `Argument` when it does not parse, and on wasm32 for any `auth`).
     pub fn new(
         url: &str,
         class: Class,
@@ -108,6 +108,14 @@ impl Endpoint {
         }
         if url.host_str().is_none() {
             return Err(RpcError::argument("an endpoint URL without a host"));
+        }
+        // T13 S12: in a browser the fetch follows a redirect before the crate sees it (reqwest 0.12 sets no redirect mode on
+        // wasm32), so a credential would reach the other host; refused there until the fetch can say `redirect: "error"`
+        #[cfg(target_arch = "wasm32")]
+        if auth.is_some() {
+            return Err(RpcError::argument(
+                "a credential on wasm32: the browser follows a redirect with it",
+            ));
         }
         if let Some(EndpointAuth::Header { name, .. }) = &auth {
             if name.is_empty()

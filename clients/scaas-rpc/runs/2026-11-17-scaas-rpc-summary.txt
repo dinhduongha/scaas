@@ -26,8 +26,8 @@ features | af174a787 | 0 | -; tree dirty
 docs | af174a787 | 0 | -; tree dirty
 node-clippy | 05e1b8f58 | 0 | -; tree dirty
 node-test | 890631299 | 0 | 791 passed, 0 failed, 72 ignored (18 binaries); tree dirty
-rpc-test | 02309d51c | 0 | 124 passed, 0 failed, 10 ignored (7 binaries); tree dirty
-rpc-clippy | 02309d51c | 0 | -; tree dirty
-rpc-wasm | 02309d51c | 0 | -; tree dirty
 ver-clippy | 02309d51c | 0 | -; tree dirty
 ver-test | 02309d51c | 0 | 41 passed, 0 failed, 1 ignored (6 binaries); tree dirty
+rpc-test | 26d5234ec | 0 | 124 passed, 0 failed, 10 ignored (7 binaries); tree dirty
+rpc-clippy | 26d5234ec | 0 | -; tree dirty
+rpc-wasm | 26d5234ec | 0 | -; tree dirty
