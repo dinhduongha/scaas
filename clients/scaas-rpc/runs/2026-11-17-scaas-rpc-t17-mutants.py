@@ -18,6 +18,16 @@ MUTANTS = [
      NT),
     ("a: the identity a constant", [(S, "            Some(g) => Ok(g == self.genesis),", "            Some(_) => Ok(true),")],
      T + "the_failover_drops_another_network_and_skips_an_endpoint_behind"),
+    ("b: op_consumed through failover", [(N, "        let b = self.view(&w.op.contract, \"lane_nonce\", &args).await?;", "        let b = self.view_at(false, &w.op.contract, \"lane_nonce\", &args).await?;")],
+     NT + "near_tx_status_op_consumed_and_the_lane_sequence_never_fail_over"),
+    ("b: every view through failover", [(N, "        let v = if first { self.rpc(\"query\", q).await? } else { self.read(\"query\", q).await? };",
+        "        let v = if false && first { self.rpc(\"query\", q).await? } else { self.read(\"query\", q).await? };")],
+     NT + "near_tx_status_op_consumed_and_the_lane_sequence_never_fail_over"),
+    ("b: the build's views on endpoint 0 only", [(N, "        let v = if first { self.rpc(\"query\", q).await? } else { self.read(\"query\", q).await? };",
+        "        let v = if true || first { self.rpc(\"query\", q).await? } else { self.read(\"query\", q).await? };")],
+     NT + "near_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: a failover refusal final (the counter not compared)", [(N, "            Err(SimError::Revert(r)) if self.failovers() != mark =>", "            Err(SimError::Revert(r)) if false =>")],
+     NT + "near_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
 ]
 
 if __name__ == "__main__":

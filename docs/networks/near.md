@@ -319,6 +319,14 @@ balance decrease per job kind (§13). BUILT.
 Config shape: the `near` row of `scaas-node/node.example.toml` (`tokens`, `params.dex`, `params.relay_fee.{router,
 executor, min_amount, min_yocto_value, targets}`).
 
+Endpoints (BUILT, scaas-rpc T17): `rpc_urls` are read through the crate's family client (16 MiB, depth 64, no redirect,
+20 s a request). `build`'s views (the entry's `*_check`, `relay_check`, `relay_hold_check`, the subject, the target's
+code and checks, balances) and the gas price fail over ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next
+endpoint must answer `status` with the configured genesis hash and a final height at or above the one the first endpoint
+last showed; an error answer from it decides nothing and a refusal read while it answered requeues the job. The
+transaction status and its escrow follow-up, the landed fee, the lane's access-key nonce, `op_consumed`, the action fees
+(kept a while) and the start checks are the first endpoint's only.
+
 ## 9. Finality and events
 
 Final = `final` blocks; transactions are read at `final_execution_status == FINAL`. Events are NEP-297 logs
