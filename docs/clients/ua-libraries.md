@@ -434,8 +434,12 @@ Ed25519 and sr25519 native keys only; `sign_digest` serves every native scheme (
 `sign_message_by` over a `UaKey` is `Argument`, C refuses it `RawDigestRefused`, [CLI-SGN-29](signers-clientkeys.md#CLI-SGN-29)); the
 scheme (no message on a secp256k1 or Taproot key, no EIP-712 or EVM transaction on a Bitcoin key, no key proof on the four new
 networks); the bound; a message starting with an off-chain envelope a SCaaS family verifies (`0xff ‖ "solana offchain"`,
-`"APTOS\n"`) refused, so the families' payloads stay with their checked builders; no coin-type override on NEAR or Polkadot; errors
-without input. The caller's half is [CLI-SGN-54](signers-clientkeys.md#CLI-SGN-54). SPECIFIED.
+`"APTOS\n"`) refused, so the families' payloads stay with their checked builders; a message starting `0x05` (EIP-7702) or `0x19 0x01`
+(EIP-712) refused (digests untouched); no coin-type override on NEAR or Polkadot; errors without input. Envelope calls, additive, own
+network only, behind the marker: `sign_near_transaction` (`sha256(tx)`), `sign_sui_transaction` (`blake2b-256(0x000000 ‖ tx)`),
+`sign_stellar_transaction` (`sha256(network_id ‖ 0x00000002 ‖ tx)`), `sign_hedera_transaction` (the body bytes); none for GRAM / TON.
+Which keys and digests reach the raw path beyond this (EVM-address keys, a bare digest) is `scaas-sdk`'s raw entry's rule
+([CLI-UAL-63](../decisions.md#CLI-UAL-63) (11) to (15)). The caller's half is [CLI-SGN-54](signers-clientkeys.md#CLI-SGN-54). SPECIFIED.
 
 <a id="CLI-UAL-45"></a>**CLI-UAL-45** — **Bitcoin: `ua-rs` signs the sighash it is given and computes none.** The BIP-143 / BIP-341
 sighash needs the whole transaction (outpoints, every spent amount and script, sighash type), which is the app's encoder's; the app

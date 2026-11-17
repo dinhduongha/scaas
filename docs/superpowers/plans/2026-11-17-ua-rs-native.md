@@ -60,6 +60,8 @@ Abbreviations used in the steps: `W` = the worktree root; `cap` = `"$W/scripts/c
 | T4 | clientkeys: the generator, `native.json` | T3 |
 | T5 | `ua-rs`: `NativeScheme`, `sign_message` on the existing ed25519 networks, the marker's docs | T4 |
 | T6 | `ua-rs`: NEAR | T5 |
+| T6a | clientkeys: the EVM-prefix refusal on `signMessage`, the four envelope calls, appended `native.json` rows (spec §8.1) | T6 |
+| T6b | `ua-rs`: the same in `sign_message` and `NativeKey` (spec §8.1) | T6a |
 | T7 | `ua-rs`: Bitcoin P2WPKH and P2TR, change chain, witness programs | T5 |
 | T8a | `ua-rs`: Polkadot crates, store, mini-secret, bare key, sr25519, SS58 | T5 |
 | T8b | `ua-rs`: Polkadot junctions, `KeyId::Polkadot`, `polkadotPaths`, the fuzz target | T8a |
@@ -240,6 +242,36 @@ JSDoc per spec §8), `clients/clientkeys/src/seed-signer.js` (exports), `clients
 - [ ] Implement; green (`cap cargo test $C --test wallet_native --test wallet_keys`).
 - [ ] Mutants (`…-t6-mutants.py`): index at the coin level; upper-case hex; coin override accepted; key proof accepted.
 - [ ] Gates: `G --only ua-rs`. Commit: `ua-rs-native T6: NEAR network`.
+
+### T6a — clientkeys: spec §8.1 (amendment after the scaas-sdk review)
+
+**Files:** `clients/clientkeys/src/seed.js` (`signMessage` prefixes; `signNearTransaction`, `signSuiTransaction`,
+`signStellarTransaction`, `signHederaTransaction`), `src/seed-signer.js` (exports), `scripts/native-vectors.mjs` (section `envelopes`
+last, refusal rows appended, the append-only assertion against the committed file), `test/native.test.js`, `native.json` (regenerated).
+
+- [ ] **Tests first:** `0x05…` and `0x19 0x01…` messages refused beside `0x06…` / `0x19 0x02…` accepted (ed25519 and sr25519 keys);
+  each envelope call: its hash (NEAR `sha256`, Sui `blake2b-256(000000 ‖ tx)`, Stellar `sha256(id ‖ 00000002 ‖ tx)`, Hedera the bytes)
+  verifies under the key, refused on another network, for 0 and 131,073 bytes and without the opt-in; the `envelopes` rows and the new
+  refusal rows read back. Red.
+- [ ] Implement; regenerate `native.json` twice (same bytes); `git diff` of the file shows insertions only; `vectors/ua` unchanged.
+- [ ] Mutants (`…-t6a-mutants.py`): prefix check removed; `0x19 0x01` check removed; Sui intent dropped; Stellar envelope type 5;
+  NEAR without the hash; network check removed (an envelope call on `solana` accepted); the append-only assertion removed while a
+  committed row changes (the generator must refuse).
+- [ ] Gates: `G --only clientkeys`. Commit: `ua-rs-native T6a: clientkeys EVM-prefix refusal and envelope calls (spec §8.1)`.
+
+### T6b — `ua-rs`: spec §8.1
+
+**Files:** `clients/ua-rs/src/wallet/sign.rs` (`sign_message_by` prefixes; the four envelope calls), `tests/wallet_native.rs`.
+
+- [ ] **Tests first:** the new refusal rows and the `envelopes` rows of `native.json` byte-equal; the prefixes beside their neighbours;
+  the network check; UA keys have no envelope call (compile-fail doc test). Red.
+- [ ] Implement; green (`cap cargo test $C --test wallet_native`).
+- [ ] Mutants (`…-t6b-mutants.py`): as T6a's, in `sign.rs`.
+- [ ] Gates: `G --only ua-rs`. Commit: `ua-rs-native T6b: EVM-prefix refusal and envelope calls (spec §8.1)`.
+
+T10 adds the C calls `scaas_ua_sign_near_transaction`, `scaas_ua_sign_sui_transaction`, `scaas_ua_sign_stellar_transaction`
+(`network_id32`), `scaas_ua_sign_hedera_transaction` (a UA key `RawDigestRefused`) and their Python rows; T11 gives them to every
+binding with `sign_message_raw` (not `ua-qt`: no raw signing in QML).
 
 ### T7 — `ua-rs`: Bitcoin
 

@@ -344,6 +344,43 @@ pub fn sign_message_by(key: &dyn Signer, message: &[u8], allow: AllowRawDigest) 
   say "never an **EVM** transaction hash or an EIP-7702 authorization raw; a native chain's preimage only as CLI-SGN-54", in place of
   today's "never a transaction".
 
+### 8.1 Amendment after the scaas-sdk review (raw path; controller calls, owner: no)
+
+Fable's review of `scaas-sdk` (F8, blind signing on the raw native path) and the coordinator's ruling of 2026-11-17: owner rule
+[CLI-SGN-40](../../clients/signers-clientkeys.md#CLI-SGN-40) stands and **nothing already pinned changes**; the F8 restrictions that
+concern which keys and digests reach the raw path belong to `scaas-sdk`'s raw entry, not to `ua-rs`'s existing calls. Recorded as
+CLI-UAL-63 (11) to (15), §15.
+
+1. **EVM prefixes on raw messages (in `ua-rs` and clientkeys).** `sign_message` / `signMessage` also refuse (`Argument`) a message
+   whose first byte is `0x05` (the EIP-7702 authorization magic) or whose first two bytes are `0x19 0x01` (the EIP-712 prefix), on
+   every key, beside the same bytes with another first byte accepted. Digests are untouched (a 32-byte hash starts with `0x05` one
+   time in 256).
+2. **Not in `ua-rs`:** `sign_digest` on `evm` / `hedera_ecdsa` keys stays (Merkle batch roots, CLI-SGN-40); `scaas-sdk`'s raw entry
+   refuses EVM-address keys (EVM goes only through `sign_transaction`). "A bare 32-byte digest only for the Bitcoin sighash" is also
+   the SDK's rule; `ua-rs`'s `sign_digest` and its rows (sr25519 and NEAR digests included) stay as they are.
+3. **Envelope calls, additive.** Four new calls on `NativeKey` (and clientkeys), each on its own network only (`Argument` on any
+   other), behind `AllowRawDigest`, the given bytes 1 to `MAX_RAW_MESSAGE` long; they build the chain's signing prefix or hash
+   wrapper over bytes the app's encoder made, not the transaction encoding:
+
+   | Call (clientkeys) | Network | `ua-rs` signs (ed25519) |
+   |---|---|---|
+   | `sign_near_transaction(tx_borsh, allow)` (`signNearTransaction`) | `near` | `sha256(tx_borsh)` |
+   | `sign_sui_transaction(tx_bcs, allow)` (`signSuiTransaction`) | `sui` | `blake2b-256(0x00 0x00 0x00 ‖ tx_bcs)` (intent `TransactionData`, `V0`, app `Sui`) |
+   | `sign_stellar_transaction(network_id, tx_xdr, allow)` (`signStellarTransaction`) | `stellar` | `sha256(network_id ‖ 0x00000002 ‖ tx_xdr)` (`network_id` = `sha256(passphrase)`, 32 bytes given; `ENVELOPE_TYPE_TX`) |
+   | `sign_hedera_transaction(body_bytes, allow)` (`signHederaTransaction`) | `hedera_ed25519` | `body_bytes` as given |
+
+   The existing raw `sign_digest` / `sign_message` calls and their `native.json` rows stay byte-equal. A UA key has none of them (C:
+   `RawDigestRefused`). Not built here: Stellar's fee-bump envelope (type 5), NEP-413, Sui's personal message.
+4. **GRAM / TON** stays off every envelope call; `ua-rs` builds no cell hash (the SDK keeps GRAM off its raw entry).
+5. **Residual: Algorand `"MX"`.** The Algorand family signs `"MX" ‖ "scaas.metaop.v1:" ‖ hex(digest)` (more than 32 bytes,
+   `docs/networks/algorand.md`); `ua-rs` has no Algorand native key, and the only way to an ed25519 key at `m/44'/283'/i'` is a coin-type
+   override on `stellar` / `ton`, which is not an Algorand wallet's path. Recorded, not refused.
+
+**Vectors.** `native.json` grows by appending only: a new last section `envelopes` (per call: the given bytes, the hash or bytes
+signed, the signature, deterministic) and new rows at the end of `refusals` (the prefixes beside their neighbours; each envelope call on
+another network, 0 and 131,073 bytes). The generator asserts that every row of the committed file is unchanged (each list section of
+the old file a prefix of the new one, every other value equal).
+
 ## 9. The blind-signing guard
 
 A raw digest or message hides what it authorizes. The guard has two halves.
@@ -574,6 +611,12 @@ Defined once, status SPECIFIED until the plan's tasks land:
 9. The Bitcoin change chain (`change` ∈ {0, 1}, `bitcoin_key`) is derived, so an imported mnemonic's change-chain funds are reachable;
    no other account level (§2, §5.1).
 10. No key proof and no import on the four new networks; NEAR without a coin-type override (§4.2, §4.5).
+11. Raw messages starting `0x05` or `0x19 0x01` refused in `ua-rs` and clientkeys; digests untouched (§8.1 item 1).
+12. EVM-address keys keep `sign_digest` in `ua-rs` (CLI-SGN-40); refusing them, and a bare digest only for the Bitcoin sighash, is
+    `scaas-sdk`'s raw entry's rule (§8.1 item 2).
+13. The four envelope calls (NEAR, Sui, Stellar, Hedera Ed25519), additive, behind `AllowRawDigest`, own network only (§8.1 item 3).
+14. GRAM / TON on no envelope call; no cell hash in `ua-rs` (§8.1 item 4).
+15. `native.json` grows by appending only, asserted by its generator; Algorand `"MX"` recorded as a residual (§8.1).
 
 ## 16. Agreement with the app contract
 
