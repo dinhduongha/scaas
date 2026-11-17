@@ -48,8 +48,11 @@ const EVENT_PAGE: u64 = 1000;
 
 pub struct SorobanAdapter {
     key: String,
+    /// `rpc_urls` as configured (the tests build another adapter on them; the reads go through `net`)
+    #[cfg_attr(not(test), allow(dead_code))]
     rpc: Vec<String>,
-    http: reqwest::Client,
+    /// the RPC endpoints (scaas-rpc T15: the family client, bounded, 20 s per request)
+    net: scaas_rpc::soroban::Soroban,
     network_id: [u8; 32],
     signers: Vec<LocalSigner>,
     lanes: Vec<Lane>,
@@ -321,7 +324,8 @@ impl SorobanAdapter {
         Ok(Self {
             key: cfg.chain_key(),
             rpc: cfg.rpc_urls.clone(),
-            http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build()?,
+            net: scaas_rpc::soroban::Soroban::new(scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None)
+                .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?, passphrase),
             network_id: network_id(passphrase),
             signers: signers.iter().map(clone_signer).collect::<Result<_>>()?,
             lanes,
@@ -337,27 +341,9 @@ impl SorobanAdapter {
         })
     }
 
-    async fn call(&self, url: &str, method: &str, params: Value) -> Result<Value> {
-        let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
-        let r: Value = self.http.post(url).json(&body).send().await?.json().await.with_context(|| format!("{method}: decode"))?;
-        if let Some(e) = r.get("error") {
-            bail!("{method}: {e}");
-        }
-        Ok(r["result"].clone())
-    }
-
+    /// One JSON-RPC call to the first endpoint (scaas-rpc T15: the family client).
     async fn rpc(&self, method: &str, params: Value) -> Result<Value> {
-        self.call(&self.rpc[0], method, params).await
-    }
-
-    async fn ledger_hash(&self, url: &str, seq: u64) -> Result<String> {
-        let r = self.call(url, "getLedgers", json!({"startLedger": seq, "pagination": {"limit": 1}})).await?;
-        let l = &r["ledgers"][0];
-        if l["sequence"].as_u64() != Some(seq) {
-            bail!("ledger {seq} not available");
-        }
-        let h = l["hash"].as_str().ok_or_else(|| anyhow!("ledger {seq} without hash"))?;
-        Ok(format!("0x{}", h.to_lowercase()))
+        Ok(self.net.call(0, method, params).await?)
     }
 
     fn signer(&self, lane: usize) -> Result<&LocalSigner> {
@@ -783,15 +769,9 @@ impl ChainAdapter for SorobanAdapter {
 
     /// SCP: ledger đã đóng là final; quorum = các endpoint khác trả cùng hash cho ledger đó.
     async fn final_head(&self) -> Result<Option<Head>> {
-        let r = self.rpc("getLatestLedger", json!({})).await?;
-        let height = r["sequence"].as_u64().ok_or_else(|| anyhow!("getLatestLedger without sequence"))?;
-        let hash = format!("0x{}", r["id"].as_str().ok_or_else(|| anyhow!("getLatestLedger without id"))?.to_lowercase());
-        let mut agree = 1;
-        for url in &self.rpc[1..] {
-            if self.ledger_hash(url, height).await.ok().as_deref() == Some(hash.as_str()) {
-                agree += 1;
-            }
-        }
+        // scaas-rpc T15: endpoint 0's latest ledger, and how many endpoints give its hash
+        let (head, agree) = self.net.head_agreement().await?;
+        let (height, hash) = (head.sequence, head.hash);
         Ok((agree >= self.quorum).then_some(Head { height, hash }))
     }
 
@@ -799,7 +779,7 @@ impl ChainAdapter for SorobanAdapter {
         if let Some(h) = self.hashes.lock().ok().and_then(|m| m.get(&height).cloned()) {
             return Ok(h);
         }
-        let h = self.ledger_hash(&self.rpc[0], height).await?;
+        let h = self.net.ledger_hash(0, height).await?;
         if let Ok(mut m) = self.hashes.lock() {
             if m.len() > 4096 {
                 m.clear();

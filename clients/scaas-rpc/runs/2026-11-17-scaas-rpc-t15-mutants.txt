@@ -1,0 +1,6 @@
+# t15 mutants at commit 96401a7a2 (name | outcome | test)
+a: the head quorum on endpoint 0 only | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test soroban the_ledger_reads_and_the_head_quorum
+a: the family timeout 30 s | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib family::tests::
+a: an error answer read as a result | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test soroban an_error_answer_is_kept_whole
+a: the ledger hash not lowercased | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test soroban the_ledger_reads_and_the_head_quorum
+4 mutants, 4 killed, 0 survived, 0 not loaded

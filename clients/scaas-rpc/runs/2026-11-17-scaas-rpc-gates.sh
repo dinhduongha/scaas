@@ -28,6 +28,7 @@ STEPS=(
   "node-clippy|scaas-node|$cap cargo clippy $C --all-targets -- -D warnings"
   "node-e2e|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e -- --ignored$TT"
   "node-e2e-hedera|scaas-node|(cd ../smartcontracts/evm && $cap forge build test/hedera/HederaMocks.sol) && CAPPED_MEM=6G $cap cargo test $C --test e2e_hedera -- --ignored$TT"
+  "node-e2e-soroban|scaas-node|CARGO_BUILD_JOBS=2 $cap ../smartcontracts/scripts/build.sh soroban && (cd ../clients/clientkeys && [ -d node_modules ] || $cap npm ci --no-audit --no-fund) && ../smartcontracts/soroban/scripts/quickstart.sh up && trap '../smartcontracts/soroban/scripts/quickstart.sh down' EXIT && ../smartcontracts/soroban/scripts/quickstart.sh wait && CAPPED_MEM=6G $cap cargo test $C --test e2e_soroban -- --ignored --test-threads=1 && CAPPED_MEM=6G $cap cargo test $C --test e2e_soroban_ua -- --ignored --test-threads=1"
   "ver-test|scaas-pqz-verifier|$cap cargo test $C"
   "ver-clippy|scaas-pqz-verifier|$cap cargo clippy $C --all-targets -- -D warnings"
   "ver-anvil|scaas-pqz-verifier|$cap cargo test $C --test anvil -- --ignored$TT"

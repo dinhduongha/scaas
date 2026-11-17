@@ -46,6 +46,9 @@ pub struct Http {
 /// `route` (`/v1/…`, its own query after `?`) under the endpoint's URL: its path prefix kept and its query kept before the
 /// route's (T13 S14: `Url::join` of an absolute path dropped both, so two gateways under one host reached one route).
 fn under(base: &url::Url, route: &str) -> url::Url {
+    if route.is_empty() {
+        return base.clone(); // a JSON-RPC endpoint is its URL itself (a family client's call, plan T15)
+    }
     let (path, query) = route.split_once('?').unwrap_or((route, ""));
     let mut u = base.clone();
     u.set_path(&format!(

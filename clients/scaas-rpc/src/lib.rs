@@ -9,12 +9,15 @@ pub mod endpoint;
 pub mod error;
 #[cfg(feature = "evm")]
 pub mod evm;
+pub mod family;
 #[cfg(feature = "evm")]
 pub mod hedera;
 pub mod http;
 #[cfg(feature = "node-client")]
 pub mod node;
 pub mod pool;
+#[cfg(feature = "soroban")]
+pub mod soroban;
 
 pub use endpoint::{
     Class, Endpoint, EndpointAuth, Fanout, Label, ListConfig, NodeList, Policy, Purpose, Secret,
