@@ -11028,6 +11028,8 @@ Change (owner 2026-11-18, "do (b) as now, and add (a′) for third parties, that
 
 Change (owner 2026-11-18, refining the above; owner: yes; status: SPECIFIED): the feature is named `sync-api` (old: `sync-cpp`): the sync surface serves every UniFFI generator without async support (C++, C#, maybe Go), while Kotlin, Swift and Python use the async API through official UniFFI. A C# binding task in this round (owner, the same day; plan T20c, after the C++ task and before the CLI) opens with a spike of `uniffi-bindgen-cs`, as T3 did, recording the generator version: async carried, C# uses the async API; otherwise `sync-api`; then generation, a dotnet smoke test and a CI job.
 
+Change (owner 2026-11-18, "put everything in the plan"; owner: yes; status: SPECIFIED): every remaining binding is in this round's plan, one task each, after the Dart task (T20) and before the CLI (T22): Python, Kotlin, Swift through official UniFFI over the async API (pytest, a JVM test, Swift on Linux or compile-only with the reason); JS / TS through `wasm-bindgen` over the async API, browser target, with the browser secret-storage and keystore rules and open questions for the owner; Go through `uniffi-bindgen-go` after a spike (async if supported, else `sync-api`); C# and the C++ `sync-api` surface as ruled.
+
 ### CLI-SDK-13 — Errors are named, stable codes; the layers below keep their names
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-13 · superseded-by: —
 

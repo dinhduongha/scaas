@@ -257,8 +257,9 @@ warning (`short_seed`, `imported_key`) comes beside a success, never as an error
 2026-11-11; generators and the C point controller calls; SPECIFIED). The public Rust API is the binding surface: module objects
 shared by reference, owned strings, byte vectors, integers, records and enums, string ids, no fixed-size arrays, lifetimes or generics,
 secrets only as `SecretBytes`, every async call on the SDK's runtime. Generators: `flutter_rust_bridge` 2 for Dart and Flutter (the
-two platform interfaces as one generated record of async closures); UniFFI for Kotlin, Swift and Python when an app asks;
-`wasm-bindgen` for the browser (PLANNED). **C++ / Qt** (owner 2026-11-18, Q-B1 (b), after the spike showed `uniffi-bindgen-cpp`
+two platform interfaces as one generated record of async closures); official UniFFI for Python, Kotlin and Swift over the async API;
+`wasm-bindgen` for JS / TS in the browser over the async API; `uniffi-bindgen-go` for Go and `uniffi-bindgen-cs` for C# after a
+spike each (async if the generator carries it, else `sync-api`); all in this round (owner 2026-11-18). **C++ / Qt** (owner 2026-11-18, Q-B1 (b), after the spike showed `uniffi-bindgen-cpp`
 refusing every async item): no C++ binding is generated from the SDK; Qt reaches it through the app's one library's own C ABI
 (scaas-app's `app-core-rust`, cbindgen, as `app-matrix`), whose Rust side owns the one tokio runtime and returns each async call
 through a completion callback that the Qt side posts to its GUI thread. **Third-party C++ apps, and every UniFFI generator without async** (owner 2026-11-18, (a′): C++, C#, maybe Go; Kotlin, Swift and
