@@ -3001,8 +3001,9 @@ created with bit 32:
   beside it; fee mode `NONE`, relayable at fee 0.
 - **Consent and checks** at the proposal and again at the apply: `consent` is `newAuditor`'s signature over the token-domain
   digest of `AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)`, checked by
-  `requireAuthorized(newAuditor, PURPOSE_ZETHER_AUTH, d, consent)` (the purpose a holder's `PqzAuth` uses; the typehash keeps
-  them apart), so a UA that never signs is never named and nobody can veto the apply by crediting the proposed UA; the key
+  `requireAuthorized(newAuditor, PURPOSE_AUDITOR_CONSENT, d, consent)` (a purpose of its own,
+  `keccak256("scaas.ua.purpose.auditor-consent.v1")` in `UAKinds`; the registry is unchanged, `requireAuthorized` takes any
+  purpose), so a UA that never signs is never named and nobody can veto the apply by crediting the proposed UA; the key
   checks a transfer with the auditor on makes on the auditor (`_keyPtrV`: a key of the token's class and scope,
   [CTR-PQZ-37](#CTR-PQZ-37); on an opening token also the opening KEM key in that scoped record,
   [CTR-UA-43](accounts.md#CTR-UA-43)), so a FULL token is never left with an auditor its transfers refuse; unlike `init`, this

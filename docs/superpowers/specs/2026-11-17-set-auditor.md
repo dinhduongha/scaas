@@ -180,8 +180,11 @@ AuditorConsent(address token,bytes32 auditor,uint32 epoch,bytes32 chainUid)
 the token's word. The digest `d` is checked at the proposal and again at the apply (the confirm carries the consent again).
 
 - **PQZ:** `consent` is an `IUARegistry.UASig` of `newAuditor` over `d`, checked by `IUARegistry.requireAuthorized(newAuditor,
-  UAKinds.PURPOSE_ZETHER_AUTH, d, consent)`, as `PqzCore` checks a holder's `PqzAuth` (same purpose, same token domain; the
-  typehash keeps the two apart, so the registry needs no new purpose); a refusal is the registry's.
+  UAKinds.PURPOSE_AUDITOR_CONSENT, d, consent)`, a purpose of its own, `PURPOSE_AUDITOR_CONSENT =
+  keccak256("scaas.ua.purpose.auditor-consent.v1")` in `UAKinds` (the string form of the other purposes, asserted by the
+  drift test). `requireAuthorized` accepts any purpose, so the registry and its closed portable list do not change.
+  `PURPOSE_ZETHER_AUTH` is not reused: it names Zether's operations, and on a PQZ token it would mislead readers and
+  auditors even though the typehash keeps the digests apart. A refusal is the registry's.
 - **Zether:** `pop` is a Schnorr proof of possession of `x_a` for `Y_a = newKey`, a new crypto object (one `bytes`, the proof):
   `pop = R ‖ be32(z)` (`P + 32` bytes, `P` the curve's G1 encoding). Prover: `k` hedged (`H(x_a ‖ d ‖ 32 random bytes)` mod `r`,
   as every opening's nonce), `R = [k]G`, `c = hashToScalar(keccak256("SCAAS-ZETHER-AUDITOR-POP-V1" ‖ d ‖ G ‖ Y_a ‖ R), r)`,
@@ -480,7 +483,9 @@ pass) and changes one thing.
   unchanged; the gas probes at epoch ≠ 0 (Zether edge cells, PQZ op 7 nearest the cap per set).
 - **Layout and pins**: every old row of `namespaces.json` unchanged, the new rows pinned; the router and consent typehashes;
   the selector audit; the bit vector; `typed_ops.json` rows; the "+0" pins on the plain kinds unchanged (`PlusZero.t.sol`).
-- **Clients**: clientkeys and `ua-rs` build the two router ops and `AuditorConsent` to the vector bytes; the Zether prover builds
+- **Clients**: clientkeys and `ua-rs` build the two router ops and `AuditorConsent`, and sign the PQZ consent under
+  `PURPOSE_AUDITOR_CONSENT`, to the vector bytes; the purpose constant equal in `UAKinds`, `kinds.json`, clientkeys and `ua-rs`
+  (the drift tests); the Zether prover builds
   the proof of possession to its vectors; every `ua-*` reads bit 32's row; the Zether prover recovers and opens an epoch-1
   entry with the epoch-1 key (the epoch-0 key must fail); the `ua-rs` PQZ reader at epoch 1 on both handles (`auditRead`,
   `proveDisclose AUDITOR`); **the old auditor's handle refuses an epoch-1 entry and the new one an epoch-0 entry, each before
@@ -491,7 +496,7 @@ pass) and changes one thing.
 the epoch check; allow a confirm before `eta`; drop the window's end; size the window by `D` or `noticePeriod` instead of
 `AUDITOR_CONFIRM_WINDOW`; refuse a new proposal over an expired one; accept a new proposal over a live one; drop the cancel
 branch; drop the proposer check; drop the role-epoch tie; read
-`noticePeriod` alone; read `grantDelay` alone; **read `PqzStorage.noticePeriod`**; skip the consent at the proposal; skip it at
+`noticePeriod` alone; read `grantDelay` alone; **read `PqzStorage.noticePeriod`**; skip the consent at the proposal; check the PQZ consent under another purpose; skip it at
 the apply; accept a proof of possession for another `d`; drop `c ≠ 0` or `z < r`; skip the per-entry write; write it at epoch
 0; write it on an opt-out; disclosure reads the current key; the apply overwrites the history; skip the key check at the
 apply; accept bit 32 on NONE; accept it with admin 0; accept `delegable` on 32; put 32 into `_delayedRelaxBits()`; put 32 into
@@ -521,9 +526,9 @@ Every chain is test-only: no migration; every confidential kind gets a new relea
 | O5 | The new auditor's consent (UA signature on PQZ, proof of possession on Zether) | controller call (coordinator's ruling on the review's A1); replaces the account-state check |
 | O6 | A consent or account check at `init` | not added: the creation-time auditor is public before anyone holds the token |
 | O7 | Hand-over to a new FULL auditor | off chain only (T10); the way back of §5.3 is in the operator note |
-| O8 | Names: `AUDITOR`, `setAuditorKey`, `setAuditorUA`, `AuditorConsent`, `"SCAAS-ZETHER-AUDITOR-POP-V1"`, `auditorEpoch`, `auditorKeyOf`, `auditorUAOf`, `auditorState`, the events and errors | controller calls |
+| O8 | Names: `AUDITOR`, `setAuditorKey`, `setAuditorUA`, `AuditorConsent`, `PURPOSE_AUDITOR_CONSENT`, `"SCAAS-ZETHER-AUDITOR-POP-V1"`, `auditorEpoch`, `auditorKeyOf`, `auditorUAOf`, `auditorState`, the events and errors | controller calls |
 | O9 | One proposal at a time (`AuditorPending`) | kept, with no delegation on bit 32 and the two-use rule |
-| O10 | The PQZ consent under `PURPOSE_ZETHER_AUTH` (no new registry purpose) | controller call; a purpose of its own would change `UAKinds` and the registry after Part R |
+| O10 | The PQZ consent's purpose | coordinator ruling 2026-11-17 (controller call, owner may override): its own `PURPOSE_AUDITOR_CONSENT = keccak256("scaas.ua.purpose.auditor-consent.v1")` in `UAKinds`, through `requireAuthorized`, which takes any purpose: the registry and its closed portable list do not change; `PURPOSE_ZETHER_AUTH` is not reused |
 | O12 | The confirm window: `AUDITOR_CONFIRM_WINDOW = 7 days`, independent of `D`; an expired proposal frees the slot; the holder cancels its own | coordinator ruling 2026-11-17 (controller call, owner may override), after the owner asked whether `max(noticePeriod(), grantDelay)` can wait forever: it cannot (both capped at 30 days), but a window sized by `noticePeriod` was empty at notice 0 |
 | O11 | KV-11: the `AUDITOR` disclosure checks the caller's `keyVersion`; with the epoch on chain the contract could require `keyVersion == kv_a` | existing behaviour, not changed here (review I2) |
 

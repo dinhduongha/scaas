@@ -115,8 +115,10 @@ its generator writing `smartcontracts/vectors/zether/auditor_pop.json` (never by
 
 Spec §5–§10, CTR-PQZ-43. Files: `src/pqz/PqzCore.sol` (the fields of spec §6; `_legOf`'s `AUDITOR` owner by the entry's
 epoch), `src/pqz/PqzStateLib.sol` (the state machine with the same window, delay and epoch check; never
-`PqzStorage.noticePeriod`; the consent through `requireAuthorized(newAuditor, PURPOSE_ZETHER_AUTH, d, consent)`; the checks
-through `_keyPtrV`; the proven-key check of step 1; the apply), `src/pqz/PqzTransferLib.sol` and the op 1 body (the per-entry
+`PqzStorage.noticePeriod`; the consent through `requireAuthorized(newAuditor, PURPOSE_AUDITOR_CONSENT, d, consent)`; the checks
+through `_keyPtrV`; the proven-key check of step 1; the apply), `src/ua/UAKinds.sol` (`PURPOSE_AUDITOR_CONSENT = keccak256("scaas.ua.purpose.auditor-consent.v1")`, the string form of
+the other purposes; no registry change: `requireAuthorized` takes any purpose and the closed portable list is unchanged),
+`test/ua/UAKinds.t.sol` (the drift test gains the constant), `src/pqz/PqzTransferLib.sol` and the op 1 body (the per-entry
 write), `src/pqz/PqzLayer.sol` (bodies), `src/pqz/IPqzToken.sol`, `test/pqz/PqzAuditor.t.sol` (new),
 `test/as/confidential/AuditorKinds.t.sol` (new, kinds 10–13), the layout files, `clients/ua-rs/src/facade/pqz.rs` (the words
 `auditorEpoch`, `entryAuditorEpoch[V]`, `auditorUAs[E]`; `auditor()` reads the entry's auditor pinned to the tail's `kv_a`;
@@ -138,7 +140,7 @@ change).
    `n2560-kmax16384`, `n2816-kmax65536` (`PqzSet.sol` restored after each); `test/as/confidential/**`; the op 7 cells nearest
    the EIP-7825 cap at each set measured at epoch ≠ 0 (forge does not enforce the cap: assert the reported regular gas);
    `ua-rs` the PQZ facade cells (`facade_pqz_state facade_pqz pqz_backup no_oracle`).
-4. Mutants: as A2's for PQZ, plus read `PqzStorage.noticePeriod`; `_legOf` reads the current auditor; the `_keyPtrV` check
+4. Mutants: as A2's for PQZ, plus read `PqzStorage.noticePeriod`; check the consent under `PURPOSE_ZETHER_AUTH`; `_legOf` reads the current auditor; the `_keyPtrV` check
    dropped at the apply; the opening KEM key check dropped; the reader uses the current auditor; the reader applies its secret
    before the epoch check.
 5. Commit `pqz: setAuditorUA on bit 32, consent, auditor epochs, disclosure and reader by the entry's auditor (CTR-PQZ-43)`.
@@ -170,10 +172,13 @@ Spec §8. Files: `src/governance/GovernanceRouter.sol` / `GovernanceRouterBase.s
 
 ## A7 — clientkeys, `ua-rs`, the typed vectors
 
-Files: `clients/clientkeys/src/evm.js` (the two router builders and the `AuditorConsent` typed data; its reader, where
-clientkeys reads auditor entries, with the same refusal of an entry of another epoch),
+Files: `clients/clientkeys/src/evm.js` (the two router builders and the `AuditorConsent` typed data),
+`clients/clientkeys/src/ua.js` and `clients/ua-rs/src/lib.rs` (the purpose `PURPOSE_AUDITOR_CONSENT` and the PQZ consent's
+UA signature under it), `smartcontracts/vectors/ua/kinds.json` (the purpose row, from its generator), the consent signature
+rows in `typed_ops.json` (a native and a derived signer), `clients/clientkeys/test/pqz-verdict.test.js`'s sibling for the
+consent; clientkeys' reader, where it reads auditor entries, with the same refusal of an entry of another epoch;
 `clients/clientkeys/scripts/typed-ops-vectors.mjs` → `smartcontracts/vectors/typed/typed_ops.json` (regenerated, never by
-hand: the two router rows and the `AuditorConsent` row), `clients/clientkeys/test/typed-ops.test.js`,
+hand: the two router rows, the `AuditorConsent` row and its signed rows), `clients/clientkeys/test/typed-ops.test.js`,
 `clients/ua-rs/src/wallet/eip712.rs` (the three structs), `clients/ua-rs/tests/wallet_typed.rs`,
 `clients/zether-prover/tests/typed_ops.rs`.
 
