@@ -16,6 +16,10 @@
 #   contract-cosmos:   test.sh cosmos (cargo test)
 #   contract-ton:      test.sh ton (npm ci; npm test = tact build + jest; Node 26.8.1)
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
+#   clients/scaas-rpc: cargo test --locked --all-features; cargo clippy --locked --all-targets --all-features -- -D warnings;
+#                  cargo test --locked --features evm --test anvil -- --ignored (three anvils, foundry's);
+#                  cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client (compiles for
+#                  wasm32, not run); ! git grep -n 'tokio::time' -- src (no tokio timer in the crate, F18)
 #   pqz:           in pqz-core: params/sets/gen_set.py --all --check, pqzl/params/to_rust.py --check (generated files in sync);
 #                  sh gate-controls.sh (the gate scripts' negative controls, stubs only);
 #                  python3 -I nethermind/chain/check-provisional-ids.py (each provisional schedule's ids = PqzSetIds.cs);
@@ -106,6 +110,7 @@ jobs:
       contract_cosmos: ${{ steps.f.outputs.contract_cosmos }}
       contract_ton: ${{ steps.f.outputs.contract_ton }}
       node: ${{ steps.f.outputs.node }}
+      scaas_rpc: ${{ steps.f.outputs.scaas_rpc }}
       docs: ${{ steps.f.outputs.docs }}
       clientkeys: ${{ steps.f.outputs.clientkeys }}
       pqz: ${{ steps.f.outputs.pqz }}
@@ -355,6 +360,38 @@ jobs:
       # npm ci (lockfile) + npm test (tact build, jest on @ton/sandbox)
       - name: test.sh ton
         run: smartcontracts/scripts/test.sh ton
+
+  # the network crate (CLI-RPC-01): endpoint lists, failover and strict majority, the bounded transport, the scaas-node client
+  scaas-rpc:
+    needs: changes
+    if: needs.changes.outputs.scaas_rpc == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-rpc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-rpc
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+      - name: cargo test
+        run: cargo test --locked --all-features
+      - name: cargo clippy
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+      - name: strict majority, broadcast and transaction state on three anvils
+        run: cargo test --locked --features evm --test anvil -- --ignored
+      - name: compiles for wasm32 (not run)
+        run: cargo check --locked --target wasm32-unknown-unknown --no-default-features --features evm,node-client
+      - name: no tokio timer in the crate (F18)
+        run: "! git grep -n 'tokio::time' -- src"
 
   node:
     needs: changes

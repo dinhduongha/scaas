@@ -354,7 +354,9 @@ impl Http {
         Ok((status, buf))
     }
 
-    /// wasm32: compiles, never sends (the fetch transport is plan T12's).
+    /// wasm32: the fetch backend (spec §12); the timeout an abort signal (`RequestBuilder::timeout`). The browser follows a
+    /// redirect itself: an answer from another URL than the one asked is the endpoint's HTTP failure. Without streams there,
+    /// the answer is read whole, then capped (an announced length above the cap is refused before reading).
     #[cfg(target_arch = "wasm32")]
     #[allow(clippy::too_many_arguments)]
     async fn send_any(
@@ -364,11 +366,44 @@ impl Http {
         method: reqwest::Method,
         path: Option<&str>,
         body: Option<Vec<u8>>,
-        _cap: usize,
+        cap: usize,
         deadline: Option<Instant>,
     ) -> Result<(u16, Vec<u8>), EndpointFailure> {
-        let _ = self.build(list, i, method, path, body, deadline)?;
-        Err(self.fail(list, i, FailureKind::Transport, "no wasm32 transport yet"))
+        let (url, req) = self.build(list, i, method, path, body, deadline)?;
+        let net = |err: reqwest::Error| {
+            let kind = if err.is_timeout() {
+                FailureKind::Timeout
+            } else {
+                FailureKind::Transport
+            };
+            self.fail(list, i, kind, &err.without_url().to_string())
+        };
+        let r = req.send().await.map_err(net)?;
+        if *r.url() != url {
+            return Err(self.fail(list, i, FailureKind::Http, "redirected"));
+        }
+        let status = r.status().as_u16();
+        if r.content_length().is_some_and(|n| n > cap as u64) {
+            return Err(self.fail(
+                list,
+                i,
+                FailureKind::AnswerTooLarge,
+                &format!("an announced answer above {cap} bytes"),
+            ));
+        }
+        let buf = r.bytes().await.map_err(net)?;
+        if buf.len() > cap {
+            return Err(self.fail(
+                list,
+                i,
+                FailureKind::AnswerTooLarge,
+                &format!("an answer above {cap} bytes"),
+            ));
+        }
+        if let Err(k) = depth(&buf) {
+            return Err(self.fail(list, i, k, "the answer's nesting"));
+        }
+        Ok((status, buf.to_vec()))
     }
 }
 

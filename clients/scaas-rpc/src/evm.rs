@@ -7,7 +7,9 @@
 use crate::endpoint::{NodeList, Purpose};
 use crate::error::{EndpointFailure, FailureKind, RpcError};
 use crate::http::{BoundedRpc, Http, ANSWER_MAX};
-use crate::pool::{Agreed, Answer, BlockChoice, Pool, Probe, ReadAt, ReadError};
+/// The pinned-read types the SDK names with `EvmPool` (spec §13), the hash an EVM block hash.
+pub use crate::pool::{Agreed, BlockChoice, ReadAt};
+use crate::pool::{Answer, Pool, Probe, ReadError};
 use alloy::eips::BlockNumberOrTag;
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, Bytes, B256};

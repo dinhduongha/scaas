@@ -35,7 +35,9 @@ JOBS = {
     'contract-sui': ['smartcontracts/move/sui/'] + SC,
     'contract-cosmos': ['smartcontracts/cosmos/'] + SC + RT,
     'contract-ton': ['smartcontracts/ton/'] + SC,
-    'node': ['scaas-node/', 'clients/ua-rs/', 'smartcontracts/'] + RT,
+    'node': ['scaas-node/', 'clients/ua-rs/', 'clients/scaas-rpc/', 'smartcontracts/'] + RT,
+    # the network crate and the depth scan it takes from ua-rs (json)
+    'scaas-rpc': ['clients/scaas-rpc/', 'clients/ua-rs/'] + RT,
     'docs': [''],
     'clientkeys': ['clients/clientkeys/', 'smartcontracts/', 'scaas-node/src/'],
     # the directories the pqz job builds and tests (pqzl, ffi, stmt, pqzh/ligero, params, fuzz); pqz-core/nethermind/ (chain
@@ -65,7 +67,7 @@ JOBS = {
 # ci-full-<group>: the jobs a label or a manual run forces on; ci-full: every job.
 GROUPS = {
     'ci-full-contracts': [j for j in JOBS if j.startswith('contract-')],
-    'ci-full-node': ['node'],
+    'ci-full-node': ['node', 'scaas-rpc'],
     'ci-full-clients': ['clientkeys', 'zether-prover', 'scaas-ct', 'test-features'] + [j for j in JOBS if j.startswith('ua-')],
     'ci-full-pqz': ['pqz'],
     'ci-full': list(JOBS),
@@ -158,7 +160,11 @@ if __name__ == '__main__':
         assert needed([p]) == {j: j == 'docs' or j in js for j in JOBS}, p
     assert {j for j, r in needed(['rust-toolchain.toml']).items() if r} == {
         'docs', 'contract-soroban', 'contract-solana', 'contract-near', 'contract-cosmos', 'node', 'pqz', 'zether-prover',
-        'scaas-ct', 'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-dart-frb', 'test-features', 'ua-py', 'ua-go', 'ua-cs', 'ua-deps'}
+        'scaas-ct', 'ua-rs', 'ua-cxx', 'ua-c', 'ua-qt', 'ua-dart-frb', 'test-features', 'ua-py', 'ua-go', 'ua-cs', 'ua-deps',
+        'scaas-rpc'}
+    # the network crate: its own job and the node's (the node builds it); ua-rs (its depth scan) runs it too
+    assert {j for j, r in needed(['clients/scaas-rpc/src/evm.rs']).items() if r} >= {'scaas-rpc', 'node'}
+    assert needed(['clients/ua-rs/src/json.rs'])['scaas-rpc'] and not needed(['scaas-node/src/chain.rs'])['scaas-rpc']
     # ua-rs-sign T18: every job over ua-rs reads the crates ua-rs builds; the bindings over libscaas_ua_c read ua-c and ua-rs
     over = ['ua-rs', 'ua-c', 'ua-cxx', 'ua-qt', 'ua-dart-frb', 'ua-py', 'ua-go', 'ua-cs']
     for p in ('pqz-core/ffi/src/lib.rs', 'pqz-core/pqzl/rust/src/lib.rs', 'pqz-core/pqzl/x.c', 'pqz-core/stmt/src/lib.rs',
