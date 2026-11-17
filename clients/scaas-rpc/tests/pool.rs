@@ -1419,3 +1419,29 @@ async fn reverts_without_data_compare_by_their_reason() {
     .await;
     assert!(matches!(r, Err(RpcError::Revert { .. })), "control: {r:?}");
 }
+
+/// T13 S15: an endpoint of another chain never counts in an agreement: with it, [5, 5, 6] has one honest 5 and no majority.
+/// Control: the same answers from three endpoints of this chain agree on 5.
+#[tokio::test]
+async fn a_wrong_chain_endpoint_never_counts_in_an_agreement() {
+    let mut other = ep(100);
+    other.same = Some(false);
+    let r = agree(
+        &named(3, Policy::StrictMajority),
+        &Fake::new(vec![other, ep(100), ep(100)]),
+        vec![A::V(5), A::V(5), A::V(6)],
+    )
+    .await;
+    assert!(
+        matches!(r, Err(RpcError::EndpointNoMajority { .. })),
+        "{r:?}"
+    );
+    let a = agree(
+        &named(3, Policy::StrictMajority),
+        &Fake::new(vec![ep(100); 3]),
+        vec![A::V(5), A::V(5), A::V(6)],
+    )
+    .await
+    .unwrap();
+    assert_eq!((a.value, a.members), (5, vec![0, 1]), "control");
+}

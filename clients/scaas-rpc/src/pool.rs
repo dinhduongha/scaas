@@ -273,9 +273,9 @@ impl Pool {
         Ok(v)
     }
 
-    /// Endpoint `i` may be asked anything at all (T13 S3): it passes identity, except endpoint 0 of a pool built without the
-    /// first endpoint's check. Every read and send outside the pool's own rules (the first-endpoint reads, a broadcast, the
-    /// strict-majority fee) goes through this, so a dropped endpoint is never asked again.
+    /// Endpoint `i` may be asked anything at all (T13 S3): it passes identity (every endpoint, the first included: T13 point 6).
+    /// Every read and send outside the pool's own rules (the first-endpoint reads, a broadcast, the strict-majority fee) goes
+    /// through this, so a dropped endpoint is never asked again.
     pub async fn admit<P: Probe>(
         &self,
         probe: &P,

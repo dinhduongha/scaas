@@ -1,3 +1,6 @@
-# t13 mutants at commit eafdc91f9 (name | outcome | test)
-S17 a bare revert compares by its data only | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool reverts_without_data_compare_by_their_reason
-1 mutants, 1 killed, 0 survived, 0 not loaded
+# t13 mutants at commit 9e5e2436b (name | outcome | test)
+S15 no NoTrustedEndpoint in agree | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool all_discovered_under_agreement_is_no_trusted_endpoint
+S15 no AgreementNeedsThree | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool discovered_with_n_2_under_agreement_is_refused_before_any_request
+S15 no identity inside agree | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool a_wrong_chain_endpoint_never_counts_in_an_agreement
+S15 op_state decisive ignored | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes op_state_from_a_failover_endpoint_is_pending
+4 mutants, 4 killed, 0 survived, 0 not loaded

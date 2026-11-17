@@ -91,6 +91,17 @@ MUTANTS = [
      T + "--test node a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status"),
     ("S17 a bare revert compares by its data only", [(P, "(Err((x, rx)), Err((y, ry))) => x == y && (!x.is_empty() || rx == ry),", "(Err((x, _)), Err((y, _))) => x == y,")],
      T + "--test pool reverts_without_data_compare_by_their_reason"),
+    ("S15 no NoTrustedEndpoint in agree", [(P, "            if !(0..n).any(trusted) {\n                return Err(RpcError::NoTrustedEndpoint);", "            if false {\n                return Err(RpcError::NoTrustedEndpoint);")],
+     T + "--test pool all_discovered_under_agreement_is_no_trusted_endpoint"),
+    ("S15 no AgreementNeedsThree", [(P, "if n < 3 && !(0..n).all(trusted) {", "if false {")],
+     T + "--test pool discovered_with_n_2_under_agreement_is_refused_before_any_request"),
+    ("S15 no identity inside agree", [(P, "        let names: Vec<Option<u64>> = futures::future::join_all((0..n).map(|i| async move {\n            self.identity_ok(probe, i, deadline).await?;\n",
+                                        "        let names: Vec<Option<u64>> = futures::future::join_all((0..n).map(|i| async move {\n"),
+                                       (P, "                    self.identity_ok(probe, i, deadline).await?;\n                    let hash = probe.header(i, number, deadline).await?;",
+                                        "                    let hash = probe.header(i, number, deadline).await?;")],
+     T + "--test pool a_wrong_chain_endpoint_never_counts_in_an_agreement"),
+    ("S15 op_state decisive ignored", [(E, "            _ if !decisive => OpState::Pending,", "            _ if false => OpState::Pending,")],
+     T + "--test evm_fakes op_state_from_a_failover_endpoint_is_pending"),
 ]
 
 if __name__ == "__main__":

@@ -1857,3 +1857,35 @@ async fn a_nonce_view_of_no_word_is_no_nonce() {
         );
     }
 }
+
+/// T13 S15: a relayed operation's facts from a failover endpoint (endpoint 0 down) are no verdict: `Pending`, though the same
+/// facts from endpoint 0 are `FailedForGood` (`a_relayed_operation_ends_on_chain_facts`, the control).
+#[tokio::test]
+async fn op_state_from_a_failover_endpoint_is_pending() {
+    let q = OpQuery {
+        contract: Address::ZERO,
+        nonce_call: Bytes::new(),
+        nonce: U256::from(3),
+        executed: alloy::rpc::types::Filter::new(),
+        from_block: 1,
+        valid_until: 0x6ac07487 + 100,
+    };
+    let spent = op_chain(false, 4).await;
+    assert_eq!(
+        sdk_pool(&[DOWN, &spent], 2_000)
+            .op_state(&q, depth(1))
+            .await
+            .unwrap(),
+        OpState::Pending
+    );
+    assert_eq!(
+        sdk_pool(&[&spent], 2_000)
+            .op_state(&q, depth(1))
+            .await
+            .unwrap(),
+        OpState::FailedForGood {
+            basis: Basis::OneEndpoint
+        },
+        "control"
+    );
+}
