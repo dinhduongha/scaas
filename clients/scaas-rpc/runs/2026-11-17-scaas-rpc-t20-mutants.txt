@@ -1,0 +1,5 @@
+# t20 mutants at commit 679dda5b5 (name | outcome | test)
+a: the final head's quorum on endpoint 0 only | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_final_head_quorum_reads_every_endpoint
+a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test sui the_failover_drops_another_network_and_skips_an_endpoint_behind
+a: each endpoint its own reference | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test sui the_failover_drops_another_network_and_skips_an_endpoint_behind
+3 mutants, 3 killed, 0 survived, 0 not loaded

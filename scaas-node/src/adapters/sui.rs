@@ -864,8 +864,8 @@ pub fn tx_events(package: &Addr, registries: &[String], chunk: &[(String, u64, S
 
 pub struct SuiAdapter {
     key: String,
-    rpcs: Vec<String>,
-    http: reqwest::Client,
+    /// the RPC endpoints (scaas-rpc T20: the family client, bounded, 20 s per request)
+    net: scaas_rpc::sui::Sui,
     /// Đích lệnh gọi (package mới nhất sau nâng cấp).
     package: Addr,
     /// Id package GỐC: type của event giữ id này qua mọi lần nâng cấp (review L1).
@@ -923,8 +923,9 @@ impl SuiAdapter {
         }
         Ok(Self {
             key: cfg.chain_key(),
-            rpcs: cfg.rpc_urls.clone(),
-            http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build()?,
+            net: scaas_rpc::sui::Sui::new(
+                scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None).map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+            ),
             package,
             type_package,
             budget_cap,
@@ -988,17 +989,13 @@ impl SuiAdapter {
         self.rpc("sui_executeTransactionBlock", json!([tx_b64, [sig_b64], {"showEffects": true}])).await.map(|_| ())
     }
 
-    async fn rpc_at(&self, url: &str, method: &str, params: Value) -> Result<Value> {
-        let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
-        let v: Value = self.http.post(url).json(&body).send().await?.error_for_status()?.json().await?;
-        if let Some(e) = v.get("error") {
-            bail!("{method}: {e}");
-        }
-        v.get("result").cloned().ok_or_else(|| anyhow!("{method}: no result"))
+    /// One call on endpoint `i` (scaas-rpc T20: the family client); an error answer is `"{method}: {error}"`, as before.
+    async fn rpc_at(&self, i: usize, method: &str, params: Value) -> Result<Value> {
+        self.net.call(i, method, params).await.map_err(|e| anyhow!("{e}"))
     }
 
     async fn rpc(&self, method: &str, params: Value) -> Result<Value> {
-        self.rpc_at(&self.rpcs[0], method, params).await
+        self.rpc_at(0, method, params).await
     }
 
     fn work(&self, job: &Job) -> Result<Work> {
@@ -1059,9 +1056,9 @@ impl SuiAdapter {
         v.as_str().and_then(|s| s.parse().ok()).or_else(|| v.as_u64()).ok_or_else(|| anyhow!("bad gas price"))
     }
 
-    async fn checkpoint_digest(&self, url: &str, seq: u64) -> Result<String> {
-        let c = self.rpc_at(url, "sui_getCheckpoint", json!([seq.to_string()])).await?;
-        let d = bs58::decode(c["digest"].as_str().unwrap_or_default()).into_vec()?;
+    async fn checkpoint_digest(&self, i: usize, seq: u64) -> Result<String> {
+        let c = self.net.checkpoint_digest(i, seq).await.map_err(|e| anyhow!("{e}"))?;
+        let d = bs58::decode(c).into_vec()?;
         if d.len() != 32 {
             bail!("bad checkpoint digest");
         }
@@ -1232,10 +1229,10 @@ impl ChainAdapter for SuiAdapter {
     async fn final_head(&self) -> Result<Option<Head>> {
         let v = self.rpc("sui_getLatestCheckpointSequenceNumber", json!([])).await?;
         let seq: u64 = v.as_str().and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("bad checkpoint number"))?;
-        let hash = self.checkpoint_digest(&self.rpcs[0], seq).await?;
+        let hash = self.checkpoint_digest(0, seq).await?;
         let mut agree = 1;
-        for url in &self.rpcs[1..] {
-            if self.checkpoint_digest(url, seq).await.ok().as_deref() == Some(hash.as_str()) {
+        for i in 1..self.net.client.len() {
+            if self.checkpoint_digest(i, seq).await.ok().as_deref() == Some(hash.as_str()) {
                 agree += 1;
             }
         }
@@ -1243,7 +1240,7 @@ impl ChainAdapter for SuiAdapter {
     }
 
     async fn block_hash(&self, height: u64) -> Result<String> {
-        self.checkpoint_digest(&self.rpcs[0], height).await
+        self.checkpoint_digest(0, height).await
     }
 
     /// `contracts` = id `Registry<T>` các token Odoo đã đăng ký (review H2: không danh sách tĩnh trong cấu hình node).
@@ -1428,6 +1425,10 @@ mod tests {
         coins: Vec<(Addr, u64, u64)>,
         executed: Vec<String>,
         dry_runs: u32,
+        /// scaas-rpc T20: the checkpoint digests' byte (`[d; 32]`), the status reads counted, a dry run refused
+        digest: u8,
+        status_reads: u32,
+        dry_fail: bool,
     }
     type FakeShared = std::sync::Arc<std::sync::Mutex<FakeSui>>;
 
@@ -1438,10 +1439,20 @@ mod tests {
             let mut f = s.lock().unwrap();
             let p = &b["params"];
             let r = match b["method"].as_str().unwrap_or_default() {
-                "sui_getTransactionBlock" => match f.status {
-                    None => return Json(json!({"error": {"code": -32602, "message": "Could not find the referenced transaction"}})),
-                    Some(st) => json!({"checkpoint": "9", "effects": {"status": {"status": st}}}),
-                },
+                "sui_getChainIdentifier" => json!("4c78adac"),
+                "sui_getLatestCheckpointSequenceNumber" => json!("9"),
+                "sui_getCheckpoint" => json!({"digest": bs58::encode([f.digest; 32]).into_string()}),
+                "sui_dryRunTransactionBlock" if f.dry_fail => {
+                    f.dry_runs += 1;
+                    json!({"effects": {"status": {"status": "failure", "error": "MoveAbort(0xb::meta, 3)"}}})
+                }
+                "sui_getTransactionBlock" => {
+                    f.status_reads += 1;
+                    match f.status {
+                        None => return Json(json!({"error": {"code": -32602, "message": "Could not find the referenced transaction"}})),
+                        Some(st) => json!({"checkpoint": "9", "effects": {"status": {"status": st}}}),
+                    }
+                }
                 "sui_getObject" if p[0] == addr_hex(&[0xaa; 32]) => json!({"data": {"version": f.gas_version.to_string()}}),
                 "sui_getObject" => json!({"data": {"owner": {"Shared": {"initial_shared_version": 3}}}}),
                 "sui_executeTransactionBlock" => {
@@ -1880,5 +1891,27 @@ mod tests {
             let ev = json!({"type": s, "id": {"eventSeq": n}, "parsedJson": {"contract": s, "from": n}});
             let _ = normalize(&[0u8; 32], &[], &ev, n, "", "");
         }
+    }
+
+    /// scaas-rpc T20a: `final_head`'s quorum reads every endpoint by index, as before: two endpoints agreeing on the
+    /// checkpoint's digest meet quorum 2, a third differing does not count. Control: quorum 3 unmet.
+    #[tokio::test]
+    async fn sui_final_head_quorum_reads_every_endpoint() {
+        let dir = tmp_dir("t20a-head");
+        let (a, _) = fake_sui(FakeSui { digest: 1, ..Default::default() }).await;
+        let (b, _) = fake_sui(FakeSui { digest: 1, ..Default::default() }).await;
+        let (c, _) = fake_sui(FakeSui { digest: 2, ..Default::default() }).await;
+        let cfg = |q: usize| -> ChainCfg {
+            toml::from_str(&format!(
+                "family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [\"{a}\", \"{c}\", \"{b}\"]\nlanes = [0]\n\
+                 finality = {{ mode = \"instant\", quorum = {q} }}\nparams = {{ package = \"0xb\", lane_journal = \"{}\" }}",
+                dir.display()
+            ))
+            .unwrap()
+        };
+        let k = [LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()];
+        let h = SuiAdapter::new(&cfg(2), &k).unwrap().final_head().await.unwrap().expect("endpoints 0 and 2 agree");
+        assert_eq!((h.height, h.hash), (9, addr_hex(&[1; 32])));
+        assert!(SuiAdapter::new(&cfg(3), &k).unwrap().final_head().await.unwrap().is_none(), "control");
     }
 }

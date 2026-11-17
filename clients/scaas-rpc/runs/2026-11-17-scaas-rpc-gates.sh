@@ -37,6 +37,7 @@ STEPS=(
   # (a slot held for the whole run starved the test's own build behind other agents' jobs); the Indexer API's containers
   # capped by `docker update`
   "node-e2e-aptos|scaas-node|D=../smartcontracts/move/aptos/scripts/devnet.sh; \$D down >/dev/null 2>&1; trap '\$D down >/dev/null 2>&1' EXIT; systemd-run --user --scope --quiet -p MemoryMax=3G -p MemorySwapMax=1G -- \$D up && $cap \$D publish && docker update --memory 2g --memory-swap 2g \$(docker ps -q --filter name=local-testnet) >/dev/null && CAPPED_MEM=6G $cap cargo test $C --test e2e_aptos -- --ignored$TT"
+  "node-e2e-sui|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e_sui -- --ignored$TT"
   "ver-test|scaas-pqz-verifier|$cap cargo test $C"
   "ver-clippy|scaas-pqz-verifier|$cap cargo clippy $C --all-targets -- -D warnings"
   "ver-anvil|scaas-pqz-verifier|$cap cargo test $C --test anvil -- --ignored$TT"

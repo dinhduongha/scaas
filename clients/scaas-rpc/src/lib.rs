@@ -26,6 +26,8 @@ pub mod pool;
 pub mod solana;
 #[cfg(feature = "soroban")]
 pub mod soroban;
+#[cfg(feature = "sui")]
+pub mod sui;
 
 pub use endpoint::{
     Class, Endpoint, EndpointAuth, Fanout, Label, ListConfig, NodeList, Policy, Purpose, Secret,
