@@ -294,10 +294,32 @@ export function signMessage(key, message, { allowRawDigest = false, aux } = {}) 
   if (allowRawDigest !== true) fail('Argument', 'signMessage: refused without { allowRawDigest: true }');
   if (!(message instanceof Uint8Array) || message.length < 1 || message.length > MAX_RAW_MESSAGE) fail('Argument', 'message: 1 to 131072 bytes');
   if (ENVELOPES.some((p) => message.length >= p.length && p.every((b, i) => message[i] === b))) fail('Argument', 'message: a SCaaS off-chain envelope');
+  if (message[0] === 0x05 || (message[0] === 0x19 && message[1] === 0x01)) fail('Argument', 'message: an EIP-7702 or EIP-712 prefix');
   if (key.curve === 'ed25519') return ed25519.sign(message, key.privateKey);
   if (key.curve === 'sr25519') return sr25519Sign(key.privateKey, message, aux);
   return fail('Argument', 'signMessage: Ed25519 and sr25519 keys only');
 }
+
+// The envelope calls (spec 2026-11-17-ua-rs-native §8.1, CLI-UAL-63 (13)): the chain's signing prefix or hash wrapper over the
+// bytes the app's encoder made, each on its own network only, behind the same opt-in; ed25519 over the result.
+function envelope(key, network, tx, allowRawDigest, build) {
+  if (allowRawDigest !== true) fail('Argument', 'refused without { allowRawDigest: true }');
+  if (key.network !== network) fail('Argument', `a ${network} key only`);
+  if (!(tx instanceof Uint8Array) || tx.length < 1 || tx.length > MAX_RAW_MESSAGE) fail('Argument', 'transaction: 1 to 131072 bytes');
+  return ed25519.sign(build(tx), key.privateKey);
+}
+/** NEAR: ed25519 over sha256(Borsh(Transaction)). */
+export const signNearTransaction = (key, txBorsh, { allowRawDigest = false } = {}) => envelope(key, 'near', txBorsh, allowRawDigest, (t) => sha256(t));
+/** Sui: ed25519 over blake2b-256(intent 0x00 0x00 0x00 ‖ TransactionData BCS). */
+export const signSuiTransaction = (key, txBcs, { allowRawDigest = false } = {}) =>
+  envelope(key, 'sui', txBcs, allowRawDigest, (t) => blake2b(concatBytes(new Uint8Array(3), t), { dkLen: 32 }));
+/** Stellar: ed25519 over sha256(networkId ‖ ENVELOPE_TYPE_TX (0x00000002) ‖ Transaction XDR); networkId = sha256(passphrase), 32 bytes. */
+export function signStellarTransaction(key, networkId, txXdr, { allowRawDigest = false } = {}) {
+  if (!(networkId instanceof Uint8Array) || networkId.length !== 32) fail('Argument', 'networkId: 32 bytes');
+  return envelope(key, 'stellar', txXdr, allowRawDigest, (t) => sha256(concatBytes(networkId, new Uint8Array([0, 0, 0, 2]), t)));
+}
+/** Hedera Ed25519: ed25519 over the transaction's bodyBytes as given. */
+export const signHederaTransaction = (key, bodyBytes, { allowRawDigest = false } = {}) => envelope(key, 'hedera_ed25519', bodyBytes, allowRawDigest, (t) => t);
 
 /** BIP-86 key-path signature: d = d0 or n − d0 (even y of P), BIP-340 with d + t mod n, then verified under x(Q). `aux`: the
  *  generator's fixed bytes, else 32 fresh bytes from the platform CSPRNG. */

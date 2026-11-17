@@ -319,6 +319,10 @@ function call(c, a) {
     case 'sign_typed': return S.signTyped(key(), a.typedData);
     case 'import_native_key': return S.importKey(a.network, B(a.secret));
     case 'imported_ua_key': return U.importedUAKey({ network: a.network, secret: B(a.secret), kind: a.kind });
+    case 'sign_near_transaction': return S.signNearTransaction(key(), msgOf(a), { allowRawDigest: true });
+    case 'sign_sui_transaction': return S.signSuiTransaction(key(), msgOf(a), { allowRawDigest: true });
+    case 'sign_stellar_transaction': return S.signStellarTransaction(key(), B(a.networkId), msgOf(a), { allowRawDigest: true });
+    case 'sign_hedera_transaction': return S.signHederaTransaction(key(), msgOf(a), { allowRawDigest: true });
     default: throw new Error(`unknown call ${c}`);
   }
 }
@@ -396,4 +400,65 @@ test('native.json external: BIP-84 / BIP-86 / BIP-143 / BIP-340 / BIP-341 / BIP-
   const sr = await import('@scure/sr25519'), j = x.polkadotJsSignature;
   assert.ok(sr.verify(B(j.message), B(j.signature), B(j.publicKey)));
   assert.ok(!sr.verify(new Uint8Array([...B(j.message), 0]), B(j.signature), B(j.publicKey)), 'one byte appended: refused');
+});
+
+// ------------------------------------------------------------------ T6a: spec §8.1 (after the scaas-sdk review)
+import { blake2b } from '@noble/hashes/blake2.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+
+test('signMessage refuses the EIP-7702 magic 0x05 and the EIP-712 prefix 0x19 0x01, beside their neighbours', () => {
+  for (const k of [S.deriveKey(seed, 'solana', 0), dot('')]) {
+    for (const [bad, good] of [[[0x05, 1, 2], [0x06, 1, 2]], [[0x05], [0x04]], [[0x19, 0x01, 7], [0x19, 0x02, 7]], [[0x19, 0x01], [0x18, 0x01]]]) {
+      assert.equal(codeOf(() => S.signMessage(k, Uint8Array.from(bad), { allowRawDigest: true })), 'Argument', `refused ${bad}`);
+      assert.equal(codeOf(() => S.signMessage(k, Uint8Array.from(good), { allowRawDigest: true })), null, `accepted ${good}`);
+    }
+  }
+  // digests are untouched
+  const evm = S.deriveKey(seed, 'evm', 0);
+  assert.equal(S.signDigest(evm, new Uint8Array(32).fill(5), { allowRawDigest: true }).length, 65);
+});
+
+const cat = (...a) => { const o = new Uint8Array(a.reduce((n, x) => n + x.length, 0)); let i = 0; for (const x of a) { o.set(x, i); i += x.length; } return o; };
+const ENV = {
+  near: { f: (k, tx) => S.signNearTransaction(k, tx, { allowRawDigest: true }), hash: (tx) => sha256(tx) },
+  sui: { f: (k, tx) => S.signSuiTransaction(k, tx, { allowRawDigest: true }), hash: (tx) => blake2b(cat(new Uint8Array(3), tx), { dkLen: 32 }) },
+  stellar: { f: (k, tx) => S.signStellarTransaction(k, new Uint8Array(32).fill(0xce), tx, { allowRawDigest: true }),
+    hash: (tx) => sha256(cat(new Uint8Array(32).fill(0xce), Uint8Array.of(0, 0, 0, 2), tx)) },
+  hedera_ed25519: { f: (k, tx) => S.signHederaTransaction(k, tx, { allowRawDigest: true }), hash: (tx) => tx },
+};
+
+test('envelope calls: NEAR sha256, Sui intent + blake2b-256, Stellar network id + ENVELOPE_TYPE_TX, Hedera body bytes', () => {
+  for (const [network, e] of Object.entries(ENV)) {
+    const k = S.deriveKey(seed, network, 0);
+    for (const tx of [Uint8Array.of(0x05), new Uint8Array(200).fill(3), new Uint8Array(131072).fill(9)]) {
+      const sig = e.f(k, tx);
+      assert.ok(ed25519.verify(sig, e.hash(tx), B(k.publicKey)), `${network} ${tx.length}`);
+      assert.equal(H(sig), H(ed25519.sign(e.hash(tx), k.privateKey)), 'deterministic');
+    }
+    assert.equal(codeOf(() => e.f(k, new Uint8Array(0))), 'Argument', `${network} 0 bytes`);
+    assert.equal(codeOf(() => e.f(k, new Uint8Array(131073))), 'Argument', `${network} 131,073 bytes`);
+    for (const other of ['solana', 'aptos', 'ton', ...Object.keys(ENV).filter((n) => n !== network)]) {
+      assert.equal(codeOf(() => e.f(S.deriveKey(seed, other, 0), Uint8Array.of(1))), 'Argument', `${network} call on ${other}`);
+    }
+  }
+  const k = S.deriveKey(seed, 'near', 0);
+  assert.equal(codeOf(() => S.signNearTransaction(k, Uint8Array.of(1))), 'Argument', 'no opt-in');
+  assert.equal(codeOf(() => S.signStellarTransaction(S.deriveKey(seed, 'stellar', 0), new Uint8Array(31), Uint8Array.of(1), { allowRawDigest: true })), 'Argument', 'network id 32 bytes');
+  for (const n of ['signNearTransaction', 'signSuiTransaction', 'signStellarTransaction', 'signHederaTransaction']) assert.equal(signer[n], S[n], n);
+});
+
+test('native.json envelopes rows byte-equal; the appended refusal rows of spec §8.1 are present', () => {
+  assert.ok(Array.isArray(nat.envelopes) && nat.envelopes.length > 0, 'envelopes');
+  const calls = { sign_near_transaction: 'near', sign_sui_transaction: 'sui', sign_stellar_transaction: 'stellar', sign_hedera_transaction: 'hedera_ed25519' };
+  for (const r of nat.envelopes) {
+    const m = mn(r.mnemonic), k = S.deriveKey(m.seed, r.network, r.index);
+    assert.equal(calls[r.call], r.network, r.id);
+    const tx = msgOf(r), opts = { allowRawDigest: true };
+    const sig = r.call === 'sign_stellar_transaction' ? S.signStellarTransaction(k, B(r.networkId), tx, opts)
+      : r.call === 'sign_near_transaction' ? S.signNearTransaction(k, tx, opts) : r.call === 'sign_sui_transaction' ? S.signSuiTransaction(k, tx, opts)
+        : S.signHederaTransaction(k, tx, opts);
+    assert.equal(H(sig), r.signature, r.id);
+    assert.ok(ed25519.verify(sig, B(r.signed), B(r.publicKey)), `${r.id} signs ${r.signed.slice(0, 16)}`);
+  }
+  for (const id of ['sign_message EIP-7702 magic 0x05', 'sign_message EIP-712 prefix 0x19 0x01']) assert.ok(nat.refusals.some((r) => r.id === id), id);
 });

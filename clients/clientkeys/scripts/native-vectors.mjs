@@ -4,11 +4,12 @@
 // from the pinned downloads in NATIVE_DOWNLOADS (each read only when its sha256 is the pinned one; the list and the commits:
 // clients/ua-rs/runs/2026-11-17-ua-rs-native-t0.md). Deterministic: two runs write the same bytes. UNAUDITED.
 //   NATIVE_DOWNLOADS=<dir> node scripts/native-vectors.mjs
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { schnorr, secp256k1 } from '@noble/curves/secp256k1.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import { blake2b } from '@noble/hashes/blake2.js';
 import * as sr from '@scure/sr25519';
 import { readPinned } from './pinned.mjs';
 import * as S from '../src/seed.js';
@@ -209,6 +210,23 @@ for (const [network, kind] of [['bitcoin_p2wpkh', 0x0108], ['bitcoin_p2tr', 0x01
   ref(`import_native_key ${network}`, 'import_native_key', { network, secret: SECRET }, { network: 'evm', secret: SECRET });
   ref(`imported_ua_key ${network}`, 'imported_ua_key', { network, secret: SECRET, kind }, { network: 'evm', secret: SECRET, kind: 0x0108 });
 }
+// spec §8.1 (after the scaas-sdk review), appended: the EIP-7702 / EIP-712 prefixes on raw messages, the envelope calls' refusals
+const STELLAR_TESTNET_ID = H(sha256(utf8ToBytes('Test SDF Network ; September 2015')));
+for (const network of ['solana', 'polkadot']) {
+  const p = network === 'polkadot' ? { path: '' } : {};
+  const on = network === 'solana' ? '' : ` on ${network}`;
+  ref(`sign_message EIP-7702 magic 0x05${on}`, 'sign_message', at(network, { ...p, message: '0501' }), at(network, { ...p, message: '0601' }));
+  ref(`sign_message EIP-712 prefix 0x19 0x01${on}`, 'sign_message', at(network, { ...p, message: '1901aa' }), at(network, { ...p, message: '1902aa' }));
+}
+const ENVELOPE_CALLS = [['sign_near_transaction', 'near'], ['sign_sui_transaction', 'sui'], ['sign_stellar_transaction', 'stellar'], ['sign_hedera_transaction', 'hedera_ed25519']];
+for (const [call, network] of ENVELOPE_CALLS) {
+  const id = call === 'sign_stellar_transaction' ? { networkId: STELLAR_TESTNET_ID } : {};
+  ref(`${call} on solana`, call, at('solana', { ...id, message: '01' }), at(network, { ...id, message: '01' }));
+  ref(`${call} 0 bytes`, call, at(network, { ...id, message: '' }), at(network, { ...id, message: '01' }));
+  ref(`${call} 131,073 bytes`, call, at(network, { ...id, messageRepeat: repeat(0xa5, 131073) }), at(network, { ...id, messageRepeat: repeat(0xa5, 131072) }));
+}
+ref('sign_stellar_transaction a 31-byte network id', 'sign_stellar_transaction', at('stellar', { networkId: '00'.repeat(31), message: '01' }),
+  at('stellar', { networkId: '00'.repeat(32), message: '01' }));
 // every refusal refused here and its neighbour accepted
 // clientkeys' reading of a row's call (ua-rs: Wallet::native_key, bitcoin_key, polkadot_key, …; Polkadot's native_key is the bare key)
 function applyCall(call, a) {
@@ -229,6 +247,10 @@ function applyCall(call, a) {
     case 'sign_typed': return S.signTyped(key(), a.typedData);
     case 'import_native_key': return S.importKey(a.network, B(a.secret));
     case 'imported_ua_key': return U.importedUAKey({ network: a.network, secret: B(a.secret), kind: a.kind });
+    case 'sign_near_transaction': return S.signNearTransaction(key(), msgOf(a), { allowRawDigest: true });
+    case 'sign_sui_transaction': return S.signSuiTransaction(key(), msgOf(a), { allowRawDigest: true });
+    case 'sign_stellar_transaction': return S.signStellarTransaction(key(), B(a.networkId), msgOf(a), { allowRawDigest: true });
+    case 'sign_hedera_transaction': return S.signHederaTransaction(key(), msgOf(a), { allowRawDigest: true });
     default: throw new Error(`unknown call ${call}`);
   }
 }
@@ -331,6 +353,22 @@ external.polkadotJsSignature = { source: 'plan T0: @polkadot/keyring 14.0.3, new
 must(H(utf8ToBytes(external.polkadotJsSignature.messageUtf8)) === external.polkadotJsSignature.message, 'polkadot.js message');
 must(sr.verify(B(external.polkadotJsSignature.message), B(external.polkadotJsSignature.signature), B(external.polkadotJsSignature.publicKey)), 'polkadot.js signature verifies');
 
+// ------------------------------------------------------------------ envelopes (spec §8.1): the chain's prefix / hash wrapper
+const envelopes = [];
+for (const [call, network] of ENVELOPE_CALLS) {
+  for (const len of [1, 200, 1232]) {
+    const r = { id: `${call}-${len}`, mode: 'deterministic', call, mnemonic: 'pq_kat', network, coinType: null, change: null, index: 0,
+      ...(call === 'sign_stellar_transaction' ? { networkId: STELLAR_TESTNET_ID } : {}), ...msgField(len) };
+    const tx = msgOf(r);
+    const signed = call === 'sign_near_transaction' ? sha256(tx) : call === 'sign_sui_transaction' ? blake2b(Uint8Array.from([0, 0, 0, ...tx]), { dkLen: 32 })
+      : call === 'sign_stellar_transaction' ? sha256(Uint8Array.from([...B(STELLAR_TESTNET_ID), 0, 0, 0, 2, ...tx])) : tx;
+    const k = S.deriveKey(M.pq_kat.seed, network, 0);
+    const sig = applyCall(call, r);
+    must(ed25519.verify(sig, signed, B(k.publicKey)) && H(ed25519.sign(signed, k.privateKey)) === H(sig), `envelope ${r.id}`);
+    envelopes.push({ ...r, signed: H(signed), publicKey: k.publicKey, signature: H(sig) });
+  }
+}
+
 // ------------------------------------------------------------------ write
 const out = {
   note: 'Generated by clients/clientkeys/scripts/native-vectors.mjs (ua-rs-native T4, spec 2026-11-17-ua-rs-native §12) from src/seed.js and '
@@ -350,8 +388,22 @@ const out = {
   signatures,
   refusals,
   external,
+  envelopes,
 };
+// append-only (spec §8.1, CLI-UAL-63 (15)): every value of the committed file is kept; a list may only grow at its end, a new
+// section only after the old ones
+const committed = join(OUT, 'native.json');
+if (existsSync(committed)) {
+  const old = JSON.parse(readFileSync(committed, 'utf8'));
+  const keys = Object.keys(old);
+  must(JSON.stringify(Object.keys(out).slice(0, keys.length)) === JSON.stringify(keys), 'native.json sections: the old ones first, in order');
+  for (const k of keys) {
+    const same = Array.isArray(old[k]) ? JSON.stringify(out[k].slice(0, old[k].length)) === JSON.stringify(old[k]) : JSON.stringify(out[k]) === JSON.stringify(old[k]);
+    must(same, `native.json ${k}: a committed row changed (append only)`);
+  }
+}
 mkdirSync(OUT, { recursive: true });
 writeFileSync(join(OUT, 'native.json'), JSON.stringify(out, null, 1) + '\n');
 console.log(`native.json: ${addresses.length} addresses, ${polkadotPaths.length} polkadotPaths, ${signatures.length} signatures `
-  + `(${signatures.filter((r) => r.mode === 'verify-only').length} verify-only), ${refusals.length} refusals, external ${Object.keys(external).join(', ')}`);
+  + `(${signatures.filter((r) => r.mode === 'verify-only').length} verify-only), ${refusals.length} refusals, external ${Object.keys(external).join(', ')}, `
+  + `${envelopes.length} envelopes`);

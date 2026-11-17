@@ -4697,6 +4697,399 @@
     "secret": "0101010101010101010101010101010101010101010101010101010101010101",
     "kind": 264
    }
+  },
+  {
+   "id": "sign_message EIP-7702 magic 0x05",
+   "call": "sign_message",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "solana",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "0501"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "solana",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "0601"
+   }
+  },
+  {
+   "id": "sign_message EIP-712 prefix 0x19 0x01",
+   "call": "sign_message",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "solana",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "1901aa"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "solana",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "1902aa"
+   }
+  },
+  {
+   "id": "sign_message EIP-7702 magic 0x05 on polkadot",
+   "call": "sign_message",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "polkadot",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "path": "",
+    "message": "0501"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "polkadot",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "path": "",
+    "message": "0601"
+   }
+  },
+  {
+   "id": "sign_message EIP-712 prefix 0x19 0x01 on polkadot",
+   "call": "sign_message",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "polkadot",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "path": "",
+    "message": "1901aa"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "polkadot",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "path": "",
+    "message": "1902aa"
+   }
+  },
+  {
+   "id": "sign_near_transaction on solana",
+   "call": "sign_near_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "solana",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "01"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "01"
+   }
+  },
+  {
+   "id": "sign_near_transaction 0 bytes",
+   "call": "sign_near_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": ""
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "01"
+   }
+  },
+  {
+   "id": "sign_near_transaction 131,073 bytes",
+   "call": "sign_near_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "messageRepeat": {
+     "byte": "a5",
+     "length": 131073
+    }
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "near",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "messageRepeat": {
+     "byte": "a5",
+     "length": 131072
+    }
+   }
+  },
+  {
+   "id": "sign_sui_transaction on solana",
+   "call": "sign_sui_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "solana",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "01"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "sui",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "01"
+   }
+  },
+  {
+   "id": "sign_sui_transaction 0 bytes",
+   "call": "sign_sui_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "sui",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": ""
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "sui",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "01"
+   }
+  },
+  {
+   "id": "sign_sui_transaction 131,073 bytes",
+   "call": "sign_sui_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "sui",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "messageRepeat": {
+     "byte": "a5",
+     "length": 131073
+    }
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "sui",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "messageRepeat": {
+     "byte": "a5",
+     "length": 131072
+    }
+   }
+  },
+  {
+   "id": "sign_stellar_transaction on solana",
+   "call": "sign_stellar_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "solana",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "networkId": "cee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
+    "message": "01"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "stellar",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "networkId": "cee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
+    "message": "01"
+   }
+  },
+  {
+   "id": "sign_stellar_transaction 0 bytes",
+   "call": "sign_stellar_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "stellar",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "networkId": "cee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
+    "message": ""
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "stellar",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "networkId": "cee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
+    "message": "01"
+   }
+  },
+  {
+   "id": "sign_stellar_transaction 131,073 bytes",
+   "call": "sign_stellar_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "stellar",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "networkId": "cee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
+    "messageRepeat": {
+     "byte": "a5",
+     "length": 131073
+    }
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "stellar",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "networkId": "cee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
+    "messageRepeat": {
+     "byte": "a5",
+     "length": 131072
+    }
+   }
+  },
+  {
+   "id": "sign_hedera_transaction on solana",
+   "call": "sign_hedera_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "solana",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "01"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "hedera_ed25519",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "01"
+   }
+  },
+  {
+   "id": "sign_hedera_transaction 0 bytes",
+   "call": "sign_hedera_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "hedera_ed25519",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": ""
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "hedera_ed25519",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "01"
+   }
+  },
+  {
+   "id": "sign_hedera_transaction 131,073 bytes",
+   "call": "sign_hedera_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "hedera_ed25519",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "messageRepeat": {
+     "byte": "a5",
+     "length": 131073
+    }
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "hedera_ed25519",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "messageRepeat": {
+     "byte": "a5",
+     "length": 131072
+    }
+   }
+  },
+  {
+   "id": "sign_stellar_transaction a 31-byte network id",
+   "call": "sign_stellar_transaction",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "stellar",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "networkId": "00000000000000000000000000000000000000000000000000000000000000",
+    "message": "01"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "stellar",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "networkId": "0000000000000000000000000000000000000000000000000000000000000000",
+    "message": "01"
+   }
   }
  ],
  "external": {
@@ -5236,5 +5629,178 @@
    "publicKey": "d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d",
    "signature": "24a27936a2b09621ea541fa427b3ea60c52199cf7e3f8966c4ffbc6620833b69f57592f47c8bd86b4076f74aef554817a434c65c16a34d5eba30030728a31f8c"
   }
- }
+ },
+ "envelopes": [
+  {
+   "id": "sign_near_transaction-1",
+   "mode": "deterministic",
+   "call": "sign_near_transaction",
+   "mnemonic": "pq_kat",
+   "network": "near",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "message": "03",
+   "signed": "084fed08b978af4d7d196a7446a86b58009e636b611db16211b65a9aadff29c5",
+   "publicKey": "c81736c68fc50227f822c2ea4bf6b0ade70fdb17ebd276da7db6c29f15814e29",
+   "signature": "fccb4dbac8728dac9e89cd6b2ec30afb1800650966a38a42e338287b2891a986d91f690863d5a78f13d3bd48f9afd67a000d3260c3ecfa4159f3b327ac73b309"
+  },
+  {
+   "id": "sign_near_transaction-200",
+   "mode": "deterministic",
+   "call": "sign_near_transaction",
+   "mnemonic": "pq_kat",
+   "network": "near",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "message": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d74",
+   "signed": "2c7e18c942ef065b526a2d4e5546283749cd3ddfb51d8fc71f42717363685f46",
+   "publicKey": "c81736c68fc50227f822c2ea4bf6b0ade70fdb17ebd276da7db6c29f15814e29",
+   "signature": "8894ddcf08d417a9f08f0eda73674c76bc9184a07485167f35a32926168b094aa1f9f621dad7460d5f16bc648db6d1e558c637df8f505df2b4e00fbb52d4ee08"
+  },
+  {
+   "id": "sign_near_transaction-1232",
+   "mode": "deterministic",
+   "call": "sign_near_transaction",
+   "mnemonic": "pq_kat",
+   "network": "near",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "message": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5ac",
+   "signed": "fc7b287a2d8f063d1d11e91c461626e507ef0529e8572401078e843ed93a9f57",
+   "publicKey": "c81736c68fc50227f822c2ea4bf6b0ade70fdb17ebd276da7db6c29f15814e29",
+   "signature": "ba05476d3f27f4a37ba7b14d5860fe624f5d871fb5e6ba0115cd7cf1805ca2667cb0b7d17bc96bf9a3de48d56d0fde7802bb47eaed6493d79d349d85e089b101"
+  },
+  {
+   "id": "sign_sui_transaction-1",
+   "mode": "deterministic",
+   "call": "sign_sui_transaction",
+   "mnemonic": "pq_kat",
+   "network": "sui",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "message": "03",
+   "signed": "d236fca2b92ca42da90327820d7fe73c8ad22ea13cd8d761adc6e98822195c77",
+   "publicKey": "99408a48bca564e9caafa69e008d4e800ffe1ef0e65ad8158341e8fc0034a763",
+   "signature": "b48c91fc70bfa87fa6a0cddcdd59391cc6e8af50385f5fc1c962127230cf3c04f40105fda8865d3889d07a2b6e7c3518518eaa3b3e25d6ee0625ee267ed93500"
+  },
+  {
+   "id": "sign_sui_transaction-200",
+   "mode": "deterministic",
+   "call": "sign_sui_transaction",
+   "mnemonic": "pq_kat",
+   "network": "sui",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "message": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d74",
+   "signed": "989a251f33da8ee103469946a4ec65c555b664bef941d568e86da881ed014fbc",
+   "publicKey": "99408a48bca564e9caafa69e008d4e800ffe1ef0e65ad8158341e8fc0034a763",
+   "signature": "ec5d151a47c52bc23da8f4e50c0741be20baae21d2abe17c89ae1f7ea27f1f73762155640c3d789bd84555fc2e98d17dad9512ddd436bf0dad491630c4b7b800"
+  },
+  {
+   "id": "sign_sui_transaction-1232",
+   "mode": "deterministic",
+   "call": "sign_sui_transaction",
+   "mnemonic": "pq_kat",
+   "network": "sui",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "message": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5ac",
+   "signed": "c2dfb07b0a058ae5758c7ea89a9e628924c7e950659ac20327c36df9632fbd6f",
+   "publicKey": "99408a48bca564e9caafa69e008d4e800ffe1ef0e65ad8158341e8fc0034a763",
+   "signature": "bfa77dbbbf9e81a38f9c7bbaf7fda7cc91dda4ea8dd8ea3668ba5ca0d9961280ae5e6f0c9d03927dd3a00fa3dd6dd3ab888d520ade00e4aef6e818806b946004"
+  },
+  {
+   "id": "sign_stellar_transaction-1",
+   "mode": "deterministic",
+   "call": "sign_stellar_transaction",
+   "mnemonic": "pq_kat",
+   "network": "stellar",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "networkId": "cee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
+   "message": "03",
+   "signed": "9f99338c044ea5131d67a0c555964d8cc2e6ef57f6d89ef0a4e9d1dff9722d99",
+   "publicKey": "b6c64ae1b1d7e13dc0a92324a277f84fff629aeeac65d1cce8937d93f4163219",
+   "signature": "67d35c659d5f5bfab023fc133a7facb586d042e17e13e32b2cb481165ab24f5a3221fbb506133a0ab03d4cea29c7c9c4221875194c8a4e557ab6a43f44655b0d"
+  },
+  {
+   "id": "sign_stellar_transaction-200",
+   "mode": "deterministic",
+   "call": "sign_stellar_transaction",
+   "mnemonic": "pq_kat",
+   "network": "stellar",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "networkId": "cee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
+   "message": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d74",
+   "signed": "99f3f03a2061959e62675b857c441d44b8cc716df4088daf4f3983d4a5a6d26d",
+   "publicKey": "b6c64ae1b1d7e13dc0a92324a277f84fff629aeeac65d1cce8937d93f4163219",
+   "signature": "a5f27c320d226d8e713ba2aaee9073935098238324ff1e9842a91c03f3a9b5d62496f3ab6c3d2741a80e0fde1d4b6a87c7b807441b19f8587fec7109ad868800"
+  },
+  {
+   "id": "sign_stellar_transaction-1232",
+   "mode": "deterministic",
+   "call": "sign_stellar_transaction",
+   "mnemonic": "pq_kat",
+   "network": "stellar",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "networkId": "cee0302d59844d32bdca915c8203dd44b33fbb7edc19051ea37abedf28ecd472",
+   "message": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5ac",
+   "signed": "31b94570ffc517962d05fc538d071db93f69cea8ef1a8b0be721fbdc0c756d61",
+   "publicKey": "b6c64ae1b1d7e13dc0a92324a277f84fff629aeeac65d1cce8937d93f4163219",
+   "signature": "0fbec8bc785b853d93ef0c8f18d46cd0ced06c0b435fbf190cf857eb57ac0a5f9a9f463e476fdf639c0d9bd0c87e518779ac08361c5a473246e639093ea58a00"
+  },
+  {
+   "id": "sign_hedera_transaction-1",
+   "mode": "deterministic",
+   "call": "sign_hedera_transaction",
+   "mnemonic": "pq_kat",
+   "network": "hedera_ed25519",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "message": "03",
+   "signed": "03",
+   "publicKey": "ecbc1c11f7a1a30902f6cf0f9c4785a40c22cfebb443372f4661b144ca437073",
+   "signature": "36f437bb04bf1ea9d174d6f90e9b904eaf3e5405abe07d463907c3691fd837d7ac42faaa5d4b0bfbeeb687658a860604baba3b07202453d11f31f913368b1201"
+  },
+  {
+   "id": "sign_hedera_transaction-200",
+   "mode": "deterministic",
+   "call": "sign_hedera_transaction",
+   "mnemonic": "pq_kat",
+   "network": "hedera_ed25519",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "message": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d74",
+   "signed": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d74",
+   "publicKey": "ecbc1c11f7a1a30902f6cf0f9c4785a40c22cfebb443372f4661b144ca437073",
+   "signature": "c028e7d0dadd98bf7438f36fb253a11dd70f25f94ca3956d81764db1cd925b79e07686e7545427fbc45508b105ad09b920450eb3e29bd6d0052331b9f772920d"
+  },
+  {
+   "id": "sign_hedera_transaction-1232",
+   "mode": "deterministic",
+   "call": "sign_hedera_transaction",
+   "mnemonic": "pq_kat",
+   "network": "hedera_ed25519",
+   "coinType": null,
+   "change": null,
+   "index": 0,
+   "message": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5ac",
+   "signed": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5ac",
+   "publicKey": "ecbc1c11f7a1a30902f6cf0f9c4785a40c22cfebb443372f4661b144ca437073",
+   "signature": "27be902f29d8145fe3b6ec74e250803e597ffa3644fec19a9df00989fbd724c665f0615d698f96772ce03366c2c80950698a981b8fa43bc0c913ea22630f5104"
+  }
+ ]
 }
