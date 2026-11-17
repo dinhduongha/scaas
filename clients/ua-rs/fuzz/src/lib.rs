@@ -27,7 +27,10 @@
 //!
 //! - T21 L48: `json_calls`, the JSON calls of `scaas_ua::json` (ua-c's `json_call`, ua-cxx, ua-qt, ua-dart-frb) under their caps:
 //!   the first byte names the call (its index in `JSON_CALLS`, modulo their count), the rest is the text (non-UTF-8: skipped,
-//!   the C ABI refuses it before the call). UNAUDITED.
+//!   the C ABI refuses it before the call).
+//!
+//! - ua-rs-native T8b: `polkadot_path`, the Polkadot junction path parser and derivation (`Wallet::polkadot_key`): the input as
+//!   UTF-8 (else skipped); the same answer twice; nothing past 512 bytes accepted. UNAUDITED.
 use scaas_ua::wallet::{
     bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, EvmTx, Expect, KemKeyPair, Manifest, MembersJson,
     Sealed, SealedContainer, TypedData, UaSigRequest, Vault, Wallet,
@@ -290,9 +293,23 @@ fn one(t: &str, data: &[u8]) {
                 }
             }
         }
+        "polkadot_path" => {
+            let Ok(p) = std::str::from_utf8(data) else { return };
+            static W: OnceLock<Wallet> = OnceLock::new();
+            let w = W.get_or_init(|| {
+                Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "").unwrap_or_else(|_| die("no wallet"))
+            });
+            let a = w.polkadot_key(p).map(|k| k.public_key());
+            if a != w.polkadot_key(p).map(|k| k.public_key()) {
+                die("polkadot_path: another answer the second time");
+            }
+            if a.is_ok() && p.len() > 512 {
+                die("polkadot_path: a path past 512 bytes accepted");
+            }
+        }
         _ => die(
             "UA_FUZZ_TARGET: typed_data | expect | tx | vault | manifest | container | sealed | kem_pk | mnemonic | container_expect | \
-             members | accepted | uasig | zether_cmd | pqz_cmd | json_calls",
+             members | accepted | uasig | zether_cmd | pqz_cmd | json_calls | polkadot_path",
         ),
     }
 }

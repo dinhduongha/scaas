@@ -485,3 +485,102 @@ fn polkadot_handle_after_lock_is_key_revoked() {
     assert_eq!(k.sign_message(&[1], AllowRawDigest).err(), Some(Error::KeyRevoked));
     assert_eq!(w.native_key(Network::Polkadot, 0, None).err(), Some(Error::WalletLocked));
 }
+
+// ------------------------------------------------------------------ T8b: Polkadot junctions, polkadotPaths
+
+#[test]
+fn native_json_polkadot_paths_rows() {
+    let v = native();
+    let mut n = 0;
+    for r in arr(&v, "polkadotPaths") {
+        let w = wallet(&v, r["mnemonic"].as_str().unwrap());
+        let k = w.polkadot_key(r["path"].as_str().unwrap()).unwrap();
+        assert_eq!(hex::encode(k.public_key()), r["publicKey"].as_str().unwrap(), "{} '{}'", r["mnemonic"], r["path"]);
+        assert_eq!(k.address().as_deref(), r["address"].as_str());
+        n += 1;
+    }
+    assert_eq!(n, 102);
+    let w = wallet(&v, "substrate_dev");
+    for r in arr(&v["external"]["subkey"], "rows") {
+        assert_eq!(hex::encode(w.polkadot_key(r["path"].as_str().unwrap()).unwrap().public_key()), r["publicKey"].as_str().unwrap());
+    }
+    assert_eq!(w.polkadot_key("").unwrap().public_key(), w.native_key(Network::Polkadot, 0, None).unwrap().public_key());
+}
+
+#[test]
+fn native_json_polkadot_key_refusal_rows() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    let mut n = 0;
+    for r in arr(&v, "refusals").iter().filter(|r| r["call"] == "polkadot_key") {
+        assert_eq!(w.polkadot_key(r["args"]["path"].as_str().unwrap()).err(), Some(Error::Argument), "{}", r["id"]);
+        assert!(w.polkadot_key(r["accepted"]["path"].as_str().unwrap()).is_ok(), "neighbour of {}", r["id"]);
+        n += 1;
+    }
+    assert_eq!(n, 12);
+}
+
+#[test]
+fn soft_keys_sign_and_verify() {
+    let v = native();
+    let w = wallet(&v, "substrate_dev");
+    for p in ["/soft", "//Alice/0", "/soft//hard"] {
+        let k = w.polkadot_key(p).unwrap();
+        let s = k.sign_message(&[1, 2, 3], AllowRawDigest).unwrap();
+        assert!(sr_verify(&k.public_key(), &[1, 2, 3], &s), "{p}");
+    }
+}
+
+#[test]
+fn manifest_polkadot_paths_written_only_when_not_empty_bounded_on_read() {
+    use scaas_ua::wallet::Manifest;
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    w.native_key(Network::Polkadot, 0, None).unwrap();
+    assert!(!w.manifest().to_json().contains("polkadotPaths"), "the bare key adds no path");
+    w.polkadot_key("//polkadot").unwrap();
+    w.polkadot_key("/a\"b").unwrap();
+    let j = w.manifest().to_json();
+    assert!(j.contains("\"polkadotPaths\":[\"//polkadot\",\"/a\\\"b\"]"), "{j}");
+    assert_eq!(Manifest::from_json(j.as_bytes()).unwrap(), w.manifest(), "round trip");
+    let with = |paths: Vec<String>| {
+        let list = paths.iter().map(|p| serde_json::Value::from(p.as_str()).to_string()).collect::<Vec<_>>().join(",");
+        j.replace("\"polkadotPaths\":[\"//polkadot\",\"/a\\\"b\"]", &format!("\"polkadotPaths\":[{list}]"))
+    };
+    let many = |n: usize| (0..n).map(|i| format!("//{i}")).collect::<Vec<_>>();
+    assert!(Manifest::from_json(with(many(64)).as_bytes()).is_ok(), "64 paths");
+    assert_eq!(Manifest::from_json(with(many(65)).as_bytes()).err(), Some(Error::Argument), "65 paths");
+    for bad in ["///pw", "//007", "", "//"] {
+        assert_eq!(Manifest::from_json(with(vec![bad.into()]).as_bytes()).err(), Some(Error::Argument), "{bad}");
+    }
+    assert_eq!(Manifest::from_json(with(vec!["//a".into(), "//a".into()]).as_bytes()).err(), Some(Error::Argument), "duplicate");
+}
+
+#[test]
+fn a_65th_path_is_refused() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    for i in 0..64 {
+        w.polkadot_key(&format!("//{i}")).unwrap();
+    }
+    assert_eq!(w.polkadot_key("//64").err(), Some(Error::Argument));
+    assert!(w.polkadot_key("//63").is_ok(), "a listed path still derives");
+}
+
+#[test]
+fn junction_handle_after_lock_is_key_revoked() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    let k = w.polkadot_key("//x/y").unwrap();
+    w.lock();
+    assert_eq!(k.sign_message(&[1], AllowRawDigest).err(), Some(Error::KeyRevoked));
+    assert_eq!(w.polkadot_key("//x").err(), Some(Error::WalletLocked));
+}
+
+#[test]
+fn network_list_is_native_json_networks() {
+    let v = native();
+    let names: Vec<&str> = Network::all().iter().map(|n| n.name()).collect();
+    let want: Vec<&str> = arr(&v, "networks").iter().map(|n| n.as_str().unwrap()).collect();
+    assert_eq!(names, want);
+}

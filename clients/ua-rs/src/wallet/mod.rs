@@ -250,6 +250,10 @@ const NETWORK_NAMES: [(Network, &str); 13] = [
 ];
 
 impl Network {
+    /// Every network, in the C ABI's order (`SCAAS_UA_NETWORK_*`: clientkeys `NETWORKS`, then `NATIVE_NETWORKS`).
+    pub fn all() -> [Network; 13] {
+        NETWORK_NAMES.map(|(n, _)| n)
+    }
     /// The clientkeys name (`evm`, `hedera_ecdsa`, …).
     pub fn from_name(name: &str) -> Option<Network> {
         NETWORK_NAMES.iter().find(|(_, n)| *n == name).map(|(net, _)| *net)
@@ -337,6 +341,8 @@ pub(crate) enum KeyId {
     Native(Network, u32, Option<u32>),
     /// A Bitcoin key of the change chain: network, coin type, index (the receive chain is `Native`; ua-rs-native spec §4.3).
     BitcoinChange(Network, Option<u32>, u32),
+    /// A Polkadot junction path's key: the SHA-256 of the path (one canonical spelling per key; the bare key is `Native`).
+    Polkadot([u8; 32]),
     /// A UA's KEM key: its UA and the KEM record's version (spec §6.1).
     Kem([u8; 32], u64),
     /// Imported key `n` (`native-import:<network>:<n>`, spec §8.3).
@@ -648,6 +654,32 @@ impl Wallet {
         })?;
         self.store.note(|m| m.add_native(network, coin_type, index, change));
         Ok(NativeKey { network, index, coin_type, change, public_key, secret })
+    }
+
+    /// The Polkadot key of the junction path `path` (spec §7.3; `sp-core` / polkadot.js): `""` is the bare account
+    /// ([`Wallet::native_key`]'s slot), `//x` a hard junction, `/x` a soft one (a soft step draws a fresh nonce half from the OS
+    /// RNG: its public key and address are reproducible, its signatures not). `Argument` for a path outside the grammar (a
+    /// `///` password part, an empty junction, a byte outside `0x21`–`0x7e`, a junction over 64 bytes, `0x` or `+`, a number
+    /// outside `u64` or with a leading zero, over 16 junctions or 512 bytes), or a 65th path; the path is noted in the manifest's
+    /// `polkadotPaths` (public data).
+    pub fn polkadot_key(&self, path: &str) -> Result<NativeKey> {
+        let junctions = substrate::parse_path(path)?;
+        if junctions.is_empty() {
+            return self.polkadot_bare();
+        }
+        let listed = self.store.manifest().polkadot_paths;
+        if listed.len() >= manifest::MAX_POLKADOT_PATHS && !listed.iter().any(|p| p == path) {
+            return Err(Error::Argument);
+        }
+        use sha2::Digest as _;
+        let id = KeyId::Polkadot(sha2::Sha256::digest(path.as_bytes()).into());
+        let (secret, public_key) = self.store.key_from_mini(id, |mini| {
+            let sk = substrate::derive(&substrate::bare(mini)?[..], &junctions, sign::os_aux)?;
+            let public = substrate::public(&sk[..])?;
+            Ok((Zeroizing::new(sk.to_vec()), public))
+        })?;
+        self.store.note(|m| m.add_polkadot_path(path));
+        Ok(NativeKey { network: Network::Polkadot, index: 0, coin_type: None, change: 0, public_key, secret })
     }
 
     /// The bare Polkadot account (spec §7.2): the mini-secret's Ed25519-mode expansion, a 64-byte schnorrkel secret in the arena.

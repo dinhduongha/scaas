@@ -6,10 +6,14 @@
 //! signature is verified before it leaves. UNAUDITED.
 use super::{Error, Result};
 use rand_core::{CryptoRng, RngCore};
+use schnorrkel::derive::{ChainCode, Derivation};
 use schnorrkel::{context::attach_rng, signing_context, ExpansionMode, MiniSecretKey, PublicKey, SecretKey, Signature};
 use zeroize::{Zeroize, Zeroizing};
 
 const CONTEXT: &[u8] = b"substrate";
+pub const MAX_PATH_BYTES: usize = 512;
+pub const MAX_JUNCTIONS: usize = 16;
+pub const MAX_JUNCTION_BYTES: usize = 64;
 
 /// `substrate-bip39` `mini_secret_from_entropy`: `PBKDF2-HMAC-SHA512(entropy, "mnemonic" ‖ UTF-8(passphrase), 2048)[0..32]`; the
 /// passphrase as given, not NFKD (an NFC and an NFD spelling are two accounts).
@@ -35,6 +39,73 @@ fn secret(sk: &[u8]) -> Result<SecretKey> {
 /// The 32-byte public key of a 64-byte secret.
 pub(crate) fn public(sk: &[u8]) -> Result<Vec<u8>> {
     Ok(secret(sk)?.to_public().to_bytes().to_vec())
+}
+
+/// One junction: hard (`//`) or soft (`/`) and its chain code.
+pub(crate) struct Junction {
+    pub hard: bool,
+    pub chain_code: [u8; 32],
+}
+
+/// A junction's chain code (spec §7.3): a digit-only junction is its `u64` little-endian, any other the SCALE string (compact
+/// length: one byte `len << 2` below 64, two bytes `(len << 2) | 1` LE at 64) ‖ bytes; an encoding of at most 32 bytes zero-padded
+/// to 32, a longer one replaced by its BLAKE2b-256.
+fn chain_code(j: &[u8]) -> Result<[u8; 32]> {
+    use blake2::Digest as _;
+    let enc = if j.iter().all(u8::is_ascii_digit) {
+        let s = core::str::from_utf8(j).map_err(|_| Error::Argument)?;
+        s.parse::<u64>().map_err(|_| Error::Argument)?.to_le_bytes().to_vec()
+    } else if j.len() < 64 {
+        [&[u8::try_from(j.len() << 2).map_err(|_| Error::Argument)?][..], j].concat()
+    } else {
+        [&u16::try_from((j.len() << 2) | 1).map_err(|_| Error::Argument)?.to_le_bytes()[..], j].concat()
+    };
+    let mut cc = [0u8; 32];
+    if enc.len() <= 32 {
+        cc.iter_mut().zip(&enc).for_each(|(c, e)| *c = *e);
+    } else {
+        cc.copy_from_slice(&blake2::Blake2b::<blake2::digest::consts::U32>::digest(&enc));
+    }
+    Ok(cc)
+}
+
+/// The junctions of `path` (spec §7.3): `//` hard, `/` soft, `""` the bare key. `Argument` for `///` (a password part), an empty
+/// junction, a byte outside `0x21`–`0x7e`, a junction over 64 bytes, a `0x` or `+` prefix, a digit-only junction outside `u64` or
+/// with a leading zero (other than `0`), more than 16 junctions or 512 bytes. A path that passes is its own canonical spelling.
+pub(crate) fn parse_path(path: &str) -> Result<Vec<Junction>> {
+    let b = path.as_bytes();
+    if b.len() > MAX_PATH_BYTES {
+        return Err(Error::Argument);
+    }
+    let mut out = Vec::new();
+    let mut rest = b;
+    while let Some(after) = rest.strip_prefix(b"/") {
+        let (hard, after) = match after.strip_prefix(b"/") {
+            Some(a) => (true, a),
+            None => (false, after),
+        };
+        let end = after.iter().position(|c| *c == b'/').unwrap_or(after.len());
+        let (j, tail) = after.split_at(end);
+        let digits = j.iter().all(u8::is_ascii_digit);
+        if j.is_empty()
+            || j.len() > MAX_JUNCTION_BYTES
+            || j.iter().any(|c| !(0x21..=0x7e).contains(c))
+            || j.starts_with(b"0x")
+            || j.starts_with(b"+")
+            || (digits && j.len() > 1 && j.first() == Some(&b'0'))
+        {
+            return Err(Error::Argument);
+        }
+        out.push(Junction { hard, chain_code: chain_code(j)? });
+        if out.len() > MAX_JUNCTIONS {
+            return Err(Error::Argument);
+        }
+        rest = tail;
+    }
+    if !rest.is_empty() {
+        return Err(Error::Argument);
+    }
+    Ok(out)
 }
 
 /// An RNG that yields 32 given bytes once, then wipes them; any further read, or a read of another length, yields zeros and marks
@@ -87,6 +158,23 @@ impl RngCore for OneShot {
     }
 }
 impl CryptoRng for OneShot {}
+
+/// The key of `junctions` from the bare secret: hard steps `hard_derive_mini_secret_key` → Ed25519 expansion, soft steps
+/// `derived_key_simple_rng` over the one-shot RNG of `rand()` (a soft step draws a fresh nonce half).
+pub(crate) fn derive(bare: &[u8], junctions: &[Junction], mut rand: impl FnMut() -> Result<[u8; 32]>) -> Result<Zeroizing<[u8; 64]>> {
+    let mut sk = secret(bare)?;
+    for j in junctions {
+        sk = if j.hard {
+            sk.hard_derive_mini_secret_key(Some(ChainCode(j.chain_code)), b"").0.expand(ExpansionMode::Ed25519)
+        } else {
+            let mut rng = OneShot::new(rand()?);
+            let (child, _) = sk.derived_key_simple_rng(ChainCode(j.chain_code), b"", &mut rng);
+            rng.check()?;
+            child
+        };
+    }
+    Ok(Zeroizing::new(sk.to_bytes()))
+}
 
 /// sr25519 over `msg` with context `substrate` and randomness `r` through the one-shot RNG, verified against `check` (the key's own
 /// public key in the release path) before it leaves; 64 bytes, schnorrkel's marker bit set.

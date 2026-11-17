@@ -91,6 +91,8 @@ pub struct PqzHeldEntry {
 pub struct Manifest {
     pub entries: Vec<ManifestEntry>,
     pub natives: Vec<NativeEntry>,
+    /// The Polkadot junction paths the wallet used (ua-rs-native spec §4.4): public, at most 64, written only when not empty.
+    pub polkadot_paths: Vec<String>,
     pub kem: Vec<KemEntry>,
     pub imports: Vec<ImportEntry>,
     /// The UAs of imported keys (T20c): one entry per `source`, never in `entries`.
@@ -110,6 +112,8 @@ const MANIFEST_DEPTH: usize = 3;
 const PAYLOAD_DEPTH: usize = 4;
 /// `gap` of [`Wallet::discover_candidates`].
 const GAP_MAX: u32 = 1024;
+/// At most this many `polkadotPaths` (spec §4.4: the manifest is outside input on restore).
+pub(crate) const MAX_POLKADOT_PATHS: usize = 64;
 /// The prefix of an imported key's label.
 const IMPORT: &str = "native-import:";
 /// The prefix of a rebuilt PQZ key's label (T16b).
@@ -126,6 +130,11 @@ impl Manifest {
         let e = NativeEntry { network, coin_type, index, change };
         if !self.natives.contains(&e) {
             self.natives.push(e);
+        }
+    }
+    pub(crate) fn add_polkadot_path(&mut self, path: &str) {
+        if !self.polkadot_paths.iter().any(|p| p == path) && self.polkadot_paths.len() < MAX_POLKADOT_PATHS {
+            self.polkadot_paths.push(path.to_owned());
         }
     }
     pub(crate) fn add_kem(&mut self, ua: [u8; 32], version: u64) {
@@ -163,6 +172,13 @@ impl Manifest {
                 })
                 .collect(),
         );
+        // after natives, only when not empty (earlier manifests keep their bytes)
+        let paths = if self.polkadot_paths.is_empty() {
+            String::new()
+        } else {
+            let p: Vec<String> = self.polkadot_paths.iter().map(|p| serde_json::Value::from(p.as_str()).to_string()).collect();
+            format!(",\"polkadotPaths\":[{}]", p.join(","))
+        };
         let kem = list(self.kem.iter().map(|k| format!("{{\"ua\":\"{}\",\"version\":{}}}", to_hex(&k.ua), k.version)).collect());
         let imports = list(self.imports.iter().map(|i| format!("{{\"network\":\"{}\",\"n\":{}}}", i.network.name(), i.n)).collect());
         let imported_uas = list(self.imported_uas.iter().map(imported_ua_json).collect());
@@ -174,7 +190,7 @@ impl Manifest {
         );
         let senders = list(self.backup_senders.iter().map(|u| format!("\"{}\"", to_hex(u))).collect());
         format!(
-            "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}],\"kem\":[{kem}],\"imports\":[{imports}],\"importedUas\":[{imported_uas}],\"pqzHeld\":[{held}],\"backupGeneration\":{},\
+            "{{\"v\":1,\"entries\":[{entries}],\"natives\":[{natives}]{paths},\"kem\":[{kem}],\"imports\":[{imports}],\"importedUas\":[{imported_uas}],\"pqzHeld\":[{held}],\"backupGeneration\":{},\
              \"backupSenders\":[{senders}]}}",
             self.backup_generation
         )
@@ -244,9 +260,21 @@ fn parse_manifest(v: &Value) -> Option<Manifest> {
             Some(NativeEntry { network: network_of(n)?, coin_type, index: u31(n, "index")?, change })
         })
         .collect::<Option<_>>()?;
+    // absent in a manifest written before ua-rs-native: none; else at most 64 distinct paths, each a valid junction path
+    let polkadot_paths: Vec<String> = match v.get("polkadotPaths") {
+        None => vec![],
+        Some(_) => list(v, "polkadotPaths")?
+            .iter()
+            .map(|p| p.as_str().filter(|s| super::substrate::parse_path(s).is_ok_and(|j| !j.is_empty())).map(str::to_owned))
+            .collect::<Option<_>>()?,
+    };
+    if polkadot_paths.len() > MAX_POLKADOT_PATHS || polkadot_paths.iter().enumerate().any(|(i, p)| polkadot_paths.get(..i).is_some_and(|b| b.contains(p))) {
+        return None;
+    }
     Some(Manifest {
         entries: list(v, "entries")?.iter().map(entry_of).collect::<Option<_>>()?,
         natives,
+        polkadot_paths,
         kem: list(v, "kem")?.iter().map(|k| Some(KemEntry { ua: ua_of(k.get("ua")?)?, version: k.get("version")?.as_u64()? })).collect::<Option<_>>()?,
         imports: list(v, "imports")?.iter().map(|i| Some(ImportEntry { network: network_of(i)?, n: u32::try_from(i.get("n")?.as_u64()?).ok()? })).collect::<Option<_>>()?,
         // absent in a manifest written before T20c: none
