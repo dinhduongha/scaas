@@ -21,6 +21,42 @@ language now, with every config file of the table, in the same round).
 
 The other languages were not measured yet; task F0 measures them.
 
+### F0 measurement (2026-11-17, `prefreeze-contracts`, the committed configs below, check modes only)
+
+Files that differ / files, generated, vendored and `legacy/` files left out. `pqz-core/pqzl` Rust was 0 / 71 at rustfmt's
+default width 100; at the configured 120 it is 46 / 70.
+
+| Language | Tool (pin) | Differ / files | Largest components |
+|---|---|---|---|
+| Rust | rustfmt 1.9.0 (toolchain 1.97.1) | 404 / 449 | `clients/ua-rs` 101 / 105, `scaas-node` 59 / 61, `pqz-core/pqzl` 46 / 70, `pqz-core/pqzh` 39 / 39, `smartcontracts/near` 30 / 33, `clients/zether-prover` 28 / 30, `smartcontracts/soroban` 26 / 27, `pqz-core/ffi` 24 / 27 |
+| Solidity | forge fmt (Foundry 1.8.5, no `[fmt]` yet) | 517 / 568 | `src` 134 / 166, `test` 359 / 378, `script` 24 / 25 |
+| JavaScript / TS | Prettier 3.3.3 | 119 / 119 | `clients/clientkeys` 89 / 89, `smartcontracts/ton` 9 / 9 |
+| Python | ruff 0.16.4 | 369 / 372 | `smartcontracts/evm` 231 / 231, `smartcontracts/algorand` 28 / 28, `pqz-core` 68 / 69 |
+| Go | gofmt (Go 1.22.2) | 2 / 6 | `clients/ua-go` |
+| C# | dotnet format whitespace (SDK 10.0.115) | 4 / 23 | `clients/ua-cs` 2 / 6, `pqz-core/nethermind` 2 / 17 |
+| Dart | dart format (SDK 3.12.2) | 8 / 12 | `clients/ua-dart` 4 / 8, `clients/ua-dart-frb` 4 / 4 |
+| C / C++ / Qt | clang-format 19.1.7 | 61 / 62 | `pqz-core/pqzl` 33 / 33 (GNU style today), `pqz-core/research` 13 / 13, `clients/ua-cxx` 5 / 5 |
+| YAML | Prettier 3.3.3 | 5 / 8 | `.github` 1 / 1 (one workflow file), `pqz-core/nethermind` 2 / 2, `smartcontracts/algorand` 2 / 2 |
+| Shell | shfmt 3.10.0 | 301 / 312 | `smartcontracts/evm` 132 / 132, `pqz-core` 138 / 144 |
+| TOML | taplo 0.9.3 | 22 / 87 | `smartcontracts/near` 5 / 10, `pqz-core/params` 4 / 4 |
+| Dockerfiles | hadolint 2.15.1 (lint) | 3 / 3 with findings | DL3008, DL4006, DL3003 |
+| Workflows | actionlint 1.7.12 (lint) | 0 / 1 with findings | |
+
+Excluded and why: `legacy/`; vendored LaZer (`pqz-core/pqzl/lazer/`), PQClean (`clients/ua-rs/vendor/`); generated: the set
+headers and Rust of `pqz-core/params/sets/` (gen_set.py, to_rust.py), `pqz-core/pqzl/rust/src/params/mod.rs`,
+`pqz-core/stmt/src/sets.rs`, `pqz-core/nethermind/Nethermind.Pqz/PqzSetIds.cs`, `pqz-core/pqzl/params/*/` and
+`pqz_aes_gen.h`, the cbindgen header `clients/ua-c/include/scaas_ua.h`, flutter_rust_bridge output
+(`clients/ua-dart-frb/lib/src/rust/`, `rust/src/frb_generated.rs`), `smartcontracts/evm/src/pqz/PqzSet.sol`, the vectors'
+JSON. **Text read by a harness** stays unformatted until the harness matches the new text: `pqzl/src/pqz_sv.c`
+(`sv/check_sv_fixes.sh` and `sv/review/review.sh` revert lines by `sed`), `pqzl/src/pqz_rel.c` (`artifact/reproduce.sh`),
+`ffi/pqz_ffi.h` (`ffi/tests/ffi.rs` `header_matches` reads its declarations). Move and TON sources: no formatter installed.
+
+Pins and where they live: rustfmt by `rust-toolchain.toml`; Prettier 3.3.3 in `clients/clientkeys/package.json`
+`devDependencies`; ruff 0.16.4 by `required-version` in `pyproject.toml`; clang-format 19.1.7 (PyPI wheel, sha256
+`f4906fb4…667f11c`), shfmt 3.10.0, taplo 0.9.3 (the release has no checksums: built from crates.io with
+`cargo install --locked`), actionlint 1.7.12, hadolint 2.15.1 (each release binary checked against the release's published
+sha256) in F9's CI step and `scripts/format.sh`. Locally they sit in the git-ignored `scratchpad/tools/`.
+
 ## Where each tool reads its settings
 
 Every setting lives in a committed config file, never only in a command line, so a developer, an editor and CI format the same
@@ -30,12 +66,12 @@ way (owner 2026-11-17: "nhớ đặt trong cấu hình luôn"):
 |---|---|---|
 | Rust | `rustfmt.toml` at the repository root | not `Cargo.toml`: rustfmt reads no Cargo section; it looks for `rustfmt.toml` in the crate's directory and every parent, so one root file covers every crate; the toolchain is already pinned by `rust-toolchain.toml` |
 | Solidity | `[fmt]` in `smartcontracts/evm/foundry.toml` | beside `bytecode_hash = "none"` in `[profile.*]` |
-| JavaScript | `clients/clientkeys/.prettierrc` | Prettier pinned in `package.json` `devDependencies` |
+| JavaScript | `.prettierrc` and `.prettierignore` at the repository root | Prettier pinned in `clients/clientkeys/package.json` `devDependencies`; at the root because Prettier also formats the YAML of F8b and the scripts outside clientkeys (the same place as scaas-app) |
 | Python | `[tool.ruff]` in a root `pyproject.toml`, or `ruff.toml` | one file for every Python directory |
 | Go | none | `gofmt` has no settings |
-| C# | `clients/ua-cs/.editorconfig` | `dotnet format` reads it |
+| C# | `.editorconfig` at the repository root (`[*.cs]`) | `dotnet format` reads it; the same file holds the shell section shfmt reads |
 | Dart | `analysis_options.yaml` of each package (`formatter: page_width`) | |
-| C / C++ / Qt | `.clang-format` at the repository root | clang-format looks in parent directories too |
+| C / C++ / Qt | `.clang-format` and `.clang-format-ignore` at the repository root | clang-format looks in parent directories too; `ReflowComments: false` beside scaas-app's values, so comment text is never rewritten |
 
 ## Bundled: `setAuditor` on one governance bit (owner 2026-11-17)
 

@@ -1,0 +1,6 @@
+# One rustfmt config for every crate of this repository: rustfmt looks for rustfmt.toml in the crate's directory and
+# every parent. The same settings as the scaas-app repository's rustfmt.toml; rust-toolchain.toml pins the rustfmt
+# version. Comment text is never rewritten (wrap_comments and normalize_comments stay at their default, off).
+# Excluded files (legacy/, generated, vendored) are left out by the file lists of the format runs: rustfmt's `ignore` is
+# unstable.
+max_width = 120

@@ -1,0 +1,6 @@
+# Files Prettier leaves alone (code-format plan, "Excluded"); .gitignore is read as well.
+**/legacy/
+**/node_modules/
+smartcontracts/evm/lib/
+# generated: the cross-language vectors
+smartcontracts/vectors/**/*.json
