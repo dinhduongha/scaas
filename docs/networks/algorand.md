@@ -278,6 +278,15 @@ params = { account_app = 1004, mandate_app = 1005, dex_app = 1006, relayfee_app 
            relay_fee = { min_amount = 1, min_microalgo_value = { "1001" = 1000 }, targets = { "2001" = ["ping(uint64)void"] } } }
 ```
 
+Endpoints (BUILT, scaas-rpc T18): `rpc_urls` are read through the crate's family client (16 MiB, no redirect, 20 s a
+request; a JSON answer deeper than 64 refused, a msgpack block bounded by the adapter's own reader; the algod token, when
+configured, sent to each endpoint). `build`'s reads (the parameters, the round times, the boxes and apps, the query and
+group simulates) fail over ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next endpoint must answer
+`/v2/transactions/params` with the configured genesis hash and a round at or above the one the first endpoint last
+showed; a status other than 2xx from it decides nothing and a refusal read while it answered requeues the job. The
+transaction status, the send, the round taken as the lane sequence, the lane balance, `op_consumed` and the start checks
+(the apps' programs, the router's executor) are the first endpoint's only.
+
 ## 9. Finality and events
 
 <a id="events"></a>

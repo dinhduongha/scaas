@@ -1556,7 +1556,16 @@ pub fn block_events(ids: &Ids, block: &Mp, block_hash: &str) -> Result<Vec<Value
 
 // ------------------------------------------------------------------ adapter
 
-/// An algod REST error: HTTP status and its `message`.
+tokio::task_local! {
+    /// scaas-rpc T18b: set while `build` runs (ARCH-POS-15: its reads fail over); every other read is endpoint 0's (F3).
+    static BUILDING: ();
+}
+
+/// Whether this read is `build`'s.
+fn building() -> bool {
+    BUILDING.try_with(|_| ()).is_ok()
+}
+
 /// A family client's error as the classifier reads it: a status other than 2xx is `AlgodError`, anything else the endpoint's
 /// failure.
 fn algod_error(e: scaas_rpc::family::FamilyError) -> anyhow::Error {
@@ -1566,6 +1575,7 @@ fn algod_error(e: scaas_rpc::family::FamilyError) -> anyhow::Error {
     }
 }
 
+/// An algod REST error: HTTP status and its `message`.
 #[derive(Debug)]
 pub struct AlgodError {
     pub status: u16,
@@ -1670,12 +1680,60 @@ impl AlgorandAdapter {
         self.net.get_raw(i, path, query).await.map_err(algod_error)
     }
 
-    async fn get(&self, path: &str) -> Result<Value> {
-        Ok(serde_json::from_slice(&self.get_raw_at(0, path, &[]).await?)?)
+    /// GET, the answer raw: `build`'s failed over, any other endpoint 0's (F3: statuses, `op_consumed`, the round, the lane
+    /// balance, `start_check`'s apps and executor).
+    async fn get_raw(&self, path: &str, query: &[(&str, String)]) -> Result<Vec<u8>> {
+        if !building() {
+            return self.get_raw_at(0, path, query).await;
+        }
+        self.read(|i| self.net.get_raw(i, path, query)).await
     }
 
+    async fn get(&self, path: &str) -> Result<Value> {
+        Ok(serde_json::from_slice(&self.get_raw(path, &[]).await?)?)
+    }
+
+    /// POST: `build`'s simulates failed over, any other (the send, `start_check`'s query) endpoint 0's.
     async fn post(&self, path: &str, body: Vec<u8>, ctype: &str) -> Result<Value> {
-        self.net.post(0, path, body, ctype).await.map_err(algod_error)
+        if !building() {
+            return self.net.post(0, path, body, ctype).await.map_err(algod_error);
+        }
+        self.read(|i| self.net.post(i, path, body.clone(), ctype)).await
+    }
+
+    /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T18b): endpoint 0, then each next endpoint of this network (its genesis hash) not
+    /// behind the round endpoint 0 last showed. A status other than 2xx (an absent box or app, a refused group) is endpoint
+    /// 0's to classify as before (`AlgodError`), a later endpoint's no verdict (the next is asked); a transport failure moves
+    /// on; what a failover endpoint's answer refuses `build` requeues.
+    async fn read<T, F, Fut>(&self, f: F) -> Result<T>
+    where
+        F: Fn(usize) -> Fut,
+        Fut: std::future::Future<Output = std::result::Result<T, scaas_rpc::family::FamilyError>>,
+    {
+        use scaas_rpc::family::FamilyError;
+        use scaas_rpc::pool::ReadError;
+        let a = self.net.client.failover(&self.net, |i| {
+            let r = f(i);
+            async move {
+                r.await.map_err(|e| match e {
+                    FamilyError::Status { status, message } => ReadError::Revert { data: vec![], reason: format!("{status}\n{message}") },
+                    FamilyError::Failure(f) => ReadError::Failure(f),
+                    e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
+                })
+            }
+        }).await;
+        match a {
+            Ok(a) => Ok(a.value),
+            Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
+                let (status, message) = reason.split_once('\n').unwrap_or(("0", &reason));
+                Err(AlgodError { status: status.parse().unwrap_or(0), message: message.into() }.into())
+            }
+            Err(e) => Err(anyhow!("{e}")),
+        }
+    }
+
+    fn failovers(&self) -> u64 {
+        self.net.client.pool().failover_answers()
     }
 
     async fn params(&self) -> Result<Params> {
@@ -1698,7 +1756,7 @@ impl AlgorandAdapter {
     }
 
     async fn box_value(&self, app: u64, name: &[u8]) -> Result<Option<Vec<u8>>> {
-        match self.get_raw_at(0, &format!("/v2/applications/{app}/box"), &[("name", format!("b64:{}", b64(name)))]).await {
+        match self.get_raw(&format!("/v2/applications/{app}/box"), &[("name", format!("b64:{}", b64(name)))]).await {
             Ok(b) => {
                 let v: Value = serde_json::from_slice(&b)?;
                 Ok(Some(b64d(v["value"].as_str().ok_or_else(|| anyhow!("box without value"))?)?))
@@ -1901,12 +1959,12 @@ impl AlgorandAdapter {
         let ts = |b: Vec<u8>| -> Result<u64> {
             mp_decode(&b)?.get("block").and_then(|b| b.get("ts")).and_then(Mp::u64).ok_or_else(|| anyhow!("block without ts"))
         };
-        let t1 = ts(self.get_raw_at(0, &format!("/v2/blocks/{last}"), &[("format", "msgpack".into())]).await?)?;
+        let t1 = ts(self.get_raw(&format!("/v2/blocks/{last}"), &[("format", "msgpack".into())]).await?)?;
         let first = last.saturating_sub(ROUND_SAMPLE).max(1);
         if first >= last {
             return Ok((t1, 0, 0));
         }
-        let t0 = ts(self.get_raw_at(0, &format!("/v2/blocks/{first}"), &[("format", "msgpack".into())]).await?)?;
+        let t0 = ts(self.get_raw(&format!("/v2/blocks/{first}"), &[("format", "msgpack".into())]).await?)?;
         Ok((t1, last - first, t1.saturating_sub(t0)))
     }
 
@@ -1925,39 +1983,12 @@ impl AlgorandAdapter {
         });
         Ok(self.policy.tokens.iter().map(|t| (*t, keys.clone())).collect())
     }
-}
-
-#[async_trait]
-impl ChainAdapter for AlgorandAdapter {
-    fn family(&self) -> Family {
-        Family::Algorand
-    }
-
-    fn chain_key(&self) -> &str {
-        &self.key
-    }
-
-    fn lanes(&self) -> &[Lane] {
-        &self.lanes
-    }
-
-    /// R80: the payer's lane box on the token has passed the op's nonce. Every job kind is one atomic group (no escrow,
-    /// no refund), so a consumed payment lane means the job's group landed (lesson 1).
-    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
-        let Ok(w) = self.work(job, self.exec().as_ref()) else { return Ok(None) };
-        let name = [&b"l"[..], &sha256(&[&w.op.from.bytes()[..], &w.op.lane].concat())].concat();
-        let next = match self.box_value(w.token, &name).await? {
-            Some(v) => be_u64(&v)?,
-            None => 0,
-        };
-        Ok(Some(next > w.op.nonce))
-    }
 
     /// The §5 checks, the group with the apps' exact MBR payments, a discovery simulate (unnamed resources allowed, a
     /// generous fee credit) whose unnamed resources go onto budget calls, then the exact group simulated with every
     /// resource named and the fee = one min fee per transaction and per inner transaction (re-run until the inner count
     /// settles); `Revert` = the job dies with the group's reason. A fee that is the node's must cover fee + MBR.
-    async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
         let exec = self.exec();
         let w = self.work(job, exec.as_ref()).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
@@ -2109,6 +2140,44 @@ impl ChainAdapter for AlgorandAdapter {
         Ok(Built { job_id: job.id, body: vec![], valid_until: w.op.valid_until, meta })
     }
 
+}
+
+#[async_trait]
+impl ChainAdapter for AlgorandAdapter {
+    fn family(&self) -> Family {
+        Family::Algorand
+    }
+
+    fn chain_key(&self) -> &str {
+        &self.key
+    }
+
+    fn lanes(&self) -> &[Lane] {
+        &self.lanes
+    }
+
+    /// R80: the payer's lane box on the token has passed the op's nonce. Every job kind is one atomic group (no escrow,
+    /// no refund), so a consumed payment lane means the job's group landed (lesson 1).
+    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
+        let Ok(w) = self.work(job, self.exec().as_ref()) else { return Ok(None) };
+        let name = [&b"l"[..], &sha256(&[&w.op.from.bytes()[..], &w.op.lane].concat())].concat();
+        let next = match self.box_value(w.token, &name).await? {
+            Some(v) => be_u64(&v)?,
+            None => 0,
+        };
+        Ok(Some(next > w.op.nonce))
+    }
+
+    /// [`AlgorandAdapter::build_on`], its reads failed over (scaas-rpc T18b, R4: a refusal read while a failover endpoint
+    /// answered is no verdict).
+    async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let mark = self.failovers();
+        match BUILDING.scope((), self.build_on(job, lane)).await {
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            r => r,
+        }
+    }
+
     /// FirstValid = `sequence` (the last round), LastValid by `last_valid` from two block timestamps; the group id set,
     /// the lane's transactions signed over `"TX"` ‖ bytes, the executor's by its program.
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
@@ -2180,6 +2249,7 @@ impl ChainAdapter for AlgorandAdapter {
     /// The last round (one-round finality); with `quorum > 1` further endpoints must agree on its hash.
     async fn final_head(&self) -> Result<Option<Head>> {
         let height = self.sequence(0).await?;
+        self.net.client.pool().saw_block(height); // the failover reads' floor: endpoint 0's last round
         let hash = self.block_hash_at(0, height).await?;
         let mut agree = 1;
         for i in 1..self.net.client.len() {
@@ -3565,5 +3635,79 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let a = AlgorandAdapter::new(&cfg(&url, ""), &[lane0()]).unwrap();
         let _ = a.get("/v2/status").await;
         assert_eq!(seen.lock().unwrap().last().unwrap(), &None, "control: no token configured");
+    }
+
+    // ---- scaas-rpc T18b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    /// The fake world behind `first` endpoints in `rpc_urls`; no start_check (endpoint 0 may be down).
+    async fn adapter_after(w: World, first: &[&str]) -> (AlgorandAdapter, Arc<M<World>>) {
+        let w = Arc::new(M::new(w));
+        let url = serve(w.clone()).await;
+        let mut c = cfg(&url, FEE_CFG);
+        c.rpc_urls = first.iter().map(|u| u.to_string()).chain([url]).collect();
+        (AlgorandAdapter::new(&c, &[lane0()]).unwrap(), w)
+    }
+
+    /// The plain pay of the vectors, valid long enough.
+    fn pay_op() -> MetaOp {
+        MetaOp { valid_until: far(), ..op_of("pay") }
+    }
+
+    /// F3: a status, `op_consumed`, the round (the lane sequence), the lane balance and `start_check` (the apps' hashes, the
+    /// executor) are endpoint 0's only: with it down each is unread, never endpoint 1's answer (here a mined status and a
+    /// consumed lane box, so a failover would show). Control: endpoint 0 up, each read.
+    #[tokio::test]
+    async fn algorand_tx_status_op_consumed_the_round_and_start_check_never_fail_over() {
+        let op = pay_op();
+        let j = job(o_op(&op, &auth_of("pay"), json!({})));
+        let tx = format!("0x{}", "11".repeat(32));
+        let w = || {
+            let mut w = world();
+            let name = [&b"l"[..], &sha256(&[&op.from.bytes()[..], &op.lane[..]].concat())].concat();
+            for t in [TOKEN, TOKEN_B] {
+                w.boxes.insert((t, name.clone()), (op.nonce + 1).to_be_bytes().to_vec());
+            }
+            w.pending.insert(b32encode(&[0x11; 32]), json!({"confirmed-round": 5}));
+            w
+        };
+        let (a, _) = adapter_after(w(), &[DOWN]).await;
+        assert!(a.tx_status(&tx).await.is_err(), "unread, never Mined from endpoint 1");
+        assert!(a.op_consumed(&j).await.is_err());
+        assert!(a.sequence(0).await.is_err());
+        assert!(a.lane_balance(0).await.is_err());
+        assert!(a.start_check().await.is_err(), "the apps and the executor: endpoint 0's");
+        assert_eq!(a.failovers(), 0);
+        let (a, _) = adapter_after(w(), &[]).await;
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 5, .. }), "control");
+        assert_eq!(a.op_consumed(&j).await.unwrap(), Some(true));
+        a.sequence(0).await.unwrap();
+        a.lane_balance(0).await.unwrap();
+        a.start_check().await.unwrap();
+    }
+
+    /// ARCH-POS-15: `build`'s reads (params, rounds, boxes, the simulates) fail over: endpoint 0 down, endpoint 1 builds the
+    /// group. A refusal read while a failover endpoint answered is no verdict (requeued, FAILOVER_ANSWER); the same refusal on
+    /// endpoint 0 is the job's, as before.
+    #[tokio::test]
+    async fn algorand_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        let j = job(o_op(&pay_op(), &auth_of("pay"), json!({})));
+        let (a, _) = adapter_after(world(), &[DOWN]).await;
+        let g = group(&a.build(&j, 0).await.unwrap());
+        assert_eq!(g.main, 1, "built on endpoint 1");
+        assert!(a.failovers() > 0);
+        let failing = || {
+            let mut w = world();
+            w.fail = Some("logic eval error: assert failed".into());
+            w
+        };
+        let (a, _) = adapter_after(failing(), &[DOWN]).await;
+        match a.build(&j, 0).await {
+            Err(SimError::Transport(m)) => assert!(m.starts_with("FAILOVER_ANSWER") && m.contains("assert failed"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        let (a, _) = adapter_after(failing(), &[]).await;
+        assert!(matches!(a.build(&j, 0).await, Err(SimError::Revert(m)) if m.contains("assert failed")), "control: endpoint 0's verdict");
     }
 }

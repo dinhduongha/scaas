@@ -22,6 +22,13 @@ MUTANTS = [
      T + "the_raw_reads_the_status_classes_and_the_token"),
     ("a: the identity a constant", [(S, "            Some(g) => Ok(g == self.genesis),", "            Some(_) => Ok(true),")],
      T + "the_failover_drops_another_network_and_skips_an_endpoint_behind"),
+    # (b) the carve-out (F3) first, then the failover
+    ("b: every read fails over (the carve-out gone)", [(N, "    BUILDING.try_with(|_| ()).is_ok()", "    true")],
+     NT + "algorand_tx_status_op_consumed_the_round_and_start_check_never_fail_over"),
+    ("b: the build's reads on endpoint 0 only", [(N, "        match BUILDING.scope((), self.build_on(job, lane)).await {", "        match self.build_on(job, lane).await {")],
+     NT + "algorand_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: a failover refusal final (the counter not compared)", [(N, "            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),\n            r => r,\n        }\n    }\n\n    /// FirstValid", "            r => r,\n        }\n    }\n\n    /// FirstValid")],
+     NT + "algorand_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
 ]
 
 if __name__ == "__main__":
