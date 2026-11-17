@@ -728,3 +728,200 @@ impl EvmPool {
         Ok(Fees { max_fee_per_gas: max[need - 1].max(1), max_priority_fee_per_gas: prio[need - 1] })
     }
 }
+
+// ---------------------------------------------------------------- plan T7: the same signed bytes to several endpoints, state
+
+/// The "already known" answers of the clients, each meaning the endpoint holds this very transaction (CLI-RPC-08, F24):
+/// - geth (and its forks): `already known` (`core/txpool`, `ErrAlreadyKnown`);
+/// - Nethermind 2.2.0: `already known` (`Nethermind.TxPool.dll`, `AcceptTxResult.AlreadyKnown`, read from the local
+///   `nethermind/nethermind:2.2.0` image);
+/// - anvil (foundry 1.8.5): `transaction already imported` (its pool's `AlreadyImported`, seen in `tests/anvil.rs`).
+pub const ALREADY_KNOWN: [&str; 2] = ["already known", "transaction already imported"];
+
+pub use crate::endpoint::Fanout;
+
+/// One endpoint's answer to a send.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SendOutcome {
+    /// it holds the transaction (its hash answered, or "already known")
+    Accepted,
+    /// a well-formed rejection, its reason capped and redacted ("nonce too low", "another transaction id", …)
+    Refused { reason: String },
+    /// transport, timeout, HTTP error, malformed answer
+    Unreachable { failure: EndpointFailure },
+}
+
+/// The merge of a send (CLI-RPC-08): never a final verdict on the transaction ([`EvmPool::tx_state`] decides).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BroadcastOutcome {
+    Sent { id: B256, accepted: Vec<usize>, others: Vec<(usize, SendOutcome)> },
+    Rejected { id: B256, outcomes: Vec<(usize, SendOutcome)> },
+}
+
+impl BroadcastOutcome {
+    /// `BroadcastRejected` for `Rejected` (the app's code 20), else `None`.
+    pub fn code(&self) -> Option<&'static str> {
+        matches!(self, BroadcastOutcome::Rejected { .. }).then_some("BroadcastRejected")
+    }
+    pub fn id(&self) -> B256 {
+        match self {
+            BroadcastOutcome::Sent { id, .. } | BroadcastOutcome::Rejected { id, .. } => *id,
+        }
+    }
+}
+
+/// A type-3 (blob) transaction in its network form (`0x03 ‖ rlp([tx_payload_body, blobs, commitments, proofs])`): its first
+/// list item is itself a list, where the canonical form's is the chain id.
+fn blob_network_form(raw: &[u8]) -> bool {
+    if raw.first() != Some(&0x03) {
+        return false;
+    }
+    let body = &raw[1..];
+    // the outer list's header: one byte (a short list), or one plus its length's bytes
+    let skip = match body.first() {
+        Some(0xc0..=0xf7) => Some(1),
+        Some(b @ 0xf8..=0xff) => Some(1 + (*b as usize - 0xf7)),
+        _ => None,
+    };
+    matches!(skip.and_then(|k| body.get(k)), Some(0xc0..=0xff))
+}
+
+/// A transaction's state (CLI-RPC-09): terminal only from a decisive read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TxState {
+    /// a receipt at or below the final block, its block hash the endpoint's header hash at its number (terminal)
+    Final { number: u64, hash: B256, success: bool },
+    /// the sender's nonce at the final block above the transaction's, the transaction and its receipt unknown, in one decisive
+    /// read (terminal; never re-sent automatically)
+    Replaced { by_nonce: u64 },
+    /// a receipt above the final block, or from a read that is not decisive
+    Included { number: u64, hash: B256, success: bool, endpoint: usize },
+    /// none of the above (also `Replaced`'s facts from an endpoint that is not decisive)
+    Pending { endpoint: Option<usize> },
+}
+
+impl TxState {
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, TxState::Final { .. } | TxState::Replaced { .. })
+    }
+}
+
+/// The facts of one read for [`EvmPool::tx_state`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TxFacts {
+    receipt: Option<ReceiptAt>,
+    nonce: u64,
+    known: bool,
+}
+
+/// A relayed operation's state (CLI-RPC-09): terminal only on chain facts at the final block from a decisive read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OpState {
+    /// its executed event at or below the final block
+    Landed,
+    /// the subject's operation nonce spent at the final block without its executed event, or its deadline below the final
+    /// block's timestamp while the nonce is unspent
+    FailedForGood,
+    Pending,
+}
+
+/// What a relayed operation's state reads: the nonce view (`call` to `contract`, decoded to the nonce now), the executed
+/// event's filter, the operation's nonce and its `validUntil`.
+#[derive(Debug, Clone)]
+pub struct OpQuery {
+    pub contract: Address,
+    pub nonce_call: Bytes,
+    pub nonce: alloy::primitives::U256,
+    pub executed: Filter,
+    pub from_block: u64,
+    pub valid_until: u64,
+}
+
+impl EvmPool {
+    /// CLI-RPC-08: the same `raw` bytes to the first endpoint or to all, concurrently; the id is `keccak256(raw)`, computed before
+    /// any request (a blob transaction in its network form is refused by name, `Argument`). `Sent` when one endpoint accepted,
+    /// else `Rejected`; neither is final.
+    pub async fn broadcast(&self, raw: &[u8], fanout: Fanout) -> Result<BroadcastOutcome, RpcError> {
+        if blob_network_form(raw) {
+            return Err(RpcError::argument("a blob transaction in its network form: send its canonical form"));
+        }
+        let id = alloy::primitives::keccak256(raw);
+        let hex = alloy::hex::encode_prefixed(raw);
+        let to: Vec<usize> = match fanout {
+            Fanout::First => vec![0],
+            Fanout::All => (0..self.list.len()).collect(),
+        };
+        let outcomes = futures::future::join_all(to.iter().map(|&i| {
+            let hex = hex.clone();
+            async move {
+                let a = self.http.json_rpc(&self.list, i, "eth_sendRawTransaction", serde_json::json!([hex]), 1 << 20, None).await;
+                (i, match a {
+                    Err(failure) => SendOutcome::Unreachable { failure },
+                    Ok(Ok(v)) => match v.as_str().and_then(|s| s.parse::<B256>().ok()) {
+                        Some(h) if h == id => SendOutcome::Accepted,
+                        _ => SendOutcome::Refused { reason: "another transaction id".into() },
+                    },
+                    Ok(Err(e)) if ALREADY_KNOWN.iter().any(|k| e.message.to_lowercase().contains(k)) => SendOutcome::Accepted,
+                    Ok(Err(e)) => SendOutcome::Refused { reason: e.message },
+                })
+            }
+        })).await;
+        let accepted: Vec<usize> = outcomes.iter().filter(|(_, o)| *o == SendOutcome::Accepted).map(|(i, _)| *i).collect();
+        Ok(if accepted.is_empty() {
+            BroadcastOutcome::Rejected { id, outcomes }
+        } else {
+            BroadcastOutcome::Sent { id, accepted, others: outcomes.into_iter().filter(|(_, o)| *o != SendOutcome::Accepted).collect() }
+        })
+    }
+
+    /// CLI-RPC-09: `id` sent by `from` with `nonce`, read at the final block `f` (`choice`'s). Terminal only from a decisive read:
+    /// agreed under `strict_majority`, or answered by endpoint 0 when it is not `discovered` under `failover`.
+    pub async fn tx_state(&self, id: B256, from: Address, nonce: u64, choice: BlockChoice) -> Result<TxState, RpcError> {
+        let a = self.read_at_block(choice, Purpose::Plain, |at| async move {
+            let receipt = self.checked_receipt(at.endpoint, id, at.deadline).await?;
+            let now = self.nonce_at_block(&at, from).await?;
+            let known = self.at(at.endpoint, at.deadline).get_transaction_by_hash(id).await
+                .map_err(|e| read_error(at.endpoint, &e, self.decode))?.is_some();
+            Ok(TxFacts { receipt, nonce: now, known })
+        }).await?;
+        let decisive = match self.pool.policy() {
+            crate::Policy::StrictMajority => true,
+            crate::Policy::Failover => a.members == [0] && self.pool.class(0) != crate::Class::Discovered,
+        };
+        let endpoint = a.members[0];
+        Ok(match a.value.receipt {
+            Some(r) if decisive && r.block_number <= a.number => TxState::Final { number: r.block_number, hash: r.block_hash, success: r.status },
+            Some(r) => TxState::Included { number: r.block_number, hash: r.block_hash, success: r.status, endpoint },
+            None if decisive && a.value.nonce > nonce && !a.value.known => TxState::Replaced { by_nonce: a.value.nonce },
+            None => TxState::Pending { endpoint: Some(endpoint) },
+        })
+    }
+
+    /// CLI-RPC-09 for a relayed operation: at the final block `f`, by one decisive read, its executed event in `[from_block, f]`,
+    /// its nonce view, and `f`'s timestamp.
+    pub async fn op_state(&self, q: &OpQuery, choice: BlockChoice) -> Result<OpState, RpcError> {
+        let a = self.read_at_block(choice, Purpose::Plain, |at| async move {
+            let p = self.at(at.endpoint, at.deadline);
+            let executed = !p.get_logs(&q.executed.clone().from_block(q.from_block).to_block(at.number)).await
+                .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?.is_empty();
+            let word = self.call_at(&at, q.contract, q.nonce_call.clone()).await?;
+            let now = alloy::primitives::U256::try_from_be_slice(word.get(..32).unwrap_or_default())
+                .ok_or_else(|| ReadError::Failure(EndpointFailure::new(at.endpoint, FailureKind::AnswerMalformed, "a nonce view of no word")))?;
+            let ts = p.get_block_by_hash(at.hash).await.map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?
+                .ok_or_else(|| ReadError::Failure(EndpointFailure::new(at.endpoint, FailureKind::Transport, "no final block")))?.header.timestamp;
+            Ok((executed, now > q.nonce, ts))
+        }).await?;
+        let decisive = match self.pool.policy() {
+            crate::Policy::StrictMajority => true,
+            crate::Policy::Failover => a.members == [0] && self.pool.class(0) != crate::Class::Discovered,
+        };
+        let (executed, spent, ts) = a.value;
+        Ok(match () {
+            _ if !decisive => OpState::Pending,
+            _ if executed => OpState::Landed,
+            _ if spent => OpState::FailedForGood,
+            _ if q.valid_until < ts => OpState::FailedForGood,
+            _ => OpState::Pending,
+        })
+    }
+}

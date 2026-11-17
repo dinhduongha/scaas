@@ -12,5 +12,5 @@ pub mod evm;
 pub mod http;
 pub mod pool;
 
-pub use endpoint::{Class, Endpoint, EndpointAuth, Label, ListConfig, NodeList, Policy, Purpose, Secret};
+pub use endpoint::{Class, Endpoint, EndpointAuth, Fanout, Label, ListConfig, NodeList, Policy, Purpose, Secret};
 pub use error::{EndpointFailure, FailureKind, RpcError};

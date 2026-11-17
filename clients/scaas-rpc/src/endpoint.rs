@@ -135,6 +135,13 @@ pub enum Purpose {
     FeedsDecryption,
 }
 
+/// The endpoints a send goes to (CLI-RPC-08): the first, or every one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fanout {
+    First,
+    All,
+}
+
 /// Defaults: the node's `rpc_timeout_ms`, `rpc_simulate_timeout_ms`, and one whole agreement read (spec §4.6).
 pub const TIMEOUT_MS: u64 = 30_000;
 pub const SLOW_TIMEOUT_MS: u64 = 120_000;

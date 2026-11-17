@@ -26,8 +26,8 @@ eip1898 | 0557f5ea0 | 0 | nethermind: canonical answered 5/5, made-up refused 5/
 node-test | 1ffb4a964 | 0 | 788 passed, 0 failed, 72 ignored (17 binaries); tree dirty
 node-clippy | 1ffb4a964 | 0 | -; tree dirty
 node-e2e | 1ffb4a964 | 0 | 24 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-features | 1ffb4a964 | 0 | -; tree dirty
-rpc-wasm | 70ed3b31e | 0 | -; tree dirty
-rpc-test | 70ed3b31e | 0 | 80 passed, 0 failed, 8 ignored (6 binaries); tree dirty
-rpc-clippy | 70ed3b31e | 0 | -; tree dirty
-rpc-anvil | 70ed3b31e | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+rpc-test | 4a84ebbce | 0 | 93 passed, 0 failed, 10 ignored (6 binaries); tree dirty
+rpc-wasm | 4a84ebbce | 0 | -; tree dirty
+features | 4a84ebbce | 0 | -; tree dirty
+rpc-anvil | 4a84ebbce | 0 | 10 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+rpc-clippy | 4a84ebbce | 0 | -; tree dirty

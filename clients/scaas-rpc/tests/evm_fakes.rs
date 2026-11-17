@@ -575,3 +575,246 @@ async fn logs_range_refuses_an_unbounded_or_too_wide_range() {
     }
     assert_eq!(n.load(SeqCst), 0, "before any request");
 }
+
+// ---------------------------------------------------------------- plan T7: broadcast and transaction state over fakes
+
+use scaas_rpc::evm::{BroadcastOutcome, Fanout, OpQuery, OpState, SendOutcome, TxState};
+use std::sync::Arc;
+
+/// A chain at head `head` (block `n`'s hash `n + fork`) whose facts for one transaction are given.
+#[derive(Clone)]
+struct Facts {
+    head: u64,
+    fork: u64,
+    nonce: u64,
+    /// the receipt's block and the hash it names
+    receipt: Option<(u64, B256)>,
+    known: bool,
+}
+
+const ID: B256 = B256::repeat_byte(0xab);
+const FROM: Address = Address::repeat_byte(0xcd);
+
+fn receipt_json(number: u64, hash: B256) -> Value {
+    json!({"transactionHash": format!("{ID:#x}"), "transactionIndex": "0x0", "blockHash": format!("{hash:#x}"),
+        "blockNumber": format!("{number:#x}"), "from": format!("{FROM:#x}"), "to": format!("{:#x}", Address::ZERO),
+        "cumulativeGasUsed": "0x5208", "gasUsed": "0x5208", "contractAddress": null, "logs": [],
+        "logsBloom": format!("0x{}", "00".repeat(256)), "type": "0x2", "status": "0x1", "effectiveGasPrice": "0x1"})
+}
+
+fn tx_json() -> Value {
+    json!({"type": "0x2", "chainId": "0x128", "nonce": "0x3", "gas": "0x5208", "maxFeePerGas": "0x2", "maxPriorityFeePerGas": "0x1",
+        "to": format!("{:#x}", Address::ZERO), "value": "0x0", "accessList": [], "input": "0x", "r": "0x1", "s": "0x1",
+        "yParity": "0x0", "v": "0x0", "hash": format!("{ID:#x}"), "from": format!("{FROM:#x}"), "blockHash": null,
+        "blockNumber": null, "transactionIndex": null, "gasPrice": "0x2"})
+}
+
+async fn facts(f: Facts) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+    fake_dyn(Arc::new(move |r: &Value| match r["method"].as_str() {
+        Some("eth_blockNumber") => json!({"result": format!("{:#x}", f.head)}),
+        Some("eth_getBlockByNumber") => json!({"result": block(num(&r["params"][0]), B256::from(U256::from(num(&r["params"][0]) + f.fork)))}),
+        Some("eth_getTransactionCount") => json!({"result": format!("{:#x}", f.nonce)}),
+        Some("eth_getTransactionReceipt") => json!({"result": f.receipt.map(|(n, h)| receipt_json(n, h))}),
+        Some("eth_getTransactionByHash") => json!({"result": if f.known { tx_json() } else { Value::Null }}),
+        Some("eth_sendRawTransaction") => json!({"result": format!("{:#x}", alloy::primitives::keccak256(
+            alloy::hex::decode(r["params"][0].as_str().unwrap()).unwrap()))}),
+        _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+    })).await
+}
+
+fn block_hash(n: u64) -> B256 {
+    B256::from(U256::from(n))
+}
+
+fn landed(head: u64, at: u64) -> Facts {
+    Facts { head, fork: 0, nonce: 4, receipt: Some((at, block_hash(at))), known: true }
+}
+fn replaced(head: u64) -> Facts {
+    Facts { head, fork: 0, nonce: 4, receipt: None, known: false }
+}
+
+/// A sender fake answering every `eth_sendRawTransaction` with `answer`, counting.
+async fn sender(answer: Value) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+    fake_dyn(Arc::new(move |r: &Value| match r["method"].as_str() {
+        Some("eth_sendRawTransaction") => answer.clone(),
+        _ => json!({"result": "0x10"}),
+    })).await
+}
+
+const RAW: &[u8] = &[0x02, 0xc1, 0x80];
+
+#[tokio::test]
+async fn the_id_is_computed_before_any_request() {
+    let p = sdk_pool(&[DOWN], 2_000);
+    match p.broadcast(RAW, Fanout::All).await.unwrap() {
+        BroadcastOutcome::Rejected { id, outcomes } => {
+            assert_eq!(id, alloy::primitives::keccak256(RAW), "known with every endpoint down");
+            assert!(matches!(outcomes[..], [(0, SendOutcome::Unreachable { .. })]));
+        }
+        o => panic!("{o:?}"),
+    }
+}
+
+#[tokio::test]
+async fn already_known_is_accepted() {
+    for text in scaas_rpc::evm::ALREADY_KNOWN {
+        let (u, _) = sender(json!({"error": {"code": -32000, "message": text}})).await;
+        assert!(matches!(sdk_pool(&[&u], 2_000).broadcast(RAW, Fanout::First).await.unwrap(), BroadcastOutcome::Sent { .. }), "{text}");
+    }
+    let (nethermind, _) = sender(json!({"error": {"code": -32010, "message": "already known"}})).await;
+    assert!(matches!(sdk_pool(&[&nethermind], 2_000).broadcast(RAW, Fanout::First).await.unwrap(), BroadcastOutcome::Sent { .. }),
+        "Nethermind 2.2.0's text");
+    let (low, _) = sender(json!({"error": {"code": -32000, "message": "nonce too low"}})).await;
+    assert!(matches!(sdk_pool(&[&low], 2_000).broadcast(RAW, Fanout::First).await.unwrap(), BroadcastOutcome::Rejected { .. }), "control");
+}
+
+#[tokio::test]
+async fn another_id_is_refused() {
+    let (u, _) = sender(json!({"result": format!("{:#x}", B256::repeat_byte(1))})).await;
+    match sdk_pool(&[&u], 2_000).broadcast(RAW, Fanout::First).await.unwrap() {
+        BroadcastOutcome::Rejected { outcomes, .. } => assert_eq!(outcomes[0].1, SendOutcome::Refused { reason: "another transaction id".into() }),
+        o => panic!("{o:?}"),
+    }
+    let (ok, _) = sender(json!({"result": format!("{:#x}", alloy::primitives::keccak256(RAW))})).await;
+    assert!(matches!(sdk_pool(&[&ok], 2_000).broadcast(RAW, Fanout::First).await.unwrap(), BroadcastOutcome::Sent { .. }), "control");
+}
+
+#[tokio::test]
+async fn a_blob_transaction_in_network_form_is_refused() {
+    let (u, n) = sender(json!({"result": "0x0"})).await;
+    let p = sdk_pool(&[&u], 2_000);
+    // 0x03 ‖ rlp([rlp([chain id, …]), blobs, commitments, proofs]): its first item a list
+    let network = [0x03, 0xc5, 0xc1, 0x01, 0xc0, 0xc0, 0xc0];
+    assert_eq!(p.broadcast(&network, Fanout::All).await.unwrap_err().code(), "Argument");
+    assert_eq!(n.load(SeqCst), 0, "nothing sent");
+    // its canonical form: 0x03 ‖ rlp([chain id, …])
+    assert!(p.broadcast(&[0x03, 0xc2, 0x01, 0x80], Fanout::All).await.is_ok(), "control: the canonical form is sent");
+}
+
+#[tokio::test]
+async fn all_refused_is_rejected_and_not_final() {
+    let (a, _) = sender(json!({"error": {"code": -32000, "message": "nonce too low"}})).await;
+    let (b, _) = sender(json!({"error": {"code": -32000, "message": "replacement transaction underpriced"}})).await;
+    let p = sdk_pool(&[&a, &b], 2_000);
+    let o = p.broadcast(RAW, Fanout::All).await.unwrap();
+    assert_eq!(o.code(), Some("BroadcastRejected"));
+    let (chain, _) = facts(Facts { head: 0x20, fork: 0, nonce: 3, receipt: None, known: false }).await;
+    let s = sdk_pool(&[&chain], 2_000).tx_state(o.id(), FROM, 3, scaas_rpc::pool::BlockChoice::Depth(1)).await.unwrap();
+    assert_eq!(s, TxState::Pending { endpoint: Some(0) }, "a refusal is no verdict");
+    assert!(!s.is_terminal());
+}
+
+#[tokio::test]
+async fn unreachable_is_kept_apart() {
+    let (ok, _) = sender(json!({"result": format!("{:#x}", alloy::primitives::keccak256(RAW))})).await;
+    let (no, _) = sender(json!({"error": {"code": -32000, "message": "insufficient funds"}})).await;
+    match sdk_pool(&[DOWN, &ok, &no], 2_000).broadcast(RAW, Fanout::All).await.unwrap() {
+        BroadcastOutcome::Sent { accepted, others, .. } => {
+            assert_eq!(accepted, vec![1]);
+            assert!(matches!(others[0], (0, SendOutcome::Unreachable { .. })), "{others:?}");
+            assert!(matches!(&others[1], (2, SendOutcome::Refused { reason }) if reason == "insufficient funds"), "{others:?}");
+        }
+        o => panic!("{o:?}"),
+    }
+}
+
+#[tokio::test]
+async fn a_refusal_reason_is_capped() {
+    let long = format!("bad https://rpc.example/v3/KEY {}", "x\n".repeat(400));
+    let (u, _) = sender(json!({"error": {"code": -32000, "message": long}})).await;
+    match sdk_pool(&[&u], 2_000).broadcast(RAW, Fanout::First).await.unwrap() {
+        BroadcastOutcome::Rejected { outcomes, .. } => match &outcomes[0].1 {
+            SendOutcome::Refused { reason } => {
+                assert!(reason.len() <= 256 && !reason.contains('\n') && !reason.contains("KEY"), "{reason}");
+                assert!(reason.starts_with("bad <url>"), "{reason}");
+            }
+            o => panic!("{o:?}"),
+        },
+        o => panic!("{o:?}"),
+    }
+}
+
+fn depth(d: u64) -> scaas_rpc::pool::BlockChoice {
+    scaas_rpc::pool::BlockChoice::Depth(d)
+}
+
+#[tokio::test]
+async fn replaced_from_a_later_endpoint_is_pending() {
+    // endpoint 0 down; endpoint 1: nonce above, receipt and transaction unknown; endpoint 2 holds the receipt
+    let (one, _) = facts(replaced(0x20)).await;
+    let (two, _) = facts(landed(0x20, 0x10)).await;
+    let s = sdk_pool(&[DOWN, &one, &two], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap();
+    assert_eq!(s, TxState::Pending { endpoint: Some(1) });
+    let s = sdk_pool(&[&one, &two], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap();
+    assert_eq!(s, TxState::Replaced { by_nonce: 4 }, "control: the same facts from endpoint 0");
+}
+
+#[tokio::test]
+async fn replaced_needs_the_transaction_unknown() {
+    let (known, _) = facts(Facts { known: true, ..replaced(0x20) }).await;
+    assert_eq!(sdk_pool(&[&known], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap(), TxState::Pending { endpoint: Some(0) });
+    let (nonce_not_above, _) = facts(Facts { nonce: 3, ..replaced(0x20) }).await;
+    assert_eq!(sdk_pool(&[&nonce_not_above], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap(), TxState::Pending { endpoint: Some(0) });
+}
+
+#[tokio::test]
+async fn a_receipt_whose_block_hash_is_not_the_header_is_not_counted() {
+    let (forged, _) = facts(Facts { receipt: Some((0x10, B256::repeat_byte(0x77))), ..landed(0x20, 0x10) }).await;
+    let s = sdk_pool(&[&forged], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap();
+    assert_eq!(s, TxState::Pending { endpoint: Some(0) });
+    let (good, _) = facts(landed(0x20, 0x10)).await;
+    assert!(matches!(sdk_pool(&[&good], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap(), TxState::Final { number: 0x10, .. }),
+        "control");
+}
+
+#[tokio::test]
+async fn final_from_a_discovered_first_endpoint_is_not_terminal() {
+    let (good, _) = facts(landed(0x20, 0x10)).await;
+    let e = vec![scaas_rpc::Endpoint::new(&good, scaas_rpc::Class::Discovered, None, None).unwrap()];
+    let p = EvmPool::connect(NodeList::new(e, Policy::Failover, 2_000, 2_000, 5_000).unwrap(), 296, Some(genesis())).unwrap();
+    let s = p.tx_state(ID, FROM, 3, depth(1)).await.unwrap();
+    assert!(matches!(s, TxState::Included { number: 0x10, endpoint: 0, .. }), "{s:?}");
+    let (late, _) = facts(landed(0x20, 0x20)).await;
+    assert!(matches!(sdk_pool(&[&late], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap(), TxState::Included { number: 0x20, .. }),
+        "above the final block: included");
+}
+
+#[tokio::test]
+async fn final_from_an_agreed_read_is_terminal() {
+    let (a, _) = facts(landed(0x20, 0x10)).await;
+    let (b, _) = facts(landed(0x20, 0x10)).await;
+    let (c, _) = facts(replaced(0x20)).await;
+    let s = strict(&[&c, &a, &b]).tx_state(ID, FROM, 3, depth(1)).await.unwrap();
+    assert!(matches!(s, TxState::Final { number: 0x10, success: true, .. }), "{s:?}");
+    assert!(s.is_terminal());
+}
+
+/// A relayed operation's facts at the final block 0x1f: the executed event, the nonce view's word, block 0x1f's timestamp
+/// (0x6ac07487, [`block`]).
+async fn op_chain(executed: bool, nonce_now: u64) -> String {
+    fake_dyn(Arc::new(move |r: &Value| match r["method"].as_str() {
+        Some("eth_blockNumber") => json!({"result": "0x20"}),
+        Some("eth_getBlockByNumber") => json!({"result": block(num(&r["params"][0]), block_hash(num(&r["params"][0])))}),
+        Some("eth_getBlockByHash") => json!({"result": block(0x1f, block_hash(0x1f))}),
+        Some("eth_getLogs") => json!({"result": if executed { json!([{"address": format!("{:#x}", Address::ZERO), "topics": [],
+            "data": "0x", "blockNumber": "0x10", "blockHash": format!("{:#x}", block_hash(0x10)),
+            "transactionHash": format!("{ID:#x}"), "transactionIndex": "0x0", "logIndex": "0x0", "removed": false}]) } else { json!([]) }}),
+        Some("eth_call") => json!({"result": format!("0x{nonce_now:064x}")}),
+        _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+    })).await.0
+}
+
+#[tokio::test]
+async fn a_relayed_operation_ends_on_chain_facts() {
+    let q = |valid_until: u64| OpQuery { contract: Address::ZERO, nonce_call: Bytes::new(), nonce: U256::from(3),
+        executed: alloy::rpc::types::Filter::new(), from_block: 1, valid_until };
+    let ts = 0x6ac07487u64;
+    let at = |u: String| sdk_pool(&[u.as_str()], 2_000);
+    assert_eq!(at(op_chain(true, 4).await).op_state(&q(ts + 100), depth(1)).await.unwrap(), OpState::Landed);
+    assert_eq!(at(op_chain(false, 4).await).op_state(&q(ts + 100), depth(1)).await.unwrap(), OpState::FailedForGood,
+        "the nonce spent without its event");
+    assert_eq!(at(op_chain(false, 3).await).op_state(&q(ts - 1), depth(1)).await.unwrap(), OpState::FailedForGood,
+        "the deadline passed, the nonce unspent");
+    assert_eq!(at(op_chain(false, 3).await).op_state(&q(ts + 100), depth(1)).await.unwrap(), OpState::Pending,
+        "the deadline not yet passed");
+}

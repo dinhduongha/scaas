@@ -189,3 +189,62 @@ async fn the_nonce_under_strict_majority_is_the_agreed_committed_nonce() {
     let f = pool(&[&b, &a, &c], Policy::Failover).await;
     assert_eq!(f.pending_nonce(WHO, Purpose::Plain).await.unwrap(), 9, "control: failover takes the first endpoint's");
 }
+
+// ---------------------------------------------------------------- plan T7: broadcast and transaction state
+
+/// anvil's dev key 0 (its well-known test key), signing in the test only (alloy's local signer is a dev-dependency).
+const DEV0: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+
+async fn transfer(nonce: u64) -> (Vec<u8>, Address) {
+    use alloy::eips::eip2718::Encodable2718;
+    use alloy::network::{EthereumWallet, TransactionBuilder};
+    let signer: alloy::signers::local::PrivateKeySigner = DEV0.parse().unwrap();
+    let from = signer.address();
+    let tx = alloy::rpc::types::TransactionRequest::default().with_from(from).with_to(WHO).with_value(U256::from(1))
+        .with_nonce(nonce).with_chain_id(31337).with_gas_limit(21_000).with_max_fee_per_gas(10_000_000_000)
+        .with_max_priority_fee_per_gas(1);
+    (tx.build(&EthereumWallet::from(signer)).await.unwrap().encoded_2718(), from)
+}
+
+#[tokio::test]
+#[ignore]
+async fn one_signed_transfer_to_two_anvils_is_sent_then_final() {
+    use scaas_rpc::evm::{BroadcastOutcome, Fanout, TxState};
+    let (a, b) = (anvil(), anvil());
+    let p = pool(&[&a, &b], Policy::Failover).await;
+    let (raw, from) = transfer(0).await;
+    let id = alloy::primitives::keccak256(&raw);
+    match p.broadcast(&raw, Fanout::All).await.unwrap() {
+        BroadcastOutcome::Sent { id: got, accepted, .. } => assert_eq!((got, accepted), (id, vec![0, 1])),
+        o => panic!("{o:?}"),
+    }
+    // anvil mines the transaction just after it answers the send: wait (bounded) for its receipt on endpoint 0
+    for _ in 0..100 {
+        if p.first_receipt(id).await.unwrap().is_some() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let s = p.tx_state(id, from, 0, BlockChoice::Depth(2)).await.unwrap();
+    assert!(matches!(s, TxState::Included { number: 1, endpoint: 0, success: true, .. }), "{s:?}");
+    let r = rpc(&a.url, "anvil_mine", json!(["0x2"])).await;
+    assert!(r.get("error").is_none(), "{r}");
+    let s = p.tx_state(id, from, 0, BlockChoice::Depth(2)).await.unwrap();
+    assert!(matches!(s, TxState::Final { number: 1, success: true, .. }), "{s:?}");
+}
+
+/// F24: anvil's answer to the same transaction sent again (its pool holds it: no mining) is "already known", accepted.
+#[tokio::test]
+#[ignore]
+async fn anvils_already_known_answer_is_accepted() {
+    use scaas_rpc::evm::{BroadcastOutcome, Fanout};
+    let a = anvil_with(&["--no-mining"]);
+    let p = pool(&[&a], Policy::Failover).await;
+    let (raw, _) = transfer(0).await;
+    let first = rpc(&a.url, "eth_sendRawTransaction", json!([alloy::hex::encode_prefixed(&raw)])).await;
+    assert!(first.get("result").is_some(), "{first}");
+    let again = rpc(&a.url, "eth_sendRawTransaction", json!([alloy::hex::encode_prefixed(&raw)])).await;
+    let msg = again["error"]["message"].as_str().unwrap_or_default().to_lowercase();
+    assert!(scaas_rpc::evm::ALREADY_KNOWN.iter().any(|k| msg.contains(k)), "anvil's text: {again}");
+    assert!(matches!(p.broadcast(&raw, Fanout::First).await.unwrap(), BroadcastOutcome::Sent { .. }));
+}
