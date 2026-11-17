@@ -1124,8 +1124,12 @@ pub const SCAAS_UA_FEATURE_MLOCK: u64 = 1 << 10;
 /// scaas-ua was built with its test feature `vectors` (Cargo may unify it in): never in a release build. This crate refuses to
 /// compile so, and every binding refuses to load a library with this bit (spec no-decryption-oracle §4.8, Codex C1, T15c2).
 pub const SCAAS_UA_FEATURE_VECTORS: u64 = 1 << 11;
+/// ua-rs-native (spec 2026-11-17-ua-rs-native §10.2): networks 9 to 12, `scaas_ua_sign_message_raw`, the Bitcoin and Polkadot key
+/// calls, the address / SS58 / witness-program calls and the envelope calls; set in every `wallet` build of this round. A binding
+/// refuses a v6 library without it at load.
+pub const SCAAS_UA_FEATURE_NATIVE_NETWORKS: u64 = 1 << 12;
 
-/// The networks of `scaas_ua_wallet_native_key` (clientkeys `NETWORKS`).
+/// The networks of `scaas_ua_wallet_native_key` (clientkeys `NETWORKS`, then `NATIVE_NETWORKS`: 9 to 12, ua-rs-native).
 pub const SCAAS_UA_NETWORK_EVM: u32 = 0;
 pub const SCAAS_UA_NETWORK_COSMOS: u32 = 1;
 pub const SCAAS_UA_NETWORK_HEDERA_ECDSA: u32 = 2;
@@ -1135,7 +1139,25 @@ pub const SCAAS_UA_NETWORK_STELLAR: u32 = 5;
 pub const SCAAS_UA_NETWORK_TON: u32 = 6;
 pub const SCAAS_UA_NETWORK_APTOS: u32 = 7;
 pub const SCAAS_UA_NETWORK_SOLANA: u32 = 8;
-const NETWORKS: [&str; 9] = ["evm", "cosmos", "hedera_ecdsa", "hedera_ed25519", "sui", "stellar", "ton", "aptos", "solana"];
+pub const SCAAS_UA_NETWORK_BITCOIN_P2WPKH: u32 = 9;
+pub const SCAAS_UA_NETWORK_BITCOIN_P2TR: u32 = 10;
+pub const SCAAS_UA_NETWORK_NEAR: u32 = 11;
+pub const SCAAS_UA_NETWORK_POLKADOT: u32 = 12;
+const NETWORKS: [&str; 13] = [
+    "evm",
+    "cosmos",
+    "hedera_ecdsa",
+    "hedera_ed25519",
+    "sui",
+    "stellar",
+    "ton",
+    "aptos",
+    "solana",
+    "bitcoin_p2wpkh",
+    "bitcoin_p2tr",
+    "near",
+    "polkadot",
+];
 /// `coin_type` of `scaas_ua_wallet_native_key`: the network's own SLIP-44 coin type (any other value replaces it: Pi Network is
 /// `SCAAS_UA_NETWORK_STELLAR` with 314159).
 pub const SCAAS_UA_COIN_DEFAULT: u32 = u32::MAX;
@@ -1360,6 +1382,7 @@ pub extern "C" fn scaas_ua_features() -> u64 {
             | b::PQZ_SETS.iter().zip(sets).fold(0, |a, (x, bit)| a | on(*x, bit))
             | on(b::MLOCK, SCAAS_UA_FEATURE_MLOCK)
             | on(b::VECTORS, SCAAS_UA_FEATURE_VECTORS)
+            | on(b::WALLET, SCAAS_UA_FEATURE_NATIVE_NETWORKS)
     })
 }
 
@@ -1490,6 +1513,38 @@ pub extern "C" fn scaas_ua_wallet_native_key(
         }
         let coin = (coin_type != SCAAS_UA_COIN_DEFAULT).then_some(coin_type);
         give(out, ScaasUaKey(Key::Native(handle(w)?.0.native_key(self::network(network)?, index, coin)?)))
+    })
+}
+
+/// Bitcoin key `index` of chain `change` (0 receive, 1 change) of `network` (SCAAS_UA_NETWORK_BITCOIN_P2WPKH or _P2TR),
+/// `coin_type` SCAAS_UA_COIN_DEFAULT, 0 or 1; anything else SCAAS_UA_ERR_ARGUMENT.
+#[no_mangle]
+pub extern "C" fn scaas_ua_wallet_bitcoin_key(
+    w: *const ScaasUaWallet,
+    network: u32,
+    coin_type: u32,
+    change: u32,
+    index: u32,
+    out: *mut *mut ScaasUaKey,
+) -> ScaasUaStatus {
+    run(|| {
+        if out.is_null() {
+            return Err(argument("NULL"));
+        }
+        let coin = (coin_type != SCAAS_UA_COIN_DEFAULT).then_some(coin_type);
+        give(out, ScaasUaKey(Key::Native(handle(w)?.0.bitcoin_key(self::network(network)?, coin, change, index)?)))
+    })
+}
+
+/// The Polkadot key of the junction path `path` (NUL-terminated UTF-8; "" the bare account): its grammar's refusals and a 65th
+/// path are SCAAS_UA_ERR_ARGUMENT.
+#[no_mangle]
+pub extern "C" fn scaas_ua_wallet_polkadot_key(w: *const ScaasUaWallet, path: *const c_char, out: *mut *mut ScaasUaKey) -> ScaasUaStatus {
+    run(|| {
+        if out.is_null() {
+            return Err(argument("NULL"));
+        }
+        give(out, ScaasUaKey(Key::Native(handle(w)?.0.polkadot_key(text(path)?)?)))
     })
 }
 
@@ -1952,6 +2007,82 @@ pub extern "C" fn scaas_ua_sign_digest_raw(
     run(|| match &handle(k)?.0 {
         Key::Ua(_) => Err(fail(SCAAS_UA_ERR_RAW_DIGEST_REFUSED)),
         Key::Native(n) => write_var(sig, sig_len, &n.sign_digest(arr(digest32)?, uw::AllowRawDigest)?),
+    })
+}
+
+/// A native key's signature of a raw message (1 to 131,072 bytes; ed25519 and sr25519 keys only; no SCaaS off-chain envelope, no
+/// EIP-7702 / EIP-712 prefix: SCAAS_UA_ERR_ARGUMENT), by this call's own name; a UA key: SCAAS_UA_ERR_RAW_DIGEST_REFUSED.
+#[no_mangle]
+pub extern "C" fn scaas_ua_sign_message_raw(
+    k: *const ScaasUaKey,
+    msg: *const u8,
+    msg_len: usize,
+    sig: *mut u8,
+    sig_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| match &handle(k)?.0 {
+        Key::Ua(_) => Err(fail(SCAAS_UA_ERR_RAW_DIGEST_REFUSED)),
+        Key::Native(n) => write_var(sig, sig_len, &n.sign_message(bytes(msg, msg_len)?, uw::AllowRawDigest)?),
+    })
+}
+
+/// The envelope calls (ua-rs-native spec §8.1): the chain's signing prefix or hash over the transaction bytes the app's encoder
+/// made, each on its own network's key only (else SCAAS_UA_ERR_ARGUMENT); a UA key: SCAAS_UA_ERR_RAW_DIGEST_REFUSED.
+fn envelope_key<'a>(k: *const ScaasUaKey) -> R<&'a uw::NativeKey> {
+    match &handle(k)?.0 {
+        Key::Ua(_) => Err(fail(SCAAS_UA_ERR_RAW_DIGEST_REFUSED)),
+        Key::Native(n) => Ok(n),
+    }
+}
+/// NEAR: ed25519 over `sha256(tx_borsh)`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_sign_near_transaction(k: *const ScaasUaKey, tx: *const u8, tx_len: usize, sig: *mut u8, sig_len: *mut usize) -> ScaasUaStatus {
+    run(|| write_var(sig, sig_len, &envelope_key(k)?.sign_near_transaction(bytes(tx, tx_len)?, uw::AllowRawDigest)?))
+}
+/// Sui: ed25519 over `blake2b-256(0x00 0x00 0x00 ‖ tx_bcs)`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_sign_sui_transaction(k: *const ScaasUaKey, tx: *const u8, tx_len: usize, sig: *mut u8, sig_len: *mut usize) -> ScaasUaStatus {
+    run(|| write_var(sig, sig_len, &envelope_key(k)?.sign_sui_transaction(bytes(tx, tx_len)?, uw::AllowRawDigest)?))
+}
+/// Stellar: ed25519 over `sha256(network_id32 ‖ 0x00000002 ‖ tx_xdr)`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_sign_stellar_transaction(
+    k: *const ScaasUaKey,
+    network_id32: *const u8,
+    tx: *const u8,
+    tx_len: usize,
+    sig: *mut u8,
+    sig_len: *mut usize,
+) -> ScaasUaStatus {
+    run(|| write_var(sig, sig_len, &envelope_key(k)?.sign_stellar_transaction(arr(network_id32)?, bytes(tx, tx_len)?, uw::AllowRawDigest)?))
+}
+/// Hedera Ed25519: ed25519 over the transaction's `bodyBytes`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_sign_hedera_transaction(k: *const ScaasUaKey, tx: *const u8, tx_len: usize, sig: *mut u8, sig_len: *mut usize) -> ScaasUaStatus {
+    run(|| write_var(sig, sig_len, &envelope_key(k)?.sign_hedera_transaction(bytes(tx, tx_len)?, uw::AllowRawDigest)?))
+}
+
+/// A native key's address as its network prints it (NUL-terminated); a UA key or a network with no address (`ton`,
+/// `hedera_ed25519`): SCAAS_UA_ERR_ARGUMENT.
+#[no_mangle]
+pub extern "C" fn scaas_ua_key_address(k: *const ScaasUaKey, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    run(|| write_str(out, out_len, &native_key(handle(k)?)?.address().ok_or_else(|| argument("no address"))?))
+}
+
+/// A Polkadot key's SS58 address at `prefix` (0 to 16,383, not 46 / 47; NUL-terminated); any other key: SCAAS_UA_ERR_ARGUMENT.
+#[no_mangle]
+pub extern "C" fn scaas_ua_key_ss58_address(k: *const ScaasUaKey, prefix: u16, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    run(|| write_str(out, out_len, &native_key(handle(k)?)?.ss58_address(prefix)?))
+}
+
+/// A Bitcoin key's witness program: `*version` 0 and `HASH160(pk)` (P2WPKH) or 1 and `x(Q)` (P2TR); any other key:
+/// SCAAS_UA_ERR_ARGUMENT.
+#[no_mangle]
+pub extern "C" fn scaas_ua_key_witness_program(k: *const ScaasUaKey, version: *mut u8, out: *mut u8, out_len: *mut usize) -> ScaasUaStatus {
+    run(|| {
+        let (v, p) = native_key(handle(k)?)?.witness_program().ok_or_else(|| argument("not a Bitcoin key"))?;
+        put(version, v)?;
+        write_var(out, out_len, &p)
     })
 }
 
@@ -2941,7 +3072,9 @@ mod tests {
         sets.iter().for_each(|(bit, on)| assert_eq!(has(*bit), *on));
         assert!(!has(SCAAS_UA_FEATURE_EXTERNAL), "MD-13: no external key in a release build");
         assert!(!has(SCAAS_UA_FEATURE_VECTORS), "C1: never a vectors build");
-        assert_eq!(f >> 12, 0, "no bit past SCAAS_UA_FEATURE_VECTORS");
+        // ua-rs-native (spec §10.2): bit 12 in every wallet build, nothing past it
+        assert!(has(SCAAS_UA_FEATURE_NATIVE_NETWORKS), "the native networks");
+        assert_eq!(f >> 13, 0, "no bit past SCAAS_UA_FEATURE_NATIVE_NETWORKS");
         let w = uw::Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "").unwrap();
         let falcon = w.ua_key(0x0132, 0, 0);
         assert_eq!(has(SCAAS_UA_FEATURE_FALCON), falcon.is_ok());

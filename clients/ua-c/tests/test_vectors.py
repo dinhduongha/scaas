@@ -969,10 +969,12 @@ class GovernanceBits(unittest.TestCase):
 
 KEYS, SIGN, KEMV, SEAL, VAULT = (json.loads((VEC / f).read_text()) for f in ('keys.json', 'sign.json', 'kem.json', 'seal.json', 'vault.json'))
 MN = {m['id']: m for m in KEYS['mnemonics']}
-NETWORKS = ['evm', 'cosmos', 'hedera_ecdsa', 'hedera_ed25519', 'sui', 'stellar', 'ton', 'aptos', 'solana']
+NETWORKS = ['evm', 'cosmos', 'hedera_ecdsa', 'hedera_ed25519', 'sui', 'stellar', 'ton', 'aptos', 'solana',
+            'bitcoin_p2wpkh', 'bitcoin_p2tr', 'near', 'polkadot']  # ua-rs-native: 9 to 12 appended
+NNET = NETWORKS
 COIN_DEFAULT, MNEMONIC_MAX, KEM_CT = 0xFFFFFFFF, 256, 1568
 FEATURES = ['wallet', 'pq', 'falcon', 'zether', 'pqz', 'pqz-set-n2048-kmax1024', 'pqz-set-n2304-kmax4096', 'pqz-set-n2560-kmax16384',
-            'pqz-set-n2816-kmax65536', 'external', 'mlock', 'vectors']
+            'pqz-set-n2816-kmax65536', 'external', 'mlock', 'vectors', 'native-networks']
 FEATURE = {n: 1 << i for i, n in enumerate(FEATURES)}
 # appended after SCAAS_UA_ERR_UNAUTHORIZED (20), no renumbering; a KEM key of a non-holder is the existing UAKemHolder (12)
 STATUS = {n: i for i, n in enumerate(['SealOpen', 'SealVersion', 'KemCheck', 'Aead', 'VaultOpen', 'VaultParams', 'VaultVersion',
@@ -1183,7 +1185,8 @@ class WalletAbi(WalletCase):
             'sign_ua key NULL': L.sign_ua(None, bytes(32), bytes(32), o, C.byref(n)),
             'from_mnemonic words NULL': L.wallet_from_mnemonic(None, None, C.byref(P())),
             'open_container expect NULL': L.open_container(None, b'{}', None, None, None, o, C.byref(n)),
-            'unknown network': L.wallet_native_key(self.w('pq_kat'), 9, 0, COIN_DEFAULT, C.byref(P())),
+            # ua-rs-native: 9 to 12 are networks now (spec §10.2); 13 is the first unknown
+            'unknown network': L.wallet_native_key(self.w('pq_kat'), 13, 0, COIN_DEFAULT, C.byref(P())),
         }.items():
             with self.subTest(label):
                 self.assertEqual(status, ERR_ARGUMENT)
@@ -2337,6 +2340,134 @@ class WalletPqzBackup(WalletCase):
         self.assertEqual(status(0, eph, 2), 'UAArgument', 'an ephemeral key')
         ms = (Recipient * 1)(Recipient(0x0120, self.msig_kd, len(self.msig_kd), 0, self.kpk[0], len(self.kpk[0]), False))
         self.assertEqual(status(1, ms, 1), 'UAKemHolder', 'MD-11: an msig holds no KEM key')
+
+
+
+# ---------------------------------------------------------------------------------------------------------------------------
+# ua-rs-native T10 (spec 2026-11-17-ua-rs-native §10.2): networks 9 to 12, bit 12, the raw-message, Bitcoin, Polkadot, address,
+# SS58, witness-program and envelope calls over smartcontracts/vectors/native/native.json.
+# ---------------------------------------------------------------------------------------------------------------------------
+NATIVE = json.loads((VEC.parent / 'native' / 'native.json').read_text())
+NMN = {m['id']: m for m in NATIVE['mnemonics']}
+for name, res, args in [
+    ('sign_message_raw', st, [P, u8, sz, P, P]), ('wallet_bitcoin_key', st, [P, u32, u32, u32, u32, P]),
+    ('wallet_polkadot_key', st, [P, u8, P]), ('key_address', st, [P, P, P]), ('key_ss58_address', st, [P, u16, P, P]),
+    ('key_witness_program', st, [P, P, P, P]), ('sign_near_transaction', st, [P, u8, sz, P, P]),
+    ('sign_sui_transaction', st, [P, u8, sz, P, P]), ('sign_stellar_transaction', st, [P, u8, u8, sz, P, P]),
+    ('sign_hedera_transaction', st, [P, u8, sz, P, P]),
+]:
+    f = getattr(LIB, 'scaas_ua_' + name)
+    f.restype, f.argtypes = res, args
+    setattr(L, name, f)
+
+
+def nmsg(r):
+    return bytes([int(r['messageRepeat']['byte'], 16)]) * r['messageRepeat']['length'] if 'messageRepeat' in r else bytes.fromhex(r['message'])
+
+
+class WalletNative(WalletCase):
+    def nw(self, mid):
+        key = 'native:' + mid
+        if key not in self.wallets:
+            self.wallets[key] = handle(L.wallet_from_mnemonic, NMN[mid]['words'].encode(), NMN[mid]['passphrase'].encode())
+        return self.wallets[key]
+
+    def nkey(self, mid, net, index=0, coin=None, change=None, path=None):
+        w = self.nw(mid)
+        if path is not None:
+            k = handle(L.wallet_polkadot_key, w, path.encode())
+        elif change is not None:
+            k = handle(L.wallet_bitcoin_key, w, NNET.index(net), COIN_DEFAULT if coin is None else coin, change, index)
+        else:
+            k = handle(L.wallet_native_key, w, NNET.index(net), index, COIN_DEFAULT if coin is None else coin)
+        self.addCleanup(L.key_free, k)
+        return k
+
+    def text(self, fn, *args):
+        status, b = sig_of(fn, *args)
+        return status, b.rstrip(b'\0').decode() if status == '' else None
+
+    def test_networks_and_feature_bit(self):
+        self.assertEqual(NNET, NATIVE['networks'])
+        self.assertTrue(L.features() & FEATURE['native-networks'])
+
+    def test_addresses_witness_programs_ss58(self):
+        n = 0
+        for r in NATIVE['addresses']:
+            with self.subTest(m=r['mnemonic'], net=r['network'], coin=r['coinType'], change=r['change'], index=r['index']):
+                k = self.nkey(r['mnemonic'], r['network'], r['index'], r['coinType'], r['change'] if r['network'].startswith('bitcoin') else None)
+                self.assertEqual(var(L.key_data, k).hex(), r['publicKey'])
+                self.assertEqual(self.text(L.key_address, k), ('', r['address']))
+                if r['witnessProgram']:
+                    v, n_ = C.c_uint8(), sz(64)
+                    o = C.create_string_buffer(64)
+                    ok(L.key_witness_program(k, C.byref(v), o, C.byref(n_)))
+                    self.assertEqual((v.value, o.raw[:n_.value].hex()), (r['witnessProgram']['version'], r['witnessProgram']['program']))
+                else:
+                    self.assertEqual(L.key_witness_program(k, C.byref(C.c_uint8()), None, C.byref(sz(0))), ERR_ARGUMENT)
+                for p, a in (r.get('ss58') or {}).items():
+                    self.assertEqual(self.text(L.key_ss58_address, k, int(p)), ('', a))
+                n += 1
+        self.assertEqual(n, 114)
+
+    def test_polkadot_paths(self):
+        for r in NATIVE['polkadotPaths']:
+            with self.subTest(m=r['mnemonic'], path=r['path']):
+                self.assertEqual(var(L.key_data, self.nkey(r['mnemonic'], 'polkadot', path=r['path'])).hex(), r['publicKey'])
+
+    def test_deterministic_signature_and_envelope_rows(self):
+        n = 0
+        for r in NATIVE['signatures'] + NATIVE['envelopes']:
+            if r['mode'] != 'deterministic':
+                continue
+            with self.subTest(r['id']):
+                k = self.nkey(r['mnemonic'], r['network'], r['index'], r['coinType'], r['change'] if r['network'].startswith('bitcoin') else None)
+                m = nmsg(r)
+                sig = {'sign_digest': lambda: var(L.sign_digest_raw, k, m), 'sign_message': lambda: var(L.sign_message_raw, k, m, len(m)),
+                       'sign_near_transaction': lambda: var(L.sign_near_transaction, k, m, len(m)),
+                       'sign_sui_transaction': lambda: var(L.sign_sui_transaction, k, m, len(m)),
+                       'sign_stellar_transaction': lambda: var(L.sign_stellar_transaction, k, bytes.fromhex(r.get('networkId', '')), m, len(m)),
+                       'sign_hedera_transaction': lambda: var(L.sign_hedera_transaction, k, m, len(m))}[r['call']]()
+                self.assertEqual(sig.hex(), r['signature'])
+                n += 1
+        self.assertEqual(n, 32 + 12, "3 P2WPKH, 28 ed25519 messages, a NEAR digest; 12 envelopes")
+
+    def test_refusal_rows_of_the_c_surface(self):
+        calls = {'sign_message': L.sign_message_raw, 'sign_near_transaction': L.sign_near_transaction, 'sign_sui_transaction': L.sign_sui_transaction,
+                 'sign_hedera_transaction': L.sign_hedera_transaction}
+        n = 0
+        for r in NATIVE['refusals']:
+            for a, want in ((r['args'], ERR_ARGUMENT), (r['accepted'], OK)):
+                with self.subTest(r['id'], want=want):
+                    if r['call'] in calls:
+                        k = self.nkey(a['mnemonic'], a['network'], path=a.get('path'))
+                        m = nmsg(a)
+                        self.assertEqual(calls[r['call']](k, m, len(m), C.create_string_buffer(64), C.byref(sz(64))), want)
+                    elif r['call'] == 'polkadot_key':
+                        self.assertEqual(L.wallet_polkadot_key(self.nw(a['mnemonic']), a['path'].encode(), C.byref(P())), want)
+                    elif r['call'] == 'ss58':
+                        k = self.nkey(a['mnemonic'], 'polkadot', path='')
+                        self.assertEqual(L.key_ss58_address(k, a['prefix'], C.create_string_buffer(64), C.byref(sz(64))), want)
+                    elif r['call'] == 'bitcoin_key':
+                        self.assertEqual(L.wallet_bitcoin_key(self.nw(a['mnemonic']), NNET.index(a['network']), COIN_DEFAULT, a['change'], 0, C.byref(P())), want)
+                    else:
+                        continue
+                    n += 1
+        self.assertGreaterEqual(n, 2 * 40)
+
+    def test_ua_key_raw_calls_are_RawDigestRefused_native_accepted(self):
+        ua = self.key('pq_kat', 0x0102)
+        o = C.create_string_buffer(64)
+        for label, status in {
+            'sign_message_raw': L.sign_message_raw(ua, b'\x01', 1, o, C.byref(sz(64))),
+            'sign_near_transaction': L.sign_near_transaction(ua, b'\x01', 1, o, C.byref(sz(64))),
+            'sign_stellar_transaction': L.sign_stellar_transaction(ua, bytes(32), b'\x01', 1, o, C.byref(sz(64))),
+        }.items():
+            with self.subTest(label):
+                self.assertEqual(name_of(status), 'UARawDigestRefused')
+        self.assertEqual(L.sign_message_raw(self.nkey('pq_kat', 'solana'), b'\x01', 1, o, C.byref(sz(64))), OK)
+        self.assertEqual(L.key_address(ua, C.create_string_buffer(64), C.byref(sz(64))), ERR_ARGUMENT, 'a UA key has no address')
+
 
 if __name__ == '__main__':
     unittest.main()
