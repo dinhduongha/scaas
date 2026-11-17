@@ -942,8 +942,8 @@ struct Plan {
 pub struct SolanaAdapter {
     key: String,
     network: Key,
-    rpcs: Vec<String>,
-    http: reqwest::Client,
+    /// the RPC endpoints (scaas-rpc T16: the family client, bounded, 20 s per request)
+    net: scaas_rpc::solana::Solana,
     program: Key,
     max_cu: u32,
     max_priority: u64,
@@ -992,8 +992,8 @@ impl SolanaAdapter {
         Ok(Self {
             key: cfg.chain_key(),
             network,
-            rpcs: cfg.rpc_urls.clone(),
-            http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
+            net: scaas_rpc::solana::Solana::new(scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None)
+                .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?, &b58(&network)),
             program,
             max_cu: n("max_cu", DEFAULT_MAX_CU as u64).clamp(10_000, 1_400_000) as u32,
             max_priority: n("max_priority_lamports", DEFAULT_MAX_PRIORITY),
@@ -1013,22 +1013,22 @@ impl SolanaAdapter {
         })
     }
 
-    async fn rpc_at(&self, url: &str, method: &str, params: Value) -> Result<Value> {
-        let body = json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
-        let v: Value = self.http.post(url).json(&body).send().await?.error_for_status()?.json().await?;
-        if let Some(e) = v.get("error") {
-            return Err(RpcError {
+    /// One JSON-RPC call to endpoint `i` (scaas-rpc T16: the family client); an error answer is the classifier's `RpcError`.
+    async fn rpc_at(&self, i: usize, method: &str, params: Value) -> Result<Value> {
+        match self.net.call(i, method, params).await {
+            Ok(v) => Ok(v),
+            Err(scaas_rpc::family::FamilyError::Rpc { error: e, .. }) => Err(RpcError {
                 code: e["code"].as_i64().unwrap_or(0),
                 message: e["message"].as_str().unwrap_or_default().to_string(),
                 data: e.get("data").cloned().unwrap_or(Value::Null),
             }
-            .into());
+            .into()),
+            Err(e) => Err(e.into()),
         }
-        Ok(v["result"].clone())
     }
 
     async fn rpc(&self, method: &str, params: Value) -> Result<Value> {
-        self.rpc_at(&self.rpcs[0], method, params).await
+        self.rpc_at(0, method, params).await
     }
 
     async fn account_data(&self, k: &Key, commitment: &str) -> Result<Option<(Vec<u8>, Key)>> {
@@ -1153,16 +1153,13 @@ impl SolanaAdapter {
     }
 
     /// Block được SẢN XUẤT cuối cùng ≤ `slot` (slot bị bỏ qua là bình thường trên Solana) và blockhash của nó.
-    async fn produced_at_or_before(&self, url: &str, slot: u64) -> Result<(u64, String)> {
-        let blocks = self.rpc_at(url, "getBlocks", json!([slot.saturating_sub(2048), slot, {"commitment": "finalized"}])).await?;
-        let s = blocks.as_array().and_then(|a| a.last()).and_then(|v| v.as_u64()).ok_or_else(|| anyhow!("no block produced in the 2048 slots up to {slot}"))?;
-        Ok((s, self.blockhash_at(url, s).await?))
+    async fn produced_at_or_before(&self, i: usize, slot: u64) -> Result<(u64, String)> {
+        let b = self.net.produced_at_or_before(i, slot).await?;
+        Ok((b.slot, hx(&key(&b.hash)?)))
     }
 
-    async fn blockhash_at(&self, url: &str, slot: u64) -> Result<String> {
-        let b = self.rpc_at(url, "getBlock", json!([slot, {"commitment": "finalized", "transactionDetails": "none",
-            "rewards": false, "maxSupportedTransactionVersion": 1}])).await?;
-        Ok(hx(&key(b["blockhash"].as_str().unwrap_or_default())?))
+    async fn blockhash_at(&self, i: usize, slot: u64) -> Result<String> {
+        Ok(hx(&key(&self.net.blockhash_at(i, slot).await?)?))
     }
 
     async fn priority_fee(&self, writable: &[Key], cu: u32) -> u64 {
@@ -1339,21 +1336,19 @@ impl ChainAdapter for SolanaAdapter {
     /// Đỉnh `finalized` (min slot giữa các endpoint) quy về block sản xuất cuối ≤ nó; quorum = cùng hash.
     async fn final_head(&self) -> Result<Option<Head>> {
         let mut slots = Vec::new();
-        for url in &self.rpcs {
-            if let Ok(v) = self.rpc_at(url, "getSlot", json!([{"commitment": "finalized"}])).await {
-                if let Some(s) = v.as_u64() {
-                    slots.push(s);
-                }
+        for i in 0..self.net.client.len() {
+            if let Ok(s) = self.net.finalized_slot(i).await {
+                slots.push(s);
             }
         }
         if slots.len() < self.quorum {
             return Ok(None);
         }
         let slot = *slots.iter().min().unwrap();
-        let (height, hash) = self.produced_at_or_before(&self.rpcs[0], slot).await?;
+        let (height, hash) = self.produced_at_or_before(0, slot).await?;
         let mut agree = 1;
-        for url in &self.rpcs[1..] {
-            if self.blockhash_at(url, height).await.ok().as_deref() == Some(hash.as_str()) {
+        for i in 1..self.net.client.len() {
+            if self.blockhash_at(i, height).await.ok().as_deref() == Some(hash.as_str()) {
                 agree += 1;
             }
         }
@@ -1361,7 +1356,7 @@ impl ChainAdapter for SolanaAdapter {
     }
 
     async fn block_hash(&self, height: u64) -> Result<String> {
-        Ok(self.produced_at_or_before(&self.rpcs[0], height).await?.1)
+        Ok(self.produced_at_or_before(0, height).await?.1)
     }
 
     /// Phân trang lùi `getSignaturesForAddress(program)` (finalized) tới slot < `from` hoặc trang rỗng; hết lịch sử mà chưa tới `from`
@@ -1425,7 +1420,7 @@ impl ChainAdapter for SolanaAdapter {
             let bh = match hashes.get(&slot) {
                 Some(h) => h.clone(),
                 None => {
-                    let h = self.blockhash_at(&self.rpcs[0], slot).await?;
+                    let h = self.blockhash_at(0, slot).await?;
                     hashes.insert(slot, h.clone());
                     h
                 }
@@ -2249,5 +2244,25 @@ mod tests {
             m.op = op;
             prop_assert_eq!(MetaOp::decode(&m.encode()).unwrap(), m);
         }
+    }
+
+    /// scaas-rpc T16a: a JSON-RPC error answer reaches the classifier as the adapter's `RpcError`, its code, message and data
+    /// whole (the family client keeps the error object).
+    #[tokio::test]
+    async fn an_error_answer_reaches_the_classifier_whole() {
+        let app = axum::Router::new().route("/", axum::routing::post(|axum::Json(b): axum::Json<Value>| async move {
+            axum::Json(json!({"jsonrpc": "2.0", "id": b["id"], "error": {"code": -32002, "message": "Transaction simulation failed",
+                "data": {"err": "BlockhashNotFound"}}}))
+        }));
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let mut params = toml::Table::new();
+        params.insert("program_id".into(), PROGRAM.into());
+        let cfg = ChainCfg { family: "solana".into(), network: Some(NETWORK.into()), rpc_urls: vec![url], lanes: vec![0], params, ..Default::default() };
+        let a = SolanaAdapter::new(&cfg, &[lane0()]).unwrap();
+        let e = a.rpc("sendTransaction", json!([])).await.unwrap_err();
+        let r = e.downcast_ref::<RpcError>().expect("the classifier's RpcError");
+        assert_eq!((r.code, r.message.as_str(), &r.data), (-32002, "Transaction simulation failed", &json!({"err": "BlockhashNotFound"})));
     }
 }

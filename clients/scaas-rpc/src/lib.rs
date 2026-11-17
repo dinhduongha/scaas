@@ -16,6 +16,8 @@ pub mod http;
 #[cfg(feature = "node-client")]
 pub mod node;
 pub mod pool;
+#[cfg(feature = "solana")]
+pub mod solana;
 #[cfg(feature = "soroban")]
 pub mod soroban;
 
