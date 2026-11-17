@@ -10543,6 +10543,8 @@ Change (owner 2026-11-17, R13 ("agreed to reverse the dependency") and R14 ("OK,
 **Cost if wrong.** A short seed made by the SDK; exposed child words handed out again; a hidden set proven by a file or a log.
 **Source.** Owner 2026-11-11 "Seeds sinh ra luôn dùng 24 words trở lên", "nhận kèm cảnh báo", "đồng ý, sửa theo đó"; TODO 8b; research [sdk-keys-and-derivation.md](research/sdk-keys-and-derivation.md) §1, §3.4, §6.2; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §6.4, §6.5.
 
+Change (owner 2026-11-17, "OK, all four points as proposed", on the `scaas-tui` review's D9 (c); owner: yes; status: SPECIFIED): `vault.word_in_list(word)`, one BIP-39 English word as `SecretBytes`, checked inside `ua-rs`, a boolean out; no word list leaves the SDK.
+
 ### CLI-SDK-05 — A seed set derived from a classical key is marked classical-rooted and may carry every kind
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-05 · superseded-by: —
 
@@ -10570,6 +10572,8 @@ Change (owner 2026-11-17, R13 ("agreed to reverse the dependency") and R14 ("OK,
 **Cost if wrong.** Two wallets tied by one KEM or PQZ key; a key the clientkeys vectors do not reproduce.
 **Source.** TODO 8b; CLI-SGN-40; research [sdk-keys-and-derivation.md](research/sdk-keys-and-derivation.md) §6.3, §7.2; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §5, §7.
 
+Change (owner 2026-11-17, "OK, all four points as proposed"; owner: yes; status: SPECIFIED, nothing built): **sponsored registration.** A payment to an unregistered derived UA stays refused (CTR-UA-06's Change on `ua-rs-sign`); the SDK answers `ReceiverUnregistered` and offers the flow: the receiver's app makes its portable registration blob (`account.registration_blob`: the `register` arguments with the PoP, which binds no caller (CTR-UA-07), and the KEM record when set); the sender's app (`account.prepare_submit_registration(blob, chain, expected_ua)`) checks, before anything is sent, that the blob's UA equals the intended receiver and the UA its key data gives (`RegistrationUaMismatch`), that the kind is enabled on the chain (`RegistrationKindDisabled`), that the PoP verifies locally (`RegistrationPopInvalid`), and that the KEM record is present and verifies when `kemPkHash` is set (`RegistrationKemMissing`, `setKemKey` follows); it submits the registration paying the gas and prepares the payment only after the registration lands. The call names and checks are controller proposals the owner may override.
+
 ### CLI-SDK-08 — One entry point per signed struct and domain; the user reviews every field before it is signed; calls are decoded
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-08 · superseded-by: —
 
@@ -10579,6 +10583,8 @@ Change (owner 2026-11-17, R13 ("agreed to reverse the dependency") and R14 ("OK,
 **Cost if wrong.** A front-end signs what it did not show, or a binding grows a generic "sign this" call.
 **Source.** AGENTS.md rules; TODO 11 (terminal UI rules); CLI-UAL-13, CLI-SGN-29, CLI-SGN-40; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §13.1, §13.2, §21.
 
+Change (owner 2026-11-17, "OK, all four points as proposed", on the `scaas-tui` review's D9 (b); owner: yes; status: SPECIFIED): `review()` lists every token or market the operation touches, with its address and its listed or `unlisted` mark, as `Derived` rows.
+
 ### CLI-SDK-09 — An operation is quoted and confirmed, written ahead, then sent to a gateway that takes it or relayed by the holder
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-09 · superseded-by: —
 
@@ -10587,6 +10593,8 @@ Change (owner 2026-11-17, R13 ("agreed to reverse the dependency") and R14 ("OK,
 **Why.** Every entry is relayable by anyone, so the holder may relay its own signed entry and pay gas; no end-user build holds a job-API key (NODE-ADM-06). Fable F6 (an endpoint's huge fee spent the payer's balance unseen), F5 (a send before the record loses an operation that lands), F22, F23 (no gas assumption: EIP-7825, EIP-8037), F36 (a gateway-queued operation never sent).
 **Cost if wrong.** An entry the app cannot send at all; a payer drained by a lying endpoint; an operation that lands while the SDK has no record of it.
 **Source.** NODE-GW-03, NODE-ADM-06, CLI-RPC-08; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §13.3, §13.4.
+
+Change (owner 2026-11-17, "OK, all four points as proposed", on the `scaas-tui` spec review's ask D9 (a); owner: yes; status: SPECIFIED): old, `submit` ran to `sent`; new, `submit` returns the `OpId` once the row is written, and every send result after that arrives as `OpState`, never as an `Err` of `submit` (an `Err` means nothing was signed or written), so no caller takes a send error for "not paid" and pays again.
 
 ### CLI-SDK-10 — The SDK is a reading layer under the seven requirements; a decryption failure never reaches a source; a verdict comes before a send
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-10 · superseded-by: —
@@ -10605,6 +10613,8 @@ Change (owner 2026-11-17, R13 ("agreed to reverse the dependency") and R14 ("OK,
 **Why.** `scaas-rpc`'s transport and the Matrix stack run on tokio; a generator that polls a future from a foreign executor enters no reactor (Fable F10); a pull queue works over every generator, a callback per event does not.
 **Cost if wrong.** A panic for want of a reactor, two runtimes in one app, or a UI thread blocked by a slow subscriber.
 **Source.** [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §14.
+
+Change (owner 2026-11-17, "OK, all four points as proposed", on the `scaas-tui` review's D9 (e); owner: yes; status: SPECIFIED): the event `StateChanged { rev }` when another process changed `sdk.state` (a cheap read of the item's `rev` on each watch poll, at once where the `SecureStore` reports changes), and `Sdk::state_rev()` on demand.
 
 ### CLI-SDK-12 — Bindings are generated from the SDK's one API; an app links one Rust library
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-12 · superseded-by: —
@@ -10670,6 +10680,8 @@ Change (coordinator 2026-11-17, controller call, owner: no; the `ua-rs-native` c
 **Cost if wrong.** A passphrase in a process list or a history file.
 **Source.** TODO 8b; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §20.
 
+Change (owner 2026-11-17, "OK, all four points as proposed", on the `scaas-tui` review's D9 (d); owner: yes; status: SPECIFIED): the CLI's profiles are pinned: compiled in, or shipped beside the binary with a digest it pins, in a release build; a `--profiles` file only in a `dev-profiles` build, which says so on every run; an overlay may add a credential by file and lower caps, never change a `chain_uid`, a contract or an RPC list. Old: "Profiles from a file", and the CLI as "the base `scaas-tui` reuses for its commands"; new: the CLI and `scaas-tui` share call and action names, and neither calls the other.
+
 ### CLI-SDK-18 — An operation ends only on a chain fact
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-18 · superseded-by: —
 
@@ -10689,6 +10701,8 @@ Change (coordinator 2026-11-17, controller call, owner: no; the `ua-rs-native` c
 **Source.** owner 2026-11-17 (relayed by the coordinator); [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §1 (R13, R14), §12.1, §16.2; the pqvault spec's revision 4.
 
 Change (coordinator, 2026-11-17, the Fable review r2 of 2026-11-17 (`scratchpad/pqvault-review/20261117-17-fable-fable-high-spec-r2.md` in the pqvault worktree, kept outside the tracked files), finding R8; status: SPECIFIED; the owner sees the wording since it touches how R14 is recorded): old, "the SDK has no module, feature, type, error or event named after an app"; new, the SDK names no app **core** and holds no app **logic**; the record types of SCaaS contracts (`PqChat`'s among them, behind `pqchat-records`) are named typed SDK entries as every SCaaS contract's are.
+
+Change (owner 2026-11-17, "OK, all four points as proposed", relayed by the coordinator; owner: yes; status: SPECIFIED): the review r2 R8 wording above is **accepted by the owner**: the SDK names no app core and holds no app logic, and it holds named, typed signing entries for SCaaS contracts' record types (`PqChat`'s behind the feature `pqchat-records`).
 
 ### CLI-SDK-20 — The `app_core` surface: key handles only, app record signing with named refusals; else the app core stays inside the SDK
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-20 · superseded-by: —
@@ -10715,6 +10729,8 @@ Change (coordinator, 2026-11-17, findings K4 and K5 of Fable's `pqchat-core` spe
 Change (owner 2026-11-17, "Ok, as proposed, settle the whole table"; status: SPECIFIED): every question of the spec's §25 is answered by its recommendation. **Q-A1 (a)**: in the `scaas` build every native chain signs through the SDK once `ua-rs-native` merges (EVM through `EvmTx`, every other chain through the guarded raw entry), no second holder of the mnemonic. **Q-B1 (a)**: UniFFI with `uniffi-bindgen-cpp`, decided by the spike (plan T3); (b) the fallback if C++ cannot carry the callbacks or async; no SDK C ABI this round. **Q-S1 (a)**: self-relay from the holder's own native EOA now, with the reviewed and capped quote, the delegated-payer check and the PQ registration split; (b), the node adding these entries to door A, asked of the node's next round. **Q-S2 (a)**: one keystore item, vault v1 objects as JSON text strings, `rev`, `backup`, the index MAC, the store lock, `keystore.prev`, the anchor. **Q-S3 (a)**: modules `vault` (seeds) and a future `pqvault` (notes). **Q-S4 (c)**: no parent id, set index or origin address stored; `class`, the origin type and the warnings under the index MAC; the BIP-85 high-water mark in the parent's sealed manifest. **Q-S6 (a)**: the account list public in the container, only with the MAC and the unverified rule. **Q-K4–Q-K18**: the defaults of §25's table, Q-K4 with `m = 128 MiB`; Q-K18's label string and salt constant fixed by plan T6 with vectors. **rpc Q6 (b)** (CLI-RPC-06's Change). The calls CLI-SDK-31 records under these questions ((1), (2), (3), (6), (8), (10), (11)) are owner rulings from this date.
 
 Change (owner 2026-11-17, after the table above was settled; status: SPECIFIED): two more rulings. **(13)** R13, "agreed to reverse the dependency": the SDK is the generic platform, app cores depend on it, the SDK knows nothing about PqVault, scaas-app links the SDK and the app cores in its one library; it replaces (12)'s placeholder and Q-S3's future `pqvault` module (CLI-SDK-19). **(14)** R14, "OK, reverse pqchat-core too": `pqchat-core` depends on the SDK like any app core and takes the app's live Matrix client itself; the SDK's `chat` module, its store attachment, the `chat` feature and the runtime requirement for chat leave the SDK; it replaces (1)'s `chat` → `pqchat-core` and (9)'s last clause (CLI-SDK-14).
+
+Change (owner 2026-11-17, "OK, all four points as proposed"; status: SPECIFIED): three more rulings. **(15)** the review r2 R8 wording accepted: named typed signing entries for SCaaS contracts' record types, `PqChat`'s behind `pqchat-records` (CLI-SDK-19). **(16)** receiving to an unregistered derived UA stays refused; the sponsored registration flow (CLI-SDK-07). **(17)** the six asks of the `scaas-tui` spec review (its §15 D9) taken as proposed: `submit` returns once the row is written (CLI-SDK-09), the review lists every token touched (CLI-SDK-08), a word-in-list check (CLI-SDK-04), `StateChanged` (CLI-SDK-11), the §20 CLI wording and pinned CLI profiles (CLI-SDK-17).
 
 ### CLI-SDK-31 — Controller calls of the SDK spec, 2026-11-17
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: decisions.md#CLI-SDK-31 · superseded-by: —

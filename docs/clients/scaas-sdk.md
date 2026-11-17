@@ -82,7 +82,7 @@ wherever the seed is listed, with the advice to move funds to a 24-word seed, an
 generated: the vault passphrase follows vault v1's rule for a new envelope ([CLI-SGN-21](signers-clientkeys.md#CLI-SGN-21);
 `VaultPassphraseWeak`), and the BIP-39 passphrase is never stored and reaches `ua-rs` as entered. A non-empty BIP-39 passphrase opens a
 session-only hidden set: nothing about it is written, emitted or logged; its operations still in flight are listed when it is locked.
-Removing a seed whose backup is `pending` needs a second confirmation.
+Removing a seed whose backup is `pending` needs a second confirmation. A seed import may check one word at a time against the BIP-39 list inside `ua-rs` (`word_in_list`, the word as `SecretBytes`); no list leaves the SDK (owner 2026-11-17, "OK, all four points as proposed").
 
 <a id="CLI-SDK-05"></a>**CLI-SDK-05** — **A seed set derived from a classical key is marked classical-rooted and may carry every
 kind** (owner 2026-11-11; SPECIFIED). Root (c), an external EVM wallet's EIP-712 signature over typed data `ua-rs` builds: signed twice
@@ -125,7 +125,7 @@ classical key is a leaf of a seed, tagged with its network, never exported. Ever
 key, KEM key, Zether key) uses that wallet's own account index, so no two wallets share one. An EVM account whose code is an EIP-7702
 designator carries a delegation mark and a warning; the SDK builds no type-4 transaction, so it cannot offer to clear the delegation
 ([CLI-SGN-40](signers-clientkeys.md#CLI-SGN-40) rule 3's offer: a recorded exception). A derived UA has no recovery
-([CTR-ACC-09](../contracts/accounts.md#CTR-ACC-09)); guardian recovery is `SmartKeyAccount`'s ([CTR-ACC-03](../contracts/accounts.md#CTR-ACC-03)).
+([CTR-ACC-09](../contracts/accounts.md#CTR-ACC-09)); guardian recovery is `SmartKeyAccount`'s ([CTR-ACC-03](../contracts/accounts.md#CTR-ACC-03)). **Sponsored registration** (owner 2026-11-17, "OK, all four points as proposed"): a payment to an unregistered derived UA is `ReceiverUnregistered`; the receiver's app makes its portable registration blob (the `register` arguments with the PoP, which binds no caller, and the KEM record when set), the sender's app checks it (the UA equals the intended receiver and its key data, the kind is enabled on the chain, the PoP verifies locally, the KEM record is present and verifies when `kemPkHash` is set) before anything is sent, submits it paying the gas, adds the KEM key by `setKemKey`, and pays only after the registration lands.
 
 ## 5. Operations
 
@@ -142,7 +142,7 @@ moved is `PreparedStale`. `Execute` and `UAExecute` take a decoded call, built b
 allow-list; an undecoded call exists only behind its own feature and marker, flagged opaque in the review, and is otherwise
 `OpaqueCallRefused`. A fee of 0 is accepted everywhere and never replaced. No call signs a caller's digest with a UA key
 ([CLI-SGN-29](signers-clientkeys.md#CLI-SGN-29)); no EIP-7702 authorization or type-4 transaction is built
-([CLI-SGN-40](signers-clientkeys.md#CLI-SGN-40); `TxTypeRefused`).
+([CLI-SGN-40](signers-clientkeys.md#CLI-SGN-40); `TxTypeRefused`). The review lists every token or market the operation touches, with its address and its listed or unlisted mark (owner 2026-11-17, "OK, all four points as proposed").
 
 <a id="CLI-SDK-09"></a>**CLI-SDK-09** — **An operation is quoted and confirmed, written ahead, then sent to a gateway that takes it
 or relayed by the holder** (SPECIFIED). Paths: a scaas-node gateway, for the entries the gateway takes
@@ -156,7 +156,7 @@ EIP-7702 designator is `PayerDelegated`; the payer's address is linked on chain 
 self-relay path. The job API is server-side only, never in an end-user build ([NODE-ADM-06](../node/admin-auth.md#NODE-ADM-06)). With no
 gateway for the entry and no payer: `SubmitPathNone`. **Write ahead:** sign, write the operation with its signed body (public data) to
 the SDK's state, then send; from the signature on the send completes whatever happens to the caller; a row written but not sent is sent
-at restart, a row sent is never sent again automatically, only by the user's `resend` of the same bytes.
+at restart, a row sent is never sent again automatically, only by the user's `resend` of the same bytes. **`submit` returns the operation's id once its row is written; every send result after that is an event, never an error of `submit`** (owner 2026-11-17, "OK, all four points as proposed"), so no caller reads a send error as "not paid".
 
 <a id="CLI-SDK-18"></a>**CLI-SDK-18** — **An operation ends only on a chain fact** (follows [CLI-RPC-09](scaas-rpc.md#CLI-RPC-09);
 SPECIFIED). Terminal, from a decisive read at the profile's final block only: `Landed` (the executed event of the operation's digest,
@@ -234,7 +234,7 @@ old item, a submission completes to its written state. Events (seed locked and u
 abandoned hidden-set operations, operation states, balances, history items, dropped endpoints) go to each subscriber's bounded
 queue; a slow subscriber gets `Lagged` with the count missed and re-reads state, and the SDK never waits for it. Watching is bounded per
 poll. No event callback crosses a binding: the only interfaces an app implements are `SecureStore` and `Authenticator`, whose errors
-include an unexpected-callback case, so a host exception never panics the SDK.
+include an unexpected-callback case, so a host exception never panics the SDK. A change of the SDK's state by another process is the event `StateChanged` (found by a cheap read of the state's revision on each poll, or at once where the store reports changes) (owner 2026-11-17, "OK, all four points as proposed").
 
 <a id="CLI-SDK-13"></a>**CLI-SDK-13** — **Errors are named, stable codes; the layers below keep their names** (SPECIFIED). An error
 answers `code()`, the variant's name, appended and never reused. `ua-rs`'s and `scaas-rpc`'s codes pass through by their own names (a
@@ -247,7 +247,8 @@ by `code`. The SDK's own names include `StoreConflict`, `KeystoreMismatch`, `Key
 `SeedExists`, `LabelTaken`, `ConfirmationMissing`, `VaultPassphraseWeak`, `DerivationPassphraseShort`, `OriginSignature`,
 `AuthenticatorRefused`, `ProfileMismatch`, `FeatureMissing`, `PreparedStale`, `PreparedUnknown`, `OpaqueCallRefused`, `FeeAboveCap`,
 `GasAboveTxCap`, `PayerDelegated`, `SubmitPathNone`, `VerdictRefused`, `TxTypeRefused`, `RawDigestRefused`, `AppDomainRefused`,
-`AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`, `AppKeyUsage`, `AppArenaFull`, `KemKeyGone`. A
+`AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused`, `AppKeyUsage`, `AppArenaFull`, `KemKeyGone`,
+`ReceiverUnregistered`, `RegistrationUaMismatch`, `RegistrationKindDisabled`, `RegistrationPopInvalid`, `RegistrationKemMissing`. A
 warning (`short_seed`, `imported_key`) comes beside a success, never as an error.
 
 ## 9. Bindings
@@ -299,4 +300,4 @@ Polkadot networks join when `ua-rs` has them (PLANNED).
 flags, JSON or a table; it shows the review and the quote and asks before submitting. Passphrases, words and keys come from the
 terminal without echo or from a file descriptor, never from the command line or the environment; nothing secret is printed except a
 new seed's one reveal. It shares its data directory with the TUI and the app under the keystore's lock, holds no logic of its own and
-serves as the reference client of the SDK's end-to-end tests.
+serves as the reference client of the SDK's end-to-end tests. Its profiles are pinned (owner 2026-11-17, "OK, all four points as proposed"): compiled in or digest-pinned in a release build; a profile file only in a development build that says so on every run; an overlay may add a credential by file and lower caps, never change a `chain_uid`, a contract or an RPC list. It shares its call and action names with `scaas-tui`; neither calls the other.
