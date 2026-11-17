@@ -142,6 +142,38 @@ impl Pool {
         Self::shared(list, pinned, Default::default(), Default::default())
     }
 
+    /// A pool of endpoints known by their classes only (T13 S11: a caller with its own transport, the PQZ verifier), with the
+    /// read deadline `read_timeout_ms` and [`crate::endpoint::MAX_LAG`]; `strict_majority` needs two or more (`Argument`).
+    pub fn of_classes(
+        classes: &[Class],
+        policy: Policy,
+        read_timeout_ms: u64,
+        pinned: bool,
+    ) -> Result<Self, RpcError> {
+        if classes.is_empty() {
+            return Err(RpcError::EndpointListEmpty);
+        }
+        if read_timeout_ms == 0 || (policy == Policy::StrictMajority && classes.len() < 2) {
+            return Err(RpcError::argument(
+                "a zero read deadline, or strict_majority with one endpoint",
+            ));
+        }
+        Ok(Self {
+            classes: classes.to_vec(),
+            labels: vec![None; classes.len()],
+            policy,
+            read_timeout: Duration::from_millis(read_timeout_ms),
+            max_lag: crate::endpoint::MAX_LAG,
+            pinned,
+            identity: Arc::new(classes.iter().map(|_| OnceLock::new()).collect()),
+            refused: classes.iter().map(|_| OnceLock::new()).collect(),
+            head: Default::default(),
+            floor: Default::default(),
+            failover: AtomicU64::new(0),
+            failover_total: Default::default(),
+        })
+    }
+
     /// With the highest-seen head and the total failover counter shared by several pools of one chain (the node's table).
     pub fn shared(
         list: &NodeList,

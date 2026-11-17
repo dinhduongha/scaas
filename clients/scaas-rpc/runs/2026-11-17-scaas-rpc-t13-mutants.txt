@@ -1,3 +1,4 @@
-# t13 mutants at commit 9d1b302ea (name | outcome | test)
-S10 any length is a nonce | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_nonce_view_of_no_word_is_no_nonce
-1 mutants, 1 killed, 0 survived, 0 not loaded
+# t13 mutants at commit 02309d51c (name | outcome | test)
+S11 block 0 not checked at start | killed | ../scripts/capped cargo test --locked --offline -j2 --test service start_pins_block_0
+S11 connect_pinned without the pin | killed | ../scripts/capped cargo test --locked --offline -j2 --test service start_pins_block_0
+2 mutants, 2 killed, 0 survived, 0 not loaded

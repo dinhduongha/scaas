@@ -344,7 +344,8 @@ impl Replay {
     }
 }
 
-/// The verifier's nodes as the crate's pool reads them: identity checked at start (`Rpc::connect`, the pinned `chain_uid`).
+/// The verifier's nodes as the crate's pool reads them: identity checked at start (`Rpc::connect_pinned`: `eth_chainId` and block
+/// 0 against the pinned `chain_uid`, T13 S11).
 struct Nodes<'a>(&'a dyn Chain);
 
 fn node_failure(i: usize, e: ChainError) -> scaas_rpc::EndpointFailure {
@@ -611,13 +612,10 @@ impl Service {
             work: Semaphore::new(cfg.concurrency),
             keys: Mutex::default(),
             strict: (cfg.rpc_policy == RpcPolicy::StrictMajority).then(|| {
-                // the pool reads only the list's length, classes (every rpc_urls endpoint is named) and deadline
-                let n = chain.nodes();
-                let e = (0..n).map(|i| scaas_rpc::Endpoint::named(&format!("http://node{i}.invalid")).expect("a URL")).collect();
-                let ms = chain::RPC_TIMEOUT.as_millis() as u64;
-                let l = scaas_rpc::NodeList::new(e, scaas_rpc::Policy::StrictMajority, ms, ms, scaas_rpc::endpoint::READ_TIMEOUT_MS)
-                    .expect("strict_majority: two rpc_urls or more (Config::parse)");
-                scaas_rpc::pool::Pool::new(&l, true)
+                // T13 S11: the pool of the nodes' classes (every rpc_urls endpoint is named), pinned (`Rpc::connect_pinned`)
+                let classes = vec![scaas_rpc::Class::Named; chain.nodes()];
+                scaas_rpc::pool::Pool::of_classes(&classes, scaas_rpc::Policy::StrictMajority, scaas_rpc::endpoint::READ_TIMEOUT_MS,
+                    true).expect("strict_majority: two rpc_urls or more (Config::parse)")
             }),
         }
     }

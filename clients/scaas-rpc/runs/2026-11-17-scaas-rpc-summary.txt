@@ -22,12 +22,12 @@ eip1898 | 0557f5ea0 | 0 | nethermind: canonical answered 5/5, made-up refused 5/
 node-e2e | 1ffb4a964 | 0 | 24 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 rpc-anvil | 4a84ebbce | 0 | 10 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 ver-anvil | 2650ede85 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-ver-test | 2650ede85 | 0 | 40 passed, 0 failed, 1 ignored (6 binaries); tree dirty
-ver-clippy | 2650ede85 | 0 | -; tree dirty
 features | af174a787 | 0 | -; tree dirty
 docs | af174a787 | 0 | -; tree dirty
 node-clippy | 05e1b8f58 | 0 | -; tree dirty
 node-test | 890631299 | 0 | 791 passed, 0 failed, 72 ignored (18 binaries); tree dirty
-rpc-test | 9d1b302ea | 0 | 124 passed, 0 failed, 10 ignored (7 binaries); tree dirty
-rpc-clippy | 9d1b302ea | 0 | -; tree dirty
-rpc-wasm | 9d1b302ea | 0 | -; tree dirty
+rpc-test | 02309d51c | 0 | 124 passed, 0 failed, 10 ignored (7 binaries); tree dirty
+rpc-clippy | 02309d51c | 0 | -; tree dirty
+rpc-wasm | 02309d51c | 0 | -; tree dirty
+ver-clippy | 02309d51c | 0 | -; tree dirty
+ver-test | 02309d51c | 0 | 41 passed, 0 failed, 1 ignored (6 binaries); tree dirty

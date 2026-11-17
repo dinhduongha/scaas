@@ -18,7 +18,8 @@ async fn main() -> anyhow::Result<()> {
     let password = std::env::var(&cfg.keystore_password_env)
         .with_context(|| format!("the keystore password: env {}", cfg.keystore_password_env))?;
     let signer = PrivateKeySigner::decrypt_keystore(&cfg.keystore, password).context("the keystore")?;
-    let rpc = Rpc::connect(&cfg.rpc_urls, cfg.chain_id).await?;
+    // T13 S11: block 0 of every node is the pinned chain_uid
+    let rpc = Rpc::connect_pinned(&cfg.rpc_urls, cfg.chain_id, cfg.chain_uid).await?;
     scaas_pqz_verifier::check_pins(&rpc, &cfg).await?;
     let chain_id = cfg.chain_id;
     let svc = Arc::new(Service::new(Arc::new(rpc), Arc::new(scaas_pqz_verifier::offchain), signer, &cfg));

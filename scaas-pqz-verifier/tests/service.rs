@@ -951,6 +951,37 @@ async fn start_pins_generation_and_chain_uid() {
     assert!(e.contains("has chainUid"), "{e}");
 }
 
+/// A node of chain `CHAIN_ID` whose block 0 has hash `zero` (`None`: a node without block 0).
+async fn rpc_with_block_0(zero: Option<B256>) -> String {
+    rpc_server(Arc::new(move |r| Some(match r["method"].as_str().unwrap() {
+        "eth_chainId" => json!({"result": format!("{CHAIN_ID:#x}")}),
+        "eth_getBlockByNumber" => json!({"result": zero.map(|h| json!({"timestamp": "0x1", "difficulty": "0x0", "extraData": "0x",
+            "gasLimit": "0x1c9c380", "gasUsed": "0x0", "logsBloom": format!("0x{}", "00".repeat(256)),
+            "miner": format!("{:#x}", Address::ZERO), "mixHash": format!("{:#x}", B256::ZERO), "nonce": "0x0000000000000000",
+            "receiptsRoot": format!("{:#x}", B256::ZERO), "sha3Uncles": format!("{:#x}", B256::ZERO), "size": "0x200",
+            "stateRoot": format!("{:#x}", B256::ZERO), "transactions": [], "transactionsRoot": format!("{:#x}", B256::ZERO),
+            "uncles": [], "number": "0x0", "hash": format!("{h:#x}"), "parentHash": format!("{:#x}", B256::ZERO)}))}),
+        _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+    }))).await
+}
+
+/// Fable code review T13 S11 (CLI-RPC-03): the service starts with `Rpc::connect_pinned`: every node's block 0 is the pinned
+/// `chain_uid`; a node of another genesis, or one without block 0, and it does not start. Control: two nodes of the pin.
+#[tokio::test]
+async fn start_pins_block_0() {
+    let uid = Config::parse(CONFIG).unwrap().chain_uid;
+    let ours = rpc_with_block_0(Some(uid)).await;
+    assert_eq!(Rpc::connect_pinned(&[ours.clone(), rpc_with_block_0(Some(uid)).await], CHAIN_ID, uid).await.unwrap().nodes(), 2);
+    let e = Rpc::connect_pinned(&[ours.clone(), rpc_with_block_0(Some(B256::repeat_byte(7))).await], CHAIN_ID, uid).await
+        .err().expect("another genesis");
+    assert!(e.to_string().contains("rpc_urls[1]: chain identity"), "{e}");
+    let e = Rpc::connect_pinned(&[rpc_with_block_0(Some(B256::repeat_byte(7))).await], CHAIN_ID, uid).await
+        .err().expect("every node of another genesis");
+    assert!(e.to_string().contains("rpc_urls[0]: chain identity"), "{e}");
+    let e = Rpc::connect_pinned(&[ours, rpc_with_block_0(None).await], CHAIN_ID, uid).await.err().expect("no block 0");
+    assert!(e.to_string().contains("serves no block 0"), "{e}");
+}
+
 /// Fable C-6: the configured `chain_id` is compared with every endpoint's `eth_chainId` at start; one other chain, or one
 /// endpoint that does not answer, and the service does not start.
 #[tokio::test]

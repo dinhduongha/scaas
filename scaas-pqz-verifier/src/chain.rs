@@ -75,15 +75,22 @@ impl Rpc {
         Self::connect_within(urls, chain_id, RPC_TIMEOUT).await
     }
 
+    /// As [`Rpc::connect`], and every endpoint's block 0 is the pinned `chain_uid` (T13 S11, CLI-RPC-03: the pool's identity
+    /// check, run at start; an endpoint without block 0 is refused, `ChainIdentityUnreadable`). The service starts with this.
+    pub async fn connect_pinned(urls: &[String], chain_id: u64, chain_uid: B256) -> anyhow::Result<Self> {
+        let rpc = Self::build(urls, chain_id, Some(chain_uid), RPC_TIMEOUT)?;
+        for i in 0..urls.len() {
+            let pool = &rpc.pool;
+            timed(RPC_TIMEOUT, async { pool.pool().admit(pool, i, None).await.map_err(|e| ChainError::Rpc(e.to_string())) })
+                .await
+                .map_err(|e| anyhow::anyhow!("rpc_urls[{i}]: chain identity: {e:?}"))?;
+        }
+        Ok(rpc)
+    }
+
     /// As [`Rpc::connect`], each read under `timeout` (the tests' short one).
     pub async fn connect_within(urls: &[String], chain_id: u64, timeout: Duration) -> anyhow::Result<Self> {
-        let ms = u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX).max(1);
-        let endpoints = urls.iter().enumerate()
-            .map(|(i, u)| Endpoint::named(u).map_err(|e| anyhow::anyhow!("rpc_urls[{i}]: {e}")))
-            .collect::<anyhow::Result<Vec<_>>>()?;
-        let list = NodeList::new(endpoints, Policy::Failover, ms, ms, scaas_rpc::endpoint::READ_TIMEOUT_MS)
-            .map_err(|e| anyhow::anyhow!("rpc_urls: {e}"))?;
-        let pool = EvmPool::connect(list, chain_id, None).map_err(|e| anyhow::anyhow!("rpc_urls: {e}"))?;
+        let Self { pool, timeout } = Self::build(urls, chain_id, None, timeout)?;
         for i in 0..urls.len() {
             let p = pool.endpoint(i, None);
             let id = timed(timeout, async { p.get_chain_id().await.map_err(|e| ChainError::Rpc(e.to_string())) })
@@ -91,6 +98,17 @@ impl Rpc {
                 .map_err(|e| anyhow::anyhow!("rpc_urls[{i}]: eth_chainId: {e:?}"))?;
             anyhow::ensure!(id == chain_id, "rpc_urls[{i}] answers chain {id}, the config pins {chain_id}");
         }
+        Ok(Self { pool, timeout })
+    }
+
+    fn build(urls: &[String], chain_id: u64, chain_uid: Option<B256>, timeout: Duration) -> anyhow::Result<Self> {
+        let ms = u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX).max(1);
+        let endpoints = urls.iter().enumerate()
+            .map(|(i, u)| Endpoint::named(u).map_err(|e| anyhow::anyhow!("rpc_urls[{i}]: {e}")))
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let list = NodeList::new(endpoints, Policy::Failover, ms, ms, scaas_rpc::endpoint::READ_TIMEOUT_MS)
+            .map_err(|e| anyhow::anyhow!("rpc_urls: {e}"))?;
+        let pool = EvmPool::connect(list, chain_id, chain_uid).map_err(|e| anyhow::anyhow!("rpc_urls: {e}"))?;
         Ok(Self { pool, timeout })
     }
 

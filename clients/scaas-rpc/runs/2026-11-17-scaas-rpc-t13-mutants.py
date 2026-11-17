@@ -12,6 +12,8 @@ EP = "clients/scaas-rpc/src/endpoint.rs"
 H = "clients/scaas-rpc/src/http.rs"
 N = "clients/scaas-rpc/src/node.rs"
 NT = "cd scaas-node && CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::"
+VT = "cd scaas-pqz-verifier && ../scripts/capped cargo test --locked --offline -j2 --test service "
+VC = "scaas-pqz-verifier/src/chain.rs"
 T = "cd clients/scaas-rpc && ../../scripts/capped cargo test --locked --offline -j2 --all-features "
 MUTANTS = [
     ("S1 no freshness", [(P, "let fresh = |i: usize| names[i].is_some_and(|x| number.saturating_add(self.max_lag) >= x);",
@@ -79,6 +81,10 @@ MUTANTS = [
      T + "--lib evm::tests::the_agreed_priority_fee_never_exceeds_the_max_fee"),
     ("S10 any length is a nonce", [(E, "            let now = match word.len() {\n                32 =>", "            let now = match word.len() {\n                _ if word.len() <= 32 =>")],
      T + "--test evm_fakes a_nonce_view_of_no_word_is_no_nonce"),
+    ("S11 block 0 not checked at start", [(VC, "        for i in 0..urls.len() {\n            let pool = &rpc.pool;", "        for i in 0..0 {\n            let pool = &rpc.pool;")],
+     VT + "start_pins_block_0"),
+    ("S11 connect_pinned without the pin", [(VC, "let rpc = Self::build(urls, chain_id, Some(chain_uid), RPC_TIMEOUT)?;", "let rpc = Self::build(urls, chain_id, None, RPC_TIMEOUT)?;")],
+     VT + "start_pins_block_0"),
 ]
 
 if __name__ == "__main__":
