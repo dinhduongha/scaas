@@ -221,7 +221,7 @@ every typed operation.
 | x86-64 Linux | every cell | every cell (PQZ at two sets) | built and tested locally, every binding's suite |
 | `wasm32-unknown-unknown` | compiles; Falcon `KindUnavailable` (its C is skipped); `mlock` compiled out; `getrandom`'s JS backend per generation | compiles | nine cells built locally; nothing runs through a browser binding yet |
 | `aarch64-linux-android` | compiles (NDK clang, API 24) | compile cells | `ua-c`'s cells built for the size ratchet, `ua-rs`'s verify-only cell locally, its other cells CI's first run; no device run |
-| `aarch64-apple-ios` | CI compile only | CI compile only | not built here (no Xcode) |
+| `aarch64-apple-ios` | CI compile only (iOS 13 or later: `IPHONEOS_DEPLOYMENT_TARGET=13.0`, for the stack probe `___chkstk_darwin`) | CI compile only | not built here (no Xcode) |
 
 Sizes per target and cell, and the timing still to come: [CLI-UAL-43](#CLI-UAL-43).
 

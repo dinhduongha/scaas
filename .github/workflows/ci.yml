@@ -670,6 +670,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.ua_rs == 'true'
     runs-on: ${{ matrix.os }}
+    env:
+      # aarch64-apple-ios: stack probes (___chkstk_darwin, from frames above one page) are in libSystem from iOS 13 only
+      IPHONEOS_DEPLOYMENT_TARGET: "13.0"
     strategy:
       fail-fast: false
       matrix:
