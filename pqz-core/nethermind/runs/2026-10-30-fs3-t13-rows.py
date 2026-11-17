@@ -14,6 +14,7 @@ rule covers PQZH too), and the script FAILS unless the live rows and both runs h
 the 60 ms verify limit, and prints a WARN for each row whose max(run 1, run 2) is above live (kept at live by the rule:
 the measured cost is above the price). <out> is calibration-shaped (one schedule, timestamp 0x0) for
 chain/patch-chainspec.py <genesis> <out> 0x0 <new genesis> --testnet-reset."""
+
 import json
 import sys
 
@@ -39,8 +40,12 @@ def t_rows(log):
 def run_json(arg):
     ss = [json.load(open(p))["schedules"][0] for p in arg.split(",")]
     st = [s["selftestGas"] for s in ss if s["pqz"]]
-    return {"pqz": [r for s in ss for r in s["pqz"]], "selftestGas": min(st),
-            "mldsa44Gas": max(s["mldsa44Gas"] for s in ss), "mldsa65Gas": max(s["mldsa65Gas"] for s in ss)}
+    return {
+        "pqz": [r for s in ss for r in s["pqz"]],
+        "selftestGas": min(st),
+        "mldsa44Gas": max(s["mldsa44Gas"] for s in ss),
+        "mldsa65Gas": max(s["mldsa65Gas"] for s in ss),
+    }
 
 
 def main(live_p, r1_p, r2_p, l1_p, l2_p, out_p):
@@ -54,7 +59,9 @@ def main(live_p, r1_p, r2_p, l1_p, l2_p, out_p):
     lk = {K(r) for r in live["pqz"]}
     for name, g in (("run 1", g1), ("run 2", g2)):
         if not g or set(g) != lk:
-            sys.exit(f"FAIL keys: live {len(lk)} rows, {name} {len(g)}; only live {sorted(lk - set(g))}, only {name} {sorted(set(g) - lk)}")
+            sys.exit(
+                f"FAIL keys: live {len(lk)} rows, {name} {len(g)}; only live {sorted(lk - set(g))}, only {name} {sorted(set(g) - lk)}"
+            )
     worst = 0.0
     for log in (l1_p, l2_p):
         t = [x for p in log.split(",") for x in t_rows(p)]
@@ -69,17 +76,23 @@ def main(live_p, r1_p, r2_p, l1_p, l2_p, out_p):
         r = dict(r)
         hi = max(g1[K(r)], g2[K(r)])
         if hi > r["gas"]:
-            warn.append(f"  WARN op {r['op']} {r['id'][:10]} stmtLen {r['stmtLen']}{shape(r)}: max(run 1, run 2) {hi:,} > live {r['gas']:,} (kept at live)")
+            warn.append(
+                f"  WARN op {r['op']} {r['id'][:10]} stmtLen {r['stmtLen']}{shape(r)}: max(run 1, run 2) {hi:,} > live {r['gas']:,} (kept at live)"
+            )
         r["gas"] = rule(r["gas"], g1[K(r)], g2[K(r)])
         rows.append(r)
     st = rule(live["selftestGas"], r1["selftestGas"], r2["selftestGas"])
     out = {"schedules": [dict(live, timestamp="0x0", pqz=rows, selftestGas=st)]}
     json.dump(out, open(out_p, "w"), indent=2)
     changed = [(r, o) for r, o in zip(rows, live["pqz"]) if r["gas"] != o["gas"]]
-    print(f"{out_p}: {len(rows)} rows matched, {len(changed)} changed, selftestGas {live['selftestGas']:,} -> {st:,}; "
-          f"max t_row {worst:.3f} ms <= {LIMIT_MS:.0f} ms in both runs")
+    print(
+        f"{out_p}: {len(rows)} rows matched, {len(changed)} changed, selftestGas {live['selftestGas']:,} -> {st:,}; "
+        f"max t_row {worst:.3f} ms <= {LIMIT_MS:.0f} ms in both runs"
+    )
     for r, o in changed:
-        print(f"  op {r['op']} {r['id'][:10]} stmtLen {r['stmtLen']}{shape(r)}: {o['gas']:,} -> {r['gas']:,} ({100 * (r['gas'] - o['gas']) / o['gas']:+.1f} %)")
+        print(
+            f"  op {r['op']} {r['id'][:10]} stmtLen {r['stmtLen']}{shape(r)}: {o['gas']:,} -> {r['gas']:,} ({100 * (r['gas'] - o['gas']) / o['gas']:+.1f} %)"
+        )
     print("\n".join(warn) if warn else "no row measured above live")
 
 

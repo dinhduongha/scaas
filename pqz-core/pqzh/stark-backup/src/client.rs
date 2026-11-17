@@ -1,7 +1,9 @@
 //! Test and bench inputs: the same keys, ciphertexts, statements and witnesses as pqz-core's test/pqz_bench.c
 //! setup() (same xorshift stream, same samplers), so the bytes can be compared with pqz-core's (xcheck/).
 
-use crate::rel::{HDR_FEE, HEADER, OP_REGISTER, PQZH_PROOF_SYSTEM_ID, PREFIX, REG_STMT, REG_WIT, TX_STMT, TX_WIT};
+use crate::rel::{
+    HDR_FEE, HEADER, OP_REGISTER, PQZH_PROOF_SYSTEM_ID, PREFIX, REG_STMT, REG_WIT, TX_STMT, TX_WIT,
+};
 use crate::ring::*;
 
 pub struct Rng(pub u64);
@@ -53,16 +55,23 @@ fn wr_vec(out: &mut Vec<u8>, v: &[Poly]) {
 /// pk = A s + e mod q
 pub fn keypair(s: &[Poly], e: &[Poly]) -> Vec<Poly> {
     let a = a_matrix();
-    (0..K).map(|i| {
-        let row: Vec<&Poly> = (0..K).map(|j| &a[i * K + j]).collect();
-        let y = dot_int(&row, &s.iter().collect::<Vec<_>>());
-        std::array::from_fn(|m| modq(y[m] + e[i][m]))
-    })
-    .collect()
+    (0..K)
+        .map(|i| {
+            let row: Vec<&Poly> = (0..K).map(|j| &a[i * K + j]).collect();
+            let y = dot_int(&row, &s.iter().collect::<Vec<_>>());
+            std::array::from_fn(|m| modq(y[m] + e[i][m]))
+        })
+        .collect()
 }
 
 /// u = A^T r + e1; v_k[i] = (pk_k^T r)[i] + e2_k[i] + Delta m_k[i] (i < 16)
-pub fn encrypt(pks: &[&Vec<Poly>], msgs: &[[u8; 16]], r: &[Poly], e1: &[Poly], e2: &[Vec<i64>]) -> (Vec<Poly>, Vec<Poly>) {
+pub fn encrypt(
+    pks: &[&Vec<Poly>],
+    msgs: &[[u8; 16]],
+    r: &[Poly],
+    e1: &[Poly],
+    e2: &[Vec<i64>],
+) -> (Vec<Poly>, Vec<Poly>) {
     let a = a_matrix();
     let rr: Vec<&Poly> = r.iter().collect();
     let u = (0..K)
@@ -78,7 +87,13 @@ pub fn encrypt(pks: &[&Vec<Poly>], msgs: &[[u8; 16]], r: &[Poly], e1: &[Poly], e
         .zip(e2)
         .map(|((pk, msg), e2)| {
             let y = dot_int(&pk.iter().collect::<Vec<_>>(), &rr);
-            std::array::from_fn(|i| if i < 16 { modq(y[i] + e2[i] + DELTA * msg[i] as i64) } else { 0 })
+            std::array::from_fn(|i| {
+                if i < 16 {
+                    modq(y[i] + e2[i] + DELTA * msg[i] as i64)
+                } else {
+                    0
+                }
+            })
         })
         .collect();
     (u, vs)
@@ -169,7 +184,9 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     }
     let (u, vs) = encrypt(&[&kt.pk, &kf.pk, &ka.pk], &m, &polys(&r), &polys(&e1), &e2);
 
-    let mut tx: Vec<u8> = (0..HEADER).map(|i| if i < PREFIX { 0x5A } else { (i * 3) as u8 }).collect();
+    let mut tx: Vec<u8> = (0..HEADER)
+        .map(|i| if i < PREFIX { 0x5A } else { (i * 3) as u8 })
+        .collect();
     tx[32..64].copy_from_slice(&psid);
     tx[HDR_FEE..HDR_FEE + 64].fill(0);
     tx[HDR_FEE + 24..HDR_FEE + 32].copy_from_slice(&fee.to_be_bytes());
@@ -202,7 +219,12 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     w.extend_from_slice(&m[0]);
     w.extend_from_slice(&m[1]);
     assert_eq!((tx.len(), w.len()), (TX_STMT, TX_WIT));
-    Setup { reg_stmt, reg_wit, tx_stmt: tx, tx_wit: w }
+    Setup {
+        reg_stmt,
+        reg_wit,
+        tx_stmt: tx,
+        tx_wit: w,
+    }
 }
 
 // ---- adversarial inputs (bench native and wasm) ----
@@ -219,14 +241,35 @@ impl R {
 }
 
 pub const KINDS: [&str; 12] = [
-    "bitflip", "byte_set", "random_bytes", "truncate", "extend", "stmt_coeff", "stmt_oob", "stmt_prefix",
-    "stmt_tail", "other_proof", "field_noncanon", "empty",
+    "bitflip",
+    "byte_set",
+    "random_bytes",
+    "truncate",
+    "extend",
+    "stmt_coeff",
+    "stmt_oob",
+    "stmt_prefix",
+    "stmt_tail",
+    "other_proof",
+    "field_noncanon",
+    "empty",
 ];
 
 /// mutated (statement, proof) of kind k
-pub fn mutate(k: usize, op: u8, st: &[u8], pf: &[u8], other: &[u8], r: &mut R) -> (Vec<u8>, Vec<u8>) {
+pub fn mutate(
+    k: usize,
+    op: u8,
+    st: &[u8],
+    pf: &[u8],
+    other: &[u8],
+    r: &mut R,
+) -> (Vec<u8>, Vec<u8>) {
     let (mut s, mut p) = (st.to_vec(), pf.to_vec());
-    let body = if op == OP_REGISTER { PREFIX + 32 } else { HEADER };
+    let body = if op == OP_REGISTER {
+        PREFIX + 32
+    } else {
+        HEADER
+    };
     let ncoef = (s.len() - body) / 8;
     match KINDS[k] {
         "bitflip" => {
@@ -254,7 +297,11 @@ pub fn mutate(k: usize, op: u8, st: &[u8], pf: &[u8], other: &[u8], r: &mut R) -
         "stmt_prefix" => s[(r.next() % PREFIX as u64) as usize] ^= 1 << (r.next() % 8),
         "stmt_tail" => {
             // R_REG: message byte; R_TX: fee
-            let i = if op == OP_REGISTER { PREFIX + (r.next() % 32) as usize } else { HDR_FEE + 24 + (r.next() % 8) as usize };
+            let i = if op == OP_REGISTER {
+                PREFIX + (r.next() % 32) as usize
+            } else {
+                HDR_FEE + 24 + (r.next() % 8) as usize
+            };
             s[i] ^= 1 << (r.next() % 8);
         }
         "other_proof" => p = other.to_vec(),

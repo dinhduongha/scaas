@@ -1,4 +1,4 @@
-use pqzh::{OP_REGISTER, OP_TRANSFER, Params, client, prove, verify};
+use pqzh::{client, prove, verify, Params, OP_REGISTER, OP_TRANSFER};
 
 #[test]
 fn honest_reg_and_tx() {
@@ -20,7 +20,10 @@ fn zk_honest_and_hiding() {
     let mut p = Params::DEFAULT;
     p.zk = true;
     p.max_proof = usize::MAX; // measured size in runs/; here only soundness of the hiding path
-    for (op, st, w) in [(OP_REGISTER, &s.reg_stmt, &s.reg_wit), (OP_TRANSFER, &s.tx_stmt, &s.tx_wit)] {
+    for (op, st, w) in [
+        (OP_REGISTER, &s.reg_stmt, &s.reg_wit),
+        (OP_TRANSFER, &s.tx_stmt, &s.tx_wit),
+    ] {
         let a = prove(op, st, w, [1; 32], &p).unwrap();
         let b = prove(op, st, w, [2; 32], &p).unwrap();
         eprintln!("zk op {op}: {} B", a.len());
@@ -31,7 +34,10 @@ fn zk_honest_and_hiding() {
         assert!(!verify(op, st, &bad, &p));
         let mut plain = p;
         plain.zk = false;
-        assert!(!verify(op, st, &a, &plain), "a hiding proof is not a plain proof");
+        assert!(
+            !verify(op, st, &a, &plain),
+            "a hiding proof is not a plain proof"
+        );
     }
 }
 
@@ -44,7 +50,10 @@ fn zk_whir_honest_and_hiding() {
     p.ext5 = true;
     p.whir = Some(pqzh::config::WhirParams::DEFAULT);
     p.max_proof = usize::MAX;
-    for (op, st, w) in [(OP_REGISTER, &s.reg_stmt, &s.reg_wit), (OP_TRANSFER, &s.tx_stmt, &s.tx_wit)] {
+    for (op, st, w) in [
+        (OP_REGISTER, &s.reg_stmt, &s.reg_wit),
+        (OP_TRANSFER, &s.tx_stmt, &s.tx_wit),
+    ] {
         let t = std::time::Instant::now();
         let a = prove(op, st, w, [1; 32], &p).unwrap();
         eprintln!("zk whir op {op}: {} B, {:?}", a.len(), t.elapsed());
@@ -58,7 +67,13 @@ fn zk_whir_honest_and_hiding() {
         fri.whir = None;
         assert!(!verify(op, st, &a, &fri), "a WHIR proof is not a FRI proof");
         let mut other = p;
-        other.whir = Some(pqzh::config::WhirParams { rate: 4, ..pqzh::config::WhirParams::DEFAULT });
-        assert!(!verify(op, st, &a, &other), "parameters are fixed, not read from the proof");
+        other.whir = Some(pqzh::config::WhirParams {
+            rate: 4,
+            ..pqzh::config::WhirParams::DEFAULT
+        });
+        assert!(
+            !verify(op, st, &a, &other),
+            "parameters are fixed, not read from the proof"
+        );
     }
 }

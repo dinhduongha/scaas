@@ -7,6 +7,7 @@ Exit 0 iff every case is equal (the "meta" block may differ: backend, build, CPU
 in which upstream's r1 is no high part mod q and pqz-core gives r1 = 0; exactly those coefficients may differ, as
 golden r1 (r1 << D >= q) -> 0, and they are counted.
 """
+
 import json
 import sys
 
@@ -34,6 +35,8 @@ if p2r_ok.n:
     print(f"power2round: {p2r_ok.n} wrap-case coefficients r1 = 0 (golden r1 << D >= q; the intended deviation)")
 for k in bad:
     print(f"MISMATCH {k}")
-print(f"{len(g) - len(bad)}/{len(g)} cases equal; golden: {gold['meta']['backend']} ({gold['meta']['build']}, "
-      f"avx512f={gold['meta']['cpu_avx512f']}); checked: {mine['meta']['backend']}")
+print(
+    f"{len(g) - len(bad)}/{len(g)} cases equal; golden: {gold['meta']['backend']} ({gold['meta']['build']}, "
+    f"avx512f={gold['meta']['cpu_avx512f']}); checked: {mine['meta']['backend']}"
+)
 sys.exit(1 if bad else 0)

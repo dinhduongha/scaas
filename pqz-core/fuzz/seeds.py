@@ -15,6 +15,7 @@ self-test input and every row of negative.json's rows (input rebuilt by pqz_kat.
 <out>/seeds/offchain/: the honest inputs, the honest split inputs and negative.json's split_rows; seeds/mutate/,
 seeds/codec/: one empty edit script per honest input and mode / codec and selector.
 """
+
 import os
 import shutil
 import sys
@@ -39,13 +40,21 @@ def kind(r):
 
 
 def inputs(n, want):
-    return [k.precompile_input(r["op"], k.with_id(stmts[r.get("case", r["form"])], k.IDS[n]), proofs[r.get("case", r["form"]), n])
-            for r in rows[n] if kind(r) == want]
+    return [
+        k.precompile_input(
+            r["op"], k.with_id(stmts[r.get("case", r["form"])], k.IDS[n]), proofs[r.get("case", r["form"]), n]
+        )
+        for r in rows[n]
+        if kind(r) == want
+    ]
 
 
 honest = [x for n in IDN for x in inputs(n, "form")]
-honest += [k.precompile_input(r["op"], k.with_id(bytes.fromhex(r["stmt"]), k.IDS[n]), bytes.fromhex(r[n]["proof"]))
-           for n in IDN for r in k.load(V, "fee0.json")["rows"]]
+honest += [
+    k.precompile_input(r["op"], k.with_id(bytes.fromhex(r["stmt"]), k.IDS[n]), bytes.fromhex(r[n]["proof"]))
+    for n in IDN
+    for r in k.load(V, "fee0.json")["rows"]
+]
 n_p6e = len(honest)
 honest += [x for n in IDN for x in inputs(n, "multi")]
 n_multi = len(honest) - n_p6e
@@ -53,20 +62,31 @@ honest += [x for n in IDN for x in inputs(n, "disc")]  # after the op 7 rows: sr
 n_disc = len(honest) - n_p6e - n_multi
 rv = os.path.join(HERE, "regress", "valid")
 # regress/valid/ holds v3-set inputs (valid under that set only)
-extra = [open(os.path.join(rv, f), "rb").read() for f in sorted(os.listdir(rv))] if os.path.isdir(rv) and k.SET == k.V3 else []
+extra = (
+    [open(os.path.join(rv, f), "rb").read() for f in sorted(os.listdir(rv))]
+    if os.path.isdir(rv) and k.SET == k.V3
+    else []
+)
 honest += extra
 with open(os.path.join(out, "honest.bin"), "wb") as f:
     for b in honest:
         f.write(len(b).to_bytes(4, "big") + b)
-shutil.rmtree(os.path.join(out, "seeds"), ignore_errors=True)  # stale seeds could hold valid proofs the oracle does not know
+shutil.rmtree(
+    os.path.join(out, "seeds"), ignore_errors=True
+)  # stale seeds could hold valid proofs the oracle does not know
 neg = [k.apply_edits(r, stmts, proofs) for r in k.load(V, "negative.json")["rows"]]
-sp = {r["form"]: (r["op"], bytes.fromhex(r["stmt"]), bytes.fromhex(r["proof"])) for r in k.load(V, "proof_pqzl_split.json")["rows"]}
+sp = {
+    r["form"]: (r["op"], bytes.fromhex(r["stmt"]), bytes.fromhex(r["proof"]))
+    for r in k.load(V, "proof_pqzl_split.json")["rows"]
+}
 split = [k.precompile_input(*x) for x in sp.values()]
 with open(os.path.join(out, "honest_split.bin"), "wb") as f:
     for b in split:
         f.write(len(b).to_bytes(4, "big") + b)
-sneg = [k.apply_edits(r, stmts, proofs, sp[r["form"]] if r["id"] == "pqzl_split" else None)
-        for r in k.load(V, "negative.json").get("split_rows", [])]
+sneg = [
+    k.apply_edits(r, stmts, proofs, sp[r["form"]] if r["id"] == "pqzl_split" else None)
+    for r in k.load(V, "negative.json").get("split_rows", [])
+]
 d = os.path.join(out, "seeds", "precompile")
 os.makedirs(d, exist_ok=True)
 for i, b in enumerate(honest + [bytes([6, 0, 0, 0, 0])] + neg):
@@ -78,15 +98,21 @@ for i, b in enumerate(honest + split + sneg):
     with open(os.path.join(d, f"vec-{i:03}"), "wb") as f:
         f.write(b)
 # codec: byte 0 = codec + 5 x (honest index >> 4), byte 1 bits 0..3 = honest index & 15 (src/lib.rs pqz_fuzz_codec)
-for t, seeds in (("mutate", [bytes([c, m]) for c in range(len(honest)) for m in range(4)]),
-                 ("codec", [bytes([x + 5 * (c >> 4), c & 15]) for x in range(5) for c in range(len(honest))])):
+for t, seeds in (
+    ("mutate", [bytes([c, m]) for c in range(len(honest)) for m in range(4)]),
+    ("codec", [bytes([x + 5 * (c >> 4), c & 15]) for x in range(5) for c in range(len(honest))]),
+):
     os.makedirs(os.path.join(out, "seeds", t), exist_ok=True)
     for i, b in enumerate(seeds):
         with open(os.path.join(out, "seeds", t, f"seed-{i:03}"), "wb") as f:
             f.write(b)
-print(f"seeds.py: {len(honest)} honest inputs -> honest.bin ({n_p6e} P6e, {n_multi} op 7, {n_disc} op 7 disclosures, "
-      f"{len(extra)} regress/valid); "
-      f"{len(honest) + 1 + len(neg)} precompile seeds ({len(neg)} negative.json rows, "
-      f"{sum(r['form'] == 'TRANSFER-MULTI' for r in k.load(V, 'negative.json')['rows'])} of them op 7)")
-print(f"seeds.py: {len(split)} honest split inputs -> honest_split.bin; {len(honest) + len(split) + len(sneg)} offchain seeds "
-      f"({len(sneg)} negative.json split_rows)")
+print(
+    f"seeds.py: {len(honest)} honest inputs -> honest.bin ({n_p6e} P6e, {n_multi} op 7, {n_disc} op 7 disclosures, "
+    f"{len(extra)} regress/valid); "
+    f"{len(honest) + 1 + len(neg)} precompile seeds ({len(neg)} negative.json rows, "
+    f"{sum(r['form'] == 'TRANSFER-MULTI' for r in k.load(V, 'negative.json')['rows'])} of them op 7)"
+)
+print(
+    f"seeds.py: {len(split)} honest split inputs -> honest_split.bin; {len(honest) + len(split) + len(sneg)} offchain seeds "
+    f"({len(sneg)} negative.json split_rows)"
+)

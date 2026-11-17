@@ -35,8 +35,8 @@
 #define PQZ_BITS_E (PQZ_BITS_C + 15 * PQZ_CBITS)
 #define PQZ_BITS_BURN (PQZ_BITS_E + 16 * PQZ_EBITS)
 #define PQZ_POLYVEC_BYTES (PQZ_K * 512) /* k polys x 64 coeffs x be8 */
-#define PQZ_V_BYTES 128         /* 16 coeffs x be8 */
-#define PQZ_PREFIX_BYTES 64     /* opTag || proofSystemId */
+#define PQZ_V_BYTES 128                 /* 16 coeffs x be8 */
+#define PQZ_PREFIX_BYTES 64             /* opTag || proofSystemId */
 /* proofSystemId (statement bytes 32..63): PQZ_PROOF_SYSTEM_ID of the set's pqz_set.h, keccak256 of its set.toml label
    pqzl_id (gen_set.py; plan 5h Task 8d: one id per set, ".../mlwe-d64k<k>-q<log2q>l4/v4", CTR-PQZ-09). pqz-core only
    hashes it; the precompile accepts only ids it implements. v4: B-1 / A-2 / R_REG (plan 5h Task 8a) and the set's
@@ -65,18 +65,18 @@
    = 1, and R_TX0 with a 74,752-byte one (n2304-kmax4096; n2048-kmax1024: 83,072 / 66,560), which requires 0; anything else is rejected (P6e plan R6) */
 #define PQZ_HDR_AUDITOR_ON 448
 /* R_TX (auditor on): header || pk_f || pk_t || pk_a || T = u_T || v_T || out = u || v_t || v_f || v_a */
-#define PQZ_TX_STMT_BYTES                                                                                   \
-  (PQZ_HEADER_BYTES + 3 * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES)                            \
-   + (PQZ_POLYVEC_BYTES + 3 * PQZ_V_BYTES))
+#define PQZ_TX_STMT_BYTES                                                                                              \
+    (PQZ_HEADER_BYTES + 3 * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES) +                                    \
+     (PQZ_POLYVEC_BYTES + 3 * PQZ_V_BYTES))
 /* R_TX witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_t, e2_f, e2_a (16 x int16 each)
    || d (16 x u8) || d' (16 x u8)   [M, carries and e_T are derived by the prover] */
 #define PQZ_TX_WIT_BYTES (6 * PQZ_N + 3 * 32 + 16 + 16)
 
 /* R_TX0 (auditor off, CTR-PQZ-24: no pk_a / v_a, row 5 skipped; P6e D8): header || pk_f || pk_t || T = u_T || v_T
    || out = u || v_t || v_f */
-#define PQZ_TX0_STMT_BYTES                                                                                  \
-  (PQZ_HEADER_BYTES + 2 * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES)                            \
-   + (PQZ_POLYVEC_BYTES + 2 * PQZ_V_BYTES))
+#define PQZ_TX0_STMT_BYTES                                                                                             \
+    (PQZ_HEADER_BYTES + 2 * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES) +                                    \
+     (PQZ_POLYVEC_BYTES + 2 * PQZ_V_BYTES))
 /* R_TX0 witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_t, e2_f (16 x int16 each) || d (16 x u8)
    || d' (16 x u8) */
 #define PQZ_TX0_WIT_BYTES (6 * PQZ_N + 2 * 32 + 16 + 16)
@@ -103,22 +103,21 @@
    R_TX0's body, and the relation uses R_TX's / R_TX0's parameters with ABDLOP keys of its own. Built M: 1, 2, 4, 8;
    M = 16 only with -DPQZ_TXM_OVERSIZE (bench builds; it does not fit MAX_INPUT, plan D3 / D20). */
 #define PQZ_OP_TRANSFER_MULTI 7
-#define PQZ_HDR_LEGS 320 /* op 7: M (op 1's recipient word) */
+#define PQZ_HDR_LEGS 320                     /* op 7: M (op 1's recipient word) */
 #define PQZ_TXM_LPG(a) ((a) ? PQZ_S_AUD : 4) /* legs per group */
-#define PQZ_TXM_GROUPS(m, a) (((m) + PQZ_TXM_LPG (a) - 1) / PQZ_TXM_LPG (a))
+#define PQZ_TXM_GROUPS(m, a) (((m) + PQZ_TXM_LPG(a) - 1) / PQZ_TXM_LPG(a))
 #ifdef PQZ_TXM_OVERSIZE
 #define PQZ_TXM_MAX_LEGS 16
 #else
 #define PQZ_TXM_MAX_LEGS 8
 #endif
-#define PQZ_TXM_STMT_BYTES(m, a)                                                                            \
-  (PQZ_HEADER_BYTES + (1 + (m) + (a)) * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES)               \
-   + PQZ_TXM_GROUPS (m, a) * PQZ_POLYVEC_BYTES + ((m) + 1 + (a) * (m)) * PQZ_V_BYTES)
+#define PQZ_TXM_STMT_BYTES(m, a)                                                                                       \
+    (PQZ_HEADER_BYTES + (1 + (m) + (a)) * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES) +                      \
+     PQZ_TXM_GROUPS(m, a) * PQZ_POLYVEC_BYTES + ((m) + 1 + (a) * (m)) * PQZ_V_BYTES)
 /* R_TXM witness (R_TX's layout with a group's r_g, e1_g after the previous group's, M leg noises and digit vectors):
    s_f (int8) || e_f (int16) || (r_g (int8) || e1_g (int16)) for g < G || e2_j (16 x int16) for j < M || e2_f
    || [e2_{a,j} for j < M] || d_j (16 x u8) for j < M || d' (16 x u8); at M = 1 R_TX's / R_TX0's witness */
-#define PQZ_TXM_WIT_BYTES(m, a)                                                                             \
-  ((1 + PQZ_TXM_GROUPS (m, a)) * 3 * PQZ_N + 32 * ((m) + 1 + (a) * (m)) + 16 * (m) + 16)
+#define PQZ_TXM_WIT_BYTES(m, a) ((1 + PQZ_TXM_GROUPS(m, a)) * 3 * PQZ_N + 32 * ((m) + 1 + (a) * (m)) + 16 * (m) + 16)
 
 /* R_BURN (§7.5): header || pk_f || T = u_T || v_T || out = u || v_f */
 #define PQZ_BURN_STMT_BYTES (PQZ_HEADER_BYTES + PQZ_POLYVEC_BYTES + 2 * (PQZ_POLYVEC_BYTES + PQZ_V_BYTES))
@@ -142,36 +141,36 @@
 #define PQZ_DR_WIT_BYTES (3 * PQZ_N)
 
 /* arena: caller memory used for every call (long-lived caches at the bottom); returns 0 on success */
-int pqz_init (void *arena, size_t arena_len);
-size_t pqz_arena_peak_bytes (void);
-void pqz_arena_peak_reset (void); /* diagnostics: the next pqz_arena_peak_bytes covers the calls that follow */
+int pqz_init(void *arena, size_t arena_len);
+size_t pqz_arena_peak_bytes(void);
+void pqz_arena_peak_reset(void); /* diagnostics: the next pqz_arena_peak_bytes covers the calls that follow */
 
 /* rnd32: 32 bytes of CSPRNG output. The masks are hedged (CTR-PQZ-19): derived from rnd32, a hash of the witness and
    the statement digest, so a repeated rnd32 never repeats masks across witnesses or statements; equal inputs give
    equal proofs (deterministic, the KATs fix rnd32) */
-int pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit, size_t wit_len,
-               const uint8_t rnd32[32], uint8_t *proof, size_t *proof_len); /* 0 = ok */
-int pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof,
-                size_t proof_len); /* 1 = valid, 0 = anything else */
+int pqz_prove(uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit, size_t wit_len,
+              const uint8_t rnd32[32], uint8_t *proof, size_t *proof_len); /* 0 = ok */
+int pqz_verify(uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof,
+               size_t proof_len); /* 1 = valid, 0 = anything else */
 /* specialised verifier for the same statements (pqz_sv.c): accepts exactly the proofs pqz_verify accepts, by
    evaluating the relation's equations directly; pqz_verify stays the reference. Its tables for an op are built at
    the op's first call. Only in builds with PQZ_SV (build.sh default; SV=0 leaves it out, e.g. a wallet's prover). */
-int pqz_verify_fast (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof, size_t proof_len);
+int pqz_verify_fast(uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof, size_t proof_len);
 
 /* helpers for tests and clients: the public matrix A (spec CTR-PQZ-03) applied to short vectors */
-int pqz_keypair_from_secret (const int8_t s[PQZ_N], const int16_t e[PQZ_N], uint8_t pk[PQZ_POLYVEC_BYTES]);
-int pqz_encrypt (const uint8_t *const pks[], unsigned int npk, const uint8_t msgs[][16], const int8_t r[PQZ_N],
-                 const int16_t e1[PQZ_N], const int16_t e2[][16], uint8_t u[PQZ_POLYVEC_BYTES],
-                 uint8_t vs[][PQZ_V_BYTES]);
-int pqz_decrypt_raw (const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTES], const uint8_t v[PQZ_V_BYTES],
-                     int64_t w[16]); /* w_i = centre(v_i - (u^T s)_i) */
+int pqz_keypair_from_secret(const int8_t s[PQZ_N], const int16_t e[PQZ_N], uint8_t pk[PQZ_POLYVEC_BYTES]);
+int pqz_encrypt(const uint8_t *const pks[], unsigned int npk, const uint8_t msgs[][16], const int8_t r[PQZ_N],
+                const int16_t e1[PQZ_N], const int16_t e2[][16], uint8_t u[PQZ_POLYVEC_BYTES],
+                uint8_t vs[][PQZ_V_BYTES]);
+int pqz_decrypt_raw(const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTES], const uint8_t v[PQZ_V_BYTES],
+                    int64_t w[16]); /* w_i = centre(v_i - (u^T s)_i) */
 /* the same with windows (R0-1): recipient k's v_k uses the coefficients [16 win[k], 16 win[k] + 16) of pk_k^T r
    (win[k] < 4; NULL = all 0, pqz_encrypt), and w_i = centre(v_i - (u^T s)_{16 win + i}); PQZ_ERR_INPUT on a window >= 4 */
-int pqz_encrypt_win (const uint8_t *const pks[], unsigned int npk, const uint8_t win[], const uint8_t msgs[][16],
-                     const int8_t r[PQZ_N], const int16_t e1[PQZ_N], const int16_t e2[][16],
-                     uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES]);
-int pqz_decrypt_raw_win (const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTES], const uint8_t v[PQZ_V_BYTES],
-                         unsigned win, int64_t w[16]);
+int pqz_encrypt_win(const uint8_t *const pks[], unsigned int npk, const uint8_t win[], const uint8_t msgs[][16],
+                    const int8_t r[PQZ_N], const int16_t e1[PQZ_N], const int16_t e2[][16],
+                    uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES]);
+int pqz_decrypt_raw_win(const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTES], const uint8_t v[PQZ_V_BYTES],
+                        unsigned win, int64_t w[16]);
 
 /* keys and encryption from seeds (pq-zero-knowledge.md §4.2, pqz_keys.c). 0 = ok; PQZ_ERR_INTERNAL (1) before pqz_init (as the
    three helpers above); PQZ_ERR_REJECT (4) after 64 counters (never in practice: the thresholds sit >= 10 s.d. above the mean norms), PQZ_ERR_INPUT (3) on a pk or
@@ -179,31 +178,30 @@ int pqz_decrypt_raw_win (const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTE
    KeyGen: SHAKE256("SCAAS-PQZ-KEYGEN-V2" || u8(len(set)) || set || seed32 || be4(ctr)), set = the set's name
    (PQZ_SET_NAME; review R2-C3: one seed32 gives unrelated keys at two sets), s <- CBD_1, e <- CBD_20, pk = A s + e.
    On an error exit s, e (and pk) are zeroed (review R2-C10). */
-int pqz_keygen (const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t s[PQZ_N], int16_t e[PQZ_N],
-                unsigned *ctr_used);
+int pqz_keygen(const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t s[PQZ_N], int16_t e[PQZ_N],
+               unsigned *ctr_used);
 /* Enc: SHAKE256("SCAAS-PQZ-ENC-V1" || seed_enc || be4(ctr)), r <- CBD_1, e1 <- CBD_20, e2_j <- CBD_20^16 in recipient
    order; u = A^T r + e1, v_j = pk_j^T r + e2_j + Delta m_j (msgs: 16 digits < 16 per recipient); on an error exit the
    outputs are zeroed (R2-C10). pqz_enc_seed_win: recipient j at window win[j] as pqz_encrypt_win (R0-1) */
-int pqz_enc_seed (const uint8_t *const pks[], unsigned int npk, const uint8_t msgs[][16], const uint8_t seed_enc[32],
-                  uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES], int8_t r[PQZ_N], int16_t e1[PQZ_N],
-                  int16_t e2[][16], unsigned *ctr_used);
-int pqz_enc_seed_win (const uint8_t *const pks[], unsigned int npk, const uint8_t win[], const uint8_t msgs[][16],
-                      const uint8_t seed_enc[32], uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES],
-                      int8_t r[PQZ_N], int16_t e1[PQZ_N], int16_t e2[][16], unsigned *ctr_used);
+int pqz_enc_seed(const uint8_t *const pks[], unsigned int npk, const uint8_t msgs[][16], const uint8_t seed_enc[32],
+                 uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES], int8_t r[PQZ_N], int16_t e1[PQZ_N],
+                 int16_t e2[][16], unsigned *ctr_used);
+int pqz_enc_seed_win(const uint8_t *const pks[], unsigned int npk, const uint8_t win[], const uint8_t msgs[][16],
+                     const uint8_t seed_enc[32], uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES],
+                     int8_t r[PQZ_N], int16_t e1[PQZ_N], int16_t e2[][16], unsigned *ctr_used);
 /* R_TXM group seeds (CTR-PQZ-19 extended, P6-ANON D13): group 0 uses seed_enc itself, group g >= 1
    SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" || seed_enc || be4(g))[0..32); pqz_enc_seed_win then encrypts the group's legs
    (PQZ_TXM_LPG (A) legs per group), then (group 0) pk_f, then the group's auditor copies at windows 0, 1, ... (the
    leg's position in its group), in that order. Pure hashing: no pqz_init needed. */
-void pqz_enc_group_seed (const uint8_t seed_enc[32], unsigned g, uint8_t out[32]);
+void pqz_enc_group_seed(const uint8_t seed_enc[32], unsigned g, uint8_t out[32]);
 /* Opening tokens (spec K3-4, split randomness): the leg seed SHAKE256("SCAAS-PQZ-ENC-LEG-V1" || seed_enc || be4(0) ||
    to_ua || pkt_hash)[0..32), pkt_hash = keccak256(pk_t); pqz_enc_seed with recipients pk_t, then pk_a encrypts the
    leg from it, pqz_enc_seed of pk_f alone from seed_enc the sender's own v_f. Pure hashing: no pqz_init needed. */
-void pqz_enc_leg_seed (const uint8_t seed_enc[32], const uint8_t to_ua[32], const uint8_t pkt_hash[32], uint8_t out[32]);
+void pqz_enc_leg_seed(const uint8_t seed_enc[32], const uint8_t to_ua[32], const uint8_t pkt_hash[32], uint8_t out[32]);
 /* Dec of ct = u || v: M_i = round(w_i / Delta), noise_i = w_i - Delta M_i; value = sum M_i 16^i (the caller's) */
-int pqz_dec (const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16],
-             int64_t noise[16]);
+int pqz_dec(const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16], int64_t noise[16]);
 /* the same for a v at window win < 4 (the auditor's copy of an R_TXM leg j: win = j mod PQZ_S_AUD; R0-1) */
-int pqz_dec_win (const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], unsigned win, int64_t M[16],
-                 int64_t noise[16]);
+int pqz_dec_win(const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], unsigned win, int64_t M[16],
+                int64_t noise[16]);
 
 #endif

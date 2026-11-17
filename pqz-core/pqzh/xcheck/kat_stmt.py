@@ -4,6 +4,7 @@ patched pqz_bench.c ones) must parse under pqz_kat.py's D15 / R6 rules with PQZH
 parse as PQZL's, and be rebuilt byte for byte by pqz_kat.py's builders from the parsed fields.
   python3 -I kat_stmt.py DIR      (DIR holds <rel>_stmt.bin); exit 1 on any difference
 """
+
 import os
 import sys
 
@@ -18,7 +19,9 @@ def rebuild(d):
     if op.startswith("DISCLOSE"):
         f = {k: int.from_bytes(d[k], "big") for k in K.DISC if k not in ("opTag", "proofSystemId")}
         return K.build_disclose(op, dict(f, proofSystemId=K.PQZH_ID), d["pk"], d["u"], d["v"])
-    f = {k: int.from_bytes(d[k], "big") for k in K.HEADER if k not in ("opTag", "proofSystemId")}  # auditorOn: build_debit sets it for TRANSFER (R6)
+    f = {
+        k: int.from_bytes(d[k], "big") for k in K.HEADER if k not in ("opTag", "proofSystemId")
+    }  # auditorOn: build_debit sets it for TRANSFER (R6)
     f["proofSystemId"] = K.PQZH_ID
     if op == "TRANSFER":
         out = d["u"] + d["v_t"] + d["v_f"] + d.get("v_a", b"")
@@ -39,8 +42,10 @@ def main(dirname):
         same = rebuild(d) == st
         ok = same and pqzl == "rejected" and st[32:64] == K.PQZH_ID
         bad += not ok
-        print(f"{rel}_stmt {len(st)} B {d['op']} id={st[32:64].hex()[:8]} as-PQZL={pqzl} "
-              f"rebuilt={'equal' if same else 'DIFFERENT'} {'ok' if ok else 'FAIL'}")
+        print(
+            f"{rel}_stmt {len(st)} B {d['op']} id={st[32:64].hex()[:8]} as-PQZL={pqzl} "
+            f"rebuilt={'equal' if same else 'DIFFERENT'} {'ok' if ok else 'FAIL'}"
+        )
     print("kat_stmt:", "FAIL" if bad else "ok")
     return 1 if bad else 0
 

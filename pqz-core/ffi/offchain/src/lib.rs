@@ -15,9 +15,13 @@ use pqz_ffi::{decode, pqzh, pqzl, NodeFault, PQZH_ID, PQZL_ID};
 /// `Err(NodeFault)`, never an invalid input. A panic in the decode / verify logic (input-caused) is caught: `Ok(false)`.
 pub fn verify_offchain(input: &[u8]) -> Result<bool, NodeFault> {
     catch_unwind(|| {
-        let Ok(inp) = decode(input) else { return Ok(false) };
+        let Ok(inp) = decode(input) else {
+            return Ok(false);
+        };
         match inp.stmt.proof_system_id() {
-            Some(id) if *id == PQZL_ID || *id == PQZL_SPLIT_ID => pqzl::verify_fast(inp.op, inp.stmt_bytes, inp.proof),
+            Some(id) if *id == PQZL_ID || *id == PQZL_SPLIT_ID => {
+                pqzl::verify_fast(inp.op, inp.stmt_bytes, inp.proof)
+            }
             Some(id) if *id == PQZH_ID => pqzh::verify(inp.op, inp.stmt_bytes, inp.proof),
             _ => Ok(false),
         }

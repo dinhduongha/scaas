@@ -9,6 +9,7 @@ s = S_AUD with the auditor, 4 without; the auditor copy of leg j at window j mod
 meet every norm, and satisfy the debit: Dec(s_f, T) = b' + sum_j a_j + fee with every digit < 16.
   python3 -I kat_multi.py DIR      (DIR holds txm<M>[_0][_fee0|_two]_{stmt,wit}.bin); exit 1 on any difference
 """
+
 import glob
 import os
 import re
@@ -25,7 +26,7 @@ def i8(b):
 
 
 def i16(b):
-    return [int.from_bytes(b[i:i + 2], "little", signed=True) for i in range(0, len(b), 2)]
+    return [int.from_bytes(b[i : i + 2], "little", signed=True) for i in range(0, len(b), 2)]
 
 
 def value(d):
@@ -43,8 +44,12 @@ def check(st, wit, m, aud):
     if (d["legs"], d["auditor"]) != (m, aud):
         bad.append(f"shape {d['legs']}, {d['auditor']}")
     f = {k: d[k] for k in K.MULTI_HEADER if k not in ("opTag", "M", "auditorOn")} | {"salt": d["salt"][16:]}
-    if K.build_multi(f, d["pk_f"], d["pks"], d["T"], d["us"], d["vs"], d["v_f"], pk_a=d.get("pk_a"),
-                     v_as=d.get("v_as")) != st:
+    if (
+        K.build_multi(
+            f, d["pk_f"], d["pks"], d["T"], d["us"], d["vs"], d["v_f"], pk_a=d.get("pk_a"), v_as=d.get("v_as")
+        )
+        != st
+    ):
         bad.append("rebuild")
     if d["recipientsHash"] != K.recipients_hash([0x1000 + j for j in range(m)]):
         bad.append("recipientsHash")
@@ -53,16 +58,21 @@ def check(st, wit, m, aud):
     nv = m + 1 + aud * m
     if len(wit) != (3 * N) * (1 + g) + 32 * nv + 16 * (m + 1):
         return bad + [f"witness length {len(wit)}"]
-    s_f, e_f = i8(wit[:N]), i16(wit[N:3 * N])
-    rs = [i8(wit[(3 * N) * (1 + i):(3 * N) * (1 + i) + N]) for i in range(g)]
-    e1s = [i16(wit[(3 * N) * (1 + i) + N:(3 * N) * (2 + i)]) for i in range(g)]
+    s_f, e_f = i8(wit[:N]), i16(wit[N : 3 * N])
+    rs = [i8(wit[(3 * N) * (1 + i) : (3 * N) * (1 + i) + N]) for i in range(g)]
+    e1s = [i16(wit[(3 * N) * (1 + i) + N : (3 * N) * (2 + i)]) for i in range(g)]
     p = (3 * N) * (1 + g)
-    e2 = [i16(wit[p + 32 * x:p + 32 * x + 32]) for x in range(nv)]
+    e2 = [i16(wit[p + 32 * x : p + 32 * x + 32]) for x in range(nv)]
     p += 32 * nv
-    ds = [list(wit[p + 16 * j:p + 16 * j + 16]) for j in range(m)]
-    dp = list(wit[p + 16 * m:p + 16 * m + 16])
-    if K.sq(s_f) > K.B_S**2 or K.sq(e_f) > K.B_E**2 or any(K.sq(r) > K.B_S**2 for r in rs) or \
-            any(K.sq(e) > K.B_E**2 for e in e1s) or any(K.sq(e) > K.B_2**2 for e in e2):
+    ds = [list(wit[p + 16 * j : p + 16 * j + 16]) for j in range(m)]
+    dp = list(wit[p + 16 * m : p + 16 * m + 16])
+    if (
+        K.sq(s_f) > K.B_S**2
+        or K.sq(e_f) > K.B_E**2
+        or any(K.sq(r) > K.B_S**2 for r in rs)
+        or any(K.sq(e) > K.B_E**2 for e in e1s)
+        or any(K.sq(e) > K.B_2**2 for e in e2)
+    ):
         bad.append("norms")
     if any(x > 15 for x in sum(ds, dp)):
         bad.append("digit >= 16")
@@ -76,8 +86,14 @@ def check(st, wit, m, aud):
         vecs += [(d["pk_a"], ds[j], j // sg, d["v_as"][j], j % sg) for j in range(m)]
     for gi in range(g):
         xs = [x for x in range(nv) if vecs[x][2] == gi]
-        u, vs = K.encrypt([vecs[x][0] for x in xs], [vecs[x][1] for x in xs], rs[gi], e1s[gi], [e2[x] for x in xs],
-                          [vecs[x][4] for x in xs])
+        u, vs = K.encrypt(
+            [vecs[x][0] for x in xs],
+            [vecs[x][1] for x in xs],
+            rs[gi],
+            e1s[gi],
+            [e2[x] for x in xs],
+            [vecs[x][4] for x in xs],
+        )
         if u != d["us"][gi]:
             bad.append(f"u_{gi}")
         bad += [f"v vector {x}" for x, v in zip(xs, vs) if v != vecs[x][3]]
@@ -93,7 +109,7 @@ def main(dirname):
     nbad = 0
     files = sorted(glob.glob(os.path.join(dirname, "txm*_stmt.bin")))
     for fn in files:
-        tag = os.path.basename(fn)[:-len("_stmt.bin")]
+        tag = os.path.basename(fn)[: -len("_stmt.bin")]
         mt = re.fullmatch(r"txm(\d+)(_0)?(_fee0|_two)?", tag)
         m, aud = int(mt.group(1)), 0 if mt.group(2) else 1
         st = open(fn, "rb").read()
@@ -104,8 +120,10 @@ def main(dirname):
         except Exception as x:  # a malformed dump must fail, not crash the run
             bad, info = [f"raised {type(x).__name__}: {x}"], ""
         nbad += bool(bad)
-        print(f"{tag}_stmt {len(st)} B wit {len(wit)} B M={m} auditorOn={aud} {info} "
-              f"{'ok' if not bad else 'FAIL ' + '; '.join(bad)}")
+        print(
+            f"{tag}_stmt {len(st)} B wit {len(wit)} B M={m} auditorOn={aud} {info} "
+            f"{'ok' if not bad else 'FAIL ' + '; '.join(bad)}"
+        )
     if not files:
         print("no txm*_stmt.bin")
         nbad = 1

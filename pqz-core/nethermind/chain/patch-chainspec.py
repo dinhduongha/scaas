@@ -34,6 +34,7 @@ get it: a genesis with chain id 22776 (scaas-mainnet) or an alloc file whose cha
 RESCUE_VAULT_ALLOC_MAINNET_REFUSED before any other check; on every mainnet the vault comes through the public CREATE2
 deployer with the real dev admin, never an alloc. The alloc changes the genesis state root, so the genesis hash (=
 chainUid) moves. patch-chainspec.py --check runs the self-check. Run with python3 -I."""
+
 import difflib
 import json
 import os
@@ -41,18 +42,31 @@ import sys
 import tempfile
 import time
 
-ADDR = ["000000000000000000000000000000005caa0f01", "000000000000000000000000000000005caa0012",
-        "000000000000000000000000000000005caa0013", "000000000000000000000000000000005caa0014"]  # 0014: MLDSA87, CTR-UA-39
-RESET = {"eip4895TransitionTimestamp": 1, "maximumExtraDataSize": "0xffff", "maxCodeSizeTransition": 0, "maxCodeSize": "0x20000"}
-RESET_REMOVE = "eip7954TransitionTimestamp"  # the one key a reset removes (CTR-GOV-19): EIP-7954 caps the code at 65,536 B
+ADDR = [
+    "000000000000000000000000000000005caa0f01",
+    "000000000000000000000000000000005caa0012",
+    "000000000000000000000000000000005caa0013",
+    "000000000000000000000000000000005caa0014",
+]  # 0014: MLDSA87, CTR-UA-39
+RESET = {
+    "eip4895TransitionTimestamp": 1,
+    "maximumExtraDataSize": "0xffff",
+    "maxCodeSizeTransition": 0,
+    "maxCodeSize": "0x20000",
+}
+RESET_REMOVE = (
+    "eip7954TransitionTimestamp"  # the one key a reset removes (CTR-GOV-19): EIP-7954 caps the code at 65,536 B
+)
 TESTNET = 7622  # the only chain --testnet-reset may touch (owner 2026-10-15; 22776 is the future mainnet)
 RESET_GAS_LIMIT = "0xbebc200"  # 200,000,000 = config.json Blocks.TargetBlockGasLimit: no ramp after the reset
 # The Amsterdam keys of the SCaaS testnet (runs/2026-10-21-testnet-reset-2.2.0.sh); the self-check's chainspec carries them
 AMSTERDAM = [2780, 7708, 7778, 7928, 7954, 7976, 7981, 8024, 8037, 8038, 8246]
 MAINNET = 22776  # scaas-mainnet, the owner's only: never a RescueVault alloc (NET-EVM-14)
 RESCUE_VAULT = "d33d17991f57befb4ccbb3e57c477c10bde5b465"  # RescueLib.SCAAS_DEV_RESCUE
-RESCUE_ALLOC = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "../../../smartcontracts/vectors/governance/rescue_vault_testnet_alloc.json")
+RESCUE_ALLOC = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "../../../smartcontracts/vectors/governance/rescue_vault_testnet_alloc.json",
+)
 
 
 def rescue_alloc(g, path, reset):
@@ -60,8 +74,10 @@ def rescue_alloc(g, path, reset):
     v = json.load(open(path))
     cid, key = int(str(g["params"].get("chainId", "0")), 0), str(v.get("chain", ""))
     if cid == MAINNET or key.endswith("-mainnet"):
-        sys.exit(f"RESCUE_VAULT_ALLOC_MAINNET_REFUSED: chain id {cid}, alloc chain {key!r}: a mainnet gets the RescueVault "
-                 f"through the public CREATE2 deployer with the real dev admin, never a genesis alloc (NET-EVM-14)")
+        sys.exit(
+            f"RESCUE_VAULT_ALLOC_MAINNET_REFUSED: chain id {cid}, alloc chain {key!r}: a mainnet gets the RescueVault "
+            f"through the public CREATE2 deployer with the real dev admin, never a genesis alloc (NET-EVM-14)"
+        )
     if not reset:
         sys.exit("RESCUE_VAULT_ALLOC_NEEDS_RESET: a genesis alloc is for a fresh chain (--testnet-reset)")
     if v.get("chainId") != cid:
@@ -92,8 +108,10 @@ def main(src, eng, ts, out, *flags):
     if reset and t != g0:
         sys.exit(f"--testnet-reset: timestamp {t} is not the genesis timestamp {g0}")
     if not reset and t < time.time() + 300:
-        sys.exit(f"timestamp {t} is not at least 5 minutes in the future (now {int(time.time())}); "
-                 f"activation at genesis is --testnet-reset's")
+        sys.exit(
+            f"timestamp {t} is not at least 5 minutes in the future (now {int(time.time())}); "
+            f"activation at genesis is --testnet-reset's"
+        )
     if not reset and t <= g0:
         sys.exit(f"timestamp {t} is not after the genesis timestamp {g0}; activation at genesis is --testnet-reset's")
     e["schedules"][0]["timestamp"] = hex(t)
@@ -115,15 +133,22 @@ def main(src, eng, ts, out, *flags):
     changed = {k for k in set(g["params"]) | set(g2["params"]) if g["params"].get(k) != g2["params"].get(k)}
     header = {k for k in set(g["genesis"]) | set(g2["genesis"]) if g["genesis"].get(k) != g2["genesis"].get(k)}
     others = lambda x: {k: v for k, v in x["engine"].items() if k != "Pqz"}
-    if set(g2) != set(g) or others(g2) != others(g) or header - ({"gasLimit"} if reset else set()) \
-            or g2["accounts"] != want or changed - (set(RESET) | {RESET_REMOVE} if reset else set()):
+    if (
+        set(g2) != set(g)
+        or others(g2) != others(g)
+        or header - ({"gasLimit"} if reset else set())
+        or g2["accounts"] != want
+        or changed - (set(RESET) | {RESET_REMOVE} if reset else set())
+    ):
         sys.exit("unexpected diff")
     json.dump(g2, open(out, "w"), indent=1)
-    print(f"{out}: engine.Pqz {'replaced' if 'Pqz' in g['engine'] else 'added'} (first timestamp {t} = {hex(t)}, {len(e['schedules'])} schedule(s), "
-          f"{len(e['schedules'][0]['pqz'])} rows); diff: {len([l for l in d if l.startswith('+') and not l.startswith('+++')])} added lines, "
-          f"{len(removed)} removed; params changed: {', '.join(f'{k} {g['params'].get(k)} -> {g2['params'].get(k, 'removed')}' for k in sorted(changed)) or 'none'}"
-          f"; genesis header changed: {', '.join(f'{k} {g['genesis'].get(k)} -> {g2['genesis'][k]}' for k in sorted(header)) or 'none'}"
-          f"; alloc added: {vault[0] + ' (RescueVault, NET-EVM-14)' if vault else 'none'}")
+    print(
+        f"{out}: engine.Pqz {'replaced' if 'Pqz' in g['engine'] else 'added'} (first timestamp {t} = {hex(t)}, {len(e['schedules'])} schedule(s), "
+        f"{len(e['schedules'][0]['pqz'])} rows); diff: {len([l for l in d if l.startswith('+') and not l.startswith('+++')])} added lines, "
+        f"{len(removed)} removed; params changed: {', '.join(f'{k} {g['params'].get(k)} -> {g2['params'].get(k, 'removed')}' for k in sorted(changed)) or 'none'}"
+        f"; genesis header changed: {', '.join(f'{k} {g['genesis'].get(k)} -> {g2['genesis'][k]}' for k in sorted(header)) or 'none'}"
+        f"; alloc added: {vault[0] + ' (RescueVault, NET-EVM-14)' if vault else 'none'}"
+    )
 
 
 def check():
@@ -135,8 +160,15 @@ def check():
         src, eng, out = (os.path.join(d, f) for f in ("g.json", "e.json", "o.json"))
         src2 = os.path.join(d, "g2.json")  # a fresh chain whose genesis is still an hour ahead
         for f, g0 in ((src, "0x0"), (src2, hex(now + 3600))):
-            json.dump({"params": {"networkID": 1, "chainId": "0x1dc6"}, "engine": {"clique": {}}, "genesis": {"timestamp": g0},
-                       "accounts": {"0x1": {}}}, open(f, "w"))
+            json.dump(
+                {
+                    "params": {"networkID": 1, "chainId": "0x1dc6"},
+                    "engine": {"clique": {}},
+                    "genesis": {"timestamp": g0},
+                    "accounts": {"0x1": {}},
+                },
+                open(f, "w"),
+            )
         json.dump({"schedules": [{"timestamp": "0x0", "pqz": []}]}, open(eng, "w"))
         main(src, eng, str(now + 900), out)
         main(src, eng, "0", out, "--testnet-reset")
@@ -179,7 +211,9 @@ def check():
         print(f"  reset: maxCodeSize 0x20000, {RESET_REMOVE} removed, {len(keys) - 1} Amsterdam keys kept")
         main(ams, eng, str(now + 900), out)
         p = json.load(open(out))["params"]
-        assert p[RESET_REMOVE] == 1 and p["maxCodeSize"] == "0x10000", "no removal, no code size without --testnet-reset"
+        assert p[RESET_REMOVE] == 1 and p["maxCodeSize"] == "0x10000", (
+            "no removal, no code size without --testnet-reset"
+        )
         print(f"  no --testnet-reset: {RESET_REMOVE} and maxCodeSize unchanged")
         g["params"]["chainId"] = hex(22776)
         json.dump(g, open(other, "w"))
@@ -195,24 +229,36 @@ def check():
         acc = json.load(open(out))["accounts"]
         va = json.load(open(RESCUE_ALLOC))
         assert acc == json.load(open(src))["accounts"] | {va["address"]: va["account"]}, "exactly the vault added"
-        print(f"  alloc: {va['address']} added, code {len(va['account']['code']) // 2 - 1} B, {len(va['account']['storage'])} slots")
+        print(
+            f"  alloc: {va['address']} added, code {len(va['account']['code']) // 2 - 1} B, {len(va['account']['storage'])} slots"
+        )
         mkey = os.path.join(d, "alloc-mainnet.json")
         json.dump(va | {"chain": "scaas-mainnet"}, open(mkey, "w"))
-        for gs, fl, why in ((other, ["--testnet-reset", "--rescue-vault-alloc", RESCUE_ALLOC], "MAINNET_REFUSED"),
-                            (other, ["--rescue-vault-alloc", RESCUE_ALLOC], "MAINNET_REFUSED"),
-                            (src, ["--testnet-reset", "--rescue-vault-alloc", mkey], "MAINNET_REFUSED"),
-                            (src, ["--rescue-vault-alloc", RESCUE_ALLOC], "NEEDS_RESET"),
-                            (out, ["--testnet-reset", "--rescue-vault-alloc", RESCUE_ALLOC], "ALLOC_PRESENT")):
+        for gs, fl, why in (
+            (other, ["--testnet-reset", "--rescue-vault-alloc", RESCUE_ALLOC], "MAINNET_REFUSED"),
+            (other, ["--rescue-vault-alloc", RESCUE_ALLOC], "MAINNET_REFUSED"),
+            (src, ["--testnet-reset", "--rescue-vault-alloc", mkey], "MAINNET_REFUSED"),
+            (src, ["--rescue-vault-alloc", RESCUE_ALLOC], "NEEDS_RESET"),
+            (out, ["--testnet-reset", "--rescue-vault-alloc", RESCUE_ALLOC], "ALLOC_PRESENT"),
+        ):
             try:
                 main(gs, eng, "0" if "--testnet-reset" in fl else str(now + 900), out2, *fl)
                 raise AssertionError(("alloc accepted", gs, fl))
             except SystemExit as e:
-                assert isinstance(e.code, str) and e.code.startswith("RESCUE_VAULT_ALLOC_" + why.removeprefix("ALLOC_")), (fl, e.code)
-                print(f"  refused (alloc, {os.path.basename(gs)}, {' '.join(os.path.basename(f) for f in fl)}): {e.code[:60]}")
-        for g, bad, why in ((src, [str(now - 60)], "5 minutes"), (src, [str(now + 60)], "5 minutes"),
-                            (src, ["0"], "5 minutes"), (src, [str(now + 900), "--testnet-reset"], "not the genesis"),
-                            (src2, [str(now + 900)], "not after the genesis"),
-                            (src2, [str(now + 3600)], "not after the genesis")):
+                assert isinstance(e.code, str) and e.code.startswith(
+                    "RESCUE_VAULT_ALLOC_" + why.removeprefix("ALLOC_")
+                ), (fl, e.code)
+                print(
+                    f"  refused (alloc, {os.path.basename(gs)}, {' '.join(os.path.basename(f) for f in fl)}): {e.code[:60]}"
+                )
+        for g, bad, why in (
+            (src, [str(now - 60)], "5 minutes"),
+            (src, [str(now + 60)], "5 minutes"),
+            (src, ["0"], "5 minutes"),
+            (src, [str(now + 900), "--testnet-reset"], "not the genesis"),
+            (src2, [str(now + 900)], "not after the genesis"),
+            (src2, [str(now + 3600)], "not after the genesis"),
+        ):
             try:
                 main(g, eng, bad[0], out, *bad[1:])
                 raise AssertionError(bad)

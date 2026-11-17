@@ -2,7 +2,11 @@
 // (Ryzen 5 7235HS) the real library would report the same, so HEXL takes its scalar ("native") path either way.
 #pragma once
 namespace cpu_features {
-struct X86Features { int avx512f, avx512dq, avx512vl, avx512ifma, avx512vbmi2; };
-struct X86Info { X86Features features; };
-inline X86Info GetX86Info () { return X86Info{}; }
-}
+struct X86Features {
+    int avx512f, avx512dq, avx512vl, avx512ifma, avx512vbmi2;
+};
+struct X86Info {
+    X86Features features;
+};
+inline X86Info GetX86Info() { return X86Info{}; }
+} // namespace cpu_features

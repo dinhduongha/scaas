@@ -4,12 +4,16 @@
 // ..._AVX512DQ=1) in the environment still turns a path off at run time.
 #pragma once
 namespace cpu_features {
-struct X86Features { int avx512f, avx512dq, avx512vl, avx512ifma, avx512vbmi2; };
-struct X86Info { X86Features features; };
-inline X86Info GetX86Info () {
-  __builtin_cpu_init ();
-  return X86Info{ { __builtin_cpu_supports ("avx512f"), __builtin_cpu_supports ("avx512dq"),
-                    __builtin_cpu_supports ("avx512vl"), __builtin_cpu_supports ("avx512ifma"),
-                    __builtin_cpu_supports ("avx512vbmi2") } };
+struct X86Features {
+    int avx512f, avx512dq, avx512vl, avx512ifma, avx512vbmi2;
+};
+struct X86Info {
+    X86Features features;
+};
+inline X86Info GetX86Info() {
+    __builtin_cpu_init();
+    return X86Info{{__builtin_cpu_supports("avx512f"), __builtin_cpu_supports("avx512dq"),
+                    __builtin_cpu_supports("avx512vl"), __builtin_cpu_supports("avx512ifma"),
+                    __builtin_cpu_supports("avx512vbmi2")}};
 }
-}
+} // namespace cpu_features

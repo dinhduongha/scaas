@@ -14,6 +14,7 @@ pqz-stmt's tests/xcheck.rs reads the dump dir and out.txt (PQZ_STMT_XCHECK=<dir>
 the same fields, build the same bytes from the fields, and reject each "bad" line for the same reason.
 Line format: ok <op> <form> <stmt hex> <field>=<hex>...  |  bad <op> <reason> <stmt hex>  |  c <name> <form> ok.
 """
+
 import importlib.util
 import os
 import random
@@ -21,13 +22,20 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location(
-    "pqz_kat", os.path.join(HERE, "..", "..", "smartcontracts", "vectors", "pqz", "pqz_kat.py"))
+    "pqz_kat", os.path.join(HERE, "..", "..", "smartcontracts", "vectors", "pqz", "pqz_kat.py")
+)
 kat = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(kat)
 
 PK, V, CT, HB = kat.PK_BYTES, kat.V_BYTES, kat.CT_BYTES, kat.HEADER_BYTES
-C_FORMS = {"reg": "REGISTER", "tx": "TRANSFER", "burn": "BURN", "ds": "DISCLOSE-SENDER", "dr": "DISCLOSE-RECEIVER",
-           "tx0": "TRANSFER0"}
+C_FORMS = {
+    "reg": "REGISTER",
+    "tx": "TRANSFER",
+    "burn": "BURN",
+    "ds": "DISCLOSE-SENDER",
+    "dr": "DISCLOSE-RECEIVER",
+    "tx0": "TRANSFER0",
+}
 
 
 def op_of(form):
@@ -39,13 +47,22 @@ def fields_of(form, st):
     if form == "REGISTER":
         return {"words": st[:96], "pk": st[96:]}
     if form.startswith("DISCLOSE"):
-        return {"words": st[:288], "pk": st[288:288 + PK], "u": st[288 + PK:288 + 2 * PK], "v": st[288 + 2 * PK:]}
+        return {"words": st[:288], "pk": st[288 : 288 + PK], "u": st[288 + PK : 288 + 2 * PK], "v": st[288 + 2 * PK :]}
     tr, aud, split = form.startswith("TRANSFER"), form in ("TRANSFER", "TRANSFER-SPLIT"), "-SPLIT" in form
     f, o, b = {"hdr": st[:HB]}, 0, st[HB:]
-    for k, n, on in (("pk_f", PK, True), ("pk_t", PK, tr), ("pk_a", PK, aud), ("t", CT, True), ("u", PK, True),
-                     ("v_t", V, tr), ("v_f", V, True), ("v_a", V, aud), ("u_f", PK, split)):
+    for k, n, on in (
+        ("pk_f", PK, True),
+        ("pk_t", PK, tr),
+        ("pk_a", PK, aud),
+        ("t", CT, True),
+        ("u", PK, True),
+        ("v_t", V, tr),
+        ("v_f", V, True),
+        ("v_a", V, aud),
+        ("u_f", PK, split),
+    ):
         if on:
-            f[k], o = b[o:o + n], o + n
+            f[k], o = b[o : o + n], o + n
     assert o == len(b)
     return f
 
@@ -82,8 +99,18 @@ def main(argv):
 
     valid = []
     for _ in range(n):
-        for form in ("TRANSFER", "TRANSFER0", "BURN", "REFRESH", "REGISTER", "DISCLOSE-SENDER", "DISCLOSE-RECEIVER",
-                     "DISCLOSE-AUDITOR", "TRANSFER-SPLIT", "TRANSFER-SPLIT0"):
+        for form in (
+            "TRANSFER",
+            "TRANSFER0",
+            "BURN",
+            "REFRESH",
+            "REGISTER",
+            "DISCLOSE-SENDER",
+            "DISCLOSE-RECEIVER",
+            "DISCLOSE-AUDITOR",
+            "TRANSFER-SPLIT",
+            "TRANSFER-SPLIT0",
+        ):
             # every id that serves the form (K3-4: PQZL_SPLIT_ID the split transfer, burn, refresh, sender disclosure)
             psid = rng.choice([i for i in kat.KNOWN_IDS if form in kat.FORMS_OF[i]])
             op = form.rstrip("0").replace("-SPLIT", "")
@@ -95,16 +122,24 @@ def main(argv):
                 st = kat.build_disclose(op, f, coeffs(kat.N), coeffs(kat.N), coeffs(16))
             else:
                 f = {k: rng.randbytes(32) for k in kat.HEADER[2:]}
-                f.update(proofSystemId=psid, fee=rng.getrandbits(64), amount=rng.getrandbits(64),
-                         salt=rng.randbytes(16))
+                f.update(
+                    proofSystemId=psid, fee=rng.getrandbits(64), amount=rng.getrandbits(64), salt=rng.randbytes(16)
+                )
                 f.pop("auditorOn")
                 for k in kat.ZERO_WORDS[op]:
                     f[k] = 0
                 tr, aud = op == "TRANSFER", form in ("TRANSFER", "TRANSFER-SPLIT")
                 out = coeffs(kat.N + 16 * (2 + aud if tr else 1))
-                st = kat.build_debit(op, f, coeffs(kat.N), coeffs(kat.N + 16), out, pk_t=coeffs(kat.N) if tr else None,
-                                     pk_a=coeffs(kat.N) if aud else None,
-                                     u_f=coeffs(kat.N) if "-SPLIT" in form else None)
+                st = kat.build_debit(
+                    op,
+                    f,
+                    coeffs(kat.N),
+                    coeffs(kat.N + 16),
+                    out,
+                    pk_t=coeffs(kat.N) if tr else None,
+                    pk_a=coeffs(kat.N) if aud else None,
+                    u_f=coeffs(kat.N) if "-SPLIT" in form else None,
+                )
             assert len(st) == kat.STMT_BYTES[form] and rebuild(form, st) == st
             kat.parse(op_of(form), st)
             valid.append((form, st))
@@ -117,17 +152,34 @@ def main(argv):
         for aud in (1, 0):
             for m in kat.BUILT_LEGS[psid]:
                 f = {k: rng.randbytes(32) for k in kat.MULTI_HEADER[2:] if k not in ("M", "auditorOn")}
-                f.update(proofSystemId=psid, fee=0 if i % 2 == 0 else rng.getrandbits(64), amount=0,
-                         salt=rng.randbytes(16))
+                f.update(
+                    proofSystemId=psid, fee=0 if i % 2 == 0 else rng.getrandbits(64), amount=0, salt=rng.randbytes(16)
+                )
                 i += 1
-                st = kat.build_multi(f, coeffs(kat.N), [coeffs(kat.N) for _ in range(m)], coeffs(kat.N + 16),
-                                     [coeffs(kat.N) for _ in range(kat.groups(m, aud))], [coeffs(16) for _ in range(m)],
-                                     coeffs(16), pk_a=coeffs(kat.N) if aud else None,
-                                     v_as=[coeffs(16) for _ in range(m)] if aud else None)
+                st = kat.build_multi(
+                    f,
+                    coeffs(kat.N),
+                    [coeffs(kat.N) for _ in range(m)],
+                    coeffs(kat.N + 16),
+                    [coeffs(kat.N) for _ in range(kat.groups(m, aud))],
+                    [coeffs(16) for _ in range(m)],
+                    coeffs(16),
+                    pk_a=coeffs(kat.N) if aud else None,
+                    v_as=[coeffs(16) for _ in range(m)] if aud else None,
+                )
                 p = kat.parse(7, st)
-                back = kat.build_multi({k: p[k] for k in kat.MULTI_HEADER if k not in ("opTag", "M", "auditorOn")} |
-                                       {"salt": p["salt"][16:]}, p["pk_f"], p["pks"], p["T"], p["us"], p["vs"],
-                                       p["v_f"], pk_a=p.get("pk_a"), v_as=p.get("v_as"))
+                back = kat.build_multi(
+                    {k: p[k] for k in kat.MULTI_HEADER if k not in ("opTag", "M", "auditorOn")}
+                    | {"salt": p["salt"][16:]},
+                    p["pk_f"],
+                    p["pks"],
+                    p["T"],
+                    p["us"],
+                    p["vs"],
+                    p["v_f"],
+                    pk_a=p.get("pk_a"),
+                    v_as=p.get("v_as"),
+                )
                 assert len(st) == kat.multi_len(m, aud) and back == st and p["legs"] == m
                 multi.append(st)
                 fl = {"hdr": st[:HB], "pk_f": p["pk_f"], "pks": b"".join(p["pks"])}
@@ -152,7 +204,7 @@ def main(argv):
         body0 = {"REGISTER": 96}.get(form, 288 if form.startswith("DISCLOSE") else HB)
         c = body0 + 8 * rng.randrange((len(st) - body0) // 8)
         for v in (kat.Q, 2**L, 2**64 - 1, kat.Q + rng.randrange(2**L - kat.Q)):  # L = ceil(log2 q)
-            bad(op, st[:c] + v.to_bytes(8, "big") + st[c + 8:], "coefficient")
+            bad(op, st[:c] + v.to_bytes(8, "big") + st[c + 8 :], "coefficient")
         bad(op, st[:-1], "length - 1")
         bad(op, st + b"\0", "length + 1")
         bad(op, rng.choice([kat.OP_TAG[m] for m in kat.OP_NAMES if kat.OP_BYTE[m] != op]) + st[32:], "opTag")
@@ -164,24 +216,27 @@ def main(argv):
                 bad(op, st[:32] + i + st[64:], "id does not serve the form")
         if form.startswith("DISCLOSE"):
             i = 224 + rng.randrange(24)
-            bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1:], "amount")
+            bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1 :], "amount")
             # the kind word = OpeningKind + 256 w (R0-1): w = 0 but for AUDITOR, w < S_AUD there; < 2^16
             k = int.from_bytes(st[256:288], "big") & 255
             wmax = kat.S_AUD if form == "DISCLOSE-AUDITOR" else 1
-            for v, what in ((k + 256 * wmax, "kind window"), (k + 2**16, "kind word >= 2^16"),
-                            ((k + 1 + rng.randrange(255)) % 256, "kind low byte (T-36)")):
+            for v, what in (
+                (k + 256 * wmax, "kind window"),
+                (k + 2**16, "kind word >= 2^16"),
+                ((k + 1 + rng.randrange(255)) % 256, "kind low byte (T-36)"),
+            ):
                 bad(op, st[:256] + kat.word(v) + st[288:], what)
         elif form != "REGISTER":
             for k in kat.ZERO_WORDS[op_of(form) == 1 and "TRANSFER" or form.rstrip("0")]:
                 i = 32 * kat.HEADER.index(k) + 16 + rng.randrange(16)  # the low half: the salt form still holds
-                bad(op, st[:i] + bytes([st[i] ^ (1 + rng.randrange(255))]) + st[i + 1:], k)
+                bad(op, st[:i] + bytes([st[i] ^ (1 + rng.randrange(255))]) + st[i + 1 :], k)
             for w, what in ((256, "fee"), (288, "amount"), (576, "salt")):
                 if what == "salt":
                     i = w + rng.randrange(16)
-                    bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1:], what)
+                    bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1 :], what)
                     continue
                 i = w + rng.randrange(24)
-                bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1:], what)
+                bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1 :], what)
             if op == 1:
                 a = int.from_bytes(st[448:480], "big")
                 for v in (1 - a, 2, 2**64 + a):
@@ -190,7 +245,7 @@ def main(argv):
     for st in sorted(multi, key=len)[:6] + [max(multi, key=len)]:
         c = HB + 8 * rng.randrange((len(st) - HB) // 8)
         for v in (kat.Q, 2**63 + 5):
-            bad(7, st[:c] + v.to_bytes(8, "big") + st[c + 8:], "coefficient")
+            bad(7, st[:c] + v.to_bytes(8, "big") + st[c + 8 :], "coefficient")
         bad(7, st[:-1], "length - 1")
         bad(7, st + b"\0", "length + 1")
         bad(7, st[:639], "header cut")
@@ -214,9 +269,11 @@ def main(argv):
     bad(7, t1, "op 1 statement under op 7")
     with open(out_path, "w") as fh:
         fh.write("\n".join(lines) + "\n")
-    print(f"xcheck.py: {len(C_FORMS)} C statements rebuilt by pqz_kat.py, {len(valid)} random statements, "
-          f"{len(multi)} op 7 statements, "
-          f"{sum(1 for l in lines if l.startswith('bad'))} rejections -> {os.path.basename(out_path)}")
+    print(
+        f"xcheck.py: {len(C_FORMS)} C statements rebuilt by pqz_kat.py, {len(valid)} random statements, "
+        f"{len(multi)} op 7 statements, "
+        f"{sum(1 for l in lines if l.startswith('bad'))} rejections -> {os.path.basename(out_path)}"
+    )
 
 
 if __name__ == "__main__":

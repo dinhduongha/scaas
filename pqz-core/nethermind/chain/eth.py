@@ -1,15 +1,37 @@
 """Minimal Ethereum helpers in the Python stdlib (P6f e2e): Keccak-256, RLP, secp256k1 ECDSA (RFC 6979) and legacy
 EIP-155 transaction signing. Used because inputs of 300+ KB exceed the 128 KiB single-argument limit of exec, so
 `cast keccak` / `cast mktx` cannot take them; test chains only (the keys are throwaway). Self-check: python3 -I eth.py"""
+
 import hashlib
 import hmac
 
 # Keccak-256 (FIPS 202 permutation, original padding 0x01)
-_RC = [0x0000000000000001, 0x0000000000008082, 0x800000000000808A, 0x8000000080008000, 0x000000000000808B,
-       0x0000000080000001, 0x8000000080008081, 0x8000000000008009, 0x000000000000008A, 0x0000000000000088,
-       0x0000000080008009, 0x000000008000000A, 0x000000008000808B, 0x800000000000008B, 0x8000000000008089,
-       0x8000000000008003, 0x8000000000008002, 0x8000000000000080, 0x000000000000800A, 0x800000008000000A,
-       0x8000000080008081, 0x8000000000008080, 0x0000000080000001, 0x8000000080008008]
+_RC = [
+    0x0000000000000001,
+    0x0000000000008082,
+    0x800000000000808A,
+    0x8000000080008000,
+    0x000000000000808B,
+    0x0000000080000001,
+    0x8000000080008081,
+    0x8000000000008009,
+    0x000000000000008A,
+    0x0000000000000088,
+    0x0000000080008009,
+    0x000000008000000A,
+    0x000000008000808B,
+    0x800000000000008B,
+    0x8000000000008089,
+    0x8000000000008003,
+    0x8000000000008002,
+    0x8000000000000080,
+    0x000000000000800A,
+    0x800000008000000A,
+    0x8000000080008081,
+    0x8000000000008080,
+    0x0000000080000001,
+    0x8000000080008008,
+]
 _ROT = [[0, 36, 3, 41, 18], [1, 44, 10, 45, 2], [62, 6, 43, 15, 61], [28, 55, 25, 21, 56], [27, 20, 39, 8, 14]]
 _M = (1 << 64) - 1
 
@@ -35,9 +57,9 @@ def keccak256(data: bytes) -> bytes:
     p[-1] |= 0x80
     a = [[0] * 5 for _ in range(5)]
     for off in range(0, len(p), rate):
-        blk = p[off:off + rate]
+        blk = p[off : off + rate]
         for i in range(rate // 8):
-            a[i % 5][i // 5] ^= int.from_bytes(blk[8 * i:8 * i + 8], "little")
+            a[i % 5][i // 5] ^= int.from_bytes(blk[8 * i : 8 * i + 8], "little")
         a = _f(a)
     return b"".join(a[i % 5][i // 5].to_bytes(8, "little") for i in range(4))
 
@@ -64,8 +86,10 @@ def _len(n, off):
 # secp256k1
 P = 2**256 - 2**32 - 977
 N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
-G = (0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798,
-     0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8)
+G = (
+    0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798,
+    0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8,
+)
 
 
 def _add(p, q):
@@ -138,7 +162,11 @@ if __name__ == "__main__":
     # the well-known key 1: address 0x7e5f4552091a69125d5dfcb7b8c2659029395bdf
     assert address(1) == "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf"
     # EIP-155 example (chain 1, key 0x4646…46): the spec's signed transaction
-    raw = legacy_tx(int("46" * 32, 16), 9, 20 * 10**9, 21000, "0x3535353535353535353535353535353535353535", 10**18, b"", 1)
-    assert raw.hex() == ("f86c098504a817c800825208943535353535353535353535353535353535353535880de0b6b3a76400008025a028ef61340bd939bc"
-                         "2195fe537567866003e1a15d3c71ff63e1590620aa636276a067cbe9d8997f761aecb703304b3800ccf555c9f3dc64214b297fb1966a3b6d83"), raw.hex()
+    raw = legacy_tx(
+        int("46" * 32, 16), 9, 20 * 10**9, 21000, "0x3535353535353535353535353535353535353535", 10**18, b"", 1
+    )
+    assert raw.hex() == (
+        "f86c098504a817c800825208943535353535353535353535353535353535353535880de0b6b3a76400008025a028ef61340bd939bc"
+        "2195fe537567866003e1a15d3c71ff63e1590620aa636276a067cbe9d8997f761aecb703304b3800ccf555c9f3dc64214b297fb1966a3b6d83"
+    ), raw.hex()
     print("eth.py: ok")

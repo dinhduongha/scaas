@@ -19,10 +19,10 @@
 //! The honest inputs (every form of both ids, the fee-0 forms, every built op 7 `(id, M, auditorOn)` and the inputs
 //! of `regress/valid/`) come from the frozen vectors (`smartcontracts/vectors/pqz/`, written to `$PQZ_FUZZ_HONEST` by
 //! `seeds.py`); the core never proves.
-use std::sync::OnceLock;
 #[cfg(feature = "pqzl-diff")]
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use std::sync::OnceLock;
 
 use pqz_ffi::stmt::{self, Form};
 use pqz_ffi::*;
@@ -67,7 +67,10 @@ static MULTI: AtomicU64 = AtomicU64::new(0);
 static MULTI_DIFFS: AtomicU64 = AtomicU64::new(0);
 
 fn die(msg: &str) -> ! {
-    eprintln!("pqz-fuzz FINDING ({}): {msg}", TARGET.get().map_or("?", |s| s.as_str()));
+    eprintln!(
+        "pqz-fuzz FINDING ({}): {msg}",
+        TARGET.get().map_or("?", |s| s.as_str())
+    );
     std::process::abort()
 }
 
@@ -76,16 +79,26 @@ fn honest() -> &'static [Honest] {
 }
 
 fn record(input: Vec<u8>) -> Honest {
-    let i = decode(&input).unwrap_or_else(|e| die(&format!("cached honest input does not decode: {e:?}")));
+    let i = decode(&input)
+        .unwrap_or_else(|e| die(&format!("cached honest input does not decode: {e:?}")));
     let (form, pqzl) = (i.stmt.form(), *i.stmt.proof_system_id().unwrap() == PQZL_ID);
     let (stmt, proof) = (i.stmt_bytes.to_vec(), i.proof.to_vec());
-    Honest { form, op: i.op, rel: rel(&i.stmt), pqzl, stmt, proof, input }
+    Honest {
+        form,
+        op: i.op,
+        rel: rel(&i.stmt),
+        pqzl,
+        stmt,
+        proof,
+        input,
+    }
 }
 
 /// The honest inputs from `seeds.py`'s file (`be32(len) ‖ input` records, built from the frozen vectors): PQZL's 8
 /// forms in `FORMS` order, PQZH's 8, the fee-0 rows of both ids, the op 7 rows of PQZL then PQZH, `regress/valid/`.
 fn load(path: &str) -> Vec<Honest> {
-    let mut b = &std::fs::read(path).unwrap_or_else(|e| die(&format!("{path}: {e} (run seeds.py)")))[..];
+    let mut b =
+        &std::fs::read(path).unwrap_or_else(|e| die(&format!("{path}: {e} (run seeds.py)")))[..];
     let mut v = Vec::new();
     while b.len() >= 4 {
         let n = u32::from_be_bytes(b[..4].try_into().unwrap()) as usize;
@@ -94,9 +107,15 @@ fn load(path: &str) -> Vec<Honest> {
     }
     // PQZL's 8 forms, then (a build with PQZH: every set with it, plan 5h Task 8c part 2) PQZH's 8
     let n = if pqz_ffi::PQZH { 16 } else { 8 };
-    let order = v.len() >= n && v.iter().take(n).enumerate().all(|(i, h)| h.pqzl == (i < 8) && h.form == Some(stmt::FORMS[i % 8]));
+    let order = v.len() >= n
+        && v.iter()
+            .take(n)
+            .enumerate()
+            .all(|(i, h)| h.pqzl == (i < 8) && h.form == Some(stmt::FORMS[i % 8]));
     if !order {
-        die(&format!("{path}: expected PQZL then PQZH in FORMS order first"));
+        die(&format!(
+            "{path}: expected PQZL then PQZH in FORMS order first"
+        ));
     }
     v
 }
@@ -134,7 +153,13 @@ fn hex(b: &[u8]) -> String {
 fn check(inp: &[u8], a: (i32, Word), b: (i32, Word)) -> bool {
     INPUTS.fetch_add(1, Relaxed);
     if a != b {
-        die(&format!("not deterministic: {} {} / {} {}", a.0, hex(&a.1), b.0, hex(&b.1)));
+        die(&format!(
+            "not deterministic: {} {} / {} {}",
+            a.0,
+            hex(&a.1),
+            b.0,
+            hex(&b.1)
+        ));
     }
     let over = inp.len() > MAX_INPUT;
     match a.0 {
@@ -150,16 +175,27 @@ fn check(inp: &[u8], a: (i32, Word), b: (i32, Word)) -> bool {
         INVALID
     };
     if a.1 != expect {
-        die(&format!("verdict {} for an input that should give {} ({} B)", hex(&a.1), hex(&expect), inp.len()));
+        die(&format!(
+            "verdict {} for an input that should give {} ({} B)",
+            hex(&a.1),
+            hex(&expect),
+            inp.len()
+        ));
     }
     if let Ok(i) = decode(inp) {
         DECODED.fetch_add(1, Relaxed);
         MULTI.fetch_add((i.op == 7) as u64, Relaxed);
         #[cfg(feature = "pqzl-diff")]
         if i.stmt.proof_system_id() == Some(&PQZL_ID) {
-            let c = pqzl::c::verify_fast(i.op, i.stmt_bytes, i.proof).unwrap_or_else(|_| die("node fault in the C core"));
+            let c = pqzl::c::verify_fast(i.op, i.stmt_bytes, i.proof)
+                .unwrap_or_else(|_| die("node fault in the C core"));
             if c != (a.1 == VALID) {
-                die(&format!("cores differ: C verdict {c}, Rust (precompile) {} (op {}, {} B)", hex(&a.1), i.op, inp.len()));
+                die(&format!(
+                    "cores differ: C verdict {c}, Rust (precompile) {} (op {}, {} B)",
+                    hex(&a.1),
+                    i.op,
+                    inp.len()
+                ));
             }
             CORE_DIFFS.fetch_add(1, Relaxed);
         }
@@ -171,10 +207,12 @@ fn check(inp: &[u8], a: (i32, Word), b: (i32, Word)) -> bool {
 
 /// `pqzl::test_mutate` (the backend's: the Rust core), and in mode `pqzl-diff` the same from the C core: equal bytes.
 fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Option<Vec<u8>> {
-    let r = pqzl::test_mutate(rel, proof, kind, r1, r2).unwrap_or_else(|_| die("node fault in pqz_test_mutate"));
+    let r = pqzl::test_mutate(rel, proof, kind, r1, r2)
+        .unwrap_or_else(|_| die("node fault in pqz_test_mutate"));
     #[cfg(feature = "pqzl-diff")]
     {
-        let c = pqzl::c::test_mutate(rel, proof, kind, r1, r2).unwrap_or_else(|_| die("node fault in the C core's pqz_test_mutate"));
+        let c = pqzl::c::test_mutate(rel, proof, kind, r1, r2)
+            .unwrap_or_else(|_| die("node fault in the C core's pqz_test_mutate"));
         if c != r {
             die(&format!(
                 "cores differ in pqz_test_mutate (rel {rel:#x}, kind {kind}, {} B): C {:?} B, Rust {:?} B",
@@ -227,7 +265,9 @@ extern "C" {
 /// `target` is a NUL-terminated string.
 #[no_mangle]
 pub unsafe extern "C" fn pqz_fuzz_init(target: *const std::ffi::c_char) {
-    let target = std::ffi::CStr::from_ptr(target).to_string_lossy().into_owned();
+    let target = std::ffi::CStr::from_ptr(target)
+        .to_string_lossy()
+        .into_owned();
     TARGET.set(target.clone()).ok();
     std::panic::set_hook(Box::new(|i| die(&format!("panic: {i}"))));
     let path = std::env::var("PQZ_FUZZ_HONEST").unwrap_or_else(|_| "honest.bin".into());
@@ -239,7 +279,8 @@ pub unsafe extern "C" fn pqz_fuzz_init(target: *const std::ffi::c_char) {
     if target == "offchain" {
         // the honest split inputs: accepted off-chain, refused by the precompile (it never serves PQZL_SPLIT_ID)
         let path = std::env::var("PQZ_FUZZ_SPLIT").unwrap_or_else(|_| "honest_split.bin".into());
-        let mut b = &std::fs::read(&path).unwrap_or_else(|e| die(&format!("{path}: {e} (run seeds.py)")))[..];
+        let mut b = &std::fs::read(&path)
+            .unwrap_or_else(|e| die(&format!("{path}: {e} (run seeds.py)")))[..];
         let mut v = Vec::new();
         while b.len() >= 4 {
             let n = u32::from_be_bytes(b[..4].try_into().unwrap()) as usize;
@@ -263,11 +304,17 @@ pub unsafe extern "C" fn pqz_fuzz_init(target: *const std::ffi::c_char) {
     SELFTEST.set(st.1).ok();
     for h in honest() {
         if call(&h.input) != (PQZ_FFI_OK, VALID) {
-            die(&format!("honest {:?} op {} rel {:#x} (PQZL {}) not valid", h.form, h.op, h.rel, h.pqzl));
+            die(&format!(
+                "honest {:?} op {} rel {:#x} (PQZL {}) not valid",
+                h.form, h.op, h.rel, h.pqzl
+            ));
         }
         #[cfg(feature = "pqzl-diff")]
         if h.pqzl && pqzl::c::verify_fast(h.op, &h.stmt, &h.proof) != Ok(true) {
-            die(&format!("honest {:?} op {} rel {:#x}: not valid in the C core", h.form, h.op, h.rel));
+            die(&format!(
+                "honest {:?} op {} rel {:#x}: not valid in the C core",
+                h.form, h.op, h.rel
+            ));
         }
     }
     arena_check();
@@ -294,8 +341,19 @@ pub unsafe extern "C" fn pqz_fuzz_init(target: *const std::ffi::c_char) {
 /// # Safety
 /// `data` points to `len` bytes, `out1` / `out2` to 32 bytes each.
 #[no_mangle]
-pub unsafe extern "C" fn pqz_fuzz_check(data: *const u8, len: usize, rc1: i32, out1: *const u8, rc2: i32, out2: *const u8) {
-    let inp = if len == 0 { &[][..] } else { std::slice::from_raw_parts(data, len) };
+pub unsafe extern "C" fn pqz_fuzz_check(
+    data: *const u8,
+    len: usize,
+    rc1: i32,
+    out1: *const u8,
+    rc2: i32,
+    out2: *const u8,
+) {
+    let inp = if len == 0 {
+        &[][..]
+    } else {
+        std::slice::from_raw_parts(data, len)
+    };
     let w = |p: *const u8| -> Word { std::slice::from_raw_parts(p, 32).try_into().unwrap() };
     check(inp, (rc1, w(out1)), (rc2, w(out2)));
 }
@@ -308,9 +366,16 @@ pub unsafe extern "C" fn pqz_fuzz_check(data: *const u8, len: usize, rc1: i32, o
 /// `data` points to `len` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn pqz_fuzz_offchain(data: *const u8, len: usize) {
-    let inp = if len == 0 { &[][..] } else { std::slice::from_raw_parts(data, len) };
+    let inp = if len == 0 {
+        &[][..]
+    } else {
+        std::slice::from_raw_parts(data, len)
+    };
     INPUTS.fetch_add(1, Relaxed);
-    let (a, b) = (pqz_offchain::verify_offchain(inp), pqz_offchain::verify_offchain(inp));
+    let (a, b) = (
+        pqz_offchain::verify_offchain(inp),
+        pqz_offchain::verify_offchain(inp),
+    );
     if a != b {
         die(&format!("offchain not deterministic: {a:?} / {b:?}"));
     }
@@ -318,7 +383,10 @@ pub unsafe extern "C" fn pqz_fuzz_offchain(data: *const u8, len: usize) {
     let split = SPLIT.get().is_some_and(|s| s.iter().any(|x| x == inp));
     let expect = split || honest().iter().any(|h| h.input == inp);
     if v != expect {
-        die(&format!("offchain verdict {v} for an input that should give {expect} ({} B)", inp.len()));
+        die(&format!(
+            "offchain verdict {v} for an input that should give {expect} ({} B)",
+            inp.len()
+        ));
     }
     if decode(inp).is_ok() {
         DECODED.fetch_add(1, Relaxed);
@@ -348,7 +416,10 @@ fn edit(buf: &mut Vec<u8>, region: std::ops::Range<usize>, s: &[u8]) {
 }
 
 fn le64(b: &[u8]) -> u64 {
-    b.iter().take(8).enumerate().fold(0, |a, (i, &x)| a | (x as u64) << (8 * i))
+    b.iter()
+        .take(8)
+        .enumerate()
+        .fold(0, |a, (i, &x)| a | (x as u64) << (8 * i))
 }
 
 /// The `pqz_test_mutate` relation code of a statement (pqz_int.h: the op, `R_TX0` = 0x81, `R_TXS` / `R_TXS0` = 0x41 /
@@ -359,7 +430,9 @@ fn rel(s: &stmt::Stmt) -> u8 {
         (_, Some(Form::TransferSplit)) => 0x41,
         (_, Some(Form::TransferSplit0)) => 0xc1,
         (_, Some(f)) => f.op(),
-        (stmt::Stmt::Multi(m), None) => 0x70 | (m.pk_a.is_some() as u8) << 3 | m.m.trailing_zeros() as u8,
+        (stmt::Stmt::Multi(m), None) => {
+            0x70 | (m.pk_a.is_some() as u8) << 3 | m.m.trailing_zeros() as u8
+        }
         _ => 0,
     }
 }
@@ -411,7 +484,8 @@ pub unsafe extern "C" fn pqz_fuzz_mutate(data: *const u8, len: usize) {
     if h.pqzl && PQZL_INPUTS.fetch_add(1, Relaxed) % DIFF_EVERY == DIFF_EVERY - 1 {
         if let Ok(i) = decode(&inp) {
             if *i.stmt.proof_system_id().unwrap() == PQZL_ID {
-                let g = pqzl::verify_generic(i.op, i.stmt_bytes, i.proof).unwrap_or_else(|_| die("node fault in the generic verifier"));
+                let g = pqzl::verify_generic(i.op, i.stmt_bytes, i.proof)
+                    .unwrap_or_else(|_| die("node fault in the generic verifier"));
                 if g != valid {
                     die(&format!("differential: generic {g}, specialised {valid}"));
                 }
@@ -452,8 +526,16 @@ pub unsafe extern "C" fn pqz_fuzz_codec(data: *const u8, len: usize) {
     INPUTS.fetch_add(1, Relaxed);
     let tr = &honest()[(sel & 1) as usize]; // PQZL Transfer / Transfer0: the bundle's u, v_t, [v_a]
     let bundle = || {
-        let Ok(stmt::Stmt::Debit(t)) = stmt::parse(tr.op, &tr.stmt) else { die("honest transfer") };
-        let b = stmt::Bundle { salt: [0xA5; 16], u: t.u, v_t: t.v_t.unwrap(), v_a: t.v_a, to_ua: [0x22; 32] };
+        let Ok(stmt::Stmt::Debit(t)) = stmt::parse(tr.op, &tr.stmt) else {
+            die("honest transfer")
+        };
+        let b = stmt::Bundle {
+            salt: [0xA5; 16],
+            u: t.u,
+            v_t: t.v_t.unwrap(),
+            v_a: t.v_a,
+            to_ua: [0x22; 32],
+        };
         b.encode().unwrap()
     };
     let mut b = match codec {
@@ -474,11 +556,17 @@ pub unsafe extern "C" fn pqz_fuzz_codec(data: *const u8, len: usize) {
             r.map(|s| {
                 let shape = match (&s, s.form()) {
                     (_, Some(f)) => f.op() == op && f.stmt_len() == b.len(),
-                    (stmt::Stmt::Multi(m), None) => op == 7 && stmt::multi_len(m.m, m.pk_a.is_some()) == b.len(),
+                    (stmt::Stmt::Multi(m), None) => {
+                        op == 7 && stmt::multi_len(m.m, m.pk_a.is_some()) == b.len()
+                    }
                     _ => op == 6 && b.is_empty(),
                 };
                 if s.encode().as_deref() != Ok(&b[..]) || !shape {
-                    die(&format!("parse/encode round trip, op {op}, form {:?}, {} B", s.form(), b.len()));
+                    die(&format!(
+                        "parse/encode round trip, op {op}, form {:?}, {} B",
+                        s.form(),
+                        b.len()
+                    ));
                 }
             })
             .is_ok()
@@ -489,7 +577,9 @@ pub unsafe extern "C" fn pqz_fuzz_codec(data: *const u8, len: usize) {
                 die("decode_input not deterministic");
             }
             r.map(|i| {
-                if stmt::input(i.op, i.stmt_bytes, i.proof) != b || stmt::parse(i.op, i.stmt_bytes) != Ok(i.stmt.clone()) {
+                if stmt::input(i.op, i.stmt_bytes, i.proof) != b
+                    || stmt::parse(i.op, i.stmt_bytes) != Ok(i.stmt.clone())
+                {
                     die("decode_input/input round trip");
                 }
             })
@@ -521,7 +611,10 @@ pub unsafe extern "C" fn pqz_fuzz_codec(data: *const u8, len: usize) {
         }
         _ => {
             let h = hl;
-            let (r, r2) = (test_mutate(h.rel, &b, 99, 0, 0), test_mutate(h.rel, &b, 99, 0, 0));
+            let (r, r2) = (
+                test_mutate(h.rel, &b, 99, 0, 0),
+                test_mutate(h.rel, &b, 99, 0, 0),
+            );
             if r != r2 {
                 die("PQZL proof decoder not deterministic");
             }

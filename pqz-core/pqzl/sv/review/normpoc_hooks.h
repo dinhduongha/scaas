@@ -16,45 +16,38 @@ int64_t pqz_poc_z21sq; /* modes 2, 4: ||z21||^2 of the emitted proof */
 int64_t pqz_poc_z2sq;  /* modes 2, 4: ||(z21, z22)||^2, the quantity the honest prover bounds by Bsqr */
 #define POC_Z21 (pqz_poc_mode == 2 || pqz_poc_mode == 4)
 
-static void
-poc_mul0 (polyvec_t v, int64_t k) /* mode 4: p_0 += sign(p_0) (k - 1) ||p||_2, p the first polynomial of v */
+static void poc_mul0(polyvec_t v, int64_t k) /* mode 4: p_0 += sign(p_0) (k - 1) ||p||_2, p the first polynomial of v */
 {
-  uint64_t s = 0, r = 0; /* y21 is Gaussian (sigma < 2^20 at every set): s < 2^47 */
-  polyvec_fromcrt (v);
-  for (unsigned j = 0; j < 64; j++)
-    {
-      const int64_t x = int_get_i64 (poly_get_coeff (polyvec_get_elem (v, 0), j));
-      s += (uint64_t)(x * x);
+    uint64_t s = 0, r = 0; /* y21 is Gaussian (sigma < 2^20 at every set): s < 2^47 */
+    polyvec_fromcrt(v);
+    for (unsigned j = 0; j < 64; j++) {
+        const int64_t x = int_get_i64(poly_get_coeff(polyvec_get_elem(v, 0), j));
+        s += (uint64_t)(x * x);
     }
-  for (uint64_t b = (uint64_t)1 << 31; b; b >>= 1) /* r = floor(sqrt(s)), no libm (normpoc links without it) */
-    if ((r + b) * (r + b) <= s)
-      r += b;
-  int_ptr c = poly_get_coeff (polyvec_get_elem (v, 0), 0);
-  const int64_t c0 = int_get_i64 (c), add = (k - 1) * (int64_t)r;
-  int_set_i64 (c, c0 < 0 ? c0 - add : c0 + add);
+    for (uint64_t b = (uint64_t)1 << 31; b; b >>= 1) /* r = floor(sqrt(s)), no libm (normpoc links without it) */
+        if ((r + b) * (r + b) <= s)
+            r += b;
+    int_ptr c = poly_get_coeff(polyvec_get_elem(v, 0), 0);
+    const int64_t c0 = int_get_i64(c), add = (k - 1) * (int64_t)r;
+    int_set_i64(c, c0 < 0 ? c0 - add : c0 + add);
 }
 
-static void
-poc_shift (polyvec_t v, int_srcptr m, int64_t s) /* v in [0, m) -> v + s mod m */
+static void poc_shift(polyvec_t v, int_srcptr m, int64_t s) /* v in [0, m) -> v + s mod m */
 {
-  const int64_t mm = int_get_i64 (m);
-  polyvec_fromcrt (v);
-  for (unsigned i = 0; i < polyvec_get_nelems (v); i++)
-    for (unsigned j = 0; j < 64; j++)
-      {
-        int_ptr c = poly_get_coeff (polyvec_get_elem (v, i), j);
-        int64_t x = (int_get_i64 (c) + s) % mm;
-        int_set_i64 (c, x < 0 ? x + mm : x);
-      }
+    const int64_t mm = int_get_i64(m);
+    polyvec_fromcrt(v);
+    for (unsigned i = 0; i < polyvec_get_nelems(v); i++)
+        for (unsigned j = 0; j < 64; j++) {
+            int_ptr c = poly_get_coeff(polyvec_get_elem(v, i), j);
+            int64_t x = (int_get_i64(c) + s) % mm;
+            int_set_i64(c, x < 0 ? x + mm : x);
+        }
 }
-static void
-poc_add (polyvec_t v, int64_t s)
-{
-  polyvec_fromcrt (v);
-  for (unsigned i = 0; i < polyvec_get_nelems (v); i++)
-    for (unsigned j = 0; j < 64; j++)
-      {
-        int_ptr c = poly_get_coeff (polyvec_get_elem (v, i), j);
-        int_set_i64 (c, int_get_i64 (c) + s);
-      }
+static void poc_add(polyvec_t v, int64_t s) {
+    polyvec_fromcrt(v);
+    for (unsigned i = 0; i < polyvec_get_nelems(v); i++)
+        for (unsigned j = 0; j < 64; j++) {
+            int_ptr c = poly_get_coeff(polyvec_get_elem(v, i), j);
+            int_set_i64(c, int_get_i64(c) + s);
+        }
 }

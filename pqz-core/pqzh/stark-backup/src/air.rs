@@ -18,7 +18,7 @@ use p3_field::PrimeCharacteristicRing;
 use p3_lookup::{Count, InteractionBuilder, LookupBus, PermutationCheckBus};
 use p3_matrix::dense::RowMajorMatrix;
 
-use crate::ring::{D, DELTA, F, Q, fi, point_pow};
+use crate::ring::{fi, point_pow, D, DELTA, F, Q};
 
 pub const RANGE: LookupBus<'static> = LookupBus::new("range");
 pub const NTT: PermutationCheckBus<'static> = PermutationCheckBus::new("ntt");
@@ -69,16 +69,25 @@ const PR_BSQ: usize = 6;
 
 fn rows_of(cols: &[Vec<F>]) -> RowMajorMatrix<F> {
     let h = cols[0].len();
-    RowMajorMatrix::new((0..h).flat_map(|r| cols.iter().map(move |c| c[r])).collect(), cols.len())
+    RowMajorMatrix::new(
+        (0..h)
+            .flat_map(|r| cols.iter().map(move |c| c[r]))
+            .collect(),
+        cols.len(),
+    )
 }
 
 impl PolyAir {
     pub fn new(specs: Vec<PolySpec>, bsq: Vec<i64>) -> Self {
         let height = (specs.len() * D).next_power_of_two();
-        let mut per: Vec<Vec<F>> = (0..D).map(|m| (0..D).map(|k| point_pow(k, m + k)).collect()).collect();
+        let mut per: Vec<Vec<F>> = (0..D)
+            .map(|m| (0..D).map(|k| point_pow(k, m + k)).collect())
+            .collect();
         per.push((0..D).map(|k| F::from_bool(k == D - 1)).collect());
         let spec = |r: usize| specs.get(r / D).copied();
-        let col = |f: &dyn Fn(usize) -> bool| -> Vec<F> { (0..height).map(|r| F::from_bool(f(r))).collect() };
+        let col = |f: &dyn Fn(usize) -> bool| -> Vec<F> {
+            (0..height).map(|r| F::from_bool(f(r))).collect()
+        };
         let gend = |r: usize| -> Option<usize> {
             let g = spec(r)?.group?;
             let last = r % D == D - 1 && spec(r + 1).and_then(|s| s.group) != Some(g);
@@ -87,14 +96,26 @@ impl PolyAir {
         let inc = |r: usize| spec(r).is_some_and(|s| s.group.is_some());
         let pre = vec![
             (0..height).map(F::from_usize).collect(),
-            (0..height).map(|r| F::from_u32(spec(r).map_or(0, |s| s.ntt))).collect(),
+            (0..height)
+                .map(|r| F::from_u32(spec(r).map_or(0, |s| s.ntt)))
+                .collect(),
             col(&|r| spec(r).is_some_and(|s| s.range)),
             col(&|r| spec(r).is_some_and(|s| s.coef16) && r % D < 16),
             col(&|r| gend(r).is_some()),
             col(&|r| r + 1 < height && inc(r + 1)),
-            (0..height).map(|r| gend(r).map_or(F::ZERO, |g| fi(bsq[g]))).collect(),
+            (0..height)
+                .map(|r| gend(r).map_or(F::ZERO, |g| fi(bsq[g])))
+                .collect(),
         ];
-        PolyAir { height, inc0: F::from_bool(inc(0)), max_ntt: specs.iter().map(|s| s.ntt).max().unwrap_or(1).max(1), specs, bsq, periodic: per, pre }
+        PolyAir {
+            height,
+            inc0: F::from_bool(inc(0)),
+            max_ntt: specs.iter().map(|s| s.ntt).max().unwrap_or(1).max(1),
+            specs,
+            bsq,
+            periodic: per,
+            pre,
+        }
     }
 
     /// Trace for the coefficient vectors `w` (one per spec) and their NTTs; range keys are counted into `rc`.
@@ -107,7 +128,11 @@ impl PolyAir {
             let p = |c: usize| self.pre[c][r];
             if b < w.len() {
                 for m in 0..D {
-                    row[m] = fi(if m + k < D { w[b][m + k] } else { -w[b][m + k - D] });
+                    row[m] = fi(if m + k < D {
+                        w[b][m + k]
+                    } else {
+                        -w[b][m + k - D]
+                    });
                 }
                 row[PC_EV] = what[b][k];
             }
@@ -139,32 +164,56 @@ impl PolyAir {
         let c: Vec<AB::Expr> = main.current_slice().iter().map(|&x| x.into()).collect();
         let n: Vec<AB::Expr> = main.next_slice().iter().map(|&x| x.into()).collect();
         let per: Vec<AB::Expr> = b.periodic_values().iter().map(|&x| x.into()).collect();
-        let pr: Vec<AB::Expr> = b.preprocessed().current_slice().iter().map(|&x| x.into()).collect();
+        let pr: Vec<AB::Expr> = b
+            .preprocessed()
+            .current_slice()
+            .iter()
+            .map(|&x| x.into())
+            .collect();
         let notbe = AB::Expr::ONE - per[PP_BE].clone();
         for m in 0..D - 1 {
-            b.when_transition().assert_zero(notbe.clone() * (n[m].clone() - c[m + 1].clone()));
+            b.when_transition()
+                .assert_zero(notbe.clone() * (n[m].clone() - c[m + 1].clone()));
         }
-        b.when_transition().assert_zero(notbe * (n[D - 1].clone() + c[0].clone()));
+        b.when_transition()
+            .assert_zero(notbe * (n[D - 1].clone() + c[0].clone()));
         let mut ev = AB::Expr::ZERO;
         for m in 0..D {
             ev += per[m].clone() * c[m].clone();
         }
         b.assert_eq(c[PC_EV].clone(), ev);
-        b.when_first_row().assert_eq(c[PC_NRM].clone(), c[0].clone() * c[0].clone() * self.inc0);
+        b.when_first_row()
+            .assert_eq(c[PC_NRM].clone(), c[0].clone() * c[0].clone() * self.inc0);
         b.when_transition().assert_eq(
             n[PC_NRM].clone(),
-            (AB::Expr::ONE - pr[PR_GEND].clone()) * c[PC_NRM].clone() + pr[PR_INCN].clone() * n[0].clone() * n[0].clone(),
+            (AB::Expr::ONE - pr[PR_GEND].clone()) * c[PC_NRM].clone()
+                + pr[PR_INCN].clone() * n[0].clone() * n[0].clone(),
         );
         b.assert_zero(
             pr[PR_GEND].clone()
-                * (pr[PR_BSQ].clone() - c[PC_NRM].clone() - c[PC_SLO].clone() - c[PC_SHI].clone() * F::from_usize(RANGE_N)),
+                * (pr[PR_BSQ].clone()
+                    - c[PC_NRM].clone()
+                    - c[PC_SLO].clone()
+                    - c[PC_SHI].clone() * F::from_usize(RANGE_N)),
         );
-        RANGE.lookup_key(b, [c[0].clone() + fi(COEF_OFF)], Count::bounded(pr[PR_RC].clone(), 1));
+        RANGE.lookup_key(
+            b,
+            [c[0].clone() + fi(COEF_OFF)],
+            Count::bounded(pr[PR_RC].clone(), 1),
+        );
         // slack limbs: bound by the group-end constraint, range-checked on every row (zero elsewhere)
         RANGE.lookup_key(b, [c[PC_SLO].clone()], 1);
         RANGE.lookup_key(b, [c[PC_SHI].clone()], 1);
-        NTT.send(b, [pr[PR_IDX].clone(), c[PC_EV].clone()], Count::bounded(pr[PR_NTT].clone(), self.max_ntt));
-        COEF.send(b, [pr[PR_IDX].clone(), c[0].clone()], Count::bounded(pr[PR_COEF].clone(), 1));
+        NTT.send(
+            b,
+            [pr[PR_IDX].clone(), c[PC_EV].clone()],
+            Count::bounded(pr[PR_NTT].clone(), self.max_ntt),
+        );
+        COEF.send(
+            b,
+            [pr[PR_IDX].clone(), c[0].clone()],
+            Count::bounded(pr[PR_COEF].clone(), 1),
+        );
     }
 }
 
@@ -236,14 +285,21 @@ impl MvAir {
             .flat_map(|(cands, outs)| {
                 outs.chunks(n_out).map(move |g| {
                     let used = (0..cands.len())
-                        .filter(|&c| g.iter().any(|o| c < o.stmt_lead || o.coef[c] != [F::ZERO; D]))
+                        .filter(|&c| {
+                            g.iter()
+                                .any(|o| c < o.stmt_lead || o.coef[c] != [F::ZERO; D])
+                        })
                         .map(|c| (c, cands[c]))
                         .collect();
                     (g, used)
                 })
             })
             .collect();
-        let block = groups.iter().map(|(g, u)| (u.len() + g.len()).next_power_of_two()).max().unwrap();
+        let block = groups
+            .iter()
+            .map(|(g, u)| (u.len() + g.len()).next_power_of_two())
+            .max()
+            .unwrap();
         let gh = D * block;
         let height = (groups.len() * gh).next_power_of_two();
         let mut reads = Vec::new();
@@ -257,12 +313,20 @@ impl MvAir {
         // (fixed, statement) coefficient of output o at row r
         let coef = |o: usize, r: usize| -> (F, F) {
             let (g, k, j) = pos(r);
-            let Some((outs_g, used)) = groups.get(g) else { return (F::ZERO, F::ZERO) };
-            let Some(out) = outs_g.get(o) else { return (F::ZERO, F::ZERO) };
+            let Some((outs_g, used)) = groups.get(g) else {
+                return (F::ZERO, F::ZERO);
+            };
+            let Some(out) = outs_g.get(o) else {
+                return (F::ZERO, F::ZERO);
+            };
             if j < used.len() {
                 let (c, _) = used[j];
                 let v = out.coef[c][k];
-                if c < out.stmt_lead { (F::ZERO, v) } else { (v, F::ZERO) }
+                if c < out.stmt_lead {
+                    (F::ZERO, v)
+                } else {
+                    (v, F::ZERO)
+                }
             } else if j == used.len() + o {
                 (-F::ONE, F::ZERO)
             } else {
@@ -282,38 +346,71 @@ impl MvAir {
             })
             .collect();
         let scol: Vec<usize> = (0..n_out)
-            .filter(|&o| groups.iter().any(|(g, u)| g.get(o).is_some_and(|out| u.iter().any(|&(c, _)| c < out.stmt_lead))))
+            .filter(|&o| {
+                groups.iter().any(|(g, u)| {
+                    g.get(o)
+                        .is_some_and(|out| u.iter().any(|&(c, _)| c < out.stmt_lead))
+                })
+            })
             .collect();
         let next = |o: usize, r: usize, s: bool| -> F {
             if r + 1 < height {
                 let (f, st) = coef(o, r + 1);
-                if s { st } else { f }
+                if s {
+                    st
+                } else {
+                    f
+                }
             } else {
                 F::ZERO
             }
         };
         let mut per = vec![
-            (0..block).map(|j| F::from_bool(j == block - 1)).collect::<Vec<_>>(),
+            (0..block)
+                .map(|j| F::from_bool(j == block - 1))
+                .collect::<Vec<_>>(),
             (0..height).map(|r| target(r).unwrap_or(F::ZERO)).collect(),
         ];
         for &o in &scol {
             per.push((0..height).map(|r| next(o, r, true)).collect());
         }
         let mut pre = vec![
-            (0..height).map(|r| F::from_bool(target(r).is_some())).collect::<Vec<_>>(),
-            (0..height).map(|r| F::from_bool(src[r].is_some())).collect(),
-            (0..height).map(|r| src[r].map_or(F::ZERO, |p| F::from_usize(p * D + pos(r).1))).collect(),
+            (0..height)
+                .map(|r| F::from_bool(target(r).is_some()))
+                .collect::<Vec<_>>(),
+            (0..height)
+                .map(|r| F::from_bool(src[r].is_some()))
+                .collect(),
+            (0..height)
+                .map(|r| src[r].map_or(F::ZERO, |p| F::from_usize(p * D + pos(r).1)))
+                .collect(),
         ];
         for o in 0..n_out {
             pre.push((0..height).map(|r| next(o, r, false)).collect());
         }
         let m0 = (0..n_out).map(|o| coef(o, 0).0 + coef(o, 0).1).collect();
-        (MvAir { height, block, n_out, m0, scol, src, periodic: per, pre }, reads)
+        (
+            MvAir {
+                height,
+                block,
+                n_out,
+                m0,
+                scol,
+                src,
+                periodic: per,
+                pre,
+            },
+            reads,
+        )
     }
 
     /// coefficient of output o at row r >= 1 (stored one row up)
     fn m(&self, o: usize, r: usize) -> F {
-        let s = self.scol.iter().position(|&c| c == o).map_or(F::ZERO, |i| self.periodic[MP_S + i][r - 1]);
+        let s = self
+            .scol
+            .iter()
+            .position(|&c| c == o)
+            .map_or(F::ZERO, |i| self.periodic[MP_S + i][r - 1]);
         self.pre[MR_P + o][r - 1] + s
     }
 
@@ -343,7 +440,12 @@ impl MvAir {
         let c: Vec<AB::Expr> = main.current_slice().iter().map(|&x| x.into()).collect();
         let n: Vec<AB::Expr> = main.next_slice().iter().map(|&x| x.into()).collect();
         let per: Vec<AB::Expr> = b.periodic_values().iter().map(|&x| x.into()).collect();
-        let pr: Vec<AB::Expr> = b.preprocessed().current_slice().iter().map(|&x| x.into()).collect();
+        let pr: Vec<AB::Expr> = b
+            .preprocessed()
+            .current_slice()
+            .iter()
+            .map(|&x| x.into())
+            .collect();
         let be = per[MP_BE].clone();
         for o in 0..self.n_out {
             let a = MC_ACC + o;
@@ -351,12 +453,20 @@ impl MvAir {
             if let Some(i) = self.scol.iter().position(|&s| s == o) {
                 m += per[MP_S + i].clone();
             }
-            b.when_first_row().assert_eq(c[a].clone(), c[MC_X].clone() * self.m0[o]);
-            b.when_transition().assert_eq(n[a].clone(), (AB::Expr::ONE - be.clone()) * c[a].clone() + m * n[MC_X].clone());
+            b.when_first_row()
+                .assert_eq(c[a].clone(), c[MC_X].clone() * self.m0[o]);
+            b.when_transition().assert_eq(
+                n[a].clone(),
+                (AB::Expr::ONE - be.clone()) * c[a].clone() + m * n[MC_X].clone(),
+            );
             b.assert_zero(be.clone() * c[a].clone());
         }
         b.assert_zero(pr[MR_TR].clone() * (c[MC_X].clone() - per[MP_T].clone()));
-        NTT.receive(b, [pr[MR_ID].clone(), c[MC_X].clone()], Count::bounded(pr[MR_MM].clone(), 1));
+        NTT.receive(
+            b,
+            [pr[MR_ID].clone(), c[MC_X].clone()],
+            Count::bounded(pr[MR_MM].clone(), 1),
+        );
     }
 }
 
@@ -421,17 +531,31 @@ pub const E2_BSQ: i64 = 64 * 64;
 impl DigitAir {
     /// `v[x][i]` centred statement coefficients (x = t, f, a, T), `ids[x]` = Poly row index of y_x's coefficient 0
     pub fn new(height: usize, v: [[i64; 16]; 4], fee: u64, ids: [usize; 4]) -> Self {
-        let nib = |i: usize| if i < 16 { F::from_u64((fee >> (4 * i)) & 15) } else { F::ZERO };
+        let nib = |i: usize| {
+            if i < 16 {
+                F::from_u64((fee >> (4 * i)) & 15)
+            } else {
+                F::ZERO
+            }
+        };
         let mut per = Vec::new();
         for x in 0..4 {
-            per.push((0..height).map(|i| if i < 16 { fi(v[x][i]) } else { F::ZERO }).collect());
+            per.push(
+                (0..height)
+                    .map(|i| if i < 16 { fi(v[x][i]) } else { F::ZERO })
+                    .collect(),
+            );
         }
         per.push((0..height).map(nib).collect());
         per.push((0..height).map(|i| nib(i + 1)).collect());
         per.push((0..height).map(|i| F::from_bool(i == height - 1)).collect());
         per.push((0..height).map(|i| F::from_bool(i < 16)).collect());
         per.push((0..height).map(|i| F::from_bool(i == 15)).collect());
-        DigitAir { height, ids, periodic: per }
+        DigitAir {
+            height,
+            ids,
+            periodic: per,
+        }
     }
 
     /// `rows[i]`: the prover's integer cells for digit index i < 16 (norm, slack, index and pin cells are filled here)
@@ -503,35 +627,50 @@ impl DigitAir {
         // rows 3-5: y_x + e2_x + Delta * digit - v_x = q tau_x
         for (x, dig) in [(0, DD), (1, DP), (2, DD)] {
             b.assert_zero(
-                c[YT + x].clone() + c[E2 + x].clone() + c[dig].clone() * dl - per[DP_V + x].clone() - c[TAU + x].clone() * q,
+                c[YT + x].clone() + c[E2 + x].clone() + c[dig].clone() * dl
+                    - per[DP_V + x].clone()
+                    - c[TAU + x].clone() * q,
             );
         }
         // row 6: v_T - y_T = Delta M + e_T + q tau_T, e_T + 2^24 = etlo + 8192 ethi
         b.assert_zero(
-            per[DP_V + 3].clone() - c[YT + 3].clone() - mm(&c) * dl
+            per[DP_V + 3].clone()
+                - c[YT + 3].clone()
+                - mm(&c) * dl
                 - (c[ETLO].clone() + c[ETHI].clone() * rn - F::from_u64(1 << 24))
                 - c[TAU + 3].clone() * q,
         );
         // row 7 over Z: M_i + c_{i-1} = d'_i + d_i + f_i + 16 c_i (c_{-1} = 0, c_15 = 0)
         let sixteen = F::from_u64(16);
-        b.when_first_row()
-            .assert_zero(mm(&c) - c[DP].clone() - c[DD].clone() - per[DP_FEE].clone() - c[C].clone() * sixteen);
+        b.when_first_row().assert_zero(
+            mm(&c) - c[DP].clone() - c[DD].clone() - per[DP_FEE].clone() - c[C].clone() * sixteen,
+        );
         b.when_transition().assert_zero(
-            mm(&n) + c[C].clone() - n[DP].clone() - n[DD].clone() - per[DP_FEEN].clone() - n[C].clone() * sixteen,
+            mm(&n) + c[C].clone()
+                - n[DP].clone()
+                - n[DD].clone()
+                - per[DP_FEEN].clone()
+                - n[C].clone() * sixteen,
         );
         // carry out of digit 15 is zero; padding rows (ZK mode) must not extend the chain
         b.assert_zero(per[DP_END].clone() * c[C].clone());
         b.assert_bool(c[MHI].clone());
         for x in 0..3 {
             let (nr, e) = (NRM + x, E2 + x);
-            b.when_first_row().assert_eq(c[nr].clone(), c[e].clone() * c[e].clone());
-            b.when_transition().assert_eq(n[nr].clone(), c[nr].clone() + n[e].clone() * n[e].clone());
+            b.when_first_row()
+                .assert_eq(c[nr].clone(), c[e].clone() * c[e].clone());
+            b.when_transition()
+                .assert_eq(n[nr].clone(), c[nr].clone() + n[e].clone() * n[e].clone());
             b.when_last_row().assert_zero(
-                AB::Expr::from(fi(E2_BSQ)) - c[nr].clone() - c[SL + 2 * x].clone() - c[SL + 2 * x + 1].clone() * rn,
+                AB::Expr::from(fi(E2_BSQ))
+                    - c[nr].clone()
+                    - c[SL + 2 * x].clone()
+                    - c[SL + 2 * x + 1].clone() * rn,
             );
         }
         b.when_first_row().assert_zero(c[RI].clone());
-        b.when_transition().assert_eq(n[RI].clone(), c[RI].clone() + AB::Expr::ONE);
+        b.when_transition()
+            .assert_eq(n[RI].clone(), c[RI].clone() + AB::Expr::ONE);
         b.assert_eq(c[MLAST].clone(), per[DP_LAST].clone());
         b.assert_eq(c[MACT].clone(), per[DP_ACT].clone());
         for k in Self::keys(&c) {
@@ -543,7 +682,10 @@ impl DigitAir {
         for x in 0..4 {
             COEF.receive(
                 b,
-                [c[RI].clone() + F::from_usize(self.ids[x]), c[YT + x].clone()],
+                [
+                    c[RI].clone() + F::from_usize(self.ids[x]),
+                    c[YT + x].clone(),
+                ],
                 Count::bounded(c[MACT].clone(), 1),
             );
         }
@@ -587,7 +729,20 @@ impl BaseAir<F> for PqzhAir {
             PqzhAir::Poly(_) => (0..D).chain([PC_NRM]).collect(),
             PqzhAir::Mv(a) => [MC_X].into_iter().chain(MC_ACC..MC_ACC + a.n_out).collect(),
             PqzhAir::Range(_) => vec![0],
-            PqzhAir::Digit(_) => vec![dc::NRM, dc::NRM + 1, dc::NRM + 2, dc::E2, dc::E2 + 1, dc::E2 + 2, dc::MLO, dc::MHI, dc::C, dc::DD, dc::DP, dc::RI],
+            PqzhAir::Digit(_) => vec![
+                dc::NRM,
+                dc::NRM + 1,
+                dc::NRM + 2,
+                dc::E2,
+                dc::E2 + 1,
+                dc::E2 + 2,
+                dc::MLO,
+                dc::MHI,
+                dc::C,
+                dc::DD,
+                dc::DP,
+                dc::RI,
+            ],
         }
     }
 }
@@ -634,7 +789,11 @@ mod tests {
     #[test]
     fn mv_layout_statement_independent() {
         let layout = |sc: F| {
-            let out = MvOut { coef: vec![[sc; D], [F::ONE; D]], target: [F::ZERO; D], stmt_lead: 1 };
+            let out = MvOut {
+                coef: vec![[sc; D], [F::ONE; D]],
+                target: [F::ZERO; D],
+                stmt_lead: 1,
+            };
             let (a, reads) = MvAir::new(&[(vec![0, 1], vec![out])], 1);
             (a.height, a.block, a.src, a.scol, a.pre, reads)
         };

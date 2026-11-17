@@ -13,6 +13,7 @@ proof_<id>.json rows (op 7 rows keyed by their case, form TRANSFER-MULTI); flip 
 fails in the verifier); negative = every negative.json row through pqz_kat.apply_edits; fee0 = fee0.json's statements
 under each id; selftest = selftest.json's input and hash. Nothing here is computed afresh: the edits and expectations
 are the vectors' own."""
+
 import json
 import os
 import sys
@@ -33,15 +34,31 @@ def main(out):
     rows = []
 
     def add(kind, name, idn, form, inp, expect):
-        rows.append({"kind": kind, "name": name, "id": idn, "form": form, "op": inp[0] if inp else -1,
-                     "stmt_len": int.from_bytes(inp[1:5], "big") if len(inp) >= 5 else -1,
-                     "input": inp.hex(), "expect": expect})
+        rows.append(
+            {
+                "kind": kind,
+                "name": name,
+                "id": idn,
+                "form": form,
+                "op": inp[0] if inp else -1,
+                "stmt_len": int.from_bytes(inp[1:5], "big") if len(inp) >= 5 else -1,
+                "input": inp.hex(),
+                "expect": expect,
+            }
+        )
 
     for n in K.IDS:
         for r in rows_p[n]:
             key = r.get("case", r["form"])
             op = 7 if r["form"] == "TRANSFER-MULTI" else K.OP_BYTE[r["form"].rstrip("0")]
-            add("honest", f"{key} {n}", n, r["form"], K.precompile_input(op, K.with_id(stmts[key], K.IDS[n]), proofs[key, n]), "1")
+            add(
+                "honest",
+                f"{key} {n}",
+                n,
+                r["form"],
+                K.precompile_input(op, K.with_id(stmts[key], K.IDS[n]), proofs[key, n]),
+                "1",
+            )
     for r in neg:
         e = {"0": "0", "revert": "revert"}[r["expect"]]
         kind = "flip" if r["name"].endswith("proof middle byte bit 3 flipped") else "negative"
@@ -51,7 +68,14 @@ def main(out):
         for idn in K.IDS:
             p = bytes.fromhex(r[idn]["proof"])
             op = int(r["op"])
-            add("fee0", f"fee0 {r['form']} {idn}", idn, r["form"], K.precompile_input(op, K.with_id(s, K.IDS[idn]), p), "1")
+            add(
+                "fee0",
+                f"fee0 {r['form']} {idn}",
+                idn,
+                r["form"],
+                K.precompile_input(op, K.with_id(s, K.IDS[idn]), p),
+                "1",
+            )
     st = K.load(VEC, "selftest.json")
     add("selftest", "OP_SELFTEST", "-", "SELFTEST", bytes.fromhex(st["input"]), st["hash"])
     with open(out, "w") as f:

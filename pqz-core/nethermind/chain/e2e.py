@@ -26,6 +26,7 @@ Common: --rpc URL (default http://127.0.0.1:18545); --schedule N: the engine fil
 last; path A before T: 0). A row the schedule lacks (op 7 before its schedule) is expected as a miss: …00 at the
 smallest row. op 7 rows are keyed by (op, id, stmtLen, M, auditorOn) (P6-ANON S8, plan D19); the probe also replays
 the op 7 rows of negative.json. Exit 0 iff every check passed."""
+
 import argparse
 import json
 import os
@@ -47,8 +48,13 @@ PROBE_AT = "0x00000000000000000000000000000000000f6f01"  # eth_call state overri
 # the node library's parameter set (PQZ_SET, default n2304-kmax4096 = pqz-ffi's default; plan 5h Task 8d): its
 # OP_SELFTEST hash and input limit (pqz_max_input () = set.json max_input)
 PQZ_SET = os.environ.get("PQZ_SET", "n2304-kmax4096")
-SELFTEST = json.load(open(os.path.join(ROOT, "smartcontracts/vectors/pqz", "" if PQZ_SET == "n2048-kmax1024" else PQZ_SET,
-                                       "selftest.json")))["hash"]
+SELFTEST = json.load(
+    open(
+        os.path.join(
+            ROOT, "smartcontracts/vectors/pqz", "" if PQZ_SET == "n2048-kmax1024" else PQZ_SET, "selftest.json"
+        )
+    )
+)["hash"]
 MAX_INPUT = json.load(open(os.path.join(ROOT, "pqz-core/params/sets", PQZ_SET, "set.json")))["max_input"]
 CHAIN_ID = 7622
 PK44, SIG44, PK65, SIG65 = 1312, 2420, 1952, 3309
@@ -135,8 +141,12 @@ def small_word(b):
 class Schedule:
     def __init__(self, path):
         s = json.load(open(path))["schedules"][SCHEDULE]
-        self.rows = {(r["op"], r["id"].lower().removeprefix("0x"), r["stmtLen"], r.get("legs", 0), r.get("auditorOn", 0)): r["gas"]
-                     for r in s["pqz"]}
+        self.rows = {
+            (r["op"], r["id"].lower().removeprefix("0x"), r["stmtLen"], r.get("legs", 0), r.get("auditorOn", 0)): r[
+                "gas"
+            ]
+            for r in s["pqz"]
+        }
         self.min = min(self.rows.values())
         self.selftest = s["selftestGas"]
         self.m44, self.m65 = s["mldsa44Gas"], s["mldsa65Gas"]
@@ -148,7 +158,7 @@ class Schedule:
         if b[0] == 7:  # header words 320 / 448, read without validation (as the plugin)
             if len(b) < 5 + 480:
                 return None
-            legs, aud = small_word(b[5 + 320:5 + 352]), small_word(b[5 + 448:5 + 480])
+            legs, aud = small_word(b[5 + 320 : 5 + 352]), small_word(b[5 + 448 : 5 + 480])
         return self.rows.get((b[0], b[37:69].hex(), int.from_bytes(b[1:5], "big"), legs, aud))
 
     def gas(self, b):
@@ -176,9 +186,15 @@ def ml_rows():
         if c["iface"] != "external":
             continue
         pk, mp = bytes.fromhex(c["pk"][2:]), bytes.fromhex(c["mprime"][2:])
-        rows.append((44 if len(pk) == PK44 else 65, pk + bytes.fromhex(c["sig"][2:]) + mp[2 + mp[1]:],
-                     mp[1] == 0 and v(c["valid"]), f"acvp {c['set']} tc {c['tc']}"))
-    for (lvl, b, ok, name) in ua_rows():
+        rows.append(
+            (
+                44 if len(pk) == PK44 else 65,
+                pk + bytes.fromhex(c["sig"][2:]) + mp[2 + mp[1] :],
+                mp[1] == 0 and v(c["valid"]),
+                f"acvp {c['set']} tc {c['tc']}",
+            )
+        )
+    for lvl, b, ok, name in ua_rows():
         rows.append((lvl, b, ok, name))
     return rows
 
@@ -225,7 +241,11 @@ def over_cap(cd_hex):
 def first_honest(rows):
     """The first honest input whose probe calldata fits 2^24 (Amsterdam: a PQZH op 1 input of 280+ KB does not, and an
     eth_call carrying it fails before the precompile, so it cannot serve as the base of the miss probes)."""
-    return bytes.fromhex(next(r["input"] for r in rows if r["kind"] == "honest" and not over_cap(probe_cd(PQZ, bytes.fromhex(r["input"])))))
+    return bytes.fromhex(
+        next(
+            r["input"] for r in rows if r["kind"] == "honest" and not over_cap(probe_cd(PQZ, bytes.fromhex(r["input"])))
+        )
+    )
 
 
 def refused(f):
@@ -242,7 +262,9 @@ def call_probe(target, data, gas=None):
     _, deployed = artifact("PqzPrecompileProbe.sol", "PqzPrecompileProbe")
     cd = "0x" + probe_cd(target, data)
     gas = gas or (CAP if AMS else 16_000_000)
-    r = rpc("eth_call", [{"to": PROBE_AT, "data": cd, "gas": hex(gas)}, "latest", {PROBE_AT: {"code": "0x" + deployed}}])
+    r = rpc(
+        "eth_call", [{"to": PROBE_AT, "data": cd, "gas": hex(gas)}, "latest", {PROBE_AT: {"code": "0x" + deployed}}]
+    )
     r = r[2:]
     return int(r[0:64], 16), int(r[64:128], 16), int(r[128:192], 16)
 
@@ -256,7 +278,9 @@ def overhead():
 
 def cmd_head(a):
     b = rpc("eth_getBlockByNumber", ["latest", False])
-    log(f"head {int(b['number'], 16)} {b['hash']} gasLimit {int(b['gasLimit'], 16)} gasUsed {int(b['gasUsed'], 16)} ts {int(b['timestamp'], 16)}")
+    log(
+        f"head {int(b['number'], 16)} {b['hash']} gasLimit {int(b['gasLimit'], 16)} gasUsed {int(b['gasUsed'], 16)} ts {int(b['timestamp'], 16)}"
+    )
 
 
 def cmd_before(a):
@@ -284,26 +308,38 @@ def cmd_probe(a, expect_fail=False):
         return
     oh = overhead()
     log(f"probe overhead (identity precompile) = {oh} gas")
-    rows = [r for r in corpus() if r["kind"] in ("honest", "flip", "fee0", "selftest")
-            or (r["kind"] == "negative" and r["op"] == 7 and r["expect"] == "0")]
+    rows = [
+        r
+        for r in corpus()
+        if r["kind"] in ("honest", "flip", "fee0", "selftest")
+        or (r["kind"] == "negative" and r["op"] == 7 and r["expect"] == "0")
+    ]
     by = {}
     for r in rows:
         b = bytes.fromhex(r["input"])
         if over_cap(probe_cd(PQZ, b)):
             floor = intrinsic(bytes.fromhex(probe_cd(PQZ, b)))[1]
-            check(refused(lambda: call_probe(PQZ, b)),
-                  f"PQZ {r['kind']:8} {r['name'][:46]:46} {r['id']}: {len(b):,} B refused (Amsterdam: EIP-7976 floor {floor:,} > 2^24, EIP-8037)")
+            check(
+                refused(lambda: call_probe(PQZ, b)),
+                f"PQZ {r['kind']:8} {r['name'][:46]:46} {r['id']}: {len(b):,} B refused (Amsterdam: EIP-7976 floor {floor:,} > 2^24, EIP-8037)",
+            )
             continue
         word, used, rlen = call_probe(PQZ, b)
         want = int(r["expect"], 16) if r["kind"] == "selftest" else 0 if sch.row(b) is None else int(r["expect"])
         gas = used - 100 - oh
-        check(rlen == 32 and word == want and gas == sch.gas(b),
-              f"PQZ {r['kind']:8} {r['name'][:46]:46} {r['id']}: word {word if word < 2 else hex(word)[:10]} (want {want if want < 2 else 'hash'}), gas {gas} = formula {sch.gas(b)}")
+        check(
+            rlen == 32 and word == want and gas == sch.gas(b),
+            f"PQZ {r['kind']:8} {r['name'][:46]:46} {r['id']}: word {word if word < 2 else hex(word)[:10]} (want {want if want < 2 else 'hash'}), gas {gas} = formula {sch.gas(b)}",
+        )
         # pair a valid input with its flip by the statement (op 7: one form, several shapes)
-        by.setdefault((r["id"], r["form"], b[:5 + max(r["stmt_len"], 0)]), {})[r["kind"]] = gas
+        by.setdefault((r["id"], r["form"], b[: 5 + max(r["stmt_len"], 0)]), {})[r["kind"]] = gas
     for k, v in sorted(by.items()):
         if "honest" in v and "flip" in v:
-            check(v["honest"] == v["flip"], f"gas valid = invalid {k[:2]} ({len(k[2]) - 5:,} B statement): {v['honest']} / {v['flip']}")
+            check(
+                v["honest"] == v["flip"],
+                f"gas valid = invalid {k[:2]} ({len(k[2]) - 5:,} B statement): {v['honest']} / {v['flip']}",
+            )
+
     # eth_estimateGas reaches the precompile too (review nethermind-2.2 §1: Facade / JsonRpc were outside the clone):
     # a direct call to PQZ with the row whose precompile gas stands out most above the calldata floor; an empty account
     # would estimate max(standard intrinsic, floor) only
@@ -311,38 +347,64 @@ def cmd_probe(a, expect_fail=False):
         b = bytes.fromhex(r["input"])
         std, floor = intrinsic(b)
         return std + sch.gas(b) - floor
-    est_row = max((r for r in rows if r["kind"] == "honest" and sch.row(bytes.fromhex(r["input"])) is not None
-                   and not over_cap(r["input"])), key=margin)
+
+    est_row = max(
+        (
+            r
+            for r in rows
+            if r["kind"] == "honest" and sch.row(bytes.fromhex(r["input"])) is not None and not over_cap(r["input"])
+        ),
+        key=margin,
+    )
     b = bytes.fromhex(est_row["input"])
     std, floor = intrinsic(b)
     want = max(std + sch.gas(b), floor)
     est = int(rpc("eth_estimateGas", [{"to": PQZ, "data": "0x" + b.hex()}, "latest"]), 16)
-    check(want <= est < want + sch.gas(b) // 2 and est > max(std, floor),
-          f"eth_estimateGas direct to PQZ, {est_row['name'][:40]} ({len(b):,} B): {est:,} >= max(standard + row {std + sch.gas(b):,}, "
-          f"floor {floor:,}) = {want:,} (+{(est - want) * 100 / want:.1f} %; an empty account would be {max(std, floor):,})")
+    check(
+        want <= est < want + sch.gas(b) // 2 and est > max(std, floor),
+        f"eth_estimateGas direct to PQZ, {est_row['name'][:40]} ({len(b):,} B): {est:,} >= max(standard + row {std + sch.gas(b):,}, "
+        f"floor {floor:,}) = {want:,} (+{(est - want) * 100 / want:.1f} %; an empty account would be {max(std, floor):,})",
+    )
     h = first_honest(rows)
-    for name, b in (("unknown id", h[:40] + bytes([h[40] ^ 1]) + h[41:]), ("short (68 B)", h[:68]), ("empty", b""),
-                    ("unknown op 9", bytes([9]) + h[1:])):
+    for name, b in (
+        ("unknown id", h[:40] + bytes([h[40] ^ 1]) + h[41:]),
+        ("short (68 B)", h[:68]),
+        ("empty", b""),
+        ("unknown op 9", bytes([9]) + h[1:]),
+    ):
         word, used, rlen = call_probe(PQZ, b)
-        check(rlen == 32 and word == 0 and used - 100 - oh == sch.gas(b) and sch.row(b) is None,
-              f"PQZ miss {name}: …00, gas {used - 100 - oh} = smallest row + length term {sch.gas(b)}")
+        check(
+            rlen == 32 and word == 0 and used - 100 - oh == sch.gas(b) and sch.row(b) is None,
+            f"PQZ miss {name}: …00, gas {used - 100 - oh} = smallest row + length term {sch.gas(b)}",
+        )
     over = h + bytes(MAX_INPUT + 1 - len(h))
     if AMS:
-        check(refused(lambda: call_probe(PQZ, over)), "PQZ input of MAX_INPUT + 1: refused before the precompile (Amsterdam floor > 2^24)")
+        check(
+            refused(lambda: call_probe(PQZ, over)),
+            "PQZ input of MAX_INPUT + 1: refused before the precompile (Amsterdam floor > 2^24)",
+        )
     else:
         word, used, rlen = call_probe(PQZ, over)
-        check(word == 2**256 - 1 and rlen == 0, f"PQZ input of MAX_INPUT + 1: failed call (word {hex(word)[:6]}, rlen {rlen})")
+        check(
+            word == 2**256 - 1 and rlen == 0,
+            f"PQZ input of MAX_INPUT + 1: failed call (word {hex(word)[:6]}, rlen {rlen})",
+        )
     for lvl, b, valid, name in ml_rows():
         addr, pk, sig, price = (ML44, PK44, SIG44, sch.m44) if lvl == 44 else (ML65, PK65, SIG65, sch.m65)
         word, used, rlen = call_probe(addr, b)
         gas = used - 100 - oh
-        check(rlen == 32 and word == int(valid) and gas == ml_gas(b, pk, sig, price),
-              f"MLDSA{lvl} {name[:44]:44}: word {word} (want {int(valid)}), gas {gas} = {ml_gas(b, pk, sig, price)}")
+        check(
+            rlen == 32 and word == int(valid) and gas == ml_gas(b, pk, sig, price),
+            f"MLDSA{lvl} {name[:44]:44}: word {word} (want {int(valid)}), gas {gas} = {ml_gas(b, pk, sig, price)}",
+        )
         if valid:
             f = bytearray(b)
             f[pk + 5] ^= 1
             word, used, rlen = call_probe(addr, bytes(f))
-            check(word == 0 and rlen == 32 and used - 100 - oh == ml_gas(b, pk, sig, price), f"MLDSA{lvl} {name[:30]} sig bit flipped: 0, same gas")
+            check(
+                word == 0 and rlen == 32 and used - 100 - oh == ml_gas(b, pk, sig, price),
+                f"MLDSA{lvl} {name[:30]} sig bit flipped: 0, same gas",
+            )
 
 
 def cmd_stock(a):
@@ -370,7 +432,16 @@ class Sender:
         # decrease rounds to 0), and a priority fee of 0 is rejected by the min-gas-price filter (7622's config key
         # Mining.MinGasPrice is not a Nethermind key; Blocks.MinGasPrice defaults to 1 wei)
         fee = int(rpc("eth_getBlockByNumber", ["latest", False])["baseFeePerGas"], 16)
-        raw = legacy_tx(self.key, self.nonce, max(2 * fee + 1, 10**9), gas, to, 0, bytes.fromhex(data_hex.removeprefix("0x")), CHAIN_ID)
+        raw = legacy_tx(
+            self.key,
+            self.nonce,
+            max(2 * fee + 1, 10**9),
+            gas,
+            to,
+            0,
+            bytes.fromhex(data_hex.removeprefix("0x")),
+            CHAIN_ID,
+        )
         h = rpc("eth_sendRawTransaction", ["0x" + raw.hex()])
         self.nonce += 1
         return h
@@ -396,9 +467,14 @@ def cmd_e2e(a):
     s = Sender(a.key)
     log(f"sender {s.addr} nonce {s.nonce}")
     code, _ = artifact("PqzPrecompileProbe.sol", "PqzPrecompileProbe")
-    r = receipt(s.send(None, "0x" + code, 8_000_000 if AMS else 2_000_000))  # Amsterdam: EIP-8037 code deposit 1,530 / byte
+    r = receipt(
+        s.send(None, "0x" + code, 8_000_000 if AMS else 2_000_000)
+    )  # Amsterdam: EIP-8037 code deposit 1,530 / byte
     probe = r["contractAddress"]
-    check(r["status"] == "0x1", f"probe deployed at {probe} (block {int(r['blockNumber'], 16)}, gas {int(r['gasUsed'], 16)})")
+    check(
+        r["status"] == "0x1",
+        f"probe deployed at {probe} (block {int(r['blockNumber'], 16)}, gas {int(r['gasUsed'], 16)})",
+    )
     topic = "0x" + keccak256(b"Probed(address,bytes32,uint256,uint256,uint256)").hex()
     sel = selector("check(address,bytes)")
     rows = [r for r in corpus() if r["kind"] in ("honest", "flip", "fee0")]
@@ -407,8 +483,10 @@ def cmd_e2e(a):
         b = bytes.fromhex(row["input"])
         cd = sel + enc_addr_bytes(PQZ, b)
         if over_cap(cd):
-            check(refused(lambda: s.send(probe, "0x" + cd, CAP)),
-                  f"tx check() {row['kind']:6} {row['name'][:40]:40} {row['id']}: {len(b):,} B refused by the pool (Amsterdam: floor {intrinsic(bytes.fromhex(cd))[1]:,} > 2^24)")
+            check(
+                refused(lambda: s.send(probe, "0x" + cd, CAP)),
+                f"tx check() {row['kind']:6} {row['name'][:40]:40} {row['id']}: {len(b):,} B refused by the pool (Amsterdam: floor {intrinsic(bytes.fromhex(cd))[1]:,} > 2^24)",
+            )
             continue
         std, floor = intrinsic(bytes.fromhex(cd))
         gl = min(CAP if AMS else 16_000_000, max(floor, std + 40 * len(b)) + sch.gas(b) + 500_000)
@@ -418,24 +496,30 @@ def cmd_e2e(a):
         rc = receipt(h)
         lg = [l for l in rc["logs"] if l["topics"][0] == topic]
         ok = rc["status"] == "0x1" and len(lg) == 1
-        word = int(lg[0]["data"][2 + 64:2 + 128], 16) if ok else None
-        used = int(lg[0]["data"][2 + 128:2 + 192], 16) if ok else None
+        word = int(lg[0]["data"][2 + 64 : 2 + 128], 16) if ok else None
+        used = int(lg[0]["data"][2 + 128 : 2 + 192], 16) if ok else None
         blocks.add(int(rc["blockNumber"], 16))
-        check(ok and word == (0 if sch.row(b) is None else int(row["expect"])),
-              f"tx check() {row['kind']:6} {row['name'][:40]:40} {row['id']}: event word {word} (want {row['expect']}), call gas {used}, tx gas {int(rc['gasUsed'], 16)}, block {int(rc['blockNumber'], 16)}")
+        check(
+            ok and word == (0 if sch.row(b) is None else int(row["expect"])),
+            f"tx check() {row['kind']:6} {row['name'][:40]:40} {row['id']}: event word {word} (want {row['expect']}), call gas {used}, tx gas {int(rc['gasUsed'], 16)}, block {int(rc['blockNumber'], 16)}",
+        )
     log(f"check() transactions in blocks {sorted(blocks)}")
     # direct transactions to PQZ with the largest inputs (> 128 KiB: TxPool.MaxTxSize)
     # (Amsterdam: the largest that still fit the EIP-7976 floor under 2^24, ≤ 261,909 B)
-    big = sorted((r for r in corpus() if r["kind"] in ("honest", "fee0") and r["id"] == "pqzh" and not over_cap(r["input"])),
-                 key=lambda r: -len(r["input"]))[:2]
+    big = sorted(
+        (r for r in corpus() if r["kind"] in ("honest", "fee0") and r["id"] == "pqzh" and not over_cap(r["input"])),
+        key=lambda r: -len(r["input"]),
+    )[:2]
     for row in big:
         b = bytes.fromhex(row["input"])
         std, floor = intrinsic(b)
         std += sch.gas(b)
         rc = receipt(s.send(PQZ, "0x" + b.hex(), min(CAP, max(std, floor) + 10_000)))
         got = int(rc["gasUsed"], 16)
-        check(rc["status"] == "0x1" and got == max(std, floor),
-              f"direct tx to PQZ, {row['name']} ({len(b):,} B > 131,072): gasUsed {got:,} = max(standard {std:,}, {'EIP-7976' if AMS else 'EIP-7623'} floor {floor:,}), block {int(rc['blockNumber'], 16)}")
+        check(
+            rc["status"] == "0x1" and got == max(std, floor),
+            f"direct tx to PQZ, {row['name']} ({len(b):,} B > 131,072): gasUsed {got:,} = max(standard {std:,}, {'EIP-7976' if AMS else 'EIP-7623'} floor {floor:,}), block {int(rc['blockNumber'], 16)}",
+        )
     if a.no_ua:
         log("MldsaVerifier skipped (--no-ua: on 7622 it is deployed with the registry in P6g, plan R5)")
         return
@@ -447,11 +531,21 @@ def cmd_e2e(a):
         valid = next(b for (l, b, ok, n) in ua if l == lvl and ok)
         bad = bytearray(valid)
         bad[pk + 7] ^= 1
-        args = w(kind) + w(int(addr, 16)) + w(128) + w(128 + 32 + len(valid) + (-len(valid) % 32)) + abi_bytes(valid) + abi_bytes(bytes(bad))
+        args = (
+            w(kind)
+            + w(int(addr, 16))
+            + w(128)
+            + w(128 + 32 + len(valid) + (-len(valid) % 32))
+            + abi_bytes(valid)
+            + abi_bytes(bytes(bad))
+        )
         rc = receipt(s.send(None, "0x" + vcode + args, 16_000_000))
         v = rc["contractAddress"]
         got = rpc("eth_call", [{"to": v, "data": "0x" + selector("PRECOMPILE()")}, "latest"])
-        check(rc["status"] == "0x1" and int(got, 16) == int(addr, 16), f"MldsaVerifier({kind:#06x}) at {v}: PRECOMPILE() = {addr} (deploy gas {int(rc['gasUsed'], 16):,})")
+        check(
+            rc["status"] == "0x1" and int(got, 16) == int(addr, 16),
+            f"MldsaVerifier({kind:#06x}) at {v}: PRECOMPILE() = {addr} (deploy gas {int(rc['gasUsed'], 16):,})",
+        )
         k = next(k for k in d["kinds"] if k["name"] == f"mldsa{lvl}")
         for sg in k["sigs"]:
             for flip in (False, True):
@@ -459,17 +553,37 @@ def cmd_e2e(a):
                 if flip:
                     sb[11] ^= 1
                 kd = bytes.fromhex(k["keyData"][2:])
-                cd = "0x" + selector("verify(bytes,bytes32,bytes)") + w(96) + sg["message"][2:] + w(96 + 32 + len(kd) + (-len(kd) % 32)) + abi_bytes(kd) + abi_bytes(bytes(sb))
+                cd = (
+                    "0x"
+                    + selector("verify(bytes,bytes32,bytes)")
+                    + w(96)
+                    + sg["message"][2:]
+                    + w(96 + 32 + len(kd) + (-len(kd) % 32))
+                    + abi_bytes(kd)
+                    + abi_bytes(bytes(sb))
+                )
                 res = rpc("eth_call", [{"to": v, "data": cd, "gas": hex(10_000_000)}, "latest"])
                 gas = int(rpc("eth_estimateGas", [{"to": v, "data": cd}, "latest"]), 16)
-                check(int(res, 16) == (0 if flip else 1), f"MldsaVerifier mldsa{lvl}.verify({sg['purpose']}{', sig flipped' if flip else ''}) = {not flip} (estimateGas {gas:,})")
+                check(
+                    int(res, 16) == (0 if flip else 1),
+                    f"MldsaVerifier mldsa{lvl}.verify({sg['purpose']}{', sig flipped' if flip else ''}) = {not flip} (estimateGas {gas:,})",
+                )
 
 
 def cmd_burst(a):
     """Step 5: `clients` threads × `calls` eth_call to PQZ through the proxy, no pacing: the largest honest input whose
     calldata floor fits 2^24 (Amsterdam refuses a PQZH transfer's 280+ KB at any gas, review nethermind-2.2 M2)."""
-    b = max((bytes.fromhex(r["input"]) for r in corpus() if r["kind"] == "honest" and not over_cap(r["input"])), key=len)
-    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "eth_call", "params": [{"to": PQZ, "data": "0x" + b.hex(), "gas": hex(CAP)}, "latest"]}).encode()
+    b = max(
+        (bytes.fromhex(r["input"]) for r in corpus() if r["kind"] == "honest" and not over_cap(r["input"])), key=len
+    )
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "eth_call",
+            "params": [{"to": PQZ, "data": "0x" + b.hex(), "gas": hex(CAP)}, "latest"],
+        }
+    ).encode()
     codes = {}
     lk = threading.Lock()
     h0 = rpc("eth_getBlockByNumber", ["latest", False])
@@ -477,7 +591,9 @@ def cmd_burst(a):
     def client():
         for _ in range(a.calls):
             try:
-                r = urllib.request.urlopen(urllib.request.Request(RPC, body, {"content-type": "application/json"}), timeout=120)
+                r = urllib.request.urlopen(
+                    urllib.request.Request(RPC, body, {"content-type": "application/json"}), timeout=120
+                )
                 ok = json.load(r).get("result") == "0x" + "00" * 31 + "01"
                 c = "200 …01" if ok else "200 other"
             except urllib.error.HTTPError as e:
@@ -518,8 +634,12 @@ def gas_fits(limit, gas):
 
 def cmd_selftest(_a):
     """No chain: the rows of codesize's wait condition."""
-    for limit, gas, want in ((200_000_000, 199_900_000, True), (200_000_000, 200_000_000, True),
-                             (199_999_999, 200_000_000, False), (110_000_000, 110_000_000, True)):
+    for limit, gas, want in (
+        (200_000_000, 199_900_000, True),
+        (200_000_000, 200_000_000, True),
+        (199_999_999, 200_000_000, False),
+        (110_000_000, 110_000_000, True),
+    ):
         check(gas_fits(limit, gas) == want, f"gas_fits(gasLimit {limit:,}, tx.gas {gas:,}) = {want}")
 
 
@@ -566,10 +686,17 @@ def cmd_codesize(a):
                 why = f", eth_call {rpc('eth_call', [{'data': '0x' + init.hex(), 'gas': hex(gas)}, 'latest'])[:20]}"
             except RuntimeError as e:
                 why = f", eth_call refuses: {e}"
-        good = {"ok": st == 1 and size == n, "jump": st == 1 and size == n and answer == 42, "fail": st == 0 and size == 0,
-                "out": False}.get(kind, True)
-        check(good, f"{what}: status {rc['status']}, eth_getCode {size:,} B, gasUsed {int(rc['gasUsed'], 16):,}, "
-                    f"block {int(rc['blockNumber'], 16)}" + (f", eth_call {answer}" if answer is not None else "") + why)
+        good = {
+            "ok": st == 1 and size == n,
+            "jump": st == 1 and size == n and answer == 42,
+            "fail": st == 0 and size == 0,
+            "out": False,
+        }.get(kind, True)
+        check(
+            good,
+            f"{what}: status {rc['status']}, eth_getCode {size:,} B, gasUsed {int(rc['gasUsed'], 16):,}, "
+            f"block {int(rc['blockNumber'], 16)}" + (f", eth_call {answer}" if answer is not None else "") + why,
+        )
         if a.record and st:
             with open(a.record, "a") as f:
                 f.write(json.dumps({"addr": addr, "size": size, "jump": kind == "jump"}) + "\n")
@@ -597,7 +724,10 @@ def cmd_codeverify(a):
     for r in rows[:-1] if got else ():
         size = (len(rpc("eth_getCode", [r["addr"], "latest"])) - 2) // 2
         ans = int(rpc("eth_call", [{"to": r["addr"]}, "latest"]) or "0x0", 16) if r["jump"] else None
-        check(size == r["size"] and ans in (None, 42), f"import: {r['addr']} eth_getCode {size:,} B" + (f", eth_call {ans}" if r["jump"] else ""))
+        check(
+            size == r["size"] and ans in (None, 42),
+            f"import: {r['addr']} eth_getCode {size:,} B" + (f", eth_call {ans}" if r["jump"] else ""),
+        )
 
 
 def cmd_fill(a):
@@ -605,8 +735,16 @@ def cmd_fill(a):
     s = Sender(a.key)
     # review nethermind-2.2 M2: under Amsterdam the PQZH op 1 inputs are over the calldata floor's 2^24, and tx.gas
     # follows intrinsic() (EIP-2780 base, EIP-7976 floor), not 21,000 and the EIP-7623 floor
-    rows = sorted((r for r in corpus() if r["kind"] in ("honest", "fee0") and not over_cap(r["input"])
-                   and (AMS or (r["id"] == "pqzh" and r["op"] == 1))), key=lambda r: -len(r["input"]))
+    rows = sorted(
+        (
+            r
+            for r in corpus()
+            if r["kind"] in ("honest", "fee0")
+            and not over_cap(r["input"])
+            and (AMS or (r["id"] == "pqzh" and r["op"] == 1))
+        ),
+        key=lambda r: -len(r["input"]),
+    )
     hs = []
     for i in range(a.n):
         b = bytes.fromhex(rows[i % len(rows)]["input"])
@@ -619,7 +757,9 @@ def cmd_fill(a):
         blocks.setdefault(int(rc["blockNumber"], 16), []).append(n)
     for bn, ns in sorted(blocks.items()):
         blk = rpc("eth_getBlockByNumber", [hex(bn), False])
-        log(f"block {bn}: {len(ns)} PQZ transfers, calldata {sum(ns):,} B, gasUsed {int(blk['gasUsed'], 16):,} / gasLimit {int(blk['gasLimit'], 16):,}, size {int(blk['size'], 16):,} B")
+        log(
+            f"block {bn}: {len(ns)} PQZ transfers, calldata {sum(ns):,} B, gasUsed {int(blk['gasUsed'], 16):,} / gasLimit {int(blk['gasLimit'], 16):,}, size {int(blk['size'], 16):,} B"
+        )
 
 
 def main():
@@ -648,9 +788,18 @@ def main():
     global AMS
     AMS = "blockAccessListHash" in rpc("eth_getBlockByNumber", ["latest", False])
     log(f"head rules: {'Amsterdam (EIP-7928 header field present)' if AMS else 'before Amsterdam'}")
-    {"head": cmd_head, "before": cmd_before, "probe": cmd_probe, "stock": cmd_stock, "e2e": cmd_e2e,
-     "burst": cmd_burst, "fill": cmd_fill, "codesize": cmd_codesize, "codedump": cmd_codedump,
-     "codeverify": cmd_codeverify}[a.cmd](a)
+    {
+        "head": cmd_head,
+        "before": cmd_before,
+        "probe": cmd_probe,
+        "stock": cmd_stock,
+        "e2e": cmd_e2e,
+        "burst": cmd_burst,
+        "fill": cmd_fill,
+        "codesize": cmd_codesize,
+        "codedump": cmd_codedump,
+        "codeverify": cmd_codeverify,
+    }[a.cmd](a)
     log(f"{a.cmd}: {'FAILED ' + str(len(FAILS)) if FAILS else 'all checks passed'}")
     sys.exit(1 if FAILS else 0)
 

@@ -5,7 +5,7 @@
 //! Decoding rejects non-canonical field elements (Goldilocks' Deserialize) and anything malformed; never panics.
 
 use serde::de::{self, DeserializeSeed, IntoDeserializer, SeqAccess, Visitor};
-use serde::{Deserialize, Serialize, ser};
+use serde::{ser, Deserialize, Serialize};
 
 #[derive(Debug)]
 pub struct Error(String);
@@ -122,12 +122,20 @@ impl<'a> ser::Serializer for &'a mut Ser {
     fn serialize_newtype_struct<T: Serialize + ?Sized>(self, _: &'static str, v: &T) -> R<()> {
         v.serialize(self)
     }
-    fn serialize_newtype_variant<T: Serialize + ?Sized>(self, _: &'static str, i: u32, _: &'static str, v: &T) -> R<()> {
+    fn serialize_newtype_variant<T: Serialize + ?Sized>(
+        self,
+        _: &'static str,
+        i: u32,
+        _: &'static str,
+        v: &T,
+    ) -> R<()> {
         self.varint(i as u64);
         v.serialize(self)
     }
     fn serialize_seq(self, len: Option<usize>) -> R<Self> {
-        let Some(n) = len else { return err("unknown length") };
+        let Some(n) = len else {
+            return err("unknown length");
+        };
         self.varint(n as u64);
         Ok(self)
     }
@@ -137,7 +145,13 @@ impl<'a> ser::Serializer for &'a mut Ser {
     fn serialize_tuple_struct(self, _: &'static str, _: usize) -> R<Self> {
         Ok(self)
     }
-    fn serialize_tuple_variant(self, _: &'static str, i: u32, _: &'static str, _: usize) -> R<Self> {
+    fn serialize_tuple_variant(
+        self,
+        _: &'static str,
+        i: u32,
+        _: &'static str,
+        _: usize,
+    ) -> R<Self> {
         self.varint(i as u64);
         Ok(self)
     }
@@ -147,7 +161,13 @@ impl<'a> ser::Serializer for &'a mut Ser {
     fn serialize_struct(self, _: &'static str, _: usize) -> R<Self> {
         Ok(self)
     }
-    fn serialize_struct_variant(self, _: &'static str, i: u32, _: &'static str, _: usize) -> R<Self> {
+    fn serialize_struct_variant(
+        self,
+        _: &'static str,
+        i: u32,
+        _: &'static str,
+        _: usize,
+    ) -> R<Self> {
         self.varint(i as u64);
         Ok(self)
     }
@@ -320,17 +340,32 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut De<'de> {
     fn deserialize_tuple<V: Visitor<'de>>(self, n: usize, v: V) -> R<V::Value> {
         v.visit_seq(Seq(self, n))
     }
-    fn deserialize_tuple_struct<V: Visitor<'de>>(self, _: &'static str, n: usize, v: V) -> R<V::Value> {
+    fn deserialize_tuple_struct<V: Visitor<'de>>(
+        self,
+        _: &'static str,
+        n: usize,
+        v: V,
+    ) -> R<V::Value> {
         v.visit_seq(Seq(self, n))
     }
     fn deserialize_map<V: Visitor<'de>>(self, v: V) -> R<V::Value> {
         let n = self.len()?;
         v.visit_map(Seq(self, n))
     }
-    fn deserialize_struct<V: Visitor<'de>>(self, _: &'static str, f: &'static [&'static str], v: V) -> R<V::Value> {
+    fn deserialize_struct<V: Visitor<'de>>(
+        self,
+        _: &'static str,
+        f: &'static [&'static str],
+        v: V,
+    ) -> R<V::Value> {
         v.visit_seq(Seq(self, f.len()))
     }
-    fn deserialize_enum<V: Visitor<'de>>(self, _: &'static str, _: &'static [&'static str], v: V) -> R<V::Value> {
+    fn deserialize_enum<V: Visitor<'de>>(
+        self,
+        _: &'static str,
+        _: &'static [&'static str],
+        v: V,
+    ) -> R<V::Value> {
         v.visit_enum(self)
     }
     fn deserialize_identifier<V: Visitor<'de>>(self, _: V) -> R<V::Value> {
@@ -402,7 +437,10 @@ mod tests {
     fn field_elements_big_endian_and_canonical() {
         let x = F::from_u64(0x0102030405060708);
         let b = super::to_vec(&(x, vec![x], [7u8; 3])).unwrap();
-        assert_eq!(b, [1, 2, 3, 4, 5, 6, 7, 8, 1, 1, 2, 3, 4, 5, 6, 7, 8, 7, 7, 7]);
+        assert_eq!(
+            b,
+            [1, 2, 3, 4, 5, 6, 7, 8, 1, 1, 2, 3, 4, 5, 6, 7, 8, 7, 7, 7]
+        );
         let (y, rest): (F, _) = super::take_from_bytes(&b).unwrap();
         assert_eq!((y, rest.len()), (x, 12));
         // p itself is not a canonical encoding
@@ -422,6 +460,9 @@ mod tests {
         let e = super::to_vec(&big).unwrap();
         assert_eq!(&e[..2], [0xac, 0x02]);
         assert_eq!(super::take_from_bytes::<Vec<u8>>(&e).unwrap().0.len(), 300);
-        assert!(super::take_from_bytes::<Vec<u8>>(&[[0xac, 0x82, 0x00].as_slice(), &big].concat()).is_err());
+        assert!(
+            super::take_from_bytes::<Vec<u8>>(&[[0xac, 0x82, 0x00].as_slice(), &big].concat())
+                .is_err()
+        );
     }
 }
