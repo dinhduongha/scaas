@@ -52,7 +52,7 @@ registry record (0 = none known: `UAKindUnknown`, a native kind `UAKindNotDerive
 
 **Registry arguments (`typed-signing`, [CTR-UA-36](../contracts/accounts.md#CTR-UA-36)).** Every library builds the explicit call of a registration: entry choice (`register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`), `UAAttrs` with `KemKey`, the KEM hash commit plus the `setKemKey(ua, 0, kem, UASig())` fill when the calldata is over `REGISTER_CALLDATA_LIMIT` (261,909 B) or forced, the `setKemKey` / `setPqzKey` arguments, and the ABI calldata length (arithmetic, no ABI encoder). A malformed KEM key is refused before a form is chosen (`kemKeyOf` runs the record check), and a `setKemKey` builder refuses no key. **Client rule (owner 2026-11-01):** a front-runner can land the commit form of a full `register`, so after `register`, or on `UAAlreadyRegistered`, read `registrationOf`; when `attrs.kemPkHash != 0` and `kemKeyAt(ua, 0)` is empty, send `setKemKey(ua, 0, key, UASig())` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)); clientkeys `kemRepair` and ua-rs `kem_repair` return that call or null from the read values, the other libraries build it with their `setKemKey` builder. clientkeys `registrationArgs` is the reference ([CLI-SGN-41](signers-clientkeys.md#CLI-SGN-41)); `scaas_ua::ua8::registration_args` in ua-rs; `registration_args` in ua-py and `registrationArgs` in ua-dart (named JSON maps), `RegistrationArgs` in ua-go and ua-cs (typed structs / records that marshal to the same JSON). The four wrappers take JSON in and out, one shim in ua-rs (feature `json`), because a nested typed struct over a C ABI is not thin: `scaas_ua_registration_args`, `scaas_ua_set_kem_key_args`, `scaas_ua_set_pqz_key_args` in ua-c, `registrationArgs` / `setKemKeyArgs` / `setPqzKeyArgs` in ua-cxx, ua-qt and ua-dart-frb, the object shapes of `portable.json`'s `args`. Bad JSON, a field of the wrong type or bad hex is `UAArgument`; the UA errors pass through.
 
-Language notes: Dart's KEM version is a `BigInt` (2^64 − 1 does not fit an `int`); ua-dart-frb's package entry point refuses a version below 0 or at or above 2^64 (`UAKemVersion`) before the bridge, which would otherwise wrap it to 64 bits; ua-qt's numbers (chain id, KEM version) are JS numbers, exact up to 2^53, and a larger or fractional value is `UAArgument`; ua-qt exposes `holderPopMessage(kind, ua, keyData, pqzKey, pqzPop, kemPk)` (+ `holderPopMessageH` for a hash-only proof, `purposeTagV(purpose, version)`) and returns JSON. **ua-c ABI version 5, the identity surface** (the wallet surface is ABI 6, [CLI-UAL-05](#CLI-UAL-05); 1 → 2: the proof-hash argument takes `(ptr, len)`, len 0 = absent, len ≠ 32 = `UAPqzPopHash`; 2 → 3: the typed digests, `scaas_ua_portable_domain_separator`, `scaas_ua_kem_record_hash`, `scaas_ua_portable_record_digest`, the `kem_record_tag`, `pqz_key_record_tag`, `portable_pop_digest` and `personal_sign_digest` exports gone; then `scaas_ua_registration_args`, `scaas_ua_set_kem_key_args`, `scaas_ua_set_pqz_key_args`): statuses **12–17** (`UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAPqzPopHash`, `UAPqzKeySet`, `UAKemScheme`), structs `ScaasUaHolderPop` and `ScaasUaPqzKeyRecord` (225 bytes, align 1), `scaas_ua_purpose_tag_v`; ua-cxx and ua-dart-frb follow through the Rust wrapper. Tests in every package read `portable.json` (27 registrations, 15 KEM records, 16 PQZ key records, 68 negatives; `mldsa87` and `fndsa1024` with `fndsa512`'s rows each: a KEM register key, KEM records v1-v3, PQZ key records at the four sets) and pin two known answers as literals: `chainKeyHash(1099511627783)` = `keccak256("evm:1099511627783")` = `0x6e45d591…`, and the KEM record digest at version 2^64 − 1 `0xa0063a84…38f07` (ua-qt pins it at 2^53 = `0x04a0150e…990482`, the largest version a QML number carries exactly). Errors carry one code everywhere: `UAKeyData`, `UAIdInNativeSpace`, `UAKindUnknown`,
+Language notes: Dart's KEM version is a `BigInt` (2^64 − 1 does not fit an `int`); ua-dart-frb's package entry point refuses a version below 0 or at or above 2^64 (`UAKemVersion`) before the bridge, which would otherwise wrap it to 64 bits; the wallet surface's other integers (kind, account, index, coin type, `change`, SS58 prefix, lengths) cross the bridge as `i64` and are `UAArgument` outside their Rust type, and ua-py refuses an integer outside its C type before the `ctypes` call, which would wrap it (ua-rs-native T13 C4); ua-qt's numbers (chain id, KEM version) are JS numbers, exact up to 2^53, and a larger or fractional value is `UAArgument`; ua-qt exposes `holderPopMessage(kind, ua, keyData, pqzKey, pqzPop, kemPk)` (+ `holderPopMessageH` for a hash-only proof, `purposeTagV(purpose, version)`) and returns JSON. **ua-c ABI version 5, the identity surface** (the wallet surface is ABI 6, [CLI-UAL-05](#CLI-UAL-05); 1 → 2: the proof-hash argument takes `(ptr, len)`, len 0 = absent, len ≠ 32 = `UAPqzPopHash`; 2 → 3: the typed digests, `scaas_ua_portable_domain_separator`, `scaas_ua_kem_record_hash`, `scaas_ua_portable_record_digest`, the `kem_record_tag`, `pqz_key_record_tag`, `portable_pop_digest` and `personal_sign_digest` exports gone; then `scaas_ua_registration_args`, `scaas_ua_set_kem_key_args`, `scaas_ua_set_pqz_key_args`): statuses **12–17** (`UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAPqzPopHash`, `UAPqzKeySet`, `UAKemScheme`), structs `ScaasUaHolderPop` and `ScaasUaPqzKeyRecord` (225 bytes, align 1), `scaas_ua_purpose_tag_v`; ua-cxx and ua-dart-frb follow through the Rust wrapper. Tests in every package read `portable.json` (27 registrations, 15 KEM records, 16 PQZ key records, 68 negatives; `mldsa87` and `fndsa1024` with `fndsa512`'s rows each: a KEM register key, KEM records v1-v3, PQZ key records at the four sets) and pin two known answers as literals: `chainKeyHash(1099511627783)` = `keccak256("evm:1099511627783")` = `0x6e45d591…`, and the KEM record digest at version 2^64 − 1 `0xa0063a84…38f07` (ua-qt pins it at 2^53 = `0x04a0150e…990482`, the largest version a QML number carries exactly). Errors carry one code everywhere: `UAKeyData`, `UAIdInNativeSpace`, `UAKindUnknown`,
 `UAKindNotDerived`, `UAKindNotNative`, `UAIdFormat`, `UAPurposeUnknown`. The Solidity library has the on-chain subset.
 
 **Nested `msig` (`msig-nested`, [CTR-UA-38](../contracts/accounts.md#CTR-UA-38)).** Key data alone does not show an `msig` member's PQ eligibility, so
@@ -153,6 +153,7 @@ Claude), no external audit.
 |---|---|---|
 | Wallet and keys | `wallet/mod.rs`, `derive.rs`, `store.rs` | `Wallet::{generate, from_mnemonic, open_vault, seal_vault, lock, unlock, manifest, memory_protection, ua_key, native_key}`; derivation as [signers-clientkeys §9](signers-clientkeys.md#9-derivation-and-role-keys) |
 | Single-key signing | `sign.rs`, `pqsign.rs`, `pairing.rs`, `signer.rs` | `UaKey::{sign_ua, sign_member}`, `NativeKey::{sign_typed, sign_transaction, sign_key_proof, sign_digest}`, the `Signer` trait |
+| Native networks (ua-rs-native) | `wallet/mod.rs`, `derive.rs`, `sign.rs`, `substrate.rs` | `Wallet::{bitcoin_key, polkadot_key}`, `NativeKey::{sign_message, sign_near_transaction, sign_sui_transaction, sign_stellar_transaction, sign_hedera_transaction, witness_program, ss58_address}`, `sign_message_by`, `Network::{scheme, all}` ([below](#native-networks-of-the-apps-backend-built)) |
 | `UASig` and groups | `uasig.rs`, `pairing.rs` | `ua_sig`, `msig_sig`, `membership_sig` (`msig` sets minimal at both levels, `UAPoP` otherwise); an updated `msig` (CTR-UA-44): `msig_sig_current`, `membership_sig_current` (the id from the first structure, slots, weights, threshold and minimality from the current one, a disabled slot `Argument`; the JSON request's `current`), `msig_update_typed_data` (a native member signs the `UAMsigUpdate` digest itself under `msig-update`); `pqz-scoped-key` signs with role Pop and an empty `keyData`, as the other portable record purposes; MuSig2 sessions (`UaKey::musig2_session`) and FROST sessions (`Wallet::frost_session`): store handles, a secret nonce in the arena used once, revoked by `lock()`; the FROST share stays the caller's `KeyPackage` until the real DKG work ([CLI-UAL-09](#CLI-UAL-09)) |
 | EIP-712, policy, transactions | `eip712.rs`, `policy.rs`, `tx.rs` | `TypedData`, `scaas_typed_data`, `pqz_verdict_typed_data` (the `PqzVerdict` a PQZ verifier UA signs under `pqz-verdict`, group 3f), `Expect`; `EvmTx` types 0 to 3 (`alloy-rlp`; type 4 has no variant, chain id 0 refused) |
 | WebAuthn | `webauthn.rs` | `webauthn_challenge`, `webauthn_assertion` |
@@ -181,7 +182,10 @@ Every v5 declaration is unchanged. New: the opaque handles `ScaasUaWallet`, `Sca
 `Aead`, `VaultOpen`, `VaultParams`, `VaultVersion`, `RawDigestRefused`, `PolicyRefused`, `ExternalSignature`, `WalletLocked`,
 `KeyRevoked`, `ContainerSender`, `ContainerReplay`, `BackupRollback`, `WebAuthnAssertion`, `KindUnavailable`, `WalletMismatch`,
 `Rng`, `PqzSetMismatch`, then group 3g's `PqzKeyVersion` 41 and `KeyInUse` 42, appended). `scaas_ua_features()` returns the build's bits: 0 `wallet`, 1 `pq`, 2 `falcon`, 3 `zether`, 4 `pqz`,
-5 to 8 the four sets, 9 `external` (clear in this round), 10 `mlock`, 11 `vectors` (a binding refuses it). A size query of a
+5 to 8 the four sets, 9 `external` (clear in this round), 10 `mlock`, 11 `vectors` (a binding refuses it), 12 `native_networks`
+(ua-rs-native: networks 9 to 12, `scaas_ua_sign_message_raw`, the four envelope calls, `scaas_ua_wallet_bitcoin_key`,
+`scaas_ua_wallet_polkadot_key`, `scaas_ua_key_address`, `scaas_ua_key_ss58_address`, `scaas_ua_key_witness_program`; the C-ABI
+bindings refuse a v6 library without it). A size query of a
 proving call runs it again and a proof's length varies, so callers use `SCAAS_UA_PQZ_OUT_MAX` (1,052,672 B) as the buffer.
 
 **Bindings of the wallet surface.** Each checks the ABI version and the features at load and refuses a mismatch. Identity calls
@@ -217,7 +221,7 @@ every typed operation.
 | x86-64 Linux | every cell | every cell (PQZ at two sets) | built and tested locally, every binding's suite |
 | `wasm32-unknown-unknown` | compiles; Falcon `KindUnavailable` (its C is skipped); `mlock` compiled out; `getrandom`'s JS backend per generation | compiles | nine cells built locally; nothing runs through a browser binding yet |
 | `aarch64-linux-android` | compiles (NDK clang, API 24) | compile cells | `ua-c`'s cells built for the size ratchet, `ua-rs`'s verify-only cell locally, its other cells CI's first run; no device run |
-| `aarch64-apple-ios` | CI compile only | CI compile only | not built here (no Xcode) |
+| `aarch64-apple-ios` | CI compile only (iOS 13 or later: `IPHONEOS_DEPLOYMENT_TARGET=13.0`, for the stack probe `___chkstk_darwin`) | CI compile only | not built here (no Xcode) |
 
 Sizes per target and cell, and the timing still to come: [CLI-UAL-43](#CLI-UAL-43).
 
@@ -423,6 +427,58 @@ and SLH-DSA keygen per handle. No figure is quoted without its device and commit
 threshold of recovery UAs) is later work; `backup_seal` to an organisation UA and `msig` cover institutional recovery.
 Reproducible builds are for the apps' own stores (`--locked`, `SOURCE_DATE_EPOCH`, `cargo auditable`); no binary goes to GitHub.
 `no_std` is not needed: no listed target asks for it.
+
+## Native networks of the app's backend: BUILT
+
+`ua-rs` as an end-user app's native signing backend ([CLI-UAL-01](#CLI-UAL-01) Scope; owner 2026-11-17, TODO 8c): the networks
+of [CLI-SGN-52](signers-clientkeys.md#CLI-SGN-52) and [CLI-SGN-53](signers-clientkeys.md#CLI-SGN-53), raw messages on Ed25519 and
+sr25519 keys. Encoding stays with the app's backends: `ua-rs` derives, gives addresses and witness programs and signs the digest or
+message it is handed. Spec and plan: [`2026-11-17-ua-rs-native.md`](../superpowers/specs/2026-11-17-ua-rs-native.md),
+[plan](../superpowers/plans/2026-11-17-ua-rs-native.md) (branch `ua-rs-native`); controller calls in
+[CLI-UAL-63](../decisions.md#CLI-UAL-63). Built on branch `ua-rs-native` (plan T0 `55f5377af` to T11c `17df72db0`; the gates:
+`smartcontracts/evm/runs/2026-11-17-ua-rs-native-summary.txt`). UNAUDITED.
+
+<a id="CLI-UAL-44"></a>**CLI-UAL-44** — **Raw native signing: the marker, native keys only, the scheme's form, a bound.**
+`NativeKey::sign_message(msg, AllowRawDigest)` (C `scaas_ua_sign_message_raw`) signs 1 to 131,072 bytes as the scheme's message, on
+Ed25519 and sr25519 native keys only; `sign_digest` serves every native scheme (secp256k1 ECDSA, BIP-340 Taproot, ed25519, sr25519).
+`ua-rs` enforces: the marker value (no call without it, compile-fail doc tests); the key class (a `UaKey` has no raw call,
+`sign_message_by` over a `UaKey` is `Argument`, C refuses it `RawDigestRefused`, [CLI-SGN-29](signers-clientkeys.md#CLI-SGN-29)); the
+scheme (no message on a secp256k1 or Taproot key, no EIP-712 or EVM transaction on a Bitcoin key, no key proof on the four new
+networks); the bound; a message starting with an off-chain envelope a SCaaS family verifies (`0xff ‖ "solana offchain"`,
+`"APTOS\n"`) refused, so the families' payloads stay with their checked builders; no other first-byte rule (a message may start
+`0x05` or `0x19 0x01`: chain data on these keys, CLI-UAL-63 (11) withdrawn); no coin-type override on NEAR or Polkadot; errors
+without input. Envelope calls, additive, own network only, behind the marker: `sign_near_transaction` (`sha256(tx)`;
+a NEP-461 tagged payload, first u32 at or above 2^30, refused), `sign_sui_transaction` (`blake2b-256(0x000000 ‖ tx)`),
+`sign_stellar_transaction` (`sha256(network_id ‖ 0x00000002 ‖ tx)`), `sign_hedera_transaction` (the body bytes); none for GRAM / TON.
+Which keys and digests reach the raw path beyond this (EVM-address keys, a bare digest) is `scaas-sdk`'s raw entry's rule
+([CLI-UAL-63](../decisions.md#CLI-UAL-63) (11) to (15)). The caller's half is [CLI-SGN-54](signers-clientkeys.md#CLI-SGN-54). BUILT (T5
+`dc359c317`, T6b `f93f7f762`; C T10 `4624ff61d`; the bindings T11a–f).
+
+<a id="CLI-UAL-45"></a>**CLI-UAL-45** — **Bitcoin: `ua-rs` signs the sighash it is given and computes none.** The BIP-143 / BIP-341
+sighash needs the whole transaction (outpoints, every spent amount and script, sighash type), which is the app's encoder's; the app
+compares sighashes across its encoders and the signatures over them. P2WPKH: ECDSA, RFC 6979 with no extra data, low-s, no low-R
+grinding, `r ‖ s ‖ v`; the app DER-encodes and appends the hash type. P2TR: BIP-340 with the BIP-86-tweaked key computed inside
+`ua-rs` from the stored BIP-32 key by one pure tweak function (also the address's), `aux` from the OS RNG
+([CLI-UAL-02](#CLI-UAL-02)), the negated and tweaked scalars wiped before return, verified against `x(Q)` before return.
+`Wallet::bitcoin_key` takes the chain (0 receive, 1 change); `witness_program()` gives `(0, HASH160(pk))` or `(1, x(Q))`. BUILT (T7 `cebe014f1`).
+
+<a id="CLI-UAL-46"></a>**CLI-UAL-46** — **The sr25519 signer.** schnorrkel 0.11 (`default-features = false`, feature `getrandom`
+only), signing context `substrate`. Every signature and soft derivation draws its 32 random bytes first through `os_aux()` (`Error::Rng`
+on failure, never a panic) and hands schnorrkel a one-shot RNG that yields exactly those bytes; a second read discards the result
+(`Error::Rng`). The witness mixes the key's nonce, the transcript and those bytes (hedged); the signature is verified before return.
+The `substrate-bip39` mini-secret is computed when the store opens (from the entropy and the passphrase, which the store does not
+keep) and lives in the arena beside the seed; Polkadot keys are 64-byte schnorrkel secrets in the arena, revoked by `lock()`
+([CLI-UAL-09](#CLI-UAL-09)). A junction key is listed in the manifest's `polkadotPaths` (written only when not empty, at most 64, each
+re-parsed on read). Controller clauses: the one-shot RNG, the mini-secret at open, `polkadotPaths`. BUILT (T8a `1fd30d957`, T8b `940e9b876`).
+
+<a id="CLI-UAL-47"></a>**CLI-UAL-47** — **Native vectors.** `smartcontracts/vectors/native/native.json` is written by clientkeys first
+(`scripts/native-vectors.mjs`) and read by `ua-rs` and every binding; `ua-rs` writes `rs_native.json` (OS-random Taproot and sr25519
+signatures) that clientkeys verifies, so randomized rows are checked both ways. The `ua/` files do not move. Rows are byte-equal for
+deterministic schemes; BIP-340 with a fixed `aux` and sr25519 with fixed bytes are byte-equal **test-only** rows (feature `vectors`;
+sr25519 only if both libraries read the bytes alike, else verify-only, and then no row pins sr25519's nonce derivation byte for byte,
+an accepted residual); soft-junction signatures verify-only. Published known answers (BIP-84, BIP-86, BIP-143, BIP-340, BIP-341,
+BIP-350, `substrate-bip39`, `subkey` keys, and one polkadot.js signature: `@polkadot/keyring` 14.0.3, verify-only) carry their
+source (the downloads also their sha256). BUILT (T4 `7e752faa2`, appended T6a `290021791`, both ways T9 `5e4aa392c`).
 
 ## Confidential-token facades: no decryption oracle
 
@@ -687,7 +743,97 @@ and reproduces every row of `smartcontracts/vectors/pqchat/` (`records.json`, `t
 with every unbound field non-zero in some row (`via`, `device`, `parents`, `ref`). Built today: the JS vector generator
 `clientkeys/src/pqchat.js` (**BUILT**, 3c T84, `test/pqchat.test.js`); `ua-rs` first, then every `ua-*` (PLANNED, UA-7
 T11–T14, T17–T20). Which device-id version a client defaults to is open (a controller proposal: v4 for a device that posts on
-chain, since v7 puts its creation time on chain).
+chain, since v7 puts its creation time on chain). The Rust client core that does all of this above `scaas-sdk`, with key handles only, is
+[`pqchat-core`](pqchat-core.md) (SPECIFIED).
+
+<a id="pqvault-clients"></a>**PqVault** (SPECIFIED, nothing built; the contract is [pqvault.md](../contracts/pqvault.md), the design
+the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)). The rules every PqVault client follows; the
+first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-12 controller calls (owner may override):
+
+<a id="CLI-PQV-01"></a>**CLI-PQV-01** — **`pqvault-core`, a Rust crate of its own, builds, encrypts, opens and merges vault
+records as an app core above `scaas-sdk`: it depends on the SDK, the SDK knows nothing about PqVault, and every signature,
+KEM, KDF and AEAD still runs in `ua-rs`, reached through the SDK ([CLI-UAL-01](#CLI-UAL-01)); scaas-app links it in its one
+Rust library `app-core-rust` with the feature `pqvault` (which implies `scaas`; scaas-app's contract section 12)** (owner
+2026-11-17, N2: "agreed to reverse the dependency", which replaced V11's SDK module `pqvault` the same day). SPECIFIED. The
+SDK's `vault` stays the seed vault; `pqvault-core`'s calls are the spec's
+[§8](../superpowers/specs/2026-11-17-pqvault.md#8-the-app-facing-api-of-pqvault-core).
+
+<a id="CLI-PQV-02"></a>**CLI-PQV-02** — **A personal vault uses the same path as a shared one: a random 32-byte epoch key
+wrapped once to its own UA KEM key (ML-KEM-1024 + X25519); no seed-derived vault key exists; a personal vault is never
+rekeyed to add a member: sharing from it is a new shared vault and a copy of the chosen live items** (owner 2026-11-17,
+ruling "(a)", its sharing clause replaced by O1 (c) the same day). SPECIFIED. The bytes are [CLI-PQV-09](#CLI-PQV-09)'s.
+
+<a id="CLI-PQV-03"></a>**CLI-PQV-03** — **Metadata reduction: titles, usernames, URLs, folders, tags, item types, vault names
+and settings only inside ciphertexts and `sealedInfo`; padding buckets always; batch writes for imports and migrations;
+relayed submission; a personal vault held by a per-vault UA derived from the seed** (owner 2026-11-17, V8; PqChat's D10).
+SPECIFIED. The derivation and the node-side linkage are [CLI-PQV-09](#CLI-PQV-09) and [CLI-PQV-11](#CLI-PQV-11).
+
+<a id="CLI-PQV-04"></a>**CLI-PQV-04** — **Client hardening: secrets hidden until an explicit reveal and hidden again after
+30 s or on leaving the foreground, no screenshots of a revealed secret where the platform allows, copy only on an explicit
+action with the clipboard marked sensitive and cleared after 30 s, autofill on the exact host and scheme by default and from
+accepted vaults only, auto-lock after 5 min idle and at once on screen lock (keys and plaintexts zeroized), never a secret in
+a log, crash report, notification, URL or error** (controller call, owner may override). SPECIFIED.
+
+<a id="CLI-PQV-05"></a>**CLI-PQV-05** — **No decryption oracle, honest limits, files off chain: a client sends nothing that
+depends on whether a version or a passphrase check opened; it reads through an RPC list keeping the highest version seen per
+item; it tells its user that a removed member keeps what it read (and lists the secrets to change) and that a deleted
+item's bytes stay; files go off chain with their key and hashes inside an item, fetched only on the user's action** (owner
+2026-11-17, V5, V7; [ARCH-POS-13](../decisions.md#ARCH-POS-13), [ARCH-POS-15](../decisions.md#ARCH-POS-15)). SPECIFIED.
+
+<a id="CLI-PQV-06"></a>**CLI-PQV-06** — **Only a PQ-rooted 24-word (256-bit) seed owns a vault: `pqvault-core` refuses (from the
+seed set's `class` and warnings the SDK reports from its authenticated index), with `SeedNotPqRooted` and before any other work, a classical-rooted seed set (the EOA-signature root, the
+private-key root and their BIP-85 children), a phrase below 24 words and an imported raw key; the vault UA, a per-vault UA
+included, derives from such a seed** (owner 2026-11-17, P1). SPECIFIED. The check binds what a client does for its own user;
+the chain cannot show another member's seed class, so a shared vault is only as quantum-safe as its weakest member's seed.
+
+<a id="CLI-PQV-07"></a>**CLI-PQV-07** — **The vault passphrase is an option, on by default: the epoch key that opens items
+combines the KEM-unwrapped `K_e` with `Argon2id(passphrase, salt)`, the salt random per vault and stored in the vault's
+record with its parameter set's id; neither the seed nor the passphrase alone opens anything; a change re-encrypts no item;
+a wrong passphrase is detected by an AEAD check before any item is opened; the passphrase is never stored or sent;
+forgetting it loses the vault; the choice is a flag in state with no value and no hint; versions written before a change
+stay under the old passphrase** (owner 2026-11-17, P2, changing V9). SPECIFIED. The mechanics are
+[CLI-PQV-10](#CLI-PQV-10)'s.
+
+<a id="CLI-PQV-08"></a>**CLI-PQV-08** — **A migration tool moves the live items to vaults under a new seed and says that the
+old ciphertexts stay on chain and every secret must be changed at its service; until the audit round that covers the
+contract, `pqvault-core` and the `ua-rs` paths it uses, with its reviewers named, the app labels PqVault UNAUDITED and test
+data only** (controller call, owner may override). SPECIFIED.
+
+<a id="CLI-PQV-09"></a>**CLI-PQV-09** — **The key schedule's bytes: wraps under the label `scaas/pqvault/v1/wrap`; `K_v =
+HKDF(K_e ‖ P_k)` with the vault, epoch and parameter id in its info; per version a fresh 16-byte salt and one HKDF giving key
+and nonce, AES-256-GCM-SIV over the padded canonical JSON with the AAD (vault, epoch, item, version, author, home);
+`sealedInfo` under `K_v` with an optional `prev = {epochId, keyWrap}`, the earlier key sealed under a `KeyWrap` key derived
+from `K_v` with the key-wrap constant and its usage in the AAD, and a `file` item's key sealed under a derived `kFile`, never
+under `K_v`; every key handle has one usage, `Derive`, `Data` or `KeyWrap`; a personal vault held by `ua_secret(seed, FN-DSA-512 by
+default, PQV_ACCOUNT, i)`, index 0 the index vault listing the user's vaults** (controller call, owner may override).
+SPECIFIED. Exact bytes: [spec §6](../superpowers/specs/2026-11-17-pqvault.md#6-cryptography); every client reproduces
+`smartcontracts/vectors/pqvault/`.
+
+<a id="CLI-PQV-10"></a>**CLI-PQV-10** — **The passphrase's mechanics: a change, or turning it on or off, is an admin's rekey
+of the same members with a fresh salt; the history is as strong as the weakest epoch that links to it, so before a rekey
+that weakens it (passphrase off or weaker, a member added) the client shows what it would expose and offers the rekey
+without `prev`; a downgrade is accepted only from a verified admin record; Argon2id without associated data at a parameter
+set pinned after a measured run; a generated 5-word passphrase offered, a user-chosen one at least 16 characters with a
+strength meter, nothing more enforced; a shared vault's passphrase never equal to the user's personal one** (controller
+call, owner may override). SPECIFIED. Design: [spec §6.5](../superpowers/specs/2026-11-17-pqvault.md#65-the-vault-passphrase-p2).
+
+<a id="CLI-PQV-12"></a>**CLI-PQV-12** — **`pqvault-core` holds key handles only and signs only under PqVault's app purpose:
+the KEM-unwrapped epoch key, the passphrase output, the effective key and every key derived from them stay in `ua-rs`
+behind handles of one usage each (`Derive`, `Data`, `KeyWrap`), and wrap, unwrap, HKDF, Argon2id, AEAD and key sealing
+run there on those handles; the only bytes that come out are plaintexts it asks to decrypt for the user, which hold no
+key (earlier and file keys are sealed); it signs typed data of its own domain through the SDK's app signing call, which
+refuses every SCaaS purpose and every SCaaS contract's or the registry's domain by name; if either cannot be met, the task
+stops and the owner decides** (coordinator conditions, controller calls, owner may override). App scoping avoids
+collisions among the cores an app links; it does not isolate: an app holding the user's unlocked seed set acts for that UA
+in every app namespace, PqVault's included, so only reviewed app cores are linked. SPECIFIED. Design: the spec's
+[§7](../superpowers/specs/2026-11-17-pqvault.md#7-pqvault-core).
+
+<a id="CLI-PQV-11"></a>**CLI-PQV-11** — **Trust what is verified and accepted: a vault the user did not create stays pending
+until the user accepts it after seeing its creator and members, and the accepted set is kept as `vaultRef` items in the
+user's index vault; before encrypting under an epoch a client verifies the signature chain from the vault record through
+every epoch to its own wrap; members and admins with a classical UA kind are flagged; reads for different vault UAs are
+spread over the RPC list and over time so one node does not link them** (controller call, owner may override). SPECIFIED.
+Details: [spec §6.9](../superpowers/specs/2026-11-17-pqvault.md#69-what-a-client-verifies-before-it-trusts-state-vc15) and §9.
 
 **Not here.** Per-kind derivation and clientkeys' API ([signers-clientkeys](signers-clientkeys.md)), group vectors, the registry contract, the UA ledger.
 Not built yet: the FRB layer as a Flutter plugin and its Android and iOS builds (no web build: `SecretBytes` needs `dart:ffi`), the wasm-bindgen browser binding of `ua-rs` (the library compiles for wasm32), and Qt packaging for Windows and macOS.

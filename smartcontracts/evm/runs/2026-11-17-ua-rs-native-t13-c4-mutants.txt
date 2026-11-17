@@ -1,0 +1,6 @@
+killed   | M1 py: the range check removed | clients/ua-py/scaas_ua/wallet.py | rc=1 | 1 failed: test_integers_outside_their_c_type_are_refused_not_wrapped
+killed   | M2 py: no lower bound (-1 wraps) | clients/ua-py/scaas_ua/wallet.py | rc=1 | 1 failed: test_integers_outside_their_c_type_are_refused_not_wrapped
+killed   | M3 dart-frb: ss58 prefix cast | clients/ua-dart-frb/rust/src/api/wallet.rs | rc=1 | 0 failed: 
+killed   | M4 dart-frb: bitcoin change cast | clients/ua-dart-frb/rust/src/api/wallet.rs | rc=1 | 0 failed: 
+killed   | M5 dart-frb: ua kind cast | clients/ua-dart-frb/rust/src/api/wallet.rs | rc=1 | 0 failed: 
+5 mutants, 5 killed, 0 survived, 0 not loaded

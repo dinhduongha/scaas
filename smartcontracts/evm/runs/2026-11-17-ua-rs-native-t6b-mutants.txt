@@ -1,0 +1,5 @@
+killed   | M1 Sui intent dropped | clients/ua-rs/src/wallet/sign.rs | rc=101 | 4 failed: native_json_ed25519_message_rows_byte_equal
+killed   | M2 Stellar envelope type 5 | clients/ua-rs/src/wallet/sign.rs | rc=101 | 4 failed: native_json_ed25519_message_rows_byte_equal
+killed   | M3 NEAR without the hash | clients/ua-rs/src/wallet/sign.rs | rc=101 | 4 failed: native_json_ed25519_message_rows_byte_equal
+killed   | M4 network check removed | clients/ua-rs/src/wallet/sign.rs | rc=101 | 4 failed: native_json_ed25519_message_rows_byte_equal
+4 mutants, 4 killed, 0 survived, 0 not loaded

@@ -1,0 +1,3 @@
+killed   | M1 change 1 off Bitcoin accepted | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: manifest_refuses_change_off_bitcoin_and_refused_coin_types
+killed   | M2 coin type unchecked | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: manifest_refuses_change_off_bitcoin_and_refused_coin_types
+2 mutants, 2 killed, 0 survived, 0 not loaded

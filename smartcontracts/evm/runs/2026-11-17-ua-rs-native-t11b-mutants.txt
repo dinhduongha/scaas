@@ -1,0 +1,3 @@
+killed   | M1 witnessProgram without its version byte | clients/ua-qt/src/ua_wallet.rs | rc=8 | 0 failed: 
+killed   | M2 ss58Address ignores its prefix | clients/ua-qt/src/ua_wallet.rs | rc=8 | 0 failed: 
+2 mutants, 2 killed, 0 survived, 0 not loaded

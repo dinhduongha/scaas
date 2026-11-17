@@ -22,10 +22,11 @@ from . import UAError
 
 ABI_VERSION = 6
 FEATURES = ('wallet', 'pq', 'falcon', 'zether', 'pqz', 'pqz-set-n2048-kmax1024', 'pqz-set-n2304-kmax4096',
-            'pqz-set-n2560-kmax16384', 'pqz-set-n2816-kmax65536', 'external', 'mlock', 'vectors')
+            'pqz-set-n2560-kmax16384', 'pqz-set-n2816-kmax65536', 'external', 'mlock', 'vectors', 'native-networks')
 FEATURE = {n: 1 << i for i, n in enumerate(FEATURES)}
 _SETS = sum(v for n, v in FEATURE.items() if n.startswith('pqz-set-'))
-NETWORKS = ('evm', 'cosmos', 'hedera_ecdsa', 'hedera_ed25519', 'sui', 'stellar', 'ton', 'aptos', 'solana')
+NETWORKS = ('evm', 'cosmos', 'hedera_ecdsa', 'hedera_ed25519', 'sui', 'stellar', 'ton', 'aptos', 'solana',
+            'bitcoin_p2wpkh', 'bitcoin_p2tr', 'near', 'polkadot')
 COIN_DEFAULT = 0xFFFFFFFF
 AEAD_AES256_GCM, AEAD_AES256_GCM_SIV = 1, 2
 KEM_PK_LEN, KEM_CT_LEN = 1601, 1568
@@ -54,7 +55,8 @@ def check_build(abi, features):
         raise LibraryMismatch(f'libscaas_ua_c ABI {abi}, this binding needs {ABI_VERSION}')
     if features & FEATURE['vectors']:
         raise LibraryMismatch('libscaas_ua_c is a test build (feature vectors): refused')
-    need = FEATURE['wallet'] | FEATURE['pq']
+    # ua-rs-native: bit native-networks (the networks 9 to 12 and their calls); an older v6 library is refused here
+    need = FEATURE['wallet'] | FEATURE['pq'] | FEATURE['native-networks']
     sets = features & _SETS
     if (features & need != need or features >> len(FEATURES) or sets & (sets - 1)
             or bool(sets) != bool(features & FEATURE['pqz'])):
@@ -90,7 +92,12 @@ _SIGNATURES = [
     ('seed_backup_take', st, [P, P, P, P]), ('seed_backup_free', None, [P]),
     ('key_free', None, [P]), ('key_data', st, [P, P, P]), ('sign_ua', st, [P, P, P, P, P]), ('sign_member', st, [P, P, P, P, P]),
     ('sign_typed', st, [P, P, P, P, P]), ('sign_typed_any', st, [P, P, P, P]), ('sign_transaction', st, [P, P, P, P]),
-    ('sign_key_proof', st, [P, P, sz, P, P]), ('sign_digest_raw', st, [P, P, P, P]), ('uasig', st, [P, P, sz, P, P]),
+    ('sign_key_proof', st, [P, P, sz, P, P]), ('sign_digest_raw', st, [P, P, P, P]),
+    ('sign_message_raw', st, [P, P, sz, P, P]), ('wallet_bitcoin_key', st, [P, u32, u32, u32, u32, P]),
+    ('wallet_polkadot_key', st, [P, C.c_char_p, P]), ('key_address', st, [P, P, P]), ('key_ss58_address', st, [P, u16, P, P]),
+    ('key_witness_program', st, [P, P, P, P]), ('sign_near_transaction', st, [P, P, sz, P, P]),
+    ('sign_sui_transaction', st, [P, P, sz, P, P]), ('sign_stellar_transaction', st, [P, P, P, sz, P, P]),
+    ('sign_hedera_transaction', st, [P, P, sz, P, P]), ('uasig', st, [P, P, sz, P, P]),
     ('external_key_new', st, [P, P, P]),
     ('kem_key', st, [P, u64, P]), ('kem_ephemeral', st, [P]), ('kem_free', None, [P]), ('kem_pk', st, [P, P]),
     ('kem_decaps', st, [P, P, sz, P, P]), ('kem_encaps', st, [P, sz, P, P, P]),
@@ -139,8 +146,24 @@ def load(path=None):
         return lib
 
 
+_UINT_BITS = {u16: 16, u32: 32, u64: 64}
+
+
 def _c(name):
-    return getattr(_lib if _lib is not None else load(), 'scaas_ua_' + name)
+    """The library's function ``name``. ctypes converts a Python int to ``c_uint16`` / ``c_uint32`` / ``c_uint64`` without a range
+    check (``65536 + 42`` becomes 42, ``-1`` the coin-type default): an integer argument outside its C type is ``UAArgument``
+    before the call (ua-rs-native T13 C4), for every function of the table."""
+    f = getattr(_lib if _lib is not None else load(), 'scaas_ua_' + name)
+    bits = [_UINT_BITS.get(t) for t in (f.argtypes or ())]
+    if not any(bits):
+        return f
+
+    def checked(*args):
+        for v, b in zip(args, bits):
+            if b and isinstance(v, int) and not 0 <= v < 1 << b:
+                raise WalletError(ERR_ARGUMENT, 'UAArgument', 'an integer outside its C type')
+        return f(*args)
+    return checked
 
 
 def abi_version():
@@ -384,6 +407,17 @@ class Wallet(_Handle):
         with _hold(self) as (w,):
             return _new(Key, _c('wallet_native_key'), w, _network(network), index, COIN_DEFAULT if coin_type is None else coin_type)
 
+    def bitcoin_key(self, network, coin_type=COIN_DEFAULT, change=0, index=0):
+        """Bitcoin key ``index`` of chain ``change`` (0 receive, 1 change); ``coin_type`` 0 or 1 (ua-rs-native)."""
+        with _hold(self) as (w,):
+            return _new(Key, _c('wallet_bitcoin_key'), w, _network(network), COIN_DEFAULT if coin_type is None else coin_type,
+                        change, index)
+
+    def polkadot_key(self, path=''):
+        """The Polkadot key of the junction path ``path`` ('' the bare account; ua-rs-native)."""
+        with _hold(self) as (w,):
+            return _new(Key, _c('wallet_polkadot_key'), w, _text(path))
+
     def import_native_key(self, network, secret):
         with _Secrets() as s, _hold(self) as (w,):
             sec = s.bytes_in(secret)
@@ -549,6 +583,47 @@ class Key(_Handle):
     def sign_digest_raw(self, digest32):
         with _hold(self) as (k,):
             return _var(_c('sign_digest_raw'), k, _fixed(digest32, 32, 'digest'))
+
+    def sign_message_raw(self, message):
+        """A native chain's message (1 to 131,072 bytes), ed25519 and sr25519 native keys only (a UA key: UARawDigestRefused)."""
+        m = bytes(message)
+        with _hold(self) as (k,):
+            return _var(_c('sign_message_raw'), k, m, len(m))
+
+    def sign_near_transaction(self, tx_borsh):
+        t = bytes(tx_borsh)
+        with _hold(self) as (k,):
+            return _var(_c('sign_near_transaction'), k, t, len(t))
+
+    def sign_sui_transaction(self, tx_bcs):
+        t = bytes(tx_bcs)
+        with _hold(self) as (k,):
+            return _var(_c('sign_sui_transaction'), k, t, len(t))
+
+    def sign_stellar_transaction(self, network_id32, tx_xdr):
+        t = bytes(tx_xdr)
+        with _hold(self) as (k,):
+            return _var(_c('sign_stellar_transaction'), k, _fixed(network_id32, 32, 'network id'), t, len(t))
+
+    def sign_hedera_transaction(self, body_bytes):
+        t = bytes(body_bytes)
+        with _hold(self) as (k,):
+            return _var(_c('sign_hedera_transaction'), k, t, len(t))
+
+    def address(self):
+        with _hold(self) as (k,):
+            return _str(_c('key_address'), k)
+
+    def ss58_address(self, prefix=0):
+        with _hold(self) as (k,):
+            return _str(_c('key_ss58_address'), k, prefix)
+
+    def witness_program(self):
+        """``(version, program)`` of a Bitcoin key."""
+        v = C.c_uint8()
+        with _hold(self) as (k,):
+            p = _var(_c('key_witness_program'), k, C.byref(v), cap=64)
+        return v.value, p
 
     def kem_key(self, version=0):
         with _hold(self) as (k,):

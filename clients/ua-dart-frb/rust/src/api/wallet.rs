@@ -7,7 +7,7 @@
 //! memory that Dart fills and reads in place through `dart:ffi`, never through frb's codec (whose transfer buffers are freed,
 //! not zeroed). Errors are `UAError { code, reason }` with the vector files' codes ("UAKeyRevoked", ...), never an input.
 //! UNAUDITED.
-use crate::api::ua::UAError;
+use crate::api::ua::{n as int, UAError};
 use crate::frb_generated::RustAutoOpaque;
 use flutter_rust_bridge::frb;
 use scaas_ua::facade::{pqz as fpqz, zether as fzether};
@@ -160,8 +160,8 @@ impl Drop for SecretBytes {
 }
 /// A new secret of `len` zero bytes (`UAArgument` above 16 MiB); Dart's `SecretBytes.take` fills it.
 #[frb(sync)]
-pub fn secret_alloc(len: u32) -> R<SecretBytes> {
-    SecretBytes::alloc(usize::try_from(len).map_err(|_| arg())?)
+pub fn secret_alloc(len: i64) -> R<SecretBytes> {
+    SecretBytes::alloc(int(len)?)
 }
 /// A secret output: a copy of `b` (its `Zeroizing` source in ua-rs wipes itself).
 fn out(b: &[u8]) -> R<SecretBytes> {
@@ -277,6 +277,11 @@ impl Opening {
 
 // --- entry points: the Dart facade checks the load -----------------------------------------------------------------------
 
+/// ua-rs-native: every network name in the C ABI's order (clientkeys `NETWORKS`, then `NATIVE_NETWORKS`).
+#[frb(sync)]
+pub fn native_networks() -> Vec<String> {
+    uw::Network::all().iter().map(|n| n.name().to_string()).collect()
+}
 pub fn wallet_generate() -> R<(UaWallet, UaSeedBackup)> {
     let (w, b) = uw::Wallet::generate()?;
     Ok((UaWallet(w, Live::new()), UaSeedBackup(Mutex::new(b), Live::new())))
@@ -428,16 +433,16 @@ fn k32(k: &SecretBytes) -> R<&[u8; 32]> {
     k.get().try_into().map_err(|_| arg())
 }
 /// `alg` 1 = AES-256-GCM, 2 = AES-256-GCM-SIV; `pt` the plaintext.
-pub fn aead_seal(alg_id: u32, key32: &SecretBytes, nonce12: Vec<u8>, aad: Vec<u8>, pt: &SecretBytes) -> R<Vec<u8>> {
-    Ok(uw::aead_seal(alg(alg_id)?, k32(key32)?, &a(&nonce12)?, &aad, pt.get())?)
+pub fn aead_seal(alg_id: i64, key32: &SecretBytes, nonce12: Vec<u8>, aad: Vec<u8>, pt: &SecretBytes) -> R<Vec<u8>> {
+    Ok(uw::aead_seal(alg(int(alg_id)?)?, k32(key32)?, &a(&nonce12)?, &aad, pt.get())?)
 }
 /// The plaintext of `data`.
-pub fn aead_open(alg_id: u32, key32: &SecretBytes, nonce12: Vec<u8>, aad: Vec<u8>, data: Vec<u8>) -> R<SecretBytes> {
-    out(&uw::aead_open(alg(alg_id)?, k32(key32)?, &a(&nonce12)?, &aad, &data)?)
+pub fn aead_open(alg_id: i64, key32: &SecretBytes, nonce12: Vec<u8>, aad: Vec<u8>, data: Vec<u8>) -> R<SecretBytes> {
+    out(&uw::aead_open(alg(int(alg_id)?)?, k32(key32)?, &a(&nonce12)?, &aad, &data)?)
 }
 /// The output keying material.
-pub fn hkdf_sha256(ikm: &SecretBytes, salt: Vec<u8>, info: Vec<u8>, len: u32) -> R<SecretBytes> {
-    out(&uw::hkdf_sha256(ikm.get(), &salt, &info, usize::try_from(len).map_err(|_| arg())?)?)
+pub fn hkdf_sha256(ikm: &SecretBytes, salt: Vec<u8>, info: Vec<u8>, len: i64) -> R<SecretBytes> {
+    out(&uw::hkdf_sha256(ikm.get(), &salt, &info, int(len)?)?)
 }
 /// The MAC (not a secret).
 pub fn hmac_sha256(key_bytes: &SecretBytes, data: Vec<u8>) -> Vec<u8> {
@@ -476,54 +481,62 @@ impl UaWallet {
         let c = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
         UaMemoryProtection { chunks: c(m.chunks), locked: c(m.locked), no_dump: c(m.no_dump) }
     }
-    pub fn ua_key(&self, kind: u16, account: u32, index: u32) -> R<UaKey> {
-        Ok(key(KeyInner::Ua(self.0.ua_key(kind, account, index)?)))
+    pub fn ua_key(&self, kind: i64, account: i64, index: i64) -> R<UaKey> {
+        Ok(key(KeyInner::Ua(self.0.ua_key(int(kind)?, int(account)?, int(index)?)?)))
     }
     /// `network_name` the clientkeys name (`evm`, `hedera_ecdsa`, ...); `coin_type` null = the network's own.
-    pub fn native_key(&self, network_name: String, index: u32, coin_type: Option<u32>) -> R<UaKey> {
-        Ok(key(KeyInner::Native(self.0.native_key(network(&network_name)?, index, coin_type)?)))
+    pub fn native_key(&self, network_name: String, index: i64, coin_type: Option<i64>) -> R<UaKey> {
+        Ok(key(KeyInner::Native(self.0.native_key(network(&network_name)?, int(index)?, coin_type.map(int).transpose()?)?)))
     }
-    pub fn imported_key(&self, network_name: String, n: u32) -> R<UaKey> {
-        Ok(key(KeyInner::Native(self.0.imported_key(network(&network_name)?, n)?)))
+    /// Bitcoin key `index` of chain `change` (0 receive, 1 change); `coin_type` null, 0 or 1 (ua-rs-native).
+    pub fn bitcoin_key(&self, network_name: String, coin_type: Option<i64>, change: i64, index: i64) -> R<UaKey> {
+        Ok(key(KeyInner::Native(self.0.bitcoin_key(network(&network_name)?, coin_type.map(int).transpose()?, int(change)?, int(index)?)?)))
+    }
+    /// The Polkadot key of the junction path `path` ("" the bare account; ua-rs-native).
+    pub fn polkadot_key(&self, path: String) -> R<UaKey> {
+        Ok(key(KeyInner::Native(self.0.polkadot_key(&path)?)))
+    }
+    pub fn imported_key(&self, network_name: String, n: i64) -> R<UaKey> {
+        Ok(key(KeyInner::Native(self.0.imported_key(network(&network_name)?, int(n)?)?)))
     }
     /// T20c (owner 2026-11-08): the UA of imported key `n`, `kind` the derived kind of its own scheme (0x0108 secp256k1, 0x0102
     /// ed25519), any other `UAArgument`; a UA key (`sign_ua` / `sign_member`), no KEM key, never a backup or link sender.
-    pub fn imported_ua_key(&self, network_name: String, n: u32, kind: u16) -> R<UaKey> {
-        Ok(key(KeyInner::Ua(self.0.imported_ua_key(network(&network_name)?, n, kind)?)))
+    pub fn imported_ua_key(&self, network_name: String, n: i64, kind: i64) -> R<UaKey> {
+        Ok(key(KeyInner::Ua(self.0.imported_ua_key(network(&network_name)?, int(n)?, int(kind)?)?)))
     }
     #[frb(sync)]
     pub fn manifest_json(&self) -> String {
         self.0.manifest().to_json()
     }
     /// JSON `[{index, ua}]`.
-    pub fn discover_candidates(&self, kind: u16, account: u32, gap: u32) -> R<String> {
+    pub fn discover_candidates(&self, kind: i64, account: i64, gap: i64) -> R<String> {
         let hex = |u: &[u8; 32]| u.iter().fold(String::from("0x"), |s, b| s + &format!("{b:02x}"));
         let rows: Vec<String> =
-            self.0.discover_candidates(kind, account, gap)?.iter().map(|(i, u)| format!("{{\"index\":{i},\"ua\":\"{}\"}}", hex(u))).collect();
+            self.0.discover_candidates(int(kind)?, int(account)?, int(gap)?)?.iter().map(|(i, u)| format!("{{\"index\":{i},\"ua\":\"{}\"}}", hex(u))).collect();
         Ok(format!("[{}]", rows.join(",")))
     }
     pub fn link_seal(&self, sender: &UaKey, session_kem_pk: Vec<u8>, short_code: String) -> R<String> {
         Ok(self.0.link_seal(sender.ua()?, &session_kem_pk, &short_code)?.to_json())
     }
-    pub fn zether_key(&self, coin: u32, account: u32, key_use: u32) -> R<UaZetherKey> {
-        Ok(UaZetherKey(self.0.zether_key(coin, account, key_use)?, Live::new()))
+    pub fn zether_key(&self, coin: i64, account: i64, key_use: i64) -> R<UaZetherKey> {
+        Ok(UaZetherKey(self.0.zether_key(int(coin)?, int(account)?, int(key_use)?)?, Live::new()))
     }
-    pub fn pqz_key(&self, account: u32, index: u32) -> R<UaPqzKey> {
-        Ok(UaPqzKey(self.0.pqz_key(account, index)?, Live::new()))
+    pub fn pqz_key(&self, account: i64, index: i64) -> R<UaPqzKey> {
+        Ok(UaPqzKey(self.0.pqz_key(int(account)?, int(index)?)?, Live::new()))
     }
     /// The PQZ leaf `seed32`: the explicit export (spec §8.4).
-    pub fn export_pqz_leaf_raw(&self, account: u32, index: u32) -> R<SecretBytes> {
-        out(&*self.0.export_pqz_leaf_raw(account, index, fpqz::AllowSecretExport)?)
+    pub fn export_pqz_leaf_raw(&self, account: i64, index: i64) -> R<SecretBytes> {
+        out(&*self.0.export_pqz_leaf_raw(int(account)?, int(index)?, fpqz::AllowSecretExport)?)
     }
 }
 /// Group 3g (T15o): the PQZ key of `account` / `index` at key `version` (0 the info without a suffix, v >= 1 with be64(v)). A free
 /// function, as [`key_kem_key`]: the Dart facade refuses a version outside u64 before frb's 64-bit encoding wraps it (T21 L54).
-pub fn wallet_pqz_key_version(w: &UaWallet, account: u32, index: u32, version: u64) -> R<UaPqzKey> {
-    Ok(UaPqzKey(w.0.pqz_key_version(account, index, version)?, Live::new()))
+pub fn wallet_pqz_key_version(w: &UaWallet, account: i64, index: i64, version: u64) -> R<UaPqzKey> {
+    Ok(UaPqzKey(w.0.pqz_key_version(int(account)?, int(index)?, version)?, Live::new()))
 }
 /// The PQZ leaf `seed32` of a key version: the explicit export (spec §8.4); a free function for the same reason.
-pub fn wallet_export_pqz_leaf_raw_version(w: &UaWallet, account: u32, index: u32, version: u64) -> R<SecretBytes> {
-    out(&*w.0.export_pqz_leaf_raw_version(account, index, version, fpqz::AllowSecretExport)?)
+pub fn wallet_export_pqz_leaf_raw_version(w: &UaWallet, account: i64, index: i64, version: u64) -> R<SecretBytes> {
+    out(&*w.0.export_pqz_leaf_raw_version(int(account)?, int(index)?, version, fpqz::AllowSecretExport)?)
 }
 
 impl UaSeedBackup {
@@ -610,9 +623,42 @@ impl UaKey {
     }
     /// A native key only: `UARawDigestRefused` for a UA key.
     pub fn sign_digest_raw(&self, digest: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_digest(&a(&digest)?, uw::AllowRawDigest)?)
+    }
+    /// A native chain's message (1 to 131,072 bytes) on an ed25519 / sr25519 native key (ua-rs-native).
+    pub fn sign_message_raw(&self, message: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_message(&message, uw::AllowRawDigest)?)
+    }
+    /// NEAR: ed25519 over `sha256(tx_borsh)`.
+    pub fn sign_near_transaction(&self, tx_borsh: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_near_transaction(&tx_borsh, uw::AllowRawDigest)?)
+    }
+    /// Sui: ed25519 over `blake2b-256(0x000000 ‖ tx_bcs)`.
+    pub fn sign_sui_transaction(&self, tx_bcs: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_sui_transaction(&tx_bcs, uw::AllowRawDigest)?)
+    }
+    /// Stellar: ed25519 over `sha256(network_id ‖ 0x00000002 ‖ tx_xdr)`.
+    pub fn sign_stellar_transaction(&self, network_id: Vec<u8>, tx_xdr: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_stellar_transaction(&a(&network_id)?, &tx_xdr, uw::AllowRawDigest)?)
+    }
+    /// Hedera Ed25519: ed25519 over the body bytes.
+    pub fn sign_hedera_transaction(&self, body_bytes: Vec<u8>) -> R<Vec<u8>> {
+        Ok(self.raw()?.sign_hedera_transaction(&body_bytes, uw::AllowRawDigest)?)
+    }
+    /// A Polkadot key's SS58 address at `prefix`.
+    #[frb(sync)]
+    pub fn ss58_address(&self, prefix: i64) -> R<String> {
+        Ok(self.native()?.ss58_address(int(prefix)?)?)
+    }
+    /// A Bitcoin key's witness program: the version byte, then the program.
+    #[frb(sync)]
+    pub fn witness_program(&self) -> R<Vec<u8>> {
+        self.native()?.witness_program().map(|(v, p)| [&[v][..], &p].concat()).ok_or_else(arg)
+    }
+    fn raw(&self) -> R<&uw::NativeKey> {
         match &*self.0 {
             KeyInner::Ua(_) => Err(UAError { code: "UARawDigestRefused".into(), reason: String::new() }),
-            KeyInner::Native(n) => Ok(n.sign_digest(&a(&digest)?, uw::AllowRawDigest)?),
+            KeyInner::Native(n) => Ok(n),
         }
     }
 }
@@ -741,9 +787,10 @@ mod tests {
     fn secret_sizes_and_outputs() {
         let e = secret_alloc(0).unwrap();
         assert_eq!((e.size(), e.mem.len(), e.get().len()), (0, 1, 0), "an empty secret: one block, nothing in it");
-        let big = secret_alloc(u32::try_from(BLOCK).unwrap() + 1).unwrap();
+        let big = secret_alloc(i64::try_from(BLOCK).unwrap() + 1).unwrap();
         assert_eq!(big.mem.len(), 2);
-        assert_eq!(secret_alloc(u32::try_from(SECRET_MAX + 1).unwrap()).err().map(|e| e.code), Some("UAArgument".into()));
+        assert_eq!(secret_alloc(i64::try_from(SECRET_MAX + 1).unwrap()).err().map(|e| e.code), Some("UAArgument".into()));
+        assert_eq!(secret_alloc(-1).err().map(|e| e.code), Some("UAArgument".into()), "a negative length (T13 C4)");
         assert_eq!(out(b"words").unwrap().get(), b"words");
     }
 

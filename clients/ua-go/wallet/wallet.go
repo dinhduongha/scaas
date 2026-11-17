@@ -46,13 +46,16 @@ const (
 	FeatureMlock
 	// FeatureVectors: a test build (scaas-ua feature `vectors`); CheckBuild refuses it (spec no-decryption-oracle §4.8, Codex C1).
 	FeatureVectors
+	// FeatureNativeNetworks: networks 9 to 12 and their calls (ua-rs-native); an older v6 library without it is refused at load.
+	FeatureNativeNetworks
 	featureEnd
 )
 
 const featureSets = FeaturePqzSetN2048Kmax1024 | FeaturePqzSetN2304Kmax4096 | FeaturePqzSetN2560Kmax16384 | FeaturePqzSetN2816Kmax65536
 
 // Networks of NativeKey, in SCAAS_UA_NETWORK_* order.
-var Networks = []string{"evm", "cosmos", "hedera_ecdsa", "hedera_ed25519", "sui", "stellar", "ton", "aptos", "solana"}
+var Networks = []string{"evm", "cosmos", "hedera_ecdsa", "hedera_ed25519", "sui", "stellar", "ton", "aptos", "solana",
+	"bitcoin_p2wpkh", "bitcoin_p2tr", "near", "polkadot"}
 
 const (
 	CoinDefault            = 0xFFFFFFFF // a network's own SLIP-44 coin type
@@ -96,7 +99,7 @@ func CheckBuild(abi uint32, features uint64) error {
 	if features&FeatureVectors != 0 {
 		return fmt.Errorf("%w: a test build (feature vectors)", ErrLibraryMismatch)
 	}
-	need, sets := FeatureWallet|FeaturePq, features&featureSets
+	need, sets := FeatureWallet|FeaturePq|FeatureNativeNetworks, features&featureSets
 	if features&need != need || features >= featureEnd || sets&(sets-1) != 0 || (sets != 0) != (features&FeaturePqz != 0) {
 		return fmt.Errorf("%w: features %#x", ErrLibraryMismatch, features)
 	}
@@ -528,6 +531,97 @@ func (w *Wallet) NativeKey(network, index, coinType uint32) (*Key, error) {
 	return w.key(func(p unsafe.Pointer, k **C.ScaasUaKey) C.ScaasUaStatus {
 		return C.scaas_ua_wallet_native_key(wp(p), C.uint32_t(network), C.uint32_t(index), C.uint32_t(coinType), k)
 	})
+}
+
+// BitcoinKey is Bitcoin key index of chain change (0 receive, 1 change) of network (NetworkBitcoinP2wpkh / NetworkBitcoinP2tr),
+// coinType CoinDefault, 0 or 1 (ua-rs-native).
+func (w *Wallet) BitcoinKey(network, coinType, change, index uint32) (*Key, error) {
+	return w.key(func(p unsafe.Pointer, k **C.ScaasUaKey) C.ScaasUaStatus {
+		return C.scaas_ua_wallet_bitcoin_key(wp(p), C.uint32_t(network), C.uint32_t(coinType), C.uint32_t(change), C.uint32_t(index), k)
+	})
+}
+
+// PolkadotKey is the Polkadot key of the junction path path ("" the bare account; ua-rs-native).
+func (w *Wallet) PolkadotKey(path string) (*Key, error) {
+	if strings.IndexByte(path, 0) >= 0 {
+		return nil, &Error{Status: errArgument, Code: "UAArgument", Detail: "a NUL inside the path"}
+	}
+	cs := C.CString(path)
+	defer C.free(unsafe.Pointer(cs))
+	return w.key(func(p unsafe.Pointer, k **C.ScaasUaKey) C.ScaasUaStatus {
+		return C.scaas_ua_wallet_polkadot_key(wp(p), cs, k)
+	})
+}
+
+func (k *Key) bytesCall(capacity int, msg []byte, f func(p unsafe.Pointer, m *C.uint8_t, ml C.size_t, o *C.uint8_t, n *C.size_t) C.ScaasUaStatus) ([]byte, error) {
+	return k.out(capacity, func(p unsafe.Pointer, o *C.uint8_t, n *C.size_t) C.ScaasUaStatus {
+		return f(p, u8(msg), C.size_t(len(msg)), o, n)
+	})
+}
+
+// SignMessageRaw signs a native chain's message (1 to 131,072 bytes) with an ed25519 or sr25519 native key (a UA key:
+// UARawDigestRefused).
+func (k *Key) SignMessageRaw(message []byte) ([]byte, error) {
+	return k.bytesCall(128, message, func(p unsafe.Pointer, m *C.uint8_t, ml C.size_t, o *C.uint8_t, n *C.size_t) C.ScaasUaStatus {
+		return C.scaas_ua_sign_message_raw(kp(p), m, ml, o, n)
+	})
+}
+
+// SignNearTransaction signs sha256(txBorsh) with a NEAR key.
+func (k *Key) SignNearTransaction(txBorsh []byte) ([]byte, error) {
+	return k.bytesCall(128, txBorsh, func(p unsafe.Pointer, m *C.uint8_t, ml C.size_t, o *C.uint8_t, n *C.size_t) C.ScaasUaStatus {
+		return C.scaas_ua_sign_near_transaction(kp(p), m, ml, o, n)
+	})
+}
+
+// SignSuiTransaction signs blake2b-256(intent 0x000000 ‖ txBcs) with a Sui key.
+func (k *Key) SignSuiTransaction(txBcs []byte) ([]byte, error) {
+	return k.bytesCall(128, txBcs, func(p unsafe.Pointer, m *C.uint8_t, ml C.size_t, o *C.uint8_t, n *C.size_t) C.ScaasUaStatus {
+		return C.scaas_ua_sign_sui_transaction(kp(p), m, ml, o, n)
+	})
+}
+
+// SignStellarTransaction signs sha256(networkID ‖ ENVELOPE_TYPE_TX ‖ txXdr) with a Stellar key.
+func (k *Key) SignStellarTransaction(networkID [32]byte, txXdr []byte) ([]byte, error) {
+	return k.bytesCall(128, txXdr, func(p unsafe.Pointer, m *C.uint8_t, ml C.size_t, o *C.uint8_t, n *C.size_t) C.ScaasUaStatus {
+		return C.scaas_ua_sign_stellar_transaction(kp(p), (*C.uint8_t)(&networkID[0]), m, ml, o, n)
+	})
+}
+
+// SignHederaTransaction signs the transaction's bodyBytes with a Hedera Ed25519 key.
+func (k *Key) SignHederaTransaction(bodyBytes []byte) ([]byte, error) {
+	return k.bytesCall(128, bodyBytes, func(p unsafe.Pointer, m *C.uint8_t, ml C.size_t, o *C.uint8_t, n *C.size_t) C.ScaasUaStatus {
+		return C.scaas_ua_sign_hedera_transaction(kp(p), m, ml, o, n)
+	})
+}
+
+func (k *Key) text(f func(p unsafe.Pointer, o *C.char, n *C.size_t) C.ScaasUaStatus) (string, error) {
+	b, err := k.out(256, func(p unsafe.Pointer, o *C.uint8_t, n *C.size_t) C.ScaasUaStatus { return f(p, (*C.char)(unsafe.Pointer(o)), n) })
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(string(b), "\x00"), nil
+}
+
+// Address is a native key's address as its network prints it.
+func (k *Key) Address() (string, error) {
+	return k.text(func(p unsafe.Pointer, o *C.char, n *C.size_t) C.ScaasUaStatus { return C.scaas_ua_key_address(kp(p), o, n) })
+}
+
+// SS58Address is a Polkadot key's SS58 address at prefix.
+func (k *Key) SS58Address(prefix uint16) (string, error) {
+	return k.text(func(p unsafe.Pointer, o *C.char, n *C.size_t) C.ScaasUaStatus {
+		return C.scaas_ua_key_ss58_address(kp(p), C.uint16_t(prefix), o, n)
+	})
+}
+
+// WitnessProgram is a Bitcoin key's (version, program).
+func (k *Key) WitnessProgram() (uint8, []byte, error) {
+	var v C.uint8_t
+	b, err := k.out(64, func(p unsafe.Pointer, o *C.uint8_t, n *C.size_t) C.ScaasUaStatus {
+		return C.scaas_ua_key_witness_program(kp(p), &v, o, n)
+	})
+	return uint8(v), b, err
 }
 
 // ImportNativeKey imports a 32-byte key of network; the caller wipes secret.

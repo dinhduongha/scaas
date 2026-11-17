@@ -179,6 +179,8 @@ pub(crate) struct Arena {
     total: usize, // bytes written, every chunk
     entropy: Slot,
     seed: Slot,
+    /// The `substrate-bip39` mini-secret, computed at open from the entropy and the passphrase (ua-rs-native spec §4.3).
+    mini: Slot,
     keys: HashMap<KeyId, (Slot, Vec<u8>)>, // a derived key: its slot and its public key data
     tested: HashSet<KeyId>,                // the keys whose self-test ran in this store (a KEM key: FIPS 203 §7.3)
     self_tests: usize,                     // self-tests run in this store
@@ -189,13 +191,14 @@ impl Arena {
     fn empty() -> Arena {
         let empty = Slot { chunk: 0, start: 0, len: 0 };
         let (keys, tested) = (HashMap::new(), HashSet::new());
-        Arena { chunks: Vec::new(), used: 0, total: 0, entropy: empty, seed: empty, keys, tested, self_tests: 0 }
+        Arena { chunks: Vec::new(), used: 0, total: 0, entropy: empty, seed: empty, mini: empty, keys, tested, self_tests: 0 }
     }
 
-    fn new(entropy: &[u8], seed: &[u8; 64]) -> Result<Arena> {
+    fn new(entropy: &[u8], seed: &[u8; 64], mini: &[u8; 32]) -> Result<Arena> {
         let mut a = Arena::empty();
         a.entropy = a.put(entropy)?;
         a.seed = a.put(seed)?;
+        a.mini = a.put(mini)?;
         Ok(a)
     }
 
@@ -225,6 +228,10 @@ impl Arena {
 
     pub(crate) fn entropy(&self) -> Result<&[u8]> {
         self.get(self.entropy)
+    }
+
+    pub(crate) fn mini(&self) -> Result<&[u8]> {
+        self.get(self.mini)
     }
 
     /// The secret of key `id`, if the arena holds it.
@@ -326,13 +333,13 @@ impl SecretStore {
     /// move the slots of live handles); `WalletMismatch` if the manifest kept by `lock()` has a first entry and `seed` does not
     /// derive its UA (another wallet's seed), checked under the same write lock before the arena is built. An empty manifest
     /// (a new wallet, or one locked before any UA key was derived) has nothing to compare: any seed opens it.
-    pub(crate) fn open(&self, entropy: &[u8], seed: &[u8; 64]) -> Result<()> {
+    pub(crate) fn open(&self, entropy: &[u8], seed: &[u8; 64], mini: &[u8; 32]) -> Result<()> {
         let mut g = self.write();
         if g.arena.is_some() {
             return Err(Error::Argument);
         }
         seed_matches(seed, &g.manifest)?;
-        g.arena = Some(Arena::new(entropy, seed)?);
+        g.arena = Some(Arena::new(entropy, seed, mini)?);
         Ok(())
     }
 
@@ -377,6 +384,19 @@ impl SecretStore {
         let generation = g.generation;
         let arena = g.arena.as_mut().ok_or(Error::WalletLocked)?;
         self.key_in(arena, generation, id, derive)
+    }
+
+    /// [`SecretStore::key`] with `derive` over the `substrate-bip39` mini-secret in place of the seed (a Polkadot key).
+    pub(crate) fn key_from_mini(
+        self: &Arc<Self>,
+        id: KeyId,
+        derive: impl FnOnce(&[u8; 32]) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>)>,
+    ) -> Result<(Handle, Vec<u8>)> {
+        let mut g = self.write();
+        let generation = g.generation;
+        let arena = g.arena.as_mut().ok_or(Error::WalletLocked)?;
+        let mini: Zeroizing<[u8; 32]> = Zeroizing::new(arena.mini()?.try_into().map_err(|_| Error::Argument)?);
+        self.key_in(arena, generation, id, |_| derive(&mini))
     }
 
     fn key_in(

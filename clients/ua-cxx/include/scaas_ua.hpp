@@ -359,6 +359,10 @@ public:
     Key uaKey(uint16_t kind, uint32_t account, uint32_t index) const;
     Key nativeKey(const std::string& network, uint32_t index, uint32_t coinType = kCoinDefault) const;
     Key importNativeKey(const std::string& network, Secret& secret) const;
+    // ua-rs-native: Bitcoin key `index` of chain `change` (0 receive, 1 change), coin kCoinDefault / 0 / 1; a Polkadot key of
+    // the junction path `path` ("" the bare account)
+    Key bitcoinKey(const std::string& network, uint32_t coinType, uint32_t change, uint32_t index) const;
+    Key polkadotKey(const std::string& path) const;
     Key importedKey(const std::string& network, uint32_t n) const;
     // T20c (owner 2026-11-08): the UA of imported key n, kind the derived kind of its own scheme (0x0108 secp256k1, 0x0102
     // ed25519), any other UAArgument; a UA key (signUa / signMember only), no KEM key, never a backup or link sender
@@ -400,8 +404,19 @@ public:
     Bytes signTransaction(const std::string& txJson) const;  // the raw transaction
     Bytes signKeyProof(const Bytes& challenge) const;
     Bytes signDigestRaw(const Bytes& digest) const;  // a native key only (UARawDigestRefused for a UA key)
+    // ua-rs-native: a raw native message (ed25519 / sr25519 native keys, 1 to 131,072 bytes) and the envelope calls (each its
+    // network's key only); a UA key UARawDigestRefused
+    Bytes signMessageRaw(const Bytes& message) const;
+    Bytes signNearTransaction(const Bytes& txBorsh) const;
+    Bytes signSuiTransaction(const Bytes& txBcs) const;
+    Bytes signStellarTransaction(const Bytes& networkId32, const Bytes& txXdr) const;
+    Bytes signHederaTransaction(const Bytes& bodyBytes) const;
+    std::string ss58Address(uint16_t prefix) const;  // a Polkadot key
+    Bytes witnessProgram() const;                     // a Bitcoin key: the version byte, then the program
     KemKey kemKey(uint64_t version) const;
 };
+// ua-rs-native: every network name in the C ABI's order (clientkeys NETWORKS, then NATIVE_NETWORKS).
+std::vector<std::string> networks();
 // The UASig builder (the C ABI's scaas_ua_uasig): request JSON with keys by position in `keys`.
 std::string uaSig(const std::string& requestJson, const std::vector<const Key*>& keys);
 // A key handle by id for a script layer that must never hold a handle (ua-qt's QML singleton signs by id): registerKey shares

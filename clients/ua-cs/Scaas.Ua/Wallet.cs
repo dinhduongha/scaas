@@ -137,6 +137,16 @@ internal static unsafe class Native
     [DllImport(L)] internal static extern int scaas_ua_wallet_memory_protection(WalletHandle w, out MemoryProtectionC m);
     [DllImport(L)] internal static extern int scaas_ua_wallet_ua_key(WalletHandle w, ushort kind, uint account, uint index, out KeyHandle k);
     [DllImport(L)] internal static extern int scaas_ua_wallet_native_key(WalletHandle w, uint network, uint index, uint coin, out KeyHandle k);
+    [DllImport(L)] internal static extern int scaas_ua_wallet_bitcoin_key(WalletHandle w, uint network, uint coin, uint change, uint index, out KeyHandle k);
+    [DllImport(L)] internal static extern int scaas_ua_wallet_polkadot_key(WalletHandle w, byte* path, out KeyHandle k);
+    [DllImport(L)] internal static extern int scaas_ua_sign_message_raw(KeyHandle k, byte* m, nuint len, byte* o, ref nuint n);
+    [DllImport(L)] internal static extern int scaas_ua_sign_near_transaction(KeyHandle k, byte* m, nuint len, byte* o, ref nuint n);
+    [DllImport(L)] internal static extern int scaas_ua_sign_sui_transaction(KeyHandle k, byte* m, nuint len, byte* o, ref nuint n);
+    [DllImport(L)] internal static extern int scaas_ua_sign_stellar_transaction(KeyHandle k, byte* id, byte* m, nuint len, byte* o, ref nuint n);
+    [DllImport(L)] internal static extern int scaas_ua_sign_hedera_transaction(KeyHandle k, byte* m, nuint len, byte* o, ref nuint n);
+    [DllImport(L)] internal static extern int scaas_ua_key_address(KeyHandle k, byte* o, ref nuint n);
+    [DllImport(L)] internal static extern int scaas_ua_key_ss58_address(KeyHandle k, ushort prefix, byte* o, ref nuint n);
+    [DllImport(L)] internal static extern int scaas_ua_key_witness_program(KeyHandle k, out byte version, byte* o, ref nuint n);
     [DllImport(L)] internal static extern int scaas_ua_wallet_import_native_key(WalletHandle w, uint network, byte* secret, nuint len, out KeyHandle k);
     [DllImport(L)] internal static extern int scaas_ua_wallet_imported_key(WalletHandle w, uint network, uint n, out KeyHandle k);
     [DllImport(L)] internal static extern int scaas_ua_wallet_imported_ua_key(WalletHandle w, uint network, uint n, ushort kind, out KeyHandle k);
@@ -276,9 +286,12 @@ public static unsafe class UaLib
         FeaturePqzSetN2816Kmax65536 = 1 << 8, FeatureExternal = 1 << 9, FeatureMlock = 1 << 10;
     /// <summary>A test build (scaas-ua feature `vectors`): CheckBuild refuses it (spec no-decryption-oracle §4.8, Codex C1).</summary>
     public const ulong FeatureVectors = 1 << 11;
-    const ulong FeatureEnd = 1 << 12;
+    /// <summary>ua-rs-native: networks 9 to 12 and their calls; an older v6 library without it is refused at load.</summary>
+    public const ulong FeatureNativeNetworks = 1 << 12;
+    const ulong FeatureEnd = 1 << 13;
     const ulong FeatureSets = FeaturePqzSetN2048Kmax1024 | FeaturePqzSetN2304Kmax4096 | FeaturePqzSetN2560Kmax16384 | FeaturePqzSetN2816Kmax65536;
-    public static readonly string[] Networks = ["evm", "cosmos", "hedera_ecdsa", "hedera_ed25519", "sui", "stellar", "ton", "aptos", "solana"];
+    public static readonly string[] Networks = ["evm", "cosmos", "hedera_ecdsa", "hedera_ed25519", "sui", "stellar", "ton", "aptos", "solana",
+        "bitcoin_p2wpkh", "bitcoin_p2tr", "near", "polkadot"];
     public const uint CoinDefault = 0xFFFFFFFF, AeadAes256Gcm = 1, AeadAes256GcmSiv = 2;
     public const int KemPkLen = 1601, KemCtLen = 1568, MnemonicMax = 256, EntropyMax = 32, ZetherYLen = 128;
     public const uint ZetherUseConf = 7, ZetherUseViewing = 8;
@@ -303,7 +316,7 @@ public static unsafe class UaLib
     {
         if (abi != AbiVersionRequired) throw new LibraryMismatchException($"libscaas_ua_c ABI {abi}, this binding needs {AbiVersionRequired}");
         if ((features & FeatureVectors) != 0) throw new LibraryMismatchException("libscaas_ua_c is a test build (feature vectors): refused");
-        const ulong need = FeatureWallet | FeaturePq;
+        const ulong need = FeatureWallet | FeaturePq | FeatureNativeNetworks;
         var sets = features & FeatureSets;
         if ((features & need) != need || features >= FeatureEnd || (sets & (sets - 1)) != 0 || (sets != 0) != ((features & FeaturePqz) != 0))
             throw new LibraryMismatchException($"libscaas_ua_c features 0x{features:x} are not a build this binding knows");
@@ -638,6 +651,21 @@ public sealed unsafe class Wallet : IDisposable
         return new WalletKey(k);
     }
 
+    /// <summary>Bitcoin key <paramref name="index"/> of chain <paramref name="change"/> (0 receive, 1 change); coin type 0 or 1.</summary>
+    public WalletKey BitcoinKey(uint network, uint coinType, uint change, uint index)
+    {
+        UaLib.Check(Native.scaas_ua_wallet_bitcoin_key(H, network, coinType, change, index, out var k));
+        return new WalletKey(k);
+    }
+
+    /// <summary>The Polkadot key of the junction path <paramref name="path"/> ("" the bare account).</summary>
+    public WalletKey PolkadotKey(string path)
+    {
+        using var a = new Args();
+        UaLib.Check(Native.scaas_ua_wallet_polkadot_key(H, a.Str(path), out var k));
+        return new WalletKey(k);
+    }
+
     /// <summary>Imports a 32-byte key of the network; the caller wipes <paramref name="secret"/>.</summary>
     public WalletKey ImportNativeKey(uint network, byte[] secret)
     {
@@ -874,6 +902,42 @@ public sealed unsafe class WalletKey : IDisposable
         using var a = new Args();
         var c = a.Pin(challenge);
         return UaLib.Out(128, (o, ref n) => Native.scaas_ua_sign_key_proof(H, c, (nuint)challenge.Length, o, ref n));
+    }
+
+    /// <summary>A native chain's message (1 to 131,072 bytes) on an ed25519 / sr25519 native key (a UA key: UARawDigestRefused).</summary>
+    public byte[] SignMessageRaw(byte[] message) => Bytes(message, (m, l, o, ref n) => Native.scaas_ua_sign_message_raw(H, m, l, o, ref n));
+    /// <summary>NEAR: ed25519 over sha256(txBorsh).</summary>
+    public byte[] SignNearTransaction(byte[] txBorsh) => Bytes(txBorsh, (m, l, o, ref n) => Native.scaas_ua_sign_near_transaction(H, m, l, o, ref n));
+    /// <summary>Sui: ed25519 over blake2b-256(0x000000 ‖ txBcs).</summary>
+    public byte[] SignSuiTransaction(byte[] txBcs) => Bytes(txBcs, (m, l, o, ref n) => Native.scaas_ua_sign_sui_transaction(H, m, l, o, ref n));
+    /// <summary>Hedera Ed25519: ed25519 over the body bytes.</summary>
+    public byte[] SignHederaTransaction(byte[] body) => Bytes(body, (m, l, o, ref n) => Native.scaas_ua_sign_hedera_transaction(H, m, l, o, ref n));
+    /// <summary>Stellar: ed25519 over sha256(networkId ‖ 0x00000002 ‖ txXdr).</summary>
+    public byte[] SignStellarTransaction(byte[] networkId32, byte[] txXdr)
+    {
+        using var a = new Args();
+        var id = a.Sized(networkId32, 32, "network id");
+        var m = a.Pin(txXdr);
+        return UaLib.Out(128, (o, ref n) => Native.scaas_ua_sign_stellar_transaction(H, id, m, (nuint)txXdr.Length, o, ref n));
+    }
+    /// <summary>A native key's address as its network prints it.</summary>
+    public string Address() => UaLib.OutStr(256, (o, ref n) => Native.scaas_ua_key_address(H, o, ref n));
+    /// <summary>A Polkadot key's SS58 address at <paramref name="prefix"/>.</summary>
+    public string Ss58Address(ushort prefix) => UaLib.OutStr(256, (o, ref n) => Native.scaas_ua_key_ss58_address(H, prefix, o, ref n));
+    /// <summary>A Bitcoin key's (version, program).</summary>
+    public (byte Version, byte[] Program) WitnessProgram()
+    {
+        byte v = 0;
+        var p = UaLib.Out(64, (o, ref n) => Native.scaas_ua_key_witness_program(H, out v, o, ref n));
+        return (v, p);
+    }
+
+    unsafe delegate int BytesFn(byte* m, nuint len, byte* o, ref nuint n);
+    byte[] Bytes(byte[] input, BytesFn f)
+    {
+        using var a = new Args();
+        var m = a.Pin(input);
+        return UaLib.Out(128, (o, ref n) => f(m, (nuint)input.Length, o, ref n));
     }
 
     public byte[] SignDigestRaw(byte[] digest32)

@@ -175,6 +175,7 @@ export function deriveUAKey(seed, { kind, account = 0, index = 0 } = {}) {
  *  secret of a secp256k1 network (`evm`, `cosmos`, `hedera_ecdsa`), `ed25519` (0x0102) for the seed of an ed25519 network; no
  *  other kind (`Argument`), no KEM key (not a holder), no raw-digest call. Its id is keccak256(TAG(kind) ‖ key_data), a separate
  *  account from the native id. `account` and `index` are null (no UA-tree position). The caller wipes `secret`. */
+// NETWORKS (the nine) on purpose: the native networks of NATIVE_NETWORKS have no imported UA (ua-rs-native spec §4.1).
 export const importedKind = (network) => {
   const net = Object.hasOwn(NETWORKS, network) ? NETWORKS[network] : fail('Argument', 'unknown network');
   return net.curve === 'ed25519' ? 0x0102 : 0x0108;

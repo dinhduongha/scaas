@@ -100,6 +100,11 @@ mod ffi {
         // `network` the clientkeys name (`evm`, `hedera_ecdsa`, ...); `coin_type` u32::MAX = the network's own
         fn wallet_native_key(w: &Wallet, network: &str, index: u32, coin_type: u32) -> Result<Box<Key>>;
         fn wallet_import_native_key(w: &Wallet, network: &str, secret: &mut [u8]) -> Result<Box<Key>>;
+        // ua-rs-native: Bitcoin `change` 0 receive / 1 change, coin u32::MAX / 0 / 1; Polkadot junction path ("" the bare key)
+        fn wallet_bitcoin_key(w: &Wallet, network: &str, coin_type: u32, change: u32, index: u32) -> Result<Box<Key>>;
+        // every network name in the C ABI's order (clientkeys NETWORKS, then NATIVE_NETWORKS)
+        fn native_networks() -> Vec<String>;
+        fn wallet_polkadot_key(w: &Wallet, path: &str) -> Result<Box<Key>>;
         fn wallet_imported_key(w: &Wallet, network: &str, n: u32) -> Result<Box<Key>>;
         // T20c: the UA of an imported key, `kind` its scheme's derived kind (0x0108 / 0x0102) only
         fn wallet_imported_ua_key(w: &Wallet, network: &str, n: u32, kind: u16) -> Result<Box<Key>>;
@@ -144,6 +149,15 @@ mod ffi {
         fn sign_transaction(k: &Key, tx_json: &str) -> Result<Vec<u8>>;
         fn sign_key_proof(k: &Key, challenge: &[u8]) -> Result<Vec<u8>>;
         fn sign_digest_raw(k: &Key, digest: &[u8]) -> Result<Vec<u8>>;
+        // ua-rs-native: raw messages (ed25519 / sr25519 native keys), the envelope calls, SS58, witness programs
+        fn sign_message_raw(k: &Key, message: &[u8]) -> Result<Vec<u8>>;
+        fn sign_near_transaction(k: &Key, tx_borsh: &[u8]) -> Result<Vec<u8>>;
+        fn sign_sui_transaction(k: &Key, tx_bcs: &[u8]) -> Result<Vec<u8>>;
+        fn sign_stellar_transaction(k: &Key, network_id: &[u8], tx_xdr: &[u8]) -> Result<Vec<u8>>;
+        fn sign_hedera_transaction(k: &Key, body_bytes: &[u8]) -> Result<Vec<u8>>;
+        fn key_ss58_address(k: &Key, prefix: u16) -> Result<String>;
+        // version byte first, then the program
+        fn key_witness_program(k: &Key) -> Result<Vec<u8>>;
         fn key_list_new() -> Box<KeyList>;
         fn key_list_push(l: &mut KeyList, k: &Key);
         fn uasig(request_json: &str, keys: &KeyList) -> Result<String>;
@@ -605,6 +619,43 @@ fn sign_digest_raw(k: &Key, digest: &[u8]) -> R<Vec<u8>> {
         KeyInner::Ua(_) => Err(UaErr("UARawDigestRefused".into())),
         KeyInner::Native(n) => Ok(n.sign_digest(&a(digest)?, uw::AllowRawDigest)?),
     })
+}
+fn raw(k: &Key) -> R<&uw::NativeKey> {
+    match &*k.0 {
+        KeyInner::Ua(_) => Err(UaErr("UARawDigestRefused".into())),
+        KeyInner::Native(n) => Ok(n),
+    }
+}
+fn sign_message_raw(k: &Key, message: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(raw(k)?.sign_message(message, uw::AllowRawDigest)?))
+}
+fn sign_near_transaction(k: &Key, tx_borsh: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(raw(k)?.sign_near_transaction(tx_borsh, uw::AllowRawDigest)?))
+}
+fn sign_sui_transaction(k: &Key, tx_bcs: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(raw(k)?.sign_sui_transaction(tx_bcs, uw::AllowRawDigest)?))
+}
+fn sign_stellar_transaction(k: &Key, network_id: &[u8], tx_xdr: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(raw(k)?.sign_stellar_transaction(&a(network_id)?, tx_xdr, uw::AllowRawDigest)?))
+}
+fn sign_hedera_transaction(k: &Key, body_bytes: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(raw(k)?.sign_hedera_transaction(body_bytes, uw::AllowRawDigest)?))
+}
+fn key_ss58_address(k: &Key, prefix: u16) -> R<String> {
+    guard(|| Ok(native_key(k)?.ss58_address(prefix)?))
+}
+fn key_witness_program(k: &Key) -> R<Vec<u8>> {
+    guard(|| native_key(k)?.witness_program().map(|(v, p)| [&[v][..], &p].concat()).ok_or_else(argument))
+}
+fn wallet_bitcoin_key(w: &Wallet, net: &str, coin_type: u32, change: u32, index: u32) -> R<Box<Key>> {
+    let coin = (coin_type != u32::MAX).then_some(coin_type);
+    guard(|| Ok(key(KeyInner::Native(w.0.bitcoin_key(network(net)?, coin, change, index)?))))
+}
+fn native_networks() -> Vec<String> {
+    uw::Network::all().iter().map(|n| n.name().to_string()).collect()
+}
+fn wallet_polkadot_key(w: &Wallet, path: &str) -> R<Box<Key>> {
+    guard(|| Ok(key(KeyInner::Native(w.0.polkadot_key(path)?))))
 }
 fn key_list_new() -> Box<KeyList> {
     Box::new(KeyList(Vec::new()))

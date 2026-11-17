@@ -32,6 +32,10 @@ pub mod qobject {
         #[qinvokable] fn address(self: Pin<&mut Self>, id: i32) -> QString;
         /// A native key's network name ("" for a UA key).
         #[qinvokable] fn network(self: Pin<&mut Self>, id: i32) -> QString;
+        /// ua-rs-native: a Bitcoin key's witness program, the version byte then the program ("0x…").
+        #[qinvokable] #[cxx_name = "witnessProgram"] fn witness_program(self: Pin<&mut Self>, id: i32) -> QString;
+        /// ua-rs-native: a Polkadot key's SS58 address at `prefix` (0 to 16,383, not 46 / 47).
+        #[qinvokable] #[cxx_name = "ss58Address"] fn ss58_address(self: Pin<&mut Self>, id: i32, prefix: i32) -> QString;
         /// A UA key's kind, 0 for a native key, -1 on failure.
         #[qinvokable] fn kind(self: Pin<&mut Self>, id: i32) -> i32;
         #[qinvokable] #[cxx_name = "isUa"] fn is_ua(self: Pin<&mut Self>, id: i32) -> bool;
@@ -138,6 +142,12 @@ impl qobject::UaWallet {
     }
     pub fn address(self: Pin<&mut Self>, id: i32) -> QString {
         self.text(|| native_key(&key(id)?)?.address().ok_or_else(|| ARG.into()))
+    }
+    pub fn witness_program(self: Pin<&mut Self>, id: i32) -> QString {
+        self.hex(|| native_key(&key(id)?)?.witness_program().map(|(v, p)| [&[v][..], &p].concat()).ok_or_else(|| ARG.into()))
+    }
+    pub fn ss58_address(self: Pin<&mut Self>, id: i32, prefix: i32) -> QString {
+        self.text(|| wallet(native_key(&key(id)?)?.ss58_address(u16::try_from(prefix).map_err(|_| ARG.to_string())?)))
     }
     pub fn network(self: Pin<&mut Self>, id: i32) -> QString {
         self.text(|| Ok(key(id)?.native_key().map(|n| n.network().name().to_string()).unwrap_or_default()))

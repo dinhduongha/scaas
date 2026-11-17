@@ -44,9 +44,36 @@
 //!     let _ = key.sign_digest(&[0; 32]);
 //! }
 //! ```
+//! So does a raw native message (CLI-UAL-44), and a UA key has no such call (CLI-SGN-29):
+//! ```no_run
+//! fn f(key: &scaas_ua::wallet::NativeKey) {
+//!     let _ = key.sign_message(&[1, 2, 3], scaas_ua::wallet::AllowRawDigest);
+//! }
+//! ```
+//! ```compile_fail,E0061
+//! fn f(key: &scaas_ua::wallet::NativeKey) {
+//!     let _ = key.sign_message(&[1, 2, 3]);
+//! }
+//! ```
+//! ```compile_fail,E0599
+//! fn f(key: &scaas_ua::wallet::UaKey) {
+//!     let _ = key.sign_message(&[1, 2, 3], scaas_ua::wallet::AllowRawDigest);
+//! }
+//! ```
+//! The envelope calls (spec §8.1) likewise, on a native key only:
+//! ```no_run
+//! fn f(key: &scaas_ua::wallet::NativeKey) {
+//!     let _ = key.sign_near_transaction(&[1, 2, 3], scaas_ua::wallet::AllowRawDigest);
+//! }
+//! ```
+//! ```compile_fail,E0599
+//! fn f(key: &scaas_ua::wallet::UaKey) {
+//!     let _ = key.sign_near_transaction(&[1, 2, 3], scaas_ua::wallet::AllowRawDigest);
+//! }
+//! ```
 use super::eip712::TypedData;
 use super::tx::EvmTx;
-use super::{Error, Network, Result};
+use super::{Error, NativeScheme, Network, Result};
 use crate::verify::verify;
 
 /// Which verifier entry a signature is for: `verify` ([`SigRole::Authorization`]) or `verifyPop` ([`SigRole::Pop`]); the
@@ -87,14 +114,20 @@ pub enum SignRequest {
     /// Only behind [`AllowRawDigest`].
     #[non_exhaustive]
     RawDigest { digest: [u8; 32] },
+    /// A native chain's message (1 to [`super::MAX_RAW_MESSAGE`] bytes, no SCaaS off-chain envelope), only behind
+    /// [`AllowRawDigest`] and only through [`super::sign_message_by`]; an Ed25519 or sr25519 native key signs it.
+    #[non_exhaustive]
+    RawMessage { message: Vec<u8> },
     /// A `webauthn-p256` (`0x0100`) key's `ua_msg` in place of a `UaMsg` (the authenticator's challenge, spec §5.6, §9.4): the
     /// response is the assertion encoding of [`super::webauthn_assertion`] against this challenge.
     #[non_exhaustive]
     WebAuthn { challenge: [u8; 32] },
 }
 
-/// The explicit opt-in of a raw-digest signature (CLI-SGN-40): for Merkle roots and family envelopes the caller built from a
-/// checked message, never a transaction or an EIP-7702 authorization.
+/// The explicit opt-in of a raw-digest or raw-message signature (CLI-SGN-40, CLI-UAL-44): for Merkle roots and family envelopes
+/// the caller built from a checked message, and a native chain's preimage only as CLI-SGN-54 (built in-process by the caller's
+/// own encoder from named fields, shown decoded); never an EVM transaction hash or an EIP-7702 authorization raw (EVM
+/// transactions: `sign_transaction`).
 #[derive(Clone, Copy, Debug)]
 pub struct AllowRawDigest;
 
@@ -116,14 +149,24 @@ pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> 
             (verify(*kind, key_data, ua_msg, &sig, *role == SigRole::Pop), sig)
         }
         (KeyRef::Ua { kind: 0x0100, key_data }, SignRequest::WebAuthn { challenge }) => (verify(0x0100, key_data, challenge, &sig, false), sig),
-        (KeyRef::Native { network, public_key, .. }, req) if network.ed25519() => {
-            (verify(0x0102, public_key, &super::sign::native_digest(req, false)?, &sig, false), sig)
-        }
-        (KeyRef::Native { public_key, .. }, req) => {
-            let digest = super::sign::native_digest(req, true)?;
-            let pk = k256::ecdsa::VerifyingKey::from_sec1_bytes(public_key).map_err(|_| Error::Argument)?;
-            let (pt, sig) = (pk.to_sec1_point(false), low_s(0x0108, sig));
-            (verify(0x0108, pt.as_bytes().get(1..).ok_or(Error::Argument)?, &digest, &sig, false), sig)
+        (KeyRef::Native { network, public_key, .. }, req) => {
+            let bytes = super::sign::native_bytes(*network, req)?;
+            match network.scheme() {
+                NativeScheme::Ed25519 => (crate::verify::ed25519(public_key, &bytes, &sig), sig),
+                NativeScheme::Secp256k1Ecdsa => {
+                    let digest: [u8; 32] = bytes.as_slice().try_into().map_err(|_| Error::Argument)?;
+                    let pk = k256::ecdsa::VerifyingKey::from_sec1_bytes(public_key).map_err(|_| Error::Argument)?;
+                    let (pt, sig) = (pk.to_sec1_point(false), low_s(0x0108, sig));
+                    (verify(0x0108, pt.as_bytes().get(1..).ok_or(Error::Argument)?, &digest, &sig, false), sig)
+                }
+                NativeScheme::Bip340Taproot => {
+                    let digest: [u8; 32] = bytes.as_slice().try_into().map_err(|_| Error::Argument)?;
+                    let x: [u8; 32] = public_key.get(1..).and_then(|x| x.try_into().ok()).ok_or(Error::Argument)?;
+                    let q = super::derive::taproot_tweak(&x)?.output_key;
+                    (crate::verify::bip340(&q, &digest, &sig), sig)
+                }
+                NativeScheme::Sr25519 => (super::substrate::verify(public_key, &bytes, &sig), sig),
+            }
         }
         _ => return Err(Error::Argument),
     };

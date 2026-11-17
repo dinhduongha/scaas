@@ -1,0 +1,81 @@
+{
+  "note": "Written by clients/ua-rs/tests/wallet_native.rs regenerate (ua-rs-native T9, feature vectors, ignored) with the release signers (OS randomness: Taproot aux, sr25519 r and soft nonce halves); read by clientkeys test/native.test.js, which re-derives each public key from its mnemonic and verifies each signature (CLI-UAL-47: randomized rows both ways). A row that still verifies is kept. Never edit by hand.",
+  "rows": [
+    {
+      "id": "p2tr-0-0",
+      "scheme": "bip340-taproot",
+      "mnemonic": "bip39_abandon",
+      "network": "bitcoin_p2tr",
+      "coinType": null,
+      "change": 0,
+      "index": 0,
+      "message": "0101010101010101010101010101010101010101010101010101010101010101",
+      "publicKey": "a60869f0dbcf1dc659c9cecbaf8050135ea9e8cdc487053f1dc6880949dc684c",
+      "signature": "58712a15121f6b20011174c6fdae2cf750ca99a2b559db2e8a007416b5abea8549acee0d8ecb8008f6b86b87c99845db382e94baa98824d3a2ea1e98b84c6f74"
+    },
+    {
+      "id": "p2tr-0-1",
+      "scheme": "bip340-taproot",
+      "mnemonic": "bip39_abandon",
+      "network": "bitcoin_p2tr",
+      "coinType": null,
+      "change": 0,
+      "index": 1,
+      "message": "0202020202020202020202020202020202020202020202020202020202020202",
+      "publicKey": "a82f29944d65b86ae6b5e5cc75e294ead6c59391a1edc5e016e3498c67fc7bbb",
+      "signature": "4d3c5e66fe4e468fc28dccdd493727dcda254caca0d39e67666a159fd2255be289144a3afc4995a4becfa01233c77e1aa9cede7c1e899cd7593d3b9fa51dd077"
+    },
+    {
+      "id": "p2tr-1-0",
+      "scheme": "bip340-taproot",
+      "mnemonic": "bip39_abandon",
+      "network": "bitcoin_p2tr",
+      "coinType": null,
+      "change": 1,
+      "index": 0,
+      "message": "1111111111111111111111111111111111111111111111111111111111111111",
+      "publicKey": "882d74e5d0572d5a816cef0041a96b6c1de832f6f9676d9605c44d5e9a97d3dc",
+      "signature": "6267cf6c381d19cbfada258d1bb56821a52651c830937961a3635016d0261912f8f3df482493762e52d2de3ba82f3ec9c179f1877dde4fdcb5669f1fb55e751d"
+    },
+    {
+      "id": "sr25519-",
+      "scheme": "sr25519",
+      "mnemonic": "substrate_dev",
+      "network": "polkadot",
+      "path": "",
+      "message": "73636161732075612d72732d6e61746976652072735f6e617469766520",
+      "publicKey": "46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a",
+      "signature": "ea44eee1b5b65fd3b669ccc8a2bc9eccb3c7e3b742b3bee94d52f30f05034a7c6c3a038f792ffd65dd99e7f1b8055b8facd03fc2459ebd759ea16bae2ef86683"
+    },
+    {
+      "id": "sr25519-//Alice",
+      "scheme": "sr25519",
+      "mnemonic": "substrate_dev",
+      "network": "polkadot",
+      "path": "//Alice",
+      "message": "73636161732075612d72732d6e61746976652072735f6e6174697665202f2f416c696365",
+      "publicKey": "d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d",
+      "signature": "b4068603665f72e4210151dfd2f8f1cacc968b0d88e0016a845e4ce188ae7c1b1e5714a3eff9368a7b6266d999f1956a4a277eb0e5c027c5cc59f2ca34a2ee82"
+    },
+    {
+      "id": "sr25519-/soft",
+      "scheme": "sr25519",
+      "mnemonic": "substrate_dev",
+      "network": "polkadot",
+      "path": "/soft",
+      "message": "73636161732075612d72732d6e61746976652072735f6e6174697665202f736f6674",
+      "publicKey": "84aedc0aba19f398f70dbcbc94b318e1e8d4eab5854e4d8de569bc4890afa45e",
+      "signature": "b04cc1dd5d04adbb9526cf085232f2637b34bbfb7b466cda84fe3158bcece2378655c8557a957abfb9e1d147c5d479019788c0603486e7480e609934b33aff83"
+    },
+    {
+      "id": "sr25519-//Alice/0",
+      "scheme": "sr25519",
+      "mnemonic": "substrate_dev",
+      "network": "polkadot",
+      "path": "//Alice/0",
+      "message": "73636161732075612d72732d6e61746976652072735f6e6174697665202f2f416c6963652f30",
+      "publicKey": "9057db4878163172ea51d570612043a98971737bf608b544991130ac110b0801",
+      "signature": "64979d36378783a93e8df9151ef678a600d2eff8cfc37ebd993e279b099694449863781fbb4fad7f8804131bdc2797a1442cce70595275a5f182ac379d82aa8f"
+    }
+  ]
+}

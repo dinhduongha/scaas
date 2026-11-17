@@ -236,18 +236,19 @@ mod vectors {
         }
     }
 
-    /// The store holds the entropy at its length and the 64-byte seed, nothing else: no copy of the mnemonic (its word
-    /// indices live in a `bip39::Mnemonic` that `from_mnemonic` drops, zeroized by the crate's `ZeroizeOnDrop`).
+    /// The store holds the entropy at its length, the 64-byte seed and the 32-byte `substrate-bip39` mini-secret (ua-rs-native
+    /// spec §4.3, CLI-UAL-63 (5): computed at open), nothing else: no copy of the mnemonic (its word indices live in a
+    /// `bip39::Mnemonic` that `from_mnemonic` drops, zeroized by the crate's `ZeroizeOnDrop`).
     #[test]
     fn mnemonic_is_not_cloned_and_dropped_after_from_mnemonic() {
         let k = keys();
-        assert_eq!(wallet(&k, "twelve_words").vectors_arena_used().unwrap(), 16 + 64);
+        assert_eq!(wallet(&k, "twelve_words").vectors_arena_used().unwrap(), 16 + 64 + 32);
         let w = wallet(&k, "pq_kat");
-        assert_eq!(w.vectors_arena_used().unwrap(), 32 + 64);
+        assert_eq!(w.vectors_arena_used().unwrap(), 32 + 64 + 32);
         let key = w.ua_key(0x0102, 0, 0).unwrap();
-        assert_eq!(w.vectors_arena_used().unwrap(), 32 + 64 + 32);
+        assert_eq!(w.vectors_arena_used().unwrap(), 32 + 64 + 32 + 32);
         w.ua_key(0x0102, 0, 0).unwrap(); // the same key again: its slot, no second copy
-        assert_eq!(w.vectors_arena_used().unwrap(), 32 + 64 + 32);
+        assert_eq!(w.vectors_arena_used().unwrap(), 32 + 64 + 32 + 32);
         drop(key);
     }
 

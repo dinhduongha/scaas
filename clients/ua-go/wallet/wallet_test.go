@@ -209,15 +209,16 @@ func TestLoadRefusesWrongAbiOrFeatures(t *testing.T) {
 	if err := Load(); err != nil {
 		t.Fatal(err)
 	}
-	good := FeatureWallet | FeaturePq | FeaturePqz | FeaturePqzSetN2304Kmax4096
-	if CheckBuild(6, good) != nil || CheckBuild(6, FeatureWallet|FeaturePq) != nil {
+	// ua-rs-native (spec §10.2): a good build carries FeatureNativeNetworks; an older v6 library without it is refused
+	good := FeatureWallet | FeaturePq | FeaturePqz | FeaturePqzSetN2304Kmax4096 | FeatureNativeNetworks
+	if CheckBuild(6, good) != nil || CheckBuild(6, FeatureWallet|FeaturePq|FeatureNativeNetworks) != nil {
 		t.Fatal("a good build refused")
 	}
 	for label, c := range map[string]struct {
 		abi uint32
 		f   uint64
 	}{"abi 5": {5, good}, "abi 7": {7, good}, "no wallet": {6, good &^ FeatureWallet}, "no pq": {6, good &^ FeaturePq},
-		"an unknown bit": {6, good | 1<<12}, "a vectors build (C1)": {6, good | FeatureVectors}, "two sets": {6, good | FeaturePqzSetN2048Kmax1024},
+		"an unknown bit": {6, good | 1<<13}, "an older v6 library": {6, good &^ FeatureNativeNetworks}, "a vectors build (C1)": {6, good | FeatureVectors}, "two sets": {6, good | FeaturePqzSetN2048Kmax1024},
 		"pqz without a set": {6, FeatureWallet | FeaturePq | FeaturePqz}, "a set without pqz": {6, FeatureWallet | FeaturePq | FeaturePqzSetN2304Kmax4096}} {
 		if !errors.Is(CheckBuild(c.abi, c.f), ErrLibraryMismatch) {
 			t.Error(label)
@@ -1626,5 +1627,196 @@ func TestImportedUAKeyRows(t *testing.T) {
 			t.Fatal(x["reason"], err)
 		}
 		must(w.ImportedUAKey(net, 0, uint16(n32(r["kind"])))).Close()
+	}
+}
+
+// --- ua-rs-native T11e: smartcontracts/vectors/native/native.json through this binding ------------------------------------
+
+type nfix struct {
+	t  *testing.T
+	v  obj
+	ws map[string]*Wallet
+}
+
+func newNfix(t *testing.T) *nfix { return &nfix{t: t, v: vec(t, "smartcontracts/vectors/native/native.json"), ws: map[string]*Wallet{}} }
+
+func (f *nfix) wallet(id string) *Wallet {
+	if w, ok := f.ws[id]; ok {
+		return w
+	}
+	for _, m := range rows(f.v["mnemonics"]) {
+		if m["id"] == id {
+			w := must(FromMnemonic([]byte(m["words"].(string)), []byte(m["passphrase"].(string))))
+			f.ws[id] = w
+			return w
+		}
+	}
+	f.t.Fatalf("mnemonic %s", id)
+	return nil
+}
+
+func netIndex(n string) uint32 {
+	for i, x := range Networks {
+		if x == n {
+			return uint32(i)
+		}
+	}
+	return 1 << 31
+}
+
+func coinOf(v any) uint32 {
+	if v == nil {
+		return CoinDefault
+	}
+	return n32(v)
+}
+
+func (f *nfix) key(r obj) (*Key, error) {
+	w, net := f.wallet(r["mnemonic"].(string)), r["network"].(string)
+	switch {
+	case net == "polkadot":
+		p, _ := r["path"].(string)
+		return w.PolkadotKey(p)
+	case strings.HasPrefix(net, "bitcoin") && r["change"] != nil:
+		return w.BitcoinKey(netIndex(net), coinOf(r["coinType"]), n32(r["change"]), n32(r["index"]))
+	default:
+		return w.NativeKey(netIndex(net), n32(r["index"]), coinOf(r["coinType"]))
+	}
+}
+
+func nmsg(r obj) []byte {
+	if m, ok := r["messageRepeat"].(obj); ok {
+		x := must(strconv.ParseUint(m["byte"].(string), 16, 8))
+		return bytes.Repeat([]byte{byte(x)}, int(n32(m["length"])))
+	}
+	return b(r["message"])
+}
+
+func TestNativeNetworksAndAddresses(t *testing.T) {
+	f := newNfix(t)
+	want := []string{}
+	for _, n := range f.v["networks"].([]any) {
+		want = append(want, n.(string))
+	}
+	if strings.Join(want, ",") != strings.Join(Networks, ",") {
+		t.Fatalf("networks %v", Networks)
+	}
+	if Features()&FeatureNativeNetworks == 0 {
+		t.Fatal("bit native-networks")
+	}
+	n := 0
+	for _, r := range rows(f.v["addresses"]) {
+		k := must(f.key(r))
+		if hex.EncodeToString(must(k.KeyData())) != r["publicKey"] || must(k.Address()) != r["address"] {
+			t.Errorf("%v", r)
+		}
+		if wp, ok := r["witnessProgram"].(obj); ok {
+			v, p := must2(k.WitnessProgram())
+			if v != uint8(n32(wp["version"])) || hex.EncodeToString(p) != wp["program"] {
+				t.Errorf("witness program %v", r)
+			}
+		}
+		if ss, ok := r["ss58"].(obj); ok {
+			for p, a := range ss {
+				if must(k.SS58Address(uint16(must(strconv.Atoi(p))))) != a {
+					t.Errorf("ss58 %s %v", p, r["mnemonic"])
+				}
+			}
+		}
+		n++
+	}
+	if n != 114 {
+		t.Fatal(n)
+	}
+	for _, r := range rows(f.v["polkadotPaths"]) {
+		k := must(f.wallet(r["mnemonic"].(string)).PolkadotKey(r["path"].(string)))
+		if hex.EncodeToString(must(k.KeyData())) != r["publicKey"] {
+			t.Errorf("path %v", r["path"])
+		}
+	}
+}
+
+func (f *nfix) sign(k *Key, call string, r obj) ([]byte, error) {
+	m := nmsg(r)
+	switch call {
+	case "sign_digest":
+		return k.SignDigestRaw(b32(r["message"]))
+	case "sign_message":
+		return k.SignMessageRaw(m)
+	case "sign_near_transaction":
+		return k.SignNearTransaction(m)
+	case "sign_sui_transaction":
+		return k.SignSuiTransaction(m)
+	case "sign_stellar_transaction":
+		id := b(r["networkId"])
+		if len(id) != 32 {
+			return nil, &Error{Status: errArgument, Code: "UAArgument"}
+		}
+		return k.SignStellarTransaction([32]byte(id), m)
+	default:
+		return k.SignHederaTransaction(m)
+	}
+}
+
+func TestNativeDeterministicRowsAndRefusals(t *testing.T) {
+	f := newNfix(t)
+	n := 0
+	for _, sec := range []string{"signatures", "envelopes"} {
+		for _, r := range rows(f.v[sec]) {
+			if r["mode"] != "deterministic" {
+				continue
+			}
+			if hex.EncodeToString(must(f.sign(must(f.key(r)), r["call"].(string), r))) != r["signature"] {
+				t.Errorf("%v", r["id"])
+			}
+			n++
+		}
+	}
+	if n != 45 {
+		t.Fatalf("deterministic rows %d (3 P2WPKH, 29 ed25519 messages (T13 C1: one starts 0x05), a NEAR digest, 12 envelopes)", n)
+	}
+	n = 0
+	for _, r := range rows(f.v["refusals"]) {
+		call := r["call"].(string)
+		run := func(a obj) string {
+			switch {
+			case call == "polkadot_key":
+				_, err := f.wallet(a["mnemonic"].(string)).PolkadotKey(a["path"].(string))
+				return code(err)
+			case call == "bitcoin_key":
+				_, err := f.wallet(a["mnemonic"].(string)).BitcoinKey(netIndex(a["network"].(string)), CoinDefault, n32(a["change"]), 0)
+				return code(err)
+			case call == "ss58":
+				_, err := must(f.wallet(a["mnemonic"].(string)).PolkadotKey("")).SS58Address(uint16(n32(a["prefix"])))
+				return code(err)
+			default:
+				k, err := f.key(a)
+				if err != nil {
+					return code(err)
+				}
+				_, err = f.sign(k, call, a)
+				return code(err)
+			}
+		}
+		if call != "polkadot_key" && call != "bitcoin_key" && call != "ss58" && call != "sign_message" && !strings.HasSuffix(call, "_transaction") {
+			continue
+		}
+		if got := run(r["args"].(obj)); got != "UAArgument" {
+			t.Errorf("%v: %s", r["id"], got)
+		}
+		if got := run(r["accepted"].(obj)); got != "" {
+			t.Errorf("neighbour of %v: %s", r["id"], got)
+		}
+		n++
+	}
+	if n < 40 {
+		t.Fatal(n)
+	}
+	ua := must(f.wallet("pq_kat").UAKey(0x0102, 0, 0))
+	if _, err := ua.SignMessageRaw([]byte{1}); code(err) != "UARawDigestRefused" {
+		t.Error(code(err))
+	}
+	if _, err := ua.SignNearTransaction([]byte{1}); code(err) != "UARawDigestRefused" {
+		t.Error(code(err))
 	}
 }

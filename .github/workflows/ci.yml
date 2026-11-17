@@ -435,10 +435,11 @@ jobs:
       - name: clientkeys dependencies for the e2e
         working-directory: clients/clientkeys
         run: npm ci --ignore-scripts
-      # and through zether-cli (relayed_zether_proof_under_the_ua_tag; ZETHER_CLI's default path)
+      # and through zether-cli (relayed_zether_proof_under_the_ua_tag; ZETHER_CLI's default path); the test's proveBurn is a raw
+      # command, built only with `hazmat` (ARCH-POS-13): a test binary of this job, never shipped
       - name: zether-cli for the e2e
         working-directory: clients/zether-prover
-        run: cargo build --release --bin zether-cli
+        run: cargo build --release --bin zether-cli --features hazmat
       - name: e2e on anvil
         run: cargo test --test e2e -- --ignored --test-threads=1
 
@@ -707,6 +708,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.ua_rs == 'true'
     runs-on: ${{ matrix.os }}
+    env:
+      # aarch64-apple-ios: stack probes (___chkstk_darwin, from frames above one page) are in libSystem from iOS 13 only
+      IPHONEOS_DEPLOYMENT_TARGET: "13.0"
     strategy:
       fail-fast: false
       matrix:

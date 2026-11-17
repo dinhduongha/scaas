@@ -1,0 +1,11 @@
+killed   | M1 hard and soft swapped | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 1 failed: native_json_polkadot_paths_rows
+killed   | M2 SCALE prefix dropped | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 1 failed: native_json_polkadot_paths_rows
+killed   | M3 one-byte compact length at 64 | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 2 failed: native_json_polkadot_key_refusal_rows
+killed   | M4 hash at 32 bytes | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 1 failed: native_json_polkadot_paths_rows
+killed   | M5 numeric junction as a string | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 2 failed: native_json_polkadot_key_refusal_rows
+killed   | M6 leading zero accepted | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 2 failed: manifest_polkadot_paths_written_only_when_not_empty_bounded_on_read
+killed   | M7 0x junction accepted | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 1 failed: native_json_polkadot_key_refusal_rows
+killed   | M8 polkadotPaths written when empty | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: manifest_polkadot_paths_written_only_when_not_empty_bounded_on_read
+killed   | M9 the 64-path cap removed | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: manifest_polkadot_paths_written_only_when_not_empty_bounded_on_read
+killed   | M10 the parser's length cap removed | clients/ua-rs/src/wallet/substrate.rs | rc=101 | 1 failed: polkadot_path_past_512_bytes_is_refused
+10 mutants, 10 killed, 0 survived, 0 not loaded

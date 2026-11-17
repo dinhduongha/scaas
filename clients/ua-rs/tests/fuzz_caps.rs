@@ -325,3 +325,16 @@ fn json_calls_past_their_caps_are_refused_unparsed() {
         assert_eq!(parses(&nest(depth + 1)), (false, 0), "{name}: depth {depth} + 1 refused unparsed");
     }
 }
+
+/// ua-rs-native T8b: a junction path one byte past the 512-byte cap (16 junctions, each in its own bounds) is refused; the same
+/// shape at 512 bytes is accepted.
+#[test]
+fn polkadot_path_past_512_bytes_is_refused() {
+    let w = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "").unwrap();
+    let p = String::from_utf8(file("polkadot_path/over-513-bytes.txt")).unwrap();
+    assert_eq!((p.len(), p.matches("//").count()), (513, 16));
+    assert_eq!(w.polkadot_key(&p).err(), Some(Error::Argument));
+    let ok = format!("//{}", "x".repeat(30)).repeat(16);
+    assert_eq!(ok.len(), 512);
+    assert!(w.polkadot_key(&ok).is_ok());
+}

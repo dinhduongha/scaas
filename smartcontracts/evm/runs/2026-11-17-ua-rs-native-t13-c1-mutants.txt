@@ -1,0 +1,6 @@
+killed   | M1 clientkeys: 0x05 refused again | clients/clientkeys/src/seed.js | rc=1 | 2 failed: native.json signatures: deterministic and fixed-randomness rows byte-equal, verify-only ro
+killed   | M2 clientkeys: 0x19 0x01 refused again | clients/clientkeys/src/seed.js | rc=1 | 1 failed: signMessage has no first-byte rule: 0x05 and 0x19 0x01 sign on Ed25519 and sr25519 keys
+killed   | M3 ua-rs: 0x05 refused again | clients/ua-rs/src/wallet/sign.rs | rc=101 | 2 failed: native_json_ed25519_message_rows_byte_equal
+killed   | M4 ua-rs: 0x19 0x01 refused again | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: sign_message_has_no_evm_prefix_rule
+killed   | M5 generator: a withdrawn row comes back | clients/clientkeys/scripts/native-vectors.mjs | rc=1 | 1 failed: Error: native-vectors: refusal sign_message EIP-7702 magic 0x05
+5 mutants, 5 killed, 0 survived, 0 not loaded

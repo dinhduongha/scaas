@@ -405,7 +405,7 @@ own key only and never acts as a direct caller, [CTR-UA-24](../contracts/account
 clientkeys API (`seed.js`, exported by `seed-signer.js`): `signTyped(key, td)` signs `hashTypedData(td)` (preimage
 `0x1901 ‖ …`, never `0x05`), after the caller checked `td` (`checkPayment`, `checkOwnerCall`, …); `signKeyProof(key,
 challenge)` signs `keyProofMessage(challenge)`; `signDigest(key, digest, { allowRawDigest: true })` signs a raw digest
-only with the opt-in (else it throws), for a digest the caller built itself from a checked SCaaS message (a Merkle batch
+of exactly 32 bytes (`Argument` otherwise, as `ua-rs`'s `&[u8; 32]`; ua-rs-native T13 C2) only with the opt-in (else it throws), for a digest the caller built itself from a checked SCaaS message (a Merkle batch
 root, a digest a `check*` function returned). **Migration note (2026-10-30, no7702):** `signDigest(key, digest)` without the
 option now throws. An integrator that vendors the clientkeys bundle (`seed-signer.js`) switches at its next rebuild to
 `signTyped(key, typed)` after its `check*` call (the same bytes) and to `signKeyProof(key, challenge)` for key proofs, or
@@ -913,6 +913,55 @@ as for `PayMeta`). Status: clientkeys `buildServicePull` (the JS reference, `ua-
 `servicePull` BUILT (ua-rs-sign T20e2), held to `smartcontracts/vectors/metatx/servicepull.json`; not yet the warning for a
 service off the chain profile's list (§10: the profile has no service list yet), `ua-qt` (its `scaas-ua` is built with `json`
 only) and the native ports (`ua-py`, `ua-go`, `ua-cs`, `ua-dart` carry no pay surface). UNAUDITED.
+
+### 9.2 Native networks of an app's native backend: BUILT
+
+Networks with no SCaaS family, for an end-user app that signs native chains through `ua-rs`
+([CLI-UAL-01](ua-libraries.md#CLI-UAL-01) Scope). Design and vectors: spec
+[`2026-11-17-ua-rs-native.md`](../superpowers/specs/2026-11-17-ua-rs-native.md); the `ua-rs` side:
+[CLI-UAL-44 to CLI-UAL-47](ua-libraries.md#native-networks-of-the-apps-backend-built). The controller's clauses below are
+recorded in [CLI-UAL-63](../decisions.md#CLI-UAL-63). Built in clientkeys (`NATIVE_NETWORKS`, `substrate.js`, `native-vectors.mjs`:
+T2 `d2089cd69`, T3 `ca2fa2e3b`, T4 `7e752faa2`, T6a `290021791`) and `ua-rs` (T5 to T11c). UNAUDITED.
+
+<a id="CLI-SGN-52"></a>**CLI-SGN-52** — **Four native networks, one name per path and scheme.** clientkeys keeps `NETWORKS` (the
+nine networks above, the set of `keys.json`, `importKey` and `importedUAKey`) and adds `NATIVE_NETWORKS` with these four; `ua-rs`
+`Network` lists all thirteen. Key `i`, coin type `c` ∈ {0, 1} (1 on Bitcoin testnets, signet and regtest; any other refused),
+Bitcoin chain `k` ∈ {0 receive, 1 change}:
+
+| `NATIVE_NETWORKS` key | Path | Curve, scheme | Address |
+|---|---|---|---|
+| `bitcoin_p2wpkh` | `m/84'/c'/0'/k/i` (BIP-84) | secp256k1, ECDSA (RFC 6979, low-s) | BIP-173 bech32, witness v0, `RIPEMD-160(SHA-256(pk))`, hrp `bc` / `tb` |
+| `bitcoin_p2tr` | `m/86'/c'/0'/k/i` (BIP-86) | secp256k1, BIP-340 over the BIP-341 key-path tweak `t = H_TapTweak(x(P))` (no script tree) | BIP-350 bech32m, witness v1, `x(P + t·G)` |
+| `near` | `m/44'/397'/i'` (SLIP-10 ed25519; index 0 is `near-seed-phrase`'s default); no coin-type override | ed25519 | implicit account id: lower-case hex of the 32-byte key |
+| `polkadot` | the bare mnemonic, optional junctions ([CLI-SGN-53](#CLI-SGN-53)); no index but 0, no coin type | sr25519 (schnorrkel, context `substrate`) | SS58, prefix 0 (any other on request) |
+
+On these four: no key proof, no import of a secret, no imported UA (each refused `Argument`); a Bitcoin key signs a sighash only,
+never an EVM record. Controller clauses: the names, the change chain, the NEAR coin-type refusal, the key-proof refusal. BUILT
+(clientkeys T2; `ua-rs` T6 `1416fc4d9`, T7 `cebe014f1`, T8a `1fd30d957`).
+
+<a id="CLI-SGN-53"></a>**CLI-SGN-53** — **A Polkadot account is the bare mnemonic under `substrate-bip39`, as polkadot.js; junctions
+are an optional per-account setting** (owner 2026-11-17). `mini = PBKDF2-HMAC-SHA512(entropy, "mnemonic" ‖ UTF-8(passphrase), 2048,
+64)[0..32]` over the BIP-39 **entropy** and the BIP-39 passphrase **as given** (no NFKD, as `substrate-bip39` and polkadot.js; an NFC
+and an NFD form of one non-ASCII passphrase are two Polkadot accounts); the key is schnorrkel's `Ed25519`-mode expansion of `mini`.
+Junction path `("//" j | "/" j)*`, hard and soft: each `j` 1 to 64 bytes of printable ASCII other than `/`, not starting `0x` or `+`;
+a digit-only `j` is a `u64` written without a leading zero (`//0` yes, `//007` refused: one spelling per key); at most 16 junctions
+and 512 bytes; `///` refused. Chain code: `u64` little-endian for a digit-only `j`, else the SCALE string (compact length: one byte
+below 64, two bytes at 64); zero-padded to 32 bytes, or BLAKE2b-256 when longer. Hard step `hard_derive_mini_secret_key`, soft
+`derived_key_simple`, as `sp-core`. A path is public: it names an account, it is no password. SS58: `base58(pre ‖ pk ‖
+BLAKE2b-512("SS58PRE" ‖ pre ‖ pk)[0..2])`, one-byte `pre` below 64, two bytes to 16,383, 46 and 47 refused; the prefix belongs to a
+chain (0 Polkadot, 42 generic Substrate), not to mainnet / testnet. Mainnet and testnets share the key. Controller clauses: the
+grammar and its bounds. BUILT (clientkeys T3; `ua-rs` T8a, T8b `940e9b876`).
+
+<a id="CLI-SGN-54"></a>**CLI-SGN-54** — **The caller's half of the guard on raw native signing.** A raw digest or message
+(`signDigest` / `signMessage` with `{ allowRawDigest: true }`, `ua-rs` `sign_digest` / `sign_message` with `AllowRawDigest`) is signed
+only when the caller (1) built it in-process with its own encoder from a transaction of named fields, never from bytes a page,
+server, link or other app handed it; (2) showed the user the decoded transaction (recipient, amount, fee, chain and the chain's other
+value-moving fields) and signs only what was shown; (3) never pairs the opt-in with a UA key or an SCaaS kind, never signs an EVM
+transaction hash or an EIP-7702 authorization raw ([CLI-SGN-40](#CLI-SGN-40)); (4) keeps each key on its network's own path
+([CLI-SGN-29](#CLI-SGN-29) Change); (5) signs an off-chain message only inside the chain's own envelope built in-process (a NEP-413
+payload, a Substrate `<Bytes>` wrapping, a Solana off-chain message, an Aptos `APTOS\n` message), never a user's raw bytes: ed25519
+and sr25519 have no domain separation of their own. Item (5) is a controller clause. The libraries enforce the rest:
+[CLI-UAL-44](ua-libraries.md#CLI-UAL-44). SPECIFIED: a documented obligation of the caller; the library half is BUILT.
 
 ## 10. Connectors
 
