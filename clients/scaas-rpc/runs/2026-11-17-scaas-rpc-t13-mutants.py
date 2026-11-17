@@ -68,6 +68,13 @@ MUTANTS = [
     ("S6 an equal timeout passes", [(EP, "if policy == Policy::StrictMajority && timeout_ms >= read_timeout_ms {",
                                      "if policy == Policy::StrictMajority && timeout_ms > read_timeout_ms {")],
      T + "--lib endpoint::tests::strict_majority_needs_a_request_timeout_below_the_read_deadline"),
+    ("S7 Replaced at the read's own block", [(E, "_ => self.tx_facts(id, from, BlockChoice::Finalized).await?.value,", "_ => a.value.clone(),")],
+     T + "--test evm_fakes replaced_under_strict_majority_rests_on_the_finalized_block"),
+    ("S7 FailedForGood at the read's own block", [(E, "_ => self.op_facts(q, BlockChoice::Finalized).await?.value,", "_ => v,")],
+     T + "--test evm_fakes failed_for_good_under_strict_majority_rests_on_the_finalized_block"),
+    ("S7 failover Replaced named a majority", [(E, "                by_nonce: a.value.nonce,\n                basis: Basis::OneEndpoint,",
+                                                "                by_nonce: a.value.nonce,\n                basis: Basis::Majority,")],
+     T + "--test evm_fakes replaced_under_strict_majority_rests_on_the_finalized_block"),
 ]
 
 if __name__ == "__main__":

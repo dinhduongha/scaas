@@ -1252,8 +1252,8 @@ pub enum TxState {
         success: bool,
     },
     /// the sender's nonce at the final block above the transaction's, the transaction and its receipt unknown, in one decisive
-    /// read (terminal; never re-sent automatically)
-    Replaced { by_nonce: u64 },
+    /// read (terminal; never re-sent automatically); under `strict_majority` only from an agreed read at the finalized block
+    Replaced { by_nonce: u64, basis: Basis },
     /// a receipt above the final block, or from a read that is not decisive
     Included {
         number: u64,
@@ -1271,6 +1271,56 @@ impl TxState {
     }
 }
 
+/// What a `Replaced` or `FailedForGood` rests on (T13 S7, owner 2026-11-17).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Basis {
+    /// agreed by a strict majority at the finalized block
+    Majority,
+    /// endpoint 0 alone (`failover`)
+    OneEndpoint,
+}
+
+impl std::fmt::Display for Basis {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Basis::Majority => "agreed by a majority at the finalized block",
+            Basis::OneEndpoint => "rests on one endpoint (endpoint 0, failover)",
+        })
+    }
+}
+
+impl std::fmt::Display for TxState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TxState::Final {
+                number, success, ..
+            } => write!(f, "final at block {number}, success {success}"),
+            TxState::Replaced { by_nonce, basis } => {
+                write!(f, "replaced: the sender's nonce is {by_nonce}; {basis}")
+            }
+            TxState::Included {
+                number, endpoint, ..
+            } => {
+                write!(
+                    f,
+                    "included at block {number} (endpoint {endpoint}), not final"
+                )
+            }
+            TxState::Pending { .. } => f.write_str("pending"),
+        }
+    }
+}
+
+impl std::fmt::Display for OpState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OpState::Landed => f.write_str("landed"),
+            OpState::FailedForGood { basis } => write!(f, "failed for good; {basis}"),
+            OpState::Pending => f.write_str("pending"),
+        }
+    }
+}
+
 /// The facts of one read for [`EvmPool::tx_state`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct TxFacts {
@@ -1285,8 +1335,10 @@ pub enum OpState {
     /// its executed event at or below the final block
     Landed,
     /// the subject's operation nonce spent at the final block without its executed event, or its deadline below the final
-    /// block's timestamp while the nonce is unspent
-    FailedForGood,
+    /// block's timestamp while the nonce is unspent; under `strict_majority` only from an agreed read at the finalized block
+    FailedForGood {
+        basis: Basis,
+    },
     Pending,
 }
 
@@ -1392,30 +1444,12 @@ impl EvmPool {
         nonce: u64,
         choice: BlockChoice,
     ) -> Result<TxState, RpcError> {
-        let a = self
-            .read_at_block(choice, Purpose::Plain, |at| async move {
-                let receipt = self.checked_receipt(at.endpoint, id, at.deadline).await?;
-                let now = self.nonce_at_block(&at, from).await?;
-                let known = self
-                    .at(at.endpoint, at.deadline)
-                    .get_transaction_by_hash(id)
-                    .await
-                    .map_err(|e| read_error(at.endpoint, &e, self.decode))?
-                    .is_some();
-                Ok(TxFacts {
-                    receipt,
-                    nonce: now,
-                    known,
-                })
-            })
-            .await?;
-        let decisive = match self.pool.policy() {
-            crate::Policy::StrictMajority => true,
-            crate::Policy::Failover => {
-                a.members == [0] && self.pool.class(0) != crate::Class::Discovered
-            }
-        };
+        let a = self.tx_facts(id, from, choice).await?;
+        let strict = self.pool.policy() == crate::Policy::StrictMajority;
+        let decisive =
+            strict || (a.members == [0] && self.pool.class(0) != crate::Class::Discovered);
         let endpoint = a.members[0];
+        let replaced = |t: &TxFacts| t.receipt.is_none() && t.nonce > nonce && !t.known;
         Ok(match a.value.receipt {
             Some(r) if decisive && r.block_number <= a.number => TxState::Final {
                 number: r.block_number,
@@ -1428,70 +1462,134 @@ impl EvmPool {
                 success: r.status,
                 endpoint,
             },
-            None if decisive && a.value.nonce > nonce && !a.value.known => TxState::Replaced {
+            None if decisive && replaced(&a.value) && !strict => TxState::Replaced {
                 by_nonce: a.value.nonce,
+                basis: Basis::OneEndpoint,
             },
+            // T13 S7 (owner 2026-11-17): under strict_majority, Replaced only from an agreed read at the finalized block
+            None if decisive && replaced(&a.value) => {
+                let f = match choice {
+                    BlockChoice::Finalized => a.value,
+                    _ => self.tx_facts(id, from, BlockChoice::Finalized).await?.value,
+                };
+                if replaced(&f) {
+                    TxState::Replaced {
+                        by_nonce: f.nonce,
+                        basis: Basis::Majority,
+                    }
+                } else {
+                    TxState::Pending {
+                        endpoint: Some(endpoint),
+                    }
+                }
+            }
             None => TxState::Pending {
                 endpoint: Some(endpoint),
             },
         })
     }
 
+    /// The facts [`EvmPool::tx_state`] reads at `choice`'s block.
+    async fn tx_facts(
+        &self,
+        id: B256,
+        from: Address,
+        choice: BlockChoice,
+    ) -> Result<Agreed<TxFacts, B256>, RpcError> {
+        self.read_at_block(choice, Purpose::Plain, |at| async move {
+            let receipt = self.checked_receipt(at.endpoint, id, at.deadline).await?;
+            let now = self.nonce_at_block(&at, from).await?;
+            let known = self
+                .at(at.endpoint, at.deadline)
+                .get_transaction_by_hash(id)
+                .await
+                .map_err(|e| read_error(at.endpoint, &e, self.decode))?
+                .is_some();
+            Ok(TxFacts {
+                receipt,
+                nonce: now,
+                known,
+            })
+        })
+        .await
+    }
+
     /// CLI-RPC-09 for a relayed operation: at the final block `f`, by one decisive read, its executed event in `[from_block, f]`,
     /// its nonce view, and `f`'s timestamp.
     pub async fn op_state(&self, q: &OpQuery, choice: BlockChoice) -> Result<OpState, RpcError> {
-        let a = self
-            .read_at_block(choice, Purpose::Plain, |at| async move {
-                let p = self.at(at.endpoint, at.deadline);
-                let executed = !p
-                    .get_logs(
-                        &q.executed
-                            .clone()
-                            .from_block(q.from_block)
-                            .to_block(at.number),
-                    )
-                    .await
-                    .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?
-                    .is_empty();
-                let word = self.call_at(&at, q.contract, q.nonce_call.clone()).await?;
-                let now =
-                    alloy::primitives::U256::try_from_be_slice(word.get(..32).unwrap_or_default())
-                        .ok_or_else(|| {
-                            ReadError::Failure(EndpointFailure::new(
-                                at.endpoint,
-                                FailureKind::AnswerMalformed,
-                                "a nonce view of no word",
-                            ))
-                        })?;
-                let ts = p
-                    .get_block_by_hash(at.hash)
-                    .await
-                    .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?
+        let a = self.op_facts(q, choice).await?;
+        let strict = self.pool.policy() == crate::Policy::StrictMajority;
+        let decisive =
+            strict || (a.members == [0] && self.pool.class(0) != crate::Class::Discovered);
+        let failed =
+            |(executed, spent, ts): (bool, bool, u64)| !executed && (spent || q.valid_until < ts);
+        Ok(match a.value {
+            _ if !decisive => OpState::Pending,
+            (true, _, _) => OpState::Landed,
+            v if failed(v) && !strict => OpState::FailedForGood {
+                basis: Basis::OneEndpoint,
+            },
+            // T13 S7 (owner 2026-11-17): under strict_majority, FailedForGood only from an agreed read at the finalized block
+            v if failed(v) => {
+                let f = match choice {
+                    BlockChoice::Finalized => v,
+                    _ => self.op_facts(q, BlockChoice::Finalized).await?.value,
+                };
+                if failed(f) {
+                    OpState::FailedForGood {
+                        basis: Basis::Majority,
+                    }
+                } else {
+                    OpState::Pending
+                }
+            }
+            _ => OpState::Pending,
+        })
+    }
+
+    /// The facts [`EvmPool::op_state`] reads at `choice`'s block: executed, nonce spent, the block's timestamp.
+    async fn op_facts(
+        &self,
+        q: &OpQuery,
+        choice: BlockChoice,
+    ) -> Result<Agreed<(bool, bool, u64), B256>, RpcError> {
+        self.read_at_block(choice, Purpose::Plain, |at| async move {
+            let p = self.at(at.endpoint, at.deadline);
+            let executed = !p
+                .get_logs(
+                    &q.executed
+                        .clone()
+                        .from_block(q.from_block)
+                        .to_block(at.number),
+                )
+                .await
+                .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?
+                .is_empty();
+            let word = self.call_at(&at, q.contract, q.nonce_call.clone()).await?;
+            let now =
+                alloy::primitives::U256::try_from_be_slice(word.get(..32).unwrap_or_default())
                     .ok_or_else(|| {
                         ReadError::Failure(EndpointFailure::new(
                             at.endpoint,
-                            FailureKind::Transport,
-                            "no final block",
+                            FailureKind::AnswerMalformed,
+                            "a nonce view of no word",
                         ))
-                    })?
-                    .header
-                    .timestamp;
-                Ok((executed, now > q.nonce, ts))
-            })
-            .await?;
-        let decisive = match self.pool.policy() {
-            crate::Policy::StrictMajority => true,
-            crate::Policy::Failover => {
-                a.members == [0] && self.pool.class(0) != crate::Class::Discovered
-            }
-        };
-        let (executed, spent, ts) = a.value;
-        Ok(match () {
-            _ if !decisive => OpState::Pending,
-            _ if executed => OpState::Landed,
-            _ if spent => OpState::FailedForGood,
-            _ if q.valid_until < ts => OpState::FailedForGood,
-            _ => OpState::Pending,
+                    })?;
+            let ts = p
+                .get_block_by_hash(at.hash)
+                .await
+                .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?
+                .ok_or_else(|| {
+                    ReadError::Failure(EndpointFailure::new(
+                        at.endpoint,
+                        FailureKind::Transport,
+                        "no final block",
+                    ))
+                })?
+                .header
+                .timestamp;
+            Ok((executed, now > q.nonce, ts))
         })
+        .await
     }
 }

@@ -10847,6 +10847,8 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", the rpc spe
 **Cost if wrong.** A wallet tells its user a payment failed; the user pays again and both land.
 **Source.** Fable review 2026-11-17 F1, F2; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.8; job states ([job-api.md](node/job-api.md#states)).
 
+Change (2026-11-17, owner: yes (the owner took the review's proposal, Fable code review S7); plan T13; status: BUILT on branch `scaas-sdk`, UNAUDITED): under `strict_majority`, `Replaced` and a relayed operation's failed-for-good need the majority's agreed read at the `finalized` block; a read at another depth that shows their facts reads the finalized block again and is `Pending` unless they hold there. Under `failover` they stay endpoint 0's alone, as the rule said, and the outcome says it rests on one endpoint (`Basis::OneEndpoint`; `Basis::Majority` under strict). Why: the nonce is pinned by hash but the receipt, the transaction and the logs are not; a load-balanced endpoint or one without the transaction index for that age answers "nonce above, receipt null, transaction null" for a transaction that landed, and the user may pay again.
+
 ### CLI-RPC-10 — The scaas-node client sends named fields and reads the node's error contract by code
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-10 · superseded-by: —
 

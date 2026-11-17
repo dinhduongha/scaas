@@ -125,7 +125,10 @@ report `dead` while a transaction may still land"; SPECIFIED). A read is decisiv
 `failover` answered whole by the first endpoint of the list when that endpoint is not `discovered`. A transaction is `Final` when a
 decisive read finds its receipt in a block at or below the final block, the receipt's block hash equal to that endpoint's header
 hash at its number. It is `Replaced` only when one decisive read finds, all at the final block, the sender's nonce (pinned by
-hash) above the transaction's nonce, the transaction by hash unknown and its receipt unknown. The same facts from any other
+hash) above the transaction's nonce, the transaction by hash unknown and its receipt unknown. Under `strict_majority`, `Replaced`
+and a relayed operation's failed-for-good need the majority's agreed read at the `finalized` block (a read at another depth that
+shows them reads the finalized block again); under `failover` they are endpoint 0's alone and their text says they rest on one
+endpoint (owner 2026-11-17). The same facts from any other
 endpoint are reported with its index and are never terminal; anything else is `Pending` or `Included`. `Replaced` never triggers an
 automatic re-send. A relayed operation ends only on chain facts read the same way: landed when its executed event is at or below
 the final block; failed for good when the subject's operation nonce is spent at the final block without its executed event, or its

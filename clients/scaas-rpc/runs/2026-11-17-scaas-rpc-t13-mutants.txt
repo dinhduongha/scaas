@@ -1,4 +1,5 @@
-# t13 mutants at commit 1c1208e06 (name | outcome | test)
-S6 no timeout check | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib endpoint::tests::strict_majority_needs_a_request_timeout_below_the_read_deadline
-S6 an equal timeout passes | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib endpoint::tests::strict_majority_needs_a_request_timeout_below_the_read_deadline
-2 mutants, 2 killed, 0 survived, 0 not loaded
+# t13 mutants at commit c6ca8d9a2 (name | outcome | test)
+S7 Replaced at the read's own block | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes replaced_under_strict_majority_rests_on_the_finalized_block
+S7 FailedForGood at the read's own block | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes failed_for_good_under_strict_majority_rests_on_the_finalized_block
+S7 failover Replaced named a majority | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes replaced_under_strict_majority_rests_on_the_finalized_block
+3 mutants, 3 killed, 0 survived, 0 not loaded

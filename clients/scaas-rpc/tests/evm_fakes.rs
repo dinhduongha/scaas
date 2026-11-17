@@ -1039,7 +1039,7 @@ async fn logs_range_refuses_an_unbounded_or_too_wide_range() {
 
 // ---------------------------------------------------------------- plan T7: broadcast and transaction state over fakes
 
-use scaas_rpc::evm::{BroadcastOutcome, Fanout, OpQuery, OpState, SendOutcome, TxState};
+use scaas_rpc::evm::{Basis, BroadcastOutcome, Fanout, OpQuery, OpState, SendOutcome, TxState};
 use std::sync::Arc;
 
 /// A chain at head `head` (block `n`'s hash `n + fork`) whose facts for one transaction are given.
@@ -1326,7 +1326,10 @@ async fn replaced_from_a_later_endpoint_is_pending() {
         .unwrap();
     assert_eq!(
         s,
-        TxState::Replaced { by_nonce: 4 },
+        TxState::Replaced {
+            by_nonce: 4,
+            basis: Basis::OneEndpoint
+        },
         "control: the same facts from endpoint 0"
     );
 }
@@ -1482,7 +1485,9 @@ async fn a_relayed_operation_ends_on_chain_facts() {
             .op_state(&q(ts + 100), depth(1))
             .await
             .unwrap(),
-        OpState::FailedForGood,
+        OpState::FailedForGood {
+            basis: Basis::OneEndpoint
+        },
         "the nonce spent without its event"
     );
     assert_eq!(
@@ -1490,7 +1495,9 @@ async fn a_relayed_operation_ends_on_chain_facts() {
             .op_state(&q(ts - 1), depth(1))
             .await
             .unwrap(),
-        OpState::FailedForGood,
+        OpState::FailedForGood {
+            basis: Basis::OneEndpoint
+        },
         "the deadline passed, the nonce unspent"
     );
     assert_eq!(
@@ -1681,4 +1688,132 @@ async fn a_revert_text_is_capped_and_cleaned() {
         "execution reverted: low",
         "control"
     );
+}
+
+// ---------------------------------------------------------------- plan T13 S7: terminal states under strict_majority
+
+/// A chain at head 0x20, finalized 0x10 (block `n`'s hash is `n`), where the sender's nonce (and the operation's nonce view)
+/// is 4 from block `raised_at` on, 3 before; no receipt, no transaction, no executed event.
+async fn raised(raised_at: u64) -> String {
+    fake_dyn(Arc::new(move |r: &Value| {
+        let at = |v: &Value| {
+            U256::from_str_radix(
+                v["blockHash"].as_str().unwrap().trim_start_matches("0x"),
+                16,
+            )
+            .unwrap()
+            .to::<u64>()
+        };
+        let nonce = |n: u64| if n >= raised_at { 4u64 } else { 3 };
+        match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x20"}),
+            Some("eth_getBlockByNumber") => {
+                let n = match r["params"][0].as_str() {
+                    Some("finalized") => 0x10,
+                    Some("latest") => 0x20,
+                    _ => num(&r["params"][0]),
+                };
+                json!({"result": block(n, block_hash(n))})
+            }
+            Some("eth_getBlockByHash") => {
+                let n = U256::from_str_radix(
+                    r["params"][0].as_str().unwrap().trim_start_matches("0x"),
+                    16,
+                )
+                .unwrap()
+                .to::<u64>();
+                json!({"result": block(n, block_hash(n))})
+            }
+            Some("eth_getTransactionCount") => {
+                json!({"result": format!("{:#x}", nonce(at(&r["params"][1])))})
+            }
+            Some("eth_call") => json!({"result": format!("0x{:064x}", nonce(at(&r["params"][1])))}),
+            Some("eth_getTransactionReceipt") | Some("eth_getTransactionByHash") => {
+                json!({"result": null})
+            }
+            Some("eth_getLogs") => json!({"result": []}),
+            _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+        }
+    }))
+    .await
+    .0
+}
+
+/// T13 S7 (owner 2026-11-17): under strict_majority, `Replaced` needs the majority's agreed read at the finalized block: a nonce
+/// raised after it (seen at depth 1) is `Pending`. Controls: raised at or below it, `Replaced` resting on the majority; under
+/// failover, `Replaced` from endpoint 0 says it rests on one endpoint.
+#[tokio::test]
+async fn replaced_under_strict_majority_rests_on_the_finalized_block() {
+    let (a, b, c) = (raised(0x18).await, raised(0x18).await, raised(0x18).await);
+    let s = strict(&[&a, &b, &c])
+        .tx_state(ID, FROM, 3, depth(1))
+        .await
+        .unwrap();
+    assert!(matches!(s, TxState::Pending { .. }), "{s:?}");
+    let (a, b, c) = (raised(0x08).await, raised(0x08).await, raised(0x08).await);
+    for choice in [depth(1), scaas_rpc::pool::BlockChoice::Finalized] {
+        let s = strict(&[&a, &b, &c])
+            .tx_state(ID, FROM, 3, choice)
+            .await
+            .unwrap();
+        assert_eq!(
+            s,
+            TxState::Replaced {
+                by_nonce: 4,
+                basis: Basis::Majority
+            },
+            "control: {choice:?}"
+        );
+        assert!(s.to_string().contains("agreed by a majority"), "{s}");
+    }
+    let s = sdk_pool(&[&raised(0x18).await], 2_000)
+        .tx_state(ID, FROM, 3, depth(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        s,
+        TxState::Replaced {
+            by_nonce: 4,
+            basis: Basis::OneEndpoint
+        }
+    );
+    assert!(s.to_string().contains("rests on one endpoint"), "{s}");
+}
+
+/// T13 S7 (owner 2026-11-17): the same for a relayed operation's `FailedForGood`.
+#[tokio::test]
+async fn failed_for_good_under_strict_majority_rests_on_the_finalized_block() {
+    let q = OpQuery {
+        contract: Address::ZERO,
+        nonce_call: Bytes::new(),
+        nonce: U256::from(3),
+        executed: alloy::rpc::types::Filter::new(),
+        from_block: 1,
+        valid_until: 0x6ac07487 + 100,
+    };
+    let (a, b, c) = (raised(0x18).await, raised(0x18).await, raised(0x18).await);
+    assert_eq!(
+        strict(&[&a, &b, &c]).op_state(&q, depth(1)).await.unwrap(),
+        OpState::Pending
+    );
+    let (a, b, c) = (raised(0x08).await, raised(0x08).await, raised(0x08).await);
+    let s = strict(&[&a, &b, &c]).op_state(&q, depth(1)).await.unwrap();
+    assert_eq!(
+        s,
+        OpState::FailedForGood {
+            basis: Basis::Majority
+        },
+        "control"
+    );
+    let s = sdk_pool(&[&raised(0x18).await], 2_000)
+        .op_state(&q, depth(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        s,
+        OpState::FailedForGood {
+            basis: Basis::OneEndpoint
+        }
+    );
+    assert!(s.to_string().contains("rests on one endpoint"), "{s}");
 }
