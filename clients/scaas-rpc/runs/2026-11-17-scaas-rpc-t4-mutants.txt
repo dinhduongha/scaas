@@ -1,6 +1,6 @@
-# t4 mutants at commit 3f422e87a (name | outcome | test)
+# t4 mutants at commit b77670551 (name | outcome | test)
 an unbounded transport (connect_reqwest reads an answer whole) | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes an_evm_answer_above_the_cap_is_that_endpoints_failure
-a first_* read delegated to the failover read | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes the_lane_nonce_fee_and_receipt_never_fail_over
+a first_* read delegated to the failover read | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes the_lane_
 read_within: a revert from endpoint 1 final | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes chain_reads_fail_over_on_transport_errors_never_on_a_revert
 read_within: head floor removed | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes chain_reads_fail_over_on_transport_errors_never_on_a_revert
 read_within: identity not checked | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes chain_reads_fail_over_on_transport_errors_never_on_a_revert

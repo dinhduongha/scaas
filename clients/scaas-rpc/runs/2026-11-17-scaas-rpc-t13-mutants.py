@@ -32,7 +32,9 @@ MUTANTS = [
      T + "--test evm_fakes a_dropped_endpoint_is_never_asked_again"),
     ("S16 a pruned endpoint trusted on the pin", [(E, "            (Some(p), None) if self.list.endpoints()[at].checkpoint().is_some() => p,",
                                                     "            (Some(p), None) => p,")],
-     T + "--test evm_fakes chain_uid_is_block_zero_and_a_wrong_pin_is_refused"),
+     # T13 S8: since point 6 the identity check refuses a pruned endpoint first; this branch is reached when block 0 goes
+     # after the identity passed
+     T + "--test evm_fakes a_block_0_gone_after_the_identity_is_never_trusted_on_the_pin"),
     ("S16 a pruned endpoint admitted without its checkpoint",
      [(E, '''                None => Err(EndpointFailure::new(
                     i,

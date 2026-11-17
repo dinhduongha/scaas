@@ -1,4 +1,4 @@
-# t7 mutants at commit 4a84ebbce (name | outcome | test)
+# t7 mutants at commit b77670551 (name | outcome | test)
 trust the answered hash | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes another_id_is_refused
 read a refusal as Replaced (a nonce not above) | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes all_refused_is_rejected_and_not_final
 Final without the depth | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes final_from_a_discovered_first_endpoint_is_not_terminal

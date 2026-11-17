@@ -1,4 +1,4 @@
-# t6 mutants at commit 70ed3b31e (name | outcome | test)
+# t6 mutants at commit b77670551 (name | outcome | test)
 pin by number instead of hash | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes pinned_reads_name_the_block_by_hash
 skip the re-check | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_reorg_between_read_and_recheck_is_block_changed
 compare T without the block hash | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool a_member_whose_block_hash_differs_is_outside_the_group

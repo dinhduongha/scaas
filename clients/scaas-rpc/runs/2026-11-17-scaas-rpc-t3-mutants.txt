@@ -1,4 +1,4 @@
-# t3 mutants at commit b145d0b89 (name | outcome | test)
+# t3 mutants at commit b77670551 (name | outcome | test)
 need = n / 2 | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool four_two_agree_two_fail_is_no_majority
 the smallest named block | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool the_block_is_the_need_th_highest_named
 answers not compared whole (any two values agree) | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool two_lie_on_different_words_is_no_majority

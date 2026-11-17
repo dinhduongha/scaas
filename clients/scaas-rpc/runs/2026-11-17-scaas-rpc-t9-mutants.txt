@@ -1,4 +1,4 @@
-# t9 mutants at commit 2650ede85 (name | outcome | test)
+# t9 mutants at commit b77670551 (name | outcome | test)
 agree replaced by failover under strict_majority | killed | ../scripts/capped cargo test --locked --offline -j2 --test service strict_majority_signs_the_honest_answer
 probe on failover under strict_majority | killed | ../scripts/capped cargo test --locked --offline -j2 --test service probe_runs_under_agree_too
 Reads compared without the key records | killed | ../scripts/capped cargo test --locked --offline -j2 --test service two_lying_nodes_refuse_rpc_no_majority_and_sign_nothing

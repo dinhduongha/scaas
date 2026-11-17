@@ -1,4 +1,4 @@
-# t1 mutants at commit 82d9754cd (name | outcome | test)
+# t1 mutants at commit b77670551 (name | outcome | test)
 drop the scheme check | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib a_scheme_other_than_http_is_refused
 compare URLs as strings | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib equal_parsed_urls_are_refused
 accept one endpoint under strict_majority | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib strict_majority_with_one_endpoint_is_refused

@@ -1,4 +1,4 @@
-# t2 mutants at commit ee12baf2c (name | outcome | test)
+# t2 mutants at commit b77670551 (name | outcome | test)
 skip the Content-Length check | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test http an_announced_length_above_the_cap_is_refused_unread
 > to >= at the chunk cap | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test http a_body_at_the_cap_is_read
 depth 64 to 128 | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test http a_depth_of_65_is_too_deep_and_64_read

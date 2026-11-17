@@ -8,8 +8,8 @@ from mutants_lib import main
 N = "clients/scaas-rpc/src/node.rs"
 T = "cd clients/scaas-rpc && ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node "
 MUTANTS = [
-    ("dead from the nodes heard only", [(N, "if !sent_to.is_empty() && sent_to.iter().all(|&i| matches!(of(i), Some(IntentState::Dead | IntentState::Unknown))) {",
-                                         "if !sent_to.is_empty() && sent_to.iter().filter(|&&i| of(i).is_some()).all(|&i| matches!(of(i), Some(IntentState::Dead | IntentState::Unknown))) {")],
+    ("dead from the nodes heard only", [(N, "            && sent_to\n                .iter()\n                .all(|&i| matches!(of(i), Some(IntentState::Dead | IntentState::Unknown)))",
+       "            && sent_to\n                .iter()\n                .filter(|&&i| of(i).is_some())\n                .all(|&i| matches!(of(i), Some(IntentState::Dead | IntentState::Unknown)))")],
      T + "a_node_that_timed_out_on_submit_keeps_it_in_flight"),
     ("GivenUpByEveryNode read as terminal", [(N, "    /// Never: only the chain's facts end a relayed operation.\n    pub fn is_terminal(&self) -> bool {\n        false",
                                               "    /// Never: only the chain's facts end a relayed operation.\n    pub fn is_terminal(&self) -> bool {\n        matches!(self, MergedState::GivenUpByEveryNode)")],

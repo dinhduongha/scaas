@@ -212,6 +212,33 @@ async fn the_lane_nonce_fee_and_receipt_never_fail_over() {
     assert!(good_n.load(SeqCst) > 0);
 }
 
+/// T13 S8: the same with endpoint 0 of this chain (its identity answered) failing each lane read: still never endpoint 1. Since
+/// T13 S3 the hung endpoint 0 above fails at its identity, before the read, so it alone no longer shows where the read goes.
+#[tokio::test]
+async fn the_lane_reads_never_fail_over_from_an_endpoint_0_of_this_chain() {
+    let (busy, _) =
+        fake_rpc(|_| json!({"error": {"code": -32000, "message": "upstream unavailable"}})).await;
+    let (good, good_n) = fake_rpc(|r| match r["method"].as_str() {
+        Some("eth_blockNumber") => json!({"result": "0x10"}),
+        Some("eth_getTransactionCount") => json!({"result": "0x7"}),
+        _ => json!({"result": null}),
+    })
+    .await;
+    let p = sdk_pool(&[&busy, &good], 2_000);
+    let a = Address::repeat_byte(1);
+    assert!(p.first_pending_nonce(a).await.is_err());
+    assert!(p.first_nonce_at(a).await.is_err());
+    assert!(p.first_fees().await.is_err());
+    assert!(p.first_receipt(B256::ZERO).await.is_err());
+    assert!(p.first_tx_fees(B256::ZERO).await.is_err());
+    assert_eq!(good_n.load(SeqCst), 0, "endpoint 1 is never asked");
+    assert_eq!(
+        p.pending_nonce(a, Purpose::Plain).await.unwrap(),
+        7,
+        "control: a failover read moves on"
+    );
+}
+
 /// The node's `chain_reads_fail_over_on_transport_errors_never_on_a_revert`, on `EvmPool`.
 #[tokio::test]
 async fn chain_reads_fail_over_on_transport_errors_never_on_a_revert() {
@@ -1886,6 +1913,45 @@ async fn op_state_from_a_failover_endpoint_is_pending() {
         OpState::FailedForGood {
             basis: Basis::OneEndpoint
         },
+        "control"
+    );
+}
+
+/// T13 S16 / S8: an endpoint whose block 0 is gone after its identity passed (a load-balanced URL, a second backend pruned) is
+/// still never trusted on the pin: `uid()` refuses it by name. Control: the same endpoint keeping block 0 answers the pin.
+#[tokio::test]
+async fn a_block_0_gone_after_the_identity_is_never_trusted_on_the_pin() {
+    async fn flaky(keep: bool) -> String {
+        let reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        serve(axum::Router::new().route(
+            "/",
+            axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+                let reads = reads.clone();
+                async move {
+                    let result = match r["method"].as_str() {
+                        Some("eth_chainId") => json!("0x128"),
+                        Some("eth_getBlockByNumber") if r["params"][0] == "0x0" => {
+                            // the identity's read sees block 0; later ones do not, unless `keep`
+                            if keep || reads.fetch_add(1, SeqCst) == 0 {
+                                block(0, genesis())
+                            } else {
+                                Value::Null
+                            }
+                        }
+                        _ => Value::Null,
+                    };
+                    axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": result}))
+                }
+            }),
+        ))
+        .await
+    }
+    let c = |u: &str| sdk_pool(&[u], 2_000);
+    let e = c(&flaky(false).await).uid().await.unwrap_err();
+    assert!(e.to_string().contains("ChainIdentityUnreadable"), "{e}");
+    assert_eq!(
+        c(&flaky(true).await).uid().await.unwrap(),
+        genesis(),
         "control"
     );
 }

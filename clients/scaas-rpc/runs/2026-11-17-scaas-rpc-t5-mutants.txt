@@ -1,4 +1,4 @@
-# t5 mutants at commit 1ffb4a964 (name | outcome | test)
+# t5 mutants at commit b77670551 (name | outcome | test)
 a fresh Arc instead of cfg.head | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::chain_reads_fail_over_on_transport_errors_never_on_a_revert
 failover_answers returning the total | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::chain_reads_fail_over_on_transport_errors_never_on_a_revert
 the simulation on the 30 s clients | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::a_hung_endpoint_and_the_block_gas_read_fail_over
