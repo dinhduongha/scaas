@@ -44,7 +44,8 @@ def main(M):
         failed = sorted({x[2:].split(" (")[0] for x in out.splitlines() if x.startswith("✖ ") and "failing tests" not in x} |
                         {x.split()[1] for x in out.splitlines() if x.startswith("test ") and x.endswith("FAILED")} |
                         {x.split()[1] for x in out.splitlines() if x.startswith(("FAIL: ", "ERROR: "))} |
-                        {x.split()[2] for x in out.splitlines() if x.startswith("--- FAIL: ")})
+                        {x.split()[2] for x in out.splitlines() if x.startswith("--- FAIL: ")} |
+                        {x.split()[1] for x in out.splitlines() if x.lstrip().startswith("Failed Scaas")})
         if not failed:  # no test names (a generator, a compile): the first error line
             failed = [x.strip() for x in out.splitlines() if x.lstrip().startswith(("Error", "error", "UAError", "thread "))][:1]
         if r.returncode == 0:
