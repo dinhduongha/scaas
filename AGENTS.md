@@ -190,3 +190,6 @@ Oversized jobs get the terminal killed by `systemd-oomd`, and every agent with i
 - `pay_ref`, `signature` and other job fields can go `dead` silently for a consumer on an old shape: job shape changes need a note for operators.
 - Mesh has no Soroban arm (`FAMILY_NOT_SUPPORTED`).
 - `size-baseline.json` is a ratchet, not a target: moving it needs a reason.
+- A shell hook (rtk) may rewrite git commands: `git add --` with an empty path list once staged every file of a shared
+  worktree. Build the path list first and refuse an empty one; commit with `git commit --only -- <explicit paths>` (through
+  `rtk proxy git …` where the hook would rewrite it), and check `git diff --cached --name-only` before every commit.
