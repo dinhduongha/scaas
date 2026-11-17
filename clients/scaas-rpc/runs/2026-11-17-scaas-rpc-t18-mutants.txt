@@ -1,0 +1,6 @@
+# t18 mutants at commit d091f1ca8 (name | outcome | test)
+a: the algod token dropped | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::the_algod_token_goes_to_every_endpoint_and_a_status_is_algod_error
+a: a raw answer scanned as JSON | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test algorand the_raw_reads_the_status_classes_and_the_token
+a: a non-2xx read as an answer | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test algorand the_raw_reads_the_status_classes_and_the_token
+a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test algorand the_failover_drops_another_network_and_skips_an_endpoint_behind
+4 mutants, 4 killed, 0 survived, 0 not loaded

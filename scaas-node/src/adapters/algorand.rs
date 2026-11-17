@@ -1557,6 +1557,15 @@ pub fn block_events(ids: &Ids, block: &Mp, block_hash: &str) -> Result<Vec<Value
 // ------------------------------------------------------------------ adapter
 
 /// An algod REST error: HTTP status and its `message`.
+/// A family client's error as the classifier reads it: a status other than 2xx is `AlgodError`, anything else the endpoint's
+/// failure.
+fn algod_error(e: scaas_rpc::family::FamilyError) -> anyhow::Error {
+    match e {
+        scaas_rpc::family::FamilyError::Status { status, message } => AlgodError { status, message }.into(),
+        e => e.into(),
+    }
+}
+
 #[derive(Debug)]
 pub struct AlgodError {
     pub status: u16,
@@ -1589,9 +1598,8 @@ struct Params {
 pub struct AlgorandAdapter {
     key: String,
     network: [u8; 32],
-    rpc: Vec<String>,
-    token: Option<String>,
-    http: reqwest::Client,
+    /// the algod endpoints (scaas-rpc T18: the family client, bounded, 20 s per request; the token to each, as before)
+    net: scaas_rpc::algorand::Algorand,
     quorum: usize,
     lanes: Vec<Lane>,
     pks: Vec<[u8; 32]>,
@@ -1639,9 +1647,14 @@ impl AlgorandAdapter {
         Ok(Self {
             key: cfg.chain_key(),
             network,
-            rpc: cfg.rpc_urls.iter().map(|u| u.trim_end_matches('/').to_string()).collect(),
-            token,
-            http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
+            net: scaas_rpc::algorand::Algorand::new(
+                scaas_rpc::family::Client::of_urls(
+                    &cfg.rpc_urls,
+                    token.map(|t| scaas_rpc::EndpointAuth::Header { name: "X-Algo-API-Token".into(), value: scaas_rpc::Secret::new(&t) }),
+                )
+                .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+                net,
+            ),
             quorum: cfg.finality.quorum.max(1),
             lanes,
             pks,
@@ -1652,35 +1665,17 @@ impl AlgorandAdapter {
         })
     }
 
-    fn req(&self, r: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        match &self.token {
-            Some(t) => r.header("X-Algo-API-Token", t),
-            None => r,
-        }
-    }
-
-    async fn answer(r: reqwest::Response) -> Result<Vec<u8>> {
-        let status = r.status().as_u16();
-        let body = r.bytes().await?.to_vec();
-        if !(200..300).contains(&status) {
-            let message = serde_json::from_slice::<Value>(&body).ok().and_then(|v| v["message"].as_str().map(str::to_string))
-                .unwrap_or_else(|| String::from_utf8_lossy(&body).chars().take(300).collect());
-            return Err(AlgodError { status, message }.into());
-        }
-        Ok(body)
-    }
-
-    async fn get_raw_at(&self, url: &str, path: &str, query: &[(&str, String)]) -> Result<Vec<u8>> {
-        Self::answer(self.req(self.http.get(format!("{url}{path}")).query(query)).send().await?).await
+    /// GET on endpoint `i`, the answer raw (scaas-rpc T18: the family client); a status other than 2xx is `AlgodError`.
+    async fn get_raw_at(&self, i: usize, path: &str, query: &[(&str, String)]) -> Result<Vec<u8>> {
+        self.net.get_raw(i, path, query).await.map_err(algod_error)
     }
 
     async fn get(&self, path: &str) -> Result<Value> {
-        Ok(serde_json::from_slice(&self.get_raw_at(&self.rpc[0], path, &[]).await?)?)
+        Ok(serde_json::from_slice(&self.get_raw_at(0, path, &[]).await?)?)
     }
 
     async fn post(&self, path: &str, body: Vec<u8>, ctype: &str) -> Result<Value> {
-        let r = self.req(self.http.post(format!("{}{path}", self.rpc[0])).header("Content-Type", ctype).body(body)).send().await?;
-        Ok(serde_json::from_slice(&Self::answer(r).await?)?)
+        self.net.post(0, path, body, ctype).await.map_err(algod_error)
     }
 
     async fn params(&self) -> Result<Params> {
@@ -1703,7 +1698,7 @@ impl AlgorandAdapter {
     }
 
     async fn box_value(&self, app: u64, name: &[u8]) -> Result<Option<Vec<u8>>> {
-        match self.get_raw_at(&self.rpc[0], &format!("/v2/applications/{app}/box"), &[("name", format!("b64:{}", b64(name)))]).await {
+        match self.get_raw_at(0, &format!("/v2/applications/{app}/box"), &[("name", format!("b64:{}", b64(name)))]).await {
             Ok(b) => {
                 let v: Value = serde_json::from_slice(&b)?;
                 Ok(Some(b64d(v["value"].as_str().ok_or_else(|| anyhow!("box without value"))?)?))
@@ -1906,18 +1901,17 @@ impl AlgorandAdapter {
         let ts = |b: Vec<u8>| -> Result<u64> {
             mp_decode(&b)?.get("block").and_then(|b| b.get("ts")).and_then(Mp::u64).ok_or_else(|| anyhow!("block without ts"))
         };
-        let t1 = ts(self.get_raw_at(&self.rpc[0], &format!("/v2/blocks/{last}"), &[("format", "msgpack".into())]).await?)?;
+        let t1 = ts(self.get_raw_at(0, &format!("/v2/blocks/{last}"), &[("format", "msgpack".into())]).await?)?;
         let first = last.saturating_sub(ROUND_SAMPLE).max(1);
         if first >= last {
             return Ok((t1, 0, 0));
         }
-        let t0 = ts(self.get_raw_at(&self.rpc[0], &format!("/v2/blocks/{first}"), &[("format", "msgpack".into())]).await?)?;
+        let t0 = ts(self.get_raw_at(0, &format!("/v2/blocks/{first}"), &[("format", "msgpack".into())]).await?)?;
         Ok((t1, last - first, t1.saturating_sub(t0)))
     }
 
-    async fn block_hash_at(&self, url: &str, h: u64) -> Result<String> {
-        let v: Value = serde_json::from_slice(&self.get_raw_at(url, &format!("/v2/blocks/{h}/hash"), &[]).await?)?;
-        let s = v["blockHash"].as_str().ok_or_else(|| anyhow!("block {h} without blockHash"))?;
+    async fn block_hash_at(&self, i: usize, h: u64) -> Result<String> {
+        let s = self.net.block_hash(i, h).await.map_err(algod_error)?;
         Ok(hex0x(&arr32(&b32decode(s.trim_start_matches("blk-"))?)?))
     }
 
@@ -2186,10 +2180,10 @@ impl ChainAdapter for AlgorandAdapter {
     /// The last round (one-round finality); with `quorum > 1` further endpoints must agree on its hash.
     async fn final_head(&self) -> Result<Option<Head>> {
         let height = self.sequence(0).await?;
-        let hash = self.block_hash_at(&self.rpc[0], height).await?;
+        let hash = self.block_hash_at(0, height).await?;
         let mut agree = 1;
-        for url in &self.rpc[1..] {
-            if self.block_hash_at(url, height).await.ok().as_deref() == Some(hash.as_str()) {
+        for i in 1..self.net.client.len() {
+            if self.block_hash_at(i, height).await.ok().as_deref() == Some(hash.as_str()) {
                 agree += 1;
             }
         }
@@ -2197,7 +2191,7 @@ impl ChainAdapter for AlgorandAdapter {
     }
 
     async fn block_hash(&self, height: u64) -> Result<String> {
-        self.block_hash_at(&self.rpc[0], height).await
+        self.block_hash_at(0, height).await
     }
 
     /// Every round of [from, to] (none is ever skipped): a round algod no longer has (a non-archival node's pruned
@@ -2215,15 +2209,15 @@ impl ChainAdapter for AlgorandAdapter {
         let mut out = Vec::new();
         for h in from..=to {
             let q = [("format", "msgpack".to_string())];
-            let raw = match self.get_raw_at(&self.rpc[0], &format!("/v2/blocks/{h}"), &q).await {
+            let raw = match self.get_raw_at(0, &format!("/v2/blocks/{h}"), &q).await {
                 Ok(b) => b,
                 Err(e) if status_of(&e) == Some(404) => bail!("round {h} is not in algod's history (pruned: use an archival node): {e:#}"),
                 Err(e) => return Err(e),
             };
             if self.quorum > 1 {
                 let mut agree = 1;
-                for url in &self.rpc[1..] {
-                    if self.get_raw_at(url, &format!("/v2/blocks/{h}"), &q).await.ok().as_deref() == Some(&raw[..]) {
+                for i in 1..self.net.client.len() {
+                    if self.get_raw_at(i, &format!("/v2/blocks/{h}"), &q).await.ok().as_deref() == Some(&raw[..]) {
                         agree += 1;
                     }
                 }
@@ -3541,5 +3535,35 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
             let pm = json!({"kind": "pay_meta", "salt": h(&bytes[..bytes.len().min(32)]), "meta": h(&bytes)});
             let _ = entry(&pol(), None, &op, &pm);
         }
+    }
+
+    /// scaas-rpc T18a: the configured `X-Algo-API-Token` goes with each request, to every endpoint, as before (each endpoint's own
+    /// credential in the crate); an algod status other than 2xx reaches the classifier as `AlgodError`. Control: unset, none.
+    #[tokio::test]
+    async fn the_algod_token_goes_to_every_endpoint_and_a_status_is_algod_error() {
+        let seen: Arc<Mutex<Vec<Option<String>>>> = Default::default();
+        let s2 = seen.clone();
+        let app = axum::Router::new().fallback(move |headers: axum::http::HeaderMap| {
+            let s2 = s2.clone();
+            async move {
+                s2.lock().unwrap().push(headers.get("x-algo-api-token").and_then(|v| v.to_str().ok()).map(str::to_string));
+                (axum::http::StatusCode::NOT_FOUND, axum::Json(json!({"message": "no such thing"})))
+            }
+        });
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        std::env::set_var("SCAAS_T18_ALGOD_TOKEN", "tok");
+        let mut c = cfg(&url, "");
+        c.rpc_urls = vec![url.clone(), format!("{url}/second")];
+        c.params.insert("algod_token_env".into(), "SCAAS_T18_ALGOD_TOKEN".into());
+        let a = AlgorandAdapter::new(&c, &[lane0()]).unwrap();
+        let e = a.get_raw_at(1, "/v2/status", &[]).await.unwrap_err();
+        assert_eq!(status_of(&e), Some(404), "{e:#}");
+        assert!(a.get("/v2/status").await.is_err());
+        assert_eq!(*seen.lock().unwrap(), [Some("tok".to_string()), Some("tok".to_string())]);
+        let a = AlgorandAdapter::new(&cfg(&url, ""), &[lane0()]).unwrap();
+        let _ = a.get("/v2/status").await;
+        assert_eq!(seen.lock().unwrap().last().unwrap(), &None, "control: no token configured");
     }
 }

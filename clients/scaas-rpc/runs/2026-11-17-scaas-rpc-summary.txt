@@ -27,10 +27,11 @@ node-e2e | 4ee72cfcc | 0 | 24 passed, 0 failed, 0 ignored (1 binaries); tree dir
 node-e2e-hedera | 4ee72cfcc | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 node-e2e-soroban | 0ed608c33 | 0 | 11 passed, 0 failed, 0 ignored (2 binaries); tree dirty
 node-e2e-solana | 23748267c | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-rpc-test | b3c203755 | 0 | 144 passed, 0 failed, 10 ignored (11 binaries); tree dirty
-rpc-clippy | b3c203755 | 0 | -; tree dirty
-rpc-wasm | b3c203755 | 0 | -; tree dirty
-node-test | 9a31ccf1d | 0 | 803 passed, 0 failed, 72 ignored (18 binaries); tree dirty
-node-clippy | 9a31ccf1d | 0 | -; tree dirty
 node-e2e-near | 9a31ccf1d | 0 | 12 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 docs | 9a31ccf1d | 0 | -; tree dirty
+rpc-test | d091f1ca8 | 0 | 147 passed, 0 failed, 10 ignored (12 binaries); tree dirty
+rpc-wasm | d091f1ca8 | 0 | -; tree dirty
+rpc-clippy | d091f1ca8 | 0 | -; tree dirty
+node-test | d091f1ca8 | 0 | 804 passed, 0 failed, 72 ignored (18 binaries); tree dirty
+node-clippy | d091f1ca8 | 0 | -; tree dirty
+node-e2e-algorand | d091f1ca8 | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty

@@ -17,12 +17,13 @@ pub const FAMILY_TIMEOUT_MS: u64 = 20_000;
 /// The longest answer a family endpoint may send (CLI-RPC-07).
 pub const ANSWER_MAX: usize = 16 << 20;
 
-/// A family request's failure: the endpoint's (transport, HTTP, timeout, too large, too deep, malformed), or its own JSON-RPC
-/// error object, kept whole for the family to classify.
+/// A family request's failure: the endpoint's (transport, HTTP, timeout, too large, too deep, malformed), its own JSON-RPC
+/// error object kept whole, or a REST answer's status other than 2xx with its message (capped), for the family to classify.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FamilyError {
     Failure(EndpointFailure),
     Rpc { method: String, error: Value },
+    Status { status: u16, message: String },
 }
 
 impl FamilyError {
@@ -30,7 +31,7 @@ impl FamilyError {
     pub fn rpc_error(&self) -> Option<&Value> {
         match self {
             FamilyError::Rpc { error, .. } => Some(error),
-            FamilyError::Failure(_) => None,
+            _ => None,
         }
     }
 }
@@ -47,6 +48,7 @@ impl std::fmt::Display for FamilyError {
                     crate::error::endpoint_text(&error.to_string())
                 )
             }
+            FamilyError::Status { status, message } => write!(f, "HTTP {status}: {message}"),
         }
     }
 }
@@ -168,6 +170,23 @@ impl Client {
                 ANSWER_MAX,
                 None,
             )
+            .await?)
+    }
+
+    /// One request to `path` of endpoint `i` whose answer comes back raw (its status and bytes; a 5xx is the endpoint's
+    /// failure), `body` sent as `ctype`; no JSON nesting scan (a binary answer has its reader's own bound).
+    pub async fn raw_at(
+        &self,
+        i: usize,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<Vec<u8>>,
+        ctype: &str,
+        cap: usize,
+    ) -> Result<(u16, Vec<u8>), FamilyError> {
+        Ok(self
+            .http
+            .raw(&self.list, i, method, path, body, ctype, cap, None)
             .await?)
     }
 

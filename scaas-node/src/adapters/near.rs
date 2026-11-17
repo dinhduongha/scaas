@@ -1628,6 +1628,7 @@ impl NearAdapter {
                 self.net.call(i, method, params).await.map_err(|e| match e {
                     scaas_rpc::family::FamilyError::Rpc { error, .. } => ReadError::Revert { data: vec![], reason: error.to_string() },
                     scaas_rpc::family::FamilyError::Failure(f) => ReadError::Failure(f),
+                    e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
                 })
             }
         }).await;

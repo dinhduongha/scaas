@@ -5,6 +5,8 @@
 //! wasm32, not run there. UNAUDITED.
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "algorand")]
+pub mod algorand;
 pub mod endpoint;
 pub mod error;
 #[cfg(feature = "evm")]
