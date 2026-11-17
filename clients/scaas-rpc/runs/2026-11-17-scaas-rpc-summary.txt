@@ -50,3 +50,4 @@ node-test | ef4c78a40 | 0 | 815 passed, 0 failed, 72 ignored (18 binaries); tree
 node-clippy | ef4c78a40 | 0 | -; tree dirty
 node-e2e-ton | ef4c78a40 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 docs | 58ff9b172 | 0 | -; tree dirty
+node-e2e-cosmos | efd9bf0d7 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty

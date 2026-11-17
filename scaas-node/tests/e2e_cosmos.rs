@@ -68,6 +68,8 @@ async fn start(lanes: &[String]) -> Devnet {
     let wasm = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/cosmos/artifacts");
     let st = Command::new("docker")
         .args(["run", "-d", "--rm", "--name", NAME, "-p", "127.0.0.1:31990:26657", "-p", "127.0.0.1:31991:1317"])
+        // the devnet's resource cap (AGENTS.md: Docker bypasses `capped`; owner 2026-11-18)
+        .args(["--memory", "2g", "--memory-swap", "2g", "--cpus", "2"])
         .args(["-v", &format!("{wasm}:/wasm:ro"), "-e", &format!("LANES={}", lanes.join(" "))])
         .args(["--entrypoint", "sh", IMAGE, "-c", SETUP])
         .status()
