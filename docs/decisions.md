@@ -5366,6 +5366,8 @@ Change (owner 2026-11-08, all as recommended; plan T66a part 1; status: BUILT on
 
 Change (owner 2026-11-17, "Ok, as proposed (b)" — research `pqchat-client-options.md` open question 5, and "chat: (b)" for scaas-app's default build; status: SPECIFIED, nothing built): **one Matrix stack, matrix-rust-sdk, for every front-end** (Qt, Flutter, the Rust UI, the terminal UI); no libQuotient on the app side (owner answer 5 of the Status-fork path replaced). The Matrix client and its login live in one shared crate below both chat paths, so an app logs in to Matrix once: scaas-app's default build (no SCaaS) offers ordinary Matrix chat with Matrix's own end-to-end encryption (Olm / Megolm, `matrix-sdk` feature `e2e-encryption` on; classical, not post-quantum); the `scaas` build adds PqChat, whose `pqchat-core` sends its envelopes `{v, hint, env}` (already PQ-encrypted, CTR-CHAT-01) through that same client as its Matrix store, and `scaas-sdk`'s `chat` module reaches it through `pqchat-core`. Why: libQuotient serves Qt only and already embeds the Rust Matrix crypto, so a Qt build would carry two Rust Matrix stacks; one login per app. Cost if wrong: matrix-sdk is heavy (tokio, an sqlite store; wasm32 needs its IndexedDB store, unverified); the Qt default build then links a Rust library for Matrix.
 
+Change (owner 2026-11-17, "OK, reverse pqchat-core too", relayed by the coordinator; status: SPECIFIED, nothing built): **the client dependency is reversed.** Old: `scaas-sdk`'s `chat` module reaches `pqchat-core`, which does not depend on the SDK. New: `pqchat-core` is an app core above `scaas-sdk` (CLI-SDK-14, CLI-SDK-19): it depends on the SDK, takes the app's live Matrix client itself, and reaches every signature, KEM operation, opening and chain read through the SDK under its two conditions (CLI-SDK-20). The `PqChat` contract, its records and `PURPOSE_PQCHAT` do not change. Why: the same reversal as `pqvault-core`'s, one platform for every app core. Cost: PqChat's records and UA-7's call keys have to fit the conditions, or those parts stay inside the SDK.
+
 ### CTR-CHAT-02 — `PqChat` is class 3, kind 0 on the factory's generic path; chain values from the clone's `ChainEnv`; `initialize` once by the factory; an owner UA without power
 - old: — · status: current · owner: yes · date: 2026-11-07 · normative: contracts/pqchat.md#CTR-CHAT-02 · superseded-by: —
 
@@ -10512,6 +10514,8 @@ The rules are in [clients/scaas-sdk.md](clients/scaas-sdk.md); the design is the
 **Cost if wrong.** Two signers or two transports drift: a digest or a node-list rule differs between the app and the node.
 **Source.** TODO 8b; owner 2026-11-11, 2026-11-17 "Ok, theo đề xuất, viết ngay"; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §1, §2, §3.
 
+Change (owner 2026-11-17, R13 ("agreed to reverse the dependency") and R14 ("OK, reverse pqchat-core too"), relayed by the coordinator; status: SPECIFIED): old, modules `vault`, `account`, `wallet`, `confidential`, `dex`, `admin`, `chat` (over `pqchat-core`) and a future `pqvault` module; new, the same modules without `chat` and without a `pqvault` module, plus `app_core`, the generic surface for app cores above the SDK (CLI-SDK-19, CLI-SDK-20); no module is named after an app. Why: the SDK is the generic platform; `pqchat-core`, `pqvault-core` and a third party's app core depend on it. Cost: the SDK needs a generic surface strong enough for each app core, or that app core stays inside it.
+
 ### CLI-SDK-02 — Secrets never leave the SDK; apps hold references
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-02 · superseded-by: —
 
@@ -10611,6 +10615,8 @@ The rules are in [clients/scaas-sdk.md](clients/scaas-sdk.md); the design is the
 **Cost if wrong.** Per-language wrappers drift from the SDK, as hand wrappers over `ua-rs` would; a binding shape found unworkable after the API is built.
 **Source.** TODO 8b; CLI-UAL-05; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §16, §19.
 
+Change (owner 2026-11-17, R13 and R14, and the scaas-app contract's section 12 at commit `e2d4ded`; status: SPECIFIED): the one library of scaas-app is named: `app-core-rust`, features `native-core` (on by default), `scaas`, `pqchat`, `pqvault` (each implying `scaas`); Rust and Flutter link it whole, Qt without `native-core`. Old: "its Matrix crate and `pqchat-core`" inside the app's one library beside the SDK's `chat`; new: the SDK and the app cores inside `app-core-rust`, no aggregating crate defined by the SDK.
+
 ### CLI-SDK-13 — Errors are named, stable codes; the layers below keep their names
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-13 · superseded-by: —
 
@@ -10620,6 +10626,8 @@ The rules are in [clients/scaas-sdk.md](clients/scaas-sdk.md); the design is the
 **Cost if wrong.** An app maps one failure two ways, shows a phishing line from a gateway, or tells the user a send failed for good.
 **Source.** CLI-UAL-04, CLI-RPC-08, CLI-RPC-10; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §15, §22.
 
+Change (controller, 2026-11-17, with R14 and CLI-SDK-20; status: SPECIFIED, nothing built): `RuntimeRequired` withdrawn (it existed for `chat` only); `AppDomainRefused`, `AppPurposeRefused`, `AppSaltMismatch`, `AppHandleForeign`, `AppLabelRefused` added.
+
 ### CLI-SDK-14 — `chat` runs `pqchat-core` over the app's live Matrix client
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-14 · superseded-by: —
 
@@ -10628,6 +10636,8 @@ The rules are in [clients/scaas-sdk.md](clients/scaas-sdk.md); the design is the
 **Why.** Owner 2026-11-17 (CTR-CHAT-01 Change): one matrix-rust-sdk stack in a shared crate below both chat paths, one login; `pqchat-core` sends its envelopes through that client. The runtime, lifetime and locked-seed rules answer Fable F27.
 **Cost if wrong.** Two Matrix logins and two sync loops in one app; a store used after the app deleted it; messages lost while locked.
 **Source.** CTR-CHAT-01 Change of 2026-11-17 ("Ok, as proposed (b)"); [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §12.
+
+Change (owner 2026-11-17, R14: "OK, reverse pqchat-core too", relayed by the coordinator; status: SPECIFIED, PLANNED until `pqchat-core` exists): old, the SDK's `chat` module runs `pqchat-core` over the app's live Matrix client (`Chat::attach` / `detach` of `pqchat_core::MatrixStore`, the feature `chat`, the adopted runtime required, `RuntimeRequired`); new, the SDK has no `chat` module: `pqchat-core` depends on the SDK like any app core and takes the app's live Matrix client (`app-matrix`, one matrix-rust-sdk stack, one login) itself; the attachment, its release before logout, envelopes kept while locked and the shared runtime are `pqchat-core`'s rules; the feature bit 12 is never reused. The PqChat contract and `PURPOSE_PQCHAT` do not change. Why: the owner reversed `pqchat-core` as `pqvault-core` (R13). Cost: `pqchat-core` must meet CLI-SDK-20's two conditions: PqChat's own records are SCaaS records, which the app signing call refuses (proposed: the SDK keeps named entries for the `PqChat` contract's structs; open), and UA-7's call keys feed a WebRTC frame encryptor outside `ua-rs` (open); where a condition fails, that part stays inside the SDK.
 
 ### CLI-SDK-15 — Chain profiles are the app's pinned data; the chain is asked, never assumed
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-15 · superseded-by: —
@@ -10667,6 +10677,24 @@ Change (coordinator 2026-11-17, controller call, owner: no; the `ua-rs-native` c
 **Cost if wrong.** A wallet tells its user a payment failed; the user pays again and both land.
 **Source.** CLI-RPC-09; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §13.5.
 
+### CLI-SDK-19 — App cores sit above the SDK: they depend on it, it names none of them, one Rust library per app
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-19 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-19).) Owner 2026-11-17, R13 ("agreed to reverse the dependency"): `scaas-sdk` is the generic platform; app cores (`pqvault-core`, any third party's) depend on it and the SDK knows nothing about PqVault; R14 ("OK, reverse pqchat-core too"): `pqchat-core` too. An app core depends on the SDK's feature `app-core` and on nothing below it that touches a key or a node; scaas-app links the SDK and its app cores in its one library `app-core-rust` (features `native-core`, `scaas`, `pqchat`, `pqvault`; its contract section 12).
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** One platform any app core uses, SCaaS's own as well as a third party's; the SDK keeps no app's logic.
+**Cost if wrong.** A generic surface too weak for an app core, which then stays inside the SDK (CLI-SDK-20).
+**Source.** owner 2026-11-17 (relayed by the coordinator); [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §1 (R13, R14), §12.1, §16.2; the pqvault spec's revision 4.
+
+### CLI-SDK-20 — The `app_core` surface: key handles only, app record signing with named refusals; else the app core stays inside the SDK
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-sdk.md#CLI-SDK-20 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-sdk.md](clients/scaas-sdk.md#CLI-SDK-20).) Coordinator conditions, with the surface as a controller proposal: (1) an app core gets key handles only (KEM-unwrapped, derived, Argon2id output), every wrap, unwrap, HKDF, Argon2id and AEAD in `ua-rs` on them, plaintexts asked for the user the only bytes out, handles and labels scoped to the app; (2) the app signing call takes typed data only and signs a portable record under `appPurpose(appId)` with `salt = appId`, or a chain-bound record under the app's own purpose on the profile's chain and the app's contract, refusing by name every `UAKinds` purpose and every SCaaS contract's or the registry's domain (by name, address and chain), each refusal with a test and a mutant; reads of ciphertexts as decryption reads; writes as operations. If either condition cannot be met for an app core, it stays inside the SDK.
+**Status.** SPECIFIED, nothing built (plan T21). UNAUDITED.
+**Why.** Moving an app's logic above the SDK must not move a key or a SCaaS signing power out of it.
+**Cost if wrong.** A key in an app core's memory, or a SCaaS operation signed blind for an app.
+**Source.** coordinator, 2026-11-17; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §12.2–§12.4, §18.
+
 ### CLI-SDK-30 — Owner rulings of the SDK spec, 2026-11-11 to 2026-11-17
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-SDK-30 · superseded-by: —
 
@@ -10677,6 +10705,8 @@ Change (coordinator 2026-11-17, controller call, owner: no; the `ua-rs-native` c
 **Source.** TODO 6, 8b, 8c, 8d; owner 2026-11-11 "Seeds sinh ra luôn dùng 24 words trở lên", "nhận kèm cảnh báo", "chỉ mạnh ngang passphrase => Chấp nhận rủi ro này. Yêu cầu passphrase phải đủ dài (10 ký tự) trong trường hợp này. Hoặc có lựa chọn dùng seed' = KDF(privkey, passphrase, nhãn, index).", "đồng ý, sửa theo đó", "wallet(s)"; owner 2026-11-16 "Làm sdk + ví trước freeze.", "Chọn scaas-app"; owner 2026-11-17 "Ok, theo đề xuất, viết ngay", "Ok, theo đề xuất, viết TUI sau SDK", "Ok, as proposed (b)", "Q1–Q5 as proposed", "đưa điểm 1 và 2 vào spec"; [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §1.
 
 Change (owner 2026-11-17, "Ok, as proposed, settle the whole table"; status: SPECIFIED): every question of the spec's §25 is answered by its recommendation. **Q-A1 (a)**: in the `scaas` build every native chain signs through the SDK once `ua-rs-native` merges (EVM through `EvmTx`, every other chain through the guarded raw entry), no second holder of the mnemonic. **Q-B1 (a)**: UniFFI with `uniffi-bindgen-cpp`, decided by the spike (plan T3); (b) the fallback if C++ cannot carry the callbacks or async; no SDK C ABI this round. **Q-S1 (a)**: self-relay from the holder's own native EOA now, with the reviewed and capped quote, the delegated-payer check and the PQ registration split; (b), the node adding these entries to door A, asked of the node's next round. **Q-S2 (a)**: one keystore item, vault v1 objects as JSON text strings, `rev`, `backup`, the index MAC, the store lock, `keystore.prev`, the anchor. **Q-S3 (a)**: modules `vault` (seeds) and a future `pqvault` (notes). **Q-S4 (c)**: no parent id, set index or origin address stored; `class`, the origin type and the warnings under the index MAC; the BIP-85 high-water mark in the parent's sealed manifest. **Q-S6 (a)**: the account list public in the container, only with the MAC and the unverified rule. **Q-K4–Q-K18**: the defaults of §25's table, Q-K4 with `m = 128 MiB`; Q-K18's label string and salt constant fixed by plan T6 with vectors. **rpc Q6 (b)** (CLI-RPC-06's Change). The calls CLI-SDK-31 records under these questions ((1), (2), (3), (6), (8), (10), (11)) are owner rulings from this date.
+
+Change (owner 2026-11-17, after the table above was settled; status: SPECIFIED): two more rulings. **(13)** R13, "agreed to reverse the dependency": the SDK is the generic platform, app cores depend on it, the SDK knows nothing about PqVault, scaas-app links the SDK and the app cores in its one library; it replaces (12)'s placeholder and Q-S3's future `pqvault` module (CLI-SDK-19). **(14)** R14, "OK, reverse pqchat-core too": `pqchat-core` depends on the SDK like any app core and takes the app's live Matrix client itself; the SDK's `chat` module, its store attachment, the `chat` feature and the runtime requirement for chat leave the SDK; it replaces (1)'s `chat` → `pqchat-core` and (9)'s last clause (CLI-SDK-14).
 
 ### CLI-SDK-31 — Controller calls of the SDK spec, 2026-11-17
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: decisions.md#CLI-SDK-31 · superseded-by: —
