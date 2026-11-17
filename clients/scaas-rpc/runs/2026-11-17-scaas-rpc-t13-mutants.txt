@@ -1,7 +1,5 @@
-# t13 mutants at commit 890631299 (name | outcome | test)
-S4 a revert message kept whole | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_revert_text_is_capped_and_cleaned
-S4 a decoded reason kept whole | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_revert_text_is_capped_and_cleaned
-S4 intent_id kept whole | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_gateways_intent_id_and_revert_data_are_bounded
-S4 revert_data hex unchecked | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_gateways_intent_id_and_revert_data_are_bounded
-S4 revert_data uncapped | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_gateways_intent_id_and_revert_data_are_bounded
-5 mutants, 5 killed, 0 survived, 0 not loaded
+# t13 mutants at commit 040c3baca (name | outcome | test)
+S5 an entry prints its URL | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib endpoint::tests::debug_and_display_carry_no_url_or_secret
+S5 an entry prints its key file | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib endpoint::tests::debug_and_display_carry_no_url_or_secret
+S5 a list prints its URLs | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib endpoint::tests::debug_and_display_carry_no_url_or_secret
+3 mutants, 3 killed, 0 survived, 0 not loaded

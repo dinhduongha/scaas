@@ -279,7 +279,7 @@ impl NodeList {
 }
 
 /// One entry of the app's form (spec §4.1): `{url, class, label, api_key_env | api_key_file, api_key_header, auth}`.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EntryConfig {
     pub url: String,
@@ -312,7 +312,7 @@ fn named() -> Class {
 /// The list's configuration, the same shape in TOML and JSON (spec §4.1): `rpc_urls` (strings, `named`, no credentials) or `rpc`
 /// (entries), `rpc_policy`, `rpc_timeout_ms`, `rpc_simulate_timeout_ms`, `rpc_read_timeout_ms`. A list-wide credential
 /// (`api_key_env`, `api_key_file`, `api_key_header`, `auth` beside the list) is refused when the list is built (F8).
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Clone, Default, Deserialize)]
 pub struct ListConfig {
     pub rpc_urls: Option<Vec<String>>,
     pub rpc: Option<Vec<EntryConfig>>,
@@ -325,6 +325,36 @@ pub struct ListConfig {
     api_key_file: Option<serde::de::IgnoredAny>,
     api_key_header: Option<serde::de::IgnoredAny>,
     auth: Option<serde::de::IgnoredAny>,
+}
+
+impl std::fmt::Debug for EntryConfig {
+    /// CLI-RPC-11 (T13 S5): no URL, no credential's variable or file path in a `Debug` output.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EntryConfig")
+            .field("class", &self.class)
+            .field("label", &self.label.as_deref().map(Label::new))
+            .field(
+                "credential",
+                &(self.api_key_env.is_some() || self.api_key_file.is_some()),
+            )
+            .field("auth", &self.auth)
+            .field("checkpoint", &self.checkpoint)
+            .finish()
+    }
+}
+
+impl std::fmt::Debug for ListConfig {
+    /// CLI-RPC-11 (T13 S5): the entries' classes and labels and the counts, never a URL.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ListConfig")
+            .field("rpc_urls", &self.rpc_urls.as_ref().map(Vec::len))
+            .field("rpc", &self.rpc)
+            .field("rpc_policy", &self.rpc_policy)
+            .field("rpc_timeout_ms", &self.rpc_timeout_ms)
+            .field("rpc_simulate_timeout_ms", &self.rpc_simulate_timeout_ms)
+            .field("rpc_read_timeout_ms", &self.rpc_read_timeout_ms)
+            .finish()
+    }
 }
 
 impl ListConfig {
@@ -675,7 +705,18 @@ rpc_read_timeout_ms = 60000
                 failover_revert: None,
             },
         ];
-        let mut texts = vec![format!("{e:?}"), format!("{l:?}")];
+        // T13 S5: the two config types, an entry with a credential file and a list of plain URLs
+        let cfg: ListConfig = toml::from_str(&format!(
+            "rpc = [{{ url = \"{url}\", label = \"own\", api_key_file = \"/KEYFILEPATH\" }}]"
+        ))
+        .unwrap();
+        let urls: ListConfig = toml::from_str(&format!("rpc_urls = [\"{url}\"]")).unwrap();
+        let mut texts = vec![
+            format!("{e:?}"),
+            format!("{l:?}"),
+            format!("{cfg:?}"),
+            format!("{urls:?}"),
+        ];
         for x in &errs {
             texts.push(format!("{x:?}"));
             texts.push(x.to_string());
@@ -688,12 +729,13 @@ rpc_read_timeout_ms = 60000
                 "HEADERSECRET",
                 "HDRPATH",
                 "rpc.example",
+                "KEYFILEPATH",
             ] {
                 assert!(!t.contains(secret), "{secret} in {t}");
             }
         }
         assert!(
-            format!("{e:?}").contains("own"),
+            format!("{e:?}").contains("own") && format!("{cfg:?}").contains("own"),
             "control: the label is printed"
         );
     }

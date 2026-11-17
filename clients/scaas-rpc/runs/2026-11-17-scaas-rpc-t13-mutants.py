@@ -57,6 +57,12 @@ MUTANTS = [
      T + "--test node a_gateways_intent_id_and_revert_data_are_bounded"),
     ("S4 revert_data uncapped", [(N, "h.len() <= 2 * REVERT_DATA_MAX", "h.len() <= 2 * ANSWER_MAX")],
      T + "--test node a_gateways_intent_id_and_revert_data_are_bounded"),
+    ("S5 an entry prints its URL", [(EP, '        f.debug_struct("EntryConfig")\n', '        f.debug_struct("EntryConfig")\n            .field("url", &self.url)\n')],
+     T + "--lib endpoint::tests::debug_and_display_carry_no_url_or_secret"),
+    ("S5 an entry prints its key file", [(EP, '        f.debug_struct("EntryConfig")\n', '        f.debug_struct("EntryConfig")\n            .field("api_key_file", &self.api_key_file)\n')],
+     T + "--lib endpoint::tests::debug_and_display_carry_no_url_or_secret"),
+    ("S5 a list prints its URLs", [(EP, '.field("rpc_urls", &self.rpc_urls.as_ref().map(Vec::len))', '.field("rpc_urls", &self.rpc_urls)')],
+     T + "--lib endpoint::tests::debug_and_display_carry_no_url_or_secret"),
 ]
 
 if __name__ == "__main__":
