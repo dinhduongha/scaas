@@ -154,6 +154,13 @@ a `UASig` over `uaMessage(kind, PURPOSE_PQCHAT, typed(record))` and checked by t
 type strings above, so both typehashes moved with it: `PqChatSession` `0xe2c3b4c1…ad1e4d`, `PqTopic` `0x75bed97b…2e1623`
 (full values in `test/pqchat/PqChatTypes.t.sol` and `smartcontracts/vectors/pqchat/`). Status: **BUILT**.
 
+**Change (2026-11-17, the pqvault spec's review r2, its native-member finding; a threat to add to UA-7's table, no rule change):** a
+native member of an `msig` signs a record's typed digest itself, so a dapp can phish its signature over a valid `PqChat`
+record (one `eth_signTypedData_v4` request per member; the wallet shows "SCaaS PqChat" and, with no chain or contract in
+`DS_C`, cannot warn); with the quorum's signatures the record is accepted. Nothing in the contract or the registry can
+refuse a valid signature over a valid record; clients show every membership change per epoch and flag an admin `msig` with
+native members. The same residual holds for `PqVault` ([pqvault.md](pqvault.md)).
+
 <a id="CTR-CHAT-04"></a>**CTR-CHAT-04** — **Ids are hashes of the signer and its nonce; a nonce is a bit in a per-scope
 bitmap, used in any order, checked after the signature; a record that replaces a value carries `seq` and lands only at
 `seq == stored + 1`** (owner answer 7 of 2026-10-25; the scope tags 3C-D5 are a controller call, owner may override).

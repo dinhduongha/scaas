@@ -4905,6 +4905,8 @@ Change (2026-11-10, ua-mtx-merge T19; pay-meta-tax spec §10; status: BUILT on b
 **Cost if wrong.** If a hostile contract recomputes another app's digest, a native member's signature passes there too (it gains nothing a plain ECDSA check would not give it); the library's size crosses its T-2 notice line.
 **Source.** controller, 2026-11-17; spec `superpowers/specs/2026-11-17-pqvault.md` §4.1.
 
+Change (controller, 2026-11-17, the Fable review r2 of 2026-11-17 (`scratchpad/pqvault-review/20261117-17-fable-fable-high-spec-r2.md`, kept outside the tracked files), findings R1, R6, R10, R14; status: SPECIFIED, nothing built): (R1) old, `_portablePurpose` moves out of `_sigOk`; new, `_sigOk` keeps its behaviour and its guard (ruling A5-m3; `test_ua8_sigOkPortablePurposesOnly` unchanged), its single-key tail is shared as `_single`, and `_portable` is today's `requirePortable` body, so a classical-only `msig` with no members is refused on the app path. (R6) old, "the domain's `salt = appId` names the app" given as the guard for native `msig` members; new, the guard is the app contract computing the digest itself in its own domain; an app portable domain is exactly `name, version, salt`, so its typehash differs from every SCaaS portable domain's; every app contract on the entry must (a) compute the digest itself, never from a caller's bytes, (b) name the signing UA in every record, (c) use different domain field sets on the two paths; the residual (a dapp phishing a native member's signature over a valid record, for every app and for `PqChat`) is stated; the sentence that the domain rule keeps two apps with one `appId` apart is withdrawn (only their names, versions and types do). (R10) old, a predecessor's empty revert mapped to `UAUnauthorized`; new, a plain forward (a revert of any shape is a refusal), tested against the pre-change `UARegistry` bytecode. Cost if wrong (R14): a third-party app contract that breaks rule (a), (b) or (c) accepts replayed native-member signatures; the phishing residual is not closed by any registry check.
+
 ## 25. Contracts — Post-quantum Zether
 
 ### CTR-UA-29 — The registry keeps an on-chain list of the UAs of each kind
@@ -5581,6 +5583,8 @@ Change (owner 2026-11-17, ruling N1, "PqVault and later apps go by (A), (B) => s
 **Cost if wrong.** A client reusing a nonce loses that record (`PqVaultNonceUsed`) and signs again.
 **Source.** controller, 2026-11-17; spec `superpowers/specs/2026-11-17-pqvault.md` §5.3. Status: SPECIFIED.
 
+Change (controller, 2026-11-17, the Fable review r2 of 2026-11-17 (`scratchpad/pqvault-review/20261117-17-fable-fable-high-spec-r2.md`, kept outside the tracked files), finding R5; status: SPECIFIED): old, `vaultId = keccak256(tag, creator, nonce)`; new, `vaultId = keccak256(tag, creator, nonce, mode, homeChain, homeVaultContract)`, so vaults of one creator and nonce in other modes or at other homes have other ids (and so do their epochs and items); a client draws the creation nonce as 64 random bits. Why: ids that coincide across modes and homes left replay safety resting on one mode read, and a public mode-0 record replayed as a replica could burn a nonce the user picks for a mode-1 vault.
+
 ### CTR-PQV-05 — Every accepted `PqVault` record is kept in full in state in SSTORE2 blobs, group records with their full `UASig`; events only notify
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: contracts/pqvault.md#CTR-PQV-05 · superseded-by: —
 
@@ -5694,6 +5698,8 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqva
 **Why.** A signed field cannot be flipped; one check keeps the domain choice in one place; ids can coincide across instances, so a wrong mode read could admit a replayed record, which the vectors and mutants guard.
 **Cost if wrong.** A mode-1 createVault writes one more slot (97,920 state gas); a mode-0 record type with the `mode` field is a new typehash.
 **Source.** controller, 2026-11-17; spec `superpowers/specs/2026-11-17-pqvault.md` §5.2, §5.15.
+
+Change (controller, 2026-11-17, the Fable review r2 of 2026-11-17 (`scratchpad/pqvault-review/20261117-17-fable-fable-high-spec-r2.md`, kept outside the tracked files), findings R5, R10, R11; status: SPECIFIED): the mode is bound into `vaultId` (CTR-PQV-04's Change); the one check takes the vault from the stored epoch (for an edit, the item) and requires the record's `vaultId` to equal it before reading the mode, with a mutant per write; the clause "or the chain's registry lacks `requirePortableApp`" of the default is withdrawn (mode 1 on the user's choice only), since every registry from the freeze carries the entry and a node's answer must not pick the mode.
 
 ### CTR-PQZ-01 — Separate PQZ class gated by the precompile self-test
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
@@ -10613,6 +10619,8 @@ Change (owner 2026-11-17, ruling N2; status: SPECIFIED): the refusal is `pqvault
 
 Change (controller, 2026-11-17, VC24, for the coordinator's condition that no key byte reaches an app core; status: SPECIFIED): old, `sealedInfo.prev = {epochId, key}` with the earlier `K_v` in the JSON, and a `file` item's `key` in the item JSON; new, `prev = {epochId, keyWrap}`, `keyWrap = n_k ‖ AES-256-GCM-SIV(kPrev, n_k, K_v(prev), aad)` with `kPrev = HKDF(K_v, "scaas/pqvault/v1/prev" ‖ vaultId ‖ epochId ‖ prevEpochId)`, and the file key sealed the same way under the version's `K_v`; `ua-rs` seals and opens a key handle under another. Why: opening `sealedInfo` or an item must hand `pqvault-core` no key. Cost: 60 B per linking epoch; new vector rows (nothing built).
 
+Change (controller, 2026-11-17, the Fable review r2 of 2026-11-17 (`scratchpad/pqvault-review/20261117-17-fable-fable-high-spec-r2.md`, kept outside the tracked files), finding R2, with the coordinator's call; status: SPECIFIED, fixed before V1's vectors): every key handle has one usage (`Derive`: `K_e`, `P_k`, `K_v`; `Data`: `kInfo`, `bk`, a file key; `KeyWrap`: `kPrev`, `kFile`); `keyWrap = n_k ‖ AES-256-GCM-SIV(kPrev, n_k, K_v(prev), aad = "scaas/ua/v1/keywrap" ‖ u8(usage) ‖ vaultId ‖ epochId ‖ prevEpochId)`; a file key is sealed under `kFile = HKDF(K_v, "scaas/pqvault/v1/file" ‖ vaultId ‖ epochId ‖ itemId ‖ be32(version))`, never under `K_v`. Why: without usages, `open` on a `keyWrap` returned the earlier `K_v` as a plaintext, and a key sealed under `K_v` made `open(K_v, …)` a valid call on the master key.
+
 ### CLI-PQV-10 — The PqVault passphrase's mechanics: admin rekeys, the weakest-epoch rule, the parameters, a length minimum
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/ua-libraries.md#CLI-PQV-10 · superseded-by: —
 
@@ -10639,6 +10647,8 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table", on the pqva
 **Why.** Moving the core above the SDK must not move a key or a SCaaS signing power out of it: an app core is less trusted code than the signer.
 **Cost if wrong.** A key in an app core's memory or a SCaaS operation signed blind for an app.
 **Source.** coordinator, 2026-11-17; spec `superpowers/specs/2026-11-17-pqvault.md` §3 (VC24, VC25), §7.
+
+Change (controller, 2026-11-17, the Fable review r2 of 2026-11-17 (`scratchpad/pqvault-review/20261117-17-fable-fable-high-spec-r2.md`, kept outside the tracked files), findings R2, R4, R9; status: SPECIFIED): handles carry one usage each (CLI-PQV-09's Change); the fallback "the code stays inside the SDK" becomes "the task stops and the owner decides" (the reversal is an owner ruling); app scoping is stated as collision avoidance, not isolation: an app holding the user's unlocked seed set acts for that UA in every app namespace, so only reviewed app cores are linked. The Why above ("an app core is less trusted code than the signer") now reads: C1 keeps key bytes out of an app core's memory and C2 keeps SCaaS value operations out of its reach; neither separates one app's data from another app that holds the same seed.
 
 ## 40. Integration — ERP
 

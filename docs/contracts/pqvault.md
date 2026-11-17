@@ -83,9 +83,10 @@ and the choice between them are [CTR-PQV-17](#CTR-PQV-17)'s.
 - `P_V` is never a SCaaS purpose and the reverse ([CTR-UA-46](accounts.md#CTR-UA-46)); a `PURPOSE_PQCHAT` signature is no
   `PqVault` signature and the reverse.
 
-<a id="CTR-PQV-04"></a>**CTR-PQV-04** — **Ids hash the signer and its nonce under `scaas/pqvault/v1/…` tags; nonces are
-per-scope bitmaps checked after the signature: a vault `(creator)`, an epoch `(vaultId, author)` for rekeys, leaves and
-removals, an item `(vaultId, author)` for items, edits and batches** (controller call, owner may override). The ids and
+<a id="CTR-PQV-04"></a>**CTR-PQV-04** — **Ids hash the signer and its nonce under `scaas/pqvault/v1/…` tags, `vaultId` also
+the vault's `mode`, `homeChain` and `homeVaultContract`; nonces are per-scope bitmaps checked after the signature: a vault
+`(creator)`, an epoch `(vaultId, author)` for rekeys, leaves and removals, an item `(vaultId, author)` for items, edits
+and batches** (controller call, owner may override). A client draws a creation nonce as 64 random bits. The ids and
 scopes are the spec's [§5.3](../superpowers/specs/2026-11-17-pqvault.md#53-ids-and-nonce-scopes); epoch 0's id is the
 vault id; a used nonce is `PqVaultNonceUsed(scope, nonce)`.
 
@@ -206,10 +207,11 @@ versions, batches, views, events, errors and the key schedule.
 
 <a id="CTR-PQV-17"></a>**CTR-PQV-17** — **The mode is the field `uint8 mode` of `PqVaultCreate` (0 portable, 1
 chain-bound), fixed by the creator's signature and kept in state as `modes[vaultId] = 1` for a chain-bound vault; every
-later record of the vault is checked in that mode's domain by one internal check: mode 0 in `DS_V` ("SCaaS PqVault", "1",
+later record of the vault is checked in that mode's domain by one internal check, which takes the vault from the stored
+epoch the record names (for an edit, the item) and requires the record's `vaultId` to equal it: mode 0 in `DS_V` ("SCaaS PqVault", "1",
 `salt = keccak256("scaas.pqvault.v1")`, no chain, no address) through `requirePortableApp`, mode 1 in `DS_B` ("SCaaS
 PqVault", "1", `chainId`, `verifyingContract` = the instance) through `requireAuthorized`; a mode-1 vault names this
 instance as its home, else `PqVaultShape`, so no replica of it can exist; clients create mode 0 unless the user chooses
-mode 1 or the chain's registry lacks `requirePortableApp`** (controller calls, owner may override). A mode other than 0 or 1
+mode 1** (controller calls, owner may override). A mode other than 0 or 1
 is `PqVaultShape`. The design and its costs are the spec's
 [§5.15](../superpowers/specs/2026-11-17-pqvault.md#515-the-two-modes-n1-vc22-vc23).

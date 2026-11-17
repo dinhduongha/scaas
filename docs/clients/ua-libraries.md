@@ -735,8 +735,9 @@ data only** (controller call, owner may override). SPECIFIED.
 <a id="CLI-PQV-09"></a>**CLI-PQV-09** — **The key schedule's bytes: wraps under the label `scaas/pqvault/v1/wrap`; `K_v =
 HKDF(K_e ‖ P_k)` with the vault, epoch and parameter id in its info; per version a fresh 16-byte salt and one HKDF giving key
 and nonce, AES-256-GCM-SIV over the padded canonical JSON with the AAD (vault, epoch, item, version, author, home);
-`sealedInfo` under `K_v` with an optional `prev = {epochId, keyWrap}`, the earlier key sealed under `K_v` (a `file` item's key
-sealed the same way); a personal vault held by `ua_secret(seed, FN-DSA-512 by
+`sealedInfo` under `K_v` with an optional `prev = {epochId, keyWrap}`, the earlier key sealed under a `KeyWrap` key derived
+from `K_v` with the key-wrap constant and its usage in the AAD, and a `file` item's key sealed under a derived `kFile`, never
+under `K_v`; every key handle has one usage, `Derive`, `Data` or `KeyWrap`; a personal vault held by `ua_secret(seed, FN-DSA-512 by
 default, PQV_ACCOUNT, i)`, index 0 the index vault listing the user's vaults** (controller call, owner may override).
 SPECIFIED. Exact bytes: [spec §6](../superpowers/specs/2026-11-17-pqvault.md#6-cryptography); every client reproduces
 `smartcontracts/vectors/pqvault/`.
@@ -751,11 +752,13 @@ call, owner may override). SPECIFIED. Design: [spec §6.5](../superpowers/specs/
 
 <a id="CLI-PQV-12"></a>**CLI-PQV-12** — **`pqvault-core` holds key handles only and signs only under PqVault's app purpose:
 the KEM-unwrapped epoch key, the passphrase output, the effective key and every key derived from them stay in `ua-rs`
-behind handles, and wrap, unwrap, HKDF, Argon2id, AEAD and key sealing run there on those handles; the only bytes that
-come out are plaintexts it asks to decrypt for the user, which hold no key (earlier and file keys are sealed); it signs
-typed data of its own domain through the SDK's app signing call, which refuses every SCaaS purpose and every SCaaS
-contract's or the registry's domain by name; if either cannot be met, PqVault's client code stays inside the SDK**
-(coordinator conditions, controller calls, owner may override). SPECIFIED. Design: the spec's
+behind handles of one usage each (`Derive`, `Data`, `KeyWrap`), and wrap, unwrap, HKDF, Argon2id, AEAD and key sealing
+run there on those handles; the only bytes that come out are plaintexts it asks to decrypt for the user, which hold no
+key (earlier and file keys are sealed); it signs typed data of its own domain through the SDK's app signing call, which
+refuses every SCaaS purpose and every SCaaS contract's or the registry's domain by name; if either cannot be met, the task
+stops and the owner decides** (coordinator conditions, controller calls, owner may override). App scoping avoids
+collisions among the cores an app links; it does not isolate: an app holding the user's unlocked seed set acts for that UA
+in every app namespace, PqVault's included, so only reviewed app cores are linked. SPECIFIED. Design: the spec's
 [§7](../superpowers/specs/2026-11-17-pqvault.md#7-pqvault-core).
 
 <a id="CLI-PQV-11"></a>**CLI-PQV-11** — **Trust what is verified and accepted: a vault the user did not create stays pending

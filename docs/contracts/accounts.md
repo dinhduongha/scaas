@@ -1615,15 +1615,23 @@ paths ([CTR-PQV-16](pqvault.md#CTR-PQV-16)); `PqChat` keeps `PURPOSE_PQCHAT` on 
 <a id="CTR-UA-46"></a>**CTR-UA-46** — **`requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, UASig auth)`
 is a view that runs `requirePortable`'s checks under `purpose = keccak256(abi.encode(keccak256("scaas.ua.purpose.app.v1"),
 appId))`, computed by the registry, `appId ≠ 0`, else `UAUnauthorized(ua)`; an app purpose is never a SCaaS purpose and
-the reverse; an app's portable domain carries `salt = appId`; gen 2 forwards a record it does not hold to its predecessor's
-entry and refuses by name what a predecessor without the entry cannot answer** (controller calls, owner may override;
+the reverse; an app's portable domain is exactly `name, version, salt` with `salt = appId`; gen 2 forwards a record it
+does not hold to its predecessor's entry plainly; an app contract on this entry computes the digest itself, names the
+signing UA in every record and uses different domain field sets on the two paths** (controller calls, owner may override;
 SPECIFIED, nothing built). `UAKinds.APP_PURPOSE_NS` and `UAKinds.appPurpose(appId)`. Separation: a SCaaS purpose hashes an
 ASCII `scaas.ua.purpose.<p>.v<n>` string shorter than 64 bytes, an app purpose exactly 64 bytes starting with
 `APP_PURPOSE_NS`, so equality needs a hash collision; `requirePortable`'s closed list refuses every app purpose; a new SCaaS
-purpose keeps that string form and `APP_PURPOSE_NS` is never a purpose itself. A native member of an `msig` signs the typed
-digest itself here as under `requirePortable` (the purpose is not in what it signs; the domain's `salt = appId` names the
-app in it); derived members sign `memberDigest(ua, uaMessage(MSIG, purpose, typedDigest))`. A predecessor's empty revert is
-`UAUnauthorized(ua)` (`UAVerifyGas` when it ran out of gas). Path (B) uses `appPurpose(appId)` as its purpose by default
+purpose keeps that string form and `APP_PURPOSE_NS` is never a purpose itself. An app portable domain has a `salt` field
+and so another domain typehash than every SCaaS portable domain (`name, version`): an app digest never equals a SCaaS
+portable digest. The body is `requirePortable`'s, `_sigOk` unchanged (its single-key tail shared as `_single`, its guard
+kept). Derived members sign `memberDigest(ua, uaMessage(MSIG, purpose, typedDigest))`, so their signatures bind the app. A
+native member of an `msig` signs the typed digest itself, as under `requirePortable`: neither the purpose nor the `ua` is
+in what it signs, so its signature is valid under every `appId` for the same digest; **the guard is the app contract
+computing that digest itself**, not the salt. Hence three obligations of every app contract on this entry: (a) compute
+the digest itself, in its own EIP-712 domain, never from a caller's bytes; (b) name the signing UA in a field of every
+record; (c) use different domain field sets on the portable and the chain-bound path. Residual: a dapp can phish a native
+member's signature over a valid record (one typed-data request per member, the quorum needed), for every app and for
+`PqChat` alike. A predecessor without the entry reverts, which is a refusal (no mapping to a named error). Path (B) uses `appPurpose(appId)` as its purpose by default
 (PqVault does); an app with its own chain-bound contract may name its own purpose, never a SCaaS one. The design, the size figures and the vectors are the pqvault spec's
 [§4.1](../superpowers/specs/2026-11-17-pqvault.md#41-r-a-the-open-portable-app-namespace-n1-a-vc20).
 
