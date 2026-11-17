@@ -4,7 +4,7 @@
 import * as bip39 from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english.js';
 import { HDKey } from '@scure/bip32';
-import { secp256k1 } from '@noble/curves/secp256k1.js';
+import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { p256 } from '@noble/curves/nist.js';
 import { hmac } from '@noble/hashes/hmac.js';
@@ -12,9 +12,12 @@ import { sha512, sha256 } from '@noble/hashes/sha2.js';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { sha3_256 } from '@noble/hashes/sha3.js';
 import { ripemd160 } from '@noble/hashes/legacy.js';
-import { bech32, base32, base58 } from '@scure/base';
+import { bech32, bech32m, base32, base58 } from '@scure/base';
 import { concatBytes, utf8ToBytes, bytesToHex, hex, wipe } from './bytes.js';
 import { evmAddress, hashTypedData, keyProofMessage, evmTransaction, signedTransaction } from './evm.js';
+import { UAError } from './ua.js';
+
+const fail = (code, reason) => { throw new UAError(code, reason); };
 
 const HARDENED = 0x80000000;
 
@@ -30,6 +33,19 @@ export const NETWORKS = {
   aptos: { curve: 'ed25519', path: (i) => `m/44'/637'/${i}'/0'/0'` },
   solana: { curve: 'ed25519', path: (i) => `m/44'/501'/${i}'/0'` },
 };
+
+/** The native networks of an app's native backend (CLI-SGN-52; spec 2026-11-17-ua-rs-native §4.1): kept apart from NETWORKS
+ *  (the nine of keys.json, of importKey and of the imported UA), so none of them has an import, an imported UA or a key proof.
+ *  Bitcoin: `k` 0 receive, 1 change; coin type 0 (mainnet) or 1 (testnets) only. NEAR: no coin-type override (it would alias
+ *  `stellar` / `ton`). Polkadot: sr25519 from the entropy and the passphrase, `polkadotKey` (deriveKey refuses it). */
+export const NATIVE_NETWORKS = {
+  bitcoin_p2wpkh: { curve: 'secp256k1', path: (i, k) => `m/84'/0'/0'/${k}/${i}` },
+  bitcoin_p2tr: { curve: 'secp256k1', path: (i, k) => `m/86'/0'/0'/${k}/${i}` },
+  near: { curve: 'ed25519', path: (i) => `m/44'/397'/${i}'` },
+  polkadot: { curve: 'sr25519', path: null },
+};
+const BITCOIN = new Set(['bitcoin_p2wpkh', 'bitcoin_p2tr']);
+const native = (network) => Object.hasOwn(NATIVE_NETWORKS, network);
 
 // ------------------------------------------------------------------ BIP-39
 
@@ -121,7 +137,39 @@ export function strkey(version, payload) {
   return base32.encode(concatBytes(body, new Uint8Array([crc & 255, crc >> 8])));
 }
 
-function describe(network, curve, privateKey) {
+/** BIP-173 / BIP-350 segwit address: bech32 for witness v0, bech32m for v1. */
+export const segwitAddress = (hrp, version, program) =>
+  (version === 0 ? bech32 : bech32m).encode(hrp, [version, ...bech32.toWords(program)]);
+
+const SECP_N = secp256k1.Point.Fn.ORDER;
+const TAG_TAPTWEAK = sha256(utf8ToBytes('TapTweak'));
+/** The BIP-86 key-path tweak of an x-only internal key (BIP-341, no script tree, so no Merkle root): t = H_TapTweak(x(P)),
+ *  Q = lift_x(x(P)) + t·G. One function for the address and the signer; t ≥ n or Q = ∞ throws. */
+export function taprootTweak(internalX) {
+  if (!(internalX instanceof Uint8Array) || internalX.length !== 32) fail('Argument', 'an x-only key is 32 bytes');
+  const tweak = sha256(concatBytes(TAG_TAPTWEAK, TAG_TAPTWEAK, internalX));
+  const t = big(tweak);
+  if (t >= SECP_N) fail('Argument', 'tweak out of range');
+  const Q = secp256k1.Point.fromHex('02' + bytesToHex(internalX)).add(secp256k1.Point.BASE.multiply(t));
+  const q = Q.toBytes(true);
+  return { tweak, outputKey: q.slice(1), oddY: q[0] === 3 };
+}
+
+function describeBitcoin(network, privateKey, coin) {
+  const compressed = secp256k1.getPublicKey(privateKey, true);
+  const hrp = coin === 1 ? 'tb' : 'bc';
+  if (network === 'bitcoin_p2wpkh') {
+    const program = ripemd160(sha256(compressed));
+    return { publicKey: bytesToHex(compressed), address: segwitAddress(hrp, 0, program), witnessProgram: { version: 0, program: bytesToHex(program) } };
+  }
+  const internal = compressed.slice(1);
+  const t = taprootTweak(internal);
+  return { publicKey: bytesToHex(compressed), internalKey: bytesToHex(internal), tweak: bytesToHex(t.tweak), outputKey: bytesToHex(t.outputKey),
+    address: segwitAddress(hrp, 1, t.outputKey), witnessProgram: { version: 1, program: bytesToHex(t.outputKey) } };
+}
+
+function describe(network, curve, privateKey, coin = null) {
+  if (BITCOIN.has(network)) return describeBitcoin(network, privateKey, coin);
   if (curve === 'secp256k1') {
     const compressed = secp256k1.getPublicKey(privateKey, true);
     const uncompressed = secp256k1.getPublicKey(privateKey, false);
@@ -141,17 +189,25 @@ function describe(network, curve, privateKey) {
   if (network === 'stellar') return { publicKey: pub, address: strkey(6 << 3, pk) };
   if (network === 'hedera_ed25519') return { publicKey: pub, publicKeyDer: '302a300506032b6570032100' + pub };
   if (network === 'solana') return { publicKey: pub, address: base58.encode(pk) };
+  // NEAR: the implicit account id (64 lower-case hex) and the display text `ed25519:<base58>`.
+  if (network === 'near') return { publicKey: pub, address: pub, publicKeyText: 'ed25519:' + base58.encode(pk) };
   // TON: public key only. A W5R1 address needs the wallet code cell + BoC hashing — not shipped (recorded).
   return { publicKey: pub };
 }
 
-/** Key `i` of `network` from a BIP-39 seed. Caller wipes `privateKey` after use. `coinType`: the chain's
- *  SLIP-44 coin type in place of the network's (Pi Network = `stellar` with 314159); null ⇒ the default. */
-export function deriveKey(seed, network, i = 0, { coinType = null } = {}) {
-  const net = NETWORKS[network];
+/** Key `i` of `network` (NETWORKS or NATIVE_NETWORKS) from a BIP-39 seed. Caller wipes `privateKey` after use. `coinType`: the
+ *  chain's SLIP-44 coin type in place of the network's (Pi Network = `stellar` with 314159); null ⇒ the default; Bitcoin 0 or 1
+ *  only, NEAR none. `change`: Bitcoin only, 0 (receive, the default) or 1 (change). */
+export function deriveKey(seed, network, i = 0, { coinType = null, change = null } = {}) {
+  const net = Object.hasOwn(NETWORKS, network) ? NETWORKS[network] : native(network) ? NATIVE_NETWORKS[network] : null;
   if (!net) throw new Error(`unknown network ${network}`);
+  if (network === 'polkadot') fail('Argument', 'polkadot: use polkadotKey(entropy, passphrase, path)');
   if (!Number.isInteger(i) || i < 0 || i >= HARDENED) throw new Error(`bad index ${i}: need an integer in [0, 2^31)`);
-  let path = net.path(i);
+  const btc = BITCOIN.has(network);
+  if (change != null && !(btc && (change === 0 || change === 1))) fail('Argument', 'change: 0 or 1, Bitcoin only');
+  if (coinType != null && btc && coinType !== 0 && coinType !== 1) fail('Argument', 'Bitcoin coin type: 0 or 1');
+  if (coinType != null && network === 'near') fail('Argument', 'near takes no coin-type override');
+  let path = net.path(i, change ?? 0);
   if (coinType != null) {
     if (!Number.isInteger(coinType) || coinType < 0 || coinType >= HARDENED) throw new Error(`bad coin type ${coinType}`);
     path = path.split('/').map((seg, n) => (n === 2 ? `${coinType}'` : seg)).join('/');
@@ -166,13 +222,14 @@ export function deriveKey(seed, network, i = 0, { coinType = null } = {}) {
     privateKey = n.privateKey;
     wipe(n.chainCode);
   }
-  return { network, curve: net.curve, path, privateKey, ...describe(network, net.curve, privateKey) };
+  return { network, curve: net.curve, path, privateKey, ...describe(network, net.curve, privateKey, coinType) };
 }
 
 /** An existing key of `network` (ua-rs-sign T20c; ua-rs `import_native_key`): a 32-byte secp256k1 secret for `evm`, `cosmos`,
  *  `hedera_ecdsa`, a 32-byte ed25519 seed for the others, described as `deriveKey` describes a derived one. Its native use is
  *  that network's only; as a UA it takes the derived kind of its own scheme (uakey.js `importedUAKey`). Caller wipes `privateKey`. */
 export function importKey(network, secret) {
+  if (native(network)) fail('Argument', 'no import on a native network of NATIVE_NETWORKS');
   const net = Object.hasOwn(NETWORKS, network) ? NETWORKS[network] : null;
   if (!net) throw new Error(`unknown network ${network}`);
   if (!(secret instanceof Uint8Array) || secret.length !== 32) throw new Error('an imported key is 32 bytes');
@@ -183,6 +240,7 @@ export function importKey(network, secret) {
 /** Sign EIP-712 typed data: the digest is computed here (`hashTypedData`, preimage `0x1901 ‖ …`), so it can never be
  *  an EIP-7702 authorization (`0x05 ‖ rlp(…)`) or a transaction hash. Check `td` first (`checkPayment`, `checkOp`, `checkCall`, …). */
 export function signTyped(key, td) {
+  if (native(key.network)) fail('Argument', 'no EIP-712 on a native network of NATIVE_NETWORKS');
   return sign(key, hashTypedData(td));
 }
 
@@ -190,6 +248,7 @@ export function signTyped(key, td) {
  *  EIP-7702 cannot be built, CLI-SGN-40) with a secp256k1 key: RFC 6979 (`extraEntropy: false`), low-s. Returns
  *  {type, sighash, yParity, r, s, v (type 0: chainId·2 + 35 + yParity), raw (the signed envelope)}. */
 export function signTransaction(key, tx) {
+  if (native(key.network)) fail('Argument', 'no EVM transaction on a native network of NATIVE_NETWORKS');
   if (key.curve !== 'secp256k1') throw new Error('Refusing to sign: an EVM transaction needs a secp256k1 key.');
   const t = evmTransaction(tx);
   const rec = secp256k1.sign(t.sighash, key.privateKey, { prehash: false, lowS: true, extraEntropy: false, format: 'recovered' });
@@ -200,6 +259,7 @@ export function signTransaction(key, tx) {
 
 /** Sign the key-possession proof for `challenge` (`keyProofMessage`, Odoo `key_proof_message`). */
 export function signKeyProof(key, challenge) {
+  if (native(key.network)) fail('Argument', 'no key proof on a native network of NATIVE_NETWORKS');
   return sign(key, keyProofMessage(challenge));
 }
 
@@ -209,9 +269,24 @@ export function signKeyProof(key, challenge) {
  *  `{ allowRawDigest: true }` and itself built the digest from a checked SCaaS message (a Merkle batch root, a digest a
  *  `check*` function returned); prefer `signTyped` / `signKeyProof`. secp256k1 ⇒ r‖s‖v (v = 27|28, low-s);
  *  ed25519 ⇒ 64 bytes. */
-export function signDigest(key, digest, { allowRawDigest = false } = {}) {
+export function signDigest(key, digest, { allowRawDigest = false, aux } = {}) {
   if (allowRawDigest !== true) throw new Error('signDigest: raw digest refused; use signTyped / signKeyProof, or pass { allowRawDigest: true }');
-  return sign(key, digest);
+  return key.network === 'bitcoin_p2tr' ? signTaproot(key.privateKey, digest, aux) : sign(key, digest);
+}
+
+/** BIP-86 key-path signature: d = d0 or n − d0 (even y of P), BIP-340 with d + t mod n, then verified under x(Q). `aux`: the
+ *  generator's fixed bytes, else 32 fresh bytes from the platform CSPRNG. */
+function signTaproot(d0, digest, aux) {
+  const P = secp256k1.getPublicKey(d0, true);
+  let d = big(d0);
+  if (P[0] === 3) d = SECP_N - d;
+  const t = taprootTweak(P.slice(1));
+  const tweaked = b32((d + big(t.tweak)) % SECP_N);
+  const a = aux ?? crypto.getRandomValues(new Uint8Array(32));
+  const sig = schnorr.sign(digest, tweaked, a);
+  wipe(tweaked);
+  if (!schnorr.verify(sig, digest, t.outputKey)) throw new Error('Taproot signature failed its own check');
+  return sig;
 }
 
 function sign(key, digest) {
