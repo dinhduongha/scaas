@@ -156,3 +156,57 @@ fn external_raw_message_answers_are_verified() {
     let other = TestExternalKey::new(k.key_ref(), |_| k.sign_message(&[8u8; 40], AllowRawDigest));
     assert_eq!(sign_message_by(&other, &m, AllowRawDigest).err(), Some(Error::ExternalSignature));
 }
+
+// ------------------------------------------------------------------ T6: NEAR
+
+#[test]
+fn native_json_near_addresses_and_signatures() {
+    let v = native();
+    let mut n = 0;
+    for r in arr(&v, "addresses").iter().filter(|r| r["network"] == "near") {
+        let k = wallet(&v, r["mnemonic"].as_str().unwrap()).native_key(Network::Near, opt_u32(&r["index"]).unwrap(), None).unwrap();
+        assert_eq!(hex::encode(k.public_key()), r["publicKey"].as_str().unwrap(), "{r}");
+        assert_eq!(k.address().as_deref(), r["address"].as_str(), "{r}");
+        assert_eq!(k.address().unwrap(), hex::encode(k.public_key()), "the implicit account id is hex(pk)");
+        n += 1;
+    }
+    assert_eq!(n, 12, "6 mnemonics x index {{0, 1}}");
+    let w = wallet(&v, "pq_kat");
+    let mut s = 0;
+    for r in arr(&v, "signatures").iter().filter(|r| r["network"] == "near") {
+        let k = w.native_key(Network::Near, opt_u32(&r["index"]).unwrap(), None).unwrap();
+        let sig = match r["call"].as_str().unwrap() {
+            "sign_digest" => k.sign_digest(&msg(r).try_into().unwrap(), AllowRawDigest).unwrap(),
+            _ => k.sign_message(&msg(r), AllowRawDigest).unwrap(),
+        };
+        assert_eq!(hex::encode(sig), r["signature"].as_str().unwrap(), "{}", r["id"]);
+        s += 1;
+    }
+    assert_eq!(s, 5, "four messages and one digest");
+}
+
+#[test]
+fn near_refusals_beside_their_accepted_neighbours() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    for c in [148, 397, 0] {
+        assert_eq!(w.native_key(Network::Near, 0, Some(c)).err(), Some(Error::Argument), "coin {c}");
+    }
+    assert!(w.native_key(Network::Near, 0, None).is_ok());
+    assert!(w.native_key(Network::Stellar, 0, Some(397)).is_ok(), "stellar keeps its override");
+    let near = w.native_key(Network::Near, 0, None).unwrap();
+    assert_eq!(near.sign_key_proof(&[0; 32]).err(), Some(Error::Argument), "no key proof on near");
+    assert!(w.native_key(Network::Solana, 0, None).unwrap().sign_key_proof(&[0; 32]).is_ok());
+    assert!(w.native_key(Network::Evm, 0, None).unwrap().sign_key_proof(&[0; 32]).is_ok());
+    assert_eq!(w.import_native_key(Network::Near, &[1; 32]).err(), Some(Error::Argument), "no import on near");
+    assert_eq!(w.imported_ua_key(Network::Near, 0, 0x0102).err(), Some(Error::Argument));
+    assert!(w.import_native_key(Network::Evm, &[1; 32]).is_ok());
+}
+
+#[test]
+fn near_scheme_and_no_scheme_kind() {
+    use scaas_ua::wallet::NativeScheme;
+    assert_eq!(Network::from_name("near"), Some(Network::Near));
+    assert_eq!(Network::Near.name(), "near");
+    assert_eq!((Network::Near.scheme(), Network::Near.scheme_kind()), (NativeScheme::Ed25519, None));
+}

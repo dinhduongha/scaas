@@ -492,7 +492,8 @@ impl Wallet {
     /// once get two numbers): already held with the same bytes, a no-op; listed (a manifest vault opened first) and not held,
     /// installed; another network or other bytes under the same `n`: `Argument`. Returns `n`.
     fn import_at(&self, network: Network, n: Option<u32>, secret: &[u8]) -> Result<u32> {
-        if secret.len() != 32 {
+        // the native networks of NATIVE_NETWORKS have no import (ua-rs-native spec §4.1)
+        if secret.len() != 32 || network.scheme_kind().is_none() {
             return Err(Error::Argument);
         }
         let public = derive::native_public(network, secret)?;

@@ -1,0 +1,5 @@
+killed   | M1 index at the coin level | clients/ua-rs/src/wallet/mod.rs | rc=101 | 1 failed: native_json_near_addresses_and_signatures
+killed   | M2 upper-case hex address | clients/ua-rs/src/wallet/derive.rs | rc=101 | 1 failed: native_json_near_addresses_and_signatures
+killed   | M3 coin override accepted | clients/ua-rs/src/wallet/mod.rs | rc=101 | 1 failed: near_refusals_beside_their_accepted_neighbours
+killed   | M4 key proof accepted on near | clients/ua-rs/src/wallet/mod.rs | rc=101 | 1 failed: near_refusals_beside_their_accepted_neighbours
+4 mutants, 4 killed, 0 survived, 0 not loaded

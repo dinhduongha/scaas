@@ -358,7 +358,7 @@ fn strkey(pk: &[u8]) -> String {
 
 /// The address of a native key from its public key (clientkeys `describe`): EIP-55 (`evm`, `hedera_ecdsa`), bech32
 /// `cosmos` of RIPEMD-160(SHA-256(compressed key)), Sui `0x` BLAKE2b-256(`0x00 ‖ key`), Aptos `0x` SHA3-256(`key ‖ 0x00`),
-/// Stellar StrKey, Solana base58; `None` for `ton` and `hedera_ed25519` (clientkeys prints none).
+/// Stellar StrKey, Solana base58, NEAR `hex(key)`; `None` for `ton` and `hedera_ed25519` (clientkeys prints none).
 pub fn native_address(network: Network, public_key: &[u8]) -> Option<String> {
     use sha3::Digest as _;
     match network {
@@ -377,6 +377,8 @@ pub fn native_address(network: Network, public_key: &[u8]) -> Option<String> {
         Network::Aptos => Some(format!("0x{}", hex(&sha3::Sha3_256::digest([public_key, &[0u8]].concat())))),
         Network::Stellar => Some(strkey(public_key)),
         Network::Solana => Some(bs58::encode(public_key).into_string()),
+        // NEAR's implicit account id: the 64 lower-case hex digits of the ed25519 key
+        Network::Near => Some(hex(public_key)),
         Network::Ton | Network::HederaEd25519 => None,
     }
 }

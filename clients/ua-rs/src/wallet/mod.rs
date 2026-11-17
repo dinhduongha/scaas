@@ -206,7 +206,8 @@ impl From<UAError> for Error {
 
 pub type Result<T> = core::result::Result<T, Error>;
 
-/// The networks of clientkeys `NETWORKS` (`seed.js`), their SLIP-44 paths.
+/// The networks of clientkeys `NETWORKS` (`seed.js`), their SLIP-44 paths, then those of `NATIVE_NETWORKS` (ua-rs-native spec
+/// §4.1: an app's native backend; no import, no imported UA, no key proof).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Network {
     Evm,
@@ -218,9 +219,11 @@ pub enum Network {
     Ton,
     Aptos,
     Solana,
+    /// NEAR, `m/44'/397'/i'` (SLIP-10 ed25519), the implicit account id; no coin-type override.
+    Near,
 }
 
-const NETWORK_NAMES: [(Network, &str); 9] = [
+const NETWORK_NAMES: [(Network, &str); 10] = [
     (Network::Evm, "evm"),
     (Network::Cosmos, "cosmos"),
     (Network::HederaEcdsa, "hedera_ecdsa"),
@@ -230,6 +233,7 @@ const NETWORK_NAMES: [(Network, &str); 9] = [
     (Network::Ton, "ton"),
     (Network::Aptos, "aptos"),
     (Network::Solana, "solana"),
+    (Network::Near, "near"),
 ];
 
 impl Network {
@@ -245,7 +249,9 @@ impl Network {
     pub fn scheme(self) -> NativeScheme {
         match self {
             Network::Evm | Network::Cosmos | Network::HederaEcdsa => NativeScheme::Secp256k1Ecdsa,
-            Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana => NativeScheme::Ed25519,
+            Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana | Network::Near => {
+                NativeScheme::Ed25519
+            }
         }
     }
     /// The derived UA kind of this network's scheme, the one kind an imported key of it may take (T20c, owner 2026-11-08):
@@ -255,6 +261,15 @@ impl Network {
         match self {
             Network::Evm | Network::Cosmos | Network::HederaEcdsa => Some(0x0108),
             Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana => Some(0x0102),
+            Network::Near => None,
+        }
+    }
+    /// The coin-type override this network takes (spec §4.5): NEAR none (it would alias `stellar` / `ton`); the nine any below
+    /// 2^31 (checked at derivation).
+    fn coin_ok(self, coin_type: Option<u32>) -> Result<()> {
+        match (self, coin_type) {
+            (Network::Near, Some(_)) => Err(Error::Argument),
+            _ => Ok(()),
         }
     }
     /// A network with a SCaaS family, whose key may sign the key proof (the nine; ua-rs-native spec §4.2).
@@ -274,6 +289,7 @@ impl Network {
             Network::Ton => vec![44 | H, 607 | H, i | H],
             Network::Aptos => vec![44 | H, 637 | H, i | H, H, H],
             Network::Solana => vec![44 | H, 501 | H, i | H, H],
+            Network::Near => vec![44 | H, 397 | H, i | H],
         }
     }
 }
@@ -578,6 +594,7 @@ impl Wallet {
     /// Key `index` of `network` (clientkeys `deriveKey`), `coin_type` in place of the network's (Pi Network: `Stellar`,
     /// 314159); `Argument` for a value ≥ 2^31.
     pub fn native_key(&self, network: Network, index: u32, coin_type: Option<u32>) -> Result<NativeKey> {
+        network.coin_ok(coin_type)?;
         let (secret, public_key) = self.store.key(KeyId::Native(network, index, coin_type), |seed| {
             let s = derive::native_secret(seed, network, index, coin_type)?;
             let public = derive::native_public(network, &s)?;
