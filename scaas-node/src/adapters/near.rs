@@ -18,7 +18,6 @@
 //! payer): such a job fails on chain and is reported reverted, never retried blindly (Task 9 note).
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
-use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -1516,6 +1515,18 @@ fn sim(e: anyhow::Error) -> SimError {
 }
 
 /// `(height, 0x hash)` of a block.
+/// A family client's error as the classifier reads it: a JSON-RPC error object is `RpcError { cause, body }` (`cause/name`,
+/// else `name`), anything else the endpoint's failure.
+fn near_error(e: scaas_rpc::family::FamilyError) -> anyhow::Error {
+    match e {
+        scaas_rpc::family::FamilyError::Rpc { error, .. } => {
+            let cause = error.pointer("/cause/name").or_else(|| error.get("name")).and_then(Value::as_str).unwrap_or("UNKNOWN").to_string();
+            RpcError { cause, body: error }.into()
+        }
+        e => e.into(),
+    }
+}
+
 fn header(b: &Value) -> Result<(u64, String)> {
     let height = b["header"]["height"].as_u64().ok_or_else(|| anyhow!("block without height"))?;
     let hash = b58_32(b["header"]["hash"].as_str().ok_or_else(|| anyhow!("block without hash"))?)?;
@@ -1526,8 +1537,8 @@ pub struct NearAdapter {
     key: String,
     network: [u8; 32],
     network_b58: String,
-    rpc: Vec<String>,
-    http: reqwest::Client,
+    /// the RPC endpoints (scaas-rpc T17: the family client, bounded, 20 s per request)
+    net: scaas_rpc::near::Near,
     quorum: usize,
     lanes: Vec<Lane>,
     pks: Vec<[u8; 32]>,
@@ -1565,8 +1576,8 @@ impl NearAdapter {
             key: cfg.chain_key(),
             network,
             network_b58: net.to_string(),
-            rpc: cfg.rpc_urls.clone(),
-            http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
+            net: scaas_rpc::near::Near::new(scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None)
+                .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?, net),
             quorum: cfg.finality.quorum.max(1),
             lanes,
             pks,
@@ -1596,37 +1607,23 @@ impl NearAdapter {
         Ok(f)
     }
 
-    async fn rpc_at(&self, url: &str, method: &str, params: Value) -> Result<Value> {
-        let body = json!({"jsonrpc": "2.0", "id": "scaas", "method": method, "params": params});
-        let v: Value = self.http.post(url).json(&body).send().await?.json().await?;
-        if let Some(e) = v.get("error").filter(|e| !e.is_null()) {
-            let cause = e.pointer("/cause/name").or_else(|| e.get("name")).and_then(Value::as_str).unwrap_or("UNKNOWN").to_string();
-            return Err(RpcError { cause, body: e.clone() }.into());
-        }
-        v.get("result").cloned().ok_or_else(|| anyhow!("{method}: no result"))
+    /// One JSON-RPC call to endpoint `i` (scaas-rpc T17: the family client); an error answer is the classifier's `RpcError`.
+    async fn rpc_at(&self, i: usize, method: &str, params: Value) -> Result<Value> {
+        self.net.call(i, method, params).await.map_err(near_error)
     }
 
     async fn rpc(&self, method: &str, params: Value) -> Result<Value> {
-        self.rpc_at(&self.rpc[0], method, params).await
+        self.rpc_at(0, method, params).await
     }
 
     /// `rpc_urls[0]`'s answer; with `quorum > 1`, further endpoints must return the same `pick` (event bodies follow the
     /// same rule as block hashes, as Aptos review L3).
     async fn agreed(&self, method: &str, params: Value, pick: fn(&Value) -> Value) -> Result<Value> {
-        let v = self.rpc(method, params.clone()).await?;
-        if self.quorum > 1 {
-            let want = pick(&v);
-            let mut agree = 1;
-            for url in &self.rpc[1..] {
-                if matches!(self.rpc_at(url, method, params.clone()).await, Ok(o) if pick(&o) == want) {
-                    agree += 1;
-                }
-            }
-            if agree < self.quorum {
-                bail!("{method}: {agree} endpoint(s) agree, quorum is {}", self.quorum);
-            }
-        }
-        Ok(v)
+        use scaas_rpc::near::AgreedError;
+        self.net.agreed(method, params, pick, self.quorum).await.map_err(|e| match e {
+            AgreedError::First(e) => near_error(e),
+            AgreedError::Quorum { agree, quorum } => anyhow!("{method}: {agree} endpoint(s) agree, quorum is {quorum}"),
+        })
     }
 
     async fn view(&self, account: &str, method: &str, args: &[u8]) -> Result<Vec<u8>> {
@@ -2159,8 +2156,8 @@ impl ChainAdapter for NearAdapter {
     async fn final_head(&self) -> Result<Option<Head>> {
         let (height, hash) = header(&self.rpc("block", json!({"finality": "final"})).await?)?;
         let mut agree = 1;
-        for url in &self.rpc[1..] {
-            if let Ok(b) = self.rpc_at(url, "block", json!({"block_id": height})).await {
+        for i in 1..self.net.client.len() {
+            if let Ok(b) = self.rpc_at(i, "block", json!({"block_id": height})).await {
                 if header(&b).ok().map(|h| h.1).as_deref() == Some(hash.as_str()) {
                     agree += 1;
                 }

@@ -13,6 +13,8 @@ pub mod family;
 #[cfg(feature = "evm")]
 pub mod hedera;
 pub mod http;
+#[cfg(feature = "near")]
+pub mod near;
 #[cfg(feature = "node-client")]
 pub mod node;
 pub mod pool;
