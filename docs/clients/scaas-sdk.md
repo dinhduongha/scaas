@@ -257,9 +257,12 @@ warning (`short_seed`, `imported_key`) comes beside a success, never as an error
 2026-11-11; generators and the C point controller calls; SPECIFIED). The public Rust API is the binding surface: module objects
 shared by reference, owned strings, byte vectors, integers, records and enums, string ids, no fixed-size arrays, lifetimes or generics,
 secrets only as `SecretBytes`, every async call on the SDK's runtime. Generators: `flutter_rust_bridge` 2 for Dart and Flutter (the
-two platform interfaces as one generated record of async closures); UniFFI with `uniffi-bindgen-cpp` for C++ (and Kotlin, Swift,
-Python when an app asks), confirmed by a spike before the API grows; `wasm-bindgen` for the browser (PLANNED). UniFFI's internal
-`extern "C"` layer is not a C API: the SDK has no C ABI of its own in this round, and `ua-c` stays the signer's C surface. No binding is
+two platform interfaces as one generated record of async closures); UniFFI for Kotlin, Swift and Python when an app asks;
+`wasm-bindgen` for the browser (PLANNED). **C++ / Qt** (owner 2026-11-18, Q-B1 (b), after the spike showed `uniffi-bindgen-cpp`
+refusing every async item): no C++ binding is generated from the SDK; Qt reaches it through the app's one library's own C ABI
+(scaas-app's `app-core-rust`, cbindgen, as `app-matrix`), whose Rust side owns the one tokio runtime and returns each async call
+through a completion callback that the Qt side posts to its GUI thread. The SDK has no C ABI of its own in this round, and `ua-c`
+stays the signer's C surface. No binding is
 written by hand per language, and no app-facing binding wraps `ua-rs` directly. No panic crosses the boundary (unwinding builds, every
 call caught, a failed task `Internal`). An app links one Rust static library that holds the SDK and its app cores (scaas-app's
 `app-core-rust`, [CLI-SDK-19](#CLI-SDK-19)); two Rust libraries in one process are not allowed. Each generated binding refuses, at load, a library
