@@ -63,9 +63,10 @@ entries), **Why.**, **Cost if wrong.** and **Source.** Superseded entries keep o
 39. [Clients — UA libraries](#39-clients--ua-libraries)
 40. [Clients — network crate (`scaas-rpc`)](#40-clients--network-crate-scaas-rpc)
 41. [Clients — application SDK (`scaas-sdk`)](#41-clients--application-sdk-scaas-sdk)
-42. [Integration — ERP](#42-integration--erp)
-43. [Integration — example connector](#43-integration--example-connector)
-44. [Alias index](#alias-index)
+42. [Clients — terminal UI (`scaas-tui`)](#42-clients--terminal-ui-scaas-tui)
+43. [Integration — ERP](#43-integration--erp)
+44. [Integration — example connector](#44-integration--example-connector)
+45. [Alias index](#alias-index)
 
 ## 1. Architecture and register policy
 
@@ -10979,7 +10980,173 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table"; status: SPE
 **Why.** Each is the smallest choice that keeps one byte format, one signer and one transport per behaviour, after Fable's review (spec §26); the questions with options are in the spec's §25.
 **Source.** [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §25, §26; Fable review `20261117-12-fable-fable-high-spec.md` (P0 0, P1 10, P2 19, P3 10, info 4; kept outside the repository's tracked files).
 
-## 42. Integration — ERP
+## 42. Clients — terminal UI (`scaas-tui`)
+
+The rules are in [clients/scaas-tui.md](clients/scaas-tui.md); the design is the [scaas-tui spec](superpowers/specs/2026-11-17-scaas-tui.md), a frame whose parts that wait on unsettled SDK sections are marked (its §15), with open points in its §16 and Fable's review of 2026-11-17 applied (its §18). Owner entries carry the owner's words only; the controller's means and proposals have entries of their own (Fable U14).
+
+### CLI-TUI-01 — The TUI is a thin front-end over `scaas-sdk`, for SCaaS only
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-01 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-01).) One binary, local and over SSH, a thin layer over the same library API as the CLI and the app with no code path of its own; over `scaas-sdk`; the view-model contract's fourth front-end; SCaaS only, no native-chain app core, no Trust Wallet Core; app cores an open point.
+**Status.** SPECIFIED (plan `2026-11-17-scaas-tui`). UNAUDITED.
+**Why.** Owner 2026-11-09 (TODO 11, as recommended) and 2026-11-17 (TODO 8b). The 2026-11-09 "linked directly" to `ua-rs` is replaced by "over `scaas-sdk`".
+**Cost if wrong.** The TUI and the app show or sign different things for one operation.
+**Source.** TODO 8b, 11; owner 2026-11-09 (as recommended), 2026-11-17 "Ok, theo đề xuất, viết TUI sau SDK"; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §1–§3.
+
+### CLI-TUI-02 — The signing screen shows every named field before anything is signed
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-02 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-02).) Every field of the SDK's review by name and decoded value (`payNo` as UUID, `save`, every other), and the quote, before signing; a test.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Owner 2026-11-09: the signing screen shows every named field, with a test.
+**Cost if wrong.** A user signs a field the screen did not show.
+**Source.** TODO 11; CLI-SDK-08, CLI-SDK-09; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §6.
+
+### CLI-TUI-03 — Every write starts from a user action; operation states and their ends are the SDK's
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-03 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-03).) Relayed operations end `Landed`, `Consumed`, `Expired` only, a failed or replaced self-relay transaction in flight; an EVM native send ends on its transaction's terminal facts; never failed or dead while it may land; resend (with the stored fields beside the new quote) and cancel (reviewed) by the user only; nothing by a timer, an event or a decrypted value; locking the one automatic action.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Follows CLI-SDK-18 and the standing rule never to report `dead` while a transaction may still land; the two classes follow SDK spec §13.5 (Fable U12, U26). No action from a decrypted value keeps the TUI out of the decryption-oracle class (ARCH-POS-13).
+**Cost if wrong.** A user re-signs an operation that later lands twice; a failed native send shown in flight for ever.
+**Source.** CLI-SDK-18, CLI-RPC-09, ARCH-POS-13; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §5.5, §5.6, §18.
+
+### CLI-TUI-04 — No secret on screen, in scrollback, on the clipboard or in a log
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-04 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-04).) A passphrase, imported words or a key never drawn, kept in scrollback, put on the clipboard or logged; a new seed's words shown once (CLI-SDK-04, CLI-SGN-11) under CLI-TUI-15; the means in CLI-TUI-16.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Owner 2026-11-09: no secret on screen, in scrollback, the clipboard or a log. The one reveal is CLI-SGN-11's.
+**Cost if wrong.** Words or a passphrase left in a terminal's history or a crash file.
+**Source.** TODO 11; CLI-SDK-02, CLI-SDK-04, CLI-SGN-11; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §8.
+
+### CLI-TUI-05 — Text the TUI did not write is drawn through an allow-list, typed so no screen can skip it
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-05 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-05).) Outside text a type of its own; chain and node names printable ASCII, the rest drawn as escapes; own labels letters, numbers, punctuation, symbols, spaces of known width; bounded; review and quote values never bounded or stripped, hidden characters escaped and the row marked; `://` broken; marks before the string at a fixed column; node `code` by pattern; errors by code, `detail` on request; text outside the screen through the same filter.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** A terminal executes escape sequences and reorders right-to-left text: a token name could rewrite the review, set the clipboard or the title, or move a mark out of its cell. An allow-list closes the classes a deny-list misses, and a signed value that the filter shortened would differ from the bytes signed (Fable U5, U6, U28). Controller call, extending CLI-SDK-15's sanitising.
+**Cost if wrong.** A malicious token or node rewrites what the review shows.
+**Source.** CLI-SDK-13, CLI-SDK-15, CLI-RPC-11; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §9, §13, §18.
+
+### CLI-TUI-06 — The user may add named endpoints; the TUI discovers none and shows no full URL
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-06 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-06).) One overlay for the CLI and the TUI with separate RPC and gateway lists of `named` endpoints, appended unless marked `first` ("decides"); policy strengthened never weakened; no pinned endpoint removed, no contract, `chain_uid`, token, DEX or verifier changed; fan-out the profile's, on the quote; no discovery (a narrowing of ARCH-POS-15, proposal); host shown without userinfo, IDN as punycode, or label only; credentials by a file (refused when group- or world-readable) or an env var name.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Follows ARCH-POS-15 (every RPC consumer takes a list of nodes). The first endpoint decides terminal states (CLI-RPC-04, CLI-RPC-09), so where an added one goes matters (Fable U13). A URL may carry a credential (CLI-RPC-11); a file is less exposed than the environment (U22). No discovery narrows an owner ruling, so it is a proposal (U24).
+**Cost if wrong.** A credential on screen; an added endpoint silently becoming the decisive one; a release's strict majority weakened.
+**Source.** ARCH-POS-15, CLI-RPC-04, CLI-RPC-05, CLI-RPC-06, CLI-RPC-11, CLI-APP-03; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §7, §10, §18.
+
+### CLI-TUI-07 — Every screen works by keyboard alone, without colour and on a plain terminal
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-07 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-07).) No colour-only meaning; `NO_COLOR` and monochrome; ASCII mode; every action a key in the footer, keys commands outside a field and input inside; no mouse; below 80 × 24 a message only.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Controller call: a terminal over SSH may have no colour, no UTF-8 and no mouse; a modal key map keeps a typed `q` from quitting a form (Fable U23).
+**Cost if wrong.** An in-flight operation read as landed on a monochrome terminal.
+**Source.** [spec](superpowers/specs/2026-11-17-scaas-tui.md) §12.
+
+### CLI-TUI-08 — Confirm is a deliberate key at a settled prompt, after every line of this review and this quote was drawn
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-08 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-08).) Seen lines a set from completed frames, keyed to the prepared value and the quote; line or page scrolling only, tall fields in sub-pages; input drained on entry, confirm only after the frame that drew the last line, the quote and the prompt, plus a settle interval; a paste never acts as keys, an unbracketed burst taken as a paste; a confirm key no form uses, no auto-repeat; dead while covered; events never move focus, selection by id; whole values, the value filter, every token's address and mark on the review; no digest, raw or undecoded input.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Fable U1: a high-water mark lets a jump, a held key, type-ahead or a paste confirm a review that was never read. U11: a reordered list or a resize must not redirect a key. U18: an unlisted token with a familiar symbol must be visible where the user decides. U5: a signed string the screen altered is not what is signed.
+**Cost if wrong.** A signature from a poisoned paste or a held key; a cancel on the wrong operation.
+**Source.** [spec](superpowers/specs/2026-11-17-scaas-tui.md) §5.5, §6, §18.
+
+### CLI-TUI-09 — After confirm there are two outcomes only: nothing signed, or an activity row; a second operation on a busy lane or `payNo` is blocked
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-09 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-09).) An error before the row returns to the review as "nothing was signed"; once a row exists, an in-flight activity row and no error dialog; the form shows its lane's in-flight operations and refuses a second one on the lane or with the same `payNo`; quit and hang-up wait 30 s at most for signed rows to reach `sent`, then lock and exit; rows sent at open listed first.
+**Status.** SPECIFIED; the unambiguous `submit` result is asked of SDK T10. UNAUDITED.
+**Why.** Fable U2: a send error read as "failed" leads the user to pay again while the first, written ahead, still lands. U10: a quit between sign and send would leave a row sent days later from another process.
+**Cost if wrong.** A double payment.
+**Source.** CLI-SDK-09, SDK spec §13.4; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §5.5, §18.
+
+### CLI-TUI-10 — A panic, or `Internal` from the SDK, ends the process after the terminal is restored
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-10 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-10).) The hook restores, clears, prints the location only and aborts; `Internal` locks all, restores, clears and exits; never drawing or reading input after the mode was restored.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Fable U3: the SDK catches a worker panic as `Internal` and the process lives on after the hook restored echo, so the next passphrase would be echoed into scrollback.
+**Cost if wrong.** A passphrase echoed on the normal screen.
+**Source.** CLI-SDK-12; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §8, §18.
+
+### CLI-TUI-11 — Release profiles are integrity-pinned; a profile file from the command line exists only in a development build, under a banner
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-11 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-11).) Profiles compiled in or pinned by digest, a mismatch refused; `--profiles` only with the feature `dev-profiles`, every screen and the review bannered with the file's digest.
+**Status.** SPECIFIED; the same question is put to the CLI (SDK §20). UNAUDITED.
+**Why.** Fable U4: every trust mark the TUI shows (listed tokens, DEXes, verifiers, `default` endpoints that may serve a decryption read alone, gateways, finality) rests on the profile; a file named on the command line pins nothing (CLI-SDK-15: "never fetched and trusted").
+**Cost if wrong.** A profile from a support chat puts an attacker's node first as `default` under the real chain key.
+**Source.** CLI-SDK-15, ARCH-POS-15; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §10, §18.
+
+### CLI-TUI-12 — Fee and gas caps come from the build, may be lowered and never raised, and are shown on the quote
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-12 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-12).) `Limits` compiled per profile; the config may lower, never raise; never from an endpoint; the caps on the quote.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Fable U4: the caps are the defence against a lying endpoint under failover (CLI-RPC-05, SDK §13.3) and were configured nowhere.
+**Cost if wrong.** A huge fee quoted by an endpoint and confirmed.
+**Source.** CLI-SDK-09, CLI-RPC-05; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §10, §18.
+
+### CLI-TUI-13 — The one native key is an EVM payer key, through the SDK
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-13 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-13).) The payer key's address, balance and linkage line, and the SDK's EVM native send; no other network; the native send out of the build until the owner answers and the SDK reports its ends.
+**Status.** SPECIFIED, proposal (spec Q-T5). UNAUDITED.
+**Why.** Controller's reading of "SCaaS only": self-relay is the only path for entries no gateway takes (SDK §13.3) and needs gas. Moved out of CLI-TUI-01 (Fable U14); the native send's ends are U12.
+**Cost if wrong.** A native-chain path in a SCaaS-only program; or no way to pay gas for self-relay.
+**Source.** SDK spec §8.5, §13.3; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §16 Q-T5.
+
+### CLI-TUI-14 — The clipboard holds public values only, and only when the user turns it on
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-14 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-14).) Off by default; when on, one public value (UA id, address, operation digest) by OSC 52; nothing else.
+**Status.** SPECIFIED, proposal (spec Q-T6). UNAUDITED.
+**Why.** Controller proposal beside the owner's "no secret on the clipboard"; moved out of CLI-TUI-04 (Fable U14).
+**Cost if wrong.** A clipboard write the owner did not want.
+**Source.** [spec](superpowers/specs/2026-11-17-scaas-tui.md) §8, §16 Q-T6.
+
+### CLI-TUI-15 — A seed's words are revealed only after the user types `reveal`, with a warning where the screen may be recorded
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-15 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-15).) Typed `reveal` always; a warning when SSH or a multiplexer is seen or the alternate screen is not confirmed, as hints.
+**Status.** SPECIFIED, proposal (spec Q-T7). UNAUDITED.
+**Why.** Fable U8, U21: the SSH check is a heuristic and a multiplexer without the alternate screen keeps the words in history, so the typed gate is always on and the hints only add a warning. Moved out of CLI-TUI-04 (U14).
+**Cost if wrong.** Words revealed into a pane's history without a warning.
+**Source.** [spec](superpowers/specs/2026-11-17-scaas-tui.md) §5.3, §8, §16 Q-T7.
+
+### CLI-TUI-16 — The means that keep secrets off the terminal
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-16 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-16).) Fixed placeholder, fixed-capacity buffers into `SecretBytes`; a modal field; alternate screen, cells overwritten and two full frames after a secret screen; purge only where the alternate screen is unconfirmed, after a reveal, with consent; restore and clear on every exit path the process handles, `SIGTSTP` locks; idle deadline on a clock that runs across suspend; view models forget a locked seed's values; core dumps and ptrace off; no title from data; `--log` `0600`, append, no symlink; residuals stated.
+**Status.** SPECIFIED; the terminal behaviours it rests on are verified at plan T1 against the pinned versions. UNAUDITED.
+**Why.** The controller's means for CLI-TUI-04, after Fable U8 (a clear can push the words into a multiplexer's history; a purge at exit is late and destroys the user's scrollback), U9 (not every exit runs a hook; a tick counter stops during suspend), U17 (view models outlive the lock), U19 (core handlers, ptrace), U20 (growing buffers), U22 (log file), U23 (keys in fields).
+**Cost if wrong.** Words in a pane's history; seeds unlocked across a night; decrypted amounts redrawn after a lock.
+**Source.** CLI-SDK-02; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §8, §18.
+
+### CLI-TUI-17 — The build and the process hold the TUI to the SDK's surface
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-tui.md#CLI-TUI-17 · superseded-by: —
+
+**Rule.** (Summary; normative [scaas-tui.md](clients/scaas-tui.md#CLI-TUI-17).) A crate dependency, its own one Rust library; no cryptography, transport, signer or byte format; `native-networks`, `raw-native`, `opaque-calls` never enabled and refused at start by `Sdk::features()`; not the CLI; one data directory, activity re-read on focus.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The controller's means for the owner's "thin layer, no separate code path"; moved out of CLI-TUI-01 (Fable U14). The start-time check is exact where a dependency-tree test is indirect (U25); another process may change the SDK's state with no event to the TUI (I2).
+**Cost if wrong.** A second implementation beside the SDK; a raw signing path reachable from a screen.
+**Source.** CLI-SDK-12, CLI-SDK-17; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §3, §18.
+
+### CLI-TUI-30 — Owner rulings of the TUI spec, 2026-11-09 to 2026-11-17
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-TUI-30 · superseded-by: —
+
+**Rule.** The owner's rulings as stated (verbatim on the Source line), with the rule that carries each. (1) 2026-11-09, as recommended: a terminal client `clients/scaas-tui` (Ratatui + Crossterm), a thin layer over the same library API as the CLI and the app, one binary, works over SSH (CLI-TUI-01); no secret on screen, in scrollback, the clipboard or a log (CLI-TUI-04); the signing screen shows every named field, with a test (CLI-TUI-02). (2) 2026-11-17: the TUI spec and plan after the SDK spec, over `scaas-sdk`, the view-model contract of scaas-app as its fourth front-end, SCaaS only: no native-chain app core, no Trust Wallet Core (CLI-TUI-01). (3) 2026-11-17: app cores, `pqchat-core` and `pqvault-core` too, sit above the SDK; whether the TUI links them is an open point (spec Q-T2), not a ruling. (4) 2026-11-17: the spec is a frame; what depends on unsettled SDK parts is marked. Read together: (1)'s "linked directly" to `ua-rs` is replaced by (2), and (1)'s chat is narrowed by (3).
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** One place for the rulings, each with the rule that carries it.
+**Cost if wrong.** A ruling restated from memory with a changed meaning.
+**Source.** TODO 8b, 11; owner 2026-11-09 "Terminal UI for wallet + chat (owner 2026-11-09, as recommended)"; owner 2026-11-17 "Ok, theo đề xuất, viết TUI sau SDK", "Đồng ý đảo chiều", "pqchat-core cũng đảo chiều luôn", "cứ viết spec, để có khung sẵn"; [spec](superpowers/specs/2026-11-17-scaas-tui.md) §1.
+
+## 43. Integration — ERP
 
 ### INT-ERP-01 — 24 h cooling-off for new receiving wallets
 - old: R22 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-01 · superseded-by: —
@@ -11172,7 +11339,7 @@ Change (2026-10-08): on the exchange path the record is `ExchangeLegSettled`; th
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 45.
 
 <!-- example:odoo -->
-## 43. Integration — example connector
+## 44. Integration — example connector
 
 ### INT-ODOO-01 — Deploy job precedes pay via prerequisite
 - old: RS4-6 · status: current · owner: no · date: 2026-10-06 · normative: integration-odoo-example.md#INT-ODOO-01 · superseded-by: —
@@ -11282,7 +11449,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 
 <!-- /example -->
 
-## <a id="alias-index"></a>44. Alias index
+## <a id="alias-index"></a>45. Alias index
 
 <!-- BEGIN alias-index (generated by scripts/docs_check.py --write) -->
 | Old id | New id(s) | Status |
