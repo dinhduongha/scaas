@@ -1,5 +1,4 @@
-# t13 mutants at commit 1e48c9fbb (name | outcome | test)
-S3 first_* without identity | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_dropped_endpoint_is_never_asked_again
-S3 broadcast without identity | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_dropped_endpoint_is_never_asked_again
-S3 strict fee without identity | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_dropped_endpoint_is_never_asked_again
-3 mutants, 3 killed, 0 survived, 0 not loaded
+# t13 mutants at commit 9fb11c18c (name | outcome | test)
+S16 a pruned endpoint trusted on the pin | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes chain_uid_is_block_zero_and_a_wrong_pin_is_refused
+S16 a pruned endpoint admitted without its checkpoint | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes an_endpoint_without_block_0_is_refused_unless_it_names_a_checkpoint
+2 mutants, 2 killed, 0 survived, 0 not loaded

@@ -372,6 +372,9 @@ impl EvmPool {
                 format!("endpoint {} is not chain {}", l.endpoint, self.number)
             }
             FailureKind::BehindHead => format!("endpoint {} {}", l.endpoint, l.text()),
+            FailureKind::ChainIdentityUnreadable => {
+                format!("ChainIdentityUnreadable: {}", l.text())
+            }
             _ => l.text().to_string(),
         }
     }
@@ -452,9 +455,15 @@ impl EvmPool {
                     .map_err(|e| classify_with(&e, d))
             })
             .await
-            .map_err(|e| RpcError::argument(&format!("chain {}: block 0: {e}", self.number)))?
-            .0
-            .map(|b| b.header.hash);
+            .map_err(|e| RpcError::EndpointAllFailed {
+                last: Some(EndpointFailure::new(
+                    0,
+                    FailureKind::Transport,
+                    &format!("chain {}: block 0: {e}", self.number),
+                )),
+                failover_revert: None,
+            })?;
+        let (genesis, at) = (genesis.0.map(|b| b.header.hash), genesis.1);
         let u = match (self.pinned_uid, genesis) {
             (Some(p), Some(g)) if p != g => {
                 return Err(RpcError::argument(&format!(
@@ -462,7 +471,22 @@ impl EvmPool {
                     self.number
                 )))
             }
-            (Some(p), _) | (None, Some(p)) => p,
+            (None, Some(g)) | (Some(g), Some(_)) => g,
+            // T13 S16: no block 0: the pin only when the answering endpoint matched its checkpoint (identity)
+            (Some(p), None) if self.list.endpoints()[at].checkpoint().is_some() => p,
+            (Some(_), None) => {
+                return Err(RpcError::EndpointAllFailed {
+                    last: Some(EndpointFailure::new(
+                        at,
+                        FailureKind::ChainIdentityUnreadable,
+                        &format!(
+                            "chain {}: endpoint {at} serves no block 0 and names no checkpoint",
+                            self.number
+                        ),
+                    )),
+                    failover_revert: None,
+                })
+            }
             (None, None) => {
                 return Err(RpcError::argument(&format!(
                     "chain {}: the RPC gives no block 0 hash; set chain_uid",
@@ -739,10 +763,19 @@ impl Probe for EvmPool {
                 .await
                 .ok_or_else(|| unread("the first endpoint's block 0"))?,
         };
-        Ok(Self::block_hash_on(&p, 0)
-            .await
-            .ok_or_else(|| unread("block 0"))?
-            == want)
+        match p.get_block_by_number(BlockNumberOrTag::Number(0)).await {
+            Err(_) => Err(unread("block 0")),
+            Ok(Some(b)) => Ok(b.header.hash == want),
+            // T13 S16: no block 0: this chain only by the checkpoint its entry names, never by the pin alone
+            Ok(None) => match self.list.endpoints()[i].checkpoint() {
+                Some(c) => Ok(self.header(i, c.number, deadline).await? == B256::from(c.hash)),
+                None => Err(EndpointFailure::new(
+                    i,
+                    FailureKind::ChainIdentityUnreadable,
+                    &format!("endpoint {i} serves no block 0 and names no checkpoint"),
+                )),
+            },
+        }
     }
 
     async fn head(&self, i: usize, deadline: Option<Instant>) -> Result<u64, EndpointFailure> {

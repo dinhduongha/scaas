@@ -73,6 +73,14 @@ pub struct Endpoint {
     pub class: Class,
     pub label: Option<Label>,
     auth: Option<EndpointAuth>,
+    checkpoint: Option<Checkpoint>,
+}
+
+/// A block an endpoint that serves no block 0 must match to be this chain (T13 S16): its number and its hash.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Checkpoint {
+    pub number: u64,
+    pub hash: [u8; 32],
 }
 
 impl std::fmt::Debug for Endpoint {
@@ -117,11 +125,20 @@ impl Endpoint {
             class,
             label: label.map(Label::new),
             auth,
+            checkpoint: None,
         })
     }
     /// A `named` endpoint without a credential.
     pub fn named(url: &str) -> Result<Self, RpcError> {
         Self::new(url, Class::Named, None, None)
+    }
+    /// The endpoint with a checkpoint: an endpoint that serves no block 0 is this chain only when its block `number` has `hash`.
+    pub fn with_checkpoint(mut self, number: u64, hash: [u8; 32]) -> Self {
+        self.checkpoint = Some(Checkpoint { number, hash });
+        self
+    }
+    pub fn checkpoint(&self) -> Option<Checkpoint> {
+        self.checkpoint
     }
     /// The URL, for the transport only.
     pub fn url(&self) -> &url::Url {
@@ -276,6 +293,16 @@ pub struct EntryConfig {
     pub api_key_header: Option<String>,
     /// `bearer` (the default without a header) or `hmac`
     pub auth: Option<String>,
+    /// `{number, hash}`: for an endpoint that serves no block 0 (T13 S16)
+    pub checkpoint: Option<CheckpointConfig>,
+}
+
+/// A checkpoint in a list entry: `{ number = 123, hash = "0x…" }`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CheckpointConfig {
+    pub number: u64,
+    pub hash: String,
 }
 
 fn named() -> Class {
@@ -369,7 +396,18 @@ fn entry(e: &EntryConfig, env: &impl Fn(&str) -> Option<String>) -> Result<Endpo
             ))
         }
     };
-    Endpoint::new(&e.url, e.class, e.label.as_deref(), auth)
+    let mut out = Endpoint::new(&e.url, e.class, e.label.as_deref(), auth)?;
+    if let Some(c) = &e.checkpoint {
+        let h = c.hash.strip_prefix("0x").unwrap_or(&c.hash);
+        let bytes: Vec<u8> = (0..h.len())
+            .step_by(2)
+            .map(|k| h.get(k..k + 2).and_then(|b| u8::from_str_radix(b, 16).ok()))
+            .collect::<Option<_>>()
+            .filter(|_| h.len() == 64)
+            .ok_or_else(|| RpcError::argument("a checkpoint hash is 32 bytes of hex"))?;
+        out = out.with_checkpoint(c.number, bytes.try_into().expect("32 bytes"));
+    }
+    Ok(out)
 }
 
 /// Fable E N-8 (moved from the node): an endpoint URL (an RPC's, a verifier's: an internal host, a key in a path) never reaches an

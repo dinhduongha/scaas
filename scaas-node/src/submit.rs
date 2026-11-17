@@ -1571,6 +1571,13 @@ pub(crate) mod tests {
                 "eth_getBlockByNumber" if e.genesis => {
                     Ok(serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
                 }
+                // scaas-rpc T13 S16: block 0 is the pinned chain_uid's (a fixture correction: a node that serves no block 0 is
+                // refused now, never trusted on the pin alone)
+                "eth_getBlockByNumber" if p[0] == "0x0" => {
+                    let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                    b["hash"] = json!(format!("{:#x}", B256::from(U256::from(UID))));
+                    Ok(b)
+                }
                 "eth_getBlockByNumber" => Ok(Value::Null),
                 "eth_getCode" => {
                     let a: Address = p[0].as_str().unwrap().parse().unwrap();

@@ -776,10 +776,12 @@ async fn chain_uid_is_block_zero_and_a_wrong_pin_is_refused() {
         }),
     ))
     .await;
-    assert_eq!(
-        c(&pruned, Some(B256::repeat_byte(1))).uid().await.unwrap(),
-        B256::repeat_byte(1)
-    );
+    // T13 S16: a pruned endpoint is never trusted on the pin alone (it named no checkpoint)
+    let e = c(&pruned, Some(B256::repeat_byte(1)))
+        .uid()
+        .await
+        .unwrap_err();
+    assert!(e.to_string().contains("ChainIdentityUnreadable"), "{e}");
     assert!(c(&pruned, None).uid().await.is_err());
     let d = c(DOWN, Some(g));
     assert!(
@@ -1564,4 +1566,75 @@ async fn a_dropped_endpoint_is_never_asked_again() {
         honest
     );
     assert_eq!(high_n.load(SeqCst), 0, "its fee was never asked");
+}
+
+// ---------------------------------------------------------------- plan T13 S16: an endpoint without block 0
+
+/// `fake_dyn` answers block 0 itself; this one does not: block 0 is `null`.
+async fn no_block_0() -> String {
+    serve(axum::Router::new().route(
+        "/",
+        axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
+            let result = match r["method"].as_str() {
+                Some("eth_chainId") => json!("0x128"),
+                Some("eth_getBlockByNumber") if r["params"][0] == "0x0" => Value::Null,
+                Some("eth_getBlockByNumber") => block(
+                    num(&r["params"][0]),
+                    B256::from(U256::from(num(&r["params"][0]))),
+                ),
+                Some("eth_blockNumber") => json!("0x20"),
+                _ => json!(format!("0x{:064x}", 5)),
+            };
+            axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": result}))
+        }),
+    ))
+    .await
+}
+
+/// S16 (coordinator's call): an endpoint that cannot serve block 0 is refused by name (`ChainIdentityUnreadable`), for good,
+/// unless its entry names a checkpoint (number, hash) it then matches; never trusted on the pin alone. Control: the same
+/// endpoint with a matching checkpoint answers; a wrong checkpoint is another chain.
+#[tokio::test]
+async fn an_endpoint_without_block_0_is_refused_unless_it_names_a_checkpoint() {
+    let pruned = no_block_0().await;
+    let (good, _) = fake_rpc(|r| match r["method"].as_str() {
+        Some("eth_blockNumber") => json!({"result": "0x20"}),
+        _ => json!({"result": format!("0x{:064x}", 6)}),
+    })
+    .await;
+    let p = sdk_pool(&[&pruned, &good], 2_000);
+    let six = Bytes::from(U256::from(6).to_be_bytes::<32>().to_vec());
+    assert_eq!(
+        call(&p).await.unwrap(),
+        six,
+        "endpoint 0 refused, endpoint 1 answers"
+    );
+    assert_eq!(p.pool().identity_of(0), Some(false), "refused for good");
+    let alone = sdk_pool(&[&pruned], 2_000);
+    let e = call(&alone).await.unwrap_err();
+    assert!(e.to_string().contains("ChainIdentityUnreadable"), "{e}");
+    let at = |cp: Option<(u64, B256)>| {
+        let mut e = scaas_rpc::Endpoint::named(&pruned).unwrap();
+        if let Some((n, h)) = cp {
+            e = e.with_checkpoint(n, h.0);
+        }
+        EvmPool::connect(
+            NodeList::new(vec![e], Policy::Failover, 2_000, 2_000, 5_000).unwrap(),
+            296,
+            Some(genesis()),
+        )
+        .unwrap()
+    };
+    let five = Bytes::from(U256::from(5).to_be_bytes::<32>().to_vec());
+    assert_eq!(
+        call(&at(Some((0x10, B256::from(U256::from(0x10))))))
+            .await
+            .unwrap(),
+        five,
+        "control: its checkpoint matches"
+    );
+    assert!(
+        call(&at(Some((0x10, B256::repeat_byte(9))))).await.is_err(),
+        "a checkpoint it does not match"
+    );
 }

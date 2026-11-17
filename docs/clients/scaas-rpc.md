@@ -48,7 +48,9 @@ log line, an error or a `Debug` output (§5). A list also names its read policy:
 the first included, answers its first read, its identity is read and compared with the configuration: EVM and Hedera
 `eth_chainId` and the block 0 hash (the pinned `chain_uid`, else the first endpoint's block 0); another family its network id where
 the RPC exposes it, else the profile constant (NET-ALL-22). Equal: kept for the process. Different: the endpoint is dropped from
-every read, with one log line. Unreadable: that read fails over, the identity is asked again next time. `strict_majority` and every
+every read, with one log line. Unreadable: that read fails over, the identity is asked again next time. An endpoint that serves
+no block 0 (a pruned node) is refused by name (`ChainIdentityUnreadable`), for the process, unless its list entry names a
+checkpoint (a block number and its hash) that it then matches; it is never trusted on the pinned `chain_uid` alone. `strict_majority` and every
 read that feeds a decryption ([CLI-RPC-06](#CLI-RPC-06)) need a pinned `chain_uid` (`Argument` otherwise).
 
 ## 3. Reads

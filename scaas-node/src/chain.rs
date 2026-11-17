@@ -159,8 +159,8 @@ impl Chain {
         self.pool.first_tx_fees(hash).await.map_err(|e| anyhow!("{e}"))
     }
 
-    /// This chain's `chain_uid`: the RPC's block 0 hash, which must equal the configured `chain_uid` when one is set
-    /// (a pruned RPC without block 0 trusts the configured one). Read once; an error is not remembered.
+    /// This chain's `chain_uid`: the RPC's block 0 hash, which must equal the configured `chain_uid` when one is set; a pruned
+    /// RPC without block 0 is refused (`ChainIdentityUnreadable`, scaas-rpc T13 S16). Read once; an error is not remembered.
     pub async fn uid(&self) -> Result<B256> {
         self.pool.uid().await.map_err(|e| anyhow!("{e}"))
     }
@@ -715,14 +715,16 @@ pub(crate) mod tests {
         assert_eq!(chain(&url, None).uid().await.unwrap(), genesis);
         assert_eq!(chain(&url, Some(genesis)).uid().await.unwrap(), genesis);
         assert!(chain(&url, Some(B256::repeat_byte(1))).uid().await.is_err());
-        // a pruned RPC (no block 0) trusts the pin, and without one there is no chain_uid
+        // scaas-rpc T13 S16 (coordinator's call): a pruned RPC (no block 0) is never trusted on the pin alone, and without one
+        // there is no chain_uid either
         let app = axum::Router::new().route("/", axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
             axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": null}))
         }));
         let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let pruned = format!("http://{}", l.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
-        assert_eq!(chain(&pruned, Some(B256::repeat_byte(1))).uid().await.unwrap(), B256::repeat_byte(1));
+        let e = chain(&pruned, Some(B256::repeat_byte(1))).uid().await.unwrap_err().to_string();
+        assert!(e.contains("ChainIdentityUnreadable"), "{e}");
         assert!(chain(&pruned, None).uid().await.is_err());
         // review T4 m3: an unreachable RPC is not a pruned one — no pin is trusted, nothing is cached, it asks again
         let c = chain("http://127.0.0.1:9", Some(genesis));

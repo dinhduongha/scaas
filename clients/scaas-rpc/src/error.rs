@@ -33,6 +33,8 @@ pub enum FailureKind {
     AnswerMalformed,
     WrongChain,
     IdentityUnread,
+    /// it serves no block 0 and its entry names no checkpoint it matches: refused (T13 S16), never trusted on a pin alone
+    ChainIdentityUnreadable,
     BehindHead,
     BlockChanged,
     /// a revert from an endpoint after the first used: no verdict (CLI-RPC-04); its data is kept

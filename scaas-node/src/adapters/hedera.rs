@@ -321,7 +321,7 @@ mod tests {
         reports: Vec<Value>,
         /// `relay_claim` calls.
         claims: u32,
-        /// `eth_getBlockByNumber` (Null = a pruned RPC: the pin is trusted).
+        /// `eth_getBlockByNumber` (Null: block 0 with the pinned word as its hash).
         block0: Value,
         /// `eth_getBlockByNumber` answers this JSON-RPC error instead; `block0_reads` counts the asks.
         block0_err: Option<Value>,
@@ -344,6 +344,13 @@ mod tests {
                 n.block0_reads += 1;
                 match n.block0_err.clone() {
                     Some(e) => json!({"jsonrpc": "2.0", "id": id, "error": e}),
+                    // scaas-rpc T13 S16: unset, block 0 is the pinned word's (a fixture correction: a node that serves no block 0
+                    // is refused now, never trusted on the pin alone)
+                    None if n.block0.is_null() => {
+                        let mut b = serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                        b["hash"] = json!(format!("{:#x}", B256::from(U256::from(n.mtx_nonce))));
+                        ok(b)
+                    }
                     None => ok(n.block0.clone()),
                 }
             }

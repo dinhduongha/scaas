@@ -130,6 +130,8 @@ pub struct Pool {
     /// whether endpoint 0 is identity-checked on its reads (F13; `true` but for the node's pool, see `EvmPool::connect_shared`)
     check_first: bool,
     identity: Arc<Vec<OnceLock<bool>>>,
+    /// set beside a `false` identity when the endpoint was refused by name (T13 S16)
+    refused: Vec<OnceLock<()>>,
     head: Arc<AtomicU64>,
     /// per block choice, the highest block an agreed read of it stood at (F12; T13 S2)
     floor: std::sync::Mutex<std::collections::HashMap<BlockChoice, u64>>,
@@ -162,6 +164,7 @@ impl Pool {
             pinned,
             check_first: true,
             identity: Arc::new(list.endpoints().iter().map(|_| OnceLock::new()).collect()),
+            refused: list.endpoints().iter().map(|_| OnceLock::new()).collect(),
             head,
             floor: Default::default(),
             failover: AtomicU64::new(0),
@@ -272,10 +275,22 @@ impl Pool {
         let same = match self.identity[i].get() {
             Some(s) => *s,
             None => {
-                let s = probe
-                    .same_chain(i, deadline)
-                    .await
-                    .map_err(|e| EndpointFailure::new(i, FailureKind::IdentityUnread, e.text()))?;
+                let s = match probe.same_chain(i, deadline).await {
+                    Ok(s) => s,
+                    // T13 S16: refused by name, for good
+                    Err(e) if e.kind == FailureKind::ChainIdentityUnreadable => {
+                        let _ = self.identity[i].set(false);
+                        let _ = self.refused[i].set(());
+                        return Err(e);
+                    }
+                    Err(e) => {
+                        return Err(EndpointFailure::new(
+                            i,
+                            FailureKind::IdentityUnread,
+                            e.text(),
+                        ))
+                    }
+                };
                 if !s {
                     tracing::warn!(
                         endpoint = i,
@@ -288,6 +303,12 @@ impl Pool {
         };
         if same {
             Ok(())
+        } else if self.refused[i].get().is_some() {
+            Err(EndpointFailure::new(
+                i,
+                FailureKind::ChainIdentityUnreadable,
+                "it serves no block 0 and names no checkpoint it matches",
+            ))
         } else {
             Err(EndpointFailure::new(
                 i,

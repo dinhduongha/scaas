@@ -443,6 +443,13 @@ mod tests {
     use alloy::signers::SignerSync;
     use tower::ServiceExt;
 
+    /// Block 0 with `hash` (the recorded Hedera testnet block; only its hash is read).
+    fn block0(hash: B256) -> Value {
+        let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+        b["hash"] = json!(format!("{hash:#x}"));
+        b
+    }
+
     /// R55 (review S1-7): lane đứng ⇒ gateway trả 503 ngay, không nhận rồi để hết hạn trong kênh.
     #[tokio::test]
     async fn open_breaker_refuses_before_simulation() {
@@ -480,6 +487,10 @@ mod tests {
     async fn the_guard_refuses_before_the_simulation() {
         let app = axum::Router::new().route("/", post(|Json(r): Json<Value>| async move {
             Json(match r["method"].as_str().unwrap() {
+                // scaas-rpc T13 S16: block 0 is the pinned chain_uid's (a fixture correction: a node that serves no block 0 is
+                // refused now, never trusted on the pin alone)
+                "eth_getBlockByNumber" if r["params"][0] == "0x0" => json!({"jsonrpc": "2.0", "id": r["id"], "result":
+                    block0(B256::repeat_byte(0x24))}),
                 "eth_getBlockByNumber" => json!({"jsonrpc": "2.0", "id": r["id"], "result": null}),
                 "eth_call" => json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("0x{:064x}", 1)}),
                 _ => json!({"jsonrpc": "2.0", "id": r["id"], "error": {"code": -32603, "message": "no simulation here"}}),
@@ -648,6 +659,9 @@ mod tests {
                 l2.lock().unwrap().push(m.clone());
                 let input = r["params"][0]["input"].as_str().or(r["params"][0]["data"].as_str()).unwrap_or("0x").to_string();
                 Json(match m.as_str() {
+                    // scaas-rpc T13 S16: block 0 is the pinned chain_uid's (a fixture correction, as above)
+                    "eth_getBlockByNumber" if r["params"][0] == "0x0" => json!({"jsonrpc": "2.0", "id": r["id"], "result":
+                        block0(uid.as_str().unwrap().parse().unwrap())}),
                     "eth_getBlockByNumber" => json!({"jsonrpc": "2.0", "id": r["id"], "result": null}),
                     "eth_call" if input.starts_with(&reg) => json!({"jsonrpc": "2.0", "id": r["id"], "result": format!("{:#x}", B256::ZERO)}),
                     "eth_call" if crate::typed::testkit::domain_answer(&input, r["params"][0]["to"].as_str().unwrap_or_default().parse().unwrap_or_default()).is_some() =>

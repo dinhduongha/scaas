@@ -27,6 +27,16 @@ MUTANTS = [
      T + "--test evm_fakes a_dropped_endpoint_is_never_asked_again"),
     ("S3 strict fee without identity", [(E, "            self.pool.admit(self, i, deadline).await?;\n", "")],
      T + "--test evm_fakes a_dropped_endpoint_is_never_asked_again"),
+    ("S16 a pruned endpoint trusted on the pin", [(E, "            (Some(p), None) if self.list.endpoints()[at].checkpoint().is_some() => p,",
+                                                    "            (Some(p), None) => p,")],
+     T + "--test evm_fakes chain_uid_is_block_zero_and_a_wrong_pin_is_refused"),
+    ("S16 a pruned endpoint admitted without its checkpoint",
+     [(E, '''                None => Err(EndpointFailure::new(
+                    i,
+                    FailureKind::ChainIdentityUnreadable,
+                    &format!("endpoint {i} serves no block 0 and names no checkpoint"),
+                )),''', "                None => Ok(true),")],
+     T + "--test evm_fakes an_endpoint_without_block_0_is_refused_unless_it_names_a_checkpoint"),
 ]
 
 if __name__ == "__main__":

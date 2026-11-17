@@ -10783,6 +10783,8 @@ The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the
 **Cost if wrong.** An endpoint of another network answers state of that network as this one's.
 **Source.** ARCH-POS-15 Changes of 2026-11-12; Fable review 2026-11-17 F13; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.2.
 
+Change (2026-11-17, plan T13 S16, Fable code review; the controller's call, the owner may override; status: BUILT on branch `scaas-sdk`, UNAUDITED): an endpoint that serves no block 0 was trusted on the pinned `chain_uid` alone by `EvmPool::uid` (and asked again for ever by the identity check). Now it is refused by name, `ChainIdentityUnreadable`, for the process, unless its list entry names a checkpoint (`{number, hash}`) that it matches; the node's `rpc_urls` name none, so a pruned endpoint is refused there.
+
 ### CLI-RPC-04 — Failover: one endpoint answers a whole read; status reads stay on the first endpoint
 - old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-04 · superseded-by: —
 
