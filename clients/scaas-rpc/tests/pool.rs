@@ -145,6 +145,8 @@ enum A {
     Down,
     /// never answers
     Hung,
+    /// a revert without data, with this reason
+    Bare(&'static str),
 }
 
 fn read(fake: &Arc<Fake>, answers: Vec<A>) -> impl Fn(usize) -> ReadFut {
@@ -161,6 +163,10 @@ fn read(fake: &Arc<Fake>, answers: Vec<A>) -> impl Fn(usize) -> ReadFut {
                 }),
                 A::Down => Err(ReadError::Failure(fail(i))),
                 A::Hung => futures::future::pending().await,
+                A::Bare(r) => Err(ReadError::Revert {
+                    data: vec![],
+                    reason: r.into(),
+                }),
             }
         })
     }
@@ -182,6 +188,10 @@ fn at(fake: &Arc<Fake>, answers: Vec<A>, by_block: bool) -> impl Fn(ReadAt<(u8, 
                 }),
                 A::Down => Err(ReadError::Failure(fail(p.endpoint))),
                 A::Hung => futures::future::pending().await,
+                A::Bare(r) => Err(ReadError::Revert {
+                    data: vec![],
+                    reason: r.into(),
+                }),
             }
         })
     }
@@ -1377,4 +1387,35 @@ async fn a_finalized_read_never_goes_below_the_last_agreed_finalized_block() {
     );
     assert_eq!(p.agreed_floor(BlockChoice::Finalized), 60);
     assert_eq!(p.agreed_floor(BlockChoice::Latest), 100);
+}
+
+/// T13 S17: a revert without data compares by its reason too: two node-side errors without data are no agreed revert. Control:
+/// the same reason agrees.
+#[tokio::test]
+async fn reverts_without_data_compare_by_their_reason() {
+    let r = agree(
+        &named(3, Policy::StrictMajority),
+        &Fake::new(vec![ep(100); 3]),
+        vec![
+            A::Bare("VM execution error."),
+            A::Bare("execution reverted"),
+            A::V(5),
+        ],
+    )
+    .await;
+    assert!(
+        matches!(r, Err(RpcError::EndpointNoMajority { .. })),
+        "{r:?}"
+    );
+    let r = agree(
+        &named(3, Policy::StrictMajority),
+        &Fake::new(vec![ep(100); 3]),
+        vec![
+            A::Bare("execution reverted"),
+            A::Bare("execution reverted"),
+            A::V(5),
+        ],
+    )
+    .await;
+    assert!(matches!(r, Err(RpcError::Revert { .. })), "control: {r:?}");
 }

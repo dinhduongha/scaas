@@ -89,6 +89,8 @@ MUTANTS = [
      T + "--test node a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status"),
     ("S14 any 2xx is queued", [(N, "                        && !v[\"status\"].is_string() =>", "                        && false =>")],
      T + "--test node a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status"),
+    ("S17 a bare revert compares by its data only", [(P, "(Err((x, rx)), Err((y, ry))) => x == y && (!x.is_empty() || rx == ry),", "(Err((x, _)), Err((y, _))) => x == y,")],
+     T + "--test pool reverts_without_data_compare_by_their_reason"),
 ]
 
 if __name__ == "__main__":

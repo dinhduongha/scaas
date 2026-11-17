@@ -626,7 +626,9 @@ impl Pool {
         let same = |a: &Result<T, (Vec<u8>, String)>, b: &Result<T, (Vec<u8>, String)>| match (a, b)
         {
             (Ok(x), Ok(y)) => x == y,
-            (Err((x, _)), Err((y, _))) => x == y, // a revert compares by its data
+            // a revert compares by its data; one without data by its reason too (T13 S17: two node-side errors without data are
+            // no agreed revert)
+            (Err((x, rx)), Err((y, ry))) => x == y && (!x.is_empty() || rx == ry),
             _ => false,
         };
         while let Some((i, r)) = pending.next().await {

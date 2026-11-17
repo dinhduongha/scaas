@@ -27,7 +27,7 @@ docs | af174a787 | 0 | -; tree dirty
 node-clippy | 05e1b8f58 | 0 | -; tree dirty
 ver-clippy | 02309d51c | 0 | -; tree dirty
 ver-test | 02309d51c | 0 | 41 passed, 0 failed, 1 ignored (6 binaries); tree dirty
-rpc-test | d5d8e87b6 | 0 | 125 passed, 0 failed, 10 ignored (7 binaries); tree dirty
-rpc-clippy | d5d8e87b6 | 0 | -; tree dirty
-rpc-wasm | d5d8e87b6 | 0 | -; tree dirty
 node-test | d5d8e87b6 | 0 | 791 passed, 0 failed, 72 ignored (18 binaries); tree dirty
+rpc-test | eafdc91f9 | 0 | 128 passed, 0 failed, 10 ignored (7 binaries); tree dirty
+rpc-clippy | eafdc91f9 | 0 | -; tree dirty
+rpc-wasm | eafdc91f9 | 0 | -; tree dirty

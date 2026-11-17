@@ -1,4 +1,3 @@
-# t13 mutants at commit d5d8e87b6 (name | outcome | test)
-S14 the route joined as before | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status
-S14 any 2xx is queued | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status
-2 mutants, 2 killed, 0 survived, 0 not loaded
+# t13 mutants at commit eafdc91f9 (name | outcome | test)
+S17 a bare revert compares by its data only | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test pool reverts_without_data_compare_by_their_reason
+1 mutants, 1 killed, 0 survived, 0 not loaded
