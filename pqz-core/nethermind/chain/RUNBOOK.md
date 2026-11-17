@@ -845,8 +845,8 @@ at 10:15:56 / 10:15:59 UTC on the same chain (head advancing, genesis unchanged)
 stack's filesystem above the node's free-space check (`df -h` of the data directory beside `watch.sh`'s RestartCount).
 
 **Results** (summary `smartcontracts/evm/runs/2026-11-16-reset5.txt`): the matrix on `mldsa-off` green in every group that runs on
-a remote target (pqzwallet local only), the `mldsa-on` rows (`mldsa_on.py`) 547 records, 0 failures; wraplimits p5 / p6 pending
-in their windows (provisionally accepted by the owner, not a pass). The Blockscout verify of the whole chain (both sets): 743 verified,
+a remote target (pqzwallet local only), the `mldsa-on` rows (`mldsa_on.py`) 547 records, 0 failures; wraplimits p5 and p6 run
+in their windows (2026-11-17 03:33 and 15:41 local): the group 165 transactions status 1, 63 negatives refused as expected. The Blockscout verify of the whole chain (both sets): 743 verified,
 218 linked clones, 265 SSTORE2 data, 150 CREATE3 proxies, genesis and the RescueVault alloc, 0 unverified. The `sc-verifier`
 container needs 4 GB to compile kind 13's modules (OOM-killed at 768 MiB and at 2 GB; owner 2026-11-17: `mem_limit` 4g).
 
