@@ -5029,6 +5029,92 @@
     "networkId": "0000000000000000000000000000000000000000000000000000000000000000",
     "message": "01"
    }
+  },
+  {
+   "id": "sign_digest 31 bytes",
+   "call": "sign_digest",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "solana",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "solana",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+   }
+  },
+  {
+   "id": "sign_digest the APTOS\\n envelope (20 bytes)",
+   "call": "sign_digest",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "aptos",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "4150544f530a6d6573736167653a207363616173"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "aptos",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+   }
+  },
+  {
+   "id": "sign_digest 33 bytes on polkadot",
+   "call": "sign_digest",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "polkadot",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "path": "",
+    "message": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "polkadot",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "path": "",
+    "message": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+   }
+  },
+  {
+   "id": "sign_digest 5 bytes on bitcoin_p2tr",
+   "call": "sign_digest",
+   "args": {
+    "mnemonic": "pq_kat",
+    "network": "bitcoin_p2tr",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "0102030405"
+   },
+   "error": "Argument",
+   "accepted": {
+    "mnemonic": "pq_kat",
+    "network": "bitcoin_p2tr",
+    "index": 0,
+    "coinType": null,
+    "change": null,
+    "message": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
+   }
   }
  ],
  "external": {

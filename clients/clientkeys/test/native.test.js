@@ -315,6 +315,7 @@ function call(c, a) {
     case 'native_key': return nativeKey();
     case 'bitcoin_key': return S.deriveKey(m.seed, a.network, a.index, { coinType: a.coinType, change: a.change });
     case 'sign_message': return S.signMessage(key(), msgOf(a), { allowRawDigest: true });
+    case 'sign_digest': return S.signDigest(key(), msgOf(a), { allowRawDigest: true });
     case 'sign_key_proof': return S.signKeyProof(key(), B(a.challenge));
     case 'sign_typed': return S.signTyped(key(), a.typedData);
     case 'import_native_key': return S.importKey(a.network, B(a.secret));
@@ -482,4 +483,18 @@ test('rs_native.json: every ua-rs Taproot and sr25519 row is of its mnemonic\'s 
       assert.ok(sr.verify(msg, sig, B(r.publicKey)), r.id);
     }
   }
+});
+
+// ------------------------------------------------------------------ T13 C2: signDigest takes exactly 32 bytes (ua-rs's &[u8; 32])
+test('signDigest refuses anything but 32 bytes on every scheme, beside 32 bytes accepted (T13 C2)', () => {
+  const opt = { allowRawDigest: true };
+  for (const k of [S.deriveKey(seed, 'evm', 0), S.deriveKey(seed, 'solana', 0), S.deriveKey(seed, 'aptos', 0), S.deriveKey(seed, 'bitcoin_p2tr', 0),
+    S.deriveKey(seed, 'bitcoin_p2wpkh', 0), dot('')]) {
+    for (const n of [0, 5, 31, 33, 200000]) assert.equal(codeOf(() => S.signDigest(k, new Uint8Array(n), opt)), 'Argument', `${k.network} ${n}`);
+    assert.equal(codeOf(() => S.signDigest(k, new Uint8Array(32).fill(7), opt)), null, `${k.network} 32`);
+    assert.equal(codeOf(() => S.signDigest(k, Array(32).fill(7), opt)), 'Argument', `${k.network} not a Uint8Array`);
+  }
+  const aptos = S.deriveKey(seed, 'aptos', 0), env = new TextEncoder().encode('APTOS\nmessage: scaas');
+  assert.equal(codeOf(() => S.signDigest(aptos, env, opt)), 'Argument', 'the AIP-62 envelope cannot pass as a digest');
+  assert.equal(codeOf(() => S.signMessage(aptos, env, opt)), 'Argument', 'nor as a message');
 });

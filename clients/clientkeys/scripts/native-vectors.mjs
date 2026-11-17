@@ -228,6 +228,11 @@ for (const [call, network] of ENVELOPE_CALLS) {
 }
 ref('sign_stellar_transaction a 31-byte network id', 'sign_stellar_transaction', at('stellar', { networkId: '00'.repeat(31), message: '01' }),
   at('stellar', { networkId: '00'.repeat(32), message: '01' }));
+// T13 C2, appended: signDigest takes exactly 32 bytes (ua-rs's &[u8; 32]); a longer preimage goes through signMessage's checks
+ref('sign_digest 31 bytes', 'sign_digest', at('solana', { message: '5a'.repeat(31) }), at('solana', { message: '5a'.repeat(32) }));
+ref('sign_digest the APTOS\\n envelope (20 bytes)', 'sign_digest', at('aptos', { message: APTOS_ENV }), at('aptos', { message: '5a'.repeat(32) }));
+ref('sign_digest 33 bytes on polkadot', 'sign_digest', at('polkadot', { path: '', message: '5a'.repeat(33) }), at('polkadot', { path: '', message: '5a'.repeat(32) }));
+ref('sign_digest 5 bytes on bitcoin_p2tr', 'sign_digest', at('bitcoin_p2tr', { message: '0102030405' }), at('bitcoin_p2tr', { message: '5a'.repeat(32) }));
 // every refusal refused here and its neighbour accepted
 // clientkeys' reading of a row's call (ua-rs: Wallet::native_key, bitcoin_key, polkadot_key, …; Polkadot's native_key is the bare key)
 function applyCall(call, a) {
@@ -244,6 +249,7 @@ function applyCall(call, a) {
     case 'native_key': return nativeKey();
     case 'bitcoin_key': return S.deriveKey(m.seed, a.network, a.index, { coinType: a.coinType, change: a.change });
     case 'sign_message': return S.signMessage(key(), msgOf(a), { allowRawDigest: true });
+    case 'sign_digest': return S.signDigest(key(), msgOf(a), { allowRawDigest: true });
     case 'sign_key_proof': return S.signKeyProof(key(), B(a.challenge));
     case 'sign_typed': return S.signTyped(key(), a.typedData);
     case 'import_native_key': return S.importKey(a.network, B(a.secret));

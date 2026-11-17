@@ -659,3 +659,21 @@ fn regenerate() {
     });
     std::fs::write(&path, serde_json::to_string_pretty(&doc).unwrap() + "\n").unwrap();
 }
+
+// ------------------------------------------------------------------ T13 C2: sign_digest takes 32 bytes, by type
+
+/// native.json's `sign_digest` refusal rows (clientkeys refuses anything but 32 bytes): here `&[u8; 32]` holds the rule, so each
+/// refused length does not fit the type, and each 32-byte neighbour signs on its key.
+#[test]
+fn native_json_sign_digest_rows_are_32_bytes_by_type() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    let mut n = 0;
+    for r in arr(&v, "refusals").iter().filter(|r| r["call"] == "sign_digest") {
+        assert!(<[u8; 32]>::try_from(msg(&r["args"])).is_err(), "{}", r["id"]);
+        let ok: [u8; 32] = msg(&r["accepted"]).try_into().unwrap();
+        assert!(w.native_key(net(&r["accepted"]), 0, None).unwrap().sign_digest(&ok, AllowRawDigest).is_ok(), "neighbour of {}", r["id"]);
+        n += 1;
+    }
+    assert_eq!(n, 4, "31 B on solana, the APTOS\\n envelope, 33 B on polkadot, 5 B on bitcoin_p2tr");
+}

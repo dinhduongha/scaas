@@ -405,7 +405,7 @@ own key only and never acts as a direct caller, [CTR-UA-24](../contracts/account
 clientkeys API (`seed.js`, exported by `seed-signer.js`): `signTyped(key, td)` signs `hashTypedData(td)` (preimage
 `0x1901 ‖ …`, never `0x05`), after the caller checked `td` (`checkPayment`, `checkOwnerCall`, …); `signKeyProof(key,
 challenge)` signs `keyProofMessage(challenge)`; `signDigest(key, digest, { allowRawDigest: true })` signs a raw digest
-only with the opt-in (else it throws), for a digest the caller built itself from a checked SCaaS message (a Merkle batch
+of exactly 32 bytes (`Argument` otherwise, as `ua-rs`'s `&[u8; 32]`; ua-rs-native T13 C2) only with the opt-in (else it throws), for a digest the caller built itself from a checked SCaaS message (a Merkle batch
 root, a digest a `check*` function returned). **Migration note (2026-10-30, no7702):** `signDigest(key, digest)` without the
 option now throws. An integrator that vendors the clientkeys bundle (`seed-signer.js`) switches at its next rebuild to
 `signTyped(key, typed)` after its `check*` call (the same bytes) and to `signKeyProof(key, challenge)` for key proofs, or

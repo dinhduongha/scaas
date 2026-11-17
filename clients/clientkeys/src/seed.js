@@ -271,10 +271,12 @@ export function signKeyProof(key, challenge) {
  *  `check*` function returned), or a native chain's preimage only as CLI-SGN-54 (built in-process from named fields by its own
  *  encoder, shown decoded); never an EVM transaction hash or an EIP-7702 authorization raw (EVM transactions: `signTransaction`).
  *  Prefer `signTyped` / `signKeyProof`. secp256k1 ⇒ r‖s‖v (v = 27|28, low-s); ed25519 ⇒ 64 bytes; `bitcoin_p2tr` ⇒ BIP-340
- *  over the tweaked key; sr25519 ⇒ 64 bytes (the digest as the message). `aux`: fixed randomness for the generator only
- *  (Taproot `aux`, sr25519 `r`), else the CSPRNG. */
+ *  over the tweaked key; sr25519 ⇒ 64 bytes (the digest as the message). `digest`: exactly 32 bytes (Argument otherwise, as
+ *  ua-rs's `&[u8; 32]`; a longer preimage goes through `signMessage` and its checks). `aux`: fixed randomness for the generator
+ *  only (Taproot `aux`, sr25519 `r`), else the CSPRNG. */
 export function signDigest(key, digest, { allowRawDigest = false, aux } = {}) {
   if (allowRawDigest !== true) throw new Error('signDigest: raw digest refused; use signTyped / signKeyProof, or pass { allowRawDigest: true }');
+  if (!(digest instanceof Uint8Array) || digest.length !== 32) fail('Argument', 'digest: 32 bytes');
   if (key.network === 'bitcoin_p2tr') return signTaproot(key.privateKey, digest, aux);
   if (key.curve === 'sr25519') return sr25519Sign(key.privateKey, digest, aux);
   return sign(key, digest);

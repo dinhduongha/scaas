@@ -22,7 +22,7 @@ OWN_STEPS="vectors-check ua-rs ua-c ua-dart-frb ua-py ua-go ua-cs"
 # named-tests: no log of these may show a test binary with 0 passed or a skipped suite
 FAMILIES="clientkeys ua-rs-nodefault ua-rs-wallet ua-rs ua-rs-vectors ua-rs-zether ua-rs-pqz no-oracle ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs"
 # the mutant records of this round (one per task that has mutants; extended per task)
-MUTANT_RECORDS=${MUTANT_RECORDS-"2026-11-17-ua-rs-native-t2 2026-11-17-ua-rs-native-t3 2026-11-17-ua-rs-native-t4 2026-11-17-ua-rs-native-t5 2026-11-17-ua-rs-native-t6 2026-11-17-ua-rs-native-t6a 2026-11-17-ua-rs-native-t6b 2026-11-17-ua-rs-native-t7 2026-11-17-ua-rs-native-t8a 2026-11-17-ua-rs-native-t8b 2026-11-17-ua-rs-native-t9 2026-11-17-ua-rs-native-t10 2026-11-17-ua-rs-native-t11d 2026-11-17-ua-rs-native-t11e 2026-11-17-ua-rs-native-t11f 2026-11-17-ua-rs-native-t11a 2026-11-17-ua-rs-native-t11b 2026-11-17-ua-rs-native-t11c 2026-11-17-ua-rs-native-t13-c1"}
+MUTANT_RECORDS=${MUTANT_RECORDS-"2026-11-17-ua-rs-native-t2 2026-11-17-ua-rs-native-t3 2026-11-17-ua-rs-native-t4 2026-11-17-ua-rs-native-t5 2026-11-17-ua-rs-native-t6 2026-11-17-ua-rs-native-t6a 2026-11-17-ua-rs-native-t6b 2026-11-17-ua-rs-native-t7 2026-11-17-ua-rs-native-t8a 2026-11-17-ua-rs-native-t8b 2026-11-17-ua-rs-native-t9 2026-11-17-ua-rs-native-t10 2026-11-17-ua-rs-native-t11d 2026-11-17-ua-rs-native-t11e 2026-11-17-ua-rs-native-t11f 2026-11-17-ua-rs-native-t11a 2026-11-17-ua-rs-native-t11b 2026-11-17-ua-rs-native-t11c 2026-11-17-ua-rs-native-t13-c1 2026-11-17-ua-rs-native-t13-c2"}
 export CAPPED_MEM=${CAPPED_MEM:-4G} # 4G: capped's own default (the base sets 3G)
 C="--locked --offline -j2"
 
@@ -214,6 +214,8 @@ ua-cxx|ctest|wallet_native_json
 ua-qt|qt|test_native_addresses_witness_programs_ss58
 ua-dart-frb|dart|native.json: networks, addresses, witness programs, SS58, polkadotPaths
 ua-dart-frb|dart|native.json: deterministic rows, refusals, a UA key refused
+clientkeys|node|signDigest refuses anything but 32 bytes on every scheme, beside 32 bytes accepted (T13 C2)
+ua-rs|cargo|native_json_sign_digest_rows_are_32_bytes_by_type
 NAMES
 )
 . "$(dirname "$0")/2026-10-27-metatx-split-gates.sh"
