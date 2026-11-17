@@ -11313,6 +11313,8 @@ Change (2026-11-17, Fable's review of `3a5ece097` applied, with the coordinator'
 
 Change (owner 2026-11-17, "settle both points"; status: SPECIFIED): **O11 (a)**: the authorship of session, epoch, leave and removal records rests on the contract's check read through trusted reads (state keeps only their `sigHash`); keeping their signature bytes in state is asked for the next `PqChat` release (b). **O12 (a)**: rooms bound to a PqChat session carry their PQ-encrypted envelopes without Megolm, so the seed and the chain alone recover the history; ordinary Matrix rooms keep Megolm.
 
+
+Change (owner 2026-11-17, "OK, as proposed (b), write it into the pqchat-core spec"; status: PLANNED, not in this round): **O13 (b)**: an optional per-session passphrase, off by default, for sensitive 1:1 sessions: the message keys of an epoch come from `HKDF(epoch key ‖ Argon2id(passphrase, salt))`, the flag and salt inside `sealedInfo`, so the seed alone opens no message of that session; a new UA-7 protocol version with vectors in clientkeys first and its own review; no contract change.
 ### CLI-PQC-31 — Coordinator and controller calls of the `pqchat-core` spec, 2026-11-17
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: decisions.md#CLI-PQC-31 · superseded-by: —
 
