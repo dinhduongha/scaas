@@ -519,6 +519,18 @@ state alone. **Recommendation and applied: (a)**, since the main case is a 1:1 s
 **Settled (owner 2026-11-17, "chốt hai điểm"): (a).** Ordinary Matrix rooms of the default build keep Megolm; only rooms
 bound to a PqChat session carry their already PQ-encrypted envelopes without it.
 
+**O13 — An optional session passphrase** (owner question 2026-11-17, after PqVault's passphrase). Whoever holds the seed opens every
+epoch's key (each is wrapped to the seed's KEM key) and so the whole history, which homeservers and chain stores keep for years.
+(a) Nothing more. (b) An optional per-session passphrase as in PqVault: the message keys of an epoch come from
+`HKDF(epoch key ‖ Argon2id(passphrase, salt))`, the flag and the salt inside `sealedInfo` (encrypted, so no contract change), every
+member agreeing it out of band; the seed alone then opens no message of that session. (c) Forward secrecy by deleting old keys and
+regular rekeys, which contradicts the state-only recovery the owner ruled for PqChat. **Settled (owner 2026-11-17, "Ok, theo
+đề xuất (b), ghi vào spec pqchat-core"): (b), optional, off by default, for sensitive 1:1 sessions**, as an extension of UA-7's key
+schedule: a new protocol version with its own vectors in clientkeys `pqchat.js` first and its own review; not in this round's
+tasks (T0–T15 build UA-7 as pinned). Rules for when it is built: the passphrase is never stored or sent; a wrong one is detected
+before any message is shown (an AEAD check on `sealedInfo`); forgetting it loses that session's history; a group session may use
+it only if every member enters the same passphrase; the UI says a PqChat session is not an out-of-band channel for it.
+
 **Requests to other specs** (stated here, not edited there):
 
 - **`scaas-rpc` (K1):** CLI-RPC-06's mark is named for reads that feed a decryption; `pqchat-core` uses the same mark,
