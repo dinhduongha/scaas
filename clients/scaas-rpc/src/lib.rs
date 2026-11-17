@@ -7,6 +7,7 @@
 
 pub mod endpoint;
 pub mod error;
+pub mod http;
 
 pub use endpoint::{Class, Endpoint, EndpointAuth, Label, ListConfig, NodeList, Policy, Purpose, Secret};
 pub use error::{EndpointFailure, FailureKind, RpcError};

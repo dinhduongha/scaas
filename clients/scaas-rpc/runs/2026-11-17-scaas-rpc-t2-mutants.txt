@@ -1,0 +1,8 @@
+# t2 mutants at commit ee12baf2c (name | outcome | test)
+skip the Content-Length check | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test http an_announced_length_above_the_cap_is_refused_unread
+> to >= at the chunk cap | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test http a_body_at_the_cap_is_read
+depth 64 to 128 | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test http a_depth_of_65_is_too_deep_and_64_read
+drop the timeout | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test http a_hung_endpoint_times_out
+the default redirect policy | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test http a_redirect_is_not_followed
+send the credential to every endpoint | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test http the_credential_goes_to_its_endpoint_only
+6 mutants, 6 killed, 0 survived, 0 not loaded
