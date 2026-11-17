@@ -152,6 +152,7 @@ impl std::fmt::Display for RpcError {
 }
 
 impl std::error::Error for RpcError {}
+impl std::error::Error for EndpointFailure {}
 
 #[cfg(test)]
 mod tests {

@@ -212,3 +212,45 @@ mod tests {
         }
     }
 }
+
+/// The alloy transport of `EvmPool` (F5): a `tower::Service<RequestPacket>` that posts with the crate's client (no redirects,
+/// the request's timeout, endpoint `i`'s own credential) and reads the answer through the bounded reader before alloy's
+/// `ResponsePacket` decode sees a byte. A failure is the endpoint's `EndpointFailure` inside a transport error.
+#[cfg(feature = "evm")]
+#[derive(Clone)]
+pub struct BoundedRpc {
+    http: Http,
+    list: std::sync::Arc<NodeList>,
+    i: usize,
+    cap: usize,
+    deadline: Option<Instant>,
+}
+
+#[cfg(feature = "evm")]
+impl BoundedRpc {
+    pub fn new(http: Http, list: std::sync::Arc<NodeList>, i: usize, cap: usize, deadline: Option<Instant>) -> Self {
+        Self { http, list, i, cap, deadline }
+    }
+}
+
+#[cfg(feature = "evm")]
+impl tower::Service<alloy::rpc::json_rpc::RequestPacket> for BoundedRpc {
+    type Response = alloy::rpc::json_rpc::ResponsePacket;
+    type Error = alloy::transports::TransportError;
+    type Future = alloy::transports::TransportFut<'static>;
+
+    fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, req: alloy::rpc::json_rpc::RequestPacket) -> Self::Future {
+        let this = self.clone();
+        Box::pin(async move {
+            use alloy::transports::{TransportError, TransportErrorKind};
+            let body = serde_json::to_vec(&req).map_err(TransportError::ser_err)?;
+            let bytes = this.http.post_bytes(&this.list, this.i, None, body, this.cap, this.deadline).await
+                .map_err(TransportErrorKind::custom)?;
+            serde_json::from_slice(&bytes).map_err(|e| TransportError::deser_err(e, String::from_utf8_lossy(&bytes)))
+        })
+    }
+}

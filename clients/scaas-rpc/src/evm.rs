@@ -1,0 +1,541 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+//! The EVM reader (spec §5.2): `EvmPool`, alloy providers per endpoint on the crate's bounded transport ([`BoundedRpc`],
+//! CLI-RPC-07: never `connect_reqwest`, which reads an answer whole), identity per endpoint (CLI-RPC-03), failover reads
+//! (CLI-RPC-04) and the first-endpoint reads that never fail over (F4). Lifted from the node's `chain.rs` with its rules; the node's
+//! lane keys, sends and typed contract reads stay in the node.
+
+use crate::endpoint::{NodeList, Purpose};
+use crate::error::{EndpointFailure, FailureKind, RpcError};
+use crate::http::{BoundedRpc, Http, ANSWER_MAX};
+use crate::pool::{Answer, BlockChoice, Pool, Probe, ReadError};
+use alloy::eips::BlockNumberOrTag;
+use alloy::network::TransactionBuilder;
+use alloy::primitives::{Address, Bytes, B256};
+use alloy::providers::{DynProvider, Provider, ProviderBuilder};
+use alloy::rpc::client::ClientBuilder;
+use alloy::rpc::types::{Filter, Log, TransactionRequest};
+use alloy::transports::TransportError;
+use std::future::Future;
+use std::sync::atomic::AtomicU64;
+use std::sync::{Arc, OnceLock};
+use web_time::Instant;
+
+/// A simulation or a read failed because the contract reverted (final for this state) or because of the transport (transient).
+/// Merging the two would kill a job for one flaky RPC answer (the node's review P7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SimError {
+    Revert(String),
+    Transport(String),
+}
+
+impl std::fmt::Display for SimError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SimError::Revert(s) => write!(f, "revert: {s}"),
+            SimError::Transport(s) => write!(f, "transport: {s}"),
+        }
+    }
+}
+
+/// `SigCheck.isContract`: code, and not an EIP-7702 designator (`0xef0100 ‖ address`: an EOA, ECDSA by its own key only).
+pub fn is_contract(code: &[u8]) -> bool {
+    let designator = code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]);
+    !code.is_empty() && !designator
+}
+
+/// A revert's data as text when the caller has no ABI for it: `Error(string)`'s reason, `Panic(uint256)`'s code, else the hex.
+pub fn default_decode(data: &[u8]) -> String {
+    use alloy::sol_types::SolValue;
+    match data.get(..4) {
+        Some([0x08, 0xc3, 0x79, 0xa0]) => String::abi_decode(&data[4..]).unwrap_or_else(|_| alloy::hex::encode_prefixed(data)),
+        Some([0x4e, 0x48, 0x7b, 0x71]) => alloy::primitives::U256::abi_decode(&data[4..])
+            .map(|c| format!("Panic({c:#x})")).unwrap_or_else(|_| alloy::hex::encode_prefixed(data)),
+        _ => alloy::hex::encode_prefixed(data),
+    }
+}
+
+/// [`classify_with`] with [`default_decode`].
+pub fn classify(e: &TransportError) -> SimError {
+    classify_with(e, default_decode)
+}
+
+/// A revert first (its data decoded by `decode`); a JSON-RPC error that says "revert", or "execution" without being a node's own
+/// limit, is the EVM's answer too; anything else is the transport's (the node's recheck 2 P3-8, recheck 3 R3-6).
+pub fn classify_with(e: &TransportError, decode: fn(&[u8]) -> String) -> SimError {
+    match e.as_error_resp() {
+        Some(resp) => match resp.as_revert_data() {
+            Some(data) => SimError::Revert(decode(&data)),
+            None if resp.message.contains("revert") => SimError::Revert(resp.message.to_string()),
+            None if resp.message.contains("execution") && !node_limit(&resp.message) => SimError::Revert(resp.message.to_string()),
+            None => SimError::Transport(resp.message.to_string()),
+        },
+        None => SimError::Transport(e.to_string()),
+    }
+}
+
+/// The revert's data as bytes, when the error answer carries it (CLI-RPC-12 Q5: the verifier keeps it as bytes).
+pub fn revert_data(e: &TransportError) -> Option<Bytes> {
+    e.as_error_resp().and_then(|r| r.as_revert_data())
+}
+
+/// A node's own limit on one call, not the EVM's answer: geth's `execution aborted (timeout = 5s)` (`--rpc.evmtimeout`).
+/// Nethermind 2.2.0 answers its own timeout with `<method> request was canceled due to enabled timeout.` (from its
+/// `Nethermind.JsonRpc.dll`, not seen in a run): neither "revert" nor "execution", so [`classify`] reads it as transport already.
+/// A timed-out `eth_estimateGas` may answer `err: Cancellation Requested (supplied gas <n>)` (from the DLLs): transport too.
+/// Erigon's and Reth's are not verified: one containing "execution" would read as a revert.
+fn node_limit(m: &str) -> bool {
+    m.starts_with("execution aborted (timeout = ") && m.ends_with(')')
+}
+
+/// [`classify`] for a simulation without a gas field: "out of gas" / "gas required exceeds allowance" there is the call needing
+/// more than 2^24 regular gas (EIP-7825 under EIP-8037) or more than the RPC's gas cap: no gas limit makes it fit, so it is the
+/// job's answer, not the network's (Nethermind 2.2.0 answers exactly these two for an endless loop).
+pub fn classify_sim(e: &TransportError) -> SimError {
+    classify_sim_with(e, default_decode)
+}
+
+pub fn classify_sim_with(e: &TransportError, decode: fn(&[u8]) -> String) -> SimError {
+    match classify_with(e, decode) {
+        SimError::Transport(m) if m.contains("out of gas") || m.contains("gas required exceeds allowance") => {
+            SimError::Revert(format!("over the 2^24 regular gas of a transaction or the RPC gas cap: {m}"))
+        }
+        x => x,
+    }
+}
+
+/// The smallest `eth_getLogs` span [`EvmPool::logs_back`] asks before it gives an endpoint up (R-6), and at most this many spans
+/// per window (recheck 2 P3-3): a window is read in at most about 25 requests.
+pub const LOG_SPAN_MIN: u64 = 10;
+pub const LOG_WINDOW_SPANS: u64 = 20;
+
+/// The `latest` header's gas facts ([`EvmPool::block_gas`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlockGas {
+    pub limit: u64,
+    /// EIP-7928's `blockAccessListHash` is in the header: the Amsterdam two-dimensional gas model applies.
+    pub amsterdam: bool,
+}
+
+/// What several pools of one chain share: the highest block seen from the first endpoint, the total of failover answers.
+#[derive(Clone, Default)]
+pub struct Shared {
+    pub head: Arc<AtomicU64>,
+    pub failover: Arc<AtomicU64>,
+}
+
+/// One endpoint list of one EVM chain.
+pub struct EvmPool {
+    number: u64,
+    list: Arc<NodeList>,
+    pool: Pool,
+    http: Http,
+    /// each request bounded by the list's `timeout_ms` (reads, log spans, the first-endpoint reads)
+    providers: Vec<DynProvider>,
+    /// the same endpoints, each request bounded by `slow_timeout_ms`: the simulation only
+    simulators: Vec<DynProvider>,
+    pinned_uid: Option<B256>,
+    uid: Arc<OnceLock<B256>>,
+    decode: fn(&[u8]) -> String,
+}
+
+fn is_local(url: &url::Url) -> bool {
+    matches!(url.host_str(), Some("localhost") | Some("127.0.0.1") | Some("[::1]"))
+}
+
+impl EvmPool {
+    /// The pool of `list` for chain `chain_id`; `chain_uid` (block 0's hash) is required by `strict_majority` and by a read that
+    /// feeds a decryption (`Argument` otherwise).
+    pub fn connect(list: NodeList, chain_id: u64, chain_uid: Option<B256>) -> Result<Self, RpcError> {
+        Self::build(list, chain_id, chain_uid, Shared::default(), default_decode, true)
+    }
+
+    /// The node's pool: the head and the failover total shared per `[[chains]]` table, reverts decoded by the node's ABI, and
+    /// endpoint 0's identity checked where the node checks it (at lane start, NODE-GW-07), not on each read.
+    #[cfg(feature = "node-internal")]
+    pub fn connect_shared(list: NodeList, chain_id: u64, chain_uid: Option<B256>, shared: Shared, decode: fn(&[u8]) -> String)
+        -> Result<Self, RpcError> {
+        Self::build(list, chain_id, chain_uid, shared, decode, false)
+    }
+
+    fn build(list: NodeList, chain_id: u64, chain_uid: Option<B256>, shared: Shared, decode: fn(&[u8]) -> String, check_first: bool)
+        -> Result<Self, RpcError> {
+        if list.policy == crate::Policy::StrictMajority && chain_uid.is_none() {
+            return Err(RpcError::argument("strict_majority needs a pinned chain_uid"));
+        }
+        let (http, slow) = (Http::new(list.timeout_ms)?, Http::new(list.slow_timeout_ms)?);
+        let list = Arc::new(list);
+        let mut pool = Pool::shared(&list, chain_uid.is_some(), shared.head, shared.failover);
+        if !check_first {
+            pool = pool.without_first_identity();
+        }
+        let set = |h: &Http| (0..list.len()).map(|i| Self::provider(h, &list, i, None)).collect::<Vec<_>>();
+        let (providers, simulators) = (set(&http), set(&slow));
+        Ok(Self { number: chain_id, list, pool, http, providers, simulators, pinned_uid: chain_uid, uid: Default::default(), decode })
+    }
+
+    fn provider(h: &Http, list: &Arc<NodeList>, i: usize, deadline: Option<Instant>) -> DynProvider {
+        let t = BoundedRpc::new(h.clone(), list.clone(), i, ANSWER_MAX, deadline);
+        let client = ClientBuilder::default().transport(t, is_local(list.endpoints()[i].url()));
+        ProviderBuilder::new().disable_recommended_fillers().connect_client(client).erased()
+    }
+
+    /// Endpoint `i`'s provider, its requests bounded by `deadline` too when given.
+    pub(crate) fn at(&self, i: usize, deadline: Option<Instant>) -> DynProvider {
+        match deadline {
+            None => self.providers[i].clone(),
+            Some(_) => Self::provider(&self.http, &self.list, i, deadline),
+        }
+    }
+
+    /// The configured chain number.
+    pub fn number(&self) -> u64 {
+        self.number
+    }
+    pub fn list(&self) -> &NodeList {
+        &self.list
+    }
+    pub fn pool(&self) -> &Pool {
+        &self.pool
+    }
+    /// The `chain_uid` cell (feature `node-internal`: the node's `Chain` keeps it).
+    #[cfg(feature = "node-internal")]
+    pub fn uid_cell(&self) -> Arc<OnceLock<B256>> {
+        self.uid.clone()
+    }
+
+    /// Endpoint 0's provider (feature `node-internal`: the node's lane and indexer reads).
+    #[cfg(feature = "node-internal")]
+    pub fn primary(&self) -> &DynProvider {
+        &self.providers[0]
+    }
+    /// The providers after endpoint 0 (feature `node-internal`: the indexers' quorum).
+    #[cfg(feature = "node-internal")]
+    pub fn others(&self) -> &[DynProvider] {
+        &self.providers[1..]
+    }
+
+    /// A block of this chain from the first endpoint (a lane's receipt, a polled head): failover endpoints below it answer no read.
+    pub fn saw_block(&self, n: u64) {
+        self.pool.saw_block(n)
+    }
+    /// The highest block seen ([`EvmPool::saw_block`]).
+    pub fn seen_head(&self) -> u64 {
+        self.pool.seen_head()
+    }
+    /// How many reads a failover endpoint answered (a value, never a verdict): a refusal read while this moved is no verdict.
+    pub fn failover_answers(&self) -> u64 {
+        self.pool.failover_answers()
+    }
+
+    /// The node's failover read (feature `node-internal`): one endpoint answers `f` whole (CLI-RPC-04).
+    #[cfg(feature = "node-internal")]
+    pub async fn raw_read<T, F, Fut>(&self, f: F) -> Result<T, SimError>
+    where
+        F: Fn(DynProvider) -> Fut,
+        Fut: Future<Output = Result<T, SimError>>,
+    {
+        self.read_within(false, f).await.map(|(t, _)| t)
+    }
+
+    /// [`EvmPool::raw_read`] with the index of the endpoint that answered: a caller that reads a refusal out of an `Ok` takes it
+    /// from the first endpoint only.
+    #[cfg(feature = "node-internal")]
+    pub async fn raw_read_at<T, F, Fut>(&self, f: F) -> Result<(T, usize), SimError>
+    where
+        F: Fn(DynProvider) -> Fut,
+        Fut: Future<Output = Result<T, SimError>>,
+    {
+        self.read_within(false, f).await
+    }
+
+    /// The failover read over [`crate::pool::Pool::failover`]; `simulate`: `f` gets the endpoint's simulation client.
+    pub(crate) async fn read_within<T, F, Fut>(&self, simulate: bool, f: F) -> Result<(T, usize), SimError>
+    where
+        F: Fn(DynProvider) -> Fut,
+        Fut: Future<Output = Result<T, SimError>>,
+    {
+        let r = self.pool.failover(self, Purpose::Plain, |i| {
+            let fut = f(if simulate { self.simulators[i].clone() } else { self.providers[i].clone() });
+            async move {
+                fut.await.map_err(|e| match e {
+                    SimError::Revert(reason) => ReadError::Revert { data: vec![], reason },
+                    SimError::Transport(s) => ReadError::Failure(EndpointFailure::new(i, FailureKind::Transport, &s)),
+                })
+            }
+        }).await;
+        match r {
+            Ok(Answer { value, endpoint }) => Ok((value, endpoint)),
+            Err(e) => Err(self.sim_error(e)),
+        }
+    }
+
+    /// An `RpcError` of a failover read as the node's `SimError`: the first endpoint's revert, else the last failure's text.
+    pub(crate) fn sim_error(&self, e: RpcError) -> SimError {
+        match e {
+            RpcError::Revert { reason, .. } => SimError::Revert(reason),
+            RpcError::EndpointAllFailed { last: Some(l), .. } => SimError::Transport(self.failure_text(&l)),
+            e => SimError::Transport(e.to_string()),
+        }
+    }
+
+    fn failure_text(&self, l: &EndpointFailure) -> String {
+        match l.kind {
+            FailureKind::WrongChain => format!("endpoint {} is not chain {}", l.endpoint, self.number),
+            FailureKind::BehindHead => format!("endpoint {} {}", l.endpoint, l.text()),
+            _ => l.text().to_string(),
+        }
+    }
+
+    /// One `eth_call` (with `from` and `gas` when given), classified.
+    pub async fn call_tx(&self, tx: TransactionRequest) -> Result<Bytes, SimError> {
+        let d = self.decode;
+        self.read_within(false, |p| {
+            let tx = tx.clone();
+            async move { p.call(tx).await.map_err(|e| classify_with(&e, d)) }
+        })
+        .await
+        .map(|(b, _)| b)
+    }
+
+    /// `eth_call` then `eth_estimateGas` from `from`: the gas limit the transaction needs, regular + state (EIP-8037); no gas
+    /// field, so both run at the RPC's gas cap. Each request under `slow_timeout_ms`. The caller caps the gas it accepts.
+    pub async fn simulate_from(&self, from: Address, to: Address, data: Bytes) -> Result<u64, SimError> {
+        let tx = TransactionRequest::default().with_from(from).with_to(to).with_input(data);
+        let d = self.decode;
+        self.read_within(true, |p| {
+            let tx = tx.clone();
+            async move {
+                p.call(tx.clone()).await.map_err(|e| classify_sim_with(&e, d))?;
+                p.estimate_gas(tx).await.map_err(|e| classify_sim_with(&e, d))
+            }
+        })
+        .await
+        .map(|(g, _)| g)
+    }
+
+    /// The `latest` header's gas facts, from the raw header (any RPC's block shape).
+    pub async fn block_gas(&self) -> Result<BlockGas, SimError> {
+        let (b, _): (serde_json::Value, usize) = self.read_within(false, |p| async move {
+            p.raw_request("eth_getBlockByNumber".into(), ("latest", false)).await.map_err(|e| SimError::Transport(e.to_string()))
+        }).await?;
+        let g = b["gasLimit"].as_str().ok_or_else(|| SimError::Transport(format!("chain {}: latest block without gasLimit", self.number)))?;
+        let limit = u64::from_str_radix(g.trim_start_matches("0x"), 16).map_err(|e| SimError::Transport(format!("gasLimit: {e}")))?;
+        Ok(BlockGas { limit, amsterdam: b.get("blockAccessListHash").is_some() })
+    }
+
+    /// This chain's `chain_uid`: block 0's hash, which must equal the pinned one when set (a pruned RPC without block 0 trusts
+    /// the pin). Kept once read; an error is not kept.
+    pub async fn uid(&self) -> Result<B256, RpcError> {
+        if let Some(u) = self.uid.get() {
+            return Ok(*u);
+        }
+        let d = self.decode;
+        let genesis = self.read_within(false, |p| async move {
+            p.get_block_by_number(BlockNumberOrTag::Number(0)).await.map_err(|e| classify_with(&e, d))
+        }).await.map_err(|e| RpcError::argument(&format!("chain {}: block 0: {e}", self.number)))?.0.map(|b| b.header.hash);
+        let u = match (self.pinned_uid, genesis) {
+            (Some(p), Some(g)) if p != g => {
+                return Err(RpcError::argument(&format!("chain {}: RPC block 0 {g:#x} is not chain_uid {p:#x}", self.number)))
+            }
+            (Some(p), _) | (None, Some(p)) => p,
+            (None, None) => return Err(RpcError::argument(&format!("chain {}: the RPC gives no block 0 hash; set chain_uid", self.number))),
+        };
+        Ok(*self.uid.get_or_init(|| u))
+    }
+
+    /// `who`'s runtime code, through the failover read.
+    pub async fn code(&self, who: Address) -> Result<Bytes, SimError> {
+        let d = self.decode;
+        self.read_within(false, |p| async move { p.get_code_at(who).await.map_err(|e| classify_with(&e, d)) }).await.map(|(c, _)| c)
+    }
+
+    /// `who` is a contract signer: [`is_contract`] of its code (an EIP-7702 designator is an EOA).
+    pub async fn is_contract_at(&self, who: Address) -> Result<bool, SimError> {
+        Ok(is_contract(&self.code(who).await?))
+    }
+
+    /// Endpoint `p`'s block `n` hash (`None`: unread or absent).
+    pub async fn block_hash_on(p: &DynProvider, n: u64) -> Option<B256> {
+        p.get_block_by_number(BlockNumberOrTag::Number(n)).await.ok().flatten().map(|b| b.header.hash)
+    }
+
+    /// The logs of `address` with `topic0` in the last `lookback` blocks.
+    pub async fn logs_since(&self, address: Address, topic0: B256, lookback: u64) -> Result<Vec<Log>, SimError> {
+        self.logs_back(Filter::new().address(address).event_signature(topic0), lookback).await
+    }
+
+    /// The logs of `filter` in the last `lookback` blocks, the head and the logs from one endpoint. An RPC that caps the
+    /// `eth_getLogs` range refuses the whole window, so a span it refuses (an error answer) is asked again in tenths, down to
+    /// [`LOG_SPAN_MIN`] blocks or a [`LOG_WINDOW_SPANS`]th of the window, whichever is larger; an endpoint that refuses the floor
+    /// fails the read over. A transport error never shrinks a span; after an answer the span grows back (doubles), staying
+    /// below half of a span refused. Each span is one request under `timeout_ms`. The first endpoint's head raises the head seen.
+    pub async fn logs_back(&self, filter: Filter, lookback: u64) -> Result<Vec<Log>, SimError> {
+        let d = self.decode;
+        let (out, at) = self.read_within(false, |p| {
+            let filter = filter.clone();
+            async move {
+                let latest = p.get_block_number().await.map_err(|e| classify_with(&e, d))?;
+                let start = latest.saturating_sub(lookback);
+                let whole = latest - start + 1;
+                let floor = LOG_SPAN_MIN.max(whole.div_ceil(LOG_WINDOW_SPANS));
+                let (mut from, mut span, mut refused, mut out) = (start, whole, u64::MAX, vec![]);
+                while from <= latest {
+                    let to = latest.min(from.saturating_add(span - 1));
+                    match p.get_logs(&filter.clone().from_block(from).to_block(to)).await {
+                        Ok(l) => {
+                            out.extend(l);
+                            from = to + 1;
+                            span = span.saturating_mul(2).min(refused / 2).max(span);
+                        }
+                        Err(e) if e.as_error_resp().is_some() && span > floor => {
+                            tracing::debug!(span, "eth_getLogs span refused; a tenth of it");
+                            refused = refused.min(span);
+                            span = (span / 10).max(floor);
+                        }
+                        // never a revert: a log read has no contract answer
+                        Err(e) => return Err(SimError::Transport(e.to_string())),
+                    }
+                }
+                Ok((latest, out))
+            }
+        })
+        .await?;
+        if at == 0 {
+            self.saw_block(out.0);
+        }
+        Ok(out.1)
+    }
+
+    // ------------------------------------------------------------ the SDK's head reads (failover; strict majority: plan T6)
+
+    /// `who`'s pending nonce, failed over (CLI-RPC-04); the caller counts its own sends on top.
+    pub async fn pending_nonce(&self, who: Address, purpose: Purpose) -> Result<u64, RpcError> {
+        self.failover_read(purpose, |p| async move { p.get_transaction_count(who).pending().await }).await
+    }
+
+    /// EIP-1559 fee data, failed over; under `failover` the caller caps fee and gas from its own configuration (CLI-RPC-05).
+    pub async fn fees(&self, purpose: Purpose) -> Result<Fees, RpcError> {
+        let f = self.failover_read(purpose, |p| async move { p.estimate_eip1559_fees().await }).await?;
+        Ok(Fees { max_fee_per_gas: f.max_fee_per_gas.max(1), max_priority_fee_per_gas: f.max_priority_fee_per_gas })
+    }
+
+    /// A receipt, failed over: a value, never terminal (`tx_state` decides, CLI-RPC-09).
+    pub async fn receipt(&self, id: B256) -> Result<Option<alloy::rpc::types::TransactionReceipt>, RpcError> {
+        self.failover_read(Purpose::Plain, |p| async move { p.get_transaction_receipt(id).await }).await
+    }
+
+    /// A failover read of one provider call, classified (a revert keeps its data as bytes).
+    pub(crate) async fn failover_read<T, F, Fut>(&self, purpose: Purpose, f: F) -> Result<T, RpcError>
+    where
+        F: Fn(DynProvider) -> Fut,
+        Fut: Future<Output = Result<T, TransportError>>,
+    {
+        let d = self.decode;
+        self.pool.failover(self, purpose, |i| {
+            let fut = f(self.providers[i].clone());
+            async move { fut.await.map_err(|e| read_error(i, &e, d)) }
+        }).await.map(|a| a.value)
+    }
+
+    // ------------------------------------------------------------ first-endpoint reads (F4): endpoint 0 only, never failover
+
+    /// The pending nonce of `who` from endpoint 0 (the lane's own).
+    pub async fn first_pending_nonce(&self, who: Address) -> Result<u64, RpcError> {
+        self.providers[0].get_transaction_count(who).pending().await.map_err(|e| first_err(&e))
+    }
+    /// The committed (`latest`) nonce of `who` from endpoint 0.
+    pub async fn first_nonce_at(&self, who: Address) -> Result<u64, RpcError> {
+        self.providers[0].get_transaction_count(who).latest().await.map_err(|e| first_err(&e))
+    }
+    /// EIP-1559 fees from endpoint 0: (max fee, at least 1; priority fee).
+    pub async fn first_fees(&self) -> Result<(u128, u128), RpcError> {
+        let est = self.providers[0].estimate_eip1559_fees().await.map_err(|e| first_err(&e))?;
+        Ok((est.max_fee_per_gas.max(1), est.max_priority_fee_per_gas))
+    }
+    /// A receipt from endpoint 0.
+    pub async fn first_receipt(&self, hash: B256) -> Result<Option<alloy::rpc::types::TransactionReceipt>, RpcError> {
+        self.providers[0].get_transaction_receipt(hash).await.map_err(|e| first_err(&e))
+    }
+    /// The gas limit and max fee per gas of transaction `hash` as sent, from endpoint 0; `None` if it does not know it (the fee:
+    /// if it gives none, e.g. a legacy transaction).
+    pub async fn first_tx_fees(&self, hash: B256) -> Result<Option<(u64, Option<u128>)>, RpcError> {
+        let t: serde_json::Value = self.providers[0].raw_request("eth_getTransactionByHash".into(), (hash,)).await.map_err(|e| first_err(&e))?;
+        let hex = |k: &str| t[k].as_str().map(|g| u128::from_str_radix(g.trim_start_matches("0x"), 16));
+        let bad = |_| RpcError::argument("a transaction field that is not a number");
+        let Some(gas) = hex("gas") else { return Ok(None) };
+        let gas = u64::try_from(gas.map_err(bad)?).map_err(|_| RpcError::argument("a gas above u64"))?;
+        Ok(Some((gas, hex("maxFeePerGas").transpose().map_err(bad)?)))
+    }
+    /// The `finalized` block's number from endpoint 0 (`None`: unread or none).
+    pub async fn first_finalized_number(&self) -> Option<u64> {
+        self.providers[0].get_block_by_number(BlockNumberOrTag::Finalized).await.ok().flatten().map(|b| b.header.number)
+    }
+}
+
+/// One endpoint's transport error as the pool reads it: a revert (its data as bytes, its text by `decode`) or a failure.
+pub(crate) fn read_error(i: usize, e: &TransportError, decode: fn(&[u8]) -> String) -> ReadError {
+    match classify_with(e, decode) {
+        SimError::Revert(reason) => ReadError::Revert { data: revert_data(e).map(|b| b.to_vec()).unwrap_or_default(), reason },
+        SimError::Transport(_) => ReadError::Failure(transport(i, e)),
+    }
+}
+
+/// EIP-1559 fee data: the max fee per gas (at least 1) and the priority fee.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Fees {
+    pub max_fee_per_gas: u128,
+    pub max_priority_fee_per_gas: u128,
+}
+
+/// A first-endpoint read's failure: endpoint 0's, never failed over.
+fn first_err(e: &TransportError) -> RpcError {
+    RpcError::EndpointAllFailed { last: Some(EndpointFailure::new(0, FailureKind::Transport, &e.to_string())), failover_revert: None }
+}
+
+fn transport(i: usize, e: &TransportError) -> EndpointFailure {
+    EndpointFailure::new(i, FailureKind::Transport, &e.to_string())
+}
+
+impl Probe for EvmPool {
+    type Hash = B256;
+
+    /// Endpoint `i`'s `eth_chainId` is the chain's and its block 0 hash is the chain's (the pinned `chain_uid`, else the one
+    /// [`EvmPool::uid`] read, else the first endpoint's block 0).
+    async fn same_chain(&self, i: usize, deadline: Option<Instant>) -> Result<bool, EndpointFailure> {
+        let p = self.at(i, deadline);
+        let unread = |what: &str| EndpointFailure::new(i, FailureKind::IdentityUnread, &format!("endpoint {i}: {what} unreadable; not used"));
+        let id = p.get_chain_id().await.map_err(|_| unread("chain id"))?;
+        if id != self.number {
+            return Ok(false);
+        }
+        let want = match self.pinned_uid.or(self.uid.get().copied()) {
+            Some(u) => u,
+            None => Self::block_hash_on(&self.at(0, deadline), 0).await.ok_or_else(|| unread("the first endpoint's block 0"))?,
+        };
+        Ok(Self::block_hash_on(&p, 0).await.ok_or_else(|| unread("block 0"))? == want)
+    }
+
+    async fn head(&self, i: usize, deadline: Option<Instant>) -> Result<u64, EndpointFailure> {
+        self.at(i, deadline).get_block_number().await.map_err(|e| transport(i, &e))
+    }
+
+    async fn named(&self, i: usize, choice: BlockChoice, deadline: Option<Instant>) -> Result<u64, EndpointFailure> {
+        let p = self.at(i, deadline);
+        match choice {
+            BlockChoice::Latest => p.get_block_number().await.map_err(|e| transport(i, &e)),
+            BlockChoice::Depth(d) => Ok(p.get_block_number().await.map_err(|e| transport(i, &e))?.saturating_sub(d)),
+            BlockChoice::Finalized => p.get_block_by_number(BlockNumberOrTag::Finalized).await.map_err(|e| transport(i, &e))?
+                .map(|b| b.header.number)
+                .ok_or_else(|| EndpointFailure::new(i, FailureKind::Transport, "no finalized block")),
+        }
+    }
+
+    async fn header(&self, i: usize, number: u64, deadline: Option<Instant>) -> Result<B256, EndpointFailure> {
+        let b = self.at(i, deadline).get_block_by_number(BlockNumberOrTag::Number(number)).await.map_err(|e| transport(i, &e))?
+            .ok_or_else(|| EndpointFailure::new(i, FailureKind::Transport, &format!("no block {number}")))?;
+        if b.header.number != number {
+            return Err(EndpointFailure::new(i, FailureKind::AnswerMalformed, &format!("asked block {number}, answered {}", b.header.number)));
+        }
+        Ok(b.header.hash)
+    }
+}

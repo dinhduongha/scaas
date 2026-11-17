@@ -7,6 +7,8 @@
 
 pub mod endpoint;
 pub mod error;
+#[cfg(feature = "evm")]
+pub mod evm;
 pub mod http;
 pub mod pool;
 
