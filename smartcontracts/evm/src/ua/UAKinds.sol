@@ -81,6 +81,11 @@ library UAKinds {
     /// CTR-UA-44 (TODO 3ze, owner 2026-11-14): an `msig`'s structure update (`updateMsig`), signed by a threshold of the stored
     /// structure; not a `requirePortable` purpose (`_portablePurpose` refuses it), never any other record's signature.
     bytes32 internal constant PURPOSE_MSIG_UPDATE = keccak256("scaas.ua.purpose.msig-update.v1");
+    /// CTR-UA-46 (pqvault spec §4.1): the namespace word of an app's portable purpose, `appPurpose(appId)`, which the registry
+    /// derives itself (`requirePortableApp`). Never a purpose itself. A SCaaS purpose is the hash of an ASCII
+    /// `scaas.ua.purpose.<p>.v<n>` shorter than 64 bytes, an app purpose the hash of exactly 64 bytes led by this word, so the
+    /// two never meet without a keccak collision; a new SCaaS purpose keeps that string form.
+    bytes32 internal constant APP_PURPOSE_NS = keccak256("scaas.ua.purpose.app.v1");
     /// typed-signing TS-D1 (owner 2026-10-31 decisions 2 + 8): the portable domain `EIP712Domain(string name,string
     /// version)` = ("SCaaS UA Portable", "1"), no chain id, verifying contract or salt (a record registers a UA on every
     /// chain, CTR-UA-07); `kind` is `uint16` (its name: `name(kind)`, the registry's `kindName`).
@@ -287,6 +292,11 @@ library UAKinds {
 
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(MSG_TAG, tag(kind), purposeTag, digest));
+    }
+
+    /// CTR-UA-46: app `appId`'s portable purpose, `keccak256(abi.encode(APP_PURPOSE_NS, appId))`.
+    function appPurpose(bytes32 appId) internal pure returns (bytes32) {
+        return keccak256(abi.encode(APP_PURPOSE_NS, appId));
     }
 
     /// `keccak256("evm:" ‖ decimal(chainId))` (the registry computes it in its constructor from `block.chainid`).

@@ -1,0 +1,64 @@
+# PqVault plan Part R (docs/superpowers/plans/2026-11-17-pqvault.md): task | step | commit | rc | counts
+# Gate runner runs/2026-11-17-pqvault/gates.sh (logs git-ignored). "R1 tree" = the tree of the R1 commit (the commits between f655cb0e0 and it touch no contract, test or vector).
+# R1 baseline, the unchanged tree:
+R1-before | forge-ua | f655cb0e0 | 0 | 831 passed 0 failed 0 skipped (forge)
+# R1:
+R1 | forge-account | R1 tree | 0 | 103 passed 0 failed 0 skipped (forge)
+R1 | forge-as | R1 tree | 0 | 564 passed 0 failed 0 skipped (forge)
+R1 | forge-confidential | R1 tree | 0 | 5 passed 0 failed 0 skipped (forge)
+R1 | forge-factory | R1 tree | 0 | 2 passed 0 failed 0 skipped (forge)
+R1 | forge-fork | R1 tree | 0 | 0 passed 0 failed 1 skipped (forge)
+R1 | forge-governance | R1 tree | 0 | 915 passed 0 failed 0 skipped (forge)
+R1 | forge-hedera | R1 tree | 0 | 20 passed 0 failed 0 skipped (forge)
+R1 | forge-liquidity | R1 tree | 0 | 93 passed 0 failed 1 skipped (forge)
+R1 | forge-merge | R1 tree | 0 | 350 passed 0 failed 0 skipped (forge)
+R1 | forge-metatx | R1 tree | 0 | 548 passed 0 failed 1 skipped (forge)
+R1 | forge-modules | R1 tree | 0 | 35 passed 0 failed 0 skipped (forge)
+R1 | forge-p6f | R1 tree | 0 | 4 passed 0 failed 0 skipped (forge)
+R1 | forge-pqchat | R1 tree | 0 | 99 passed 0 failed 0 skipped (forge)
+R1 | forge-pqz | R1 tree | 0 | 680 passed 0 failed 4 skipped (forge)
+R1 | forge-pqzh | R1 tree | 0 | 42 passed 0 failed 0 skipped (forge)
+R1 | forge-research | R1 tree | 0 | 360 passed 0 failed 7 skipped (forge)
+R1 | forge-top | R1 tree | 0 | 29 passed 0 failed 0 skipped (forge)
+R1 | forge-ua | R1 tree | 0 | 847 passed 0 failed 0 skipped (forge)
+R1 | forge-v2 | R1 tree | 0 | 750 passed 0 failed 0 skipped (forge)
+R1 | forge-wallet | R1 tree | 0 | 185 passed 0 failed 0 skipped (forge)
+R1 | forge-wrap | R1 tree | 0 | 324 passed 0 failed 0 skipped (forge)
+R1 | forge-zether | R1 tree | 0 | 444 passed 0 failed 4 skipped (forge)
+R1 | node-guard | R1 tree | 0 | 46 passed 0 failed 0 ignored (cargo)
+R1 | set-n2048-kmax1024-as | R1 tree | 0 | 102 passed 0 failed 0 skipped (forge)
+R1 | set-n2048-kmax1024-governance | R1 tree | 0 | 224 passed 0 failed 0 skipped (forge)
+R1 | set-n2048-kmax1024-metatx | R1 tree | 0 | 183 passed 0 failed 0 skipped (forge)
+R1 | set-n2048-kmax1024-pqz | R1 tree | 0 | 506 passed 0 failed 3 skipped (forge)
+R1 | set-n2048-kmax1024-pqzh | R1 tree | 0 | 42 passed 0 failed 0 skipped (forge)
+R1 | set-n2048-kmax1024-research | R1 tree | 0 | 89 passed 0 failed 0 skipped (forge)
+R1 | set-n2048-kmax1024-ua | R1 tree | 0 | 236 passed 0 failed 0 skipped (forge)
+R1 | set-n2048-kmax1024-v2 | R1 tree | 0 | 37 passed 0 failed 0 skipped (forge)
+R1 | set-n2048-kmax1024-wrap | R1 tree | 0 | 24 passed 0 failed 0 skipped (forge)
+R1 | set-n2560-kmax16384-as | R1 tree | 0 | 102 passed 0 failed 0 skipped (forge)
+R1 | set-n2560-kmax16384-governance | R1 tree | 0 | 224 passed 0 failed 0 skipped (forge)
+R1 | set-n2560-kmax16384-metatx | R1 tree | 0 | 183 passed 0 failed 0 skipped (forge)
+R1 | set-n2560-kmax16384-pqz | R1 tree | 0 | 502 passed 0 failed 7 skipped (forge)
+R1 | set-n2560-kmax16384-pqzh | R1 tree | 0 | 42 passed 0 failed 0 skipped (forge)
+R1 | set-n2560-kmax16384-research | R1 tree | 0 | 87 passed 0 failed 2 skipped (forge)
+R1 | set-n2560-kmax16384-ua | R1 tree | 0 | 236 passed 0 failed 0 skipped (forge)
+R1 | set-n2560-kmax16384-v2 | R1 tree | 0 | 37 passed 0 failed 0 skipped (forge)
+R1 | set-n2560-kmax16384-wrap | R1 tree | 0 | 24 passed 0 failed 0 skipped (forge)
+R1 | set-n2816-kmax65536-as | R1 tree | 0 | 102 passed 0 failed 0 skipped (forge)
+R1 | set-n2816-kmax65536-governance | R1 tree | 0 | 224 passed 0 failed 0 skipped (forge)
+R1 | set-n2816-kmax65536-metatx | R1 tree | 0 | 183 passed 0 failed 0 skipped (forge)
+R1 | set-n2816-kmax65536-pqz | R1 tree | 0 | 497 passed 0 failed 12 skipped (forge)
+R1 | set-n2816-kmax65536-pqzh | R1 tree | 0 | 42 passed 0 failed 0 skipped (forge)
+R1 | set-n2816-kmax65536-research | R1 tree | 0 | 80 passed 0 failed 9 skipped (forge)
+R1 | set-n2816-kmax65536-ua | R1 tree | 0 | 236 passed 0 failed 0 skipped (forge)
+R1 | set-n2816-kmax65536-v2 | R1 tree | 0 | 37 passed 0 failed 0 skipped (forge)
+R1 | set-n2816-kmax65536-wrap | R1 tree | 0 | 24 passed 0 failed 0 skipped (forge)
+R1 | size | R1 tree | 0 | size gate: 0 error(s), 170 contracts
+R1 | uagas | R1 tree | 0 | 22 passed 0 failed 0 skipped (forge)
+# R1 mutants (runs/2026-11-17-pqvault/mutants-r1.py): mutant | tests that went red | rc (1 = killed); 6 of 6 killed
+R1 mutant | entry-closed-list | test_requirePortableApp_appIdZero, test_requirePortableApp_gen2, test_requirePortableApp_gen2PreChangeGen1, test_requirePortableApp_msig, test_requirePortableApp_nativeMemberUnderEveryApp, test_requirePortableApp_separation, test_requirePortableApp_singleKeyEveryHolderKind | 1
+R1 mutant | appid-zero-dropped | test_requirePortableApp_appIdZero | 1
+R1 mutant | purpose-without-ns | test_requirePortableApp_appIdZero, test_requirePortableApp_gen2, test_requirePortableApp_gen2PreChangeGen1, test_requirePortableApp_msig, test_requirePortableApp_separation, test_requirePortableApp_singleKeyEveryHolderKind | 1
+R1 mutant | requireportable-open | test_requirePortableApp_separation, test_requirePortable_purposes | 1
+R1 mutant | portable-classical-shortcut | test_requirePortableApp_msig, test_requirePortable_msig | 1
+R1 mutant | sigok-guard-dropped | test_ua8_sigOkPortablePurposesOnly | 1

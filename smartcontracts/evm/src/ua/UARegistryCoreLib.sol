@@ -568,20 +568,34 @@ library UARegistryCoreLib {
 
     // ----- the portable check (UA-7 O1, owner 2026-11-04; plan T66a) -----
 
-    /// `IUARegistry.requirePortable` on a record held here (the registry forwards a gen-1 record to gen 1 first): a single key by
-    /// `_portableOk`, the path `setKemKey` and `setPqzKey` take; an `msig` by `_msig` over its accepted slots, minimal, whatever its PQ
-    /// weight (`_sigOk`'s empty `pop` of a classical-dominant `msig` is the registration's rule, never a signature). No write: the registry
-    /// runs it inside its view.
+    /// `IUARegistry.requirePortable` on a record held here (the registry forwards a gen-1 record to gen 1 first): the closed list of
+    /// portable purposes (`_portablePurpose`), then `_portable`. No write: the registry runs it inside its view.
     function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, IUARegistry.UASig calldata auth) external {
+        _portablePurpose(ua, purposeTag);
+        _portable(ua, purposeTag, typedDigest, auth);
+    }
+
+    /// `IUARegistry.requirePortableApp` on a record held here (CTR-UA-46): `_portable` under `appPurpose(appId)`, a purpose the
+    /// registry derives, so no caller names a SCaaS purpose through it; `appId` 0 refused. No write.
+    function requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, IUARegistry.UASig calldata auth) external {
+        if (appId == 0) revert IUARegistry.UAUnauthorized(ua);
+        _portable(ua, UAKinds.appPurpose(appId), typedDigest, auth);
+    }
+
+    /// The portable check of `requirePortable` and `requirePortableApp` (its purpose already checked by the caller): a single key by
+    /// `_single` with `signature` only, the check `setKemKey` and `setPqzKey` make; an `msig` by `_msig` over its accepted slots,
+    /// minimal, whatever its PQ weight (`_sigOk`'s empty `pop` of a classical-dominant `msig` is the registration's rule, never a
+    /// signature: a classical-only `msig` with no members is refused here).
+    function _portable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, IUARegistry.UASig calldata auth) internal view {
         IUARegistry.Record memory r = UAStore.layout().records[ua];
         // the registration's `pop` is `register`'s own check (its slots need no acceptance): never a view's
         if (r.kind == 0 || purposeTag == UAKinds.PURPOSE_POP_V2) revert IUARegistry.UAUnauthorized(ua);
         bool ok;
         if (r.kind != UAKinds.MSIG) {
             (bytes memory d,) = UAStore.registration(ua, r);
-            ok = _portableOk(r.kind, d, ua, purposeTag, typedDigest, auth);
+            ok = auth.keyData.length == 0 && auth.members.length == 0
+                && _single(_cfgKind(), r.kind, d, ua, purposeTag, typedDigest, auth.signature);
         } else {
-            _portablePurpose(ua, purposeTag);
             bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purposeTag, typedDigest));
             // CTR-UA-44: the current structure (MM-9)
             ok = auth.keyData.length == 0 && auth.signature.length == 0
@@ -655,9 +669,19 @@ library UARegistryCoreLib {
             return members.length != 0 && _msig(ua, md, digest, purpose == UAKinds.PURPOSE_POP_V2, d, members);
         }
         if (members.length != 0) return false;
+        return _single(cfg, kind, d, ua, purpose, digest, sig);
+    }
+
+    /// `_sigOk`'s single-key tail, shared with `_portable` (CTR-UA-46): `sig` by the kind's verifier over `uaMessage(kind, purpose,
+    /// digest)`; the caller has checked the purpose and that no `members` came.
+    function _single(uint256 cfg, uint16 kind, bytes memory d, bytes32 ua, bytes32 purpose, bytes32 digest, bytes memory sig)
+        internal view returns (bool)
+    {
         // A6-I1: a gen-1 holder's PQZ key record on gen 2 (the PQ holder kinds are stored: no key data in `auth`); the
         // PQ verifiers' `verify` is their `verifyPop`
-        if (uint160(cfg) == 0) return UAStore.via(_pred(), ua, purpose, digest, IUARegistry.UASig("", sig, members));
+        if (uint160(cfg) == 0) {
+            return UAStore.via(_pred(), ua, purpose, digest, IUARegistry.UASig("", sig, new IUARegistry.MemberSig[](0)));
+        }
         bytes32 message = UAKinds.uaMessage(kind, purpose, digest);
         bytes memory ek = UAStore.expanded(ua, kind); // ML-DSA: a complete cache is the key the PoP verifies on
         bytes memory data = ek.length != 0

@@ -259,19 +259,30 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             emit log_named_uint(string.concat("register threshold kind ", vm.toString(g.kind)), found);
             bool sawPoP;
             for (uint256 gas = 20_000; gas < found; gas += gas + 80_000 < found ? 20_000 : 250) {
-                uint256 snap = vm.snapshotState();
-                (bool ok, bytes memory ret) = address(reg).call{gas: gas}(call);
-                if (!ok) {
-                    assertEq(reg.kindOf(g.ua), 0, "no record after a starved register");
-                    assertEq(reg.keyOwner(g.keyHash), 0, "no key owner after a starved register");
-                    if (ret.length == 0) {} // outer out-of-gas
-                    else if (bytes4(ret) == IUARegistry.UAPoP.selector && ret.length == 4) sawPoP = true;
-                    else assertTrue(bytes4(ret) == bytes4(keccak256("SSTORE2WriteFailed()")) && ret.length == 4, "outcome");
-                }
-                vm.revertToState(snap);
+                if (_starvedRegister(g, call, gas)) sawPoP = true;
+            }
+            // pqvault R1: also every 1,000 below 200,000, where each kind's `UAPoP` band lies (musig2-secp256k1 about 8 k wide at
+            // 99,900-107,950; it was 97,800-108,150 before `requirePortableApp`): the 20,000 grid above hit it at one sample only
+            for (uint256 gas = 21_000; gas < 200_000 && gas < found; gas += 1_000) {
+                if (_starvedRegister(g, call, gas)) sawPoP = true;
             }
             assertTrue(sawPoP, "UAPoP seen");
         }
+    }
+
+    /// One starved `register` of `g` at `gas`: no record either way; the outcome an empty revert, `UAPoP` (returns true) or
+    /// `SSTORE2WriteFailed`.
+    function _starvedRegister(Group memory g, bytes memory call, uint256 gas) internal returns (bool pop) {
+        uint256 snap = vm.snapshotState();
+        (bool ok, bytes memory ret) = address(reg).call{gas: gas}(call);
+        if (!ok) {
+            assertEq(reg.kindOf(g.ua), 0, "no record after a starved register");
+            assertEq(reg.keyOwner(g.keyHash), 0, "no key owner after a starved register");
+            if (ret.length == 0) {} // outer out-of-gas
+            else if (bytes4(ret) == IUARegistry.UAPoP.selector && ret.length == 4) pop = true;
+            else assertTrue(bytes4(ret) == bytes4(keccak256("SSTORE2WriteFailed()")) && ret.length == 4, "outcome");
+        }
+        vm.revertToState(snap);
     }
 
     // ----- generations -----

@@ -540,6 +540,19 @@ interface IUARegistry is IERC5267 {
     /// one. Gen 2 forwards a gen-1 record (UA8-D11). `UAVerifyGas` when too little gas is left for a verifier's cap.
     function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig calldata auth) external view;
 
+    /// CTR-UA-45 / CTR-UA-46 (owner 2026-11-17, N1): the open portable app namespace. `requirePortable`'s checks under
+    /// `purpose = UAKinds.appPurpose(appId) = keccak256(abi.encode(keccak256("scaas.ua.purpose.app.v1"), appId))`, computed here, so
+    /// an app never names a SCaaS purpose through it and `requirePortable` refuses every app purpose; `appId` 0 is
+    /// `UAUnauthorized(ua)`. No write, no event, no new error. Gen 2 forwards a gen-1 record to gen 1's entry plainly (a gen 1
+    /// without it reverts: a refusal). Single keys and derived `msig` members sign the purpose, so app X's signature is refused
+    /// under app Y; a native `msig` member signs `typedDigest` itself, so its signature holds under every `appId` for the same
+    /// digest. Hence three rules for every app contract on this entry: (a) it computes `typedDigest` itself, in its own EIP-712
+    /// domain, from the record it checks, never from a caller's bytes; (b) every record names the signing UA in a field; (c) its
+    /// portable domain (exactly `name, version, salt`, `salt = appId`) and its chain-bound domain (`requireAuthorized`) have
+    /// different field sets. Residual: a dapp can phish a native member's signature over a valid record (one request per member,
+    /// the quorum needed).
+    function requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, UASig calldata auth) external view;
+
     /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag` (typed-signing TS-D12).
     /// Native ids (ua >> 160 == 0): `auth.signature` only, ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for
     ///   SmartKeyAccount clones, by the immutable clone codehash) over uaAuthDigest(ua, purposeTag, digest) — never over

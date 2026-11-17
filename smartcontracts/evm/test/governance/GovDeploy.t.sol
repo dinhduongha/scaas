@@ -659,8 +659,9 @@ contract GovDeployTest is Test {
         // scoped PQZ key records, K3-3; its code unchanged): 0x7f00524c2b24014C7db703d89c1b16B49B3aEfeF; CTR-UA-44 (TODO 3ze; the
         // metadata hash: `IUARegistry` gains `updateMsig`, `msigStateOf`; its code unchanged): 0x3a77CAC88eeFa96E89CA64154D20dc8efcaE082C;
         // 3zh-mldsa (the metadata hash: `IUARegistry`'s `UAKeyNotCached` and `expandedKeyOf` returning `address[3]`, owner
-        // 2026-11-15; its code unchanged): -> this
-        assertEq(rf, 0x93690B9A678b7D37221D41625563fe3f2939c1be, "RelayFeeRouter");
+        // 2026-11-15; its code unchanged): 0x93690B9A678b7D37221D41625563fe3f2939c1be; pqvault R1 (the metadata hash: `IUARegistry`
+        // gains `requirePortableApp`, CTR-UA-46; its code unchanged): -> this
+        assertEq(rf, 0x4321eD19C728Ad11767c4514a5f089E876D7De73, "RelayFeeRouter");
         // ua-mtx-merge T24: 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 -> 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (the
         // router's metadata hash: `IGovernance`); T26: -> this (the two empty hooks `UAMetaTxBase` adds, its
         // `mtxCancelNonce` seats); T32: 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> this (the eight regulated control ops)
@@ -736,8 +737,9 @@ contract GovDeployTest is Test {
         // msig-members, CTR-UA-44 (TODO 3ze; the metadata hash: `IUARegistry` gains `updateMsig`, `msigStateOf`; its code
         // unchanged): 0x25e38E5af7B8aeF469B92cc357f56F46898FCe70. The merge pre-reset4 (both; the metadata hash):
         // 0xEf29EBaCe18B161338a8a0f8cF34839b233127F9; 3zh-mldsa (the metadata hash: `IUARegistry`, `UAStore`, `PqUA`; owner
-        // 2026-11-15; its code unchanged): -> this
-        assertEq(router, 0xFf149718D2757d1afD4435AdD5c8bA80A14C2Fa4, "GovernanceRouter");
+        // 2026-11-15; its code unchanged): 0xFf149718D2757d1afD4435AdD5c8bA80A14C2Fa4; pqvault R1 (the metadata hash: `IUARegistry`
+        // gains `requirePortableApp` and `UAKinds` `appPurpose`, CTR-UA-46; its code unchanged): -> this
+        assertEq(router, 0x36Ebc0Ab03EB1B67D37b6443FD04C06a4E3AB091, "GovernanceRouter");
     }
 
     /// A kind's init code with the factory's append: chain-neutral releases (plan T72), `abi.encode(factory, implArgs)`;

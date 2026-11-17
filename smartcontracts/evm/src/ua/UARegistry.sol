@@ -693,6 +693,13 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         else _libView(address(UARegistryCoreLib), UARegistryCoreLib.requirePortable.selector, _s.records[ua].kind);
     }
 
+    /// CTR-UA-46: as `requirePortable`, under the purpose the library derives from `appId`. Gen 2 forwards plainly: a predecessor
+    /// without this entry reverts (empty data, no fallback), a refusal of a void view.
+    function requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, UASig calldata auth) external view {
+        if (_elsewhere(ua)) IUARegistry(predecessor).requirePortableApp(ua, appId, typedDigest, auth);
+        else _libView(address(UARegistryCoreLib), UARegistryCoreLib.requirePortableApp.selector, _s.records[ua].kind);
+    }
+
     /// `_lib` inside a view (`requirePortable`): the library entry writes nothing, so it runs in a STATICCALL frame too. Solidity
     /// types no DELEGATECALL as `view`; the function pointer is cast.
     function _libView(address lib, bytes4 sel, uint16 kind) private view {

@@ -19,10 +19,10 @@
   "transfer_wrapped": 46451,
   "transfer_wrappedPqz": 46440,
   "transfer_wrappedZether": 46484,
-  "uaExecuteTransfer_normal": 97871,
+  "uaExecuteTransfer_normal": 97785,
   "uaExecuteTransfer_normalPqz": 265112,
-  "uaExecuteTransfer_normalZether": 139522,
-  "uaExecuteTransfer_wrapped": 97947,
+  "uaExecuteTransfer_normalZether": 139436,
+  "uaExecuteTransfer_wrapped": 97861,
   "uaExecuteTransfer_wrappedPqz": 265112,
-  "uaExecuteTransfer_wrappedZether": 139535
+  "uaExecuteTransfer_wrappedZether": 139449
 }
