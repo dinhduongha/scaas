@@ -1,0 +1,11 @@
+killed   | M1 NFKD the passphrase | clients/clientkeys/src/substrate.js | rc=1 | 1 failed: the passphrase as given: NFC and NFD give one BIP-39 seed and two Polkadot keys; the mini-
+killed   | M2 the BIP-39 seed in place of the entropy (the app's old code) | clients/clientkeys/src/substrate.js | rc=1 | 2 failed: the passphrase as given: NFC and NFD give one BIP-39 seed and two Polkadot keys; the mini-
+killed   | M3 hard and soft swapped | clients/clientkeys/src/substrate.js | rc=1 | 2 failed: signMessage and signDigest on Polkadot keys verify under @scure/sr25519; fixed randomness 
+killed   | M4 SCALE length prefix dropped | clients/clientkeys/src/substrate.js | rc=1 | 1 failed: the subkey answers and the junction rows of T0
+killed   | M5 one-byte compact length at 64 | clients/clientkeys/src/substrate.js | rc=1 | 1 failed: the subkey answers and the junction rows of T0
+killed   | M6 hash at 32 bytes | clients/clientkeys/src/substrate.js | rc=1 | 1 failed: the subkey answers and the junction rows of T0
+killed   | M7 numeric junction as a string | clients/clientkeys/src/substrate.js | rc=1 | 1 failed: the subkey answers and the junction rows of T0
+killed   | M8 leading zero accepted | clients/clientkeys/src/substrate.js | rc=1 | 1 failed: path refusals, each beside its accepted neighbour
+killed   | M9 raw-message bound 131,071 | clients/clientkeys/src/seed.js | rc=1 | 2 failed: signMessage on the ed25519 networks
+killed   | M10 envelope prefix check removed | clients/clientkeys/src/seed.js | rc=1 | 1 failed: signMessage refusals
+10 mutants, 10 killed, 0 survived, 0 not loaded

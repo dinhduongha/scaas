@@ -1,5 +1,6 @@
 // Lazy-loaded by the portal only when the payer picks "Recovery phrase wallet".
-export { normalizeMnemonic, wordsToEntropy, seedFromEntropy, deriveKey, signDigest, signTyped, signKeyProof, NETWORKS, NATIVE_NETWORKS } from './seed.js';
+export { normalizeMnemonic, wordsToEntropy, seedFromEntropy, deriveKey, signDigest, signTyped, signKeyProof, NETWORKS, NATIVE_NETWORKS, signMessage, MAX_RAW_MESSAGE } from './seed.js';
+export { polkadotKey, miniSecretFromEntropy, parsePolkadotPath, ss58 } from './substrate.js';
 export { createVault, openVault, enablePrf, needsRewrap, rewrapPin, checkPassphrase, SCRYPT } from './vault.js';
 export { SeedBackup } from './backup.js';
 export {

@@ -16,6 +16,7 @@ import { bech32, bech32m, base32, base58 } from '@scure/base';
 import { concatBytes, utf8ToBytes, bytesToHex, hex, wipe } from './bytes.js';
 import { evmAddress, hashTypedData, keyProofMessage, evmTransaction, signedTransaction } from './evm.js';
 import { UAError } from './ua.js';
+import { sr25519Sign } from './substrate.js';
 
 const fail = (code, reason) => { throw new UAError(code, reason); };
 
@@ -266,12 +267,36 @@ export function signKeyProof(key, challenge) {
 /** Sign a raw 32-byte digest (or batch root). DANGER: a raw digest hides its preimage — it may be an EIP-7702
  *  authorization (`keccak256(0x05 ‖ rlp([chainId, address, nonce]))`), which hands the account to a sweeper, or a
  *  transaction hash. Owner rule 2026-10-30: never sign a 7702 authorization. Refused unless the caller opts in with
- *  `{ allowRawDigest: true }` and itself built the digest from a checked SCaaS message (a Merkle batch root, a digest a
- *  `check*` function returned); prefer `signTyped` / `signKeyProof`. secp256k1 ⇒ r‖s‖v (v = 27|28, low-s);
- *  ed25519 ⇒ 64 bytes. */
+ *  `{ allowRawDigest: true }` and itself built the digest: from a checked SCaaS message (a Merkle batch root, a digest a
+ *  `check*` function returned), or a native chain's preimage only as CLI-SGN-54 (built in-process from named fields by its own
+ *  encoder, shown decoded); never an EVM transaction hash or an EIP-7702 authorization raw (EVM transactions: `signTransaction`).
+ *  Prefer `signTyped` / `signKeyProof`. secp256k1 ⇒ r‖s‖v (v = 27|28, low-s); ed25519 ⇒ 64 bytes; `bitcoin_p2tr` ⇒ BIP-340
+ *  over the tweaked key; sr25519 ⇒ 64 bytes (the digest as the message). `aux`: fixed randomness for the generator only
+ *  (Taproot `aux`, sr25519 `r`), else the CSPRNG. */
 export function signDigest(key, digest, { allowRawDigest = false, aux } = {}) {
   if (allowRawDigest !== true) throw new Error('signDigest: raw digest refused; use signTyped / signKeyProof, or pass { allowRawDigest: true }');
-  return key.network === 'bitcoin_p2tr' ? signTaproot(key.privateKey, digest, aux) : sign(key, digest);
+  if (key.network === 'bitcoin_p2tr') return signTaproot(key.privateKey, digest, aux);
+  if (key.curve === 'sr25519') return sr25519Sign(key.privateKey, digest, aux);
+  return sign(key, digest);
+}
+
+/** The raw-message bound (CLI-UAL-44): Aptos's 64 KiB transaction limit plus its prefix, with room. */
+export const MAX_RAW_MESSAGE = 131072;
+// the off-chain envelopes SCaaS families verify (Solana OCMS v1, Aptos AIP-62 fullMessage): never through the raw path
+const ENVELOPES = [concatBytes(new Uint8Array([0xff]), utf8ToBytes('solana offchain')), utf8ToBytes('APTOS\n')];
+
+/** Sign a native chain's message (1 to 131,072 bytes) with an Ed25519 or sr25519 native key, behind the same opt-in as
+ *  `signDigest` (CLI-SGN-54: a transaction preimage the caller's encoder built; an off-chain text only inside the chain's own
+ *  envelope). Refused (Argument): no opt-in, an empty or over-long message, a message starting with an envelope a SCaaS family
+ *  verifies (`0xff ‖ "solana offchain"`, `"APTOS\n"`), a secp256k1 or Taproot key. ed25519 RFC 8032; sr25519 context
+ *  "substrate" (`aux`: the generator's fixed randomness). */
+export function signMessage(key, message, { allowRawDigest = false, aux } = {}) {
+  if (allowRawDigest !== true) fail('Argument', 'signMessage: refused without { allowRawDigest: true }');
+  if (!(message instanceof Uint8Array) || message.length < 1 || message.length > MAX_RAW_MESSAGE) fail('Argument', 'message: 1 to 131072 bytes');
+  if (ENVELOPES.some((p) => message.length >= p.length && p.every((b, i) => message[i] === b))) fail('Argument', 'message: a SCaaS off-chain envelope');
+  if (key.curve === 'ed25519') return ed25519.sign(message, key.privateKey);
+  if (key.curve === 'sr25519') return sr25519Sign(key.privateKey, message, aux);
+  return fail('Argument', 'signMessage: Ed25519 and sr25519 keys only');
 }
 
 /** BIP-86 key-path signature: d = d0 or n − d0 (even y of P), BIP-340 with d + t mod n, then verified under x(Q). `aux`: the

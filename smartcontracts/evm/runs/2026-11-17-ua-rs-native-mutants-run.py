@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """ua-rs-native: the mutant runner every task's harness (2026-11-17-ua-rs-native-t<n>-mutants.py) loads. A harness defines
 M = [(name, file, old, new, cmd, cwd), ...] and calls main(M). One change per run on a clean tree, `cmd` run in `cwd` (from the
-worktree root), the file restored byte for byte after it. A mutant whose suite passes is a finding; one that does not load (a
+worktree root), the file restored byte for byte after it. A mutant that needs two edits in one file (an import beside its
+use) gives `old` as a list of (old, new) pairs and `new` None. A mutant whose suite passes is a finding; one that does not load (a
 syntax or compile error, a missing export) kills nothing and is counted as not loaded.
   python3 -I <harness> [first last]     run (slices for long lists)
   python3 -I <harness> check            every replacement found exactly once at this commit, no run
@@ -12,20 +13,27 @@ import sys
 NO_LOAD = ("SyntaxError", "ERR_MODULE_NOT_FOUND", "does not provide an export", "error[E", "error: could not compile")
 
 
+def edits(a, b):
+    return a if b is None else [(a, b)]
+
+
 def main(M):
     assert len({m[0] for m in M}) == len(M), "mutant names must be unique"
     if sys.argv[1:] == ["check"]:
-        for name, f, a, _b, _cmd, _cwd in M:
-            n = open(f, encoding="utf-8").read().count(a)
-            assert n == 1, (name, f, n)
+        for name, f, a, b, _cmd, _cwd in M:
+            src = open(f, encoding="utf-8").read()
+            for x, _y in edits(a, b):
+                assert src.count(x) == 1, (name, f, x, src.count(x))
         print(f"{len(M)} mutants, every replacement found once")
         return 0
     lo, hi = (int(sys.argv[1]), int(sys.argv[2])) if len(sys.argv) == 3 else (1, len(M))
     killed = survived = noload = 0
     for n, (name, f, a, b, cmd, cwd) in enumerate(M[lo - 1:hi], lo):
-        src = open(f, encoding="utf-8").read()
-        assert src.count(a) == 1, (name, src.count(a))
-        open(f, "w", encoding="utf-8").write(src.replace(a, b))
+        src = mut = open(f, encoding="utf-8").read()
+        for x, y in edits(a, b):
+            assert mut.count(x) == 1, (name, x, mut.count(x))
+            mut = mut.replace(x, y)
+        open(f, "w", encoding="utf-8").write(mut)
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
         finally:

@@ -150,3 +150,144 @@ test('no import and no imported UA of the four networks (Argument); evm accepted
   assert.equal(S.importKey('evm', secret).network, 'evm');
   assert.ok(U.importedUAKey({ network: 'evm', secret, kind: 0x0108 }).ua);
 });
+
+// ------------------------------------------------------------------ T3: Polkadot sr25519, signMessage, raw-signing guards
+// Known answers: substrate-bip39's VECTORS (password "Substrate"), the subkey answers of spec §7.3, the junction-length rows of
+// plan T0 (schnorrkel, @scure/sr25519 and polkadot.js agree), the polkadot.js //Alice signature of T0.
+const DEV = 'bottom drive obey lake curtain smoke basket hold race lonely fit walk';
+const PQ_KAT = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author capable act festival slice deposit sauce coconut afford frown better';
+const devE = S.wordsToEntropy(DEV);
+const dot = (path, opts) => P.polkadotKey(devE, '', path, opts);
+const X = (n) => 'x'.repeat(n);
+const DEV_KEYS = {
+  '': '46ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a',
+  '//Alice': 'd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d',
+  '//Bob': '8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48',
+  '//0': '2afba9278e30ccf6a6ceb3a8b6e336b70068f045c666f2e7f4f9cc5f47db8972',
+  '/0': 'b696d3a7fbc9dd6648e18fd56169b90f3be49714133eaa464cbfd6ca79ab1310',
+  '//1/2': '509efd067a5a345cea7185745c2996a36733711651f6cc41087c0bcc66a68a1d',
+  '/soft//hard': 'b692f2e809e8805a1814fab0baea78841806544446ebb8280b4e593962706f4a',
+  '//18446744073709551615': 'a4ca284d5222ef916e2e181430785972ed22cb51ef91a0c6cdbbd390ee74bc77',
+  '//polkadot': 'f606519cb8726753885cd4d0f518804a69a5e0badf36fee70feadd8044081730',
+  ['//' + X(31)]: 'd08d581c9755746d091ef753234388455eb5f847ae6061ceae8c77b38fcb030f',
+  ['/' + X(31)]: '2a72e28d57ef0263eccad32fef0b2c6c9c37358821e4be63773df52f52edd87c',
+  ['//' + X(32)]: '9644ab5b228ce544dfff7f8f021e06120d26f2c0a856096cbbce37abc1541a5c',
+  ['/' + X(32)]: 'f24dd03839f881a9ba7e18bfc99b57f590c3b397a631534bc6c5702d14963a1e',
+  ['//' + X(63)]: '76dab0a15bee6bc691c04d2b7ee92b7e89596040e6565d75a17ec1da6c0eab1c',
+  ['/' + X(63)]: '5a8a9a1cd97dff92b58c8c59655e3b112f6cf315e82e9e776b2f95f276c10870',
+  ['//' + X(64)]: '4e7a9573fa04dafa01aa9d0eeda5dd5f6685879a2bfd024a75c17c231b488556',
+  ['/' + X(64)]: '827385d21b2e6b7db061391eb9839b0eb5e9f8c9b012d64e7d02d10b6abc4f65',
+};
+let P;
+test('substrate.js loads', async () => { P = await import('../src/substrate.js'); });
+
+test('substrate-bip39 VECTORS: the mini-secret is the first half of PBKDF2(entropy, "mnemonic" ‖ "Substrate")', () => {
+  const rows = [ // a slice of substrate-bip39 src/lib.rs VECTORS (ceb4fe5a), entropy → seed[0..32]
+    ['00000000000000000000000000000000', '44e9d125f037ac1d51f0a7d3649689d422c2af8b1ec8e00d71db4d7bf6d127e3'],
+    ['7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f', '4313249608fe8ac10fd5886c92c4579007272cb77c21551ee5b8d60b78041685'],
+    ['80808080808080808080808080808080', '27f3eb595928c60d5bc91a4d747da40ed236328183046892ed6cd5aa9ae38122'],
+  ];
+  for (const [e, mini] of rows) assert.equal(H(P.miniSecretFromEntropy(B(e), 'Substrate')), mini, e);
+});
+
+test('the subkey answers and the junction rows of T0 (hard and soft, 31 / 32 / 63 / 64-byte junctions)', () => {
+  for (const [path, pk] of Object.entries(DEV_KEYS)) assert.equal(dot(path).publicKey, pk, `'${path}'`);
+  assert.equal(dot('').address, '12bzRJfh7arnnfPPUZHeJUaE62QLEwhK48QnH9LXeK2m1iZU');
+  assert.equal(P.ss58(B(DEV_KEYS['//Alice']), 42), '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY');
+  assert.equal(P.ss58(B(DEV_KEYS['//Bob']), 42), '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty');
+});
+
+test('the passphrase as given: NFC and NFD give one BIP-39 seed and two Polkadot keys; the mini-secret is not the seed', () => {
+  const e = S.wordsToEntropy(PQ_KAT);
+  const nfc = 'Ünïcödé パスワード'.normalize('NFC'), nfd = nfc.normalize('NFD');
+  assert.notEqual(nfc, nfd);
+  assert.equal(H(S.seedFromEntropy(e, nfc)), H(S.seedFromEntropy(e, nfd)));
+  assert.notEqual(P.polkadotKey(e, nfc, '').publicKey, P.polkadotKey(e, nfd, '').publicKey);
+  assert.notEqual(H(P.miniSecretFromEntropy(e, '')), H(S.seedFromEntropy(e, '').subarray(0, 32)));
+});
+
+test('path refusals, each beside its accepted neighbour (Argument)', () => {
+  const pairs = [
+    ['///pw', '//pw'], ['//', '//a'], ['/0x12', '/x12'], ['//+1', '//1'],
+    ['//18446744073709551616', '//18446744073709551615'], ['//007', '//7'], ['//00', '//0'],
+    [Array(17).fill('//a').join(''), Array(16).fill('//a').join('')],
+    [Array(15).fill('//' + X(30)).join('') + '//' + X(31), Array(16).fill('//' + X(30)).join('')],
+    ['//' + X(65), '//' + X(64)], ['//a b', '//ab'], ['//é', '//e'], ['Alice', '//Alice'],
+  ];
+  for (const [bad, good] of pairs) {
+    assert.equal(codeOf(() => P.polkadotKey(devE, '', bad)), 'Argument', `refused ${bad.slice(0, 40)}`);
+    assert.equal(codeOf(() => P.polkadotKey(devE, '', good)), null, `accepted ${good.slice(0, 40)}`);
+  }
+  assert.equal(new TextEncoder().encode(Array(16).fill('//' + X(30)).join('')).length, 512);
+});
+
+test('SS58 prefixes: 0, 2, 42, 64 (two-byte form), 16383; 46, 47, 16384 refused', () => {
+  const pk = B(DEV_KEYS['']);
+  const want = { 0: '12bzRJfh7arnnfPPUZHeJUaE62QLEwhK48QnH9LXeK2m1iZU', 2: 'EBJwHkVtAcF6nCKHd3h4H75NzgvMJxMS1X3WWd8a2DjaQx9',
+    42: '5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV', 64: 'cEXBCBPEn84gHSpZtrHx5fmAvFR4UGKD2DL5kFGUnGLj2ksXy',
+    16383: 'yNWw4BEqdLrtrV4Gja14vK2s7JN7Td9tKvJvzcTXENhkJiVUD' };
+  for (const [p, a] of Object.entries(want)) assert.equal(P.ss58(pk, Number(p)), a, `prefix ${p}`);
+  for (const p of [46, 47, 16384, -1]) assert.equal(codeOf(() => P.ss58(pk, p)), 'Argument', `prefix ${p}`);
+});
+
+test('Polkadot: no index, no coin type through deriveKey; no key proof, EIP-712 or EVM transaction (Argument)', () => {
+  for (const [i, coinType] of [[0, null], [1, null], [0, 0], [0, 354]]) assert.equal(codeOf(() => S.deriveKey(seed, 'polkadot', i, { coinType })), 'Argument');
+  const k = dot('//Alice');
+  assert.equal(codeOf(() => S.signKeyProof(k, new Uint8Array(32))), 'Argument');
+  assert.equal(codeOf(() => S.signTyped(k, {})), 'Argument');
+  assert.equal(codeOf(() => S.signTransaction(k, {})), 'Argument');
+});
+
+test('signMessage on the ed25519 networks (1 B to 131,072 B): RFC 8032, deterministic', () => {
+  for (const n of ['hedera_ed25519', 'sui', 'stellar', 'ton', 'aptos', 'solana', 'near']) {
+    const k = S.deriveKey(seed, n, 0);
+    for (const len of [1, 32, 1232, 131072]) {
+      const m = Uint8Array.from({ length: len }, (_, i) => (i * 13 + len) & 255);
+      const sig = S.signMessage(k, m, { allowRawDigest: true });
+      assert.ok(ed25519.verify(sig, m, B(k.publicKey)), `${n} ${len}`);
+      assert.equal(H(sig), H(ed25519.sign(m, k.privateKey)));
+    }
+  }
+});
+
+test('signMessage and signDigest on Polkadot keys verify under @scure/sr25519; fixed randomness is test-only; T0 polkadot.js signature verifies', async () => {
+  const sr = await import('@scure/sr25519');
+  for (const path of ['', '//Alice', '/soft']) {
+    const k = dot(path);
+    for (const len of [1, 32, 257]) {
+      const m = new Uint8Array(len).fill(len & 255);
+      const a = S.signMessage(k, m, { allowRawDigest: true }), b = S.signMessage(k, m, { allowRawDigest: true });
+      assert.ok(sr.verify(m, a, B(k.publicKey)) && sr.verify(m, b, B(k.publicKey)), `'${path}' ${len}`);
+      assert.notEqual(H(a), H(b), 'release signatures are fresh');
+    }
+    const d = new Uint8Array(32).fill(9);
+    assert.ok(sr.verify(d, S.signDigest(k, d, { allowRawDigest: true }), B(k.publicKey)));
+  }
+  const r = new Uint8Array(32).fill(5), m = new Uint8Array([1, 2, 3]);
+  assert.equal(H(S.signMessage(dot('//Alice'), m, { allowRawDigest: true, aux: r })), H(S.signMessage(dot('//Alice'), m, { allowRawDigest: true, aux: r })));
+  assert.ok(sr.verify(B('73636161732075612d72732d6e61746976652054303a20706f6c6b61646f742e6a73202f2f416c696365207369676e6174757265'),
+    B('24a27936a2b09621ea541fa427b3ea60c52199cf7e3f8966c4ffbc6620833b69f57592f47c8bd86b4076f74aef554817a434c65c16a34d5eba30030728a31f8c'),
+    B(DEV_KEYS['//Alice'])));
+});
+
+test('signMessage refusals (Argument), each beside the call accepted', () => {
+  const k = S.deriveKey(seed, 'solana', 0), m = new Uint8Array([1]);
+  assert.equal(codeOf(() => S.signMessage(k, m)), 'Argument', 'no opt-in');
+  assert.equal(codeOf(() => S.signMessage(k, m, { allowRawDigest: true })), null);
+  assert.equal(codeOf(() => S.signMessage(k, new Uint8Array(0), { allowRawDigest: true })), 'Argument', '0 bytes');
+  assert.equal(codeOf(() => S.signMessage(k, new Uint8Array(131073), { allowRawDigest: true })), 'Argument', '131,073 bytes');
+  assert.equal(codeOf(() => S.signMessage(k, new Uint8Array(131072), { allowRawDigest: true })), null, '131,072 bytes');
+  const solana = Uint8Array.of(0xff, ...new TextEncoder().encode('solana offchain'), 1, 2);
+  const aptos = new TextEncoder().encode('APTOS\nmessage: x');
+  for (const [env, rest] of [[solana, solana.subarray(1)], [aptos, aptos.subarray(1)]]) {
+    for (const key of [k, dot('')]) {
+      assert.equal(codeOf(() => S.signMessage(key, env, { allowRawDigest: true })), 'Argument', 'envelope');
+      assert.equal(codeOf(() => S.signMessage(key, rest, { allowRawDigest: true })), null, 'without the prefix');
+    }
+  }
+  for (const n of ['evm', 'cosmos', 'bitcoin_p2wpkh', 'bitcoin_p2tr']) {
+    assert.equal(codeOf(() => S.signMessage(S.deriveKey(seed, n, 0), m, { allowRawDigest: true })), 'Argument', n);
+  }
+  assert.equal(signer.signMessage, S.signMessage);
+  assert.equal(signer.MAX_RAW_MESSAGE, 131072);
+});

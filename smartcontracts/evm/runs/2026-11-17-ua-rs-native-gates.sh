@@ -22,7 +22,7 @@ OWN_STEPS="vectors-check ua-rs ua-c ua-dart-frb ua-py ua-go ua-cs"
 # named-tests: no log of these may show a test binary with 0 passed or a skipped suite
 FAMILIES="clientkeys ua-rs-nodefault ua-rs-wallet ua-rs ua-rs-vectors ua-rs-zether ua-rs-pqz no-oracle ua-c ua-cxx ua-qt ua-dart-frb ua-py ua-go ua-cs"
 # the mutant records of this round (one per task that has mutants; extended per task)
-MUTANT_RECORDS=${MUTANT_RECORDS-"2026-11-17-ua-rs-native-t2"}
+MUTANT_RECORDS=${MUTANT_RECORDS-"2026-11-17-ua-rs-native-t2 2026-11-17-ua-rs-native-t3"}
 export CAPPED_MEM=${CAPPED_MEM:-4G} # 4G: capped's own default (the base sets 3G)
 C="--locked --offline -j2"
 
