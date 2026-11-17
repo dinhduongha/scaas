@@ -331,6 +331,13 @@ a `G…` ed25519 key signs raw 32 bytes like a Hedera ED25519 key, so one key ne
 apply while Soroban is off the mesh (`mesh/digest.rs:146` returns `FamilyNotSupported`); if it joins, the decoder
 verifies a `G…` ed25519 signature locally.
 
+Endpoints (BUILT, scaas-rpc T15): `rpc_urls` are read through the crate's family client (16 MiB, depth 64, no redirect,
+20 s a request). `build`'s simulation and the views and settings it reads fail over ([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)):
+the next endpoint must answer `getNetwork` with the configured passphrase and a `getLatestLedger` at or above the ledger
+the first endpoint last showed; a refusal read while a failover endpoint answered requeues the job (`FAILOVER_ANSWER`).
+The transaction status and fee, the lane sequence and balance, `op_consumed` and the values kept for the process
+(the router's executor, the registry's relayers) are the first endpoint's only.
+
 ## 7. Finality and events
 
 <a id="finality"></a>

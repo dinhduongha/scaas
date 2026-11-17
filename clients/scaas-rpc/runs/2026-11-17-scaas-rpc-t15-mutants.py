@@ -20,6 +20,19 @@ MUTANTS = [
      T + "an_error_answer_is_kept_whole"),
     ("a: the ledger hash not lowercased", [(S, "        Ok(format!(\"0x{}\", h.to_lowercase()))", "        Ok(format!(\"0x{h}\"))")],
      T + "the_ledger_reads_and_the_head_quorum"),
+    ("b: tx_status through failover", [(N, "        let r = self.rpc(\"getTransaction\", json!({\"hash\": tx_id.trim_start_matches(\"0x\")})).await?;\n        Ok(match r[\"status\"].as_str() {",
+        "        let r = self.read(\"getTransaction\", json!({\"hash\": tx_id.trim_start_matches(\"0x\")})).await?;\n        Ok(match r[\"status\"].as_str() {")],
+     NT + "soroban_tx_status_never_fails_over"),
+    ("b: op_consumed through failover", [(N, "        match self.view_first(contract, f, args).await {\n            Err(e) if e.is::<SimRefused>() => Ok(None),",
+        "        match self.view(contract, f, args).await {\n            Err(e) if e.is::<SimRefused>() => Ok(None),")],
+     NT + "soroban_op_consumed_and_the_lane_sequence_never_fail_over"),
+    ("b: the lane sequence through failover", [(N, "        let r = self.rpc(\"getLedgerEntries\", json!({\"keys\": [k]})).await?;\n        let x = r[\"entries\"][0][\"xdr\"]",
+        "        let r = self.read(\"getLedgerEntries\", json!({\"keys\": [k]})).await?;\n        let x = r[\"entries\"][0][\"xdr\"]")],
+     NT + "soroban_op_consumed_and_the_lane_sequence_never_fail_over"),
+    ("b: the build's simulation on endpoint 0 only", [(N, "            .read(\"simulateTransaction\", json!({\"transaction\": b64}))", "            .rpc(\"simulateTransaction\", json!({\"transaction\": b64}))")],
+     NT + "soroban_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: a failover refusal final (the counter not compared)", [(N, "            Err(SimError::Revert(r)) if self.failovers() != mark =>", "            Err(SimError::Revert(r)) if false =>")],
+     NT + "soroban_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
 ]
 
 if __name__ == "__main__":
