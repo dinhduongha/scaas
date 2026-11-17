@@ -1,0 +1,5 @@
+# t14 mutants at commit 4de8a5604 (name | outcome | test)
+a: every transaction known | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test hedera the_relay_receipt_is_read_raw_from_the_first_endpoint
+a: the receipt dropped | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test hedera the_relay_receipt_is_read_raw_from_the_first_endpoint
+a: the adapter reads no receipt | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::hedera::tests::contract_revert_stays_terminal
+3 mutants, 3 killed, 0 survived, 0 not loaded

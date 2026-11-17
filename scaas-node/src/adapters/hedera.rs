@@ -14,7 +14,7 @@
 //! - Danh sách token lọc event: token Odoo đăng ký, lấy từ `node_config` mỗi vòng `index_step` (review H2;
 //!   không danh sách tĩnh trong cấu hình node — event của contract lạ không bao giờ gửi Odoo).
 use alloy::primitives::{Address, Bytes, B256, U256};
-use alloy::providers::{DynProvider, Provider, ProviderBuilder};
+use alloy::providers::Provider;
 use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
 use serde_json::Value;
@@ -33,7 +33,6 @@ pub const CHAIN_IDS: [u64; 4] = [295, 296, 297, 298];
 
 pub struct HederaAdapter {
     inner: EvmAdapter,
-    rpc: DynProvider,
     lane_addrs: Vec<Address>,
 }
 
@@ -42,10 +41,9 @@ impl HederaAdapter {
         if cfg.family != "hedera" || !CHAIN_IDS.contains(&cfg.evm_chain_number) {
             bail!("chain {}: Hedera needs family=hedera and evm_chain_number 295..298", cfg.chain_key());
         }
-        let url = cfg.rpc_urls.first().ok_or_else(|| anyhow!("chain {}: no rpc_urls", cfg.chain_key()))?;
-        let rpc = ProviderBuilder::new().disable_recommended_fillers().connect_http(url.parse()?).erased();
+        // scaas-rpc T14: the Relay is read through the chain's EvmPool (bounded, its timeout), no provider of its own
         let lane_addrs = chains.iter().map(Chain::address).collect();
-        Ok(Self { inner: EvmAdapter::new(cfg, chains, Default::default())?, rpc, lane_addrs })
+        Ok(Self { inner: EvmAdapter::new(cfg, chains, Default::default())?, lane_addrs })
     }
 
     /// Từ config: một `Chain` mỗi lane (khoá secp256k1 coin 3030).
@@ -189,7 +187,8 @@ impl ChainAdapter for HederaAdapter {
             return Err(SimError::Revert("expired before inclusion".into()));
         }
         let addr = *self.lane_addrs.get(lane).ok_or_else(|| SimError::Transport(format!("no lane {lane}")))?;
-        let bal = self.rpc.get_balance(addr).await.map_err(|e| SimError::Transport(e.to_string()))?;
+        let first = self.inner.lane(0).map_err(|e| SimError::Transport(e.to_string()))?.primary();
+        let bal = first.get_balance(addr).await.map_err(|e| SimError::Transport(e.to_string()))?;
         if bal == U256::ZERO {
             return Err(SimError::Transport(format!("lane {addr:#x} is not a funded Hedera account")));
         }
@@ -200,7 +199,7 @@ impl ChainAdapter for HederaAdapter {
         let chain = self.inner.lane(lane)?;
         let to: Address = built.meta["to"].as_str().unwrap_or_default().parse()?;
         let gas = built.meta["gas"].as_u64().ok_or_else(|| anyhow!("built tx without gas"))?;
-        let fees = fees(self.rpc.get_gas_price().await?);
+        let fees = fees(self.inner.lane(0)?.pool().first_gas_price().await?);
         let (raw, hash) = chain.sign(sequence, to, Bytes::from(built.body), gas, fees).await?;
         Ok(Signed { job_id: built.job_id, tx_id: format!("{hash:#x}"), raw: raw.to_vec(), valid_until: built.valid_until, sequence })
     }
@@ -210,8 +209,9 @@ impl ChainAdapter for HederaAdapter {
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let rc: Value = self.rpc.raw_request("eth_getTransactionReceipt".into(), (tx_id,)).await?;
-        if let Some(st) = decode_receipt(&rc) {
+        // F3: endpoint 0 only (scaas-rpc T14)
+        let (pool, id) = (self.inner.lane(0)?.pool(), tx_id.parse()?);
+        if let Some(st) = decode_receipt(&pool.first_relay_receipt(id).await?) {
             if let TxStatus::Reverted { reason } = &st {
                 if requeues(reason) {
                     return Err(Rejected(reason.clone()).into());
@@ -219,8 +219,7 @@ impl ChainAdapter for HederaAdapter {
             }
             return Ok(st);
         }
-        let tx: Value = self.rpc.raw_request("eth_getTransactionByHash".into(), (tx_id,)).await?;
-        Ok(if tx.is_null() { TxStatus::Unknown } else { TxStatus::Pending })
+        Ok(if pool.first_tx_known(id).await? { TxStatus::Pending } else { TxStatus::Unknown })
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {

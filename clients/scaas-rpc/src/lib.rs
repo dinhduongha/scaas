@@ -9,6 +9,8 @@ pub mod endpoint;
 pub mod error;
 #[cfg(feature = "evm")]
 pub mod evm;
+#[cfg(feature = "evm")]
+pub mod hedera;
 pub mod http;
 #[cfg(feature = "node-client")]
 pub mod node;
