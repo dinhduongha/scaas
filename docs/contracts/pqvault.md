@@ -64,7 +64,7 @@ PqVault's class with version ≠ 0. Class 3 stays `PqChat`.
 
 ## 3. Records and typed signing
 
-Status: **SPECIFIED** (registry entry: Part R; records: Part V).
+Status: **SPECIFIED** (registry entry: BUILT, Part R `09000f2af`, [CTR-UA-46](accounts.md#CTR-UA-46); records: Part V).
 
 <a id="CTR-PQV-03"></a>**CTR-PQV-03** — **Every record is a typed EIP-712 struct in its vault's domain, signed as a `UASig`
 over `uaMessage(kind, P_V, typed(record))` with `P_V = appPurpose(keccak256("scaas.pqvault.v1"))`, PqVault's purpose in the
@@ -182,7 +182,8 @@ that every state-changing write is relayable; PqChat's precedent [CTR-CHAT-19](p
 
 ## 9. The base shared with PqChat
 
-Status: **SPECIFIED** (Part R, before the freeze).
+Status: **BUILT** (Part R `fcdd83a7e`: `src/pqgroup/PqGroupBase.sol`, PqChat on it, its proof as
+CTR-PQV-15 lists it held; `PqVault` on it: Part V). UNAUDITED.
 
 <a id="CTR-PQV-12"></a>**CTR-PQV-12** — **The group code PqChat and PqVault share moves into one abstract base without state
 of its own, PqChat's storage-layout and gas pins proving PqChat unchanged; if that proof fails, PqVault copies the code

@@ -250,3 +250,8 @@ R3 re-point | p48-author-removed | src/pqchat/PqChat.sol: 'if (pe.removed != 0 &
 R3 re-point | p48-drop-is-plain | src/pqchat/PqChat.sol: 'else if (!pe.left[parent[i]] && !pe.removedOf[parent[i]]) return false;' -> 'else if (!pe.left[parent[i]]) return false;' | src/pqgroup/PqGroupBase.sol: 'else if (!pe.left[parent[i]] && !pe.removedOf[parent[i]]) return false;' -> 'else if (!pe.left[parent[i]]) return false;'
 R3 re-point | p48-completion-check | src/pqchat/PqChat.sol: 'if (_s().epochs[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it' -> '' | src/pqgroup/PqGroupBase.sol: 'if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it' -> ''
 R3 re-point | p48-admins-excluded | src/pqchat/PqChat.sol: 'for (uint256 i; i < admins.length; ++i) if (pe.removedOf[admins[i]]) revert PqChatRemovedKept(ep.parent, admins[i]);' -> '' | src/pqgroup/PqGroupBase.sol: 'for (uint256 i; i < admins.length; ++i) if (pe.removedOf[admins[i]]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(admins[i]));' -> ''
+# R4: UARegistryCoreLib 34,157 B, 1,537 B under its 35,694 B T-1 line (its 33,903 B T-2 notice line passed; the spec expected about
+# 1.7 KB, review r2 I3): the room left in that library for audit fixes before the freeze. UARegistry 32,518 B: 998 B under T-2
+# (33,516), 2,768 B under T-1 (35,286). PqChat 29,152 B (plain; under its 33,516 B T-2 line).
+# R4: docs gates on the R4 tree
+R4 | docs | R4 tree | 0 | docs_check.py check 0 errors; facts check 0 misses; paths 0; test_docs_check ok; no temp path

@@ -1608,7 +1608,8 @@ without it reverts, which is a refusal). `UAVerifyGas` when too little gas is le
 <a id="CTR-UA-45"></a>**CTR-UA-45** — **Apps sign records by two paths, both supported: (A) the registry's open portable
 app namespace, one entry added before the freeze, so any app gets portable (chain-free, replica-able) records with no
 further registry change; (B) the chain-bound `requireAuthorized`, open to any contract and purpose already, the app's own
-EIP-712 domain binding the chain, one instance and no replica** (owner 2026-11-17, N1; SPECIFIED, nothing built). An app
+EIP-712 domain binding the chain, one instance and no replica** (owner 2026-11-17, N1; BUILT on EVM: path (A) `09000f2af`, its
+vectors and `ua-rs` `5dfad16d3`; path (B) needs no registry change; UNAUDITED). An app
 needs no SCaaS registration beyond its users' UAs, with or without `OpenFactory`. `PqVault` is the first app on both
 paths ([CTR-PQV-16](pqvault.md#CTR-PQV-16)); `PqChat` keeps `PURPOSE_PQCHAT` on `requirePortable`, unchanged.
 
@@ -1618,7 +1619,9 @@ appId))`, computed by the registry, `appId ≠ 0`, else `UAUnauthorized(ua)`; an
 the reverse; an app's portable domain is exactly `name, version, salt` with `salt = appId`; gen 2 forwards a record it
 does not hold to its predecessor's entry plainly; an app contract on this entry computes the digest itself, names the
 signing UA in every record and uses different domain field sets on the two paths** (controller calls, owner may override;
-SPECIFIED, nothing built). `UAKinds.APP_PURPOSE_NS` and `UAKinds.appPurpose(appId)`. Separation: a SCaaS purpose hashes an
+BUILT on EVM `09000f2af`, tests `test/ua/UARegistryPortableApp.t.sol`, 6 mutants killed; clientkeys, the vectors
+(`vectors/ua/sign.json` `portableApp`, `rs_signatures.json` `appRows`) and `ua-rs` (`ua8::app_purpose`, `ua_sig_app`,
+`msig_sig_app`) `5dfad16d3`; UNAUDITED). `UAKinds.APP_PURPOSE_NS` and `UAKinds.appPurpose(appId)`. Separation: a SCaaS purpose hashes an
 ASCII `scaas.ua.purpose.<p>.v<n>` string shorter than 64 bytes, an app purpose exactly 64 bytes starting with
 `APP_PURPOSE_NS`, so equality needs a hash collision; `requirePortable`'s closed list refuses every app purpose; a new SCaaS
 purpose keeps that string form and `APP_PURPOSE_NS` is never a purpose itself. An app portable domain has a `salt` field
@@ -1788,7 +1791,7 @@ interface IUARegistry is IERC5267 {
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig calldata auth) external view;
     /// The portable check (UA-7 O1): purposeTag one of PURPOSE_KEM, PURPOSE_PQZ_KEY, PURPOSE_PQCHAT (see requirePortable above)
     function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig calldata auth) external view;
-    /// SPECIFIED, not built (CTR-UA-46): the portable check under appPurpose(appId), the open app namespace
+    /// CTR-UA-46: the portable check under appPurpose(appId), the open app namespace
     function requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, UASig calldata auth) external view;
 }
 // constructor (the UA-2a UARegistry): error UAConfig(uint16 kind) — kind outside the code's table, duplicate, verifier
