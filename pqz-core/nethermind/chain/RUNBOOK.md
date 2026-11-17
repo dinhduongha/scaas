@@ -782,6 +782,74 @@ For reset 1: `SCAAS_TESTNET_DIR=<stack> sh ../runs/2026-11-04-testnet-reset1.sh 
 `.bak-pre-reset1-20261104` files back, moves the new data dirs to `*.failed-reset1-20261104` and the `*.pre-reset1-20261104`
 ones back (both nodes and Blockscout), and starts sealer, rpc and Blockscout (the pqz6 chain at head 69,993). Not used.
 
+## Reset 5 of the SCaaS testnet: two deploy sets (executed 2026-11-16)
+
+Resets 3, 4 and 4b used the same procedure (`smartcontracts/evm/runs/2026-11-12-scaas-testnet-reset3/`,
+`smartcontracts/evm/runs/2026-11-15-scaas-testnet-reset4/`, summaries `runs/2026-11-15-reset4.txt`); reset 5 is that procedure
+on the `ua-mtx-merge` tree before PR #18 (owner 2026-11-16, "Ok, reset 5 before PR #18"), scripts in
+`smartcontracts/evm/runs/2026-11-16-scaas-testnet-reset5/`, summary `smartcontracts/evm/runs/2026-11-16-reset5.txt`.
+No chain-data backup (owner 2026-10-24): data dirs renamed `*.pre-reset5-20261116`, `.bak-pre-reset5-20261116` copies of
+`genesis.json`, `docker-compose.yml`, `config.json`, `config.rpc.json`.
+
+```sh
+# 1. image: the plugin from the tree, the library from the commit whose build is the reviewed pin (FFI_REV; a
+#    test-hooks-only change since moves source lines and so the library's bytes: never edit the pin to go green)
+FFI_REV=9ddc814e9 scripts/capped pqz-core/nethermind/build-image.sh pqz11
+# 2. chainspec: the live genesis (its RescueVault alloc already there, NET-EVM-14), engine.Pqz = chain/engine-pqz.json
+#    (the calibrated rows) from genesis, then schedule 1 with the ML-DSA prices (>= 5 minutes ahead)
+python3 -I chain/patch-chainspec.py <live genesis> chain/engine-pqz.json 0 <p0> --testnet-reset
+python3 -I chain/add-schedule.py <p0> chain/engine-pqz.json <T> <new> --mldsa
+#    a throwaway node (the image, <new>, mining off, no ports): PQZ-START, block 0 as expected, then remove it
+# 3. stack (from smartcontracts/evm): reset, explorer, check (watch, e2e.py probe of every row, the ML-DSA probe)
+NEW=<new> SCAAS_TESTNET_DIR=<stack> RPC_7622=<rpc> sh runs/2026-11-16-scaas-testnet-reset5/reset5.sh reset   # then explorer, check
+# 4. the two deploy sets, mldsa-on first, then mldsa-off (the book's default set, the forge matrix's)
+RPC_7622=<rpc> SCAAS_TESTNET_MNEMONIC_FILE=<file> sh runs/2026-11-16-scaas-testnet-reset5/deploy5.sh mldsa-on
+RPC_7622=<rpc> SCAAS_TESTNET_MNEMONIC_FILE=<file> sh runs/2026-11-16-scaas-testnet-reset5/deploy5.sh mldsa-off
+python3 -I runs/2026-11-16-scaas-testnet-reset5/check5.py <rpc> mldsa-on    # and mldsa-off
+# 5. the matrix against mldsa-off (VERIFY=none with its reason), then ONE whole-chain verify of both sets
+RPC_7622=<rpc> VERIFY=none VERIFY_REASON=... MATRIX_OUT=runs/2026-11-16-matrix sh script/onchain/matrix.sh scaas-testnet
+sh script/onchain/verify.sh scaas-testnet     # DEPLOY_SET=all (the default): both sets, completeness with the children
+```
+
+**Two deploy sets** (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"; then "agreed" to two full sets as a
+test-only layout; [NET-EVM-13](../../../docs/networks/evm.md#NET-EVM-13)'s Change). The chain carries two whole deploys of the
+same build, each with its own `DEPLOY_SALT`, `OpenFactory`, UA registry, `GovernanceRouter`, releases and tokens:
+`mldsa-on` (`MLDSA_PRECOMPILE=on`, the shipped default: the registry's ML-DSA kinds on `MldsaVerifier`s that call the chain's
+precompiles) and `mldsa-off` (the ML-DSA kinds on the registry's expanded-key cache). The one-`GovernanceRouter`-per-chain rule
+(owner 2026-11-04) applies per deploy set; a mainnet or a customer chain carries one set, chosen by the chain's precompile
+availability. The two sets share the chain, its genesis, the RescueVault genesis alloc and Blockscout, nothing else: a UA of
+one set is unknown to the other's registry. The forge matrix runs against `mldsa-off` (forge's own EVM has no ML-DSA or
+PQZ precompile, so a forge script that registers or signs with an ML-DSA UA is refused in its simulation against
+`mldsa-on`); `mldsa-on` is checked by real transactions only (`check5.py`, the live checks, eth_calls). The port of the
+`pqzkeys` / `pqzwallet` groups and of the ML-DSA rows of `tokens` / `pqchat` to real-transaction scripts is the follow-up
+against `mldsa-on`, on this chain, without a further reset. The book `smartcontracts/evm/deployments/scaas-testnet.json`
+(git-ignored) holds both under `sets.<label>`, `mldsa-off` at its top level; `DEPLOY_SET` names a set for `deploy.sh`,
+`matrix.sh`, `verify.sh` and `coverage.py`.
+
+Result: image `2.2.0-pqz11` (library `f397d9c1…` = the reviewed pin); genesis `0x9ae9048b…5b13`, unchanged from reset 4 (the
+chainspec's header, params and alloc did not move, only engine.Pqz: `chain-uids.json` unchanged; move any
+`cache/vcheck-7622-0x9ae9048b*.json` of the old chain aside before `verify.sh`); live checks 463 ok / 0 FAIL; ML-DSA
+59,006 / 100,006 / 135,006; deploys `mldsa-on` 151 transactions in 261 s, `mldsa-off` 138 in 220 s (batches of 16 without
+`--slow`, NET-EVM-11's Change), both `check5.py` all passed. The first `mldsa-on` attempt stopped before its plan at the
+verifiers step: the KAT check gave the transaction, not the verifier call, the `cap + cap / 63` gas, below the calldata floor
+(fixed in `script/pq_verifiers.py`). Matrix, verify and the wraplimits p5 / p6 times: the summary.
+
+**Outage during the matrix (2026-11-16, ~10:12-10:16 UTC; earlier short windows ~07:2x UTC).** Both nodes restart-looped
+(`restart: unless-stopped`, RestartCount 10, no OOM): Nethermind refuses to start, and so to keep running after a restart,
+with less free space on its data directory's filesystem than its check asks ("Not enough free disk space in
+'/nethermind/nethermind_datadir' to safely run a node - please provide at least 45.82 GB"); `/home` was at 99 % (19 GB free),
+filled by the host's work trees, not by the chain (data dirs under 100 MB each). Clients saw it as connection resets on the
+RPC port ("connection closed before message completed", "Connection reset by peer"), the explanation of the earlier windows
+too. Fixed by freeing disk (owner 2026-11-16, finished work trees removed: 215 GB free); the nodes came back by themselves
+at 10:15:56 / 10:15:59 UTC on the same chain (head advancing, genesis unchanged), nothing pending lost. Watch item: keep the
+stack's filesystem above the node's free-space check (`df -h` of the data directory beside `watch.sh`'s RestartCount).
+
+**Results** (summary `smartcontracts/evm/runs/2026-11-16-reset5.txt`): the matrix on `mldsa-off` green in every group that runs on
+a remote target (pqzwallet local only), the `mldsa-on` rows (`mldsa_on.py`) 547 records, 0 failures; wraplimits p5 / p6 pending
+in their windows (provisionally accepted by the owner, not a pass). The Blockscout verify of the whole chain (both sets): 743 verified,
+218 linked clones, 265 SSTORE2 data, 150 CREATE3 proxies, genesis and the RescueVault alloc, 0 unverified. The `sc-verifier`
+container needs 4 GB to compile kind 13's modules (OOM-killed at 768 MiB and at 2 GB; owner 2026-11-17: `mem_limit` 4g).
+
 ## 7622 node layout and access (owner 2026-10-31)
 
 Two nodes since the node split (owner 2026-10-31, [NET-EVM-10](../../../docs/networks/evm.md#NET-EVM-10)): `sealer`
