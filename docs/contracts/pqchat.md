@@ -606,6 +606,10 @@ The Fable fixes cost each `postMessage` and each plain `rekey` one SLOAD (`postM
 364,096 → 366,316 regular; the release 24,771 → 24,883 B). `remove` (CTR-CHAT-20) reads one packed field on the
 1:1 path (`rekey` 366,316 → 366,797; `postMessage` unchanged); the release 24,883 → 27,825 B.
 
+**The base shared with `PqVault`** (SPECIFIED, [CTR-PQV-12](pqvault.md#CTR-PQV-12)): before the freeze the group code
+moves into one base used by `PqChat` and `PqVault`; this page's layout, typehashes, ABI and every per-operation row above
+stay as they are, and only the release-size figures move, with old → new figures, or the move does not happen.
+
 ## 13. Tests
 
 Status: **BUILT** for the files below, mutants included (T91: `smartcontracts/evm/runs/2026-11-10-ua-mtx-merge-3c/mutants.txt`,

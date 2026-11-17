@@ -1598,6 +1598,9 @@ portable signature over `uaMessage(kind, purposeTag, typedDigest)`, `typedDigest
 purpose set is closed: `PURPOSE_KEM`, `PURPOSE_PQZ_KEY` and `PURPOSE_PQCHAT = keccak256("scaas.ua.purpose.pqchat.v1")`
 ([pqchat.md](pqchat.md)); `PURPOSE_POP_V2` (the registration's own check) and every chain-bound purpose are refused, so are a
 native id (it signs chain-bound only) and an unregistered one; a new portable purpose waits for the next registry generation.
+**SPECIFIED** (owner 2026-11-17, before the freeze, [CTR-PQV-03](pqvault.md#CTR-PQV-03)): `PURPOSE_PQVAULT =
+keccak256("scaas.ua.purpose.pqvault.v1")` joins this set, compared after every other purpose; it lands in the current
+generation, before the freeze, and the next-generation rule holds after it.
 Gen 2 forwards a gen-1 record and returns gen 1's verdict (UA8-D11); its constructor does not probe gen 1 for the view (a gen 1
 without it reverts, which is a refusal). `UAVerifyGas` when too little gas is left for a verifier's cap. Built as
 `UARegistryCoreLib.requirePortable`, run by DELEGATECALL inside the registry's view (it writes nothing).

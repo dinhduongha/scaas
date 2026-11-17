@@ -679,5 +679,78 @@ with every unbound field non-zero in some row (`via`, `device`, `parents`, `ref`
 T11–T14, T17–T20). Which device-id version a client defaults to is open (a controller proposal: v4 for a device that posts on
 chain, since v7 puts its creation time on chain).
 
+<a id="pqvault-clients"></a>**PqVault** (SPECIFIED, nothing built; the contract is [pqvault.md](../contracts/pqvault.md), the design
+the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)). The rules every PqVault client follows; the
+first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-11 controller calls (owner may override):
+
+<a id="CLI-PQV-01"></a>**CLI-PQV-01** — **`pqvault-core`, a Rust crate of its own, builds, encrypts, opens and merges vault
+records and signs only through `ua-rs`; apps reach it through the `scaas-sdk` module `pqvault`, in scaas-app's `scaas` build
+only** (owner 2026-11-17, V11 and the stack as proposed; CLI-UAL-01). SPECIFIED. The SDK's `vault` stays the seed vault; the
+module's calls are the spec's [§8](../superpowers/specs/2026-11-17-pqvault.md#8-the-sdk-module-pqvault).
+
+<a id="CLI-PQV-02"></a>**CLI-PQV-02** — **A personal vault uses the same path as a shared one: a random 32-byte epoch key
+wrapped once to its own UA KEM key (ML-KEM-1024 + X25519); no seed-derived vault key exists; a personal vault is never
+rekeyed to add a member: sharing from it is a new shared vault and a copy of the chosen live items** (owner 2026-11-17,
+ruling "(a)", its sharing clause replaced by O1 (c) the same day). SPECIFIED. The bytes are [CLI-PQV-09](#CLI-PQV-09)'s.
+
+<a id="CLI-PQV-03"></a>**CLI-PQV-03** — **Metadata reduction: titles, usernames, URLs, folders, tags, item types, vault names
+and settings only inside ciphertexts and `sealedInfo`; padding buckets always; batch writes for imports and migrations;
+relayed submission; a personal vault held by a per-vault UA derived from the seed** (owner 2026-11-17, V8; PqChat's D10).
+SPECIFIED. The derivation and the node-side linkage are [CLI-PQV-09](#CLI-PQV-09) and [CLI-PQV-11](#CLI-PQV-11).
+
+<a id="CLI-PQV-04"></a>**CLI-PQV-04** — **Client hardening: secrets hidden until an explicit reveal and hidden again after
+30 s or on leaving the foreground, no screenshots of a revealed secret where the platform allows, copy only on an explicit
+action with the clipboard marked sensitive and cleared after 30 s, autofill on the exact host and scheme by default and from
+accepted vaults only, auto-lock after 5 min idle and at once on screen lock (keys and plaintexts zeroized), never a secret in
+a log, crash report, notification, URL or error** (controller call, owner may override). SPECIFIED.
+
+<a id="CLI-PQV-05"></a>**CLI-PQV-05** — **No decryption oracle, honest limits, files off chain: a client sends nothing that
+depends on whether a version or a passphrase check opened; it reads through an RPC list keeping the highest version seen per
+item; it tells its user that a removed member keeps what it read (and lists the secrets to change) and that a deleted
+item's bytes stay; files go off chain with their key and hashes inside an item, fetched only on the user's action** (owner
+2026-11-17, V5, V7; [ARCH-POS-13](../decisions.md#ARCH-POS-13), [ARCH-POS-15](../decisions.md#ARCH-POS-15)). SPECIFIED.
+
+<a id="CLI-PQV-06"></a>**CLI-PQV-06** — **Only a PQ-rooted 24-word (256-bit) seed owns a vault: `pqvault-core` and the SDK
+refuse, with `SeedNotPqRooted` and before any other work, a classical-rooted seed set (the EOA-signature root, the
+private-key root and their BIP-85 children), a phrase below 24 words and an imported raw key; the vault UA, a per-vault UA
+included, derives from such a seed** (owner 2026-11-17, P1). SPECIFIED. The check binds what a client does for its own user;
+the chain cannot show another member's seed class, so a shared vault is only as quantum-safe as its weakest member's seed.
+
+<a id="CLI-PQV-07"></a>**CLI-PQV-07** — **The vault passphrase is an option, on by default: the epoch key that opens items
+combines the KEM-unwrapped `K_e` with `Argon2id(passphrase, salt)`, the salt random per vault and stored in the vault's
+record with its parameter set's id; neither the seed nor the passphrase alone opens anything; a change re-encrypts no item;
+a wrong passphrase is detected by an AEAD check before any item is opened; the passphrase is never stored or sent;
+forgetting it loses the vault; the choice is a flag in state with no value and no hint; versions written before a change
+stay under the old passphrase** (owner 2026-11-17, P2, changing V9). SPECIFIED. The mechanics are
+[CLI-PQV-10](#CLI-PQV-10)'s.
+
+<a id="CLI-PQV-08"></a>**CLI-PQV-08** — **A migration tool moves the live items to vaults under a new seed and says that the
+old ciphertexts stay on chain and every secret must be changed at its service; until the audit round that covers the
+contract, `pqvault-core` and the `ua-rs` paths it uses, with its reviewers named, the app labels PqVault UNAUDITED and test
+data only** (controller call, owner may override). SPECIFIED.
+
+<a id="CLI-PQV-09"></a>**CLI-PQV-09** — **The key schedule's bytes: wraps under the label `scaas/pqvault/v1/wrap`; `K_v =
+HKDF(K_e ‖ P_k)` with the vault, epoch and parameter id in its info; per version a fresh 16-byte salt and one HKDF giving key
+and nonce, AES-256-GCM-SIV over the padded canonical JSON with the AAD (vault, epoch, item, version, author, home);
+`sealedInfo` under `K_v` with an optional `prev = {epochId, key}`; a personal vault held by `ua_secret(seed, FN-DSA-512 by
+default, PQV_ACCOUNT, i)`, index 0 the index vault listing the user's vaults** (controller call, owner may override).
+SPECIFIED. Exact bytes: [spec §6](../superpowers/specs/2026-11-17-pqvault.md#6-cryptography); every client reproduces
+`smartcontracts/vectors/pqvault/`.
+
+<a id="CLI-PQV-10"></a>**CLI-PQV-10** — **The passphrase's mechanics: a change, or turning it on or off, is an admin's rekey
+of the same members with a fresh salt; the history is as strong as the weakest epoch that links to it, so before a rekey
+that weakens it (passphrase off or weaker, a member added) the client shows what it would expose and offers the rekey
+without `prev`; a downgrade is accepted only from a verified admin record; Argon2id without associated data at a parameter
+set pinned after a measured run; a generated 5-word passphrase offered, a user-chosen one at least 16 characters with a
+strength meter, nothing more enforced; a shared vault's passphrase never equal to the user's personal one** (controller
+call, owner may override). SPECIFIED. Design: [spec §6.5](../superpowers/specs/2026-11-17-pqvault.md#65-the-vault-passphrase-p2).
+
+<a id="CLI-PQV-11"></a>**CLI-PQV-11** — **Trust what is verified and accepted: a vault the user did not create stays pending
+until the user accepts it after seeing its creator and members, and the accepted set is kept as `vaultRef` items in the
+user's index vault; before encrypting under an epoch a client verifies the signature chain from the vault record through
+every epoch to its own wrap; members and admins with a classical UA kind are flagged; reads for different vault UAs are
+spread over the RPC list and over time so one node does not link them** (controller call, owner may override). SPECIFIED.
+Details: [spec §6.9](../superpowers/specs/2026-11-17-pqvault.md#69-what-a-client-verifies-before-it-trusts-state-vc15) and §9.
+
 **Not here.** Per-kind derivation and clientkeys' API ([signers-clientkeys](signers-clientkeys.md)), group vectors, the registry contract, the UA ledger.
 Not built yet: the FRB layer as a Flutter plugin and its Android and iOS builds (no web build: `SecretBytes` needs `dart:ffi`), the wasm-bindgen browser binding of `ua-rs` (the library compiles for wasm32), and Qt packaging for Windows and macOS.
