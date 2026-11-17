@@ -846,9 +846,9 @@ stack's filesystem above the node's free-space check (`df -h` of the data direct
 
 **Results** (summary `smartcontracts/evm/runs/2026-11-16-reset5.txt`): the matrix on `mldsa-off` green in every group that runs on
 a remote target (pqzwallet local only), the `mldsa-on` rows (`mldsa_on.py`) 547 records, 0 failures; wraplimits p5 / p6 pending
-in their windows (provisionally accepted by the owner, not a pass). The Blockscout verify paused at 377 / 743: kind 13's modules
-cannot be verified while the `sc-verifier` container keeps its 768 MiB limit (OOM-killed compiling them); raise it, then re-run
-`verify.sh scaas-testnet`, which resumes.
+in their windows (provisionally accepted by the owner, not a pass). The Blockscout verify of the whole chain (both sets): 743 verified,
+218 linked clones, 265 SSTORE2 data, 150 CREATE3 proxies, genesis and the RescueVault alloc, 0 unverified. The `sc-verifier`
+container needs 4 GB to compile kind 13's modules (OOM-killed at 768 MiB and at 2 GB; owner 2026-11-17: `mem_limit` 4g).
 
 ## 7622 node layout and access (owner 2026-10-31)
 

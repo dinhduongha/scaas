@@ -94,8 +94,8 @@ zethere2e | 21 | 21 | 12,755,254 | 0 / 0 | 0 / 0
 zethermore | 64 | 64 | 7,025,924 | 0 / 0 | 1 / 1
 zetherrege2e | 21 | 21 | 12,758,793 | 0 / 0 | 0 / 0
 zetherregmore | 64 | 64 | 7,029,594 | 0 / 0 | 1 / 1
-views | 0 | 0 | 0 | 1381 / 2700 | 0 / 0
-wraplimits | 129 | 129 | 54,640,720 | 0 / 0 | 51 / 51
+views | 0 | 0 | 0 | 3602 / 8062 | 0 / 0
+wraplimits | 132 | 132 | 54,640,720 | 0 / 0 | 54 / 54
 
 ## scaas-testnet: state-changing entries not called by a transaction, with the reason
 tokens | NormalToken | approve(address,uint256) | NO REASON RECORDED
@@ -494,7 +494,7 @@ pqchat | PqChatTopics | voteEntry((bytes32,bytes32,int8,uint64),(bytes,bytes,(ui
 ## scaas-testnet: known gaps
 gap | pqzwallet on a registry with a PqzKeyVerifier (set mldsa-on): the wallet's scoped records are written without storePqzScopedPop and stay unproven (owner 2026-11-16, D3: ua-rs PqzKeyHandle has no R_REG prover; an OFFCHAIN token reads an unproven record); the proven-record rows are pqzkeys' (mldsa_on.py, README-mldsa-on.md)
 
-## scaas-testnet: negatives (279; refused as expected = status 2)
+## scaas-testnet: negatives (282; refused as expected = status 2)
 ok  | SCaaSDex | negative: mtxHybrid on dexC (closed), A / W not listed | expected 0x69fb943f0000000000000000000000000606c1ddb2816f46521f050f30e64275b024a09e000000000000000000000000cf9bf72b1cf2f1570b0f99575f2b426e34d01761 got 0x69fb943f0000000000000000000000000606c1ddb2816f46521f050f30e64275b024a09e000000000000000000000000cf9bf72b1cf2f1570b0f99575f2b426e34d01761
 ok  | SCaaSDex | negative: mtxExchange on dexC (closed), W in no listed market | expected 0xa274598e000000000000000000000000cf9bf72b1cf2f1570b0f99575f2b426e34d01761 got 0xa274598e000000000000000000000000cf9bf72b1cf2f1570b0f99575f2b426e34d01761
 ok  | SCaaSDex | negative: enableFeature(29) on dexO after its disable: no such entry on the DEX (bit 29 never comes back) | expected 0x got 0x
@@ -774,8 +774,11 @@ ok  | GovernanceRouter | negative: wraplimits p3 H13: the wrap relaxation confir
 ok  | WrappedToken | negative: wraplimits p4 H1: an unwrap by an id not on the unwrapper list: UnwrapperNotListed | expected 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5 got 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5
 ok  | WrappedPqzToken | negative: wraplimits p4 H5: an unwrap by an id not on the unwrapper list: UnwrapperNotListed | expected 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5 got 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5
 ok  | WrappedPqzRegulatedToken | negative: wraplimits p4 H13: an unwrap by an id not on the unwrapper list: UnwrapperNotListed | expected 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5 got 0xe7891811000000000000000000000000000000000000000000000000000000000000a5a5
+ok  | WrappedToken | negative: wraplimits p5 H1: an unwrap above E at H/2: UnwrapAboveNetWrapped | expected 0x12b4f58a got 0x12b4f58a
+ok  | WrappedPqzToken | negative: wraplimits p5 H5: an unwrap above E at H/2: UnwrapAboveNetWrapped | expected 0x12b4f58a got 0x12b4f58a
+ok  | WrappedPqzRegulatedToken | negative: wraplimits p5 H13: an unwrap above E at H/2: UnwrapAboveNetWrapped | expected 0x12b4f58a got 0x12b4f58a
 
-## scaas-testnet: transactions 2707, status 1: 2707; the heaviest ten
+## scaas-testnet: transactions 2710, status 1: 2710; the heaviest ten
 56,577,145 | 0xcaed32a7b2966453aa46bba96331a6140a817de160c2d9d55f9b8432fdc9a028 | WrappedPqzToken | pqW mtxConfidentialTransfer (op 7) alice→M = 8 (bob 30, seven decoys), auditor off, commit-reveal (two groups)
 54,640,720 | 0xafe5ecb615d9892d7781a52a5841fc5641b3ce7cbdc0244354c0afede6037026 | OpenFactory | factory: this group's OpenFactory: 
 54,621,499 | 0x2195642401ca818444877934c7a07ee78b762e1c2fc9a880b2efd3cb9c3519c9 | OpenFactory | OpenFactory
