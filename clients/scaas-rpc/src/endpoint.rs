@@ -77,15 +77,24 @@ pub struct Endpoint {
 
 impl std::fmt::Debug for Endpoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Endpoint").field("class", &self.class).field("label", &self.label)
-            .field("auth", &self.auth.as_ref().map(|_| "<secret>")).finish()
+        f.debug_struct("Endpoint")
+            .field("class", &self.class)
+            .field("label", &self.label)
+            .field("auth", &self.auth.as_ref().map(|_| "<secret>"))
+            .finish()
     }
 }
 
 impl Endpoint {
     /// An `http` or `https` URL (`EndpointScheme` otherwise; `Argument` when it does not parse).
-    pub fn new(url: &str, class: Class, label: Option<&str>, auth: Option<EndpointAuth>) -> Result<Self, RpcError> {
-        let url = url::Url::parse(url).map_err(|_| RpcError::argument("an endpoint URL that does not parse"))?;
+    pub fn new(
+        url: &str,
+        class: Class,
+        label: Option<&str>,
+        auth: Option<EndpointAuth>,
+    ) -> Result<Self, RpcError> {
+        let url = url::Url::parse(url)
+            .map_err(|_| RpcError::argument("an endpoint URL that does not parse"))?;
         if !matches!(url.scheme(), "http" | "https") {
             return Err(RpcError::EndpointScheme);
         }
@@ -93,11 +102,22 @@ impl Endpoint {
             return Err(RpcError::argument("an endpoint URL without a host"));
         }
         if let Some(EndpointAuth::Header { name, .. }) = &auth {
-            if name.is_empty() || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b)) {
-                return Err(RpcError::argument("an API key header name that is not a header name"));
+            if name.is_empty()
+                || !name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b"-_".contains(&b))
+            {
+                return Err(RpcError::argument(
+                    "an API key header name that is not a header name",
+                ));
             }
         }
-        Ok(Self { url, class, label: label.map(Label::new), auth })
+        Ok(Self {
+            url,
+            class,
+            label: label.map(Label::new),
+            auth,
+        })
     }
     /// A `named` endpoint without a credential.
     pub fn named(url: &str) -> Result<Self, RpcError> {
@@ -115,7 +135,12 @@ impl Endpoint {
     }
     /// Scheme, host, port and path: two endpoints equal in these are one (F22).
     fn identity(&self) -> (&str, Option<&str>, Option<u16>, &str) {
-        (self.url.scheme(), self.url.host_str(), self.url.port_or_known_default(), self.url.path())
+        (
+            self.url.scheme(),
+            self.url.host_str(),
+            self.url.port_or_known_default(),
+            self.url.path(),
+        )
     }
 }
 
@@ -160,8 +185,13 @@ pub struct NodeList {
 impl NodeList {
     /// Refuses: no endpoint (`EndpointListEmpty`); two endpoints equal in scheme, host, port and path, a zero timeout, or
     /// `strict_majority` with one endpoint (`Argument`). The scheme is checked when each [`Endpoint`] is built.
-    pub fn new(endpoints: Vec<Endpoint>, policy: Policy, timeout_ms: u64, slow_timeout_ms: u64, read_timeout_ms: u64)
-        -> Result<Self, RpcError> {
+    pub fn new(
+        endpoints: Vec<Endpoint>,
+        policy: Policy,
+        timeout_ms: u64,
+        slow_timeout_ms: u64,
+        read_timeout_ms: u64,
+    ) -> Result<Self, RpcError> {
         if endpoints.is_empty() {
             return Err(RpcError::EndpointListEmpty);
         }
@@ -170,20 +200,39 @@ impl NodeList {
         }
         for (i, a) in endpoints.iter().enumerate() {
             if endpoints[..i].iter().any(|b| b.identity() == a.identity()) {
-                return Err(RpcError::argument(&format!("endpoint {i} is an earlier endpoint again (scheme, host, port and path)")));
+                return Err(RpcError::argument(&format!(
+                    "endpoint {i} is an earlier endpoint again (scheme, host, port and path)"
+                )));
             }
         }
         if policy == Policy::StrictMajority && endpoints.len() < 2 {
-            return Err(RpcError::argument("strict_majority needs two endpoints or more"));
+            return Err(RpcError::argument(
+                "strict_majority needs two endpoints or more",
+            ));
         }
-        Ok(Self { endpoints, policy, timeout_ms, slow_timeout_ms, read_timeout_ms })
+        Ok(Self {
+            endpoints,
+            policy,
+            timeout_ms,
+            slow_timeout_ms,
+            read_timeout_ms,
+        })
     }
 
     /// A plain list of URL strings (the node's and the verifier's `rpc_urls`): `named`, in order, without credentials, failover,
     /// the default timeouts.
     pub fn from_urls(urls: &[String]) -> Result<Self, RpcError> {
-        let e = urls.iter().map(|u| Endpoint::named(u)).collect::<Result<Vec<_>, _>>()?;
-        Self::new(e, Policy::Failover, TIMEOUT_MS, SLOW_TIMEOUT_MS, READ_TIMEOUT_MS)
+        let e = urls
+            .iter()
+            .map(|u| Endpoint::named(u))
+            .collect::<Result<Vec<_>, _>>()?;
+        Self::new(
+            e,
+            Policy::Failover,
+            TIMEOUT_MS,
+            SLOW_TIMEOUT_MS,
+            READ_TIMEOUT_MS,
+        )
     }
 
     pub fn endpoints(&self) -> &[Endpoint] {
@@ -239,35 +288,71 @@ pub struct ListConfig {
 impl ListConfig {
     /// The list; `env` reads an environment variable (the caller's: `std::env::var` in a process, a map in a test).
     pub fn build(&self, env: impl Fn(&str) -> Option<String>) -> Result<NodeList, RpcError> {
-        if self.api_key_env.is_some() || self.api_key_file.is_some() || self.api_key_header.is_some() || self.auth.is_some() {
-            return Err(RpcError::argument("a list-wide credential: a credential belongs to one endpoint"));
+        if self.api_key_env.is_some()
+            || self.api_key_file.is_some()
+            || self.api_key_header.is_some()
+            || self.auth.is_some()
+        {
+            return Err(RpcError::argument(
+                "a list-wide credential: a credential belongs to one endpoint",
+            ));
         }
         let endpoints = match (&self.rpc_urls, &self.rpc) {
             (Some(_), Some(_)) => return Err(RpcError::argument("both rpc_urls and rpc")),
-            (Some(urls), None) => urls.iter().map(|u| Endpoint::named(u)).collect::<Result<Vec<_>, _>>()?,
-            (None, Some(es)) => es.iter().map(|e| entry(e, &env)).collect::<Result<Vec<_>, _>>()?,
+            (Some(urls), None) => urls
+                .iter()
+                .map(|u| Endpoint::named(u))
+                .collect::<Result<Vec<_>, _>>()?,
+            (None, Some(es)) => es
+                .iter()
+                .map(|e| entry(e, &env))
+                .collect::<Result<Vec<_>, _>>()?,
             (None, None) => vec![],
         };
-        NodeList::new(endpoints, self.rpc_policy, self.rpc_timeout_ms.unwrap_or(TIMEOUT_MS),
-            self.rpc_simulate_timeout_ms.unwrap_or(SLOW_TIMEOUT_MS), self.rpc_read_timeout_ms.unwrap_or(READ_TIMEOUT_MS))
+        NodeList::new(
+            endpoints,
+            self.rpc_policy,
+            self.rpc_timeout_ms.unwrap_or(TIMEOUT_MS),
+            self.rpc_simulate_timeout_ms.unwrap_or(SLOW_TIMEOUT_MS),
+            self.rpc_read_timeout_ms.unwrap_or(READ_TIMEOUT_MS),
+        )
     }
 }
 
 fn entry(e: &EntryConfig, env: &impl Fn(&str) -> Option<String>) -> Result<Endpoint, RpcError> {
     let secret = match (&e.api_key_env, &e.api_key_file) {
         (Some(_), Some(_)) => return Err(RpcError::argument("both api_key_env and api_key_file")),
-        (Some(v), None) => Some(Secret::new(env(v).ok_or_else(|| RpcError::argument("api_key_env names an unset variable"))?)),
-        (None, Some(p)) => Some(Secret::new(std::fs::read_to_string(p).map_err(|_| RpcError::argument("api_key_file unreadable"))?
-            .trim().to_string())),
+        (Some(v), None) => {
+            Some(Secret::new(env(v).ok_or_else(|| {
+                RpcError::argument("api_key_env names an unset variable")
+            })?))
+        }
+        (None, Some(p)) => Some(Secret::new(
+            std::fs::read_to_string(p)
+                .map_err(|_| RpcError::argument("api_key_file unreadable"))?
+                .trim()
+                .to_string(),
+        )),
         (None, None) => None,
     };
     let auth = match (secret, e.api_key_header.as_deref(), e.auth.as_deref()) {
         (None, None, None) => None,
-        (None, _, _) => return Err(RpcError::argument("an auth kind or header without a credential")),
-        (Some(s), Some(h), None | Some("header")) => Some(EndpointAuth::Header { name: h.to_string(), value: s }),
+        (None, _, _) => {
+            return Err(RpcError::argument(
+                "an auth kind or header without a credential",
+            ))
+        }
+        (Some(s), Some(h), None | Some("header")) => Some(EndpointAuth::Header {
+            name: h.to_string(),
+            value: s,
+        }),
         (Some(s), None, None | Some("bearer")) => Some(EndpointAuth::Bearer(s)),
         (Some(s), None, Some("hmac")) => Some(EndpointAuth::Hmac(s)),
-        _ => return Err(RpcError::argument("auth is header (with api_key_header), bearer or hmac")),
+        _ => {
+            return Err(RpcError::argument(
+                "auth is header (with api_key_header), bearer or hmac",
+            ))
+        }
     };
     Endpoint::new(&e.url, e.class, e.label.as_deref(), auth)
 }
@@ -278,11 +363,17 @@ fn entry(e: &EntryConfig, env: &impl Fn(&str) -> Option<String>) -> Result<Endpo
 pub fn redact_urls(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
-    while let Some(i) = ["http://", "https://", "ws://", "wss://"].iter().filter_map(|p| rest.find(p)).min() {
+    while let Some(i) = ["http://", "https://", "ws://", "wss://"]
+        .iter()
+        .filter_map(|p| rest.find(p))
+        .min()
+    {
         out.push_str(&rest[..i]);
         out.push_str("<url>");
         let tail = &rest[i..];
-        rest = &tail[tail.find(|c: char| c.is_whitespace() || "()<>\"'".contains(c)).unwrap_or(tail.len())..];
+        rest = &tail[tail
+            .find(|c: char| c.is_whitespace() || "()<>\"'".contains(c))
+            .unwrap_or(tail.len())..];
     }
     out.push_str(rest);
     out
@@ -299,8 +390,16 @@ mod tests {
     #[test]
     fn a_scheme_other_than_http_is_refused() {
         for u in ["ws://a.example", "file:///etc/passwd", "ftp://a.example/x"] {
-            assert_eq!(Endpoint::named(u).unwrap_err(), RpcError::EndpointScheme, "{u}");
-            assert_eq!(list(&["https://ok.example", u]).unwrap_err(), RpcError::EndpointScheme, "{u} in a list");
+            assert_eq!(
+                Endpoint::named(u).unwrap_err(),
+                RpcError::EndpointScheme,
+                "{u}"
+            );
+            assert_eq!(
+                list(&["https://ok.example", u]).unwrap_err(),
+                RpcError::EndpointScheme,
+                "{u} in a list"
+            );
         }
         for u in ["http://a.example", "https://a.example:8545/v1"] {
             assert!(Endpoint::named(u).is_ok(), "control: {u}");
@@ -310,7 +409,10 @@ mod tests {
     #[test]
     fn an_empty_list_is_refused() {
         assert_eq!(list(&[]).unwrap_err(), RpcError::EndpointListEmpty);
-        assert_eq!(ListConfig::default().build(|_| None).unwrap_err(), RpcError::EndpointListEmpty);
+        assert_eq!(
+            ListConfig::default().build(|_| None).unwrap_err(),
+            RpcError::EndpointListEmpty
+        );
         assert!(list(&["http://a.example"]).is_ok(), "control");
     }
 
@@ -319,17 +421,39 @@ mod tests {
         let e = list(&["https://a.example:443/x", "https://A.example/x"]).unwrap_err();
         assert_eq!(e.code(), "Argument", "{e}");
         let e = list(&["https://a.example/x?key=1", "https://a.example/x?key=2"]).unwrap_err();
-        assert_eq!(e.code(), "Argument", "the query is not part of an endpoint's identity: {e}");
-        assert!(list(&["https://a.example:443/x", "https://A.example/y"]).is_ok(), "control: another path");
-        assert!(list(&["https://a.example/x", "http://a.example/x"]).is_ok(), "control: another scheme");
+        assert_eq!(
+            e.code(),
+            "Argument",
+            "the query is not part of an endpoint's identity: {e}"
+        );
+        assert!(
+            list(&["https://a.example:443/x", "https://A.example/y"]).is_ok(),
+            "control: another path"
+        );
+        assert!(
+            list(&["https://a.example/x", "http://a.example/x"]).is_ok(),
+            "control: another scheme"
+        );
     }
 
     #[test]
     fn url_strings_are_named_in_order_without_credentials() {
         let l = list(&["https://b.example", "https://a.example"]).unwrap();
-        assert_eq!(l.endpoints().iter().map(|e| e.url().host_str().unwrap()).collect::<Vec<_>>(), ["b.example", "a.example"]);
-        assert!(l.endpoints().iter().all(|e| e.class == Class::Named && e.auth().is_none() && e.label.is_none()));
-        assert_eq!((l.policy, l.timeout_ms, l.slow_timeout_ms, l.read_timeout_ms), (Policy::Failover, 30_000, 120_000, 60_000));
+        assert_eq!(
+            l.endpoints()
+                .iter()
+                .map(|e| e.url().host_str().unwrap())
+                .collect::<Vec<_>>(),
+            ["b.example", "a.example"]
+        );
+        assert!(l
+            .endpoints()
+            .iter()
+            .all(|e| e.class == Class::Named && e.auth().is_none() && e.label.is_none()));
+        assert_eq!(
+            (l.policy, l.timeout_ms, l.slow_timeout_ms, l.read_timeout_ms),
+            (Policy::Failover, 30_000, 120_000, 60_000)
+        );
     }
 
     #[test]
@@ -348,28 +472,65 @@ rpc_read_timeout_ms = 60000
             {"url": "https://rpc-c.example", "class": "discovered"}],
             "rpc_policy": "strict_majority", "rpc_timeout_ms": 30000, "rpc_simulate_timeout_ms": 120000, "rpc_read_timeout_ms": 60000}"#;
         let env = |k: &str| (k == "RPC_A_KEY").then(|| "k-123".to_string());
-        for c in [toml::from_str::<ListConfig>(toml_text).unwrap(), serde_json::from_str::<ListConfig>(json_text).unwrap()] {
+        for c in [
+            toml::from_str::<ListConfig>(toml_text).unwrap(),
+            serde_json::from_str::<ListConfig>(json_text).unwrap(),
+        ] {
             let l = c.build(env).unwrap();
-            assert_eq!(l.endpoints().iter().map(|e| e.class).collect::<Vec<_>>(), [Class::Named, Class::Default, Class::Discovered]);
+            assert_eq!(
+                l.endpoints().iter().map(|e| e.class).collect::<Vec<_>>(),
+                [Class::Named, Class::Default, Class::Discovered]
+            );
             assert_eq!(l.policy, Policy::StrictMajority);
             assert_eq!(l.endpoints()[0].label_str(), Some("own"));
             match l.endpoints()[0].auth() {
-                Some(EndpointAuth::Header { name, value }) => assert_eq!((name.as_str(), value.expose()), ("X-API-Key", "k-123")),
+                Some(EndpointAuth::Header { name, value }) => {
+                    assert_eq!((name.as_str(), value.expose()), ("X-API-Key", "k-123"))
+                }
                 a => panic!("{a:?}"),
             }
-            assert!(l.endpoints()[1].auth().is_none() && l.endpoints()[2].auth().is_none(), "the key is the first entry's only");
+            assert!(
+                l.endpoints()[1].auth().is_none() && l.endpoints()[2].auth().is_none(),
+                "the key is the first entry's only"
+            );
         }
-        assert!(toml::from_str::<ListConfig>(r#"rpc = [{ url = "https://a.example", class = "Named" }]"#).is_err(), "class names exact");
-        assert!(toml::from_str::<ListConfig>(r#"rpc = [{ url = "https://a.example", class = "trusted" }]"#).is_err());
-        let unset = toml::from_str::<ListConfig>(r#"rpc = [{ url = "https://a.example", api_key_env = "NOPE" }]"#).unwrap();
-        assert_eq!(unset.build(|_| None).unwrap_err().code(), "Argument", "an unset variable");
+        assert!(
+            toml::from_str::<ListConfig>(
+                r#"rpc = [{ url = "https://a.example", class = "Named" }]"#
+            )
+            .is_err(),
+            "class names exact"
+        );
+        assert!(toml::from_str::<ListConfig>(
+            r#"rpc = [{ url = "https://a.example", class = "trusted" }]"#
+        )
+        .is_err());
+        let unset = toml::from_str::<ListConfig>(
+            r#"rpc = [{ url = "https://a.example", api_key_env = "NOPE" }]"#,
+        )
+        .unwrap();
+        assert_eq!(
+            unset.build(|_| None).unwrap_err().code(),
+            "Argument",
+            "an unset variable"
+        );
     }
 
     #[test]
     fn a_list_wide_credential_is_refused() {
-        for extra in [r#"api_key_env = "K""#, r#"api_key_header = "X-API-Key""#, r#"auth = "bearer""#, r#"api_key_file = "k""#] {
-            let c: ListConfig = toml::from_str(&format!("rpc_urls = [\"https://a.example\"]\n{extra}")).unwrap();
-            assert_eq!(c.build(|_| Some("v".into())).unwrap_err().code(), "Argument", "{extra}");
+        for extra in [
+            r#"api_key_env = "K""#,
+            r#"api_key_header = "X-API-Key""#,
+            r#"auth = "bearer""#,
+            r#"api_key_file = "k""#,
+        ] {
+            let c: ListConfig =
+                toml::from_str(&format!("rpc_urls = [\"https://a.example\"]\n{extra}")).unwrap();
+            assert_eq!(
+                c.build(|_| Some("v".into())).unwrap_err().code(),
+                "Argument",
+                "{extra}"
+            );
         }
         let c: ListConfig = toml::from_str("rpc_urls = [\"https://a.example\"]").unwrap();
         assert!(c.build(|_| None).is_ok(), "control");
@@ -378,18 +539,38 @@ rpc_read_timeout_ms = 60000
     #[test]
     fn strict_majority_with_one_endpoint_is_refused() {
         let one = vec![Endpoint::named("https://a.example").unwrap()];
-        assert_eq!(NodeList::new(one, Policy::StrictMajority, 1, 1, 1).unwrap_err().code(), "Argument");
-        let two = vec![Endpoint::named("https://a.example").unwrap(), Endpoint::named("https://b.example").unwrap()];
-        assert!(NodeList::new(two, Policy::StrictMajority, 1, 1, 1).is_ok(), "control: two");
+        assert_eq!(
+            NodeList::new(one, Policy::StrictMajority, 1, 1, 1)
+                .unwrap_err()
+                .code(),
+            "Argument"
+        );
+        let two = vec![
+            Endpoint::named("https://a.example").unwrap(),
+            Endpoint::named("https://b.example").unwrap(),
+        ];
+        assert!(
+            NodeList::new(two, Policy::StrictMajority, 1, 1, 1).is_ok(),
+            "control: two"
+        );
     }
 
     #[test]
     fn a_zero_timeout_is_refused() {
         let e = || vec![Endpoint::named("https://a.example").unwrap()];
         for (a, b, c) in [(0, 1, 1), (1, 0, 1), (1, 1, 0)] {
-            assert_eq!(NodeList::new(e(), Policy::Failover, a, b, c).unwrap_err().code(), "Argument", "{a} {b} {c}");
+            assert_eq!(
+                NodeList::new(e(), Policy::Failover, a, b, c)
+                    .unwrap_err()
+                    .code(),
+                "Argument",
+                "{a} {b} {c}"
+            );
         }
-        assert!(NodeList::new(e(), Policy::Failover, 1, 1, 1).is_ok(), "control");
+        assert!(
+            NodeList::new(e(), Policy::Failover, 1, 1, 1).is_ok(),
+            "control"
+        );
     }
 
     #[test]
@@ -397,8 +578,18 @@ rpc_read_timeout_ms = 60000
         assert_eq!(Label::new("own node").as_str(), "own node", "control");
         assert_eq!(Label::new("a\nb\tc\u{0}").as_str(), "abc");
         let l = Label::new(&"ü".repeat(100));
-        assert!(l.as_str().len() <= 64 && l.as_str().len() >= 63, "{}", l.as_str().len());
-        let e = Endpoint::new("https://a.example", Class::Named, Some(&"x".repeat(80)), None).unwrap();
+        assert!(
+            l.as_str().len() <= 64 && l.as_str().len() >= 63,
+            "{}",
+            l.as_str().len()
+        );
+        let e = Endpoint::new(
+            "https://a.example",
+            Class::Named,
+            Some(&"x".repeat(80)),
+            None,
+        )
+        .unwrap();
         assert_eq!(e.label_str().unwrap().len(), 64);
     }
 
@@ -407,15 +598,29 @@ rpc_read_timeout_ms = 60000
         let url = "https://rpc.example/v3/PATHKEY123?apikey=QUERYKEY456";
         let bearer = EndpointAuth::Bearer(Secret::new("BEARERSECRET789"));
         let e = Endpoint::new(url, Class::Named, Some("own"), Some(bearer)).unwrap();
-        let hdr = Endpoint::new("https://b.example/HDRPATH", Class::Default, None,
-            Some(EndpointAuth::Header { name: "X-API-Key".into(), value: Secret::new("HEADERSECRET") })).unwrap();
+        let hdr = Endpoint::new(
+            "https://b.example/HDRPATH",
+            Class::Default,
+            None,
+            Some(EndpointAuth::Header {
+                name: "X-API-Key".into(),
+                value: Secret::new("HEADERSECRET"),
+            }),
+        )
+        .unwrap();
         let l = NodeList::new(vec![e.clone(), hdr], Policy::Failover, 1, 1, 1).unwrap();
         let errs = [
             Endpoint::named("ftp://rpc.example/v3/PATHKEY123").unwrap_err(),
             NodeList::new(vec![e.clone(), e.clone()], Policy::Failover, 1, 1, 1).unwrap_err(),
             RpcError::argument(&format!("failed {url}")),
-            RpcError::EndpointAllFailed { last: Some(crate::error::EndpointFailure::new(0, crate::error::FailureKind::Transport,
-                &format!("error sending request for url ({url})"))), failover_revert: None },
+            RpcError::EndpointAllFailed {
+                last: Some(crate::error::EndpointFailure::new(
+                    0,
+                    crate::error::FailureKind::Transport,
+                    &format!("error sending request for url ({url})"),
+                )),
+                failover_revert: None,
+            },
         ];
         let mut texts = vec![format!("{e:?}"), format!("{l:?}")];
         for x in &errs {
@@ -423,11 +628,21 @@ rpc_read_timeout_ms = 60000
             texts.push(x.to_string());
         }
         for t in &texts {
-            for secret in ["PATHKEY123", "QUERYKEY456", "BEARERSECRET789", "HEADERSECRET", "HDRPATH", "rpc.example"] {
+            for secret in [
+                "PATHKEY123",
+                "QUERYKEY456",
+                "BEARERSECRET789",
+                "HEADERSECRET",
+                "HDRPATH",
+                "rpc.example",
+            ] {
                 assert!(!t.contains(secret), "{secret} in {t}");
             }
         }
-        assert!(format!("{e:?}").contains("own"), "control: the label is printed");
+        assert!(
+            format!("{e:?}").contains("own"),
+            "control: the label is printed"
+        );
     }
 
     /// The node's redaction tests (scaas-node `submit.rs::a_job_error_carries_no_endpoint_url`), kept with their name.
@@ -436,6 +651,10 @@ rpc_read_timeout_ms = 60000
         assert_eq!(redact_urls("rpc: error sending request for url (https://rpc.example/v3/KEY) after http://10.0.0.7:8545/ x"),
             "rpc: error sending request for url (<url>) after <url> x");
         assert_eq!(redact_urls("no url; wss://h:1/p,ws://q"), "no url; <url>");
-        assert_eq!(redact_urls("x http://h/p?a=1;key=SECRET,b=2 y"), "x <url> y", "recheck R-7: a key after ; or ,");
+        assert_eq!(
+            redact_urls("x http://h/p?a=1;key=SECRET,b=2 y"),
+            "x <url> y",
+            "recheck R-7: a key after ; or ,"
+        );
     }
 }

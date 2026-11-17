@@ -18,7 +18,10 @@ pub const ANSWER_MAX: usize = 1 << 20;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeOutcome {
     /// `202 {"status": "queued", "intent_id"?}`, or `200` (a duplicate)
-    Queued { status: u16, intent_id: Option<String> },
+    Queued {
+        status: u16,
+        intent_id: Option<String>,
+    },
     /// the node's error contract (`NodeRefused`)
     Refused(RpcError),
     /// transport, timeout, a 3xx (never followed), a 5xx, `RPC_UNAVAILABLE`, a malformed answer
@@ -47,7 +50,9 @@ pub struct NodeClient {
 
 impl std::fmt::Debug for NodeClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NodeClient").field("list", &self.list).finish()
+        f.debug_struct("NodeClient")
+            .field("list", &self.list)
+            .finish()
     }
 }
 
@@ -61,7 +66,10 @@ fn object(v: &Value, what: &str) -> Result<(), RpcError> {
 
 impl NodeClient {
     pub fn new(list: NodeList) -> Result<Self, RpcError> {
-        Ok(Self { http: Http::new(list.timeout_ms)?, list: Arc::new(list) })
+        Ok(Self {
+            http: Http::new(list.timeout_ms)?,
+            list: Arc::new(list),
+        })
     }
 
     pub fn list(&self) -> &NodeList {
@@ -69,17 +77,35 @@ impl NodeClient {
     }
 
     /// `POST /v1/op {chain, op}` to gateway `i`: `op` the object `ua-rs` built, serialised once, byte for byte.
-    pub async fn submit_op_at(&self, i: usize, chain: u64, op: &Value) -> Result<NodeOutcome, RpcError> {
+    pub async fn submit_op_at(
+        &self,
+        i: usize,
+        chain: u64,
+        op: &Value,
+    ) -> Result<NodeOutcome, RpcError> {
         object(op, "op")?;
-        let body = format!(r#"{{"chain":{chain},"op":{}}}"#, serde_json::to_string(op).expect("a Value serialises")).into_bytes();
+        let body = format!(
+            r#"{{"chain":{chain},"op":{}}}"#,
+            serde_json::to_string(op).expect("a Value serialises")
+        )
+        .into_bytes();
         self.submit_at(i, "/v1/op", body).await
     }
 
     /// `POST /v1/ua-metatx` to gateway `i`.
-    pub async fn submit_ua_metatx_at(&self, i: usize, req: &UaMetaTxReq) -> Result<NodeOutcome, RpcError> {
+    pub async fn submit_ua_metatx_at(
+        &self,
+        i: usize,
+        req: &UaMetaTxReq,
+    ) -> Result<NodeOutcome, RpcError> {
         object(&req.m, "m")?;
         object(&req.auth, "auth")?;
-        self.submit_at(i, "/v1/ua-metatx", serde_json::to_vec(req).expect("a request serialises")).await
+        self.submit_at(
+            i,
+            "/v1/ua-metatx",
+            serde_json::to_vec(req).expect("a request serialises"),
+        )
+        .await
     }
 
     /// `POST /v1/dex/orders` (`{chain, sellToken, order, signature | auth}`, the gateway's body) to gateway `i`.
@@ -97,7 +123,12 @@ impl NodeClient {
 
     async fn dex_post(&self, i: usize, route: &str, req: &Value) -> Result<NodeOutcome, RpcError> {
         object(req, "the DEX request")?;
-        self.submit_at(i, route, serde_json::to_vec(req).expect("a Value serialises")).await
+        self.submit_at(
+            i,
+            route,
+            serde_json::to_vec(req).expect("a Value serialises"),
+        )
+        .await
     }
 
     /// `GET /v1/dex/markets?chain=`, failed over.
@@ -105,42 +136,85 @@ impl NodeClient {
         self.get(&format!("/v1/dex/markets?chain={chain}")).await
     }
     /// `GET /v1/dex/depth?chain=&market=&levels=`, failed over.
-    pub async fn dex_depth(&self, chain: u64, market: i64, levels: Option<usize>) -> Result<Value, RpcError> {
+    pub async fn dex_depth(
+        &self,
+        chain: u64,
+        market: i64,
+        levels: Option<usize>,
+    ) -> Result<Value, RpcError> {
         let l = levels.map(|l| format!("&levels={l}")).unwrap_or_default();
-        self.get(&format!("/v1/dex/depth?chain={chain}&market={market}{l}")).await
+        self.get(&format!("/v1/dex/depth?chain={chain}&market={market}{l}"))
+            .await
     }
     /// `GET /v1/dex/trades?chain=&market=`, failed over.
     pub async fn dex_trades(&self, chain: u64, market: i64) -> Result<Value, RpcError> {
-        self.get(&format!("/v1/dex/trades?chain={chain}&market={market}")).await
+        self.get(&format!("/v1/dex/trades?chain={chain}&market={market}"))
+            .await
     }
     /// `GET /v1/dex/ticker?chain=&market=`, failed over.
     pub async fn dex_ticker(&self, chain: u64, market: i64) -> Result<Value, RpcError> {
-        self.get(&format!("/v1/dex/ticker?chain={chain}&market={market}")).await
+        self.get(&format!("/v1/dex/ticker?chain={chain}&market={market}"))
+            .await
     }
     /// `GET /v1/dex/orders?chain=&maker=` (an id or an address), failed over.
     pub async fn dex_orders(&self, chain: u64, maker: &str) -> Result<Value, RpcError> {
         if !maker.bytes().all(|b| b.is_ascii_alphanumeric()) {
             return Err(RpcError::argument("maker is an id or an address in hex"));
         }
-        self.get(&format!("/v1/dex/orders?chain={chain}&maker={maker}")).await
+        self.get(&format!("/v1/dex/orders?chain={chain}&maker={maker}"))
+            .await
     }
 
     /// One submit to gateway `i`: the body cap first (nothing sent above it), then the answer by the node's contract.
-    async fn submit_at(&self, i: usize, route: &str, body: Vec<u8>) -> Result<NodeOutcome, RpcError> {
+    async fn submit_at(
+        &self,
+        i: usize,
+        route: &str,
+        body: Vec<u8>,
+    ) -> Result<NodeOutcome, RpcError> {
         if body.len() > BODY_MAX {
-            return Err(RpcError::BodyTooLarge { len: body.len(), cap: BODY_MAX });
+            return Err(RpcError::BodyTooLarge {
+                len: body.len(),
+                cap: BODY_MAX,
+            });
         }
-        Ok(match self.http.request(&self.list, i, reqwest::Method::POST, route, Some(body), ANSWER_MAX, None).await {
-            Err(f) => NodeOutcome::Unreachable(f),
-            Ok((status, v)) => answer(i, status, v),
-        })
+        Ok(
+            match self
+                .http
+                .request(
+                    &self.list,
+                    i,
+                    reqwest::Method::POST,
+                    route,
+                    Some(body),
+                    ANSWER_MAX,
+                    None,
+                )
+                .await
+            {
+                Err(f) => NodeOutcome::Unreachable(f),
+                Ok((status, v)) => answer(i, status, v),
+            },
+        )
     }
 
     /// A read route, failed over in list order: the first gateway that answers a 2xx; a 4xx is the node's refusal, final.
     async fn get(&self, path: &str) -> Result<Value, RpcError> {
         let mut last = None;
         for i in 0..self.list.len() {
-            match self.http.request(&self.list, i, reqwest::Method::GET, path, None, ANSWER_MAX, None).await {
+            match self
+                .http
+                .request(
+                    &self.list,
+                    i,
+                    reqwest::Method::GET,
+                    path,
+                    None,
+                    ANSWER_MAX,
+                    None,
+                )
+                .await
+            {
                 Ok((s, v)) if (200..300).contains(&s) => return Ok(v),
                 Ok((s, v)) => match answer(i, s, v) {
                     NodeOutcome::Refused(e) => return Err(e),
@@ -150,7 +224,10 @@ impl NodeClient {
                 Err(f) => last = Some(f),
             }
         }
-        Err(RpcError::EndpointAllFailed { last, failover_revert: None })
+        Err(RpcError::EndpointAllFailed {
+            last,
+            failover_revert: None,
+        })
     }
 }
 
@@ -158,18 +235,32 @@ impl NodeClient {
 /// `detail` and `revert_data`; `RPC_UNAVAILABLE` is unreachable.
 fn answer(i: usize, status: u16, v: Value) -> NodeOutcome {
     if (200..300).contains(&status) {
-        return NodeOutcome::Queued { status, intent_id: v["intent_id"].as_str().map(str::to_string) };
+        return NodeOutcome::Queued {
+            status,
+            intent_id: v["intent_id"].as_str().map(str::to_string),
+        };
     }
-    let code = v["code"].as_str().or(v["error"].as_str()).unwrap_or("").to_string();
+    let code = v["code"]
+        .as_str()
+        .or(v["error"].as_str())
+        .unwrap_or("")
+        .to_string();
     if code == "RPC_UNAVAILABLE" {
-        return NodeOutcome::Unreachable(EndpointFailure::new(i, crate::FailureKind::Http, &format!("HTTP {status} RPC_UNAVAILABLE")));
+        return NodeOutcome::Unreachable(EndpointFailure::new(
+            i,
+            crate::FailureKind::Http,
+            &format!("HTTP {status} RPC_UNAVAILABLE"),
+        ));
     }
     let text = |k: &str| v[k].as_str().map(crate::error::endpoint_text);
     NodeOutcome::Refused(RpcError::NodeRefused {
         status,
         code: crate::error::endpoint_text(&code),
         detail: text("detail"),
-        revert_data: v["revert_data"].as_str().map(str::to_string).filter(|d| d.starts_with("0x") && d.len() <= 2 * ANSWER_MAX),
+        revert_data: v["revert_data"]
+            .as_str()
+            .map(str::to_string)
+            .filter(|d| d.starts_with("0x") && d.len() <= 2 * ANSWER_MAX),
     })
 }
 
@@ -181,7 +272,11 @@ pub use crate::endpoint::Fanout;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SubmitOutcome {
     /// at least one gateway queued it
-    Queued { by: Vec<usize>, refused: Vec<(usize, RpcError)>, unreachable: Vec<(usize, EndpointFailure)> },
+    Queued {
+        by: Vec<usize>,
+        refused: Vec<(usize, RpcError)>,
+        unreachable: Vec<(usize, EndpointFailure)>,
+    },
     /// none did: every gateway's outcome
     NotQueued { outcomes: Vec<(usize, NodeOutcome)> },
 }
@@ -221,22 +316,48 @@ impl MergedState {
 
 impl NodeClient {
     /// `POST /v1/op {chain, op}`: the same bytes to the gateways `fanout` selects, concurrently, merged.
-    pub async fn submit_op(&self, chain: u64, op: &Value, fanout: Fanout) -> Result<SubmitOutcome, RpcError> {
+    pub async fn submit_op(
+        &self,
+        chain: u64,
+        op: &Value,
+        fanout: Fanout,
+    ) -> Result<SubmitOutcome, RpcError> {
         object(op, "op")?;
-        let body = format!(r#"{{"chain":{chain},"op":{}}}"#, serde_json::to_string(op).expect("a Value serialises")).into_bytes();
+        let body = format!(
+            r#"{{"chain":{chain},"op":{}}}"#,
+            serde_json::to_string(op).expect("a Value serialises")
+        )
+        .into_bytes();
         self.fan(fanout, "/v1/op", body).await
     }
 
     /// `POST /v1/ua-metatx`: the same bytes to the gateways `fanout` selects.
-    pub async fn submit_ua_metatx(&self, req: &UaMetaTxReq, fanout: Fanout) -> Result<SubmitOutcome, RpcError> {
+    pub async fn submit_ua_metatx(
+        &self,
+        req: &UaMetaTxReq,
+        fanout: Fanout,
+    ) -> Result<SubmitOutcome, RpcError> {
         object(&req.m, "m")?;
         object(&req.auth, "auth")?;
-        self.fan(fanout, "/v1/ua-metatx", serde_json::to_vec(req).expect("a request serialises")).await
+        self.fan(
+            fanout,
+            "/v1/ua-metatx",
+            serde_json::to_vec(req).expect("a request serialises"),
+        )
+        .await
     }
 
-    async fn fan(&self, fanout: Fanout, route: &str, body: Vec<u8>) -> Result<SubmitOutcome, RpcError> {
+    async fn fan(
+        &self,
+        fanout: Fanout,
+        route: &str,
+        body: Vec<u8>,
+    ) -> Result<SubmitOutcome, RpcError> {
         if body.len() > BODY_MAX {
-            return Err(RpcError::BodyTooLarge { len: body.len(), cap: BODY_MAX });
+            return Err(RpcError::BodyTooLarge {
+                len: body.len(),
+                cap: BODY_MAX,
+            });
         }
         let to: Vec<usize> = match fanout {
             Fanout::First => vec![0],
@@ -245,9 +366,17 @@ impl NodeClient {
         let outcomes = futures::future::join_all(to.iter().map(|&i| {
             let body = body.clone();
             async move { (i, self.submit_at(i, route, body).await) }
-        })).await;
-        let outcomes: Vec<(usize, NodeOutcome)> = outcomes.into_iter().map(|(i, o)| (i, o.expect("the cap is checked once"))).collect();
-        let by: Vec<usize> = outcomes.iter().filter(|(_, o)| matches!(o, NodeOutcome::Queued { .. })).map(|(i, _)| *i).collect();
+        }))
+        .await;
+        let outcomes: Vec<(usize, NodeOutcome)> = outcomes
+            .into_iter()
+            .map(|(i, o)| (i, o.expect("the cap is checked once")))
+            .collect();
+        let by: Vec<usize> = outcomes
+            .iter()
+            .filter(|(_, o)| matches!(o, NodeOutcome::Queued { .. }))
+            .map(|(i, _)| *i)
+            .collect();
         if by.is_empty() {
             return Ok(SubmitOutcome::NotQueued { outcomes });
         }
@@ -259,18 +388,30 @@ impl NodeClient {
                 NodeOutcome::Queued { .. } => {}
             }
         }
-        Ok(SubmitOutcome::Queued { by, refused, unreachable })
+        Ok(SubmitOutcome::Queued {
+            by,
+            refused,
+            unreachable,
+        })
     }
 
     /// The merge over `sent_to`, every gateway the bytes were sent to (whatever it answered at submit); `states` what each one
     /// reports now (`None`: not reachable). Pure; never terminal.
     pub fn merged_state(sent_to: &[usize], states: &[(usize, Option<IntentState>)]) -> MergedState {
         let of = |i: usize| states.iter().find(|(j, _)| *j == i).and_then(|(_, s)| *s);
-        let by: Vec<usize> = sent_to.iter().copied().filter(|&i| of(i) == Some(IntentState::Mined)).collect();
+        let by: Vec<usize> = sent_to
+            .iter()
+            .copied()
+            .filter(|&i| of(i) == Some(IntentState::Mined))
+            .collect();
         if !by.is_empty() {
             return MergedState::Landed { by };
         }
-        if !sent_to.is_empty() && sent_to.iter().all(|&i| matches!(of(i), Some(IntentState::Dead | IntentState::Unknown))) {
+        if !sent_to.is_empty()
+            && sent_to
+                .iter()
+                .all(|&i| matches!(of(i), Some(IntentState::Dead | IntentState::Unknown)))
+        {
             return MergedState::GivenUpByEveryNode;
         }
         MergedState::InFlight

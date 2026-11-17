@@ -51,15 +51,31 @@ impl Default for BlockChoice {
 pub trait Probe: MaybeSync {
     type Hash: Clone + PartialEq + std::fmt::Debug + MaybeSend + MaybeSync;
     /// `Ok(true)`: endpoint `i` is the configured chain; `Ok(false)`: another one (dropped for good); `Err`: unread (asked again).
-    fn same_chain(&self, i: usize, deadline: Option<Instant>) -> impl Future<Output = Result<bool, EndpointFailure>> + MaybeSend;
+    fn same_chain(
+        &self,
+        i: usize,
+        deadline: Option<Instant>,
+    ) -> impl Future<Output = Result<bool, EndpointFailure>> + MaybeSend;
     /// Endpoint `i`'s head number.
-    fn head(&self, i: usize, deadline: Option<Instant>) -> impl Future<Output = Result<u64, EndpointFailure>> + MaybeSend;
+    fn head(
+        &self,
+        i: usize,
+        deadline: Option<Instant>,
+    ) -> impl Future<Output = Result<u64, EndpointFailure>> + MaybeSend;
     /// The number endpoint `i` names for `choice`.
-    fn named(&self, i: usize, choice: BlockChoice, deadline: Option<Instant>)
-        -> impl Future<Output = Result<u64, EndpointFailure>> + MaybeSend;
+    fn named(
+        &self,
+        i: usize,
+        choice: BlockChoice,
+        deadline: Option<Instant>,
+    ) -> impl Future<Output = Result<u64, EndpointFailure>> + MaybeSend;
     /// Endpoint `i`'s header hash at `number` (a header that answers another number is the endpoint's failure).
-    fn header(&self, i: usize, number: u64, deadline: Option<Instant>)
-        -> impl Future<Output = Result<Self::Hash, EndpointFailure>> + MaybeSend;
+    fn header(
+        &self,
+        i: usize,
+        number: u64,
+        deadline: Option<Instant>,
+    ) -> impl Future<Output = Result<Self::Hash, EndpointFailure>> + MaybeSend;
 }
 
 /// How one endpoint's read ended other than with a value: a revert (the contract's answer, its data as bytes) or a failure.
@@ -125,10 +141,19 @@ impl Pool {
     }
 
     /// With the highest-seen head and the total failover counter shared by several pools of one chain (the node's table).
-    pub fn shared(list: &NodeList, pinned: bool, head: Arc<AtomicU64>, failover_total: Arc<AtomicU64>) -> Self {
+    pub fn shared(
+        list: &NodeList,
+        pinned: bool,
+        head: Arc<AtomicU64>,
+        failover_total: Arc<AtomicU64>,
+    ) -> Self {
         Self {
             classes: list.endpoints().iter().map(|e| e.class).collect(),
-            labels: list.endpoints().iter().map(|e| e.label_str().map(str::to_string)).collect(),
+            labels: list
+                .endpoints()
+                .iter()
+                .map(|e| e.label_str().map(str::to_string))
+                .collect(),
             policy: list.policy,
             read_timeout: Duration::from_millis(list.read_timeout_ms),
             pinned,
@@ -201,9 +226,12 @@ impl Pool {
             Purpose::Plain => all.collect(),
             Purpose::FeedsDecryption => {
                 if !self.pinned {
-                    return Err(RpcError::argument("a read that feeds a decryption needs a pinned chain_uid"));
+                    return Err(RpcError::argument(
+                        "a read that feeds a decryption needs a pinned chain_uid",
+                    ));
                 }
-                all.filter(|&i| self.classes[i] != Class::Discovered).collect()
+                all.filter(|&i| self.classes[i] != Class::Discovered)
+                    .collect()
             }
         };
         if v.is_empty() {
@@ -213,14 +241,25 @@ impl Pool {
     }
 
     /// Endpoint `i` passes identity (cached once read; unread is asked again next time).
-    async fn identity_ok<P: Probe>(&self, probe: &P, i: usize, deadline: Option<Instant>) -> Result<(), EndpointFailure> {
+    async fn identity_ok<P: Probe>(
+        &self,
+        probe: &P,
+        i: usize,
+        deadline: Option<Instant>,
+    ) -> Result<(), EndpointFailure> {
         let same = match self.identity[i].get() {
             Some(s) => *s,
             None => {
-                let s = probe.same_chain(i, deadline).await
+                let s = probe
+                    .same_chain(i, deadline)
+                    .await
                     .map_err(|e| EndpointFailure::new(i, FailureKind::IdentityUnread, e.text()))?;
                 if !s {
-                    tracing::warn!(endpoint = i, label = self.labels[i].as_deref(), "endpoint is another chain (chain id or block 0); dropped");
+                    tracing::warn!(
+                        endpoint = i,
+                        label = self.labels[i].as_deref(),
+                        "endpoint is another chain (chain id or block 0); dropped"
+                    );
                 }
                 *self.identity[i].get_or_init(|| s)
             }
@@ -228,7 +267,11 @@ impl Pool {
         if same {
             Ok(())
         } else {
-            Err(EndpointFailure::new(i, FailureKind::WrongChain, "another chain"))
+            Err(EndpointFailure::new(
+                i,
+                FailureKind::WrongChain,
+                "another chain",
+            ))
         }
     }
 
@@ -252,7 +295,12 @@ impl Pool {
     /// let _ = p.failover(probe, scaas_rpc::Purpose::FeedsDecryption, |_i: usize| async { Ok::<u8, ReadError>(1) }).await;
     /// # }
     /// ```
-    pub async fn failover<T, P, F, Fut>(&self, probe: &P, purpose: Purpose, f: F) -> Result<Answer<T>, RpcError>
+    pub async fn failover<T, P, F, Fut>(
+        &self,
+        probe: &P,
+        purpose: Purpose,
+        f: F,
+    ) -> Result<Answer<T>, RpcError>
     where
         P: Probe,
         F: Fn(usize) -> Fut,
@@ -270,7 +318,11 @@ impl Pool {
                     let floor = self.head.load(Relaxed);
                     let n = probe.head(i, None).await?;
                     if n < floor {
-                        return Err(EndpointFailure::new(i, FailureKind::BehindHead, &format!("at block {n}, behind {floor}")));
+                        return Err(EndpointFailure::new(
+                            i,
+                            FailureKind::BehindHead,
+                            &format!("at block {n}, behind {floor}"),
+                        ));
                     }
                 }
                 Ok(())
@@ -288,11 +340,25 @@ impl Pool {
                     }
                     return Ok(Answer { value, endpoint: i });
                 }
-                Err(ReadError::Revert { data, reason }) if i == first => return Err(RpcError::Revert { endpoint: i, data, reason }),
+                Err(ReadError::Revert { data, reason }) if i == first => {
+                    return Err(RpcError::Revert {
+                        endpoint: i,
+                        data,
+                        reason,
+                    })
+                }
                 Err(ReadError::Revert { data, reason }) => {
-                    tracing::warn!(endpoint = i, "read: a failover endpoint's revert is no verdict; next");
-                    let mut e = EndpointFailure::new(i, FailureKind::FailoverRevert,
-                        &format!("endpoint {i} reverted (a failover endpoint decides nothing): {reason}"));
+                    tracing::warn!(
+                        endpoint = i,
+                        "read: a failover endpoint's revert is no verdict; next"
+                    );
+                    let mut e = EndpointFailure::new(
+                        i,
+                        FailureKind::FailoverRevert,
+                        &format!(
+                            "endpoint {i} reverted (a failover endpoint decides nothing): {reason}"
+                        ),
+                    );
                     e.revert_data = Some(data.clone());
                     failover_revert = Some(data);
                     last = Some(self.label(e));
@@ -303,7 +369,10 @@ impl Pool {
                 }
             }
         }
-        Err(RpcError::EndpointAllFailed { last, failover_revert })
+        Err(RpcError::EndpointAllFailed {
+            last,
+            failover_revert,
+        })
     }
 
     /// The deadline of one whole agreed read.
@@ -316,8 +385,13 @@ impl Pool {
     /// answers have passed the re-check (the rest dropped); one fallback round at the next lower named number; one deadline.
     /// CLI-RPC-06 under strict majority: a `discovered` endpoint serves a decryption read only when `n ≥ 3`, and the agreeing
     /// group holds a `named` or `default` member (owner, Q6 (b)).
-    pub async fn agree<T, P, F, Fut>(&self, probe: &P, choice: BlockChoice, purpose: Purpose, f: F)
-        -> Result<Agreed<T, P::Hash>, RpcError>
+    pub async fn agree<T, P, F, Fut>(
+        &self,
+        probe: &P,
+        choice: BlockChoice,
+        purpose: Purpose,
+        f: F,
+    ) -> Result<Agreed<T, P::Hash>, RpcError>
     where
         T: Clone + PartialEq,
         P: Probe,
@@ -326,10 +400,14 @@ impl Pool {
     {
         let n = self.len();
         if n < 2 {
-            return Err(RpcError::argument("strict_majority needs two endpoints or more"));
+            return Err(RpcError::argument(
+                "strict_majority needs two endpoints or more",
+            ));
         }
         if !self.pinned {
-            return Err(RpcError::argument("strict_majority needs a pinned chain_uid"));
+            return Err(RpcError::argument(
+                "strict_majority needs a pinned chain_uid",
+            ));
         }
         let need = n / 2 + 1;
         let trusted = |i: usize| self.classes[i] != Class::Discovered;
@@ -349,11 +427,20 @@ impl Pool {
         let names: Vec<Option<u64>> = futures::future::join_all((0..n).map(|i| async move {
             self.identity_ok(probe, i, deadline).await?;
             probe.named(i, choice, deadline).await
-        })).await.into_iter().map(|r| r.map_err(|e| failures.push(self.label(e))).ok()).collect();
+        }))
+        .await
+        .into_iter()
+        .map(|r| r.map_err(|e| failures.push(self.label(e))).ok())
+        .collect();
         let mut sorted: Vec<u64> = names.iter().flatten().copied().collect();
         sorted.sort_unstable_by(|a, b| b.cmp(a));
         let highest_named = sorted.first().copied().unwrap_or(0);
-        let no = |largest: usize, failures: Vec<EndpointFailure>| RpcError::EndpointNoMajority { n, need, largest, failures };
+        let no = |largest: usize, failures: Vec<EndpointFailure>| RpcError::EndpointNoMajority {
+            n,
+            need,
+            largest,
+            failures,
+        };
         if sorted.len() < need {
             return Err(no(0, failures));
         }
@@ -361,8 +448,17 @@ impl Pool {
         let floor = self.floor.load(Relaxed);
         let b = sorted[need - 1];
         if b < floor {
-            failures.extend((0..n).filter(|&i| names[i].is_some_and(|x| x < floor))
-                .map(|i| self.label(EndpointFailure::new(i, FailureKind::BehindHead, &format!("names a block below the agreed {floor}")))));
+            failures.extend(
+                (0..n)
+                    .filter(|&i| names[i].is_some_and(|x| x < floor))
+                    .map(|i| {
+                        self.label(EndpointFailure::new(
+                            i,
+                            FailureKind::BehindHead,
+                            &format!("names a block below the agreed {floor}"),
+                        ))
+                    }),
+            );
             return Err(no(0, failures));
         }
         let fallback = sorted.iter().copied().find(|&x| x < b && x >= floor);
@@ -372,8 +468,18 @@ impl Pool {
                 Ok((value, hash, members)) => {
                     self.floor.fetch_max(number, Relaxed);
                     return match value {
-                        Ok(value) => Ok(Agreed { value, number, hash, members, highest_named }),
-                        Err((data, reason)) => Err(RpcError::Revert { endpoint: members[0], data, reason }),
+                        Ok(value) => Ok(Agreed {
+                            value,
+                            number,
+                            hash,
+                            members,
+                            highest_named,
+                        }),
+                        Err((data, reason)) => Err(RpcError::Revert {
+                            endpoint: members[0],
+                            data,
+                            reason,
+                        }),
                     };
                 }
                 Err((l, mut fs)) => {
@@ -388,8 +494,15 @@ impl Pool {
     /// One round at block `number`: (3) each endpoint's header there, (4) the read pinned to it, (5) answers grouped whole, (6)
     /// a group of `need` re-reads its header and decides; the rest are dropped. `Err`: the largest group's size and the failures.
     #[allow(clippy::type_complexity)]
-    async fn round<T, P, F, Fut>(&self, probe: &P, number: u64, deadline: Option<Instant>, need: usize, purpose: Purpose, f: &F)
-        -> Result<(Result<T, (Vec<u8>, String)>, P::Hash, Vec<usize>), (usize, Vec<EndpointFailure>)>
+    async fn round<T, P, F, Fut>(
+        &self,
+        probe: &P,
+        number: u64,
+        deadline: Option<Instant>,
+        need: usize,
+        purpose: Purpose,
+        f: &F,
+    ) -> Result<(Result<T, (Vec<u8>, String)>, P::Hash, Vec<usize>), (usize, Vec<EndpointFailure>)>
     where
         T: Clone + PartialEq,
         P: Probe,
@@ -397,23 +510,39 @@ impl Pool {
         Fut: Future<Output = Result<T, ReadError>>,
     {
         let n = self.len();
-        let mut pending: FuturesUnordered<_> = (0..n).map(|i| async move {
-            let r = async {
-                self.identity_ok(probe, i, deadline).await?;
-                let hash = probe.header(i, number, deadline).await?;
-                let v = match f(ReadAt { endpoint: i, number, hash: hash.clone(), deadline }).await {
-                    Ok(v) => Ok(v),
-                    Err(ReadError::Revert { data, reason }) => Err((data, reason)),
-                    Err(ReadError::Failure(e)) => return Err(e),
-                };
-                Ok((v, hash))
-            }.await;
-            (i, r)
-        }).collect();
+        let mut pending: FuturesUnordered<_> = (0..n)
+            .map(|i| async move {
+                let r = async {
+                    self.identity_ok(probe, i, deadline).await?;
+                    let hash = probe.header(i, number, deadline).await?;
+                    let v = match f(ReadAt {
+                        endpoint: i,
+                        number,
+                        hash: hash.clone(),
+                        deadline,
+                    })
+                    .await
+                    {
+                        Ok(v) => Ok(v),
+                        Err(ReadError::Revert { data, reason }) => Err((data, reason)),
+                        Err(ReadError::Failure(e)) => return Err(e),
+                    };
+                    Ok((v, hash))
+                }
+                .await;
+                (i, r)
+            })
+            .collect();
         // groups of equal (answer, hash): members, and which of them passed the re-check
-        let mut groups: Vec<(Result<T, (Vec<u8>, String)>, P::Hash, Vec<usize>, Vec<usize>)> = vec![];
+        let mut groups: Vec<(
+            Result<T, (Vec<u8>, String)>,
+            P::Hash,
+            Vec<usize>,
+            Vec<usize>,
+        )> = vec![];
         let mut failures = vec![];
-        let same = |a: &Result<T, (Vec<u8>, String)>, b: &Result<T, (Vec<u8>, String)>| match (a, b) {
+        let same = |a: &Result<T, (Vec<u8>, String)>, b: &Result<T, (Vec<u8>, String)>| match (a, b)
+        {
             (Ok(x), Ok(y)) => x == y,
             (Err((x, _)), Err((y, _))) => x == y, // a revert compares by its data
             _ => false,
@@ -438,15 +567,29 @@ impl Pool {
                 continue;
             }
             // (6) the re-check: each member not yet re-checked reads the header at `number` again; a moved hash leaves
-            let (hash, members, checked) = (groups[g].1.clone(), groups[g].2.clone(), groups[g].3.clone());
-            let todo: Vec<usize> = members.iter().copied().filter(|m| !checked.contains(m)).collect();
-            let again = futures::future::join_all(todo.iter().map(|&m| probe.header(m, number, deadline))).await;
+            let (hash, members, checked) = (
+                groups[g].1.clone(),
+                groups[g].2.clone(),
+                groups[g].3.clone(),
+            );
+            let todo: Vec<usize> = members
+                .iter()
+                .copied()
+                .filter(|m| !checked.contains(m))
+                .collect();
+            let again =
+                futures::future::join_all(todo.iter().map(|&m| probe.header(m, number, deadline)))
+                    .await;
             for (&m, h) in todo.iter().zip(again) {
                 match h {
                     Ok(h) if h == hash => groups[g].3.push(m),
                     Ok(_) => {
                         groups[g].2.retain(|x| *x != m);
-                        failures.push(self.label(EndpointFailure::new(m, FailureKind::BlockChanged, &format!("block {number} changed"))));
+                        failures.push(self.label(EndpointFailure::new(
+                            m,
+                            FailureKind::BlockChanged,
+                            &format!("block {number} changed"),
+                        )));
                     }
                     Err(e) => {
                         groups[g].2.retain(|x| *x != m);
@@ -455,7 +598,8 @@ impl Pool {
                 }
             }
             let ok = &groups[g].3;
-            let trusted_member = purpose == Purpose::Plain || ok.iter().any(|&m| self.classes[m] != Class::Discovered);
+            let trusted_member = purpose == Purpose::Plain
+                || ok.iter().any(|&m| self.classes[m] != Class::Discovered);
             if ok.len() >= need && trusted_member {
                 let mut members = ok.clone();
                 members.sort_unstable();
@@ -463,12 +607,19 @@ impl Pool {
                 return Ok((v, h, members));
             }
         }
-        Err((groups.iter().map(|g| g.2.len()).max().unwrap_or(0), failures))
+        Err((
+            groups.iter().map(|g| g.2.len()).max().unwrap_or(0),
+            failures,
+        ))
     }
 }
 
 /// The indexers' event-set quorum (NODE-IDX-01, moved from the node's `finality.rs`): the first endpoint always counts; `others`
 /// are the remaining independent endpoints.
 pub fn quorum_ok<H: PartialEq>(primary: H, others: &[Option<H>], quorum: usize) -> bool {
-    1 + others.iter().filter(|h| h.as_ref() == Some(&primary)).count() >= quorum
+    1 + others
+        .iter()
+        .filter(|h| h.as_ref() == Some(&primary))
+        .count()
+        >= quorum
 }

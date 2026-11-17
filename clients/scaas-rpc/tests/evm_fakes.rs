@@ -10,7 +10,10 @@ use serde_json::{json, Value};
 use std::sync::atomic::Ordering::SeqCst;
 
 fn list(urls: &[&str], timeout_ms: u64, slow_ms: u64) -> NodeList {
-    let e = urls.iter().map(|u| scaas_rpc::Endpoint::named(u).unwrap()).collect();
+    let e = urls
+        .iter()
+        .map(|u| scaas_rpc::Endpoint::named(u).unwrap())
+        .collect();
     NodeList::new(e, Policy::Failover, timeout_ms, slow_ms, 60_000).unwrap()
 }
 
@@ -19,8 +22,21 @@ fn node_pool(urls: &[&str]) -> EvmPool {
     node_pool_with(urls, Some(genesis()), Shared::default(), 30_000, 120_000)
 }
 
-fn node_pool_with(urls: &[&str], pin: Option<B256>, shared: Shared, timeout_ms: u64, slow_ms: u64) -> EvmPool {
-    EvmPool::connect_shared(list(urls, timeout_ms, slow_ms), 296, pin, shared, scaas_rpc::evm::default_decode).unwrap()
+fn node_pool_with(
+    urls: &[&str],
+    pin: Option<B256>,
+    shared: Shared,
+    timeout_ms: u64,
+    slow_ms: u64,
+) -> EvmPool {
+    EvmPool::connect_shared(
+        list(urls, timeout_ms, slow_ms),
+        296,
+        pin,
+        shared,
+        scaas_rpc::evm::default_decode,
+    )
+    .unwrap()
 }
 
 /// The SDK's pool: every endpoint identity-checked.
@@ -33,36 +49,54 @@ fn five() -> Bytes {
 }
 
 async fn call(c: &EvmPool) -> Result<Bytes, SimError> {
-    c.call_tx(alloy::rpc::types::TransactionRequest::default().to(Address::ZERO).input(Bytes::new().into())).await
+    c.call_tx(
+        alloy::rpc::types::TransactionRequest::default()
+            .to(Address::ZERO)
+            .input(Bytes::new().into()),
+    )
+    .await
 }
 
 /// An endpoint whose `eth_getCode` answer is `body` (raw bytes, `chunked` or announced), chain id and block 0 as [`fake_rpc`].
 async fn code_answer(body: fn(&Value) -> Vec<u8>, chunked: bool) -> String {
     let b0 = block(0, genesis());
-    let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
-        let b0 = b0.clone();
-        async move {
-            let small = |v: Value| axum::body::Body::from(serde_json::to_vec(&json!({"jsonrpc": "2.0", "id": r["id"], "result": v})).unwrap());
-            let out = match r["method"].as_str() {
-                Some("eth_chainId") => small(json!("0x128")),
-                Some("eth_getBlockByNumber") => small(b0),
-                Some("eth_blockNumber") => small(json!("0x10")),
-                _ if chunked => {
-                    let all = body(&r);
-                    let parts: Vec<Result<Vec<u8>, std::io::Error>> = all.chunks(1 << 16).map(|c| Ok(c.to_vec())).collect();
-                    axum::body::Body::from_stream(futures::stream::iter(parts))
-                }
-                _ => axum::body::Body::from(body(&r)),
-            };
-            axum::response::Response::builder().header("content-type", "application/json").body(out).unwrap()
-        }
-    }));
+    let app = axum::Router::new().route(
+        "/",
+        axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let b0 = b0.clone();
+            async move {
+                let small = |v: Value| {
+                    axum::body::Body::from(
+                        serde_json::to_vec(&json!({"jsonrpc": "2.0", "id": r["id"], "result": v}))
+                            .unwrap(),
+                    )
+                };
+                let out = match r["method"].as_str() {
+                    Some("eth_chainId") => small(json!("0x128")),
+                    Some("eth_getBlockByNumber") => small(b0),
+                    Some("eth_blockNumber") => small(json!("0x10")),
+                    _ if chunked => {
+                        let all = body(&r);
+                        let parts: Vec<Result<Vec<u8>, std::io::Error>> =
+                            all.chunks(1 << 16).map(|c| Ok(c.to_vec())).collect();
+                        axum::body::Body::from_stream(futures::stream::iter(parts))
+                    }
+                    _ => axum::body::Body::from(body(&r)),
+                };
+                axum::response::Response::builder()
+                    .header("content-type", "application/json")
+                    .body(out)
+                    .unwrap()
+            }
+        }),
+    );
     serve(app).await
 }
 
 /// A JSON-RPC answer of exactly `len` bytes: `{"jsonrpc":"2.0","id":…,"result":"0x"}` padded with spaces.
 fn answer_of_len(r: &Value, len: usize) -> Vec<u8> {
-    let mut b = serde_json::to_vec(&json!({"jsonrpc": "2.0", "id": r["id"], "result": "0x6001"})).unwrap();
+    let mut b =
+        serde_json::to_vec(&json!({"jsonrpc": "2.0", "id": r["id"], "result": "0x6001"})).unwrap();
     b.resize(len, b' ');
     b
 }
@@ -74,31 +108,83 @@ async fn an_evm_answer_above_the_cap_is_that_endpoints_failure() {
     let (good, _) = fake_rpc(|r| match r["method"].as_str() {
         Some("eth_blockNumber") => json!({"result": "0x10"}),
         _ => json!({"result": "0x6002"}),
-    }).await;
+    })
+    .await;
     for chunked in [false, true] {
         let big = code_answer(|r| answer_of_len(r, CAP + 1), chunked).await;
-        assert_eq!(sdk_pool(&[&big, &good], 30_000).code(Address::ZERO).await.unwrap(), Bytes::from(vec![0x60, 0x02]),
-            "fails over to endpoint 1 (chunked {chunked})");
-        let e = sdk_pool(&[&big], 30_000).code(Address::ZERO).await.unwrap_err();
-        assert!(matches!(&e, SimError::Transport(t) if t.contains("AnswerTooLarge") || t.contains("above")), "{e}");
+        assert_eq!(
+            sdk_pool(&[&big, &good], 30_000)
+                .code(Address::ZERO)
+                .await
+                .unwrap(),
+            Bytes::from(vec![0x60, 0x02]),
+            "fails over to endpoint 1 (chunked {chunked})"
+        );
+        let e = sdk_pool(&[&big], 30_000)
+            .code(Address::ZERO)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(&e, SimError::Transport(t) if t.contains("AnswerTooLarge") || t.contains("above")),
+            "{e}"
+        );
     }
 }
 
 #[tokio::test]
 async fn an_evm_answer_of_depth_65_is_too_deep() {
     // the answer object is depth 1: a result nested 64 deep is depth 65
-    let deep = code_answer(|r| format!(r#"{{"jsonrpc":"2.0","id":{},"result":{}{}}}"#, r["id"], "[".repeat(64), "]".repeat(64)).into_bytes(), false).await;
-    let e = sdk_pool(&[&deep], 30_000).code(Address::ZERO).await.unwrap_err();
-    assert!(matches!(&e, SimError::Transport(t) if t.contains("AnswerTooDeep")), "{e}");
-    let ok = code_answer(|r| format!(r#"{{"jsonrpc":"2.0","id":{},"result":{}{}}}"#, r["id"], "[".repeat(63), "]".repeat(63)).into_bytes(), false).await;
-    let e = sdk_pool(&[&ok], 30_000).code(Address::ZERO).await.unwrap_err();
-    assert!(!matches!(&e, SimError::Transport(t) if t.contains("AnswerTooDeep")), "control: depth 64 reaches the parser: {e}");
+    let deep = code_answer(
+        |r| {
+            format!(
+                r#"{{"jsonrpc":"2.0","id":{},"result":{}{}}}"#,
+                r["id"],
+                "[".repeat(64),
+                "]".repeat(64)
+            )
+            .into_bytes()
+        },
+        false,
+    )
+    .await;
+    let e = sdk_pool(&[&deep], 30_000)
+        .code(Address::ZERO)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&e, SimError::Transport(t) if t.contains("AnswerTooDeep")),
+        "{e}"
+    );
+    let ok = code_answer(
+        |r| {
+            format!(
+                r#"{{"jsonrpc":"2.0","id":{},"result":{}{}}}"#,
+                r["id"],
+                "[".repeat(63),
+                "]".repeat(63)
+            )
+            .into_bytes()
+        },
+        false,
+    )
+    .await;
+    let e = sdk_pool(&[&ok], 30_000)
+        .code(Address::ZERO)
+        .await
+        .unwrap_err();
+    assert!(
+        !matches!(&e, SimError::Transport(t) if t.contains("AnswerTooDeep")),
+        "control: depth 64 reaches the parser: {e}"
+    );
 }
 
 #[tokio::test]
 async fn an_evm_answer_at_the_cap_is_read() {
     let at = code_answer(|r| answer_of_len(r, CAP), true).await;
-    assert_eq!(sdk_pool(&[&at], 30_000).code(Address::ZERO).await.unwrap(), Bytes::from(vec![0x60, 0x01]));
+    assert_eq!(
+        sdk_pool(&[&at], 30_000).code(Address::ZERO).await.unwrap(),
+        Bytes::from(vec![0x60, 0x01])
+    );
 }
 
 #[tokio::test]
@@ -138,55 +224,134 @@ async fn chain_reads_fail_over_on_transport_errors_never_on_a_revert() {
         Some("eth_blockNumber") => json!({"result": "0x64"}),
         Some("eth_getLogs") => json!({"result": []}),
         _ => json!({"result": format!("0x{:064x}", 5)}),
-    }).await;
-    let (busy, busy_n) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "header not found"}})).await;
-    let (rev, rev_n) = fake_rpc(|_| json!({"error": {"code": 3, "message": "execution reverted", "data": "0xdeadbeef"}})).await;
+    })
+    .await;
+    let (busy, busy_n) =
+        fake_rpc(|_| json!({"error": {"code": -32000, "message": "header not found"}})).await;
+    let (rev, rev_n) = fake_rpc(
+        |_| json!({"error": {"code": 3, "message": "execution reverted", "data": "0xdeadbeef"}}),
+    )
+    .await;
     assert_eq!(call(&node_pool(&[&good])).await.unwrap(), five(), "control");
-    assert_eq!(call(&node_pool(&[DOWN, &good])).await.unwrap(), five(), "the first endpoint down");
-    assert_eq!(call(&node_pool(&[&busy, &good])).await.unwrap(), five(), "an error answer that is no revert");
+    assert_eq!(
+        call(&node_pool(&[DOWN, &good])).await.unwrap(),
+        five(),
+        "the first endpoint down"
+    );
+    assert_eq!(
+        call(&node_pool(&[&busy, &good])).await.unwrap(),
+        five(),
+        "an error answer that is no revert"
+    );
     assert_eq!(busy_n.load(SeqCst), 1);
     let before = good_n.load(SeqCst);
-    assert!(matches!(call(&node_pool(&[&rev, &good])).await, Err(SimError::Revert(_))), "a revert is final");
-    assert_eq!((rev_n.load(SeqCst), good_n.load(SeqCst)), (1, before), "the next endpoint is never asked after a revert");
-    assert!(matches!(call(&node_pool(&[DOWN, &busy])).await, Err(SimError::Transport(_))), "all down");
+    assert!(
+        matches!(
+            call(&node_pool(&[&rev, &good])).await,
+            Err(SimError::Revert(_))
+        ),
+        "a revert is final"
+    );
+    assert_eq!(
+        (rev_n.load(SeqCst), good_n.load(SeqCst)),
+        (1, before),
+        "the next endpoint is never asked after a revert"
+    );
+    assert!(
+        matches!(
+            call(&node_pool(&[DOWN, &busy])).await,
+            Err(SimError::Transport(_))
+        ),
+        "all down"
+    );
     let (stale, stale_n) = fake_rpc(|r| match r["method"].as_str() {
         Some("eth_blockNumber") => json!({"result": "0x10"}),
         _ => json!({"error": {"code": 3, "message": "execution reverted", "data": "0xdeadbeef"}}),
-    }).await;
+    })
+    .await;
     let (level, _) = fake_rpc(|r| match r["method"].as_str() {
         Some("eth_blockNumber") => json!({"result": "0x10"}),
         _ => json!({"result": format!("0x{:064x}", 5)}),
-    }).await;
+    })
+    .await;
     let fresh = node_pool(&[DOWN, &stale]);
     assert_eq!(fresh.seen_head(), 0);
-    assert!(matches!(call(&fresh).await, Err(SimError::Transport(e)) if e.contains("decides nothing")), "head 0: requeue");
+    assert!(
+        matches!(call(&fresh).await, Err(SimError::Transport(e)) if e.contains("decides nothing")),
+        "head 0: requeue"
+    );
     let at_head = node_pool(&[DOWN, &stale]);
     at_head.saw_block(0x10);
-    assert!(matches!(call(&at_head).await, Err(SimError::Transport(e)) if e.contains("decides nothing")), "at the head too");
-    assert!(matches!(call(&node_pool(&[&stale])).await, Err(SimError::Revert(_))), "control: the first endpoint's revert is final");
+    assert!(
+        matches!(call(&at_head).await, Err(SimError::Transport(e)) if e.contains("decides nothing")),
+        "at the head too"
+    );
+    assert!(
+        matches!(call(&node_pool(&[&stale])).await, Err(SimError::Revert(_))),
+        "control: the first endpoint's revert is final"
+    );
     let shared = Shared::default();
-    let lane = node_pool_with(&[DOWN, &level], Some(genesis()), shared.clone(), 30_000, 120_000);
-    let venue = node_pool_with(&[DOWN, &level], Some(genesis()), shared.clone(), 30_000, 120_000);
-    assert_eq!(call(&venue).await.unwrap(), five(), "control: at the head, its answer is used");
-    assert_eq!((venue.failover_answers(), lane.failover_answers()), (1, 0), "a failover answer is counted, per pool");
+    let lane = node_pool_with(
+        &[DOWN, &level],
+        Some(genesis()),
+        shared.clone(),
+        30_000,
+        120_000,
+    );
+    let venue = node_pool_with(
+        &[DOWN, &level],
+        Some(genesis()),
+        shared.clone(),
+        30_000,
+        120_000,
+    );
+    assert_eq!(
+        call(&venue).await.unwrap(),
+        five(),
+        "control: at the head, its answer is used"
+    );
+    assert_eq!(
+        (venue.failover_answers(), lane.failover_answers()),
+        (1, 0),
+        "a failover answer is counted, per pool"
+    );
     assert_eq!(shared.failover.load(SeqCst), 1, "and per table, for health");
     let first = node_pool(&[&level]);
     call(&first).await.unwrap();
-    assert_eq!(first.failover_answers(), 0, "control: the first endpoint's answer is not");
-    assert_eq!(venue.seen_head(), 0, "a failover endpoint's own head raises nothing");
+    assert_eq!(
+        first.failover_answers(),
+        0,
+        "control: the first endpoint's answer is not"
+    );
+    assert_eq!(
+        venue.seen_head(),
+        0,
+        "a failover endpoint's own head raises nothing"
+    );
     lane.saw_block(0x11);
     let before = stale_n.load(SeqCst);
     assert!(matches!(call(&venue).await, Err(SimError::Transport(e)) if e.contains("behind 17")));
     let behind = node_pool(&[DOWN, &stale]);
     behind.saw_block(0x11);
-    assert!(matches!(call(&behind).await, Err(SimError::Transport(e)) if e.contains("behind")), "stale: requeue, never final");
+    assert!(
+        matches!(call(&behind).await, Err(SimError::Transport(e)) if e.contains("behind")),
+        "stale: requeue, never final"
+    );
     assert_eq!(stale_n.load(SeqCst) - before, 1, "only its head was read");
     let (headless, _) = fake_rpc(|r| match r["method"].as_str() {
-        Some("eth_blockNumber") => json!({"error": {"code": -32000, "message": "header not found"}}),
+        Some("eth_blockNumber") => {
+            json!({"error": {"code": -32000, "message": "header not found"}})
+        }
         _ => json!({"error": {"code": 3, "message": "execution reverted", "data": "0xdeadbeef"}}),
-    }).await;
-    assert!(matches!(call(&node_pool(&[DOWN, &headless])).await, Err(SimError::Transport(_))),
-        "a failover endpoint whose head is unread answers nothing");
+    })
+    .await;
+    assert!(
+        matches!(
+            call(&node_pool(&[DOWN, &headless])).await,
+            Err(SimError::Transport(_))
+        ),
+        "a failover endpoint whose head is unread answers nothing"
+    );
     let answer = |r: &Value| match r["method"].as_str() {
         Some("eth_blockNumber") => json!({"result": "0x64"}),
         _ => json!({"result": format!("0x{:064x}", 5)}),
@@ -195,9 +360,15 @@ async fn chain_reads_fail_over_on_transport_errors_never_on_a_revert() {
         let (other, other_n) = fake_rpc_on(answer, id, zero).await;
         let c = node_pool(&[DOWN, &other]);
         for _ in 0..2 {
-            assert!(matches!(call(&c).await, Err(SimError::Transport(e)) if e.contains("not chain 296")));
+            assert!(
+                matches!(call(&c).await, Err(SimError::Transport(e)) if e.contains("not chain 296"))
+            );
         }
-        assert_eq!(other_n.load(SeqCst), 0, "nothing but its chain id and block 0 was asked");
+        assert_eq!(
+            other_n.load(SeqCst),
+            0,
+            "nothing but its chain id and block 0 was asked"
+        );
         assert_eq!(c.pool().identity_of(1), Some(false), "dropped, once");
     }
     let (same, _) = fake_rpc(answer).await;
@@ -206,7 +377,11 @@ async fn chain_reads_fail_over_on_transport_errors_never_on_a_revert() {
     assert_eq!(c.pool().identity_of(1), None, "not kept");
     let (first, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "busy"}})).await;
     let c = node_pool_with(&[&first, &same], None, Shared::default(), 30_000, 120_000);
-    assert_eq!(call(&c).await.unwrap(), five(), "the first endpoint's block 0 matches");
+    assert_eq!(
+        call(&c).await.unwrap(),
+        five(),
+        "the first endpoint's block 0 matches"
+    );
     let mute = serve(axum::Router::new().route("/", axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
         axum::Json(match r["method"].as_str() {
             Some("eth_chainId") => json!({"jsonrpc": "2.0", "id": r["id"], "error": {"code": -32000, "message": "busy"}}),
@@ -215,16 +390,35 @@ async fn chain_reads_fail_over_on_transport_errors_never_on_a_revert() {
         })
     }))).await;
     let c = node_pool(&[DOWN, &mute]);
-    assert!(matches!(call(&c).await, Err(SimError::Transport(e)) if e.contains("chain id unreadable")), "unread chain id: not used");
+    assert!(
+        matches!(call(&c).await, Err(SimError::Transport(e)) if e.contains("chain id unreadable")),
+        "unread chain id: not used"
+    );
     assert_eq!(c.pool().identity_of(1), None, "not kept");
     let c = node_pool(&[&busy, &good]);
     let before = good_n.load(SeqCst);
-    assert!(c.logs_since(Address::ZERO, B256::ZERO, 10).await.unwrap().is_empty());
-    assert_eq!(good_n.load(SeqCst) - before, 3, "its head check, eth_blockNumber and eth_getLogs, all on the good endpoint");
-    assert_eq!(c.seen_head(), 0, "a failover endpoint's head in a log read raises nothing");
+    assert!(c
+        .logs_since(Address::ZERO, B256::ZERO, 10)
+        .await
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        good_n.load(SeqCst) - before,
+        3,
+        "its head check, eth_blockNumber and eth_getLogs, all on the good endpoint"
+    );
+    assert_eq!(
+        c.seen_head(),
+        0,
+        "a failover endpoint's head in a log read raises nothing"
+    );
     let c = node_pool(&[&good]);
     c.logs_since(Address::ZERO, B256::ZERO, 10).await.unwrap();
-    assert_eq!(c.seen_head(), 0x64, "control: the first endpoint's head does");
+    assert_eq!(
+        c.seen_head(),
+        0x64,
+        "control: the first endpoint's head does"
+    );
 }
 
 /// The node's `an_unspent_nonce_on_a_failover_answer_is_unread`, its pool part: a view answered by a failover endpoint moves the
@@ -234,25 +428,38 @@ async fn an_unspent_nonce_on_a_failover_answer_is_unread() {
     let (unspent, _) = fake_rpc(|r| match r["method"].as_str() {
         Some("eth_blockNumber") => json!({"result": "0x10"}),
         _ => json!({"result": format!("0x{:064x}", 3)}),
-    }).await;
+    })
+    .await;
     let first = node_pool(&[&unspent]);
     let mark = first.failover_answers();
     call(&first).await.unwrap();
-    assert_eq!(first.failover_answers(), mark, "control: the first endpoint's answer");
+    assert_eq!(
+        first.failover_answers(),
+        mark,
+        "control: the first endpoint's answer"
+    );
     let over = node_pool(&[DOWN, &unspent]);
     let mark = over.failover_answers();
     call(&over).await.unwrap();
-    assert_eq!(over.failover_answers(), mark + 1, "a failover endpoint answered");
+    assert_eq!(
+        over.failover_answers(),
+        mark + 1,
+        "a failover endpoint answered"
+    );
 }
 
 /// An RPC at head 12,288 whose `eth_getLogs` caps the range at `cap` blocks and answers one log per accepted request, its
 /// `blockNumber` the request's `fromBlock` and its `logIndex` the span's length.
 fn capped_logs(r: &Value, cap: u64) -> Value {
-    let n = |v: &Value| u64::from_str_radix(v.as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
+    let n =
+        |v: &Value| u64::from_str_radix(v.as_str().unwrap().trim_start_matches("0x"), 16).unwrap();
     match r["method"].as_str() {
         Some("eth_blockNumber") => json!({"result": "0x3000"}),
         Some("eth_getLogs") => {
-            let (from, to) = (n(&r["params"][0]["fromBlock"]), n(&r["params"][0]["toBlock"]));
+            let (from, to) = (
+                n(&r["params"][0]["fromBlock"]),
+                n(&r["params"][0]["toBlock"]),
+            );
             if to - from + 1 > cap {
                 return json!({"error": {"code": -32005, "message": format!("query exceeds max block range {cap}")}});
             }
@@ -269,39 +476,69 @@ fn capped_logs(r: &Value, cap: u64) -> Value {
 async fn each_log_span_has_its_own_timeout() {
     async fn slow(delay: u64) -> String {
         let b0 = block(0, genesis());
-        serve(axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
-            let b0 = b0.clone();
-            async move {
-                let mut a = match r["method"].as_str() {
-                    Some("eth_chainId") => json!({"result": "0x128"}),
-                    Some("eth_getBlockByNumber") => json!({"result": b0}),
-                    _ => {
-                        tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
-                        capped_logs(&r, 2_000)
-                    }
-                };
-                a["jsonrpc"] = json!("2.0");
-                a["id"] = r["id"].clone();
-                axum::Json(a)
-            }
-        }))).await
+        serve(axum::Router::new().route(
+            "/",
+            axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+                let b0 = b0.clone();
+                async move {
+                    let mut a = match r["method"].as_str() {
+                        Some("eth_chainId") => json!({"result": "0x128"}),
+                        Some("eth_getBlockByNumber") => json!({"result": b0}),
+                        _ => {
+                            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                            capped_logs(&r, 2_000)
+                        }
+                    };
+                    a["jsonrpc"] = json!("2.0");
+                    a["id"] = r["id"].clone();
+                    axum::Json(a)
+                }
+            }),
+        ))
+        .await
     }
     let c = |url: &str| node_pool_with(&[url], Some(genesis()), Shared::default(), 1_000, 120_000);
     let t = std::time::Instant::now();
-    let logs = c(&slow(400).await).logs_since(Address::ZERO, B256::ZERO, 10_000).await.unwrap();
-    assert!(logs.len() >= 3 && t.elapsed() > std::time::Duration::from_millis(1_200), "{} spans in {:?}", logs.len(), t.elapsed());
-    assert!(c(&slow(2_500).await).logs_since(Address::ZERO, B256::ZERO, 10_000).await.is_err(), "control: one slow request");
+    let logs = c(&slow(400).await)
+        .logs_since(Address::ZERO, B256::ZERO, 10_000)
+        .await
+        .unwrap();
+    assert!(
+        logs.len() >= 3 && t.elapsed() > std::time::Duration::from_millis(1_200),
+        "{} spans in {:?}",
+        logs.len(),
+        t.elapsed()
+    );
+    assert!(
+        c(&slow(2_500).await)
+            .logs_since(Address::ZERO, B256::ZERO, 10_000)
+            .await
+            .is_err(),
+        "control: one slow request"
+    );
 }
 
 #[tokio::test]
 async fn a_log_window_is_chunked_for_an_rpc_that_caps_the_range() {
-    let spans = |logs: Vec<alloy::rpc::types::Log>| logs.iter().map(|l| (l.block_number.unwrap(), l.log_index.unwrap())).collect::<Vec<_>>();
+    let spans = |logs: Vec<alloy::rpc::types::Log>| {
+        logs.iter()
+            .map(|l| (l.block_number.unwrap(), l.log_index.unwrap()))
+            .collect::<Vec<_>>()
+    };
     let (open, _) = fake_rpc(|r| capped_logs(r, u64::MAX)).await;
     let (capped, _) = fake_rpc(|r| capped_logs(r, 1_000)).await;
     let (stingy, _) = fake_rpc(|r| capped_logs(r, 5)).await;
     let head = 0x3000u64;
-    let read = |url: String| async move { node_pool(&[&url]).logs_since(Address::ZERO, B256::ZERO, 10_000).await };
-    assert_eq!(spans(read(open).await.unwrap()), vec![(head - 10_000, 10_001)], "control: one request");
+    let read = |url: String| async move {
+        node_pool(&[&url])
+            .logs_since(Address::ZERO, B256::ZERO, 10_000)
+            .await
+    };
+    assert_eq!(
+        spans(read(open).await.unwrap()),
+        vec![(head - 10_000, 10_001)],
+        "control: one request"
+    );
     let got = spans(read(capped).await.unwrap());
     let mut at = head - 10_000;
     for (from, len) in &got {
@@ -314,32 +551,73 @@ async fn a_log_window_is_chunked_for_an_rpc_that_caps_the_range() {
     let (wide, _) = fake_rpc(|r| capped_logs(r, 3_000)).await;
     let got = spans(read(wide).await.unwrap());
     assert_eq!(got.iter().map(|x| x.1).sum::<u64>(), 10_001, "{got:?}");
-    assert!(got.len() <= 8 && got.iter().any(|x| x.1 > 1_000), "grows back: {got:?}");
-    assert!(read(stingy.clone()).await.is_err(), "a cap below LOG_SPAN_MIN gives the endpoint up");
-    assert!(node_pool(&[&stingy]).logs_since(Address::ZERO, B256::ZERO, 50).await.is_err(),
-        "a 51-block window: a tenth is 5, floored at LOG_SPAN_MIN, still refused");
+    assert!(
+        got.len() <= 8 && got.iter().any(|x| x.1 > 1_000),
+        "grows back: {got:?}"
+    );
+    assert!(
+        read(stingy.clone()).await.is_err(),
+        "a cap below LOG_SPAN_MIN gives the endpoint up"
+    );
+    assert!(
+        node_pool(&[&stingy])
+            .logs_since(Address::ZERO, B256::ZERO, 50)
+            .await
+            .is_err(),
+        "a 51-block window: a tenth is 5, floored at LOG_SPAN_MIN, still refused"
+    );
     let (capped2, _) = fake_rpc(|r| capped_logs(r, 1_000)).await;
-    assert!(!node_pool(&[&stingy, &capped2]).logs_since(Address::ZERO, B256::ZERO, 10_000).await.unwrap().is_empty(),
-        "and the read fails over to the next endpoint");
+    assert!(
+        !node_pool(&[&stingy, &capped2])
+            .logs_since(Address::ZERO, B256::ZERO, 10_000)
+            .await
+            .unwrap()
+            .is_empty(),
+        "and the read fails over to the next endpoint"
+    );
     let (tight, tight_n) = fake_rpc(|r| capped_logs(r, 400)).await;
     assert!(read(tight).await.is_err());
-    assert!(tight_n.load(SeqCst) <= 5, "head, 10,001, 1,000, 501: given up");
+    assert!(
+        tight_n.load(SeqCst) <= 5,
+        "head, 10,001, 1,000, 501: given up"
+    );
     let n: std::sync::Arc<std::sync::atomic::AtomicUsize> = Default::default();
     let n2 = n.clone();
     let b0 = block(0, genesis());
-    let down = serve(axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
-        let (n2, b0) = (n2.clone(), b0.clone());
-        async move {
-            if r["method"] == "eth_getLogs" {
-                n2.fetch_add(1, SeqCst);
-                return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::Json(json!({})));
+    let down = serve(axum::Router::new().route(
+        "/",
+        axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let (n2, b0) = (n2.clone(), b0.clone());
+            async move {
+                if r["method"] == "eth_getLogs" {
+                    n2.fetch_add(1, SeqCst);
+                    return (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        axum::Json(json!({})),
+                    );
+                }
+                let result = match r["method"].as_str() {
+                    Some("eth_chainId") => json!("0x128"),
+                    Some("eth_getBlockByNumber") => b0,
+                    _ => json!("0x3000"),
+                };
+                (
+                    axum::http::StatusCode::OK,
+                    axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": result})),
+                )
             }
-            let result = match r["method"].as_str() { Some("eth_chainId") => json!("0x128"), Some("eth_getBlockByNumber") => b0, _ => json!("0x3000") };
-            (axum::http::StatusCode::OK, axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": result})))
-        }
-    }))).await;
+        }),
+    ))
+    .await;
     let (capped3, _) = fake_rpc(|r| capped_logs(r, u64::MAX)).await;
-    assert_eq!(node_pool(&[&down, &capped3]).logs_since(Address::ZERO, B256::ZERO, 10_000).await.unwrap().len(), 1);
+    assert_eq!(
+        node_pool(&[&down, &capped3])
+            .logs_since(Address::ZERO, B256::ZERO, 10_000)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
     assert_eq!(n.load(SeqCst), 1, "one request, then the next endpoint");
 }
 
@@ -350,75 +628,164 @@ async fn a_hung_endpoint_and_the_block_gas_read_fail_over() {
         Some("eth_blockNumber") => json!({"result": "0x64"}),
         Some("eth_getBlockByNumber") => json!({"result": {"gasLimit": "0x1c9c380"}}),
         _ => json!({"result": format!("0x{:064x}", 5)}),
-    }).await;
-    assert_eq!(node_pool(&[&good]).block_gas().await.unwrap().limit, 30_000_000, "control");
-    let quick = |urls: &[&str], read: u64, simulate: u64| node_pool_with(urls, Some(genesis()), Shared::default(), read, simulate);
+    })
+    .await;
+    assert_eq!(
+        node_pool(&[&good]).block_gas().await.unwrap().limit,
+        30_000_000,
+        "control"
+    );
+    let quick = |urls: &[&str], read: u64, simulate: u64| {
+        node_pool_with(urls, Some(genesis()), Shared::default(), read, simulate)
+    };
     let two = quick(&[&stuck, &good], 500, 500);
     let got = tokio::time::timeout(std::time::Duration::from_secs(20), call(&two)).await;
-    assert_eq!(got.expect("one timeout, then the next endpoint").unwrap().len(), 32);
+    assert_eq!(
+        got.expect("one timeout, then the next endpoint")
+            .unwrap()
+            .len(),
+        32
+    );
     let b0 = block(0, genesis());
-    let slow = serve(axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
-        let b0 = b0.clone();
-        async move {
-            let result = match r["method"].as_str() {
-                Some("eth_chainId") => json!("0x128"),
-                Some("eth_getBlockByNumber") => b0,
-                Some("eth_estimateGas") => { tokio::time::sleep(std::time::Duration::from_millis(1_500)).await; json!("0x5208") }
-                _ => { tokio::time::sleep(std::time::Duration::from_millis(1_500)).await; json!("0x") }
-            };
-            axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": result}))
-        }
-    }))).await;
+    let slow = serve(axum::Router::new().route(
+        "/",
+        axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let b0 = b0.clone();
+            async move {
+                let result = match r["method"].as_str() {
+                    Some("eth_chainId") => json!("0x128"),
+                    Some("eth_getBlockByNumber") => b0,
+                    Some("eth_estimateGas") => {
+                        tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
+                        json!("0x5208")
+                    }
+                    _ => {
+                        tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
+                        json!("0x")
+                    }
+                };
+                axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": result}))
+            }
+        }),
+    ))
+    .await;
     let c = quick(&[&slow], 300, 10_000);
-    assert_eq!(c.simulate_from(Address::ZERO, Address::ZERO, Bytes::new()).await.unwrap(), 21_000, "a simulation within its own limit");
+    assert_eq!(
+        c.simulate_from(Address::ZERO, Address::ZERO, Bytes::new())
+            .await
+            .unwrap(),
+        21_000,
+        "a simulation within its own limit"
+    );
     let t = std::time::Instant::now();
     let got = call(&quick(&[&slow], 300, 10_000)).await;
-    assert!(matches!(&got, Err(SimError::Transport(_))) && t.elapsed() < std::time::Duration::from_millis(1_400),
-        "control: a read of the same speed times out: {got:?} after {:?}", t.elapsed());
-    let (busy, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "header not found"}})).await;
-    assert_eq!(node_pool(&[&busy, &good]).block_gas().await.unwrap().limit, 30_000_000, "the gas cap's read fails over");
+    assert!(
+        matches!(&got, Err(SimError::Transport(_)))
+            && t.elapsed() < std::time::Duration::from_millis(1_400),
+        "control: a read of the same speed times out: {got:?} after {:?}",
+        t.elapsed()
+    );
+    let (busy, _) =
+        fake_rpc(|_| json!({"error": {"code": -32000, "message": "header not found"}})).await;
+    assert_eq!(
+        node_pool(&[&busy, &good]).block_gas().await.unwrap().limit,
+        30_000_000,
+        "the gas cap's read fails over"
+    );
 }
 
 #[tokio::test]
 async fn an_aborted_execution_is_transport() {
-    let (aborted, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "execution aborted (timeout = 5s)"}})).await;
-    let (exec, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "VM execution error."}})).await;
-    let (rev, _) = fake_rpc(|_| json!({"error": {"code": 3, "message": "execution reverted"}})).await;
-    let (reason, _) = fake_rpc(|_| json!({"error": {"code": 3, "message": "execution reverted: timeout elapsed"}})).await;
-    let (other, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "execution timeout aborted"}})).await;
+    let (aborted, _) = fake_rpc(
+        |_| json!({"error": {"code": -32000, "message": "execution aborted (timeout = 5s)"}}),
+    )
+    .await;
+    let (exec, _) =
+        fake_rpc(|_| json!({"error": {"code": -32000, "message": "VM execution error."}})).await;
+    let (rev, _) =
+        fake_rpc(|_| json!({"error": {"code": 3, "message": "execution reverted"}})).await;
+    let (reason, _) = fake_rpc(
+        |_| json!({"error": {"code": 3, "message": "execution reverted: timeout elapsed"}}),
+    )
+    .await;
+    let (other, _) =
+        fake_rpc(|_| json!({"error": {"code": -32000, "message": "execution timeout aborted"}}))
+            .await;
     let (nethermind, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "eth_call request was canceled due to enabled timeout."}})).await;
     let c = |u: &str| node_pool(&[u]);
-    assert!(matches!(call(&c(&aborted)).await, Err(SimError::Transport(_))));
-    assert!(matches!(call(&c(&exec)).await, Err(SimError::Revert(_))), "control: an execution error");
-    assert!(matches!(call(&c(&rev)).await, Err(SimError::Revert(_))), "control: a revert");
-    assert!(matches!(call(&c(&reason)).await, Err(SimError::Revert(_))), "a revert whose reason names a timeout");
-    assert!(matches!(call(&c(&other)).await, Err(SimError::Revert(_))), "not the node's phrase: the EVM's");
-    assert!(matches!(call(&c(&nethermind)).await, Err(SimError::Transport(_))), "Nethermind's own timeout");
+    assert!(matches!(
+        call(&c(&aborted)).await,
+        Err(SimError::Transport(_))
+    ));
+    assert!(
+        matches!(call(&c(&exec)).await, Err(SimError::Revert(_))),
+        "control: an execution error"
+    );
+    assert!(
+        matches!(call(&c(&rev)).await, Err(SimError::Revert(_))),
+        "control: a revert"
+    );
+    assert!(
+        matches!(call(&c(&reason)).await, Err(SimError::Revert(_))),
+        "a revert whose reason names a timeout"
+    );
+    assert!(
+        matches!(call(&c(&other)).await, Err(SimError::Revert(_))),
+        "not the node's phrase: the EVM's"
+    );
+    assert!(
+        matches!(call(&c(&nethermind)).await, Err(SimError::Transport(_))),
+        "Nethermind's own timeout"
+    );
     let (cancelled, _) = fake_rpc(|_| json!({"error": {"code": -32000, "message": "err: Cancellation Requested (supplied gas 100000000)"}})).await;
-    assert!(matches!(call(&c(&cancelled)).await, Err(SimError::Transport(_))), "the estimate's cancellation");
-    assert!(matches!(c(&cancelled).simulate_from(Address::ZERO, Address::ZERO, Bytes::new()).await, Err(SimError::Transport(_))),
-        "the same through classify_sim");
+    assert!(
+        matches!(call(&c(&cancelled)).await, Err(SimError::Transport(_))),
+        "the estimate's cancellation"
+    );
+    assert!(
+        matches!(
+            c(&cancelled)
+                .simulate_from(Address::ZERO, Address::ZERO, Bytes::new())
+                .await,
+            Err(SimError::Transport(_))
+        ),
+        "the same through classify_sim"
+    );
 }
 
 #[tokio::test]
 async fn chain_uid_is_block_zero_and_a_wrong_pin_is_refused() {
     let g = B256::repeat_byte(0x42);
     let b = block(0x2760215, g);
-    let url = serve(axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
-        let b = b.clone();
-        async move { axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": b})) }
-    }))).await;
+    let url = serve(axum::Router::new().route(
+        "/",
+        axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let b = b.clone();
+            async move { axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": b})) }
+        }),
+    ))
+    .await;
     let c = |u: &str, pin| node_pool_with(&[u], pin, Shared::default(), 30_000, 120_000);
     assert_eq!(c(&url, None).uid().await.unwrap(), g);
     assert_eq!(c(&url, Some(g)).uid().await.unwrap(), g);
     assert!(c(&url, Some(B256::repeat_byte(1))).uid().await.is_err());
-    let pruned = serve(axum::Router::new().route("/", axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
-        axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": null}))
-    }))).await;
-    assert_eq!(c(&pruned, Some(B256::repeat_byte(1))).uid().await.unwrap(), B256::repeat_byte(1));
+    let pruned = serve(axum::Router::new().route(
+        "/",
+        axum::routing::post(|axum::Json(r): axum::Json<Value>| async move {
+            axum::Json(json!({"jsonrpc": "2.0", "id": r["id"], "result": null}))
+        }),
+    ))
+    .await;
+    assert_eq!(
+        c(&pruned, Some(B256::repeat_byte(1))).uid().await.unwrap(),
+        B256::repeat_byte(1)
+    );
     assert!(c(&pruned, None).uid().await.is_err());
     let d = c(DOWN, Some(g));
-    assert!(d.uid().await.is_err() && d.uid().await.is_err(), "unreachable: not trusted, not kept");
+    assert!(
+        d.uid().await.is_err() && d.uid().await.is_err(),
+        "unreachable: not trusted, not kept"
+    );
 }
 
 /// `is_contract`: code that is not an EIP-7702 designator; `classify`: a revert's data, a "revert" or "execution" message (not a
@@ -435,12 +802,25 @@ fn is_contract_and_classify_cases() {
     let resp = |code: i64, msg: &str, data: Option<&str>| {
         let raw = serde_json::value::to_raw_value(&data.map(|d| json!(d))).unwrap();
         alloy::transports::TransportError::ErrorResp(alloy::rpc::json_rpc::ErrorPayload {
-            code, message: msg.to_string().into(), data: data.map(|_| raw) })
+            code,
+            message: msg.to_string().into(),
+            data: data.map(|_| raw),
+        })
     };
-    let err_string = "0x08c379a0".to_string() + &alloy::hex::encode(alloy::sol_types::SolValue::abi_encode(&"nope".to_string()));
-    assert_eq!(classify(&resp(3, "execution reverted", Some(&err_string))), SimError::Revert("nope".into()));
-    assert_eq!(classify(&resp(-32000, "execution aborted (timeout = 5s)", None)), SimError::Transport("execution aborted (timeout = 5s)".into()));
-    assert_eq!(classify(&resp(-32000, "header not found", None)), SimError::Transport("header not found".into()));
+    let err_string = "0x08c379a0".to_string()
+        + &alloy::hex::encode(alloy::sol_types::SolValue::abi_encode(&"nope".to_string()));
+    assert_eq!(
+        classify(&resp(3, "execution reverted", Some(&err_string))),
+        SimError::Revert("nope".into())
+    );
+    assert_eq!(
+        classify(&resp(-32000, "execution aborted (timeout = 5s)", None)),
+        SimError::Transport("execution aborted (timeout = 5s)".into())
+    );
+    assert_eq!(
+        classify(&resp(-32000, "header not found", None)),
+        SimError::Transport("header not found".into())
+    );
 }
 
 // ---------------------------------------------------------------- plan T6: pinned reads, strict majority over fakes
@@ -455,8 +835,16 @@ fn num(v: &Value) -> u64 {
 }
 
 fn strict(urls: &[&str]) -> EvmPool {
-    let e = urls.iter().map(|u| scaas_rpc::Endpoint::named(u).unwrap()).collect();
-    EvmPool::connect(NodeList::new(e, Policy::StrictMajority, 5_000, 5_000, 20_000).unwrap(), 296, Some(genesis())).unwrap()
+    let e = urls
+        .iter()
+        .map(|u| scaas_rpc::Endpoint::named(u).unwrap())
+        .collect();
+    EvmPool::connect(
+        NodeList::new(e, Policy::StrictMajority, 5_000, 5_000, 20_000).unwrap(),
+        296,
+        Some(genesis()),
+    )
+    .unwrap()
 }
 
 /// A chain at head 0x20 whose storage word is 5, recording each `eth_getStorageAt`'s block parameter.
@@ -477,15 +865,28 @@ fn pinned_rpc(r: &Value) -> Value {
 async fn pinned_reads_name_the_block_by_hash() {
     let (a, _) = fake_rpc(pinned_rpc).await;
     let p = sdk_pool(&[&a], 5_000);
-    let r = p.read_at_block(scaas_rpc::pool::BlockChoice::Depth(1), Purpose::Plain, |at| {
-        let p = &p;
-        async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
-    }).await.unwrap();
-    assert_eq!((r.value, r.number, r.hash), (U256::from(5), 0x1f, B256::from(U256::from(0x1f))));
+    let r = p
+        .read_at_block(
+            scaas_rpc::pool::BlockChoice::Depth(1),
+            Purpose::Plain,
+            |at| {
+                let p = &p;
+                async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (r.value, r.number, r.hash),
+        (U256::from(5), 0x1f, B256::from(U256::from(0x1f)))
+    );
     // other tests read this fake too: every storage read it saw named its block by hash
     let seen = PINNED.lock().unwrap().clone();
     let want = json!({"blockHash": format!("{:#x}", B256::from(U256::from(0x1f))), "requireCanonical": true});
-    assert!(!seen.is_empty() && seen.iter().all(|b| *b == want), "EIP-1898: {seen:?}");
+    assert!(
+        !seen.is_empty() && seen.iter().all(|b| *b == want),
+        "EIP-1898: {seen:?}"
+    );
 }
 
 /// Under failover, endpoint 0's header at the read's block moves between the read and its re-check: its answer is not used
@@ -508,11 +909,22 @@ async fn a_reorg_between_read_and_recheck_is_block_changed() {
     let (moving, _) = fake_rpc(reorging).await;
     let (steady, _) = fake_rpc(pinned_rpc).await;
     let p = sdk_pool(&[&moving, &steady], 5_000);
-    let r = p.read_at_block(scaas_rpc::pool::BlockChoice::Depth(1), Purpose::Plain, |at| {
-        let p = &p;
-        async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
-    }).await.unwrap();
-    assert_eq!((r.value, r.members), (U256::from(5), vec![1]), "endpoint 0's answer is not used");
+    let r = p
+        .read_at_block(
+            scaas_rpc::pool::BlockChoice::Depth(1),
+            Purpose::Plain,
+            |at| {
+                let p = &p;
+                async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (r.value, r.members),
+        (U256::from(5), vec![1]),
+        "endpoint 0's answer is not used"
+    );
 }
 
 /// A header that answers another number than asked is that endpoint's failure.
@@ -529,16 +941,32 @@ async fn a_header_that_answers_another_number_is_that_endpoints_failure() {
     let (liar, _) = fake_rpc(wrong_number).await;
     let (steady, _) = fake_rpc(pinned_rpc).await;
     let p = sdk_pool(&[&liar, &steady], 5_000);
-    let r = p.read_at_block(scaas_rpc::pool::BlockChoice::Depth(1), Purpose::Plain, |at| {
-        let p = &p;
-        async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
-    }).await.unwrap();
+    let r = p
+        .read_at_block(
+            scaas_rpc::pool::BlockChoice::Depth(1),
+            Purpose::Plain,
+            |at| {
+                let p = &p;
+                async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
+            },
+        )
+        .await
+        .unwrap();
     assert_eq!(r.members, vec![1]);
     let only = sdk_pool(&[&liar], 5_000);
-    assert!(only.read_at_block(scaas_rpc::pool::BlockChoice::Depth(1), Purpose::Plain, |at| {
-        let p = &only;
-        async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
-    }).await.is_err(), "alone: no read");
+    assert!(
+        only.read_at_block(
+            scaas_rpc::pool::BlockChoice::Depth(1),
+            Purpose::Plain,
+            |at| {
+                let p = &only;
+                async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
+            }
+        )
+        .await
+        .is_err(),
+        "alone: no read"
+    );
 }
 
 /// F14: under strict majority the fee is the need-th highest of the endpoints' values: one endpoint answering a priority fee
@@ -547,10 +975,18 @@ fn fee_rpc(prio: u64) -> Value {
     json!({"result": {"oldestBlock": "0x1", "baseFeePerGas": ["0x64", "0x64"], "gasUsedRatio": [0.5], "reward": [[format!("{prio:#x}")]]}})
 }
 fn fees_low(r: &Value) -> Value {
-    if r["method"] == "eth_feeHistory" { fee_rpc(10) } else { json!({"result": "0x20"}) }
+    if r["method"] == "eth_feeHistory" {
+        fee_rpc(10)
+    } else {
+        json!({"result": "0x20"})
+    }
 }
 fn fees_high(r: &Value) -> Value {
-    if r["method"] == "eth_feeHistory" { fee_rpc(10_000_000) } else { json!({"result": "0x20"}) }
+    if r["method"] == "eth_feeHistory" {
+        fee_rpc(10_000_000)
+    } else {
+        json!({"result": "0x20"})
+    }
 }
 
 #[tokio::test]
@@ -561,8 +997,14 @@ async fn fees_under_strict_majority_are_the_need_th_highest() {
     let honest = sdk_pool(&[&a], 5_000).fees(Purpose::Plain).await.unwrap();
     let agreed = strict(&[&b, &a, &c]).fees(Purpose::Plain).await.unwrap();
     assert_eq!(agreed, honest, "the liar moves neither field");
-    let first = sdk_pool(&[&b, &a, &c], 5_000).fees(Purpose::Plain).await.unwrap();
-    assert!(first.max_priority_fee_per_gas > honest.max_priority_fee_per_gas, "control: failover takes endpoint 0's");
+    let first = sdk_pool(&[&b, &a, &c], 5_000)
+        .fees(Purpose::Plain)
+        .await
+        .unwrap();
+    assert!(
+        first.max_priority_fee_per_gas > honest.max_priority_fee_per_gas,
+        "control: failover takes endpoint 0's"
+    );
 }
 
 #[tokio::test]
@@ -570,8 +1012,19 @@ async fn logs_range_refuses_an_unbounded_or_too_wide_range() {
     let (a, n) = fake_rpc(pinned_rpc).await;
     let p = sdk_pool(&[&a], 5_000);
     let f = alloy::rpc::types::Filter::new();
-    for (from, to) in [(10, 9), (0, scaas_rpc::evm::LOG_RANGE_MAX), (5, 5 + scaas_rpc::evm::LOG_RANGE_MAX)] {
-        assert_eq!(p.logs_range(from, to, f.clone(), Purpose::Plain).await.unwrap_err().code(), "Argument", "{from}..{to}");
+    for (from, to) in [
+        (10, 9),
+        (0, scaas_rpc::evm::LOG_RANGE_MAX),
+        (5, 5 + scaas_rpc::evm::LOG_RANGE_MAX),
+    ] {
+        assert_eq!(
+            p.logs_range(from, to, f.clone(), Purpose::Plain)
+                .await
+                .unwrap_err()
+                .code(),
+            "Argument",
+            "{from}..{to}"
+        );
     }
     assert_eq!(n.load(SeqCst), 0, "before any request");
 }
@@ -627,10 +1080,22 @@ fn block_hash(n: u64) -> B256 {
 }
 
 fn landed(head: u64, at: u64) -> Facts {
-    Facts { head, fork: 0, nonce: 4, receipt: Some((at, block_hash(at))), known: true }
+    Facts {
+        head,
+        fork: 0,
+        nonce: 4,
+        receipt: Some((at, block_hash(at))),
+        known: true,
+    }
 }
 fn replaced(head: u64) -> Facts {
-    Facts { head, fork: 0, nonce: 4, receipt: None, known: false }
+    Facts {
+        head,
+        fork: 0,
+        nonce: 4,
+        receipt: None,
+        known: false,
+    }
 }
 
 /// A sender fake answering every `eth_sendRawTransaction` with `answer`, counting.
@@ -638,7 +1103,8 @@ async fn sender(answer: Value) -> (String, Arc<std::sync::atomic::AtomicUsize>) 
     fake_dyn(Arc::new(move |r: &Value| match r["method"].as_str() {
         Some("eth_sendRawTransaction") => answer.clone(),
         _ => json!({"result": "0x10"}),
-    })).await
+    }))
+    .await
 }
 
 const RAW: &[u8] = &[0x02, 0xc1, 0x80];
@@ -648,8 +1114,15 @@ async fn the_id_is_computed_before_any_request() {
     let p = sdk_pool(&[DOWN], 2_000);
     match p.broadcast(RAW, Fanout::All).await.unwrap() {
         BroadcastOutcome::Rejected { id, outcomes } => {
-            assert_eq!(id, alloy::primitives::keccak256(RAW), "known with every endpoint down");
-            assert!(matches!(outcomes[..], [(0, SendOutcome::Unreachable { .. })]));
+            assert_eq!(
+                id,
+                alloy::primitives::keccak256(RAW),
+                "known with every endpoint down"
+            );
+            assert!(matches!(
+                outcomes[..],
+                [(0, SendOutcome::Unreachable { .. })]
+            ));
         }
         o => panic!("{o:?}"),
     }
@@ -659,24 +1132,70 @@ async fn the_id_is_computed_before_any_request() {
 async fn already_known_is_accepted() {
     for text in scaas_rpc::evm::ALREADY_KNOWN {
         let (u, _) = sender(json!({"error": {"code": -32000, "message": text}})).await;
-        assert!(matches!(sdk_pool(&[&u], 2_000).broadcast(RAW, Fanout::First).await.unwrap(), BroadcastOutcome::Sent { .. }), "{text}");
+        assert!(
+            matches!(
+                sdk_pool(&[&u], 2_000)
+                    .broadcast(RAW, Fanout::First)
+                    .await
+                    .unwrap(),
+                BroadcastOutcome::Sent { .. }
+            ),
+            "{text}"
+        );
     }
-    let (nethermind, _) = sender(json!({"error": {"code": -32010, "message": "already known"}})).await;
-    assert!(matches!(sdk_pool(&[&nethermind], 2_000).broadcast(RAW, Fanout::First).await.unwrap(), BroadcastOutcome::Sent { .. }),
-        "Nethermind 2.2.0's text");
+    let (nethermind, _) =
+        sender(json!({"error": {"code": -32010, "message": "already known"}})).await;
+    assert!(
+        matches!(
+            sdk_pool(&[&nethermind], 2_000)
+                .broadcast(RAW, Fanout::First)
+                .await
+                .unwrap(),
+            BroadcastOutcome::Sent { .. }
+        ),
+        "Nethermind 2.2.0's text"
+    );
     let (low, _) = sender(json!({"error": {"code": -32000, "message": "nonce too low"}})).await;
-    assert!(matches!(sdk_pool(&[&low], 2_000).broadcast(RAW, Fanout::First).await.unwrap(), BroadcastOutcome::Rejected { .. }), "control");
+    assert!(
+        matches!(
+            sdk_pool(&[&low], 2_000)
+                .broadcast(RAW, Fanout::First)
+                .await
+                .unwrap(),
+            BroadcastOutcome::Rejected { .. }
+        ),
+        "control"
+    );
 }
 
 #[tokio::test]
 async fn another_id_is_refused() {
     let (u, _) = sender(json!({"result": format!("{:#x}", B256::repeat_byte(1))})).await;
-    match sdk_pool(&[&u], 2_000).broadcast(RAW, Fanout::First).await.unwrap() {
-        BroadcastOutcome::Rejected { outcomes, .. } => assert_eq!(outcomes[0].1, SendOutcome::Refused { reason: "another transaction id".into() }),
+    match sdk_pool(&[&u], 2_000)
+        .broadcast(RAW, Fanout::First)
+        .await
+        .unwrap()
+    {
+        BroadcastOutcome::Rejected { outcomes, .. } => assert_eq!(
+            outcomes[0].1,
+            SendOutcome::Refused {
+                reason: "another transaction id".into()
+            }
+        ),
         o => panic!("{o:?}"),
     }
-    let (ok, _) = sender(json!({"result": format!("{:#x}", alloy::primitives::keccak256(RAW))})).await;
-    assert!(matches!(sdk_pool(&[&ok], 2_000).broadcast(RAW, Fanout::First).await.unwrap(), BroadcastOutcome::Sent { .. }), "control");
+    let (ok, _) =
+        sender(json!({"result": format!("{:#x}", alloy::primitives::keccak256(RAW))})).await;
+    assert!(
+        matches!(
+            sdk_pool(&[&ok], 2_000)
+                .broadcast(RAW, Fanout::First)
+                .await
+                .unwrap(),
+            BroadcastOutcome::Sent { .. }
+        ),
+        "control"
+    );
 }
 
 #[tokio::test]
@@ -685,34 +1204,72 @@ async fn a_blob_transaction_in_network_form_is_refused() {
     let p = sdk_pool(&[&u], 2_000);
     // 0x03 ‖ rlp([rlp([chain id, …]), blobs, commitments, proofs]): its first item a list
     let network = [0x03, 0xc5, 0xc1, 0x01, 0xc0, 0xc0, 0xc0];
-    assert_eq!(p.broadcast(&network, Fanout::All).await.unwrap_err().code(), "Argument");
+    assert_eq!(
+        p.broadcast(&network, Fanout::All).await.unwrap_err().code(),
+        "Argument"
+    );
     assert_eq!(n.load(SeqCst), 0, "nothing sent");
     // its canonical form: 0x03 ‖ rlp([chain id, …])
-    assert!(p.broadcast(&[0x03, 0xc2, 0x01, 0x80], Fanout::All).await.is_ok(), "control: the canonical form is sent");
+    assert!(
+        p.broadcast(&[0x03, 0xc2, 0x01, 0x80], Fanout::All)
+            .await
+            .is_ok(),
+        "control: the canonical form is sent"
+    );
 }
 
 #[tokio::test]
 async fn all_refused_is_rejected_and_not_final() {
     let (a, _) = sender(json!({"error": {"code": -32000, "message": "nonce too low"}})).await;
-    let (b, _) = sender(json!({"error": {"code": -32000, "message": "replacement transaction underpriced"}})).await;
+    let (b, _) = sender(
+        json!({"error": {"code": -32000, "message": "replacement transaction underpriced"}}),
+    )
+    .await;
     let p = sdk_pool(&[&a, &b], 2_000);
     let o = p.broadcast(RAW, Fanout::All).await.unwrap();
     assert_eq!(o.code(), Some("BroadcastRejected"));
-    let (chain, _) = facts(Facts { head: 0x20, fork: 0, nonce: 3, receipt: None, known: false }).await;
-    let s = sdk_pool(&[&chain], 2_000).tx_state(o.id(), FROM, 3, scaas_rpc::pool::BlockChoice::Depth(1)).await.unwrap();
-    assert_eq!(s, TxState::Pending { endpoint: Some(0) }, "a refusal is no verdict");
+    let (chain, _) = facts(Facts {
+        head: 0x20,
+        fork: 0,
+        nonce: 3,
+        receipt: None,
+        known: false,
+    })
+    .await;
+    let s = sdk_pool(&[&chain], 2_000)
+        .tx_state(o.id(), FROM, 3, scaas_rpc::pool::BlockChoice::Depth(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        s,
+        TxState::Pending { endpoint: Some(0) },
+        "a refusal is no verdict"
+    );
     assert!(!s.is_terminal());
 }
 
 #[tokio::test]
 async fn unreachable_is_kept_apart() {
-    let (ok, _) = sender(json!({"result": format!("{:#x}", alloy::primitives::keccak256(RAW))})).await;
+    let (ok, _) =
+        sender(json!({"result": format!("{:#x}", alloy::primitives::keccak256(RAW))})).await;
     let (no, _) = sender(json!({"error": {"code": -32000, "message": "insufficient funds"}})).await;
-    match sdk_pool(&[DOWN, &ok, &no], 2_000).broadcast(RAW, Fanout::All).await.unwrap() {
-        BroadcastOutcome::Sent { accepted, others, .. } => {
+    match sdk_pool(&[DOWN, &ok, &no], 2_000)
+        .broadcast(RAW, Fanout::All)
+        .await
+        .unwrap()
+    {
+        BroadcastOutcome::Sent {
+            accepted, others, ..
+        } => {
             assert_eq!(accepted, vec![1]);
-            assert!(matches!(others[0], (0, SendOutcome::Unreachable { .. })), "{others:?}");
-            assert!(matches!(&others[1], (2, SendOutcome::Refused { reason }) if reason == "insufficient funds"), "{others:?}");
+            assert!(
+                matches!(others[0], (0, SendOutcome::Unreachable { .. })),
+                "{others:?}"
+            );
+            assert!(
+                matches!(&others[1], (2, SendOutcome::Refused { reason }) if reason == "insufficient funds"),
+                "{others:?}"
+            );
         }
         o => panic!("{o:?}"),
     }
@@ -722,10 +1279,17 @@ async fn unreachable_is_kept_apart() {
 async fn a_refusal_reason_is_capped() {
     let long = format!("bad https://rpc.example/v3/KEY {}", "x\n".repeat(400));
     let (u, _) = sender(json!({"error": {"code": -32000, "message": long}})).await;
-    match sdk_pool(&[&u], 2_000).broadcast(RAW, Fanout::First).await.unwrap() {
+    match sdk_pool(&[&u], 2_000)
+        .broadcast(RAW, Fanout::First)
+        .await
+        .unwrap()
+    {
         BroadcastOutcome::Rejected { outcomes, .. } => match &outcomes[0].1 {
             SendOutcome::Refused { reason } => {
-                assert!(reason.len() <= 256 && !reason.contains('\n') && !reason.contains("KEY"), "{reason}");
+                assert!(
+                    reason.len() <= 256 && !reason.contains('\n') && !reason.contains("KEY"),
+                    "{reason}"
+                );
                 assert!(reason.starts_with("bad <url>"), "{reason}");
             }
             o => panic!("{o:?}"),
@@ -743,40 +1307,109 @@ async fn replaced_from_a_later_endpoint_is_pending() {
     // endpoint 0 down; endpoint 1: nonce above, receipt and transaction unknown; endpoint 2 holds the receipt
     let (one, _) = facts(replaced(0x20)).await;
     let (two, _) = facts(landed(0x20, 0x10)).await;
-    let s = sdk_pool(&[DOWN, &one, &two], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap();
+    let s = sdk_pool(&[DOWN, &one, &two], 2_000)
+        .tx_state(ID, FROM, 3, depth(1))
+        .await
+        .unwrap();
     assert_eq!(s, TxState::Pending { endpoint: Some(1) });
-    let s = sdk_pool(&[&one, &two], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap();
-    assert_eq!(s, TxState::Replaced { by_nonce: 4 }, "control: the same facts from endpoint 0");
+    let s = sdk_pool(&[&one, &two], 2_000)
+        .tx_state(ID, FROM, 3, depth(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        s,
+        TxState::Replaced { by_nonce: 4 },
+        "control: the same facts from endpoint 0"
+    );
 }
 
 #[tokio::test]
 async fn replaced_needs_the_transaction_unknown() {
-    let (known, _) = facts(Facts { known: true, ..replaced(0x20) }).await;
-    assert_eq!(sdk_pool(&[&known], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap(), TxState::Pending { endpoint: Some(0) });
-    let (nonce_not_above, _) = facts(Facts { nonce: 3, ..replaced(0x20) }).await;
-    assert_eq!(sdk_pool(&[&nonce_not_above], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap(), TxState::Pending { endpoint: Some(0) });
+    let (known, _) = facts(Facts {
+        known: true,
+        ..replaced(0x20)
+    })
+    .await;
+    assert_eq!(
+        sdk_pool(&[&known], 2_000)
+            .tx_state(ID, FROM, 3, depth(1))
+            .await
+            .unwrap(),
+        TxState::Pending { endpoint: Some(0) }
+    );
+    let (nonce_not_above, _) = facts(Facts {
+        nonce: 3,
+        ..replaced(0x20)
+    })
+    .await;
+    assert_eq!(
+        sdk_pool(&[&nonce_not_above], 2_000)
+            .tx_state(ID, FROM, 3, depth(1))
+            .await
+            .unwrap(),
+        TxState::Pending { endpoint: Some(0) }
+    );
 }
 
 #[tokio::test]
 async fn a_receipt_whose_block_hash_is_not_the_header_is_not_counted() {
-    let (forged, _) = facts(Facts { receipt: Some((0x10, B256::repeat_byte(0x77))), ..landed(0x20, 0x10) }).await;
-    let s = sdk_pool(&[&forged], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap();
+    let (forged, _) = facts(Facts {
+        receipt: Some((0x10, B256::repeat_byte(0x77))),
+        ..landed(0x20, 0x10)
+    })
+    .await;
+    let s = sdk_pool(&[&forged], 2_000)
+        .tx_state(ID, FROM, 3, depth(1))
+        .await
+        .unwrap();
     assert_eq!(s, TxState::Pending { endpoint: Some(0) });
     let (good, _) = facts(landed(0x20, 0x10)).await;
-    assert!(matches!(sdk_pool(&[&good], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap(), TxState::Final { number: 0x10, .. }),
-        "control");
+    assert!(
+        matches!(
+            sdk_pool(&[&good], 2_000)
+                .tx_state(ID, FROM, 3, depth(1))
+                .await
+                .unwrap(),
+            TxState::Final { number: 0x10, .. }
+        ),
+        "control"
+    );
 }
 
 #[tokio::test]
 async fn final_from_a_discovered_first_endpoint_is_not_terminal() {
     let (good, _) = facts(landed(0x20, 0x10)).await;
-    let e = vec![scaas_rpc::Endpoint::new(&good, scaas_rpc::Class::Discovered, None, None).unwrap()];
-    let p = EvmPool::connect(NodeList::new(e, Policy::Failover, 2_000, 2_000, 5_000).unwrap(), 296, Some(genesis())).unwrap();
+    let e =
+        vec![scaas_rpc::Endpoint::new(&good, scaas_rpc::Class::Discovered, None, None).unwrap()];
+    let p = EvmPool::connect(
+        NodeList::new(e, Policy::Failover, 2_000, 2_000, 5_000).unwrap(),
+        296,
+        Some(genesis()),
+    )
+    .unwrap();
     let s = p.tx_state(ID, FROM, 3, depth(1)).await.unwrap();
-    assert!(matches!(s, TxState::Included { number: 0x10, endpoint: 0, .. }), "{s:?}");
+    assert!(
+        matches!(
+            s,
+            TxState::Included {
+                number: 0x10,
+                endpoint: 0,
+                ..
+            }
+        ),
+        "{s:?}"
+    );
     let (late, _) = facts(landed(0x20, 0x20)).await;
-    assert!(matches!(sdk_pool(&[&late], 2_000).tx_state(ID, FROM, 3, depth(1)).await.unwrap(), TxState::Included { number: 0x20, .. }),
-        "above the final block: included");
+    assert!(
+        matches!(
+            sdk_pool(&[&late], 2_000)
+                .tx_state(ID, FROM, 3, depth(1))
+                .await
+                .unwrap(),
+            TxState::Included { number: 0x20, .. }
+        ),
+        "above the final block: included"
+    );
 }
 
 #[tokio::test]
@@ -784,8 +1417,21 @@ async fn final_from_an_agreed_read_is_terminal() {
     let (a, _) = facts(landed(0x20, 0x10)).await;
     let (b, _) = facts(landed(0x20, 0x10)).await;
     let (c, _) = facts(replaced(0x20)).await;
-    let s = strict(&[&c, &a, &b]).tx_state(ID, FROM, 3, depth(1)).await.unwrap();
-    assert!(matches!(s, TxState::Final { number: 0x10, success: true, .. }), "{s:?}");
+    let s = strict(&[&c, &a, &b])
+        .tx_state(ID, FROM, 3, depth(1))
+        .await
+        .unwrap();
+    assert!(
+        matches!(
+            s,
+            TxState::Final {
+                number: 0x10,
+                success: true,
+                ..
+            }
+        ),
+        "{s:?}"
+    );
     assert!(s.is_terminal());
 }
 
@@ -806,15 +1452,45 @@ async fn op_chain(executed: bool, nonce_now: u64) -> String {
 
 #[tokio::test]
 async fn a_relayed_operation_ends_on_chain_facts() {
-    let q = |valid_until: u64| OpQuery { contract: Address::ZERO, nonce_call: Bytes::new(), nonce: U256::from(3),
-        executed: alloy::rpc::types::Filter::new(), from_block: 1, valid_until };
+    let q = |valid_until: u64| OpQuery {
+        contract: Address::ZERO,
+        nonce_call: Bytes::new(),
+        nonce: U256::from(3),
+        executed: alloy::rpc::types::Filter::new(),
+        from_block: 1,
+        valid_until,
+    };
     let ts = 0x6ac07487u64;
     let at = |u: String| sdk_pool(&[u.as_str()], 2_000);
-    assert_eq!(at(op_chain(true, 4).await).op_state(&q(ts + 100), depth(1)).await.unwrap(), OpState::Landed);
-    assert_eq!(at(op_chain(false, 4).await).op_state(&q(ts + 100), depth(1)).await.unwrap(), OpState::FailedForGood,
-        "the nonce spent without its event");
-    assert_eq!(at(op_chain(false, 3).await).op_state(&q(ts - 1), depth(1)).await.unwrap(), OpState::FailedForGood,
-        "the deadline passed, the nonce unspent");
-    assert_eq!(at(op_chain(false, 3).await).op_state(&q(ts + 100), depth(1)).await.unwrap(), OpState::Pending,
-        "the deadline not yet passed");
+    assert_eq!(
+        at(op_chain(true, 4).await)
+            .op_state(&q(ts + 100), depth(1))
+            .await
+            .unwrap(),
+        OpState::Landed
+    );
+    assert_eq!(
+        at(op_chain(false, 4).await)
+            .op_state(&q(ts + 100), depth(1))
+            .await
+            .unwrap(),
+        OpState::FailedForGood,
+        "the nonce spent without its event"
+    );
+    assert_eq!(
+        at(op_chain(false, 3).await)
+            .op_state(&q(ts - 1), depth(1))
+            .await
+            .unwrap(),
+        OpState::FailedForGood,
+        "the deadline passed, the nonce unspent"
+    );
+    assert_eq!(
+        at(op_chain(false, 3).await)
+            .op_state(&q(ts + 100), depth(1))
+            .await
+            .unwrap(),
+        OpState::Pending,
+        "the deadline not yet passed"
+    );
 }

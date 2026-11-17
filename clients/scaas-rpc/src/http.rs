@@ -47,7 +47,9 @@ impl Http {
     /// Each request is bounded by `timeout_ms` (and by a read's deadline when it has one).
     pub fn new(timeout_ms: u64) -> Result<Self, crate::RpcError> {
         #[cfg(not(target_arch = "wasm32"))]
-        let client = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build()
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
             .map_err(|_| crate::RpcError::argument("the HTTP client could not be built"))?;
         #[cfg(target_arch = "wasm32")]
         let client = reqwest::Client::new();
@@ -58,13 +60,21 @@ impl Http {
     }
 
     /// The request's timeout: the client's, or what is left of `deadline` when less; `Timeout` when nothing is left.
-    fn timeout_for(&self, i: usize, deadline: Option<Instant>) -> Result<Duration, EndpointFailure> {
+    fn timeout_for(
+        &self,
+        i: usize,
+        deadline: Option<Instant>,
+    ) -> Result<Duration, EndpointFailure> {
         match deadline {
             None => Ok(self.timeout),
             Some(d) => {
                 let left = d.saturating_duration_since(Instant::now());
                 if left.is_zero() {
-                    return Err(EndpointFailure::new(i, FailureKind::Timeout, "the read's deadline passed"));
+                    return Err(EndpointFailure::new(
+                        i,
+                        FailureKind::Timeout,
+                        "the read's deadline passed",
+                    ));
                 }
                 Ok(left.min(self.timeout))
             }
@@ -73,44 +83,118 @@ impl Http {
 
     /// POST `body` (JSON bytes) to endpoint `i` of `list` (its URL joined with `path` when given); the answer's bytes once they pass
     /// the length cap and the depth scan.
-    pub async fn post_bytes(&self, list: &NodeList, i: usize, path: Option<&str>, body: Vec<u8>, cap: usize,
-        deadline: Option<Instant>) -> Result<Vec<u8>, EndpointFailure> {
-        self.send(list, i, reqwest::Method::POST, path, Some(body), cap, deadline).await
+    pub async fn post_bytes(
+        &self,
+        list: &NodeList,
+        i: usize,
+        path: Option<&str>,
+        body: Vec<u8>,
+        cap: usize,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<u8>, EndpointFailure> {
+        self.send(
+            list,
+            i,
+            reqwest::Method::POST,
+            path,
+            Some(body),
+            cap,
+            deadline,
+        )
+        .await
     }
 
     /// POST a JSON value; the answer parsed.
-    pub async fn post_json(&self, list: &NodeList, i: usize, path: Option<&str>, body: &Value, cap: usize,
-        deadline: Option<Instant>) -> Result<Value, EndpointFailure> {
-        let b = self.post_bytes(list, i, path, serde_json::to_vec(body).expect("a Value serialises"), cap, deadline).await?;
+    pub async fn post_json(
+        &self,
+        list: &NodeList,
+        i: usize,
+        path: Option<&str>,
+        body: &Value,
+        cap: usize,
+        deadline: Option<Instant>,
+    ) -> Result<Value, EndpointFailure> {
+        let b = self
+            .post_bytes(
+                list,
+                i,
+                path,
+                serde_json::to_vec(body).expect("a Value serialises"),
+                cap,
+                deadline,
+            )
+            .await?;
         decode(&b, cap).map_err(|k| self.fail(list, i, k, "the answer"))
     }
 
     /// GET `path` of endpoint `i`; the answer parsed.
-    pub async fn get_json(&self, list: &NodeList, i: usize, path: &str, cap: usize, deadline: Option<Instant>)
-        -> Result<Value, EndpointFailure> {
-        let b = self.send(list, i, reqwest::Method::GET, Some(path), None, cap, deadline).await?;
+    pub async fn get_json(
+        &self,
+        list: &NodeList,
+        i: usize,
+        path: &str,
+        cap: usize,
+        deadline: Option<Instant>,
+    ) -> Result<Value, EndpointFailure> {
+        let b = self
+            .send(
+                list,
+                i,
+                reqwest::Method::GET,
+                Some(path),
+                None,
+                cap,
+                deadline,
+            )
+            .await?;
         decode(&b, cap).map_err(|k| self.fail(list, i, k, "the answer"))
     }
 
     /// One JSON-RPC call: `Ok(Ok(result))`, `Ok(Err(the endpoint's error answer))`, or the endpoint's failure (an answer with
     /// neither `result` nor `error` is malformed).
-    pub async fn json_rpc(&self, list: &NodeList, i: usize, method: &str, params: Value, cap: usize, deadline: Option<Instant>)
-        -> Result<Result<Value, JsonRpcError>, EndpointFailure> {
-        let body = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
+    pub async fn json_rpc(
+        &self,
+        list: &NodeList,
+        i: usize,
+        method: &str,
+        params: Value,
+        cap: usize,
+        deadline: Option<Instant>,
+    ) -> Result<Result<Value, JsonRpcError>, EndpointFailure> {
+        let body =
+            serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
         let v = self.post_json(list, i, None, &body, cap, deadline).await?;
-        rpc_answer(v).map_err(|k| self.fail(list, i, k, "a JSON-RPC answer with neither result nor error"))
+        rpc_answer(v).map_err(|k| {
+            self.fail(
+                list,
+                i,
+                k,
+                "a JSON-RPC answer with neither result nor error",
+            )
+        })
     }
 
     fn fail(&self, list: &NodeList, i: usize, kind: FailureKind, text: &str) -> EndpointFailure {
-        EndpointFailure::new(i, kind, text).with_label(list.endpoints().get(i).and_then(|e| e.label_str()))
+        EndpointFailure::new(i, kind, text)
+            .with_label(list.endpoints().get(i).and_then(|e| e.label_str()))
     }
 
     /// One request whose 2xx or 4xx answer is read and parsed (a gateway's error contract is in a 4xx body); a 3xx, a 5xx and
     /// every transport failure are the endpoint's failure.
     #[allow(clippy::too_many_arguments)]
-    pub async fn request(&self, list: &NodeList, i: usize, method: reqwest::Method, path: &str, body: Option<Vec<u8>>, cap: usize,
-        deadline: Option<Instant>) -> Result<(u16, Value), EndpointFailure> {
-        let (status, b) = self.send_any(list, i, method, Some(path), body, cap, deadline).await?;
+    pub async fn request(
+        &self,
+        list: &NodeList,
+        i: usize,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<Vec<u8>>,
+        cap: usize,
+        deadline: Option<Instant>,
+    ) -> Result<(u16, Value), EndpointFailure> {
+        let (status, b) = self
+            .send_any(list, i, method, Some(path), body, cap, deadline)
+            .await?;
         if status >= 500 {
             return Err(self.fail(list, i, FailureKind::Http, &format!("HTTP {status}")));
         }
@@ -123,9 +207,19 @@ impl Http {
     }
 
     #[allow(clippy::too_many_arguments)]
-    async fn send(&self, list: &NodeList, i: usize, method: reqwest::Method, path: Option<&str>, body: Option<Vec<u8>>, cap: usize,
-        deadline: Option<Instant>) -> Result<Vec<u8>, EndpointFailure> {
-        let (status, b) = self.send_any(list, i, method, path, body, cap, deadline).await?;
+    async fn send(
+        &self,
+        list: &NodeList,
+        i: usize,
+        method: reqwest::Method,
+        path: Option<&str>,
+        body: Option<Vec<u8>>,
+        cap: usize,
+        deadline: Option<Instant>,
+    ) -> Result<Vec<u8>, EndpointFailure> {
+        let (status, b) = self
+            .send_any(list, i, method, path, body, cap, deadline)
+            .await?;
         if !(200..300).contains(&status) {
             return Err(self.fail(list, i, FailureKind::Http, &format!("HTTP {status}")));
         }
@@ -135,41 +229,74 @@ impl Http {
     /// The request of endpoint `i`: its URL (joined with `path`), the timeout, the body, and its own credential only (F8): a
     /// bearer, its API key header, or NODE-GW-02's HMAC over `ts "." nonce "." METHOD " " path?query "\n" body`.
     #[allow(clippy::too_many_arguments)]
-    fn build(&self, list: &NodeList, i: usize, method: reqwest::Method, path: Option<&str>, body: Option<Vec<u8>>,
-        deadline: Option<Instant>) -> Result<(url::Url, reqwest::RequestBuilder), EndpointFailure> {
-        let e = list.endpoints().get(i).ok_or_else(|| self.fail(list, i, FailureKind::Transport, "no such endpoint"))?;
+    fn build(
+        &self,
+        list: &NodeList,
+        i: usize,
+        method: reqwest::Method,
+        path: Option<&str>,
+        body: Option<Vec<u8>>,
+        deadline: Option<Instant>,
+    ) -> Result<(url::Url, reqwest::RequestBuilder), EndpointFailure> {
+        let e = list
+            .endpoints()
+            .get(i)
+            .ok_or_else(|| self.fail(list, i, FailureKind::Transport, "no such endpoint"))?;
         let timeout = self.timeout_for(i, deadline)?;
         let url = match path {
-            Some(p) => e.url().join(p).map_err(|_| self.fail(list, i, FailureKind::Transport, "a path that does not join"))?,
+            Some(p) => e.url().join(p).map_err(|_| {
+                self.fail(list, i, FailureKind::Transport, "a path that does not join")
+            })?,
             None => e.url().clone(),
         };
         let body = body.unwrap_or_default();
-        let mut req = self.client.request(method.clone(), url.clone()).timeout(timeout);
+        let mut req = self
+            .client
+            .request(method.clone(), url.clone())
+            .timeout(timeout);
         // the credential of this endpoint only (F8)
         match e.auth() {
             None => {}
             Some(EndpointAuth::Bearer(s)) => req = req.bearer_auth(s.expose()),
-            Some(EndpointAuth::Header { name, value }) => req = req.header(name.as_str(), value.expose()),
+            Some(EndpointAuth::Header { name, value }) => {
+                req = req.header(name.as_str(), value.expose())
+            }
             Some(EndpointAuth::Hmac(secret)) => {
                 use base64::Engine as _;
                 use hmac::Mac as _;
-                let ts = web_time::SystemTime::now().duration_since(web_time::UNIX_EPOCH).map_or(0, |d| d.as_secs()).to_string();
+                let ts = web_time::SystemTime::now()
+                    .duration_since(web_time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs())
+                    .to_string();
                 let mut n = [0u8; 16];
-                getrandom::getrandom(&mut n).map_err(|_| self.fail(list, i, FailureKind::Transport, "no OS randomness"))?;
+                getrandom::getrandom(&mut n)
+                    .map_err(|_| self.fail(list, i, FailureKind::Transport, "no OS randomness"))?;
                 let nonce = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(n);
                 let target = match url.query() {
                     Some(q) => format!("{}?{q}", url.path()),
                     None => url.path().to_string(),
                 };
-                let mut mac = <hmac::Hmac<sha2::Sha256>>::new_from_slice(secret.expose().as_bytes()).expect("any key length");
+                let mut mac =
+                    <hmac::Hmac<sha2::Sha256>>::new_from_slice(secret.expose().as_bytes())
+                        .expect("any key length");
                 mac.update(format!("{ts}.{nonce}.{} {target}\n", method.as_str()).as_bytes());
                 mac.update(&body);
-                let sig: String = mac.finalize().into_bytes().iter().map(|b| format!("{b:02x}")).collect();
-                req = req.header("x-scaas-timestamp", ts).header("x-scaas-nonce", nonce).header("x-scaas-signature", sig);
+                let sig: String = mac
+                    .finalize()
+                    .into_bytes()
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect();
+                req = req
+                    .header("x-scaas-timestamp", ts)
+                    .header("x-scaas-nonce", nonce)
+                    .header("x-scaas-signature", sig);
             }
         }
         if !body.is_empty() {
-            req = req.header(reqwest::header::CONTENT_TYPE, "application/json").body(body);
+            req = req
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .body(body);
         }
         Ok((url, req))
     }
@@ -177,11 +304,23 @@ impl Http {
     /// The answer of any status but a 3xx (never followed), read up to `cap`, its nesting checked.
     #[cfg(not(target_arch = "wasm32"))]
     #[allow(clippy::too_many_arguments)]
-    async fn send_any(&self, list: &NodeList, i: usize, method: reqwest::Method, path: Option<&str>, body: Option<Vec<u8>>, cap: usize,
-        deadline: Option<Instant>) -> Result<(u16, Vec<u8>), EndpointFailure> {
+    async fn send_any(
+        &self,
+        list: &NodeList,
+        i: usize,
+        method: reqwest::Method,
+        path: Option<&str>,
+        body: Option<Vec<u8>>,
+        cap: usize,
+        deadline: Option<Instant>,
+    ) -> Result<(u16, Vec<u8>), EndpointFailure> {
         let (_, req) = self.build(list, i, method, path, body, deadline)?;
         let net = |err: reqwest::Error| {
-            let kind = if err.is_timeout() { FailureKind::Timeout } else { FailureKind::Transport };
+            let kind = if err.is_timeout() {
+                FailureKind::Timeout
+            } else {
+                FailureKind::Transport
+            };
             self.fail(list, i, kind, &err.without_url().to_string())
         };
         let mut r = req.send().await.map_err(net)?;
@@ -190,12 +329,22 @@ impl Http {
             return Err(self.fail(list, i, FailureKind::Http, &format!("HTTP {status}")));
         }
         if r.content_length().is_some_and(|n| n > cap as u64) {
-            return Err(self.fail(list, i, FailureKind::AnswerTooLarge, &format!("an announced answer above {cap} bytes")));
+            return Err(self.fail(
+                list,
+                i,
+                FailureKind::AnswerTooLarge,
+                &format!("an announced answer above {cap} bytes"),
+            ));
         }
         let mut buf = Vec::new();
         while let Some(c) = r.chunk().await.map_err(net)? {
             if buf.len() + c.len() > cap {
-                return Err(self.fail(list, i, FailureKind::AnswerTooLarge, &format!("an answer above {cap} bytes")));
+                return Err(self.fail(
+                    list,
+                    i,
+                    FailureKind::AnswerTooLarge,
+                    &format!("an answer above {cap} bytes"),
+                ));
             }
             buf.extend_from_slice(&c);
         }
@@ -208,8 +357,16 @@ impl Http {
     /// wasm32: compiles, never sends (the fetch transport is plan T12's).
     #[cfg(target_arch = "wasm32")]
     #[allow(clippy::too_many_arguments)]
-    async fn send_any(&self, list: &NodeList, i: usize, method: reqwest::Method, path: Option<&str>, body: Option<Vec<u8>>,
-        _cap: usize, deadline: Option<Instant>) -> Result<(u16, Vec<u8>), EndpointFailure> {
+    async fn send_any(
+        &self,
+        list: &NodeList,
+        i: usize,
+        method: reqwest::Method,
+        path: Option<&str>,
+        body: Option<Vec<u8>>,
+        _cap: usize,
+        deadline: Option<Instant>,
+    ) -> Result<(u16, Vec<u8>), EndpointFailure> {
         let _ = self.build(list, i, method, path, body, deadline)?;
         Err(self.fail(list, i, FailureKind::Transport, "no wasm32 transport yet"))
     }
@@ -229,7 +386,11 @@ pub fn rpc_answer(mut v: Value) -> Result<Result<Value, JsonRpcError>, FailureKi
         let code = e["code"].as_i64().ok_or(FailureKind::AnswerMalformed)?;
         let message = crate::error::endpoint_text(e["message"].as_str().unwrap_or_default());
         let data = e.get_mut("data").map(Value::take).filter(|d| !d.is_null());
-        return Ok(Err(JsonRpcError { code, message, data }));
+        return Ok(Err(JsonRpcError {
+            code,
+            message,
+            data,
+        }));
     }
     match v.get_mut("result") {
         Some(r) => Ok(Ok(r.take())),
@@ -281,8 +442,20 @@ pub struct BoundedRpc {
 
 #[cfg(feature = "evm")]
 impl BoundedRpc {
-    pub fn new(http: Http, list: std::sync::Arc<NodeList>, i: usize, cap: usize, deadline: Option<Instant>) -> Self {
-        Self { http, list, i, cap, deadline }
+    pub fn new(
+        http: Http,
+        list: std::sync::Arc<NodeList>,
+        i: usize,
+        cap: usize,
+        deadline: Option<Instant>,
+    ) -> Self {
+        Self {
+            http,
+            list,
+            i,
+            cap,
+            deadline,
+        }
     }
 }
 
@@ -292,7 +465,10 @@ impl tower::Service<alloy::rpc::json_rpc::RequestPacket> for BoundedRpc {
     type Error = alloy::transports::TransportError;
     type Future = alloy::transports::TransportFut<'static>;
 
-    fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(
+        &mut self,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
         std::task::Poll::Ready(Ok(()))
     }
 
@@ -301,9 +477,13 @@ impl tower::Service<alloy::rpc::json_rpc::RequestPacket> for BoundedRpc {
         Box::pin(async move {
             use alloy::transports::{TransportError, TransportErrorKind};
             let body = serde_json::to_vec(&req).map_err(TransportError::ser_err)?;
-            let bytes = this.http.post_bytes(&this.list, this.i, None, body, this.cap, this.deadline).await
+            let bytes = this
+                .http
+                .post_bytes(&this.list, this.i, None, body, this.cap, this.deadline)
+                .await
                 .map_err(TransportErrorKind::custom)?;
-            serde_json::from_slice(&bytes).map_err(|e| TransportError::deser_err(e, String::from_utf8_lossy(&bytes)))
+            serde_json::from_slice(&bytes)
+                .map_err(|e| TransportError::deser_err(e, String::from_utf8_lossy(&bytes)))
         })
     }
 }

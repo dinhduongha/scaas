@@ -36,25 +36,32 @@ pub async fn fake_rpc(f: fn(&Value) -> Value) -> (String, Arc<AtomicUsize>) {
 }
 
 /// [`fake_rpc`] answering `eth_chainId` with `id` and block 0 with hash `zero`.
-pub async fn fake_rpc_on(f: fn(&Value) -> Value, id: u64, zero: B256) -> (String, Arc<AtomicUsize>) {
+pub async fn fake_rpc_on(
+    f: fn(&Value) -> Value,
+    id: u64,
+    zero: B256,
+) -> (String, Arc<AtomicUsize>) {
     let n: Arc<AtomicUsize> = Default::default();
     let n2 = n.clone();
     let b0 = block(0, zero);
-    let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
-        let mut a = if r["method"] == "eth_chainId" {
-            json!({"result": format!("{id:#x}")})
-        } else if r["method"] == "eth_getBlockByNumber" && r["params"][0] == "0x0" {
-            json!({"result": b0.clone()})
-        } else {
-            n2.fetch_add(1, SeqCst);
-            f(&r)
-        };
-        async move {
-            a["jsonrpc"] = json!("2.0");
-            a["id"] = r["id"].clone();
-            axum::Json(a)
-        }
-    }));
+    let app = axum::Router::new().route(
+        "/",
+        axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let mut a = if r["method"] == "eth_chainId" {
+                json!({"result": format!("{id:#x}")})
+            } else if r["method"] == "eth_getBlockByNumber" && r["params"][0] == "0x0" {
+                json!({"result": b0.clone()})
+            } else {
+                n2.fetch_add(1, SeqCst);
+                f(&r)
+            };
+            async move {
+                a["jsonrpc"] = json!("2.0");
+                a["id"] = r["id"].clone();
+                axum::Json(a)
+            }
+        }),
+    );
     (serve(app).await, n)
 }
 
@@ -74,26 +81,28 @@ pub async fn hung() -> String {
 /// A down endpoint.
 pub const DOWN: &str = "http://127.0.0.1:9";
 
-
 /// [`fake_rpc`] with a closure (chain 296, block 0 [`genesis`], neither counted).
 pub async fn fake_dyn(f: Arc<dyn Fn(&Value) -> Value + Send + Sync>) -> (String, Arc<AtomicUsize>) {
     let n: Arc<AtomicUsize> = Default::default();
     let n2 = n.clone();
     let b0 = block(0, genesis());
-    let app = axum::Router::new().route("/", axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
-        let mut a = if r["method"] == "eth_chainId" {
-            json!({"result": "0x128"})
-        } else if r["method"] == "eth_getBlockByNumber" && r["params"][0] == "0x0" {
-            json!({"result": b0.clone()})
-        } else {
-            n2.fetch_add(1, SeqCst);
-            f(&r)
-        };
-        async move {
-            a["jsonrpc"] = json!("2.0");
-            a["id"] = r["id"].clone();
-            axum::Json(a)
-        }
-    }));
+    let app = axum::Router::new().route(
+        "/",
+        axum::routing::post(move |axum::Json(r): axum::Json<Value>| {
+            let mut a = if r["method"] == "eth_chainId" {
+                json!({"result": "0x128"})
+            } else if r["method"] == "eth_getBlockByNumber" && r["params"][0] == "0x0" {
+                json!({"result": b0.clone()})
+            } else {
+                n2.fetch_add(1, SeqCst);
+                f(&r)
+            };
+            async move {
+                a["jsonrpc"] = json!("2.0");
+                a["id"] = r["id"].clone();
+                axum::Json(a)
+            }
+        }),
+    );
     (serve(app).await, n)
 }

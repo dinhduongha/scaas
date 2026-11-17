@@ -51,7 +51,13 @@ pub struct EndpointFailure {
 
 impl EndpointFailure {
     pub fn new(endpoint: usize, kind: FailureKind, text: &str) -> Self {
-        Self { endpoint, label: None, kind, text: endpoint_text(text), revert_data: None }
+        Self {
+            endpoint,
+            label: None,
+            kind,
+            text: endpoint_text(text),
+            revert_data: None,
+        }
     }
     pub fn with_label(mut self, label: Option<&str>) -> Self {
         self.label = label.map(str::to_string);
@@ -80,17 +86,34 @@ pub enum RpcError {
     /// a list with no endpoint
     EndpointListEmpty,
     /// failover: no endpoint answered the whole read; the last failure, and a later endpoint's revert data if one reverted
-    EndpointAllFailed { last: Option<EndpointFailure>, failover_revert: Option<Vec<u8>> },
+    EndpointAllFailed {
+        last: Option<EndpointFailure>,
+        failover_revert: Option<Vec<u8>>,
+    },
     /// strict majority: no `need` equal complete answers at one block after the fallback round
-    EndpointNoMajority { n: usize, need: usize, largest: usize, failures: Vec<EndpointFailure> },
+    EndpointNoMajority {
+        n: usize,
+        need: usize,
+        largest: usize,
+        failures: Vec<EndpointFailure>,
+    },
     /// a read that feeds a decryption with no `named` or `default` endpoint to serve it
     NoTrustedEndpoint,
     /// the same under strict majority with a `discovered` endpoint and `n < 3`
     AgreementNeedsThree,
     /// the first endpoint's revert (failover) or the agreed revert (strict majority), its data as bytes
-    Revert { endpoint: usize, data: Vec<u8>, reason: String },
+    Revert {
+        endpoint: usize,
+        data: Vec<u8>,
+        reason: String,
+    },
     /// a scaas-node's error contract (NODE-GW-06)
-    NodeRefused { status: u16, code: String, detail: Option<String>, revert_data: Option<String> },
+    NodeRefused {
+        status: u16,
+        code: String,
+        detail: Option<String>,
+        revert_data: Option<String>,
+    },
     /// a node's `api` this client does not speak
     NodeApiVersion { api: String },
     /// a request above the route's body cap, refused before sending
@@ -127,7 +150,10 @@ impl std::fmt::Display for RpcError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let code = self.code();
         match self {
-            RpcError::EndpointAllFailed { last, failover_revert } => {
+            RpcError::EndpointAllFailed {
+                last,
+                failover_revert,
+            } => {
                 write!(f, "{code}")?;
                 if let Some(l) = last {
                     write!(f, ": last {l}")?;
@@ -137,9 +163,18 @@ impl std::fmt::Display for RpcError {
                 }
                 Ok(())
             }
-            RpcError::EndpointNoMajority { n, need, largest, .. } => write!(f, "{code}: n {n}, need {need}, largest group {largest}"),
-            RpcError::Revert { endpoint, reason, .. } => write!(f, "{code} (endpoint {endpoint}): {reason}"),
-            RpcError::NodeRefused { status, code: c, detail, .. } => {
+            RpcError::EndpointNoMajority {
+                n, need, largest, ..
+            } => write!(f, "{code}: n {n}, need {need}, largest group {largest}"),
+            RpcError::Revert {
+                endpoint, reason, ..
+            } => write!(f, "{code} (endpoint {endpoint}): {reason}"),
+            RpcError::NodeRefused {
+                status,
+                code: c,
+                detail,
+                ..
+            } => {
                 write!(f, "{code}: HTTP {status} {c}")?;
                 detail.as_ref().map_or(Ok(()), |d| write!(f, ": {d}"))
             }
@@ -162,12 +197,30 @@ mod tests {
     #[test]
     fn codes_are_the_app_names() {
         assert_eq!(RpcError::EndpointScheme.code(), "EndpointScheme");
-        assert_eq!(RpcError::EndpointAllFailed { last: None, failover_revert: None }.code(), "EndpointAllFailed");
-        assert_eq!(RpcError::EndpointNoMajority { n: 3, need: 2, largest: 1, failures: vec![] }.code(), "EndpointNoMajority");
+        assert_eq!(
+            RpcError::EndpointAllFailed {
+                last: None,
+                failover_revert: None
+            }
+            .code(),
+            "EndpointAllFailed"
+        );
+        assert_eq!(
+            RpcError::EndpointNoMajority {
+                n: 3,
+                need: 2,
+                largest: 1,
+                failures: vec![]
+            }
+            .code(),
+            "EndpointNoMajority"
+        );
         assert_eq!(RpcError::EndpointListEmpty.code(), "EndpointListEmpty");
         assert_eq!(RpcError::NoTrustedEndpoint.code(), "NoTrustedEndpoint");
         assert_eq!(RpcError::AgreementNeedsThree.code(), "AgreementNeedsThree");
-        assert!(RpcError::argument("x").to_string().starts_with("Argument: "));
+        assert!(RpcError::argument("x")
+            .to_string()
+            .starts_with("Argument: "));
     }
 
     /// An endpoint's text is cut to 256 bytes at a character boundary, control characters removed, URLs redacted; a short clean
@@ -177,10 +230,18 @@ mod tests {
         assert_eq!(endpoint_text("nonce too low"), "nonce too low", "control");
         let long = "é".repeat(300);
         let t = endpoint_text(&long);
-        assert!(t.len() <= TEXT_MAX && t.len() >= TEXT_MAX - 1 && t.chars().all(|c| c == 'é'), "{}", t.len());
+        assert!(
+            t.len() <= TEXT_MAX && t.len() >= TEXT_MAX - 1 && t.chars().all(|c| c == 'é'),
+            "{}",
+            t.len()
+        );
         assert_eq!(endpoint_text("a\nb\u{1b}[31mc\u{7f}"), "ab[31mc");
-        assert_eq!(endpoint_text("at https://h.example/v3/KEY now"), "at <url> now");
-        let f = EndpointFailure::new(2, FailureKind::Http, &"x".repeat(1_000)).with_label(Some("own"));
+        assert_eq!(
+            endpoint_text("at https://h.example/v3/KEY now"),
+            "at <url> now"
+        );
+        let f =
+            EndpointFailure::new(2, FailureKind::Http, &"x".repeat(1_000)).with_label(Some("own"));
         assert_eq!(f.text().len(), TEXT_MAX);
         assert!(f.to_string().starts_with("endpoint 2 (own): Http: "));
     }

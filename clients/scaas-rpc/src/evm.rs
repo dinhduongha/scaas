@@ -47,9 +47,12 @@ pub fn is_contract(code: &[u8]) -> bool {
 pub fn default_decode(data: &[u8]) -> String {
     use alloy::sol_types::SolValue;
     match data.get(..4) {
-        Some([0x08, 0xc3, 0x79, 0xa0]) => String::abi_decode(&data[4..]).unwrap_or_else(|_| alloy::hex::encode_prefixed(data)),
+        Some([0x08, 0xc3, 0x79, 0xa0]) => {
+            String::abi_decode(&data[4..]).unwrap_or_else(|_| alloy::hex::encode_prefixed(data))
+        }
         Some([0x4e, 0x48, 0x7b, 0x71]) => alloy::primitives::U256::abi_decode(&data[4..])
-            .map(|c| format!("Panic({c:#x})")).unwrap_or_else(|_| alloy::hex::encode_prefixed(data)),
+            .map(|c| format!("Panic({c:#x})"))
+            .unwrap_or_else(|_| alloy::hex::encode_prefixed(data)),
         _ => alloy::hex::encode_prefixed(data),
     }
 }
@@ -66,7 +69,9 @@ pub fn classify_with(e: &TransportError, decode: fn(&[u8]) -> String) -> SimErro
         Some(resp) => match resp.as_revert_data() {
             Some(data) => SimError::Revert(decode(&data)),
             None if resp.message.contains("revert") => SimError::Revert(resp.message.to_string()),
-            None if resp.message.contains("execution") && !node_limit(&resp.message) => SimError::Revert(resp.message.to_string()),
+            None if resp.message.contains("execution") && !node_limit(&resp.message) => {
+                SimError::Revert(resp.message.to_string())
+            }
             None => SimError::Transport(resp.message.to_string()),
         },
         None => SimError::Transport(e.to_string()),
@@ -96,8 +101,12 @@ pub fn classify_sim(e: &TransportError) -> SimError {
 
 pub fn classify_sim_with(e: &TransportError, decode: fn(&[u8]) -> String) -> SimError {
     match classify_with(e, decode) {
-        SimError::Transport(m) if m.contains("out of gas") || m.contains("gas required exceeds allowance") => {
-            SimError::Revert(format!("over the 2^24 regular gas of a transaction or the RPC gas cap: {m}"))
+        SimError::Transport(m)
+            if m.contains("out of gas") || m.contains("gas required exceeds allowance") =>
+        {
+            SimError::Revert(format!(
+                "over the 2^24 regular gas of a transaction or the RPC gas cap: {m}"
+            ))
         }
         x => x,
     }
@@ -139,44 +148,96 @@ pub struct EvmPool {
 }
 
 fn is_local(url: &url::Url) -> bool {
-    matches!(url.host_str(), Some("localhost") | Some("127.0.0.1") | Some("[::1]"))
+    matches!(
+        url.host_str(),
+        Some("localhost") | Some("127.0.0.1") | Some("[::1]")
+    )
 }
 
 impl EvmPool {
     /// The pool of `list` for chain `chain_id`; `chain_uid` (block 0's hash) is required by `strict_majority` and by a read that
     /// feeds a decryption (`Argument` otherwise).
-    pub fn connect(list: NodeList, chain_id: u64, chain_uid: Option<B256>) -> Result<Self, RpcError> {
-        Self::build(list, chain_id, chain_uid, Shared::default(), default_decode, true)
+    pub fn connect(
+        list: NodeList,
+        chain_id: u64,
+        chain_uid: Option<B256>,
+    ) -> Result<Self, RpcError> {
+        Self::build(
+            list,
+            chain_id,
+            chain_uid,
+            Shared::default(),
+            default_decode,
+            true,
+        )
     }
 
     /// The node's pool: the head and the failover total shared per `[[chains]]` table, reverts decoded by the node's ABI, and
     /// endpoint 0's identity checked where the node checks it (at lane start, NODE-GW-07), not on each read.
     #[cfg(feature = "node-internal")]
-    pub fn connect_shared(list: NodeList, chain_id: u64, chain_uid: Option<B256>, shared: Shared, decode: fn(&[u8]) -> String)
-        -> Result<Self, RpcError> {
+    pub fn connect_shared(
+        list: NodeList,
+        chain_id: u64,
+        chain_uid: Option<B256>,
+        shared: Shared,
+        decode: fn(&[u8]) -> String,
+    ) -> Result<Self, RpcError> {
         Self::build(list, chain_id, chain_uid, shared, decode, false)
     }
 
-    fn build(list: NodeList, chain_id: u64, chain_uid: Option<B256>, shared: Shared, decode: fn(&[u8]) -> String, check_first: bool)
-        -> Result<Self, RpcError> {
+    fn build(
+        list: NodeList,
+        chain_id: u64,
+        chain_uid: Option<B256>,
+        shared: Shared,
+        decode: fn(&[u8]) -> String,
+        check_first: bool,
+    ) -> Result<Self, RpcError> {
         if list.policy == crate::Policy::StrictMajority && chain_uid.is_none() {
-            return Err(RpcError::argument("strict_majority needs a pinned chain_uid"));
+            return Err(RpcError::argument(
+                "strict_majority needs a pinned chain_uid",
+            ));
         }
-        let (http, slow) = (Http::new(list.timeout_ms)?, Http::new(list.slow_timeout_ms)?);
+        let (http, slow) = (
+            Http::new(list.timeout_ms)?,
+            Http::new(list.slow_timeout_ms)?,
+        );
         let list = Arc::new(list);
         let mut pool = Pool::shared(&list, chain_uid.is_some(), shared.head, shared.failover);
         if !check_first {
             pool = pool.without_first_identity();
         }
-        let set = |h: &Http| (0..list.len()).map(|i| Self::provider(h, &list, i, None)).collect::<Vec<_>>();
+        let set = |h: &Http| {
+            (0..list.len())
+                .map(|i| Self::provider(h, &list, i, None))
+                .collect::<Vec<_>>()
+        };
         let (providers, simulators) = (set(&http), set(&slow));
-        Ok(Self { number: chain_id, list, pool, http, providers, simulators, pinned_uid: chain_uid, uid: Default::default(), decode })
+        Ok(Self {
+            number: chain_id,
+            list,
+            pool,
+            http,
+            providers,
+            simulators,
+            pinned_uid: chain_uid,
+            uid: Default::default(),
+            decode,
+        })
     }
 
-    fn provider(h: &Http, list: &Arc<NodeList>, i: usize, deadline: Option<Instant>) -> DynProvider {
+    fn provider(
+        h: &Http,
+        list: &Arc<NodeList>,
+        i: usize,
+        deadline: Option<Instant>,
+    ) -> DynProvider {
         let t = BoundedRpc::new(h.clone(), list.clone(), i, ANSWER_MAX, deadline);
         let client = ClientBuilder::default().transport(t, is_local(list.endpoints()[i].url()));
-        ProviderBuilder::new().disable_recommended_fillers().connect_client(client).erased()
+        ProviderBuilder::new()
+            .disable_recommended_fillers()
+            .connect_client(client)
+            .erased()
     }
 
     /// Endpoint `i`'s provider, its requests bounded by `deadline` too when given.
@@ -256,20 +317,36 @@ impl EvmPool {
     }
 
     /// The failover read over [`crate::pool::Pool::failover`]; `simulate`: `f` gets the endpoint's simulation client.
-    pub(crate) async fn read_within<T, F, Fut>(&self, simulate: bool, f: F) -> Result<(T, usize), SimError>
+    pub(crate) async fn read_within<T, F, Fut>(
+        &self,
+        simulate: bool,
+        f: F,
+    ) -> Result<(T, usize), SimError>
     where
         F: Fn(DynProvider) -> Fut,
         Fut: Future<Output = Result<T, SimError>>,
     {
-        let r = self.pool.failover(self, Purpose::Plain, |i| {
-            let fut = f(if simulate { self.simulators[i].clone() } else { self.providers[i].clone() });
-            async move {
-                fut.await.map_err(|e| match e {
-                    SimError::Revert(reason) => ReadError::Revert { data: vec![], reason },
-                    SimError::Transport(s) => ReadError::Failure(EndpointFailure::new(i, FailureKind::Transport, &s)),
-                })
-            }
-        }).await;
+        let r = self
+            .pool
+            .failover(self, Purpose::Plain, |i| {
+                let fut = f(if simulate {
+                    self.simulators[i].clone()
+                } else {
+                    self.providers[i].clone()
+                });
+                async move {
+                    fut.await.map_err(|e| match e {
+                        SimError::Revert(reason) => ReadError::Revert {
+                            data: vec![],
+                            reason,
+                        },
+                        SimError::Transport(s) => {
+                            ReadError::Failure(EndpointFailure::new(i, FailureKind::Transport, &s))
+                        }
+                    })
+                }
+            })
+            .await;
         match r {
             Ok(Answer { value, endpoint }) => Ok((value, endpoint)),
             Err(e) => Err(self.sim_error(e)),
@@ -280,14 +357,18 @@ impl EvmPool {
     pub(crate) fn sim_error(&self, e: RpcError) -> SimError {
         match e {
             RpcError::Revert { reason, .. } => SimError::Revert(reason),
-            RpcError::EndpointAllFailed { last: Some(l), .. } => SimError::Transport(self.failure_text(&l)),
+            RpcError::EndpointAllFailed { last: Some(l), .. } => {
+                SimError::Transport(self.failure_text(&l))
+            }
             e => SimError::Transport(e.to_string()),
         }
     }
 
     fn failure_text(&self, l: &EndpointFailure) -> String {
         match l.kind {
-            FailureKind::WrongChain => format!("endpoint {} is not chain {}", l.endpoint, self.number),
+            FailureKind::WrongChain => {
+                format!("endpoint {} is not chain {}", l.endpoint, self.number)
+            }
             FailureKind::BehindHead => format!("endpoint {} {}", l.endpoint, l.text()),
             _ => l.text().to_string(),
         }
@@ -306,14 +387,26 @@ impl EvmPool {
 
     /// `eth_call` then `eth_estimateGas` from `from`: the gas limit the transaction needs, regular + state (EIP-8037); no gas
     /// field, so both run at the RPC's gas cap. Each request under `slow_timeout_ms`. The caller caps the gas it accepts.
-    pub async fn simulate_from(&self, from: Address, to: Address, data: Bytes) -> Result<u64, SimError> {
-        let tx = TransactionRequest::default().with_from(from).with_to(to).with_input(data);
+    pub async fn simulate_from(
+        &self,
+        from: Address,
+        to: Address,
+        data: Bytes,
+    ) -> Result<u64, SimError> {
+        let tx = TransactionRequest::default()
+            .with_from(from)
+            .with_to(to)
+            .with_input(data);
         let d = self.decode;
         self.read_within(true, |p| {
             let tx = tx.clone();
             async move {
-                p.call(tx.clone()).await.map_err(|e| classify_sim_with(&e, d))?;
-                p.estimate_gas(tx).await.map_err(|e| classify_sim_with(&e, d))
+                p.call(tx.clone())
+                    .await
+                    .map_err(|e| classify_sim_with(&e, d))?;
+                p.estimate_gas(tx)
+                    .await
+                    .map_err(|e| classify_sim_with(&e, d))
             }
         })
         .await
@@ -322,12 +415,25 @@ impl EvmPool {
 
     /// The `latest` header's gas facts, from the raw header (any RPC's block shape).
     pub async fn block_gas(&self) -> Result<BlockGas, SimError> {
-        let (b, _): (serde_json::Value, usize) = self.read_within(false, |p| async move {
-            p.raw_request("eth_getBlockByNumber".into(), ("latest", false)).await.map_err(|e| SimError::Transport(e.to_string()))
-        }).await?;
-        let g = b["gasLimit"].as_str().ok_or_else(|| SimError::Transport(format!("chain {}: latest block without gasLimit", self.number)))?;
-        let limit = u64::from_str_radix(g.trim_start_matches("0x"), 16).map_err(|e| SimError::Transport(format!("gasLimit: {e}")))?;
-        Ok(BlockGas { limit, amsterdam: b.get("blockAccessListHash").is_some() })
+        let (b, _): (serde_json::Value, usize) = self
+            .read_within(false, |p| async move {
+                p.raw_request("eth_getBlockByNumber".into(), ("latest", false))
+                    .await
+                    .map_err(|e| SimError::Transport(e.to_string()))
+            })
+            .await?;
+        let g = b["gasLimit"].as_str().ok_or_else(|| {
+            SimError::Transport(format!(
+                "chain {}: latest block without gasLimit",
+                self.number
+            ))
+        })?;
+        let limit = u64::from_str_radix(g.trim_start_matches("0x"), 16)
+            .map_err(|e| SimError::Transport(format!("gasLimit: {e}")))?;
+        Ok(BlockGas {
+            limit,
+            amsterdam: b.get("blockAccessListHash").is_some(),
+        })
     }
 
     /// This chain's `chain_uid`: block 0's hash, which must equal the pinned one when set (a pruned RPC without block 0 trusts
@@ -337,15 +443,30 @@ impl EvmPool {
             return Ok(*u);
         }
         let d = self.decode;
-        let genesis = self.read_within(false, |p| async move {
-            p.get_block_by_number(BlockNumberOrTag::Number(0)).await.map_err(|e| classify_with(&e, d))
-        }).await.map_err(|e| RpcError::argument(&format!("chain {}: block 0: {e}", self.number)))?.0.map(|b| b.header.hash);
+        let genesis = self
+            .read_within(false, |p| async move {
+                p.get_block_by_number(BlockNumberOrTag::Number(0))
+                    .await
+                    .map_err(|e| classify_with(&e, d))
+            })
+            .await
+            .map_err(|e| RpcError::argument(&format!("chain {}: block 0: {e}", self.number)))?
+            .0
+            .map(|b| b.header.hash);
         let u = match (self.pinned_uid, genesis) {
             (Some(p), Some(g)) if p != g => {
-                return Err(RpcError::argument(&format!("chain {}: RPC block 0 {g:#x} is not chain_uid {p:#x}", self.number)))
+                return Err(RpcError::argument(&format!(
+                    "chain {}: RPC block 0 {g:#x} is not chain_uid {p:#x}",
+                    self.number
+                )))
             }
             (Some(p), _) | (None, Some(p)) => p,
-            (None, None) => return Err(RpcError::argument(&format!("chain {}: the RPC gives no block 0 hash; set chain_uid", self.number))),
+            (None, None) => {
+                return Err(RpcError::argument(&format!(
+                    "chain {}: the RPC gives no block 0 hash; set chain_uid",
+                    self.number
+                )))
+            }
         };
         Ok(*self.uid.get_or_init(|| u))
     }
@@ -353,7 +474,11 @@ impl EvmPool {
     /// `who`'s runtime code, through the failover read.
     pub async fn code(&self, who: Address) -> Result<Bytes, SimError> {
         let d = self.decode;
-        self.read_within(false, |p| async move { p.get_code_at(who).await.map_err(|e| classify_with(&e, d)) }).await.map(|(c, _)| c)
+        self.read_within(false, |p| async move {
+            p.get_code_at(who).await.map_err(|e| classify_with(&e, d))
+        })
+        .await
+        .map(|(c, _)| c)
     }
 
     /// `who` is a contract signer: [`is_contract`] of its code (an EIP-7702 designator is an EOA).
@@ -363,12 +488,25 @@ impl EvmPool {
 
     /// Endpoint `p`'s block `n` hash (`None`: unread or absent).
     pub async fn block_hash_on(p: &DynProvider, n: u64) -> Option<B256> {
-        p.get_block_by_number(BlockNumberOrTag::Number(n)).await.ok().flatten().map(|b| b.header.hash)
+        p.get_block_by_number(BlockNumberOrTag::Number(n))
+            .await
+            .ok()
+            .flatten()
+            .map(|b| b.header.hash)
     }
 
     /// The logs of `address` with `topic0` in the last `lookback` blocks.
-    pub async fn logs_since(&self, address: Address, topic0: B256, lookback: u64) -> Result<Vec<Log>, SimError> {
-        self.logs_back(Filter::new().address(address).event_signature(topic0), lookback).await
+    pub async fn logs_since(
+        &self,
+        address: Address,
+        topic0: B256,
+        lookback: u64,
+    ) -> Result<Vec<Log>, SimError> {
+        self.logs_back(
+            Filter::new().address(address).event_signature(topic0),
+            lookback,
+        )
+        .await
     }
 
     /// The logs of `filter` in the last `lookback` blocks, the head and the logs from one endpoint. An RPC that caps the
@@ -378,35 +516,43 @@ impl EvmPool {
     /// below half of a span refused. Each span is one request under `timeout_ms`. The first endpoint's head raises the head seen.
     pub async fn logs_back(&self, filter: Filter, lookback: u64) -> Result<Vec<Log>, SimError> {
         let d = self.decode;
-        let (out, at) = self.read_within(false, |p| {
-            let filter = filter.clone();
-            async move {
-                let latest = p.get_block_number().await.map_err(|e| classify_with(&e, d))?;
-                let start = latest.saturating_sub(lookback);
-                let whole = latest - start + 1;
-                let floor = LOG_SPAN_MIN.max(whole.div_ceil(LOG_WINDOW_SPANS));
-                let (mut from, mut span, mut refused, mut out) = (start, whole, u64::MAX, vec![]);
-                while from <= latest {
-                    let to = latest.min(from.saturating_add(span - 1));
-                    match p.get_logs(&filter.clone().from_block(from).to_block(to)).await {
-                        Ok(l) => {
-                            out.extend(l);
-                            from = to + 1;
-                            span = span.saturating_mul(2).min(refused / 2).max(span);
+        let (out, at) = self
+            .read_within(false, |p| {
+                let filter = filter.clone();
+                async move {
+                    let latest = p
+                        .get_block_number()
+                        .await
+                        .map_err(|e| classify_with(&e, d))?;
+                    let start = latest.saturating_sub(lookback);
+                    let whole = latest - start + 1;
+                    let floor = LOG_SPAN_MIN.max(whole.div_ceil(LOG_WINDOW_SPANS));
+                    let (mut from, mut span, mut refused, mut out) =
+                        (start, whole, u64::MAX, vec![]);
+                    while from <= latest {
+                        let to = latest.min(from.saturating_add(span - 1));
+                        match p
+                            .get_logs(&filter.clone().from_block(from).to_block(to))
+                            .await
+                        {
+                            Ok(l) => {
+                                out.extend(l);
+                                from = to + 1;
+                                span = span.saturating_mul(2).min(refused / 2).max(span);
+                            }
+                            Err(e) if e.as_error_resp().is_some() && span > floor => {
+                                tracing::debug!(span, "eth_getLogs span refused; a tenth of it");
+                                refused = refused.min(span);
+                                span = (span / 10).max(floor);
+                            }
+                            // never a revert: a log read has no contract answer
+                            Err(e) => return Err(SimError::Transport(e.to_string())),
                         }
-                        Err(e) if e.as_error_resp().is_some() && span > floor => {
-                            tracing::debug!(span, "eth_getLogs span refused; a tenth of it");
-                            refused = refused.min(span);
-                            span = (span / 10).max(floor);
-                        }
-                        // never a revert: a log read has no contract answer
-                        Err(e) => return Err(SimError::Transport(e.to_string())),
                     }
+                    Ok((latest, out))
                 }
-                Ok((latest, out))
-            }
-        })
-        .await?;
+            })
+            .await?;
         if at == 0 {
             self.saw_block(out.0);
         }
@@ -416,62 +562,109 @@ impl EvmPool {
     // ------------------------------------------------------------ the SDK's head reads (failover; strict majority: plan T6)
 
     /// A receipt, failed over: a value, never terminal (`tx_state` decides, CLI-RPC-09).
-    pub async fn receipt(&self, id: B256) -> Result<Option<alloy::rpc::types::TransactionReceipt>, RpcError> {
-        self.failover_read(Purpose::Plain, |p| async move { p.get_transaction_receipt(id).await }).await
+    pub async fn receipt(
+        &self,
+        id: B256,
+    ) -> Result<Option<alloy::rpc::types::TransactionReceipt>, RpcError> {
+        self.failover_read(Purpose::Plain, |p| async move {
+            p.get_transaction_receipt(id).await
+        })
+        .await
     }
 
     /// A failover read of one provider call, classified (a revert keeps its data as bytes).
-    pub(crate) async fn failover_read<T, F, Fut>(&self, purpose: Purpose, f: F) -> Result<T, RpcError>
+    pub(crate) async fn failover_read<T, F, Fut>(
+        &self,
+        purpose: Purpose,
+        f: F,
+    ) -> Result<T, RpcError>
     where
         F: Fn(DynProvider) -> Fut,
         Fut: Future<Output = Result<T, TransportError>>,
     {
         let d = self.decode;
-        self.pool.failover(self, purpose, |i| {
-            let fut = f(self.providers[i].clone());
-            async move { fut.await.map_err(|e| read_error(i, &e, d)) }
-        }).await.map(|a| a.value)
+        self.pool
+            .failover(self, purpose, |i| {
+                let fut = f(self.providers[i].clone());
+                async move { fut.await.map_err(|e| read_error(i, &e, d)) }
+            })
+            .await
+            .map(|a| a.value)
     }
 
     // ------------------------------------------------------------ first-endpoint reads (F4): endpoint 0 only, never failover
 
     /// The pending nonce of `who` from endpoint 0 (the lane's own).
     pub async fn first_pending_nonce(&self, who: Address) -> Result<u64, RpcError> {
-        self.providers[0].get_transaction_count(who).pending().await.map_err(|e| first_err(&e))
+        self.providers[0]
+            .get_transaction_count(who)
+            .pending()
+            .await
+            .map_err(|e| first_err(&e))
     }
     /// The committed (`latest`) nonce of `who` from endpoint 0.
     pub async fn first_nonce_at(&self, who: Address) -> Result<u64, RpcError> {
-        self.providers[0].get_transaction_count(who).latest().await.map_err(|e| first_err(&e))
+        self.providers[0]
+            .get_transaction_count(who)
+            .latest()
+            .await
+            .map_err(|e| first_err(&e))
     }
     /// EIP-1559 fees from endpoint 0: (max fee, at least 1; priority fee).
     pub async fn first_fees(&self) -> Result<(u128, u128), RpcError> {
-        let est = self.providers[0].estimate_eip1559_fees().await.map_err(|e| first_err(&e))?;
+        let est = self.providers[0]
+            .estimate_eip1559_fees()
+            .await
+            .map_err(|e| first_err(&e))?;
         Ok((est.max_fee_per_gas.max(1), est.max_priority_fee_per_gas))
     }
     /// A receipt from endpoint 0.
-    pub async fn first_receipt(&self, hash: B256) -> Result<Option<alloy::rpc::types::TransactionReceipt>, RpcError> {
-        self.providers[0].get_transaction_receipt(hash).await.map_err(|e| first_err(&e))
+    pub async fn first_receipt(
+        &self,
+        hash: B256,
+    ) -> Result<Option<alloy::rpc::types::TransactionReceipt>, RpcError> {
+        self.providers[0]
+            .get_transaction_receipt(hash)
+            .await
+            .map_err(|e| first_err(&e))
     }
     /// The gas limit and max fee per gas of transaction `hash` as sent, from endpoint 0; `None` if it does not know it (the fee:
     /// if it gives none, e.g. a legacy transaction).
     pub async fn first_tx_fees(&self, hash: B256) -> Result<Option<(u64, Option<u128>)>, RpcError> {
-        let t: serde_json::Value = self.providers[0].raw_request("eth_getTransactionByHash".into(), (hash,)).await.map_err(|e| first_err(&e))?;
-        let hex = |k: &str| t[k].as_str().map(|g| u128::from_str_radix(g.trim_start_matches("0x"), 16));
+        let t: serde_json::Value = self.providers[0]
+            .raw_request("eth_getTransactionByHash".into(), (hash,))
+            .await
+            .map_err(|e| first_err(&e))?;
+        let hex = |k: &str| {
+            t[k].as_str()
+                .map(|g| u128::from_str_radix(g.trim_start_matches("0x"), 16))
+        };
         let bad = |_| RpcError::argument("a transaction field that is not a number");
-        let Some(gas) = hex("gas") else { return Ok(None) };
-        let gas = u64::try_from(gas.map_err(bad)?).map_err(|_| RpcError::argument("a gas above u64"))?;
+        let Some(gas) = hex("gas") else {
+            return Ok(None);
+        };
+        let gas =
+            u64::try_from(gas.map_err(bad)?).map_err(|_| RpcError::argument("a gas above u64"))?;
         Ok(Some((gas, hex("maxFeePerGas").transpose().map_err(bad)?)))
     }
     /// The `finalized` block's number from endpoint 0 (`None`: unread or none).
     pub async fn first_finalized_number(&self) -> Option<u64> {
-        self.providers[0].get_block_by_number(BlockNumberOrTag::Finalized).await.ok().flatten().map(|b| b.header.number)
+        self.providers[0]
+            .get_block_by_number(BlockNumberOrTag::Finalized)
+            .await
+            .ok()
+            .flatten()
+            .map(|b| b.header.number)
     }
 }
 
 /// One endpoint's transport error as the pool reads it: a revert (its data as bytes, its text by `decode`) or a failure.
 pub(crate) fn read_error(i: usize, e: &TransportError, decode: fn(&[u8]) -> String) -> ReadError {
     match classify_with(e, decode) {
-        SimError::Revert(reason) => ReadError::Revert { data: revert_data(e).map(|b| b.to_vec()).unwrap_or_default(), reason },
+        SimError::Revert(reason) => ReadError::Revert {
+            data: revert_data(e).map(|b| b.to_vec()).unwrap_or_default(),
+            reason,
+        },
         SimError::Transport(_) => ReadError::Failure(transport(i, e)),
     }
 }
@@ -485,7 +678,14 @@ pub struct Fees {
 
 /// A first-endpoint read's failure: endpoint 0's, never failed over.
 fn first_err(e: &TransportError) -> RpcError {
-    RpcError::EndpointAllFailed { last: Some(EndpointFailure::new(0, FailureKind::Transport, &e.to_string())), failover_revert: None }
+    RpcError::EndpointAllFailed {
+        last: Some(EndpointFailure::new(
+            0,
+            FailureKind::Transport,
+            &e.to_string(),
+        )),
+        failover_revert: None,
+    }
 }
 
 fn transport(i: usize, e: &TransportError) -> EndpointFailure {
@@ -497,40 +697,87 @@ impl Probe for EvmPool {
 
     /// Endpoint `i`'s `eth_chainId` is the chain's and its block 0 hash is the chain's (the pinned `chain_uid`, else the one
     /// [`EvmPool::uid`] read, else the first endpoint's block 0).
-    async fn same_chain(&self, i: usize, deadline: Option<Instant>) -> Result<bool, EndpointFailure> {
+    async fn same_chain(
+        &self,
+        i: usize,
+        deadline: Option<Instant>,
+    ) -> Result<bool, EndpointFailure> {
         let p = self.at(i, deadline);
-        let unread = |what: &str| EndpointFailure::new(i, FailureKind::IdentityUnread, &format!("endpoint {i}: {what} unreadable; not used"));
+        let unread = |what: &str| {
+            EndpointFailure::new(
+                i,
+                FailureKind::IdentityUnread,
+                &format!("endpoint {i}: {what} unreadable; not used"),
+            )
+        };
         let id = p.get_chain_id().await.map_err(|_| unread("chain id"))?;
         if id != self.number {
             return Ok(false);
         }
         let want = match self.pinned_uid.or(self.uid.get().copied()) {
             Some(u) => u,
-            None => Self::block_hash_on(&self.at(0, deadline), 0).await.ok_or_else(|| unread("the first endpoint's block 0"))?,
+            None => Self::block_hash_on(&self.at(0, deadline), 0)
+                .await
+                .ok_or_else(|| unread("the first endpoint's block 0"))?,
         };
-        Ok(Self::block_hash_on(&p, 0).await.ok_or_else(|| unread("block 0"))? == want)
+        Ok(Self::block_hash_on(&p, 0)
+            .await
+            .ok_or_else(|| unread("block 0"))?
+            == want)
     }
 
     async fn head(&self, i: usize, deadline: Option<Instant>) -> Result<u64, EndpointFailure> {
-        self.at(i, deadline).get_block_number().await.map_err(|e| transport(i, &e))
+        self.at(i, deadline)
+            .get_block_number()
+            .await
+            .map_err(|e| transport(i, &e))
     }
 
-    async fn named(&self, i: usize, choice: BlockChoice, deadline: Option<Instant>) -> Result<u64, EndpointFailure> {
+    async fn named(
+        &self,
+        i: usize,
+        choice: BlockChoice,
+        deadline: Option<Instant>,
+    ) -> Result<u64, EndpointFailure> {
         let p = self.at(i, deadline);
         match choice {
             BlockChoice::Latest => p.get_block_number().await.map_err(|e| transport(i, &e)),
-            BlockChoice::Depth(d) => Ok(p.get_block_number().await.map_err(|e| transport(i, &e))?.saturating_sub(d)),
-            BlockChoice::Finalized => p.get_block_by_number(BlockNumberOrTag::Finalized).await.map_err(|e| transport(i, &e))?
+            BlockChoice::Depth(d) => Ok(p
+                .get_block_number()
+                .await
+                .map_err(|e| transport(i, &e))?
+                .saturating_sub(d)),
+            BlockChoice::Finalized => p
+                .get_block_by_number(BlockNumberOrTag::Finalized)
+                .await
+                .map_err(|e| transport(i, &e))?
                 .map(|b| b.header.number)
-                .ok_or_else(|| EndpointFailure::new(i, FailureKind::Transport, "no finalized block")),
+                .ok_or_else(|| {
+                    EndpointFailure::new(i, FailureKind::Transport, "no finalized block")
+                }),
         }
     }
 
-    async fn header(&self, i: usize, number: u64, deadline: Option<Instant>) -> Result<B256, EndpointFailure> {
-        let b = self.at(i, deadline).get_block_by_number(BlockNumberOrTag::Number(number)).await.map_err(|e| transport(i, &e))?
-            .ok_or_else(|| EndpointFailure::new(i, FailureKind::Transport, &format!("no block {number}")))?;
+    async fn header(
+        &self,
+        i: usize,
+        number: u64,
+        deadline: Option<Instant>,
+    ) -> Result<B256, EndpointFailure> {
+        let b = self
+            .at(i, deadline)
+            .get_block_by_number(BlockNumberOrTag::Number(number))
+            .await
+            .map_err(|e| transport(i, &e))?
+            .ok_or_else(|| {
+                EndpointFailure::new(i, FailureKind::Transport, &format!("no block {number}"))
+            })?;
         if b.header.number != number {
-            return Err(EndpointFailure::new(i, FailureKind::AnswerMalformed, &format!("asked block {number}, answered {}", b.header.number)));
+            return Err(EndpointFailure::new(
+                i,
+                FailureKind::AnswerMalformed,
+                &format!("asked block {number}, answered {}", b.header.number),
+            ));
         }
         Ok(b.header.hash)
     }
@@ -554,8 +801,14 @@ pub struct LogAt {
 
 impl From<&Log> for LogAt {
     fn from(l: &Log) -> Self {
-        Self { block_hash: l.block_hash, tx_hash: l.transaction_hash, log_index: l.log_index, address: l.address(),
-            topics: l.topics().to_vec(), data: l.data().data.clone() }
+        Self {
+            block_hash: l.block_hash,
+            tx_hash: l.transaction_hash,
+            log_index: l.log_index,
+            address: l.address(),
+            topics: l.topics().to_vec(),
+            data: l.data().data.clone(),
+        }
     }
 }
 
@@ -580,14 +833,22 @@ pub struct TxAt {
 
 /// Every request of a pinned read names its block by hash (EIP-1898, `requireCanonical`).
 pub fn pinned(at: &ReadAt<B256>) -> alloy::eips::BlockId {
-    alloy::eips::BlockId::Hash(alloy::eips::RpcBlockHash { block_hash: at.hash, require_canonical: Some(true) })
+    alloy::eips::BlockId::Hash(alloy::eips::RpcBlockHash {
+        block_hash: at.hash,
+        require_canonical: Some(true),
+    })
 }
 
 impl EvmPool {
     /// A read pinned to one block, by the list's policy (spec §4.4): under `strict_majority` the agreed read; under `failover`
     /// one endpoint names its block for `choice`, reads its header there, runs `f` pinned to that hash, and reads the header
     /// again (a moved hash is that endpoint's failure, `BlockChanged`).
-    pub async fn read_at_block<T, F, Fut>(&self, choice: BlockChoice, purpose: Purpose, f: F) -> Result<Agreed<T, B256>, RpcError>
+    pub async fn read_at_block<T, F, Fut>(
+        &self,
+        choice: BlockChoice,
+        purpose: Purpose,
+        f: F,
+    ) -> Result<Agreed<T, B256>, RpcError>
     where
         T: Clone + PartialEq,
         F: Fn(ReadAt<B256>) -> Fut,
@@ -597,96 +858,211 @@ impl EvmPool {
             return self.pool.agree(self, choice, purpose, f).await;
         }
         let f = &f;
-        let a = self.pool.failover(self, purpose, |i| async move {
-            let number = self.named(i, choice, None).await?;
-            let hash = self.header(i, number, None).await?;
-            let v = f(ReadAt { endpoint: i, number, hash, deadline: None }).await?;
-            if self.header(i, number, None).await? != hash {
-                return Err(ReadError::Failure(EndpointFailure::new(i, FailureKind::BlockChanged, &format!("block {number} changed"))));
-            }
-            Ok((v, number, hash))
-        }).await?;
+        let a = self
+            .pool
+            .failover(self, purpose, |i| async move {
+                let number = self.named(i, choice, None).await?;
+                let hash = self.header(i, number, None).await?;
+                let v = f(ReadAt {
+                    endpoint: i,
+                    number,
+                    hash,
+                    deadline: None,
+                })
+                .await?;
+                if self.header(i, number, None).await? != hash {
+                    return Err(ReadError::Failure(EndpointFailure::new(
+                        i,
+                        FailureKind::BlockChanged,
+                        &format!("block {number} changed"),
+                    )));
+                }
+                Ok((v, number, hash))
+            })
+            .await?;
         let (value, number, hash) = a.value;
-        Ok(Agreed { value, number, hash, members: vec![a.endpoint], highest_named: number })
+        Ok(Agreed {
+            value,
+            number,
+            hash,
+            members: vec![a.endpoint],
+            highest_named: number,
+        })
     }
 
     /// `eth_call` at the read's block (by hash).
-    pub async fn call_at(&self, at: &ReadAt<B256>, to: Address, data: Bytes) -> Result<Bytes, ReadError> {
+    pub async fn call_at(
+        &self,
+        at: &ReadAt<B256>,
+        to: Address,
+        data: Bytes,
+    ) -> Result<Bytes, ReadError> {
         let tx = TransactionRequest::default().with_to(to).with_input(data);
-        self.at(at.endpoint, at.deadline).call(tx).block(pinned(at)).await.map_err(|e| read_error(at.endpoint, &e, self.decode))
+        self.at(at.endpoint, at.deadline)
+            .call(tx)
+            .block(pinned(at))
+            .await
+            .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
     /// `eth_getStorageAt` at the read's block.
-    pub async fn storage_at(&self, at: &ReadAt<B256>, who: Address, slot: alloy::primitives::U256) -> Result<alloy::primitives::U256, ReadError> {
-        self.at(at.endpoint, at.deadline).get_storage_at(who, slot).block_id(pinned(at)).await
+    pub async fn storage_at(
+        &self,
+        at: &ReadAt<B256>,
+        who: Address,
+        slot: alloy::primitives::U256,
+    ) -> Result<alloy::primitives::U256, ReadError> {
+        self.at(at.endpoint, at.deadline)
+            .get_storage_at(who, slot)
+            .block_id(pinned(at))
+            .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
     /// `eth_getCode` at the read's block.
     pub async fn code_at(&self, at: &ReadAt<B256>, who: Address) -> Result<Bytes, ReadError> {
-        self.at(at.endpoint, at.deadline).get_code_at(who).block_id(pinned(at)).await.map_err(|e| read_error(at.endpoint, &e, self.decode))
+        self.at(at.endpoint, at.deadline)
+            .get_code_at(who)
+            .block_id(pinned(at))
+            .await
+            .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
     /// `eth_getBalance` at the read's block.
-    pub async fn balance_at(&self, at: &ReadAt<B256>, who: Address) -> Result<alloy::primitives::U256, ReadError> {
-        self.at(at.endpoint, at.deadline).get_balance(who).block_id(pinned(at)).await.map_err(|e| read_error(at.endpoint, &e, self.decode))
+    pub async fn balance_at(
+        &self,
+        at: &ReadAt<B256>,
+        who: Address,
+    ) -> Result<alloy::primitives::U256, ReadError> {
+        self.at(at.endpoint, at.deadline)
+            .get_balance(who)
+            .block_id(pinned(at))
+            .await
+            .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
     /// The committed nonce of `who` at the read's block.
     pub async fn nonce_at_block(&self, at: &ReadAt<B256>, who: Address) -> Result<u64, ReadError> {
-        self.at(at.endpoint, at.deadline).get_transaction_count(who).block_id(pinned(at)).await
+        self.at(at.endpoint, at.deadline)
+            .get_transaction_count(who)
+            .block_id(pinned(at))
+            .await
             .map_err(|e| read_error(at.endpoint, &e, self.decode))
     }
     /// A transaction by hash, from the read's endpoint (`None`: unknown to it).
-    pub async fn tx_by_hash_at(&self, at: &ReadAt<B256>, id: B256) -> Result<Option<TxAt>, ReadError> {
+    pub async fn tx_by_hash_at(
+        &self,
+        at: &ReadAt<B256>,
+        id: B256,
+    ) -> Result<Option<TxAt>, ReadError> {
         use alloy::consensus::Transaction as _;
-        let t = self.at(at.endpoint, at.deadline).get_transaction_by_hash(id).await.map_err(|e| read_error(at.endpoint, &e, self.decode))?;
-        Ok(t.map(|t| TxAt { block_hash: t.block_hash, block_number: t.block_number, from: t.inner.signer(), nonce: t.nonce() }))
+        let t = self
+            .at(at.endpoint, at.deadline)
+            .get_transaction_by_hash(id)
+            .await
+            .map_err(|e| read_error(at.endpoint, &e, self.decode))?;
+        Ok(t.map(|t| TxAt {
+            block_hash: t.block_hash,
+            block_number: t.block_number,
+            from: t.inner.signer(),
+            nonce: t.nonce(),
+        }))
     }
     /// A receipt as of the read's block: counted only when its block is at or below it and its block hash is this endpoint's
     /// header hash at its number (else `None`).
-    pub async fn receipt_at(&self, at: &ReadAt<B256>, id: B256) -> Result<Option<ReceiptAt>, ReadError> {
-        Ok(self.checked_receipt(at.endpoint, id, at.deadline).await?.filter(|r| r.block_number <= at.number))
+    pub async fn receipt_at(
+        &self,
+        at: &ReadAt<B256>,
+        id: B256,
+    ) -> Result<Option<ReceiptAt>, ReadError> {
+        Ok(self
+            .checked_receipt(at.endpoint, id, at.deadline)
+            .await?
+            .filter(|r| r.block_number <= at.number))
     }
 
     /// A receipt whose block hash is the endpoint's header hash at its number (`None` otherwise or unknown).
-    pub(crate) async fn checked_receipt(&self, i: usize, id: B256, deadline: Option<Instant>) -> Result<Option<ReceiptAt>, ReadError> {
+    pub(crate) async fn checked_receipt(
+        &self,
+        i: usize,
+        id: B256,
+        deadline: Option<Instant>,
+    ) -> Result<Option<ReceiptAt>, ReadError> {
         let p = self.at(i, deadline);
-        let Some(r) = p.get_transaction_receipt(id).await.map_err(|e| read_error(i, &e, self.decode))? else { return Ok(None) };
-        let (Some(hash), Some(number)) = (r.block_hash, r.block_number) else { return Ok(None) };
+        let Some(r) = p
+            .get_transaction_receipt(id)
+            .await
+            .map_err(|e| read_error(i, &e, self.decode))?
+        else {
+            return Ok(None);
+        };
+        let (Some(hash), Some(number)) = (r.block_hash, r.block_number) else {
+            return Ok(None);
+        };
         if self.header(i, number, deadline).await? != hash {
             return Ok(None);
         }
-        Ok(Some(ReceiptAt { block_hash: hash, block_number: number, status: r.status(), gas_used: r.gas_used,
-            logs: r.logs().iter().map(LogAt::from).collect() }))
+        Ok(Some(ReceiptAt {
+            block_hash: hash,
+            block_number: number,
+            status: r.status(),
+            gas_used: r.gas_used,
+            logs: r.logs().iter().map(LogAt::from).collect(),
+        }))
     }
 
     /// The logs of `filter` over blocks `[from, to]`, both required, at most [`LOG_RANGE_MAX`] blocks (`Argument` otherwise;
     /// F23), compared whole under `strict_majority`; an endpoint whose head is below `to` does not answer.
-    pub async fn logs_range(&self, from: u64, to: u64, filter: Filter, purpose: Purpose) -> Result<Agreed<Vec<LogAt>, B256>, RpcError> {
+    pub async fn logs_range(
+        &self,
+        from: u64,
+        to: u64,
+        filter: Filter,
+        purpose: Purpose,
+    ) -> Result<Agreed<Vec<LogAt>, B256>, RpcError> {
         if to < from || to - from >= LOG_RANGE_MAX {
-            return Err(RpcError::argument(&format!("a log range is [from, to] with at most {LOG_RANGE_MAX} blocks")));
+            return Err(RpcError::argument(&format!(
+                "a log range is [from, to] with at most {LOG_RANGE_MAX} blocks"
+            )));
         }
         let filter = &filter;
         self.read_at_block(BlockChoice::Latest, purpose, |at| async move {
             if at.number < to {
-                return Err(ReadError::Failure(EndpointFailure::new(at.endpoint, FailureKind::BehindHead, &format!("at block {}, below {to}", at.number))));
+                return Err(ReadError::Failure(EndpointFailure::new(
+                    at.endpoint,
+                    FailureKind::BehindHead,
+                    &format!("at block {}, below {to}", at.number),
+                )));
             }
-            let logs = self.at(at.endpoint, at.deadline).get_logs(&filter.clone().from_block(from).to_block(to)).await
+            let logs = self
+                .at(at.endpoint, at.deadline)
+                .get_logs(&filter.clone().from_block(from).to_block(to))
+                .await
                 .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?;
             Ok(logs.iter().map(LogAt::from).collect())
-        }).await
+        })
+        .await
     }
 
     /// The head, failed over.
     pub async fn head(&self) -> Result<u64, RpcError> {
-        self.failover_read(Purpose::Plain, |p| async move { p.get_block_number().await }).await
+        self.failover_read(
+            Purpose::Plain,
+            |p| async move { p.get_block_number().await },
+        )
+        .await
     }
     /// The `finalized` block's number, failed over (`None`: the chain has none).
     pub async fn finalized(&self) -> Result<Option<u64>, RpcError> {
-        self.failover_read(Purpose::Plain, |p| async move { p.get_block_by_number(BlockNumberOrTag::Finalized).await })
-            .await.map(|b| b.map(|b| b.header.number))
+        self.failover_read(Purpose::Plain, |p| async move {
+            p.get_block_by_number(BlockNumberOrTag::Finalized).await
+        })
+        .await
+        .map(|b| b.map(|b| b.header.number))
     }
     /// Block `n`'s hash, failed over.
     pub async fn block_hash(&self, n: u64) -> Result<Option<B256>, RpcError> {
-        self.failover_read(Purpose::Plain, |p| async move { p.get_block_by_number(BlockNumberOrTag::Number(n)).await })
-            .await.map(|b| b.map(|b| b.header.hash))
+        self.failover_read(Purpose::Plain, |p| async move {
+            p.get_block_by_number(BlockNumberOrTag::Number(n)).await
+        })
+        .await
+        .map(|b| b.map(|b| b.header.hash))
     }
     /// The chain's `chain_uid` ([`EvmPool::uid`]).
     pub async fn chain_uid(&self) -> Result<B256, RpcError> {
@@ -697,26 +1073,42 @@ impl EvmPool {
     /// agreed committed nonce at the default block (the caller adds its own count of what it sent since; F14).
     pub async fn pending_nonce(&self, who: Address, purpose: Purpose) -> Result<u64, RpcError> {
         if self.pool.policy() == crate::Policy::StrictMajority {
-            return self.read_at_block(BlockChoice::default(), purpose, |at| async move { self.nonce_at_block(&at, who).await })
-                .await.map(|a| a.value);
+            return self
+                .read_at_block(BlockChoice::default(), purpose, |at| async move {
+                    self.nonce_at_block(&at, who).await
+                })
+                .await
+                .map(|a| a.value);
         }
-        self.failover_read(purpose, |p| async move { p.get_transaction_count(who).pending().await }).await
+        self.failover_read(purpose, |p| async move {
+            p.get_transaction_count(who).pending().await
+        })
+        .await
     }
 
     /// EIP-1559 fee data: under `failover` failed over (the caller caps fee and gas from its own configuration); under
     /// `strict_majority` the `need`-th highest of the endpoints' values for each field (a minority moves it neither way; F14).
     pub async fn fees(&self, purpose: Purpose) -> Result<Fees, RpcError> {
         if self.pool.policy() != crate::Policy::StrictMajority {
-            let f = self.failover_read(purpose, |p| async move { p.estimate_eip1559_fees().await }).await?;
-            return Ok(Fees { max_fee_per_gas: f.max_fee_per_gas.max(1), max_priority_fee_per_gas: f.max_priority_fee_per_gas });
+            let f = self
+                .failover_read(purpose, |p| async move { p.estimate_eip1559_fees().await })
+                .await?;
+            return Ok(Fees {
+                max_fee_per_gas: f.max_fee_per_gas.max(1),
+                max_priority_fee_per_gas: f.max_priority_fee_per_gas,
+            });
         }
         let order = self.pool.usable(purpose)?;
         let n = self.list.len();
         let need = n / 2 + 1;
         let deadline = Some(self.pool.deadline());
         let got = futures::future::join_all(order.iter().map(|&i| async move {
-            self.at(i, deadline).estimate_eip1559_fees().await.map_err(|e| transport(i, &e))
-        })).await;
+            self.at(i, deadline)
+                .estimate_eip1559_fees()
+                .await
+                .map_err(|e| transport(i, &e))
+        }))
+        .await;
         let (mut max, mut prio, mut failures) = (vec![], vec![], vec![]);
         for g in got {
             match g {
@@ -728,11 +1120,19 @@ impl EvmPool {
             }
         }
         if max.len() < need {
-            return Err(RpcError::EndpointNoMajority { n, need, largest: max.len(), failures });
+            return Err(RpcError::EndpointNoMajority {
+                n,
+                need,
+                largest: max.len(),
+                failures,
+            });
         }
         max.sort_unstable_by(|a, b| b.cmp(a));
         prio.sort_unstable_by(|a, b| b.cmp(a));
-        Ok(Fees { max_fee_per_gas: max[need - 1].max(1), max_priority_fee_per_gas: prio[need - 1] })
+        Ok(Fees {
+            max_fee_per_gas: max[need - 1].max(1),
+            max_priority_fee_per_gas: prio[need - 1],
+        })
     }
 }
 
@@ -761,8 +1161,15 @@ pub enum SendOutcome {
 /// The merge of a send (CLI-RPC-08): never a final verdict on the transaction ([`EvmPool::tx_state`] decides).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BroadcastOutcome {
-    Sent { id: B256, accepted: Vec<usize>, others: Vec<(usize, SendOutcome)> },
-    Rejected { id: B256, outcomes: Vec<(usize, SendOutcome)> },
+    Sent {
+        id: B256,
+        accepted: Vec<usize>,
+        others: Vec<(usize, SendOutcome)>,
+    },
+    Rejected {
+        id: B256,
+        outcomes: Vec<(usize, SendOutcome)>,
+    },
 }
 
 impl BroadcastOutcome {
@@ -797,12 +1204,21 @@ fn blob_network_form(raw: &[u8]) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TxState {
     /// a receipt at or below the final block, its block hash the endpoint's header hash at its number (terminal)
-    Final { number: u64, hash: B256, success: bool },
+    Final {
+        number: u64,
+        hash: B256,
+        success: bool,
+    },
     /// the sender's nonce at the final block above the transaction's, the transaction and its receipt unknown, in one decisive
     /// read (terminal; never re-sent automatically)
     Replaced { by_nonce: u64 },
     /// a receipt above the final block, or from a read that is not decisive
-    Included { number: u64, hash: B256, success: bool, endpoint: usize },
+    Included {
+        number: u64,
+        hash: B256,
+        success: bool,
+        endpoint: usize,
+    },
     /// none of the above (also `Replaced`'s facts from an endpoint that is not decisive)
     Pending { endpoint: Option<usize> },
 }
@@ -848,9 +1264,15 @@ impl EvmPool {
     /// CLI-RPC-08: the same `raw` bytes to the first endpoint or to all, concurrently; the id is `keccak256(raw)`, computed before
     /// any request (a blob transaction in its network form is refused by name, `Argument`). `Sent` when one endpoint accepted,
     /// else `Rejected`; neither is final.
-    pub async fn broadcast(&self, raw: &[u8], fanout: Fanout) -> Result<BroadcastOutcome, RpcError> {
+    pub async fn broadcast(
+        &self,
+        raw: &[u8],
+        fanout: Fanout,
+    ) -> Result<BroadcastOutcome, RpcError> {
         if blob_network_form(raw) {
-            return Err(RpcError::argument("a blob transaction in its network form: send its canonical form"));
+            return Err(RpcError::argument(
+                "a blob transaction in its network form: send its canonical form",
+            ));
         }
         let id = alloy::primitives::keccak256(raw);
         let hex = alloy::hex::encode_prefixed(raw);
@@ -861,66 +1283,160 @@ impl EvmPool {
         let outcomes = futures::future::join_all(to.iter().map(|&i| {
             let hex = hex.clone();
             async move {
-                let a = self.http.json_rpc(&self.list, i, "eth_sendRawTransaction", serde_json::json!([hex]), 1 << 20, None).await;
-                (i, match a {
-                    Err(failure) => SendOutcome::Unreachable { failure },
-                    Ok(Ok(v)) => match v.as_str().and_then(|s| s.parse::<B256>().ok()) {
-                        Some(h) if h == id => SendOutcome::Accepted,
-                        _ => SendOutcome::Refused { reason: "another transaction id".into() },
+                let a = self
+                    .http
+                    .json_rpc(
+                        &self.list,
+                        i,
+                        "eth_sendRawTransaction",
+                        serde_json::json!([hex]),
+                        1 << 20,
+                        None,
+                    )
+                    .await;
+                (
+                    i,
+                    match a {
+                        Err(failure) => SendOutcome::Unreachable { failure },
+                        Ok(Ok(v)) => match v.as_str().and_then(|s| s.parse::<B256>().ok()) {
+                            Some(h) if h == id => SendOutcome::Accepted,
+                            _ => SendOutcome::Refused {
+                                reason: "another transaction id".into(),
+                            },
+                        },
+                        Ok(Err(e))
+                            if ALREADY_KNOWN
+                                .iter()
+                                .any(|k| e.message.to_lowercase().contains(k)) =>
+                        {
+                            SendOutcome::Accepted
+                        }
+                        Ok(Err(e)) => SendOutcome::Refused { reason: e.message },
                     },
-                    Ok(Err(e)) if ALREADY_KNOWN.iter().any(|k| e.message.to_lowercase().contains(k)) => SendOutcome::Accepted,
-                    Ok(Err(e)) => SendOutcome::Refused { reason: e.message },
-                })
+                )
             }
-        })).await;
-        let accepted: Vec<usize> = outcomes.iter().filter(|(_, o)| *o == SendOutcome::Accepted).map(|(i, _)| *i).collect();
+        }))
+        .await;
+        let accepted: Vec<usize> = outcomes
+            .iter()
+            .filter(|(_, o)| *o == SendOutcome::Accepted)
+            .map(|(i, _)| *i)
+            .collect();
         Ok(if accepted.is_empty() {
             BroadcastOutcome::Rejected { id, outcomes }
         } else {
-            BroadcastOutcome::Sent { id, accepted, others: outcomes.into_iter().filter(|(_, o)| *o != SendOutcome::Accepted).collect() }
+            BroadcastOutcome::Sent {
+                id,
+                accepted,
+                others: outcomes
+                    .into_iter()
+                    .filter(|(_, o)| *o != SendOutcome::Accepted)
+                    .collect(),
+            }
         })
     }
 
     /// CLI-RPC-09: `id` sent by `from` with `nonce`, read at the final block `f` (`choice`'s). Terminal only from a decisive read:
     /// agreed under `strict_majority`, or answered by endpoint 0 when it is not `discovered` under `failover`.
-    pub async fn tx_state(&self, id: B256, from: Address, nonce: u64, choice: BlockChoice) -> Result<TxState, RpcError> {
-        let a = self.read_at_block(choice, Purpose::Plain, |at| async move {
-            let receipt = self.checked_receipt(at.endpoint, id, at.deadline).await?;
-            let now = self.nonce_at_block(&at, from).await?;
-            let known = self.at(at.endpoint, at.deadline).get_transaction_by_hash(id).await
-                .map_err(|e| read_error(at.endpoint, &e, self.decode))?.is_some();
-            Ok(TxFacts { receipt, nonce: now, known })
-        }).await?;
+    pub async fn tx_state(
+        &self,
+        id: B256,
+        from: Address,
+        nonce: u64,
+        choice: BlockChoice,
+    ) -> Result<TxState, RpcError> {
+        let a = self
+            .read_at_block(choice, Purpose::Plain, |at| async move {
+                let receipt = self.checked_receipt(at.endpoint, id, at.deadline).await?;
+                let now = self.nonce_at_block(&at, from).await?;
+                let known = self
+                    .at(at.endpoint, at.deadline)
+                    .get_transaction_by_hash(id)
+                    .await
+                    .map_err(|e| read_error(at.endpoint, &e, self.decode))?
+                    .is_some();
+                Ok(TxFacts {
+                    receipt,
+                    nonce: now,
+                    known,
+                })
+            })
+            .await?;
         let decisive = match self.pool.policy() {
             crate::Policy::StrictMajority => true,
-            crate::Policy::Failover => a.members == [0] && self.pool.class(0) != crate::Class::Discovered,
+            crate::Policy::Failover => {
+                a.members == [0] && self.pool.class(0) != crate::Class::Discovered
+            }
         };
         let endpoint = a.members[0];
         Ok(match a.value.receipt {
-            Some(r) if decisive && r.block_number <= a.number => TxState::Final { number: r.block_number, hash: r.block_hash, success: r.status },
-            Some(r) => TxState::Included { number: r.block_number, hash: r.block_hash, success: r.status, endpoint },
-            None if decisive && a.value.nonce > nonce && !a.value.known => TxState::Replaced { by_nonce: a.value.nonce },
-            None => TxState::Pending { endpoint: Some(endpoint) },
+            Some(r) if decisive && r.block_number <= a.number => TxState::Final {
+                number: r.block_number,
+                hash: r.block_hash,
+                success: r.status,
+            },
+            Some(r) => TxState::Included {
+                number: r.block_number,
+                hash: r.block_hash,
+                success: r.status,
+                endpoint,
+            },
+            None if decisive && a.value.nonce > nonce && !a.value.known => TxState::Replaced {
+                by_nonce: a.value.nonce,
+            },
+            None => TxState::Pending {
+                endpoint: Some(endpoint),
+            },
         })
     }
 
     /// CLI-RPC-09 for a relayed operation: at the final block `f`, by one decisive read, its executed event in `[from_block, f]`,
     /// its nonce view, and `f`'s timestamp.
     pub async fn op_state(&self, q: &OpQuery, choice: BlockChoice) -> Result<OpState, RpcError> {
-        let a = self.read_at_block(choice, Purpose::Plain, |at| async move {
-            let p = self.at(at.endpoint, at.deadline);
-            let executed = !p.get_logs(&q.executed.clone().from_block(q.from_block).to_block(at.number)).await
-                .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?.is_empty();
-            let word = self.call_at(&at, q.contract, q.nonce_call.clone()).await?;
-            let now = alloy::primitives::U256::try_from_be_slice(word.get(..32).unwrap_or_default())
-                .ok_or_else(|| ReadError::Failure(EndpointFailure::new(at.endpoint, FailureKind::AnswerMalformed, "a nonce view of no word")))?;
-            let ts = p.get_block_by_hash(at.hash).await.map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?
-                .ok_or_else(|| ReadError::Failure(EndpointFailure::new(at.endpoint, FailureKind::Transport, "no final block")))?.header.timestamp;
-            Ok((executed, now > q.nonce, ts))
-        }).await?;
+        let a = self
+            .read_at_block(choice, Purpose::Plain, |at| async move {
+                let p = self.at(at.endpoint, at.deadline);
+                let executed = !p
+                    .get_logs(
+                        &q.executed
+                            .clone()
+                            .from_block(q.from_block)
+                            .to_block(at.number),
+                    )
+                    .await
+                    .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?
+                    .is_empty();
+                let word = self.call_at(&at, q.contract, q.nonce_call.clone()).await?;
+                let now =
+                    alloy::primitives::U256::try_from_be_slice(word.get(..32).unwrap_or_default())
+                        .ok_or_else(|| {
+                            ReadError::Failure(EndpointFailure::new(
+                                at.endpoint,
+                                FailureKind::AnswerMalformed,
+                                "a nonce view of no word",
+                            ))
+                        })?;
+                let ts = p
+                    .get_block_by_hash(at.hash)
+                    .await
+                    .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?
+                    .ok_or_else(|| {
+                        ReadError::Failure(EndpointFailure::new(
+                            at.endpoint,
+                            FailureKind::Transport,
+                            "no final block",
+                        ))
+                    })?
+                    .header
+                    .timestamp;
+                Ok((executed, now > q.nonce, ts))
+            })
+            .await?;
         let decisive = match self.pool.policy() {
             crate::Policy::StrictMajority => true,
-            crate::Policy::Failover => a.members == [0] && self.pool.class(0) != crate::Class::Discovered,
+            crate::Policy::Failover => {
+                a.members == [0] && self.pool.class(0) != crate::Class::Discovered
+            }
         };
         let (executed, spent, ts) = a.value;
         Ok(match () {

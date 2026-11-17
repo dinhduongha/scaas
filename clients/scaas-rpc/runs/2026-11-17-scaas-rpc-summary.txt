@@ -28,6 +28,6 @@ ver-clippy | 2650ede85 | 0 | -; tree dirty
 docs | 2650ede85 | 0 | -; tree dirty
 node-test | 69b8eda66 | 0 | 790 passed, 0 failed, 72 ignored (18 binaries); tree dirty
 node-clippy | 69b8eda66 | 0 | -; tree dirty
-rpc-test | a7301086a | 0 | 111 passed, 0 failed, 10 ignored (7 binaries); tree dirty
-rpc-clippy | a7301086a | 0 | -; tree dirty
-rpc-wasm | a7301086a | 0 | -; tree dirty
+rpc-test | fe2f7cb3a | 0 | 111 passed, 0 failed, 10 ignored (7 binaries); tree dirty
+rpc-clippy | fe2f7cb3a | 0 | -; tree dirty
+rpc-wasm | fe2f7cb3a | 0 | -; tree dirty
