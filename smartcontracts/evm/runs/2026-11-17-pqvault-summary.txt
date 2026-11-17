@@ -83,3 +83,170 @@ R2 | ua-dart | R2 tree | 0 | -
 R2 | ua-dart-frb | R2 tree | 0 | -
 R2 | ua-qt | R2 tree | 0 | 1 passed 0 failed (ctest)
 R2 | negative control | R2 tree | 1 | test_appPurpose_pinned red with one hex digit of portableApp.apps[0].purposeTag changed in sign.json (file restored byte-equal)
+# R3 (CTR-PQV-15). Baseline on the R1 tree (an isolated copy of it): forge inspect abi / methodIdentifiers / storageLayout of PqChat and PqChatTopics, interfaceId 0xa46bb0a4, PqChatGas log; after: the same files byte-identical. Every forge dir at the default set; at the other three sets the set-sensitive tests of the dirs that deploy the release set (as, governance, metatx, v2, wrap). R3 changes no PQZ code: the other set-sensitive dirs (ua, pqz, pqzh, research) at the other sets are R1's runs.
+R3 | forge-account | R3 tree | 0 | 103 passed 0 failed 0 skipped (forge)
+R3 | forge-as | R3 tree | 0 | 564 passed 0 failed 0 skipped (forge)
+R3 | forge-confidential | R3 tree | 0 | 5 passed 0 failed 0 skipped (forge)
+R3 | forge-factory | R3 tree | 0 | 2 passed 0 failed 0 skipped (forge)
+R3 | forge-fork | R3 tree | 0 | 0 passed 0 failed 1 skipped (forge)
+R3 | forge-governance | R3 tree | 0 | 915 passed 0 failed 0 skipped (forge)
+R3 | forge-hedera | R3 tree | 0 | 20 passed 0 failed 0 skipped (forge)
+R3 | forge-liquidity | R3 tree | 0 | 93 passed 0 failed 1 skipped (forge)
+R3 | forge-merge | R3 tree | 0 | 350 passed 0 failed 0 skipped (forge)
+R3 | forge-metatx | R3 tree | 0 | 548 passed 0 failed 1 skipped (forge)
+R3 | forge-modules | R3 tree | 0 | 35 passed 0 failed 0 skipped (forge)
+R3 | forge-p6f | R3 tree | 0 | 4 passed 0 failed 0 skipped (forge)
+R3 | forge-pqchat | R3 tree | 0 | 99 passed 0 failed 0 skipped (forge)
+R3 | forge-pqz | R3 tree | 0 | 680 passed 0 failed 4 skipped (forge)
+R3 | forge-pqzh | R3 tree | 0 | 42 passed 0 failed 0 skipped (forge)
+R3 | forge-research | R3 tree | 0 | 360 passed 0 failed 7 skipped (forge)
+R3 | forge-top | R3 tree | 0 | 29 passed 0 failed 0 skipped (forge)
+R3 | forge-ua | R3 tree | 0 | 847 passed 0 failed 0 skipped (forge)
+R3 | forge-v2 | R3 tree | 0 | 750 passed 0 failed 0 skipped (forge)
+R3 | forge-wallet | R3 tree | 0 | 185 passed 0 failed 0 skipped (forge)
+R3 | forge-wrap | R3 tree | 0 | 324 passed 0 failed 0 skipped (forge)
+R3 | forge-zether | R3 tree | 0 | 444 passed 0 failed 4 skipped (forge)
+R3 | node-guard | R3 tree | 0 | 46 passed 0 failed 0 ignored (cargo)
+R3 | set-n2048-kmax1024-as | R3 tree | 0 | 102 passed 0 failed 0 skipped (forge)
+R3 | set-n2048-kmax1024-governance | R3 tree | 0 | 224 passed 0 failed 0 skipped (forge)
+R3 | set-n2048-kmax1024-metatx | R3 tree | 0 | 183 passed 0 failed 0 skipped (forge)
+R3 | set-n2048-kmax1024-v2 | R3 tree | 0 | 37 passed 0 failed 0 skipped (forge)
+R3 | set-n2048-kmax1024-wrap | R3 tree | 0 | 24 passed 0 failed 0 skipped (forge)
+R3 | set-n2560-kmax16384-as | R3 tree | 0 | 102 passed 0 failed 0 skipped (forge)
+R3 | set-n2560-kmax16384-governance | R3 tree | 0 | 224 passed 0 failed 0 skipped (forge)
+R3 | set-n2560-kmax16384-metatx | R3 tree | 0 | 183 passed 0 failed 0 skipped (forge)
+R3 | set-n2560-kmax16384-v2 | R3 tree | 0 | 37 passed 0 failed 0 skipped (forge)
+R3 | set-n2560-kmax16384-wrap | R3 tree | 0 | 24 passed 0 failed 0 skipped (forge)
+R3 | set-n2816-kmax65536-as | R3 tree | 0 | 102 passed 0 failed 0 skipped (forge)
+R3 | set-n2816-kmax65536-governance | R3 tree | 0 | 224 passed 0 failed 0 skipped (forge)
+R3 | set-n2816-kmax65536-metatx | R3 tree | 0 | 183 passed 0 failed 0 skipped (forge)
+R3 | set-n2816-kmax65536-v2 | R3 tree | 0 | 37 passed 0 failed 0 skipped (forge)
+R3 | set-n2816-kmax65536-wrap | R3 tree | 0 | 24 passed 0 failed 0 skipped (forge)
+R3 | size | R3 tree | 0 | size gate: 0 error(s), 170 contracts
+# R3 mutants (runs/2026-11-17-pqvault/mutants-r3.py, the 55 of runs/2026-11-10-ua-mtx-merge-3c re-pointed): before = R1 tree, after = R3 tree; each line mutant | tests that went red | rc (1 = killed). Before 55 of 55, after 55 of 55, every mutant red by the same tests on both trees.
+R3 mutant before | t85-completion-at-any-landing | test_createSession_chunks | 1
+R3 mutant before | t85-wrap-hash-index | test_addWraps_storedOnceUnknownAndRange, test_addWraps_wrongWrapRefused, test_createSession_chunks | 1
+R3 mutant before | t85-nonce-before-sig | test_createSession_signatureBeforeNonce | 1
+R3 mutant before | t85-wrap-stored-twice | test_addWraps_storedOnceUnknownAndRange | 1
+R3 mutant before | t86-parent-plus-one | test_rekey_removalAttackRefused | 1
+R3 mutant before | t86-home-chain-uid-ignored | test_replica_otherChainUid | 1
+R3 mutant before | t86-admin-check | test_O4_noAdminFreezesMembership, test_rekey_membershipChangeNeedsAdmin, test_rekey_plainDropsLeaversOnly, test_rekey_removalAttackRefused | 1
+R3 mutant before | t86-plain-ignores-admins | test_rekey_membershipChangeNeedsAdmin | 1
+R3 mutant before | t86-leaver-drop-any | test_O4_noAdminFreezesMembership, test_msigAdminSignsByQuorum, test_rekey_membershipChangeNeedsAdmin, test_rekey_plainDropsLeaversOnly | 1
+R3 mutant before | t86-slot-not-checked | test_O2_plainRekeyFirstThenAdminFromIt, test_rekey_removalAttackRefused, test_replica_storesEveryChild | 1
+R3 mutant before | t87-device-dimension | test_postMessage_deviceDimensionAnyOrder, test_postMessage_deviceIdNeverParsed, test_postMessage_memberPostsHashInStateBytesInEvent | 1
+R3 mutant before | t87-membership-check | test_postMessage_nonMemberRefused | 1
+R3 mutant before | t87-sig-hash-write | test_postMessage_memberPostsHashInStateBytesInEvent | 1
+R3 mutant before | t87-stored-list-key | test_storeMessage_shapeRefused, test_storeMessage_strangerStoresTheVectorPayload, test_storedRange_pages | 1
+R3 mutant before | t87-range-past-end-not-empty | test_storedRange_pages | 1
+R3 mutant before | t87-range-clamp-dropped | test_storedRange_pages | 1
+R3 mutant before | t87-range-off-by-one | test_storedRange_pages | 1
+R3 mutant before | t96-index-kept-member | test_epochsOf_replicaCompletionOrder, test_sessionsOf_rekeyListsAddedOnly | 1
+R3 mutant before | t96-chain-at-rekey | test_epochsOf_homeIsTheChildOfChain, test_epochsOf_replicaCompletionOrder, test_latestEpoch_movesOnCompletionOnly | 1
+R3 mutant before | t96-sessions-past-end-not-empty | test_sessionsOf_pagesAndEnd | 1
+R3 mutant before | t96-epochs-past-end-not-empty | test_epochsOf_homeIsTheChildOfChain | 1
+R3 mutant before | t96-sessions-clamp-dropped | test_sessionsOf_limitClamped | 1
+R3 mutant before | t88-writer-check | test_topics_instanceOwnerIsNoTopicAdmin, test_topics_replies, test_topics_writersPost | 1
+R3 mutant before | t88-open-replies | test_topics_replies | 1
+R3 mutant before | t88-parent-topic | test_topics_replyParents | 1
+R3 mutant before | t88-depth-plus-one | test_topics_replies | 1
+R3 mutant before | t88-edit-author | test_topics_edits | 1
+R3 mutant before | t88-version-plus-one | test_topics_edits | 1
+R3 mutant before | t88-writer-seq-plus-one | test_topics_writerSeqAndAdmin | 1
+R3 mutant before | t88-ref-shape | test_topics_bodiesAndRefs | 1
+R3 mutant before | t88-scope-topic-dimension | test_topics_edits | 1
+R3 mutant before | t88-list-key | test_topics_replies | 1
+R3 mutant before | t88-byauthor-on-edits | test_topics_edits | 1
+R3 mutant before | t88-not-owner-signs | test_topics_instanceOwnerIsNoTopicAdmin, test_topics_writerSeqAndAdmin | 1
+R3 mutant before | t89-old-count-kept | test_votes_oneUaCountsOnce | 1
+R3 mutant before | t89-value-range | test_votes_refusals | 1
+R3 mutant before | t89-vote-seq | test_votes_refusals | 1
+R3 mutant before | t92-initialize-any-caller | test_initialize_onceAndOnlyByTheFactory | 1
+R3 mutant before | t90-module-check | test_constructor_refusesAnotherModule | 1
+R3 mutant before | fable-p1-1-superseded-epoch | test_postMessage_supersededEpochRefusedAtHome | 1
+R3 mutant before | fable-p1-2-leaver-authors-plain | test_rekey_leaverAuthorsNoPlainRekey | 1
+R3 mutant before | p48-admin-check | test_remove_refusals | 1
+R3 mutant before | p48-sorted | test_remove_refusals | 1
+R3 mutant before | p48-bound | test_remove_refusals | 1
+R3 mutant before | p48-member-check | test_remove_refusals | 1
+R3 mutant before | p48-nonce | test_remove_raceIsClosed, test_remove_refusals | 1
+R3 mutant before | p48-next-epoch | test_remove_refusals | 1
+R3 mutant before | p48-slot-taken | test_remove_refusals | 1
+R3 mutant before | p48-author-removed | test_remove_raceIsClosed | 1
+R3 mutant before | p48-drop-is-plain | test_remove_dropIsPlain | 1
+R3 mutant before | p48-completion-check | test_remove_childAdminsExcludeRemoved, test_remove_incompleteChildCannotComplete, test_remove_raceIsClosed | 1
+R3 mutant before | p48-admins-excluded | test_remove_childAdminsExcludeRemoved | 1
+R3 mutant before | p48-count | test_remove_childAdminsExcludeRemoved, test_remove_incompleteChildCannotComplete, test_remove_raceIsClosed | 1
+R3 mutant before | p48-record-kept | test_remove_raceIsClosed | 1
+R3 mutant before | t92-factory-info-class | setUp | 1
+R3 mutant after | t85-completion-at-any-landing | test_createSession_chunks | 1
+R3 mutant after | t85-wrap-hash-index | test_addWraps_storedOnceUnknownAndRange, test_addWraps_wrongWrapRefused, test_createSession_chunks | 1
+R3 mutant after | t85-nonce-before-sig | test_createSession_signatureBeforeNonce | 1
+R3 mutant after | t85-wrap-stored-twice | test_addWraps_storedOnceUnknownAndRange | 1
+R3 mutant after | t86-parent-plus-one | test_rekey_removalAttackRefused | 1
+R3 mutant after | t86-home-chain-uid-ignored | test_replica_otherChainUid | 1
+R3 mutant after | t86-admin-check | test_O4_noAdminFreezesMembership, test_rekey_membershipChangeNeedsAdmin, test_rekey_plainDropsLeaversOnly, test_rekey_removalAttackRefused | 1
+R3 mutant after | t86-plain-ignores-admins | test_rekey_membershipChangeNeedsAdmin | 1
+R3 mutant after | t86-leaver-drop-any | test_O4_noAdminFreezesMembership, test_msigAdminSignsByQuorum, test_rekey_membershipChangeNeedsAdmin, test_rekey_plainDropsLeaversOnly | 1
+R3 mutant after | t86-slot-not-checked | test_O2_plainRekeyFirstThenAdminFromIt, test_rekey_removalAttackRefused, test_replica_storesEveryChild | 1
+R3 mutant after | t87-device-dimension | test_postMessage_deviceDimensionAnyOrder, test_postMessage_deviceIdNeverParsed, test_postMessage_memberPostsHashInStateBytesInEvent | 1
+R3 mutant after | t87-membership-check | test_postMessage_nonMemberRefused | 1
+R3 mutant after | t87-sig-hash-write | test_postMessage_memberPostsHashInStateBytesInEvent | 1
+R3 mutant after | t87-stored-list-key | test_storeMessage_shapeRefused, test_storeMessage_strangerStoresTheVectorPayload, test_storedRange_pages | 1
+R3 mutant after | t87-range-past-end-not-empty | test_storedRange_pages | 1
+R3 mutant after | t87-range-clamp-dropped | test_storedRange_pages | 1
+R3 mutant after | t87-range-off-by-one | test_storedRange_pages | 1
+R3 mutant after | t96-index-kept-member | test_epochsOf_replicaCompletionOrder, test_sessionsOf_rekeyListsAddedOnly | 1
+R3 mutant after | t96-chain-at-rekey | test_epochsOf_homeIsTheChildOfChain, test_epochsOf_replicaCompletionOrder, test_latestEpoch_movesOnCompletionOnly | 1
+R3 mutant after | t96-sessions-past-end-not-empty | test_sessionsOf_pagesAndEnd | 1
+R3 mutant after | t96-epochs-past-end-not-empty | test_epochsOf_homeIsTheChildOfChain | 1
+R3 mutant after | t96-sessions-clamp-dropped | test_sessionsOf_limitClamped | 1
+R3 mutant after | t88-writer-check | test_topics_instanceOwnerIsNoTopicAdmin, test_topics_replies, test_topics_writersPost | 1
+R3 mutant after | t88-open-replies | test_topics_replies | 1
+R3 mutant after | t88-parent-topic | test_topics_replyParents | 1
+R3 mutant after | t88-depth-plus-one | test_topics_replies | 1
+R3 mutant after | t88-edit-author | test_topics_edits | 1
+R3 mutant after | t88-version-plus-one | test_topics_edits | 1
+R3 mutant after | t88-writer-seq-plus-one | test_topics_writerSeqAndAdmin | 1
+R3 mutant after | t88-ref-shape | test_topics_bodiesAndRefs | 1
+R3 mutant after | t88-scope-topic-dimension | test_topics_edits | 1
+R3 mutant after | t88-list-key | test_topics_replies | 1
+R3 mutant after | t88-byauthor-on-edits | test_topics_edits | 1
+R3 mutant after | t88-not-owner-signs | test_topics_instanceOwnerIsNoTopicAdmin, test_topics_writerSeqAndAdmin | 1
+R3 mutant after | t89-old-count-kept | test_votes_oneUaCountsOnce | 1
+R3 mutant after | t89-value-range | test_votes_refusals | 1
+R3 mutant after | t89-vote-seq | test_votes_refusals | 1
+R3 mutant after | t92-initialize-any-caller | test_initialize_onceAndOnlyByTheFactory | 1
+R3 mutant after | t90-module-check | test_constructor_refusesAnotherModule | 1
+R3 mutant after | fable-p1-1-superseded-epoch | test_postMessage_supersededEpochRefusedAtHome | 1
+R3 mutant after | fable-p1-2-leaver-authors-plain | test_rekey_leaverAuthorsNoPlainRekey | 1
+R3 mutant after | p48-admin-check | test_remove_refusals | 1
+R3 mutant after | p48-sorted | test_remove_refusals | 1
+R3 mutant after | p48-bound | test_remove_refusals | 1
+R3 mutant after | p48-member-check | test_remove_refusals | 1
+R3 mutant after | p48-nonce | test_remove_raceIsClosed, test_remove_refusals | 1
+R3 mutant after | p48-next-epoch | test_remove_refusals | 1
+R3 mutant after | p48-slot-taken | test_remove_refusals | 1
+R3 mutant after | p48-author-removed | test_remove_raceIsClosed | 1
+R3 mutant after | p48-drop-is-plain | test_remove_dropIsPlain | 1
+R3 mutant after | p48-completion-check | test_remove_childAdminsExcludeRemoved, test_remove_incompleteChildCannotComplete, test_remove_raceIsClosed | 1
+R3 mutant after | p48-admins-excluded | test_remove_childAdminsExcludeRemoved | 1
+R3 mutant after | p48-count | test_remove_childAdminsExcludeRemoved, test_remove_incompleteChildCannotComplete, test_remove_raceIsClosed | 1
+R3 mutant after | p48-record-kept | test_remove_raceIsClosed | 1
+R3 mutant after | t92-factory-info-class | setUp | 1
+# R3 re-pointed mutants: mutant | old file: old text -> mutation | new file: new text -> mutation
+R3 re-point | t85-completion-at-any-landing | src/pqchat/PqChat.sol: 'if (landed == ep.wraps && n != 0) {' -> 'if (n != 0) {' | src/pqgroup/PqGroupBase.sol: 'if (landed == ep.wraps && n != 0) {' -> 'if (n != 0) {'
+R3 re-point | t85-wrap-hash-index | src/pqchat/PqChat.sol: 'if (PqChatTypes.hashWrap(w) != hashes[i]) revert' -> 'if (PqChatTypes.hashWrap(w) != hashes[j]) revert' | src/pqgroup/PqGroupBase.sol: 'if (PqChatTypes.hashWrap(w) != hashes[i]) _fail' -> 'if (PqChatTypes.hashWrap(w) != hashes[j]) _fail'
+R3 re-point | t85-wrap-stored-twice | src/pqchat/PqChat.sol: 'if (ep.wrapAt[i] != 0) revert PqChatWrapStored(epochId, i);' -> '' | src/pqgroup/PqGroupBase.sol: 'if (ep.wrapAt[i] != 0) _fail(F_WRAP_STORED, uint256(epochId), i);' -> ''
+R3 re-point | t86-parent-plus-one | src/pqchat/PqChat.sol: 'if (e.epoch != pe.epoch + 1) revert' -> 'if (e.epoch <= pe.epoch) revert' | src/pqgroup/PqGroupBase.sol: 'if (epoch != pe.epoch + 1) _fail' -> 'if (epoch <= pe.epoch) _fail'
+R3 re-point | t86-admin-check | src/pqchat/PqChat.sol: '} else if (!_has(pa, e.author)) {\n            revert PqChatNotAdmin(e.author);' -> '} else if (false) {\n            revert PqChatNotAdmin(e.author);' | src/pqgroup/PqGroupBase.sol: '} else if (!_has(pa, author)) {\n            _fail(F_NOT_ADMIN, uint256(author), 0);' -> '} else if (false) {\n            _fail(F_NOT_ADMIN, uint256(author), 0);'
+R3 re-point | t86-plain-ignores-admins | src/pqchat/PqChat.sol: 'if (_keeps(pe, pa, admins) && _keeps(pe, pu, _uas(members))) {' -> 'if (_keeps(pe, pu, _uas(members))) {' | src/pqgroup/PqGroupBase.sol: 'if (_keeps(pe, pa, admins) && _keeps(pe, pu, _uas(members))) {' -> 'if (_keeps(pe, pu, _uas(members))) {'
+R3 re-point | t86-leaver-drop-any | src/pqchat/PqChat.sol: 'else if (!pe.left[parent[i]] && !pe.removedOf[parent[i]]) return false; // dropped without leaving or removal' -> 'else if (false) return false;' | src/pqgroup/PqGroupBase.sol: 'else if (!pe.left[parent[i]] && !pe.removedOf[parent[i]]) return false; // dropped without leaving or removal' -> 'else if (false) return false;'
+R3 re-point | t86-slot-not-checked | src/pqchat/PqChat.sol: 'if (c != 0) revert PqChatEpochTaken(e.parentEpochId, c);' -> 'c;' | src/pqgroup/PqGroupBase.sol: 'if (c != 0) _fail(F_EPOCH_TAKEN, uint256(parentEpochId), uint256(c));' -> 'c;'
+R3 re-point | t88-writer-check | src/pqchat/PqChatTopics.sol: 'if (e.author != tp.owner && !_s().writers[e.topicId][e.author].granted) revert' -> 'if (false) revert' | src/pqchat/PqChatTopics.sol: 'if (e.author != tp.admin && !_s().writers[e.topicId][e.author].granted) revert' -> 'if (false) revert'
+R3 re-point | t88-not-owner-signs | src/pqchat/PqChatTopics.sol: 'if (bytes4(err) == IUARegistry.UAUnauthorized.selector) revert IPqChat.PqTopicNotOwner(owner_);' -> '' | src/pqchat/PqChatTopics.sol: 'if (bytes4(err) == IUARegistry.UAUnauthorized.selector) revert IPqChat.PqTopicNotAdmin(admin_);' -> ''
+R3 re-point | fable-p1-2-leaver-authors-plain | src/pqchat/PqChat.sol: 'type(uint256).max || pe.left[e.author]) revert PqChatNotMember(e.author);' -> 'type(uint256).max) revert PqChatNotMember(e.author);' | src/pqgroup/PqGroupBase.sol: 'type(uint256).max || pe.left[author]) _fail(F_NOT_MEMBER, uint256(author), 0);' -> 'type(uint256).max) _fail(F_NOT_MEMBER, uint256(author), 0);'
+R3 re-point | p48-author-removed | src/pqchat/PqChat.sol: 'if (pe.removed != 0 && pe.removedOf[e.author]) revert PqChatNotMember(e.author); // P48' -> '' | src/pqgroup/PqGroupBase.sol: 'if (pe.removed != 0 && pe.removedOf[author]) _fail(F_NOT_MEMBER, uint256(author), 0); // P48' -> ''
+R3 re-point | p48-drop-is-plain | src/pqchat/PqChat.sol: 'else if (!pe.left[parent[i]] && !pe.removedOf[parent[i]]) return false;' -> 'else if (!pe.left[parent[i]]) return false;' | src/pqgroup/PqGroupBase.sol: 'else if (!pe.left[parent[i]] && !pe.removedOf[parent[i]]) return false;' -> 'else if (!pe.left[parent[i]]) return false;'
+R3 re-point | p48-completion-check | src/pqchat/PqChat.sol: 'if (_s().epochs[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it' -> '' | src/pqgroup/PqGroupBase.sol: 'if (_epochs()[ep.parent].removed != 0) _noneRemoved(ep); // P48: whoever authored it' -> ''
+R3 re-point | p48-admins-excluded | src/pqchat/PqChat.sol: 'for (uint256 i; i < admins.length; ++i) if (pe.removedOf[admins[i]]) revert PqChatRemovedKept(ep.parent, admins[i]);' -> '' | src/pqgroup/PqGroupBase.sol: 'for (uint256 i; i < admins.length; ++i) if (pe.removedOf[admins[i]]) _fail(F_REMOVED_KEPT, uint256(ep.parent), uint256(admins[i]));' -> ''
