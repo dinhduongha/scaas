@@ -148,7 +148,9 @@ vault, seal and backup row's bytes (the precedent of `importedUas`, CLI-SGN-29 C
 
 The manifest is outside input on restore (a vault, a backup, a link payload; CLI-UAL-03): **at most 64 entries in
 `polkadotPaths`**, each re-parsed by the §7.3 parser when the manifest is read (a stored `///pw`, a non-canonical digit or an
-over-long path refuses the whole manifest, `Argument`), a duplicate refused; `change` other than absent or 1 refused.
+over-long path refuses the whole manifest, `Argument`), a duplicate refused; `change` other than absent or 1 refused, and a
+`natives` entry the wallet would never write refused too (T13 C7): `change` 1 off Bitcoin, a coin type its network refuses
+(§4.5: any on NEAR or Polkadot, above 1 on Bitcoin).
 
 ### 4.5 Bounds (**follows** CLI-UAL-03)
 

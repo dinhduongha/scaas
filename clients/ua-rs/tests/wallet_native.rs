@@ -695,3 +695,36 @@ fn sign_near_transaction_refuses_nep461_tags_beside_a_transaction() {
     }
     assert!(k.sign_near_transaction(&[0x40, 0, 0], AllowRawDigest).is_ok(), "shorter than four bytes: no tag to read");
 }
+
+// ------------------------------------------------------------------ T13 C7: the manifest takes only entries the wallet writes
+
+#[test]
+fn manifest_refuses_change_off_bitcoin_and_refused_coin_types() {
+    use scaas_ua::wallet::Manifest;
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    w.bitcoin_key(Network::BitcoinP2tr, Some(1), 1, 3).unwrap();
+    w.native_key(Network::Near, 0, None).unwrap();
+    w.native_key(Network::Solana, 0, Some(501)).unwrap();
+    let j = w.manifest().to_json();
+    let (btc, near, sol) = (
+        "\"network\":\"bitcoin_p2tr\",\"coinType\":1,\"index\":3,\"change\":1",
+        "\"network\":\"near\",\"coinType\":null,\"index\":0",
+        "\"network\":\"solana\",\"coinType\":501,\"index\":0",
+    );
+    for e in [btc, near, sol] {
+        assert!(j.contains(e), "{e} in {j}");
+    }
+    assert_eq!(Manifest::from_json(j.as_bytes()).unwrap(), w.manifest(), "the written manifest reads back");
+    for (from, to) in [
+        (btc, btc.replace("\"coinType\":1", "\"coinType\":2")),
+        (near, near.replace("null", "397")),
+        (sol, format!("{sol},\"change\":1")),
+        (btc, btc.replace("bitcoin_p2tr", "evm")),
+    ] {
+        assert_eq!(Manifest::from_json(j.replace(from, &to).as_bytes()).err(), Some(Error::Argument), "{to}");
+    }
+    for (from, to) in [(btc, btc.replace("\"coinType\":1", "\"coinType\":0")), (sol, sol.replace("501", "1"))] {
+        assert!(Manifest::from_json(j.replace(from, &to).as_bytes()).is_ok(), "{to}");
+    }
+}

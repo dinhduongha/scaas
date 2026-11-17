@@ -257,7 +257,12 @@ fn parse_manifest(v: &Value) -> Option<Manifest> {
                 None => 0,
                 Some(c) => c.as_u64().filter(|c| *c == 1).map(|_| 1)?,
             };
-            Some(NativeEntry { network: network_of(n)?, coin_type, index: u31(n, "index")?, change })
+            // only an entry `derive_native` can write (T13 C7): `change` 1 on Bitcoin only, a coin type the network takes
+            let network = network_of(n)?;
+            if (change == 1 && !network.bitcoin()) || network.coin_ok(coin_type).is_err() {
+                return None;
+            }
+            Some(NativeEntry { network, coin_type, index: u31(n, "index")?, change })
         })
         .collect::<Option<_>>()?;
     // absent in a manifest written before ua-rs-native: none; else at most 64 distinct paths, each a valid junction path
