@@ -19,6 +19,15 @@ MUTANTS = [
      T + "the_rest_reads_the_quorum_read_and_the_indexer"),
     ("a: the identity a constant", [(S, "            Some(c) => Ok(c == u64::from(self.chain_id)),", "            Some(_) => Ok(true),")],
      T + "the_failover_drops_another_network_and_skips_an_endpoint_behind"),
+    # (b) the carve-out (F3) first, then the failover
+    ("b: every read fails over (the carve-out gone)", [("scaas-node/src/adapters/evm.rs", "    BUILDING.try_with(|_| ()).is_ok()", "    true")],
+     NT + "aptos_tx_status_op_consumed_and_the_lane_sequence_never_fail_over"),
+    ("b: the build's reads on endpoint 0 only", [(N, "        match BUILDING.scope((), self.build_on(job, lane)).await {", "        match self.build_on(job, lane).await {")],
+     NT + "aptos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: a failover refusal final (the counter not compared)", [(N, "            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),\n            r => r,\n        }\n    }\n\n    async fn sign", "            r => r,\n        }\n    }\n\n    async fn sign")],
+     NT + "aptos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: a later endpoint's refusal text reaches the classifier", [(N, "            Err(scaas_rpc::RpcError::EndpointAllFailed { failover_revert: Some(_), .. }) => {\n                bail!(\"{path}: no endpoint answered (a failover endpoint's refusal decides nothing)\")\n            }\n", "")],
+     NT + "aptos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
 ]
 
 if __name__ == "__main__":

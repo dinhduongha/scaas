@@ -89,6 +89,17 @@ pub fn failover_answer(reason: &str) -> String {
     format!("FAILOVER_ANSWER: refused on a failover endpoint's answer (the first endpoint did not answer); retried: {reason}")
 }
 
+tokio::task_local! {
+    /// scaas-rpc T18b / T19b: set while a family adapter's `build` runs (ARCH-POS-15: its reads fail over); every other read
+    /// of that adapter is endpoint 0's (F3).
+    pub(crate) static BUILDING: ();
+}
+
+/// Whether this read is a family adapter's `build`'s.
+pub(crate) fn building() -> bool {
+    BUILDING.try_with(|_| ()).is_ok()
+}
+
 
 #[async_trait]
 impl ChainAdapter for EvmAdapter {

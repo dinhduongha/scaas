@@ -11,6 +11,8 @@ use serde_json::{json, Value};
 use sha3::{Digest, Sha3_256};
 
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
+use crate::adapters::evm::{building, BUILDING};
+use scaas_rpc::family::FamilyError;
 use crate::chain::SimError;
 use crate::config::ChainCfg;
 use crate::odoo::Job;
@@ -742,12 +744,67 @@ impl AptosAdapter {
     }
 
     async fn get(&self, path: &str) -> Result<Value> {
-        self.get_at(0, path).await?.ok_or_else(|| anyhow!("GET {path}: not found"))
+        match self.request(path, None).await? {
+            (200..=299, v) => Ok(v),
+            (404, _) => bail!("GET {path}: not found"),
+            (status, v) => bail!("GET {path}: HTTP {status}: {}", v.as_str().unwrap_or_default()),
+        }
+    }
+
+    /// One request on endpoint `i`: its status and body (a 404's body `null`, another 4xx's its text).
+    async fn request_at(&self, i: usize, path: &str, post: Option<(&[u8], &str)>) -> std::result::Result<(u16, Value), FamilyError> {
+        match post {
+            Some((body, ctype)) => self.net.post_json(i, path, body.to_vec(), ctype).await,
+            None => match self.net.get_at(i, path).await {
+                Ok(Some(v)) => Ok((200, v)),
+                Ok(None) => Ok((404, Value::Null)),
+                Err(FamilyError::Status { status, message }) => Ok((status, Value::String(message))),
+                Err(e) => Err(e),
+            },
+        }
+    }
+
+    /// A request (GET, or POST `post`'s body and type): `build`'s fail over, any other is endpoint 0's (F3: a status,
+    /// `op_consumed`, the lane sequence, the landed fee, the lane balance). ARCH-POS-15 (CLI-RPC-04, scaas-rpc T19b):
+    /// endpoint 0, then each next endpoint of this network (ledger info `chain_id`) not behind the block height endpoint 0 last
+    /// showed. An answer other than 2xx (a view's abort, a refused simulate) is endpoint 0's to classify as before, a later
+    /// endpoint's no verdict (the next is asked); every endpoint failing is a transport error that carries no later
+    /// endpoint's refusal (no classifier may read it as the job's); what a failover endpoint's answer refuses `build`
+    /// requeues.
+    async fn request(&self, path: &str, post: Option<(&[u8], &str)>) -> Result<(u16, Value)> {
+        if !building() {
+            return self.request_at(0, path, post).await.map_err(|e| anyhow!("{path}: {e}"));
+        }
+        use scaas_rpc::pool::ReadError;
+        let a = self.net.client.failover(&self.net, |i| async move {
+            match self.request_at(i, path, post).await {
+                Ok((s, v)) if (200..300).contains(&s) => Ok((s, v)),
+                Ok((s, v)) => Err(ReadError::Revert { data: vec![], reason: format!("{s}\n{v}") }),
+                Err(FamilyError::Failure(f)) => Err(ReadError::Failure(f)),
+                Err(e) => Err(ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string()))),
+            }
+        }).await;
+        match a {
+            Ok(a) => Ok(a.value),
+            // endpoint 0's own answer: the caller's to classify, as before
+            Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
+                let (s, v) = reason.split_once('\n').unwrap_or(("0", "null"));
+                Ok((s.parse().unwrap_or(0), serde_json::from_str(v).unwrap_or(Value::Null)))
+            }
+            Err(scaas_rpc::RpcError::EndpointAllFailed { failover_revert: Some(_), .. }) => {
+                bail!("{path}: no endpoint answered (a failover endpoint's refusal decides nothing)")
+            }
+            Err(e) => bail!("{path}: {e}"),
+        }
+    }
+
+    fn failovers(&self) -> u64 {
+        self.net.client.pool().failover_answers()
     }
 
     async fn view(&self, function: &str, type_args: &[&str], args: &[impl serde::Serialize]) -> Result<Value> {
         let body = serde_json::to_vec(&json!({"function": function, "type_arguments": type_args, "arguments": args}))?;
-        let (status, v) = self.net.post_json(0, "/view", body, "application/json").await.map_err(|e| anyhow!("view {function}: {e}"))?;
+        let (status, v) = self.request("/view", Some((&body, "application/json"))).await.map_err(|e| anyhow!("view {function}: {e}"))?;
         if !(200..300).contains(&status) {
             bail!("view {function}: HTTP {status}: {v}");
         }
@@ -837,36 +894,9 @@ impl AptosAdapter {
     fn block_hash_of(b: &Value) -> Result<String> {
         bytes_of(&b["block_hash"]).filter(|h| h.len() == 32).map(|h| addr_hex(&h)).ok_or_else(|| anyhow!("bad block hash"))
     }
-}
-
-#[async_trait]
-impl ChainAdapter for AptosAdapter {
-    fn family(&self) -> Family {
-        Family::Aptos
-    }
-
-    fn chain_key(&self) -> &str {
-        &self.key
-    }
-
-    fn lanes(&self) -> &[Lane] {
-        &self.lanes
-    }
-
-    /// R80: `pay` ⇒ view `meta::lane_nonce(from, lane)` (Account chưa mở ⇒ chưa gì bị tiêu thụ).
-    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
-        let Ok(w) = self.work(job) else { return Ok(None) };
-        if !self.account_exists(&w.op.from).await? {
-            return Ok(Some(false));
-        }
-        let lane = format!("0x{}", alloy::hex::encode(&w.op.lane));
-        let v = self.view(&format!("{}::meta::lane_nonce", addr_hex(&self.package)), &[], &[addr_hex(&w.op.from), lane]).await?;
-        let next = num(&v).ok_or_else(|| anyhow!("bad lane_nonce {v}"))?;
-        Ok(Some(next > w.op.nonce))
-    }
 
     /// Mô phỏng với chữ ký toàn số 0 (API từ chối mô phỏng tx có chữ ký hợp lệ). Abort ⇒ `Revert` (job chết).
-    async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
         let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         if w.op.valid_until <= now() {
             return Err(SimError::Revert("payload expired".into()));
@@ -900,7 +930,7 @@ impl ChainAdapter for AptosAdapter {
         let pk = &self.signers[lane].public_key();
         let body = signed_tx(&raw, pk, &[0u8; 64]);
         let path = "/transactions/simulate?estimate_max_gas_amount=true&estimate_gas_unit_price=true";
-        let (status, v) = self.net.post_json(0, path, body, BCS_SIGNED_TX).await.map_err(|e| transport(e.into()))?;
+        let (status, v) = self.request(path, Some((&body, BCS_SIGNED_TX))).await.map_err(transport)?;
         if !(200..300).contains(&status) {
             return Err(SimError::Transport(format!("simulate HTTP {status}: {v}")));
         }
@@ -913,6 +943,43 @@ impl ChainAdapter for AptosAdapter {
         let price = num(&sim["gas_unit_price"]).unwrap_or(price).max(price);
         let meta = json!({"max_gas": max_gas, "gas_price": price, "expiration": exp});
         Ok(Built { job_id: job.id, body: payload, valid_until: w.op.valid_until, meta })
+    }
+}
+
+#[async_trait]
+impl ChainAdapter for AptosAdapter {
+    fn family(&self) -> Family {
+        Family::Aptos
+    }
+
+    fn chain_key(&self) -> &str {
+        &self.key
+    }
+
+    fn lanes(&self) -> &[Lane] {
+        &self.lanes
+    }
+
+    /// R80: `pay` ⇒ view `meta::lane_nonce(from, lane)` (Account chưa mở ⇒ chưa gì bị tiêu thụ).
+    async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
+        let Ok(w) = self.work(job) else { return Ok(None) };
+        if !self.account_exists(&w.op.from).await? {
+            return Ok(Some(false));
+        }
+        let lane = format!("0x{}", alloy::hex::encode(&w.op.lane));
+        let v = self.view(&format!("{}::meta::lane_nonce", addr_hex(&self.package)), &[], &[addr_hex(&w.op.from), lane]).await?;
+        let next = num(&v).ok_or_else(|| anyhow!("bad lane_nonce {v}"))?;
+        Ok(Some(next > w.op.nonce))
+    }
+
+    /// [`AptosAdapter::build_on`], its reads failed over (scaas-rpc T19b, R4: a refusal read while a failover endpoint answered
+    /// is no verdict).
+    async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let mark = self.failovers();
+        match BUILDING.scope((), self.build_on(job, lane)).await {
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            r => r,
+        }
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
@@ -962,6 +1029,7 @@ impl ChainAdapter for AptosAdapter {
     /// không bao giờ vượt indexer (owner OQ2); nhiều `rpc_urls` ⇒ cùng hash ở đỉnh đó (quorum).
     async fn final_head(&self) -> Result<Option<Head>> {
         let head = num(&self.get("").await?["block_height"]).ok_or_else(|| anyhow!("bad ledger info"))?;
+        self.net.client.pool().saw_block(head); // the failover reads' floor: endpoint 0's block height
         let done = self.indexed_version().await?;
         let b = self.get(&format!("/blocks/by_version/{done}")).await?;
         let (h, last) = (num(&b["block_height"]), num(&b["last_version"]));
@@ -1570,5 +1638,124 @@ mod tests {
         let a = AptosAdapter::new(&cfg(""), &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap();
         a.indexed_version().await.unwrap();
         assert_eq!(seen.lock().unwrap()[0].1, None, "control: no key configured");
+    }
+
+    // ---- scaas-rpc T19b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    /// What the fake fullnode answers: the payer's Account open, its pay check and the simulate passing; `check_down`: the
+    /// pay check unanswered (503).
+    #[derive(Clone, Copy)]
+    struct Node {
+        open: bool,
+        check_ok: bool,
+        sim_ok: bool,
+        check_down: bool,
+    }
+
+    /// A fullnode for `build` and the lane reads: ledger info, views (sequence 0, `exists_at`, `pay_check`, `lane_nonce` 1,
+    /// coin balance 100), the gas estimate, the simulate, a landed transaction `0xaa` at version 5 in block 3.
+    async fn fullnode(n: Node) -> String {
+        let app = axum::Router::new().fallback(move |uri: axum::http::Uri, body: axum::body::Bytes| async move {
+            let p = uri.path().trim_start_matches("/v1").to_string();
+            let ok = |v: Value| (axum::http::StatusCode::OK, axum::Json(v));
+            let f = serde_json::from_slice::<Value>(&body).ok().and_then(|b| b["function"].as_str().map(str::to_string)).unwrap_or_default();
+            match p.as_str() {
+                "" => ok(json!({"chain_id": 4, "block_height": "3", "ledger_version": "9"})),
+                "/estimate_gas_price" => ok(json!({"gas_estimate": 100})),
+                "/view" if f.ends_with("::get_sequence_number") => ok(json!(["0"])),
+                "/view" if f.ends_with("::exists_at") => ok(json!([n.open])),
+                "/view" if f.ends_with("::lane_nonce") => ok(json!(["1"])),
+                "/view" if f.ends_with("::balance") => ok(json!(["100"])),
+                "/view" if f.ends_with("::pay_check") && n.check_down => (axum::http::StatusCode::SERVICE_UNAVAILABLE, axum::Json(json!({}))),
+                "/view" if f.ends_with("::pay_check") && n.check_ok => ok(json!([])),
+                "/view" => (axum::http::StatusCode::BAD_REQUEST, axum::Json(json!({"message": "Move abort in 0xb0b::meta: E_BAD_SIG(0x6)"}))),
+                "/transactions/simulate" if n.sim_ok => ok(json!([{"success": true, "vm_status": "Executed successfully", "gas_used": "10", "gas_unit_price": "100"}])),
+                "/transactions/simulate" => ok(json!([{"success": false, "vm_status": "Move abort in 0xb0b::meta: E_NONCE(0x3)"}])),
+                "/transactions/by_hash/0xaa" => ok(json!({"type": "user_transaction", "version": "5", "success": true, "vm_status": "Executed successfully",
+                                                          "gas_used": "7", "gas_unit_price": "100"})),
+                "/blocks/by_version/5" => ok(json!({"block_height": "3"})),
+                _ => (axum::http::StatusCode::NOT_FOUND, axum::Json(json!({"message": "not found"}))),
+            }
+        });
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/v1", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        url
+    }
+
+    /// The fullnode behind `first` endpoints in `rpc_urls`.
+    async fn adapter_after(n: Node, first: &[&str]) -> AptosAdapter {
+        let url = fullnode(n).await;
+        adapter_on(&first.iter().map(|u| u.to_string()).chain([url]).collect::<Vec<_>>())
+    }
+
+    fn adapter_on(urls: &[String]) -> AptosAdapter {
+        let urls: Vec<String> = urls.iter().map(|u| format!("\"{u}\"")).collect();
+        let cfg: ChainCfg = toml::from_str(&format!(
+            "family = \"aptos\"\nnetwork = \"4\"\nrpc_urls = [{}]\nlanes = [0]\nparams = {{ package = \"0xb0b\", indexer_url = \"{DOWN}/graphql\" }}",
+            urls.join(", ")
+        ))
+        .unwrap();
+        AptosAdapter::new(&cfg, &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap()
+    }
+
+    /// The vectors' plain pay, valid long enough (the adapter never checks its signature: the contract does).
+    fn pay_job() -> Job {
+        let op = MetaOp { valid_until: u64::MAX / 2, ..vector_op() };
+        serde_json::from_value(json!({"id": 7, "kind": "signed_op", "op": {"payload": alloy::hex::encode(op.encode()),
+            "contract": addr_hex(&op.contract), "signature": BLOB, "public_key": ALICE_PK}})).unwrap()
+    }
+
+    const OPEN: Node = Node { open: true, check_ok: true, sim_ok: true, check_down: false };
+
+    /// F3: a status, `op_consumed`, the lane sequence, the landed fee and the lane balance are endpoint 0's only: with it down
+    /// each is unread (asked again; a lagging endpoint 1's "unknown" is never read, so never `dead`), though endpoint 1 holds
+    /// a landed transaction and a consumed lane. Control: endpoint 0 up, each read.
+    #[tokio::test]
+    async fn aptos_tx_status_op_consumed_and_the_lane_sequence_never_fail_over() {
+        let a = adapter_after(OPEN, &[DOWN]).await;
+        assert!(a.tx_status("0xaa").await.is_err(), "unread, never Mined from endpoint 1");
+        assert!(a.op_consumed(&pay_job()).await.is_err());
+        assert!(a.sequence(0).await.is_err());
+        assert!(a.tx_fee("0xaa").await.is_err());
+        assert!(a.lane_balance(0).await.is_err());
+        assert_eq!(a.failovers(), 0);
+        let a = adapter_after(OPEN, &[]).await;
+        assert!(matches!(a.tx_status("0xaa").await.unwrap(), TxStatus::Mined { height: 3, .. }), "control");
+        assert_eq!(a.op_consumed(&pay_job()).await.unwrap(), Some(true));
+        assert_eq!(a.sequence(0).await.unwrap(), 0);
+        assert_eq!(a.tx_fee("0xaa").await.unwrap(), Some(700));
+        assert_eq!(a.lane_balance(0).await.unwrap(), Some(100));
+    }
+
+    /// ARCH-POS-15: `build`'s reads (the sequence and gas price for the simulate, the Account, the pay check, the simulate)
+    /// fail over: endpoint 0 down, endpoint 1 builds. A refusal read while a failover endpoint answered is no verdict
+    /// (FAILOVER_ANSWER, requeued); a failover endpoint's abort decides nothing (transport); the same on endpoint 0 is the job's.
+    #[tokio::test]
+    async fn aptos_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        let a = adapter_after(OPEN, &[DOWN]).await;
+        let b = a.build(&pay_job(), 0).await.unwrap();
+        assert_eq!(b.meta["gas_price"], 100, "built on endpoint 1");
+        assert!(a.failovers() > 0);
+        let sim_fails = Node { sim_ok: false, ..OPEN };
+        match adapter_after(sim_fails, &[DOWN]).await.build(&pay_job(), 0).await {
+            Err(SimError::Transport(m)) => assert!(m.starts_with("FAILOVER_ANSWER") && m.contains("E_NONCE"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        assert!(matches!(adapter_after(sim_fails, &[]).await.build(&pay_job(), 0).await, Err(SimError::Revert(m)) if m.contains("E_NONCE")), "control");
+        // an unopened Account: the pay check's abort on a failover endpoint is no verdict
+        let check_aborts = Node { open: false, check_ok: false, ..OPEN };
+        assert!(matches!(adapter_after(check_aborts, &[DOWN]).await.build(&pay_job(), 0).await, Err(SimError::Transport(_))));
+        assert!(matches!(adapter_after(check_aborts, &[]).await.build(&pay_job(), 0).await, Err(SimError::Revert(m)) if m.contains("Move abort")), "control");
+        // endpoint 0 answers every read but the pay check (the counter never moves): endpoint 1's abort still decides nothing
+        let first = fullnode(Node { open: false, check_down: true, ..OPEN }).await;
+        let a = adapter_on(&[first, fullnode(check_aborts).await]);
+        match a.build(&pay_job(), 0).await {
+            Err(SimError::Transport(m)) => assert!(!m.contains("Move abort"), "{m}"),
+            r => panic!("a failover endpoint's abort became a verdict: {r:?}"),
+        }
+        assert_eq!(a.failovers(), 0);
     }
 }

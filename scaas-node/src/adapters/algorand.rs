@@ -31,6 +31,7 @@ use sha2::{Digest, Sha256, Sha512_256};
 use tracing::info;
 
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Rejected, Signed, TxStatus};
+use crate::adapters::evm::{building, BUILDING};
 use crate::addresses::{algorand_address, b32decode, b32encode};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
@@ -1555,16 +1556,6 @@ pub fn block_events(ids: &Ids, block: &Mp, block_hash: &str) -> Result<Vec<Value
 }
 
 // ------------------------------------------------------------------ adapter
-
-tokio::task_local! {
-    /// scaas-rpc T18b: set while `build` runs (ARCH-POS-15: its reads fail over); every other read is endpoint 0's (F3).
-    static BUILDING: ();
-}
-
-/// Whether this read is `build`'s.
-fn building() -> bool {
-    BUILDING.try_with(|_| ()).is_ok()
-}
 
 /// A family client's error as the classifier reads it: a status other than 2xx is `AlgodError`, anything else the endpoint's
 /// failure.
