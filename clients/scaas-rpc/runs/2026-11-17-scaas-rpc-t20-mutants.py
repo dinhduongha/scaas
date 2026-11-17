@@ -17,6 +17,15 @@ MUTANTS = [
      T + "the_failover_drops_another_network_and_skips_an_endpoint_behind"),
     ("a: each endpoint its own reference", [(S, "                let w = self.chain_identifier(0).await.map_err(|e| {", "                let w = self.chain_identifier(i).await.map_err(|e| {")],
      T + "the_failover_drops_another_network_and_skips_an_endpoint_behind"),
+    # (b) the carve-out (F3) first, then the failover
+    ("b: tx_status through failover", [(N, "        let r = match self.rpc_first(\"sui_getTransactionBlock\", json!([d, {\"showEffects\": true}])).await {", "        let r = match BUILDING.scope((), self.rpc(\"sui_getTransactionBlock\", json!([d, {\"showEffects\": true}]))).await {")],
+     NT + "sui_tx_status_and_op_consumed_never_fail_over"),
+    ("b: the journal's status read fails over in build", [(N, "        let r = match self.rpc_first(\"sui_getTransactionBlock\"", "        let r = match self.rpc(\"sui_getTransactionBlock\"")],
+     NT + "sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: the build's reads on endpoint 0 only", [(N, "        match BUILDING.scope((), self.build_on(job, lane)).await {", "        match self.build_on(job, lane).await {")],
+     NT + "sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: a failover refusal final (the counter not compared)", [(N, "            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),\n", "")],
+     NT + "sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
 ]
 
 if __name__ == "__main__":

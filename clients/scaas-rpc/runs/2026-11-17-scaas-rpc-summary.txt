@@ -31,10 +31,10 @@ rpc-anvil | 2633740cb | 0 | 10 passed, 0 failed, 0 ignored (1 binaries); tree di
 rpc-deny | 2633740cb | 0 | -; tree dirty
 node-e2e-aptos | 6a0e68b1a | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 node-e2e-algorand | 6a0e68b1a | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-docs | 6a0e68b1a | 0 | -; tree dirty
 rpc-test | 679dda5b5 | 0 | 153 passed, 0 failed, 10 ignored (14 binaries); tree dirty
 rpc-clippy | 679dda5b5 | 0 | -; tree dirty
 rpc-wasm | 679dda5b5 | 0 | -; tree dirty
-node-test | 679dda5b5 | 0 | 810 passed, 0 failed, 72 ignored (18 binaries); tree dirty
-node-e2e-sui | 679dda5b5 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-node-clippy | 679dda5b5 | 0 | -; tree dirty
+node-e2e-sui | 118d28867 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+docs | 118d28867 | 0 | -; tree dirty
+node-clippy | 118d28867 | 0 | -; tree dirty
+node-test | 118d28867 | 0 | 812 passed, 0 failed, 72 ignored (18 binaries); tree dirty

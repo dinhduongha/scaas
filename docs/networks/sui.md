@@ -352,6 +352,14 @@ transaction aborts `EBadNonce` after dry-run ⇒ counted in `subject_grief` and 
 `build`). SPECIFIED (as built `mesh/digest.rs:245-255` checks no signature). Signed fields come from the payload
 (`work()` already decodes it).
 
+Endpoints (BUILT, scaas-rpc T20): `rpc_urls` are read through the crate's family client (16 MiB, depth 64, no redirect,
+20 s a request). `build`'s reads (the Account's shared version, the gas price, the lane's coins, the dry run) fail over
+([CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04)): the next endpoint must answer `sui_getChainIdentifier` as the first
+endpoint did (no chain identifier is configured, so none is taken before the first endpoint's was read once) and a latest
+checkpoint at or above the one the first endpoint last showed; an error answer from it decides nothing and a refusal read
+while it answered requeues the job. The transaction status, the send, the lane journal's checks and re-send (inside `build`
+too), and `op_consumed` are the first endpoint's only; the lane sequence is 0.
+
 ## 10. Finality and events
 
 <a id="events"></a>

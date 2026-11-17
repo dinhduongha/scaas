@@ -10,6 +10,8 @@ use base64::Engine;
 use serde_json::{json, Value};
 
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
+use crate::adapters::evm::{building, BUILDING};
+use scaas_rpc::family::FamilyError;
 use crate::chain::SimError;
 use crate::config::ChainCfg;
 use crate::odoo::Job;
@@ -967,7 +969,7 @@ impl SuiAdapter {
             TxStatus::Mined { .. } | TxStatus::Reverted { .. } => false,
             TxStatus::Pending => true,
             TxStatus::Unknown => {
-                let o = self.rpc("sui_getObject", json!([p.gas, {}])).await?;
+                let o = self.rpc_first("sui_getObject", json!([p.gas, {}])).await?;
                 let v = o["data"]["version"].as_str().and_then(|v| v.parse().ok()).or_else(|| o["data"]["version"].as_u64());
                 let live = v == Some(p.gas_version);
                 if live {
@@ -986,7 +988,7 @@ impl SuiAdapter {
     }
 
     async fn execute(&self, tx_b64: &str, sig_b64: &str) -> Result<()> {
-        self.rpc("sui_executeTransactionBlock", json!([tx_b64, [sig_b64], {"showEffects": true}])).await.map(|_| ())
+        self.rpc_first("sui_executeTransactionBlock", json!([tx_b64, [sig_b64], {"showEffects": true}])).await.map(|_| ())
     }
 
     /// One call on endpoint `i` (scaas-rpc T20: the family client); an error answer is `"{method}: {error}"`, as before.
@@ -994,8 +996,114 @@ impl SuiAdapter {
         self.net.call(i, method, params).await.map_err(|e| anyhow!("{e}"))
     }
 
+    /// A call: `build`'s fail over, any other is endpoint 0's (F3). ARCH-POS-15 (CLI-RPC-04, scaas-rpc T20b): endpoint 0,
+    /// then each next endpoint of this network (`sui_getChainIdentifier` equal to the first endpoint's) not behind the
+    /// checkpoint endpoint 0 last showed. An error answer is endpoint 0's to classify as before, a later endpoint's no verdict
+    /// (the next is asked); every endpoint failing is a transport error without a later endpoint's error text; what a
+    /// failover endpoint's answer refuses `build` requeues. The lane journal's status read and its re-send, inside `build`,
+    /// are endpoint 0's ([`Self::rpc_first`]).
     async fn rpc(&self, method: &str, params: Value) -> Result<Value> {
+        if !building() {
+            return self.rpc_first(method, params).await;
+        }
+        use scaas_rpc::pool::ReadError;
+        let a = self.net.client.failover(&self.net, |i| {
+            let params = params.clone();
+            async move {
+                self.net.call(i, method, params).await.map_err(|e| match e {
+                    FamilyError::Rpc { error, .. } => ReadError::Revert { data: vec![], reason: error.to_string() },
+                    FamilyError::Failure(f) => ReadError::Failure(f),
+                    e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
+                })
+            }
+        }).await;
+        match a {
+            Ok(a) => Ok(a.value),
+            // endpoint 0's error answer: as before
+            Err(scaas_rpc::RpcError::Revert { reason, .. }) => bail!("{method}: {}", scaas_rpc::error::endpoint_text(&reason)),
+            Err(scaas_rpc::RpcError::EndpointAllFailed { failover_revert: Some(_), .. }) => {
+                bail!("{method}: no endpoint answered (a failover endpoint's error decides nothing)")
+            }
+            Err(e) => bail!("{method}: {e}"),
+        }
+    }
+
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let sender = self.lane_addr(lane).map_err(transport)?;
+        if matches!(w.entry, Entry::Fee { .. }) {
+            relay_payee(&self.relay_fee, &w.op, &sender).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        }
+        let skip = self.previous_gas(lane).await.map_err(transport)?;
+        let isv = self
+            .shared_version(&w.op.contract)
+            .await
+            .map_err(transport)?
+            .ok_or_else(|| SimError::Revert(format!("account {} does not exist", addr_hex(&w.op.contract))))?;
+        let price = self.gas_price().await.map_err(transport)?;
+        let (gas, balance) = match self.gas_coin(&sender, skip).await {
+            Ok(g) => g,
+            Err(e) => {
+                // ponytail: runner trả job về hàng đợi rồi thử ngay — chậm lại khi chỉ chờ tx cũ của lane.
+                if skip.is_some() {
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+                return Err(transport(e));
+            }
+        };
+        let objs = match &w.entry {
+            Entry::Fee { call, router } => {
+                let version = |id: Addr| async move {
+                    self.shared_version(&id)
+                        .await
+                        .map_err(transport)?
+                        .ok_or_else(|| SimError::Revert(format!("shared object {} does not exist", addr_hex(&id))))
+                        .map(|v| (id, v))
+                };
+                let object = match call.object() {
+                    Some(id) => Some(version(id).await?),
+                    None => None,
+                };
+                Some(FeeObjects { router: version(*router).await?, object, mandate_tag: w.mandate_tag.clone() })
+            }
+            _ => None,
+        };
+        let make = |budget: u64| -> std::result::Result<Vec<u8>, SimError> {
+            Ok(match (&w.entry, &objs) {
+                (Entry::PayMeta { salt, meta }, _) => {
+                    pay_meta_tx(&self.package, &w.op, &w.auth, salt, meta, isv, &w.coin_tag, &sender, &gas, price, budget)
+                }
+                (Entry::Fee { call, .. }, Some(objs)) => {
+                    fee_tx(&self.package, &w.op, &w.auth, call, isv, &w.coin_tag, objs, &sender, &gas, price, budget)
+                        .map_err(|e| SimError::Revert(format!("{e:#}")))?
+                }
+                (Entry::Pay, _) => pay_tx(&self.package, &w.op, &w.auth, isv, &w.coin_tag, &sender, &gas, price, budget),
+                // unreachable (`objs` is `Some` for every `Fee`); never fall back to a plain `relay_pay`
+                (Entry::Fee { .. }, None) => return Err(SimError::Revert("relay-fee job without its shared objects".into())),
+            })
+        };
+        let cap = self.budget_cap.min(balance);
+        let tx = make(cap)?;
+        let dry = self.rpc("sui_dryRunTransactionBlock", json!([B64.encode(&tx)])).await.map_err(transport)?;
+        let st = &dry["effects"]["status"];
+        if st["status"].as_str() != Some("success") {
+            return Err(SimError::Revert(st["error"].as_str().unwrap_or("dry run failed").to_string()));
+        }
+        let cost = |k: &str| dry["effects"]["gasUsed"][k].as_str().and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+        let used = cost("computationCost") + cost("storageCost");
+        let budget = (used + used / 5).max(price * 1000).min(cap);
+        let tx = make(budget)?;
+        let meta = json!({"budget": budget, "gas": addr_hex(&gas.id), "gas_version": gas.version});
+        Ok(Built { job_id: job.id, body: tx, valid_until: w.op.valid_until, meta })
+    }
+
+    /// A call on endpoint 0 only (F3: the status, the send, the lane journal's checks).
+    async fn rpc_first(&self, method: &str, params: Value) -> Result<Value> {
         self.rpc_at(0, method, params).await
+    }
+
+    fn failovers(&self) -> u64 {
+        self.net.client.pool().failover_answers()
     }
 
     fn work(&self, job: &Job) -> Result<Work> {
@@ -1091,11 +1199,11 @@ impl ChainAdapter for SuiAdapter {
     /// R80: `pay` ⇒ `Account.lanes[lane]` (Table, dynamic field; vắng = 0) so với nonce đã ký.
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
         let Ok(w) = self.work(job) else { return Ok(None) };
-        let a = self.rpc("sui_getObject", json!([addr_hex(&w.op.contract), {"showContent": true}])).await?;
+        let a = self.rpc_first("sui_getObject", json!([addr_hex(&w.op.contract), {"showContent": true}])).await?;
         let table = a["data"]["content"]["fields"]["lanes"]["fields"]["id"]["id"]
             .as_str()
             .ok_or_else(|| anyhow!("account {} has no lanes table", addr_hex(&w.op.contract)))?;
-        let f = self.rpc("suix_getDynamicFieldObject", json!([table, {"type": "vector<u8>", "value": w.op.lane}])).await?;
+        let f = self.rpc_first("suix_getDynamicFieldObject", json!([table, {"type": "vector<u8>", "value": w.op.lane}])).await?;
         if f["error"]["code"] == "dynamicFieldNotFound" {
             return Ok(Some(false));
         }
@@ -1105,73 +1213,14 @@ impl ChainAdapter for SuiAdapter {
         Ok(Some(next > w.op.nonce))
     }
 
+    /// [`SuiAdapter::build_on`], its reads failed over (scaas-rpc T20b, R4: a refusal read while a failover endpoint answered
+    /// is no verdict).
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let w = self.work(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
-        let sender = self.lane_addr(lane).map_err(transport)?;
-        if matches!(w.entry, Entry::Fee { .. }) {
-            relay_payee(&self.relay_fee, &w.op, &sender).map_err(|e| SimError::Revert(format!("{e:#}")))?;
+        let mark = self.failovers();
+        match BUILDING.scope((), self.build_on(job, lane)).await {
+            Err(SimError::Revert(r)) if self.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            r => r,
         }
-        let skip = self.previous_gas(lane).await.map_err(transport)?;
-        let isv = self
-            .shared_version(&w.op.contract)
-            .await
-            .map_err(transport)?
-            .ok_or_else(|| SimError::Revert(format!("account {} does not exist", addr_hex(&w.op.contract))))?;
-        let price = self.gas_price().await.map_err(transport)?;
-        let (gas, balance) = match self.gas_coin(&sender, skip).await {
-            Ok(g) => g,
-            Err(e) => {
-                // ponytail: runner trả job về hàng đợi rồi thử ngay — chậm lại khi chỉ chờ tx cũ của lane.
-                if skip.is_some() {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                }
-                return Err(transport(e));
-            }
-        };
-        let objs = match &w.entry {
-            Entry::Fee { call, router } => {
-                let version = |id: Addr| async move {
-                    self.shared_version(&id)
-                        .await
-                        .map_err(transport)?
-                        .ok_or_else(|| SimError::Revert(format!("shared object {} does not exist", addr_hex(&id))))
-                        .map(|v| (id, v))
-                };
-                let object = match call.object() {
-                    Some(id) => Some(version(id).await?),
-                    None => None,
-                };
-                Some(FeeObjects { router: version(*router).await?, object, mandate_tag: w.mandate_tag.clone() })
-            }
-            _ => None,
-        };
-        let make = |budget: u64| -> std::result::Result<Vec<u8>, SimError> {
-            Ok(match (&w.entry, &objs) {
-                (Entry::PayMeta { salt, meta }, _) => {
-                    pay_meta_tx(&self.package, &w.op, &w.auth, salt, meta, isv, &w.coin_tag, &sender, &gas, price, budget)
-                }
-                (Entry::Fee { call, .. }, Some(objs)) => {
-                    fee_tx(&self.package, &w.op, &w.auth, call, isv, &w.coin_tag, objs, &sender, &gas, price, budget)
-                        .map_err(|e| SimError::Revert(format!("{e:#}")))?
-                }
-                (Entry::Pay, _) => pay_tx(&self.package, &w.op, &w.auth, isv, &w.coin_tag, &sender, &gas, price, budget),
-                // unreachable (`objs` is `Some` for every `Fee`); never fall back to a plain `relay_pay`
-                (Entry::Fee { .. }, None) => return Err(SimError::Revert("relay-fee job without its shared objects".into())),
-            })
-        };
-        let cap = self.budget_cap.min(balance);
-        let tx = make(cap)?;
-        let dry = self.rpc("sui_dryRunTransactionBlock", json!([B64.encode(&tx)])).await.map_err(transport)?;
-        let st = &dry["effects"]["status"];
-        if st["status"].as_str() != Some("success") {
-            return Err(SimError::Revert(st["error"].as_str().unwrap_or("dry run failed").to_string()));
-        }
-        let cost = |k: &str| dry["effects"]["gasUsed"][k].as_str().and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
-        let used = cost("computationCost") + cost("storageCost");
-        let budget = (used + used / 5).max(price * 1000).min(cap);
-        let tx = make(budget)?;
-        let meta = json!({"budget": budget, "gas": addr_hex(&gas.id), "gas_version": gas.version});
-        Ok(Built { job_id: job.id, body: tx, valid_until: w.op.valid_until, meta })
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
@@ -1204,7 +1253,7 @@ impl ChainAdapter for SuiAdapter {
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
         let d = bs58::encode(parse_addr(tx_id)?).into_string();
-        let r = match self.rpc("sui_getTransactionBlock", json!([d, {"showEffects": true}])).await {
+        let r = match self.rpc_first("sui_getTransactionBlock", json!([d, {"showEffects": true}])).await {
             Ok(r) => r,
             Err(e) if format!("{e:#}").contains("Could not find") => return Ok(TxStatus::Unknown),
             Err(e) => return Err(e),
@@ -1229,6 +1278,7 @@ impl ChainAdapter for SuiAdapter {
     async fn final_head(&self) -> Result<Option<Head>> {
         let v = self.rpc("sui_getLatestCheckpointSequenceNumber", json!([])).await?;
         let seq: u64 = v.as_str().and_then(|s| s.parse().ok()).ok_or_else(|| anyhow!("bad checkpoint number"))?;
+        self.net.client.pool().saw_block(seq); // the failover reads' floor: endpoint 0's checkpoint
         let hash = self.checkpoint_digest(0, seq).await?;
         let mut agree = 1;
         for i in 1..self.net.client.len() {
@@ -1429,14 +1479,20 @@ mod tests {
         digest: u8,
         status_reads: u32,
         dry_fail: bool,
+        /// every request unanswered (503): the endpoint down
+        down: bool,
     }
     type FakeShared = std::sync::Arc<std::sync::Mutex<FakeSui>>;
 
     async fn fake_sui(f: FakeSui) -> (String, FakeShared) {
         use axum::extract::State;
         use axum::Json;
-        async fn h(State(s): State<FakeShared>, Json(b): Json<Value>) -> Json<Value> {
+        async fn h(State(s): State<FakeShared>, Json(b): Json<Value>) -> axum::response::Response {
+            use axum::response::IntoResponse;
             let mut f = s.lock().unwrap();
+            if f.down {
+                return axum::http::StatusCode::SERVICE_UNAVAILABLE.into_response();
+            }
             let p = &b["params"];
             let r = match b["method"].as_str().unwrap_or_default() {
                 "sui_getChainIdentifier" => json!("4c78adac"),
@@ -1449,7 +1505,7 @@ mod tests {
                 "sui_getTransactionBlock" => {
                     f.status_reads += 1;
                     match f.status {
-                        None => return Json(json!({"error": {"code": -32602, "message": "Could not find the referenced transaction"}})),
+                        None => return Json(json!({"error": {"code": -32602, "message": "Could not find the referenced transaction"}})).into_response(),
                         Some(st) => json!({"checkpoint": "9", "effects": {"status": {"status": st}}}),
                     }
                 }
@@ -1468,7 +1524,7 @@ mod tests {
                 }
                 m => panic!("unexpected {m}"),
             };
-            Json(json!({"jsonrpc": "2.0", "id": 1, "result": r}))
+            Json(json!({"jsonrpc": "2.0", "id": 1, "result": r})).into_response()
         }
         let s: FakeShared = std::sync::Arc::new(std::sync::Mutex::new(f));
         let app = axum::Router::new().route("/", axum::routing::post(h)).with_state(s.clone());
@@ -1913,5 +1969,91 @@ mod tests {
         let h = SuiAdapter::new(&cfg(2), &k).unwrap().final_head().await.unwrap().expect("endpoints 0 and 2 agree");
         assert_eq!((h.height, h.hash), (9, addr_hex(&[1; 32])));
         assert!(SuiAdapter::new(&cfg(3), &k).unwrap().final_head().await.unwrap().is_none(), "control");
+    }
+
+    // ---- scaas-rpc T20b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    fn adapter_on(urls: &[String], dir: &std::path::Path) -> SuiAdapter {
+        let urls: Vec<String> = urls.iter().map(|u| format!("\"{u}\"")).collect();
+        let cfg: ChainCfg = toml::from_str(&format!(
+            "family = \"sui\"\nnetwork = \"localnet\"\nrpc_urls = [{}]\nlanes = [0]\nfinality = {{ mode = \"instant\" }}\n\
+             params = {{ package = \"0xb\", lane_journal = \"{}\" }}",
+            urls.join(", "),
+            dir.display()
+        ))
+        .unwrap();
+        SuiAdapter::new(&cfg, &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap()
+    }
+
+    fn coin() -> FakeSui {
+        FakeSui { coins: vec![([0xaa; 32], 7, 5_000_000_000)], ..Default::default() }
+    }
+
+    /// Endpoint 0 and endpoint 1 (`second`), endpoint 0's chain identifier read once by a build (so a later endpoint could
+    /// answer a failover read), then endpoint 0 down.
+    async fn primed(second: FakeSui, dir: &std::path::Path) -> (SuiAdapter, FakeShared, FakeShared) {
+        primed_from(coin(), second, dir).await
+    }
+
+    /// [`primed`] with endpoint 0's own answers.
+    async fn primed_from(first: FakeSui, second: FakeSui, dir: &std::path::Path) -> (SuiAdapter, FakeShared, FakeShared) {
+        let (u0, f0) = fake_sui(first).await;
+        let (u1, f1) = fake_sui(second).await;
+        let a = adapter_on(&[u0, u1], dir);
+        let _ = a.build(&pay_job(), 0).await;
+        f0.lock().unwrap().down = true;
+        (a, f0, f1)
+    }
+
+    /// F3: a status and `op_consumed` are endpoint 0's only: with it down each is unread (asked again; a lagging endpoint
+    /// 1's "unknown" is never read, so never `dead`) though endpoint 1, of this network, holds a landed transaction;
+    /// endpoint 1 counts no status read. The lane sequence is 0 (no account nonce). Control: endpoint 0 up again.
+    #[tokio::test]
+    async fn sui_tx_status_and_op_consumed_never_fail_over() {
+        let dir = tmp_dir("t20b-f3");
+        let (a, f0, f1) = primed(FakeSui { status: Some("success"), ..coin() }, &dir).await;
+        let tx = addr_hex(&[0x11; 32]);
+        assert!(a.tx_status(&tx).await.is_err(), "unread, never Mined from endpoint 1");
+        assert!(a.op_consumed(&pay_job()).await.is_err());
+        assert_eq!(a.sequence(0).await.unwrap(), 0);
+        assert_eq!((f1.lock().unwrap().status_reads, a.failovers()), (0, 0));
+        {
+            let mut g = f0.lock().unwrap();
+            g.down = false;
+            g.status = Some("success");
+        }
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 9, .. }), "control");
+    }
+
+    /// ARCH-POS-15: `build`'s reads (the account's version, the gas price and coin, the dry run) fail over: endpoint 0 down,
+    /// endpoint 1 builds. A dry run refused there is no verdict (FAILOVER_ANSWER, requeued); the same on endpoint 0 is the
+    /// job's. The lane journal's status read and its re-send inside `build` stay endpoint 0's.
+    #[tokio::test]
+    async fn sui_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        let dir = tmp_dir("t20b-build");
+        // the first endpoint's chain identifier is the reference: read once while it is up, then it goes down
+        let (a, _, _) = primed(coin(), &dir).await;
+        let b = a.build(&pay_job(), 0).await.unwrap();
+        assert_eq!(gas_of(&b.body), [0xaa; 32], "built on endpoint 1");
+        assert!(a.failovers() > 0);
+        assert!(adapter_on(&[DOWN.to_string(), fake_sui(coin()).await.0], &dir).build(&pay_job(), 0).await.is_err(),
+                "the first endpoint never read: no later endpoint is this network yet");
+        let (a, _, _) = primed(FakeSui { dry_fail: true, ..coin() }, &dir).await;
+        match a.build(&pay_job(), 0).await {
+            Err(SimError::Transport(m)) => assert!(m.starts_with("FAILOVER_ANSWER") && m.contains("MoveAbort"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        let (url, _) = fake_sui(FakeSui { dry_fail: true, ..coin() }).await;
+        assert!(matches!(adapter_on(&[url], &dir).build(&pay_job(), 0).await, Err(SimError::Revert(m)) if m.contains("MoveAbort")), "control");
+        // a journaled transaction: its status read and re-send are endpoint 0's, never endpoint 1's
+        let jdir = tmp_dir("t20b-journal");
+        crash_after_sign(&jdir).await;
+        // endpoint 0 sees the journaled coin unspent: the journal stays (its re-send went to endpoint 0)
+        let (a, _, f) = primed_from(FakeSui { gas_version: 7, ..coin() }, FakeSui { gas_version: 7, ..coin() }, &jdir).await;
+        assert!(a.build(&pay_job(), 0).await.is_err());
+        let g = f.lock().unwrap();
+        assert_eq!((g.status_reads, g.executed.len()), (0, 0));
     }
 }
