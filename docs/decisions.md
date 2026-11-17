@@ -63,9 +63,10 @@ entries), **Why.**, **Cost if wrong.** and **Source.** Superseded entries keep o
 39. [Clients — UA libraries](#39-clients--ua-libraries)
 40. [Clients — network crate (`scaas-rpc`)](#40-clients--network-crate-scaas-rpc)
 41. [Clients — application SDK (`scaas-sdk`)](#41-clients--application-sdk-scaas-sdk)
-42. [Integration — ERP](#42-integration--erp)
-43. [Integration — example connector](#43-integration--example-connector)
-44. [Alias index](#alias-index)
+42. [Clients — chat app core (`pqchat-core`)](#42-clients--chat-app-core-pqchat-core)
+43. [Integration — ERP](#43-integration--erp)
+44. [Integration — example connector](#44-integration--example-connector)
+45. [Alias index](#alias-index)
 
 ## 1. Architecture and register policy
 
@@ -10686,7 +10687,136 @@ Change (owner 2026-11-17, "Ok, as proposed, settle the whole table"; status: SPE
 **Why.** Each is the smallest choice that keeps one byte format, one signer and one transport per behaviour, after Fable's review (spec §26); the questions with options are in the spec's §25.
 **Source.** [spec](superpowers/specs/2026-11-17-scaas-sdk.md) §25, §26; Fable review `20261117-12-fable-fable-high-spec.md` (P0 0, P1 10, P2 19, P3 10, info 4; kept outside the repository's tracked files).
 
-## 42. Integration — ERP
+## 42. Clients — chat app core (`pqchat-core`)
+
+The rules are in [clients/pqchat-core.md](clients/pqchat-core.md); the design is the [pqchat-core spec](superpowers/specs/2026-11-17-pqchat-core.md), the plan its [build plan](superpowers/plans/2026-11-17-pqchat-core.md). The protocol stays normative in [contracts/pqchat.md](contracts/pqchat.md) and the UA-7 spec.
+
+### CLI-PQC-01 — `pqchat-core` is an app core above `scaas-sdk`: it depends on the SDK and on the app's Matrix client, and the SDK names no chat
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-01 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-01).) `pqchat-core` depends on `scaas-sdk`'s app-core surface and on nothing else that touches a key, a node or Matrix (no `scaas-ua`, `scaas-rpc` or Matrix SDK; a `cargo tree` test); it reaches the app's live Matrix client through a transport trait the app's Matrix crate implements; it holds no cryptography and no hash or decoder of a signed byte format; in scaas-app it is the feature `pqchat` of `app-core-rust`.
+**Status.** SPECIFIED, nothing built (plan `2026-11-17-pqchat-core`). UNAUDITED.
+**Why.** The owner reversed the dependency for `pqchat-core` as for `pqvault-core`: the SDK is the generic platform, app cores sit above it, and one library per app links them.
+**Cost if wrong.** Chat logic inside the SDK, or key operations inside the app core.
+**Source.** owner 2026-11-17 "OK, pqchat-core cũng đảo chiều luôn" and the scaas-app contract's section 12 (`pqchat` feature of `app-core-rust`), relayed by the coordinator; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §1, §3.
+
+### CLI-PQC-02 — This round's scope: 1:1 first, groups correct; Matrix and chain stores; public topics; no calls, attachments, HCS, Waku or libp2p
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-02 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-02).) In: sessions, epochs, wraps, leave, remove, home and replicas, `msig` expansion, sender chains, padding, envelope, `postMessage`, `storeMessage`, dedupe, order, recovery, consent, the content types `text`, `edit`, `redact`, `react`, `receipt`, `typing`, and public topics. Out, PLANNED later: calls and their content types, `file`, HCS, Waku, libp2p, device linking, the epoch-key export. A content out of scope is shown as unsupported and never acted on.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The 2-person chat is the main case (owner 2026-11-10); calls break the key-handles condition (spec §13 O2); attachments need a key inside the content (O9); the app's first version lists Matrix and no Waku.
+**Cost if wrong.** A session made by a fuller client lists a store this build cannot serve; CLI-PQC-06 refuses its sends.
+**Source.** controller call 2026-11-17 (owner may override), on the owner's 1:1-first ruling of 2026-11-10 and the coordinator's call exclusion; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §2, §13.
+
+### CLI-PQC-03 — Secrets stay below the SDK: key handles only, only decrypted plaintext leaves
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-03 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-03).) `K`, each wrap's shared secret and KEK, `ck_i`, `mk_i`, `n_i`, `k_env` and the `sealedInfo` key are `ua-rs` handles; KEM (with the P14 checks), HKDF, the chain's HMAC steps and every AEAD run in `ua-rs`; only a message content and an epoch's `sealedInfo` leave, as `SecretBytes`. The crate declares one label prefix, `scaas/pqchat/v1/`, which fits every PqChat label (spec §5.2); the KEM combiner `scaas.kem.1` is the scheme's. Handles die at the seed's lock and are re-derived from state; no secret is persisted.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Moving the app's logic above the SDK must not move a key out of it.
+**Cost if wrong.** A key in an app core's memory, reachable by every bug in it.
+**Source.** coordinator condition 1, 2026-11-17, and the coordinator's label-prefix point of the same day; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §1, §5.
+
+### CLI-PQC-04 — No blind signing: PqChat records only through the SDK's named, typed PqChat entries, never a digest, never the generic app signing call
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-04 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-04).) `PqChat` is a SCaaS contract: the SDK keeps one signing entry per record struct (`PqChatSession` and `PqChatEpoch` with their wraps, `PqChatLeave`, `PqChatRemove`, `PqChatMessage`, the six topic records), built by `ua-rs` from named fields under `PURPOSE_PQCHAT` in `DS_C` and reviewed; `pqchat-core` passes named fields, never a digest; the SDK's generic app signing call stays closed to every SCaaS purpose and domain. The SDK knows PqChat's record formats, not its logic.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The coordinator's first wording asked the generic call to sign under `PURPOSE_PQCHAT`, which that call refuses as a SCaaS purpose; the named entries resolve it as every SCaaS contract's operations are signed.
+**Cost if wrong.** A signing call that signs what an app core hands it, under a SCaaS purpose.
+**Source.** coordinator ruling 2026-11-17, correcting condition 2 (the owner may override); the SDK spec on branch `scaas-sdk` at `82d9754cd` lists it as open; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §1, §5, §13 O1.
+
+### CLI-PQC-05 — The Matrix store is the app's live Matrix client; a PqChat session is never a Matrix room to the user
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-05 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-05).) One Matrix stack, one client, one login: `pqchat-core` attaches to `app-matrix` after login and detaches before logout, sends envelopes as `net.scaas.pqchat.v1` events in the room `sealedInfo` lists, ignores other rooms, keeps the room id off chain, follows the epoch for invites and removals, takes no right from a power level; the app neither shows a PqChat room as an ordinary room, nor upgrades a room in place, nor joins before acceptance.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Owner's chat (b): ordinary Matrix chat in the default build, PqChat in the `scaas` build over the same client.
+**Cost if wrong.** Two logins and sync loops, or a PqChat conversation mistaken for a classical Matrix one.
+**Source.** owner 2026-11-17, chat "(b)" (CTR-CHAT-01's Change of that day); the scaas-app contract's section 11; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §6.
+
+### CLI-PQC-06 — Every message to every listed message store; a session with a store the crate does not implement cannot send
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-06 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-06).) One record and one envelope go to the Matrix room and every chain store the epoch lists; a listed kind this build lacks (HCS, Waku) refuses the send before signing (`StoreUnsupported`), reads continue; `postMessage` only by the user's choice, above the 1,024-B bucket only after the cost is confirmed; sessions are created only with implemented stores.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** UA-7 P27 sends every message to every listed store; sending to a subset would make a store silently incomplete.
+**Cost if wrong.** A member who reads only the store left out never sees the message.
+**Source.** owner D15 (2026-11-05), UA-7 P27; the refusal a controller call 2026-11-17 (owner may override); [spec](superpowers/specs/2026-11-17-pqchat-core.md) §4, §8.
+
+### CLI-PQC-07 — Every record read is checked; a failure is dropped silently; nothing sent depends on whether anything opened
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-07 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-07).) A message counts only after the envelope opens, the bounded decode, the portable signature, membership by the home's order, a fresh counter in its scope and a new `messageId`; a replica's record only when equal to the home's; failures are counted on the device only; reads feeding a decryption are CLI-RPC-06 reads. ARCH-POS-13's Change of 2026-11-13 puts the hybrid KEM outside that rule; PqChat keeps its own no-reaction rule.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Anyone can write to a store, and a reaction that depends on an opening tells a chosen-ciphertext sender something.
+**Cost if wrong.** A forged or replayed message shown, or a device that answers probes.
+**Source.** UA-7 spec P25, P49, P12 (accepted by the owner 2026-11-04, content types 2026-11-10); ARCH-POS-13 (owner 2026-11-06, Change 2026-11-13); [spec](superpowers/specs/2026-11-17-pqchat-core.md) §4, §9.
+
+### CLI-PQC-08 — A session is pending until its user accepts it; before that, no network call and no write derived from its wraps or `sealedInfo`
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-08 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-08).) A pending session may be read from state and its own wrap and `sealedInfo` opened locally to show it; no store read or joined, no Matrix invite answered, no subscription, receipt, leave or rekey; declining writes nothing; `epochCount` 0 never shown.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Anyone may wrap a chosen key to a UA and name its own store; an automatic join tells the creator the device is online and opened it.
+**Cost if wrong.** Presence and opening leaked to any stranger who creates a session.
+**Source.** UA-7 spec P12 (Fable review 2026-11-10, P2-4; controller text) and CTR-CHAT-14; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §4, §6.2.
+
+### CLI-PQC-09 — Recovery from contract state alone; the local store is a cache with no secret and no source of truth
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-09 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-09).) A new device pages the factory index, reads `sessionCount` / `sessionsOf` per listed instance, de-duplicates, follows the home's epochs after finality, opens its wraps, reads `storedRange` and the room's history, and reads no event. The store keeps the device id, own next counters, counters seen, consent decisions, unprocessed envelopes and read positions; losing it costs a new device id, so a counter is never reused.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Owner: recovery from state alone, no client session list, no events.
+**Cost if wrong.** A lost phone loses the sessions, or a restored store reuses a counter.
+**Source.** owner 2026-11-10 (CTR-CHAT-14, UA-7 P47, CTR-CHAT-12); the store's content a controller call 2026-11-17 (owner may override); [spec](superpowers/specs/2026-11-17-pqchat-core.md) §7.
+
+### CLI-PQC-10 — An envelope that arrives while the seed is locked is kept and processed at unlock: never dropped, never answered
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-10 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-10).) Kept up to a bound per session, the rest re-read from the room's history after unlock; nothing the sender sees depends on the lock.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** The Matrix sync loop runs while the seed is locked; the SDK review's F27 fix, which moved with the chat module to `pqchat-core`.
+**Cost if wrong.** Messages lost at every lock, or a lock state visible to senders.
+**Source.** Fable's SDK review of 2026-11-17, F27; owner 2026-11-17 "OK, reverse pqchat-core too" (the rule moves with the module); [spec](superpowers/specs/2026-11-17-pqchat-core.md) §6.1.
+
+### CLI-PQC-11 — The crate reproduces clientkeys' PqChat rows: the bytes that cross the SDK boundary in its tests, the secrets between in `ua-rs`'s
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-11 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-11).) `pqchat-core`'s tests read `records.json`, `topics.json`, `keys.json` and `messages.json` and check every output that leaves the SDK through its test-only vectors build; `ss`, `kek`, `ck_i`, `mk_i`, `n_i`, `k_env` are checked in `ua-rs`; every unbound field non-zero in some row; call-key rows wait for the call tasks.
+**Status.** SPECIFIED. UNAUDITED.
+**Why.** Byte formats change everywhere at once; an app core that never sees a key cannot check a key's row.
+**Cost if wrong.** A client that drifts from the contract's and the other clients' bytes.
+**Source.** AGENTS.md (clients and vectors); controller call 2026-11-17 for the split; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §10.
+
+### CLI-PQC-12 — A real-crypto end-to-end run is a gate of the crate
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: clients/pqchat-core.md#CLI-PQC-12 · superseded-by: —
+
+**Rule.** (Summary; normative [pqchat-core.md](clients/pqchat-core.md#CLI-PQC-12).) Locally, through `pqchat-core` over the SDK and a local homeserver, no stand-in wrap: a 1:1 session wrapped by the hybrid KEM to registered KEM keys; send and decrypt with equality; a rekey after which a removed member cannot read; a fresh device recovering from state alone; a replica read checked against the home; a public topic; at least one mutant per decryption or verification check, each killed. Then on the SCaaS testnet at its next reset, on the owner's word.
+**Status.** SPECIFIED, PLANNED (plan T11, T13). UNAUDITED.
+**Why.** Today's on-chain PqChat runs use stand-in wraps and test the contract only; no run yet opens a real wrap end to end.
+**Cost if wrong.** A client that passes vectors and still cannot talk to another.
+**Source.** owner 2026-11-17 "Ok, đưa e2e vào plan pqchat-core", relayed by the coordinator; [plan](superpowers/plans/2026-11-17-pqchat-core.md) T11, T13.
+
+### CLI-PQC-30 — Owner rulings for `pqchat-core`, 2026-11-17
+- old: — · status: current · owner: yes · date: 2026-11-17 · normative: decisions.md#CLI-PQC-30 · superseded-by: —
+
+**Rule.** The owner's rulings as stated (verbatim on the Source line), with the rule that carries each. (1) `pqchat-core` depends on `scaas-sdk` like any app core; the SDK has no chat module (CLI-PQC-01; recorded for the SDK in CTR-CHAT-01's and CLI-SDK-14's Changes on branch `scaas-sdk`). (2) Chat (b): ordinary Matrix chat in the default app build, PqChat in the `scaas` build; one matrix-rust-sdk stack, one client, one login; `pqchat-core` takes the app's live Matrix client as its transport and store and sends envelopes as `net.scaas.pqchat.v1` events (CLI-PQC-05). (3) In scaas-app, `pqchat-core` is the Cargo feature `pqchat` of `app-core-rust` (CLI-PQC-01). (4) A real-crypto client e2e in the `pqchat-core` plan (CLI-PQC-12). Earlier rulings it follows, unchanged: recovery from state alone, the 2-person chat first, spam filtered by clients (2026-11-10, CTR-CHAT-14); consent in clients (D5).
+**Status.** SPECIFIED.
+**Why.** One place for the round's rulings, each with the rule that carries it.
+**Cost if wrong.** A ruling restated from memory with a changed meaning.
+**Source.** owner 2026-11-17, relayed by the coordinator: "OK, pqchat-core cũng đảo chiều luôn"; chat "(b)" ("Ok, as proposed (b)"); the scaas-app contract's section 12 ("Ok, theo đề xuất, ghi vào contract scaas-app"); "Ok, đưa e2e vào plan pqchat-core"; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §1.
+
+### CLI-PQC-31 — Coordinator and controller calls of the `pqchat-core` spec, 2026-11-17
+- old: — · status: current · owner: no · date: 2026-11-17 · normative: decisions.md#CLI-PQC-31 · superseded-by: —
+
+**Rule.** The owner may override any. Coordinator: (1) secrets stay below the SDK, handles only, plaintext the only exit (CLI-PQC-03); (2) PqChat records signed only by the SDK's named PqChat entries, the generic app call closed to SCaaS purposes (CLI-PQC-04, correcting the first wording of the same day); (3) calls out of this spec's scope (spec §13 O2); (4) each app core declares its label prefixes; PqChat's labels checked and fit under `scaas/pqchat/v1/` (spec §5.2). Controller: (5) the round's scope (CLI-PQC-02); (6) a send refused when a listed store kind is not implemented (CLI-PQC-06); (7) the local store holds no secret and no plaintext (CLI-PQC-09, spec §13 O7 (a)); (8) the vector split between the crate and `ua-rs` (CLI-PQC-11); (9) the error names of spec §8.
+**Status.** SPECIFIED with the rules they belong to.
+**Why.** Each is the smallest choice that keeps every key in `ua-rs`, one signer, one Matrix client and the UA-7 rules unchanged; the questions with options are in the spec's §13.
+**Source.** coordinator messages of 2026-11-17 (conditions 1 and 2, the correction of 2, the call and label points); [spec](superpowers/specs/2026-11-17-pqchat-core.md) §1, §5.2, §13.
+
+## 43. Integration — ERP
 
 ### INT-ERP-01 — 24 h cooling-off for new receiving wallets
 - old: R22 · status: current · owner: no · date: 2026-10-03 · normative: integration.md#INT-ERP-01 · superseded-by: —
@@ -10879,7 +11009,7 @@ Change (2026-10-08): on the exchange path the record is `ExchangeLegSettled`; th
 **Source.** [research/_USER-DECISIONS.md](research/_USER-DECISIONS.md) line 45.
 
 <!-- example:odoo -->
-## 43. Integration — example connector
+## 44. Integration — example connector
 
 ### INT-ODOO-01 — Deploy job precedes pay via prerequisite
 - old: RS4-6 · status: current · owner: no · date: 2026-10-06 · normative: integration-odoo-example.md#INT-ODOO-01 · superseded-by: —
@@ -10989,7 +11119,7 @@ It said: Host company configuration parameter; replaced by INT-ODOO-11.
 
 <!-- /example -->
 
-## <a id="alias-index"></a>44. Alias index
+## <a id="alias-index"></a>45. Alias index
 
 <!-- BEGIN alias-index (generated by scripts/docs_check.py --write) -->
 | Old id | New id(s) | Status |

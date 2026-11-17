@@ -687,7 +687,8 @@ and reproduces every row of `smartcontracts/vectors/pqchat/` (`records.json`, `t
 with every unbound field non-zero in some row (`via`, `device`, `parents`, `ref`). Built today: the JS vector generator
 `clientkeys/src/pqchat.js` (**BUILT**, 3c T84, `test/pqchat.test.js`); `ua-rs` first, then every `ua-*` (PLANNED, UA-7
 T11–T14, T17–T20). Which device-id version a client defaults to is open (a controller proposal: v4 for a device that posts on
-chain, since v7 puts its creation time on chain).
+chain, since v7 puts its creation time on chain). The Rust client core that does all of this above `scaas-sdk`, with key handles only, is
+[`pqchat-core`](pqchat-core.md) (SPECIFIED).
 
 **Not here.** Per-kind derivation and clientkeys' API ([signers-clientkeys](signers-clientkeys.md)), group vectors, the registry contract, the UA ledger.
 Not built yet: the FRB layer as a Flutter plugin and its Android and iOS builds (no web build: `SecretBytes` needs `dart:ffi`), the wasm-bindgen browser binding of `ua-rs` (the library compiles for wasm32), and Qt packaging for Windows and macOS.
