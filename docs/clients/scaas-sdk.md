@@ -270,3 +270,7 @@ flags, JSON or a table; it shows the review and the quote and asks before submit
 terminal without echo or from a file descriptor, never from the command line or the environment; nothing secret is printed except a
 new seed's one reveal. It shares its data directory with the TUI and the app under the keystore's lock, holds no logic of its own and
 serves as the reference client of the SDK's end-to-end tests.
+
+The interactive terminal front-end over the SDK is `scaas-tui`, a separate program with its own rules
+([CLI-TUI-01](scaas-tui.md#CLI-TUI-01)): a session that follows events and reviews every operation on screen, where the CLI runs one
+call per command.
