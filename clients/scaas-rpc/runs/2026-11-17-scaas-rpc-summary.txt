@@ -32,10 +32,10 @@ rpc-deny | 2633740cb | 0 | -; tree dirty
 node-e2e-aptos | 6a0e68b1a | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 node-e2e-algorand | 6a0e68b1a | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 node-e2e-sui | 118d28867 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-docs | 118d28867 | 0 | -; tree dirty
 rpc-wasm | ecb574968 | 0 | -; tree dirty
 rpc-test | ecb574968 | 0 | 156 passed, 0 failed, 10 ignored (15 binaries); tree dirty
 rpc-clippy | ecb574968 | 0 | -; tree dirty
-node-test | ecb574968 | 0 | 813 passed, 0 failed, 72 ignored (18 binaries); tree dirty
-node-clippy | ecb574968 | 0 | -; tree dirty
-node-e2e-ton | ecb574968 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+node-test | ef4c78a40 | 0 | 815 passed, 0 failed, 72 ignored (18 binaries); tree dirty
+node-clippy | ef4c78a40 | 0 | -; tree dirty
+node-e2e-ton | ef4c78a40 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+docs | ef4c78a40 | 0 | -; tree dirty

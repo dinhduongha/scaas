@@ -18,6 +18,15 @@ MUTANTS = [
      T + "the_reads_the_status_class_and_the_key_to_the_first_endpoint_only"),
     ("a: a non-2xx read as an answer", [(S, "        if !(200..300).contains(&status) {", "        if status >= 500 {")],
      T + "the_reads_the_status_class_and_the_key_to_the_first_endpoint_only"),
+    # (b) the carve-out (F3) first, then the failover
+    ("b: every read fails over (the carve-out gone)", [("scaas-node/src/adapters/evm.rs", "    BUILDING.try_with(|_| ()).is_ok()", "    true")],
+     NT + "ton_tx_status_op_consumed_and_the_lane_sequence_never_fail_over"),
+    ("b: the build's reads on endpoint 0 only", [(N, "        match BUILDING.scope((), self.build_on(job, lane)).await {", "        match self.build_on(job, lane).await {")],
+     NT + "ton_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: a failover refusal final (the counter not compared)", [(N, "            Err(SimError::Revert(r)) if self.api.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),\n", "")],
+     NT + "ton_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
+    ("b: the first endpoint's key to every endpoint", [(N, "                .filter(|_| i == 0)\n", "                .filter(|_| true)\n")],
+     NT + "ton_build_reads_fail_over_and_a_failover_refusal_is_no_verdict"),
 ]
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ use ed25519_dalek::{Signature, VerifyingKey};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
+use crate::adapters::evm::{building, BUILDING};
 use crate::adapter::{Built, ChainAdapter, Family, Head, Lane, Signed, TxStatus};
 use crate::chain::SimError;
 use crate::config::ChainCfg;
@@ -1164,12 +1165,66 @@ impl Api {
         }
     }
 
+    /// GET: inside `build` failed over, any other endpoint 0's (F3: a status, the escrow follow-up, `op_consumed`, the lane
+    /// sequence).
     pub async fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value> {
-        self.net.get(0, path, query).await.map_err(|e| Self::error(path, e))
+        if !building() {
+            return self.net.get(0, path, query).await.map_err(|e| Self::error(path, e));
+        }
+        self.failover(path, |i| self.net.get(i, path, query)).await
     }
 
+    /// POST: inside `build` failed over (its getters), any other endpoint 0's (the sends, the escrow's getters).
     pub async fn post(&self, path: &str, body: Value) -> Result<Value> {
-        self.net.post(0, path, &body).await.map_err(|e| Self::error(path, e))
+        if !building() {
+            return self.net.post(0, path, &body).await.map_err(|e| Self::error(path, e));
+        }
+        self.failover(path, |i| self.net.post(i, path, &body)).await
+    }
+
+    /// ARCH-POS-15 (CLI-RPC-04, scaas-rpc T22b): endpoint 0, then each next endpoint of the list (the profile constant names
+    /// the network, NET-ALL-22) not behind the masterchain seqno endpoint 0 last showed. A status other than 2xx is endpoint
+    /// 0's as before (`"{what}: HTTP {status}: {text}"`), a later endpoint's no verdict (the next is asked); every endpoint
+    /// failing after a later endpoint's refusal is a transport error without its text; what a failover endpoint's answer
+    /// refuses `build` requeues. A later endpoint gets no key but its own (none: the key is the first endpoint's).
+    async fn failover<F, Fut>(&self, what: &str, f: F) -> Result<Value>
+    where
+        F: Fn(usize) -> Fut,
+        Fut: std::future::Future<Output = std::result::Result<Value, scaas_rpc::family::FamilyError>>,
+    {
+        use scaas_rpc::family::FamilyError;
+        use scaas_rpc::pool::ReadError;
+        let a = self.net.client.failover(&*self.net, |i| {
+            let r = f(i);
+            async move {
+                r.await.map_err(|e| match e {
+                    FamilyError::Status { status, message } => ReadError::Revert { data: vec![], reason: format!("{status}\n{message}") },
+                    FamilyError::Failure(f) => ReadError::Failure(f),
+                    e => ReadError::Failure(scaas_rpc::EndpointFailure::new(i, scaas_rpc::FailureKind::Transport, &e.to_string())),
+                })
+            }
+        }).await;
+        match a {
+            Ok(a) => Ok(a.value),
+            Err(scaas_rpc::RpcError::Revert { reason, .. }) => {
+                let (status, message) = reason.split_once('\n').unwrap_or(("0", &reason));
+                Err(Self::error(what, FamilyError::Status { status: status.parse().unwrap_or(0), message: message.into() }))
+            }
+            Err(scaas_rpc::RpcError::EndpointAllFailed { failover_revert: Some(_), .. }) => {
+                bail!("{what}: no endpoint answered (a failover endpoint's refusal decides nothing)")
+            }
+            Err(e) => bail!("{what}: {e}"),
+        }
+    }
+
+    /// Answers of an endpoint after the first (the failover count).
+    pub fn failovers(&self) -> u64 {
+        self.net.client.pool().failover_answers()
+    }
+
+    /// The failover reads' floor: endpoint 0's masterchain seqno.
+    fn saw(&self, seqno: u64) {
+        self.net.client.pool().saw_block(seqno);
     }
 
     /// Get-method; numeric results only (`num` entries, `0x…` hex or decimal).
@@ -1615,6 +1670,71 @@ impl TonAdapter {
         self.api.post("message", json!({"boc": b64encode(&raw)})).await.map(|_| ())
     }
 
+    async fn build_on(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
+        let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
+        let transport = |e: anyhow::Error| SimError::Transport(format!("{e:#}"));
+        let op = job.op.as_ref().ok_or_else(|| SimError::Revert("not a signed_op job".into()))?;
+        let s = |k: &str| op.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+        let cell = alloy::hex::decode(s("payload").trim_start_matches("0x")).map_err(|e| revert(e.into())).and_then(|b| boc_parse(&b).map_err(revert))?;
+        let m = parse_metaop(&cell).map_err(revert)?;
+        if hex0x(&m.digest) != s("digest").to_lowercase() {
+            return Err(SimError::Revert("payload does not hash to the job digest".into()));
+        }
+        if op["kind"] == "relay_fee" {
+            return self.build_relay_fee(job, op, &cell, &m).await;
+        }
+        let contract = Addr::parse(&s("contract")).map_err(revert)?;
+        if contract != m.contract || m.network != self.global_id {
+            return Err(SimError::Revert("payload contract/network does not match the job".into()));
+        }
+        if m.valid_until <= crate::submit::now() {
+            return Err(SimError::Revert("signed payload expired".into()));
+        }
+        let me = self.lane_wallet(lane).and_then(|w| w.address()).map_err(transport)?;
+        if m.relayer.is_some_and(|r| r != me) {
+            return Err(SimError::Revert("payload is bound to another relayer".into()));
+        }
+        let pay_meta = pay_params(&m, op, self.relay_fee.params.max_pay_meta_bytes).map_err(revert)?;
+        if m.op == 1 && self.relay_fee.router == Some(m.to) {
+            // CTR-MTX-27: never pay the router outside a relay (a transfer without a notification would stay there).
+            return Err(SimError::Revert(format!("a plain pay to the relay-fee router {} is refused", m.to.raw())));
+        }
+        let extra = op.get("extra").cloned().unwrap_or(Value::Null);
+        let mut forward = 0u128;
+        let body = if s("op_kind") == "mandate_pay" {
+            let sig: [u8; 64] = alloy::hex::decode(s("signature").trim_start_matches("0x"))
+                .map_err(|e| revert(e.into()))?
+                .try_into()
+                .map_err(|_| SimError::Revert("delegate signature must be 64 bytes".into()))?;
+            mandate_pay_body(&cell, &sig, &me).map_err(revert)?
+        } else {
+            let auth = parse_auth(&s("signature")).map_err(revert)?;
+            let next = self.simulate_signed(&contract, &m, &cell, &auth).await?;
+            let state_init = auth_state_init(&auth);
+            let params = match (pay_meta, extra.get("params").and_then(Value::as_str)) {
+                (Some(p), _) => Some(p),
+                (None, Some(p)) => Some(boc_parse(&alloy::hex::decode(p.trim_start_matches("0x")).map_err(|e| revert(e.into()))?).map_err(revert)?),
+                (None, None) => None,
+            };
+            let match_with = match extra.get("match_with").and_then(Value::as_str) {
+                Some(h) => b32(h).map_err(revert)?,
+                None => [0; 32],
+            };
+            // The payer signed a floor for the forward TON (review H2); the wallet refuses less.
+            let floor = match m.op {
+                1 => pay_forward_floor(&m).map_err(revert)?,
+                2 => trade_forward_floor(params.as_ref().ok_or_else(|| SimError::Revert("trade without params".into()))?).map_err(revert)?.max(MIN_LEG_TON),
+                4 if next == m.nonce + 1 => CANCEL_TON,
+                _ => 0,
+            };
+            forward = extra.get("forward_nanoton").and_then(Value::as_u64).map(u128::from).unwrap_or(self.forward).max(floor);
+            signed_op_body(&cell, &auth_cell(&auth).map_err(revert)?, params, state_init, &me, forward, match_with).map_err(revert)?
+        };
+        // Sized from THIS job's forward (review L8): the wallet wants 0.05 TON + forward.
+        let value = self.attach.max(forward + 100_000_000);
+        Ok(Built { job_id: job.id, body: boc_serialize(&body), valid_until: m.valid_until, meta: built_meta(&contract, value) })
+    }
+
     async fn mc_block(&self, seqno: u64) -> Result<String> {
         let v = self
             .api
@@ -1810,69 +1930,14 @@ impl ChainAdapter for TonAdapter {
         Ok(Some(next > m.nonce))
     }
 
+    /// [`TonAdapter::build_on`], its getters failed over (scaas-rpc T22b, R4: a refusal read while a failover endpoint
+    /// answered is no verdict).
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let revert = |e: anyhow::Error| SimError::Revert(format!("{e:#}"));
-        let transport = |e: anyhow::Error| SimError::Transport(format!("{e:#}"));
-        let op = job.op.as_ref().ok_or_else(|| SimError::Revert("not a signed_op job".into()))?;
-        let s = |k: &str| op.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
-        let cell = alloy::hex::decode(s("payload").trim_start_matches("0x")).map_err(|e| revert(e.into())).and_then(|b| boc_parse(&b).map_err(revert))?;
-        let m = parse_metaop(&cell).map_err(revert)?;
-        if hex0x(&m.digest) != s("digest").to_lowercase() {
-            return Err(SimError::Revert("payload does not hash to the job digest".into()));
+        let mark = self.api.failovers();
+        match BUILDING.scope((), self.build_on(job, lane)).await {
+            Err(SimError::Revert(r)) if self.api.failovers() != mark => Err(SimError::Transport(crate::adapters::evm::failover_answer(&r))),
+            r => r,
         }
-        if op["kind"] == "relay_fee" {
-            return self.build_relay_fee(job, op, &cell, &m).await;
-        }
-        let contract = Addr::parse(&s("contract")).map_err(revert)?;
-        if contract != m.contract || m.network != self.global_id {
-            return Err(SimError::Revert("payload contract/network does not match the job".into()));
-        }
-        if m.valid_until <= crate::submit::now() {
-            return Err(SimError::Revert("signed payload expired".into()));
-        }
-        let me = self.lane_wallet(lane).and_then(|w| w.address()).map_err(transport)?;
-        if m.relayer.is_some_and(|r| r != me) {
-            return Err(SimError::Revert("payload is bound to another relayer".into()));
-        }
-        let pay_meta = pay_params(&m, op, self.relay_fee.params.max_pay_meta_bytes).map_err(revert)?;
-        if m.op == 1 && self.relay_fee.router == Some(m.to) {
-            // CTR-MTX-27: never pay the router outside a relay (a transfer without a notification would stay there).
-            return Err(SimError::Revert(format!("a plain pay to the relay-fee router {} is refused", m.to.raw())));
-        }
-        let extra = op.get("extra").cloned().unwrap_or(Value::Null);
-        let mut forward = 0u128;
-        let body = if s("op_kind") == "mandate_pay" {
-            let sig: [u8; 64] = alloy::hex::decode(s("signature").trim_start_matches("0x"))
-                .map_err(|e| revert(e.into()))?
-                .try_into()
-                .map_err(|_| SimError::Revert("delegate signature must be 64 bytes".into()))?;
-            mandate_pay_body(&cell, &sig, &me).map_err(revert)?
-        } else {
-            let auth = parse_auth(&s("signature")).map_err(revert)?;
-            let next = self.simulate_signed(&contract, &m, &cell, &auth).await?;
-            let state_init = auth_state_init(&auth);
-            let params = match (pay_meta, extra.get("params").and_then(Value::as_str)) {
-                (Some(p), _) => Some(p),
-                (None, Some(p)) => Some(boc_parse(&alloy::hex::decode(p.trim_start_matches("0x")).map_err(|e| revert(e.into()))?).map_err(revert)?),
-                (None, None) => None,
-            };
-            let match_with = match extra.get("match_with").and_then(Value::as_str) {
-                Some(h) => b32(h).map_err(revert)?,
-                None => [0; 32],
-            };
-            // The payer signed a floor for the forward TON (review H2); the wallet refuses less.
-            let floor = match m.op {
-                1 => pay_forward_floor(&m).map_err(revert)?,
-                2 => trade_forward_floor(params.as_ref().ok_or_else(|| SimError::Revert("trade without params".into()))?).map_err(revert)?.max(MIN_LEG_TON),
-                4 if next == m.nonce + 1 => CANCEL_TON,
-                _ => 0,
-            };
-            forward = extra.get("forward_nanoton").and_then(Value::as_u64).map(u128::from).unwrap_or(self.forward).max(floor);
-            signed_op_body(&cell, &auth_cell(&auth).map_err(revert)?, params, state_init, &me, forward, match_with).map_err(revert)?
-        };
-        // Sized from THIS job's forward (review L8): the wallet wants 0.05 TON + forward.
-        let value = self.attach.max(forward + 100_000_000);
-        Ok(Built { job_id: job.id, body: boc_serialize(&body), valid_until: m.valid_until, meta: built_meta(&contract, value) })
     }
 
     async fn sign(&self, built: Built, lane: usize, sequence: u64) -> Result<Signed> {
@@ -1947,6 +2012,7 @@ impl ChainAdapter for TonAdapter {
         let v = self.api.get("masterchainInfo", &[]).await?;
         let last = v.get("last").ok_or_else(|| anyhow!("masterchainInfo.last"))?;
         let height = last.get("seqno").and_then(Value::as_u64).ok_or_else(|| anyhow!("masterchainInfo.last.seqno"))?;
+        self.api.saw(height); // the failover reads' floor: endpoint 0's masterchain seqno
         Ok(Some(Head { height, hash: hex0x(&api_hash(last.get("root_hash").unwrap_or(&Value::Null))?) }))
     }
 
@@ -2316,6 +2382,8 @@ mod tests {
         posted: Vec<Value>,
         /// The getters run, in order (`runGetMethod` method names).
         ran: Vec<String>,
+        /// scaas-rpc T22b: each request's `X-API-Key`
+        keys: Vec<Option<String>>,
     }
 
     type Shared = Arc<std::sync::Mutex<Fake>>;
@@ -2326,9 +2394,12 @@ mod tests {
 
     async fn fake_api_shared(f: Fake) -> (String, Shared) {
         use axum::extract::{Path, Query, State};
-        async fn h(State(s): State<Shared>, Path(path): Path<String>, Query(q): Query<HashMap<String, String>>, body: String) -> axum::Json<Value> {
+        async fn h(State(s): State<Shared>, Path(path): Path<String>, Query(q): Query<HashMap<String, String>>, headers: axum::http::HeaderMap,
+                   body: String) -> axum::Json<Value> {
             let mut f = s.lock().unwrap();
+            f.keys.push(headers.get("x-api-key").and_then(|v| v.to_str().ok()).map(str::to_string));
             axum::Json(match path.as_str() {
+                "masterchainInfo" => json!({"last": {"seqno": 1, "root_hash": b64encode(&[0; 32])}}),
                 "runGetMethod" => {
                     let b: Value = serde_json::from_str(&body).unwrap();
                     let method = b["method"].as_str().unwrap().to_string();
@@ -2360,11 +2431,15 @@ mod tests {
     }
 
     fn adapter_with(url: &str, params: toml::Table, tokens: Vec<crate::config::TokenCfg>) -> Result<TonAdapter> {
+        adapter_with_urls(&[url.to_string()], params, tokens)
+    }
+
+    fn adapter_with_urls(urls: &[String], params: toml::Table, tokens: Vec<crate::config::TokenCfg>) -> Result<TonAdapter> {
         let cfg = ChainCfg {
             family: "ton".into(),
             network: Some("-239".into()),
             evm_chain_number: 0,
-            rpc_urls: vec![url.into()],
+            rpc_urls: urls.to_vec(),
             signer_key_env: String::new(),
             private_key: None,
             lanes: vec![0],
@@ -3275,5 +3350,84 @@ mod tests {
         assert_eq!(a.sequence(0).await.unwrap(), 3);
         assert_eq!(adapter(&url).sequence(0).await.unwrap(), 3);
         assert_eq!(*seen.lock().unwrap(), [Some("k".to_string()), None], "the key, then control: none configured");
+    }
+
+    // ---- scaas-rpc T22b: ARCH-POS-15 failover, the first-endpoint carve-out first (F3) ----
+
+    const DOWN: &str = "http://127.0.0.1:9";
+
+    fn adapter_on(urls: &[String], params: toml::Table) -> TonAdapter {
+        adapter_with_urls(urls, params, vec![]).unwrap()
+    }
+
+    /// A TON Connect-signed plain pay of 10 at lane nonce 0, valid ten minutes, bound to no relayer.
+    fn signed_pay() -> Job {
+        let key = LocalSigner::new(Curve::Ed25519, &[1; 32]).unwrap();
+        let w5 = W5::new(key.public_key().try_into().unwrap(), -239).unwrap();
+        let (from, contract) = (w5.address().unwrap(), Addr { wc: 0, hash: [0xc0; 32] });
+        let vu = crate::submit::now() + 600;
+        let op = Builder::new()
+            .bytes(b"scaas.metaop.v1")
+            .int(-239, 32)
+            .uint(1, 8)
+            .uint(10, 128)
+            .uint(0, 64)
+            .uint(vu as u128, 64)
+            .addr(Some(&contract))
+            .reference(Builder::new().addr(Some(&from)).addr(Some(&Addr { wc: 0, hash: [2; 32] })).addr(None).end().unwrap())
+            .reference(Builder::new().bytes(&[3; 32]).bytes(&[4; 32]).bytes(&[0; 32]).end().unwrap())
+            .end()
+            .unwrap();
+        let ts = 1_800_000_000u64;
+        let sig = key.sign(&envelope_hash(&from, ts, "pay.example", &op).unwrap()).unwrap();
+        let signature = json!({"kind": "ton_connect", "signature": b64encode(&sig), "timestamp": ts, "domain": "pay.example",
+                               "state_init": b64encode(&boc_serialize(&w5.state_init().unwrap()))});
+        serde_json::from_value(json!({"id": 1, "kind": "signed_op", "op": {"contract": contract.raw(), "op_kind": "pay",
+            "payload": alloy::hex::encode(boc_serialize(&op)), "signature": signature.to_string(), "digest": hex0x(&op.hash()), "extra": {}}}))
+        .unwrap()
+    }
+
+    fn lane_at(next: u128) -> Fake {
+        Fake { getters: HashMap::from([("get_lane_nonce".into(), num(next)), ("get_owner_pubkey".into(), num(0))]), ..Default::default() }
+    }
+
+    /// F3: a status, `op_consumed` and the lane sequence are endpoint 0's only: with it down each is unread (asked again;
+    /// a lagging endpoint 1's "unknown" is never read, so never `dead`) though endpoint 1 holds a consumed lane; endpoint 1
+    /// runs no getter and is sent nothing. Control: endpoint 0 up.
+    #[tokio::test]
+    async fn ton_tx_status_op_consumed_and_the_lane_sequence_never_fail_over() {
+        let (url, f) = fake_api_shared(lane_at(1)).await;
+        let a = adapter_on(&[DOWN.to_string(), url.clone()], toml::Table::new());
+        assert!(a.tx_status(&format!("0x{}", "11".repeat(32))).await.is_err(), "unread, never Unknown from endpoint 1");
+        assert!(a.op_consumed(&signed_pay()).await.is_err());
+        assert!(a.sequence(0).await.is_err());
+        {
+            let g = f.lock().unwrap();
+            assert!(g.ran.is_empty() && g.posted.is_empty() && g.keys.is_empty(), "endpoint 1 never asked");
+        }
+        assert_eq!(a.api.failovers(), 0);
+        let a = adapter(&url);
+        assert_eq!(a.op_consumed(&signed_pay()).await.unwrap(), Some(true), "control");
+        assert_eq!(a.sequence(0).await.unwrap(), 3);
+    }
+
+    /// ARCH-POS-15: `build`'s getters fail over: endpoint 0 down, endpoint 1 builds (and gets no key but its own: none). A
+    /// refusal read while a failover endpoint answered is no verdict (FAILOVER_ANSWER, requeued); the same on endpoint 0 is
+    /// the job's.
+    #[tokio::test]
+    async fn ton_build_reads_fail_over_and_a_failover_refusal_is_no_verdict() {
+        std::env::set_var("SCAAS_T22B_TON_KEY", "k");
+        let key = toml::Table::from_iter([("api_key_env".to_string(), toml::Value::from("SCAAS_T22B_TON_KEY"))]);
+        let (url, f) = fake_api_shared(lane_at(0)).await;
+        let a = adapter_on(&[DOWN.to_string(), url], key.clone());
+        a.build(&signed_pay(), 0).await.unwrap();
+        assert!(a.api.failovers() > 0);
+        assert!(f.lock().unwrap().keys.iter().all(Option::is_none), "endpoint 0's key never reaches endpoint 1");
+        let (url, _) = fake_api_shared(lane_at(1)).await;
+        match adapter_on(&[DOWN.to_string(), url.clone()], key).build(&signed_pay(), 0).await {
+            Err(SimError::Transport(m)) => assert!(m.starts_with("FAILOVER_ANSWER") && m.contains("lane nonce is 1"), "{m}"),
+            r => panic!("{r:?}"),
+        }
+        assert!(matches!(adapter(&url).build(&signed_pay(), 0).await, Err(SimError::Revert(m)) if m.contains("lane nonce is 1")), "control");
     }
 }
