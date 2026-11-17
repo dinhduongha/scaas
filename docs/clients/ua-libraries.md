@@ -225,6 +225,11 @@ stays the JS reference and writes every vector row first. The only exits of a se
 per-encapsulation secret ([CLI-SGN-43](signers-clientkeys.md#CLI-SGN-43)). Key types are neither `Clone` nor `Debug`-printing and
 have no accessor for secret bytes (compile-fail doc tests). BUILT.
 
+**Scope (owner 2026-11-17).** The rule holds from `scaas-sdk` down: every SCaaS kind (UA keys, `mtx*`, PQZ and Zether,
+PqChat) and everything `scaas-sdk` or `pqchat-core` signs goes through `ua-rs`. An app above `scaas-sdk` may sign the native
+transactions of other chains with its own library (for example Trust Wallet Core) and keep its own vault; such an app links
+`ua-rs` and `scaas-sdk` only in a build that offers SCaaS features. SPECIFIED.
+
 <a id="CLI-UAL-02"></a>**CLI-UAL-02** — **No release signature takes randomness.** Every randomized call (ML-DSA `rnd`, SLH-DSA
 `opt_rand`, Falcon, BIP-340 and scaas Schnorr `aux`, the KEM's `m` and `e`, PQZ `rnd32`, link codes) draws from the OS RNG inside
 `ua-rs`; deterministic entry points exist only under `vectors`, and a compile-fail doc test shows a release build has none. BUILT.

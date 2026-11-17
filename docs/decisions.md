@@ -9752,6 +9752,13 @@ Rules of the `ua-rs` wallet surface and its facades, then the records of the dec
 **Status.** BUILT: T2 `b3e051a5`, T3a `82fbac3f`, T8 `1da36807`, T9 `6e092199`, T10 `b2c56d53`. UNAUDITED.
 **Source.** [signer spec](superpowers/specs/2026-11-05-ua-rs-sign.md) §1, §2, §8.4.
 
+**Change (owner 2026-11-17, "ua-rs is the only signer is the rule, so it counts from scaas-sdk down"; docs).** The rule's
+scope is `scaas-sdk` and below: every SCaaS kind signs through `ua-rs`. An end-user app above it (scaas-app) may sign other
+chains' native transactions with its own library and links `ua-rs` + `scaas-sdk` only behind a build option that turns on the
+SCaaS features (owner: "the scaas flag is what builds ua-rs and scaas-sdk"). Why: the app must build and ship as a plain
+multi-chain wallet without SCaaS. Cost if wrong: a native-chain signing flaw in such an app is outside the `ua-rs` audit; the
+app carries its own cross-check of addresses and signed bytes between its backends.
+
 ### CLI-UAL-02 — No release signature takes randomness
 - old: — · status: current · owner: yes · date: 2026-11-05 · normative: clients/ua-libraries.md#CLI-UAL-02 · superseded-by: —
 
