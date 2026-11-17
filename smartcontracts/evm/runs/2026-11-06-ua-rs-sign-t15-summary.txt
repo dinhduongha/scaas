@@ -1,0 +1,64 @@
+# 2026-11-06 ua-rs-sign T15: the PQZ facade (spec §10.2, §8.2, §8.4, §9.3; plan T15). clients/ua-rs src/facade/pqz.rs (feature `pqz` =
+# wallet + pqz-ffi `prove`, Rust PQZL backend, PQZH where the set has it; `pqz-set-<set>` -> pqz-ffi `set-<set>`, exactly one, a const
+# assert): Wallet::pqz_key(account, index) -> PqzKey (seed32 = HKDF-SHA256(seed, "scaas.ua.pq.v1", utf8("scaas.ua.pqz-mlwe.v1") ||
+# be32 a || be32 i) in the wallet's arena; s, e rebuilt by pqzl::keygen per call under the store guard and wiped; lock / drop revoke it,
+# unlock does not revive it), Wallet::export_pqz_leaf_raw(_, _, AllowSecretExport), pqz_set() / check_set() / PqzSetMismatch,
+# PqzKey::call (11 commands: enc, dec (dec_win), proveRegister (R_REG over pqz_reg_message), proveKeyRecord (the setPqzKey R_REG),
+# proveTransfer (op 1), proveBurn, proveRefresh (op 2), proveTransferMulti (op 7, memo::seal under seed32), proveDiscloseSender (op 4,
+# r, e1, e2_t re-derived), proveDisclose (op 5), openMemo; bounded reader 1 MiB / depth 8, an allow-list per command, typed values),
+# seal / open_balance_cache (HKDF(seed32, "scaas-pqz-balance-cache-v1"), AAD pqz-cache:<set>). rnd32 from OsRng; transfers: a fresh
+# salt and CTR-PQZ-19's seed_enc = HKDF-SHA256(seed32, "SCAAS-PQZ-ENC-V2", chainUid || token || fromUA || be32 sendCounter || salt);
+# burn / refresh: a fresh OS-RNG seed. No pqzl / pqzh / stmt / ffi source changed, no transcript, relation or proofSystemId. ua-c: 120 ->
+# 129 exports (ScaasUaPqzKey and 9 calls), status 40 SCAAS_UA_ERR_PQZ_SET_MISMATCH appended, SCAAS_UA_PQZ_OUT_MAX, `pqz` +
+# `pqz-set-n2304-kmax4096` in the default build. Fuzz target pqz_cmd. UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs git-ignored (clients/ua-rs/target/t15/,
+# clients/ua-c/target/t15/, clients/ua-rs/fuzz/runs/t15*-pqz_cmd.log). Gates on the tree of 12b4577a (the T15 code commit).
+step | commit | rc | counts
+red: ua-rs cargo test --features vectors --test facade_pqz (tests and Cargo wiring only, no facade) | 594ca636 + tests | 101 | does not compile: E0432 unresolved import scaas_ua::facade::pqz (2), E0599 no method pqz_key (22) / export_pqz_leaf_raw (5) on Wallet, E0599 no variant PqzSetMismatch (5); 35 errors
+red: ua-c tests.test_vectors.WalletPqz against the T12-follow-up library (120 exports) | 594ca636 lib | 1 | AttributeError: undefined symbol scaas_ua_wallet_pqz_key; tests/smoke.c against it: does not compile (11 errors)
+ua-rs clippy --all-targets -D warnings: default, vectors, --no-default-features, signers, json, pq, wallet,mlock, zether, pqz,pqz-set-n2048-kmax1024 (+ vectors) | 12b4577a | 0 | 0 warnings each (10 cells); pqzl (a path dependency) prints 2 `deprecated` warnings of generic-array's GenericArray at ua-rs' lock, not ours
+ua-rs test (default: zether + pqz n2304-kmax4096) | 12b4577a | 0 | 29 suites, 282 passed, 1 ignored (T12 follow-ups: 268; + facade_pqz 11, 3 doc tests: no Clone, no vectors_call / vectors_register_message in a release build)
+ua-rs test --features vectors | 12b4577a | 0 | 30 suites, 339 passed, 3 ignored (T12 follow-ups: 322; + facade_pqz 15, fuzz_caps 1, a doc test)
+ua-rs test --no-default-features | 12b4577a | 0 | 10 suites, 50 passed
+ua-rs test --no-default-features --features signers --test groups | 12b4577a | 0 | 8 passed, 1 ignored
+ua-rs test --no-default-features --features json --test json | 12b4577a | 0 | 5 passed
+ua-rs test --no-default-features --features pq --test pq --test ua8 --test nested | 12b4577a | 0 | 45 passed
+ua-rs test --no-default-features --features wallet,mlock | 12b4577a | 0 | 27 suites, 256 passed, 1 ignored (no facade: unchanged)
+ua-rs test --no-default-features --features zether --test facade_zether | 12b4577a | 0 | 9 passed
+ua-rs test --no-default-features --features pqz,pqz-set-n2048-kmax1024 --test facade_pqz (the other set) | 12b4577a | 0 | 11 passed
+ua-rs test --no-default-features --features pqz,pqz-set-n2048-kmax1024,vectors --test facade_pqz | 12b4577a | 0 | 15 passed (the n2048-kmax1024 vector files, smartcontracts/vectors/pqz/)
+ua-rs facade_pqz under vectors: proof_rows_through_the_facade, at both sets | 12b4577a | 0 | every row of proof_pqzl.json (23) and proof_pqzh.json (20) per set: the statement rebuilt through the facade (proveTransfer, proveBurn, proveRefresh, proveTransferMulti incl. its memo, the R_REG message hook, proveDiscloseSender, proveDisclose) equals the statement file's and the proof's keccak equals the row's, at the generator's keys, seed_enc, salt, memo key and rnd32: pqz-core's transcripts are the facade's; keygen.json 8 rows; memo_open 9 rows (edits included, "none" = Argument)
+ua-rs fuzz_caps (--features vectors) | 12b4577a | 0 | 9 passed (+ pqz_inputs_past_their_caps_are_refused_unparsed; caps as literals, seeds.py's QCMDS == COMMANDS)
+wasm32-unknown-unknown build: default (zether + pqz), --no-default-features, signers, pq, wallet, zether alone, pqz n2304-kmax4096 alone, pqz n2048-kmax1024 alone | 12b4577a | 0 | 8 of 8: pqz builds on wasm32
+ua-c clippy --all-targets -D warnings: default (mlock, zether, pqz n2304-kmax4096), --no-default-features | 12b4577a | 0 | 0 warnings each
+ua-c cargo test (lib + header) | 12b4577a | 0 | 4 + 5 passed (header regenerated by cbindgen; every_export_is_guarded: 129 exports; + export_pqz_leaf_raw_is_warned)
+ua-c C smoke (cc -std=c99 -Werror) | 12b4577a | 0 | smoke ok (+ PQZ: feature and set bits, pqz_set / check_set, an R_REG proof, a key field refused, cache box round trip, leaf export, KEY_REVOKED after wallet_free, public key readable)
+ua-c ASan smoke (tests/asan-smoke.sh) | 12b4577a | 0 | smoke ok, no report
+ua-c test_vectors.py (ctypes), three runs | 12b4577a | 0 | 82 tests OK each (T12 follow-ups: 76; + WalletPqz 6; WalletErrors fed 6 PQZ calls with secret inputs; the unknown-status pin 40 -> 41)
+ua-c default decision: x86-64 release cdylib, stripped | 12b4577a | 0 | default without pqz 4,107,472 B, with pqz n2304-kmax4096 5,380,640 B (+1,273,168 B, +31 %); release rebuild adding pqz-ffi, pqz-stmt, pqzl, pqzh-ligero, scaas-ua, scaas-ua-c: 92.6 s wall on a shared machine (not a calibrated timing)
+fuzz clippy -D warnings (clients/ua-rs/fuzz); build.sh | 12b4577a | 0 | 0 warnings; ua-fuzz linked (profile now panic = "unwind", the panic caught at LLVMFuzzerTestOneInput and aborted: pqz-ffi refuses panic = "abort" natively)
+fuzz pqz_cmd 60 s (execs | cov / ft | corpus | crashes) | 12b4577a | 0 | 647,037 (2247 / 4911, 757) 0; seeds 16 (requests from the n2304-kmax4096 statement files, every command, a box), regress 2; max_len 256 KiB
+cargo deny --all-features check, clients/ua-rs | 12b4577a | 0 | advisories ok, bans ok, licenses ok, sources ok; 22 duplicate warnings (unchanged)
+cargo deny --all-features --config ../ua-rs/deny.toml check, clients/ua-c | 12b4577a | 0 | advisories ok, bans ok, licenses ok, sources ok; 21 duplicate warnings (unchanged)
+cargo deny --all-features --config ../deny.toml check, clients/ua-rs/fuzz | 12b4577a | 0 | advisories ok, bans ok, licenses ok, sources ok; 21 duplicate warnings
+Cargo.lock | 12b4577a | - | clients/ua-rs, clients/ua-c, clients/ua-rs/fuzz: + pqz-ffi, pqz-stmt, pqzl, pqzh-ligero (path); sha3 0.10.9 -> 0.10.8 (pqz-ffi, pqzl and pqzh-ligero pin =0.10.8; one sha3 0.10 in each graph); nothing else moved
+cargo tree --locked --offline: scaas-node, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, ua-c | 12b4577a | 0 | 6 of 6; no other lock file changed
+docs_check check / paths | 12b4577a | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+mutants: 2026-11-06-ua-rs-sign-t15-mutants.py | 12b4577a | 0 | 29 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t15-mutants.txt): the plan's 3 (rnd32 fixed, set mismatch accepted, TAG(kind) for utf8(tag)) and 26 of the controller's; M14 / M15 survived their first run (the prover's own refusal hid the facade's checks) and were closed by the prover-call counter before the commit was final
+# Decisions (controller, the owner may override): (1) The facade keeps seed32 only (spec §8.2's arena list); s, e are rebuilt per call by
+# pqzl::keygen (cached A) and wiped, so the arena holds 32 bytes per key, not 6 KiB. (2) The facade is a JSON command API like Zether's
+# (PqzKey::call), its statements built inside from named fields; a disclosure takes the statement the token's disclosureStatement view gives.
+# (3) Set: every proving command names the token's proofSystemId (PqzSetMismatch for another), check_set compares a deployed PqzSet; the id
+# word is checked before pqz-stmt parses (it refuses an unknown id as a malformed statement). (4) CTR-PQZ-19's seed_enc ("SCAAS-PQZ-ENC-V2",
+# a controller ruling pending the owner in the contracts doc) is built here for the first time in a client; the salt is fresh per build.
+# (5) Op 1 memo: CTR-PQZ-23's 57-byte single-recipient memo is not in pqz-core, so proveTransfer takes memoHash as given (op 7's memo is
+# built). (6) The PQZ cache box: key HKDF(seed32, no salt, "scaas-pqz-balance-cache-v1"), AAD "pqz-cache:<set>" (new labels; clientkeys has
+# no PQZ box). (7) ua-c default: pqz + pqz-set-n2304-kmax4096 (MD-5; +1.27 MB stripped). (8) SCAAS_UA_PQZ_OUT_MAX (1,052,672 B): a proof's
+# length varies per build, so a size query (which proves again) can be followed by SCAAS_UA_ERR_BUFFER; found by test_vectors.py.
+# (9) The fuzz crate unwinds (pqz-ffi's compile_error under panic = "abort") and aborts on a caught panic (mutant M25 is its control).
+# (10) The vectors-only hooks: PqzKey::vectors_from_seed32, vectors_call(Draw), vectors_register_message, vectors_seal_balance_cache,
+# vectors_prover_calls. Notes: the PQZ key is not in the manifest (as Zether's). Residual (spec §8.2): pqz-core's copies of seed32, s, e and
+# the witness on its worker thread and in the prover; the leaf export's 32-byte stack copy (as kem_decaps' ss32).
+# Conflicts: spec §8.4 / §9.1 put export_pqz_leaf_raw on the wallet (done) - the plan text writes `export_pqz_leaf_raw(_, AllowSecretExport)`;
+# spec §9.2's status list has no PqzSetMismatch (appended as 40); spec §10.2 says "s, e, seed32 stay" (only seed32 stays, decision 1).
+# The spec and plan are not edited here (T19's).

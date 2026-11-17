@@ -1,0 +1,327 @@
+# 2026-11-08-ua-rs-sign-t20b2 at commit b3033535
+step | commit | rc | counts
+docs | bbf723c0 | 0 | -
+clientkeys | bbf723c0 | 0 | 329 passed 0 failed (node) 
+vectors-check | bbf723c0 | 0 | 4 passed 0 failed 0 ignored (cargo) 
+forge-ua | bbf723c0 | 0 | 595 passed 0 failed 0 skipped (forge) 
+ua-rs-nodefault | bbf723c0 | 0 | 61 passed 0 failed 0 ignored (cargo) 
+ua-rs-wallet | bbf723c0 | 0 | 272 passed 0 failed 1 ignored (cargo) 
+ua-rs | bbf723c0 | 0 | 351 passed 0 failed 3 ignored (cargo) 
+ua-rs-pq | bbf723c0 | 0 | 33 passed 0 failed 0 ignored (cargo) 
+ua-rs-signers | bbf723c0 | 0 | 8 passed 0 failed 1 ignored (cargo) 
+ua-rs-json | bbf723c0 | 0 | 5 passed 0 failed 0 ignored (cargo) 
+ua-rs-vectors | b3033535 | 0 | 425 passed 0 failed 5 ignored (cargo) 
+ua-rs-zether | b3033535 | 0 | 20 passed 0 failed 0 ignored (cargo) 
+ua-rs-pqz | b3033535 | 0 | 52 passed 0 failed 2 ignored (cargo) 
+ua-rs-pqz-n2048 | b3033535 | 0 | 113 passed 0 failed 2 ignored (cargo) 
+ua-deny | b3033535 | 0 | -
+ua-fuzz | b3033535 | 0 | -
+ua-sizes | b3033535 | 0 | -
+ua-c | b3033535 | 0 | 9 passed 0 failed 0 ignored (cargo) 92 ran (unittest) 
+ua-cxx | b3033535 | 0 | 40 passed (ctest) 
+ua-qt | b3033535 | 0 | 1 passed (ctest) 40 passed (qt) 
+ua-dart-frb | b3033535 | 0 | 3 passed 0 failed 0 ignored (cargo) 
+ua-py | b3033535 | 0 | 89 ran (unittest) 
+ua-go | b3033535 | 0 | 56 passed (go) 
+ua-cs | b3033535 | 0 | 56 passed (dotnet) 
+ua-dart | b3033535 | 0 | -
+cargo-zether-prover | b3033535 | 0 | 172 passed 0 failed 4 ignored (cargo) 
+wasm-zether-prover | b3033535 | 0 | -
+scaas-ct | b3033535 | 0 | 9 passed 0 failed 0 ignored (cargo) 
+no-oracle | b3033535 | 0 | 11 passed 0 failed 1 ignored (cargo) 
+no-oracle-n2048 | b3033535 | 0 | 9 passed 0 failed 0 ignored (cargo) 
+no-oracle-ua-py | b3033535 | 0 | 1 ran (unittest) 
+wallet-rows | b3033535 | 0 | 2 passed 0 failed 0 ignored (cargo) 
+test-features | b3033535 | 0 | -
+mutant-logs | b3033535 | 0 | -
+pqz-read | b3033535 | 0 | 7 passed 0 failed 0 ignored (cargo) 
+read-balance | b3033535 | 0 | 17 passed 0 failed 0 ignored (cargo) 
+named-tests | b3033535 | 0 | -
+
+# result lines
+vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 1.42s
+vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 1.95s
+vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 1.45s
+vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 2.02s
+forge-ua: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 10.19ms (4.92ms CPU time)
+forge-ua: Suite result: ok. 7 passed; 0 failed; 0 skipped; finished in 223.92ms (64.88ms CPU time)
+forge-ua: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 1.79s (2.90s CPU time)
+forge-ua: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 114.39ms (79.78ms CPU time)
+forge-ua: Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 5.95s (5.90s CPU time)
+forge-ua: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 6.48s (6.47s CPU time)
+forge-ua: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 16.15s (16.04s CPU time)
+forge-ua: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 16.66s (16.40s CPU time)
+forge-ua: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 20.53s (19.68s CPU time)
+forge-ua: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 2.61s (2.61s CPU time)
+forge-ua: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 1.25s (1.16s CPU time)
+forge-ua: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 769.83ms (699.88ms CPU time)
+forge-ua: Suite result: ok. 25 passed; 0 failed; 0 skipped; finished in 328.04ms (152.43ms CPU time)
+forge-ua: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 31.11s (31.10s CPU time)
+forge-ua: Suite result: ok. 40 passed; 0 failed; 0 skipped; finished in 9.16s (9.02s CPU time)
+forge-ua: Suite result: ok. 30 passed; 0 failed; 0 skipped; finished in 730.45ms (698.46ms CPU time)
+forge-ua: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 27.25s (27.25s CPU time)
+forge-ua: Suite result: ok. 29 passed; 0 failed; 0 skipped; finished in 448.01ms (252.54ms CPU time)
+forge-ua: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 25.83s (25.73s CPU time)
+forge-ua: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 222.10ms (156.94ms CPU time)
+forge-ua: Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 62.14ms (40.86ms CPU time)
+forge-ua: Suite result: ok. 22 passed; 0 failed; 0 skipped; finished in 251.06ms (146.77ms CPU time)
+forge-ua: Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 9.39s (7.12s CPU time)
+forge-ua: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 201.18ms (60.95ms CPU time)
+forge-ua: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 12.46s (12.45s CPU time)
+forge-ua: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 29.16s (29.10s CPU time)
+forge-ua: Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 1.91s (2.62s CPU time)
+forge-ua: Suite result: ok. 24 passed; 0 failed; 0 skipped; finished in 263.61ms (99.75ms CPU time)
+forge-ua: Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 891.52ms (873.31ms CPU time)
+forge-ua: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 1.56s (1.51s CPU time)
+forge-ua: Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 19.56s (19.48s CPU time)
+forge-ua: Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 207.86ms (21.57ms CPU time)
+forge-ua: Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 5.21s (3.86s CPU time)
+forge-ua: Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 62.36s (108.89s CPU time)
+forge-ua: Suite result: ok. 41 passed; 0 failed; 0 skipped; finished in 71.13s (10.28s CPU time)
+forge-ua: Suite result: ok. 11 passed; 0 failed; 0 skipped; finished in 6.45s (6.44s CPU time)
+forge-ua: Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 16.88s (16.86s CPU time)
+forge-ua: Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 106.94s (120.74s CPU time)
+forge-ua: Suite result: ok. 21 passed; 0 failed; 0 skipped; finished in 530.96s (162.59s CPU time)
+forge-ua: Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 1274.43s (755.93s CPU time)
+forge-ua: Suite result: ok. 17 passed; 0 failed; 0 skipped; finished in 1228.77s (133.06s CPU time)
+forge-ua: Suite result: ok. 85 passed; 0 failed; 0 skipped; finished in 1217.52s (7967.86s CPU time)
+forge-ua: Ran 42 test suites in 1274.48s (4764.20s CPU time): 595 tests passed, 0 failed, 0 skipped (595 total tests)
+ua-rs-nodefault: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+ua-rs-nodefault: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+ua-rs-nodefault: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-nodefault: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.67s
+ua-rs-nodefault: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-nodefault: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+ua-rs-nodefault: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+ua-rs-nodefault: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+ua-rs-nodefault: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+ua-rs-nodefault: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.72s
+ua-rs-nodefault: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.40s
+ua-rs-nodefault: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+ua-rs-nodefault: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-wallet: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-wallet: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+ua-rs-wallet: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-wallet: test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 90.07s
+ua-rs-wallet: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+ua-rs-wallet: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.80s
+ua-rs-wallet: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-wallet: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-rs-wallet: test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+ua-rs-wallet: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+ua-rs-wallet: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.28s
+ua-rs-wallet: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+ua-rs-wallet: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.90s
+ua-rs-wallet: test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.15s
+ua-rs-wallet: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+ua-rs-wallet: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.56s
+ua-rs-wallet: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.64s
+ua-rs-wallet: test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 25.36s
+ua-rs-wallet: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+ua-rs-wallet: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+ua-rs-wallet: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.21s
+ua-rs-wallet: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 32.44s
+ua-rs-wallet: test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.90s
+ua-rs-wallet: test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+ua-rs-wallet: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+ua-rs-wallet: test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s
+ua-rs-wallet: test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.53s
+ua-rs-wallet: test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.91s
+ua-rs-wallet: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+ua-rs-wallet: test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.96s
+ua-rs: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.80s
+ua-rs: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+ua-rs: test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.63s
+ua-rs: test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 34.19s
+ua-rs: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+ua-rs: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 103.75s
+ua-rs: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs: test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 37.67s
+ua-rs: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+ua-rs: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.44s
+ua-rs: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs: test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+ua-rs: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.64s
+ua-rs: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-rs: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+ua-rs: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.92s
+ua-rs: test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.08s
+ua-rs: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+ua-rs: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-rs: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.92s
+ua-rs: test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.33s
+ua-rs: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+ua-rs: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.44s
+ua-rs: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+ua-rs: test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.78s
+ua-rs: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+ua-rs: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.22s
+ua-rs: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.36s
+ua-rs: test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
+ua-rs: test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+ua-rs: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+ua-rs: test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+ua-rs: test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.48s
+ua-rs: test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.31s
+ua-rs: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+ua-rs: test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.34s
+ua-rs-pq: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.42s
+ua-rs-pq: test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.11s
+ua-rs-signers: test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 68.79s
+ua-rs-json: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.90s
+ua-rs-vectors: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.62s
+ua-rs-vectors: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-vectors: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+ua-rs-vectors: test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 397.62s
+ua-rs-vectors: test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 140.68s
+ua-rs-vectors: test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 241.09s
+ua-rs-vectors: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 294.45s
+ua-rs-vectors: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-vectors: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
+ua-rs-vectors: test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 83.73s
+ua-rs-vectors: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+ua-rs-vectors: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.61s
+ua-rs-vectors: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-vectors: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+ua-rs-vectors: test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+ua-rs-vectors: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.09s
+ua-rs-vectors: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+ua-rs-vectors: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.03s
+ua-rs-vectors: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.84s
+ua-rs-vectors: test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.14s
+ua-rs-vectors: test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.21s
+ua-rs-vectors: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+ua-rs-vectors: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.22s
+ua-rs-vectors: test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.60s
+ua-rs-vectors: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+ua-rs-vectors: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+ua-rs-vectors: test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.44s
+ua-rs-vectors: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 46.10s
+ua-rs-vectors: test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.77s
+ua-rs-vectors: test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.96s
+ua-rs-vectors: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+ua-rs-vectors: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+ua-rs-vectors: test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.58s
+ua-rs-vectors: test result: ok. 11 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 39.98s
+ua-rs-vectors: test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.43s
+ua-rs-vectors: test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.80s
+ua-rs-vectors: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+ua-rs-vectors: test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s
+ua-rs-vectors: test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.58s
+ua-rs-vectors: test result: ok. 22 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 6.09s
+ua-rs-vectors: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+ua-rs-vectors: test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.22s
+ua-rs-zether: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.23s
+ua-rs-zether: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+ua-rs-pqz: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.85s
+ua-rs-pqz: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-pqz: test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.38s
+ua-rs-pqz: test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 79.28s
+ua-rs-pqz: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.96s
+ua-rs-pqz: test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.08s
+ua-rs-pqz: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+ua-rs-pqz-n2048: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 17.61s
+ua-rs-pqz-n2048: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-pqz-n2048: test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.44s
+ua-rs-pqz-n2048: test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 130.57s
+ua-rs-pqz-n2048: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.87s
+ua-rs-pqz-n2048: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.19s
+ua-rs-pqz-n2048: test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.12s
+ua-rs-pqz-n2048: test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 226.24s
+ua-rs-pqz-n2048: test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 42.07s
+ua-rs-pqz-n2048: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.33s
+ua-rs-pqz-n2048: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.20s
+ua-c: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-c: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+ua-dart-frb: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-zether-prover: test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.00s
+cargo-zether-prover: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-zether-prover: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+cargo-zether-prover: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+cargo-zether-prover: test result: ok. 3 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.01s
+cargo-zether-prover: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+cargo-zether-prover: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.83s
+cargo-zether-prover: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.43s
+cargo-zether-prover: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+cargo-zether-prover: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.52s
+cargo-zether-prover: test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.99s
+cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+cargo-zether-prover: test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.92s
+cargo-zether-prover: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-zether-prover: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+cargo-zether-prover: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 93.87s
+cargo-zether-prover: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+cargo-zether-prover: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+cargo-zether-prover: test result: ok. 4 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 30.68s
+cargo-zether-prover: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.56s
+cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+cargo-zether-prover: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.84s
+cargo-zether-prover: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.48s
+cargo-zether-prover: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+cargo-zether-prover: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.55s
+cargo-zether-prover: test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.40s
+cargo-zether-prover: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+scaas-ct: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+scaas-ct: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.37s
+scaas-ct: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+scaas-ct: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+scaas-ct: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.32s
+scaas-ct: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+no-oracle: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.00s
+no-oracle: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+no-oracle: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.25s
+no-oracle: test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.07s
+no-oracle-n2048: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.06s
+no-oracle-n2048: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.46s
+wallet-rows: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 2.12s
+wallet-rows: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.88s
+pqz-read: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+pqz-read: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.58s
+read-balance: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+read-balance: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.98s
+read-balance: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+read-balance: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 34.07s
+named-tests: named-tests: 639 names, 0 problem(s)
+
+# notes (T20b second sync, by hand after the `summary` step; the rows above are the runner's)
+# Merge: ua-mtx-merge 4f6d8605 (the factory index and chain-neutral group: T70, T71 + T72, T73, T74, T76, T68, the T70 fix;
+# nothing from 3f, whose first legacy copy is e5ea8d9f) into ua-rs-sign by the merge commit cec0aab5; no conflicts (both sides
+# touched only clientkeys src/evm.js and the ua-mtx-merge plan, merged by git and checked). Before it: fc8ad35b moved the six
+# size-baseline rows of the first sync old -> new (controller 2026-11-08), ua-sizes rc 0 there (38f60e87).
+# Client part: 14766082 (T15m2 in pqz-read and zether-read-balance, the CREATE3 predictor, the router create rows, uaEnvelope on
+# the Zether facade, docs), runner and harness bbf723c0, the fix b3033535 (fuzz regress box input, below).
+# Gate rule (plan T20b, 8f45d0ac): the steps whose inputs changed by .github/ci_changes.py over `git diff --name-only
+# a1ab1d70..HEAD` (187 paths, no .github/): every CI job but pqz and scaas-ct, so every T20 step but scaas-ct; scaas-ct ran too
+# (one minute), because named-tests reads one log per family at the prefix. GATES_P=2026-11-08-ua-rs-sign-t20b2.
+# Steps at bbf723c0 against b3033535: b3033535 changes only clients/ua-rs/fuzz/regress/zether_cmd/box-over-depth-2.bin, read by
+# fuzz_caps (the ua-rs-vectors cell) and ua-fuzz, both re-run at b3033535.
+# Fix (failing test first, the gate): ua-rs-vectors failed at bbf723c0, fuzz_caps zether_inputs_past_their_caps_are_refused_unparsed
+# ("the index after the last command" 27 != 28): the regress box input encodes the index after facade::zether::COMMANDS, which
+# uaEnvelope lengthened; regenerated by seeds.py --regress (only that file moved).
+# Against the first sync (t20b1): clientkeys 323 -> 329 (ua-mtx-merge's create3 and router-create rows), ua-rs-nodefault 60 -> 61,
+# ua-rs-wallet 271 -> 272, ua-rs 348 -> 351, ua-rs-vectors 422 -> 425, ua-rs-zether 19 -> 20, ua-rs-pqz 51 -> 52, ua-rs-pqz-n2048
+# 112 -> 113, cargo-zether-prover 168 -> 172, pqz-read 6 -> 7, read-balance 13 -> 17; forge-ua 595 unchanged.
+# Counts the parser leaves as "-":
+# docs: test_docs_check ok, docs_check check 0 errors 5 warnings (budgets, unchanged), paths 0
+# ua-deny: cargo tree --locked 8 of 8; cargo deny 3 of 3; cargo audit 3 of 3
+# ua-fuzz: build.sh, then 15 targets x 20 s over seeds (seeds.py: a uaEnvelope seed) and regress/: 0 findings, every run rc 0
+# ua-sizes: selftest ok; 0 failures, every baseline cell measured; the largest growth inside the tolerance +0.83 %
+# ua-dart: dart analyze no issues; vm, node and dart run: 29 tests each, all passed
+# wasm-zether-prover: release smoke 3 checks, hazmat smoke 9 checks
+# test-features: check_test_features ok; positive control (scaas-ua/vectors forced in ua-c) rc 1; restored, tree clean
+# mutant-logs: 46 harnesses, every record ends with no survivor, every `check` rc 0. Two harnesses had stale strings, brought to
+#   HEAD and killed again (each record's dated T20b second-sync section): t14b M3 (zether-read-balance R5), t15m M9, M10 (pqz-read
+#   R5; M10's "exists" is now the record's class TOKEN) and M11 run again on the rewritten decoder
+# named-tests: 639 names (the first sync's 634 and these 5). Self-check on a scratch copy (NAMED_TESTS_LOG_DIR): unchanged copy
+#   0 problems; the cargo-zether-prover line of factory_record_is_the_layout_pin dropped: 1 problem
+# Mutants: 2026-11-08-ua-rs-sign-t20b2-mutants.txt, 13 of 13 killed at bbf723c0 (one per run, git diff --exit-code 0 after each).
+# Not built (CLI-UAL-57): no ua-* binding carries the factory ABI (chain-neutral spec §6.3) and the reading layers read the factory's
+#   storage, not its views; the CREATE3 predictor is ua-rs only (no ABI export); the clone's ChainEnv has no reader here.
+# Inputs: PQ_DOWNLOADS held the 15 pinned downloads (not committed); Foundry 1.8.5 (anvil, stopped by the tests); Qt 6.12; NDK r29;
+#   smartcontracts/evm/lib at its pins. Another agent's forge jobs held the capped slots: wall times are not comparable. UNAUDITED.

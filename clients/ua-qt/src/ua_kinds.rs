@@ -174,8 +174,9 @@ pub mod qobject {
         /// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
         #[qinvokable] #[cxx_name = "payDigest"]
         fn pay_digest(self: Pin<&mut Self>, input: &QString) -> QString;
-        /// `metaPayId` under `scaas.pay.meta.v3` (pay-meta-tax T41 / T83): in `{salt, payNo, save, schema, body}` (`payNo` 32 bytes
-        /// hex), out `{payId}`; a refused shape (`save` without a `payNo` too) is `UAArgument`.
+        /// `metaPayId` under `scaas.pay.meta.v3` (pay-meta-tax T41, T83): in `{salt, payNo?, save?, schema, body}` (`payNo` 32
+        /// bytes, absent 0; `save` a bool, absent false), out `{payId, payNo, payNoUuid, save}` (`payNoUuid` the UUID text of a
+        /// right-aligned UUIDv7 `payNo`, else null: show the hex); a refused shape (`save` with `payNo` 0 included) is `UAArgument`.
         #[qinvokable] #[cxx_name = "metaPayIdV3"]
         fn meta_pay_id_v3(self: Pin<&mut Self>, input: &QString) -> QString;
     }
@@ -219,7 +220,7 @@ fn hx(b: &[u8]) -> String {
 fn bytes(q: &QString) -> Res<Vec<u8>> {
     let t = s(q);
     let h = t.strip_prefix("0x").unwrap_or(&t);
-    if h.len() % 2 != 0 || !h.bytes().all(|c| c.is_ascii_hexdigit()) {
+    if !h.len().is_multiple_of(2) || !h.bytes().all(|c| c.is_ascii_hexdigit()) {
         return Err(ARG);
     }
     Ok((0..h.len()).step_by(2).map(|i| u8::from_str_radix(&h[i..i + 2], 16).unwrap()).collect())

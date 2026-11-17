@@ -6,6 +6,21 @@
 // (statement, proof, witness) tuples are the API shape; a type alias per curve adds nothing.
 #![allow(clippy::type_complexity)]
 
+/// ARCH-POS-13 (ua-rs-sign T15c2, Codex C3; spec no-decryption-oracle §4.7): a helper that decrypts or opens a ciphertext,
+/// entry or memo the caller hands over is `pub` only under feature `hazmat`, `pub(crate)` otherwise (the crate's own code,
+/// the dispatcher behind [`api::HAZMAT`] and the vector generator keep it), so no in-process caller bypasses the gate.
+macro_rules! hazmat_pub {
+    ($(#[$m:meta])* fn $($t:tt)*) => {
+        #[cfg(feature = "hazmat")]
+        $(#[$m])*
+        pub fn $($t)*
+        #[cfg(not(feature = "hazmat"))]
+        #[allow(dead_code)]
+        $(#[$m])*
+        pub(crate) fn $($t)*
+    };
+}
+
 pub mod abi;
 pub mod api;
 pub mod bulletproofs;
@@ -15,6 +30,7 @@ pub mod envelope;
 pub mod keys;
 pub mod nonce;
 pub mod schnorr;
+pub mod state;
 pub mod transcript;
 pub mod typed;
 pub mod vectors;
@@ -34,6 +50,8 @@ pub enum ZError {
     DecryptBound,
     #[error("bsgs: {0}")]
     Bsgs(&'static str),
+    #[error("the OS random number generator failed")]
+    Rng,
     #[error("witness out of range")]
     OutOfRange,
     #[error("malformed proof: {0}")]

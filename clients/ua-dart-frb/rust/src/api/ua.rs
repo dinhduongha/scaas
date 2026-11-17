@@ -41,7 +41,8 @@ fn arg() -> UAError {
 fn k(kind: i64) -> R<u16> {
     u16::try_from(kind).map_err(|_| UAError { code: "UAKindUnknown".into(), reason: String::new() })
 }
-fn n<T: TryFrom<i64>>(v: i64) -> R<T> {
+/// A Dart `int` into its Rust type, `UAArgument` outside it (frb's own u16 / u32 encoding would wrap, T13 C4).
+pub(crate) fn n<T: TryFrom<i64>>(v: i64) -> R<T> {
     T::try_from(v).map_err(|_| arg())
 }
 
@@ -430,11 +431,21 @@ pub fn msig_update(input: String) -> R<String> {
 pub fn pay_digest(input: String) -> R<String> {
     Ok(scaas_ua::json::pay_digest_json(&input)?)
 }
-/// `metaPayId` under `scaas.pay.meta.v3` (pay-meta-tax T41 / T83): in `{salt, payNo, save, schema, body}` (`payNo` 32 bytes hex),
-/// out `{payId}`; a refused shape (`save` without a `payNo` too) is `UAArgument`.
+/// `metaPayId` under `scaas.pay.meta.v3` (pay-meta-tax T41, T83): in `{salt, payNo?, save?, schema, body}` (`payNo` 32 bytes,
+/// absent 0; `save` a bool, absent false), out `{payId, payNo, payNoUuid, save}` (`payNoUuid` the UUID text of a right-aligned
+/// UUIDv7 `payNo`, else null: show the hex); a refused shape (`save` with `payNo` 0 included) is `UAArgument`.
 #[frb(sync)]
 pub fn meta_pay_id(input: String) -> R<String> {
     Ok(scaas_ua::json::meta_pay_id_json(&input)?)
+}
+/// A service pull (spec 2026-11-09-service-pull §10, CLI-SGN-48), JSON in and out, one call per step: in `{name?, token,
+/// chainId, chainUid, entry, op, from, amount, batch, nonce, validUntil}` (`op` the operation's typed data in the service's domain),
+/// then `auth` (the payer's `UASig` over `digest`) and `relayFee` `{name?, feeToken, router, executor, value, batch, nonce,
+/// validUntil, feeAuth?}`; out `{service, entryRef, typedData, digest, selector, prompt}`, with `auth` `calldata` and `job`, with
+/// `relayFee` its `{relayRef, callDataHash, typedData, digest}` and, with `feeAuth`, `relayCalldata`. A refusal is `UAArgument`.
+#[frb(sync)]
+pub fn service_pull(input: String) -> R<String> {
+    Ok(scaas_ua::json::service_pull_json(&input)?)
 }
 /// Members are `(kind, id, weight)`; a kind outside 0..=0xFFFF is `UAKindUnknown`, a threshold or weight outside u16 (or
 /// more than 65535 members) is `UAArgument`.

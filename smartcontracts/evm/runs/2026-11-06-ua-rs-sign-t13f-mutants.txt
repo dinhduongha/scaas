@@ -1,0 +1,19 @@
+# 2026-11-06 ua-rs-sign T13f mutants: python3 -I smartcontracts/evm/runs/2026-11-06-ua-rs-sign-t13f-mutants.py (each mutant alone on a clean tree, dotnet test --filter through
+# scripts/capped, then dotnet build-server shutdown; files restored). Run in two ranges (1-8, 9-16) on the tree committed as 24406793 (the T13f code commit):
+killed     | M1 the load check skipped | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.LoadRefusesWrongAbiOrFeatures
+killed     | M2 a secret buffer not wiped (every call) | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.SecretBufferWipedAfterCall
+killed     | M3 a handle freed twice (an eager free in Dispose beside ReleaseHandle) | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.HandleFreedExactlyOnce
+killed     | M4 the feature check skipped (ABI only) | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.LoadRefusesWrongAbiOrFeatures
+killed     | M5 a constructor skips the load check (FromMnemonic) | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.LoadRefusesWrongAbiOrFeatures
+killed     | M6 a refused library marked loaded | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.LoadRefusesWrongAbiOrFeatures
+killed     | M7 a secret copied outside the hook (never wiped) | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.SecretBufferWipedAfterCall
+killed     | M8 Wipe does nothing | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.SecretBufferWipedAfterCall
+killed     | M9 a 31-byte PRF secret passed (an over-read) | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.FixedSizeAndShortSecretsAreRefused
+killed     | M10 an 11-byte nonce passed (an over-read) | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.FixedSizeAndShortSecretsAreRefused
+killed     | M11 restore ignores `installed` (an equal generation installs) | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.SealJsonReplayBackupRows
+killed     | M12 RestoreBackupRollback calls restore_backup | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.SealJsonReplayBackupRows
+killed     | M13 a backup recipient's ephemeral flag dropped | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.BackupSealRestoresAWallet
+killed     | M14 UASig keys reversed | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.SignJsonMsigThroughUASig
+killed     | M15 Take hands out entropy that was not taken | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.SeedBackupSequence
+killed     | M16 a key's Dispose frees nothing (a call after it reaches the library) | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.UseAfterDisposeNeverReachesTheLibrary
+mutants M1-M16 of 16, survived or not loaded: 0

@@ -22,6 +22,9 @@ set(UA_VECTORS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../smartcontracts/vectors/ua"
 
 add_executable(tst_ua tests/tst_ua.cpp)
 target_compile_definitions(tst_ua PRIVATE UA_VECTORS_DIR="${UA_VECTORS_DIR}")
+# ua-rs-sign T13b: the C++ side of an app is ua-cxx (its header here, its C++ compiled into the crate by build.rs)
+target_include_directories(tst_ua PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../ua-cxx/include)
 target_link_libraries(tst_ua PRIVATE scaas_ua_qml_module Qt6::QuickTest Qt6::Qml)
-add_test(NAME tst_ua COMMAND tst_ua -input ${CMAKE_CURRENT_SOURCE_DIR}/tests/tst_ua.qml)
+# tests/tst_*.qml: UaKinds (tst_ua.qml), UaWallet (tst_wallet.qml)
+add_test(NAME tst_ua COMMAND tst_ua -input ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 set_tests_properties(tst_ua PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

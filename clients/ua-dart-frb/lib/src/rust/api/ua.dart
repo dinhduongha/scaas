@@ -402,10 +402,19 @@ String msigUpdate({required String input}) =>
 String payDigest({required String input}) =>
     ScaasUa.instance.api.crateApiUaPayDigest(input: input);
 
-/// `metaPayId` under `scaas.pay.meta.v3` (pay-meta-tax T41 / T83): in `{salt, payNo, save, schema, body}` (`payNo` 32 bytes hex),
-/// out `{payId}`; a refused shape (`save` without a `payNo` too) is `UAArgument`.
+/// `metaPayId` under `scaas.pay.meta.v3` (pay-meta-tax T41, T83): in `{salt, payNo?, save?, schema, body}` (`payNo` 32 bytes,
+/// absent 0; `save` a bool, absent false), out `{payId, payNo, payNoUuid, save}` (`payNoUuid` the UUID text of a right-aligned
+/// UUIDv7 `payNo`, else null: show the hex); a refused shape (`save` with `payNo` 0 included) is `UAArgument`.
 String metaPayId({required String input}) =>
     ScaasUa.instance.api.crateApiUaMetaPayId(input: input);
+
+/// A service pull (spec 2026-11-09-service-pull §10, CLI-SGN-48), JSON in and out, one call per step: in `{name?, token,
+/// chainId, chainUid, entry, op, from, amount, batch, nonce, validUntil}` (`op` the operation's typed data in the service's domain),
+/// then `auth` (the payer's `UASig` over `digest`) and `relayFee` `{name?, feeToken, router, executor, value, batch, nonce,
+/// validUntil, feeAuth?}`; out `{service, entryRef, typedData, digest, selector, prompt}`, with `auth` `calldata` and `job`, with
+/// `relayFee` its `{relayRef, callDataHash, typedData, digest}` and, with `feeAuth`, `relayCalldata`. A refusal is `UAArgument`.
+String servicePull({required String input}) =>
+    ScaasUa.instance.api.crateApiUaServicePull(input: input);
 
 /// Members are `(kind, id, weight)`; a kind outside 0..=0xFFFF is `UAKindUnknown`, a threshold or weight outside u16 (or
 /// more than 65535 members) is `UAArgument`.

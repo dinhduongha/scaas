@@ -1,0 +1,27 @@
+# 2026-11-07 ua-rs-sign T15g: the mutant run of 2026-11-07-ua-rs-sign-t15g-mutants.py (one mutant per foreground call through
+# scripts/capped, every file restored by the harness, then `git diff --exit-code`: clean after each). Tree: c933f8ab (the T15g
+# commits) + the harness. M10-M18 rebuild a library from mutated source; after the run the release and debug libscaas_ua_c,
+# ua-cxx's and ua-dart-frb's builds were rebuilt from the clean tree and every binding suite run again (green).
+# Superseded during the run (a finding of the harness, not of the code): the first M8 (seeds.py's list skipping the raw forms)
+# SURVIVED because the command ignored seeds.py's exit (seeds.py raised, wrote nothing, so the inputs did not move); the command
+# now needs seeds.py to succeed, and M8 is a list that is not COMMANDS (its last command dropped). Positive control of the
+# command on the clean tree: rc 0. The dart failures carry no parsed name ("0 failed:"): rc != 0 with no build error.
+killed     | M1 ua-py: ZetherKey.call drops accountData | clients/ua-py/scaas_ua/wallet.py | rc=1 | 1 failed: test_words_commands_on_the_forge_rows
+killed     | M2 ua-go: ZetherKey.Call renames accountData | clients/ua-go/wallet/wallet.go | rc=1 | 1 failed: TestZetherWordsOnTheForgeRows
+killed     | M3 ua-cs: ZetherKey.Call renames accountData | clients/ua-cs/Scaas.Ua/Wallet.cs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.ZetherWordsOnTheForgeRows
+killed     | M4 ua-py: COMMANDS membership reverted to equality | clients/ua-py/tests/test_wallet.py | rc=1 | 1 failed: test_words_commands_on_the_forge_rows
+killed     | M5 ua-go: COMMANDS membership reverted to equality | clients/ua-go/wallet/wallet_test.go | rc=1 | 1 failed: TestZetherWordsOnTheForgeRows
+killed     | M6 ua-dart-frb: COMMANDS membership reverted to equality | clients/ua-dart-frb/test/wallet_test.dart | rc=1 | 0 failed: 
+killed     | M7 Zether: `decrypt` no longer under vectors in COMMANDS, seen through ua-py | clients/ua-rs/src/facade/zether.rs | rc=1 | 1 failed: test_words_commands_on_the_forge_rows
+killed     | M8 seeds.py: the Zether command index is not COMMANDS (its last command dropped) | clients/ua-rs/fuzz/seeds.py | rc=1 | 1 failed: seeds.py failed or the regress inputs moved (their command index)
+killed     | M9 fuzz_caps: the source rule skips the raw forms | clients/ua-rs/tests/fuzz_caps.rs | rc=101 | 2 failed: pqz_inputs_past_their_caps_are_refused_unparsed, zether_inputs_past_their_caps_are_refused_unparsed
+killed     | M10 ua-cxx: zether_call renames accountData | clients/ua-cxx/src/wallet.rs | rc=8 | 1 failed: wallet_zether_words
+killed     | M11 ua-dart-frb: UaZetherKey.call renames accountData | clients/ua-dart-frb/rust/src/api/wallet.rs | rc=1 | 0 failed: 
+killed     | M12 ua-c: scaas_ua_zether_call renames accountData | clients/ua-c/src/lib.rs | rc=1 | 1 failed: test_words_commands_on_the_forge_rows
+killed     | M13 PQZ: the key-binding refusal as KeyRevoked, through ua-py | clients/ua-rs/src/facade/pqz.rs | rc=1 | 1 failed: test_words_commands_on_the_forge_rows
+killed     | M14 Zether: the words refusal as KeyRevoked, through ua-go | clients/ua-rs/src/facade/zether.rs | rc=1 | 1 failed: TestZetherWordsOnTheForgeRows
+killed     | M15 PQZ: the psid refusal as Argument, through ua-cs | clients/ua-rs/src/facade/pqz.rs | rc=1 | 1 failed: Scaas.Ua.Tests.WalletTests.PqzWordsOnTheForgeRows
+killed     | M16 Zether: the words refusal as KeyRevoked, through ua-cxx | clients/ua-rs/src/facade/zether.rs | rc=8 | 1 failed: wallet_zether_words
+killed     | M17 PQZ: the key-binding refusal as KeyRevoked, through ua-dart-frb | clients/ua-rs/src/facade/pqz.rs | rc=1 | 0 failed: 
+killed     | M18 PQZ: the psid refusal as Argument, through the C ABI (ua-c test_vectors.py) | clients/ua-rs/src/facade/pqz.rs | rc=1 | 1 failed: test_words_commands_on_the_forge_rows
+mutants M1-M18 of 18: 18 killed, 0 survived, 0 not loaded

@@ -2111,7 +2111,9 @@ CHECKERS = {MULTI_FILE: check_multi, "matrix.json": check_matrix, "cbd.json": ch
 # another set; a missing required file fails (--check on the set's directory).
 OTHER_WRITERS = {"verdict.json": ("n2304-kmax4096", "forge PqzVerdictVectors.t.sol; clientkeys pqz-verdict.test.js, scaas-node pqz.rs"),
                  "verifier_fee.json": ("n2304-kmax4096", "forge PqzVerifierFeeVectors.t.sol; clientkeys pqz-verifier-fee.test.js, "
-                                                         "ua-rs tests/pqzfee.rs, scaas-node pqz.rs")}
+                                                         "ua-rs tests/pqzfee.rs, scaas-node pqz.rs"),
+                 "wallet_state.json": ("n2304-kmax4096", "gen_wallet_state.sh (ua-rs tests/pqz_wallet_rows.rs write_wallet_rows); "
+                                                         "every binding's wallet rows")}
 REQUIRED = ["state.json"] + [n for n, (s, _) in OTHER_WRITERS.items() if s == SET]
 
 # Files whose checker here rebuilds only part of the file (review 3w fix round, the S7 gate's tamper step: 8 of 12

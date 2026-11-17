@@ -11,6 +11,7 @@ import {
   uaPayUnderMandateTypedData, uaPayUnderMandateCalldata, uaDelegateRevokeTypedData, uaDelegateRevokeCalldata, mtxExecuteCalldata,
   mtxExecuteTransferCalldata, TYPED_OPS, metaPayId,
 } from '../src/evm.js';
+import * as E from '../src/evm.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
 
 const vectors = new URL('../../../smartcontracts/evm/test/vectors/', import.meta.url);
@@ -745,4 +746,22 @@ test('a bid\'s minFill from a base minimum and back (CLI-SGN-35)', () => {
 test('a base minimum that needs more than the bid\'s amount is refused', () => {
   assert.equal(bidMinFill(2000n, 1000n, 2000n), 1000n);
   assert.throws(() => bidMinFill(2001n, 1000n, 2000n), /more than the bid/);
+});
+
+test('T21 L38: the absent values one digest zero-fills are at most MAX_FILL (2,048), the rows of ua-rs typed_data_bounds', () => {
+  const td = (type, v) => ({ types: { EIP712Domain: [], S: [{ name: 'v', type }] }, primaryType: 'S', domain: {}, message: v === undefined ? {} : { v } });
+  const ok = (type, v) => { E.hashTypedData(td(type, v)); };
+  const refused = (type, v) => assert.throws(() => E.hashTypedData(td(type, v)), /absent values/, type);
+  assert.equal(E.MAX_FILL, 2048);
+  ok('uint8[1024]');
+  ok('uint8[32][32]'); // 1 + 32 + 1,024
+  refused('uint8[1024][2]'); // 1 + 2 + 2,048
+  refused('uint8[1024][2]', [null, null]);
+  ok('uint8[1024][2]', [Array(1024).fill(0), null]);
+  // the ~200-byte request whose zero-fill is 1024^7 encodings: refused at once, before any allocation
+  const huge = '{"types":{"S":[{"name":"v","type":"uint8[1024][1024][1024][1024][1024][1024][1024]"}]},"primaryType":"S","domain":{},"message":{}}';
+  assert.ok(huge.length < 200);
+  const t = JSON.parse(huge);
+  t.types.EIP712Domain = [];
+  assert.throws(() => E.hashTypedData(t), /absent values/);
 });

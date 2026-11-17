@@ -1,0 +1,46 @@
+# 2026-11-06 ua-rs-sign T15c: fail closed now, the lazy version (ARCH-POS-13 "never a decryption oracle", owner 2026-11-06; spec
+# no-decryption-oracle F1, F2, F3, F6, F7, F8). Commits: 9ee9d76a (PQZ), 6978925b (Zether), follow-ups 2f72b4ad (clippy allow in the
+# release cell), afffb881 (hazmat_is_off_by_default), 9107ae01 (rpc_refused fails fast). A release build (no feature `vectors`) has
+# no command that decrypts or opens a caller's ciphertext, statement or `T`: PQZ COMMANDS lose dec, proveTransfer, proveBurn,
+# proveRefresh, proveTransferMulti, proveDisclose, openMemo; Zether COMMANDS lose decrypt, decryptPending, checkBalance,
+# proveTransfer, proveTransferMulti, proveBurn, openMemo, recoverTransfer, openDisclosure (cfg on the list; unknown command =
+# Argument, before the key; the code stays, backup). zether-prover: feature `hazmat` (off by default and in every wasm build) gates
+# api::HAZMAT in call / call_with_key; ua-rs `vectors` turns it on. zether-read-balance --rpc refused before any request. No
+# contract, statement, transcript, vector file, C ABI export or dependency changed (ua-c doc + header text only). UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs git-ignored (clients/ua-rs/target/t15c/,
+# clients/ua-c/target/t15c/, clients/zether-prover/target/t15c/). Code gates on the tree of 6978925b (the follow-ups change tests
+# only; the cells they touch were rerun at 9107ae01 as noted).
+step | commit | rc | counts
+red: release_has_no_raw_decrypt (PQZ, Zether, zether-prover) against an unfiltered list / no gate (mutants M1, M8, M10) | 9107ae01 - M | 101 | each fails
+ua-rs test (default: zether + pqz n2304-kmax4096, the release cell) | 6978925b | 0 | 30 suites, 290 passed, 1 ignored (+ 2 release_has_no_raw_decrypt; raw-command tests moved under vectors)
+ua-rs test --features vectors | 6978925b | 0 | 32 suites, 362 passed, 3 ignored
+ua-rs test --no-default-features --features wallet,mlock | 6978925b | 0 | 27 suites, 256 passed, 1 ignored (no facade: unchanged)
+ua-rs facade_pqz + pqz_backup, default / vectors | 6978925b | 0 | 18 / 32 passed (pqz_backup checks the rebuilt key by the operator's cache box, not dec)
+ua-rs facade_zether, default / vectors | 6978925b | 0 | 10 / 12 passed
+ua-rs clippy --all-targets -D warnings: default, vectors, --no-default-features, wallet,mlock, zether, zether+vectors, pqz,pqz-set-n2048-kmax1024 (+ vectors) | 2f72b4ad | 0 | 0 of ours each (8 cells; first run: single_element_loop in set_mismatch_refused at default and n2048, fixed by 2f72b4ad); pqzl's 2 deprecated GenericArray warnings
+zether-prover cargo test (default, no hazmat) | 9107ae01 | 0 | 13 suites, 59 passed (release_has_no_raw_decrypt, hazmat_is_off_by_default, rpc_refused; recover.rs and the raw-command tests compile out)
+zether-prover cargo test --features hazmat | 9107ae01 | 0 | 13 suites, 73 passed (recover.rs' 2 unused-import warnings under hazmat are pre-existing: used only with bn254)
+zether-prover wasm-smoke.sh (shipped wasm, no hazmat) | 6978925b | 0 | 3 checks: keygen, every api::HAZMAT command refused naming ARCH-POS-13, a native vector verifies in wasm
+zether-prover ZETHER_HAZMAT=1 wasm-smoke.sh | 6978925b | 0 | 9 checks (the prover in wasm, as before; proveTransfer 601 ms, not a calibrated timing)
+ua-c cargo build (debug, release); cargo test (lib + header, header regenerated) | 6978925b | 0 | 4 + 5 passed
+ua-c clippy --all-targets -D warnings | 6978925b | 0 | 0 of ours
+ua-c test_vectors.py (ctypes) | 6978925b | 0 | 85 tests OK (dec, checkBalance, proveTransfer, decrypt, recoverTransfer: UAArgument)
+ua-c C smoke (cc -std=c99 -Wall -Wextra -Werror) | 6978925b | 0 | smoke ok (its dec calls were refusals already)
+ua-py unittest tests.test_wallet / tests.test_vectors (release libscaas_ua_c) | 6978925b | 0 | 56 OK / OK
+ua-go go test -count=1 ./... | 6978925b | 0 | 52 passed
+ua-cs dotnet test Scaas.Ua.Tests (then dotnet build-server shutdown) | 6978925b | 0 | 51 passed
+ua-cxx cmake --build build (cargo rebuilt scaas-ua); ctest | 6978925b | 0 | 35 of 35
+ua-dart-frb cargo build (rust/); dart test wallet_test.dart vectors_test.dart | 6978925b | 0 | 34 passed
+ua-qt | - | - | no PQZ or Zether facade in this binding: nothing to assert
+cargo tree --locked --offline -e normal: ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node | 6978925b | 0 | 8 of 8; no lock file changed
+cargo deny --all-features check: ua-rs; ua-c and zether-prover (--config ../ua-rs/deny.toml) | 6978925b | 0 | advisories ok, bans ok, licenses ok, sources ok each
+docs_check check / paths | 6978925b | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+mutants: 2026-11-06-ua-rs-sign-t15c-mutants.py | 9107ae01 | 0 | 12 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t15c-mutants.txt): the plan's 3 (dec back in the release list, hazmat on by default, --rpc accepted) and 9 of the controller's
+# Findings of the mutant run, both fixed before this summary: (1) "hazmat on by default" survived release_has_no_raw_decrypt, which
+# follows cfg!(feature = "hazmat") and so flips with such a default; hazmat_is_off_by_default reads Cargo.toml (afffb881). (2) "--rpc
+# accepted" hung on a listener that never answered instead of failing; the port is closed before the call (9107ae01).
+# Decisions (controller, the owner may override): (1) The filter is a cfg on the COMMANDS lists, as the plan says; the match arms and
+# helpers stay compiled (backup) but unreachable. (2) zether-prover gates the dispatch (api::call / call_with_key, so the CLI and the
+# wasm), not its public Rust functions (prove_transfer_json, ...): in-process callers, the same defence-in-depth class as pqz-core's
+# F4 (T15h). (3) The CI builds zether-cli with hazmat for ZetherProverCross and e2e-zether.sh (test tools) and runs the wasm smoke
+# twice. (4) zether-read-balance keeps the pasted --ct path (spec §4.8: unchanged). (5) ua-qt wraps neither facade.

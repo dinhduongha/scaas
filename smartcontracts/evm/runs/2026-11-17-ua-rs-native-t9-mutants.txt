@@ -1,0 +1,2 @@
+killed   | M1 a flipped signature byte in rs_native.json (row sr25519-) | smartcontracts/vectors/native/rs_native.json | rc=1 | 1 failed: rs_native.json: every ua-rs Taproot and sr25519 row is of its mnemonic's key and verifies 
+1 mutants, 1 killed, 0 survived, 0 not loaded

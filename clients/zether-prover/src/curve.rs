@@ -16,7 +16,7 @@ pub type G<C> = Projective<C>;
 pub type Fr<C> = <C as CurveConfig>::ScalarField;
 
 pub trait ZCurve: SWCurveConfig<BaseField = <Self as ZCurve>::Fq> + Clone + PartialEq + Eq {
-    type Fq: PrimeField;
+    type Fq: PrimeField + scaas_ct::CtSwap;
     /// `"bn254"` / `"bls12381"` (the curve key used in vector files).
     const NAME: &'static str;
     /// Padded byte length of one coordinate on the wire.
@@ -99,6 +99,13 @@ pub fn hash_to_g1_bls(msg: &[u8], dst: &[u8]) -> G<Bls12381> {
     let h = MapToCurveBasedHasher::<G<Bls12381>, DefaultFieldHasher<sha2::Sha256, 128>, WBMap<Bls12381>>::new(dst)
         .expect("valid DST");
     h.hash(msg).expect("hash_to_curve").into()
+}
+
+/// `[k]P` for a secret `k` (the key `x`, a nonce over it) and a point `P` someone else may have chosen (ARCH-POS-13,
+/// ua-rs-sign T14b, Codex C6): `scaas_ct::secret_mul`, the blinded fixed-width ladder, never arkworks' variable-time `P * k`.
+/// `ZError::Rng` if the OS RNG fails.
+pub fn secret_mul<C: ZCurve>(p: &G<C>, k: &Fr<C>) -> Result<G<C>, ZError> {
+    scaas_ct::secret_mul(*p, k).map_err(|_| ZError::Rng)
 }
 
 pub fn proof_system_id<C: ZCurve>() -> [u8; 32] {

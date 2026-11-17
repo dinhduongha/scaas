@@ -11,7 +11,7 @@ import { p256 } from '@noble/curves/nist.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
-import { keccak_256, concatBytes, utf8ToBytes, fromHex, hex, word } from './bytes.js';
+import { keccak_256, concatBytes, utf8ToBytes, fromHex, hex, word, intOf } from './bytes.js';
 import { encodeType, checksumAddress } from './evm.js';
 
 /** An error whose `code` every implementation and the vector files share. */
@@ -161,7 +161,7 @@ export const groupTagString = (group) => {
 export const GROUP = (group) => tagHash(groupTagString(group));
 export const MSG_TAG = tagHash('scaas.ua.msg.v1');
 export const PURPOSES = Object.freeze(['pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner',
-  'keyop', 'payee-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update']);
+  'keyop', 'payee-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update', 'pqz-verdict']);
 /** `keccak256("scaas.ua.purpose.<p>.v<version>")`; every purpose has v1, `pop` also v2 (the portable PoP, UA-8 P1). */
 export const purposeTagString = (p, version = 1) => {
   if (!PURPOSES.includes(p) || !(version === 1 || (version === 2 && p === 'pop'))) fail('UAPurposeUnknown', `${p} v${version}`);
@@ -172,12 +172,22 @@ export const purposeTag = (p, version = 1) => tagHash(purposeTagString(p, versio
 export const POP_TAG = purposeTag('pop');
 export const POP_V2_TAG = purposeTag('pop', 2);
 export const KEM_TAG = purposeTag('kem');
+/** The off-chain purpose of a sealed container's sender signature (MD-10, ua-rs-sign spec §6.3): never in `PURPOSES`, never in a
+ *  contract list; `UAKey.signUA` refuses it, only the container builder (seal.js) signs under it. */
+export const SEAL_TAG = tagHash('scaas.ua.purpose.seal.v1');
 /** A PQZ key attached after `register` (`setPqzKey`, ruling A1-I1): its purpose. */
 export const PQZ_KEY_TAG = purposeTag('pqz-key');
 /** What a PQZ verifier UA signs a `PqzVerdict` under (group 3f, PQZ verifier mode spec §5.1; `UAKinds.PURPOSE_PQZ_VERDICT`): a
- *  native verifier over `uaAuthDigest`, a derived one over `uaMessage`. Not in `PURPOSES` yet: that list writes the purpose
- *  rows of vectors/ua/kinds.json, which every `ua-*` binding reads; it joins them with ua-rs's purpose (ua-rs-sign). */
-export const PQZ_VERDICT_TAG = tagHash('scaas.ua.purpose.pqz-verdict.v1');
+ *  native verifier over `uaAuthDigest`, a derived one over `uaMessage`. In `PURPOSES` since ua-rs-sign's T20b sync with 3f, so
+ *  the purpose rows of vectors/ua/kinds.json, which every `ua-*` binding reads, carry it. */
+export const PQZ_VERDICT_TAG = purposeTag('pqz-verdict');
+/** A scoped PQZ key's record (`setPqzScopedKey`, CTR-UA-43, K3-3): its purpose (`UAKinds.PURPOSE_PQZ_SCOPED_KEY`). Not in `PURPOSES`
+ *  (the kinds.json purpose table): a portable record purpose only. */
+export const PQZ_SCOPED_KEY_TAG = tagHash('scaas.ua.purpose.pqz-scoped-key.v1');
+/** The portable record purposes a single key signs for the registry's `verifyPop` (`UARegistryCoreLib._portablePurpose`): `pop` v2,
+ *  `kem`, `pqz-key`, `pqz-scoped-key`; `pqchat` joins with its round (PLANNED). One list (T21 L03, as ua-rs `portable_record_purposes`):
+ *  the signer's role (`pop`, the BLS PoP domain) and the purpose check read it. */
+export const PORTABLE_RECORD_TAGS = Object.freeze([POP_V2_TAG, KEM_TAG, PQZ_KEY_TAG, PQZ_SCOPED_KEY_TAG]);
 /** A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): its purpose. */
 export const MEMBERSHIP_TAG = purposeTag('membership');
 /** An `msig`'s structure update (`updateMsig`, CTR-UA-44): its purpose. Not a `requirePortable` purpose. */
@@ -765,6 +775,55 @@ export function kemRepair({ ua, kemPkHash, stored, kemPk }) {
   if (hex(sized(kemPkHash, 32, 'kemPkHash')) === ZW || kemPkOf(stored).length !== 0) return null;
   const record = kemRecordStruct({ ua, version: 1, kemPk }); // a fill needs a key: version 0 alone has a no-key record
   return { ua: record.ua, version: 0, kem: kemKeyOf(kemPk), sig: uaSig() };
+}
+
+// --- the ML-DSA expanded-key cache (CTR-UA-23, NODE-JOB-29; owner 2026-11-15) ---
+
+/** ML-DSA kind -> [FIPS 204 public key length, cache part count] (`PqUA.mldsaParts`: mldsa44 1, mldsa65 2, mldsa87 3). */
+const MLDSA_CACHE = new Map([[0x0130, [1312, 1]], [0x0131, [1952, 2]], [0x0134, [2592, 3]]]);
+const CACHE_SELECTOR = keccak_256(utf8ToBytes('cacheExpandedKey(uint16,bytes,uint256)')).subarray(0, 4);
+
+/** The cache part count of `kind`: 1 / 2 / 3 for mldsa44 / mldsa65 / mldsa87, 0 for every other kind (no cache). */
+// T21 L65: the kind and the part read strictly (`Number(null)` is 0, `Number('')` too): a malformed one is refused
+const cacheInt = (v, what) => { try { return Number(intOf(v, what)); } catch (e) { return fail('UAKeyCache', e.message); } };
+export const mldsaCacheParts = (kind) => MLDSA_CACHE.get(cacheInt(kind, 'kind'))?.[1] ?? 0;
+
+/**
+ * One cache part transaction: `cacheExpandedKey(kind, pk, part)` on the registry, a plain call (no signature; the subject or
+ * anyone sends it), as `{ entry, args, data }`: the named fields of the node's `call` job and the calldata for a subject that
+ * sends it itself. Refuses what the registry refuses, by its error names: `UAKeyCache` (a kind with no cache, a part past the
+ * last), `UAKeyData` (a key of the wrong length). Only on a registry without the ML-DSA precompile (the deploy JSON's
+ * `mldsa<x>_path` = `cache`); with a precompile the registry refuses it (`UAKeyCache`). UNAUDITED.
+ */
+export function cacheExpandedKeyCall(kind, pk, part) {
+  const k = cacheInt(kind, 'kind');
+  const c = MLDSA_CACHE.get(k) ?? fail('UAKeyCache', `0x${k.toString(16).padStart(4, '0')} has no expanded-key cache`);
+  const key = bytes(pk);
+  if (key.length !== c[0]) fail('UAKeyData', `${key.length} bytes, kind 0x${k.toString(16).padStart(4, '0')} takes ${c[0]}`);
+  const n = cacheInt(part, 'part');
+  if (!Number.isInteger(n) || n < 0 || n >= c[1]) fail('UAKeyCache', `part ${part}: kind 0x${k.toString(16).padStart(4, '0')} has ${c[1]} part(s)`);
+  const data = concatBytes(CACHE_SELECTOR, word(k), word(96), word(n), word(key.length), key, new Uint8Array(pad32(key.length) - key.length));
+  return { entry: 'cacheExpandedKey', args: { kind: k, pk: hex(key), part: String(n) }, data: hex(data) };
+}
+
+/** Every cache part transaction of `pk`, in part order (`cacheExpandedKeyCall` for parts 0 … count − 1). */
+export function mldsaCacheCalls(kind, pk) {
+  const n = mldsaCacheParts(kind);
+  if (n === 0) fail('UAKeyCache', `0x${Number(kind).toString(16).padStart(4, '0')} has no expanded-key cache`);
+  return Array.from({ length: n }, (_, part) => cacheExpandedKeyCall(kind, pk, part));
+}
+
+/**
+ * The cache-then-register order (CTR-UA-23 MD-3, NODE-JOB-29) on a registry without the ML-DSA precompile: every cache part
+ * of an ML-DSA key, then the registration (`registrationArgs(input)`), then its `kemFill` if any; for any other kind the
+ * registration alone. Each item is `{ entry, args }` (a part also carries `data`), sent in this order, each after the last
+ * landed: `register` reverts `UAKeyNotCached(ua)` while a part is missing.
+ */
+export function cacheThenRegister(input = {}) {
+  const reg = registrationArgs(input);
+  const parts = mldsaCacheParts(input.kind) ? mldsaCacheCalls(input.kind, input.keyData) : [];
+  const fill = reg.kemFill ? [{ entry: 'setKemKey', args: reg.kemFill }] : [];
+  return [...parts, { entry: reg.entry, args: reg.args }, ...fill];
 }
 
 // --- key-data validation (§1.6 "Validation at registration") ---

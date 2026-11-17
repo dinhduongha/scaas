@@ -199,7 +199,15 @@ local-directory journal: failover is "restore the store on another host", and a 
 owner lock ([NET-SUI-10](../networks/sui.md#NET-SUI-10)).
 
 Transitional (BUILT): the journal is the client's job row, written by a `signed` report over the pull protocol before
-`send_raw`; a failed report puts the work in the `retry` queue without sending.
+`send_raw`; a failed report puts the work in the `retry` queue without sending. The lane's own jobs, which have no client row
+(the [NODE-JOB-29](job-api.md#NODE-JOB-29) cache parts), are journaled in the store already (T21, owner 2026-11-16, O8; BUILT on
+the EVM lane): a job row in namespace `~node`, `queued → leased → signed` with its nonce and hash before `send_raw` (no row, no
+send), then `broadcast` (a replacement's hash), `mined` / `reverted` at the receipt of any of its hashes, `dead` at the gap-fill's receipt (T21 L80: never before: the original
+may still land). At start the lane plans with `max(legacy journal, lane.journal_max)` and reads the lane's `signed` / `broadcast`
+rows: one below `pending` is tracked as a job is; one at or above it is gap-filled and tracked beside the gap-fill, its hash kept,
+so whichever lands settles it (a failed gap-fill send is bumped like any stuck nonce). A part whose `register` expired while it is stuck
+is gap-filled the same way, its row live. A nonce the chain used for a transaction whose hash the lane does not hold closes it
+`consumed`.
 
 <a id="legacy-pull"></a><a id="NODE-LANE-02"></a>**NODE-LANE-02** — **Legacy pull: the `signed` report is idempotent
 and the nonce is held.** A `signed` report repeated with the same `(tx_hash, outer_nonce, signer_address)` (per signer: `(tx_hash,
@@ -369,7 +377,10 @@ nothing lowers it, a restart clears it. It is used only once its `eth_chainId` a
 `chain_uid`, else the first endpoint's block 0), read at first use and kept; another network (another id, or a reset or forked one
 with the same id) is dropped with a log line, an unreadable id or block 0 is logged as such and asked again (recheck 2 P3-5, 3 R3-3).
 The lane's own sends, nonces, fees and receipts stay on the first endpoint; the indexers keep their quorum. The strict-majority option
-stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). Each request gets `rpc_timeout_ms` (30 s: a read's, each
+stays deferred to `scaas-rpc` (decision of 2026-11-11 under ARCH-POS-15). PLANNED: this helper and its rules move into the
+shared crate as [CLI-RPC-04](../clients/scaas-rpc.md#CLI-RPC-04) without behaviour change (the lane's nonce, fee and receipt
+reads stay on the first endpoint), and the other families' transaction-building reads take the same failover while their status,
+sequence and fee reads stay on the first endpoint ([scaas-rpc.md](../clients/scaas-rpc.md), SPECIFIED). Each request gets `rpc_timeout_ms` (30 s: a read's, each
 span of a log window, the lane's nonce, fee, send and receipt requests), each request of a simulation `rpc_simulate_timeout_ms` (120
 s: `eth_estimateGas` runs a PQZ or Zether proof check several times; unmeasured, generous), per `[[chains]]` table, 0 refused at
 start; an endpoint that accepts and never answers fails the read over (Fable recheck 3 R3-4, recheck 4 R4-3; tests

@@ -88,7 +88,7 @@ static void table_groups_purposes_constants() {
         CHECK(hx(*groupTag(g)) == r["GROUP"].get<std::string>(), g);
     }
     CHECK(!groupTag("nope") && !groupTagString("nope"), "unknown group");
-    CHECK(k["purposes"].size() == 16, "purposes size");  // 15 purposes, `pop` has v1 and v2
+    CHECK(k["purposes"].size() == 17, "purposes size");  // 16 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44), `pop` has v1 and v2
     for (auto& r : k["purposes"]) {
         CHECK(hx(purposeTag(r["purpose"], r["version"].get<uint32_t>())) == r["purposeTag"].get<std::string>(), r["purpose"].get<std::string>());
         if (r["version"] == 1) CHECK(hx(purposeTag(r["purpose"])) == r["purposeTag"].get<std::string>(), r["purpose"].get<std::string>());
@@ -840,7 +840,7 @@ static void governance_bits_rows() {
     for (int bit : {32, 127, 128, 255}) CHECK(code_of([&] { governanceBit(uint8_t(bit)); }) == "UAArgument", std::to_string(bit));
 }
 
-// pay-meta-tax T41 / T83: paymeta.json v3 rows (save without a payNo refused) and paytax.json's UAPayWithTax digest row
+// pay-meta-tax T41, T83: paymeta.json v3 rows (save without a payNo refused; the UUIDv7 shown) and paytax.json's UAPayWithTax digest row
 static void pay_rows() {
     auto read = [](const std::string& n) {
         std::ifstream f(std::string(SCAAS_UA_VECTORS_DIR) + "/../metatx/" + n);
@@ -851,8 +851,11 @@ static void pay_rows() {
     for (auto& r : read("paymeta.json")) {
         json i = {{"salt", r["salt"]}, {"payNo", r["payNo"]}, {"save", r["save"]}, {"schema", r["schema"]}, {"body", r["body"]}};
         refused += !r["accepted"].get<bool>();
-        if (r["accepted"].get<bool>()) CHECK(json::parse(metaPayId(i.dump()))["payId"] == r["payId"], r["name"].get<std::string>());
-        else CHECK(code_of([&] { metaPayId(i.dump()); }) == "UAArgument", r["name"].get<std::string>());
+        if (r["accepted"].get<bool>()) {
+            json o = json::parse(metaPayId(i.dump()));
+            CHECK(o["payId"] == r["payId"] && o["save"] == r["save"], r["name"].get<std::string>());
+            CHECK(o["payNoUuid"] == (r.contains("payNoUuid") ? r["payNoUuid"] : json()), r["name"].get<std::string>());
+        } else CHECK(code_of([&] { metaPayId(i.dump()); }) == "UAArgument", r["name"].get<std::string>());
     }
     CHECK(refused > 0, "a refused paymeta row");
     for (auto& r : read("paytax.json")) {
@@ -863,6 +866,29 @@ static void pay_rows() {
         json got = json::parse(payDigest(i.dump()));
         CHECK(got["digest"] == r["digest"], "UAPayWithTax digest");
         CHECK(got["structHash"] == r["structHash"], "UAPayWithTax struct hash");
+    }
+    // T80 (CLI-SGN-48): servicepull.json's Note row through servicePull: entryRef, digest, calldata, job, the relay-fee wrap
+    for (auto& r : read("servicepull.json")["rows"]) {
+        if (r["name"] != "note_native") continue;
+        auto& t = r["t"];
+        auto& f = r["relayFee"];
+        json i = {{"name", r["token"]["name"]}, {"token", r["token"]["address"]}, {"chainId", r["chainId"]}, {"chainUid", r["token"]["salt"]},
+                  {"entry", r["entry"]}, {"op", r["typedData"]}, {"from", t["from"]}, {"amount", t["value"]}, {"batch", t["batch"]},
+                  {"nonce", t["nonce"]}, {"validUntil", t["validUntil"]}};
+        json got = json::parse(servicePull(i.dump()));
+        CHECK(got["entryRef"] == r["entryRef"] && got["digest"] == r["transferDigest"], "service pull entryRef, digest");
+        json fee = {{"feeToken", f["feeToken"]}, {"router", f["router"]}, {"executor", f["executor"]}, {"value", f["value"]},
+                    {"batch", f["batch"]}, {"nonce", std::stoull(t["nonce"].get<std::string>()) + 1}, {"validUntil", f["validUntil"]},
+                    {"feeAuth", {{"keyData", "0x"}, {"signature", f["signature"]}, {"members", json::array()}}}};
+        json s = i;
+        s["auth"] = r["auth"];
+        s["relayFee"] = fee;
+        got = json::parse(servicePull(s.dump()));
+        CHECK(got["calldata"] == r["calldata"] && got["job"] == r["job"], "service pull calldata, job");
+        CHECK(got["relayFee"]["relayCalldata"] == f["relayCalldata"], "service pull relay calldata");
+        json other = i;
+        other["from"] = "0x" + std::string(64, '1');
+        CHECK(code_of([&] { servicePull(other.dump()); }) == "UAArgument", "service pull: another payer");
     }
 }
 

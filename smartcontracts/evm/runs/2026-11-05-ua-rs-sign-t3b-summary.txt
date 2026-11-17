@@ -1,0 +1,40 @@
+# 2026-11-05 ua-rs-sign T3b: PQ signers (ML-DSA hedged, SLH-DSA randomized, Falcon padded over ua_msg), PQClean Falcon vendored
+# (MD-8 "equal" branch), the both-ways fixture rs_signatures.json (MD-7); spec §3, §8.2, §11, §12. UNAUDITED.
+# All commands in clients/ua-rs (or the dependent named) through scripts/capped, -j2, --locked; full logs git-ignored
+# (clients/ua-rs/target/t3b/<step>.log). Gates ran on the tree committed as 1ce2b70e.
+step | commit | rc | counts
+red: cargo test --features vectors --test wallet_pq --test wallet_sign --test wallet_keys (tests only) | 0214dd32 | 101 | does not compile: error[E0599]: no method named `vectors_sign_ua_fixed` found for reference `&UaKey`
+red: cargo test --no-fail-fast --test wallet_pq --test wallet_keys --test wallet_sign (tests only) | 0214dd32 | 101 | wallet_pq 0 passed / 6 failed; wallet_keys 9 / 1 failed (keys_json_ua_rows: Falcon KindUnavailable); wallet_sign 11 / 0
+red: node --test test/ua-wallet.test.js (clients/clientkeys, tests only) | 0214dd32 | 1 | 25 pass / 1 fail (rs_signatures.json absent)
+regenerate: cargo test --features vectors --test wallet_pq -- --ignored regenerate, twice | 1ce2b70e | 0 | rs_signatures.json 14 rows; sha256 the same after the second run (3f47cf6d...)
+green: cargo test --features vectors --test wallet_pq | 1ce2b70e | 0 | 11 passed, 1 ignored (regenerate)
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | 1ce2b70e | 0 | 0 warnings
+clippy --no-default-features | 1ce2b70e | 0 | 0 warnings
+clippy --no-default-features --features signers | 1ce2b70e | 0 | 0 warnings
+clippy --no-default-features --features json | 1ce2b70e | 0 | 0 warnings
+clippy --no-default-features --features pq | 1ce2b70e | 0 | 0 warnings
+clippy --features vectors | 1ce2b70e | 0 | 0 warnings
+test (default) | 1ce2b70e | 0 | 16 suites, 115 passed, 0 failed, 1 ignored (T3a: 109; + wallet_pq 6)
+test --no-default-features | 1ce2b70e | 0 | 10 suites, 50 passed, 0 failed (unchanged)
+test --no-default-features --features signers --test groups | 1ce2b70e | 0 | 8 passed, 1 ignored
+test --no-default-features --features json --test json | 1ce2b70e | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | 1ce2b70e | 0 | 45 passed (Falcon verified by the vendored PQClean: KATs, mutations, padding)
+test --features vectors | 1ce2b70e | 0 | 16 suites, 138 passed, 0 failed, 2 ignored (T3a: 127; + wallet_pq 11)
+clientkeys npm test | 1ce2b70e | 0 | 289 tests, 286 pass, 0 fail, 3 skipped (ua-wallet.test.js 26, + rs_signatures.json)
+cargo deny --all-features check (cargo-deny 0.20.2) | 1ce2b70e | 1 | advisories FAILED on 1: RUSTSEC-2026-0387 crypto-bigint 0.5.5 only through frost-secp256k1 =3.0.0 -> k256 0.13.4 (feature signers; owner decision open, no ignore added); RUSTSEC-2026-0162/0163/0165 gone (pqcrypto-* left the graph); bans, licenses, sources ok; warning: MIT-0 allowance not encountered (dunce left)
+build wasm32-unknown-unknown --no-default-features | 1ce2b70e | 0 | ok
+build wasm32-unknown-unknown --no-default-features --features pq | 1ce2b70e | 0 | ok (no Falcon: build.rs skips the C on wasm32)
+build wasm32-unknown-unknown --no-default-features --features wallet | 1ce2b70e | 0 | ok (was 101 at T3a: pqcrypto-internals C); Falcon kinds KindUnavailable there
+build wasm32-unknown-unknown (default) | 1ce2b70e | 0 | ok
+cargo tree --locked in scaas-node, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust | 1ce2b70e | 0 | 5 of 5 after `cargo update -p scaas-ua --offline` in each: scaas-node's lock moves (scaas-ua: - pqcrypto-falcon, - pqcrypto-traits, + cc; scaas-node keeps pqcrypto-falcon as its dev-dependency and cc 1.6.0); the four clients unchanged (scaas-ua without pq)
+scaas-node cargo check --all-targets | 1ce2b70e | 0 | ok
+scaas-node cargo test --lib relayer_mode_checks_a_marked_msig_slot | 1ce2b70e | 0 | 1 passed: a pqcrypto-falcon signature (dev-dependency) verified by scaas-ua's vendored PQClean, both copies linked in one binary (renamed symbols)
+ua-c cargo test | 1ce2b70e | 0 | 1 passed
+vendor.sh re-run (vendor/pqclean-falcon-seeded) | 1ce2b70e | 0 | every vendored file byte-equal after a second run (sha256 of the crates.io archives = their Cargo.lock checksums)
+mutants: 2026-11-05-ua-rs-sign-t3b-mutants.py | 1ce2b70e | 0 | 12 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t3b-mutants.txt)
+docs_check check / paths | 1ce2b70e | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# Byte-equal: sign.json PQ `bytes` rows 8 (ML-DSA rnd = 0, SLH-DSA opt_rand = PK.seed) through sign_ua's path with fixed
+# randomness; pq_kat.json ML-DSA-44/-65/-87 and SLH-DSA signatures 4; ACVP sigGen 16 (ML-DSA x 12 with the expanded keys, external
+# and internal interfaces, deterministic and with rnd; SLH-DSA x 4). Keys: pq_kat.json 6 kinds, keys.json 216 ua rows (Falcon 32).
+# Verify-only: sign.json PQ rows 20 (Rust verifies the JS signatures; the release signature of each request verifies), Falcon
+# pq_kat.json 2; the JS side verifies rs_signatures.json 14 (and refuses each with one flipped byte).

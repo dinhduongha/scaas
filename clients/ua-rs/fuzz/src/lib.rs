@@ -1,0 +1,331 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+//! The oracles of ua-rs's libFuzzer targets (ua-rs-sign T11; spec §9.3), one binary, the target named by `UA_FUZZ_TARGET`
+//! (`run.sh` sets it). On every input each target checks (a failed check prints a FINDING and aborts: a libFuzzer crash;
+//! a panic aborts too, caught at the entry point):
+//! - no panic;
+//! - the same input twice gives the same result;
+//! - the JSON decoders: an input longer than the decoder's cap, or nesting deeper than its depth cap (counted here by a scan
+//!   of our own, not the crate's), is refused and never reaches `serde_json` (`bounded::vectors_parsed`: a decoder's later
+//!   refusal of the parsed value would hide a missing bound);
+//! - an accepted value written back and read again gives the same value (`to_json` / `to_value` / `to_wire`);
+//! - `kem_pk`: only a scheme-1 key of exactly 1,601 bytes is accepted; `mnemonic`: none past 1 KiB or 24 words; `sealed`: the
+//!   wire form is accepted exactly when it holds its fixed fields and a tag at version and scheme 1, and never opens to a key
+//!   it was not sealed to.
+//!
+//! - T12: `container_expect`, `members`, `accepted` (the container open's JSON inputs across the C ABI) and `uasig` (the `UASig`
+//!   request) under their caps.
+//!
+//! - T14: `zether_cmd`, the Zether facade's command decoder (1 MiB, depth 8, an allow-list per command): the first byte names
+//!   the command (its index in `facade::zether::COMMANDS`, modulo one more than their count), the rest is the JSON; the extra
+//!   index is the balance-cache box reader (2 MiB, depth 1), opened with a fixed wallet's key (never opens a fuzzed box). An
+//!   accepted command reads back to itself and holds no `key` member at any depth.
+//!
+//! - T15: `pqz_cmd`, the PQZ facade's command decoder (1 MiB, depth 8, an allow-list per command, typed values): the first byte
+//!   names the command (its index in `facade::pqz::COMMANDS`, modulo one more than their count), the rest is the JSON; the extra
+//!   index is the balance-cache box reader (2 MiB, depth 1), opened with a fixed wallet's PQZ key (never opens a fuzzed box). An
+//!   accepted command reads back to itself and holds no `key` member at any depth. No proof is made (decoding only).
+//!
+//! - T21 L48: `json_calls`, the JSON calls of `scaas_ua::json` (ua-c's `json_call`, ua-cxx, ua-qt, ua-dart-frb) under their caps:
+//!   the first byte names the call (its index in `JSON_CALLS`, modulo their count), the rest is the text (non-UTF-8: skipped,
+//!   the C ABI refuses it before the call).
+//!
+//! - ua-rs-native T8b: `polkadot_path`, the Polkadot junction path parser and derivation (`Wallet::polkadot_key`): the input as
+//!   UTF-8 (else skipped); the same answer twice; nothing past 512 bytes accepted. UNAUDITED.
+use scaas_ua::wallet::{
+    bounded, kem_encaps, vectors_backup_payload, AcceptedJson, ContainerExpectJson, EvmTx, Expect, KemKeyPair, Manifest, MembersJson,
+    Sealed, SealedContainer, TypedData, UaSigRequest, Vault, Wallet,
+};
+use scaas_ua::facade::pqz::{PqzCmd, PqzKey, COMMANDS as PQZ_COMMANDS};
+use scaas_ua::facade::zether::{ZetherCmd, ZetherKey, COMMANDS};
+use std::fmt::Debug;
+use std::sync::OnceLock;
+
+/// `(target, length cap, depth cap)` of each JSON decoder (the crate's constants, spec §9.3).
+const TYPED: (usize, usize) = (64 * 1024, 8);
+const EXPECT: (usize, usize) = (16 * 1024, 4);
+const TX: (usize, usize) = (16 * 1024, 4);
+const VAULT: (usize, usize) = (2 << 20, 2);
+const MANIFEST: (usize, usize) = (1 << 20, 3);
+const PAYLOAD: (usize, usize) = (1 << 20, 4);
+const CONTAINER: (usize, usize) = (4 << 20, 7);
+const LOOKUP: (usize, usize) = (16 * 1024, 4);
+/// `members_json`: 512 KiB (owner 2026-11-06), depth 4.
+const MEMBERS: (usize, usize) = (512 * 1024, 4);
+const UASIG: (usize, usize) = (64 * 1024, 6);
+const ZCMD: (usize, usize) = (1 << 20, 8);
+const ZBOX: (usize, usize) = (2 << 20, 1);
+const QCMD: (usize, usize) = (1 << 20, 8);
+const QBOX: (usize, usize) = (2 << 20, 1);
+/// `json_calls`: the call and its `(length cap, depth cap)`, in the order of `fuzz/seeds.py`'s `JCALLS`.
+type JsonCall = fn(&str) -> scaas_ua::json::JsonResult<String>;
+const JSON_CALLS: [(JsonCall, (usize, usize)); 9] = {
+    use scaas_ua::json::*;
+    [
+        (registration_args_json, (1 << 20, 6)),
+        (set_kem_key_args_json, (1 << 20, 6)),
+        (set_pqz_key_args_json, (1 << 20, 6)),
+        (set_pqz_key_version_args_json, (1 << 20, 6)),
+        (msig_update_json, (1 << 20, 6)),
+        (pay_digest_json, (1 << 20, 6)),
+        (meta_pay_id_json, (1 << 20, 6)),
+        (service_pull_json, (64 * 1024, 7)),
+        (|t| inner_json(t).map(|v| v.len().to_string()), (64 * 1024, 1)),
+    ]
+};
+/// `version ‖ scheme ‖ mlkemCt (1,568) ‖ x25519Eph (32)` and a 16-byte tag.
+const SEALED_MIN: usize = 2 + 1568 + 32 + 16;
+
+static TARGET: OnceLock<String> = OnceLock::new();
+
+fn die(msg: &str) -> ! {
+    eprintln!("ua-fuzz FINDING ({}): {msg}", TARGET.get().map_or("?", String::as_str));
+    std::process::abort()
+}
+
+/// The deepest nesting of `[` / `{` outside strings (a `\` escapes the next byte in a string); an extra closer ends the scan.
+fn depth(b: &[u8]) -> usize {
+    let (mut d, mut max, mut s, mut esc) = (0usize, 0usize, false, false);
+    for &c in b {
+        if s {
+            if esc {
+                esc = false;
+            } else if c == b'\\' {
+                esc = true;
+            } else if c == b'"' {
+                s = false;
+            }
+            continue;
+        }
+        match c {
+            b'"' => s = true,
+            b'[' | b'{' => {
+                d += 1;
+                max = max.max(d);
+            }
+            b']' | b'}' => match d.checked_sub(1) {
+                Some(x) => d = x,
+                None => break,
+            },
+            _ => {}
+        }
+    }
+    max
+}
+
+/// `dec(data)` twice under the caps' oracle; the accepted value.
+fn json<T: PartialEq + Debug>(data: &[u8], (len, deep): (usize, usize), dec: impl Fn(&[u8]) -> scaas_ua::wallet::Result<T>) -> Option<T> {
+    let before = bounded::vectors_parsed();
+    let r = dec(data);
+    let reached = bounded::vectors_parsed() - before;
+    if reached > 1 {
+        die(&format!("{reached} parses of one input"));
+    }
+    if (data.len() > len || depth(data) > deep) && (reached != 0 || r.is_ok()) {
+        die(&format!("past its cap ({} B, depth {}) and {}", data.len(), depth(data), if r.is_ok() { "accepted" } else { "parsed" }));
+    }
+    if dec(data) != r {
+        die("not deterministic");
+    }
+    r.ok()
+}
+
+fn same<T: PartialEq + Debug>(a: &T, b: scaas_ua::wallet::Result<T>, what: &str) {
+    if b.as_ref() != Ok(a) {
+        die(&format!("{what}: written back and read again differs: {b:?}"));
+    }
+}
+
+/// Whether an object in `v` has a member named `key`.
+fn has_key(v: &serde_json::Value) -> bool {
+    match v {
+        serde_json::Value::Object(o) => o.iter().any(|(k, x)| k == "key" || has_key(x)),
+        serde_json::Value::Array(a) => a.iter().any(has_key),
+        _ => false,
+    }
+}
+
+fn one(t: &str, data: &[u8]) {
+    match t {
+        "typed_data" => {
+            if let Some(td) = json(data, TYPED, TypedData::from_json) {
+                same(&td, TypedData::from_json(td.to_value().to_string().as_bytes()), "typed_data");
+                let _ = td.digest();
+            }
+        }
+        "expect" => {
+            json(data, EXPECT, Expect::from_json);
+        }
+        "tx" => {
+            json(data, TX, EvmTx::from_json);
+        }
+        "vault" => {
+            if let Some(v) = json(data, VAULT, Vault::from_json) {
+                same(&v, Vault::from_json(v.to_json().as_bytes()), "vault");
+            }
+        }
+        "manifest" => {
+            if let Some(m) = json(data, MANIFEST, Manifest::from_json) {
+                same(&m, Manifest::from_json(m.to_json().as_bytes()), "manifest");
+            }
+            // the backup / link payload (`BackupPayload`, read inside restore_backup and from_link): written back, it reads
+            // back to the same text
+            if let Some(p) = json(data, PAYLOAD, vectors_backup_payload) {
+                same(&p, vectors_backup_payload(p.as_bytes()), "payload");
+            }
+        }
+        "container" => {
+            if let Some(c) = json(data, CONTAINER, SealedContainer::from_json) {
+                same(&c, SealedContainer::from_json(c.to_json().as_bytes()), "container");
+            }
+        }
+        "sealed" => {
+            let r = Sealed::from_wire(data);
+            let fits = data.len() >= SEALED_MIN && data.get(..2) == Some(&[1, 1][..]);
+            if r.is_ok() != fits {
+                die(&format!("from_wire {} a {}-byte input", if fits { "refused" } else { "accepted" }, data.len()));
+            }
+            if let Ok(s) = r {
+                if s.to_wire() != data {
+                    die("to_wire(from_wire(x)) != x");
+                }
+                static KEY: OnceLock<KemKeyPair> = OnceLock::new();
+                let key = KEY.get_or_init(|| KemKeyPair::vectors_ephemeral(&[7; 96]).unwrap_or_else(|_| die("no key")));
+                if key.open("scaas/test/v1", b"", &s).is_ok() {
+                    die("a seal not made to this key opened");
+                }
+            }
+        }
+        "kem_pk" => {
+            if kem_encaps(data).is_ok() && (data.len() != 1601 || data.first() != Some(&1)) {
+                die(&format!("a {}-byte kemPk of scheme {:?} accepted", data.len(), data.first()));
+            }
+        }
+        "mnemonic" => {
+            let Ok(s) = std::str::from_utf8(data) else { return };
+            let r = Wallet::from_mnemonic(s, "").map(|_| ());
+            if r.is_ok() && (s.len() > 1024 || s.split_whitespace().count() > 24) {
+                die(&format!("a mnemonic of {} B, {} words accepted", s.len(), s.split_whitespace().count()));
+            }
+            if Wallet::from_mnemonic(s, "").map(|_| ()) != r {
+                die("not deterministic");
+            }
+        }
+        "container_expect" => {
+            json(data, LOOKUP, ContainerExpectJson::from_json);
+        }
+        "members" => {
+            json(data, MEMBERS, MembersJson::from_json);
+        }
+        "accepted" => {
+            json(data, LOOKUP, AcceptedJson::from_json);
+        }
+        "uasig" => {
+            // no key handles: a parsed request signs nothing (every key position is past the empty list)
+            if let Some(r) = json(data, UASIG, UaSigRequest::from_json) {
+                if r.sign(&[]).is_ok() {
+                    die("a UASig built with no key");
+                }
+            }
+        }
+        "zether_cmd" => {
+            let Some((&b, rest)) = data.split_first() else { return };
+            match COMMANDS.get(usize::from(b) % (COMMANDS.len() + 1)) {
+                Some(cmd) => {
+                    if let Some(c) = json(rest, ZCMD, |d| ZetherCmd::from_json(cmd, d)) {
+                        same(&c, ZetherCmd::from_json(cmd, c.to_json().as_bytes()), "zether_cmd");
+                        let v: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap_or_else(|_| die("to_json not JSON"));
+                        if has_key(&v) {
+                            die("a command with a `key` member accepted");
+                        }
+                    }
+                }
+                None => {
+                    static KEY: OnceLock<(Wallet, ZetherKey)> = OnceLock::new();
+                    let (_, k) = KEY.get_or_init(|| {
+                        // a `vectors` build makes key handles only after the test-only marker (Codex C1, T15c2)
+                        scaas_ua::facade::vectors_unlock(scaas_ua::facade::TestOnly);
+                        let w = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "")
+                            .unwrap_or_else(|_| die("no wallet"));
+                        let k = w.zether_key(60, 0, 7).unwrap_or_else(|_| die("no key"));
+                        (w, k)
+                    });
+                    if json(rest, ZBOX, |d| k.open_balance_cache(d).map(|p| p.to_vec())).is_some() {
+                        die("a fuzzed box opened");
+                    }
+                }
+            }
+        }
+        "pqz_cmd" => {
+            let Some((&b, rest)) = data.split_first() else { return };
+            match PQZ_COMMANDS.get(usize::from(b) % (PQZ_COMMANDS.len() + 1)) {
+                Some(cmd) => {
+                    if let Some(c) = json(rest, QCMD, |d| PqzCmd::from_json(cmd, d)) {
+                        same(&c, PqzCmd::from_json(cmd, c.to_json().as_bytes()), "pqz_cmd");
+                        let v: serde_json::Value = serde_json::from_str(&c.to_json()).unwrap_or_else(|_| die("to_json not JSON"));
+                        if has_key(&v) {
+                            die("a command with a `key` member accepted");
+                        }
+                    }
+                }
+                None => {
+                    static KEY: OnceLock<(Wallet, PqzKey)> = OnceLock::new();
+                    let (_, k) = KEY.get_or_init(|| {
+                        // a `vectors` build makes key handles only after the test-only marker (Codex C1, T15c2)
+                        scaas_ua::facade::vectors_unlock(scaas_ua::facade::TestOnly);
+                        let w = Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "")
+                            .unwrap_or_else(|_| die("no wallet"));
+                        let k = w.pqz_key(0, 0).unwrap_or_else(|_| die("no key"));
+                        (w, k)
+                    });
+                    if json(rest, QBOX, |d| k.open_balance_cache(d).map(|p| p.to_vec())).is_some() {
+                        die("a fuzzed box opened");
+                    }
+                }
+            }
+        }
+        "json_calls" => {
+            let Some((&b, rest)) = data.split_first() else { return };
+            let Ok(t) = std::str::from_utf8(rest) else { return };
+            let (f, caps) = JSON_CALLS[usize::from(b) % JSON_CALLS.len()];
+            if let Some(out) = json(rest, caps, |_| f(t).map_err(|_| scaas_ua::wallet::Error::Argument)) {
+                if serde_json::from_str::<serde_json::Value>(&out).is_err() {
+                    die("an accepted call's output is not JSON");
+                }
+            }
+        }
+        "polkadot_path" => {
+            let Ok(p) = std::str::from_utf8(data) else { return };
+            static W: OnceLock<Wallet> = OnceLock::new();
+            let w = W.get_or_init(|| {
+                Wallet::from_mnemonic("legal winner thank year wave sausage worth useful legal winner thank yellow", "").unwrap_or_else(|_| die("no wallet"))
+            });
+            let a = w.polkadot_key(p).map(|k| k.public_key());
+            if a != w.polkadot_key(p).map(|k| k.public_key()) {
+                die("polkadot_path: another answer the second time");
+            }
+            if a.is_ok() && p.len() > 512 {
+                die("polkadot_path: a path past 512 bytes accepted");
+            }
+        }
+        _ => die(
+            "UA_FUZZ_TARGET: typed_data | expect | tx | vault | manifest | container | sealed | kem_pk | mnemonic | container_expect | \
+             members | accepted | uasig | zether_cmd | pqz_cmd | json_calls | polkadot_path",
+        ),
+    }
+}
+
+/// libFuzzer's entry point.
+///
+/// # Safety
+/// libFuzzer passes `size` readable bytes at `data`.
+#[no_mangle]
+pub unsafe extern "C" fn LLVMFuzzerTestOneInput(data: *const u8, size: usize) -> i32 {
+    let t = TARGET.get_or_init(|| std::env::var("UA_FUZZ_TARGET").unwrap_or_default());
+    let input = if size == 0 { &[][..] } else { std::slice::from_raw_parts(data, size) };
+    // T15: the profile unwinds (pqz-ffi refuses panic = "abort" on native targets), so a panic is caught here and is still a
+    // finding: abort, which libFuzzer reports as a crash (the panic hook has printed it)
+    if std::panic::catch_unwind(|| one(t, input)).is_err() {
+        die("panic");
+    }
+    0
+}

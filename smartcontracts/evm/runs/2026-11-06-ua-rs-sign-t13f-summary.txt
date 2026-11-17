@@ -1,0 +1,36 @@
+# 2026-11-06 ua-rs-sign T13f: ua-cs binding (spec §9.2; plan T13). clients/ua-cs Scaas.Ua/Wallet.cs loads libscaas_ua_c (C ABI v6) by P/Invoke
+# (DllImport + SafeHandle): the same surface as T13d / T13e (wallet, keys, imported keys and label vaults, sign, UASig, WebAuthn, KEM, seal /
+# open / container, link incl. link_seal, backup / restore / rollback, vault rewrap / PRF, AEAD / HKDF / HMAC, the Zether and PQZ facades,
+# ExportPqzLeafRaw); the v5 identity calls stay Ua.cs's own port (the cross-check). Scaas.Ua.csproj: AllowUnsafeBlocks. UNAUDITED.
+# .NET 10.0.114; dotnet build / test through scripts/capped, foreground, each followed by dotnet build-server shutdown; full logs git-ignored
+# (clients/ua-cs/t13f-*.log).
+step | commit | rc | counts
+red: dotnet build Scaas.Ua.Tests (WalletTests.cs, no Wallet.cs) | a5bcd806 + tests | 1 | 84 errors: CS0246 Wallet, WalletKey, KemKey, UaHandle ... not found
+ua-cs dotnet test Scaas.Ua.Tests (then dotnet build-server shutdown) | 24406793 | 0 | 51 passed, 0 warnings (TreatWarningsAsErrors): VectorTests 26 (own port, unchanged), WalletTests 25
+mutants: 2026-11-06-ua-rs-sign-t13f-mutants.py | 24406793 | 0 | 16 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t13f-mutants.txt): the plan's 3 and 13 of the controller's
+# Rows read: as T13d (keys, sign incl. msig memberSigs bytes, kem, seal, vault, zether.json; zether-prover r33_keys / transfer_bls12381; PQZ set,
+# leaf, proveRegister, enc / dec, cache box), the own port's UA.DeriveUA / UAMessage / Keccak256 as cross-check; the same release-only skips.
+# Decisions (controller, the owner may override): (1) Types Wallet, WalletKey (UA, native or imported key), KemKey, LinkSession, SeedBackup,
+# ZetherKey, PqzKey (IDisposable over one SafeHandle subclass each) and the static UaLib (constants, load check, module-level calls, Wipe).
+# (2) Library resolution: SCAAS_UA_C_LIB, else clients/ua-c/target/release above the binary, else the default probing (a DllImport resolver).
+# (3) Load: every entry point runs UaLib.Load() (a lock, cached on success only); CheckBuild as T13d; test hooks AbiVersionHook / ResetLoad
+# (internal, InternalsVisibleTo Scaas.Ua.Tests). (4) Secrets: inputs byte[] (strings cannot be wiped); the NUL-terminated copies come from
+# UaLib.SecretBuf (test hook; pinned-heap arrays, never moved by the GC) and are zeroed by CryptographicOperations.ZeroMemory after the call;
+# caller arrays are pinned in place, not copied; secret outputs (Decaps / KemEncaps ss, Open, OpenContainer, AeadOpen, HKDF, cache opens,
+# Reveal, Take, the PQZ leaf) are pinned-heap arrays, any larger intermediate buffer wiped; UaLib.Wipe is the caller's helper. (5) Handles:
+# SafeHandle frees exactly once and the P/Invoke marshaller holds a reference per call, so Dispose never frees under a call in flight; UASig
+# takes DangerousAddRef on each key for the call; a call after Dispose is ObjectDisposedException, never the library. RestoreBackup's NULL
+# current wallet is an invalid static handle. (6) Fixed-size inputs length-checked (UAKeyData). (7) PqzKey.Call uses PqzOutMax, never a size
+# query. (8) DllImport, not LibraryImport (SYSLIB1054 suppressed with its reason): SafeHandle marshalling is the handle rule.
+# Notes: (1) T18 owns CI: the ua-cs job's dotnet test now needs ua-c's release build first. (2) Last-error is read right after each call on
+# the same managed thread (CoreCLR binds it to one OS thread).
+# Conflicts: the plan's T13 row names the files; ua-go uses a subpackage (T13e decision 1). Spec §9.2's list does not name link_seal,
+# imported_key, the label vaults or PqzSetMismatch (T12 follow-up and T15 conflicts, unchanged); the bindings cover them as asked. Spec and plan not edited.
+# What T16 / T16a depend on: (1) Each binding passes cb = NULL to scaas_ua_external_key_new and expects UAKindUnavailable; no binding
+# marshals a ScaasUaExternalSigner callback yet (ctypes CFUNCTYPE, cgo //export, UnmanagedCallersOnly): if T16 lets a test build take a real
+# signer through the C ABI, each binding needs a callback wrapper. (2) The load check knows bit 9 `external` (a build with it set loads) and
+# refuses any bit past `mlock`: a new feature bit needs the binding's FEATURES table extended. (3) A change of ScaasUaExternalSigner's layout or
+# external_key_new's signature means ABI 7: every binding's ABI constant and CheckBuild move with it (they refuse 7 by design). (4) T16a's new
+# C calls (k-of-n PQZ seed backup) are appended exports: each binding needs wrappers; a binding that declares an export the library lacks
+# fails at load (ua-py: AttributeError in load(); ua-go: link error; ua-cs: EntryPointNotFoundException at first call). New statuses need no
+# binding change (names come from scaas_ua_status_name). (5) T18 (CI): the ua-py / ua-go / ua-cs jobs need ua-c's release build first.

@@ -1,0 +1,49 @@
+# 2026-11-06 ua-rs-sign T10: custody and memory protection (spec §8.2, §9.1, §12; C-02, C-09). Wallet::unlock(vault, Unlock,
+# bip39_passphrase) = open_vault's checks (shared seed_entropy) + a new arena at the generation lock() raised (Argument while
+# unlocked; old handles stay KeyRevoked); feature `mlock` (wallet + libc, Unix): each 16 KiB arena chunk mlock'ed and MADV_DONTDUMP
+# (Linux, Android) at allocation, wiped then unmarked and unlocked at release, best effort, reported by Wallet::memory_protection()
+# -> MemoryProtection {chunks, locked, no_dump}; compile-fail doc tests (no Clone / Debug on UaKey, NativeKey, KemKeyPair, Wallet;
+# no secret accessor or fixed-randomness entry in a release build, F-01). UNAUDITED.
+# All commands in clients/ua-rs through scripts/capped, -j2, --locked; full logs git-ignored (clients/ua-rs/target/t10/<step>.log).
+# Gates ran on the tree committed as b2c56d53, the T10 code commit (the commit before this summary).
+step | commit | rc | counts
+red: cargo test --features vectors --test wallet_custody --test wallet_memory (tests only) | 9adb6974 | 101 | does not compile: 15 errors, E0599 (11) no method unlock (6) / memory_protection (5), E0432 (2) unresolved wallet::MemoryProtection, E0425 (2) vectors_chunks_released
+green: cargo test --features vectors,mlock --test wallet_custody --test wallet_memory | b2c56d53 | 0 | 8 + 3 passed
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | b2c56d53 | 0 | 0 warnings
+clippy --no-default-features | b2c56d53 | 0 | 0 warnings
+clippy --no-default-features --features signers | b2c56d53 | 0 | 0 warnings
+clippy --no-default-features --features json | b2c56d53 | 0 | 0 warnings
+clippy --no-default-features --features pq | b2c56d53 | 0 | 0 warnings
+clippy --features vectors | b2c56d53 | 0 | 0 warnings
+clippy --no-default-features --features wallet,mlock | b2c56d53 | 0 | 0 warnings
+clippy --features vectors,mlock | b2c56d53 | 0 | 0 warnings
+test (default) | b2c56d53 | 0 | 26 suites, 248 passed, 0 failed, 1 ignored (T9: 226; + wallet_custody 7, wallet_memory 1, 14 doc tests: 13 compile_fail, 1 control)
+test --no-default-features | b2c56d53 | 0 | 10 suites, 50 passed (unchanged)
+test --no-default-features --features signers --test groups | b2c56d53 | 0 | 8 passed, 1 ignored
+test --no-default-features --features json --test json | b2c56d53 | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | b2c56d53 | 0 | 45 passed
+test --no-default-features --features wallet | b2c56d53 | 0 | 26 suites, 248 passed, 1 ignored
+test --no-default-features --features wallet,mlock | b2c56d53 | 0 | 26 suites, 249 passed, 1 ignored (+ mlock_refused_never_fails_the_wallet)
+test --features vectors | b2c56d53 | 0 | 26 suites, 292 passed, 3 ignored (T9: 274; + wallet_custody 8, wallet_memory 1, 9 doc tests: the 5 release-only ones are not built under vectors)
+test --features vectors,mlock | b2c56d53 | 0 | 26 suites, 294 passed, 3 ignored (+ arena_chunks_locked_and_no_dump, mlock_refused_never_fails_the_wallet; the RLIMIT_MEMLOCK refusal exercised, it binds on this host)
+build wasm32-unknown-unknown --no-default-features / signers / pq / wallet / default / default + mlock | b2c56d53 | 0 | ok, 6 of 6 (mlock compiled out off Unix: libc not taken, memory_protection reports locked = no_dump = 0)
+cargo deny --all-features check (cargo-deny 0.20.2) | b2c56d53 | 0 | advisories ok, bans ok, licenses ok, sources ok; warnings: 22 duplicates (unchanged from T9)
+Cargo.lock | b2c56d53 | - | scaas-ua lists libc 0.2.190 (in the lock already: optional dep for `mlock` on Unix, Unix dev-dep for the RLIMIT test); no package added
+cargo update -p scaas-ua --offline; cargo tree --locked --offline in scaas-node, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust | b2c56d53 | 0 | 5 of 5; no lock moves for scaas-ua (none enables mlock). scaas-node's offline update again re-resolved tempfile's getrandom 0.4.3 -> 0.3.4 (unrelated): reverted, cargo tree --locked passes on the committed lock
+clientkeys npm test | - | - | not run: no vector or JS file changed
+mutants: 2026-11-06-ua-rs-sign-t10-mutants.py | b2c56d53 | 0 | 19 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t10-mutants.txt); the plan's 7 and 12 of the controller's. Before the commit two survived and were closed: M13 (Handle::derive generation check skipped: kem_key's self_test still refused, so the test now checks that a revoked handle writes nothing into the new arena) and a field-privacy doc test that could not fail (E0616 even with the field pub: removed, replaced by M19, a release secret accessor)
+docs_check check / paths | b2c56d53 | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# Custody: lock_keeps_manifest_drops_secrets, unlock_reopens_the_vault, derive_lock_then_sign_decaps_open_prove_are_KeyRevoked (sign_ua,
+# sign_member, decaps, open, kem_key, native key proof and raw digest, MuSig2 session sign and creation), unlock_does_not_revive_old_handles,
+# ua_key_on_locked_wallet_is_WalletLocked, wallet_dropped_with_children_retained, concurrent_lock_and_sign (4 threads, bounded: 3 calls past
+# the first KeyRevoked, at most 200,000 calls; no call started after lock() returned signs; every chunk released zero, vectors hook),
+# lock_returns_only_after_operations_in_flight (one bounded 1 s wait, no loop). Memory (Linux): /proc/self/smaps VmFlags lo and dd on a
+# derived key's slot, neither after lock(); the handle's own page not locked; RLIMIT_MEMLOCK 0 reported (locked 0, no_dump kept), the wallet signs.
+# Notes: (1) "prove" has no handle yet: the Zether and PQZ handles come with T14 / T15 and must run under Handle::with. (2) Imported keys
+# after unlock: listed in the kept manifest, held again only after open_label_vault of their native-import: vault (imported_key is Argument
+# until then); unlock takes the seed vault only, each label vault has its own DEK and unlock. (3) The scrypt work buffer (128 MiB at
+# N = 2^17) is not wiped: scrypt 0.11 allocates it inside and offers no caller buffer; residual, stated in vault.rs and store.rs (spec §8.2
+# table). (4) Windows: no VirtualLock in this build (not a target of MD-12); `mlock` is a no-op there and reports locked = 0. (5) A kernel
+# page that does not divide 16 KiB (64 KiB pages): nothing locked or marked (an unlock would release a neighbouring chunk on the same page).
+# (6) unlock does not check that the vault is this wallet's (another seed vault, or another BIP-39 passphrase, gives another seed under the
+# kept manifest): open question for the controller. (7) `mlock` is not in `default` (MD-5's list); a release build opts in.

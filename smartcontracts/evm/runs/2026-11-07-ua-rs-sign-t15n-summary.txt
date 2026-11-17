@@ -1,0 +1,48 @@
+# 2026-11-07 ua-rs-sign T15n: decoy selection from the registry's per-kind lists (CTR-UA-29, Change 2026-11-07 owner at
+# ua-mtx-merge 66ce4beb; plan "T15n", owner-approved 2026-11-07). Commits: b08b8a0d (facade::decoys and pickDecoys in both
+# facades, pqz-read --command decoys, zether-read-balance --decoy-count / --decoy-keys, tests, ua-c doc lists and
+# test_vectors.py, ua-libraries.md, plan, mutant harness), 31b3712e (fuzz regress inputs regenerated: the cache-box index after
+# the last command), 2b59e396 (mutant record; gates.sh mutant-logs checks the T15n harness), the follow-up commit of this
+# summary. No contract, statement, transcript, byte format, C ABI call or status change; no new dependency, no lock changed.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs in the scratch directory, not committed.
+# UNAUDITED.
+step | commit | rc | counts
+ua-rs test (default: zether + pqz n2304-kmax4096, the release cell) | b08b8a0d | 0 | 38 suites, 364 passed, 0 failed, 3 ignored
+ua-rs test --test pqz_read --bin pqz-read -- --include-ignored (ANVIL=foundry's anvil 1.8.5, stopped by the tests) | b08b8a0d | 0 | 1 + 4 passed (incl. decoys_against_anvil, decoy_arguments); no anvil left
+ua-rs test --features vectors --lib --tests --bins (first run at b08b8a0d: fuzz_caps 2 failed, the regress box index; fixed by 31b3712e) | 31b3712e | 0 | 40 suites, 415 passed, 0 failed, 5 ignored
+ua-rs test --no-default-features --features wallet,mlock | 31b3712e | 0 | 27 suites, 256 passed, 1 ignored
+ua-rs test wallet,zether,mlock --lib --test facade_zether | 31b3712e | 0 | 2 suites, 17 passed
+ua-rs test wallet,zether,pqz,pqz-set-n2048-kmax1024,mlock --lib --bin pqz-read --test pqz_read | 31b3712e | 0 | 3 suites, 9 passed, 2 ignored (the anvil tests)
+ua-rs clippy --all-targets -D warnings: default, vectors, --no-default-features, wallet,mlock, wallet,zether,mlock, wallet,pqz,n2048,mlock (+ vectors) | 31b3712e | 0 | 0 of ours each (7 cells); the zether-only cell first failed (wallet::{from_hex, to_hex} under pqz only; fixed in b08b8a0d before the commit)
+zether-prover test default / --features hazmat | 31b3712e | 0 | 17 suites, 89 passed, 2 ignored / 17 suites, 103 passed, 2 ignored
+zether-prover test --test read_balance --bin zether-read-balance -- --include-ignored, default and hazmat (anvil) | 31b3712e | 0 | 5 + 1 / 6 + 1 passed; no anvil left
+zether-prover clippy --bin zether-read-balance --test read_balance -D warnings, default and hazmat | 31b3712e | 0 | 0 (pre-existing, not of T15n, allowed for this run: src/api.rs needless_borrow x10, src/zether.rs manual_is_multiple_of x2; --all-targets also stops at tests/recover.rs unused imports and tests/zether_proofs.rs a constant assertion: a finding for the owner)
+ua-c cargo build, cargo test (header drift), clippy -D warnings, python3 -m unittest tests.test_vectors | 31b3712e | 0 | 4 + 5 passed; 0 of ours; 89 tests OK (incl. 2 new test_pick_decoys)
+ua-py tests.test_wallet (words_commands_on_the_forge_rows x2, no_oracle) on the release libscaas_ua_c; ua-go go test -run WordsOnTheForgeRows (COMMANDS membership read from the source) | 31b3712e | 0 | 3 OK; ok
+check_test_features.py | 31b3712e | 0 | 57 manifests 0 findings; every graph 0 findings; positive controls found
+cargo tree --locked --offline -e normal: ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node | 31b3712e | 0 | 8 of 8
+cargo deny --all-features check: ua-rs | 31b3712e | 0 | advisories ok, bans ok, licenses ok, sources ok
+docs: test_docs_check.py; docs_check.py check; docs_check.py paths | b08b8a0d | 0 | ok; 0 errors (5 pre-existing budget warnings); 0 machine paths
+mutants: 2026-11-07-ua-rs-sign-t15n-mutants.py, four runs, git diff --exit-code after each | 31b3712e | 0 | 33 killed, 0 survived, 0 not loaded (2026-11-07-ua-rs-sign-t15n-mutants.txt)
+gates mutant-logs (every record ends with no survivor and every harness checks, T15n added) | 2b59e396 | 0 | 11 of 11
+# Decisions (controller; the owner may override): (1) The pick is `facade::decoys` (pure, I/O-free) behind one command,
+# `pickDecoys {candidates, exclude, count, weights?}` -> `{decoys}`, in both facades' COMMANDS (any key handle; the key is not
+# used): the smallest form under the explicit-parameters rule (named fields, one entry point, no new C ABI call). Not a field of
+# proveTransferMulti: the pick comes before the decoys' keys are read (only the chosen keys are), and the legs / recipients
+# already take explicit keys. (2) Sequential sampling without replacement, each index by rejection sampling from the OS CSPRNG
+# (try_fill_bytes: Rng on failure); all weights 1 without `weights` (uniform subset, uniform order); weight 0 never drawn; a
+# candidate given twice is refused (the reading layers drop duplicates of the list). (3) The sync point bounds the list by
+# uaCount read at --sync-block (by hash; at most the read block; default the read block); the list entries (append-only) and
+# everything else at the read block; every block read is re-checked after the last read. (4) The filter (option): the account's
+# counters at block - window, block - window/2 and block; `activity` any move (PQZ pendingCount, rolled, sendCounter; Zether
+# the counters word), `holder` sendCounter only; weight 2 for the newer half, 1 for the older half only, else dropped. (5) pqz-read
+# picks in process (it links ua-rs) and reads the chosen decoys' proven pqzKey and code; zether-read-balance (zether-prover does
+# not link ua-rs) prints the pick's request (--decoy-count, --exclude named) and reads the chosen keys in a second call
+# (--decoy-keys: kind 0x0141, list index below the sync count and uaAt equal, UA(Y) equal). Neither reads a key or stdin.
+# Residuals: the registry's slots (records 0, pqzKey 2, uaCount 4, uaAt 5) hand-copied (the registry layout pin of group 3g is
+# not on this branch); --registry must be the generation that lists the kind (the predecessor forward is in code, not
+# followed); the PQZ key read is the unversioned pqzKey[ua] and moves to the current version with 3g's versioned keys (a
+# follow-up); a list over 50,000 UAs refused (one storage read and one curl per UA); the filter needs a node holding the window's
+# state; the Zether steps are two reads at two read blocks bounded by the same sync point; leg order (the real recipient among
+# the decoys) stays the caller's; the bindings ua-cxx, ua-qt, ua-dart-frb, ua-cs not run (untouched; their COMMANDS parse is
+# membership only); the anvil tests run at n2304-kmax4096 only.

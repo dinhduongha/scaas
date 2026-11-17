@@ -248,6 +248,10 @@ pub async fn revert_verdict(chain: &Chain, w: &Work, reason: String) -> Verdict 
     if reason.starts_with(LIQUIDITY_ORDER_CLOSED) {
         return Verdict::Consumed(Some(reason));
     }
+    // NODE-JOB-29: an ML-DSA key's cache is incomplete; a part may still land (anyone may send it), so the job waits
+    if reason.starts_with("UAKeyNotCached") {
+        return Verdict::Requeue(format!("{UA_KEY_NOT_CACHED}: {reason}"));
+    }
     // NODE-JOB-24 (group 3h, pqz-proof-path spec §10): under `LOG` a holder of bit 24 may switch the token to `NONE` and the job
     // may land: `PROOF_STORE_OVER_LANE_CAP`, back in the queue; under `NONE`, or without the view, the plain refusal
     if over_cap(&reason) && crate::pqz::is_debit(w) {
@@ -382,6 +386,55 @@ pub fn pq_register(data: &[u8]) -> bool {
     use alloy::sol_types::SolCall;
     crate::abi::IUARegistry::registerCall::abi_decode(data).is_ok_and(|c| !c.pqzPop.is_empty())
         || crate::abi::IUARegistry::registerMsigCall::abi_decode(data).is_ok_and(|c| !c.pqzPop.is_empty())
+}
+
+/// NODE-JOB-29 (CTR-UA-23, owner 2026-11-15): a check of an ML-DSA key on a registry whose verifier of the kind has no precompile
+/// reverts `UAKeyNotCached(ua)` until every part of the key's expanded-key cache is stored. The job waits under this name, `queued`,
+/// never `dead`: anyone may send the parts (`cacheExpandedKey`), and for a `register` the lane sends them itself.
+pub const UA_KEY_NOT_CACHED: &str = "UA_KEY_NOT_CACHED";
+
+/// An ML-DSA kind's FIPS 204 public key length and its cache part count (`PqUA.mldsaParts`): mldsa44 1,312 B / 1 part, mldsa65
+/// 1,952 B / 2, mldsa87 2,592 B / 3; `None` for every other kind (no cache).
+pub fn mldsa_cache(kind: u16) -> Option<(usize, u64)> {
+    match kind {
+        0x0130 => Some((1312, 1)),
+        0x0131 => Some((1952, 2)),
+        0x0134 => Some((2592, 3)),
+        _ => None,
+    }
+}
+
+/// `(kind, pk)` of a `register` calldata whose key is an ML-DSA public key of its kind's length (NODE-JOB-29); `None` otherwise.
+pub fn mldsa_register(data: &[u8]) -> Option<(u16, Bytes)> {
+    use alloy::sol_types::SolCall;
+    let c = crate::abi::IUARegistry::registerCall::abi_decode(data).ok()?;
+    (mldsa_cache(c.kind)?.0 == c.keyData.len()).then_some((c.kind, c.keyData))
+}
+
+/// NODE-JOB-29 (owner O7, 2026-11-16): an ML-DSA `register` whose `pop` (or attributes) the off-chain check refuses is `dead` under
+/// this name before the lane sends any cache part: the registry runs the same check once the key is cached, so it could never land.
+pub const UA_REGISTER_POP_REFUSED: &str = "UA_REGISTER_POP_REFUSED";
+
+/// `ua8::check_registration` on a `register` calldata (a single key, no `msig` members): what the registry checks at step 6 once
+/// the key's cache is complete. An extra check; the contract stays the guard.
+pub fn register_pop(data: &[u8]) -> Result<(), String> {
+    use alloy::sol_types::SolCall;
+    let c = crate::abi::IUARegistry::registerCall::abi_decode(data).map_err(|e| format!("register calldata: {e}"))?;
+    let a = scaas_ua::ua8::UAAttrs {
+        pqz_key: c.attrs.pqzKey.to_vec(),
+        pqz_pop_hash: c.attrs.pqzPopHash.0,
+        kem: scaas_ua::ua8::KemKey { scheme: c.attrs.kem.scheme, mlkem_ek: c.attrs.kem.mlkemEk.to_vec(), x25519: c.attrs.kem.x25519.0 },
+        kem_pk_hash: c.attrs.kemPkHash.0,
+    };
+    scaas_ua::ua8::check_registration(c.kind, &c.keyData, &a, &c.pop, &c.pqzPop, &|_| None).map_err(|e| e.code().to_string())
+}
+
+/// The node's own cache part job (NODE-JOB-29): the named op `cacheExpandedKey {kind, pk, part}` on `registry`, built by the same
+/// parser as every job's (`typed.rs`'s plain row), so the calldata comes from the named fields.
+pub fn cache_part_op(registry: Address, kind: u16, pk: &[u8], part: u64, valid_until: u64) -> serde_json::Value {
+    serde_json::json!({"entry": "cacheExpandedKey", "contract": "registry", "token": format!("{registry:#x}"),
+        "args": {"kind": kind, "pk": format!("0x{}", alloy::hex::encode(pk)), "part": part.to_string()},
+        "validUntil": valid_until.to_string()})
 }
 
 /// Forge's minimum relayer CALL gas of a `SmartKeyAccount`-signed `mtxExecute` after the split (the ERC-1271 call two
@@ -1426,6 +1479,19 @@ pub fn over_cap(reason: &str) -> bool {
         || reason.contains(" above the 2^24 gas limit of a transaction"))
 }
 
+/// NODE-JOB-29 (owner O8, 2026-11-16): a refusal of [`gas`] by this lane's own cap (`max_gas_per_tx`) or by its RPC's gas cap
+/// ([`crate::chain::classify_sim`]'s message, which cannot tell the RPC's cap from the 2^24 regular gas: read as the RPC's, so a part
+/// that may still land is never `dead`), not by the chain (`TX_EXCEEDS_CHAIN_LIMIT`) or the call itself: another sender may cure it.
+pub fn lane_cap(reason: &str) -> bool {
+    !reason.starts_with(TX_EXCEEDS_CHAIN_LIMIT) && (over_cap(reason) || rpc_cap(reason))
+}
+
+/// [`crate::chain::classify_sim`]'s gas message: the RPC's gas cap or the chain's 2^24 regular gas, which no answer tells apart
+/// (Nethermind's words are the same for both).
+pub fn rpc_cap(reason: &str) -> bool {
+    reason.contains("or the RPC gas cap: ")
+}
+
 pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
     let block = chain.block_gas().await.map_err(|e| SimError::Transport(format!("block gas limit: {e:#}")))?;
     let floor = calldata_floor(w.data.len());
@@ -1454,9 +1520,21 @@ pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
     if !block.amsterdam && est > MAX_TX_GAS {
         return Err(SimError::Revert(format!("{TX_EXCEEDS_CHAIN_LIMIT}: gas {est} above the 2^24 gas limit of a transaction (EIP-7825, before Amsterdam)")));
     }
+    let max_cfg = max;
     let max = total_cap(max, block);
     let g = if w.meta.is_none() && w.data.get(..4) == Some(&SEL_MTX_SETTLE[..]) {
         settle_gas(chain, w.to, &w.data, est, max).await?
+    } else if w.meta.is_none() && w.data.get(..4) == Some(&crate::abi::IUARegistry::cacheExpandedKeyCall::SELECTOR[..]) {
+        // NODE-JOB-29, NET-EVM-11: a cache part's explicit limit is its measured (regular + state) × 1.05, within the block
+        let g = est.saturating_add(est.div_ceil(20));
+        if g > block.limit {
+            return Err(SimError::Revert(format!(
+                "{TX_EXCEEDS_CHAIN_LIMIT}: cache part gas {g} (estimate {est} x 1.05) above the chain's block gas limit {}", block.limit)));
+        }
+        if g > max {
+            return Err(SimError::Revert(format!("gas {g} above max_gas_per_tx {max_cfg} (a cache part's estimate {est} x 1.05)")));
+        }
+        g
     } else {
         let contract_signer = match &w.meta {
             // a derived UA has no code: its verify is held by the registry (`UAVerifyGas` when starved), so the
@@ -1546,6 +1624,9 @@ mod tests {
         assert_eq!(sel("storePqzScopedPop", "registry"), U::storePqzScopedPopCall::SELECTOR);
         assert_eq!(sel("acceptMembership", "registry"), U::acceptMembershipCall::SELECTOR);
         assert_eq!(sel("updateMsig", "registry"), U::updateMsigCall::SELECTOR);
+        // NODE-JOB-29: `cast sig "cacheExpandedKey(uint16,bytes,uint256)"`
+        assert_eq!(sel("cacheExpandedKey", "registry"), U::cacheExpandedKeyCall::SELECTOR);
+        assert_eq!(U::cacheExpandedKeyCall::SELECTOR, [0x8b, 0x73, 0x88, 0x73]);
         let cast = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
         assert_eq!(sel("deploy", "factory"), cast("deploy((uint8,bytes32,bytes32,bytes32,bytes32),address)"));
         assert_eq!(sel("mtxExecuteAsOwner", "account"), cast("mtxExecuteAsOwner(bytes,uint256,uint256,bytes)"));
@@ -1705,7 +1786,8 @@ mod tests {
         // walk: their vector rows carry filler `initArgs`; `typed::tests::creation_rows_encode_the_named_config`); -> 138,
         // `UACreateInstance`; the three-key model: -> 141, `PqzRollOver`, the registry's `setPqzScopedKey`, `storePqzScopedPop`;
         // round 3zc (CTR-GOV-30): -> 143, the router's two cap setters; CTR-UA-44 (TODO 3ze): -> 144, the registry's `updateMsig`
-        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 144, "table rows: 109 typed with an entry, 35 plain");
+        // NODE-JOB-29 (TODO 3zh MD-14): -> 145, the registry's `cacheExpandedKey`
+        assert_eq!(typed::rows().iter().filter(|r| !r.entry.is_empty()).count(), 145, "table rows: 109 typed with an entry, 36 plain");
         // selectors with no row: refused on every kind, on a target that would otherwise pass
         let target = Address::repeat_byte(0x31);
         let g = Guard::new(&ChainCfg { dex: Some(target), governance_routers: vec![target], ..cfg.clone() }, Arc::new(RwLock::new(vec![target]))).unwrap();
@@ -2109,7 +2191,8 @@ mod tests {
         let struct_jobs: HashSet<[u8; 4]> = [m.calldata(auth)[..4].try_into().unwrap()].into_iter().collect();
         let (mut rowed, mut exempt, mut governed) = (0, 0, 0);
         // Fable E N-10: + the registry and the account factory, whose writes anyone may relay: a row there is a SIGNED entry or a
-        // PERMISSIONLESS one (`storePqzPop`, `deploy`: a proof or the address fixes what they write)
+        // PERMISSIONLESS one (`storePqzPop`, `deploy`: a proof or the address fixes what they write; `cacheExpandedKey`, NODE-JOB-29:
+        // the registry derives what it writes from `pk`)
         // owner 2026-11-12: + the account (`SmartKeyAccount`; its guardian's `initiateRecovery` is class GUARDIAN, no row)
         for kind in ["token", "zether", "pqz", "dex", "gov_router", "open_factory", "registry", "factory", "account"] {
             let entries: Vec<&serde_json::Value> = AUDIT_KINDS.iter().filter(|(_, k)| *k == kind)
@@ -2564,7 +2647,8 @@ address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,
     // `setMaxWrapSupply` (ADMIN) on each of the six wrapped kinds (expected from the contracts; the 25 ops of the Change of
     // CTR-GOV-28 and their direct entries moved selector in place, their classes kept)
     // CTR-UA-44 (TODO 3ze): -> 306, the registry's `updateMsig` (SIGNED)
-    const ROWED: usize = 306;
+    // NODE-JOB-29 (TODO 3zh MD-14): -> 307, the registry's `cacheExpandedKey` (PERMISSIONLESS)
+    const ROWED: usize = 307;
     // ua-mtx-merge T76: EXEMPT 178 -> 181, the router's three creations (NOT_ROWS)
     const EXEMPT: usize = 206;
     const GOVERNED: usize = 309;

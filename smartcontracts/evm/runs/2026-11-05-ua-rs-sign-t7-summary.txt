@@ -1,0 +1,45 @@
+# 2026-11-05 ua-rs-sign T7: the UA KEM key (UaKey::kem_key(version), no wallet argument: the handle's own store, C-05; kemSeed HKDF
+# info "scaas.kem.1" || ua || be64 version, owner 2026-11-05; KEM holders only, KemHolder; msig: no wallet handle, MD-11; revoked
+# handle KeyRevoked; FIPS 203 §7.3 self-test once per store per (ua, version), its record in the store), kem_encaps (scheme, length,
+# modulus, ss_X != 0), KemKeyPair::{generate_ephemeral, kem_pk, decaps} (1,568-byte ct, small-order E refused, implicit rejection
+# kept), the combiner SHA3-256(ss_M || ss_X || E || pk_X || "scaas.kem.1"). Spec §6.1, §6.2, §9.1. UNAUDITED.
+# All commands in clients/ua-rs through scripts/capped, -j2, --locked; full logs git-ignored (clients/ua-rs/target/t7/<step>.log).
+# Gates ran on the tree committed as 8c17754b, the T7 code commit (the commit before this summary).
+step | commit | rc | counts
+red: cargo test --features vectors --test wallet_kem (tests only) | 03ebf1ac | 101 | does not compile: 31 errors, E0432 unresolved wallet::{kem, is_kem_holder, kem_encaps, KemKeyPair}; E0599 no method kem_key (17), vectors_kem_self_tests (8), no variant Error::KemCheck (3), Error::KemHolder (1)
+green: cargo test --features vectors --test wallet_kem | 8c17754b | 0 | 16 passed
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | 8c17754b | 0 | 0 warnings
+clippy --no-default-features | 8c17754b | 0 | 0 warnings
+clippy --no-default-features --features signers | 8c17754b | 0 | 0 warnings
+clippy --no-default-features --features json | 8c17754b | 0 | 0 warnings
+clippy --no-default-features --features pq | 8c17754b | 0 | 0 warnings
+clippy --features vectors | 8c17754b | 0 | 0 warnings
+test (default) | 8c17754b | 0 | 22 suites, 181 passed, 0 failed, 1 ignored (T6: 173; + wallet_kem 8)
+test --no-default-features | 8c17754b | 0 | 10 suites, 50 passed (unchanged)
+test --no-default-features --features signers --test groups | 8c17754b | 0 | 8 passed, 1 ignored
+test --no-default-features --features json --test json | 8c17754b | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | 8c17754b | 0 | 45 passed
+test --features vectors | 8c17754b | 0 | 22 suites, 222 passed, 0 failed, 2 ignored (T6: 206; + wallet_kem 16)
+build wasm32-unknown-unknown --no-default-features / --no-default-features --features signers / pq / wallet / default | 8c17754b | 0 | ok, 5 of 5 (ml-kem pure Rust; no getrandom 0.4)
+cargo deny --all-features check (cargo-deny 0.20.2) | 8c17754b | 0 | advisories ok, bans ok, licenses ok, sources ok; warnings: 22 duplicates (sha3 now 3 versions: 0.10.9, 0.11.0, + 0.12.0 through ml-kem)
+Cargo.lock | 8c17754b | - | + ml-kem 0.3.4, + kem 0.3.0, + sha3 0.12.0 (Apache-2.0 OR MIT; rand_core 0.10.1, hybrid-array, module-lattice, shake, keccak 0.2.2 were in the graph)
+cargo update -p scaas-ua --offline; cargo tree --locked in scaas-node, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust | 8c17754b | 0 | 5 of 5; no lock moves for scaas-ua (none enables wallet: ml-kem not in their graphs). scaas-node's offline update also re-resolved tempfile's getrandom 0.4.3 -> 0.3.4 (unrelated to scaas-ua): reverted, cargo tree --locked passes on the committed lock
+clientkeys npm test | - | - | not run: no vector or JS file changed
+mutants: 2026-11-05-ua-rs-sign-t7-mutants.py | 8c17754b | 0 | 19 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t7-mutants.txt)
+docs_check check / paths | 8c17754b | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# Byte-equal: kem.json keys 14 (kemPk, kemPkHash: kinds 0x0130-0x0132, 0x0134, 0x0135, versions 0, 1 and 2^64 - 1, account 1,
+# index 1, the 12-word mnemonic); encaps 3 (two derived recipients, one ephemeral from 96 given bytes) with the row's m and e, each
+# decapsulated to ss; decaps 7 (valid; flipped byte: implicit rejection, the row's other ss; 1,567-byte ct, E = 0, 1 and of order 8:
+# KemCheck; a 31-byte E is not a [u8; 32]). Refused: refusals 11 (9 non-holders KemHolder with their UA keys derived; the msig row:
+# no wallet handle of 0x0120 and is_kem_holder false; version 2^64 not a u64), encapsRefusals 4 (modulus, length, scheme 2,
+# all-zero ss_X) through the release call and with fixed m, e (control: the same m, e to a valid key). External: ACVP ML-KEM-1024
+# keyGen 5 (ek, expanded dk), encapsulation 5, decapsulation 10, dkCheck 10, ekCheck 10 (our modulus check); RFC 7748 scalarMult 2,
+# iterated 1 and 1,000, DH. Custody: lock -> kem_key and decaps KeyRevoked, still after unlock, a new handle works; the self-test
+# once per store (a second wallet of the same mnemonic and a reopened store each run their own); the seed in the arena, wiped
+# when the wallet drops.
+# Notes: (1) encaps runs our FIPS 203 §7.2 modulus check, then the crate's (EncapsulationKey::new): M1 is killed by the direct check
+# tests (ACVP ekCheck, one coefficient = q), the encaps row alone would still be refused by the crate. (2) Handle::derive and
+# Handle::self_test each check the generation; M16 removes both (one alone is masked by the other). (3) The release encapsulation
+# uses ml-kem's encapsulate_deterministic with m from rand_core 0.6 OsRng (as the PQ signers' rnd), so ml-kem's getrandom feature
+# (getrandom 0.4) is not taken; `hazmat` is enabled only by `vectors`. Not in this task: seal / open (T8), the C ABI
+# scaas_ua_kem_* and the external key's KIND_UNAVAILABLE (T12, T16).

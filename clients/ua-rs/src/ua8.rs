@@ -584,6 +584,13 @@ pub fn inner_digest(inner: &[u8; 32], md: &[u8; 32]) -> Result<[u8; 32]> {
     Ok(member_digest(inner, &ua_message(0x0120, &purpose_tag("member")?, md)?))
 }
 
+/// The portable record purposes a single key signs for the registry's `verifyPop` (`UARegistryCoreLib._portablePurpose`): `pop` v2,
+/// `kem`, `pqz-key`, `pqz-scoped-key` (CTR-UA-43, `setPqzScopedKey`); `pqchat` joins with its round (PLANNED). One list (T21 L03):
+/// the signer's role (`Pop`, the BLS PoP domain), the purpose check and a `UASig`'s empty `keyData` read it.
+pub fn portable_record_purposes() -> [[u8; 32]; 4] {
+    [pop_v2_tag(), purpose_tag("kem").expect("kem"), purpose_tag("pqz-key").expect("pqz-key"), crate::pqz3k::purpose_pqz_scoped_key()]
+}
+
 /// The portable purposes (POP_V2, KEM, PQZ_KEY, MEMBERSHIP): the only ones where a code-less or EIP-7702-designator native msig member
 /// signs the record's typed digest itself (`eth_signTypedData_v4`, 65-byte r ‖ s ‖ v, low-s, v 27 / 28; a contract member
 /// answers ERC-1271 `isValidSignature(typedDigest, sig)`; TS-D4); every other purpose stays UAAuth (CTR-MTX-14).
@@ -967,7 +974,7 @@ fn abi_list(items: Vec<Vec<u8>>) -> Vec<u8> {
     o.extend(items.concat());
     o
 }
-fn abi_bytes(o: &mut Vec<u8>, b: &[u8]) {
+pub(crate) fn abi_bytes(o: &mut Vec<u8>, b: &[u8]) {
     o.extend(word(b.len() as u64));
     o.extend(b);
     o.resize(o.len() + b.len().next_multiple_of(32) - b.len(), 0);
@@ -1063,6 +1070,12 @@ fn member_keys(d: &[u8], cx: &Cx) -> Result<Vec<Vec<u8>>> {
     };
     MsigStructure::from_key_data(d)?.members.iter().map(key).collect()
 }
+/// [`member_keys`] for a check outside this module (the sealed container's `msig` sender, MD-10, `wallet::seal`), with `current` as
+/// the record checks take it (`&|_| None`: the first structures, never updated).
+#[cfg(feature = "wallet")]
+pub(crate) fn member_keys_current(d: &[u8], members: &Members, current: &Current) -> Result<Vec<Vec<u8>>> {
+    member_keys(d, &Cx { members, current })
+}
 /// `(id, index)` → `memberAccepted(id, index)` of the target registry (CTR-UA-37): has slot `index` of `id` agreed?
 pub type Accepted<'a> = dyn Fn([u8; 32], u16) -> bool + 'a;
 /// The accepted bits a verdict reads. `slot`: a bit the registry always reads (an inner `msig`'s, a `pop` exempting only its own record's;
@@ -1101,8 +1114,12 @@ impl Cx<'_> {
     /// Slot `index` of the `msig` `id` is enabled on the target registry (CTR-UA-44; never updated: every slot), whatever `accepted`
     /// answers: the contract masks by `accepted & enabled` itself (Fable P2-4).
     fn on(&self, id: &[u8; 32], index: u16) -> bool {
-        (self.current)(*id).is_none_or(|(_, en)| index < 256 && en[31 - index as usize / 8] >> (index % 8) & 1 == 1)
+        (self.current)(*id).is_none_or(|(_, en)| slot_enabled(&en, index))
     }
+}
+/// Bit `index` of an `msigStateOf` `enabled` word (big-endian uint256, bit i = slot i; CTR-UA-44): slot `index` signs.
+pub fn slot_enabled(enabled: &[u8; 32], index: u16) -> bool {
+    index < 256 && enabled[31 - index as usize / 8] >> (index % 8) & 1 == 1
 }
 /// The enabled slots of the CTR-UA-09 bytes `d` only (`enabled` bit i = slot i): what eligibility counts (a disabled slot signs nothing).
 pub fn enabled_only(d: &[u8], enabled: &[u8; 32]) -> Result<Vec<u8>> {

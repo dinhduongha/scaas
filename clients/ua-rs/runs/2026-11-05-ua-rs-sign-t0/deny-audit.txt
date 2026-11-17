@@ -1,0 +1,19 @@
+# cargo-deny 0.20.2 / cargo-audit 0.22.2 at commit 8795d425, advisory DB fetched 2026-11-05
+## deny ua-rs: advisories FAILED, bans ok, licenses ok, sources ok
+      1 error[unmaintained]: paste - no longer maintained
+      1 error[unmaintained]: `pqcrypto-falcon` is unmaintained: upstream PQClean project being archived
+      1 error[unmaintained]: `pqcrypto-internals` is unmaintained: upstream PQClean project being archived
+      1 error[unmaintained]: `pqcrypto-traits` is unmaintained: upstream PQClean project being archived
+      1 error[vulnerability]: Multiple timing variability issues in operations intended to be constant-time
+duplicates (warn): block-buffer const-oid cpufeatures crypto-common der digest getrandom hashbrown hmac itertools keccak rand_core r-efi sha2 sha3 signature syn 
+## audit ua-rs: error: 1 vulnerability found! warning: 4 allowed warnings found 
+ID: RUSTSEC-2026-0387 ID: RUSTSEC-2024-0436 ID: RUSTSEC-2026-0165 ID: RUSTSEC-2026-0163 ID: RUSTSEC-2026-0162 
+## deny spike: advisories FAILED, bans ok, licenses ok, sources ok
+      1 error[unmaintained]: paste - no longer maintained
+      1 error[unmaintained]: `pqcrypto-falcon` is unmaintained: upstream PQClean project being archived
+      1 error[unmaintained]: `pqcrypto-internals` is unmaintained: upstream PQClean project being archived
+      1 error[unmaintained]: `pqcrypto-traits` is unmaintained: upstream PQClean project being archived
+      1 error[vulnerability]: Multiple timing variability issues in operations intended to be constant-time
+duplicates (warn): block-buffer const-oid cpufeatures crypto-common der digest getrandom hmac itertools keccak rand_core r-efi sha2 sha3 signature syn 
+## audit spike: error: 1 vulnerability found! warning: 4 allowed warnings found 
+ID: RUSTSEC-2026-0387 ID: RUSTSEC-2024-0436 ID: RUSTSEC-2026-0165 ID: RUSTSEC-2026-0163 ID: RUSTSEC-2026-0162 

@@ -89,12 +89,16 @@ for (const set of SETS) {
   test(`${set}: opening.json's rejects (review 3w-delta U2-2): wasm = the native outcomes the generator recorded`, async () => {
     const w = await loadPqzWallet(bytes);
     const x = C.rows.find((y) => y.auditorOn);
-    assert.ok(K.rejects.length >= 15);
+    assert.ok(K.rejects.length >= 22);
     for (const r of K.rejects) {
       const c = structuredClone(x.credit);
-      const [who, f] = r.field.split('.');
-      assert.ok((who === 'to' || who === 'auditor') && (f === 'opening' || f === 'kemPk'), r.field);
-      c[who][f] = h0(r.value);
+      if (r.field === 'chainUid') c.chainUid = h0(r.value); // T21 L66b: an aad of another chain or key version
+      else if (r.field === 'to.keyVersion') c.to.keyVersion = Number(BigInt(h0(r.value)));
+      else {
+        const [who, f] = r.field.split('.');
+        assert.ok((who === 'to' || who === 'auditor') && (f === 'opening' || f === 'kemPk'), r.field);
+        c[who][f] = h0(r.value);
+      }
       assert.equal(outcomeR(w.checkRecipient(x.openKemSeedT, c)), r.recipient, r.case);
       assert.equal(outcomeA(w.checkAuditor(x.openKemSeedA, c)), r.auditor, r.case);
     }
@@ -245,7 +249,8 @@ for (const set of SETS) {
     const layout = pqzLayout((fromHex(x.pu).length * 8) / packBits, packBits);
     const h = pqzKeyHandle(BIP39, { chainUid: c.chainUid, ua: c.to.ua, version: 0, layout });
     assert.equal(hex(h.openKem), c.to.kemPk, 'the handle\'s opening KEM key is the credit\'s');
-    const SLOT = '0x' + (BigInt('0x5e' + '00'.repeat(19)) << 96n | 16n << 80n | 200n << 64n | 7n).toString(16).padStart(64, '0');
+    // an op 1 credit's offsets (16, 16 + P(u)): the handle binds them (T21 O5 (b) review, F1)
+    const SLOT = '0x' + (BigInt('0x5e' + '00'.repeat(19)) << 96n | 16n << 80n | BigInt(16 + layout.pkp) << 64n | 7n).toString(16).padStart(64, '0');
     const filled = (k, v) => new Uint8Array(k).fill(v);
     const blob = ({ pu = fromHex(x.pu), oT = fromHex(c.to.opening), oA = fromHex(c.auditor.opening) } = {}) => concatBytes(
       Uint8Array.of(0), filled(16, 3), pu, fromHex(x.pvt), fromHex(x.pva), fromHex(c.to.ua), filled(layout.pkp, 4), filled(layout.vp, 5),

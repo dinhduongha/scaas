@@ -66,7 +66,7 @@ const groups = <String>[
 
 const purposes = <String>[
   'pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'payee-fee', 'vp',
-  'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update',
+  'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update', 'pqz-verdict',
 ];
 
 /// The governance bits 0-31 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the app

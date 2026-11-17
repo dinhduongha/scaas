@@ -1,0 +1,37 @@
+# 2026-11-05 ua-rs-sign T4: EIP-712 (TypedData, the faithful hasher, the caps of spec §9.3), the SCaaS builders' canonical step
+# (scaas_typed_data: unbound relayer / feeRecipient zeroed, nested too; the op table pinned by typed_ops.json), the Expect policy of
+# NativeKey::sign_typed (MD-9: the nine clientkeys check* ports + Any; the checked path refuses a non-zero unbound relayer /
+# feeRecipient with PolicyRefused, never zeroes it, owner 2026-11-05), and T3d's native arm (R17 native UASig over UAAuth; native
+# msig members over the record's typed data or UAAuth). Spec §5.3, §5.4, §9.3, §9.4; CTR-UA-07, CTR-UA-24. UNAUDITED.
+# All commands in clients/ua-rs through scripts/capped, -j2, --locked; full logs git-ignored (clients/ua-rs/target/t4/<step>.log).
+# Gates ran on the tree committed as d423f3ca, the T4 code commit (the commit before this summary).
+step | commit | rc | counts
+red: cargo test --features vectors --test wallet_typed --test wallet_uasig (tests only) | 5b827e1c | 101 | does not compile: 43 errors, E0432 unresolved `scaas_ua::wallet::TypedData`, `Expect`, `scaas_typed_data`; E0599 no method `sign_typed`, no variant `Error::PolicyRefused`, no variant `SignRequest::Eip712`; E0061 ua_sig 3 -> 4 and msig_sig 5 -> 7 arguments
+green: cargo test --features vectors --test wallet_typed --test wallet_uasig | d423f3ca | 0 | 27 passed (wallet_typed 17, wallet_uasig 10)
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | d423f3ca | 0 | 0 warnings
+clippy --no-default-features | d423f3ca | 0 | 0 warnings
+clippy --no-default-features --features signers | d423f3ca | 0 | 0 warnings
+clippy --no-default-features --features json | d423f3ca | 0 | 0 warnings
+clippy --no-default-features --features pq | d423f3ca | 0 | 0 warnings
+clippy --features vectors | d423f3ca | 0 | 0 warnings
+test (default) | d423f3ca | 0 | 19 suites, 149 passed, 0 failed, 1 ignored (T3d: 131; + wallet_typed 17, wallet_uasig 9 -> 10)
+test --no-default-features | d423f3ca | 0 | 10 suites, 50 passed (unchanged)
+test --no-default-features --features signers --test groups | d423f3ca | 0 | 8 passed, 1 ignored
+test --no-default-features --features json --test json | d423f3ca | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | d423f3ca | 0 | 45 passed
+test --features vectors | d423f3ca | 0 | 19 suites, 182 passed, 0 failed, 2 ignored (T3d: 164; + 18)
+build wasm32-unknown-unknown --no-default-features / --features signers / --features pq / --features wallet / default | d423f3ca | 0 | ok, 5 of 5
+cargo deny --all-features check (cargo-deny 0.20.2) | d423f3ca | 0 | advisories ok, bans ok, licenses ok, sources ok; warnings: duplicates (as T3d)
+Cargo.lock | d423f3ca | - | unchanged (no dependency added; Cargo.toml only gains [[test]] wallet_typed): dependents' cargo tree --locked not re-run; clientkeys npm test not run (no vector or JS file changed)
+mutants: 2026-11-05-ua-rs-sign-t4-mutants.py | d423f3ca | 0 | 24 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t4-mutants.txt)
+docs_check check / paths | d423f3ca | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# Byte-equal / digest-equal: typed_ops.json 112 structs in 170 domain rows (encodeType, structHash, domain separator, digest; the
+# builder's digest per domain; every other SCaaS domain name refused); portable.json 64 and nested.json 26 typed-data digests,
+# chainSeparation portable 1 and typed 2; sign.json typed generic 3 (refusals 5), canon 8 (the builders' zeroed value and digest; the
+# supplied value's faithful hash differs), policy 24 (10 signed through sign_typed and recovered to the wallet's EVM key over the row's
+# digest, 14 PolicyRefused), unrelated-order-any signed through Any byte for byte (RFC 6979). Native members (the vector files' fixed
+# key of typed_ops.json; no wallet key matches it, signed through a test Signer): portable.json msig rows 8 -> 15 built and verified
+# (15 byte-equal with feature vectors, 2 in a default build), nested.json 7 -> 17 (Falcon leaves: verified), nested acceptances
+# 12 / 3 -> 14 / 6. Still not built: portable memberships msig-classical/1-3, nested afterAcceptance msig-nested-after-acceptance,
+# memberships msig-inner-classical/0-1 and msig-nested-classical/1 (a fixed-seed classical member of signatures.json: no key here),
+# authorizations list-on-signing-slot (a form a Slot cannot express).

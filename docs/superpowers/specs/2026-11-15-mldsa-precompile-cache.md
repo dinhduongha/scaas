@@ -1,8 +1,8 @@
 # Spec: ML-DSA on the EVM, precompile or expanded-key cache
 
 2026-11-15. Status: the contract sections (MD-1 .. MD-13, MD-15) **BUILT** on branch `3zh-mldsa` (`ba98edc41`, merged
-into `ua-mtx-merge` `0df1aea32`); MD-14 (the node job and the client builders) **SPECIFIED**, built in the `ua-rs-sign`
-port round. The measured figures below come from that build (forge 1.8.5, Amsterdam, `isolate`, regular =
+into `ua-mtx-merge` `0df1aea32`); MD-14 (the node job and the client builders) **BUILT** in the `ua-rs-sign`
+port round (the node's lane `2064e707d`, `clientkeys` `bd23168d7`, `ua-rs` `97b96e967`; NODE-JOB-29). The measured figures below come from that build (forge 1.8.5, Amsterdam, `isolate`, regular =
 `lastCallGas` × 64/63; MD-13's re-measured in 3zh-core group 2), the rest is marked [estimate]. Everything cryptographic is **UNAUDITED**. Rule ids here are local
 (`MD-n`); the build round turns them into Changes of CTR-UA-23 / CTR-UA-39 and NET-EVM-06 / -11 and a `decisions.md`
 entry with §0 verbatim. **Scope: EVM.** A grep of every other family (soroban, solana, near, algorand, move, ton, cosmos)
@@ -140,8 +140,8 @@ unchanged; the new `test_register_msigHolder_fndsa512x4_perSet` states the per-s
 `UAPqzHolder` at the three other sets. Tests per set: the cheapest debit and a
 `ROLL_MAX` rollover with a cached mldsa87 holder and a cached ML-DSA fee signer, measured; the refusal where it does not fit.
 
-**MD-14 (who sends the cache parts; F-3, owner "như đề xuất") — SPECIFIED, built in the `ua-rs-sign` port round after 3zh,
-not in this round.** The node sends them on its submit lane, as
+**MD-14 (who sends the cache parts; F-3, owner "như đề xuất") — BUILT in the `ua-rs-sign` port round after 3zh
+([NODE-JOB-29](../../node/job-api.md#NODE-JOB-29); the gateway route `POST /v1/ua/register` stays SPECIFIED).** The node sends them on its submit lane, as
 a job of its own (`docs/node/job-api.md`: named fields `kind`, `pk`, `part`; the node builds the calldata; an explicit gas
 limit per NET-EVM-11; allow-lists equal to the contract's in both directions: `guard.rs`, `CALL_TABLE`, `typed.rs`), before
 the `register` job of the same key, and maps `UAKeyNotCached` to a named node error; the guarantee is the node's (open

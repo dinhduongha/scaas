@@ -1,0 +1,43 @@
+# 2026-11-05 ua-rs-sign T3c: pairing-curve kinds and group sessions: scaas Schnorr nonce (0x0104 / 0x0105), BLS with roles
+# (0x0106 / 0x0107), MuSig2 / FROST sessions (nonce used once), every arkworks secret multiplication through `secret_mul` in the
+# new shared crate clients/scaas-ct (owner 2026-11-05, option (c)); RUSTSEC-2026-0387 ignored (owner 2026-11-05, option (a)).
+# Spec §3, §8.2, §9.1, §9.4, §12. UNAUDITED.
+# All commands in clients/ua-rs (or the crate named) through scripts/capped, -j2, --locked; full logs git-ignored
+# (clients/ua-rs/target/t3c/<step>.log, clients/scaas-ct/target/t3c/<step>.log). Gates ran on the tree committed as b149726b, the T3c code
+# commit (the commit before this summary).
+step | commit | rc | counts
+red: scaas-ct cargo test --features vectors (tests/secret_mul.rs on a stub lib) | e93e017c | 101 | does not compile: error[E0432]: unresolved imports `scaas_ct::secret_mul`, `scaas_ct::CtSwap`, `scaas_ct::LADDER_BITS`; `scaas_ct::trace`
+red: cargo test --features vectors --test wallet_pairing (tests only) | e93e017c | 101 | does not compile: 16 errors, E0432 unresolved `scaas_ua::wallet::FrostSession`, `scaas_ua::wallet::pairing`, `scaas_ua::scaas_ct`; E0599 no method `musig2_session` / `vectors_musig2_session` on `UaKey`
+red: cargo test --features vectors --no-fail-fast --test wallet_pq --test wallet_sign (tests only) | e93e017c | 101 | wallet_pq 10 / 1 failed (rs_signatures_json_rows: 14 rows, 18 expected); wallet_sign 16 / 1 failed (sign_raw_refusals: 0x0104 KindUnavailable, Argument expected)
+red: node --test test/ua-wallet.test.js (clients/clientkeys, tests only) | e93e017c | 1 | 25 pass / 1 fail (rs_signatures.json: 14 rows, 18 expected)
+green: cargo test --features vectors --test wallet_pairing | b149726b | 0 | 17 passed
+regenerate: cargo test --features vectors --test wallet_pq -- --ignored regenerate, twice | b149726b | 0 | rs_signatures.json 18 rows (+ 4 scaas Schnorr: 0x0104 x 2, 0x0105 x 2); sha256 the same after the second run (19b8f0f9...)
+scaas-ct cargo test (default) / --features vectors | b149726b | 0 | 4 passed / 5 passed (products equal on G1 / G2 of bn254 and BLS12-381; masked swap; limb blinding; k' >= r, k' = k mod r, 384 iterations, a new k' per call)
+scaas-ct clippy --all-targets -D warnings (default / vectors) | b149726b | 0 | 0 warnings
+scaas-ct build wasm32-unknown-unknown | b149726b | 0 | ok
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | b149726b | 0 | 0 warnings
+clippy --no-default-features | b149726b | 0 | 0 warnings
+clippy --no-default-features --features signers | b149726b | 0 | 0 warnings
+clippy --no-default-features --features json | b149726b | 0 | 0 warnings
+clippy --no-default-features --features pq | b149726b | 0 | 0 warnings
+clippy --features vectors | b149726b | 0 | 0 warnings
+clippy.toml disallowed-methods positive control (an `ark_ec::PrimeGroup::mul_bigint` call added in src/wallet/pairing.rs) | b149726b | 101 | error: use of a disallowed method `ark_ec::PrimeGroup::mul_bigint`; file restored
+test (default) | b149726b | 0 | 17 suites, 122 passed, 0 failed, 1 ignored (T3b: 115; + wallet_pairing 7)
+test --no-default-features | b149726b | 0 | 10 suites, 50 passed (unchanged)
+test --no-default-features --features signers --test groups | b149726b | 0 | 8 passed, 1 ignored (groups.json byte-equal with the Bn254Element newtype and secret_g)
+test --no-default-features --features json --test json | b149726b | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | b149726b | 0 | 45 passed
+test --features vectors | b149726b | 0 | 17 suites, 155 passed, 0 failed, 2 ignored (T3b: 138; + wallet_pairing 17)
+clientkeys npm test | b149726b | 0 | 289 tests, 286 pass, 0 fail, 3 skipped (ua-wallet.test.js: rs_signatures.json 18 rows, + 0x0104 / 0x0105)
+cargo deny --all-features check (cargo-deny 0.20.2) | b149726b | 0 | advisories ok, bans ok, licenses ok, sources ok (RUSTSEC-2026-0387 ignored with its reason: crypto-bigint 0.5.5 only via frost-secp256k1 =3.0.0 -> k256 0.13.4 -> elliptic-curve 0.13.8; cargo tree -i shows that one path); warnings: duplicates (as T3b), MIT-0 not encountered
+build wasm32-unknown-unknown --no-default-features / --features signers / --features pq / --features wallet / default | b149726b | 0 | ok, 5 of 5 (signers now pulls scaas-ct and getrandom 0.2 js)
+cargo tree --locked --offline in ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, scaas-node | b149726b | 0 | 5 of 5, no lock moves (none enables `signers`; scaas-ct is optional behind it)
+scaas-node cargo check --all-targets | b149726b | 0 | ok
+ua-c cargo test | b149726b | 0 | 1 passed
+mutants: 2026-11-05-ua-rs-sign-t3c-mutants.py | b149726b | 0 | 22 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t3c-mutants.txt; the failed-test list per mutant is the first failing test binary's: cargo stops there)
+docs_check check / paths | b149726b | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# Byte-equal: sign.json scaas Schnorr fixed-aux rows 4, nonceMap rows 2 (input, seed, k by the 512-bit map, k != the 256-bit map,
+# signature), BLS rows 6 (both roles, sign_ua); keys.json pairing key data through secret_mul (wallet_keys). Verify-only: sign.json
+# pairing rows 14 verify under their role; refusals bls-wrong-dst 4 (and their controls). Structural test (feature vectors), per
+# secret path (keygen G1 0x0104 / 0x0105 / 0x0112, keygen G2 0x0106 / 0x0107, nonce point, BLS sign, MuSig2-bn254 nonces and
+# sign, FROST-BN254 commitments): two calls, one secret: one point, two integers, each >= r, = k (mod r), 384 iterations.

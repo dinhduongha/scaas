@@ -9,8 +9,10 @@
 //   python3 -I -c 'import hashlib,sys,zipfile; b=open(sys.argv[1],"rb").read(); assert hashlib.sha256(b).hexdigest()==sys.argv[3]
 //     z=zipfile.ZipFile(sys.argv[1]); open(sys.argv[2],"wb").write(z.read("Falcon/falcon-round3/KAT/falcon1024-KAT.rsp"))' \
 //     Falcon-Round3.zip <download dir>/falcon1024-KAT.rsp fd58f0454f6bfb4713734e60b2d2d75d96fbae62d5180fceeef1039df5362f44
-import { readFileSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+import { ml_kem1024 } from '@noble/post-quantum/ml-kem.js';
+import { x25519 } from '@noble/curves/ed25519.js';
+import { readPinned } from './pinned.mjs';
 import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { slh_dsa_sha2_128s } from '@noble/post-quantum/slh-dsa.js';
 import { falcon512padded, falcon1024, falcon1024padded } from '@noble/post-quantum/falcon.js';
@@ -26,12 +28,14 @@ const PIN = {
   'kat_FALCONCORE_512.rsp': 'c79c1dd457a92760ef30bbd63f1783aa634b9817acd2c1f1c3885c0c668b15ad',
   'kat_HASHTOPOINT_512.rsp': '05b0ac54f4b329b9a778c826a81cb4184ce4c03b637607383b435efaf2899fcb',
   'falcon1024-KAT.rsp': '036a0bf5260573cec44977284dfef756cd1143db9961b981bd1fb55828acb20d',
+  // ua-rs-sign T1c (spec §11, F-10): the signers' and the KEM's known answers
+  'ML-KEM-keyGen-FIPS203/internalProjection.json': 'd7a62a2c3476957f56dd8d24f9004ea6776ccfe995ffe71a65bb9506dc9c7b1b',
+  'ML-KEM-encapDecap-FIPS203/internalProjection.json': 'a556952ce869bb89c3a3196a701dad89647c193a34c86eafb61a9d710d5b810f',
+  'ML-DSA-sigGen-FIPS204/internalProjection.json': '72dcaf5f69853ca267ccd16af9cb40949786aca0fcfbf05d1ebeba132b93af22',
+  'SLH-DSA-sigGen-FIPS205/internalProjection.json': '62b42e7c27fda5de8a94aba2943ae413b59b6ea08141f3bc035b1eceae235dba',
+  'rfc7748.txt': '279ca0ecc5e92e2962e27b846986aeb74729d9dd34bd4a04a362f80dcb596ad3',
 };
-const raw = (f) => {
-  const b = readFileSync(`${dir}/${f}`);
-  if (createHash('sha256').update(b).digest('hex') !== PIN[f]) throw new Error(`sha256 mismatch ${f}`);
-  return b;
-};
+const raw = (f) => readPinned(`${dir}/${f}`, PIN[f], f);
 const sha = (f) => PIN[f];
 const h = (s) => Uint8Array.from(Buffer.from(s, 'hex'));
 const x = (u) => '0x' + Buffer.from(u).toString('hex');
@@ -131,14 +135,112 @@ function falcon1024Kat(file, n) {
     sha256_zip: 'fd58f0454f6bfb4713734e60b2d2d75d96fbae62d5180fceeef1039df5362f44', sha256: sha(file), rows_over_1239: over, cases };
 }
 
+
+// ACVP ML-KEM-1024 (FIPS 203) keyGen: d, z → ek, dk (the first `n` cases).
+function acvpMlkemKeygen(file, n) {
+  const g = JSON.parse(raw(file)).testGroups.find((t) => t.parameterSet === 'ML-KEM-1024');
+  const cases = g.tests.slice(0, n).map((t) => {
+    const { publicKey, secretKey } = ml_kem1024.keygen(h(t.d + t.z));
+    if (x(publicKey) !== x(h(t.ek)) || x(secretKey) !== x(h(t.dk))) throw new Error(`noble disagrees with ACVP ML-KEM keyGen tc ${t.tcId}`);
+    return { tc: t.tcId, d: x(h(t.d)), z: x(h(t.z)), ek: x(h(t.ek)), dk: x(h(t.dk)) };
+  });
+  return { source: ACVP + file, sha256: sha(file), cases };
+}
+
+// ACVP ML-KEM-1024 encapDecap: encapsulation (ek, m → c, k), decapsulation (dk, c → k; modified ciphertexts give the implicit
+// rejection key), and the two input checks (decapsulationKeyCheck: FIPS 203 §7.3; encapsulationKeyCheck: the §7.2 modulus check).
+function acvpMlkemEncapDecap(file, nEncaps) {
+  const groups = JSON.parse(raw(file)).testGroups.filter((t) => t.parameterSet === 'ML-KEM-1024');
+  const by = (f) => groups.find((t) => t.function === f).tests;
+  const encapsulation = by('encapsulation').slice(0, nEncaps).map((t) => {
+    const { cipherText, sharedSecret } = ml_kem1024.encapsulate(h(t.ek), h(t.m));
+    if (x(cipherText) !== x(h(t.c)) || x(sharedSecret) !== x(h(t.k))) throw new Error(`noble disagrees with ACVP encapsulation tc ${t.tcId}`);
+    return { tc: t.tcId, ek: x(h(t.ek)), m: x(h(t.m)), c: x(h(t.c)), k: x(h(t.k)) };
+  });
+  const decapsulation = by('decapsulation').map((t) => {
+    if (x(ml_kem1024.decapsulate(h(t.c), h(t.dk))) !== x(h(t.k))) throw new Error(`noble disagrees with ACVP decapsulation tc ${t.tcId}`);
+    return { tc: t.tcId, dk: x(h(t.dk)), c: x(h(t.c)), k: x(h(t.k)), reason: t.reason };
+  });
+  const dkCheck = by('decapsulationKeyCheck').map((t) => ({ tc: t.tcId, dk: x(h(t.dk)), valid: t.testPassed, reason: t.reason }));
+  const ekCheck = by('encapsulationKeyCheck').map((t) => {
+    let ok = true;
+    try { ml_kem1024.encapsulate(h(t.ek), new Uint8Array(32)); } catch { ok = false; }
+    if (ok !== t.testPassed) throw new Error(`noble disagrees with ACVP encapsulationKeyCheck tc ${t.tcId}`);
+    return { tc: t.tcId, ek: x(h(t.ek)), valid: t.testPassed, reason: t.reason };
+  });
+  return { source: ACVP + file, sha256: sha(file), encapsulation, decapsulation, dkCheck, ekCheck };
+}
+
+// ACVP sigGen for the signers (ua-rs T3b): pure external (M' = 0 ‖ len(ctx) ‖ ctx ‖ M) and internal (M' = the message) groups,
+// deterministic and hedged / randomized, `n` cases per group; `mprime` is what `internal.sign` signs, `rnd` the hedge (ML-DSA,
+// absent = deterministic = 32 zero bytes), `addRand` SLH-DSA's opt_rand (absent = PK.seed).
+function acvpSigGen(file, sets, n) {
+  const j = JSON.parse(raw(file));
+  const cases = [];
+  for (const g of j.testGroups) {
+    if (!sets.includes(g.parameterSet) || g.preHash === 'preHash' || g.externalMu) continue;
+    for (const t of g.tests.slice(0, n)) {
+      const ctx = h(t.context || '');
+      const m = h(t.message);
+      const mprime = g.signatureInterface === 'internal' ? m : Uint8Array.from([0, ctx.length, ...ctx, ...m]);
+      const rand = t.rnd ?? t.additionalRandomness;
+      const sig = ALG[g.parameterSet].internal.sign(mprime, h(t.sk), { extraEntropy: g.deterministic ? false : h(rand) });
+      if (x(sig) !== x(h(t.signature))) throw new Error(`noble disagrees with ACVP sigGen ${g.parameterSet} tc ${t.tcId}`);
+      cases.push({ set: g.parameterSet, tc: t.tcId, iface: g.signatureInterface, deterministic: g.deterministic, sk: x(h(t.sk)),
+        pk: x(h(t.pk)), mprime: x(mprime), ...(g.deterministic ? {} : t.rnd ? { rnd: x(h(t.rnd)) } : { addRand: x(h(rand)) }), sig: x(sig) });
+    }
+  }
+  return { source: ACVP + file, sha256: sha(file), cases };
+}
+
+// RFC 7748 X25519: §5.2 (two scalar multiplications; the iterated function after 1 and 1,000 iterations; 1,000,000 not run) and
+// §6.1 (the Diffie-Hellman example). Every value is quoted from the RFC text and found in it here.
+function rfc7748(file) {
+  const text = raw(file).toString('utf8').replace(/\s+/g, ' ');
+  const v = {
+    scalarMult: [
+      { k: 'a546e36bf0527c9d3b16154b82465edd62144c0ac1fc5a18506a2244ba449ac4', u: 'e6db6867583030db3594c1a424b15f7c726624ec26b3353b10a903a6d0ab1c4c',
+        out: 'c3da55379de9c6908e94ea4df28d084f32eccf03491c71f754b4075577a28552' },
+      { k: '4b66e9d4d1b4673c5ad22691957d6af5c11b6421e0ea01d42ca4169e7918ba0d', u: 'e5210f12786811d3f4b7959d0538ae2c31dbe7106fc03c3efc4cd549c715a493',
+        out: '95cbde9476e8907d7aade45cb4b873f88b595a68799fa152e6f8f7647aac7957' },
+    ],
+    iterated: [{ iterations: 1, out: '422c8e7a6227d7bca1350b3e2bb7279f7897b87bb6854b783c60e80311ae3079' },
+      { iterations: 1000, out: '684cf59ba83309552800ef566f2f4d3c1c3887c49360e3875f2eb94d99532c51' }],
+    dh: { a: '77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a', A: '8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a',
+      b: '5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb', B: 'de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f',
+      K: '4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742' },
+  };
+  const quoted = [...v.scalarMult.flatMap((r) => [r.k, r.u, r.out]), ...v.iterated.map((r) => r.out), ...Object.values(v.dh)];
+  for (const q of quoted) if (!text.includes(q)) throw new Error(`rfc7748.txt does not quote ${q.slice(0, 16)}`);
+  for (const r of v.scalarMult) if (x(x25519.scalarMult(h(r.k), h(r.u))) !== '0x' + r.out) throw new Error('RFC 7748 §5.2 in noble');
+  let [k, u] = [h('09'.padEnd(64, '0')), h('09'.padEnd(64, '0'))];
+  for (let i = 1; i <= 1000; i++) {
+    [k, u] = [x25519.scalarMult(k, u), k];
+    const want = v.iterated.find((r) => r.iterations === i);
+    if (want && x(k) !== '0x' + want.out) throw new Error(`RFC 7748 iterated ${i} in noble`);
+  }
+  const d = v.dh;
+  if (x(x25519.getPublicKey(h(d.a))) !== '0x' + d.A || x(x25519.getSharedSecret(h(d.b), h(d.A))) !== '0x' + d.K) throw new Error('RFC 7748 §6.1 in noble');
+  const p = (s) => '0x' + s;
+  return { source: 'https://www.rfc-editor.org/rfc/rfc7748.txt', sha256: sha(file),
+    scalarMult: v.scalarMult.map((r) => ({ k: p(r.k), u: p(r.u), out: p(r.out) })), iterated: v.iterated.map((r) => ({ ...r, out: p(r.out) })),
+    dh: Object.fromEntries(Object.entries(d).map(([kk, vv]) => [kk, p(vv)])) };
+}
+
 const out = {
-  note: 'Imported by clients/clientkeys/scripts/pq-external.mjs; every entry re-checked with @noble/post-quantum 0.7.1.',
+  note: 'Imported by clients/clientkeys/scripts/pq-external.mjs; every entry re-checked with @noble/post-quantum 0.7.1 (X25519: '
+    + '@noble/curves 2.4.0). Each section: its source URL and the downloaded file\'s sha256 (refused before parsing on a mismatch).',
   acvp_mldsa: acvp('ML-DSA-sigVer-FIPS204/internalProjection.json', ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87']),
   acvp_slhdsa: acvp('SLH-DSA-sigVer-FIPS205/internalProjection.json', ['SLH-DSA-SHA2-128s']),
   eip8051_nist_kat: eip8051('mldsa_nist.rsp', 10),
   eip8355: eip8355('test-vectors.json'),
   falcon_kat: falcon('kat_FALCONCORE_512.rsp', 'kat_HASHTOPOINT_512.rsp', 10),
   falcon1024_kat: falcon1024Kat('falcon1024-KAT.rsp', 10),
+  acvp_mlkem_keygen: acvpMlkemKeygen('ML-KEM-keyGen-FIPS203/internalProjection.json', 5),
+  acvp_mlkem_encapdecap: acvpMlkemEncapDecap('ML-KEM-encapDecap-FIPS203/internalProjection.json', 5),
+  acvp_mldsa_siggen: acvpSigGen('ML-DSA-sigGen-FIPS204/internalProjection.json', ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'], 1),
+  acvp_slhdsa_siggen: acvpSigGen('SLH-DSA-sigGen-FIPS205/internalProjection.json', ['SLH-DSA-SHA2-128s'], 1),
+  rfc7748: rfc7748('rfc7748.txt'),
 };
 writeFileSync(new URL('../../../smartcontracts/vectors/ua/pq_external.json', import.meta.url), JSON.stringify(out, null, 1) + '\n');
 for (const [k, v] of Object.entries(out)) if (v.cases) console.log(k, v.cases.length, 'cases,', v.cases.filter((c) => c.valid).length, 'valid');

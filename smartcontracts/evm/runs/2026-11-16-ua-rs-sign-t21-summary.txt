@@ -1,0 +1,57 @@
+# 2026-11-16-ua-rs-sign-t21 at commit cbac97075 (the T21 merges: fix waves 1-3, pqz3k-handle (O5 (b)) in 2179f8b32 and 2626850c2; ninth sync of ua-mtx-merge 473ad889b in a82488351)
+step | commit | rc | counts
+docs | cbac97075 | 0 | -
+clientkeys | 2179f8b32 | 0 | -
+vectors-check | cbac97075 | 0 | 4 passed 0 failed 0 ignored (cargo)
+forge-ua | 9c12e1aac | 0 | -
+ua-rs-nodefault | 2179f8b32 | 0 | 84 passed 0 failed 0 ignored (cargo)
+ua-rs-wallet | 2179f8b32 | 0 | 333 passed 0 failed 0 ignored (cargo)
+ua-rs | 2179f8b32 | 0 | 463 passed 0 failed 3 ignored (cargo)
+ua-rs-pq | 2179f8b32 | 0 | 38 passed 0 failed 0 ignored (cargo)
+ua-rs-signers | 2179f8b32 | 0 | 4 passed 0 failed 0 ignored (cargo)
+ua-rs-json | 2179f8b32 | 0 | 7 passed 0 failed 0 ignored (cargo)
+ua-rs-vectors | 2179f8b32 | 0 | 551 passed 0 failed 5 ignored (cargo)
+ua-rs-zether | 2179f8b32 | 0 | 21 passed 0 failed 0 ignored (cargo)
+ua-rs-pqz | 2179f8b32 | 0 | 88 passed 0 failed 3 ignored (cargo)
+ua-rs-pqz-n2048 | 2179f8b32 | 0 | 174 passed 0 failed 3 ignored (cargo)
+ua-deny | 9c12e1aac | 0 | -
+ua-fuzz | 9c12e1aac | 0 | -
+ua-sizes | e169a426c | 0 | -
+ua-c | 2179f8b32 | 0 | 9 passed 0 failed 0 ignored (cargo)
+ua-cxx | 9c12e1aac | 0 | -
+ua-qt | 9c12e1aac | 0 | -
+ua-dart-frb | 9c12e1aac | 0 | 3 passed 0 failed 0 ignored (cargo)
+ua-py | 9c12e1aac | 0 | -
+ua-go | 9c12e1aac | 0 | -
+ua-cs | 9c12e1aac | 0 | -
+ua-dart | 9c12e1aac | 0 | -
+cargo-zether-prover | 9c12e1aac | 0 | 176 passed 0 failed 4 ignored (cargo)
+wasm-zether-prover | 9c12e1aac | 0 | -
+scaas-ct | 9c12e1aac | 0 | 9 passed 0 failed 0 ignored (cargo)
+no-oracle | 2179f8b32 | 0 | 19 passed 0 failed 1 ignored (cargo)
+no-oracle-n2048 | 2179f8b32 | 0 | 15 passed 0 failed 0 ignored (cargo)
+no-oracle-ua-py | 2179f8b32 | 0 | -
+wallet-rows | 2179f8b32 | 0 | 2 passed 0 failed 0 ignored (cargo)
+test-features | cbac97075 | 0 | -
+mutant-logs | cbac97075 | 0 | -
+pqz-read | 2179f8b32 | 0 | 13 passed 0 failed 0 ignored (cargo)
+read-balance | 9c12e1aac | 0 | 19 passed 0 failed 0 ignored (cargo)
+named-tests | cbac97075 | 0 | -
+scaas-node cargo test | cbac97075 | 0 | 787 passed 0 failed 72 ignored (cargo; lib 782)
+scaas-node clippy --all-targets -D warnings | cbac97075 | 0 | -
+scaas-node e2e (--ignored, alone, CAPPED_MEM=6G) | cbac97075 | 0 | 24 passed 0 failed (cargo)
+forge build script (all scripts, PqzWallet.s.sol included) | cbac97075 | 0 | -
+pqz-wallet-sim cargo build --locked + cargo test --locked | cbac97075 | 0 | 2 passed 0 failed 0 ignored (cargo)
+script/test_deploybook.py | cbac97075 | 0 | ok
+script/onchain/test_vcheck.py | cbac97075 | 0 | ok
+script/onchain/test_mldsa_on.py | cbac97075 | 0 | 0 failures
+script/onchain/sched.py self-test | cbac97075 | 0 | ok
+forge test --match-path test/governance/DeploySendPlan.t.sol | cbac97075 | 0 | 11 passed 0 failed 0 skipped (forge)
+
+# test-features: rc 1 at 2179f8b32 (pqz-wallet-sim enabled scaas-ua/vectors); rc 0 at 2626850c2 after the owner's option (b),
+# pqz3k-handle d526dd644: the tool builds the release scaas-ua (Wallet::from_mnemonic, Wallet::pqz_scoped_key).
+# steps not re-run after 2179f8b32 (their inputs unchanged by pqz3k-handle): forge-ua, ua-deny, ua-fuzz, ua-cxx, ua-qt,
+# ua-dart-frb, ua-py, ua-go, ua-cs, ua-dart, zether-prover x2, scaas-ct, read-balance (rows at 9c12e1aac).
+
+# ninth sync (a82488351): mldsa_on_pqz.py's group pqzwallet ported to the O5 (b) wallet tool (cbac97075: 32-byte entropy, window
+# lastDebit / shieldIn / ownCode, no T; not run against a chain here). Book readers: scaas-node e2e only (top level = default set).

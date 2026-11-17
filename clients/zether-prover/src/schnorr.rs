@@ -6,7 +6,7 @@ use rand_core::{CryptoRng, RngCore};
 
 use crate::abi::{self, Tok};
 use crate::curve::{
-    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, ua_of, zether_kind, zether_tag,
+    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, ua_of, zether_kind, zether_tag, secret_mul,
     Fr, ZCurve, G,
 };
 use crate::keys::ZetherKey;
@@ -221,9 +221,11 @@ pub struct Entry<C: ZCurve> {
     pub d_aud: G<C>,
 }
 
+hazmat_pub! {
 /// `SENDER_S`: `abi.encode(uint256 s)`.
-pub fn open_sender<C: ZCurve>(s: &Fr<C>) -> Vec<u8> {
+fn open_sender<C: ZCurve>(s: &Fr<C>) -> Vec<u8> {
     encode_scalar::<C>(s).to_vec()
+}
 }
 
 /// Challenge preimage up to the statement points; also the opening nonce's public input.
@@ -268,22 +270,23 @@ fn cp_open<C: ZCurve, R: RngCore + CryptoRng>(
     kind: OpeningKind,
     x: &Fr<C>,
     rng: &mut R,
-) -> Vec<u8> {
+) -> Result<Vec<u8>, ZError> {
     // With a dead RNG, two kinds (receiver == auditor), two legs or two amounts must not share `k`.
     let mut secret = zeroize::Zeroizing::new(encode_scalar::<C>(x).to_vec());
     secret.extend_from_slice(&cp_prefix(e, amount, kind));
     let k = Nonces::new(&secret, rng).next::<C>();
     let (_, _, b) = kmb(e, kind);
     let a1 = encode_point::<C>(&(generator::<C>() * k));
-    let a2 = encode_point::<C>(&(b * k));
+    let a2 = encode_point::<C>(&secret_mul(&b, &k)?);
     let c = cp_challenge(e, amount, kind, &a1, &a2);
     let z = k + c * x;
-    abi::encode(&[Tok::Bytes(a1), Tok::Bytes(a2), Tok::Word(encode_scalar::<C>(&z))])
+    Ok(abi::encode(&[Tok::Bytes(a1), Tok::Bytes(a2), Tok::Word(encode_scalar::<C>(&z))]))
 }
 
+hazmat_pub! {
 /// `RECEIVER_X` / `AUDITOR`: Chaum-Pedersen `log_G(K) == log_B(M − [amount]G)` (`B = D_out`, or `D_aud` for the
 /// auditor), `abi.encode(bytes A1, bytes A2, uint256 z)`.
-pub fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
+fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
     e: &Entry<C>,
     amount: u64,
     kind: OpeningKind,
@@ -297,15 +300,17 @@ pub fn open_chaum_pedersen<C: ZCurve, R: RngCore + CryptoRng>(
     if matches!(kind, OpeningKind::SenderS | OpeningKind::SenderCp) || key.y != k_pt {
         return Err(ZError::BadStatement("opening key does not match the entry"));
     }
-    if m - generator::<C>() * Fr::<C>::from(amount) != b * key.x {
+    if m - generator::<C>() * Fr::<C>::from(amount) != secret_mul(&b, &key.x)? {
         return Err(ZError::BadStatement("amount does not open this ciphertext"));
     }
-    Ok(cp_open(e, amount, kind, &key.x, rng))
+    cp_open(e, amount, kind, &key.x, rng)
+}
 }
 
+hazmat_pub! {
 /// `SENDER_CP`: Chaum-Pedersen on the shared `s`, `log_G(D_out) == log_{Y_t}(C_out − [amount]G)`;
 /// opens leg `e.index` only, where `s` itself opens every leg of the transfer.
-pub fn open_sender_cp<C: ZCurve, R: RngCore + CryptoRng>(
+fn open_sender_cp<C: ZCurve, R: RngCore + CryptoRng>(
     e: &Entry<C>,
     amount: u64,
     s: &Fr<C>,
@@ -320,7 +325,8 @@ pub fn open_sender_cp<C: ZCurve, R: RngCore + CryptoRng>(
     if e.c_out - generator::<C>() * Fr::<C>::from(amount) != e.y_t * *s {
         return Err(ZError::BadStatement("amount does not open this ciphertext"));
     }
-    Ok(cp_open(e, amount, OpeningKind::SenderCp, s, rng))
+    cp_open(e, amount, OpeningKind::SenderCp, s, rng)
+}
 }
 
 /// Mirror of `verifyTransferAmount`.

@@ -40,7 +40,8 @@ export function clientDataOk(cd, challenge) {
   const cross = ',"crossOrigin":false';
   const after = end + 1 + cross.length;
   if (after >= n || s.slice(end + 1, after) !== cross) return false;
-  return s[after] === '}' ? after + 1 === n : s[after] === ',';
+  // C1-2 (WebAuthnClientData.sol): after `,"crossOrigin":false,` the object must still close (T21 L05)
+  return s[after] === '}' ? after + 1 === n : s[after] === ',' && s[n - 1] === '}';
 }
 /** `[authenticatorData, clientDataJSON]` only if `blob` is their canonical `abi.encode(authenticatorData, clientDataJSON,
  *  r, s)` (owner 2026-10-30, CTR-UA-33 C; WebAuthnP256Verifier._fields): heads 0x80 and 0xa0 + pad32(len a), each field
@@ -228,7 +229,7 @@ const refuse = (code, reason) => { throw new ua.UAError(code, reason); };
 /** Each derived member's key by its id, in member order (native members: null), an `msig` member's its structure. `members(id)` →
  *  `{ kind, keyData }` is never trusted: the answer must be a canonical key that hashes to `id` under its stated kind, and an `msig`
  *  member holds no `msig` (two levels only, as the registry refused it). */
-const memberKeys = (d, members) => ua.msigStructure(d).members.map((m) => {
+export const memberKeys = (d, members) => ua.msigStructure(d).members.map((m) => {
   if (ua.isNativeKind(m.kind)) return null;
   const r = members(m.id);
   const ok = r?.kind === m.kind && attempt(() => hex(ua.deriveUA(r.kind, r.keyData)) === m.id)

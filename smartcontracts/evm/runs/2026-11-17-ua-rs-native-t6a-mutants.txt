@@ -1,0 +1,6 @@
+killed   | M1 Sui intent dropped | clients/clientkeys/src/seed.js | rc=1 | 2 failed: envelope calls: NEAR sha256, Sui intent + blake2b-256, Stellar network id + ENVELOPE_TYPE_
+killed   | M2 Stellar envelope type 5 | clients/clientkeys/src/seed.js | rc=1 | 2 failed: envelope calls: NEAR sha256, Sui intent + blake2b-256, Stellar network id + ENVELOPE_TYPE_
+killed   | M3 NEAR without the hash | clients/clientkeys/src/seed.js | rc=1 | 2 failed: envelope calls: NEAR sha256, Sui intent + blake2b-256, Stellar network id + ENVELOPE_TYPE_
+killed   | M4 network check removed | clients/clientkeys/src/seed.js | rc=1 | 2 failed: envelope calls: NEAR sha256, Sui intent + blake2b-256, Stellar network id + ENVELOPE_TYPE_
+killed   | M5 a committed row changed (the append-only assertion refuses) | clients/clientkeys/scripts/native-vectors.mjs | rc=1 | 1 failed: Error: native-vectors: native.json signatures: a committed row changed (append only)
+5 mutants, 5 killed, 0 survived, 0 not loaded

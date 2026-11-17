@@ -1,0 +1,32 @@
+# 2026-11-05 ua-rs-sign T6: WebAuthn builders (webauthn_challenge = uaMessage(0x0100, purpose, digest); webauthn_assertion against the
+# expected challenge: 0 < r, s < n first, low-s, UTF-8 and client_data_ok, verify(0x0100, ...) before return; Error::WebAuthnAssertion;
+# SignRequest::WebAuthn for a 0x0100 key in the UASig / msig builders). Spec §5.6, §9.1, §9.4; C-07. UNAUDITED.
+# All commands in clients/ua-rs through scripts/capped, -j2, --locked; full logs git-ignored (clients/ua-rs/target/t6/<step>.log).
+# Gates ran on the tree committed as b84b8ba5, the T6 code commit (the commit before this summary).
+step | commit | rc | counts
+red: cargo test --features vectors --test wallet_webauthn (tests only) | e5af7626 | 101 | does not compile: 11 errors, E0432 unresolved webauthn_assertion, webauthn_challenge; E0599 no variant Error::WebAuthnAssertion (9), no variant SignRequest::WebAuthn
+green: cargo test --features vectors --test wallet_webauthn | b84b8ba5 | 0 | 12 passed
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | b84b8ba5 | 0 | 0 warnings
+clippy --no-default-features | b84b8ba5 | 0 | 0 warnings
+clippy --no-default-features --features signers | b84b8ba5 | 0 | 0 warnings
+clippy --no-default-features --features json | b84b8ba5 | 0 | 0 warnings
+clippy --no-default-features --features pq | b84b8ba5 | 0 | 0 warnings
+clippy --features vectors | b84b8ba5 | 0 | 0 warnings
+test (default) | b84b8ba5 | 0 | 21 suites, 173 passed, 0 failed, 1 ignored (T5: 161; + wallet_webauthn 12)
+test --no-default-features | b84b8ba5 | 0 | 10 suites, 50 passed (unchanged)
+test --no-default-features --features signers --test groups | b84b8ba5 | 0 | 8 passed, 1 ignored
+test --no-default-features --features json --test json | b84b8ba5 | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | b84b8ba5 | 0 | 45 passed
+test --features vectors | b84b8ba5 | 0 | 21 suites, 206 passed, 0 failed, 2 ignored (T5: 194; + 12)
+build wasm32-unknown-unknown --no-default-features / --no-default-features --features signers / pq / wallet / default | b84b8ba5 | 0 | ok, 5 of 5
+cargo deny --all-features check (cargo-deny 0.20.2) | b84b8ba5 | 0 | advisories ok, bans ok, licenses ok, sources ok; warnings: 22 duplicates, none new
+Cargo.lock | b84b8ba5 | - | unchanged (no dependency added; Cargo.toml only gains [[test]] wallet_webauthn): dependents' cargo tree --locked not re-run
+clientkeys npm test | - | - | not run: no vector or JS file changed
+mutants: 2026-11-05-ua-rs-sign-t6-mutants.py | b84b8ba5 | 0 | 11 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t6-mutants.txt)
+docs_check check / paths | b84b8ba5 | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# Byte-equal: sign.json webauthn accepted 4 (one high-s row normalised; crossOrigin false; crossOrigin false with an extra key);
+# signatures.json webauthn-p256 sigs 4 and the PoP; portable.json webauthn-p256 registration PoP. Refused (WebAuthnAssertion): sign.json
+# webauthn refusals 9 of 9; signatures.json webauthn-p256 negatives 12 (the 8 abi-* are encodings, not builder input; high-s is
+# normalised and verifies); wrong type; non-UTF-8 clientDataJSON (verify alone accepts the same bytes: control); s = n + 1 with (r, 1)
+# valid; r = n; another key. Not in this task: the external-key verification after a device signs (ExternalSignature, T16); the C ABI
+# scaas_ua_webauthn_challenge / _assertion (T12).

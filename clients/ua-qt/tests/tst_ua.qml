@@ -826,14 +826,16 @@ TestCase {
         }
     }
 
-    // pay-meta-tax T41 / T83: paymeta.json v3 rows (save without a payNo refused) and paytax.json's UAPayWithTax digest row
+    // pay-meta-tax T41, T83: paymeta.json v3 rows (save without a payNo refused; the UUIDv7 shown) and paytax.json's UAPayWithTax digest row
     function test_pay_rows() {
         const pm = vectors.load("../metatx/paymeta.json")
         verify(pm.some((r) => !r.accepted), "a refused row")
         for (const r of pm) {
             const o = UaKinds.metaPayIdV3(JSON.stringify({ salt: r.salt, payNo: r.payNo, save: r.save, schema: r.schema, body: r.body }))
-            if (r.accepted) compare(JSON.parse(o).payId, r.payId, r.name)
-            else { compare(o, "", r.name); compare(UaKinds.lastError, "UAArgument", r.name) }
+            if (r.accepted) {
+                const g = JSON.parse(o)
+                compare([g.payId, g.save, g.payNoUuid], [r.payId, r.save, r.payNoUuid === undefined ? null : r.payNoUuid], r.name)
+            } else { compare(o, "", r.name); compare(UaKinds.lastError, "UAArgument", r.name) }
         }
         const r = vectors.load("../metatx/paytax.json").find((x) => x.name === "digest_unbound_relayer_fee_recipient")
         const payment = {}

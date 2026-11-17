@@ -334,7 +334,7 @@ refunding the rest ([section 15](#15-how-the-design-evolved)).
 | Wallet Standard | Sui, Aptos and Solana browser wallets |
 | WalletConnect, TON Connect | Mobile and GRAM (formerly TON) wallets (interfaces reserved; the TON Connect HTTP bridge is not wired yet) |
 | WebAuthn | Passkeys (P-256) that sign on the user's device |
-| BIP-39, BIP-32, BIP-43, SLIP-10, SLIP-44 | One 24-word seed; per-network and per-kind key paths (Universal Account tree `m/7622'/…`) |
+| BIP-39, BIP-32, BIP-43, SLIP-10, SLIP-44 | One 24-word seed; per-network and per-kind key paths (Universal Account tree `m/22776'/…`) |
 | EIP-2333, EIP-2334 | BLS and bn254 key derivation for BLS and Schnorr Universal Accounts |
 | RFC 6979 | Deterministic ECDSA for server-side signing: re-signing after a restart gives the same signature |
 | OIDC with RFC 9207 | Console login to a node's admin API, with issuer pinning |

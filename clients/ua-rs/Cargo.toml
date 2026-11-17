@@ -8,10 +8,14 @@ description = "SCaaS Universal Account identity layer: kind table, ids, keyHash,
 
 [dependencies]
 sha3 = "0.10"
-k256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa", "schnorr", "hash2curve"] }
-p256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa"] }
+# ua-rs-sign T3a (owner 2026-11-05, RUSTSEC-2026-0387): k256 / p256 0.13 -> 0.14 (elliptic-curve 0.14.3, ecdsa 0.17.0,
+# crypto-bigint 0.5.5 -> 0.7.10), every use in this crate, verifiers included; bip32 0.5.3 -> 0.6.0 (on k256 0.14). Left on
+# crypto-bigint 0.5.5: ZF frost-secp256k1 =3.0.0 (k256 0.13, its latest release), feature `signers` only.
+k256 = { version = "=0.14.0", default-features = false, features = ["arithmetic", "ecdsa", "schnorr", "hash2curve"] }
+p256 = { version = "=0.14.0", default-features = false, features = ["arithmetic", "ecdsa"] }
 sha2 = "=0.10.9"
-# the three-key model's HKDF-SHA256 (src/pqz3k.rs; the version already in the lockfile)
+# the three-key model's HKDF-SHA256 (src/pqz3k.rs; the version already in the lockfile); feature `wallet` uses it too (SLIP-10,
+# EIP-2333, the PQ seeds), so it is no longer optional there
 hmac = "=0.12.1"
 curve25519-dalek = "4"
 ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["fast"] }
@@ -24,26 +28,112 @@ frost-core = { version = "=3.0.0", default-features = false, optional = true }
 frost-secp256k1 = { version = "=3.0.0", default-features = false, optional = true }
 rand_core = { version = "0.6", optional = true }
 rand_chacha = { version = "=0.3.1", optional = true }
+# `secret_mul` (spec §12; owner 2026-11-05, option (c): a shared crate): every secret multiplication on arkworks curves in
+# this crate (the pairing kinds' keys and signatures, MuSig2-bn254 nonces, FROST-BN254 through its element newtype)
+scaas-ct = { path = "../scaas-ct", optional = true }
 # feature `json`: the registry's explicit arguments as JSON string calls (src/json.rs), for ua-c, ua-cxx, ua-qt, ua-dart-frb
 serde_json = { version = "=1.0.145", optional = true }
-# feature `pq`: the off-chain verifier's PQ kinds (src/pq.rs): the relayer's and the node's only check of what Soroban stores unverified
+# feature `pq`: the off-chain verifier's PQ kinds (src/pq.rs): the relayer's and the node's only check of what Soroban stores unverified.
+# Falcon (ua-rs-sign T3b, MD-8): PQClean vendored in vendor/pqclean-falcon-seeded, built by build.rs (`cc`); pqcrypto-falcon
+# =0.4.1 / pqcrypto-traits =0.3.5 (and pqcrypto-internals 0.2.11, getrandom 0.3.4) left the graph (RUSTSEC-2026-0162/-0163/-0165).
 ml-dsa = { version = "=0.1.1", default-features = false, features = ["alloc"], optional = true }
 slh-dsa = { version = "=0.2.0-rc.5", default-features = false, optional = true }
-pqcrypto-falcon = { version = "=0.4.1", default-features = false, optional = true }
-pqcrypto-traits = { version = "=0.3.5", default-features = false, optional = true }
+# feature `wallet` (ua-rs-sign T2): BIP-39, BIP-32, HKDF / HMAC (SLIP-10, EIP-2333, the PQ seeds), zeroize; pins of T0
+# (runs/2026-11-05-ua-rs-sign-t0.md)
+bip39 = { version = "=2.2.2", default-features = false, features = ["alloc", "zeroize"], optional = true }
+bip32 = { version = "=0.6.0", default-features = false, features = ["alloc", "secp256k1"], optional = true }
+hkdf = { version = "=0.12.4", optional = true }
+zeroize = { version = "=1.8.2", optional = true }
+unicode-normalization = { version = "=0.1.26", optional = true }
+# ua-rs-sign T3a: the native addresses of clientkeys `describe` (cosmos RIPEMD-160 + bech32, Solana base58, Sui BLAKE2b-256);
+# `ripemd` and `bs58` were in the graph already (bip32 0.6), `blake2` is new (RustCrypto, MIT OR Apache-2.0)
+ripemd = { version = "=0.2.0", optional = true }
+bs58 = { version = "=0.5.1", default-features = false, features = ["alloc"], optional = true }
+blake2 = { version = "=0.10.6", default-features = false, optional = true }
+# ua-rs-sign T5: EVM transaction RLP (spec §5.5), pin of T0 (MIT OR Apache-2.0; pulls `bytes` 1.12.1, MIT)
+alloy-rlp = { version = "=0.3.17", default-features = false, optional = true }
+# ua-rs-sign T7: the UA KEM key (spec §6.1, §6.2), pin of T0: ML-KEM-1024 (FIPS 203), `zeroize`; `hazmat` only under `vectors`.
+# Its release encapsulation runs `m` from `rand_core` 0.6 `OsRng` (as the PQ signers), so ml-kem's `getrandom` (getrandom 0.4) is
+# not taken. X25519 is curve25519-dalek 4's clamped Montgomery ladder (a dependency already): no x25519-dalek.
+ml-kem = { version = "=0.3.4", default-features = false, features = ["zeroize"], optional = true }
+# ua-rs-sign T8: AEAD (spec §7: AES-256-GCM, AES-256-GCM-SIV, both on `aes` 0.8, the generation pqzl pins) and the containers'
+# base64url (spec §6.3, unpadded, constant time); pins of T0
+aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc", "zeroize"], optional = true }
+aes-gcm-siv = { version = "=0.11.1", default-features = false, features = ["aes", "alloc"], optional = true }
+base64ct = { version = "=1.8.3", default-features = false, features = ["alloc"], optional = true }
+# ua-rs-sign T9: the clientkeys vault v1 pin envelope (spec §8.1, CLI-SGN-02: scrypt N = 2^17, r = 8, p = 1), pin of T0; no
+# `simple` / `std` (password-hash and its rand_core 0.6 are not taken): salsa20 0.10.2, pbkdf2 0.12.2 (MIT OR Apache-2.0)
+scrypt = { version = "=0.11.0", default-features = false, optional = true }
+# ua-rs-native T8a (spec §11, pins of T0, runs/2026-11-17-ua-rs-native-t0.md): Polkadot sr25519. schnorrkel BSD-3-Clause, no `alloc`
+# (it would pull serde_bytes), `getrandom` only (every call passes its own one-shot RNG); its merlin, getrandom_or_panic and
+# arrayref are new in the lock. pbkdf2 (in the lock through scrypt) for the substrate-bip39 mini-secret.
+schnorrkel = { version = "=0.11.5", default-features = false, features = ["getrandom"], optional = true }
+pbkdf2 = { version = "=0.12.2", default-features = false, features = ["hmac"], optional = true }
+
+# ua-rs-sign T14: feature `zether` (spec §10.1): the Zether prover (BLS12-381 only; its legacy `bn254` feature stays off). Every
+# proof, transcript and encryption stays there; ua-rs adds key custody (the conf key `x` in the wallet's arena) and the ABI.
+zether-prover = { path = "../zether-prover", default-features = false, optional = true }
+
+# ua-rs-sign T15: feature `pqz` (spec §10.2): the PQZ prover side of pqz-core (`pqz-ffi` feature `prove`, the Rust PQZL backend
+# `pqzl-rust`, no C core; PQZH (Ligero) at every set that has it). Every proof, statement, transcript and encryption stays there;
+# ua-rs adds key custody (the PQZ leaf `seed32` in the wallet's arena) and the ABI. The parameter set: `pqz-set-<set>` -> `set-<set>`.
+pqz-ffi = { path = "../../pqz-core/ffi", default-features = false, features = ["prove", "pqzl-rust"], optional = true }
+# ua-rs-sign T15c2 (Fable P3-1): the facade's constant-time compares (`subtle::ConstantTimeEq`); in the lock already (k256,
+# scaas-ct), the pin of scaas-ct
+subtle = { version = "=2.6.1", default-features = false, optional = true }
+
+# ua-rs-sign T10: feature `mlock` (spec §8.2): `mlock` / `MADV_DONTDUMP` of the arena's chunks on Unix; any 0.2, so a dependent keeps
+# its own (libc was in the lock: getrandom); off Unix (wasm32) not taken
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", optional = true }
+
+# wasm32-unknown-unknown: `rand_core` 0.6's `OsRng` through getrandom 0.2's JS backend (T0: features only, no --cfg)
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "=0.2.17", features = ["js"], optional = true }
+# ua-rs-sign T8: the link window clock (`js_sys::Date::now`; `SystemTime::now` panics on wasm32-unknown-unknown)
+js-sys = { version = "=0.3.107", optional = true }
 
 [features]
-signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha"]
+# MD-5 (owner: the facades on by default). `--no-default-features` keeps the verify-only identity layer (+ `pq` / `json` /
+# `signers` as before). `zether` (T14: zether-prover) and `pqz` (T15: pqz-ffi) imply `wallet`; `pqz-set-*`: exactly one
+# with `pqz` (src/facade/pqz.rs refuses to compile otherwise). `vectors`: test-only entry points (secrets through hooks), never in a release build.
+# `vectors` also keeps the facades' raw decrypt commands and zether-prover's `hazmat` (ARCH-POS-13, T15c: never in a release build).
+# `mlock` on by default for native builds (owner 2026-11-06, superseding MD-5's list); off Unix it compiles out (no libc).
+default = ["wallet", "zether", "pqz", "pqz-set-n2304-kmax4096", "mlock"]
+wallet = ["pq", "signers", "json", "dep:bip39", "dep:bip32", "dep:hkdf", "dep:zeroize", "dep:unicode-normalization",
+    "dep:ripemd", "dep:bs58", "dep:blake2", "dep:alloy-rlp", "dep:ml-kem", "dep:aes-gcm", "dep:aes-gcm-siv", "dep:base64ct", "dep:scrypt", "dep:schnorrkel", "dep:pbkdf2", "dep:js-sys", "rand_core/getrandom", "dep:getrandom", "ed25519-dalek/zeroize", "ml-dsa/zeroize", "slh-dsa/zeroize"]
+zether = ["wallet", "dep:zether-prover"]
+pqz = ["wallet", "dep:pqz-ffi", "dep:subtle"]
+pqz-set-n2048-kmax1024 = ["pqz-ffi?/set-n2048-kmax1024"]
+pqz-set-n2304-kmax4096 = ["pqz-ffi?/set-n2304-kmax4096"]
+pqz-set-n2560-kmax16384 = ["pqz-ffi?/set-n2560-kmax16384"]
+pqz-set-n2816-kmax65536 = ["pqz-ffi?/set-n2816-kmax65536"]
+vectors = ["wallet", "scaas-ct/vectors", "ml-kem/hazmat", "zether-prover?/hazmat"]
+# T10: the arena's chunks `mlock`ed and no-dump (Linux, Android), best effort, reported by `Wallet::memory_protection`; a no-op
+# off Unix (wasm32: compiled out)
+mlock = ["wallet", "dep:libc"]
+signers = ["dep:frost-core", "dep:frost-secp256k1", "dep:rand_core", "dep:rand_chacha", "dep:scaas-ct", "dep:zeroize"]
 json = ["dep:serde_json"]
-pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:pqcrypto-falcon", "dep:pqcrypto-traits"]
+pq = ["dep:ml-dsa", "dep:slh-dsa", "dep:cc"]
+
+[build-dependencies]
+# feature `pq`: the vendored PQClean Falcon (build.rs); any 1.x, so a dependent keeps its own (ua-rs locks 1.10.0)
+cc = { version = "1", optional = true }
 
 [dev-dependencies]
 hex = "0.4"
+# ua-rs-native: the tests' independent sr25519 verify of the wallet's signatures (the same pin)
+schnorrkel = { version = "=0.11.5", default-features = false, features = ["getrandom"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 
+# ua-rs-sign T10: tests/wallet_memory.rs lowers RLIMIT_MEMLOCK (libc was in the lock)
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"
+
+# T21 L11 (CLI-UAL-02): the groups.json generator signs with fixed randomness, the test-only entry points of `vectors`
 [[test]]
 name = "groups"
-required-features = ["signers"]
+required-features = ["vectors"]
 
 [[test]]
 name = "json"
@@ -53,6 +143,154 @@ required-features = ["json"]
 name = "pq"
 required-features = ["pq"]
 
+[[test]]
+name = "wallet_keys"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_sign"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_pq"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_pairing"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_nonce_wipe"
+required-features = ["vectors"]
+
+[[test]]
+name = "wallet_uasig"
+required-features = ["wallet"]
+
 # arkworks subgroup checks crawl unoptimised
 [profile.dev.package."*"]
 opt-level = 3
+
+[[test]]
+name = "wallet_typed"
+required-features = ["wallet"]
+
+[[test]]
+name = "service_pull"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_tx"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_webauthn"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_kem"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_seal"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_vault"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_import_ua"
+required-features = ["wallet"]
+
+[[test]]
+name = "wallet_custody"
+required-features = ["wallet"]
+
+# ua-rs-native: the native networks and raw native signing against smartcontracts/vectors/native/native.json
+[[test]]
+name = "wallet_native"
+required-features = ["wallet"]
+
+# ua-rs-native: the fixed-randomness rows (test-only entry points) and the published Taproot answers
+[[test]]
+name = "native_fixed"
+required-features = ["vectors"]
+
+[[test]]
+name = "wallet_memory"
+required-features = ["wallet"]
+
+# ua-rs-sign T11: each fuzz target's input past its cap (fuzz/regress/), refused outside the fuzzer
+[[test]]
+name = "fuzz_caps"
+required-features = ["vectors"]
+
+# ua-rs-sign T14: the Zether facade (spec §10.1)
+[[test]]
+name = "facade_zether"
+required-features = ["zether"]
+
+[[test]]
+name = "facade_zether_state"
+required-features = ["zether"]
+
+# ua-rs-sign T12 follow-ups (owner 2026-11-06): the link seal of the existing device, the members JSON cap
+[[test]]
+name = "wallet_link"
+required-features = ["wallet"]
+
+# ua-rs-sign T15: the PQZ facade (spec §10.2)
+[[test]]
+name = "facade_pqz"
+required-features = ["pqz"]
+
+[[test]]
+name = "pqz_backup"
+required-features = ["pqz"]
+
+# ua-rs-sign T15e: PQZ on raw words (spec no-decryption-oracle §4.3–§4.6)
+[[test]]
+name = "facade_pqz_state"
+required-features = ["pqz"]
+
+# ua-rs-sign T20d4: the PQZ proof path (B) (spec no-decryption-oracle §4.14)
+[[test]]
+name = "facade_pqz_proof"
+required-features = ["pqz"]
+
+# ua-rs-sign T15i: the oracle harness (spec no-decryption-oracle §5): 8·K crafted queries, positive / negative / residual
+[[test]]
+name = "no_oracle"
+required-features = ["pqz", "zether"]
+
+# ua-rs-sign T15i: PQZ words rows for wallet keys (the bindings decrypt them); `write_wallet_rows` (vectors, ignored) writes them
+[[test]]
+name = "pqz_wallet_rows"
+required-features = ["pqz"]
+
+# ua-rs-sign T16: the external-key interface (spec §9.4, MD-13): `TestExternalKey` is a `vectors` entry point
+[[test]]
+name = "wallet_external"
+required-features = ["vectors"]
+
+# ua-rs-sign T15m (ARCH-POS-13, spec no-decryption-oracle §4.2): the PQZ reference reading layer, a binary beside the library
+# (never in it; a production artifact, check_test_features.py), and its anvil test
+[[bin]]
+name = "pqz-read"
+path = "src/bin/pqz-read.rs"
+required-features = ["pqz"]
+
+[[test]]
+name = "pqz_read"
+required-features = ["pqz"]
+
+# ua-rs-sign T15c2 (Codex C1): a `vectors` build makes key handles only after the test-only marker (its own process)
+[[test]]
+name = "vectors_marker"
+required-features = ["vectors", "pqz", "zether"]
+
+# ua-rs-sign T17: the reference bench, release build, no test feature; the command and its record: runs/2026-11-07-ua-rs-sign-t17.md
+[[example]]
+name = "ua_bench"
+required-features = ["pqz"]

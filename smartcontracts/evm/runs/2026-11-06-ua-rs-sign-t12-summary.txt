@@ -1,0 +1,62 @@
+# 2026-11-06 ua-rs-sign T12: C ABI v6 (spec §9.2, §9.3; plan T12; MD-4, MD-13). clients/ua-c: SCAAS_UA_ABI_VERSION 5 -> 6, the opaque
+# handles ScaasUaWallet, ScaasUaKey (UA or native), ScaasUaKemKey, ScaasUaLinkSession, ScaasUaSeedBackup; 56 new exports, every v5
+# declaration unchanged (54 -> 110); statuses 21-39 appended; scaas_ua_features(); the header rules rewritten (cbindgen.toml); feature
+# mlock on by default; `vectors` refused at compile time; panic = "unwind". clients/ua-rs: ContainerExpectJson, MembersJson, AcceptedJson,
+# UaSigRequest (bounded readers), scaas_ua::build, ZeroizeOnDrop on the handle types, 4 fuzz targets. Before T12: a19922a7 (the v5 header
+# copied to clients/ua-c/legacy/ua-rs-sign/scaas_ua.v5.h, MD-4; not git-ignored). UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs git-ignored (clients/ua-c/target/t12/, clients/ua-rs/
+# target/t12/, clients/ua-rs/fuzz/runs/t12-*.log). Gates ran on the tree committed as b62cb2b4, the T12 code commit (the commit before this).
+step | commit | rc | counts
+red: ua-rs cargo test --features vectors --test fuzz_caps (tests on 540bf05b's src) | 540bf05b | 101 | does not compile: E0432 unresolved imports AcceptedJson, ContainerExpectJson, MembersJson, UaSigRequest
+red: ua-c python3 -m unittest tests.test_vectors (against the v5 library) | a19922a7 | 1 | AttributeError: undefined symbol: scaas_ua_features
+red: ua-c cargo test --test header | a19922a7 | 101 | 3 of 4 failed: scaas_ua_kem_key not in the header; rule missing "seal authenticates no sender"; scaas_ua_status_name not guarded
+red: cc tests/smoke.c | a19922a7 | 1 | 27 errors (implicit declaration of scaas_ua_seal, ...)
+ua-c clippy --all-targets -D warnings (default = mlock) | b62cb2b4 | 0 | 0 warnings (unwrap_used, expect_used, panic, indexing_slicing denied)
+ua-c cargo test (lib + header) | b62cb2b4 | 0 | 4 + 4 passed: abi_version_is_6, features_bits_match_the_build, handles_wipe_on_free, a_panic_is_internal_never_an_unwind; header_matches_src, kem_key_takes_no_wallet, header_states_its_rules, every_export_is_guarded (110 exports)
+ua-c cargo build --release | b62cb2b4 | 0 | libscaas_ua_c.so 4,075,072 B unstripped (sizes are T17's)
+ua-c C smoke (cc -std=c99 -Werror; c++ -fsyntax-only on the header) | b62cb2b4 | 0 | smoke ok: p256 and bls12381-minsig rows byte-equal, mldsa44 2,420 B, evm raw digest, RawDigestRefused, KEM seal / open, children after wallet_free KEY_REVOKED, _free(NULL)
+ua-c ASan smoke (tests/asan-smoke.sh: Rust -Zsanitizer=address via RUSTC_BOOTSTRAP=1, clang-18 -fsanitize=address, detect_leaks=1) | b62cb2b4 | 0 | smoke ok, no report; positive control M5 (store freed under live children): heap-use-after-free
+ua-c test_vectors.py (ctypes) | b62cb2b4 | 0 | 68 tests OK (the v5 suite 22 + 46 wallet tests over keys, sign, kem, seal, vault.json)
+ua-rs clippy --all-targets -D warnings: default, --no-default-features, signers, json, pq, vectors, wallet,mlock | b62cb2b4 | 0 | 0 warnings each (7 cells)
+ua-rs test (default) | b62cb2b4 | 0 | 251 passed
+ua-rs test --no-default-features | b62cb2b4 | 0 | 50 passed
+ua-rs test --no-default-features --features signers --test groups | b62cb2b4 | 0 | 8 passed
+ua-rs test --no-default-features --features json --test json | b62cb2b4 | 0 | 5 passed
+ua-rs test --no-default-features --features pq --test pq --test ua8 --test nested | b62cb2b4 | 0 | 45 passed
+ua-rs test --features vectors | b62cb2b4 | 0 | 303 passed (T11: 302; + container_json_inputs_read_the_vector_rows; fuzz_caps 7)
+ua-rs test --no-default-features --features wallet,mlock | b62cb2b4 | 0 | 251 passed
+fuzz clippy -D warnings (clients/ua-rs/fuzz); build.sh | b62cb2b4 | 0 | 0 warnings; ua-fuzz linked
+fuzz run, 60 s each (target | execs | cov / ft | corpus | crashes) | b62cb2b4 | 0 | container_expect 3,139,626 (714 / 2382, 852) 0; members 1,906,397 (686 / 2307, 753) 0; accepted 1,632,280 (675 / 2102, 761) 0; uasig 2,144,772 (829 / 2521, 783) 0
+cargo deny --all-features check, clients/ua-rs | b62cb2b4 | 0 | advisories ok, bans ok, licenses ok, sources ok; 22 duplicate warnings (unchanged)
+cargo deny --all-features --config ../ua-rs/deny.toml check, clients/ua-c | b62cb2b4 | 0 | advisories ok, bans ok, licenses ok, sources ok; 21 duplicate warnings
+Cargo.lock | b62cb2b4 | - | clients/ua-c/Cargo.lock: scaas-ua's wallet graph added; zeroize 1.9.1 -> 1.8.2 (ua-rs's =1.8.2 pin), cc 1.10.0 and litrs 1.0.0 set to ua-rs's lock; getrandom 0.2.17 added beside the dev-only 0.4.3 (cbindgen's tempfile, already in v5). No other lock moved.
+cargo tree --locked --offline: scaas-node, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz | b62cb2b4 | 0 | 5 of 5; no lock file changed, no getrandom move to revert
+ua-cxx: clippy -D warnings; cmake + ctest | b62cb2b4 | 0 | 0 warnings; 18 of 18 passed
+ua-qt (Qt 6.12.0 gcc_64): cmake Release + ctest offscreen | b62cb2b4 | 0 | 1 of 1 passed
+ua-dart-frb: dart pub get --enforce-lockfile; cargo build rust/; dart test | b62cb2b4 | 0 | 19 passed
+ua-py: python3 -m unittest tests.test_vectors | b62cb2b4 | 0 | 27 OK (own port; does not load libscaas_ua_c yet: T13d)
+ua-go: go vet; go test | b62cb2b4 | 0 | 26 passed (own port; T13e)
+ua-cs: dotnet test Scaas.Ua.Tests (then dotnet build-server shutdown) | b62cb2b4 | 0 | 26 passed (own port; T13f)
+ua-dart: dart analyze; dart test | b62cb2b4 | 0 | 0 errors (infos only); 27 passed (identity only, spec §2)
+mutants: 2026-11-06-ua-rs-sign-t12-mutants.py | b62cb2b4 | 0 | 22 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t12-mutants.txt): the plan's 5 and 17 of the controller's
+# Decisions (controller, the owner may override): (1) SignedTx: scaas_ua_sign_transaction returns the raw transaction only (the spec's
+# signature; y parity, r, s are in its RLP). (2) T7's KemHolder -> the existing SCAAS_UA_ERR_KEM_HOLDER (12); new SCAAS_UA_ERR_WALLET_MISMATCH 38
+# and SCAAS_UA_ERR_RNG 39 (Error::Rng had no status). (3) Panics (frost-core's two OS-RNG panics among them; no FROST call is exported): every
+# export in the one catch_unwind, SCAAS_UA_ERR_INTERNAL; profile.release and profile.dev panic = "unwind". (4) mlock: ua-c's default feature
+# (native builds; compiled out off Unix). (5) Unlock: both secrets given -> PRF, the passphrase not tried (clientkeys dekFrom); neither ->
+# Argument. (6) The link session handle stays allocated after from_link consumes it (the caller still frees it; later calls KEY_REVOKED); the
+# inputs are parsed first, so a malformed JSON does not consume it. (7) Restore's None: *installed = false, *out = NULL, OK. (8) AllowRollback:
+# its own name, scaas_ua_wallet_restore_backup_rollback. (9) backup_seal: a sender key handle and a ScaasUaRecipient array (typed, no JSON);
+# out a JSON array of container JSONs; each call raises the generation once, a size query included. (10) memory protection:
+# scaas_ua_wallet_memory_protection -> ScaasUaMemoryProtection {chunks, locked, no_dump}. (11) The UASig builder: scaas_ua_uasig(request_json,
+# keys[], n): keys by position, no record (a native member in a portable purpose is Argument). (12) Calls that change state or reveal once
+# check their capacity before they run (open, open_container, aead_open, seal, seed_backup_reveal: SCAAS_UA_MNEMONIC_MAX, seed_backup_take:
+# SCAAS_UA_ENTROPY_MAX).
+# Notes: (1) Not in this task: the facade calls and export_pqz_leaf_raw (T14, T15), MuSig2 / FROST session calls (not in §9.2's list),
+# seal_container / a link seal on the existing device (no Rust API builds a link payload: a gap for the owner), imported_key and the label
+# vaults (not in §9.2's list; after unlock an imported key is not reachable through the ABI). (2) bounded::vectors_parsed stays out: ua-c fails
+# to compile if scaas-ua has `vectors` (const assert on scaas_ua::build::VECTORS). (3) The members_json cap is the spec's 16 KiB: about three
+# ML-DSA-87 member keys in hex; the vectors' largest is 2,153 B. (4) The spec's plus line names import_native_key, manifest_json,
+# discover_candidates, backup_seal: exported as scaas_ua_wallet_*. (5) ASan needs RUSTC_BOOTSTRAP=1 for -Zsanitizer on stable 1.97.1 (test build
+# only, target/asan). (6) test_vectors.py skips what a release build cannot express: link sessions of the vectors (fixed seed / start), seal
+# rows of version or scheme 2 (the named fields carry neither; container v 2 covers SealVersion), the 31-byte E and 2^64 version rows.

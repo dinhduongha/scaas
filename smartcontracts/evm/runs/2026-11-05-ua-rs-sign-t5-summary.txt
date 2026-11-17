@@ -1,0 +1,34 @@
+# 2026-11-05 ua-rs-sign T5: EVM transaction signing, types 0-3 (EvmTx, alloy-rlp, NativeKey::sign_transaction, SignRequest::Transaction;
+# no type 4, never chain id 0: CLI-SGN-40). Spec §5.5, §9.3, §9.4. UNAUDITED.
+# All commands in clients/ua-rs (or the dependent named) through scripts/capped, -j2, --locked; full logs git-ignored
+# (clients/ua-rs/target/t5/<step>.log). Gates ran on the tree committed as 6315fcbe, the T5 code commit (the commit before this summary),
+# except the four cells without `wallet` (clippy and tests of --no-default-features, signers, json, pq), which ran one edit earlier: that
+# edit touched src/wallet/tx.rs only, which those cells do not compile (`pub mod wallet` is cfg(feature = "wallet")).
+step | commit | rc | counts
+red: cargo test --features vectors --test wallet_tx (tests only) | 0b43f781 | 101 | does not compile: 5 errors, E0432 unresolved import `scaas_ua::wallet::EvmTx`; E0599 no method `sign_transaction` for `NativeKey` (4)
+green: cargo test --features vectors --test wallet_tx | 6315fcbe | 0 | 8 passed
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | 6315fcbe | 0 | 0 warnings
+clippy --no-default-features | 6315fcbe | 0 | 0 warnings
+clippy --no-default-features --features signers | 6315fcbe | 0 | 0 warnings
+clippy --no-default-features --features json | 6315fcbe | 0 | 0 warnings
+clippy --no-default-features --features pq | 6315fcbe | 0 | 0 warnings
+clippy --features vectors | 6315fcbe | 0 | 0 warnings
+test (default) | 6315fcbe | 0 | 20 suites, 161 passed, 0 failed, 1 ignored (T4: 149; + wallet_tx 8, doc tests 4)
+test --no-default-features | 6315fcbe | 0 | 10 suites, 50 passed (unchanged)
+test --no-default-features --features signers --test groups | 6315fcbe | 0 | 8 passed, 1 ignored
+test --no-default-features --features json --test json | 6315fcbe | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | 6315fcbe | 0 | 45 passed
+test --features vectors | 6315fcbe | 0 | 20 suites, 194 passed, 0 failed, 2 ignored (T4: 182; + 12)
+build wasm32-unknown-unknown --no-default-features / --features signers / --features pq / --features wallet / default | 6315fcbe | 0 | ok, 5 of 5
+cargo deny --all-features check (cargo-deny 0.20.2) | 6315fcbe | 0 | advisories ok, bans ok, licenses ok, sources ok; warnings: 22 duplicates, none new (alloy-rlp, bytes single)
+Cargo.lock (ua-rs) | 6315fcbe | - | + alloy-rlp 0.3.17 (T0 pin), + bytes 1.12.1 (MIT); both under feature `wallet` only
+cargo update -p scaas-ua; cargo tree --locked in ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, scaas-node | 6315fcbe | 0 | 5 of 5; "Locking 0 packages" in each, no lock moved (none enables `wallet`); scaas-node's re-resolve flipped tempfile's getrandom 0.4.3 -> 0.3.4, unrelated to scaas-ua: reverted, cargo tree --locked passes on the committed lock
+clientkeys npm test | - | - | not run: no vector or JS file changed
+mutants: 2026-11-05-ua-rs-sign-t5-mutants.py | 6315fcbe | 0 | 14 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t5-mutants.txt)
+docs_check check / paths | 6315fcbe | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# Byte-equal: sign.json tx rows 6 (types 0, 0 create, 1 access list, 2 value 2^256 - 1, 2 nonce 2^64 - 1 on chain 1, 3 blob hashes):
+# unsigned, sighash, yParity, r, s, raw; the EIP-155 published example (signing data, signing hash; with feature vectors the signed tx,
+# v = 37, r and s as published); chainSeparation tx 4 rows (types 0, 2 on 7622 and 22776) and its 4 tx refusals (a signature for one
+# chain does not recover to the key over the other chain's sighash). Refused (Argument): sign.json tx.refusals 12 of 12; chain id 0
+# built in Rust; a built type 3 with no blob hash; the six ed25519 networks; 16 KiB + 1 of JSON (16 KiB exactly read).
+# Not in this task: a Signer-generic sign_transaction over &dyn Signer (phase 2, T16); the C ABI scaas_ua_sign_transaction (T12).

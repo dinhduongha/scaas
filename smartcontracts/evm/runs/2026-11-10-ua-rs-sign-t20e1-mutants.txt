@@ -1,0 +1,13 @@
+# ua-rs-sign T20e1 mutants (2026-11-10-ua-rs-sign-t20e1-mutants.py: PayMeta v3, the UUIDv7 helpers, the pay records reader, the JSON's display, the policy's save and never-called list), one per run on a clean tree at fb232151, one foreground run (M1-M11), git diff --exit-code 0 before and after; positive control: both commands (--features json --test pay, 8 tests; --test wallet_typed, 25 tests) pass on the clean tree first. UNAUDITED.
+killed     | M1 the v2 tag | clients/ua-rs/src/pay.rs | rc=101 | 2 failed: json_surface, paymeta_v3_rows | assertion `left == right` failed: "salt_only" | at fb232151
+killed     | M2 save outside the commitment | clients/ua-rs/src/pay.rs | rc=101 | 2 failed: json_surface, paymeta_v3_rows | assertion `left == right` failed: "payno_uuidv7_save" | at fb232151
+killed     | M3 save with payNo 0 accepted | clients/ua-rs/src/pay.rs | rc=101 | 3 failed: json_surface, pay_meta_shape, paymeta_v3_rows | "save_without_payno_refused": refused | at fb232151
+killed     | M4 payNo left-aligned by the UUID helper | clients/ua-rs/src/pay.rs | rc=101 | 3 failed: pay_no_uuid_helpers, paymeta_v3_rows, payrecords_rows | assertion `left == right` failed | at fb232151
+killed     | M5 a version-4 UUID accepted | clients/ua-rs/src/pay.rs | rc=101 | 1 failed: pay_no_uuid_helpers | assertion `left == right` failed: 019a6e3c-5f00-4a3b-8c4d-5e6f708192a3 | at fb232151
+killed     | M6 the UUID shown for a payNo with a high byte set | clients/ua-rs/src/pay.rs | rc=101 | 1 failed: pay_no_uuid_helpers | assertion `left == right` failed: the high 16 bytes set | at fb232151
+killed     | M7 a v3 pay selector missing from the never-called list | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: never_called_pay_entries | assertion `left == right` failed: payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,bytes32,bool,uint16,bytes)) | at fb232151
+killed     | M8 a paymentsOf return with trailing bytes accepted | clients/ua-rs/src/pay.rs | rc=101 | 1 failed: payrecords_rows | assertion `left == right` failed: a trailing byte | at fb232151
+killed     | M9 payNoUuid not shown by the JSON | clients/ua-rs/src/json.rs | rc=101 | 1 failed: json_surface | assertion `left == right` failed: "payno_uuidv7": the UUID, else null | at fb232151
+killed     | M10 the policy drops save | clients/ua-rs/src/wallet/policy.rs | rc=101 | 1 failed: pay_meta_v3_body_rules | a payNo saved | at fb232151
+killed     | M11 amount at 2^192 accepted | clients/ua-rs/src/pay.rs | rc=101 | 1 failed: payrecords_rows | assertion `left == right` failed: amount at 2^192 | at fb232151
+mutants M1-M11 of 11: 11 killed, 0 survived, 0 not loaded

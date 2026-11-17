@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 """The C ABI (include/scaas_ua.h) through ctypes against smartcontracts/vectors/ua/: mirrors
 clients/ua-cxx/tests/vectors_test.cpp row for row, plus the ABI edges (buffers, NULL, non-UTF-8, per-thread last error).
+ABI v6 (ua-rs-sign T12): the wallet surface over keys.json, sign.json, kem.json, seal.json and vault.json (classes Wallet*);
+T14: the Zether facade over zether.json and clients/zether-prover/vectors/ (class WalletZether).
 From clients/ua-c after `cargo build --locked`: python3 -m unittest -v tests.test_vectors
 (overrides: SCAAS_UA_C_LIB = the shared library, SCAAS_UA_VECTORS = the vectors directory)."""
 import ctypes as C
@@ -88,7 +90,7 @@ for name, res, args in [
     ('replayed_member_sig', st, [u8, sz, u16, u8, sz, P, P]),
     ('ua_auth_domain_separator', st, [u32, u64, u8, u8, P]),
     ('ua_auth_digest', st, [u32, u64, u8, u8, u8, u8, u8, P]), ('member_digest', st, [u8, u8, P]),
-    ('canonical_id', st, [u8, P, P]), ('id_display', st, [u8, u16, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]), ('set_kem_key_args', st, [u8, P, P]), ('set_pqz_key_args', st, [u8, P, P]), ('msig_update', st, [u8, P, P]), ('pay_digest', st, [u8, P, P]), ('meta_pay_id', st, [u8, P, P]),
+    ('canonical_id', st, [u8, P, P]), ('id_display', st, [u8, u16, P, P]), ('encode_msig', st, [u16, P, sz, P, P]), ('registration_args', st, [u8, P, P]), ('set_kem_key_args', st, [u8, P, P]), ('set_pqz_key_args', st, [u8, P, P]), ('msig_update', st, [u8, P, P]), ('pay_digest', st, [u8, P, P]), ('meta_pay_id', st, [u8, P, P]), ('service_pull', st, [u8, P, P]),
 ]:
     f = getattr(LIB, 'scaas_ua_' + name)
     f.restype, f.argtypes = res, args
@@ -218,7 +220,7 @@ def record_sig(r):
 
 class Vectors(unittest.TestCase):
     def test_table_groups_purposes_constants(self):
-        self.assertEqual(L.abi_version(), 5)
+        self.assertEqual(L.abi_version(), 6)  # T12: 5 -> 6
         self.assertEqual(L.kind_count(), len(K['kinds']))
         for i, r in enumerate(K['kinds']):
             with self.subTest(r['name']):
@@ -255,7 +257,7 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(hx(opt32(L.group_tag, g)), r['GROUP'])
         self.assertIsNone(opt32(L.group_tag, b'nope'))
         self.assertIsNone(opt_text(L.group_tag_string, b'nope'))
-        self.assertEqual(len(K['purposes']), 16)  # 15 purposes, `pop` has v1 and v2
+        self.assertEqual(len(K['purposes']), 17)  # 16 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44), `pop` has v1 and v2
         for r in K['purposes']:
             self.assertEqual(hx(out32(L.purpose_tag_v, r['purpose'].encode(), r['version'])), r['purposeTag'], r['purpose'])
             if r['version'] == 1:
@@ -921,14 +923,17 @@ class GovernanceBits(unittest.TestCase):
             self.assertEqual(code_of(lambda: text(L.governance_bit, bit)), 'UAArgument', bit)
 
     def test_pay_digest_and_meta_pay_id(self):
-        """pay-meta-tax T41 / T83: paymeta.json v3 rows (save without a payNo refused) and paytax.json's UAPayWithTax digest row."""
+        """pay-meta-tax T41, T83: paymeta.json v3 rows (save without a payNo refused; the UUIDv7 shown) and paytax.json's
+        UAPayWithTax digest row."""
         meta = VEC.parent / 'metatx'
         rows = json.loads((meta / 'paymeta.json').read_text())
         self.assertTrue(any(not r['accepted'] for r in rows))
         for r in rows:
             i = json.dumps({k: r[k] for k in ('salt', 'payNo', 'save', 'schema', 'body')}).encode()
             if r['accepted']:
-                self.assertEqual(json.loads(text(L.meta_pay_id, i))['payId'], r['payId'], r['name'])
+                got = json.loads(text(L.meta_pay_id, i))
+                self.assertEqual((got['payId'], got['save']), (r['payId'], r['save']), r['name'])
+                self.assertEqual(got['payNoUuid'], r.get('payNoUuid'), r['name'])
             else:
                 self.assertEqual(code_of(lambda: text(L.meta_pay_id, i)), 'UAArgument', r['name'])
         r = next(x for x in json.loads((meta / 'paytax.json').read_text()) if x['name'] == 'digest_unbound_relayer_fee_recipient')
@@ -939,6 +944,1529 @@ class GovernanceBits(unittest.TestCase):
         got = json.loads(text(L.pay_digest, i))
         self.assertEqual(got['structHash'], r['structHash'])
         self.assertEqual(got['digest'], r['digest'])
+
+    def test_service_pull(self):
+        """T80 (CLI-SGN-48): servicepull.json's Note row (a string and a bytes field) through scaas_ua_service_pull: entryRef,
+        the transfer digest, the calldata and job once signed, the relay-fee wrap at nonce + 1; another payer refused."""
+        r = next(x for x in json.loads((VEC.parent / 'metatx' / 'servicepull.json').read_text())['rows'] if x['name'] == 'note_native')
+        t, f = r['t'], r['relayFee']
+        i = {'name': r['token']['name'], 'token': r['token']['address'], 'chainId': r['chainId'], 'chainUid': r['token']['salt'],
+             'entry': r['entry'], 'op': r['typedData'], 'from': t['from'], 'amount': t['value'], 'batch': t['batch'],
+             'nonce': t['nonce'], 'validUntil': t['validUntil']}
+        got = json.loads(text(L.service_pull, json.dumps(i).encode()))
+        self.assertEqual((got['entryRef'], got['digest'], got['selector']), (r['entryRef'], r['transferDigest'], r['selector']))
+        fee = {k: f[k] for k in ('feeToken', 'router', 'executor', 'value', 'batch', 'validUntil')}
+        fee.update(nonce=int(t['nonce']) + 1, feeAuth={'keyData': '0x', 'signature': f['signature'], 'members': []})
+        got = json.loads(text(L.service_pull, json.dumps({**i, 'auth': r['auth'], 'relayFee': fee}).encode()))
+        self.assertEqual((got['calldata'], got['job']), (r['calldata'], r['job']))
+        self.assertEqual((got['relayFee']['digest'], got['relayFee']['relayCalldata']), (f['digest'], f['relayCalldata']))
+        other = json.dumps({**i, 'from': '0x' + '11' * 32}).encode()
+        self.assertEqual(code_of(lambda: text(L.service_pull, other)), 'UAArgument')
+
+
+
+# --- ABI v6 (ua-rs-sign T12): the wallet surface over keys.json, sign.json, kem.json, seal.json, vault.json ---
+
+KEYS, SIGN, KEMV, SEAL, VAULT = (json.loads((VEC / f).read_text()) for f in ('keys.json', 'sign.json', 'kem.json', 'seal.json', 'vault.json'))
+MN = {m['id']: m for m in KEYS['mnemonics']}
+NETWORKS = ['evm', 'cosmos', 'hedera_ecdsa', 'hedera_ed25519', 'sui', 'stellar', 'ton', 'aptos', 'solana',
+            'bitcoin_p2wpkh', 'bitcoin_p2tr', 'near', 'polkadot']  # ua-rs-native: 9 to 12 appended
+NNET = NETWORKS
+COIN_DEFAULT, MNEMONIC_MAX, KEM_CT = 0xFFFFFFFF, 256, 1568
+FEATURES = ['wallet', 'pq', 'falcon', 'zether', 'pqz', 'pqz-set-n2048-kmax1024', 'pqz-set-n2304-kmax4096', 'pqz-set-n2560-kmax16384',
+            'pqz-set-n2816-kmax65536', 'external', 'mlock', 'vectors', 'native-networks']
+FEATURE = {n: 1 << i for i, n in enumerate(FEATURES)}
+# appended after SCAAS_UA_ERR_UNAUTHORIZED (20), no renumbering; a KEM key of a non-holder is the existing UAKemHolder (12)
+STATUS = {n: i for i, n in enumerate(['SealOpen', 'SealVersion', 'KemCheck', 'Aead', 'VaultOpen', 'VaultParams', 'VaultVersion',
+                                      'RawDigestRefused', 'PolicyRefused', 'ExternalSignature', 'WalletLocked', 'KeyRevoked',
+                                      'ContainerSender', 'ContainerReplay', 'BackupRollback', 'WebAuthnAssertion', 'KindUnavailable',
+                                      'WalletMismatch', 'Rng', 'PqzSetMismatch', 'PqzKeyVersion', 'KeyInUse'], 21)}
+# deterministic in a release build (RFC 6979, ed25519, BLS): byte-equal; the others are randomized: the length only
+DETERMINISTIC = {0x0101, 0x0102, 0x0106, 0x0107, 0x0108}
+
+
+class MemoryProtection(C.Structure):
+    _fields_ = [('chunks', sz), ('locked', sz), ('no_dump', sz)]
+
+
+class Recipient(C.Structure):
+    _fields_ = [('kind', u16), ('key_data', C.c_char_p), ('key_data_len', sz), ('version', u64), ('kem_pk', C.c_char_p),
+                ('kem_pk_len', sz), ('ephemeral', bl)]
+
+
+for name, res, args in [
+    ('features', u64, []),
+    ('wallet_generate', st, [P, P]), ('wallet_from_mnemonic', st, [u8, u8, P]), ('wallet_open_vault', st, [u8, u8, u8, u8, P]),
+    ('wallet_unlock', st, [P, u8, u8, u8, u8]), ('wallet_seal_vault', st, [P, u8, P, P]), ('wallet_lock', st, [P]),
+    ('wallet_free', None, [P]), ('wallet_memory_protection', st, [P, P]), ('wallet_ua_key', st, [P, u16, u32, u32, P]),
+    ('wallet_native_key', st, [P, u32, u32, u32, P]), ('wallet_import_native_key', st, [P, u32, u8, sz, P]),
+    ('wallet_manifest_json', st, [P, P, P]), ('wallet_discover_candidates', st, [P, u16, u32, u32, P, P]),
+    ('wallet_backup_seal', st, [P, P, P, sz, P, P]),
+    ('wallet_restore_backup', st, [P, u8, u8, u8, u8, P, u8, P, P]),
+    ('wallet_restore_backup_rollback', st, [P, u8, u8, u8, u8, P, u8, P, P]),
+    ('wallet_from_link', st, [P, u8, u8, u8, u8, u8, P]),
+    ('seed_backup_reveal', st, [P, P, P]), ('seed_backup_challenge', st, [P, P]), ('seed_backup_verify', st, [P, P, sz, P]),
+    ('seed_backup_take', st, [P, P, P, P]), ('seed_backup_free', None, [P]),
+    ('key_free', None, [P]), ('key_data', st, [P, P, P]),
+    ('sign_ua', st, [P, u8, u8, P, P]), ('sign_member', st, [P, u8, u8, P, P]), ('sign_typed', st, [P, u8, u8, P, P]),
+    ('sign_typed_any', st, [P, u8, P, P]), ('sign_transaction', st, [P, u8, P, P]), ('sign_key_proof', st, [P, u8, sz, P, P]),
+    ('sign_digest_raw', st, [P, u8, P, P]), ('uasig', st, [u8, P, sz, P, P]), ('external_key_new', st, [u8, P, P]),
+    ('kem_key', st, [P, u64, P]), ('kem_ephemeral', st, [P]), ('kem_free', None, [P]), ('kem_pk', st, [P, P]),
+    ('kem_decaps', st, [P, u8, sz, u8, P]), ('kem_encaps', st, [u8, sz, P, P, P]),
+    ('seal', st, [u8, sz, u8, u8, sz, u8, sz, P, P, P, P, P]), ('open', st, [P, u8, u8, sz, u8, sz, u8, u8, sz, P, P]),
+    ('open_container', st, [P, u8, u8, u8, u8, P, P]),
+    ('link_session_new', st, [P]), ('link_session_kem_pk', st, [P, P]), ('link_session_short_code', st, [P, P, P]),
+    ('link_session_free', None, [P]),
+    ('vault_needs_rewrap', st, [u8, P]), ('vault_rewrap_pin', st, [u8, u8, u8, P, P]),
+    ('vault_enable_prf', st, [u8, u8, u8, u8, u8, sz, P, P]),
+    ('aead_seal', st, [u32, u8, u8, u8, sz, u8, sz, P, P]), ('aead_open', st, [u32, u8, u8, u8, sz, u8, sz, P, P]),
+    ('hkdf_sha256', st, [u8, sz, u8, sz, u8, sz, P, sz]), ('hmac_sha256', st, [u8, sz, u8, sz, P]),
+    ('webauthn_challenge', st, [u8, u8, P]), ('webauthn_assertion', st, [u8, sz, u8, u8, sz, u8, sz, u8, u8, P, P]),
+    ('wallet_zether_key', st, [P, u32, u32, u32, P]), ('zether_key_free', None, [P]), ('zether_public', st, [P, P, P]),
+    ('zether_call', st, [P, u8, u8, P, P]), ('zether_seal_balance_cache', st, [P, u8, sz, P, P]),
+    ('zether_open_balance_cache', st, [P, u8, P, P]),
+    ('wallet_link_seal', st, [P, P, u8, sz, u8, P, P]), ('wallet_seal_label_vault', st, [P, u8, u8, P, P]),
+    ('wallet_open_label_vault', st, [P, u8, u8, u8]), ('wallet_imported_key', st, [P, u32, u32, P]),
+    ('wallet_imported_ua_key', st, [P, u32, u32, u16, P]),
+    ('wallet_pqz_key', st, [P, u32, u32, P]), ('pqz_key_free', None, [P]), ('pqz_public', st, [P, P, P]),
+    ('pqz_call', st, [P, u8, u8, P, P]), ('pqz_seal_balance_cache', st, [P, u8, sz, P, P]),
+    ('pqz_open_balance_cache', st, [P, u8, P, P]), ('pqz_set', st, [P, P]), ('pqz_check_set', st, [u8]),
+    ('pqz_check', st, [u8, P, P]),
+    ('export_pqz_leaf_raw', st, [P, u32, u32, P]),
+    ('wallet_pqz_key_version', st, [P, u32, u32, u64, P]), ('export_pqz_leaf_raw_version', st, [P, u32, u32, u64, P]),
+    ('pqz_seed_backup', st, [P, P, u8, sz, u64, C.c_uint8, P, sz, P, P]),
+    ('pqz_share_reseal', st, [P, u8, u8, u8, u8, P, P, P, P]),
+    ('wallet_pqz_reconstruct', st, [P, P, u8, u8, u8, u8, u8, u64, u8, P]),
+    ('wallet_pqz_held_key', st, [P, u8, P]),
+    ('pqz_seed_backup_warning', st, [u16, u8, u64, u8, sz, u8, P]),
+]:
+    f = getattr(LIB, 'scaas_ua_' + name)
+    f.restype, f.argtypes = res, args
+    setattr(L, name, f)
+
+
+def handle(fn, *args):
+    h = P()
+    ok(fn(*args, C.byref(h)))
+    return h
+
+
+def name_of(status):
+    return '' if status == OK else L.status_name(status).decode()
+
+
+def jb(v):
+    return None if v is None else json.dumps(v).encode()
+
+
+def mnemonic_wallet(mid):
+    m = MN[mid]
+    return handle(L.wallet_from_mnemonic, m['words'].encode(), m['passphrase'].encode())
+
+
+def sig_of(fn, *args):
+    """`(status name, bytes)` of a call with a variable output."""
+    n = sz(0)
+    status = fn(*args, None, C.byref(n))
+    if status != ERR_BUFFER:
+        return name_of(status), b'' if status == OK else None  # OK at the size query: an empty output
+    buf = C.create_string_buffer(n.value)
+    status = fn(*args, buf, C.byref(n))
+    return name_of(status), buf.raw[:n.value] if status == OK else None
+
+
+def once(fn, *args, cap=1 << 20):
+    """A variable output fetched in one call (no size query): for a call that changes state each time (backup_seal raises the
+    generation)."""
+    buf, n = C.create_string_buffer(cap), sz(cap)
+    ok(fn(*args, buf, C.byref(n)))
+    return buf.raw[:n.value - 1].decode()
+
+
+def abi_word(x):
+    return x.to_bytes(32, 'big')
+
+
+def abi_bytes(b):
+    return abi_word(len(b)) + b + bytes(-len(b) % 32)
+
+
+def abi_list(items):
+    offs, o = b'', 32 * len(items)
+    for t in items:
+        offs += abi_word(o)
+        o += len(t)
+    return abi_word(len(items)) + offs + b''.join(items)
+
+
+def member_sigs(members):
+    """`abi.encode(MemberSig[])` of a UASig JSON's members (ua8.rs `encode_member_sigs`)."""
+    inner = lambda x: abi_word(x['index']) + abi_word(64) + abi_bytes(b(x['sig']))
+    def slot(m):
+        lst = abi_list([inner(x) for x in m['members']])
+        return abi_word(m['index']) + abi_word(96) + abi_word(96 + len(lst)) + lst + abi_bytes(b(m['sig']))
+    return abi_word(32) + abi_list([slot(m) for m in members]) if members else b''
+
+
+class WalletCase(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.wallets = {}
+
+    @classmethod
+    def tearDownClass(cls):
+        for w in cls.wallets.values():
+            L.wallet_free(w)
+
+    def w(self, mid):
+        if mid not in self.wallets:
+            self.wallets[mid] = mnemonic_wallet(mid)
+        return self.wallets[mid]
+
+    def key(self, mid, kind, account=0, index=0, w=None):
+        k = handle(L.wallet_ua_key, w or self.w(mid), kind, account, index)
+        self.addCleanup(L.key_free, k)
+        return k
+
+    def native(self, mid, net='evm', index=0, coin=None):
+        k = handle(L.wallet_native_key, self.w(mid), NETWORKS.index(net), index, COIN_DEFAULT if coin is None else coin)
+        self.addCleanup(L.key_free, k)
+        return k
+
+    def kem(self, r, w=None):
+        """The KEM key `{mnemonic, kind, account, index, version}` names."""
+        kk = handle(L.kem_key, self.key(r.get('mnemonic', 'pq_kat'), r['kind'], r['account'], r['index'], w=w), int(r['version']))
+        self.addCleanup(L.kem_free, kk)
+        return kk
+
+    def opener(self, r):
+        return self.kem(r['opener']['kem'])
+
+    def raw_sig(self, k, digest):
+        return var(L.sign_digest_raw, k, digest)
+
+    def open_container(self, kk, r, accepted=True):
+        acc = r.get('accepted') if accepted else None
+        return sig_of(L.open_container, kk, jb(r['container']), jb(r['expect']), jb(r.get('members')), jb(acc))
+
+
+class WalletAbi(WalletCase):
+    def test_abi_version_is_6(self):
+        self.assertEqual(L.abi_version(), 6)
+
+    def test_features_bits(self):
+        f = L.features()
+        self.assertTrue(f & FEATURE['wallet'] and f & FEATURE['pq'], hex(f))
+        self.assertFalse(f & FEATURE['external'], 'MD-13: no external key in a release build')
+        self.assertFalse(f & FEATURE['vectors'], 'C1: never a vectors build')
+        self.assertEqual(f >> len(FEATURES), 0, 'no bit past the named ones')
+        self.assertLessEqual(bin(f >> 5 & 0xf).count('1'), 1, 'at most one pqz-set-*')
+
+    def test_status_codes_appended(self):
+        for n, v in STATUS.items():
+            self.assertEqual(L.status_name(v).decode(), 'UA' + n)
+        self.assertEqual(L.status_name(12).decode(), 'UAKemHolder')
+        self.assertEqual(L.status_name(43).decode(), 'UAStatusUnknown')  # T15: 40 -> 41 (UAPqzSetMismatch appended); T15o: 41 -> 43
+        self.assertNotEqual(STATUS['KindUnavailable'], 3)
+
+    def test_free_null_is_a_noop(self):
+        for f in (L.wallet_free, L.key_free, L.kem_free, L.link_session_free, L.seed_backup_free):
+            f(None)
+
+    def test_external_key_new_is_KIND_UNAVAILABLE(self):
+        self.assertEqual(name_of(L.external_key_new(b'{}', None, C.byref(P()))), 'UAKindUnavailable')
+        self.assertEqual(L.status_name(3).decode(), 'UAKindUnknown')
+
+    def test_null_handles_and_arguments(self):
+        o, n = C.create_string_buffer(64), sz(64)
+        for label, status in {
+            'ua_key wallet NULL': L.wallet_ua_key(None, 0x0102, 0, 0, C.byref(P())),
+            'ua_key out NULL': L.wallet_ua_key(self.w('pq_kat'), 0x0102, 0, 0, None),
+            'sign_ua key NULL': L.sign_ua(None, bytes(32), bytes(32), o, C.byref(n)),
+            'from_mnemonic words NULL': L.wallet_from_mnemonic(None, None, C.byref(P())),
+            'open_container expect NULL': L.open_container(None, b'{}', None, None, None, o, C.byref(n)),
+            # ua-rs-native: 9 to 12 are networks now (spec §10.2); 13 is the first unknown
+            'unknown network': L.wallet_native_key(self.w('pq_kat'), 13, 0, COIN_DEFAULT, C.byref(P())),
+        }.items():
+            with self.subTest(label):
+                self.assertEqual(status, ERR_ARGUMENT)
+
+
+class WalletKeys(WalletCase):
+    def test_keys_json_ua_rows(self):
+        falcon = L.features() & FEATURE['falcon']
+        n = 0
+        for r in KEYS['ua']:
+            if r['kind'] in (0x0132, 0x0135) and not falcon:
+                continue
+            with self.subTest(r['name'], account=r['account'], index=r['index']):
+                k = self.key(r['mnemonic'], r['kind'], r['account'], r['index'])
+                self.assertEqual(hx(var(L.key_data, k)), r['keyData'])
+                n += 1
+        self.assertGreaterEqual(n, 184)
+
+    def test_keys_json_native_rows(self):
+        for r in KEYS['native']:
+            with self.subTest(r['network'], index=r['index'], coin=r['coinType']):
+                k = self.native(r['mnemonic'], r['network'], r['index'], r['coinType'])
+                self.assertEqual(var(L.key_data, k).hex(), r['publicKey'].removeprefix('0x'))
+
+    def test_keys_json_refusals(self):
+        for r in KEYS['refusals']:
+            with self.subTest(r['reason']):
+                out = C.byref(P())
+                if r['what'] == 'ua':
+                    status = L.wallet_ua_key(self.w(r['mnemonic']), r['kind'], r['account'], r['index'], out)
+                else:
+                    coin = COIN_DEFAULT if r['coinType'] is None else r['coinType']
+                    status = L.wallet_native_key(self.w(r['mnemonic']), NETWORKS.index(r['network']), r['index'], coin, out)
+                self.assertEqual(name_of(status), 'UA' + r['error'])
+
+
+class WalletSign(WalletCase):
+    def test_sign_json_ua_rows(self):
+        falcon = L.features() & FEATURE['falcon']
+        exact = 0
+        for r in SIGN['ua']:
+            if r['kind'] in (0x0132, 0x0135) and not falcon:
+                continue
+            with self.subTest(r['name'], purpose=r['purpose']):
+                k = self.key(r['mnemonic'], r['kind'], r['account'], r['index'])
+                sig = var(L.sign_ua, k, b(r['purposeTag']), b(r['digest']))
+                if r['kind'] in DETERMINISTIC:
+                    self.assertEqual(hx(sig), r['signature'])
+                    exact += 1
+                elif r['kind'] not in (0x0132, 0x0135):  # Falcon padded: a fixed length too, but the row may be the unpadded vector's
+                    self.assertEqual(len(sig), len(b(r['signature'])))
+        self.assertGreaterEqual(exact, 10)
+
+    def test_sign_json_member_rows(self):
+        for r in SIGN['member']:
+            with self.subTest(r['name']):
+                k = self.key(r['mnemonic'], r['kind'], r['account'], r['index'])
+                sig = var(L.sign_member, k, b(r['structureUa']), b(r['structureUaMsg']))
+                if r['kind'] in DETERMINISTIC:
+                    self.assertEqual(hx(sig), r['signature'])
+                else:
+                    self.assertEqual(len(sig), len(b(r['signature'])))
+
+    def test_sign_json_policy_rows(self):
+        k = self.native('pq_kat')
+        signed = refused = 0
+        for r in SIGN['policy']:
+            with self.subTest(r['id']):
+                got = sig_of(L.sign_typed, k, jb(r['td']), jb(r['expect']))
+                if 'refused' in r:
+                    self.assertEqual(got[0], 'UAPolicyRefused')
+                    refused += 1
+                else:
+                    # RFC 6979: the typed signature is the raw signature of the digest the row approves
+                    self.assertEqual(got, ('', self.raw_sig(k, b(r['digest']))))
+                    signed += 1
+        self.assertEqual((signed, refused), (10, 14))
+
+    def test_sign_json_typed_any(self):
+        k = self.native('pq_kat')
+        for r in SIGN['typed']['generic']:
+            with self.subTest(r['id']):
+                self.assertEqual(var(L.sign_typed_any, k, jb(r['td'])), self.raw_sig(k, b(r['digest'])))
+        for r in SIGN['typed']['refusals']:
+            with self.subTest(r['id']):
+                self.assertEqual(sig_of(L.sign_typed_any, k, jb(r['td']))[0], 'UAArgument')
+
+    def test_sign_json_tx_rows(self):
+        for r in SIGN['tx']['rows']:
+            with self.subTest(r['tx']['type']):
+                s = r['signer']
+                k = self.native(s['mnemonic'], s['network'], s['index'])
+                self.assertEqual(hx(var(L.sign_transaction, k, jb(r['tx']))), r['raw'])
+        k = self.native('pq_kat')
+        for r in SIGN['tx']['refusals']:
+            with self.subTest(r['id']):
+                self.assertEqual(sig_of(L.sign_transaction, k, jb(r['tx']))[0], 'UAArgument')
+
+    def test_sign_json_webauthn(self):
+        for r in SIGN['webauthn']['accepted']:
+            self.assertEqual(out32(L.webauthn_challenge, b(r['purposeTag']), b(r['digest'])), b(r['expectedChallenge']))
+            self.assertEqual(out32(L.webauthn_challenge, b(r['purposeTag']), b(r['digest'])),
+                             out32(L.ua_message, 0x0100, b(r['purposeTag']), b(r['digest'])))
+        rows = [(r, None) for r in SIGN['webauthn']['accepted']] + [(r, r['error']) for r in SIGN['webauthn']['refusals']]
+        for r, err in rows:
+            with self.subTest(r.get('case', 'accepted')):
+                kd_, ad, cd = b(r['keyData']), b(r['authData']), b(r['clientDataJSON'])
+                got = sig_of(L.webauthn_assertion, kd_, len(kd_), b(r['expectedChallenge']), ad, len(ad), cd, len(cd), b(r['r']), b(r['s']))
+                self.assertEqual(got, ('UA' + err, None) if err else ('', b(r['assertion'])))
+
+    def test_sign_json_msig_rows_through_uasig(self):
+        built = refused = 0
+        for r in SIGN['msig']:
+            with self.subTest(r['case']):
+                keys = []
+                def pos(x):
+                    k = x['key']
+                    keys.append(self.key(k['mnemonic'], k['kind'], k['account'], k['index']))
+                    return len(keys) - 1
+                slots = [{'index': s['index'], 'members': [{'index': x['index'], 'key': pos(x)} for x in s['members']]}
+                         if 'members' in s else {'index': s['index'], 'key': pos(s)} for s in r['slots']]
+                m = {'keyData': r['keyData'], 'slots': slots, **({'inner': r['inner']} if 'inner' in r else {})}
+                req = jb({'purpose': r['purposeTag'], 'digest': r['digest'], 'msig': m})
+                arr = (P * len(keys))(*keys)
+                got = sig_of(L.uasig, req, arr, len(keys))
+                if 'refused' in r:
+                    self.assertEqual(got, (r['refused'], None))  # the row's code is UAPoP already
+                    refused += 1
+                else:
+                    sig = json.loads(got[1][:-1])
+                    self.assertEqual((sig['keyData'], sig['signature']), ('0x', '0x'))
+                    self.assertEqual(hx(member_sigs(sig['members'])), r['memberSigs'])
+                    built += 1
+        self.assertEqual((built, refused), (3, 4))
+
+    def test_uasig_single_key_is_sign_ua(self):
+        r = next(x for x in SIGN['ua'] if x['kind'] == 0x0101)
+        k = self.key(r['mnemonic'], r['kind'])
+        arr = (P * 1)(k)
+        got = json.loads(text(L.uasig, jb({'purpose': r['purposeTag'], 'digest': r['digest'], 'key': 0}), arr, 1))
+        self.assertEqual(got, {'keyData': r['keyData'], 'signature': r['signature'], 'members': []})
+        self.assertEqual(sig_of(L.uasig, jb({'purpose': r['purposeTag'], 'digest': r['digest'], 'key': 1}), arr, 1)[0], 'UAArgument')
+
+    def test_sign_digest_raw_on_a_ua_key_is_RawDigestRefused(self):
+        k = self.key('pq_kat', 0x0108)
+        self.assertEqual(sig_of(L.sign_digest_raw, k, bytes(32))[0], 'UARawDigestRefused')
+        self.assertEqual(len(self.raw_sig(self.native('pq_kat'), bytes(32))), 65)
+
+    def test_sign_key_proof(self):
+        n = self.native('pq_kat')
+        self.assertEqual(len(var(L.sign_key_proof, n, b'challenge', 9)), 65)
+        self.assertEqual(sig_of(L.sign_key_proof, self.key('pq_kat', 0x0101), b'challenge', 9)[0], 'UAArgument')
+
+
+class WalletKem(WalletCase):
+    def test_kem_json_keys(self):
+        for r in KEMV['keys']:
+            with self.subTest(kind=r['kind'], version=r['version']):
+                pk = C.create_string_buffer(KEM_PK)
+                ok(L.kem_pk(self.kem(r), pk))
+                self.assertEqual(hx(pk.raw), r['kemPk'])
+
+    def test_kem_json_refusals(self):
+        for r in KEMV['refusals']:
+            if 'mnemonic' not in r or not isinstance(r['version'], int):
+                continue  # the msig row: no wallet handle of 0x0120; 2^64: not a uint64_t
+            with self.subTest(kind=r['kind']):
+                k = self.key(r['mnemonic'], r['kind'], r['account'], r['index'])
+                self.assertEqual(name_of(L.kem_key(k, r['version'], C.byref(P()))), 'UA' + r['error'])
+
+    def test_kem_json_encaps_refusals_and_round_trip(self):
+        ct, e, ss = C.create_string_buffer(KEM_CT), C.create_string_buffer(32), C.create_string_buffer(32)
+        for r in KEMV['encapsRefusals']:
+            with self.subTest(r['id']):
+                pk = b(r['kemPk'])
+                self.assertEqual(name_of(L.kem_encaps(pk, len(pk), ct, e, ss)), 'UA' + r['error'])
+        kk = self.kem(KEMV['keys'][0])
+        pk = b(KEMV['keys'][0]['kemPk'])
+        ok(L.kem_encaps(pk, len(pk), ct, e, ss))
+        self.assertEqual(out32(L.kem_decaps, kk, ct.raw, KEM_CT, e.raw), ss.raw)
+
+    def test_kem_json_decaps(self):
+        for r in KEMV['decaps']:
+            eph = b(r['x25519Eph'])
+            if len(eph) != 32:
+                continue  # a 31-byte E is not a uint8_t[32]
+            with self.subTest(r['id']):
+                kk, ct = self.kem(r['key']), b(r['mlkemCt'])
+                got = C.create_string_buffer(32)
+                status = L.kem_decaps(kk, ct, len(ct), eph, got)
+                self.assertEqual((name_of(status), got.raw if status == OK else None),
+                                 ('UA' + r['error'], None) if r.get('error') else ('', b(r['ss'])))
+
+    def test_kem_ephemeral(self):
+        kk = handle(L.kem_ephemeral)
+        self.addCleanup(L.kem_free, kk)
+        pk = C.create_string_buffer(KEM_PK)
+        ok(L.kem_pk(kk, pk))
+        self.assertEqual(pk.raw[0], 1)
+
+
+class WalletSeal(WalletCase):
+    def seal_open(self, kk, purpose, aad, mlkem_ct, eph, ct):
+        return sig_of(L.open, kk, purpose.encode(), aad, len(aad), mlkem_ct, len(mlkem_ct), eph, ct, len(ct))
+
+    def test_seal_json_seal_rows(self):
+        for r in SEAL['seal']:
+            if 'kind' not in r['recipient']:
+                continue  # an ephemeral recipient from a fixed seed: under `vectors` only
+            with self.subTest(r['id']):
+                kk = self.kem(r['recipient'])
+                got = self.seal_open(kk, r['purpose'], b(r['aad']), b(r['mlkemCt']), b(r['x25519Eph']), b(r['ciphertext']))
+                self.assertEqual(got, ('', b(r['pt'])))
+                # a fresh seal of the same plaintext opens to it
+                pk, aad, pt = b(r['kemPk']), b(r['aad']), b(r['pt'])
+                mct, nm, e, ct, nc = C.create_string_buffer(KEM_CT), sz(KEM_CT), C.create_string_buffer(32), C.create_string_buffer(len(pt) + 16), sz(len(pt) + 16)
+                ok(L.seal(pk, len(pk), r['purpose'].encode(), aad, len(aad), pt, len(pt), mct, C.byref(nm), e, ct, C.byref(nc)))
+                self.assertEqual((nm.value, nc.value), (KEM_CT, len(pt) + 16))
+                self.assertEqual(self.seal_open(kk, r['purpose'], aad, mct.raw, e.raw, ct.raw), ('', pt))
+
+    def test_seal_json_refusals(self):
+        base = next(r for r in SEAL['seal'] if r['id'] == SEAL['refusals']['base'])
+        for r in SEAL['refusals']['rows']:
+            wire = b(r.get('wire', base['wire']))
+            if wire[:2] != b'\x01\x01':
+                continue  # version or scheme 2: the named fields carry neither (container v 2 below is SealVersion)
+            with self.subTest(r['id']):
+                kk = self.kem(r.get('key', SEAL['refusals']['key']))
+                aad = b(r['aad']) if 'aad' in r else b(base['aad'])
+                got = self.seal_open(kk, r.get('purpose', base['purpose']), aad, wire[2:2 + KEM_CT], wire[2 + KEM_CT:2 + KEM_CT + 32],
+                                     wire[2 + KEM_CT + 32:])
+                self.assertEqual(got, ('UA' + r['error'], None))
+
+    def test_seal_json_argument_refusals(self):
+        pk = b(SEAL['seal'][0]['kemPk'])
+        for r in SEAL['argumentRefusals']:
+            with self.subTest(r['id']):
+                pt = bytes(r['ptLength'])
+                mct, nm, e, ct, nc = C.create_string_buffer(KEM_CT), sz(KEM_CT), C.create_string_buffer(32), C.create_string_buffer(len(pt) + 16), sz(len(pt) + 16)
+                status = L.seal(pk, len(pk), r['purpose'].encode(), b'', 0, pt, len(pt), mct, C.byref(nm), e, ct, C.byref(nc))
+                self.assertEqual(name_of(status), 'UA' + r['error'])
+
+    def test_seal_json_containers(self):
+        n = 0
+        for r in SEAL['containers']:
+            if 'session' in r['opener']:
+                continue  # a link container opens only through its session (a fixed one exists under `vectors` only)
+            with self.subTest(r['id']):
+                self.assertEqual(self.open_container(self.opener(r), r), ('', b(r['pt'])))
+                n += 1
+        self.assertEqual(n, 3)
+
+    def test_seal_json_acceptance(self):
+        n = 0
+        for r in SEAL['acceptance']:
+            if 'link' in r:
+                continue  # its session's short code: a fixed session exists under `vectors` only
+            with self.subTest(r['id']):
+                kk = self.opener(r)
+                if r.get('restore'):
+                    out, installed = P(), bl()
+                    status = L.wallet_restore_backup(kk, jb(r['container']), jb(r['expect']), jb(r.get('members')), jb(r.get('accepted')),
+                                                     None, b'', C.byref(out), C.byref(installed))
+                    got = name_of(status)
+                    if status == OK:
+                        L.wallet_free(out)
+                else:
+                    got = self.open_container(kk, r)[0]
+                self.assertEqual(got, 'UA' + r['error'] if r.get('error') else '')
+                n += 1
+        self.assertEqual(n, 28)
+
+    def test_open_container_msig_without_accepted_json_is_ContainerSender(self):
+        r = next(x for x in SEAL['containers'] if x.get('accepted'))
+        kk = self.opener(r)
+        self.assertEqual(self.open_container(kk, r, accepted=False), ('UAContainerSender', None))
+        self.assertEqual(self.open_container(kk, r), ('', b(r['pt'])))
+
+    def test_container_json_inputs_are_bounded(self):
+        r = SEAL['containers'][0]
+        kk = self.opener(r)
+        deep = dict(r['expect'], x=[[[[0]]]])
+        self.assertEqual(sig_of(L.open_container, kk, jb(r['container']), jb(deep), None, None)[0], 'UAArgument')
+        big = json.dumps(r['expect']).encode() + b' ' * (16 << 10)
+        self.assertEqual(sig_of(L.open_container, kk, jb(r['container']), big, None, None)[0], 'UAArgument')
+        # members_json: 512 KiB (owner 2026-11-06), the other two 16 KiB
+        members = b'{}' + b' ' * ((512 << 10) - 2)
+        self.assertEqual(sig_of(L.open_container, kk, jb(r['container']), jb(r['expect']), members, None), ('', b(r['pt'])), '512 KiB')
+        self.assertEqual(sig_of(L.open_container, kk, jb(r['container']), jb(r['expect']), members + b' ', None)[0], 'UAArgument')
+
+    def replay_current(self, r):
+        """A wallet holding `current.ua` at `current.generation` (raised by backup_seal), or None."""
+        c = r['current']
+        if c is None:
+            return None
+        twelve = handle(L.wallet_ua_key, self.w('twelve_words'), 0x0102, 0, 0)
+        sender_ua = out32(L.derive_ua, 0x0102, var(L.key_data, twelve), 32, False)
+        L.key_free(twelve)
+        w = mnemonic_wallet('twelve_words' if b(c['ua']) == sender_ua else 'pq_kat')
+        self.addCleanup(L.wallet_free, w)
+        k = self.key(None, 0x0102, w=w)
+        self.assertEqual(out32(L.derive_ua, 0x0102, var(L.key_data, k), 32, False), b(c['ua']))
+        rec_key = self.key('pq_kat', 0x0130)
+        kd_, pk = var(L.key_data, rec_key), b(KEMV['keys'][0]['kemPk'])
+        rec = Recipient(0x0130, kd_, len(kd_), 0, pk, len(pk), False)
+        for _ in range(c['generation']):
+            once(L.wallet_backup_seal, w, k, C.byref(rec), 1)
+        self.assertEqual(json.loads(text(L.wallet_manifest_json, w))['backupGeneration'], c['generation'])
+        return w
+
+    def test_seal_json_replay_backup_rows_and_the_none_flag(self):
+        n = 0
+        for r in SEAL['replay']:
+            if r['kind'] != 'backup':
+                continue  # link windows: a session starts now in a release build
+            with self.subTest(r['id']):
+                cur = self.replay_current(r)
+                fn = L.wallet_restore_backup_rollback if r.get('allowRollback') else L.wallet_restore_backup
+                out, installed = P(), bl(True)
+                status = fn(self.opener(r), jb(r['container']), jb(r['expect']), None, None, cur, b'', C.byref(out), C.byref(installed))
+                if r.get('error'):
+                    self.assertEqual(name_of(status), 'UA' + r['error'])
+                else:
+                    ok(status)
+                    self.assertEqual(installed.value, r['install'])
+                    self.assertEqual(out.value is not None, r['install'], 'an equal generation installs nothing: out stays NULL')
+                    L.wallet_free(out)
+                n += 1
+        self.assertEqual(n, 6)
+
+    def test_backup_seal_restores_a_wallet(self):
+        w = mnemonic_wallet('twelve_words')
+        self.addCleanup(L.wallet_free, w)
+        sender = self.key(None, 0x0102, w=w)
+        self.key(None, 0x0101, 0, 1, w=w)
+        rec_key = self.key('pq_kat', 0x0130)
+        kd_, pk = var(L.key_data, rec_key), b(KEMV['keys'][0]['kemPk'])
+        recs = (Recipient * 2)(Recipient(0x0130, kd_, len(kd_), 0, pk, len(pk), False), Recipient(0, None, 0, 0, pk, len(pk), True))
+        cs = json.loads(once(L.wallet_backup_seal, w, sender, recs, 2))
+        self.assertEqual(len(cs), 2)
+        ua = hx(out32(L.derive_ua, 0x0102, var(L.key_data, sender), 32, False))
+        expect = {'purpose': 'scaas/backup/v1', 'sender': {'ua': ua}, 'recipient': {'ua': hx(out32(L.derive_ua, 0x0130, kd_, len(kd_), False)), 'version': 0}}
+        out, installed = P(), bl()
+        ok(L.wallet_restore_backup(self.kem(KEMV['keys'][0]), jb(cs[0]), jb(expect), None, None, None, b'', C.byref(out), C.byref(installed)))
+        self.addCleanup(L.wallet_free, out)
+        self.assertTrue(installed.value)
+        self.assertEqual(var(L.key_data, self.key(None, 0x0102, w=out)), var(L.key_data, sender))
+        m = json.loads(text(L.wallet_manifest_json, out))
+        self.assertEqual((m['backupGeneration'], len(m['entries'])), (1, 2))
+        self.assertEqual(sig_of(L.wallet_backup_seal, w, self.native('pq_kat'), recs, 1)[0], 'UAArgument', 'a native key seals no container')
+        self.assertEqual(sig_of(L.wallet_backup_seal, w, sender, recs, 0)[0], 'UAArgument', 'no recipient')
+
+    def test_link_session_is_consumed(self):
+        s = handle(L.link_session_new)
+        self.addCleanup(L.link_session_free, s)
+        pk = C.create_string_buffer(KEM_PK)
+        ok(L.link_session_kem_pk(s, pk))
+        self.assertRegex(text(L.link_session_short_code, s), r'^[0-9]{8}$')
+        r = next(x for x in SEAL['containers'] if 'session' in x['opener'])
+        expect = dict(r['expect'], recipient={'kemPkHash': hx(out32(L.keccak256, pk.raw, KEM_PK))})
+        out = P()
+        status = L.wallet_from_link(s, jb(r['container']), jb(expect), None, None, b'', C.byref(out))
+        self.assertEqual(name_of(status), 'UAContainerReplay', "the vector container's created is outside this session's window")
+        for f in (lambda: L.wallet_from_link(s, jb(r['container']), jb(expect), None, None, b'', C.byref(out)),
+                  lambda: L.link_session_kem_pk(s, pk)):
+            self.assertEqual(name_of(f()), 'UAKeyRevoked', 'the session is consumed by its first install')
+
+    def test_link_seal_round_trip(self):
+        """T12 follow-up (owner 2026-11-06): the existing device seals the link container; the new device installs it; a wrong
+        short code and a key of another wallet are refused."""
+        w = mnemonic_wallet('twelve_words')
+        self.addCleanup(L.wallet_free, w)
+        key = self.key(None, 0x0102, w=w)
+        ok(L.wallet_import_native_key(w, 0, bytes(range(1, 33)), 32, C.byref(P())))
+        ua = hx(out32(L.derive_ua, 0x0102, var(L.key_data, key), 32, False))
+        for wrong in (False, True):
+            s = handle(L.link_session_new)
+            self.addCleanup(L.link_session_free, s)
+            pk = C.create_string_buffer(KEM_PK)
+            ok(L.link_session_kem_pk(s, pk))
+            code = text(L.link_session_short_code, s)
+            if wrong:
+                code = '00000000' if code != '00000000' else '00000001'
+            c = text(L.wallet_link_seal, w, key, pk.raw, KEM_PK, code.encode())
+            expect = {'purpose': 'scaas/link/v1', 'sender': {'ua': ua}, 'recipient': {'kemPkHash': hx(out32(L.keccak256, pk.raw, KEM_PK))}}
+            out = P()
+            status = L.wallet_from_link(s, c.encode(), jb(expect), None, None, b'', C.byref(out))
+            if wrong:
+                self.assertEqual(name_of(status), 'UASealOpen')
+                continue
+            ok(status)
+            self.addCleanup(L.wallet_free, out)
+            self.assertEqual(var(L.key_data, self.key(None, 0x0102, w=out)), var(L.key_data, key))
+            self.assertEqual(json.loads(text(L.wallet_manifest_json, out))['imports'], json.loads(text(L.wallet_manifest_json, w))['imports'])
+        s = handle(L.link_session_new)
+        self.addCleanup(L.link_session_free, s)
+        pk = C.create_string_buffer(KEM_PK)
+        ok(L.link_session_kem_pk(s, pk))
+        other = self.key('pq_kat', 0x0102)
+        self.assertEqual(sig_of(L.wallet_link_seal, w, other, pk.raw, KEM_PK, b'12345678')[0], 'UAArgument', "another wallet's key")
+        self.assertEqual(sig_of(L.wallet_link_seal, w, key, pk.raw, KEM_PK - 1, b'12345678')[0], 'UAKemCheck')
+
+
+class WalletVault(WalletCase):
+    def unlock_of(self, u):
+        prf = b(u['prfOutput']) if 'prfOutput' in u else None
+        return (u['pin'].encode() if 'pin' in u else None), prf
+
+    def open_vault(self, v, pin, prf, bip39=b''):
+        out = P()
+        status = L.wallet_open_vault(jb(v), pin, prf, bip39, C.byref(out))
+        if status == OK:
+            self.addCleanup(L.wallet_free, out)
+        return name_of(status), out
+
+    def test_vault_json_vaults(self):
+        by_entropy = {m['entropy']: m['id'] for m in KEYS['mnemonics'] if not m['passphrase']}
+        for r in VAULT['vaults']:
+            with self.subTest(r['id']):
+                got, w = self.open_vault(r['vault'], *self.unlock_of(r['unlock']))
+                self.assertEqual(got, '')
+                mid = by_entropy[r['plaintext']]
+                self.assertEqual(var(L.key_data, self.key(None, 0x0102, w=w)), var(L.key_data, self.key(mid, 0x0102)))
+
+    def test_vault_json_refusals(self):
+        for r in VAULT['refusals']:
+            with self.subTest(r['id']):
+                self.assertEqual(self.open_vault(r['vault'], *self.unlock_of(r['unlock']))[0], 'UA' + r['error'])
+
+    def test_exactly_one_unlock_secret(self):
+        r = next(x for x in VAULT['vaults'] if 'prfOutput' in x['unlock'])
+        prf = b(r['unlock']['prfOutput'])
+        pin_row = VAULT['vaults'][0]
+        self.assertEqual(self.open_vault(r['vault'], None, None)[0], 'UAArgument', 'neither')
+        self.assertEqual(self.open_vault(r['vault'], b'not the passphrase', prf)[0], '', 'both: PRF first, the passphrase not tried')
+        self.assertEqual(self.open_vault(r['vault'], pin_row['unlock']['pin'].encode(), bytes(32))[0], 'UAVaultOpen', 'both: a wrong PRF')
+        self.assertEqual(self.open_vault(pin_row['vault'], None, prf)[0], 'UAArgument', 'a PRF for a vault without its envelope')
+
+    def test_seal_vault_rewrap_enable_prf(self):
+        w = self.w('twelve_words')
+        v = json.loads(text(L.wallet_seal_vault, w, b'correct horse 9'))
+        self.assertEqual(sig_of(L.wallet_seal_vault, w, b'12345678')[0], 'UAArgument', 'the new-passphrase policy')
+        flag = bl(True)
+        ok(L.vault_needs_rewrap(jb(v), C.byref(flag)))
+        self.assertFalse(flag.value)
+        v2 = json.loads(text(L.vault_rewrap_pin, jb(v), b'correct horse 9', b'battery staple 7'))
+        v3 = json.loads(text(L.vault_enable_prf, jb(v2), b'battery staple 7', bytes(range(32)), b'cred-1', b'salt', 4))
+        want = var(L.key_data, self.key('twelve_words', 0x0102))
+        for vault, pin, prf in ((v, b'correct horse 9', None), (v2, b'battery staple 7', None), (v3, None, bytes(range(32)))):
+            got, w2 = self.open_vault(vault, pin, prf)
+            self.assertEqual(got, '')
+            self.assertEqual(var(L.key_data, self.key(None, 0x0102, w=w2)), want)
+        self.assertEqual(self.open_vault(v2, b'correct horse 9', None)[0], 'UAVaultOpen', 'the old passphrase after the rewrap')
+
+
+class WalletCustody(WalletCase):
+    def test_lock_revokes_and_unlock_does_not_revive(self):
+        w = mnemonic_wallet('twelve_words')
+        self.addCleanup(L.wallet_free, w)
+        v = text(L.wallet_seal_vault, w, b'correct horse 9').encode()
+        k = self.key(None, 0x0101, w=w)
+        before = var(L.sign_ua, k, out32(L.purpose_tag, b'metatx'), bytes(32))
+        ok(L.wallet_lock(w))
+        self.assertEqual(sig_of(L.sign_ua, k, out32(L.purpose_tag, b'metatx'), bytes(32))[0], 'UAKeyRevoked')
+        self.assertEqual(name_of(L.wallet_ua_key(w, 0x0101, 0, 0, C.byref(P()))), 'UAWalletLocked')
+        mp = MemoryProtection(1, 1, 1)
+        ok(L.wallet_memory_protection(w, C.byref(mp)))
+        self.assertEqual((mp.chunks, mp.locked, mp.no_dump), (0, 0, 0))
+        ok(L.wallet_unlock(w, v, b'correct horse 9', None, b''))
+        self.assertEqual(sig_of(L.sign_ua, k, out32(L.purpose_tag, b'metatx'), bytes(32))[0], 'UAKeyRevoked', 'unlock does not revive')
+        self.assertEqual(var(L.sign_ua, self.key(None, 0x0101, w=w), out32(L.purpose_tag, b'metatx'), bytes(32)), before)
+        self.assertEqual(name_of(L.wallet_unlock(w, v, b'correct horse 9', None, b'')), 'UAArgument', 'already unlocked')
+
+    def test_imported_key_after_unlock(self):
+        """T12 follow-up (owner 2026-11-06): an imported key is reachable again after unlock through its label vault."""
+        w = mnemonic_wallet('twelve_words')
+        self.addCleanup(L.wallet_free, w)
+        seed_v = text(L.wallet_seal_vault, w, b'correct horse 9').encode()
+        k = handle(L.wallet_import_native_key, w, 0, bytes(range(1, 33)), 32)
+        self.addCleanup(L.key_free, k)
+        d = bytes(range(32))
+        before = var(L.sign_digest_raw, k, d)
+        label_v = text(L.wallet_seal_label_vault, w, b'native-import:evm:0', b'correct horse 9').encode()
+        self.assertEqual(sig_of(L.wallet_seal_label_vault, w, b'native-import:evm:7', b'correct horse 9')[0], 'UAArgument', 'not held')
+        ok(L.wallet_lock(w))
+        self.assertEqual(name_of(L.wallet_imported_key(w, 0, 0, C.byref(P()))), 'UAWalletLocked')
+        ok(L.wallet_unlock(w, seed_v, b'correct horse 9', None, b''))
+        self.assertEqual(name_of(L.wallet_imported_key(w, 0, 0, C.byref(P()))), 'UAArgument', 'listed, not held before its vault opens')
+        self.assertEqual(name_of(L.wallet_open_label_vault(w, label_v, b'wrong horse 9', None)), 'UAVaultOpen')
+        self.assertEqual(name_of(L.wallet_open_label_vault(w, seed_v, b'correct horse 9', None)), 'UAArgument', 'the seed vault is not a label vault')
+        ok(L.wallet_open_label_vault(w, label_v, b'correct horse 9', None))
+        k2 = handle(L.wallet_imported_key, w, 0, 0)
+        self.addCleanup(L.key_free, k2)
+        self.assertEqual(var(L.sign_digest_raw, k2, d), before, 'the same key (RFC 6979)')
+        self.assertEqual(sig_of(L.sign_digest_raw, k, d)[0], 'UAKeyRevoked', 'the old handle stays revoked')
+        self.assertEqual(name_of(L.wallet_imported_key(w, 1, 0, C.byref(P()))), 'UAArgument', 'another network (CLI-SGN-11)')
+        self.assertEqual(name_of(L.wallet_imported_key(w, 0, 1, C.byref(P()))), 'UAArgument', 'an unknown n')
+
+    def test_imported_ua_key_rows(self):
+        """T20c (owner 2026-11-08): keys.json / sign.json `imported`: an imported key's UA (0x0108 / 0x0102 only) has the row's id
+        and key data and signs the rows byte for byte; every other kind, another network, a KEM key, a backup sender refused."""
+        sign = {r['id']: r for r in SIGN['imported']['rows']}
+        for r in KEYS['imported']['rows']:
+            w = mnemonic_wallet('twelve_words')
+            self.addCleanup(L.wallet_free, w)
+            nk = handle(L.wallet_import_native_key, w, NETWORKS.index(r['network']), bytes.fromhex(r['secret'][2:]), 32)
+            self.addCleanup(L.key_free, nk)
+            k = handle(L.wallet_imported_ua_key, w, NETWORKS.index(r['network']), 0, r['kind'])
+            self.addCleanup(L.key_free, k)
+            self.assertEqual('0x' + var(L.key_data, k).hex(), r['keyData'], r['network'])
+            self.assertIn('"importedUas":[{"kind":%d,"source":"native-import:%s:0","ua":"%s"}]' % (r['kind'], r['network'], r['ua']),
+                          text(L.wallet_manifest_json, w), r['network'])
+            for what in ('pop', 'metatx'):
+                x = sign.get('%s %s' % (r['network'], what))
+                if x:
+                    got = var(L.sign_ua, k, bytes.fromhex(x['purposeTag'][2:]), bytes.fromhex(x['digest'][2:]))
+                    self.assertEqual('0x' + got.hex(), x['signature'], x['id'])
+            self.assertEqual(name_of(L.kem_key(k, 0, C.byref(P()))), 'UAKemHolder', r['network'])
+        for x in KEYS['imported']['refusals']:
+            r = next(y for y in KEYS['imported']['rows'] if y['network'] == x['network'])
+            w = mnemonic_wallet('twelve_words')
+            self.addCleanup(L.wallet_free, w)
+            nk = handle(L.wallet_import_native_key, w, NETWORKS.index(r['network']), bytes.fromhex(r['secret'][2:]), 32)
+            self.addCleanup(L.key_free, nk)
+            self.assertEqual(name_of(L.wallet_imported_ua_key(w, NETWORKS.index(r['network']), 0, x['kind'], C.byref(P()))), 'UAArgument', x['reason'])
+            self.assertEqual(name_of(L.wallet_imported_ua_key(w, NETWORKS.index(r['network']), 0, r['kind'], C.byref(P()))), '', 'positive control')
+        self.assertEqual(name_of(L.wallet_imported_ua_key(w, NETWORKS.index('cosmos'), 0, 0x0108, C.byref(P()))), 'UAArgument', 'another network')
+
+    def test_unlock_with_another_wallets_vault_is_WalletMismatch(self):
+        w = mnemonic_wallet('twelve_words')
+        self.addCleanup(L.wallet_free, w)
+        self.key(None, 0x0102, w=w)
+        other = text(L.wallet_seal_vault, self.w('pq_kat'), b'correct horse 9').encode()
+        ok(L.wallet_lock(w))
+        self.assertEqual(name_of(L.wallet_unlock(w, other, b'correct horse 9', None, b'')), 'UAWalletMismatch')
+
+    def test_child_handle_after_wallet_free_is_KEY_REVOKED(self):
+        w = mnemonic_wallet('pq_kat')
+        k = handle(L.wallet_ua_key, w, 0x0130, 0, 0)
+        kk = handle(L.kem_key, k, 0)
+        n = handle(L.wallet_native_key, w, 0, 0, COIN_DEFAULT)
+        L.wallet_free(w)  # defined before its children: they stay valid memory and answer KEY_REVOKED
+        try:
+            self.assertEqual(sig_of(L.sign_ua, k, out32(L.purpose_tag, b'metatx'), bytes(32))[0], 'UAKeyRevoked')
+            self.assertEqual(sig_of(L.sign_digest_raw, n, bytes(32))[0], 'UAKeyRevoked')
+            self.assertEqual(name_of(L.kem_key(k, 1, C.byref(P()))), 'UAKeyRevoked')
+            self.assertEqual(name_of(L.kem_decaps(kk, bytes(KEM_CT), KEM_CT, bytes(range(1, 33)), C.create_string_buffer(32))), 'UAKeyRevoked')
+            self.assertEqual(len(var(L.key_data, k)), 1312, 'public data stays readable')
+        finally:
+            L.kem_free(kk)
+            L.key_free(k)
+            L.key_free(n)
+
+    def test_memory_protection(self):
+        w = mnemonic_wallet('pq_kat')
+        self.addCleanup(L.wallet_free, w)
+        self.key(None, 0x0102, w=w)
+        mp = MemoryProtection()
+        ok(L.wallet_memory_protection(w, C.byref(mp)))
+        self.assertGreaterEqual(mp.chunks, 1)
+        self.assertLessEqual(max(mp.locked, mp.no_dump), mp.chunks)
+        if L.features() & FEATURE['mlock']:
+            self.assertEqual(mp.no_dump, mp.chunks, 'MADV_DONTDUMP needs no rlimit')
+
+    def test_seed_backup_sequence(self):
+        w, s = P(), P()
+        ok(L.wallet_generate(C.byref(w), C.byref(s)))
+        self.addCleanup(L.wallet_free, w)
+        self.addCleanup(L.seed_backup_free, s)
+        n = sz(MNEMONIC_MAX - 1)
+        self.assertEqual(L.seed_backup_reveal(s, C.create_string_buffer(MNEMONIC_MAX), C.byref(n)), ERR_BUFFER)
+        self.assertEqual(n.value, MNEMONIC_MAX, 'a short buffer reveals nothing')
+        n = sz(MNEMONIC_MAX)
+        self.assertEqual(L.seed_backup_reveal(s, None, C.byref(n)), ERR_ARGUMENT, 'NULL out (T21 L50)')
+        words = text(L.seed_backup_reveal, s).split()
+        self.assertEqual(len(words), 24)
+        self.assertEqual(sig_of(L.seed_backup_reveal, s)[0], 'UAArgument', 'shown once')
+        pos = (u32 * 3)()
+        ok(L.seed_backup_challenge(s, pos))
+        self.assertTrue(1 <= pos[0] < pos[1] < pos[2] <= 24)
+        good = (C.c_char_p * 3)(*[words[i - 1].encode() for i in pos])
+        bad = (C.c_char_p * 3)(*[b'x', b'y', b'z'])
+        flag, taken = bl(True), bl(True)
+        e, ne = C.create_string_buffer(32), sz(32)
+        self.assertEqual(L.seed_backup_take(s, e, C.byref(ne), C.byref(taken)), OK)
+        self.assertFalse(taken.value, 'not before the words are confirmed')
+        ok(L.seed_backup_verify(s, bad, 3, C.byref(flag)))
+        self.assertFalse(flag.value)
+        ok(L.seed_backup_challenge(s, pos))
+        good = (C.c_char_p * 3)(*[words[i - 1].encode() for i in pos])
+        ok(L.seed_backup_verify(s, good, 3, C.byref(flag)))
+        self.assertTrue(flag.value)
+        ne = sz(32)
+        ok(L.seed_backup_take(s, e, C.byref(ne), C.byref(taken)))
+        self.assertEqual((taken.value, ne.value), (True, 32))
+        ne = sz(32)
+        ok(L.seed_backup_take(s, e, C.byref(ne), C.byref(taken)))
+        self.assertFalse(taken.value, 'handed out once')
+        w2 = handle(L.wallet_from_mnemonic, ' '.join(words).encode(), None)
+        self.addCleanup(L.wallet_free, w2)
+        self.assertEqual(var(L.key_data, self.key(None, 0x0102, w=w2)), var(L.key_data, self.key(None, 0x0102, w=w)))
+
+    def test_import_manifest_discover(self):
+        w = mnemonic_wallet('pq_kat')
+        self.addCleanup(L.wallet_free, w)
+        k = handle(L.wallet_import_native_key, w, 0, bytes(range(1, 33)), 32)
+        self.addCleanup(L.key_free, k)
+        self.assertEqual(len(var(L.key_data, k)), 33)
+        self.assertEqual(name_of(L.wallet_import_native_key(w, 0, bytes(31), 31, C.byref(P()))), 'UAArgument')
+        m = json.loads(text(L.wallet_manifest_json, w))
+        self.assertEqual(m['imports'], [{'network': 'evm', 'n': 0}])
+        got = json.loads(text(L.wallet_discover_candidates, w, 0x0102, 0, 3))
+        row = next(r for r in KEYS['ua'] if r['mnemonic'] == 'pq_kat' and r['kind'] == 0x0102 and r['account'] == 0 and r['index'] == 0)
+        self.assertEqual([x['index'] for x in got], [0, 1, 2])
+        self.assertEqual(got[0]['ua'], row['ua'])
+
+
+class WalletErrors(WalletCase):
+    def test_error_strings_never_contain_an_input(self):
+        secrets = [b'zebrasecretword', b'Pa55-word-Secret', b'SECRETvalue0xdead', b'deadbeefcafe1234', b'Qx7SekritPurp0se']
+        w = self.w('pq_kat')
+        evm, ua, kk = self.native('pq_kat'), self.key('pq_kat', 0x0101), self.kem(KEMV['keys'][0])
+        words = ' '.join(MN['pq_kat']['words'].split()[:23] + ['zebrasecretword']).encode()
+        vault = jb(VAULT['vaults'][0]['vault'])
+        td = jb({'types': {'EIP712Domain': []}, 'primaryType': 'SECRETvalue0xdead', 'domain': {}, 'message': {'v': 'SECRETvalue0xdead'}})
+        expect = jb({'check': 'Payment', 'account': '0xdeadbeefcafe1234', 'payee': 'Pa55-word-Secret'})
+        o, n = C.create_string_buffer(8192), sz(8192)
+        zk = handle(L.wallet_zether_key, w, 60, 0, 7)
+        self.addCleanup(L.zether_key_free, zk)
+        qk = handle(L.wallet_pqz_key, w, 0, 0)
+        self.addCleanup(L.pqz_key_free, qk)
+        calls = [
+            lambda: L.pqz_call(qk, b'zebrasecretword', b'{}', o, C.byref(n)),
+            lambda: L.pqz_call(qk, b'proveRegister', jb({'key': {'seed32': 'zebrasecretword Pa55-word-Secret'}}), o, C.byref(n)),
+            lambda: L.pqz_call(qk, b'dec', jb({'ct': '0xdeadbeefcafe1234', 'window': 'SECRETvalue0xdead'}), o, C.byref(n)),
+            lambda: L.pqz_call(qk, b'proveRegister', jb({'proofSystemId': '0x' + 'de' * 32, 'kind': 305, 'ua': '0x' + '11' * 32}), o, C.byref(n)),
+            lambda: L.pqz_open_balance_cache(qk, jb({'iv': 'Qx7SekritPurp0se', 'ct': 'zebrasecretword'}), o, C.byref(n)),
+            lambda: L.pqz_check_set(jb({'set': 'Qx7SekritPurp0se', 'pkLen': 1, 'pqzlId': '0x' + '00' * 32, 'pqzhId': None})),
+            lambda: L.zether_call(zk, b'zebrasecretword', b'{}', o, C.byref(n)),
+            lambda: L.zether_call(zk, b'proveTransfer', jb({'key': {'mnemonic': 'zebrasecretword Pa55-word-Secret'}}), o, C.byref(n)),
+            lambda: L.zether_call(zk, b'checkBalance', jb({'acc': {'C': '0xdeadbeefcafe1234', 'D': '0x'}, 'balance': 'SECRETvalue0xdead'}), o, C.byref(n)),
+            lambda: L.zether_open_balance_cache(zk, jb({'iv': 'Qx7SekritPurp0se', 'ct': 'zebrasecretword'}), o, C.byref(n)),
+            lambda: L.wallet_from_mnemonic(words, b'Pa55-word-Secret', C.byref(P())),
+            lambda: L.wallet_open_vault(vault, b'Pa55-word-Secret', None, b'zebrasecretword', C.byref(P())),
+            lambda: L.wallet_open_vault(b'{"v":1,"label":"Pa55-word-Secret"}', b'Pa55-word-Secret', None, None, C.byref(P())),
+            lambda: L.wallet_seal_vault(w, b'deadbeefcafe1234'[:6], o, C.byref(n)),
+            lambda: L.sign_typed(evm, td, expect, o, C.byref(n)),
+            lambda: L.sign_typed_any(evm, td, o, C.byref(n)),
+            lambda: L.sign_transaction(evm, jb({'type': 2, 'chainId': 'SECRETvalue0xdead'}), o, C.byref(n)),
+            lambda: L.open_container(kk, b'{"v":"Pa55-word-Secret"}', jb({'purpose': 'Qx7SekritPurp0se'}), None, None, o, C.byref(n)),
+            lambda: L.open_container(kk, jb(SEAL['containers'][0]['container']), jb({'purpose': 'Qx7SekritPurp0se'}), None, None, o, C.byref(n)),
+            lambda: L.seal(b'\x01' * KEM_PK, KEM_PK, b'Qx7SekritPurp0se', None, 0, b'zebrasecretword', 15, o, C.byref(n), o, o, C.byref(n)),
+            lambda: L.wallet_import_native_key(w, 0, b'deadbeefcafe1234', 16, C.byref(P())),
+            lambda: L.uasig(jb({'purpose': 'zebrasecretword'}), None, 0, o, C.byref(n)),
+            lambda: L.vault_rewrap_pin(vault, b'Pa55-word-Secret', b'zebrasecretword', o, C.byref(n)),
+            lambda: L.sign_ua(ua, b'zebrasecretword_padding_to_32byt', bytes(32), o, C.byref(n)),
+        ]
+        for i, call in enumerate(calls):
+            with self.subTest(i):
+                status = call()
+                detail = L.last_error()
+                self.assertNotEqual(status, OK)
+                for sec in secrets:
+                    for j in range(len(sec) - 5):
+                        self.assertNotIn(sec[j:j + 6], detail, (sec, detail))
+
+
+class WalletCrypto(WalletCase):
+    def test_aead_hkdf_hmac(self):
+        # RFC 4231 test case 1, RFC 5869 A.1
+        self.assertEqual(out32(L.hmac_sha256, b'\x0b' * 20, 20, b'Hi There', 8).hex(),
+                         'b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7')
+        okm = C.create_string_buffer(42)
+        ok(L.hkdf_sha256(b'\x0b' * 22, 22, bytes(range(13)), 13, bytes(range(0xf0, 0xfa)), 10, okm, 42))
+        self.assertEqual(okm.raw.hex(), '3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865')
+        self.assertEqual(name_of(L.hkdf_sha256(b'k', 1, None, 0, None, 0, C.create_string_buffer(8161), 255 * 32 + 1)), 'UAArgument')
+        key, nonce, aad, data = bytes(range(32)), bytes(12), b'aad', b'plaintext'
+        for alg in (1, 2):
+            ct = var(L.aead_seal, alg, key, nonce, aad, 3, data, len(data))
+            self.assertEqual(len(ct), len(data) + 16)
+            self.assertEqual(var(L.aead_open, alg, key, nonce, aad, 3, ct, len(ct)), data)
+            bad = ct[:-1] + bytes([ct[-1] ^ 1])
+            self.assertEqual(sig_of(L.aead_open, alg, key, nonce, aad, 3, bad, len(bad)), ('UAAead', None))
+        self.assertEqual(sig_of(L.aead_seal, 3, key, nonce, aad, 3, data, len(data))[0], 'UAArgument')
+
+
+ZV = HERE.parents[1] / 'zether-prover' / 'vectors'
+R33 = json.loads((ZV / 'r33_keys.json').read_text())
+ZJ = json.loads((VEC / 'zether.json').read_text())
+STATE = HERE.parents[2] / 'smartcontracts' / 'vectors'
+
+
+def commands(name):
+    """scaas-ua `facade::<name>::COMMANDS` read from its source (T15g): (the release commands, the `vectors`-only raw forms).
+    A test asserts that a command is in it, never that it equals a list (spec no-decryption-oracle §4.13)."""
+    src = (HERE.parents[1] / 'ua-rs' / 'src' / 'facade' / f'{name}.rs').read_text()
+    body = src[src.index('pub const COMMANDS: &[&str] = &['):]
+    out, gated = ([], []), False
+    for ln in body[:body.index('];')].splitlines()[1:]:
+        ln = ln.strip()
+        if ln == '#[cfg(feature = "vectors")]':
+            gated = True
+        elif ln.startswith('"'):
+            out[gated].append(ln.strip('",'))
+            gated = False
+    return out
+
+
+class WalletZether(WalletCase):
+    """T14 (spec §10.1): the Zether facade through the C ABI."""
+
+    def zw(self, passphrase=''):
+        w = handle(L.wallet_from_mnemonic, R33['mnemonic'].encode(), passphrase.encode())
+        self.addCleanup(L.wallet_free, w)
+        return w
+
+    def zk(self, w, coin=60, account=0, use=7):
+        k = handle(L.wallet_zether_key, w, coin, account, use)
+        self.addCleanup(L.zether_key_free, k)
+        return k
+
+    def public(self, k):
+        y, ua = C.create_string_buffer(128), C.create_string_buffer(32)
+        ok(L.zether_public(k, y, ua))
+        return '0x' + y.raw.hex(), '0x' + ua.raw.hex()
+
+    def call(self, k, cmd, req):
+        st_, out = sig_of(L.zether_call, k, cmd.encode(), jb(req))
+        return st_, None if out is None else json.loads(out[:-1])
+
+    def request(self, f):
+        r = json.loads((ZV / f).read_text())['request']
+        r.pop('key')
+        r.pop('includeWitness')
+        return r
+
+    def test_zether_feature_in_the_default_build(self):
+        self.assertTrue(L.features() & FEATURE['zether'])
+
+    def test_r33_keys(self):
+        w = self.zw()
+        for r in R33['bls12381']['keys']:
+            _, _, coin, account, use = r['path'].split('/')
+            self.assertEqual(self.public(self.zk(w, int(coin), int(account), int(use))), (r['Y'], r['UA']), r['path'])
+        self.assertEqual(name_of(L.wallet_zether_key(w, 60, 0, 9, C.byref(P()))), 'UAArgument')
+
+    def test_pop_and_check_balance(self):
+        k = self.zk(self.zw())
+        st_, pop = self.call(k, 'pop', {'curve': 'bls12381'})
+        self.assertEqual(st_, '')
+        r = R33['bls12381']['keys'][0]['pop']
+        for f in ('popDigest', 'registrationDigest', 'uaMsg'):
+            self.assertEqual(pop[f], r[f], f)
+        t = self.request('transfer_bls12381.json')
+        # ARCH-POS-13 (T15c, T14b): no command of a release build decrypts a caller's ciphertext (the words commands: below)
+        for cmd, req in [('checkBalance', {'acc': t['acc'], 'balance': t['balance']}), ('proveTransfer', t),
+                         ('decrypt', {'ct': t['acc']}), ('recoverTransfer', {})]:
+            self.assertEqual(self.call(k, cmd, req), ('UAArgument', None), cmd)
+
+    def test_pick_decoys(self):
+        """T15n (CTR-UA-29, owner 2026-11-07): `pickDecoys` through the C ABI (in COMMANDS): distinct decoys, never an
+        excluded UA, too few refused (UAArgument); no key."""
+        self.assertIn('pickDecoys', commands('zether')[0])
+        c = ['0x' + bytes([i]).hex() * 32 for i in range(1, 6)]
+        st_, out = self.call(self.zk(self.zw()), 'pickDecoys', {'candidates': c, 'exclude': [c[0]], 'count': 4})
+        self.assertEqual((st_, sorted(out['decoys'])), (name_of(OK), c[1:]))
+        self.assertEqual(self.call(self.zk(self.zw()), 'pickDecoys', {'candidates': c, 'exclude': [c[0]], 'count': 5}), ('UAArgument', None))
+
+    def test_words_commands_on_the_forge_rows(self):
+        """T15g (ARCH-POS-13): the words commands through the C ABI on the forge rows (smartcontracts/vectors/zether/state.json;
+        the holders are r33_keys.json's): each in COMMANDS, the balances the contract's; another holder's words refused before
+        the key (ua-rs tests/facade_zether_state.rs counts the key's uses); every `vectors`-only raw form refused here."""
+        release, raw = commands('zether')
+        for c in ('balance', 'pendingBalance'):
+            self.assertIn(c, release)
+        for c in ('decrypt', 'decryptPending'):
+            self.assertIn(c, raw)
+        rows = json.loads((STATE / 'zether' / 'state.json').read_text())
+        row = {r['name'].split(':')[0]: r for r in rows['accounts']}
+        loc = {f: rows[f] for f in ('family', 'chainId', 'chainUid', 'token', 'block', 'psid')}
+
+        def words(name):
+            return dict(loc, ua=row[name]['ua'], account=row[name]['account'], accountData=row[name]['accountData'], tableBits=18,
+                        boundBits=20)
+        w = self.zw()
+        alice, bob = self.zk(w, 60, 0, 7), self.zk(w, 60, 1, 7)
+        st_, out = self.call(alice, 'balance', words('alice'))
+        self.assertEqual((st_, out['amount']), ('', str(row['alice']['balance'])))
+        st_, out = self.call(bob, 'pendingBalance', words('bob'))
+        self.assertEqual((st_, out['amount']), ('', str(row['bob']['pending'])))
+        self.assertEqual(self.call(bob, 'balance', words('alice')), ('UAArgument', None), "another holder's words")
+        for c in raw:
+            self.assertEqual(self.call(alice, c, {}), ('UAArgument', None), c)
+
+    def test_a_key_field_in_command_json_is_refused(self):
+        k = self.zk(self.zw())
+        t = self.request('transfer_bls12381.json')
+        for cmd, req in [('pop', {}), ('encrypt', {'Y': self.public(k)[0], 'amount': 1})]:
+            self.assertEqual(self.call(k, cmd, req)[0], '', cmd + ': positive control')
+            bad = dict(req, key={'seed': '0x' + '11' * 64, 'coin': 60, 'account': 0})
+            self.assertEqual(self.call(k, cmd, bad), ('UAArgument', None), cmd)
+        for f in ('includeWitness', 'revealSecret'):
+            self.assertEqual(self.call(k, 'pop', {f: True}), ('UAArgument', None), f)
+        self.assertEqual(self.call(k, 'verifyTransfer', {})[0], 'UAArgument', 'verifiers are not exposed')
+        self.assertEqual(self.call(k, 'pop', {'curve': 'bls12381', 'x': {'a': ' ' * 10}})[0], 'UAArgument')
+
+    def test_cache_box_rows(self):
+        for r in ZJ['cacheBox']:
+            m = MN[r['mnemonic']]
+            w = handle(L.wallet_from_mnemonic, m['words'].encode(), m['passphrase'].encode())
+            self.addCleanup(L.wallet_free, w)
+            k = self.zk(w, r['coin'], r['account'], r['use'])
+            self.assertEqual(self.public(k), (r['Y'], r['UA']))
+            pt = var(L.zether_open_balance_cache, k, jb(r['box']))
+            self.assertEqual('0x' + pt.hex(), r['plaintext'], r['id'])
+            box = text(L.zether_seal_balance_cache, k, pt, len(pt))
+            self.assertEqual(var(L.zether_open_balance_cache, k, box.encode()), pt, r['id'] + ': round trip')
+        for r in ZJ['cacheRefusals']:
+            m = MN[r['mnemonic']]
+            w = handle(L.wallet_from_mnemonic, m['words'].encode(), m['passphrase'].encode())
+            self.addCleanup(L.wallet_free, w)
+            self.assertEqual(sig_of(L.zether_open_balance_cache, self.zk(w, r['coin'], r['account'], r['use']), jb(r['box'])),
+                             ('UAAead', None), r['id'])
+
+    def test_zether_handle_after_lock_and_free_is_KEY_REVOKED(self):
+        w = self.zw()
+        k = self.zk(w)
+        y = self.public(k)
+        ok(L.wallet_lock(w))
+        self.assertEqual(self.call(k, 'pop', {}), ('UAKeyRevoked', None))
+        self.assertEqual(sig_of(L.zether_seal_balance_cache, k, b'{}', 2), ('UAKeyRevoked', None))
+        self.assertEqual(self.public(k), y, 'public data stays readable')
+        self.assertEqual(name_of(L.wallet_zether_key(w, 60, 0, 7, C.byref(P()))), 'UAWalletLocked')
+        w2 = handle(L.wallet_from_mnemonic, R33['mnemonic'].encode(), b'')
+        k2 = handle(L.wallet_zether_key, w2, 60, 1, 7)
+        L.wallet_free(w2)
+        try:
+            self.assertEqual(self.call(k2, 'pop', {}), ('UAKeyRevoked', None))
+        finally:
+            L.zether_key_free(k2)
+        L.zether_key_free(None)
+
+
+PQZL_ID = {'n2048-kmax1024': 'a626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee',
+           'n2304-kmax4096': '41852bdcad5a49d19e7a054f1a658373a97126e7db09bd8f51aaab8d19a504fc',
+           'n2560-kmax16384': '53aa68704b996ebee81c257c513ea3c114ed04137b5e8b1ba94cfc95e3d83841',
+           'n2816-kmax65536': '7a3e76790c331d1ff5b7b8e9897e876dc11773afed874fcd65c145aeba1da28f'}
+
+
+PQZ_OUT_MAX = 1_052_672  # SCAAS_UA_PQZ_OUT_MAX
+
+
+class WalletPqz(WalletCase):
+    """T15 (spec §10.2): the PQZ facade through the C ABI (the Rust suite tests/facade_pqz.rs verifies every proof)."""
+
+    def qw(self):
+        m = MN['pq_kat']
+        w = handle(L.wallet_from_mnemonic, m['words'].encode(), m['passphrase'].encode())
+        self.addCleanup(L.wallet_free, w)
+        return w
+
+    def qk(self, w, account=0, index=0, version=None):
+        k = handle(L.wallet_pqz_key, w, account, index) if version is None else handle(L.wallet_pqz_key_version, w, account, index, version)
+        self.addCleanup(L.pqz_key_free, k)
+        return k
+
+    def call(self, k, cmd, req):
+        # one call into a buffer of SCAAS_UA_PQZ_OUT_MAX: a size query would prove again, and a proof's length varies
+        buf, n = C.create_string_buffer(PQZ_OUT_MAX), sz(PQZ_OUT_MAX)
+        status = L.pqz_call(k, cmd.encode(), jb(req), buf, C.byref(n))
+        return name_of(status), json.loads(buf.raw[:n.value - 1]) if status == OK else None
+
+    def test_out_max_holds_a_proof_twice(self):
+        k = self.qk(self.qw())
+        req = {'proofSystemId': '0x' + PQZL_ID['n2304-kmax4096'], 'kind': 0x0131, 'ua': '0x' + '11' * 32}
+        small = C.create_string_buffer(64)
+        n = sz(64)
+        self.assertEqual(name_of(L.pqz_call(k, b'proveRegister', jb(req), small, C.byref(n))), 'UABuffer')
+        self.assertLessEqual(n.value, PQZ_OUT_MAX)
+        self.assertEqual(self.call(k, 'proveRegister', req)[0], '')
+
+    def the_set(self):
+        return json.loads(text(L.pqz_set))
+
+    def test_pqz_and_one_set_in_the_default_build(self):
+        f = L.features()
+        self.assertTrue(f & FEATURE['pqz'])
+        sets = [n for n in FEATURES if n.startswith('pqz-set-') and f & FEATURE[n]]
+        self.assertEqual(sets, ['pqz-set-n2304-kmax4096'])
+        s = self.the_set()
+        self.assertEqual((s['set'], s['pkLen'], s['pqzlId']), ('n2304-kmax4096', 18432, '0x' + PQZL_ID['n2304-kmax4096']))
+        self.assertEqual(name_of(L.pqz_check_set(jb(s))), '')
+        for other in (dict(s, set='n2048-kmax1024'), dict(s, pkLen=16384), dict(s, pqzlId='0x' + PQZL_ID['n2048-kmax1024']),
+                      dict(s, pqzhId=None)):
+            self.assertEqual(name_of(L.pqz_check_set(jb(other))), 'UAPqzSetMismatch', other)
+        self.assertEqual(name_of(L.pqz_check_set(jb(dict(s, extra=1)))), 'UAArgument')
+        self.assertEqual(L.status_name(40).decode(), 'UAPqzSetMismatch')
+
+    def test_leaf_is_the_ua_pq_rule(self):
+        import hashlib
+        import hmac
+        m = MN['pq_kat']
+        seed = hashlib.pbkdf2_hmac('sha512', m['words'].encode(), b'mnemonic' + m['passphrase'].encode(), 2048)
+        prk = hmac.new(b'scaas.ua.pq.v1', seed, hashlib.sha256).digest()
+        w = self.qw()
+        for a, i in ((0, 0), (1, 2)):
+            info = b'scaas.ua.pqz-mlwe.v1' + a.to_bytes(4, 'big') + i.to_bytes(4, 'big')
+            want = hmac.new(prk, info + b'\x01', hashlib.sha256).digest()
+            leaf = C.create_string_buffer(32)
+            ok(L.export_pqz_leaf_raw(w, a, i, leaf))
+            self.assertEqual(leaf.raw, want, (a, i))
+            self.assertEqual(len(var(L.pqz_public, self.qk(w, a, i))), 18432)
+        self.assertEqual(name_of(L.export_pqz_leaf_raw(w, 1 << 31, 0, C.create_string_buffer(32))), 'UAArgument')
+        self.assertEqual(name_of(L.export_pqz_leaf_raw(w, 0, 0, None)), 'UAArgument')
+
+    def test_pqz_key_versions_are_the_pq_kat_rows(self):
+        """Group 3g C8 (T15o): scaas_ua_wallet_pqz_key_version / scaas_ua_export_pqz_leaf_raw_version give pq_kat.json's
+        `pqzSeeds` (version 0 the info without a suffix, v >= 1 with be64(v)); version 0 is scaas_ua_wallet_pqz_key's key."""
+        rows = json.loads((STATE / 'ua' / 'pq_kat.json').read_text())['pqzSeeds']
+        self.assertEqual([r['version'] for r in rows], [0, 1, 2])
+        w = self.qw()
+        pks = []
+        for r in rows:
+            leaf = C.create_string_buffer(32)
+            ok(L.export_pqz_leaf_raw_version(w, r['account'], r['index'], r['version'], leaf))
+            self.assertEqual('0x' + leaf.raw.hex(), r['seed32'], r['version'])
+            pks.append(var(L.pqz_public, self.qk(w, r['account'], r['index'], r['version'])))
+        self.assertEqual(pks[0], var(L.pqz_public, self.qk(w)))
+        self.assertEqual(len(set(pks)), 3, 'one key per version')
+        self.assertEqual(name_of(L.wallet_pqz_key_version(w, 1 << 31, 0, 1, C.byref(P()))), 'UAArgument')
+        self.assertEqual(name_of(L.export_pqz_leaf_raw_version(w, 0, 0, 1, None)), 'UAArgument')
+
+    def test_register_set_mismatch_and_key_field(self):
+        k = self.qk(self.qw())
+        req = {'proofSystemId': '0x' + PQZL_ID['n2304-kmax4096'], 'kind': 0x0131, 'ua': '0x' + '11' * 32}
+        st_, out = self.call(k, 'proveRegister', req)
+        self.assertEqual(st_, '')
+        pk = var(L.pqz_public, k)
+        self.assertEqual(bytes.fromhex(out['stmt'][2:])[96:], pk)
+        self.assertEqual(self.call(k, 'proveRegister', dict(req, proofSystemId='0x' + PQZL_ID['n2048-kmax1024'])), ('UAPqzSetMismatch', None))
+        for f in ('key', 'seed32', 's', 'witness'):
+            self.assertEqual(self.call(k, 'proveRegister', dict(req, **{f: {'seed32': '0x' + '11' * 32}})), ('UAArgument', None), f)
+        self.assertEqual(self.call(k, 'verify', {})[0], 'UAArgument', 'verifiers are not exposed')
+
+    def test_enc_dec_and_cache_box(self):
+        w = self.qw()
+        k = self.qk(w)
+        pk = '0x' + var(L.pqz_public, k).hex()
+        st_, e = self.call(k, 'enc', {'pks': [pk], 'values': [123456]})
+        self.assertEqual(st_, '')
+        # ARCH-POS-13 (T15c): a release build has no raw decrypt; a well-formed `dec` is an unknown command
+        self.assertEqual(self.call(k, 'dec', {'ct': e['u'] + e['vs'][0][2:]}), ('UAArgument', None))
+        box = text(L.pqz_seal_balance_cache, k, b'{"v":1}', 7)
+        self.assertEqual(var(L.pqz_open_balance_cache, k, box.encode()), b'{"v":1}')
+        self.assertEqual(sig_of(L.pqz_open_balance_cache, self.qk(w, 0, 1), box.encode()), ('UAAead', None))
+
+    def test_pick_decoys(self):
+        """T15n (CTR-UA-29, owner 2026-11-07): `pickDecoys` through the C ABI (in COMMANDS), op 7's decoys: weight 0 never
+        drawn, never an excluded UA, too few refused (UAArgument); no key."""
+        self.assertIn('pickDecoys', commands('pqz')[0])
+        c = ['0x' + bytes([i]).hex() * 32 for i in range(1, 6)]
+        k = self.qk(self.qw())
+        st_, out = self.call(k, 'pickDecoys', {'candidates': c, 'exclude': [c[0]], 'count': 2, 'weights': [9, 1, 0, 0, 3]})
+        self.assertEqual((st_, sorted(out['decoys'])), (name_of(OK), [c[1], c[4]]))
+        self.assertEqual(self.call(k, 'pickDecoys', {'candidates': c, 'exclude': [], 'count': 6}), ('UAArgument', None))
+        # T15n2: `recipient` (excluded implicitly) answers `legs`, the recipient once with the decoys, shuffled
+        st_, out = self.call(k, 'pickDecoys', {'candidates': c, 'exclude': [c[0]], 'count': 3, 'recipient': c[1]})
+        self.assertEqual((st_, sorted(out['legs']), c[1] in out['decoys']), (name_of(OK), c[1:], False))
+
+    def test_words_commands_on_the_forge_rows(self):
+        """T15g (ARCH-POS-13): `balance` through the C ABI on a forge row (smartcontracts/vectors/pqz/n2304-kmax4096/state.json):
+        in COMMANDS; the forge keys are mocked, so the words bind to no wallet key and are refused (UAArgument), with the
+        other set's psid UAPqzSetMismatch, both before the key (ua-rs tests/facade_pqz_state.rs counts the key's uses); every
+        `vectors`-only raw form refused here."""
+        release, raw = commands('pqz')
+        self.assertIn('balance', release)
+        self.assertIn('dec', raw)
+        rows = json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'state.json').read_text())
+        a = rows['accounts'][0]
+        words = dict({f: rows[f] for f in ('chainUid', 'token', 'psid')},
+                     **{f: a[f] for f in ('ua', 'block', 'account', 'pending', 'accWords', 'blobs', 'keyRecord')}, forOp7=False,
+                     # group 3g (T15o): the UA's sendCounter word, version 0, pqzVersions (latest 0, current 0, listed)
+                     sendCounterWord='0x' + a['sendCounter'].to_bytes(32, 'big').hex(), keyVersion=0,
+                     keyVersions='0x' + (1 << 128).to_bytes(32, 'big').hex())
+        k = self.qk(self.qw())
+        self.assertEqual(self.call(k, 'balance', words), ('UAArgument', None))
+        self.assertEqual(self.call(k, 'balance', dict(words, psid='0x' + PQZL_ID['n2048-kmax1024'])), ('UAPqzSetMismatch', None))
+        for c in raw:
+            self.assertEqual(self.call(k, c, {}), ('UAArgument', None), c)
+        # T15i: words rows for wallet keys (smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json, written by ua-rs
+        # under `vectors`, gen_wallet_state.sh): each row's own handle decrypts its balance through the C ABI
+        w = self.qw()
+        ws = json.loads((STATE / 'pqz' / 'n2304-kmax4096' / 'wallet_state.json').read_text())
+        for r in ws['rows']:
+            st_, out = self.call(self.qk(w, r['account'], r['index'], r['version']), 'balance', r['request'])
+            self.assertEqual((st_, out and out['value']), (name_of(OK), r['value']), r['name'])
+        # T20d9 (C-PP-8): the proof path's commands are in COMMANDS; each proven row end to end (provenOpen, provenAdd with the
+        # session, balanceProven), and the quorum's row through scaas_ua_pqz_check (no handle)
+        for c in ['provenOpen', 'provenAdd', 'provenCancel', 'balanceProven', 'proveTransferProven', 'proveTransferMultiProven', 'proveBurnProven', 'proveRefreshProven']:
+            self.assertIn(c, commands('pqz')[0], c)
+        for r in ws['proven']:
+            k = self.qk(w, r['account'], r['index'], r['version'])
+            st_, o = self.call(k, 'provenOpen', r['open'])
+            self.assertEqual(st_, name_of(OK), r['name'])
+            st_, a = self.call(k, 'provenAdd', dict(r['add'], session=o['session']))
+            self.assertEqual((st_, a['accepted']), (name_of(OK), o['need']), r['name'])
+            st_, b = self.call(k, 'balanceProven', {'session': o['session']})
+            self.assertEqual((b['value'], [p['kind'] for p in b['parts']]), (r['value'], r['kinds']), r['name'])
+        for r in ws['check']:
+            buf, n = C.create_string_buffer(PQZ_OUT_MAX), sz(PQZ_OUT_MAX)
+            self.assertEqual(name_of(L.pqz_check(jb(r['request']), buf, C.byref(n))), name_of(OK), r['name'])
+            self.assertEqual(json.loads(buf.raw[:n.value - 1]), r['answer'], r['name'])
+            self.assertEqual(name_of(L.pqz_check(jb(dict(r['request'], keyRecord='0x' + '00' * 32)), buf, C.byref(n))), 'UAArgument')
+
+    def test_pqz_handle_after_lock_and_free_is_KEY_REVOKED(self):
+        w = self.qw()
+        k = self.qk(w)
+        pk = var(L.pqz_public, k)
+        box = text(L.pqz_seal_balance_cache, k, b'{}', 2)
+        ok(L.wallet_lock(w))
+        self.assertEqual(sig_of(L.pqz_open_balance_cache, k, box.encode()), ('UAKeyRevoked', None))
+        req = {'proofSystemId': '0x' + PQZL_ID['n2304-kmax4096'], 'kind': 0x0131, 'ua': '0x' + '11' * 32}
+        self.assertEqual(self.call(k, 'proveRegister', req), ('UAKeyRevoked', None))
+        self.assertEqual(var(L.pqz_public, k), pk, 'public data stays readable')
+        self.assertEqual(name_of(L.wallet_pqz_key(w, 0, 0, C.byref(P()))), 'UAWalletLocked')
+        self.assertEqual(name_of(L.export_pqz_leaf_raw(w, 0, 0, C.create_string_buffer(32))), 'UAWalletLocked')
+        m = MN['pq_kat']
+        w2 = handle(L.wallet_from_mnemonic, m['words'].encode(), m['passphrase'].encode())
+        k2 = handle(L.wallet_pqz_key, w2, 0, 1)
+        L.wallet_free(w2)
+        try:
+            self.assertEqual(sig_of(L.pqz_seal_balance_cache, k2, b'{}', 2), ('UAKeyRevoked', None))
+        finally:
+            L.pqz_key_free(k2)
+        L.pqz_key_free(None)
+
+
+class WalletPqzBackup(WalletCase):
+    """T16a (owner 2026-11-06): the k-of-n backup of an msig holder's PQZ seed32 through the C ABI (the Rust suite
+    tests/pqz_backup.rs pins the field, the split and every refusal). Three members (0x0130, one mnemonic each), a 2-of-3 msig."""
+
+    def setUp(self):
+        self.mids = ['bip39_test', 'twelve_words', 'non_ascii_passphrase']
+        self.op = self.w('pq_kat')
+        self.op_key = self.key('pq_kat', 0x0130)
+        self.pqz = handle(L.wallet_pqz_key, self.op, 7, 0)
+        self.addCleanup(L.pqz_key_free, self.pqz)
+        self.mkeys = [self.key(m, 0x0130) for m in self.mids]
+        self.mkd = [var(L.key_data, k) for k in self.mkeys]
+        self.mua = [out32(L.derive_ua, 0x0130, kd, len(kd), False) for kd in self.mkd]
+        self.kks = [handle(L.kem_key, k, 0) for k in self.mkeys]
+        for kk in self.kks:
+            self.addCleanup(L.kem_free, kk)
+        self.kpk = []
+        for kk in self.kks:
+            buf = C.create_string_buffer(KEM_PK)
+            ok(L.kem_pk(kk, buf))
+            self.kpk.append(buf.raw)
+        order = sorted(range(3), key=lambda i: self.mua[i])
+        self.msig_kd = (2).to_bytes(2, 'big') + (3).to_bytes(2, 'big') + b''.join(
+            (0x0130).to_bytes(2, 'big') + self.mua[i] + (1).to_bytes(2, 'big') for i in order)
+        self.msig_ua = out32(L.derive_ua, 0x0120, self.msig_kd, len(self.msig_kd), False)
+        self.op_ua = out32(L.derive_ua, 0x0130, var(L.key_data, self.op_key), len(var(L.key_data, self.op_key)), False)
+
+    def rec(self, i):
+        return Recipient(0x0130, self.mkd[i], len(self.mkd[i]), 0, self.kpk[i], len(self.kpk[i]), False)
+
+    def expect(self, i):
+        return {'purpose': 'scaas/pqz-share/v1', 'sender': {'set': [hx(u) for u in [self.op_ua] + self.mua]},
+                'recipient': {'ua': hx(self.mua[i]), 'version': 0}}
+
+    def deal(self, threshold=0):
+        recs = (Recipient * 3)(*[self.rec(i) for i in range(3)])
+        return json.loads(once(L.pqz_seed_backup, self.pqz, self.op_key, self.msig_kd, len(self.msig_kd), 0, threshold, recs, 3))
+
+    def rebuild(self, cs, ua=None, kh=None):
+        out = P()
+        status = L.wallet_pqz_reconstruct(self.w(self.mids[0]), self.kks[0], jb(cs), jb(self.expect(0)), None, None,
+                                          ua or self.msig_ua, 0, kh or self.kh, C.byref(out))
+        if status == OK:
+            self.addCleanup(L.pqz_key_free, out)
+        return name_of(status), out
+
+    def warn(self, backups, version=0):
+        m = bl()
+        ok(L.pqz_seed_backup_warning(0x0120, self.msig_ua, version, self.pk, len(self.pk), jb(backups), C.byref(m)))
+        return m.value
+
+    def test_two_of_three_rebuild_through_the_abi(self):
+        self.pk = var(L.pqz_public, self.pqz)
+        b = self.deal()
+        self.kh = bytes.fromhex(b['pqzKeyHash'][2:])
+        self.assertEqual((b['k'], b['n'], b['version'], b['msigUa']), (2, 3, 0, hx(self.msig_ua)))
+        self.assertEqual(len(b['shares']), 3)
+        # member 1 seals its share on to member 0, who rebuilds from its own and that one
+        r0 = self.rec(0)
+        fwd = json.loads(once(L.pqz_share_reseal, self.kks[1], jb(b['shares'][1]), jb(self.expect(1)), None, None,
+                              C.byref(r0), self.mkeys[1]))
+        st_, k = self.rebuild([b['shares'][0], fwd])
+        self.assertEqual(st_, '')
+        self.assertEqual(var(L.pqz_public, k), self.pk, 'the rebuilt key is the operator\'s')
+        self.assertEqual(self.rebuild([b['shares'][0]])[0], 'UAArgument', 'k - 1 shares')
+        other = bytes([self.msig_ua[0] ^ 1]) + self.msig_ua[1:]
+        self.assertEqual(self.rebuild([b['shares'][0], fwd], ua=other)[0], 'UAArgument', 'another msig')
+        self.assertEqual(self.rebuild([b['shares'][0], fwd], kh=bytes(32))[0], 'UAArgument', 'another key hash')
+        # the warning: missing without a backup, cleared by this one; never a refusal (a status OK either way)
+        self.assertTrue(self.warn(None))
+        self.assertTrue(self.warn([]))
+        self.assertFalse(self.warn([b]))
+        self.assertTrue(self.warn([b], version=1))
+        m = bl()
+        ok(L.pqz_seed_backup_warning(0x0130, self.mua[0], 0, self.pk, len(self.pk), None, C.byref(m)))
+        self.assertFalse(m.value, 'a single key needs no backup')
+
+    def test_rebuilt_key_after_lock_and_unlock(self):
+        """T16b (owner 2026-11-06): the rebuilt key persists in the rebuilder's pqz-held vault; after unlock it is held again
+        once that vault opens, checked against its pqzKeyHash."""
+        self.pk = var(L.pqz_public, self.pqz)
+        b = self.deal()
+        self.kh = bytes.fromhex(b['pqzKeyHash'][2:])
+        w = mnemonic_wallet(self.mids[0])  # a wallet of its own: it is locked below
+        self.addCleanup(L.wallet_free, w)
+        out = P()
+        ok(L.wallet_pqz_reconstruct(w, self.kks[0], jb(b['shares'][:1] + [json.loads(once(
+            L.pqz_share_reseal, self.kks[1], jb(b['shares'][1]), jb(self.expect(1)), None, None, C.byref(self.rec(0)),
+            self.mkeys[1]))]), jb(self.expect(0)), None, None, self.msig_ua, 0, self.kh, C.byref(out)))
+        self.addCleanup(L.pqz_key_free, out)
+        self.assertEqual(json.loads(text(L.wallet_manifest_json, w))['pqzHeld'],
+                         [{'ua': hx(self.msig_ua), 'version': 0, 'pqzKeyHash': hx(self.kh)}])
+        label = f'pqz-held:{hx(self.msig_ua)}:0:{hx(self.kh)}'.encode()
+        seed_v = text(L.wallet_seal_vault, w, b'correct horse 9').encode()
+        held_v = text(L.wallet_seal_label_vault, w, label, b'correct horse 9').encode()
+        ok(L.wallet_lock(w))
+        self.assertEqual(name_of(L.wallet_pqz_held_key(w, self.kh, C.byref(P()))), 'UAWalletLocked')
+        ok(L.wallet_unlock(w, seed_v, b'correct horse 9', None, b''))
+        self.assertEqual(name_of(L.wallet_pqz_held_key(w, self.kh, C.byref(P()))), 'UAArgument', 'listed, not held before its vault opens')
+        ok(L.wallet_open_label_vault(w, held_v, b'correct horse 9', None))
+        k = handle(L.wallet_pqz_held_key, w, self.kh)
+        self.addCleanup(L.pqz_key_free, k)
+        self.assertEqual(var(L.pqz_public, k), self.pk, 'the operator\'s key again')
+        self.assertEqual(name_of(L.wallet_pqz_held_key(w, bytes(32), C.byref(P()))), 'UAArgument', 'another key hash')
+
+    def test_k_and_recipients_checked(self):
+        self.assertEqual(self.deal(3)['k'], 3)
+        recs = (Recipient * 3)(*[self.rec(i) for i in range(3)])
+        status = lambda t, rs, n: sig_of(L.pqz_seed_backup, self.pqz, self.op_key, self.msig_kd, len(self.msig_kd), 0, t, rs, n)[0]
+        self.assertEqual(status(4, recs, 3), 'UAArgument', 'k > n')
+        twice = (Recipient * 2)(self.rec(0), self.rec(0))
+        self.assertEqual(status(0, twice, 2), 'UAArgument', 'a member twice')
+        eph = (Recipient * 2)(self.rec(0), Recipient(0, None, 0, 0, self.kpk[1], len(self.kpk[1]), True))
+        self.assertEqual(status(0, eph, 2), 'UAArgument', 'an ephemeral key')
+        ms = (Recipient * 1)(Recipient(0x0120, self.msig_kd, len(self.msig_kd), 0, self.kpk[0], len(self.kpk[0]), False))
+        self.assertEqual(status(1, ms, 1), 'UAKemHolder', 'MD-11: an msig holds no KEM key')
+
+
+
+# ---------------------------------------------------------------------------------------------------------------------------
+# ua-rs-native T10 (spec 2026-11-17-ua-rs-native §10.2): networks 9 to 12, bit 12, the raw-message, Bitcoin, Polkadot, address,
+# SS58, witness-program and envelope calls over smartcontracts/vectors/native/native.json.
+# ---------------------------------------------------------------------------------------------------------------------------
+NATIVE = json.loads((VEC.parent / 'native' / 'native.json').read_text())
+NMN = {m['id']: m for m in NATIVE['mnemonics']}
+for name, res, args in [
+    ('sign_message_raw', st, [P, u8, sz, P, P]), ('wallet_bitcoin_key', st, [P, u32, u32, u32, u32, P]),
+    ('wallet_polkadot_key', st, [P, u8, P]), ('key_address', st, [P, P, P]), ('key_ss58_address', st, [P, u16, P, P]),
+    ('key_witness_program', st, [P, P, P, P]), ('sign_near_transaction', st, [P, u8, sz, P, P]),
+    ('sign_sui_transaction', st, [P, u8, sz, P, P]), ('sign_stellar_transaction', st, [P, u8, u8, sz, P, P]),
+    ('sign_hedera_transaction', st, [P, u8, sz, P, P]),
+]:
+    f = getattr(LIB, 'scaas_ua_' + name)
+    f.restype, f.argtypes = res, args
+    setattr(L, name, f)
+
+
+def nmsg(r):
+    return bytes([int(r['messageRepeat']['byte'], 16)]) * r['messageRepeat']['length'] if 'messageRepeat' in r else bytes.fromhex(r['message'])
+
+
+class WalletNative(WalletCase):
+    def nw(self, mid):
+        key = 'native:' + mid
+        if key not in self.wallets:
+            self.wallets[key] = handle(L.wallet_from_mnemonic, NMN[mid]['words'].encode(), NMN[mid]['passphrase'].encode())
+        return self.wallets[key]
+
+    def nkey(self, mid, net, index=0, coin=None, change=None, path=None):
+        w = self.nw(mid)
+        if path is not None:
+            k = handle(L.wallet_polkadot_key, w, path.encode())
+        elif change is not None:
+            k = handle(L.wallet_bitcoin_key, w, NNET.index(net), COIN_DEFAULT if coin is None else coin, change, index)
+        else:
+            k = handle(L.wallet_native_key, w, NNET.index(net), index, COIN_DEFAULT if coin is None else coin)
+        self.addCleanup(L.key_free, k)
+        return k
+
+    def text(self, fn, *args):
+        status, b = sig_of(fn, *args)
+        return status, b.rstrip(b'\0').decode() if status == '' else None
+
+    def test_networks_and_feature_bit(self):
+        self.assertEqual(NNET, NATIVE['networks'])
+        self.assertTrue(L.features() & FEATURE['native-networks'])
+
+    def test_addresses_witness_programs_ss58(self):
+        n = 0
+        for r in NATIVE['addresses']:
+            with self.subTest(m=r['mnemonic'], net=r['network'], coin=r['coinType'], change=r['change'], index=r['index']):
+                k = self.nkey(r['mnemonic'], r['network'], r['index'], r['coinType'], r['change'] if r['network'].startswith('bitcoin') else None)
+                self.assertEqual(var(L.key_data, k).hex(), r['publicKey'])
+                self.assertEqual(self.text(L.key_address, k), ('', r['address']))
+                if r['witnessProgram']:
+                    v, n_ = C.c_uint8(), sz(64)
+                    o = C.create_string_buffer(64)
+                    ok(L.key_witness_program(k, C.byref(v), o, C.byref(n_)))
+                    self.assertEqual((v.value, o.raw[:n_.value].hex()), (r['witnessProgram']['version'], r['witnessProgram']['program']))
+                else:
+                    self.assertEqual(L.key_witness_program(k, C.byref(C.c_uint8()), None, C.byref(sz(0))), ERR_ARGUMENT)
+                for p, a in (r.get('ss58') or {}).items():
+                    self.assertEqual(self.text(L.key_ss58_address, k, int(p)), ('', a))
+                n += 1
+        self.assertEqual(n, 114)
+
+    def test_polkadot_paths(self):
+        for r in NATIVE['polkadotPaths']:
+            with self.subTest(m=r['mnemonic'], path=r['path']):
+                self.assertEqual(var(L.key_data, self.nkey(r['mnemonic'], 'polkadot', path=r['path'])).hex(), r['publicKey'])
+
+    def test_deterministic_signature_and_envelope_rows(self):
+        n = 0
+        for r in NATIVE['signatures'] + NATIVE['envelopes']:
+            if r['mode'] != 'deterministic':
+                continue
+            with self.subTest(r['id']):
+                k = self.nkey(r['mnemonic'], r['network'], r['index'], r['coinType'], r['change'] if r['network'].startswith('bitcoin') else None)
+                m = nmsg(r)
+                sig = {'sign_digest': lambda: var(L.sign_digest_raw, k, m), 'sign_message': lambda: var(L.sign_message_raw, k, m, len(m)),
+                       'sign_near_transaction': lambda: var(L.sign_near_transaction, k, m, len(m)),
+                       'sign_sui_transaction': lambda: var(L.sign_sui_transaction, k, m, len(m)),
+                       'sign_stellar_transaction': lambda: var(L.sign_stellar_transaction, k, bytes.fromhex(r.get('networkId', '')), m, len(m)),
+                       'sign_hedera_transaction': lambda: var(L.sign_hedera_transaction, k, m, len(m))}[r['call']]()
+                self.assertEqual(sig.hex(), r['signature'])
+                n += 1
+        self.assertEqual(n, 33 + 12, "3 P2WPKH, 29 ed25519 messages (T13 C1: one starts 0x05), a NEAR digest; 12 envelopes")
+
+    def test_refusal_rows_of_the_c_surface(self):
+        calls = {'sign_message': L.sign_message_raw, 'sign_near_transaction': L.sign_near_transaction, 'sign_sui_transaction': L.sign_sui_transaction,
+                 'sign_hedera_transaction': L.sign_hedera_transaction}
+        n = 0
+        for r in NATIVE['refusals']:
+            for a, want in ((r['args'], ERR_ARGUMENT), (r['accepted'], OK)):
+                with self.subTest(r['id'], want=want):
+                    if r['call'] in calls:
+                        k = self.nkey(a['mnemonic'], a['network'], path=a.get('path'))
+                        m = nmsg(a)
+                        self.assertEqual(calls[r['call']](k, m, len(m), C.create_string_buffer(64), C.byref(sz(64))), want)
+                    elif r['call'] == 'polkadot_key':
+                        self.assertEqual(L.wallet_polkadot_key(self.nw(a['mnemonic']), a['path'].encode(), C.byref(P())), want)
+                    elif r['call'] == 'ss58':
+                        k = self.nkey(a['mnemonic'], 'polkadot', path='')
+                        self.assertEqual(L.key_ss58_address(k, a['prefix'], C.create_string_buffer(64), C.byref(sz(64))), want)
+                    elif r['call'] == 'bitcoin_key':
+                        self.assertEqual(L.wallet_bitcoin_key(self.nw(a['mnemonic']), NNET.index(a['network']), COIN_DEFAULT, a['change'], 0, C.byref(P())), want)
+                    else:
+                        continue
+                    n += 1
+        self.assertGreaterEqual(n, 2 * 36)  # T13 C1: four EVM-prefix rows withdrawn
+
+    def test_ua_key_raw_calls_are_RawDigestRefused_native_accepted(self):
+        ua = self.key('pq_kat', 0x0102)
+        o = C.create_string_buffer(64)
+        for label, status in {
+            'sign_message_raw': L.sign_message_raw(ua, b'\x01', 1, o, C.byref(sz(64))),
+            'sign_near_transaction': L.sign_near_transaction(ua, b'\x01', 1, o, C.byref(sz(64))),
+            'sign_stellar_transaction': L.sign_stellar_transaction(ua, bytes(32), b'\x01', 1, o, C.byref(sz(64))),
+        }.items():
+            with self.subTest(label):
+                self.assertEqual(name_of(status), 'UARawDigestRefused')
+        self.assertEqual(L.sign_message_raw(self.nkey('pq_kat', 'solana'), b'\x01', 1, o, C.byref(sz(64))), OK)
+        self.assertEqual(L.key_address(ua, C.create_string_buffer(64), C.byref(sz(64))), ERR_ARGUMENT, 'a UA key has no address')
 
 
 if __name__ == '__main__':

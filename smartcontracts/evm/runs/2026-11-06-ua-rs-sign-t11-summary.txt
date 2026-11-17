@@ -1,0 +1,34 @@
+# 2026-11-06 ua-rs-sign T11: fuzz targets for every decoder (spec §9.3; plan T11). clients/ua-rs/fuzz/ on pqz-core/fuzz's pattern: build.sh (stable
+# 1.97.1 from the root rust-toolchain.toml, sancov RUSTFLAGS, clang 18 -fsanitize=fuzzer,address,undefined; no nightly, no cargo-fuzz), run.sh <target>
+# <seconds> [label], seeds.py (seeds from smartcontracts/vectors/ua/ at run time; --regress writes regress/<target>/). One binary, the target in
+# UA_FUZZ_TARGET; oracles in fuzz/src/lib.rs. Before T11, on this branch: 5b7eef3a (unlock refuses a vault of another wallet, WalletMismatch) and
+# af4d1f57 (mlock on by default, owner 2026-11-06). UNAUDITED.
+# All commands through scripts/capped, foreground, -j2, --locked; full logs git-ignored (clients/ua-rs/target/t11/<step>.log, fuzz/runs/t11-<target>.log).
+step | commit | rc | counts
+red: cargo test --features vectors --test fuzz_caps (tests and regress inputs only) | af4d1f57 | 101 | does not compile: 5 x E0425 no function bounded::vectors_parsed
+green: cargo test --features vectors --test fuzz_caps | 08edeea3 | 0 | 6 passed (7 over-depth JSON files refused unparsed, each accepted without x after one parse; 7 length caps at cap ok / cap + 1 refused unparsed; sealed short tag; sealed ciphertext past 1 MiB + tag; kem_pk scheme 2 and 1,602 B; mnemonic 1,025 B and 25 words)
+clippy --all-targets -D warnings: default (now + mlock), --no-default-features, signers, json, pq, vectors, wallet,mlock | 08edeea3 | 0 | 0 warnings each (vectors first failed on type_complexity in fuzz_caps.rs: fixed by a type alias before the commit)
+clippy -D warnings, clients/ua-rs/fuzz | 08edeea3 | 0 | 0 warnings (first failed on doc_lazy_continuation: fixed before the commit)
+test (default) | 08edeea3 | 0 | 26 suites, 251 passed, 1 ignored
+test --no-default-features | 08edeea3 | 0 | 10 suites, 50 passed
+test --no-default-features --features signers --test groups | 08edeea3 | 0 | 8 passed, 1 ignored
+test --no-default-features --features json --test json | 08edeea3 | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | 08edeea3 | 0 | 45 passed
+test --features vectors | 08edeea3 | 0 | 27 suites, 302 passed, 3 ignored (296 + fuzz_caps 6)
+test --no-default-features --features wallet,mlock | 08edeea3 | 0 | 26 suites, 251 passed, 1 ignored
+build wasm32-unknown-unknown (default features) | 08edeea3 | 0 | ok
+fuzz build.sh | 08edeea3 | 0 | ua-fuzz linked (clang 18.1.3, rustc 1.97.1); built before the doc-only lib.rs fix of the commit, same code
+fuzz run, 60 s each, one target at a time (target | execs | cov / ft at the end | corpus | crashes) | 08edeea3 | 0 | typed_data 573,870 (1598 / 5031, 829) 0; expect 2,104,472 (1036 / 2877, 864) 0; tx 3,460,154 (927 / 2587, 819) 0; vault 2,776,248 (704 / 2457, 755) 0; manifest 1,021,656 (979 / 3419, 780) 0; container 768,155 (783 / 2402, 711) 0; sealed 19,306 (582 / 802, 14) 0; kem_pk 108,298 (332 / 405, 42) 0; mnemonic 830,826 (570 / 1660, 417) 0
+fuzz seeds (seeds.py) | - | 0 | typed_data 40, expect 24, tx 23, vault 10, manifest 5 (1 manifest of kem.json's UA rows + 4 container plaintexts, note 4), container 33, sealed 3, kem_pk 18, mnemonic 6; regress/ 12
+mutants: 2026-11-06-ua-rs-sign-t11-mutants.py | T11 tree | 0 | 10 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t11-mutants.txt): each by fuzz_caps and by a 60 s fuzz run's FINDING
+cargo deny --all-features check (cargo-deny 0.20.2), clients/ua-rs | 08edeea3 | 0 | advisories ok, bans ok, licenses ok, sources ok; 22 duplicate warnings (unchanged)
+cargo deny --all-features --config ../deny.toml check, clients/ua-rs/fuzz | 08edeea3 | 0 | advisories ok, bans ok, licenses ok, sources ok; 21 duplicate warnings
+Cargo.lock | 08edeea3 | - | clients/ua-rs/Cargo.lock unchanged (no dependent check needed); fuzz/Cargo.lock new: ua-rs's lock plus scaas-ua-fuzz, minus its dev-only preserve_order crates (equivalent, hashbrown 0.17.1, indexmap)
+# Notes: (1) zether_cmd and pqz_cmd are not built: features zether / pqz are empty until T14 / T15 and no command decoder exists; plan T11 depends on T14, T15.
+# (2) Caps used are the code's: Expect 16 KiB / depth 4 (as the spec), vault 2 MiB / 2 and manifest 1 MiB / 3 and container 4 MiB / 7 (the spec table says
+# vault 64 KiB / 4, manifest depth 4; the container's own cap is not in it). (3) A depth mutant cannot show in a decoder's result alone (tx, Expect,
+# typed data refuse the extra key x after parsing too), hence bounded::vectors_parsed (feature vectors): the corpus case asserts the input never reached
+# serde_json. (4) The manifest target also runs the backup / link payload reader (vectors_backup_payload): seeds = 1 manifest + the plaintexts of
+# seal.json's 4 backup / link containers (2 are payloads; the 2 msig-sender rows' pt is not JSON and only exercises refusal). (5) No committed corpus: seeds are rebuilt from the vectors at each run;
+# regress/ holds the over-cap inputs (and is where a crash input goes). (6) sealed runs slowly (open decapsulates ML-KEM per accepted wire form).
+# (7) The sealed, kem_pk and mnemonic targets have no depth: their mutants remove the tag minimum, the scheme / length check, the 1 KiB bound.

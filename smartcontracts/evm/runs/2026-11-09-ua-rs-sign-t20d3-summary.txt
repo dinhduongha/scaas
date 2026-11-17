@@ -1,0 +1,386 @@
+# 2026-11-09-ua-rs-sign-t20d3 at commit ff956a6a
+step | commit | rc | counts
+docs | ff956a6a | 0 | -
+vectors-check | ff956a6a | 0 | 4 passed 0 failed 0 ignored (cargo) 
+ua-rs-nodefault | ff956a6a | 0 | 62 passed 0 failed 0 ignored (cargo) 
+ua-rs-wallet | ff956a6a | 0 | 285 passed 0 failed 1 ignored (cargo) 
+ua-rs | ff956a6a | 101 | 44 passed 1 failed 0 ignored (cargo) 
+ua-rs-pq | ff956a6a | 0 | 33 passed 0 failed 0 ignored (cargo) 
+ua-rs-signers | ff956a6a | 0 | 8 passed 0 failed 1 ignored (cargo) 
+ua-rs-json | ff956a6a | 0 | 5 passed 0 failed 0 ignored (cargo) 
+ua-rs-vectors | ff956a6a | 101 | 56 passed 1 failed 0 ignored (cargo) 
+ua-rs-zether | ff956a6a | 0 | 20 passed 0 failed 0 ignored (cargo) 
+ua-rs-pqz | ff956a6a | 101 | 43 passed 1 failed 0 ignored (cargo) 
+ua-rs-pqz-n2048 | ff956a6a | 101 | 43 passed 1 failed 0 ignored (cargo) 
+ua-deny | ff956a6a | 0 | -
+ua-fuzz | ff956a6a | 0 | -
+ua-sizes | ff956a6a | 0 | -
+ua-c | ff956a6a | 0 | 9 passed 0 failed 0 ignored (cargo) 93 ran (unittest) 
+ua-cxx | ff956a6a | 0 | 41 passed (ctest) 
+ua-qt | ff956a6a | 0 | 1 passed (ctest) 40 passed (qt) 
+ua-dart-frb | ff956a6a | 0 | 3 passed 0 failed 0 ignored (cargo) 
+ua-py | ff956a6a | 0 | 90 ran (unittest) 
+ua-go | ff956a6a | 0 | 57 passed (go) 
+ua-cs | ff956a6a | 0 | 57 passed (dotnet) 
+no-oracle | ff956a6a | 0 | 11 passed 0 failed 1 ignored (cargo) 
+no-oracle-n2048 | ff956a6a | 0 | 9 passed 0 failed 0 ignored (cargo) 
+no-oracle-ua-py | ff956a6a | 0 | 1 ran (unittest) 
+wallet-rows | ff956a6a | 0 | 2 passed 0 failed 0 ignored (cargo) 
+test-features | ff956a6a | 0 | -
+mutant-logs | ff956a6a | 0 | -
+pqz-read | ff956a6a | 0 | 7 passed 0 failed 0 ignored (cargo) 
+named-tests | ff956a6a | 1 | -
+
+# result lines
+vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.81s
+vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 1.57s
+vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 11 filtered out; finished in 0.80s
+vectors-check: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 22 filtered out; finished in 1.23s
+ua-rs-nodefault: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-nodefault: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+ua-rs-nodefault: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-nodefault: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
+ua-rs-nodefault: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-nodefault: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-nodefault: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+ua-rs-nodefault: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-nodefault: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-rs-nodefault: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
+ua-rs-nodefault: test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
+ua-rs-nodefault: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+ua-rs-nodefault: test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-wallet: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-wallet: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+ua-rs-wallet: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-wallet: test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 44.50s
+ua-rs-wallet: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+ua-rs-wallet: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+ua-rs-wallet: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-wallet: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-wallet: test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+ua-rs-wallet: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-rs-wallet: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+ua-rs-wallet: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-wallet: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
+ua-rs-wallet: test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.90s
+ua-rs-wallet: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+ua-rs-wallet: test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.73s
+ua-rs-wallet: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.86s
+ua-rs-wallet: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+ua-rs-wallet: test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.59s
+ua-rs-wallet: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+ua-rs-wallet: test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+ua-rs-wallet: test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+ua-rs-wallet: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.72s
+ua-rs-wallet: test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+ua-rs-wallet: test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+ua-rs-wallet: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+ua-rs-wallet: test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+ua-rs-wallet: test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.31s
+ua-rs-wallet: test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.77s
+ua-rs-wallet: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+ua-rs-wallet: test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+ua-rs: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.70s
+ua-rs: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+ua-rs: test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.45s
+ua-rs: test result: FAILED. 14 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 39.39s
+ua-rs-pq: test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+ua-rs-pq: test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s
+ua-rs-signers: test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 43.49s
+ua-rs-json: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+ua-rs-vectors: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.79s
+ua-rs-vectors: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-vectors: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+ua-rs-vectors: test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 111.66s
+ua-rs-vectors: test result: FAILED. 15 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 32.06s
+ua-rs-zether: test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.65s
+ua-rs-zether: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+ua-rs-pqz: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.84s
+ua-rs-pqz: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-pqz: test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.67s
+ua-rs-pqz: test result: FAILED. 14 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 38.88s
+ua-rs-pqz-n2048: test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.80s
+ua-rs-pqz-n2048: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+ua-rs-pqz-n2048: test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.32s
+ua-rs-pqz-n2048: test result: FAILED. 14 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 35.84s
+ua-c: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-c: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+ua-dart-frb: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+no-oracle: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.90s
+no-oracle: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+no-oracle: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.24s
+no-oracle: test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.08s
+no-oracle-n2048: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.01s
+no-oracle-n2048: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.60s
+wallet-rows: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 2.30s
+wallet-rows: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 2.29s
+pqz-read: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+pqz-read: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 31.13s
+named-tests: named-tests: not passed in ua-rs: memo_hash_is_the_contracts
+named-tests: named-tests: not passed in ua-rs: conf_and_viewing_keys_are_r33_keys
+named-tests: named-tests: not passed in ua-rs: key_use_other_than_conf_or_viewing_is_refused
+named-tests: named-tests: not passed in ua-rs: zether_handle_KeyRevoked_after_lock
+named-tests: named-tests: not passed in ua-rs-vectors: unlock_does_not_revive_a_zether_handle
+named-tests: named-tests: not passed in ua-rs: fields_outside_the_allow_list_are_refused
+named-tests: named-tests: not passed in ua-rs: numbers_other_than_u64_are_refused
+named-tests: named-tests: not passed in ua-rs: command_json_is_bounded_by_length_and_depth
+named-tests: named-tests: not passed in ua-rs: pop_and_check_balance_through_the_facade
+named-tests: named-tests: not passed in ua-rs: cache_box_equals_clientkeys
+named-tests: named-tests: not passed in ua-rs-vectors: zether_prover_vectors_through_the_facade
+named-tests: named-tests: not passed in ua-rs: the_parser_is_the_pin_of_the_rows
+named-tests: named-tests: not passed in ua-rs: balances_from_the_words
+named-tests: named-tests: not passed in ua-rs: openings_for_the_receiver_and_the_auditor_verify
+named-tests: named-tests: not passed in ua-rs: debits_over_the_words_verify
+named-tests: named-tests: not passed in ua-rs: location_word_and_role_negatives_are_refused_with_the_key_unused
+named-tests: named-tests: not passed in ua-rs: residual_control_consistent_fabricated_words_are_decrypted
+named-tests: named-tests: not passed in ua-rs-vectors: json_inputs_deeper_than_their_cap_are_refused_unparsed
+named-tests: named-tests: not passed in ua-rs-vectors: json_inputs_longer_than_their_cap_are_refused_unparsed
+named-tests: named-tests: not passed in ua-rs-vectors: sealed_short_of_its_tag_is_refused
+named-tests: named-tests: not passed in ua-rs-vectors: sealed_past_its_plaintext_cap_does_not_open
+named-tests: named-tests: not passed in ua-rs-vectors: kem_pk_of_another_scheme_or_length_is_refused
+named-tests: named-tests: not passed in ua-rs-vectors: mnemonic_past_1_kib_or_24_words_is_refused
+named-tests: named-tests: not passed in ua-rs-vectors: container_json_inputs_read_the_vector_rows
+named-tests: named-tests: not passed in ua-rs-vectors: zether_inputs_past_their_caps_are_refused_unparsed
+named-tests: named-tests: not passed in ua-rs-vectors: pqz_inputs_past_their_caps_are_refused_unparsed
+named-tests: named-tests: not passed in ua-rs-vectors: positive_control_raw_dec_recovers_s
+named-tests: named-tests: not passed in ua-rs: production_refuses_every_crafted_query_before_the_key
+named-tests: named-tests: not passed in ua-rs: a_crafted_query_beside_real_words_is_refused
+named-tests: named-tests: not passed in ua-rs: residual_control_fabricated_words_are_decrypted
+named-tests: named-tests: not passed in ua-rs: zether_refuses_a_bare_ciphertext
+named-tests: named-tests: not passed in ua-rs: k_shares_rebuild_a_key_matching_pqzKeyHash
+named-tests: named-tests: not passed in ua-rs: k_minus_1_shares_refused
+named-tests: named-tests: not passed in ua-rs: a_share_for_another_msig_key_or_version_refused
+named-tests: named-tests: not passed in ua-rs: shares_never_carry_wallet_entropy
+named-tests: named-tests: not passed in ua-rs: recipients_and_k_checked
+named-tests: named-tests: not passed in ua-rs: a_missing_backup_warns_and_never_refuses
+named-tests: named-tests: not passed in ua-rs: reseal_takes_share_containers_only
+named-tests: named-tests: not passed in ua-rs-vectors: field_and_split_known_answers
+named-tests: named-tests: not passed in ua-rs-vectors: a_backup_record_past_its_caps_is_refused_unparsed
+named-tests: named-tests: not passed in ua-rs: a_rebuilt_key_survives_lock_and_unlock_through_its_vault
+named-tests: named-tests: not passed in ua-rs: the_rebuilders_backup_carries_the_key
+named-tests: named-tests: not passed in ua-rs-vectors: a_held_vault_is_checked_against_its_key_hash
+named-tests: named-tests: not passed in ua-rs: the_holders_configuration_is_required
+named-tests: named-tests: not passed in ua-rs: decoy_arguments
+named-tests: named-tests: not passed in ua-rs: wallet_rows_decrypt
+named-tests: named-tests: not passed in ua-rs-vectors: key_handles_need_the_test_only_marker
+named-tests: named-tests: not passed in ua-rs: lock_keeps_manifest_drops_secrets
+named-tests: named-tests: not passed in ua-rs: unlock_reopens_the_vault
+named-tests: named-tests: not passed in ua-rs: unlock_refuses_a_vault_of_another_wallet
+named-tests: named-tests: not passed in ua-rs: unlock_with_an_empty_manifest_has_nothing_to_compare
+named-tests: named-tests: not passed in ua-rs: derive_lock_then_sign_decaps_open_prove_are_KeyRevoked
+named-tests: named-tests: not passed in ua-rs: unlock_does_not_revive_old_handles
+named-tests: named-tests: not passed in ua-rs: ua_key_on_locked_wallet_is_WalletLocked
+named-tests: named-tests: not passed in ua-rs: wallet_dropped_with_children_retained
+named-tests: named-tests: not passed in ua-rs: concurrent_lock_and_sign
+named-tests: named-tests: not passed in ua-rs-vectors: lock_returns_only_after_operations_in_flight
+named-tests: named-tests: not passed in ua-rs-vectors: sign_json_rows_through_an_external_key_equal_the_internal_ones
+named-tests: named-tests: not passed in ua-rs-vectors: native_rows_through_an_external_key
+named-tests: named-tests: not passed in ua-rs-vectors: webauthn_rows_through_an_external_passkey
+named-tests: named-tests: not passed in ua-rs-vectors: a_bad_external_signature_is_ExternalSignature
+named-tests: named-tests: not passed in ua-rs-vectors: high_s_from_device_normalised
+named-tests: named-tests: not passed in ua-rs: kem_json_keys
+named-tests: named-tests: not passed in ua-rs: kem_json_refusals
+named-tests: named-tests: not passed in ua-rs: kem_json_decaps
+named-tests: named-tests: not passed in ua-rs: release_encaps_round_trip
+named-tests: named-tests: not passed in ua-rs: kem_json_encaps_refusals_release
+named-tests: named-tests: not passed in ua-rs: ephemeral_round_trip
+named-tests: named-tests: not passed in ua-rs: kem_key_of_wallet_a_handle_is_a_derivation_while_wallet_b_unlocked
+named-tests: named-tests: not passed in ua-rs: kem_handles_revoked_by_lock
+named-tests: named-tests: not passed in ua-rs-vectors: kem_json_encaps
+named-tests: named-tests: not passed in ua-rs-vectors: kem_json_encaps_refusals
+named-tests: named-tests: not passed in ua-rs-vectors: ek_modulus_check
+named-tests: named-tests: not passed in ua-rs-vectors: acvp_mlkem_keygen
+named-tests: named-tests: not passed in ua-rs-vectors: acvp_mlkem_encap_decap
+named-tests: named-tests: not passed in ua-rs-vectors: rfc7748
+named-tests: named-tests: not passed in ua-rs-vectors: self_test_runs_once_per_store
+named-tests: named-tests: not passed in ua-rs-vectors: kem_secret_in_arena
+named-tests: named-tests: not passed in ua-rs: keys_json_ua_rows
+named-tests: named-tests: not passed in ua-rs: keys_json_native_rows
+named-tests: named-tests: not passed in ua-rs: keys_json_refusals_are_argument
+named-tests: named-tests: not passed in ua-rs: index_1_refused_for_eip2333_kinds
+named-tests: named-tests: not passed in ua-rs: normalization_rows_nfkd
+named-tests: named-tests: not passed in ua-rs: mnemonic_refusals_name_no_input
+named-tests: named-tests: not passed in ua-rs: bounded_json_refuses_depth_9
+named-tests: named-tests: not passed in ua-rs: lock_revokes_every_handle_and_keeps_the_wallet_locked
+named-tests: named-tests: not passed in ua-rs: wallet_send_sync
+named-tests: named-tests: not passed in ua-rs: generate_is_24_words_and_the_backup_forgets
+named-tests: named-tests: not passed in ua-rs-vectors: keys_json_mnemonic_rows_entropy_and_seed
+named-tests: named-tests: not passed in ua-rs-vectors: twelve_word_entropy_kept_at_16_bytes
+named-tests: named-tests: not passed in ua-rs-vectors: mnemonic_is_not_cloned_and_dropped_after_from_mnemonic
+named-tests: named-tests: not passed in ua-rs-vectors: handle_holds_no_secret_bytes
+named-tests: named-tests: not passed in ua-rs-vectors: lock_wipes_and_revokes_unlock_never_revives
+named-tests: named-tests: not passed in ua-rs-vectors: lock_waits_for_an_operation_in_flight
+named-tests: named-tests: not passed in ua-rs-vectors: bip32_published_vector_1
+named-tests: named-tests: not passed in ua-rs-vectors: slip10_published_vectors
+named-tests: named-tests: not passed in ua-rs-vectors: eip2333_published_vectors
+named-tests: named-tests: not passed in ua-rs-vectors: eip2333_equals_zether_prover_on_the_zether_path
+named-tests: named-tests: not passed in ua-rs-vectors: hkdf_pq_seed_is_the_ml_dsa_key
+named-tests: named-tests: not passed in ua-rs: link_seal_then_from_link_installs
+named-tests: named-tests: not passed in ua-rs: link_seal_with_a_wrong_short_code_is_refused
+named-tests: named-tests: not passed in ua-rs: link_seal_takes_a_container_key_of_this_wallet
+named-tests: named-tests: not passed in ua-rs: members_json_holds_64_mldsa87_members_and_no_more
+named-tests: named-tests: not passed in ua-rs-vectors: link_seal_outside_the_window_is_ContainerReplay
+named-tests: named-tests: not passed in ua-rs-vectors: link_seal_equals_clientkeys_link_row
+named-tests: named-tests: not passed in ua-rs: memory_protection_reports_the_arena
+named-tests: named-tests: not passed in ua-rs-vectors: arena_chunks_locked_and_no_dump
+named-tests: named-tests: not passed in ua-rs: mlock_refused_never_fails_the_wallet
+named-tests: named-tests: not passed in ua-rs: sign_json_pairing_rows
+named-tests: named-tests: not passed in ua-rs: bls_wrong_dst_refusal_rows
+named-tests: named-tests: not passed in ua-rs: right_message_wrong_dst_refused
+named-tests: named-tests: not passed in ua-rs: release_randomness_per_kind
+named-tests: named-tests: not passed in ua-rs: locked_wallet_pairing_handles_sign_nothing
+named-tests: named-tests: not passed in ua-rs: second_sign_on_a_session_errors
+named-tests: named-tests: not passed in ua-rs: frost_session_nonce_signs_once
+named-tests: named-tests: not passed in ua-rs-vectors: sign_json_fixed_aux_rows
+named-tests: named-tests: not passed in ua-rs-vectors: nonce_map_rows
+named-tests: named-tests: not passed in ua-rs-vectors: bls_pop_and_sig_through_the_trait
+named-tests: named-tests: not passed in ua-rs-vectors: fixed_randomness_shapes
+named-tests: named-tests: not passed in ua-rs-vectors: structural_keygen_g1
+named-tests: named-tests: not passed in ua-rs-vectors: structural_keygen_g2
+named-tests: named-tests: not passed in ua-rs-vectors: structural_nonce_point
+named-tests: named-tests: not passed in ua-rs-vectors: structural_bls_sign
+named-tests: named-tests: not passed in ua-rs-vectors: structural_musig2_bn254
+named-tests: named-tests: not passed in ua-rs-vectors: structural_frost_bn254
+named-tests: named-tests: not passed in ua-rs: pq_kat_keys
+named-tests: named-tests: not passed in ua-rs: sign_json_pq_rows
+named-tests: named-tests: not passed in ua-rs: two_release_signatures_differ
+named-tests: named-tests: not passed in ua-rs: signed_bytes_per_scheme
+named-tests: named-tests: not passed in ua-rs: locked_wallet_pq_handles_sign_nothing
+named-tests: named-tests: not passed in ua-rs: rs_signatures_json_rows
+named-tests: named-tests: not passed in ua-rs-vectors: sign_json_pq_bytes_rows
+named-tests: named-tests: not passed in ua-rs-vectors: pq_kat_signatures
+named-tests: named-tests: not passed in ua-rs-vectors: acvp_siggen_rows
+named-tests: named-tests: not passed in ua-rs-vectors: falcon_fixed_randomness
+named-tests: named-tests: not passed in ua-rs-vectors: arena_keeps_the_encoded_keys
+named-tests: named-tests: not passed in ua-rs: nist_gcm_aes256
+named-tests: named-tests: not passed in ua-rs: rfc8452_aes256_gcm_siv
+named-tests: named-tests: not passed in ua-rs: aead_open_refusals
+named-tests: named-tests: not passed in ua-rs: rfc5869_hkdf_sha256
+named-tests: named-tests: not passed in ua-rs: rfc4231_hmac_sha256
+named-tests: named-tests: not passed in ua-rs: seal_json_open
+named-tests: named-tests: not passed in ua-rs: seal_json_refusals
+named-tests: named-tests: not passed in ua-rs: seal_json_argument_refusals
+named-tests: named-tests: not passed in ua-rs: empty_pt_ok
+named-tests: named-tests: not passed in ua-rs: pt_over_1_MiB_refused
+named-tests: named-tests: not passed in ua-rs: release_seal_round_trip
+named-tests: named-tests: not passed in ua-rs: seal_json_containers_open
+named-tests: named-tests: not passed in ua-rs: seal_json_acceptance
+named-tests: named-tests: not passed in ua-rs: msig_member_msig_with_own_sig_refused
+named-tests: named-tests: not passed in ua-rs: msig_sender_without_accepted_refused
+named-tests: named-tests: not passed in ua-rs: single_key_sender_never_asks_accepted
+named-tests: named-tests: not passed in ua-rs: approved_set_bounded
+named-tests: named-tests: not passed in ua-rs: container_json_bounds
+named-tests: named-tests: not passed in ua-rs: seal_purpose_only_from_the_container_builder
+named-tests: named-tests: not passed in ua-rs: msig_recipient_refused
+named-tests: named-tests: not passed in ua-rs: release_link_round_trip
+named-tests: named-tests: not passed in ua-rs-vectors: seal_json_seal_rows
+named-tests: named-tests: not passed in ua-rs-vectors: seal_json_containers_rebuilt
+named-tests: named-tests: not passed in ua-rs-vectors: seal_json_acceptance_link
+named-tests: named-tests: not passed in ua-rs-vectors: seal_json_replay_link
+named-tests: named-tests: not passed in ua-rs-vectors: link_session_key_wiped_after_install
+named-tests: named-tests: not passed in ua-rs: sign_json_ua_rows
+named-tests: named-tests: not passed in ua-rs: sign_json_member_rows
+named-tests: named-tests: not passed in ua-rs: chain_separation_rows
+named-tests: named-tests: not passed in ua-rs: keys_json_native_addresses
+named-tests: named-tests: not passed in ua-rs: evm_address_is_checksummed
+named-tests: named-tests: not passed in ua-rs: native_key_proof_and_raw_digest
+named-tests: named-tests: not passed in ua-rs: purpose_not_in_purposes_refused
+named-tests: named-tests: not passed in ua-rs: other_kinds_not_signed_here
+named-tests: named-tests: not passed in ua-rs: bip340_release_aux_is_random
+named-tests: named-tests: not passed in ua-rs: locked_wallet_handles_sign_nothing
+named-tests: named-tests: not passed in ua-rs: signer_trait_key_ref
+named-tests: named-tests: not passed in ua-rs-vectors: role_follows_the_registry_rule
+named-tests: named-tests: not passed in ua-rs-vectors: kind_no_of_another_kind_refused
+named-tests: named-tests: not passed in ua-rs-vectors: rfc6979_a25_p256
+named-tests: named-tests: not passed in ua-rs-vectors: rfc6979_secp256k1_set
+named-tests: named-tests: not passed in ua-rs-vectors: signatures_json_native_ecdsa
+named-tests: named-tests: not passed in ua-rs-vectors: sign_raw_refusals
+named-tests: named-tests: not passed in ua-rs: sign_json_tx_rows_per_type
+named-tests: named-tests: not passed in ua-rs: eip155_published_row
+named-tests: named-tests: not passed in ua-rs: sign_json_tx_refusals
+named-tests: named-tests: not passed in ua-rs: legacy_without_chain_id_refused
+named-tests: named-tests: not passed in ua-rs: blob_tx_without_hashes_refused_when_built
+named-tests: named-tests: not passed in ua-rs: chain_separation_tx_rows
+named-tests: named-tests: not passed in ua-rs: ed25519_native_key_refused
+named-tests: named-tests: not passed in ua-rs: tx_json_capped_at_16_kib
+named-tests: named-tests: not passed in ua-rs: typed_ops_json_rows
+named-tests: named-tests: not passed in ua-rs: portable_json_typed_rows
+named-tests: named-tests: not passed in ua-rs: sign_json_typed_rows
+named-tests: named-tests: not passed in ua-rs: unknown_field_refused
+named-tests: named-tests: not passed in ua-rs: cyclic_types_refused
+named-tests: named-tests: not passed in ua-rs: negative_int_two_complement
+named-tests: named-tests: not passed in ua-rs: typed_data_bounds
+named-tests: named-tests: not passed in ua-rs: eip712_domain_order
+named-tests: named-tests: not passed in ua-rs: sign_json_canon_rows
+named-tests: named-tests: not passed in ua-rs: nested_metatransfer_zeroed
+named-tests: named-tests: not passed in ua-rs: sign_json_policy_rows
+named-tests: named-tests: not passed in ua-rs: checked_path_refuses_nonzero_unbound_relayer_and_fee_recipient
+named-tests: named-tests: not passed in ua-rs: unrelated_order_through_any_is_signed_as_supplied
+named-tests: named-tests: not passed in ua-rs: expect_bounds_and_forms
+named-tests: named-tests: not passed in ua-rs: chain_separation_typed_digests
+named-tests: named-tests: not passed in ua-rs: payment_lane_nonce_and_deadline
+named-tests: named-tests: not passed in ua-rs: op_requires_the_whole_message
+named-tests: named-tests: not passed in ua-rs: sign_json_msig_rows
+named-tests: named-tests: not passed in ua-rs: non_minimal_set_refused_at_level_2
+named-tests: named-tests: not passed in ua-rs: slots_sorted
+named-tests: named-tests: not passed in ua-rs: portable_json_msig_rows
+named-tests: named-tests: not passed in ua-rs: nested_json_msig_rows
+named-tests: named-tests: not passed in ua-rs: pq_signatures_json_treasury
+named-tests: named-tests: not passed in ua-rs: single_key_uasig_forms
+named-tests: named-tests: not passed in ua-rs: native_ua_sig_r17
+named-tests: named-tests: not passed in ua-rs: native_slot_needs_its_typed_data
+named-tests: named-tests: not passed in ua-rs: slot_must_match_its_member
+named-tests: named-tests: not passed in ua-rs: vault_json_vaults_open
+named-tests: named-tests: not passed in ua-rs: vault_json_refusals
+named-tests: named-tests: not passed in ua-rs: seed_payload_of_31_bytes_refused
+named-tests: named-tests: not passed in ua-rs: vault_seal_open_round_trip
+named-tests: named-tests: not passed in ua-rs: rs_vault_json_rows_open
+named-tests: named-tests: not passed in ua-rs: rewrap_pin_keeps_the_dek
+named-tests: named-tests: not passed in ua-rs: prf_envelope
+named-tests: named-tests: not passed in ua-rs: passphrase_policy
+named-tests: named-tests: not passed in ua-rs: bip39_passphrase_absent_from_every_payload
+named-tests: named-tests: not passed in ua-rs: imported_key_refused_for_another_family
+named-tests: named-tests: not passed in ua-rs: label_vaults_import_and_manifest
+named-tests: named-tests: not passed in ua-rs: manifest_records_first_use_and_survives_lock
+named-tests: named-tests: not passed in ua-rs: discover_candidates_gap
+named-tests: named-tests: not passed in ua-rs: seed_backup_shown_once_and_confirmed
+named-tests: named-tests: not passed in ua-rs-vectors: backup_payload_json
+named-tests: named-tests: not passed in ua-rs: seal_json_restore_rows
+named-tests: named-tests: not passed in ua-rs: backup_restores_manifest_and_secrets
+named-tests: named-tests: not passed in ua-rs: twelve_word_wallet_round_trips_vault_and_backup
+named-tests: named-tests: not passed in ua-rs: older_backup_over_newer_refused_with_allow_rollback_accepted_equal_is_a_no_op
+named-tests: named-tests: not passed in ua-rs: backup_signed_by_another_registered_ua_refused
+named-tests: named-tests: not passed in ua-rs: backup_whose_entropy_does_not_derive_sender_refused
+named-tests: named-tests: not passed in ua-rs-vectors: link_installs_manifest_and_secrets
+named-tests: named-tests: not passed in ua-rs: webauthn_challenge_is_ua_msg
+named-tests: named-tests: not passed in ua-rs: sign_json_accepted_rows
+named-tests: named-tests: not passed in ua-rs: sign_json_refusals
+named-tests: named-tests: not passed in ua-rs: challenge_from_the_json_is_never_the_reference
+named-tests: named-tests: not passed in ua-rs: signatures_json_rows
+named-tests: named-tests: not passed in ua-rs: portable_json_pop_row
+named-tests: named-tests: not passed in ua-rs: wrong_type_refused
+named-tests: named-tests: not passed in ua-rs: non_utf8_client_data_refused
+named-tests: named-tests: not passed in ua-rs: high_s_normalised
+named-tests: named-tests: not passed in ua-rs: s_out_of_range_refused_before_normalisation
+named-tests: named-tests: not passed in ua-rs: assertion_for_another_key_refused
+named-tests: named-tests: not passed in ua-rs: passkey_signs_through_the_uasig_builder
+named-tests: named-tests: not passed in ua-rs: pqz_rollover_is_its_own_op
+named-tests: named-tests: not passed in ua-rs: trade_order_takes_the_ua_struct
+named-tests: named-tests: not passed in ua-rs: pay_meta_v2_body_rules
+named-tests: named-tests: not passed in ua-rs: create3_kat_rows
+named-tests: named-tests: not passed in ua-rs: ua_envelope_through_the_facade
+named-tests: named-tests: not passed in ua-rs: chain_env_kat_rows
+named-tests: named-tests: not passed in ua-rs: verdict_json_rows
+named-tests: named-tests: not passed in ua-rs: pqz_verdict_builder_rules
+named-tests: named-tests: not passed in ua-rs: pqz_verifier_router_ops_canon
+named-tests: named-tests: not passed in ua-rs: keys_json_imported_rows
+named-tests: named-tests: not passed in ua-rs: imported_ua_holds_no_kem_key
+named-tests: named-tests: not passed in ua-rs: sign_json_imported_rows
+named-tests: named-tests: not passed in ua-rs: sign_json_imported_separation
+named-tests: named-tests: not passed in ua-rs: seal_json_imported_rows
+named-tests: named-tests: not passed in ua-rs: backup_and_link_keep_the_imported_ua
+named-tests: named-tests: not passed in ua-rs: imported_ua_is_no_sender_and_entries_stay_readable
+named-tests: named-tests: not passed in ua-rs: manifest_json_imported_uas
+named-tests: named-tests: not passed in ua-rs-vectors: manifest_listing_is_no_trust_anchor
+named-tests: named-tests: 672 names, 266 problem(s)

@@ -11,7 +11,7 @@ use sha2::Sha256;
 use crate::bulletproofs::{self as bp, msm, nz_challenge, Gens, RangeProof};
 use crate::curve::{
     decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, proof_system_id, ua_of,
-    proof_system_id_multi, Fr, ZCurve, G,
+    proof_system_id_multi, secret_mul, Fr, ZCurve, G,
 };
 use crate::elgamal::Ciphertext;
 use crate::keys::ZetherKey;
@@ -478,7 +478,7 @@ pub fn prove_transfer_core<C: ZCurve, R: RngCore + CryptoRng>(
     let a_d = g * k_s;
     let a_out = g * k_v + st.y_t * k_s;
     let a_deb = g * k_v + st.y_f * k_s;
-    let a_bal = g * k_b + (st.acc.d - st.d_out) * k_x;
+    let a_bal = g * k_b + secret_mul(&(st.acc.d - st.d_out), &k_x)?;
     let a_aud = if st.auditor_on() { g * k_v + st.y_a * k_s } else { G::<C>::zero() };
     let a_vv = g * k_v + hb * k_gv;
     let a_vb = g * k_b + hb * k_gb;
@@ -697,7 +697,7 @@ pub fn prove_transfer<C: ZCurve, R: RngCore + CryptoRng>(
     if !value_in_range(v) {
         return Err(ZError::OutOfRange);
     }
-    if acc.c - acc.d * key.x != g * Fr::<C>::from(balance) {
+    if acc.c - secret_mul(&acc.d, &key.x)? != g * Fr::<C>::from(balance) {
         return Err(ZError::BadStatement("balance does not decrypt from acc"));
     }
     let b_prime = (balance as u128)
@@ -1197,7 +1197,7 @@ pub fn prove_transfer_multi_core<C: ZCurve, R: RngCore + CryptoRng>(
         g * k_x,                                     // A_y
         g * k_s,                                     // A_D
         g * k_v_sum + st.y_f * k_s,                  // A_deb
-        g * k_b + (st.acc.d - st.d_out) * k_x,       // A_bal
+        g * k_b + secret_mul(&(st.acc.d - st.d_out), &k_x)?, // A_bal
         g * k_b + hb * k_gb,                         // A_Vb
     ];
     let o = G::<C>::zero();
@@ -1340,7 +1340,7 @@ pub fn prove_transfer_multi_ua<C: ZCurve, R: RngCore + CryptoRng>(
 ) -> Result<(MultiTransferStatement<C>, MultiTransferProof<C>, MultiTransferWitness<C>), ZError> {
     let mut header = header;
     let g = generator::<C>();
-    if acc.c - acc.d * key.x != g * Fr::<C>::from(balance) {
+    if acc.c - secret_mul(&acc.d, &key.x)? != g * Fr::<C>::from(balance) {
         return Err(ZError::BadStatement("balance does not decrypt from acc"));
     }
     if recipients.is_empty() || recipients.len() > MAX_RECIPIENTS {
@@ -1538,7 +1538,7 @@ pub fn prove_burn_core<C: ZCurve, R: RngCore + CryptoRng>(
     let (k_x, k_b, k_gb) = (n.next::<C>(), n.next::<C>(), n.next::<C>());
     let v_b = g * w.b_prime + hb * w.gamma_b;
     let a_y = g * k_x;
-    let a_bal = g * k_b + st.acc.d * k_x;
+    let a_bal = g * k_b + secret_mul(&st.acc.d, &k_x)?;
     let a_vb = g * k_b + hb * k_gb;
     let mut tr = Transcript::new();
     tr.absorb("statement", &stmt);
@@ -1583,7 +1583,7 @@ pub fn prove_burn<C: ZCurve, R: RngCore + CryptoRng>(
     balance: u64,
     rng: &mut R,
 ) -> Result<(BurnStatement<C>, BurnProof<C>, BurnWitness<C>), ZError> {
-    if acc.c - acc.d * key.x != generator::<C>() * Fr::<C>::from(balance) {
+    if acc.c - secret_mul(&acc.d, &key.x)? != generator::<C>() * Fr::<C>::from(balance) {
         return Err(ZError::BadStatement("balance does not decrypt from acc"));
     }
     let b_prime = (balance as u128)

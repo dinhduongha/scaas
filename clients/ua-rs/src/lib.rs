@@ -4,7 +4,9 @@
 //! The curve code here (k256, p256, curve25519-dalek, arkworks) is independent of the JS generator's (noble): the vectors
 //! are accepted only when both agree. Feature `signers` (UA-2c): the MuSig2 / FROST group signers that generate
 //! `groups.json` (`musig2`, `frost`); the group kinds' registry checks are in the default build (`verify`). Feature `pq`
-//! (UA8-D24): the PQ kinds' verifiers (`pq`) behind `verify` and `ua8::check_*`; without it a PQ signature is refused. UNAUDITED.
+//! (UA8-D24): the PQ kinds' verifiers (`pq`) behind `verify` and `ua8::check_*`; without it a PQ signature is refused. Feature
+//! `wallet` (ua-rs-sign, on by default): the BIP-39 wallet, key derivation and the secret store (`wallet`);
+//! `--no-default-features` keeps this verify-only layer. UNAUDITED.
 use sha3::{Digest, Keccak256};
 
 mod keydata;
@@ -15,6 +17,8 @@ pub mod verify;
 pub mod ua8;
 #[cfg(feature = "pq")]
 pub mod pq;
+#[cfg(feature = "pq")]
+mod falcon;
 #[cfg(feature = "json")]
 pub mod json;
 pub use ua8::{holder_pop_message, pqz_reg_message};
@@ -23,6 +27,43 @@ mod groups;
 pub mod musig2;
 #[cfg(feature = "signers")]
 pub mod frost;
+#[cfg(feature = "wallet")]
+pub mod wallet;
+/// The facades (spec §10; ua-rs-sign T14 `zether`, T15 `pqz`): key custody and the ABI over the prover crates.
+#[cfg(any(feature = "zether", feature = "pqz"))]
+pub mod facade;
+/// Test-only (feature `vectors`): the ladder's record of `secret_mul` (the structural test, spec §12).
+#[cfg(feature = "vectors")]
+pub use scaas_ct;
+
+/// What this build of the crate holds (ua-rs-sign T12; spec §9.2 "build discovery"): read by `ua-c`'s `scaas_ua_features()`,
+/// which a binding checks at load. Each is the crate's own `cfg`, so a feature a dependent did not ask for but another enabled
+/// (Cargo unifies features) still shows.
+pub mod build {
+    pub const WALLET: bool = cfg!(feature = "wallet");
+    pub const PQ: bool = cfg!(feature = "pq");
+    /// The vendored PQClean Falcon was built (`build.rs`; not on wasm32): `0x0132`, `0x0135` sign and verify.
+    pub const FALCON: bool = cfg!(scaas_falcon);
+    pub const ZETHER: bool = cfg!(feature = "zether");
+    pub const PQZ: bool = cfg!(feature = "pqz");
+    /// The `pqz-set-*` features, in this order: `n2048-kmax1024`, `n2304-kmax4096`, `n2560-kmax16384`, `n2816-kmax65536`.
+    pub const PQZ_SETS: [bool; 4] = [
+        cfg!(feature = "pqz-set-n2048-kmax1024"),
+        cfg!(feature = "pqz-set-n2304-kmax4096"),
+        cfg!(feature = "pqz-set-n2560-kmax16384"),
+        cfg!(feature = "pqz-set-n2816-kmax65536"),
+    ];
+    /// The arena is `mlock`ed and no-dump (feature `mlock`, Unix; compiled out elsewhere).
+    pub const MLOCK: bool = cfg!(all(unix, feature = "mlock"));
+    /// The test-only entry points (feature `vectors`): never in a release build, so `ua-c`, `ua-cxx` and `ua-dart-frb` refuse
+    /// to compile with it, `scaas_ua_features()` reports it (`SCAAS_UA_FEATURE_VECTORS`) and every binding refuses to load such
+    /// a library (spec no-decryption-oracle §4.8, Codex C1).
+    pub const VECTORS: bool = cfg!(feature = "vectors");
+}
+
+/// [`build::VECTORS`]: this crate was built with the test feature `vectors` (Cargo unifies features: a dependency may have
+/// turned it on). Its key-handle constructors then refuse until `facade::vectors_unlock` (spec no-decryption-oracle §4.8).
+pub use build::VECTORS;
 
 /// An error whose [`UAError::code`] every implementation and the vector files share.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,10 +203,19 @@ pub const GROUPS: &[&str] = &[
     "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe",
 ];
 
+/// Every purpose at v1 (clientkeys `PURPOSES`, `vectors/ua/kinds.json`); `pqz-verdict` (group 3f, `UAKinds.PURPOSE_PQZ_VERDICT`):
+/// what a PQZ verifier UA signs a `PqzVerdict` under (`wallet::pqz_verdict_typed_data`, feature `wallet`).
 pub const PURPOSES: &[&str] = &[
     "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "payee-fee", "vp",
-    "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update",
+    "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update", "pqz-verdict",
 ];
+
+/// The off-chain purpose of a sealed container's sender signature, `keccak256("scaas.ua.purpose.seal.v1")` (MD-10, ua-rs-sign
+/// spec §6.3; clientkeys `SEAL_TAG`): never in [`PURPOSES`], never in a contract list; `sign_ua` refuses it, only the container
+/// builder signs under it.
+pub fn seal_purpose_tag() -> [u8; 32] {
+    keccak256(b"scaas.ua.purpose.seal.v1")
+}
 
 pub const DOMAIN_TYPE: &str =
     "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)";
@@ -504,6 +554,8 @@ pub fn encode_msig(threshold: u16, members: &[(u16, [u8; 32], u16)]) -> Vec<u8> 
 /// ua-mtx-merge T34: the regulated kinds' router ops, `recordId`, the relaxation `commit`, `R` (regulated-kinds spec §3, §5).
 pub mod regulated;
 pub mod pay;
+/// T20b (ua-mtx-merge T71, T74): the factory's chain-neutral CREATE3 address of a creation (chain-neutral releases spec §4).
+pub mod factory;
 pub mod wraplimit;
 /// Round 3t: the router's `UASetVerifierFee` and a PQZ debit's fee word (CTR-PQZ-36).
 pub mod pqzfee;
@@ -511,3 +563,5 @@ pub mod pqzfee;
 pub mod admin;
 /// The PQZ three-key model: the scoped seeds, the opening KEM seed, the leg seed, `memoHash`, `PqzRollOver` (CTR-PQZ-37 .. -41).
 pub mod pqz3k;
+/// NODE-JOB-29 (CTR-UA-23): an ML-DSA key's `cacheExpandedKey` part transactions and the cache-then-register order.
+pub mod mldsa_cache;

@@ -1,0 +1,47 @@
+# 2026-11-07 ua-rs-sign T15g: C ABI and bindings for the words commands (ARCH-POS-13 "never a decryption oracle"; spec
+# no-decryption-oracle §4.3, §4.7, §4.13, §5; F1 bindings; Fable answer 4). Commits: 8e3801a0 (spec §4.7: the Zether balance
+# hint comes from the holder's own sealed cache box; alone, --only), 8190e4c7 (C ABI tests, the zether_call doc line and
+# header, the fuzz command index from COMMANDS, the PQZ forge-row refusal pinned in ua-rs), df0a3f15 (ua-py), c390dde1 (ua-go),
+# 1ceb65da (ua-cs), a190338f (ua-cxx), 591c4af9 (ua-dart-frb), c933f8ab (every binding: the raw forms in the vectors-only part),
+# the follow-up commit of this summary and the mutant record. No ABI call, status, feature bit, contract, statement, vector
+# file or dependency changed; scaas-ua and zether-prover source unchanged. ua-qt wraps neither facade: its suite only. UNAUDITED.
+# Each binding: commands read from the facade source (`pub const COMMANDS`; the `vectors`-gated lines apart), a command asserted
+# to be IN the list, never equal to one; Zether balance (alice, 843) and pendingBalance (bob, 7) on the forge rows
+# smartcontracts/vectors/zether/state.json (holders: r33_keys.json), another holder's words refused (UAArgument); a PQZ forge
+# row (n2304-kmax4096/state.json) refused (UAArgument: the forge keys are mocked, no wallet holds them) and with the other set's
+# psid UAPqzSetMismatch; every vectors-only raw form refused by the release build; decrypt / decryptPending / dec asserted to
+# be vectors-only in the source. The state files are the ones T15e / T14b took by `git show` (sha256 equal to ua-mtx-merge's).
+# All commands through scripts/capped, foreground, -j2, --locked, --offline; full logs in the scratch directory, not committed.
+step | commit | rc | counts
+ua-rs test (default: zether + pqz n2304-kmax4096, the release cell) | 8190e4c7 | 0 | 32 suites, 311 passed, 1 ignored (+ forge_rows_on_another_handle_are_refused_before_the_key)
+ua-rs test --features vectors | 8190e4c7 | 0 | 35 suites, 384 passed, 3 ignored
+ua-rs test --no-default-features --features wallet,mlock | 8190e4c7 | 0 | 27 suites, 256 passed, 1 ignored
+ua-rs facade_pqz_state + facade_pqz + pqz_backup at pqz-set-n2048-kmax1024, release / vectors | 8190e4c7 | 0 | 32 / 47 passed
+ua-rs clippy --all-targets -D warnings: default, vectors, --no-default-features, wallet,mlock, zether, zether+vectors, pqz,n2048 (+ vectors) | 8190e4c7 | 0 | 0 of ours each (8 cells); pqzl's 2 deprecated GenericArray warnings
+ua-rs/fuzz cargo check; seeds.py --regress | 8190e4c7 | 0 | builds; the zether_cmd / pqz_cmd inputs unchanged (manifest/over-depth-4.json drifts by `pqzHeld`, older than T15g: restored, not committed)
+zether-prover cargo test (default) / --features hazmat | c933f8ab | 0 | 15 suites, 72 passed, 1 ignored (the anvil test) / 15 suites, 86 passed, 1 ignored
+zether-prover ./wasm-smoke.sh / ZETHER_HAZMAT=1 | c933f8ab | 0 | 3 checks / 9 checks passed
+ua-c clippy -D warnings; cargo build (debug, release); cargo test (lib + header, SCAAS_UA_C_BLESS once); C smoke + c++ -fsyntax-only; test_vectors.py | c933f8ab | 0 | 0 of ours; built; 4 + 5 passed; smoke ok; 87 tests OK (+2)
+ua-py unittest tests.test_wallet tests.test_vectors (release libscaas_ua_c) | c933f8ab | 0 | 85 OK (+2)
+ua-go go vet; go test -count=1 ./... | c933f8ab | 0 | vet clean; 54 passed (+2)
+ua-cs dotnet test Scaas.Ua.Tests (then dotnet build-server shutdown) | c933f8ab | 0 | 53 passed (+2)
+ua-cxx clippy -D warnings; cmake --build build; ctest | c933f8ab | 0 | 0 of ours; 37 of 37 (+ wallet_zether_words, wallet_pqz_words)
+ua-qt cmake (Qt 6.12) --build; tst_ua offscreen | c933f8ab | 0 | 38 passed (wraps neither facade)
+ua-dart-frb cargo build (rust/); dart test wallet_test.dart vectors_test.dart | c933f8ab | 0 | 36 passed (+ zether_words, pqz_words)
+after the mutant run: libscaas_ua_c (release, debug), ua-cxx, ua-dart-frb rebuilt; ua-c test_vectors + smoke, ua-py, ua-go, ua-cs, ua-cxx, ua-dart-frb | c933f8ab | 0 | 87 OK, smoke ok; 85 OK; ok; 53; 37 of 37; 36
+check_test_features.py | c933f8ab | 0 | ok (5 graphs 0 findings; positive control: 2 findings)
+cargo tree --locked --offline -e normal: ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust, ua-rs/fuzz, zether-prover, scaas-node | c933f8ab | 0 | 8 of 8; no lock changed
+cargo deny --all-features check: ua-rs; ua-c and zether-prover (--config ../ua-rs/deny.toml) | c933f8ab | 0 | advisories ok, bans ok, licenses ok, sources ok each
+docs_check check / paths | 8e3801a0 | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+mutants: 2026-11-07-ua-rs-sign-t15g-mutants.py | c933f8ab | 0 | 18 killed, 0 survived, 0 not loaded (2026-11-07-ua-rs-sign-t15g-mutants.txt), git diff --exit-code clean after each
+# Decisions (controller, the owner may override): (1) No COMMANDS export in the ABI (the plan: no new call): a binding test
+# reads `pub const COMMANDS` from clients/ua-rs/src/facade/{zether,pqz}.rs; fuzz/seeds.py takes its command index from the
+# same lines (every entry: the fuzz build has `vectors`), fuzz_caps.rs reads the source by the same rule and compares it with
+# COMMANDS. (2) The PQZ forge rows carry mocked keys, so a binding's PQZ words test is a refusal (the words parse: ua-rs
+# asserts from_json accepts them and the key is unused); the PQZ positive path over rebuilt words stays in ua-rs
+# (facade_pqz_state.rs, through the same JSON). (3) The `balance` hint rule (controller 2026-11-07) is in spec §4.7 and the
+# scaas_ua_zether_call doc line (header regenerated); zether-prover's api / wasm words commands wait for the browser-binding round.
+# Residuals: no binding exercises a PQZ words command that decrypts (needs PQZ state words for a wallet key: a forge writer
+# with a registered real key, or a ua-rs-made row file); a raw form's refusal with `{}` cannot tell an unknown command from a
+# missing field (the vectors-only membership of decrypt / decryptPending / dec, and T15c2's well-formed `decrypt` / `dec`
+# refusals, cover it); fuzz/regress/manifest/over-depth-4.json lags seeds.py by `pqzHeld` (older than T15g).

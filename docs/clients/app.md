@@ -33,7 +33,8 @@ wallets); balances and the token catalogue; token creation (factory v1 and v2) a
 meta-tx token; wrap/unwrap including gasless unwrap (target: `mtxExecute` with the token's `unwrap` calldata, and
 `mtxWrap` by signature for a SCaaS underlying; as built on the v2 line `mtxExecute(unwrap…)`); meta-tx transfers and payments submitted through a node gateway
 (all families) or self-paid; the DEX order book (home-bound and relayer-unbound markets) with place/cancel; Zether
-(register, deposit/shield, confidential transfer, withdraw, balance via the device cache + BSGS).
+(register, deposit/shield, confidential transfer, withdraw, balance via the device cache, or BSGS over words read as
+[a reading layer](#CLI-APP-28)).
 
 **Console** (login to one node's admin API, built-in users or OIDC): chains, tokens, lanes, namespaces, jobs, mesh peers
 (SSRF-guarded), policy, gossip (peers, topics, announces, bans, trusted), DEX markets and homes, external-client API keys,
@@ -324,7 +325,7 @@ other remote party. Why: display and bytes cannot diverge silently; one JS imple
 clientkeys grows to all families.
 
 <a id="signers"></a><a id="CLI-APP-06"></a>**CLI-APP-06** — **App signers: the clientkeys passkey; the seed vault (vault v2
-in the key worker); UA keys (`UAKey`, tree `m/7622'/0'/<account>'/<kindNo>'/<i>'`); extension wallets through clientkeys
+in the key worker); UA keys (`UAKey`, tree `m/22776'/0'/<account>'/<kindNo>'/<i>'`); extension wallets through clientkeys
 `wallets/<family>.js` and `wallets/evm.js` (`win` injected); a dev key in dev builds only.** The seed signer signs only the
 family envelopes of [CLI-SGN-22](signers-clientkeys.md#CLI-SGN-22) — Solana OCMS kind 1, **never** `solana-raw`, which is
 extension-only. Native keys keep their family paths; EVM `m/44'/60'/0'/0/i` is the EOA only
@@ -490,7 +491,7 @@ explain.
 | Offer | Made of | Families | Backup (switch on) |
 |---|---|---|---|
 | **Account** (default once UA lands) | `webauthn-p256` UA, registered gaslessly | EVM, Hedera (v3 tokens) | single-key ⇒ unsatisfiable ⇒ not offered; existing ⇒ exit only |
-| **Recoverable account** (option (b); interim default) | `SmartKeyAccount` (passkey and/or secp256k1 role key `m/7622'/0'/<account>'/2'/<i>'`, guardian) | EVM, Hedera | ≥ 2 distinct credentials or 1 + guardian |
+| **Recoverable account** (option (b); interim default) | `SmartKeyAccount` (passkey and/or secp256k1 role key `m/22776'/0'/<account>'/2'/<i>'`, guardian) | EVM, Hedera | ≥ 2 distinct credentials or 1 + guardian |
 | Subject accounts per family | Sui `Account<T>`, Aptos Account, Solana PDA, Soroban `C…`, GRAM jetton wallet | as the matrix | per family (Soroban/TON: ≥ 2 keys) |
 | **Approvers** (minimal) | `msig` UA over member UAs/EOAs; the app shows the id and registers it | EVM | `Σw − max(w) ≥ threshold` |
 | Native wallet | a seed-vault native key or an extension wallet | all | outside the predicate |
@@ -519,6 +520,17 @@ table, falling back to `executeMetaTransaction` for unknown versions — includi
 versions. Target: every gasless operation of a token is `mtxExecute` with calldata the app encodes and decodes against
 the implementation's allowlist ([CLI-SGN-34](signers-clientkeys.md#CLI-SGN-34)); `mtxTransfer`, `mtxPay` and
 `mtxBatch` stay as typed builders. `termsHash` documents link only to config-listed URLs.
+
+<a id="CLI-APP-28"></a>**CLI-APP-28** — **Confidential balances: the app is a layer that reads the chain.** SPECIFIED. Before anything
+decrypts a Zether balance (and a PQZ one once the app carries PQZ), the app meets the requirements on the wallet layer that
+reads the chain ([CLI-UAL-30](ua-libraries.md#CLI-UAL-30), owner ruling [ARCH-POS-13](../decisions.md#ARCH-POS-13), 2026-11-06). The
+words come from one source the holder chose (requirement 1): `config.json`'s `chains[].rpc` is an app default, so it serves a
+decryption only once the holder has selected that node explicitly; until then the balance comes from the holder's own sealed
+balance cache and no word from it is decrypted. Every word of one balance comes from one final block of the configured chain,
+as storage, for a catalogued token and the holder's own account (requirements 2 to 6). Nothing that depends on a decryption
+goes back to the source (requirement 7): no retry, follow-up read or error report keyed on the result. The browser build of
+zether-prover has no raw decrypt (its raw commands exist only under `hazmat`); its words commands come with the browser
+binding (PLANNED).
 
 <a id="contract-roles"></a><a id="CLI-APP-18"></a>**CLI-APP-18** — **Contract-held roles get calldata, not transactions.**
 `rateAdmin` must be a contract, so rate operations are emitted as **Safe Transaction Builder JSON** (`{to, value: "0",
@@ -797,7 +809,7 @@ Unit (Vitest / `node --test`, no network):
 |---|---|
 | EVM encoders | `metatx_kat`, `metatransfer_kat`, `trade_kat`, `dex_order_kat` (relayed calldata too), `hedera_kat`, `wrap_rate_vectors`, `smart_key_account_create2`, `smart_key_account_kat`, `mandate_pay_kat`, `mandate_revoke_kat`, `webauthn_soft` |
 | Non-EVM encoders (clientkeys) | `mesh-envelope-v1.2.json` cross-language payloads (the TON cases of it; `smartcontracts/ton/vectors/ton-vectors.json` belongs to the TON suite, no clientkeys code reads it), `fam_*.json` per family, `sui_vectors.json`, the seed-signed vectors, `solana_derivation.json` |
-| UA (clientkeys) | `smartcontracts/vectors/ua/*`: ids, keyHash, `ua_msg`, PoP, `UAMetaTransaction` digests; `deriveUAKey` paths under `m/7622'` |
+| UA (clientkeys) | `smartcontracts/vectors/ua/*`: ids, keyHash, `ua_msg`, PoP, `UAMetaTransaction` digests; `deriveUAKey` paths under `m/22776'` |
 | Backup / vault | `backup_policy.json` plus the de-duplication and `msig` rows; `vault_v2_fixture.json` |
 | Zether | prover vectors through the WASM `nodejs` build; clientkeys `zether.test.js` |
 | Adapter contract suite | as above, including `decode ∘ signRequest ∘ buildTerms = id` |

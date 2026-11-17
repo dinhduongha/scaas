@@ -1,0 +1,35 @@
+# 2026-11-05 ua-rs-sign T1b: clientkeys KEM key, seal / open, containers; kem.json, seal.json, vault.json (plan T1b, spec §6, §8.1, §11). UNAUDITED.
+step | commit | rc | counts
+red: node --test test/kem.test.js test/seal.test.js test/vault.test.js on fa07bebe's src with the new tests and vectors | fa07bebe | 1 | 21 tests, 14 failed (every new test), 7 passed (the existing vault tests)
+clientkeys npm test (before) | fa07bebe | 0 | 265 tests, 263 pass, 0 fail, 2 skipped
+clientkeys npm test (foundry 1.8.5 on PATH) | (this commit) | 0 | 279 tests, 277 pass, 0 fail, 2 skipped
+vectors-check: ua-wallet-vectors.mjs twice into scratch dirs, cmp with each other and the tree | (this commit) | 0 | keys, sign, kem, seal, vault identical; keys.json and sign.json unchanged
+vectors-check: every other generator (typed-ops, ua-portable, ua-sig, ua-vectors into scratch; pq-vectors in place + git status, soroban-ua-ops --check) | (this commit) | 0 | 12 files byte-identical, tree clean
+mutants: 2026-11-05-ua-rs-sign-t1b-mutants.py | (this commit) | 0 | 28 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t1b-mutants.txt)
+mutants (first run) | - | 1 | M15 msig guard redundant (removed), M28 open's version check shadowed by fromWire (test now opens named fields) -> both killed
+docs_check check / paths / test_docs_check | (this commit) | 0 | 0 errors 5 warnings / 0 machine paths / ok
+forge | - | not run | no file forge reads changed (kem, seal, vault.json are new; every existing vector byte-identical)
+# Rows: kem.json 14 keys, 11 key refusals (9 non-holder kinds, msig, version 2^64), 3 encaps, 4 encaps refusals, 7 decaps (1 valid,
+# 1 implicit rejection, 5 refused); seal.json 3 seal, 10 open refusals + 4 argument refusals, 2 containers (backup, link), 14 acceptance
+# (13 refused, 1 accepted control: sender in the approved set), 9 replay (3 link window, 6 backup generation); vault.json 6 vaults, 11 refusals.
+# 2026-11-05 follow-up (owner: "theo khuyên cả sáu"): container sender.auth is a full UASig (single key or minimal msig); seal.json rows moved.
+step | commit | rc | counts
+red: node --test test/seal.test.js test/kem.test.js test/vault.test.js on 68c585e4's src with the new tests and seal.json | 68c585e4 | 1 | 22 tests, 5 failed (the 5 container tests, incl. the new builder test), 17 passed
+clientkeys npm test (foundry 1.8.5 on PATH) | (this commit) | 0 | 287 tests, 285 pass, 0 fail, 2 skipped (was 279 / 277: +1 builder test; seal.test.js is 7 tests)
+vectors-check: ua-wallet-vectors.mjs three times into scratch dirs, cmp with each other and the tree | (this commit) | 0 | seal.json moved; keys, sign, kem, vault byte-identical
+vectors-check: ua-sig and ua-vectors into scratch (7 files), ua-portable, typed-ops, pq-vectors in place + git status, soroban-ua-ops --check | (this commit) | 0 | every other vector file byte-identical, tree clean
+mutants: 2026-11-05-ua-rs-sign-t1b-mutants.py | (this commit) | 0 | 34 killed, 0 survived, 0 not loaded (M29-M34 new: msig non-minimal set, minimal at level 1 only, single-key UASig with members, msig own signature, member signature unchecked, inner digest)
+docs_check check / paths / test_docs_check | (this commit) | 0 | 0 errors 5 warnings / 0 machine paths / ok
+# seal.json: containers 2 -> 4 (+ msig flat {p256, ed25519}, + msig nested), acceptance 14 -> 23 (- "an msig sender key"; + 10 UASig rows),
+# replay 9 rows rewritten (sender.sig -> sender.auth); seal, refusals, argumentRefusals unchanged; the old containers' sealed bytes and signatures unchanged.
+# 2026-11-05 follow-up (owner: "theo khuyên cả hai"): no kind in the container (the opener tries derive_ua, at most one kind matches);
+# an msig container sender needs its signers accepted at both levels (CTR-UA-37), accepted(id, index) supplied by the caller.
+step | commit | rc | counts
+red: node --test test/seal.test.js test/kem.test.js test/vault.test.js on ed1129b4's src/seal.js with the new tests and seal.json | ed1129b4 | 1 | 23 tests, 3 failed (acceptance rows: the first member-acceptance row opens; the new lookup test; replay: restoreBackup's options moved one place), 20 passed
+clientkeys npm test (foundry 1.8.5 on PATH) | (this commit) | 0 | 288 tests, 286 pass, 0 fail, 2 skipped (was 287 / 285: +1 lookup test)
+vectors-check: ua-wallet-vectors.mjs twice into scratch dirs, cmp with each other and the tree | (this commit) | 0 | seal.json moved (rows added, note); keys, sign, kem, vault byte-identical; no other generator imports seal.js
+mutants: 2026-11-05-ua-rs-sign-t1b-mutants.py | (this commit) | 0 | 39 killed, 0 survived, 0 not loaded (M35-M39 new: acceptance skipped at level 1, at level 2, weight over the signers, a missing lookup as all accepted, a non-false answer as accepted)
+docs_check check / paths / test_docs_check | (this commit) | 0 | 0 errors 5 warnings / 0 machine paths / ok
+# seal.json: acceptance 23 -> 29 (+ signer not accepted with the msig active through a non-signer, accepted weight below the threshold,
+# inner msig's slot not accepted (level 1), inner signer not accepted (level 2), no accepted lookup: ContainerSender; + control: a
+# non-signer not accepted opens); the msig containers and msig acceptance rows gain `accepted` (every member); no bytes moved.

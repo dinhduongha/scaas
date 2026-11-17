@@ -7,9 +7,10 @@ use crate::verify::{bip340, schnorr, sha256};
 use crate::{keccak, validate_key_data};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::PrimeField;
-use k256::elliptic_curve::hash2curve::{hash_to_field, ExpandMsgXmd};
+use k256::elliptic_curve::consts::{U16, U48};
+use k256::hash2curve::{hash_to_field, ExpandMsgXmd};
 use k256::elliptic_curve::ops::Reduce;
-use k256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
+use k256::elliptic_curve::sec1::{FromSec1Point, ToSec1Point};
 use k256::elliptic_curve::PrimeField as _;
 use k256::{AffinePoint, ProjectivePoint, Scalar};
 
@@ -61,8 +62,8 @@ fn secp_point(b: &[u8]) -> Option<ProjectivePoint> {
     if b.len() != 33 || !(b[0] == 2 || b[0] == 3) {
         return None;
     }
-    let ep = k256::EncodedPoint::from_bytes(b).ok()?;
-    Option::<AffinePoint>::from(AffinePoint::from_encoded_point(&ep)).map(Into::into)
+    let ep = k256::Sec1Point::from_bytes(b).ok()?;
+    Option::<AffinePoint>::from(AffinePoint::from_sec1_point(&ep)).map(Into::into)
 }
 fn secp_scalar(b: &[u8]) -> Option<Scalar> {
     Scalar::from_repr(<[u8; 32]>::try_from(b).ok()?.into()).into()
@@ -72,7 +73,7 @@ fn compressed(p: &ProjectivePoint) -> Vec<u8> {
     if *p == ProjectivePoint::IDENTITY {
         return vec![0; 33];
     }
-    p.to_affine().to_encoded_point(true).as_bytes().to_vec()
+    p.to_affine().to_sec1_point(true).as_bytes().to_vec()
 }
 fn address(xy: &[u8]) -> [u8; 20] {
     keccak(&[xy])[12..].try_into().expect("20")
@@ -80,9 +81,9 @@ fn address(xy: &[u8]) -> [u8; 20] {
 
 /// RFC 9591 `hash_to_field` (`expand_message_xmd` SHA-256, 48 bytes, mod N) with DST `contextString ‖ label`.
 fn secp_h(label: &[u8], m: &[u8]) -> Scalar {
-    let mut u = [Scalar::ZERO];
-    hash_to_field::<ExpandMsgXmd<sha2::Sha256>, Scalar>(&[m], &[FROST_SECP256K1_CONTEXT, label], &mut u).expect("xmd");
-    u[0]
+    let [u] = hash_to_field::<1, ExpandMsgXmd<k256::sha2::Sha256>, U16, Scalar, U48>(&[m], &[FROST_SECP256K1_CONTEXT, label])
+        .expect("xmd");
+    u
 }
 
 /// RFC 9591 FROST(secp256k1, SHA-256) verify: `Y` and `R` SEC1 compressed, `z < N`, `z·G == R + H2(R ‖ Y ‖ msg)·Y`.
@@ -110,14 +111,14 @@ fn musig2_secp256k1_pop(kd: &[u8], msg: &[u8; 32], pop: &[u8]) -> bool {
         let a = if Some(pk) == second {
             Scalar::ONE
         } else {
-            <Scalar as Reduce<k256::U256>>::reduce_bytes(&tagged("KeyAgg coefficient", &[&l, pk]).into())
+            <Scalar as Reduce<k256::FieldBytes>>::reduce(&tagged("KeyAgg coefficient", &[&l, pk]).into())
         };
         // ecrecover(0, v, r = x(P_i), s = a·r mod N) = r⁻¹·s·R: needs r < N; R = lift(r, v) = P_i
         let (Some(r), Some(p)) = (secp_scalar(&pk[1..]), secp_point(pk)) else { return false };
         let Some(r_inv) = Option::<Scalar>::from(r.invert()) else { return false }; // ecrecover refuses r = 0
         let rec = p * (a * r * r_inv);
         let h = &pop[64 + 64 * i..128 + 64 * i];
-        if address(&rec.to_affine().to_encoded_point(false).as_bytes()[1..]) != address(h) {
+        if address(&rec.to_affine().to_sec1_point(false).as_bytes()[1..]) != address(h) {
             return false;
         }
         sum += rec; // = H_i (address match); the EVM adds H_i in affine coordinates

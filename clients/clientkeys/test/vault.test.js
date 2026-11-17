@@ -1,9 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import * as V from '../src/vault.js';
 import { createVault, openVault, enablePrf, needsRewrap, rewrapPin, SCRYPT } from '../src/vault.js';
 import { SeedBackup } from '../src/backup.js';
 import { entropyToWords } from '../src/seed.js';
-import { bytesToHex } from '../src/bytes.js';
+import { bytesToHex, fromHex } from '../src/bytes.js';
+import { dir as uaDir } from './ua-vectors-dir.js';
 
 const secret = () => crypto.getRandomValues(new Uint8Array(32));
 
@@ -105,4 +108,48 @@ test('vault: open refuses an envelope outside N ∈ {2^15, 2^16, 2^17}, r = 8, p
     const ok = await rewrapPin(v, PASS, PASS, { N, r: 8, p: 1, dkLen: 32 }, { policy: false });
     assert.equal(bytesToHex(await openVault(ok, { pin: PASS })), bytesToHex(s));
   }
+});
+
+// ua-rs-sign T1b: the seed vault rows of smartcontracts/vectors/ua/vault.json (scripts/ua-wallet-vectors.mjs), which ua-rs opens (T9).
+const VJ = (() => { try { return JSON.parse(readFileSync(new URL('vault.json', uaDir), 'utf8')); } catch { return null; } })();
+const unlockOf = (u) => (u.prfOutput ? { prfOutput: fromHex(u.prfOutput) } : u);
+const codeOf = async (p) => { try { await p(); return null; } catch (e) { return e.code ?? e.message; } };
+
+test('vault.json: seed vaults at N = 2^15, 2^16, 2^17, 12 words, NFC sealed / NFD opened (NFKC), PRF; each opens to its entropy', async () => {
+  assert.ok(VJ, 'vault.json');
+  assert.deepEqual(VJ.vaults.map((r) => r.vault.pin.N).slice(0, 3), [2 ** 15, 2 ** 16, 2 ** 17]);
+  for (const r of VJ.vaults) {
+    assert.equal(bytesToHex(await V.openSeedVault(r.vault, unlockOf(r.unlock))), r.plaintext.slice(2), r.id);
+    assert.equal(r.vault.v, 1);
+    assert.equal(r.vault.label, 'seed');
+  }
+  const nfd = VJ.vaults.find((r) => r.id.startsWith('passphrase in NFD'));
+  assert.notEqual(nfd.unlock.pin, nfd.unlock.pin.normalize('NFC'), 'the row opens with the NFD form');
+  assert.equal(fromHex(VJ.vaults.find((r) => r.id.startsWith('twelve')).plaintext).length, 16);
+});
+
+test('vault.json refusals: wrong passphrase, altered AAD label, N = 2^31 / 3, r = 16, p = 2, v 2 and its tombstone, 31 and 64-byte payloads, label', async () => {
+  assert.equal(VJ.refusals.length, 11);
+  for (const x of VJ.refusals) assert.equal(await codeOf(() => V.openSeedVault(x.vault, unlockOf(x.unlock))), x.error, x.id);
+  // v 2 is never reported as a wrong passphrase, and the parameters are refused before scrypt runs (a 2^31 N would not return)
+  assert.ok(VJ.refusals.filter((x) => x.error === 'VaultVersion').length === 2);
+});
+
+// ua-rs-sign T9 (MD-7): the both-ways fixture rs_vault.json, written by ua-rs (tests/wallet_vault.rs, `--ignored regenerate`):
+// vaults sealed by ua-rs open here to their entropy, so a vault format both clients read the same wrong way cannot pass one-sided.
+test('rs_vault.json: ua-rs vaults (24 and 12 words, PRF envelope, rewrapped pin) open here', async () => {
+  const RS = (() => { try { return JSON.parse(readFileSync(new URL('rs_vault.json', uaDir), 'utf8')); } catch { return null; } })();
+  assert.ok(RS, 'rs_vault.json');
+  assert.ok(RS.note.includes('never edit by hand'));
+  assert.equal(RS.vaults.length, 4);
+  for (const r of RS.vaults) {
+    assert.equal(bytesToHex(await V.openSeedVault(r.vault, unlockOf(r.unlock))), r.plaintext.slice(2), r.id);
+    assert.deepEqual([r.vault.v, r.vault.label, r.vault.pin.kdf, r.vault.pin.N, r.vault.pin.r, r.vault.pin.p], [1, 'seed', 'scrypt', 2 ** 17, 8, 1], r.id);
+    assert.equal(V.needsRewrap(r.vault), false);
+  }
+  assert.deepEqual(RS.vaults.map((r) => fromHex(r.plaintext).length), [32, 16, 32, 16]);
+  assert.ok(RS.vaults.some((r) => r.vault.prf && r.unlock.prfOutput));
+  // negative control: a wrong passphrase on a ua-rs vault is VaultOpen
+  const pin = RS.vaults.find((r) => r.unlock.pin);
+  assert.equal(await codeOf(() => V.openSeedVault(pin.vault, { pin: pin.unlock.pin + 'x' })), 'VaultOpen');
 });

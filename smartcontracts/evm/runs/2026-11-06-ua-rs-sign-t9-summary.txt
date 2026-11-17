@@ -1,0 +1,48 @@
+# 2026-11-06 ua-rs-sign T9: the clientkeys vault v1 (Vault JSON, AES-256-GCM AAD label|data / label|pin / label|prf, scrypt =0.11.0,
+# NFKC passphrase, N in {2^15, 2^16, 2^17}, r = 8, p = 1 checked before scrypt: VaultParams; v != 1 VaultVersion; seal_vault /
+# open_vault(Unlock) with the entropy at its own length (else VaultOpen) and the label seed (else Argument), needs_rewrap,
+# rewrap_pin (KEK rotation, not DEK rotation, C-12), enable_prf, check_passphrase; label vaults manifest and
+# native-import:<network>:<n>), the Manifest (in the store, kept by lock), discover_candidates, import_native_key / imported_key
+# (network-tagged, CLI-SGN-11), SeedBackup (reveal once, three words, then take), backup_seal(sender, recipients) over
+# BackupPayload with the generation raised per call, restore_backup (acceptance, self-consistency, BackupRollback / AllowRollback,
+# equal generation None), from_link installing the same payload. Spec §6.3, §8.1, §8.3, §8.4; C-03, C-10, C-11, C-12. UNAUDITED.
+# All commands in clients/ua-rs through scripts/capped, -j2, --locked; full logs git-ignored (clients/ua-rs/target/t9/<step>.log).
+# Gates ran on the tree committed as 6e092199, the T9 code commit (the commit before this summary).
+step | commit | rc | counts
+red: cargo test --features vectors --test wallet_vault (tests only) | 33eb4ee9 | 101 | does not compile: 103 errors, E0599 (99) no method seal_vault / manifest / backup_seal / import_native_key / discover_candidates / reveal / challenge / ..., E0432 (1) unresolved wallet::{check_passphrase, AllowRollback, PrfEnvelope, Unlock, Vault}, E0425 (2) vectors_backup_payload, E0433 (1)
+red: clientkeys npm test (tests only) | 33eb4ee9 | 1 | 288 pass, 2 fail: rs_vault.json vaults, rs_vault.json backups (no file)
+green: cargo test --features vectors --test wallet_vault | 6e092199 | 0 | 22 passed, 1 ignored (regenerate)
+regenerate rs_vault.json (--ignored regenerate), twice | 6e092199 | 0 | sha256 equal after the second run (4 vaults, 1 backup)
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | 6e092199 | 0 | 0 warnings
+clippy --no-default-features | 6e092199 | 0 | 0 warnings
+clippy --no-default-features --features signers | 6e092199 | 0 | 0 warnings
+clippy --no-default-features --features json | 6e092199 | 0 | 0 warnings
+clippy --no-default-features --features pq | 6e092199 | 0 | 0 warnings
+clippy --features vectors | 6e092199 | 0 | 0 warnings
+test (default) | 6e092199 | 0 | 24 suites, 226 passed, 0 failed, 1 ignored (T8: 206; + wallet_vault 20)
+test --no-default-features | 6e092199 | 0 | 10 suites, 50 passed (unchanged)
+test --no-default-features --features signers --test groups | 6e092199 | 0 | 8 passed, 1 ignored
+test --no-default-features --features json --test json | 6e092199 | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | 6e092199 | 0 | 45 passed
+test --features vectors | 6e092199 | 0 | 24 suites, 274 passed, 0 failed, 3 ignored (T8: 252; + wallet_vault 22, + 1 ignored regenerate)
+build wasm32-unknown-unknown --no-default-features / --no-default-features --features signers / pq / wallet / default | 6e092199 | 0 | ok, 5 of 5 (scrypt pure Rust)
+cargo deny --all-features check (cargo-deny 0.20.2) | 6e092199 | 0 | advisories ok, bans ok, licenses ok, sources ok; warnings: 22 duplicates (unchanged from T8)
+Cargo.lock | 6e092199 | - | + scrypt 0.11.0, salsa20 0.10.2, pbkdf2 0.12.2 (MIT OR Apache-2.0; scrypt without default features: no password-hash)
+cargo update -p scaas-ua --offline; cargo tree --locked --offline in scaas-node, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust | 6e092199 | 0 | 5 of 5; no lock moves for scaas-ua (none enables wallet). scaas-node's offline update again re-resolved tempfile's getrandom 0.4.3 -> 0.3.4 (unrelated): reverted, cargo tree --locked passes on the committed lock
+clientkeys npm test | 6e092199 | 0 | 293 tests, 290 pass, 0 fail (+ rs_vault.json vaults, rs_vault.json backups)
+mutants: 2026-11-06-ua-rs-sign-t9-mutants.py | 6e092199 | 0 | 35 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t9-mutants.txt); the plan's 10 (padding: vault and payload, 11 runs) and 24 of the controller's
+docs_check check / paths | 6e092199 | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# Byte-equal and refused: vault.json vaults 6 (N = 2^15, 2^16, 2^17, 12 words: the UA key 0x0102 and the KEM key's kemPkHash of
+# keys.json / kem.json, NFC sealed / NFD opened, PRF) and refusals 11 (wrong passphrase, altered AAD label: VaultOpen; N = 2^31, 3,
+# r = 16, p = 2: VaultParams; v 2 and its tombstone: VaultVersion; 31- and 64-byte payloads: VaultOpen; label manifest: Argument);
+# seal.json: containers[0] restores (12 words, generation 2, the imported evm key), the 12 backup acceptance rows through
+# restore_backup (each row's own opener), the 6 backup replay rows (current = a wallet holding the row's UA, raised to the row's
+# generation by backup_seal); the payload of containers[0] read and written back byte for byte, 10 malformed payloads Argument.
+# Both ways: rs_vault.json (written here) opens in clientkeys (openSeedVault, 4 vaults; restoreBackup, 1 backup incl. its
+# BackupRollback and ContainerSender controls), and here.
+# Notes: (1) M3 (bounds check removed) kills by a crash: the N = 2^31 row asks scrypt for a 2 TiB buffer and the test binary aborts
+# before any assertion; M35 (r and p unchecked, N still bounded) kills by the assertion (r = 16, p = 2: VaultOpen, not VaultParams).
+# (2) restore_backup returns Option<Wallet> (None: equal generation, nothing to install) and takes bip39_passphrase last (as
+# T8's from_link); backup_seal takes the sender UaKey (spec §9.1 names neither). (3) the T2 test
+# generate_is_24_words_and_the_backup_forgets now confirms three words before take() (spec §8.4, CLI-SGN-11). (4) Manifest entries
+# carry no label / created, KEM entries no origin, no FROST shares: nothing produces them in this round. (5) Wallet::unlock is T10's.

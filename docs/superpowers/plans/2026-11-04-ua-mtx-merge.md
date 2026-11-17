@@ -1839,7 +1839,7 @@ error, never `dead`; the `PqzVerdictMismatch` arm lands in T47); the indexer's v
 **Depends on:** T51–T56 for BUILT tags (drafts beside them). **Estimate:** 1. Lands inside T19's commit.
 
 **Files:** spec §9's docs; the spec's §10 Change lines (R2's Change line on the owner ruling R-cross-set included) and §12 entries
-(CTR-UA-41, CTR-PQZ-31, CTR-PQZ-32, NODE-JOB-23, CLI-SGN-43; `docs_check.py` confirms they are next-free) in `docs/decisions.md`;
+(CTR-UA-41, CTR-PQZ-31, CTR-PQZ-32, NODE-JOB-23, CLI-SGN-48: CLI-SGN-43 to CLI-SGN-47 are `ua-rs-sign`'s, controller 2026-11-08; `docs_check.py` confirms they are next-free) in `docs/decisions.md`;
 the operator note's rotation runbook.
 
 - [ ] **Step 1:** Write each change; figures quoted from T51–T56 logs; BUILT only where code and tests exist.

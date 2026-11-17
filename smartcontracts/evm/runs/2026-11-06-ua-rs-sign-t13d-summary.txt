@@ -1,0 +1,41 @@
+# 2026-11-06 ua-rs-sign T13d: ua-py binding (spec §9.2; plan T13). clients/ua-py scaas_ua/wallet.py loads libscaas_ua_c (C ABI v6) by ctypes:
+# wallet (generate, mnemonic, vault open / unlock / seal, lock, memory protection), keys (UA, native, imported, label vaults), sign (ua, member,
+# typed, typed_any, transaction, key proof, raw digest), uasig, WebAuthn, KEM (key, ephemeral, pk, decaps, encaps), seal / open / container, link
+# (session, link_seal, from_link), backup_seal / restore / restore_rollback, vault rewrap / PRF, AEAD / HKDF / HMAC, the Zether and PQZ facades,
+# export_pqz_leaf_raw: every export of ABI 6 except the v5 identity calls, which stay ua-py's own port (the independent cross-check). UNAUDITED.
+# Commands foreground; ua-c's build through scripts/capped (-j2, --locked, --offline); full logs git-ignored (clients/ua-py/t13d-*.log).
+step | commit | rc | counts
+red: python3 -m unittest tests.test_wallet (the tests, no scaas_ua/wallet.py) | 1eba2d4e + tests | 1 | ImportError: cannot import name 'wallet' from 'scaas_ua'
+ua-c cargo build --release (the library the bindings load) | 1eba2d4e | 0 | libscaas_ua_c.so rebuilt (the 14:24 release build predated the T15 commit's source); 129 exports, abi_version 6, features 0x45f (wallet, pq, falcon, zether, pqz, pqz-set-n2304-kmax4096, mlock)
+ua-py python3 -m unittest tests.test_wallet | 877094b3 | 0 | 56 tests OK (Load 2, Handles 3, Secrets 2, Keys 3, Sign 8, Kem 5, Seal 10, Vault 4, Custody 7, Errors 1, Crypto 1, Zether 4, Pqz 5; subtests per vector row)
+ua-py python3 -m unittest tests.test_vectors (the own port, unchanged) | 877094b3 | 0 | 27 tests OK
+mutants: 2026-11-06-ua-rs-sign-t13d-mutants.py | 877094b3 | 0 | 18 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-t13d-mutants.txt): the plan's 3 and 15 of the controller's
+# Rows read: keys.json (ua 184+ rows with the own port's derive_ua as cross-check, native, refusals), sign.json (ua, member, policy 10 + 14, typed
+# generic / refusals, tx rows / refusals, webauthn accepted / refusals with the own port's ua_message, msig 3 + 4 through uasig: memberSigs bytes),
+# kem.json (keys, refusals, encapsRefusals, decaps), seal.json (seal, refusals, argumentRefusals, containers 3, acceptance 28, replay backup 6),
+# vault.json (vaults, refusals), zether.json (cacheBox, cacheRefusals), clients/zether-prover/vectors (r33_keys, transfer_bls12381), PQZ (set,
+# leaf = the UA PQ rule, proveRegister, enc / dec, cache box). Skipped as in ua-c's test_vectors.py: rows a release build cannot express
+# (fixed-seed link sessions and ephemeral recipients, seal version / scheme 2, the 31-byte E, the 2^64 KEM version).
+# Decisions (controller, the owner may override): (1) The module is scaas_ua.wallet beside the port (the plan's file). (2) Load: the first call
+# loads SCAAS_UA_C_LIB, else clients/ua-c/target/release; check_build refuses abi != 6, a missing wallet or pq bit, an unknown bit, two
+# pqz-set bits, pqz without a set or a set without pqz (LibraryMismatch); a refused library is not kept; test hook _abi_hook. (3) Secret
+# inputs are bytes-like, a str is refused (TypeError): it cannot be wiped; each is copied into a ctypes buffer from _secret_buf (the test hook)
+# and wiped in a finally; secret outputs (decaps / encaps ss, open, open_container, aead_open, hkdf, cache opens, reveal, take, the PQZ leaf) are
+# returned as bytearray and their ctypes buffer wiped; wipe() is the caller's helper. (4) Fixed-size inputs are length-checked before the call
+# (UAKeyData): a short bytes would be an over-read in the library. (5) Handles: one class per handle type over _Handle (close once, with,
+# __del__); close waits for calls in flight on that handle (a counter under a Condition), and a call on a closed handle raises ValueError
+# without reaching the library. (6) Variable outputs: one call into a first buffer, again at the size asked for (a size query runs the call
+# again; backup_seal's first buffer is 4 MiB so its generation rises once in practice); PqzKey.call always uses PQZ_OUT_MAX.
+# (7) restore_backup returns None when nothing was installed (the `installed` flag), restore_backup_rollback is its own name.
+# Notes: (1) T18 owns CI: the ua-py job runs tests.test_vectors only today; tests.test_wallet needs ua-c's release build first. (2) The
+# zether_call / pqz_call answers (balances, openings) are returned as str, not wiped. (3) pyproject.toml is unchanged (ctypes is stdlib).
+# Conflicts: the plan's T13 row names the files; ua-go uses a subpackage (T13e decision 1). Spec §9.2's list does not name link_seal,
+# imported_key, the label vaults or PqzSetMismatch (T12 follow-up and T15 conflicts, unchanged); the bindings cover them as asked. Spec and plan not edited.
+# What T16 / T16a depend on: (1) Each binding passes cb = NULL to scaas_ua_external_key_new and expects UAKindUnavailable; no binding
+# marshals a ScaasUaExternalSigner callback yet (ctypes CFUNCTYPE, cgo //export, UnmanagedCallersOnly): if T16 lets a test build take a real
+# signer through the C ABI, each binding needs a callback wrapper. (2) The load check knows bit 9 `external` (a build with it set loads) and
+# refuses any bit past `mlock`: a new feature bit needs the binding's FEATURES table extended. (3) A change of ScaasUaExternalSigner's layout or
+# external_key_new's signature means ABI 7: every binding's ABI constant and CheckBuild move with it (they refuse 7 by design). (4) T16a's new
+# C calls (k-of-n PQZ seed backup) are appended exports: each binding needs wrappers; a binding that declares an export the library lacks
+# fails at load (ua-py: AttributeError in load(); ua-go: link error; ua-cs: EntryPointNotFoundException at first call). New statuses need no
+# binding change (names come from scaas_ua_status_name). (5) T18 (CI): the ua-py / ua-go / ua-cs jobs need ua-c's release build first.

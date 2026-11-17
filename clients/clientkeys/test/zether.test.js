@@ -11,7 +11,7 @@ import {
   zetherRollOverCalldata, zetherRollOverDigest, zetherSetRollOverModeTypedData, zetherSetRollOverModeCalldata, zetherSetRollOverModeDigest,
 } from '../src/zether.js';
 import { deriveKey, seedFromWords, NETWORKS } from '../src/seed.js';
-import { fromHex, hex, abiEncode, keccak_256, concatBytes, utf8ToBytes } from '../src/bytes.js';
+import { fromHex, hex, abiEncode, keccak_256, concatBytes, utf8ToBytes, b64url, fromB64url } from '../src/bytes.js';
 import { hashTypedData, hashStruct, TYPED_OPS } from '../src/evm.js';
 import { uaMessage, purposeTag, holderPopMessage, portableRecordDigest, registrationDigest, POP_V2_TAG } from '../src/ua.js';
 import { dir } from './ua-vectors-dir.js';
@@ -224,7 +224,11 @@ for (const curve of ['bls12381']) {
     const box = await sealBalanceCache(curve, x, entries);
     assert.deepEqual(await openBalanceCache(curve, x, box), entries);
     assert.deepEqual(await openBalanceCache(curve, x + 1n, box), {});
-    assert.deepEqual(await openBalanceCache(curve, x, { ...box, ct: box.ct.slice(0, -2) + 'AA' }), {});
+    // the tamper always changes a byte (its last one XOR 0x5a; writing 'AA' kept a ct that already ended in it, 1 in 4096)
+    const ct = fromB64url(box.ct);
+    ct[ct.length - 1] ^= 0x5a;
+    assert.notEqual(b64url(ct), box.ct);
+    assert.deepEqual(await openBalanceCache(curve, x, { ...box, ct: b64url(ct) }), {});
     assert.deepEqual(await openBalanceCache(curve, x, undefined), {});
     assert.ok(!JSON.stringify(box).includes(String((1n << 54n) - 1n)), 'balance is not stored in clear');
   });
@@ -352,4 +356,22 @@ test('G1: the 128 encoded bytes word by word, abi.encode(G1) = the packed point'
   const g = g1(b);
   assert.equal(hex(abiEncode(['(bytes32,bytes32,bytes32,bytes32)'], [[g.x0, g.x1, g.y0, g.y1]])), hex(b));
   assert.throws(() => g1(b.subarray(1)), /wrong point length/);
+});
+
+// ua-rs-sign T14: the balance-cache rows of zether.json (written by scripts/ua-wallet-vectors.mjs; ua-rs's Zether facade is
+// held to the same bytes): each box opens to its entries under the conf key of its keys.json mnemonic, each refusal opens
+// to an empty cache.
+test('zether.json: cache boxes open under the conf key, refusals do not', async () => {
+  const Z = JSON.parse(readFileSync(new URL('zether.json', dir)));
+  const K = JSON.parse(readFileSync(new URL('keys.json', dir)));
+  const seed = (id) => fromHex(K.mnemonics.find((m) => m.id === id).seed);
+  const x = (r) => deriveConfKey(seed(r.mnemonic), { curve: Z.curve, coin: r.coin, account: r.account, use: r.use });
+  assert.ok(Z.cacheBox.length >= 2 && Z.cacheRefusals.length >= 3);
+  for (const r of Z.cacheBox) {
+    const k = x(r);
+    assert.equal(k.Y, r.Y, r.id);
+    const entries = await openBalanceCache(Z.curve, k.x, r.box);
+    assert.equal(hex(utf8ToBytes(JSON.stringify(entries, (_, v) => (typeof v === 'bigint' ? v.toString() : v)))), r.plaintext, r.id);
+  }
+  for (const r of Z.cacheRefusals) assert.deepEqual(await openBalanceCache(Z.curve, x(r).x, r.box), {}, r.id);
 });

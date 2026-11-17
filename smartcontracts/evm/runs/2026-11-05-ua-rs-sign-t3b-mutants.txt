@@ -1,0 +1,15 @@
+# ua-rs-sign T3b mutants (plan T3b + the controller's additions: release randomness per scheme, the arena form, routing, and four on the vendored Falcon C / FFI): one change each on a clean tree at 1ce2b70e (code as committed), suite = cargo test -j2 --locked --features vectors --test wallet_pq --test wallet_keys --test pq --test ua8 (clients/ua-rs; it stops at the first failing test binary), source restored byte for byte after each.
+verdict | mutant | file | rc | failed tests
+killed   | M1 Falcon signs pq_msg | src/wallet/pqsign.rs | rc=101 | 4 failed: sign_json_pq_rows, signed_bytes_per_scheme, two_release_signatures_differ, vectors::falcon_fixed_randomness
+killed   | M2 ML-DSA context non-empty | src/wallet/pqsign.rs | rc=101 | 5 failed: sign_json_pq_rows, signed_bytes_per_scheme, two_release_signatures_differ, vectors::pq_kat_signatures, vectors::sign_json_pq_bytes_rows
+killed   | M3 ML-DSA rnd fixed in a release build | src/wallet/pqsign.rs | rc=101 | 1 failed: two_release_signatures_differ
+killed   | M4 SLH-DSA M' without the two zero bytes | src/wallet/pqsign.rs | rc=101 | 5 failed: sign_json_pq_rows, signed_bytes_per_scheme, two_release_signatures_differ, vectors::pq_kat_signatures, vectors::sign_json_pq_bytes_rows
+killed   | M5 SLH-DSA release opt_rand = PK.seed (deterministic) | src/wallet/pqsign.rs | rc=101 | 1 failed: two_release_signatures_differ
+killed   | M6 Falcon randomness fixed in a release build | src/wallet/pqsign.rs | rc=101 | 1 failed: two_release_signatures_differ
+killed   | M7 SLH-DSA arena keeps the 48-byte seed (keygen per signature) | src/wallet/pqsign.rs | rc=101 | 6 failed: sign_json_pq_rows, signed_bytes_per_scheme, two_release_signatures_differ, vectors::arena_keeps_the_encoded_keys, vectors::pq_kat_signatures, vectors::sign_json
+killed   | M8 Falcon not routed to the PQ signer | src/wallet/pqsign.rs | rc=101 | 6 failed: locked_wallet_pq_handles_sign_nothing, sign_json_pq_rows, signed_bytes_per_scheme, two_release_signatures_differ, vectors::arena_keeps_the_encoded_keys, vectors
+killed   | M9 Falcon keygen seed shortened (C) | vendor/pqclean-falcon-seeded/seeded.c | rc=101 | 1 failed: keys_json_ua_rows
+killed   | M10 Falcon verify: non-zero padding accepted (C) | vendor/pqclean-falcon-seeded/seeded.c | rc=101 | 1 failed: pq_kat_verifies
+killed   | M11 Falcon verify: unpadded length accepted | src/falcon.rs | rc=101 | 1 failed: check_fails_closed
+killed   | M12 Falcon nonce not hashed with the message (C) | vendor/pqclean-falcon-seeded/seeded.c | rc=101 | 4 failed: sign_json_pq_rows, signed_bytes_per_scheme, two_release_signatures_differ, vectors::falcon_fixed_randomness
+mutants M1-M12 of 12: 12 killed, 0 survived, 0 not loaded

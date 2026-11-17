@@ -329,6 +329,9 @@ const PLAIN: &[(&str, &[&str], &str)] = &[
     // the three-key model (K3-3, CTR-UA-43): a scoped record (scope 0 class 2, the token class 3) and its stored `R_REG` proof
     ("setPqzScopedKey", REG, "bytes32 ua,address scope,uint64 version,bytes pqzKey,bytes32 pqzPopHash,KemKey openKem,uint64 validUntilBlock,UASig sig"),
     ("storePqzScopedPop", REG, "bytes32 ua,address scope,uint64 version,bytes pqzPop"),
+    // NODE-JOB-29 (CTR-UA-23, owner 2026-11-15): one part of an ML-DSA key's expanded-key cache, derived on chain from `pk`; anyone
+    // sends it (PERMISSIONLESS), no signature; `pk` of the kind's FIPS 204 length and `part` below its part count ([`cache_bounds`])
+    ("cacheExpandedKey", REG, "uint16 kind,bytes pk,uint256 part"),
     ("acceptMembership", REG, "bytes32 ua,MemberSig memberSig"),
     // CTR-UA-44 (TODO 3ze): an `msig`'s structure update on this registry, signed by a quorum of its stored structure; fee 0, anyone
     // submits (`chainUid` the registry's word: the contract's `chainUid_`, the JSON name without the trailing underscore)
@@ -715,6 +718,25 @@ fn register_msig_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()>
     });
     if n > MSIG_MAX_SLOTS {
         bail!("BAD_PAYLOAD: args.structure.members: more than 16 members");
+    }
+    Ok(())
+}
+
+/// NODE-JOB-29: a cache part's `kind` is an ML-DSA kind, `pk` its FIPS 204 length (1,312 / 1,952 / 2,592 B), `part` below its part
+/// count (1 / 2 / 3, `PqUA.mldsaParts`), refused by name before any simulation, as the registry refuses them (`UAKeyCache`,
+/// `UAKeyData`). The fields are flat, so the decode's depth is the type's.
+fn cache_bounds(fields: &[(String, String)], vals: &[Val]) -> Result<()> {
+    let at = |n: &str| pos(fields, n).map(|i| &vals[i]);
+    let kind = at("kind").and_then(Val::as_uint).and_then(|(k, _)| u16::try_from(k).ok()).unwrap_or(0);
+    let Some((len, parts)) = crate::guard::mldsa_cache(kind) else {
+        bail!("BAD_PAYLOAD: args.kind: {kind:#06x} is no ML-DSA kind (0x0130, 0x0131, 0x0134): no expanded-key cache");
+    };
+    let n = at("pk").and_then(Val::as_bytes).map_or(usize::MAX, <[u8]>::len);
+    if n != len {
+        bail!("BAD_PAYLOAD: args.pk: {n} bytes, kind {kind:#06x} takes a {len}-byte FIPS 204 public key");
+    }
+    if at("part").and_then(Val::as_uint).is_none_or(|(p, _)| p >= U256::from(parts)) {
+        bail!("BAD_PAYLOAD: args.part: kind {kind:#06x} has {parts} part(s), 0 to {}", parts - 1);
     }
     Ok(())
 }
@@ -1196,6 +1218,9 @@ pub fn assemble(row: &Row, envelope: Option<&Value>, args: &Value, sig: Option<&
     }
     if row.name == "registerMsig" {
         register_msig_bounds(&row.fields, &vals)?;
+    }
+    if row.name == "cacheExpandedKey" {
+        cache_bounds(&row.fields, &vals)?;
     }
     if row.typed {
         normalize(&row.fields, &mut vals, fee_recipient)?;
@@ -1971,8 +1996,8 @@ mod tests {
         // T93: 18 -> 30, `PqChat`'s twelve writes; UA-7 P48: -> 31, `remove`; ua-mtx-liquidity L6: -> 32, the DEX's `mtxLiquidity`
         // (CTR-DEX-30)
         // the three-key model (K3-3): -> 34, the registry's `setPqzScopedKey`, `storePqzScopedPop`
-        // CTR-UA-44 (TODO 3ze): -> 35, the registry's `updateMsig`
-        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 35, "the wallet's three flat builders are gone (MD-11 (a))");
+        // CTR-UA-44 (TODO 3ze): -> 35, the registry's `updateMsig`; NODE-JOB-29 (TODO 3zh MD-14): -> 36, the registry's `cacheExpandedKey`
+        assert_eq!(rows().iter().filter(|r| !r.typed).count(), 36, "the wallet's three flat builders are gone (MD-11 (a))");
     }
 
     /// Group 3g (KV-10): the rollover is one row per kind (Zether's form kept; the PQZ one with `keyVersion`, its EIP-712 struct
@@ -2479,6 +2504,32 @@ mod tests {
         let st = |n: usize| parse("MsigStructure", &json!({"threshold": 1, "members": members(n)}), "s").unwrap();
         assert!(register_msig_bounds(&f, &[st(16)]).is_ok());
         assert_eq!(register_msig_bounds(&f, &[st(17)]).unwrap_err().to_string(), "BAD_PAYLOAD: args.structure.members: more than 16 members");
+    }
+
+    /// NODE-JOB-29: a cache part's `kind`, `pk` length and `part`, each kind's boundary accepted and one past it refused by name,
+    /// before any simulation.
+    #[test]
+    fn cache_parts_are_bounded() {
+        let f = fields_of("uint16 kind,bytes pk,uint256 part");
+        let v = |k: u64, n: usize, p: u64| [Val::Uint(U256::from(k), 16), Val::Bytes(vec![1; n]), Val::Uint(U256::from(p), 256)];
+        let err = |k: u64, n: usize, p: u64| cache_bounds(&f, &v(k, n, p)).unwrap_err().to_string();
+        for (k, n, parts) in [(0x0130, 1312, 1), (0x0131, 1952, 2), (0x0134, 2592, 3)] {
+            assert!(cache_bounds(&f, &v(k, n, parts - 1)).is_ok(), "{k:#x}");
+            assert!(err(k, n, parts).starts_with("BAD_PAYLOAD: args.part: "), "{k:#x}");
+            assert!(err(k, n - 1, 0).starts_with("BAD_PAYLOAD: args.pk: "), "{k:#x}");
+            assert!(err(k, n + 1, 0).starts_with("BAD_PAYLOAD: args.pk: "), "{k:#x}");
+        }
+        for k in [0x0132, 0x0133, 0x0135, 0x0101, 0] {
+            assert!(err(k, 1952, 0).starts_with("BAD_PAYLOAD: args.kind: "), "{k:#x}");
+        }
+        // through the parser: the named op builds the contract's calldata
+        let pk = vec![7u8; 1952];
+        let op = crate::guard::cache_part_op(Address::repeat_byte(0x5e), 0x0131, &pk, 1, 4_000_000_000);
+        let p = Op::parse(&op, None).unwrap();
+        assert_eq!(p.data.to_vec(), crate::abi::IUARegistry::cacheExpandedKeyCall { kind: 0x0131, pk: pk.into(), part: U256::from(1) }.abi_encode());
+        let mut bad = op.clone();
+        bad["args"]["part"] = json!("2");
+        assert!(Op::parse(&bad, None).unwrap_err().to_string().starts_with("BAD_PAYLOAD: args.part: "));
     }
 
     /// The typed bytes a job builds are `abi.encode(MemberSig[])`, the stored form, nested too, and a blob that claims more than it holds

@@ -1,0 +1,41 @@
+# 2026-11-06 ua-rs-sign client parity before T8: clientkeys refuses what ua-rs refuses, sign.json carries the rows, both read them.
+# (1) evmTransaction chainId < 2^64 (ua-rs: alloy ChainId u64, EIP-2294); (2) webauthnAssertion refuses a clientDataJSON that is not
+# UTF-8 (fatal decoder; the verifiers and the chains' rule unchanged); (3) MD-11 record builders: NOT built, stopped (below). UNAUDITED.
+# Commands in clients/clientkeys or clients/ua-rs through scripts/capped, -j2, --locked; full logs git-ignored
+# (clients/ua-rs/target/parity/<step>.log). Gates ran on the tree committed as 5e502590 one edit earlier: that edit rewrapped a
+# comment in src/evm.js (no code); the mutants ran on 5e502590 itself.
+step | commit | rc | counts
+red: node --test test/ua-wallet.test.js (tests only) | 28949ea2 | 1 | 28 tests, 3 failed: tx chainId row ids missing, webauthn case client-data-not-utf8 missing (2)
+red: cargo test --features vectors --test wallet_tx (tests only) | 28949ea2 | 101 | 2 failed: sign_json_tx_rows_per_type (rows 6 != 7), sign_json_tx_refusals (12 != 14)
+red: cargo test --features vectors --test wallet_webauthn (tests only) | 28949ea2 | 101 | 1 failed: sign_json_refusals (no client-data-not-utf8)
+red: node scripts/ua-wallet-vectors.mjs (rows added, src not fixed) | 28949ea2 | 1 | generator self-check: chainId 2^64 (evmTransaction accepted it)
+red: the same after the chainId fix only | 28949ea2 | 1 | generator self-check: client-data-not-utf8 (webauthnAssertion returned a blob)
+red: cargo test --test wallet_tx after the mutant M5 finding (row chainId 2^64 + 1 asked, not generated) | 28949ea2 | 101 | 1 failed: sign_json_tx_refusals (14 != 15)
+vectors: ua-wallet-vectors.mjs run twice | 5e502590 | 0 | sign.json sha256 330b755bdcf7065222b19c79c5d8f92c2fc8e00fd22b4318f1c56c1bd3dce686 both runs (was d2ee412c...); every other vectors/ua/*.json unchanged
+green: clientkeys npm test | 5e502590 | 0 | 291 tests, 288 passed, 0 failed, 3 skipped (no vendored bundle x2, no cast on PATH: as before)
+clippy --all-targets -D warnings (default) | 5e502590 | 0 | 0 warnings
+clippy --no-default-features | 5e502590 | 0 | 0 warnings
+clippy --no-default-features --features signers | 5e502590 | 0 | 0 warnings
+clippy --no-default-features --features json | 5e502590 | 0 | 0 warnings
+clippy --no-default-features --features pq | 5e502590 | 0 | 0 warnings
+clippy --features vectors | 5e502590 | 0 | 0 warnings
+test (default) | 5e502590 | 0 | 22 suites, 181 passed, 0 failed, 1 ignored (T7: 181; assertions added, no new test)
+test --no-default-features | 5e502590 | 0 | 10 suites, 50 passed
+test --no-default-features --features signers --test groups | 5e502590 | 0 | 8 passed, 1 ignored
+test --no-default-features --features json --test json | 5e502590 | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | 5e502590 | 0 | 45 passed
+test --features vectors | 5e502590 | 0 | 22 suites, 222 passed, 0 failed, 2 ignored (T7: 222)
+cargo deny --all-features check (cargo-deny 0.20.2) | 5e502590 | 0 | advisories ok, bans ok, licenses ok, sources ok; 22 duplicate warnings + 1 unused licence entry, as T7; Cargo.lock unchanged
+readers of sign.json | - | - | clientkeys (ua-wallet.test.js, the generator) and ua-rs tests wallet_{tx,webauthn,sign,pq,pairing,typed,uasig}.rs, src/wallet/policy.rs: all in the runs above; no contract test, scaas-node or other ua-* client reads it
+mutants: 2026-11-06-ua-rs-sign-parity-mutants.py | 5e502590 | 0 | 5 killed, 0 survived, 0 not loaded (2026-11-06-ua-rs-sign-parity-mutants.txt)
+docs_check paths | 5e502590 | 0 | 0 machine paths (no doc changed)
+# Rows added (sign.json): tx.rows + type 2 at chainId 2^64 - 1 (appended: no row index moves); tx.refusals + "chainId 2^64" (type 2),
+# "legacy chainId 2^64", "chainId 2^64 + 1"; webauthn.refusals + "client-data-not-utf8" (0xff in the origin, validly signed; the
+# generator checks clientDataOk passes it, the JS test checks the whole encoding verifies with the chains' rule).
+# (3) MD-11 stopped: clientkeys holderPopMessage / registrationArgs / kemRecordMessage and ua-rs ua8.rs holder_pop_message(_with) /
+# registration_args / kem_record_message are what every contract-side harness uses to build the msig KEM rows the registry still
+# accepts until 3c: smartcontracts/evm/script/pqz/e2e.py msig_ua (a live-chain contract e2e: popmd and registrationArgs with a KEM
+# key for an msig), ua-portable-vectors.mjs (portable.json msig-pq/<set> x4 with kem, kemRecords msig-pq/v1-v3, read by forge
+# test/ua and the other families), and the ua-rs-based bindings' vector tests (ua-c, ua-cxx, ua-qt, ua-dart-frb) over those rows.
+# Keeping both needs a choice (a named registry-view builder for harnesses, or e2e.py dropping the msig's KEM key, or waiting for
+# 3c); left to the controller.

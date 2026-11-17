@@ -732,6 +732,7 @@ Layer 3 — purposes:
 | `kem` | `kemRecordDigest(ua, version, kem)` ([CTR-UA-32](#CTR-UA-32)) |
 | `pqz-key` | `pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash)`, the record of `setPqzKey` version 0 ([CTR-UA-16](#CTR-UA-16)), `pqzKeyVersionRecordDigest(ua, version, pqzKeyHash, pqzPopHash)` for a version v ≥ 1 ([CTR-UA-42](#CTR-UA-42)); its `R_REG` proof's message wraps `pqzKeyDigest` (version 0) or `pqzKeyVersionDigest` (v ≥ 1) under the tag `0x0142` |
 | `pqchat` (`scaas.ua.purpose.pqchat.v1`) | the typed digest of a `PqChat` record ([pqchat.md](pqchat.md)); portable, checked by `requirePortable` ([§1.8](#require-portable)), never chain-bound (UA-7 O1, plan T66a) |
+| app (`appPurpose(appId)`, namespace `scaas.ua.purpose.app.v1`; SPECIFIED) | an app's record typed digest in the app's own domain: portable through `requirePortableApp`, chain-bound through `requireAuthorized` ([CTR-UA-45](#CTR-UA-45), [CTR-UA-46](#CTR-UA-46)) |
 | `metatx` | v3 EIP-712 digest of `UAMetaTransaction` or `UAMetaTransfer` |
 | `metatx-cancel` | `keccak256(abi.encode(CANCEL_TAG, chainid, chainUid, token, ua, batch, validUntil))` with `CANCEL_TAG` = this purpose tag (UA-4), the token's view `uaCancelDigest` — derived `ua` only (natives use `cancelNonce`); each signature cancels once |
 | `member` | `keccak256(structureUA ‖ ua_msg_of_structure)` (native members: inside `UAAuth`, except for the three portable purposes `pop` v2, `kem` and `pqz-key` and the acceptance of [CTR-UA-37](#CTR-UA-37), where a native member — code-less or an EIP-7702 designator — signs the record's typed digest itself by its own key, or a contract member answers ERC-1271 over it by [CTR-UA-24](#CTR-UA-24)'s rule, [CTR-UA-07](#CTR-UA-07)) |
@@ -914,8 +915,8 @@ mod `r`; no x-only / parity negation (points are full); nonce aggregation and pa
 port; challenge = the scaas Schnorr challenge, so the result verifies as `schnorr-bn254`. Port details (UA-2c, pinned by `groups.json`): `L`
 stays a 32-byte tagged hash; the coefficient and nonce hashes are widened to 512 bits and reduced mod `r`; FROST(bn254)
 `H4`/`H5` output the scalar's 32 bytes and there is no `HID`. The FROST DKG PoK challenge is `H_dkg(id (32-byte
-big-endian) ‖ C_i0 ‖ R_i)` exactly as ZF `frost-core` 3.0.0 computes it.
-For `frost-secp256k1` the on-chain verifier sums `C_i0` with mixed Jacobian additions and refuses a transcript in which a partial sum equals ±the next `C_i0` (repeated or cancelling commitments, only constructible by a party holding two participant slots); the Rust registry checks and noble accept such a transcript, and `frost-bn254` (precompile addition) accepts it; the refusal fails closed (`UAPoP`).
+big-endian) ‖ C_i0 ‖ R_i)` exactly as ZF `frost-core` 3.0.0 computes it. That challenge has no context string, so a participant's `(C_i0, R_i, μ_i)` can be replayed at the same index in another transcript, by design: what binds a registration is the group PoP by `Y`, which needs the discrete log of every `C_i0` (groups.json row `rogue-contribution`).
+For `frost-secp256k1` the on-chain verifier sums `C_i0` with mixed Jacobian additions and refuses a transcript in which a partial sum equals ±the next `C_i0` (repeated or cancelling commitments, only constructible by a party holding two participant slots); every UA library refuses it too (ua-rs `dkg_check`, clientkeys' noble re-check of groups.json: rows `c0-repeated`, `c0-cancelling`), while `frost-bn254` (precompile addition) accepts it on chain and off; the refusal fails closed (`UAPoP`).
 
 **FROST (RFC 9591, DKG of the FROST paper).** Key data is the DKG transcript: for each participant `i = 1..n` (RFC 9591
 scalar identifiers), its full Feldman commitment vector `C_i0 … C_i(t−1)` and its round-1 PoK `(R_i, μ_i)` of `a_i0`.
@@ -1597,10 +1598,42 @@ portable signature over `uaMessage(kind, purposeTag, typedDigest)`, `typedDigest
 `memberDigest` under `member`, native members over `typedDigest` itself, never `UAAuth`; any `msig`, PQ-eligible or not. The
 purpose set is closed: `PURPOSE_KEM`, `PURPOSE_PQZ_KEY` and `PURPOSE_PQCHAT = keccak256("scaas.ua.purpose.pqchat.v1")`
 ([pqchat.md](pqchat.md)); `PURPOSE_POP_V2` (the registration's own check) and every chain-bound purpose are refused, so are a
-native id (it signs chain-bound only) and an unregistered one; a new portable purpose waits for the next registry generation.
+native id (it signs chain-bound only) and an unregistered one; a new SCaaS portable purpose waits for the next registry
+generation, and an app's portable records use the open app namespace instead ([CTR-UA-45](#CTR-UA-45); the earlier
+`PURPOSE_PQVAULT` proposal was withdrawn the same day, 2026-11-17).
 Gen 2 forwards a gen-1 record and returns gen 1's verdict (UA8-D11); its constructor does not probe gen 1 for the view (a gen 1
 without it reverts, which is a refusal). `UAVerifyGas` when too little gas is left for a verifier's cap. Built as
 `UARegistryCoreLib.requirePortable`, run by DELEGATECALL inside the registry's view (it writes nothing).
+
+<a id="CTR-UA-45"></a>**CTR-UA-45** — **Apps sign records by two paths, both supported: (A) the registry's open portable
+app namespace, one entry added before the freeze, so any app gets portable (chain-free, replica-able) records with no
+further registry change; (B) the chain-bound `requireAuthorized`, open to any contract and purpose already, the app's own
+EIP-712 domain binding the chain, one instance and no replica** (owner 2026-11-17, N1; SPECIFIED, nothing built). An app
+needs no SCaaS registration beyond its users' UAs, with or without `OpenFactory`. `PqVault` is the first app on both
+paths ([CTR-PQV-16](pqvault.md#CTR-PQV-16)); `PqChat` keeps `PURPOSE_PQCHAT` on `requirePortable`, unchanged.
+
+<a id="CTR-UA-46"></a>**CTR-UA-46** — **`requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, UASig auth)`
+is a view that runs `requirePortable`'s checks under `purpose = keccak256(abi.encode(keccak256("scaas.ua.purpose.app.v1"),
+appId))`, computed by the registry, `appId ≠ 0`, else `UAUnauthorized(ua)`; an app purpose is never a SCaaS purpose and
+the reverse; an app's portable domain is exactly `name, version, salt` with `salt = appId`; gen 2 forwards a record it
+does not hold to its predecessor's entry plainly; an app contract on this entry computes the digest itself, names the
+signing UA in every record and uses different domain field sets on the two paths** (controller calls, owner may override;
+SPECIFIED, nothing built). `UAKinds.APP_PURPOSE_NS` and `UAKinds.appPurpose(appId)`. Separation: a SCaaS purpose hashes an
+ASCII `scaas.ua.purpose.<p>.v<n>` string shorter than 64 bytes, an app purpose exactly 64 bytes starting with
+`APP_PURPOSE_NS`, so equality needs a hash collision; `requirePortable`'s closed list refuses every app purpose; a new SCaaS
+purpose keeps that string form and `APP_PURPOSE_NS` is never a purpose itself. An app portable domain has a `salt` field
+and so another domain typehash than every SCaaS portable domain (`name, version`): an app digest never equals a SCaaS
+portable digest. The body is `requirePortable`'s, `_sigOk` unchanged (its single-key tail shared as `_single`, its guard
+kept). Derived members sign `memberDigest(ua, uaMessage(MSIG, purpose, typedDigest))`, so their signatures bind the app. A
+native member of an `msig` signs the typed digest itself, as under `requirePortable`: neither the purpose nor the `ua` is
+in what it signs, so its signature is valid under every `appId` for the same digest; **the guard is the app contract
+computing that digest itself**, not the salt. Hence three obligations of every app contract on this entry: (a) compute
+the digest itself, in its own EIP-712 domain, never from a caller's bytes; (b) name the signing UA in a field of every
+record; (c) use different domain field sets on the portable and the chain-bound path. Residual: a dapp can phish a native
+member's signature over a valid record (one typed-data request per member, the quorum needed), for every app and for
+`PqChat` alike. A predecessor without the entry reverts, which is a refusal (no mapping to a named error). Path (B) uses `appPurpose(appId)` as its purpose by default
+(PqVault does); an app with its own chain-bound contract may name its own purpose, never a SCaaS one. The design, the size figures and the vectors are the pqvault spec's
+[§4.1](../superpowers/specs/2026-11-17-pqvault.md#41-r-a-the-open-portable-app-namespace-n1-a-vc20).
 
 ```solidity
 interface IUARegistry is IERC5267 {
@@ -1755,6 +1788,8 @@ interface IUARegistry is IERC5267 {
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig calldata auth) external view;
     /// The portable check (UA-7 O1): purposeTag one of PURPOSE_KEM, PURPOSE_PQZ_KEY, PURPOSE_PQCHAT (see requirePortable above)
     function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig calldata auth) external view;
+    /// SPECIFIED, not built (CTR-UA-46): the portable check under appPurpose(appId), the open app namespace
+    function requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, UASig calldata auth) external view;
 }
 // constructor (the UA-2a UARegistry): error UAConfig(uint16 kind) — kind outside the code's table, duplicate, verifier
 //   (or smartKeyAccountImpl) not a contract (no code or an EIP-7702 designator, owner ruling D5), cap 0 or above the budget, a keyHash group the predecessor enables, a predecessor of another
@@ -2380,7 +2415,7 @@ live in the separate `ComplianceRegistry`. This interface was replaced by `IUARe
 | S20 | Typo in a UA id; Zether UA as receiver | unregistered `to` refused; `to` ∈ native ∪ SIGNING (`UAKindNotAccepted`) | none |
 | S21 | ERC-20 replay of `Transfer` ≠ `balanceOf` | the `UA_POOL` sub-ledger: every native balance change emits `Transfer` | naive tools show one large `UA_POOL` holder |
 | S22 | Gas repricing pushes an enabled kind over budget after funds are held | caps ≤ ~50 % of the budget for the classical kinds, ≤ 75 % for the PQ kinds (owner 2026-11-15; 66 % by the ruling of 2026-10-31); budget ≤ 70 % of the chain cap | a large repricing fork can still lock a PQ/ed25519 UA on that chain until a new generation and v3 version |
-| S23 | Raw-hash signing by EOAs (`eth_sign` drain) | native signers behind the registry sign EIP-712 `UAAuth` only, except an `msig` native member of a portable record (`pop` v2, `kem`, `pqz-key`), which signs the record's chain-free EIP-712 typed data ([CTR-UA-07](#CTR-UA-07)), never a raw hash; `uaCancelNonce` derived-only | the `secp256k1` kind (0x0108): its verifier checks ECDSA over the raw digest, so an EOA-held key signs it only through `eth_sign` (on-chain review W-J; owner 2026-10-19: recorded residual risk; an EIP-191 `personal_sign` variant after P6, with new vectors and the six clients) |
+| S23 | Raw-hash signing by EOAs (`eth_sign` drain) | native signers behind the registry sign EIP-712 `UAAuth` only, except an `msig` native member of a portable record (`pop` v2, `kem`, `pqz-key`), which signs the record's chain-free EIP-712 typed data ([CTR-UA-07](#CTR-UA-07)), never a raw hash; `uaCancelNonce` derived-only | the `secp256k1` kind (0x0108): its verifier checks ECDSA over the raw digest, so an EOA-held key signs it only through `eth_sign` (on-chain review W-J; owner 2026-10-19: recorded residual risk; an EIP-191 `personal_sign` variant after P6, with new vectors and the six clients). The same class, both directions, for a wallet's imported key that registers its own derived kind (owner 2026-11-08, [CLI-SGN-29](../clients/signers-clientkeys.md#CLI-SGN-29)'s Change): (a) the key's native raw-digest call (CLI-SGN-40's opt-in, kept: its native use is unchanged) or another wallet holding the key (`eth_sign`; an ed25519 wallet's sign-message of given bytes) signs any 32 bytes, a `ua_msg` of its `0x0108` / `0x0102` UA included; (b) every `0x0108` / `0x0102` signature is a raw signature of the key over the 32-byte `ua_msg` (`Secp256k1Verifier` recovers the EOA by design), dangerous only to a verifier that takes an arbitrary hash from the key, which [CTR-UA-12](#CTR-UA-12) forbids in SCaaS; the guard of (a) is [CLI-SGN-22](../clients/signers-clientkeys.md#CLI-SGN-22) (the family's own envelope, never a server digest); signatures over operations that hash their own preimage (EIP-712, transactions, the key proof) do not cross (vectors `ua/sign.json` `imported.separation`) |
 | S24 | Native send to a derived id on non-EVM (keyless address) | derived ids shown only as URN, never in the chain's address format | a user who converts the URN by hand |
 | S25 | Membership shown as consent | app rules (members confirm off chain); the MuSig2 PoP proves participation | `msig`/FROST groups found on chain without member confirmations |
 | S26 | Chain-id collision (7622 or any id shared by two networks): `UAAuth` or v3 signature replayed to a same-address registry/token there (a registration PoP is portable, so its replay is not an attack: it registers the same UA, S31) | `chain_uid` (genesis hash) in both EIP-712 domain salts, the cancel digest and the CREATE2 init code; the node binds registry, `chainUid()` and genesis hash per profile | a replica built from a copy of our profile on a colliding chain can copy our records; nothing of ours trusts it |
@@ -2703,7 +2738,7 @@ identifier features. Tokens verify a `SmartKeyAccount` through ERC-1271 with the
   interact with third-party contracts that only understand `address`.
 - Keys: multiple authorized keys (`P256_WEBAUTHN(x, y, rpIdHash, originHash)`, `SECP256K1(address)`), never zero keys (`LastKey`);
   guardian `initiateRecovery(newKey)` → anyone `completeRecovery` after `RECOVERY_DELAY`. Its
-  `SECP256K1` keys come from the role path `m/7622'/0'/<account>'/2'/<i>'` ([CLI-SGN-30](../clients/signers-clientkeys.md#CLI-SGN-30)),
+  `SECP256K1` keys come from the role path `m/22776'/0'/<account>'/2'/<i>'` ([CLI-SGN-30](../clients/signers-clientkeys.md#CLI-SGN-30)),
   never from the EOA path (the factory salt and the 400 k cap as built: `SmartKeyAccountFactory.salt`,
   `MetaTokenBase._erc1271Gas`); registering a key whose address equals the subject's own EOA (its payer address) on the
   same account is refused ([CLI-SGN-07](../clients/signers-clientkeys.md#CLI-SGN-07)). Its P-256 keys are passkeys
@@ -2759,7 +2794,7 @@ OpenZeppelin Contracts v5.4.0 `draft-ERC7739Utils`, with the EIP's recommended `
 
 A signature over the raw `hash` is refused; there is no other form (fail closed). **Limit:** the wallet cannot see how `hash`
 was made, so `PersonalSign` accepts whatever `hash` the caller passes; it is meant for EIP-191 hashes, and a client signs
-`PersonalSign` only for an EIP-191 message it rebuilt itself (clientkeys offers `TypedDataSign` only). A hash that is neither
+`PersonalSign` only for an EIP-191 message it rebuilt itself (clientkeys and `ua-rs` offer `TypedDataSign` only). A hash that is neither
 an app's EIP-712 digest nor an EIP-191 hash has no supported form. A key shared by two accounts, or an owner's EOA and its
 `MandateWallet`, answers only for the wallet it signed for. In a batch, each leaf is the ERC-7739 message of its operation
 and each operation carries its own suffix. Every caller of `SigCheck`'s ERC-1271 (tokens, DEX, registry, Zether and PQZ

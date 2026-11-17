@@ -162,6 +162,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [asset-suite.md](contracts/asset-suite.md) | Regulated flags, vesting, distributions, `ExchangeOffer`, templates |
 | [zether.md](contracts/zether.md) · [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) | Classical Zether; PQZ: shield / transfer / unshield, proofs, disclosure (PQZ also: verifier mode, key versions, proof path) |
 | [pqchat.md](contracts/pqchat.md) | `PqChat`: post-quantum chat sessions, epochs, messages, public topics |
+| [pqvault.md](contracts/pqvault.md) | `PqVault`: post-quantum notes and passwords in contract state (SPECIFIED) |
 | [settlement.md](contracts/settlement.md) | Map of every settlement kind: entry points, who checks what, fees, finality |
 
 ### Node (`NODE-*`)
@@ -199,6 +200,10 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [signers-clientkeys.md](clients/signers-clientkeys.md) | Signers, key vault, what a wallet checks before signing |
 | [ua-libraries.md](clients/ua-libraries.md) | UA identity layer in Solidity, JS, Rust, Python, Go, C#; C, C++, QML and Dart bindings |
 | [app.md](clients/app.md) | Console and dApp |
+| [scaas-rpc.md](clients/scaas-rpc.md) | The shared network crate: endpoint lists, failover and strict-majority reads, sends to several nodes, the scaas-node client (SPECIFIED) |
+| [scaas-sdk.md](clients/scaas-sdk.md) | The one API apps call: several seeds in a vault v1 keystore, accounts, operations, confidential tokens, chat, generated bindings (SPECIFIED) |
+| [scaas-tui.md](clients/scaas-tui.md) | The terminal front-end over `scaas-sdk`: review before signing, terminal secret handling, endpoints, accessibility (SPECIFIED) |
+| [pqchat-core.md](clients/pqchat-core.md) | The PqChat client core, an app core above `scaas-sdk`: key handles only, PqChat records through the SDK's named entries, the app's Matrix client as its store, recovery from contract state (SPECIFIED) |
 | [integration.md](integration.md) | Connecting any ERP or back office |
 | [integration-odoo-example.md](integration-odoo-example.md) | One worked ERP connector (example only) |
 

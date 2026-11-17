@@ -1,0 +1,37 @@
+# 2026-11-05 ua-rs-sign T3a: classic-curve signers, the Signer trait, the k256 / p256 0.14 move (plan T3a, owner answer on
+# RUSTSEC-2026-0387; spec §3, §5.1, §8.2, §9.1, §9.4). UNAUDITED.
+# All commands in clients/ua-rs (or the dependent named) through scripts/capped, -j2, --locked; full logs git-ignored
+# (clients/ua-rs/target/t3a/<step>.log). Gates ran on the tree committed as 82fbac3f.
+step | commit | rc | counts
+spike: k256 / p256 next generation | 82fbac3f | 0 | k256 0.14.0, p256 0.14.0, elliptic-curve 0.14.3, ecdsa 0.17.0, rfc6979 0.6.0, crypto-bigint 0.7.10 (>= 0.7.6), signature 3.0.0, bip32 0.6.0 (on k256 0.14); released, not rc
+red: cargo test --features vectors --test wallet_sign (tests/wallet_sign.rs alone) | f9648fa5 | 101 | does not compile: 40 errors, error[E0432]: unresolved imports `scaas_ua::wallet::AllowRawDigest`, `KeyRef`, `SigRole`, `Signer`
+green: cargo test --features vectors --test wallet_sign | 82fbac3f | 0 | 17 passed, 0 failed
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | 82fbac3f | 0 | 0 warnings
+clippy --no-default-features | 82fbac3f | 0 | 0 warnings
+clippy --no-default-features --features signers | 82fbac3f | 0 | 0 warnings
+clippy --no-default-features --features json | 82fbac3f | 0 | 0 warnings
+clippy --no-default-features --features pq | 82fbac3f | 0 | 0 warnings
+clippy --features vectors | 82fbac3f | 0 | 0 warnings
+test (default) | 82fbac3f | 0 | 15 suites, 109 passed, 0 failed (T2: 92; + wallet_sign 11, doc tests 6)
+test --no-default-features | 82fbac3f | 0 | 10 suites, 50 passed, 0 failed (unchanged: the verifiers on k256 / p256 0.14)
+test --no-default-features --features signers --test groups | 82fbac3f | 0 | 8 passed
+test --no-default-features --features json --test json | 82fbac3f | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 | 82fbac3f | 0 | 32 passed
+test --features vectors | 82fbac3f | 0 | 15 suites, 127 passed, 0 failed (T2: 104; + wallet_sign 17, doc tests 6)
+cargo deny --all-features check (cargo-deny 0.20.2) | 82fbac3f | 1 | advisories FAILED on 4: RUSTSEC-2026-0387 crypto-bigint 0.5.5 only through frost-secp256k1 =3.0.0 -> k256 0.13.4 (feature signers; ZF's latest release); RUSTSEC-2026-0162/0163/0165 pqcrypto-* (T3b); RUSTSEC-2024-0436 paste ignored (owner); bans, licenses, sources ok
+cargo tree -i crypto-bigint@0.5.5 --no-default-features | 82fbac3f | 101 | not in the verify-only graph
+build wasm32-unknown-unknown --no-default-features | 82fbac3f | 0 | ok
+build wasm32-unknown-unknown --no-default-features --features signers | 82fbac3f | 0 | ok
+build wasm32-unknown-unknown --no-default-features --features json | 82fbac3f | 0 | ok
+build wasm32-unknown-unknown --no-default-features --features wallet | 82fbac3f | 101 | stops at pqcrypto-internals C ('stdlib.h' not found; T3b, as T0 and T2)
+cargo tree --locked in scaas-node, ua-c, ua-cxx, ua-qt, ua-dart-frb/rust | 82fbac3f | 0 | 5 of 5 after `cargo update -p scaas-ua` in each (locks in 82fbac3f): the four clients drop crypto-bigint 0.5.5; scaas-node keeps it through alloy-signer (k256 0.13)
+scaas-node cargo check --all-targets | 82fbac3f | 0 | ok
+ua-c cargo test | 82fbac3f | 0 | 2 suites, 1 passed
+mutants: 2026-11-05-ua-rs-sign-t3a-mutants.py | 82fbac3f | 0 | 22 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t3a-mutants.txt)
+docs_check check / paths | 82fbac3f | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# sign.json: ua rows of 0x0101 / 0x0102 / 0x0103 / 0x0108: 14 (10 byte-equal through sign_ua, 2 BIP-340 fixed-aux byte-equal
+# through the vectors entry point, 2 BIP-340 verify rows); member rows 3 byte-equal; chainSeparation typed 2 byte-equal (digests
+# from the vector; T4 builds them); role of every ua row but Falcon's 4 (44) and of each PURPOSES entry; external: RFC 6979
+# A.2.5 P-256 SHA-256 2 rows (r as published, s low), secp256k1 set 20 rows (r || s and recovery id); signatures.json native
+# ECDSA rows byte-equal. keys.json native addresses 74. Not signing KATs: signatures.json ed25519Rfc8032 and bip340Official
+# carry no secret key / aux (verify rows only).

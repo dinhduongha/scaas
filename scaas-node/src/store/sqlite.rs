@@ -13,7 +13,8 @@ use sqlx::{Sqlite, Transaction};
 use super::*;
 
 const LIVE_SQL: &str = "('queued', 'leased', 'signed', 'broadcast')";
-const RESERVED: [&str; 3] = ["~gateway", "~mesh", "~dex"];
+/// `~node`: the node's own jobs (T21 L63b: the ML-DSA cache parts a lane sends for a `register`, NODE-JOB-29).
+const RESERVED: [&str; 4] = ["~gateway", "~mesh", "~dex", "~node"];
 /// Feed tables with a purge floor in `meta('<table>_floor')`.
 const FEEDS: [&str; 2] = ["job_event", "feed_item"];
 
@@ -400,6 +401,12 @@ impl Backend for SqliteStore {
         let v: Option<Option<i64>> = sqlx::query_scalar("SELECT journal_max FROM lane WHERE chain_key = ? AND label = ?")
             .bind(chain_key).bind(lane).fetch_optional(&self.pool).await?;
         Ok(v.flatten())
+    }
+
+    async fn lane_journal(&self, chain_key: &str, lane: &str) -> Result<Vec<JobRow>> {
+        Ok(sqlx::query_as("SELECT * FROM job WHERE chain_key = ? AND lane_label = ? AND state IN ('signed', 'broadcast') \
+                           ORDER BY outer_nonce")
+            .bind(chain_key).bind(lane).fetch_all(&self.pool).await?)
     }
 
     async fn bump_journal_max(&self, chain_key: &str, lane: &str, nonce: i64) -> Result<()> {

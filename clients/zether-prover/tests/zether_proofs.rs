@@ -62,7 +62,8 @@ fn transfer<C: ZCurve>(f: &Fx<C>, h: Header, aud: bool, v: u64) -> (TransferStat
 
 /// Small test table (2^18 entries, shared) — `BAL`-sized plaintexts decrypt with bound 2^24.
 fn decrypt<C: ZCurve>(ct: &Ciphertext<C>, x: &Fr<C>) -> u64 {
-    zether_prover::elgamal::cached_table::<C>(18).unwrap().decrypt(ct, x, 24).unwrap()
+    // the public `dlog` on `C - [x]D` (the decrypt helpers are `pub` only under `hazmat`, T15c2)
+    zether_prover::elgamal::cached_table::<C>(18).unwrap().dlog(&(ct.c - ct.d * x), 24).unwrap()
 }
 
 fn valid_and_effects<C: ZCurve>() {
@@ -335,7 +336,8 @@ fn burn_bls12_381() {
 /// limits D1: one transfer > 2^32 from a balance > 2^44 and a fee near 2^64 are provable; the
 /// effects check with `check_balance` (no BSGS needed for any of it).
 fn large_values<C: ZCurve>() {
-    use zether_prover::elgamal::check_balance;
+    // `[b]G == C - [x]D` in the open (elgamal::check_balance is `pub` only under `hazmat`, T15c2)
+    let check_balance = |ct: &Ciphertext<C>, x: &Fr<C>, b: u64| ct.c - ct.d * x == generator::<C>() * Fr::<C>::from(b);
     let from = key::<C>(0);
     let bal: u64 = (1 << 44) + 12_345;
     let acc = encrypt(&from.y, bal, &Fr::<C>::from(55u64));

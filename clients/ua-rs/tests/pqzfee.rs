@@ -71,3 +71,32 @@ fn verifier_fee_rows() {
     }
     assert_eq!(pqz_fee_word(u64::MAX, true, 1, 0, 0), None, "2^64 refused");
 }
+
+/// T21 L77: `facade::pqz::bind_mode` against the forge writer's `binding` rows (`PqzCore._bindMode` on a direct op 1 and op 7,
+/// word 544): `OFFCHAIN` at verifier fees 0, 1, 7 and 10 (`TAG_DIRECT_MODE_VF`, the fee hashed at 0 too) and `PRECOMPILE`, both
+/// modes. A relayed binding is the envelope's on either verification (the contract's `binding == 0` branch only).
+#[cfg(feature = "pqz")]
+#[test]
+fn bind_mode_rows() {
+    use scaas_ua::facade::pqz::{bind_mode, Mode, Verification};
+    let v = load("pqz/n2304-kmax4096/verifier_fee.json");
+    let rows = v["binding"].as_array().unwrap();
+    let offchain = rows.iter().filter(|r| r["pqzVerifyMode"] == "OFFCHAIN").count();
+    assert!(offchain >= 2 && rows.len() > offchain, "both verifications");
+    for r in rows {
+        let mode = match num(&r["modeByte"]) { 0 => Mode::Hash, 1 => Mode::Bundle, m => panic!("mode {m}") };
+        let fee = num(&r["verifierFee"]) as u64;
+        let ver = match r["pqzVerifyMode"].as_str().unwrap() {
+            "OFFCHAIN" => Verification::Offchain { verifier_fee: fee },
+            "PRECOMPILE" => Verification::Precompile,
+            m => panic!("{m}"),
+        };
+        let got = bind_mode(&[0; 32], mode, ver);
+        assert_eq!(got, b32(&r["op1Word544"]), "{r}");
+        assert_eq!(got, b32(&r["op7Word544"]), "{r}");
+    }
+    let eb = [0x5a; 32];
+    for mode in [Mode::Hash, Mode::Bundle] {
+        assert_eq!(bind_mode(&eb, mode, Verification::Offchain { verifier_fee: 7 }), bind_mode(&eb, mode, Verification::Precompile));
+    }
+}

@@ -5,6 +5,10 @@
 use scaas_ua as ua;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
+/// ua-rs-sign T13a: the wallet, its handles and the facades (src/wallet.rs, its own bridge).
+pub mod wallet;
+
+/// An error: its code, as `rust::Error`'s message.
 pub struct UaErr(String);
 impl core::fmt::Display for UaErr {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -24,11 +28,12 @@ impl From<ua::json::JsonError> for UaErr {
         }
     }
 }
-type R<T> = Result<T, UaErr>;
+pub type R<T> = Result<T, UaErr>;
 
-/// Run `f`, turning a (never expected) panic into an error instead of unwinding into C++.
+/// Run `f`, turning a (never expected) panic into an error instead of unwinding into C++: `UAInternal`, as ua-c and ua-qt
+/// (never `UAKeyData`, which a caller reads as bad input: T21 L57).
 fn guard<T>(f: impl FnOnce() -> R<T>) -> R<T> {
-    catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|_| Err(UaErr("UAKeyData: internal".into())))
+    catch_unwind(AssertUnwindSafe(f)).unwrap_or_else(|_| Err(UaErr("UAInternal: panic".into())))
 }
 fn a<const N: usize>(b: &[u8]) -> R<[u8; N]> {
     b.try_into().map_err(|_| UaErr("UAKeyData: length".into()))
@@ -178,6 +183,7 @@ mod ffi {
         fn msig_update(input: &str) -> Result<String>;
         fn pay_digest(input: &str) -> Result<String>;
         fn meta_pay_id(input: &str) -> Result<String>;
+        fn service_pull(input: &str) -> Result<String>;
     }
 }
 use ffi::{HolderPop, KindInfo, Member, PqzKeyRecord};
@@ -421,6 +427,9 @@ fn pay_digest(input: &str) -> R<String> {
 }
 fn meta_pay_id(input: &str) -> R<String> {
     guard(|| Ok(ua::json::meta_pay_id_json(input)?))
+}
+fn service_pull(input: &str) -> R<String> {
+    guard(|| Ok(ua::json::service_pull_json(input)?))
 }
 fn encode_msig(threshold: u16, members: &[Member]) -> R<Vec<u8>> {
     guard(|| {

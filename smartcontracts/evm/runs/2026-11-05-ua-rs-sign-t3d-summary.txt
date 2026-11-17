@@ -1,0 +1,36 @@
+# 2026-11-05 ua-rs-sign T3d: the UASig builder over &dyn Signer (ua_sig, msig_sig, membership_sig, Slot), msig member sets minimal
+# at both levels and strictly increasing (UAPoP otherwise, nothing signed), CTR-UA-37 acceptance over membership_digest. Spec §5.2,
+# §9.4; accounts.md CTR-UA-07 (minimal form), CTR-UA-17 (key data), CTR-UA-33, CTR-UA-37. UNAUDITED.
+# All commands in clients/ua-rs through scripts/capped, -j2, --locked; full logs git-ignored (clients/ua-rs/target/t3d/<step>.log).
+# Gates ran on the tree committed as 282bc47b, the T3d code commit (the commit before this summary); the full test cells ran one
+# test-file edit earlier (the counting signer and the lying `inner` of slot_must_match_its_member, same 9 tests), and wallet_uasig,
+# clippy default and clippy vectors were re-run on the committed file.
+step | commit | rc | counts
+red: cargo test --features vectors --test wallet_uasig (tests only) | 115ad776 | 101 | does not compile: error[E0432]: unresolved imports `scaas_ua::wallet::membership_sig`, `msig_sig`, `ua_sig`, `Slot`
+green: cargo test --features vectors --test wallet_uasig | 282bc47b | 0 | 9 passed
+green: cargo test --test wallet_uasig (default) | 282bc47b | 0 | 9 passed (ML-DSA hedged: verified, not byte-equal)
+clippy --all-targets -D warnings (default = wallet + zether + pqz + pqz-set-n2304-kmax4096) | 282bc47b | 0 | 0 warnings
+clippy --no-default-features | 282bc47b | 0 | 0 warnings
+clippy --no-default-features --features signers | 282bc47b | 0 | 0 warnings
+clippy --no-default-features --features json | 282bc47b | 0 | 0 warnings
+clippy --no-default-features --features pq | 282bc47b | 0 | 0 warnings
+clippy --features vectors | 282bc47b | 0 | 0 warnings
+test (default) | 282bc47b | 0 | 18 suites, 131 passed, 0 failed, 1 ignored (T3c: 122; + wallet_uasig 9)
+test --no-default-features | 282bc47b | 0 | 10 suites, 50 passed (unchanged)
+test --no-default-features --features signers --test groups | 282bc47b | 0 | 8 passed, 1 ignored
+test --no-default-features --features json --test json | 282bc47b | 0 | 5 passed
+test --no-default-features --features pq --test pq --test ua8 --test nested | 282bc47b | 0 | 45 passed
+test --features vectors | 282bc47b | 0 | 18 suites, 164 passed, 0 failed, 2 ignored (T3c: 155; + wallet_uasig 9)
+build wasm32-unknown-unknown --no-default-features / --features signers / --features pq / --features wallet / default | 282bc47b | 0 | ok, 5 of 5
+cargo deny --all-features check (cargo-deny 0.20.2) | 282bc47b | 0 | advisories ok, bans ok, licenses ok, sources ok; warnings: duplicates (as T3c), MIT-0 not encountered
+Cargo.lock | 282bc47b | - | unchanged (no dependency added): dependents' cargo tree --locked not re-run; clientkeys npm test not run (no vector or JS file changed)
+mutants: 2026-11-05-ua-rs-sign-t3d-mutants.py | 282bc47b | 0 | 16 killed, 0 survived, 0 not loaded (2026-11-05-ua-rs-sign-t3d-mutants.txt)
+docs_check check / paths | 282bc47b | 0 | 0 errors 5 warnings (existing) / 0 machine paths
+# Byte-equal: sign.json msig rows 3 (flat {p256, ed25519}, flat {ed25519, secp256k1}, nested inner {p256, ed25519} + bls12381), refused
+# UAPoP 4 (three of t = 2, unsorted, below threshold, nested level-2 three of t = 2); with feature vectors (ML-DSA rnd = 0, the JS
+# extraEntropy: false): portable.json msig-pq registrations 4, KEM records v1-v3 3, the msig-pq-native/1 acceptance 1;
+# pq_signatures.json treasury pairs 2 (below threshold refused). Verified by ua8.rs check_registration_with / check_kem_record_with /
+# check_membership_with / check_authorization (the registry's rule): every set built, nested.json registrations 5 (msig-inner-pq,
+# -inner-heavy, -nested-pq, -nested-heavy-inner, -nested-heavy-outer), KEM record 1, acceptance 1, and every acceptance the vector
+# wallet can sign over nested.json's msigs (12 signing slots, 3 msig slots); Falcon is verify-only. Not built: rows with a native
+# member (its typed signature is T4's) or a fixed-seed classical member of signatures.json (no wallet key): portable 10, nested 17.

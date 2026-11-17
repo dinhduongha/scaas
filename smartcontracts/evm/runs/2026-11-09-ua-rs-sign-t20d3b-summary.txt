@@ -1,0 +1,20 @@
+# 2026-11-09-ua-rs-sign-t20d3b at commit 0478f4e4
+step | commit | rc | counts
+no-oracle | 0478f4e4 | 0 | 11 passed 0 failed 1 ignored (cargo) 
+no-oracle-n2048 | 0478f4e4 | 0 | 9 passed 0 failed 0 ignored (cargo) 
+no-oracle-ua-py | 0478f4e4 | 0 | 1 ran (unittest) 
+pqz-read | 0478f4e4 | 0 | 7 passed 0 failed 0 ignored (cargo) 
+ua-c | 0478f4e4 | 0 | 9 passed 0 failed 0 ignored (cargo) 93 ran (unittest) 
+mutant-logs | 0478f4e4 | 0 | -
+
+# result lines
+no-oracle: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.94s
+no-oracle: test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+no-oracle: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.30s
+no-oracle: test result: ok. 1 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.09s
+no-oracle-n2048: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.08s
+no-oracle-n2048: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.53s
+pqz-read: test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+pqz-read: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 30.55s
+ua-c: test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+ua-c: test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s

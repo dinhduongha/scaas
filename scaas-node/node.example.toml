@@ -154,7 +154,9 @@ max_fee_cap_gwei = 500
 max_index_lag = 100                              # /readyz fails when final head - indexed > this
 # Gas circuit breakers (R55), per lane; they pause NEW work only, signed txs are still tracked/replaced.
 # Amounts in the gas coin's smallest unit (wei); strings for values above 2^63.
-breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_relayer_balance = "100000000000000000" }
+# call_budget_pct (default 50): the ML-DSA cache parts the lane sends before a register (NODE-JOB-29) stop at this share of the
+# hour's budget; every other job runs to all of it, so registry writes cannot stop a payment.
+breaker = { spike_ratio = 3.0, gas_budget_per_hour = "50000000000000000", min_relayer_balance = "100000000000000000", call_budget_pct = 50 }
 # Services (proposed NODE-JOB-25, the contract kind `service`; spec docs/superpowers/specs/2026-11-09-service-pull.md §8):
 # a contract that takes a payer's signed pull (its job: {entry, contract = "service", token = <the service>, args = {op,
 # pullToken, t, auth}}). Its entries must equal the contract's servicePullEntries(), both directions, and its eip712Domain()

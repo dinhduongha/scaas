@@ -1,0 +1,12 @@
+# ua-rs-sign sync7, MD-14 (NODE-JOB-29: the lane sends an ML-DSA key's cache parts before its register) - test summary
+# Closes the WIP commits 2064e707d (node), 97b96e967 (ua-rs), 2fba9ca9c (docs): their tests ran on 3c5c22051 (eighth sync).
+step | commit | rc | counts
+clientkeys ua-cache / ua8 / ua | bd23168d7 | 0 | 52/52 (mutants: mldsa87 parts 3->2, pk length check dropped: caught)
+ua-rs cargo test --test mldsa_cache | 3c5c22051 | 0 | 3 passed
+ua-rs cargo test --lib mldsa_cache | 3c5c22051 | 0 | 1 passed
+ua-rs cargo clippy --all-targets -D warnings | 3c5c22051 | 0 | -
+scaas-node cargo test --lib (guard, typed, abi, mldsa_, ua8_, cache_parts, the_plain_rows, allow_lists) | 3c5c22051 | 0 | 96 passed
+scaas-node typed_ops_kat_every_entry, guard_allows_every_named_entry_only (row counts 36 / 145), mldsa_register_* | 3c5c22051 | 0 | 5 passed
+scaas-node cargo clippy --all-targets -D warnings | 3c5c22051 | 0 | -
+mutant: submit.rs Submitter::send UAKeyNotCached arm disabled | 3c5c22051 | caught | mldsa_register_sends_its_cache_parts_first FAILED; restored
+# Not run here: the full node cargo test and the sync7 gate (after the node e2e of ua-mtx-merge); review in T21 part 5.

@@ -81,7 +81,7 @@ void main() {
       expect(hx(groupTag(group: r['group'])!), r['GROUP']);
     }
     expect(groupTag(group: 'nope'), isNull);
-    expect(rows(k, 'purposes').length, 16); // 15 purposes, `pop` has v1 and v2
+    expect(rows(k, 'purposes').length, 17); // 16 purposes (pqz-verdict: group 3f; msig-update: CTR-UA-44), `pop` has v1 and v2
     for (final r in rows(k, 'purposes')) {
       expect(hx(purposeTagV(purpose: r['purpose'], version: r['version'])), r['purposeTag']);
       if (r['version'] == 1) expect(hx(purposeTag(purpose: r['purpose'])), r['purposeTag']);
@@ -829,14 +829,15 @@ void main() {
     }
   });
 
-  // pay-meta-tax T41 / T83: paymeta.json v3 rows (save without a payNo refused) and paytax.json's UAPayWithTax digest row
+  // pay-meta-tax T41, T83: paymeta.json v3 rows (save without a payNo refused; the UUIDv7 shown) and paytax.json's UAPayWithTax digest row
   test('pay rows', () {
     final pm = jsonDecode(File('$vectors/../metatx/paymeta.json').readAsStringSync()) as List;
     expect(pm.any((r) => !(r['accepted'] as bool)), isTrue, reason: 'a refused row');
     for (final r in pm) {
       final i = jsonEncode({'salt': r['salt'], 'payNo': r['payNo'], 'save': r['save'], 'schema': r['schema'], 'body': r['body']});
       if (r['accepted'] as bool) {
-        expect((jsonDecode(metaPayId(input: i)) as Map)['payId'], r['payId'], reason: r['name'] as String);
+        final o = jsonDecode(metaPayId(input: i)) as Map;
+        expect([o['payId'], o['save'], o['payNoUuid']], [r['payId'], r['save'], r['payNoUuid']], reason: r['name'] as String);
       } else {
         expect(errCode(() => metaPayId(input: i)), 'UAArgument', reason: r['name'] as String);
       }
@@ -848,5 +849,19 @@ void main() {
         'message': {'payment': payment, 'taxMode': r['taxMode'], 'tax': r['tax']}}))) as Map;
     expect(got['digest'], r['digest']);
     expect(got['structHash'], r['structHash']);
+    // T80 (CLI-SGN-48): servicepull.json's Note row through servicePull: entryRef, digest, calldata, job, the relay-fee wrap
+    final sp = (jsonDecode(File('$vectors/../metatx/servicepull.json').readAsStringSync()) as Map)['rows'] as List;
+    final n = sp.firstWhere((x) => x['name'] == 'note_native') as Map;
+    final t = n['t'] as Map, f = n['relayFee'] as Map;
+    final i = {'name': n['token']['name'], 'token': n['token']['address'], 'chainId': n['chainId'], 'chainUid': n['token']['salt'],
+        'entry': n['entry'], 'op': n['typedData'], 'from': t['from'], 'amount': t['value'], 'batch': t['batch'], 'nonce': t['nonce'],
+        'validUntil': t['validUntil']};
+    final b = jsonDecode(servicePull(input: jsonEncode(i))) as Map;
+    expect([b['entryRef'], b['digest']], [n['entryRef'], n['transferDigest']]);
+    final fee = {for (final k in ['feeToken', 'router', 'executor', 'value', 'batch', 'validUntil']) k: f[k],
+        'nonce': int.parse(t['nonce'] as String) + 1, 'feeAuth': {'keyData': '0x', 'signature': f['signature'], 'members': []}};
+    final s = jsonDecode(servicePull(input: jsonEncode({...i, 'auth': n['auth'], 'relayFee': fee}))) as Map;
+    expect([s['calldata'], s['job'], (s['relayFee'] as Map)['relayCalldata']], [n['calldata'], n['job'], f['relayCalldata']]);
+    expect(errCode(() => servicePull(input: jsonEncode({...i, 'from': '0x${'11' * 32}'}))), 'UAArgument');
   });
 }

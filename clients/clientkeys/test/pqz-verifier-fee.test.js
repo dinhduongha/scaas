@@ -37,13 +37,16 @@ test('pqzFeeWord = header word 256 of every row; the payouts txFee·s, vf·s, d�
 test('the direct binding word 544: TAG_DIRECT_MODE_VF folds vf on OFFCHAIN, PRECOMPILE keeps TAG_DIRECT_MODE', () => {
   assert.equal(VF.tagDirectModeVf, hex(keccak_256(utf8ToBytes('SCAAS-PQZ-DIRECT-MODE-VF-V1'))));
   assert.equal(VF.tagDirectMode, hex(keccak_256(utf8ToBytes('SCAAS-PQZ-DIRECT-MODE-V1'))));
-  assert.equal(VF.binding.length, 8);
+  assert.equal(VF.binding.length, VF.bindingCount);
+  assert.equal(VF.bindingCount, 10); // OFFCHAIN at vf 0, 1, 7 and the cap, PRECOMPILE; both modes (T21 L83)
   for (const b of VF.binding) {
     const off = b.pqzVerifyMode === 'OFFCHAIN';
     const enc = (off ? VF.tagDirectModeVf.slice(2) : VF.tagDirectMode.slice(2)) + word(b.modeByte) + (off ? word(b.verifierFee) : '');
     const want = hex(keccak_256(fromHex('0x' + enc)));
     assert.equal(b.op1Word544, want, `op 1 ${b.pqzVerifyMode} ${b.mode} ${b.verifierFee}`);
     assert.equal(b.op7Word544, want, `op 7 ${b.pqzVerifyMode} ${b.mode} ${b.verifierFee}`);
+    // op 1 with no beneficiary: the fee word is the verifier fee alone
+    assert.equal(evm.pqzFeeWord({ confidentialFee: VF.rows[0].confidentialFee, verifierFee: b.verifierFee }), BigInt(b.op1FeeWord));
   }
 });
 

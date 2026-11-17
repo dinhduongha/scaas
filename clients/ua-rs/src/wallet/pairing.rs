@@ -1,0 +1,425 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+//! The pairing-curve kinds and the group sessions (spec §3, §8.2, §9.1, §9.4, §12; T3c). Every multiplication by a secret
+//! on an arkworks curve goes through `scaas_ct::secret_mul` (blinded integer, fixed 384-step ladder): the public keys of
+//! `0x0104`–`0x0107` and `0x0112`, the scaas Schnorr nonce point, the BLS signature `sk·H(m)`; MuSig2-bn254 through
+//! `musig2::Curve::secret_g`, FROST-BN254 through `frost::Bn254Element`. `mul_bigint` is denied here
+//! (`clippy::disallowed_methods`); the operator form is covered by the structural test (feature `vectors`).
+//!
+//! - scaas Schnorr `0x0104` / `0x0105` (`scaas.ua.schnorr.v1`): `k = hashToScalar(keccak256("scaas.ua.schnorr.nonce.v1" ‖
+//!   be32(sk) ‖ Y ‖ ua_msg ‖ aux))` with the verifier's one 512-bit map (`verify::hash_to_scalar`), `aux` 32 bytes from the
+//!   OS RNG (redrawn if `k = 0`), `R = k·G`, `e = hashToScalar(keccak256(tag ‖ R ‖ Y ‖ ua_msg))`, signature `R ‖ k + e·sk`.
+//! - BLS min-sig `0x0106` / `0x0107`: `sk·H(ua_msg)` under the domain of the request's [`SigRole`] (`verify.rs`'s DSTs and
+//!   labels: SIG for `Authorization`, POP for `Pop`).
+//! - [`Musig2Session`]: a wallet participant key's BIP-327 session, its secret nonce in the wallet's arena, wiped by the first
+//!   `sign`; [`FrostSession`]: RFC 9591 round 1 / round 2 over a caller's key package, its nonces in the arena, used once.
+//!
+//! Residual (spec §12): arkworks field arithmetic, point-addition special cases and the signature's scalar arithmetic
+//! (`k + e·sk mod r`) branch on values. UNAUDITED.
+use super::signer::SigRole;
+use super::store::Handle;
+use super::{Error, Result, UaKey, Wallet};
+use crate::keccak;
+use crate::musig2::{self, Bn254, Curve, Secp256k1};
+use crate::verify::{hash_to_g1_bls12381, hash_to_scalar, hash_to_scalar_wide, map_to_g1_bn254};
+use crate::verify::{BLS12381_DST_POP, BLS12381_DST_SIG, BN254_LABEL_POP, BN254_LABEL_SIG, SCHNORR_TAG};
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
+use ark_ec::{AffineRepr, CurveGroup, PrimeGroup};
+use ark_ff::{BigInteger, PrimeField, Zero};
+use frost_core::keys::KeyPackage;
+use frost_core::round1::{Nonce, SigningCommitments, SigningNonces};
+use frost_core::round2::SignatureShare;
+use frost_core::{Ciphersuite, SigningPackage};
+use rand_core::{CryptoRng, OsRng, RngCore};
+use scaas_ct::CtSwap;
+use zeroize::Zeroizing;
+
+const NONCE_TAG: &[u8] = b"scaas.ua.schnorr.nonce.v1";
+type Bn1 = ark_bn254::g1::Config;
+type Bls1 = ark_bls12_381::g1::Config;
+
+/// The kinds this module signs through `sign_ua` (the MuSig2 participants sign through [`Musig2Session`]).
+pub(crate) fn is_pairing(kind: u16) -> bool {
+    matches!(kind, 0x0104..=0x0107)
+}
+
+/// `secret · base`, the only multiplication by a secret in this module (spec §12).
+fn mul<P: SWCurveConfig>(base: Projective<P>, secret: &P::ScalarField) -> Result<Projective<P>>
+where
+    P::BaseField: CtSwap,
+{
+    scaas_ct::secret_mul(base, secret).map_err(|_| Error::Rng)
+}
+
+/// The scalar of a 32-byte big-endian secret: canonical (`< r`) and non-zero, else `Argument`.
+fn scalar<F: PrimeField>(s: &[u8]) -> Result<Zeroizing<F>> {
+    let f = Zeroizing::new(F::from_be_bytes_mod_order(s));
+    let back = Zeroizing::new(f.into_bigint().to_bytes_be());
+    if s.len() != 32 || back.as_slice() != s || f.is_zero() {
+        return Err(Error::Argument);
+    }
+    Ok(f)
+}
+
+/// `f` big-endian, left-padded to `width` bytes.
+fn be<F: PrimeField>(f: &F, width: usize, out: &mut Vec<u8>) {
+    let b = f.into_bigint().to_bytes_be();
+    out.extend(std::iter::repeat_n(0, width.saturating_sub(b.len())));
+    out.extend_from_slice(&b);
+}
+
+/// A G1 point as `x ‖ y`, each `w` bytes (bn254 32, BLS12-381 64); the identity is `Argument`.
+fn g1_bytes<P: SWCurveConfig>(p: &Projective<P>, w: usize, out: &mut Vec<u8>) -> Result<()>
+where
+    P::BaseField: PrimeField,
+{
+    let a: Affine<P> = p.into_affine();
+    let (x, y) = a.xy().ok_or(Error::Argument)?;
+    be(&x, w, out);
+    be(&y, w, out);
+    Ok(())
+}
+
+/// `sk·G1`, `x ‖ y` `w` bytes each.
+fn g1_key<P: SWCurveConfig>(s: &[u8], w: usize) -> Result<Vec<u8>>
+where
+    P::BaseField: PrimeField + CtSwap,
+{
+    let mut out = Vec::new();
+    g1_bytes(&mul(Projective::<P>::generator(), &*scalar::<P::ScalarField>(s)?)?, w, &mut out)?;
+    Ok(out)
+}
+
+/// `sk·G2` in affine form (the two curves encode it apart).
+fn g2_point<P: SWCurveConfig>(s: &[u8]) -> Result<Affine<P>>
+where
+    P::BaseField: CtSwap,
+{
+    let p = mul(Projective::<P>::generator(), &*scalar::<P::ScalarField>(s)?)?.into_affine();
+    if p.infinity {
+        return Err(Error::Argument);
+    }
+    Ok(p)
+}
+
+/// The key data of a pairing kind or a MuSig2-bn254 participant from its 32-byte secret (accounts.md §1.6 forms): bn254 G1
+/// `x ‖ y` (`0x0104`, `0x0112`), BLS12-381 G1 64-byte coordinates (`0x0105`), BLS12-381 G2 `x.c0 ‖ x.c1 ‖ y.c0 ‖ y.c1`
+/// 64 bytes each (`0x0106`, EIP-2537), bn254 G2 `x.c1 ‖ x.c0 ‖ y.c1 ‖ y.c0` (`0x0107`, EIP-197).
+pub(crate) fn key_data(kind: u16, s: &[u8]) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    match kind {
+        0x0104 | 0x0112 => return g1_key::<Bn1>(s, 32),
+        0x0105 => return g1_key::<Bls1>(s, 64),
+        0x0106 => {
+            let p = g2_point::<ark_bls12_381::g2::Config>(s)?;
+            for f in [&p.x.c0, &p.x.c1, &p.y.c0, &p.y.c1] {
+                be(f, 64, &mut out);
+            }
+        }
+        0x0107 => {
+            let p = g2_point::<ark_bn254::g2::Config>(s)?;
+            for f in [&p.x.c1, &p.x.c0, &p.y.c1, &p.y.c0] {
+                be(f, 32, &mut out);
+            }
+        }
+        _ => return Err(Error::Argument),
+    }
+    Ok(out)
+}
+
+/// The scaas Schnorr nonce `hashToScalar(keccak256("scaas.ua.schnorr.nonce.v1" ‖ be32(sk) ‖ Y ‖ ua_msg ‖ aux))`.
+/// The digest and the 64 bytes before reduction each give `k`: both wiped (T21 L07).
+fn nonce<F: PrimeField>(sk: &[u8], y: &[u8], ua_msg: &[u8; 32], aux: &[u8; 32]) -> F {
+    let d = Zeroizing::new(keccak(&[NONCE_TAG, sk, y, ua_msg, aux]));
+    let mut w = Zeroizing::new([0u8; 64]);
+    hash_to_scalar_wide(&d, &mut w);
+    F::from_be_bytes_mod_order(&w[..])
+}
+
+/// scaas Schnorr of `ua_msg` by the secret `sk` whose key data is `y`; `fixed` replaces the OS `aux` (feature `vectors`,
+/// `Argument` if it gives `k = 0`).
+fn schnorr<P: SWCurveConfig>(sk_bytes: &[u8], y: &[u8], ua_msg: &[u8; 32], fixed: Option<&[u8; 32]>, w: usize) -> Result<Vec<u8>>
+where
+    P::BaseField: PrimeField + CtSwap,
+{
+    let sk = scalar::<P::ScalarField>(sk_bytes)?;
+    loop {
+        let aux = match fixed {
+            Some(a) => *a,
+            None => super::sign::os_aux()?,
+        };
+        let k: Zeroizing<P::ScalarField> = Zeroizing::new(nonce(sk_bytes, y, ua_msg, &aux));
+        if k.is_zero() {
+            if fixed.is_some() {
+                return Err(Error::Argument);
+            }
+            continue;
+        }
+        let mut sig = Vec::new();
+        g1_bytes(&mul(Projective::<P>::generator(), &k)?, w, &mut sig)?;
+        let e: P::ScalarField = hash_to_scalar(&keccak(&[SCHNORR_TAG, &sig, y, ua_msg]));
+        if e.is_zero() {
+            return Err(Error::Argument);
+        }
+        let z = Zeroizing::new(*k + e * *sk);
+        be(&*z, 32, &mut sig);
+        return Ok(sig);
+    }
+}
+
+/// The signature of `ua_msg` by the pairing kind `kind` with its secret and key data; `role` picks the BLS domain;
+/// `fixed`: scaas Schnorr's `aux` (32 bytes, feature `vectors`), none for BLS (deterministic).
+pub(crate) fn sign(kind: u16, secret: &[u8], key_data: &[u8], ua_msg: &[u8; 32], role: SigRole, fixed: Option<&[u8]>) -> Result<Vec<u8>> {
+    let pop = role == SigRole::Pop;
+    let aux = fixed.map(<&[u8; 32]>::try_from).transpose().map_err(|_| Error::Argument)?;
+    let mut out = Vec::new();
+    match (kind, aux) {
+        (0x0104, _) => return schnorr::<Bn1>(secret, key_data, ua_msg, aux, 32),
+        (0x0105, _) => return schnorr::<Bls1>(secret, key_data, ua_msg, aux, 64),
+        (0x0106, None) => {
+            let h = hash_to_g1_bls12381(ua_msg, if pop { BLS12381_DST_POP } else { BLS12381_DST_SIG });
+            g1_bytes(&mul(h.into_group(), &*scalar(secret)?)?, 64, &mut out)?;
+        }
+        (0x0107, None) => {
+            let h = map_to_g1_bn254(&[if pop { BN254_LABEL_POP } else { BN254_LABEL_SIG }, &ua_msg[..]].concat());
+            g1_bytes(&mul(h.into_group(), &*scalar(secret)?)?, 32, &mut out)?;
+        }
+        _ => return Err(Error::Argument),
+    }
+    Ok(out)
+}
+
+fn musig2_error(e: musig2::Error) -> Error {
+    if e == musig2::Error::Value("OS RNG") {
+        Error::Rng
+    } else {
+        Error::Argument
+    }
+}
+
+/// A BIP-327 MuSig2 signing session of one wallet participant key (`0x0110` secp256k1, `0x0112` bn254) over one key list and
+/// one message (NonceGen binds both). Its secret nonce lives in the wallet's arena (spec §8.2) and is wiped by the first
+/// [`Musig2Session::sign`]; a second `sign` is `Argument`. After the wallet's `lock()`: `KeyRevoked`. No `Clone`.
+pub struct Musig2Session {
+    kind: u16,
+    pk: Vec<u8>,
+    pks: Vec<Vec<u8>>,
+    msg: Vec<u8>,
+    pubnonce: Vec<u8>,
+    key: Handle,
+    nonce: Option<Handle>,
+}
+
+impl Musig2Session {
+    pub fn kind(&self) -> u16 {
+        self.kind
+    }
+    /// The public nonce `R1 ‖ R2` to send to the other signers.
+    pub fn pubnonce(&self) -> Vec<u8> {
+        self.pubnonce.clone()
+    }
+    /// The partial signature (BIP-327 Sign) under the aggregate nonce; spends the secret nonce first, so a second call (or a
+    /// call after a failed one) is `Argument`.
+    pub fn sign(&mut self, aggnonce: &[u8]) -> Result<[u8; 32]> {
+        let nonce = self.nonce.take().ok_or(Error::Argument)?;
+        let (pks, msg) = (&self.pks, &self.msg);
+        let (pk, pubnonce) = (&self.pk, &self.pubnonce);
+        // BIP-327 Sign's last step: the own partial signature verifies, else nothing is released (T21 L15)
+        fn own<C: Curve>(key: &Handle, sec: &[u8], aggnonce: &[u8], pk: &[u8], pn: &[u8], pks: &[Vec<u8>], msg: &[u8]) -> Result<[u8; 32]> {
+            let psig = key.with(|sk| musig2::sign::<C>(sec, sk, aggnonce, pks, msg))?.map_err(musig2_error)?;
+            match musig2::partial_sig_verify_internal::<C>(&psig, pn, pk, aggnonce, pks, msg) {
+                Ok(true) => Ok(psig),
+                _ => Err(Error::Argument),
+            }
+        }
+        // the nonce's copy is used under a read lease, so `lock()` waits for the partial signature (T21 L82)
+        nonce.take_with(|k| {
+            let sec = Zeroizing::new([k, pk].concat());
+            match self.kind {
+                0x0110 => own::<Secp256k1>(&self.key, &sec, aggnonce, pk, pubnonce, pks, msg),
+                _ => own::<Bn254>(&self.key, &sec, aggnonce, pk, pubnonce, pks, msg),
+            }
+        })?
+    }
+}
+
+/// An unsigned session wipes its secret nonce's slot when dropped (T21 L17).
+impl Drop for Musig2Session {
+    fn drop(&mut self) {
+        if let Some(h) = self.nonce.take() {
+            let _ = h.take(); // `KeyRevoked` after `lock()`: the arena is gone already
+        }
+    }
+}
+
+impl UaKey {
+    /// A MuSig2 session of this participant key (`0x0110`, `0x0112`; else `Argument`) over `pks` (its own key among them,
+    /// in the order the group signs) and `msg`, its `rand'` from the OS RNG.
+    pub fn musig2_session(&self, pks: &[Vec<u8>], msg: &[u8]) -> Result<Musig2Session> {
+        let mut rand = Zeroizing::new([0u8; 32]);
+        OsRng.try_fill_bytes(&mut rand[..]).map_err(|_| Error::Rng)?;
+        self.musig2_session_with(pks, msg, &rand)
+    }
+
+    fn musig2_session_with(&self, pks: &[Vec<u8>], msg: &[u8], rand: &[u8; 32]) -> Result<Musig2Session> {
+        match self.kind {
+            0x0110 => self.session::<Secp256k1>(pks, msg, rand),
+            0x0112 => self.session::<Bn254>(pks, msg, rand),
+            _ => Err(Error::Argument),
+        }
+    }
+
+    fn session<C: Curve>(&self, pks: &[Vec<u8>], msg: &[u8], rand: &[u8; 32]) -> Result<Musig2Session> {
+        // the registry's MuSig2 key-data rule (2 <= n <= 16, valid points, strictly increasing; T21 L16) before KeyAgg: the
+        // first key stands in for `Q`, which KeyAgg computes below
+        let n = u16::try_from(pks.len()).map_err(|_| Error::Argument)?;
+        let first = pks.first().ok_or(Error::Argument)?;
+        crate::validate_key_data(self.kind, &[&first[..], &n.to_be_bytes(), &pks.concat()].concat(), false).map_err(|_| Error::Argument)?;
+        if !pks.contains(&self.key_data) {
+            return Err(Error::Argument);
+        }
+        let agg = C::agg_bytes(&musig2::key_agg::<C>(pks).map_err(musig2_error)?.q);
+        let pk = &self.key_data;
+        let (sec, pubnonce) =
+            self.secret.with(|sk| musig2::nonce_gen::<C>(rand, Some(sk), pk, Some(&agg), Some(msg), None))?.map_err(musig2_error)?;
+        let nonce = self.secret.put(sec.get(..64).ok_or(Error::Argument)?)?;
+        Ok(Musig2Session {
+            kind: self.kind,
+            pk: self.key_data.clone(),
+            pks: pks.to_vec(),
+            msg: msg.to_vec(),
+            pubnonce,
+            key: self.secret.dup(),
+            nonce: Some(nonce),
+        })
+    }
+}
+
+/// An RFC 9591 FROST signing session (round 1 → round 2) of one participant's key package, either ciphersuite, opened by
+/// [`Wallet::frost_session`]: its nonces (OS RNG) live in the wallet's arena (spec §8.2; owner O1 2026-11-16) and sign once;
+/// a second [`FrostSession::sign`] is `Argument`; after the wallet's `lock()`: `KeyRevoked`; dropped unsigned, its slot is
+/// wiped. No `Clone`. The share itself is still the caller's `KeyPackage` (no FROST share in store custody this round: it
+/// comes with the real DKG; spec §8.2, ua-libraries.md).
+pub struct FrostSession<C: Ciphersuite> {
+    nonce: Option<Handle>,
+    commitments: SigningCommitments<C>,
+}
+
+impl Wallet {
+    /// A FROST session of `key`: round 1's nonces from the OS RNG, kept in this wallet's arena. `WalletLocked` while locked.
+    pub fn frost_session<C: Ciphersuite>(&self, key: &KeyPackage<C>) -> Result<FrostSession<C>> {
+        self.frost_session_with(key, &mut OsRng)
+    }
+
+    fn frost_session_with<C: Ciphersuite>(&self, key: &KeyPackage<C>, rng: &mut (impl RngCore + CryptoRng)) -> Result<FrostSession<C>> {
+        // `SigningNonces` zeroizes on drop; its two scalars go to the arena as `hiding ‖ binding`, each serialized copy wiped
+        // (T21 L75)
+        let n = SigningNonces::new(key.signing_share(), rng);
+        let (h, b) = (Zeroizing::new(n.hiding().serialize()), Zeroizing::new(n.binding().serialize()));
+        let mut bytes = Zeroizing::new(Vec::with_capacity(h.len() + b.len()));
+        bytes.extend_from_slice(&h);
+        bytes.extend_from_slice(&b);
+        Ok(FrostSession { nonce: Some(self.store.put(&bytes)?), commitments: *n.commitments() })
+    }
+}
+
+impl<C: Ciphersuite> FrostSession<C> {
+    /// Round 1's commitments, for the coordinator.
+    pub fn commitments(&self) -> SigningCommitments<C> {
+        self.commitments
+    }
+
+    /// Round 2's signature share; spends the nonces first (wiped in the arena as they are read). Round 2 runs under a read
+    /// lease of the store, so the wallet's `lock()` waits for it while other signers run; after `lock()`: `KeyRevoked` (spec
+    /// §8.2, T21 L73, L82).
+    pub fn sign(&mut self, package: &SigningPackage<C>, key: &KeyPackage<C>) -> Result<SignatureShare<C>> {
+        self.sign_paused(package, key, || ())
+    }
+
+    fn sign_paused(&mut self, package: &SigningPackage<C>, key: &KeyPackage<C>, pause: impl FnOnce()) -> Result<SignatureShare<C>> {
+        self.nonce.take().ok_or(Error::Argument)?.take_with(|k| {
+            let (hiding, binding) = k.split_at(k.len() / 2);
+            let nonce = |b: &[u8]| Nonce::<C>::deserialize(b).map_err(|_| Error::Argument);
+            let n = SigningNonces::from_nonces(nonce(hiding)?, nonce(binding)?);
+            let share = frost_core::round2::sign(package, &n, key).map_err(|_| Error::Argument);
+            pause();
+            share
+        })?
+    }
+}
+
+/// An unsigned session wipes its nonces' slot when dropped.
+impl<C: Ciphersuite> Drop for FrostSession<C> {
+    fn drop(&mut self) {
+        if let Some(h) = self.nonce.take() {
+            let _ = h.take(); // `KeyRevoked` after `lock()`: the arena is gone already
+        }
+    }
+}
+
+/// Test-only entry points (feature `vectors`, never in a release build): fixed randomness, the nonce map.
+#[cfg(feature = "vectors")]
+pub use vectors::NonceSlotProbe;
+
+#[cfg(feature = "vectors")]
+mod vectors {
+    use super::*;
+
+    impl UaKey {
+        /// `musig2_session` with a fixed `rand'`.
+        pub fn vectors_musig2_session(&self, pks: &[Vec<u8>], msg: &[u8], rand: &[u8; 32]) -> Result<Musig2Session> {
+            self.musig2_session_with(pks, msg, rand)
+        }
+    }
+
+    /// A second handle on a session's secret-nonce slot in the arena, to read the slot after the session is gone (T21 L17).
+    pub struct NonceSlotProbe(Handle);
+
+    impl NonceSlotProbe {
+        pub fn bytes(&self) -> Result<Vec<u8>> {
+            self.0.with(|s| s.to_vec())
+        }
+    }
+
+    impl Musig2Session {
+        /// The probe of this session's nonce slot, `None` once the nonce is spent.
+        pub fn vectors_nonce_probe(&self) -> Option<NonceSlotProbe> {
+            self.nonce.as_ref().map(|h| NonceSlotProbe(h.dup()))
+        }
+    }
+
+    impl<C: Ciphersuite> FrostSession<C> {
+        /// The probe of this session's nonce slot, `None` once the nonces are spent.
+        pub fn vectors_nonce_probe(&self) -> Option<NonceSlotProbe> {
+            self.nonce.as_ref().map(|h| NonceSlotProbe(h.dup()))
+        }
+
+        /// `sign` that runs `pause` inside round 2, after the share is computed (T21 L73: `lock()` meanwhile).
+        pub fn vectors_sign_paused(
+            &mut self, package: &SigningPackage<C>, key: &KeyPackage<C>, pause: impl FnOnce(),
+        ) -> Result<SignatureShare<C>> {
+            self.sign_paused(package, key, pause)
+        }
+    }
+
+    impl Wallet {
+        /// `frost_session` with the caller's RNG.
+        pub fn vectors_frost_session_with_rng<C: Ciphersuite>(
+            &self, key: &KeyPackage<C>, rng: &mut (impl RngCore + CryptoRng),
+        ) -> Result<FrostSession<C>> {
+            self.frost_session_with(key, rng)
+        }
+    }
+}
+
+/// The scaas Schnorr nonce `k` of `0x0104` / `0x0105` (32 bytes big-endian) for the secret `sk`, key data `y`, `ua_msg`
+/// and `aux` (feature `vectors`: the nonce-map rows).
+#[cfg(feature = "vectors")]
+pub fn schnorr_nonce(kind: u16, sk: &[u8; 32], y: &[u8], ua_msg: &[u8; 32], aux: &[u8; 32]) -> Result<[u8; 32]> {
+    let mut out = Vec::new();
+    match kind {
+        0x0104 => be(&nonce::<ark_bn254::Fr>(sk, y, ua_msg, aux), 32, &mut out),
+        0x0105 => be(&nonce::<ark_bls12_381::Fr>(sk, y, ua_msg, aux), 32, &mut out),
+        _ => return Err(Error::Argument),
+    }
+    out.try_into().map_err(|_| Error::Argument)
+}

@@ -666,9 +666,10 @@ fn plain_rows_match_the_forge_abi() {
             n += 1;
         }
     }
-    assert_eq!(n, 35, "35 rows, one contract each (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
+    assert_eq!(n, 36, "36 rows, one contract each (22 before MD-11 (a): the wallet's four flat rows retired; 18 -> 30, T93: PqChat's twelve; \
         30 -> 32: the DEX's mtxLiquidity (CTR-DEX-30) and PqChat's remove (UA-7 P48); 32 -> 34: the registry's setPqzScopedKey, \
-        storePqzScopedPop (K3-3); 34 -> 35: the registry's updateMsig (CTR-UA-44))");
+        storePqzScopedPop (K3-3); 34 -> 35: the registry's updateMsig (CTR-UA-44); 35 -> 36: the registry's cacheExpandedKey \
+        (NODE-JOB-29, TODO 3zh MD-14))");
 }
 
 /// The `UAEnvelope` of a native signer `from` (its padded id) on lane `batch` at `nonce`, fee 0, open relayer.

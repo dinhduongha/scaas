@@ -4,10 +4,43 @@
 //! no x-only key or parity negation, challenge = the scaas Schnorr challenge, signature `R (64) ‖ s (32)` (verifies as
 //! `schnorr-bn254`). `L = hash_{KeyAgg list}(pk_1 ‖ … ‖ pk_n)` is the plain 32-byte tagged hash on both curves (it is a
 //! byte string, not a scalar). No tweaks (the registry has none). Feature `signers`: malformed input is an error, never a
-//! panic; not side-channel hardened (secret nonces are plain bytes). UNAUDITED.
+//! panic. Secret multiplications through [`Curve::secret_g`] (bn254: `scaas_ct::secret_mul`, spec §12); otherwise not
+//! side-channel hardened (the wallet's session keeps the secret nonce in its arena; here it and the NonceGen `rand` are
+//! `Zeroizing`). CLI-UAL-02: `nonce_gen` (caller's `rand'`), `sign` (a secnonce it does not consume) and `sign_all`
+//! are test-only (feature `vectors`); a release build signs through the wallet's `Musig2Session` alone. UNAUDITED.
+#![cfg_attr(
+    not(feature = "vectors"),
+    doc = "A release build (no feature `vectors`) has no caller-randomness or reusable-nonce entry point (T21 L11):",
+    doc = "```compile_fail,E0603",
+    doc = "let _ = scaas_ua::musig2::nonce_gen::<scaas_ua::musig2::Secp256k1>(&[0; 32], None, &[0; 33], None, None, None);",
+    doc = "```",
+    doc = "```compile_fail,E0603",
+    doc = "let _ = scaas_ua::musig2::sign::<scaas_ua::musig2::Secp256k1>(&[0; 97], &[0; 32], &[0; 66], &[], &[]);",
+    doc = "```",
+    doc = "```compile_fail,E0425",
+    doc = "let _ = scaas_ua::musig2::sign_all::<scaas_ua::musig2::Secp256k1>(&[], &[], &[], &[]);",
+    doc = "```",
+    doc = "Positive control: the coordinator's functions stay public.",
+    doc = "```",
+    doc = "let _ = scaas_ua::musig2::nonce_agg::<scaas_ua::musig2::Secp256k1>(&[]);",
+    doc = "let _ = scaas_ua::musig2::partial_sig_verify::<scaas_ua::musig2::Secp256k1>(&[0; 32], &[], &[], &[], 0);",
+    doc = "```"
+)]
 use crate::keccak;
 use core::ops::{Add, Mul, Neg};
 use sha2::{Digest, Sha256};
+use zeroize::Zeroizing;
+
+/// `pub` under the test feature `vectors`, else crate-private (the wallet's session is the one caller; CLI-UAL-02).
+macro_rules! vectors_pub {
+    ($(#[$m:meta])* fn $($rest:tt)*) => {
+        #[cfg(feature = "vectors")]
+        $(#[$m])* pub fn $($rest)*
+        #[cfg(not(feature = "vectors"))]
+        #[cfg_attr(not(feature = "wallet"), allow(dead_code))]
+        $(#[$m])* pub(crate) fn $($rest)*
+    };
+}
 
 /// BIP-340 tagged hash `sha256(sha256(tag) ‖ sha256(tag) ‖ parts…)`.
 pub fn tagged(tag: &str, parts: &[&[u8]]) -> [u8; 32] {
@@ -56,6 +89,9 @@ pub trait Curve {
     fn agg_bytes(q: &Self::P) -> Vec<u8>;
     fn challenge(r: &Self::P, q: &Self::P, msg: &[u8]) -> Self::S;
     fn sig(r: &Self::P, s: &Self::S) -> Vec<u8>;
+    /// `s·G` for a secret `s` (a nonce or the signer's key): k256's constant-time multiplication on secp256k1,
+    /// `scaas_ct::secret_mul` on bn254 (spec §12; `Value` if the OS RNG fails).
+    fn secret_g(s: &Self::S) -> Result<Self::P, Error>;
 }
 
 /// BIP-327 over secp256k1.
@@ -82,7 +118,7 @@ impl Curve for Secp256k1 {
     }
     fn hash_s(tag: &str, parts: &[&[u8]]) -> Self::S {
         use k256::elliptic_curve::ops::Reduce;
-        <k256::Scalar as Reduce<k256::U256>>::reduce_bytes(&tagged(tag, parts).into())
+        <k256::Scalar as Reduce<k256::FieldBytes>>::reduce(&tagged(tag, parts).into())
     }
     fn s_bytes(s: &Self::S) -> [u8; 32] {
         s.to_bytes().into()
@@ -93,19 +129,19 @@ impl Curve for Secp256k1 {
         k256::Scalar::from_repr(b.into()).into()
     }
     fn ser(p: &Self::P) -> Vec<u8> {
-        use k256::elliptic_curve::sec1::ToEncodedPoint;
+        use k256::elliptic_curve::sec1::ToSec1Point;
         if *p == Self::inf() {
             return vec![0; 33];
         }
-        p.to_affine().to_encoded_point(true).as_bytes().to_vec()
+        p.to_affine().to_sec1_point(true).as_bytes().to_vec()
     }
     fn parse(b: &[u8]) -> Option<Self::P> {
-        use k256::elliptic_curve::sec1::FromEncodedPoint;
+        use k256::elliptic_curve::sec1::FromSec1Point;
         if b.len() != 33 || !(b[0] == 2 || b[0] == 3) {
             return None;
         }
-        let ep = k256::EncodedPoint::from_bytes(b).ok()?;
-        Option::<k256::AffinePoint>::from(k256::AffinePoint::from_encoded_point(&ep)).map(Into::into)
+        let ep = k256::Sec1Point::from_bytes(b).ok()?;
+        Option::<k256::AffinePoint>::from(k256::AffinePoint::from_sec1_point(&ep)).map(Into::into)
     }
     fn even(p: &Self::P) -> bool {
         use k256::elliptic_curve::point::AffineCoordinates;
@@ -119,6 +155,9 @@ impl Curve for Secp256k1 {
     }
     fn sig(r: &Self::P, s: &Self::S) -> Vec<u8> {
         [&Self::ser(r)[1..], &Self::s_bytes(s)[..]].concat()
+    }
+    fn secret_g(s: &Self::S) -> Result<Self::P, Error> {
+        Ok(Self::g() * *s)
     }
 }
 
@@ -148,11 +187,9 @@ pub fn bn_parse(b: &[u8]) -> Option<ark_bn254::G1Projective> {
     (!(x.is_zero() && y.is_zero()) && p.is_on_curve()).then(|| p.into())
 }
 
-/// The scaas Schnorr challenge `(keccak(s ‖ 2) · 2^256 + keccak(s ‖ 3)) mod r`, `s = keccak(tag ‖ m)`.
+/// The scaas Schnorr challenge `hashToScalar(keccak(tag ‖ m))` (`verify::hash_to_scalar`, the 512-bit map).
 pub fn bn_schnorr_challenge(m: &[u8]) -> ark_bn254::Fr {
-    use ark_ff::PrimeField;
-    let seed = keccak(&[crate::verify::SCHNORR_TAG, m]);
-    ark_bn254::Fr::from_be_bytes_mod_order(&[keccak(&[&seed, &[2]]), keccak(&[&seed, &[3]])].concat())
+    crate::verify::hash_to_scalar(&keccak(&[crate::verify::SCHNORR_TAG, m]))
 }
 
 impl Curve for Bn254 {
@@ -177,7 +214,11 @@ impl Curve for Bn254 {
     fn hash_s(tag: &str, parts: &[&[u8]]) -> Self::S {
         use ark_ff::PrimeField;
         let wide = |b: u8| tagged(tag, &[parts, &[&[b][..]]].concat());
-        ark_bn254::Fr::from_be_bytes_mod_order(&[wide(0), wide(1)].concat())
+        // the 512 bits are the secret nonce before reduction for `MuSig/nonce`: wiped (T21 L14)
+        let mut w = Zeroizing::new([0u8; 64]);
+        w[..32].copy_from_slice(&*Zeroizing::new(wide(0)));
+        w[32..].copy_from_slice(&*Zeroizing::new(wide(1)));
+        ark_bn254::Fr::from_be_bytes_mod_order(&w[..])
     }
     fn s_bytes(s: &Self::S) -> [u8; 32] {
         use ark_ff::{BigInteger, PrimeField};
@@ -205,6 +246,9 @@ impl Curve for Bn254 {
     }
     fn sig(r: &Self::P, s: &Self::S) -> Vec<u8> {
         [bn_ser(r), Self::s_bytes(s).to_vec()].concat()
+    }
+    fn secret_g(s: &Self::S) -> Result<Self::P, Error> {
+        scaas_ct::secret_mul(Self::g(), s).map_err(|_| Error::Value("OS RNG"))
     }
 }
 
@@ -243,16 +287,17 @@ pub fn key_agg<C: Curve>(pks: &[Vec<u8>]) -> Result<KeyAgg<C>, Error> {
     Ok(ka)
 }
 
+vectors_pub! {
 /// BIP-327 NonceGen: `(secnonce = k1 ‖ k2 ‖ pk, pubnonce = R1 ‖ R2)`. `aggpk` is `xbytes(Q)` / `Q`. `sk` must be 32 bytes
-/// (never truncated), `pk` `PLEN`, `aggpk` `ALEN` (BIP-327's length checks).
-pub fn nonce_gen<C: Curve>(
+/// (never truncated), `pk` `PLEN`, `aggpk` `ALEN` (BIP-327's length checks). `rand'` is the caller's: test-only (`vectors`).
+fn nonce_gen<C: Curve>(
     rand_: &[u8; 32],
     sk: Option<&[u8]>,
     pk: &[u8],
     aggpk: Option<&[u8]>,
     msg: Option<&[u8]>,
     extra_in: Option<&[u8]>,
-) -> Result<(Vec<u8>, Vec<u8>), Error> {
+) -> Result<(Zeroizing<Vec<u8>>, Vec<u8>), Error> {
     if sk.is_some_and(|sk| sk.len() != 32) {
         return Err(Error::Value("The optional byte array sk must have length 32."));
     }
@@ -262,10 +307,10 @@ pub fn nonce_gen<C: Curve>(
     if aggpk.is_some_and(|a| a.len() != C::ALEN) {
         return Err(Error::Value("The optional byte array aggpk has the wrong length."));
     }
-    let rand: Vec<u8> = match sk {
+    let rand: Zeroizing<Vec<u8>> = Zeroizing::new(match sk {
         Some(sk) => sk.iter().zip(tagged("MuSig/aux", &[rand_])).map(|(a, b)| a ^ b).collect(),
         None => rand_.to_vec(),
-    };
+    });
     let aggpk = aggpk.unwrap_or(&[]);
     let msg_prefixed = match msg {
         None => vec![0u8],
@@ -279,8 +324,10 @@ pub fn nonce_gen<C: Curve>(
         )
     };
     let (k1, k2) = (k(0), k(1));
-    let secnonce = [&C::s_bytes(&k1)[..], &C::s_bytes(&k2), pk].concat();
-    Ok((secnonce, [C::ser(&(C::g() * k1)), C::ser(&(C::g() * k2))].concat()))
+    let (b1, b2) = (Zeroizing::new(C::s_bytes(&k1)), Zeroizing::new(C::s_bytes(&k2)));
+    let secnonce = Zeroizing::new([&b1[..], &b2[..], pk].concat());
+    Ok((secnonce, [C::ser(&C::secret_g(&k1)?), C::ser(&C::secret_g(&k2)?)].concat()))
+}
 }
 
 /// A point or, for `PLEN` zero bytes, the identity (BIP-327 `cpoint_ext`).
@@ -290,6 +337,10 @@ fn parse_ext<C: Curve>(b: &[u8]) -> Option<C::P> {
 
 /// BIP-327 NonceAgg.
 pub fn nonce_agg<C: Curve>(pubnonces: &[Vec<u8>]) -> Result<Vec<u8>, Error> {
+    // exactly two points each: no suffix ignored (T21 L13; the verifier checks the same length)
+    if let Some(i) = pubnonces.iter().position(|pn| pn.len() != 2 * C::PLEN) {
+        return Err(Error::Contribution(Some(i), "pubnonce"));
+    }
     let mut out = Vec::new();
     for j in 0..2 {
         let mut r = C::inf();
@@ -325,8 +376,10 @@ fn sign_g<C: Curve>(q: &C::P) -> C::S {
     if C::even(q) { C::one() } else { -C::one() }
 }
 
-/// BIP-327 Sign: the partial signature `s` (32 bytes).
-pub fn sign<C: Curve>(secnonce: &[u8], sk: &[u8], aggnonce: &[u8], pks: &[Vec<u8>], msg: &[u8]) -> Result<[u8; 32], Error> {
+vectors_pub! {
+/// BIP-327 Sign: the partial signature `s` (32 bytes). The secnonce is not consumed here: test-only (`vectors`); the wallet's
+/// session takes it out of its arena first.
+fn sign<C: Curve>(secnonce: &[u8], sk: &[u8], aggnonce: &[u8], pks: &[Vec<u8>], msg: &[u8]) -> Result<[u8; 32], Error> {
     if secnonce.len() != 64 + C::PLEN {
         return Err(Error::Value("The secnonce must be k1 ‖ k2 ‖ pk."));
     }
@@ -336,7 +389,7 @@ pub fn sign<C: Curve>(secnonce: &[u8], sk: &[u8], aggnonce: &[u8], pks: &[Vec<u8
     let k2 = nonzero(C::s_parse(&secnonce[32..64])).ok_or(Error::Value("second secnonce value is out of range."))?;
     let (k1, k2) = if C::even(&r) { (k1, k2) } else { (-k1, -k2) };
     let d_ = nonzero(C::s_parse(sk)).ok_or(Error::Value("The secret key must be in the range 0 < sk < n."))?;
-    let pk = C::ser(&(C::g() * d_));
+    let pk = C::ser(&C::secret_g(&d_)?);
     if pk != secnonce[64..] {
         return Err(Error::Value("Public key does not match nonce_gen argument"));
     }
@@ -346,8 +399,9 @@ pub fn sign<C: Curve>(secnonce: &[u8], sk: &[u8], aggnonce: &[u8], pks: &[Vec<u8
     let d = sign_g::<C>(&ka.q) * d_;
     Ok(C::s_bytes(&(k1 + b * k2 + e * ka.coef(&pk) * d)))
 }
+}
 
-/// BIP-327 PartialSigVerifyInternal.
+/// BIP-327 PartialSigVerifyInternal; `pk` must be in `pks` (GetSessionKeyAggCoeff, T21 L12).
 pub fn partial_sig_verify_internal<C: Curve>(
     psig: &[u8],
     pubnonce: &[u8],
@@ -360,6 +414,9 @@ pub fn partial_sig_verify_internal<C: Curve>(
         return Err(Error::Value("The pubnonce has the wrong length."));
     }
     let (ka, b, r, e) = session::<C>(aggnonce, pks, msg)?;
+    if !pks.iter().any(|k| k == pk) {
+        return Err(Error::Value("The signer's pubkey must be included in the list of pubkeys."));
+    }
     let Some(s) = C::s_parse(psig) else { return Ok(false) };
     let (Some(r1), Some(r2), Some(p)) = (C::parse(&pubnonce[..C::PLEN]), C::parse(&pubnonce[C::PLEN..]), C::parse(pk)) else {
         return Ok(false);
@@ -389,7 +446,8 @@ pub fn partial_sig_agg<C: Curve>(psigs: &[[u8; 32]], aggnonce: &[u8], pks: &[Vec
 }
 
 /// The whole n-of-n protocol for one message, every signer simulated: `rands[i]` is signer i's NonceGen `rand'`.
-/// Returns the signature; every partial signature is verified on the way.
+/// Returns the signature; every partial signature is verified on the way. Test-only (feature `vectors`).
+#[cfg(feature = "vectors")]
 pub fn sign_all<C: Curve>(sks: &[Vec<u8>], pks: &[Vec<u8>], msg: &[u8], rands: &[[u8; 32]]) -> Result<Vec<u8>, Error> {
     if pks.len() != sks.len() || rands.len() != sks.len() {
         return Err(Error::Value("One pk and one rand per sk."));

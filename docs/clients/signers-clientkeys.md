@@ -3,8 +3,9 @@
 How a subject's keys are created, stored and used on the client: wallet standards, passkeys, the seed vault, role
 keys, the backup-key switch, family encoders and connectors, Zether keys, and the rules for what a signer may sign.
 `clientkeys` is the JavaScript library shared by the SCaaS app ([clients/app](app.md)) and by any ERP portal; it signs
-on the user's device and never sends secrets anywhere. Status: passkeys, the seed vault (v1) and Zether keys **BUILT**
-(clientkeys 1.0.0, EVM-only family encoders); everything else here **SPECIFIED** unless marked.
+on the user's device and never sends secrets anywhere. Status: passkeys, the seed vault (v1), Zether keys, the UA tree with its UA
+signers, the UA KEM key, seal and containers **BUILT** (clientkeys 1.0.0, EVM-only family encoders; §9); everything else here **SPECIFIED** unless marked.
+The one signer of every client other than a browser is `ua-rs` ([CLI-UAL-01](ua-libraries.md#CLI-UAL-01)), which reproduces clientkeys' rows.
 
 **Contents**
 
@@ -18,6 +19,7 @@ on the user's device and never sends secrets anywhere. Status: passkeys, the see
 7. [Seed vault](#7-seed-vault)
 8. [Backup-key switch](#8-backup-key-switch)
 9. [Derivation and role keys](#9-derivation-and-role-keys)
+   - 9.1 [The UA KEM key, seal and containers](#91-the-ua-kem-key-seal-and-containers)
 10. [Connectors](#10-connectors)
 11. [Zether keys](#zether-keys)
 12. [Zether balance reading](#12-zether-balance-reading)
@@ -168,7 +170,8 @@ EVM browser wallets are used only through open standards (EIP-1193, EIP-6963, EI
    invalid signature cannot execute on chain. A key of a `SmartKeyAccount` or a `MandateWallet` owner signs the
    ERC-7739 `erc7739TypedData(td, {wallet, address, chainId, chainUid})` of the app's typed data (its fields stay readable),
    never the digest itself, and sends `erc7739Signature(inner, td)` ([accounts.md CTR-ACC-02](../contracts/accounts.md#erc1271-wrap));
-   the account's own entries are signed as they are.
+   the account's own entries are signed as they are. `ua-rs` the same (owner 2026-11-16, T21 O6): `TypedData::erc7739` /
+   `erc7739_signature`, signed through `Expect::Erc7739` (the nest of the confirmed app typed data only), same KAT.
 
 <a id="CLI-SGN-06"></a>**CLI-SGN-06** — **WalletConnect v2 is a seam behind a configuration flag; no SDK is loaded by the
 core.** A `providerFactories` registry; the WalletConnect option appears only when a project id is configured **and** an
@@ -402,7 +405,7 @@ own key only and never acts as a direct caller, [CTR-UA-24](../contracts/account
 clientkeys API (`seed.js`, exported by `seed-signer.js`): `signTyped(key, td)` signs `hashTypedData(td)` (preimage
 `0x1901 ‖ …`, never `0x05`), after the caller checked `td` (`checkPayment`, `checkOwnerCall`, …); `signKeyProof(key,
 challenge)` signs `keyProofMessage(challenge)`; `signDigest(key, digest, { allowRawDigest: true })` signs a raw digest
-only with the opt-in (else it throws), for a digest the caller built itself from a checked SCaaS message (a Merkle batch
+of exactly 32 bytes (`Argument` otherwise, as `ua-rs`'s `&[u8; 32]`; ua-rs-native T13 C2) only with the opt-in (else it throws), for a digest the caller built itself from a checked SCaaS message (a Merkle batch
 root, a digest a `check*` function returned). **Migration note (2026-10-30, no7702):** `signDigest(key, digest)` without the
 option now throws. An integrator that vendors the clientkeys bundle (`seed-signer.js`) switches at its next rebuild to
 `signTyped(key, typed)` after its `check*` call (the same bytes) and to `signKeyProof(key, challenge)` for key proofs, or
@@ -475,6 +478,10 @@ virtual authenticator per family.
 
 <a id="vault"></a>
 
+Several seeds on one device, each a set of v1 vaults below, are kept in the `scaas.keystore` container of
+[CLI-SDK-03](scaas-sdk.md#CLI-SDK-03) (SPECIFIED): the same bytes in clientkeys, `ua-rs`, `scaas-sdk` and scaas-app, each seed's public
+fields authenticated by an index MAC computed in clientkeys and `ua-rs`. The vault v1 format itself does not change.
+
 <a id="CLI-SGN-11"></a>**CLI-SGN-11** — **A non-custodial seed wallet lives on the client, and one subject account holds
 several keys (passkey + seed).** Owner decision ("both passkeys and seed words"). A 24-word BIP-39 mnemonic (256 bits;
 import accepts 12–24 valid words, checksum checked) is generated or imported **on the device**; the mnemonic and keys
@@ -507,7 +514,7 @@ before the attempt — a marker present on the next load skips the re-wrap (no c
 same marker ([CLI-APP-24](app.md#CLI-APP-24)). On open, a pin envelope outside `N ∈ {2^15, 2^16, 2^17}, r = 8, p = 1` is
 refused (`dekFrom` bounds check). `SCRYPT = { N: 2^17, r: 8, p: 1, dkLen: 32 }`. Why: one number in code and docs, and no
 device locked out by its own upgrade. Cost: very low-memory phones use a paper backup or an extension wallet. BUILT
-(parameters, re-wrap, and the open-time bounds check with its test, 2026-11-05); the failure and marker tests SPECIFIED.
+(parameters, re-wrap, and the open-time bounds check with its test, 2026-11-05, PR #16 `b3650dbf`; `ua-rs` refuses the same parameters, `VaultParams`); the failure and marker tests SPECIFIED.
 
 <a id="CLI-SGN-17"></a>**CLI-SGN-17** — **Vault v2 is an outer AES-256-GCM layer under a per-origin non-extractable device
 key, wrapped around the unchanged v1 vault.** The device key is WebCrypto `AES-GCM` 256, `extractable: false`, kept as a
@@ -713,24 +720,28 @@ offered; an app end-to-end test.
 | Use | Path | Curve / scheme |
 |---|---|---|
 | Native account keys | the family paths below: EVM `m/44'/60'/0'/0/i`, Solana `m/44'/501'/i'/0'`, … | family |
-| Every derived UA kind and every account-role key | `m/7622'/0'/<account>'/<kindNo>'/<i>'` | BIP-32 (secp256k1, P-256 via SLIP-10 nist256p1), SLIP-10 ed25519 |
-| `SmartKeyAccount` SECP256K1 key (role of `evm-contract`) | `m/7622'/0'/<account>'/2'/<i>'` | secp256k1 |
-| Non-native subject-account owner keys (Sui/Aptos/Solana/Soroban role keys) | `m/7622'/0'/<account>'/<native kindNo>'/<i>'`: Solana 16, **Soroban `C…` 18** (`soroban-contract` 0x0012 = 18, not `stellar-account` 0x0011 = 17; owner 2026-10-07), Aptos 19, Sui 20 | ed25519 |
-| `musig2-secp256k1` participant keys | `m/7622'/0'/<account>'/272'/<i>'` (kind 0x0110; never a `bip340` key); `musig2-bn254` as the bn254 row | secp256k1 |
+| Every derived UA kind and every account-role key | `m/22776'/0'/<account>'/<kindNo>'/<i>'` | BIP-32 (secp256k1, P-256 via SLIP-10 nist256p1), SLIP-10 ed25519 |
+| `SmartKeyAccount` SECP256K1 key (role of `evm-contract`) | `m/22776'/0'/<account>'/2'/<i>'` | secp256k1 |
+| Non-native subject-account owner keys (Sui/Aptos/Solana/Soroban role keys) | `m/22776'/0'/<account>'/<native kindNo>'/<i>'`: Solana 16, **Soroban `C…` 18** (`soroban-contract` 0x0012 = 18, not `stellar-account` 0x0011 = 17; owner 2026-10-07), Aptos 19, Sui 20 | ed25519 |
+| `musig2-secp256k1` participant keys | `m/22776'/0'/<account>'/272'/<i>'` (kind 0x0110; never a `bip340` key); `musig2-bn254` as the bn254 row | secp256k1 |
 | FROST shares | **not seed-derived**: DKG polynomial secrets are fresh randomness; the share is kept in the vault; a lost share is a lost participant | — |
-| `schnorr-bn254`, `musig2-bn254` keys from seed | EIP-2333-style `m/254/0/<account>/<kindNo>` (salt `"SCAAS-UA-BN254-v1"`) | bn254 |
+| `schnorr-bn254`, `musig2-bn254` keys from seed | EIP-2333-style `m/254/0/<account>/<kindNo>` (salt `"SCAAS-UA-BN254-v1"`), index 0 only ([CLI-UAL-15](ua-libraries.md#CLI-UAL-15)) | bn254 |
 | Identity UA for credentials | its own `<account>'` in the UA tree, never the paying account's | per kind |
-| `bls12381-minsig`, `schnorr-bls12381` | EIP-2333 `m/12381/0/<account>/<kindNo>` | BLS12-381 |
+| `bls12381-minsig`, `schnorr-bls12381` | EIP-2333 `m/12381/0/<account>/<kindNo>`, index 0 only | BLS12-381 |
 | Zether conf key / viewing key | `m/254|12381/<coin>/<account>/7`, `…/8` ([CLI-SGN-10](#CLI-SGN-10)) | bn254 / BLS12-381 |
-| PQ seeds | `ξ = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1", info = kind_tag ‖ u32 account ‖ u32 i)` → FIPS 204 `KeyGen_internal(ξ)` (32 B) / Falcon-512 keygen from a 48-byte seed (implementation-specific: pinned to `@noble/post-quantum` 0.7.1 by the vectors); `mldsa87` (0x0134, [CTR-UA-39](../contracts/accounts.md#CTR-UA-39)) as `mldsa65` (32 B seed, `ml_dsa87`); `fndsa1024` (0x0135, [CTR-UA-40](../contracts/accounts.md#CTR-UA-40)) as `fndsa512` (48 B seed, `falcon1024padded`, 1,280 B signatures); `slhdsa128s`: output length 48 → `SK.seed ‖ SK.prf ‖ PK.seed` (16 B each) → FIPS 205 `slh_keygen_internal`. `signUA(kind, sk, purposeTag, digest)` signs `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the empty FIPS 204/205 context (Falcon: `ua_msg`) ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)); BUILT (P6a): `src/pq.js` with the EIP-8051 expanded key `mldsaExpandedKey`, not in the portal bundle; registry vectors `pq_signatures.json` from `scripts/ua-sig-vectors.mjs` (P6c) | ML-DSA, FN-DSA, SLH-DSA |
+| PQ seeds | `ξ = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1", info = kind_tag ‖ u32 account ‖ u32 i)` → FIPS 204 `KeyGen_internal(ξ)` (32 B) / Falcon-512 keygen from a 48-byte seed (implementation-specific: pinned to `@noble/post-quantum` 0.7.1 by the vectors; PQClean's seeded keygen, vendored in `ua-rs`, equals it byte for byte, 102 comparisons); `mldsa87` (0x0134, [CTR-UA-39](../contracts/accounts.md#CTR-UA-39)) as `mldsa65` (32 B seed, `ml_dsa87`); `fndsa1024` (0x0135, [CTR-UA-40](../contracts/accounts.md#CTR-UA-40)) as `fndsa512` (48 B seed, `falcon1024padded`, 1,280 B signatures); `slhdsa128s`: output length 48 → `SK.seed ‖ SK.prf ‖ PK.seed` (16 B each) → FIPS 205 `slh_keygen_internal`. `signUA(kind, sk, purposeTag, digest)` signs `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the empty FIPS 204/205 context (Falcon: `ua_msg`) ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)); BUILT (P6a): `src/pq.js` with the EIP-8051 expanded key `mldsaExpandedKey`, not in the portal bundle; registry vectors `pq_signatures.json` from `scripts/ua-sig-vectors.mjs` (P6c) | ML-DSA, FN-DSA, SLH-DSA |
 | Passkeys | one credential per `rpId`; the same credential on several chains is the same kind (`webauthn-p256` or a family's native passkey) — allowed, the challenges are domain-separated digests | P-256 |
 
-In general form the tree is `m/7622'/0'/<account>'/<kind>'/<i>'`. `7622'` is the SCaaS BIP-43 purpose for UA trees (owner); the coin level is `0'` because a UA id is chain-independent
+**Status: BUILT** in clientkeys (`deriveUAKey`, `src/uakey.js`, `ua-rs-sign` T1a): the UA tree for every derived kind, the EIP-2333 UA paths, `solana`, the UA signers for `0x0101` and `0x0108`, the transaction rows; vectors
+`smartcontracts/vectors/ua/keys.json` and `sign.json`, which `ua-rs` reproduces and whose randomized rows are checked both ways (`rs_signatures.json`). The vector generator passes `extraEntropy: false` explicitly on every deterministic
+ECDSA row: noble 2.4.0's default is already `false`, and the explicit value keeps a later default change from passing silently.
+
+In general form the tree is `m/22776'/0'/<account>'/<kind>'/<i>'`. `22776'` is the SCaaS BIP-43 purpose for UA trees (owner; `7622'` until 2026-11-05, [CLI-SGN-30](#CLI-SGN-30)); the coin level is `0'` because a UA id is chain-independent
 (one derived key ⇒ the same UA on every chain). clientkeys API rules: `signTyped` / `signKeyProof` / `signDigest(key, digest, { allowRawDigest: true })` are for
 **native** keys only ([CLI-SGN-40](#CLI-SGN-40): a raw digest needs the opt-in); UA keys are `UAKey` objects from `deriveUAKey(seed, {kind, account, index})` whose only signing method is
 `signUA(purpose, digest)` (it builds `ua_msg` itself), so no raw signature over arbitrary 32 bytes ever comes from a UA key;
 `deriveUAKey` refuses a `kind` whose curve group equals a native path's curve **and** whose path would equal it (impossible
-with `7622'`, asserted in tests) and refuses the Zether `use` indices 7/8 for non-Zether kinds; `deriveConfKey` accepts only
+with `22776'`, asserted in tests) and refuses the Zether `use` indices 7/8 for non-Zether kinds; `deriveConfKey` accepts only
 `use` 7 and 8; MuSig2/FROST are `UAKey` session objects (`musig2.start/partial/aggregate`, `frost.dkg*/commit/sign/aggregate`)
 that only ever sign `ua_msg` (vectors BIP-327, RFC 9591 Appendix E.5, `frost.json`); a Zether `x` is never reused as an
 independent same-curve BLS key (it would make G1 DDH decidable and leak balances) — the BLS and Zether trees are disjoint
@@ -746,15 +757,24 @@ the registry, tagged messages and EOA rules are the other three layers ([CTR-UA-
 The registry layer keeps `keyOwner[keyHash] → ua` and refuses the same public key under another kind (`UAKeyInUse`). Why:
 ECDSA and Schnorr over one secp256k1 key leak through nonce relations; a Schnorr signing oracle on an ElGamal key is a
 decryption-adjacent oracle; untagged digests replay across protocols. Owner decision.
+Change (owner 2026-11-08): **an imported native key may register and sign as the derived kind of its own scheme**, a secp256k1
+secret (`evm`, `cosmos`, `hedera_ecdsa`) as `secp256k1` (0x0108), an ed25519 seed as `ed25519` (0x0102), id `keccak256(TAG(kind) ‖
+key_data)`, a separate account from the native id ([CTR-UA-06](../contracts/accounts.md#CTR-UA-06)); no other kind on that key
+(`bip340` included: `Argument`, and the registry's `UAKeyInUse`), no raw-digest call on it, no KEM key (not a holder), never a backup
+or link sender; listed in the manifest's `importedUas` (never in `entries`) and carried by the backup ([CLI-SGN-44](#CLI-SGN-44)). The
+key's native use is unchanged, its raw-digest opt-in included; the S23-class residual in both directions is in
+[accounts.md §1.14](../contracts/accounts.md#security). A key the wallet derives on a native path stays its network's alone
+([CLI-SGN-30](#CLI-SGN-30)). BUILT (ua-rs-sign T20c): clientkeys `importedUAKey`, ua-rs `Wallet::imported_ua_key`, C
+`scaas_ua_wallet_imported_ua_key`, and `ua-cxx`, `ua-dart-frb`, `ua-py`, `ua-go`, `ua-cs`.
 
 <a id="CLI-SGN-30"></a>**CLI-SGN-30** — **The EVM seed path is the EOA only; every subject-account key that is not the
-native owner and every derived kind comes from the UA tree `m/7622'/0'/<account>'/<kindNo>'/<i>'`.** The role `kindNo` is
+native owner and every derived kind comes from the UA tree `m/22776'/0'/<account>'/<kindNo>'/<i>'`.** The role `kindNo` is
 the kind of the account the key serves: EVM/Hedera `SmartKeyAccount` 2, Solana 16, Soroban `SmartKeyAccount` `C…` 18
-(`soroban-contract`), Aptos 19, Sui 20. Owner decisions (one chain-independent tree under purpose `7622'`; Soroban
+(`soroban-contract`), Aptos 19, Sui 20. Owner decisions (one chain-independent tree under purpose `22776'`; Soroban
 `kindNo` 18). Existing dev accounts whose SECP256K1 key is the EOA key rotate at the UA migration.
 
 <a id="CLI-SGN-25"></a>**CLI-SGN-25** — **Every seed key added to a subject account is a role key; a backup seed key lives
-on paper only.** `deriveRoleKey(seed, {kindNo, account, i})` derives `m/7622'/0'/<account>'/<kindNo>'/<i>'` (all hardened;
+on paper only.** `deriveRoleKey(seed, {kindNo, account, i})` derives `m/22776'/0'/<account>'/<kindNo>'/<i>'` (all hardened;
 BIP-32 for secp256k1, SLIP-10 for ed25519) — plain derivation that `UAKey` later wraps without changing the path. The
 **native** path is used only for a native account and for the owner/first key of a Sui/Aptos/Solana account derived from
 the user's own native address; every other key added by a seed is a role key (backup, added device, a passkey-first
@@ -764,7 +784,7 @@ it on this device, and no scrypt runs, so low-memory phones can comply. Why: a b
 primary key is not a backup. Cost: one derivation per role; wallets show the role.
 
 <a id="CLI-SGN-07"></a>**CLI-SGN-07** — **New seed keys of subject accounts use the role path.** New `SECP256K1` keys
-registered by an ERP or clientkeys are derived on `m/7622'/0'/<account>'/2'/<i>'`, never the subject's EOA key; existing
+registered by an ERP or clientkeys are derived on `m/22776'/0'/<account>'/2'/<i>'`, never the subject's EOA key; existing
 dev keys stay until rotated. Tests: a clientkeys vector for the role path; the issuer refuses registering a key whose
 address equals the subject's own payer address (`payer_address`) on the same account.
 
@@ -780,7 +800,7 @@ above; a session-key mechanism would map to Universal Account key purposes. Stat
 
 | Family | `NETWORKS` key | Native path | Curve | Native address | Adds to a subject account | Seed signer signs | Status |
 |---|---|---|---|---|---|---|---|
-| EVM | `evm` | `m/44'/60'/0'/0/i` (EOA only) | secp256k1 | keccak address | role `m/7622'/0'/a'/2'/i'` (SECP256K1 key) | EIP-712 digest | native BUILT; role SPECIFIED |
+| EVM | `evm` | `m/44'/60'/0'/0/i` (EOA only) | secp256k1 | keccak address | role `m/22776'/0'/a'/2'/i'` (SECP256K1 key) | EIP-712 digest | native BUILT; role SPECIFIED |
 | Hedera ECDSA | `hedera_ecdsa` | `m/44'/3030'/0'/0/i` | secp256k1 | EVM alias | role `…/2'/i'` (HSCS `SmartKeyAccount`) | EIP-712 digest | as EVM |
 | Hedera ED25519 | `hedera_ed25519` | `m/44'/3030'/0'/0'/i'` | ed25519 | `0.0.N` | — | raw ed25519 over the EIP-712 digest (HIP-632) | BUILT |
 | Cosmos | `cosmos` | `m/44'/118'/0'/0/i` | secp256k1 | bech32 | — (no subject account) | ADR-036 doc | key BUILT; envelope SPECIFIED |
@@ -789,7 +809,7 @@ above; a session-key mechanism would map to Universal Account key purposes. Stat
 | Soroban Stellar | `stellar` | `m/44'/148'/i'` | ed25519 | `G…` | role `…/18'/i'` (`C…` key) | `G…`: sha256(auth preimage); `C…`: `Ed25519{key_id, sig}` | SPECIFIED |
 | Soroban Pi | `stellar` + 314159 | `m/44'/314159'/i'` | ed25519 | `G…` | as Stellar | as Stellar, Pi passphrase | SPECIFIED |
 | Aptos | `aptos` | `m/44'/637'/i'/0'/0'` | ed25519 | `sha3_256(pk ‖ 0x00)` | native if owner; else role `…/19'/i'` | AIP-62 `fullMessage` | SPECIFIED |
-| Solana | `solana` | `m/44'/501'/i'/0'` | ed25519 | base58 pk | native if owner; else role `…/16'/i'` | OCMS v1 (kind 1) | SPECIFIED |
+| Solana | `solana` | `m/44'/501'/i'/0'` | ed25519 | base58 pk | native if owner; else role `…/16'/i'` | OCMS v1 (kind 1) | key BUILT; envelope SPECIFIED |
 
 `a` = the user's account number. GRAM keys from `m/44'/607'/i'` are "BIP-39/Ledger path" imports, not native GRAM mnemonics.
 Interface (`src/fam/<family>.js`, used by the seed signer and wallets):
@@ -819,6 +839,129 @@ vector (fixed seed and path, terms → `checked`, signature, packed value), asse
 verifier (owner key ⇒ `True`); Soroban `C…`: one `Ed25519` ScVal vector from the account contract's `cargo test` (real
 `set_auths`), compared byte for byte; every must-check row has a failing case per family; wallet `sign()` throws when given
 anything but a `checked` object.
+
+### 9.1 The UA KEM key, seal and containers
+
+BUILT in clientkeys (`src/kem.js`, `src/seal.js`) and `ua-rs` (`wallet/kem.rs`, `seal.rs`, `aead.rs`); both reproduce
+`smartcontracts/vectors/ua/kem.json` and `seal.json`, and ACVP ML-KEM-1024 and RFC 7748 from `pq_external.json`. UNAUDITED.
+
+<a id="CLI-SGN-43"></a>**CLI-SGN-43** — **The UA KEM key is derived from the seed, per UA and version; of its secrets only `ss` reaches a
+caller.** Scheme 1 only ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)): `kemPk = 0x01 ‖ ek (1,568) ‖ pk_X (32)`, 1,601 B.
+`kemSeed = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.kem.v1", info = "scaas.kem.1" ‖ ua (32) ‖ be64 version, L = 96)`; `(ek, dk) =
+ML-KEM-1024.KeyGen_internal(d = kemSeed[0:32], z = kemSeed[32:64])`; `sk_X = kemSeed[64:96]`. KEM holders only: `mldsa44`, `mldsa65`, `fndsa512`,
+`mldsa87`, `fndsa1024`, else `KemHolder`. Combiner: `ss = SHA3-256(ss_M ‖ ss_X ‖ E ‖ pk_X ‖ "scaas.kem.1")`. Encapsulation checks scheme, length and
+the FIPS 203 §7.2 modulus and refuses an all-zero `ss_X`; decapsulation checks both lengths and refuses a small-order `E` (`KemCheck`) and keeps ML-KEM's
+implicit rejection, never a distinct error. `decaps` returns the 32-byte `ss`, zeroizing: a per-encapsulation secret from which a client core builds its own
+KEK; `dk` and `sk_X` never leave. So a handle is a decapsulation oracle, and a binding never exposes it to page scripts. A random KEM key is
+possible (vault label `kem:<ua>:<version>`) for an owner who wants deleting a version to bound something; nothing produces one in this
+round. The call shape: [CLI-UAL-14](ua-libraries.md#CLI-UAL-14). BUILT.
+
+<a id="CLI-SGN-44"></a>**CLI-SGN-44** — **Seal is HPKE-like with a single-use key; a container adds the sender's signature under an off-chain
+purpose.** `seal(kemPk, purpose, aad, pt)`: `kem_encaps`, `key = HKDF-SHA256(ikm = ss, salt = empty, info = "scaas/seal/v1" ‖ u8 scheme ‖ be16
+len(purpose) ‖ purpose ‖ keccak256(kemPk), L = 32)`, AES-256-GCM under a zero nonce (safe: every key encrypts once, `m` and `e` fresh from
+the OS RNG inside the library). `purpose` is ASCII `[a-z0-9./-]`, 1 to 64 B; `pt` may be empty, at most 1 MiB; no length hiding. Any failure of
+`open`: `SealOpen`; another version or scheme: `SealVersion`. **Seal authenticates no sender.** The **container** (named fields, base64url, JSON) carries
+`{v, purpose, recipient, sender: {ua, auth}, created, sealed}`; `aad = u8 v ‖ be16 len(purpose) ‖ purpose ‖ recipientId ‖ be64 version ‖ senderUa ‖ be64 created`, rebuilt by
+the opener; `scaas/link/v1` appends `sha256(shortCode)` (it binds the code, not the key: the link key needs an authenticated channel, [CLI-UAL-12](ua-libraries.md#CLI-UAL-12)). `sender.auth` is a full `UASig` of the sender over `uaMessage(kind, seal, keccak256(aad ‖ wire form))` under
+`scaas.ua.purpose.seal.v1`, an **off-chain purpose**, never in a contract's list and outside `PURPOSES` (`seal_purpose_tag()`, clientkeys `SEAL_TAG`). Purposes
+today: `scaas/backup/v1`, `scaas/link/v1`, `scaas/pqz-share/v1`. Acceptance, trust anchors, replay and rollback: [CLI-UAL-11](ua-libraries.md#CLI-UAL-11),
+[CLI-UAL-12](ua-libraries.md#CLI-UAL-12). The backup payload: `{v, generation, entropy, secrets, manifest}` in this field order; malformed is `Argument`. BUILT.
+`manifest` is `{entries: [{kind, account, index, ua}]}`, then `importedUas: [{kind, source, ua}]` only when the wallet has the UA of an imported key
+(owner 2026-11-08, [CLI-SGN-29](#CLI-SGN-29)'s Change; absent otherwise, so earlier payloads keep their bytes): each entry names a `native-import:<network>:<n>`
+secret of the same payload once, with that network's scheme kind and the id the secret gives (recomputed on restore and link, never trusted); one secret
+under two sources is two entries of one `ua`; a present empty list or any mismatch is `Argument`. BUILT (ua-rs-sign T20c: clientkeys `encodeBackup` /
+`decodeBackup`, ua-rs `BackupPayload`).
+
+<a id="CLI-SGN-45"></a>**CLI-SGN-45** — **An `msig` UA has no KEM key of its own, client side.** Sealing to an `msig` means sealing to each of its
+accepted members ([CTR-UA-37](../contracts/accounts.md#CTR-UA-37)), two levels ([CTR-UA-38](../contracts/accounts.md#CTR-UA-38)), each a single-key UA with
+its own KEM key. The caller reads `msigOf` and `memberAccepted` and expands before `seal`, skipping and reporting a member without a key. BUILT for `kem_key` (it takes a single-key handle; a wallet has
+no `0x0120` handle) and the seal callers (`Recipient::ua` refuses an `msig`, `KemHolder`). PLANNED for the record builders (clientkeys `ua.js` `holds`,
+`registrationArgs`, `kemRecordMessage`; `ua-rs` `ua8.rs`): they refuse together with the registry's own refusal
+([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)) in one step, plan task T66b on branch `ua-mtx-merge`, where the contract e2e, the `portable.json` `msig-pq` and `kemRecords` rows
+and the binding tests move to refusal rows (owner 2026-11-07, who moved it there and confirmed the rule). Until then those builders still build the rows that harnesses read,
+and a registry can still store an `msig` KEM key.
+
+<a id="CLI-SGN-46"></a>**CLI-SGN-46** — **The production nonce of scaas Schnorr (`0x0104`, `0x0105`) is hedged over the 512-bit map.**
+`k = hashToScalar(keccak256("scaas.ua.schnorr.nonce.v1" ‖ be32(sk) ‖ Y ‖ ua_msg ‖ aux))`, `aux` 32 B from the OS RNG inside the library, and
+`hashToScalar(s) = (keccak256(s ‖ 0x02) · 2^256 + keccak256(s ‖ 0x03)) mod r`, the one function the verifier calls, so a biased 256-bit reduction cannot appear; `k = 0` redraws
+`aux`. Vector rows fix `aux`, so they are byte-equal; a `nonceMap` row, computed by the generator, kills a 256-bit map. BIP-340 takes `aux` from the OS RNG. Every multiplication
+by `sk` or `k`: [CLI-UAL-08](ua-libraries.md#CLI-UAL-08). BUILT.
+
+<a id="CLI-SGN-47"></a>**CLI-SGN-47** — **An `msig` PQZ holder's operator key has a k-of-n seed backup, and its absence is a warning, not a refusal.** For an `msig` holder the PQZ key is one key
+held by an operator; if the operator loses it or leaves, the balance under that key's version is stuck. A rotation (group 3g's client rule, plan task T57) adds a version: the members register version v+1 under the `msig`'s m-of-n and new credits go to it, while the old versions stay readable and are never deleted; the balance under v moves to v+1 only by a migration proof under v, which needs v's `seed32`, so the backup is what lets the members rebuild it and migrate (spec 3g O4, O5). `PqzKey::seal_seed_backup`: Shamir over GF(2^8) of the PQZ
+`seed32` only, never wallet entropy; one share to each direct, distinct member's own single-key UA KEM key, a container of purpose `scaas/pqz-share/v1` signed by the operator, payload `{v, msigUa, version, pqzKeyHash, k, n, index, share}`, `k` the `msig`'s threshold by default. **Direct members only:** a member that
+is itself an `msig` gets no share ([CLI-SGN-45](#CLI-SGN-45)) and its members are not reached. `KemKeyPair::reseal_pqz_share` hands a share on with the plaintext inside. `Wallet::reconstruct_pqz_seed` refuses fewer than `k`, mixed or unexpected headers and repeated indices before combining, and installs only a key
+that hashes to the registered `pqzKeyHash`; the rebuilder is the new operator. **The rebuilt key persists** in the rebuilder's encrypted vault and backup under `pqz-held:<ua>:<version>:<pqzKeyHash>` (vault v1 unchanged), listed in the manifest's public `pqzHeld`, hash-checked on every reopen, reachable by `Wallet::pqz_held_key`. The new operator should rotate to a new key version soon: the old operator and every member
+who held `k` shares can read under the rebuilt version. `seed_backup_warning` is what a client calls before `register` / `setPqzKey`; it warns and the client still builds them. Every refusal is `Argument`; the format is `ua-rs`'s own, pinned by known answers. BUILT in `ua-rs` and the C ABI; no other binding wraps it yet.
+
+<a id="CLI-SGN-48"></a>**CLI-SGN-48** — **A service pull signs one `UAMetaTransfer` bound to the service, with `entryRef` the digest of the operation the
+signer rebuilt and showed.** ([service-pull spec](../superpowers/specs/2026-11-09-service-pull.md) §3, §4 A, §10; owner-approved 2026-11-09.)
+The builder takes the operation's typed data `{domain, types, primaryType, message}` in the service's own domain, the pulled
+token, the payer, the amount, the lane, the nonce and `validUntil`, and refuses unless: the typed data hashes under the
+signer's own EIP-712 encoder within C3 (at most 16 fields of atomic types, `bytes` or `string`, no array, no nested struct, no
+`int` in the reference builders, the first field `bytes32 payer`, every field present and none extra); `op.payer` is the payer;
+the domain's chain id is the chain's and its `verifyingContract` is the service; the amount is above 0. It then sets
+`t = {from, to = pad(service), value, entryRef = the operation's digest, batch, nonce, validUntil, mode = MODE_RESTRICT_RELAYER,
+relayer = the service, fee = 0, feeRecipient = 0}` in the token's salted domain (canonical, `MetaTxLib.canon`), and builds the
+entry's calldata `<entry>(op, t, auth)` (`op`'s `bytes` / `string` raw) and the node job's named fields. With a fee it builds
+the relay-fee wrap after `t` is signed: `UARelayFee` over `keccak256(calldata)` in open mode (payee `pad(router)`), never on the
+pull's own lane and nonce in the pulled token (the pull spends it first: the fee takes `nonce + 1` on the same lane, §2.4).
+**Display:** the service's domain name and address, every field of the operation, the token, the amount and `validUntil`; the
+operation itself is never signed (§3.1). A signer other than `ua-rs` commits blind to the operation (§7, the accepted residual,
+as for `PayMeta`). Status: clientkeys `buildServicePull` (the JS reference, `ua-mtx-merge` T78) BUILT; `ua-rs`
+`wallet::service_pull` and `json::service_pull_json`, the C entry `scaas_ua_service_pull`, `ua-cxx` `servicePull`, `ua-dart-frb`
+`servicePull` BUILT (ua-rs-sign T20e2), held to `smartcontracts/vectors/metatx/servicepull.json`; not yet the warning for a
+service off the chain profile's list (§10: the profile has no service list yet), `ua-qt` (its `scaas-ua` is built with `json`
+only) and the native ports (`ua-py`, `ua-go`, `ua-cs`, `ua-dart` carry no pay surface). UNAUDITED.
+
+### 9.2 Native networks of an app's native backend: BUILT
+
+Networks with no SCaaS family, for an end-user app that signs native chains through `ua-rs`
+([CLI-UAL-01](ua-libraries.md#CLI-UAL-01) Scope). Design and vectors: spec
+[`2026-11-17-ua-rs-native.md`](../superpowers/specs/2026-11-17-ua-rs-native.md); the `ua-rs` side:
+[CLI-UAL-44 to CLI-UAL-47](ua-libraries.md#native-networks-of-the-apps-backend-built). The controller's clauses below are
+recorded in [CLI-UAL-63](../decisions.md#CLI-UAL-63). Built in clientkeys (`NATIVE_NETWORKS`, `substrate.js`, `native-vectors.mjs`:
+T2 `d2089cd69`, T3 `ca2fa2e3b`, T4 `7e752faa2`, T6a `290021791`) and `ua-rs` (T5 to T11c). UNAUDITED.
+
+<a id="CLI-SGN-52"></a>**CLI-SGN-52** — **Four native networks, one name per path and scheme.** clientkeys keeps `NETWORKS` (the
+nine networks above, the set of `keys.json`, `importKey` and `importedUAKey`) and adds `NATIVE_NETWORKS` with these four; `ua-rs`
+`Network` lists all thirteen. Key `i`, coin type `c` ∈ {0, 1} (1 on Bitcoin testnets, signet and regtest; any other refused),
+Bitcoin chain `k` ∈ {0 receive, 1 change}:
+
+| `NATIVE_NETWORKS` key | Path | Curve, scheme | Address |
+|---|---|---|---|
+| `bitcoin_p2wpkh` | `m/84'/c'/0'/k/i` (BIP-84) | secp256k1, ECDSA (RFC 6979, low-s) | BIP-173 bech32, witness v0, `RIPEMD-160(SHA-256(pk))`, hrp `bc` / `tb` |
+| `bitcoin_p2tr` | `m/86'/c'/0'/k/i` (BIP-86) | secp256k1, BIP-340 over the BIP-341 key-path tweak `t = H_TapTweak(x(P))` (no script tree) | BIP-350 bech32m, witness v1, `x(P + t·G)` |
+| `near` | `m/44'/397'/i'` (SLIP-10 ed25519; index 0 is `near-seed-phrase`'s default); no coin-type override | ed25519 | implicit account id: lower-case hex of the 32-byte key |
+| `polkadot` | the bare mnemonic, optional junctions ([CLI-SGN-53](#CLI-SGN-53)); no index but 0, no coin type | sr25519 (schnorrkel, context `substrate`) | SS58, prefix 0 (any other on request) |
+
+On these four: no key proof, no import of a secret, no imported UA (each refused `Argument`); a Bitcoin key signs a sighash only,
+never an EVM record. Controller clauses: the names, the change chain, the NEAR coin-type refusal, the key-proof refusal. BUILT
+(clientkeys T2; `ua-rs` T6 `1416fc4d9`, T7 `cebe014f1`, T8a `1fd30d957`).
+
+<a id="CLI-SGN-53"></a>**CLI-SGN-53** — **A Polkadot account is the bare mnemonic under `substrate-bip39`, as polkadot.js; junctions
+are an optional per-account setting** (owner 2026-11-17). `mini = PBKDF2-HMAC-SHA512(entropy, "mnemonic" ‖ UTF-8(passphrase), 2048,
+64)[0..32]` over the BIP-39 **entropy** and the BIP-39 passphrase **as given** (no NFKD, as `substrate-bip39` and polkadot.js; an NFC
+and an NFD form of one non-ASCII passphrase are two Polkadot accounts); the key is schnorrkel's `Ed25519`-mode expansion of `mini`.
+Junction path `("//" j | "/" j)*`, hard and soft: each `j` 1 to 64 bytes of printable ASCII other than `/`, not starting `0x` or `+`;
+a digit-only `j` is a `u64` written without a leading zero (`//0` yes, `//007` refused: one spelling per key); at most 16 junctions
+and 512 bytes; `///` refused. Chain code: `u64` little-endian for a digit-only `j`, else the SCALE string (compact length: one byte
+below 64, two bytes at 64); zero-padded to 32 bytes, or BLAKE2b-256 when longer. Hard step `hard_derive_mini_secret_key`, soft
+`derived_key_simple`, as `sp-core`. A path is public: it names an account, it is no password. SS58: `base58(pre ‖ pk ‖
+BLAKE2b-512("SS58PRE" ‖ pre ‖ pk)[0..2])`, one-byte `pre` below 64, two bytes to 16,383, 46 and 47 refused; the prefix belongs to a
+chain (0 Polkadot, 42 generic Substrate), not to mainnet / testnet. Mainnet and testnets share the key. Controller clauses: the
+grammar and its bounds. BUILT (clientkeys T3; `ua-rs` T8a, T8b `940e9b876`).
+
+<a id="CLI-SGN-54"></a>**CLI-SGN-54** — **The caller's half of the guard on raw native signing.** A raw digest or message
+(`signDigest` / `signMessage` with `{ allowRawDigest: true }`, `ua-rs` `sign_digest` / `sign_message` with `AllowRawDigest`) is signed
+only when the caller (1) built it in-process with its own encoder from a transaction of named fields, never from bytes a page,
+server, link or other app handed it; (2) showed the user the decoded transaction (recipient, amount, fee, chain and the chain's other
+value-moving fields) and signs only what was shown; (3) never pairs the opt-in with a UA key or an SCaaS kind, never signs an EVM
+transaction hash or an EIP-7702 authorization raw ([CLI-SGN-40](#CLI-SGN-40)); (4) keeps each key on its network's own path
+([CLI-SGN-29](#CLI-SGN-29) Change); (5) signs an off-chain message only inside the chain's own envelope built in-process (a NEP-413
+payload, a Substrate `<Bytes>` wrapping, a Solana off-chain message, an Aptos `APTOS\n` message), never a user's raw bytes: ed25519
+and sr25519 have no domain separation of their own. Item (5) is a controller clause. The libraries enforce the rest:
+[CLI-UAL-44](ua-libraries.md#CLI-UAL-44). SPECIFIED: a documented obligation of the caller; the library half is BUILT.
 
 ## 10. Connectors
 
@@ -1028,25 +1171,48 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
    skip. So no credit is spendable by an honest wallet while the auditor is blinded.
 10. Accept.
 
-- **Key handle** (owner 2026-11-14, the Change of this rule in `decisions.md`; Fable review of the round P1-1). Status:
-  **SPECIFIED** until the round's client gates are green: the handle refuses mislabelled credits; it holds the PQZ secret of its
-  record, but no binding in this repository proves through it yet. "No bare class-2 decrypt" is enforced here, in the clients,
-  not in pqz-ffi. `clientkeys` `pqzKeyHandle` and `ua-rs` `pqz3k::PqzKeyHandle`, one per key with the opening
-  (`offchain-shared`, or `offchain-token` of a token with the opening) and key version:
-  - It derives and holds that key's PQZ seed and its opening KEM secret; no member returns either. The scoped seed of a key
-    with the opening is no public export (`pqzScopedKeySeed` / `pqz_scoped_key_seed` removed); only an `offchain-token` key of a
-    token **without** the opening keeps one, `pqzTokenKeySeedWithoutOpening` / `pqz_token_key_seed_without_opening` (the accepted
+- **Key handle** (owner 2026-11-14, the Change of this rule in `decisions.md`; Fable review of the round P1-1; in the wallet's
+  store owner 2026-11-16, T21 O5 (b), "ok, as proposed"; design [2026-11-16-pqz3k-handle-store.md](../superpowers/specs/2026-11-16-pqz3k-handle-store.md)).
+  Status: **BUILT**, **UNAUDITED**; no binding in this repository proves through it yet (the matrix's wallet simulator
+  `smartcontracts/evm/script/pqz/wallet` decrypts its `T` through it). "No bare class-2 decrypt" is enforced here, in the
+  clients, not in pqz-ffi. `clientkeys` `pqzKeyHandle` and `ua-rs` `pqz3k::PqzKeyHandle` (feature `pqz`), one per key with the
+  opening (`offchain-shared`, or `offchain-token` of a token with the opening) and key version:
+  - It derives and holds that key's PQZ seed and its opening KEM secret; no member returns either. In `ua-rs` only
+    `Wallet::pqz_scoped_key(&Scope { account, index, ua, chain_uid, token, version })` makes one: both seeds are derived from the
+    wallet's seed into its `SecretStore` arena (one slot, `KeyId::PqzScoped`), the handle holds a store handle and public data
+    (`pk`, the opening KEM key), and `lock()` revokes it for good (`Refused::KeyRevoked`; spec §8.2). Every entry that uses a
+    secret holds a read lease of the store for its copy's whole use, so `lock()` waits for it
+    ([CLI-UAL-09](ua-libraries.md#CLI-UAL-09)'s read lease, T21 L82). The raw-seed derivations `open_kem_seed` and
+    `pqz_token_key_seed_without_opening` and the test constructors `PqzKeyHandle::vectors_from_seed` / `vectors_from_secrets`
+    are `pub` under the test feature `vectors` only (a release build cannot name them; `compile_fail` checks). `clientkeys`
+    keeps its constructor from the BIP-39 seed (its custody is [CLI-SGN-02](#CLI-SGN-02)'s). The scoped seed of a key with the
+    opening is no public export (`pqzScopedKeySeed` / `pqz_scoped_key_seed` removed); only an `offchain-token` key of a token
+    **without** the opening keeps one, `pqzTokenKeySeedWithoutOpening` / `pqz_token_key_seed_without_opening` (the accepted
     exposure of [CTR-PQZ-37](../contracts/pq-zero-knowledge.md#CTR-PQZ-37)). The KAT reads the handle's
     `seedCommitment = keccak256(seed32)`.
-  - `check(credit)` reads the blob itself (`pqzOpeningBlobOf` / `pqz3k::opening_blob`), refuses a credit of another token
-    (class 3), recipient or key version, and builds both `aad`s from the blob's own bytes; `clientkeys` runs steps 2–4, 8 and the
+  - `check(credit)` reads the blob itself (`pqzOpeningBlobOf` / `pqz3k::opening_blob`), refuses a slot whose offsets are not an op
+    1 credit's (`uOff = 16`, `vOff = 16 + P(u)`, as the contract writes them), a credit of another token (class 3), recipient or
+    key version, and builds both `aad`s from the blob's own bytes; `clientkeys` runs steps 2–4, 8 and the
     auditor's opening of step 9 itself, the binding's check (pqz-ffi `opening::check_recipient`) the PQZ arithmetic of steps
-    5–7 and `v_a`; `ua-rs` hands the opening KEM seed and those inputs to the binding's check. The result is an **acceptance**
-    bound to the handle, the index and `h(i)` (slot and blob bytes), or a skip.
-  - The PQZ seed reaches a function only through three gated entries, counted: `withSecretOwn` / `with_secret_own` after the
-    holder's own `ownTag` verifies under the handle's key; `withSecretWindow` / `with_secret_window` when every window entry is
-    skip-marked, TRIVIAL or accepted by this handle with the same index and bytes, else refused before the seed is touched;
-    `withSecretKeygen` / `with_secret_keygen` (the public key and the `R_REG` proof of registration), counted apart.
+    5–7 and `v_a`; `ua-rs` runs pqz-ffi `opening::check_recipient` itself on the blob's bytes, its own `pk` and opening KEM key
+    and the auditor's keys as given (no caller code sees the opening KEM seed). The result is an **acceptance** bound to the
+    handle, the token, the index and `h(i)` (slot and blob bytes), or a skip.
+  - **The debit** (the review of the handle, owner 2026-11-16 "ok, as proposed", decision (a): in `ua-rs` no caller code sees the PQZ seed in a
+    release build). One entry per debit, the own part and the window together (`T = own (u_f, v_f) + Σ pending[p_last, p) +
+    Trivial(shieldIn)`, [CTR-PQZ-33](../contracts/pq-zero-knowledge.md#CTR-PQZ-33)): `{ token, lastDebit, own: { pu, pvf, ownTag }
+    | none, window: [{ token, index, slot, code, accepted }], shieldIn }`, refused in this order: revoked (`KeyRevoked`, first
+    for every entry); another token than the handle's (`NotThisHandle`); `lastDebit > 0` without the own part (`OwnRequired`: a
+    window of zero entries never skips it); an own part at `lastDebit = 0` (`Input`); no own part, no window entry and `shieldIn =
+    0` (`EmptyDebit`; a first debit of `Trivial(shieldIn)` alone passes); the own part's counter `lastDebit − 1` at or above 2^32
+    or its parts not of the set's lengths (`Input`); more than `K_MAX − 2` window entries, an entry of another token, indexes not
+    strictly ascending, or an entry neither skip-marked, TRIVIAL nor accepted by this handle for that token, index and bytes
+    (`Window`); the own part's `ownTag` at counter `lastDebit − 1` not verifying under the handle's key, compared in constant time
+    (`OwnTag`). `ua-rs` `open_debit` then builds `T` from exactly those parts and decrypts it inside the handle (`{ t, balance }`),
+    and `prove_reg(id)` proves the record's own `R_REG` message inside; the seed-taking closures (`with_secret_debit(d, f(seed,
+    T))`, `with_secret_keygen`) are test-only (`vectors`). `clientkeys` `withSecretDebit(debit, f)` and `withSecretKeygen(f)` keep
+    the closure (clientkeys has no PQZ arithmetic; its custody is CLI-SGN-02's). The handle's id binds its class, derivation
+    account and index and its keys (`keccak256(pk)` in `ua-rs`, the seed commitment in `clientkeys`, `keccak256(kemPk)`), so an
+    acceptance of one key never opens another's debit. Nothing inside an entry may lock (or wipe) the same wallet.
 - <a id="pqz-wallet-wasm"></a>**The browser wallet's check** (TODO 3zf, owner 2026-11-15). Status: **BUILT**, **UNAUDITED**. A
   browser wallet holds an opening token through the wallet module: `pqz-core/ffi/wallet-wasm` (pqz-ffi
   `opening::check_recipient` / `check_auditor` in wasm32, one module per parameter set, built by its `build.sh`; no built `.wasm`
@@ -1084,7 +1250,13 @@ signer) and every binding through it; no opening-token "decrypt credit" entry ex
   seed commitments, `ownTag` over `u_f`, `h(i)` and `entriesHash`, the `UAPqzScopedKey` / `UAPqzScopedKeyRecord` digests and
   both messages, and an opening blob with its offsets; read by `clientkeys` and `ua-rs` and checked against the contracts by
   `test/pqz/PqzClientRows.t.sol`. The K3-7 differential of spec §14.19 between `clientkeys` and `ua-rs` waits for a client that
-  carries steps 5–7; today both hand them to pqz-ffi.
+  carries steps 5–7; today both hand them to pqz-ffi. Every row of `pqz/opening.json` `rejects` is read by `clientkeys` (JS and
+  the wasm module) and by `ua-rs` (T21 O5 (b), `tests/pqz3k.rs`: pqz-ffi `check_recipient` / `check_auditor` on the row's credit
+  rebuilt from its seeds, both outcomes the row's; the rows whose field the handle takes from the credit also through
+  `PqzKeyHandle::check`, a skip on each, the unchanged credit accepted). The rows hold
+  §14.19's named cases (T21 L66b: a low-order X25519 point, an `mlkemCt` of another UA's key, the auditor's sealed seed given to
+  the recipient), a flipped `mlkemCt` bit, an `aad` of another chain and of another key version, and a malformed auditor
+  `kemPk`, beside the wrong lengths, the flipped tag, `O_a` under role 0's coins and the malformed recipient `kemPk`.
 - Inputs are public bytes and the opening KEM secret; `s` is not an input. No error detail, step number or timing class leaves
   the wallet. The PQZ secret is applied only to the holder's own `(u_f, v_f)` after its `ownTag` verifies, and to a `T` whose
   every part is that, an accepted credit, a TRIVIAL entry or a marked slot (zero); the prover refuses a window with an

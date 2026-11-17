@@ -17,7 +17,7 @@ audit.
 | C++ `scaas::ua` | `clients/ua-cxx` | C++17 code without Qt (`#include "scaas_ua.hpp"`, CMake target `ScaasUa::scaas_ua`) | `scaas-ua` via `cxx` 1.0.202 | `ctest` in `clients/ua-cxx/build` |
 | C `scaas_ua.h` | `clients/ua-c` | any language with a C FFI: C, Swift, Kotlin/JNI, Go cgo, Python ctypes, Zig, C# (`#include "scaas_ua.h"`, `libscaas_ua_c.a` / `.so`) | `scaas-ua`, header by cbindgen 0.28.0 | `cargo test` (header drift), the C smoke test and `python3 -m unittest -v tests.test_vectors` in `clients/ua-c`, after `cargo build` (the suite loads `target/debug/libscaas_ua_c.so`; override with `SCAAS_UA_C_LIB`) |
 | QML `Scaas.Ua` / `UaKinds` | `clients/ua-qt` | Qt 6 QML apps (singleton `UaKinds`, defined in Rust with CXX-Qt 0.10.0) | `scaas-ua` | `QT_QPA_PLATFORM=offscreen ctest` in `clients/ua-qt/build` |
-| Dart `scaas_ua_frb` | `clients/ua-dart-frb` | Dart / Flutter on Linux today (flutter_rust_bridge 2.13.0); Android, iOS, desktop, web planned | `scaas-ua` | `dart test` in `clients/ua-dart-frb`, after `cargo build --manifest-path rust/Cargo.toml` (the test loads `rust/target/debug/libscaas_ua_frb.so`; override with `SCAAS_UA_LIB`) |
+| Dart `scaas_ua_frb` | `clients/ua-dart-frb` | Dart / Flutter on Linux today (flutter_rust_bridge 2.13.0); Android, iOS, desktop planned; not the web: wallet secrets are Rust-owned `SecretBytes` written and read in place through `dart:ffi`, never through the bridge's codec (owner 2026-11-06) | `scaas-ua` | `dart test` in `clients/ua-dart-frb`, after `cargo build --manifest-path rust/Cargo.toml` (the test loads `rust/target/debug/libscaas_ua_frb.so`; override with `SCAAS_UA_LIB`) |
 | Dart `scaas_ua` | `clients/ua-dart` | every Dart target incl. the web (pure Dart, no native code) | `BigInt`, in-package Keccak | `dart test` (and `-p node`) in `clients/ua-dart` |
 
 **Directories.** Every UA client library lives in `clients/ua-<lang>`. Bindings over the Rust crate (`ua-rs`): `ua-c`,
@@ -35,7 +35,7 @@ read the same files. Never edit them by hand.
 `validateKeyData`, digests (`uaMessage`, `chainKeyHash`, `uaAuthDomainSeparator`, `uaAuthDigest`,
 `memberDigest`) and `encodeMsig`. UA-6 adds the PQZ key attribute ([accounts.md](../contracts/accounts.md) CTR-UA-16): `isPqzHolder(kind)` (`mldsa44`, `mldsa65`, `fndsa512`, and `mldsa87`, `fndsa1024` since owner 2026-11-04) and `msigPqzEligible` (an `msig` whose non-PQ weight is below the threshold; PQ weight is kinds `0x0130`–`0x0135`). `mldsa87` (0x0134, [CTR-UA-39](../contracts/accounts.md#CTR-UA-39)): every library's kind table, key length 2,592 and group, BUILT on branch `mldsa87`; `ua-rs` (feature `pq`, `ml-dsa`'s `MlDsa87`) verifies it, the vectors (`kinds.json`, `structures.json`, `pq_kat.json`, `pq_external.json`, `pq_signatures.json`) carry its rows. `fndsa1024`
 (0x0135, [CTR-UA-40](../contracts/accounts.md#CTR-UA-40)) the same way: every library's kind table, key length 1,793 with the header `0x0A`
-and every `h_i < q` checked, group, holder; `ua-rs` (feature `pq`, `pqcrypto-falcon`'s `falconpadded1024`) verifies it; the vectors carry its
+and every `h_i < q` checked, group, holder; `ua-rs` (feature `pq`, PQClean `falcon-padded-1024`, vendored since ua-rs-sign T3b) verifies it; the vectors carry its
 rows and `pq_external.json` the NIST round-3 Falcon-1024 KATs (`falcon1024_kat`). BUILT on branch `mldsa87`.
 
 **Id display** (ua-mtx-merge spec §6, MD-9; BUILT on branch `ua-mtx-merge`, task T13). How a client shows a `bytes32` id before the
@@ -52,7 +52,7 @@ registry record (0 = none known: `UAKindUnknown`, a native kind `UAKindNotDerive
 
 **Registry arguments (`typed-signing`, [CTR-UA-36](../contracts/accounts.md#CTR-UA-36)).** Every library builds the explicit call of a registration: entry choice (`register`, `registerMsig`, `registerWebAuthn`, `registerMuSig2`, `registerFrost`), `UAAttrs` with `KemKey`, the KEM hash commit plus the `setKemKey(ua, 0, kem, UASig())` fill when the calldata is over `REGISTER_CALLDATA_LIMIT` (261,909 B) or forced, the `setKemKey` / `setPqzKey` arguments, and the ABI calldata length (arithmetic, no ABI encoder). A malformed KEM key is refused before a form is chosen (`kemKeyOf` runs the record check), and a `setKemKey` builder refuses no key. **Client rule (owner 2026-11-01):** a front-runner can land the commit form of a full `register`, so after `register`, or on `UAAlreadyRegistered`, read `registrationOf`; when `attrs.kemPkHash != 0` and `kemKeyAt(ua, 0)` is empty, send `setKemKey(ua, 0, key, UASig())` ([CTR-UA-32](../contracts/accounts.md#CTR-UA-32)); clientkeys `kemRepair` and ua-rs `kem_repair` return that call or null from the read values, the other libraries build it with their `setKemKey` builder. clientkeys `registrationArgs` is the reference ([CLI-SGN-41](signers-clientkeys.md#CLI-SGN-41)); `scaas_ua::ua8::registration_args` in ua-rs; `registration_args` in ua-py and `registrationArgs` in ua-dart (named JSON maps), `RegistrationArgs` in ua-go and ua-cs (typed structs / records that marshal to the same JSON). The four wrappers take JSON in and out, one shim in ua-rs (feature `json`), because a nested typed struct over a C ABI is not thin: `scaas_ua_registration_args`, `scaas_ua_set_kem_key_args`, `scaas_ua_set_pqz_key_args` in ua-c, `registrationArgs` / `setKemKeyArgs` / `setPqzKeyArgs` in ua-cxx, ua-qt and ua-dart-frb, the object shapes of `portable.json`'s `args`. Bad JSON, a field of the wrong type or bad hex is `UAArgument`; the UA errors pass through.
 
-Language notes: Dart's KEM version is a `BigInt` (2^64 − 1 does not fit an `int`); ua-dart-frb's package entry point refuses a version below 0 or at or above 2^64 (`UAKemVersion`) before the bridge, which would otherwise wrap it to 64 bits; ua-qt's numbers (chain id, KEM version) are JS numbers, exact up to 2^53, and a larger or fractional value is `UAArgument`; ua-qt exposes `holderPopMessage(kind, ua, keyData, pqzKey, pqzPop, kemPk)` (+ `holderPopMessageH` for a hash-only proof, `purposeTagV(purpose, version)`) and returns JSON. **ua-c ABI version 5** (1 → 2: the proof-hash argument takes `(ptr, len)`, len 0 = absent, len ≠ 32 = `UAPqzPopHash`; 2 → 3: the typed digests, `scaas_ua_portable_domain_separator`, `scaas_ua_kem_record_hash`, `scaas_ua_portable_record_digest`, the `kem_record_tag`, `pqz_key_record_tag`, `portable_pop_digest` and `personal_sign_digest` exports gone; then `scaas_ua_registration_args`, `scaas_ua_set_kem_key_args`, `scaas_ua_set_pqz_key_args`): statuses **12–17** (`UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAPqzPopHash`, `UAPqzKeySet`, `UAKemScheme`), structs `ScaasUaHolderPop` and `ScaasUaPqzKeyRecord` (225 bytes, align 1), `scaas_ua_purpose_tag_v`; ua-cxx and ua-dart-frb follow through the Rust wrapper. Tests in every package read `portable.json` (27 registrations, 15 KEM records, 16 PQZ key records, 68 negatives; `mldsa87` and `fndsa1024` with `fndsa512`'s rows each: a KEM register key, KEM records v1-v3, PQZ key records at the four sets) and pin two known answers as literals: `chainKeyHash(1099511627783)` = `keccak256("evm:1099511627783")` = `0x6e45d591…`, and the KEM record digest at version 2^64 − 1 `0xa0063a84…38f07` (ua-qt pins it at 2^53 = `0x04a0150e…990482`, the largest version a QML number carries exactly). Errors carry one code everywhere: `UAKeyData`, `UAIdInNativeSpace`, `UAKindUnknown`,
+Language notes: Dart's KEM version is a `BigInt` (2^64 − 1 does not fit an `int`); ua-dart-frb's package entry point refuses a version below 0 or at or above 2^64 (`UAKemVersion`) before the bridge, which would otherwise wrap it to 64 bits; the wallet surface's other integers (kind, account, index, coin type, `change`, SS58 prefix, lengths) cross the bridge as `i64` and are `UAArgument` outside their Rust type, and ua-py refuses an integer outside its C type before the `ctypes` call, which would wrap it (ua-rs-native T13 C4); ua-qt's numbers (chain id, KEM version) are JS numbers, exact up to 2^53, and a larger or fractional value is `UAArgument`; ua-qt exposes `holderPopMessage(kind, ua, keyData, pqzKey, pqzPop, kemPk)` (+ `holderPopMessageH` for a hash-only proof, `purposeTagV(purpose, version)`) and returns JSON. **ua-c ABI version 5, the identity surface** (the wallet surface is ABI 6, [CLI-UAL-05](#CLI-UAL-05); 1 → 2: the proof-hash argument takes `(ptr, len)`, len 0 = absent, len ≠ 32 = `UAPqzPopHash`; 2 → 3: the typed digests, `scaas_ua_portable_domain_separator`, `scaas_ua_kem_record_hash`, `scaas_ua_portable_record_digest`, the `kem_record_tag`, `pqz_key_record_tag`, `portable_pop_digest` and `personal_sign_digest` exports gone; then `scaas_ua_registration_args`, `scaas_ua_set_kem_key_args`, `scaas_ua_set_pqz_key_args`): statuses **12–17** (`UAKemHolder`, `UAKemVersion`, `UAKemKeyLength`, `UAPqzPopHash`, `UAPqzKeySet`, `UAKemScheme`), structs `ScaasUaHolderPop` and `ScaasUaPqzKeyRecord` (225 bytes, align 1), `scaas_ua_purpose_tag_v`; ua-cxx and ua-dart-frb follow through the Rust wrapper. Tests in every package read `portable.json` (27 registrations, 15 KEM records, 16 PQZ key records, 68 negatives; `mldsa87` and `fndsa1024` with `fndsa512`'s rows each: a KEM register key, KEM records v1-v3, PQZ key records at the four sets) and pin two known answers as literals: `chainKeyHash(1099511627783)` = `keccak256("evm:1099511627783")` = `0x6e45d591…`, and the KEM record digest at version 2^64 − 1 `0xa0063a84…38f07` (ua-qt pins it at 2^53 = `0x04a0150e…990482`, the largest version a QML number carries exactly). Errors carry one code everywhere: `UAKeyData`, `UAIdInNativeSpace`, `UAKindUnknown`,
 `UAKindNotDerived`, `UAKindNotNative`, `UAIdFormat`, `UAPurposeUnknown`. The Solidity library has the on-chain subset.
 
 **Nested `msig` (`msig-nested`, [CTR-UA-38](../contracts/accounts.md#CTR-UA-38)).** Key data alone does not show an `msig` member's PQ eligibility, so
@@ -75,9 +75,10 @@ ua-dart-frb export `keccak256(data)` (ua-rs `keccak256`; ua-qt hex in and out, `
 for [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26) / [CTR-MTX-27](../contracts/metatx.md#CTR-MTX-27). EVM pay entries:
 `pay::meta_pay_id_v3(PayMeta {salt, pay_no, save, schema, body})` (`keccak256("scaas.pay.meta.v3" ‖ salt ‖
 keccak256(abi.encode(bytes32 payNo, bool save, uint16 schema, bytes body)))`, after the contract's shape checks), as JSON
-`json::meta_pay_id_json` `{salt, payNo, save, schema, body}` → `{payId}`, exported by ua-c `scaas_ua_meta_pay_id`, ua-cxx and
+`json::meta_pay_id_json` `{salt, payNo, save, schema, body}` → `{payId, payNo, payNoUuid, save}` (below), exported by ua-c `scaas_ua_meta_pay_id`, ua-cxx and
 ua-dart-frb `metaPayId`, QML `UaKinds.metaPayIdV3`; vectors `smartcontracts/vectors/metatx/paymeta.json` (written by forge).
-The v2 form (`string payNo`, `scaas.pay.meta.v2`) is kept under each client's `legacy/ua-mtx-merge/`, not built. The non-EVM
+The v2 form (`string payNo`, `scaas.pay.meta.v2`) is kept under each client's `legacy/ua-mtx-merge/` and in
+`clients/ua-rs/legacy/ua-rs-sign/pay_meta_v2.rs`, not built. The non-EVM
 families keep the v1 form until their own round: `meta_pay_id(salt, meta)` (`keccak256("scaas.pay.meta" ‖ salt ‖
 keccak256(meta))`), QML `UaKinds.metaPayId(saltHex, metaHex)`, vectors `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json`.
 Both: `pay_lane(p)` (`keccak256("scaas.pay.lane" ‖ p)`, 32 bytes) and `relay_ref(chain_id, target, call_data)` (the EVM
@@ -86,7 +87,18 @@ router's `ref`; other families' forms differ, see [CLI-SGN-39](signers-clientkey
 `clientkeys` `evm.js`. The C, C++ and Dart bindings carry `metaPayId` (v3) and `payDigest` only; the independent ports
 (ua-py, ua-go, ua-cs, ua-dart) carry none of them. BUILT.
 
-**Bindings.** C: the caller owns every buffer and nothing is freed; a fixed-size argument points to 32 bytes (20 for
+**`PayMeta` v3 (`ua-mtx-merge` T83; ua-rs-sign T20e1).** `scaas_ua::pay`: `PayMeta {salt, pay_no: [u8; 32], save, schema, body}`
+and `meta_pay_id_v3` (tag `scaas.pay.meta.v3` over `abi.encode(bytes32 payNo, bool save, uint16 schema, bytes body)`; `save`
+with `payNo` 0 refused as a shape error); `pay_no_from_uuid` / `pay_no_to_uuid` (a UUIDv7 right-aligned in 32 bytes, clientkeys
+`payNoFromUuid` / `payNoToUuid`); the pay records an ERP reads by `eth_call` (`payment_count_call`, `payments_of_call`,
+`decode_pay_records`, canonical return data only). `meta_pay_id_json` (C `scaas_ua_meta_pay_id`, C++ `metaPayId`, Dart
+`metaPayId`, QML `UaKinds.metaPayIdV3`) answers `{payId, payNo, payNoUuid, save}`: what a sign screen shows, the UUID text when
+`payNo` is a right-aligned UUIDv7, else `null` and the hex. The wallet policy's `PayMeta` check takes `save`, and a pay entry in
+any `PayMeta` form is never signed as a call (CLI-SGN-34). The v2 text form is in `clients/ua-rs/legacy/ua-rs-sign/pay_meta_v2.rs`.
+Vectors `metatx/paymeta.json`, `metatx/payrecords.json`. No `ua-*` library decodes the `PaymentMeta` log or the
+`PayRecordAmount` revert (the node's indexer reads the log). **BUILT.** UNAUDITED.
+
+**Bindings (the identity calls; the wallet surface: [below](#the-wallet-surface-of-ua-rs-built)).** C: the caller owns every buffer and nothing is freed; a fixed-size argument points to 32 bytes (20 for
 `registry20`), a variable output takes `(out, size_t *out_len)` and returns `SCAAS_UA_ERR_BUFFER` with the size needed
 in `*out_len` when it is too small (strings NUL-terminated, the NUL counted); every fallible call returns an `int32_t`
 `ScaasUaStatus` whose `scaas_ua_status_name` is the code above, or `UAArgument` (a NULL pointer, a table index out of
@@ -130,9 +142,591 @@ the prime-order subgroup; MuSig2 / FROST layouts of valid points with sorted mem
 layout and member rules; FN-DSA header and coefficients `< 12289`; ML-DSA, SLH-DSA and `pqz-mlwe` by length. Precompile calls (EIP-2537 G1MSM / G2MSM, the bn254 pairing) are capped at 2× their EIP price; a gas
 shortage reverts `UAVerifyGas`, never `UAKeyData`; on a chain that prices those precompiles above 2× the EIP price, valid keys fail with `UAVerifyGas` (check the prices before enabling the kinds). Registration status, KeyAgg, the FROST DKG check, PoP and the structure gas bound are the registry's.
 
+## The wallet surface of `ua-rs`: BUILT
+
+Built on branch `ua-rs-sign` (plan tasks T0 to T18, each commit in the
+[register](../decisions.md#39-clients--ua-libraries)). No contract, node or signed-record byte format changed. Design and the
+review mapping: the [signer spec](../superpowers/specs/2026-11-05-ua-rs-sign.md). UNAUDITED: reviewed by AI (Fable, Codex,
+Claude), no external audit.
+
+| Area | Module (`clients/ua-rs/src/`) | Calls |
+|---|---|---|
+| Wallet and keys | `wallet/mod.rs`, `derive.rs`, `store.rs` | `Wallet::{generate, from_mnemonic, open_vault, seal_vault, lock, unlock, manifest, memory_protection, ua_key, native_key}`; derivation as [signers-clientkeys §9](signers-clientkeys.md#9-derivation-and-role-keys) |
+| Single-key signing | `sign.rs`, `pqsign.rs`, `pairing.rs`, `signer.rs` | `UaKey::{sign_ua, sign_member}`, `NativeKey::{sign_typed, sign_transaction, sign_key_proof, sign_digest}`, the `Signer` trait |
+| Native networks (ua-rs-native) | `wallet/mod.rs`, `derive.rs`, `sign.rs`, `substrate.rs` | `Wallet::{bitcoin_key, polkadot_key}`, `NativeKey::{sign_message, sign_near_transaction, sign_sui_transaction, sign_stellar_transaction, sign_hedera_transaction, witness_program, ss58_address}`, `sign_message_by`, `Network::{scheme, all}` ([below](#native-networks-of-the-apps-backend-built)) |
+| `UASig` and groups | `uasig.rs`, `pairing.rs` | `ua_sig`, `msig_sig`, `membership_sig` (`msig` sets minimal at both levels, `UAPoP` otherwise); an updated `msig` (CTR-UA-44): `msig_sig_current`, `membership_sig_current` (the id from the first structure, slots, weights, threshold and minimality from the current one, a disabled slot `Argument`; the JSON request's `current`), `msig_update_typed_data` (a native member signs the `UAMsigUpdate` digest itself under `msig-update`); `pqz-scoped-key` signs with role Pop and an empty `keyData`, as the other portable record purposes; MuSig2 sessions (`UaKey::musig2_session`) and FROST sessions (`Wallet::frost_session`): store handles, a secret nonce in the arena used once, revoked by `lock()`; the FROST share stays the caller's `KeyPackage` until the real DKG work ([CLI-UAL-09](#CLI-UAL-09)) |
+| EIP-712, policy, transactions | `eip712.rs`, `policy.rs`, `tx.rs` | `TypedData`, `scaas_typed_data`, `pqz_verdict_typed_data` (the `PqzVerdict` a PQZ verifier UA signs under `pqz-verdict`, group 3f), `Expect`; `EvmTx` types 0 to 3 (`alloy-rlp`; type 4 has no variant, chain id 0 refused) |
+| WebAuthn | `webauthn.rs` | `webauthn_challenge`, `webauthn_assertion` |
+| Factory addresses | `factory.rs` | `create3_salt`, `create3_address`: a creation's chain-neutral CREATE3 address (chain-neutral spec §4, `vectors/factory/create3_kat.json`), shown before a router create op |
+| KEM, seal, containers | `kem.rs`, `seal.rs`, `aead.rs` | `UaKey::kem_key`, `kem_encaps`, `KemKeyPair`, `seal`, `open_container`, `LinkSession`, `from_link`; AEAD, HKDF, HMAC ([§9.1](signers-clientkeys.md#91-the-ua-kem-key-seal-and-containers)) |
+| Vault, manifest, backup | `vault.rs`, `manifest.rs` | clientkeys vault v1 byte for byte, `discover_candidates`, `import_native_key`, `imported_ua_key` (an imported key's own derived kind, [CLI-SGN-29](signers-clientkeys.md#CLI-SGN-29)), `SeedBackup`, `backup_seal`, `link_seal`, `restore_backup`, label vaults |
+| Facades | `facade/zether.rs`, `pqz.rs`, `pqz_pack.rs`, `pqz_backup.rs`, `decoys.rs` | `ZetherKey`, `PqzKey`, each one JSON `call` ([below](#confidential-token-facades-no-decryption-oracle)); `pqz_set`, `export_pqz_leaf_raw` |
+| Bounded readers | `wallet/bounded.rs` | [CLI-UAL-03](#CLI-UAL-03) |
+
+**Features** (`clients/ua-rs/Cargo.toml`). `--no-default-features` keeps the verify-only identity layer, a CI cell of its own.
+
+| Feature | Gives | Default |
+|---|---|---|
+| `wallet` | `pq`, `signers`, `json` and everything in the table above but the facades | yes |
+| `zether` | `wallet` and the Zether facade (`zether-prover`, BLS12-381 only) | yes |
+| `pqz` | `wallet` and the PQZ facade (`pqz-ffi` with `prove`; the Rust PQZL backend, PQZH where the set has it) | yes |
+| `pqz-set-<set>` | exactly one with `pqz` (a const assert): `n2048-kmax1024`, `n2304-kmax4096`, `n2560-kmax16384`, `n2816-kmax65536`; a wallet serving two sets ships two builds; another set is `PqzSetMismatch` | `n2304-kmax4096` |
+| `mlock` | arena protection ([CLI-UAL-10](#CLI-UAL-10)); compiled out off Unix | yes (owner 2026-11-06) |
+| `pq`, `signers`, `json` | the identity layer's own: PQ verifiers, group signers, JSON shims | through `wallet` |
+| `vectors` | test-only entry points; never in a production artifact ([CLI-UAL-25](#CLI-UAL-25)) | no |
+
+**C ABI 6** (`clients/ua-c`, `include/scaas_ua.h` by cbindgen; the v5 header is kept at `legacy/ua-rs-sign/scaas_ua.v5.h`).
+Every v5 declaration is unchanged. New: the opaque handles `ScaasUaWallet`, `ScaasUaKey` (UA or native), `ScaasUaKemKey`,
+`ScaasUaLinkSession`, `ScaasUaSeedBackup`, `ScaasUaZetherKey`, `ScaasUaPqzKey`; a call per row of the table above;
+`scaas_ua_zether_call` and `scaas_ua_pqz_call` for the facades' JSON; statuses 21 to 42 (`SealOpen`, `SealVersion`, `KemCheck`,
+`Aead`, `VaultOpen`, `VaultParams`, `VaultVersion`, `RawDigestRefused`, `PolicyRefused`, `ExternalSignature`, `WalletLocked`,
+`KeyRevoked`, `ContainerSender`, `ContainerReplay`, `BackupRollback`, `WebAuthnAssertion`, `KindUnavailable`, `WalletMismatch`,
+`Rng`, `PqzSetMismatch`, then group 3g's `PqzKeyVersion` 41 and `KeyInUse` 42, appended). `scaas_ua_features()` returns the build's bits: 0 `wallet`, 1 `pq`, 2 `falcon`, 3 `zether`, 4 `pqz`,
+5 to 8 the four sets, 9 `external` (clear in this round), 10 `mlock`, 11 `vectors` (a binding refuses it), 12 `native_networks`
+(ua-rs-native: networks 9 to 12, `scaas_ua_sign_message_raw`, the four envelope calls, `scaas_ua_wallet_bitcoin_key`,
+`scaas_ua_wallet_polkadot_key`, `scaas_ua_key_address`, `scaas_ua_key_ss58_address`, `scaas_ua_key_witness_program`; the C-ABI
+bindings refuse a v6 library without it). A size query of a
+proving call runs it again and a proof's length varies, so callers use `SCAAS_UA_PQZ_OUT_MAX` (1,052,672 B) as the buffer.
+
+**Bindings of the wallet surface.** Each checks the ABI version and the features at load and refuses a mismatch. Identity calls
+stay as above: `ua-py`, `ua-go`, `ua-cs` and `ua-dart` keep their own ports as the independent cross-check.
+
+| Binding | Reaches `ua-rs` by | Handles and load check | Secrets |
+|---|---|---|---|
+| `ua-c` | the C ABI; `vectors` does not compile | caller frees each handle once; `scaas_ua_abi_version`, `scaas_ua_features` | caller memory, the caller zeroizes |
+| `ua-cxx` | a second `cxx` bridge over the Rust API | move-only classes, `scaas::ua::load()`, `UAAbiMismatch` | `Secret`, zeroized in Rust before the call returns |
+| `ua-qt` | singleton `UaWallet` over `ua-cxx` | QML holds an id, never a handle | public data, seal to a public key, sign by id; no decaps, open, raw digest, typed `Any` or export in QML; wraps neither facade |
+| `ua-dart-frb` | `flutter_rust_bridge`, a hand Dart facade `lib/src/wallet.dart` | opaque handles, `UAAbiMismatch` | Rust-owned `SecretBytes`, never the bridge's codec ([CLI-UAL-05](#CLI-UAL-05)); no web build |
+| `ua-py` | `scaas_ua.wallet`, ctypes over `libscaas_ua_c` | one class per handle, close waits for calls in flight | bytes-like in (a `str` is refused), `bytearray` out, `wipe()` |
+| `ua-go` | subpackage `clients/ua-go/wallet`, cgo (the identity port stays cgo-free) | `Close` under a write lock, a finalizer | `[]byte`, `Wipe`; each call on a locked OS thread |
+| `ua-cs` | `Scaas.Ua/Wallet.cs`, P/Invoke with `SafeHandle` | `IDisposable`, freed once | pinned arrays, `CryptographicOperations.ZeroMemory` |
+| `ua-dart` | identity only, no signing | — | — |
+
+Stated gaps: no binding wraps the C calls of the PQZ seed backup ([CLI-SGN-47](signers-clientkeys.md#CLI-SGN-47): `scaas_ua_pqz_seed_backup`, `scaas_ua_pqz_share_reseal`, `scaas_ua_wallet_pqz_reconstruct`,
+`scaas_ua_pqz_seed_backup_warning`, `scaas_ua_wallet_pqz_held_key`), and none marshals an external signer's callback (each passes NULL
+and expects `KindUnavailable`). The wasm-bindgen browser binding is PLANNED (next, after the size and device numbers).
+Apps do not wrap these: they reach SCaaS through `scaas-sdk` and the bindings generated from it
+([CLI-SDK-12](scaas-sdk.md#CLI-SDK-12); SPECIFIED); the wrappers above stay for clients that use the signer without the SDK.
+PLANNED in `ua-rs` for the SDK, each with clientkeys rows first: `SecretBytes` lifted from `ua-dart-frb` (one implementation), the
+master fingerprint, the keystore's index MAC ([CLI-SDK-03](scaas-sdk.md#CLI-SDK-03)), a re-seal of a vault's data under its same data
+key, BIP-85 children with a sealed high-water mark ([CLI-SDK-04](scaas-sdk.md#CLI-SDK-04)), and the named-entry JSON and calldata of
+every typed operation.
+
+**Targets.** CI (`.github/workflows/ci.yml`; its header lists the commands): `ua-rs` runs ten cells, each with clippy and tests;
+`ua-rs-targets` compiles for the other targets; `ua-deps` runs `cargo tree --locked`, `cargo deny`, `cargo audit`;
+`test-features` runs [CLI-UAL-25](#CLI-UAL-25)'s check. The jobs have not yet run on GitHub (no push on this branch).
+
+| Target | Core | Zether, PQZ | Status |
+|---|---|---|---|
+| x86-64 Linux | every cell | every cell (PQZ at two sets) | built and tested locally, every binding's suite |
+| `wasm32-unknown-unknown` | compiles; Falcon `KindUnavailable` (its C is skipped); `mlock` compiled out; `getrandom`'s JS backend per generation | compiles | nine cells built locally; nothing runs through a browser binding yet |
+| `aarch64-linux-android` | compiles (NDK clang, API 24) | compile cells | `ua-c`'s cells built for the size ratchet, `ua-rs`'s verify-only cell locally, its other cells CI's first run; no device run |
+| `aarch64-apple-ios` | CI compile only (iOS 13 or later: `IPHONEOS_DEPLOYMENT_TARGET=13.0`, for the stack probe `___chkstk_darwin`) | CI compile only | not built here (no Xcode) |
+
+Sizes per target and cell, and the timing still to come: [CLI-UAL-43](#CLI-UAL-43).
+
+<a id="CLI-UAL-01"></a>**CLI-UAL-01** — **`ua-rs` is the only signer, and a secret leaves it only through a named export.**
+Every client signs through `scaas-ua`: a client core or wallet module over it never signs on its own, and apps reach it through
+the bindings above. It derives every key exactly as clientkeys, signs for every kind, holds the UA KEM key, seals and opens,
+wraps AEAD, HKDF and HMAC from RustCrypto crates (never its own AES), and keeps the vault, the manifest and backups. clientkeys
+stays the JS reference and writes every vector row first. The only exits of a secret: `seal_vault` and `seal_label_vault`
+(encrypted), `SeedBackup` (shown once, three-word check, `take()` forgets), `backup_seal` and `link_seal` (sealed containers), and
+`export_pqz_leaf_raw` with the marker `AllowSecretExport`, the one call that returns a secret in the clear. `decaps` returns `ss`, a
+per-encapsulation secret ([CLI-SGN-43](signers-clientkeys.md#CLI-SGN-43)). Key types are neither `Clone` nor `Debug`-printing and
+have no accessor for secret bytes (compile-fail doc tests). BUILT.
+
+**Scope (owner 2026-11-17).** The rule holds from `scaas-sdk` down: every SCaaS kind (UA keys, `mtx*`, PQZ and Zether,
+PqChat) and everything `scaas-sdk` or `pqchat-core` signs goes through `ua-rs`. An app above `scaas-sdk` may sign the native
+transactions of other chains with its own library (for example Trust Wallet Core) and keep its own vault; such an app links
+`ua-rs` and `scaas-sdk` only in a build that offers SCaaS features. SPECIFIED.
+
+<a id="CLI-UAL-02"></a>**CLI-UAL-02** — **No release signature takes randomness.** Every randomized call (ML-DSA `rnd`, SLH-DSA
+`opt_rand`, Falcon, BIP-340 and scaas Schnorr `aux`, the KEM's `m` and `e`, PQZ `rnd32`, link codes) draws from the OS RNG inside
+`ua-rs`; deterministic entry points exist only under `vectors`, and a compile-fail doc test shows a release build has none. BUILT.
+
+<a id="CLI-UAL-03"></a>**CLI-UAL-03** — **Every outside input is bounded by length and depth before it allocates or recurses.**
+Over a cap: `Argument`, nothing parsed. A fuzz target per decoder (`clients/ua-rs/fuzz/`: `build.sh`, `run.sh <target> <seconds>`,
+`seeds.py`; stable Rust, clang sanitizers). `fuzz_caps` reads the over-cap inputs in `regress/` in the `vectors` CI cell; the
+campaigns stay local. BUILT.
+
+| Input | Cap | Fuzz target |
+|---|---|---|
+| typed data JSON | 64 KiB, depth 8, 32 struct types, 64 fields each, type references acyclic and 8 deep, arrays 1,024 | `typed_data` |
+| `Expect`, transaction JSON | 16 KiB, depth 4 | `expect`, `tx` |
+| vault JSON | 2 MiB, depth 2; the scrypt bounds of [CLI-SGN-21](signers-clientkeys.md#CLI-SGN-21) | `vault` |
+| manifest JSON; backup and link payload | 1 MiB, depth 3; payload depth 4 | `manifest` |
+| `Sealed`; container JSON | `pt` ≤ 1 MiB, fixed field lengths; 4 MiB, depth 7, `sender.auth` two levels, lists of 16 | `sealed`, `container` |
+| `ContainerExpect`, accepted JSON | 16 KiB, depth 4; an approved set of 64 UAs, indices `u16` | `container_expect`, `accepted` |
+| members JSON | 512 KiB, depth 4, 64 UAs (owner 2026-11-06) | `members` |
+| `UASig` request JSON | 64 KiB, depth 6, 16 slots | `uasig` |
+| `kemPk` | exactly 1,601 B | `kem_pk` |
+| mnemonic text | 1 KiB, 24 words | `mnemonic` |
+| Zether command JSON | 1 MiB, depth 8 | `zether_cmd` |
+| PQZ command JSON | 4 MiB, depth 8 (16 pending 8-leg audited blobs, `acc` and the key in hex reach about 2.3 MiB at `n2816-kmax65536`) | `pqz_cmd` |
+| balance-cache box; `pickDecoys` | 2 MiB, depth 1; 4 MiB, depth 2 | through the two above |
+
+<a id="CLI-UAL-04"></a>**CLI-UAL-04** — **Errors carry no input and no panic crosses the ABI.** `Display` of an error and
+`scaas_ua_last_error` never echo an argument (not a BIP-39 word, a vault label's plaintext or a typed-data value); `ua-rs` has no
+`log` or `tracing`; bindings print no argument on an error path; a test runs secret inputs through the error paths. `catch_unwind` does nothing on
+`wasm32-unknown-unknown` or under `panic = "abort"`, so `clippy::{unwrap_used, expect_used, panic, indexing_slicing}` are denied in
+`ua-rs`'s wallet and facades, `scaas-ct` and `ua-c`; every C export also runs in one `catch_unwind` (`SCAAS_UA_ERR_INTERNAL`) and the shared
+library keeps `panic = "unwind"`. BUILT.
+
+<a id="CLI-UAL-05"></a>**CLI-UAL-05** — **Header rules of ABI 6: handles, and whose memory holds a secret.** `_free(NULL)` is a
+no-op; the caller frees each handle it received exactly once; use after free, a double free of one handle, or freeing a handle
+while a call on it runs is undefined; `_free` zeroizes; a handle may be used from any thread concurrently; the last-error detail
+stays per thread. A child handle refers to its wallet's secret store, not into the wallet handle, so freeing the wallet before
+its children is defined ([CLI-UAL-09](#CLI-UAL-09)). Exactly one of `vault_passphrase` and `prf32` is non-NULL (both: PRF first,
+as clientkeys); `bip39_passphrase` NULL means empty. A call that changes state or reveals once checks its capacity before it
+runs. The mnemonic, both passphrases, `ss32`, an opened plaintext and the exported PQZ leaf sit in **caller** memory: the header
+says the caller zeroizes them and each binding does. `ua-dart-frb` passes no secret through flutter_rust_bridge's codec, whose transfer
+buffers are freed unzeroed: every secret in or out is a Rust-owned `SecretBytes` (whole 16 KiB page-aligned blocks, never moved,
+`mlock` and no-dump best effort, zeroed on dispose) that Dart writes and reads in place through `dart:ffi`; `SecretBytes.take`
+zeroes the source, so the package has no web build (owner 2026-11-06). Residual: a caller's copies, and a Dart `String` from a
+text field, stay the caller's. BUILT.
+
+<a id="CLI-UAL-06"></a>**CLI-UAL-06** — **A facade adds key custody and the ABI, no cryptography, and no request field can carry a
+key.** Every proof, transcript, statement and encryption stays in `zether-prover` and `pqz-core`; verifiers, the precompile, the
+self-test and the PQZL C core are not exposed. `Wallet::zether_key` and `Wallet::pqz_key` give `ZetherKey` and `PqzKey`, separate
+handles under separate features: the Zether `x` and the PQZ `seed32` sit in the wallet's arena under the store guard, PQZ's `s` and
+`e` are rebuilt per call and wiped. `call` reads a bounded request, keeps an allow-list of fields per command and a shape per
+nested object, and hands the key itself to the prover: `key`, `revealSecret` and `includeWitness` cannot arrive by request.
+`pqz_set()` names the build's set; a token's `proofSystemId` of another set is `PqzSetMismatch` before anything is parsed. BUILT.
+
+<a id="CLI-UAL-07"></a>**CLI-UAL-07** — **The external-key interface is fixed and tested; device implementations are phase 2.**
+Every signing path goes through `trait Signer { key_ref, sign_request }`; `UaKey` and `NativeKey` implement it, the `UASig`, typed,
+transaction, key-proof and raw-digest builders take `&dyn Signer` (`sign_typed_by`, `sign_transaction_by`, `sign_key_proof_by`,
+`sign_digest_by`). `SignRequest` has no public constructor. `ua-rs` normalises a device's answer (low-s, `v`) and verifies it
+against the `KeyRef` under the request's role before returning it, else `ExternalSignature`. A test `TestExternalKey` (under
+`vectors`) runs the `sign.json` rows through the interface. BUILT. The C header declares `ScaasUaExternalSigner` and
+`scaas_ua_external_key_new`, which returns `KIND_UNAVAILABLE` in every build with the feature bit `external` clear. Secure Enclave,
+StrongBox, Android Keystore, Ledger and passkey implementations: PLANNED; an external key has no KEM key.
+
+<a id="CLI-UAL-08"></a>**CLI-UAL-08** — **Every multiplication by a secret on an arkworks curve goes through
+`scaas_ct::secret_mul`.** A blinded scalar cannot be an arkworks field element (it reduces back), G1's GLV path reduces it again,
+and the unreduced paths skip leading zeros and branch per bit. So `clients/scaas-ct` (a small crate `ua-rs` and `zether-prover` share,
+owner 2026-11-05) forms `k' = k + ρ·r` as a 384-bit integer (`ρ` 128 bits from the OS RNG), runs a Montgomery ladder of exactly 384
+iterations with a masked swap, and wipes `ρ`, `k'` and the swap state. Covered: the public keys of `0x0104`–`0x0107` and `0x0112`, the
+scaas Schnorr nonce point, the BLS signature, the MuSig2-bn254 nonces, FROST-BN254 through an element newtype, and in zether-prover
+every `x` times a supplied point and the proofs' nonces over `x` on supplied points. `mul_bigint` and friends are refused by
+`clippy.toml`; a structural test under `vectors` shows, per path, one point, two integers, each `≥ r` and `≡ k`, 384 iterations.
+Residual: arkworks field arithmetic, point-addition cases, the scalar arithmetic of a signature, Zether's fixed-base `[x]G`, `[k]G` and
+per-transfer secrets (a leak of those reveals that transfer's amounts, never `x`). Blinding narrows; it does not make them constant time. BUILT.
+
+<a id="CLI-UAL-09"></a>**CLI-UAL-09** — **One secret store per wallet; `lock()` revokes every handle for good.** The store is a
+read-write lock over `{generation, arena}`, shared by `Arc`. Every handle (`UaKey`, `NativeKey`, a derived `KemKeyPair`, a group
+session, `ZetherKey`, `PqzKey`, the three-key `pqz3k::PqzKeyHandle`) holds the `Arc`, its generation and its slot, and no secret bytes. Every secret operation takes the
+read lock, refuses `KeyRevoked` when the generation is old, and runs under the guard. An operation that copies a secret out under
+the guard and uses the copy after it (a vault's scrypt and AEAD, a seal's KDF and AEAD after decapsulation, a backup's or a k-of-n
+split's seals, a MuSig2 or FROST partial signature, a PQZ migration's re-encryption, the three-key handle's check, debit and
+registration) holds a **read lease** of the store for the copy's whole
+use: leases never wait for each other, so signers stay concurrent, and the store guard inside still refuses once locked. `lock()`
+waits until no lease is in flight, then takes the write lock (so it waits for calls in flight), wipes the arena and raises the
+generation; no lease begins between the two. Lock order: a lease before any guard of its store, never while one is held (owner
+2026-11-16, T21 L82). An export (`export_pqz_leaf_raw`, `decaps`) hands its copy to the caller and holds no lease. `unlock` reopens the vault into a new arena at the raised generation and
+never revives an old handle; a vault of another wallet is `WalletMismatch`. A wallet call that needs secrets while locked is
+`WalletLocked`; the public manifest stays. Freeing the wallet is `lock()` plus the release of its reference: a child returns
+`KeyRevoked` until its own `_free`. An imported or rebuilt key is listed after `unlock` and held only once its label vault is opened
+(`backup_seal` refuses until then). An ephemeral `KemKeyPair` and a `LinkSession` have a store of their own. A FROST session is such a handle (its nonces in the arena); its share is not yet: the caller's `KeyPackage` until share custody comes with the real DKG work (owner 2026-11-16). BUILT.
+
+<a id="CLI-UAL-10"></a>**CLI-UAL-10** — **Memory protection covers the arena, not the object graph.** The arena is page-aligned 16 KiB
+chunks that never move or grow, each `mlock`ed and `MADV_DONTDUMP` (Linux, Android) at allocation, wiped, unmarked and unlocked at
+release. Every long-lived secret lives in it as bytes: the entropy, the seed, each handle's key bytes, imported keys, group secret
+nonces, the Zether `x`, the PQZ `seed32`. Best effort: a failed lock is reported by `Wallet::memory_protection()` (`{chunks, locked,
+no_dump}`) and never fails the wallet. **Outside, stated:** a crate's key type rebuilt for one operation and its temporaries, the
+scrypt work buffer (128 MiB at `N = 2^17`, the crate offers no caller buffer), caller buffers, Windows (no `VirtualLock`, reports 0),
+a kernel page that does not divide 16 KiB (nothing locked), everything on wasm32. `ua-rs` never sets `PR_SET_DUMPABLE`; a host app
+may. BUILT.
+
+<a id="CLI-UAL-11"></a>**CLI-UAL-11** — **A container's sender is expected, never self-declared.** A valid signature proves only that some
+registered UA sealed it, so the one opening call is `open_container(kem_key, container, expect, members, accepted)` and no call
+opens without a `ContainerExpect {purpose, sender (a UA or an approved set), recipient}`. Before any decapsulation, each a refusal
+with nothing imported: the purpose; the recipient, which is the opening key's own; `sender.ua` expected; `sender.auth.keyData`
+derives `sender.ua` (an `msig`, or exactly one single-key kind: the container names no kind, the opener tries the derived kinds
+that may sign, each under its own tag); `sender.auth` verifies over the rebuilt `aad` and wire form. An `msig` sender: no signature of
+its own, the minimal set at both levels, its signers accepted at both levels through the caller's `accepted(id, index)` (a missing
+lookup refuses, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)). A mismatch, or a signer not accepted: `ContainerSender`; a bad signature,
+the wrong `UASig` form or a bad tag: `SealOpen`. **Trust anchors.** Restore: the wallet's identity UA, known before the container
+is read (the UA a backup holder approved, kept in its manifest as `backup_senders`, or the account the user confirms); after
+decryption the payload's entropy must derive `sender.ua`, else `ContainerSender`. Link: the UA the user confirms on the new device
+from the old device's screen, never from the container. BUILT, clientkeys and `ua-rs`.
+
+<a id="CLI-UAL-12"></a>**CLI-UAL-12** — **`open` gives no replay protection; link and restore carry their own.** Link:
+`LinkSession::new()` makes the ephemeral key, an 8-digit short code from the OS RNG and a window; the window is measured on the
+opener's clock (owner 2026-11-16): an open after session start + 10 minutes on the opener's clock, or a `created` (the sender's clock)
+outside `[start − 120 s, start + 10 minutes + 120 s]`, is `ContainerReplay` (`LINK_WINDOW` 600, `LINK_SKEW` 120); `from_link` takes the
+session by value and consumes it, so a second install cannot be expressed (C: the handle stays allocated, later calls `KEY_REVOKED`; a
+malformed JSON does not consume it). The short code's hash is in the link `aad`. **The short code does not protect the payload
+against a swapped key** (owner 2026-11-16): the AEAD key depends on the session's `kemPk`, not on the `aad`, so whoever substitutes
+its own `kemPk` reads the seed whatever code the user types. The session's `kemPk` must reach the existing device over an
+authenticated channel: a direct QR scan of the new device's screen, or a screen of the same user; never a relay, a deep link or a
+pasted string. Restore: the payload's `generation` (raised by each `backup_seal`; a link raises none) lower than the recorded one over a wallet
+already held is `BackupRollback`, unless the caller passes the marker `AllowRollback` (JS `allowRollback: true`; C its own name,
+`scaas_ua_wallet_restore_backup_rollback`) after the user confirmed; an equal generation is treated as the same backup and installs
+nothing (owner 2026-11-16): generations order the backups of one device only, so after a link two devices can seal different backups
+at one generation and the second one restored over the other is skipped. Reading an old backup is not refused; installing it over
+newer state is. BUILT, clientkeys and `ua-rs`.
+
+<a id="CLI-UAL-13"></a>**CLI-UAL-13** — **The EIP-712 hasher is faithful; the canonical step belongs to checked SCaaS records.** The
+generic hasher hashes the values supplied and never rewrites a field. `scaas_typed_data` (the SCaaS builders) writes an unbound
+`relayer` / `feeRecipient` as zero, recursively, within a SCaaS domain and operation only. `sign_typed` with a checked `Expect` (one variant per
+clientkeys check: `Payment`, `PayeeFee` (`ReceiverFee` before [CTR-MTX-86](../contracts/metatx.md#CTR-MTX-86)), `PayMeta`, `Op`, `Call`, `OwnerCall`, `Cancel`, `TradeOrder`, `WrapOrder`) **refuses** a
+non-zero unbound field (`PolicyRefused`), so what the user confirmed is what is hashed (owner 2026-11-05). `Expect::Any(AllowAnyTypedData)`, with its
+own C name `scaas_ua_sign_typed_any`, signs the standard digest of the values as supplied. An unrelated domain's struct with the
+same field names is untouched. Since the merge of `ua-mtx-merge` `aa898cf6` (T20b) the op table and the checks follow its merged-entry rows (`typed/typed_ops.json`, 80 structs; 83 since `4f6d8605`, with the router's `UACreateToken`, `UACreateDex`, `UACreateInstance`; 86 since
+`7558a364`, with 3f's `UAPqzSetVerifier`, `UAPqzCancelVerifier`, `UAPqzRevokeVerifier`, [CLI-UAL-59](../decisions.md#CLI-UAL-59)): a payment, a payee fee, a SCaaS sell token's order, a wrap order and their cancels are the `UA` structs between 32-byte ids, `PayMeta` is v2 (`{salt, payNo, schema, body}`), the PQZ debits name `keyVersion` and the PQZ `UARollOver` is its own row (`UAPqzRollOver`). BUILT.
+
+<a id="CLI-UAL-14"></a>**CLI-UAL-14** — **The KEM key comes through the UA key's own store.** `UaKey::kem_key(version)` has no wallet
+argument, so a handle cannot be combined with another wallet's seed and two wallets cannot make a second `(ek, pk_X)` for one
+`(ua, version)`. It refuses a kind that is not a KEM holder (`KemHolder`) and a revoked handle (`KeyRevoked`). The FIPS 203 §7.3
+self-test of a derived key runs once per store per `(ua, version)`, its record in the store. BUILT.
+
+<a id="CLI-UAL-15"></a>**CLI-UAL-15** — **EIP-2333 UA kinds have index 0 only.** Their paths have no index level (`0x0104`–`0x0107`,
+`0x0112`), so `index ≠ 0` is `Argument` and two indices can never alias one key; the manifest records 0, `discover_candidates`
+returns index 0 alone, and several keys of such a kind come from several `account` values. `account`, `index` and `coinType` are
+`< 2^31` for every kind. BUILT, clientkeys and `ua-rs`.
+
+<a id="CLI-UAL-16"></a>**CLI-UAL-16** — **A WebAuthn assertion is built against the challenge the caller asked for, and verified before it
+is returned.** `webauthn_assertion(key_data, expected_challenge, authData, clientDataJSON, r, s)`, in order: `0 < r, s < n`; `s` to
+low-s; `clientDataJSON` kept as the exact signed bytes, UTF-8, accepted only by the chains' rule (`client_data_ok`) against
+`expected_challenge`, never the JSON's own; the whole encoding through `verify(0x0100, …)`. Any failure: `WebAuthnAssertion`, nothing
+returned. BUILT, clientkeys and `ua-rs`.
+
+<a id="CLI-UAL-17"></a>**CLI-UAL-17** — **The signature role is set inside `ua-rs`.** `SigRole::{Authorization, Pop}` picks the BLS domain
+(SIG or POP) and every kind's post-verification: `sign_ua` maps a portable purpose (`pop` v2, `kem`, `pqz-key`) to `Pop` and every
+other to `Authorization`, as the registry's `_sigOk`; `sign_member` is always `Authorization`. No public call takes a role; an
+external signer reads it. BUILT.
+
+<a id="CLI-UAL-18"></a>**CLI-UAL-18** — **A `seed` vault holds the BIP-39 entropy at its own length.** Exactly 16, 20, 24, 28 or 32 bytes
+(12 to 24 words; a new wallet 32), never the 64-byte seed, never padded. Another length is `VaultOpen` before a `Wallet` is built;
+`open_vault` needs the label `seed` (`Argument`). The BIP-39 passphrase is never stored: it is asked at every unlock. The format is
+clientkeys vault v1 ([CLI-SGN-02](signers-clientkeys.md#CLI-SGN-02)) byte for byte, both ways; vault v2 and its tombstone are
+`VaultVersion` by name. BUILT.
+
+<a id="CLI-UAL-19"></a>**CLI-UAL-19** — **`rewrap_pin` is not a DEK rotation.** It replaces the passphrase envelope and keeps the DEK, so it
+revokes nothing from someone who learnt the DEK. Recovery from a DEK compromise is `seal_vault` anew: a fresh DEK, every envelope rebuilt. A
+wallet UI does not call a PIN change a key rotation. BUILT.
+
+<a id="CLI-UAL-43"></a>**CLI-UAL-43** — **A size ratchet per target and feature cell; timing only on an idle machine or on real
+devices.** `clients/ua-c/size-baseline.json` (34 cells) and `clients/ua-c/sizes.py` (`measure`, `check`, `selftest`; gate step `ua-sizes`):
+stripped release `libscaas_ua_c` per target and feature cell, the bindings' own artifacts and the wasm32 modules; `pqzh` per set recorded,
+not checked. A cell fails on growth past 1 %, on a cell missing from the baseline, on a failed build or when nothing was measured; the
+baseline moves only by hand, with its old → new figure and a reason in the commit. The 1 % departs from MD-12's plain text (any growth):
+another host's C compiler and checkout path move the bytes with no change of code. Default `libscaas_ua_c` cdylib: x86-64 5,685,272 B,
+aarch64-android 4,972,880 B, wasm32 5,362,876 B; the table per cell is in the run record `clients/ua-rs/runs/2026-11-07-ua-rs-sign-t17.md`.
+BUILT for x86-64, aarch64-android and wasm32; aarch64-ios is not measured (no Xcode on the measuring host).
+**Reference timing** on a desktop through `clients/ua-rs/examples/ua_bench.rs` (release, default features, no test feature, the public API:
+PQZ `R_TX` prove with PQZL and PQZH, scrypt at `N = 2^17` opening a seed vault, Falcon-1024 and SLH-DSA keygen per handle; p50 and p95):
+pending, run alone once the machine is idle (owner 2026-11-07); a desktop reference, not CTR-PQZ-18's proof.
+**Device timing:** pending, the owner has no devices yet (2026-11-07): PQZ `R_TX` prove and heap peak on Android and iOS against
+[CTR-PQZ-18](../contracts/pq-zero-knowledge.md#CTR-PQZ-18) (≤ 15 s, ≤ 128 MiB), wasm32 scrypt at `N = 2^17` on a phone browser, Falcon-1024
+and SLH-DSA keygen per handle. No figure is quoted without its device and commit; until then CTR-PQZ-18 is unmeasured on a device.
+
+**Notes, not rules.** No key rotation exists for a UA's signing key: a UA id is the hash of its key, so "rotation" is a new UA or an
+`msig` membership move; KEM keys rotate by version, FROST by a new DKG. Consumer recovery beyond the phrase (SLIP-39 shares, a
+threshold of recovery UAs) is later work; `backup_seal` to an organisation UA and `msig` cover institutional recovery.
+Reproducible builds are for the apps' own stores (`--locked`, `SOURCE_DATE_EPOCH`, `cargo auditable`); no binary goes to GitHub.
+`no_std` is not needed: no listed target asks for it.
+
+## Native networks of the app's backend: BUILT
+
+`ua-rs` as an end-user app's native signing backend ([CLI-UAL-01](#CLI-UAL-01) Scope; owner 2026-11-17, TODO 8c): the networks
+of [CLI-SGN-52](signers-clientkeys.md#CLI-SGN-52) and [CLI-SGN-53](signers-clientkeys.md#CLI-SGN-53), raw messages on Ed25519 and
+sr25519 keys. Encoding stays with the app's backends: `ua-rs` derives, gives addresses and witness programs and signs the digest or
+message it is handed. Spec and plan: [`2026-11-17-ua-rs-native.md`](../superpowers/specs/2026-11-17-ua-rs-native.md),
+[plan](../superpowers/plans/2026-11-17-ua-rs-native.md) (branch `ua-rs-native`); controller calls in
+[CLI-UAL-63](../decisions.md#CLI-UAL-63). Built on branch `ua-rs-native` (plan T0 `55f5377af` to T11c `17df72db0`; the gates:
+`smartcontracts/evm/runs/2026-11-17-ua-rs-native-summary.txt`). UNAUDITED.
+
+<a id="CLI-UAL-44"></a>**CLI-UAL-44** — **Raw native signing: the marker, native keys only, the scheme's form, a bound.**
+`NativeKey::sign_message(msg, AllowRawDigest)` (C `scaas_ua_sign_message_raw`) signs 1 to 131,072 bytes as the scheme's message, on
+Ed25519 and sr25519 native keys only; `sign_digest` serves every native scheme (secp256k1 ECDSA, BIP-340 Taproot, ed25519, sr25519).
+`ua-rs` enforces: the marker value (no call without it, compile-fail doc tests); the key class (a `UaKey` has no raw call,
+`sign_message_by` over a `UaKey` is `Argument`, C refuses it `RawDigestRefused`, [CLI-SGN-29](signers-clientkeys.md#CLI-SGN-29)); the
+scheme (no message on a secp256k1 or Taproot key, no EIP-712 or EVM transaction on a Bitcoin key, no key proof on the four new
+networks); the bound; a message starting with an off-chain envelope a SCaaS family verifies (`0xff ‖ "solana offchain"`,
+`"APTOS\n"`) refused, so the families' payloads stay with their checked builders; no other first-byte rule (a message may start
+`0x05` or `0x19 0x01`: chain data on these keys, CLI-UAL-63 (11) withdrawn); no coin-type override on NEAR or Polkadot; errors
+without input. Envelope calls, additive, own network only, behind the marker: `sign_near_transaction` (`sha256(tx)`;
+a NEP-461 tagged payload, first u32 at or above 2^30, refused), `sign_sui_transaction` (`blake2b-256(0x000000 ‖ tx)`),
+`sign_stellar_transaction` (`sha256(network_id ‖ 0x00000002 ‖ tx)`), `sign_hedera_transaction` (the body bytes); none for GRAM / TON.
+Which keys and digests reach the raw path beyond this (EVM-address keys, a bare digest) is `scaas-sdk`'s raw entry's rule
+([CLI-UAL-63](../decisions.md#CLI-UAL-63) (11) to (15)). The caller's half is [CLI-SGN-54](signers-clientkeys.md#CLI-SGN-54). BUILT (T5
+`dc359c317`, T6b `f93f7f762`; C T10 `4624ff61d`; the bindings T11a–f).
+
+<a id="CLI-UAL-45"></a>**CLI-UAL-45** — **Bitcoin: `ua-rs` signs the sighash it is given and computes none.** The BIP-143 / BIP-341
+sighash needs the whole transaction (outpoints, every spent amount and script, sighash type), which is the app's encoder's; the app
+compares sighashes across its encoders and the signatures over them. P2WPKH: ECDSA, RFC 6979 with no extra data, low-s, no low-R
+grinding, `r ‖ s ‖ v`; the app DER-encodes and appends the hash type. P2TR: BIP-340 with the BIP-86-tweaked key computed inside
+`ua-rs` from the stored BIP-32 key by one pure tweak function (also the address's), `aux` from the OS RNG
+([CLI-UAL-02](#CLI-UAL-02)), the negated and tweaked scalars wiped before return, verified against `x(Q)` before return.
+`Wallet::bitcoin_key` takes the chain (0 receive, 1 change); `witness_program()` gives `(0, HASH160(pk))` or `(1, x(Q))`. BUILT (T7 `cebe014f1`).
+
+<a id="CLI-UAL-46"></a>**CLI-UAL-46** — **The sr25519 signer.** schnorrkel 0.11 (`default-features = false`, feature `getrandom`
+only), signing context `substrate`. Every signature and soft derivation draws its 32 random bytes first through `os_aux()` (`Error::Rng`
+on failure, never a panic) and hands schnorrkel a one-shot RNG that yields exactly those bytes; a second read discards the result
+(`Error::Rng`). The witness mixes the key's nonce, the transcript and those bytes (hedged); the signature is verified before return.
+The `substrate-bip39` mini-secret is computed when the store opens (from the entropy and the passphrase, which the store does not
+keep) and lives in the arena beside the seed; Polkadot keys are 64-byte schnorrkel secrets in the arena, revoked by `lock()`
+([CLI-UAL-09](#CLI-UAL-09)). A junction key is listed in the manifest's `polkadotPaths` (written only when not empty, at most 64, each
+re-parsed on read). Controller clauses: the one-shot RNG, the mini-secret at open, `polkadotPaths`. BUILT (T8a `1fd30d957`, T8b `940e9b876`).
+
+<a id="CLI-UAL-47"></a>**CLI-UAL-47** — **Native vectors.** `smartcontracts/vectors/native/native.json` is written by clientkeys first
+(`scripts/native-vectors.mjs`) and read by `ua-rs` and every binding; `ua-rs` writes `rs_native.json` (OS-random Taproot and sr25519
+signatures) that clientkeys verifies, so randomized rows are checked both ways. The `ua/` files do not move. Rows are byte-equal for
+deterministic schemes; BIP-340 with a fixed `aux` and sr25519 with fixed bytes are byte-equal **test-only** rows (feature `vectors`;
+sr25519 only if both libraries read the bytes alike, else verify-only, and then no row pins sr25519's nonce derivation byte for byte,
+an accepted residual); soft-junction signatures verify-only. Published known answers (BIP-84, BIP-86, BIP-143, BIP-340, BIP-341,
+BIP-350, `substrate-bip39`, `subkey` keys, and one polkadot.js signature: `@polkadot/keyring` 14.0.3, verify-only) carry their
+source (the downloads also their sha256). BUILT (T4 `7e752faa2`, appended T6a `290021791`, both ways T9 `5e4aa392c`).
+
+## Confidential-token facades: no decryption oracle
+
+[ARCH-POS-13](../decisions.md#ARCH-POS-13) (owner 2026-11-06: no part of SCaaS decrypts, opens or test-decrypts a ciphertext
+chosen by anyone other than the key holder and lets that party learn anything about the result) splits one duty
+in two: the library makes a bare ciphertext impossible to hand over, and the layer that reads the chain guarantees the words
+it hands over are real chain state. Design, findings and the owner's decisions: the
+[no-decryption-oracle spec](../superpowers/specs/2026-11-06-no-decryption-oracle.md). Zether and PQZ are separate modules,
+handles and features; each rule names the one it is about or says both. UNAUDITED.
+
+***Library duties (`ua-rs` facades and every binding): BUILT*** (ua-rs-sign T15c, T15c2, T15e, T14b,
+T15g, T15i, T15l):
+
+1. <a id="CLI-UAL-20"></a>**CLI-UAL-20 — No bare ciphertext in a production artifact (both).** No release command takes a ciphertext, a statement, `T`, `p` or a
+   parsed state field. The raw forms (table below) and their request types compile only under the test feature `vectors`;
+   zether-prover's raw commands and its decrypt and opening helpers are `pub` only under its feature `hazmat`.
+2. <a id="CLI-UAL-21"></a>**CLI-UAL-21 — Location and raw words (both).** A decrypting command takes a named location (`chainUid`, `token`, `block`, `psid`, the
+   reader's `ua`; an old entry by its sender's `fromUA` and `sendCounter`, `entryRef` recomputed as the contract derives it)
+   and the raw storage words the reading layer read at that block, each in a named field. The facade alone parses them by the
+   pinned storage layout (`scaas.pqz`, `scaas.zether` in `smartcontracts/evm/test/v2/layout/namespaces.json`, compared through
+   the forge state rows), checks them, rebuilds every ciphertext exactly as the contract does, and only then uses the key.
+   PQZ: `p` is chosen by the facade (the inline window and `K_MAX`), the pending words are exactly `[rolled, p)`, a TRIVIAL
+   entry is `vOff == 0`, the materialised `acc` is `not()` of its slots and must hash to `accHash`, and the stored form is
+   unpacked by `facade::pqz_pack`. Zether: `family` names the layout parser (EVM only; another family is refused until its
+   parser exists), the account slots are those of the reader's own `acct[UA(Y)]`.
+3. <a id="CLI-UAL-22"></a>**CLI-UAL-22 — Leg and role bound to the handle (both).** Before the key is used: the handle's key equals the registered key the words
+   carry (PQZ: the registry's `pqzKey[ua][v]` record of the key version read, `proven`, its SSTORE2 code; Zether: the leg's `Y_t` or the token's auditor
+   key); the selected leg's owner is the reader; an auditor read needs the token's auditor mode not NONE and an auditor copy
+   on that leg. These checks stop a careless caller; they never make words authentic.
+4. <a id="CLI-UAL-23"></a>**CLI-UAL-23 — One refusal before the key (both).** Every refusal before the key is used is `Argument` (C: `SCAAS_UA_ERR_ARGUMENT`)
+   with no detail; PQZ's `psid` of another set is `PqzSetMismatch` (a fact of the build, compared before anything is parsed).
+   After the key only `KeyRevoked` (the wallet locked or freed), `Aead` (the standalone balance-cache box calls
+   `open_balance_cache`) and these refusals, **all `Argument`**, each to the caller only (T15l, Fable P3-8): PQZ, digits that
+   are not a balance (a decryption above `u64`); a debit's balance below amount and fee; an opened memo that does not name
+   the entry's legs (`auditorOn` and the leg UAs, compared in constant time); `proveDiscloseSender`'s leg that is not the
+   sender's re-derivation (another key as the leg owner's, another sender's entry); Zether, `DecryptBound` (the balance above
+   the BSGS bound), a `cacheBox` that does not open under the key or holds no entry for the UA and token, a debit below its
+   amount; and a prover refusal on either.
+5. <a id="CLI-UAL-24"></a>**CLI-UAL-24 — A Zether balance hint is the sealed box (Zether).** `checkBalance` and a debit's hint take the holder's own sealed
+   balance-cache box `{iv, ct}` (`cacheBox`, a balance above the device's BSGS bound), never a number (T15l, Fable P3-1): the
+   facade opens it under the handle's key, uses its entry `<UA>:<token>` only at the words' `accSeq` (a stale entry: BSGS of
+   the rebuilt `acc`) and checks it against the rebuilt `acc` (`[b]G == C − [x]D`). Every multiplication of the key `x` by a
+   supplied point runs through `scaas_ct::secret_mul`; the per-transfer secrets stay on arkworks (a leak reveals that
+   transfer's amounts, never `x`).
+6. <a id="CLI-UAL-25"></a>**CLI-UAL-25 — No test feature in a production artifact (both).** `scaas_ua::VECTORS` and the feature bit `SCAAS_UA_FEATURE_VECTORS`
+   (`1 << 11`): `ua-c` does not compile with it, every binding refuses to load a library that has it, and a `vectors` build
+   makes key handles only after a test-only marker. `scripts/check_test_features.py` (CI and the gates) fails when a manifest
+   enables `vectors` or `hazmat` of `scaas-ua`, `zether-prover` or `pqz-ffi`, or `vectors` of `scaas-ct`, outside
+   `[dev-dependencies]` or a test-only crate, or when `cargo tree -e features` of `ua-c` (the library `ua-py`, `ua-go` and
+   `ua-cs` load), `ua-cxx`, `ua-qt`, `ua-dart-frb`'s crate, `zether-prover` (`zether-read-balance`), `scaas-node`,
+   `pqz-core/ffi/wasm` or `ua-rs` itself (`pqz-read`) shows one, transitive defaults included; each check has a positive control. The name `hazmat` follows the RustCrypto convention and is not a security boundary: the command set is.
+7. <a id="CLI-UAL-26"></a>**CLI-UAL-26 — Tests that can fail (both).** `clients/ua-rs/tests/no_oracle.rs`: the 8·K crafted PQZ queries recover `s` through the
+   `vectors`-only raw `dec` (positive control) and are refused by every production command in every bare shape with the key
+   unused; consistent fabricated words are decrypted (the residual control: authenticity is the reading layer's). `ua-py`
+   runs the same refusals through the C ABI. `facade_pqz_state.rs` and `facade_zether_state.rs` reproduce the contract's
+   ciphertexts from the forge state rows (PQZ at two sets) and refuse every word and role negative with the key unused. Every
+   binding over the facades (all but `ua-qt`, which wraps neither) decrypts the PQZ rows `smartcontracts/vectors/pqz/n2304-kmax4096/wallet_state.json` (wallet keys, written by
+   `gen_wallet_state.sh`) and the Zether forge rows through its own call path. Path (B)'s share: `no_oracle.rs` `proof_path_*`
+   and ua-py's `test_no_oracle_proof_path` (below). Each guard has a killed mutant
+   (`smartcontracts/evm/runs/2026-11-0[679]-ua-rs-sign-*-mutants.txt`).
+
+<a id="CLI-UAL-27"></a>**CLI-UAL-27** — **`ua-rs` contains no light client and no chain-state verifier** (owner 2026-11-06). It reads no
+chain and holds no anchors table, no Merkle-Patricia proof and no factory or registry proof; it stays I/O-free and holds no chain
+trust. The check that words are chain state is [CLI-UAL-30](#CLI-UAL-30)'s. BUILT (the library has none). The client-side **proof path**,
+where the library verifies each credit's proof itself over raw words it already takes, is BUILT for release 3h (below: path (B)); it
+checks parts, never that words are chain state, so CLI-UAL-30 still binds every debit's words.
+
+| Facade (`COMMANDS`) | Decrypts nothing | Location and raw words | `vectors` only (raw) |
+|---|---|---|---|
+| PQZ (`facade::pqz`) | `enc`, `proveRegister`, `proveKeyRecord`; `checkProven` (no handle: `facade::pqz::check_proven`, C `scaas_ua_pqz_check`; not in `COMMANDS`) | `balance` (with `forOp7`), `proveTransfer`, `proveBurn`, `proveRefresh`, `proveTransferMulti` (with `mode`), `auditRead` (the auditor's handle), `proveDisclose` (`RECEIVER_X` or `AUDITOR`), `proveDiscloseSender` and `openMemo` (the sender's handle); path (B): `provenOpen`, `provenAdd`, `provenCancel`, `balanceProven`, `proveTransferProven`, `proveTransferMultiProven`, `proveBurnProven`, `proveRefreshProven` | `dec`, `rawProveTransfer`, `rawProveBurn`, `rawProveRefresh`, `rawProveTransferMulti`, `rawProveDisclose`, `rawOpenMemo`, `rawProveDiscloseSender` |
+| Zether (`facade::zether`) | `encrypt`, `pop`, `ownerAuth`, `uaSig`, `shieldCalldata`, `envelope`, `uaEnvelope`, `typedDigest`, `namedCall` | `balance`, `pendingBalance`, `checkBalance`, `proveTransfer`, `proveTransferMulti`, `proveBurn`, `openMemo`, `recoverTransfer`, `openDisclosure` | `decrypt`, `decryptPending`, `rawCheckBalance`, `rawProveTransfer`, `rawProveTransferMulti`, `rawProveBurn`, `rawOpenMemo`, `rawRecoverTransfer`, `rawOpenDisclosure` |
+
+The words each command reads are in its rustdoc (`facade::pqz::COMMANDS` and `STATE_LAYOUT`; zether-prover `state`). The C ABI
+carries them through `scaas_ua_pqz_call` and `scaas_ua_zether_call` (no new call or status). A binding test asserts that a
+command is in `COMMANDS`, never that the list equals one, so a later proof path can add commands without breaking them.
+
+***PQZ: the proof path (B), release 3h: BUILT*** (ua-rs-sign T20d, 2026-11-09; [CLI-UAL-60](../decisions.md#CLI-UAL-60); design in
+the [no-decryption-oracle spec](../superpowers/specs/2026-11-06-no-decryption-oracle.md) §4.14, the contract side in the
+[proof-path spec](../superpowers/specs/2026-11-06-pqz-proof-path.md)). Beside path (A) above, `ua-rs` decrypts a PQZ balance over
+parts it checked itself, before the key is used, so path (B)'s words may come from any source for viewing. UNAUDITED.
+
+- **How each part is checked.** A credit by its sender's debit proof P, which the library verifies (`pqz_ffi::precompile`, the
+  chain's own function) over the statement it rebuilds with **its own key** in the leg the credit names, the leg paired with
+  its own group's `u` as the relation defines; the sender's `T` from the debit's record, its predecessor blob, its pending
+  window and `Trivial(shieldIn)`; the header from the `PqzDebitProof` log (LOG) or from the call's named fields (NONE), as the
+  record's `proofStore` says. The holder's own `v_f` by `ownTag` (a MAC keyed from the seed). A migration credit by
+  re-encryption from the debited version's seed, or by its P when the handle's store holds no seed of that version. A TRIVIAL
+  entry from its public amount. A crafted `(u, v)` has no valid P and no tag, so it is refused with the key unused.
+- **Commands** (on the handle of the account's key version, `PqzKey::call`, `scaas_ua_pqz_call`; every refusal before the key
+  is `Argument`). A session: `provenOpen` (path (A)'s `balance` words, `lastRecord`, the window `[p_last, p)`, the token's
+  `auditorUA`, `chainId`, `registry`) answers `{session, p, sendCounter, need, unsealed}`; `provenAdd` (`session`, `blobs`,
+  `credits`, each with its `record`, `senderPending`, `keyRecords`, `proof` and `header` or `call`) answers `{accepted, refused}`,
+  a refused credit refused alone with the session kept; `provenCancel`; `balanceProven` answers `{value, p, sendCounter, parts,
+  unsealed, sealAdvised}` only once every `need` index is accepted (`need` is the slot range `provenOpen` fixed). One session per
+  handle, in its memory only: a second `provenOpen` replaces it, `lock()` drops it. The debits `proveTransferProven`,
+  `proveTransferMultiProven`, `proveBurnProven`, `proveRefreshProven` are path (A)'s builders over the session's `T`. An MPC
+  quorum member, which holds no handle, runs `checkProven` (`facade::pqz::check_proven`, C `scaas_ua_pqz_check`, every binding
+  but `ua-qt`): the quorum's own last debit and every credit since, each by its P, against the member's own DKG record of the
+  quorum's `pk`; it answers `{parts, sum}` and decrypts nothing (the partial decryption waits for the threshold protocol).
+- **Release 3h only** (owner ruling 4 of CLI-UAL-60): both paths parse 3h's layout; a reading layer refuses an earlier PQZ token
+  by name; the pre-3h `memoHash` formulas are kept in `clients/ua-rs/legacy/ua-rs-sign/`.
+- **`ownTag` in every debit** (both paths: op 1, op 7, burn, refresh, unwrap, a migration): the output carries `ownTag` and the
+  statement `memoHash = keccak256(memo ‖ ownTag)` (`memo` empty except on HASH: `salt ‖ sealedMemo`). The caller puts `ownTag` in the payload; a node
+  job names it as `args.ownTag`. On a LOG token the node refuses a debit job above its lane's per-transaction cap with the named
+  status `PROOF_STORE_OVER_LANE_CAP` before sending, never `dead` while it may land (the proof-path spec's §10, where the node
+  rule is proposed; built in `scaas-node/src/submit.rs`; the node docs take it when that rule gets its id).
+- **Where the words come from.** Viewing: any source (the configured chain and "nothing back" of [CLI-UAL-30](#CLI-UAL-30) still
+  bind). A debit: every word and code that fixes `T`'s bytes from one source under CLI-UAL-30's requirements 1 to 5, as path
+  (A); what only makes a part's check pass from any source. History: `eth_getLogs` by the `blob` topic (LOG) and the debit's
+  transaction (NONE; a call through another contract needs a trace, else path (A)). The reference reader is
+  `pqz-read --command balanceProven` ([CLI-UAL-40](#CLI-UAL-40)).
+- **Residuals.** A check certifies a part, not the composition: a source can omit a credit, add a part it proved itself, or
+  replay an older own debit (a tag proves authorship, not inclusion). The result is then wrong, never a key leak; an outward
+  action on it gives the source a balance bit, hence a debit's words under CLI-UAL-30's requirements 1 to 5. The argument is "encrypt, then prove
+  knowledge of the plaintext" (Naor–Yung); its proof for PQZL and PQZH needs simulation-sound extractability of their
+  Fiat–Shamir proofs, which nobody has written: an audit item, not a claim. The auditor's and the disclosure commands
+  (`auditRead`, `proveDisclose`, `proveDiscloseSender`, `openMemo`) stay on path (A); a single holder whose P is gone from history
+  takes path (A); a quorum's fallback is the proof-path spec §9.6's. Zether gets no path (B) (Zether ≠ PQZ).
+- **Tests.** `tests/facade_pqz_proof.rs` (path (B) equals path (A) over the same state; every negative refused alone with the
+  key unused; the quorum; the bounds), `tests/no_oracle.rs` `proof_path_*` (the residual control's fabricated words refused
+  wherever a value enters path (B); the proof-path spec's negatives), ua-py `Pqz.test_no_oracle_proof_path` through the C ABI,
+  `wallet_state.json`'s `proven` and `check` rows in every binding but `ua-qt`, `pqz-read`'s anvil test. Mutants:
+  `smartcontracts/evm/runs/2026-11-09-ua-rs-sign-t20d{2,4,5,6,7,8,10}-mutants.txt`.
+
+<a id="CLI-UAL-30"></a>**CLI-UAL-30** — ***Requirements on the wallet layer that reads the chain: SPECIFIED*** (normative for every layer
+that hands words to `ua-rs`, in this repository or outside it; `ua-rs` contains no light client and no chain-state verifier,
+owner 2026-11-06). Reading the words from an untrusted RPC or indexer and passing them on is the oracle, and the fault is that
+layer's. Stated plainly (Fable review 2026-11-07, verdict 1): `ua-rs` decrypts **any internally consistent fabricated words**,
+so the **full key-recovery oracle** (8·K crafted PQZ queries recover the key `s`) exists for any app that breaks these
+requirements; the library's word checks stop a careless caller, never a forger. Zether has a reference reading layer
+(`zether-read-balance --rpc`, below), and so has PQZ (`pqz-read`, below; owner 2026-11-07, plan task T15m). EVM assertions; another family states its own before its layout parser lands. Numbered as in the spec's §4.2, one rule id each; this doc writes "requirement 1" where the spec uses its short form, which is an old-id token here (`docs_check` C4).
+
+| # (rule id) | Requirement | Checkable assertion |
+|---|---|---|
+| 1 (<a id="CLI-UAL-31"></a>CLI-UAL-31) | **Trusted sources, one or several** (owner 2026-11-06; Change owner 2026-11-08, ARCH-POS-15): every source is an RPC endpoint the holder **named** (their own node or one they configured), a **default** in the release's own reviewed list (from public RPC information, trusted like a named one), a **discovered** endpoint (found at run time), or a verifying light client in the reading layer. A layer may take several (a wallet layer and the app may; the reference readers do, named only: `--rpc` repeated, `--rpc-agree`): by default **failover** in the order given, every word of a request from the one source that answered the whole read and the next source from scratch after a failure, never a mix; with the **agreement option** a **strict majority** of the sources (⌊n/2⌋ + 1) must return the same complete read at one block, counted per source over the whole read, else the read is refused. A discovered endpoint serves a read that feeds a decryption only under the agreement option with at least three sources | the request's words are one source's (failover) or the identical read of a strict majority (agreement); a discovered source alone, or under agreement with fewer than three sources, is refused |
+| 2 (<a id="CLI-UAL-32"></a>CLI-UAL-32) | **Known chain**: `(chainId, chain_uid)` from the holder's configuration (genesis hashes as pinned in `smartcontracts/evm/chain-uids.json`, [NET-ALL-22](../networks/README.md#NET-ALL-22)) | `eth_chainId` and `eth_getBlockByNumber("0x0").hash` equal the configured pair |
+| 3 (<a id="CLI-UAL-33"></a>CLI-UAL-33) | **One final block**: all words from one block final by the chain's rule, or at the holder's confirmation depth where the chain has no finality ([NET-EVM-04](../networks/evm.md#NET-EVM-04)) | every read names the same block number and hash; `head − block ≥ depth`, or the block is at or below the `finalized` tag |
+| 4 (<a id="CLI-UAL-34"></a>CLI-UAL-34) | **Real storage, not views**: storage words by `eth_getStorageAt` / `eth_getProof` at that block; blob and key code by `eth_getCode`, whose `keccak256` equals the account's `codeHash`; `eth_call` views only from requirement 1's own or configured node, never as the sole source of a word a light client verifies | `keccak256(code) == codeHash` for each pointer; the method and block recorded per word |
+| 5 (<a id="CLI-UAL-35"></a>CLI-UAL-35) | **Catalogued token**: catalogued by that chain's `OpenFactory` (its configured address) with a PQZ kind for the PQZ facade, a Zether kind for the Zether facade | the factory index's `_rec[token]` read as storage (slot and packing from ua-mtx-merge's pin `test/zether/ZetherStateVectors.t.sol`): `contractClass` TOKEN, `kind` among the facade's kinds; the token's code a clone of a chain-neutral release, its `ChainEnv` read at the fixed offsets (owner 2026-11-08) |
+| 6 (<a id="CLI-UAL-36"></a>CLI-UAL-36) | **The selected leg belongs to the handle**: the leg's recipient UA's registered key equals the handle's (PQZ: `pqzKeyOf(ua)` `proven`, its key hash the handle's; Zether: the registered `Y`); an auditor read: the account is the token's `auditorUA`, `auditorMode` not NONE, an auditor copy on that leg; a disclosure kind allowed by the token's `disclosureMode` | the registry and token words read as storage at the same block; the comparisons above; the registry read is the one the token's `ChainEnv` names (owner 2026-11-08) |
+| 7 (<a id="CLI-UAL-37"></a>CLI-UAL-37) | **Nothing back**: no result, failure, error code, result-dependent timing, follow-up read or log line that depends on a decryption goes back to the source; a result goes to the holder or a viewer the holder names | no request to the source after a decryption depends on its outcome (reviewable in the layer's code) |
+
+A Rust reading layer outside the reference readers takes its endpoint list, failover, strict majority and the discovered-endpoint
+rule from `scaas-rpc` ([CLI-RPC-05](scaas-rpc.md#CLI-RPC-05), [CLI-RPC-06](scaas-rpc.md#CLI-RPC-06); SPECIFIED); requirements 1
+to 7 stay the reading layer's.
+
+Encryption to a public key is public: a debit's `pkT`, `pkA`, the op 7 legs' keys and the Zether `yTo` / `yAud` stay caller
+fields, and a wrong key is refused on chain.
+
+<a id="CLI-UAL-38"></a>**CLI-UAL-38** — **The source's residual is the holder's chosen trust** (owner 2026-11-06). The holder's own full node
+trusts only the chain's rules; a light client trusts the chain's sealing keys (a sealer or a leaked sealing key can seal a header over a
+fabricated `stateRoot`; one key on a single-signer chain); another operator's node trusts that operator. SPECIFIED.
+
+<a id="CLI-UAL-39"></a>**CLI-UAL-39** — **Another family needs a trusted node and a layout parser, not a change of the rule** (owner 2026-11-06: the
+question of chain adapters is moot for `ua-rs`). The library has no chain adapter, so nothing in it blocks Zether on another family; a
+reading layer there meets requirement 1 with a trusted node of that family and states its own assertions, and the library refuses that
+family's words until its parser exists. SPECIFIED.
+
+<a id="CLI-UAL-40"></a>**CLI-UAL-40** — **Reference reading layers** (owner 2026-11-07 for PQZ). `zether-read-balance --rpc` (zether-prover) is a reading
+layer under [CLI-UAL-30](#CLI-UAL-30) for the holder's own Zether account: requirements 1 to 3, 5 and 6 checked against the configured node, storage words by
+block hash, every read before the key is used; it reads no entry, so the `codeHash` check of requirement 4 does not arise;
+without `--rpc` it reads the holder's own sealed cache box; a typed-in ciphertext (`--ct`) exists only under `hazmat`. BUILT.
+
+***The PQZ reference reading layer, `pqz-read`: BUILT*** (ua-rs-sign T15m, owner 2026-11-07; a binary of the `ua-rs` package,
+`clients/ua-rs/src/bin/pqz-read.rs`, never in the library). It reads the words of `balance` (the holder's own account of key
+version `--key-version`, with `--for-op7`) and `auditRead` (an audited leg, on the token's auditor's key of `--key-version`)
+and feeds them to `ua-rs`; it never parses a
+ciphertext or decrypts itself. Required: `--rpc` (requirement 1: a node the holder names, repeated for several, failover by default and a strict majority with `--rpc-agree`; named only),
+`--chain-id` and `--chain-uid` (2), `--depth` or `--finalized` (3: every read by block hash, EIP-1898 with `requireCanonical`;
+the node must answer the block asked for and the block must keep its hash until the last read), `--factory` (5: `_rec[token]`
+class TOKEN with a PQZ kind), `--registry` and `--ua` (6: `pqzKey[ua][--key-version]`'s code must hold the handle's key; for
+`auditRead`, `--ua` the token's `auditorUA` with `auditorMode` not NONE). Group 3g (ua-rs-sign T15o, spec
+`2026-11-06-pqz-key-versions.md` on `ua-mtx-merge`): the account is `acct[ua][v]`, the counter `sendCounter[ua]`, the request
+carries `keyVersion` and the registry's `pqzVersions[ua]` word; `ua-rs` refuses a version above `current`, and a debit of a
+stale one other than the migration (op 1 to its own UA) or a refresh; a balance over every version is one call per version. Storage and code only (4), the token's slots by `STATE_LAYOUT` (the
+`scaas.pqz` pin) under the namespace's ERC-7201 root, the pending window `[rolled, p)` by the facade's own rule; every read,
+the block re-check included, before the key is used, nothing after it to the node (7). The key arrives as JSON on stdin, the
+URL and body go to `curl` on its stdin; `--words` prints the request read without a key. `clients/ua-rs/tests/pqz_read.rs`:
+against a local `anvil`, the words equal the forge rows byte for byte, the wallet rows and an audited op 1 decrypt with real
+keys, and each refusal of requirements 2, 3, 5 and 6 is named (mutants:
+`smartcontracts/evm/runs/2026-11-07-ua-rs-sign-t15m-mutants.txt`). Since T20b the factory record (`_rec[token]`, slot 8,
+word 1 since the factory record lost `ownerUA`, word 2 before) and the registry's slots (`UAStore.Layout` 2, 4, 5, 17) are read where their pins put them, in both reference layers.
+Since the owner's ruling of 2026-11-08 both reference layers refuse a token whose code is no clone with a `ChainEnv` and a
+`--registry` other than the one that env names (CLI-UAL-58). **Residuals:** requirement 4's `codeHash` check is not made (no `eth_getProof`); the
+other words commands (`proveDisclose`, `proveDiscloseSender`, `openMemo`, the debits) are not wired; a debit request is not
+built. UNAUDITED.
+
+<a id="CLI-UAL-41"></a>**CLI-UAL-41** — ***Decoy selection for PQZ op 7 and classical Zether multi-recipient transfers: BUILT*** (ua-rs-sign T15n;
+rule [CTR-UA-29](../contracts/accounts.md#CTR-UA-29), Change of 2026-11-07, owner). The candidates are the registry's per-kind list
+of the token's family: `0x0142` (every holder with a proven PQZ key, one anonymity set across the signer kinds) for PQZ, `0x0141`
+for classical Zether, up to the wallet's **last sync point**: a UA listed after it is never a candidate. **Default: uniform**
+over the candidates. **Option, off by default:** the token-activity filter keeps only the candidates active in the token within
+a look-back window and weights them by recency; with the stricter variant only holder-authorised activity (a `sendCounter` move)
+counts. **The trade-off, stated to the holder:** registration is permissionless, so with the default an observer that registers
+UAs of the kind can recognise its own decoys in a ring (threat S30; a PQZ holder costs one PQ registration); the filter raises
+that to gas-level cost only (an observer keeps its UAs active), and it shrinks the anonymity set to the recently active.
+- **The pick** (`ua-rs` `facade::decoys`, pure and I/O-free; command `pickDecoys` of both facades, on any key handle, the key
+  unused): request `{candidates, exclude, count, weights?, recipient?}`, named fields: `count` = `M − 1`, `exclude` the sender
+  and every real recipient, `weights` (the filter's, optional) one `u64` per candidate, `recipient` (optional) the real
+  recipient, excluded implicitly; answer `{decoys}`: `count` distinct candidates, never an excluded one, drawn one at a time
+  without replacement by the OS CSPRNG (rejection sampling, no modulo bias), uniform without `weights`; with `recipient`
+  `{decoys, legs}`. Too few eligible candidates (not excluded, weight above 0), a candidate given twice, `weights` of another length or
+  any other field: `Argument`. One command, not a field of `proveTransferMulti`: the pick comes before the decoys' keys are read
+  (only the chosen keys are), and op 7's legs and the Zether recipients already take explicit keys.
+- **The recipient's position** (ua-rs-sign T15n follow-up): the legs of op 7 and of a Zether multi-recipient transfer are
+  public in their order, so **a fixed position of the real recipient (always first, always last, always after the decoys)
+  names it** to every observer, whatever the decoys. The safe choice is the default: with `recipient`, `legs` is the full leg
+  order (the recipient and the decoys, `M` UAs) shuffled uniformly by the OS CSPRNG (Fisher–Yates, each index by rejection
+  sampling). **Callers build the transfer's legs in the `legs` order**, or shuffle themselves with a uniform shuffle from a
+  CSPRNG; without `recipient` the answer is `{decoys}` as before and the order is the caller's duty.
+- **The recency weight** of the filter (2 for a candidate active in the newer half of the window, 1 for one active only in
+  the older half) is a documented choice, kept as built: a simple two-step recency preference; another shape (more steps, a
+  decay) is not a rule.
+- **The reading layers** (storage only, the list's length read at the sync point by block hash and everything else at the read
+  block, every block re-checked after the last read; no key, no stdin): `pqz-read --command decoys --count <M−1> [--exclude …]
+  [--sync-block <n>] [--decoy-filter activity|holder --window <blocks>]` reads the `0x0142` list, excludes `--ua` and `--exclude`,
+  calls the pick in process and reads each chosen decoy's proven `pqzKey` record and key code: `{decoys: [{ua, pk}]}`, each an
+  op 7 leg with amount 0 (`--words` prints the pick's request); `--recipient <ua>` passes the real recipient to the pick and
+  adds its shuffled `legs`. `zether-read-balance … --registry <address> --decoy-count <M−1> --exclude … [--recipient <ua>]`
+  prints the pick's request from the `0x0141` list (zether-prover does not link `ua-rs`); after `pickDecoys`,
+  `--decoy-keys <ua>,…` reads each chosen UA's record (kind `0x0141`, its list index below the sync point's count and the list
+  entry at that index equal to it) and its `Y`, with `UA(Y)` equal to it: `{decoys: [{ua, yTo}]}`, each a recipient with amount
+  0. The filter reads the account's counters at `block − window`, `block − window/2` and `block` (PQZ `pendingCount`, `rolled`,
+  `sendCounter`; Zether the counters word): moved in the newer half weight 2, only in the older half weight 1, else dropped;
+  `holder` compares `sendCounter` only. The node must hold those blocks' state.
+- Tests: the pick's distribution by chi-square at a fixed seed (unit tests only), no duplicates, exclusions, too few, the
+  facades and the C ABI; each tool against a local `anvil` (UAs listed after the sync point never chosen, the filter on and off,
+  its weights, the keys, the refusals); mutants `smartcontracts/evm/runs/2026-11-07-ua-rs-sign-t15n-mutants.txt`.
+- **Group 3g (T15o):** `pqz-read --command decoys` never draws a UA with a pending key version (its latest version has this
+  set's key length and is not current: a credit to it would fail), and reads each chosen decoy's key at its current version
+  (`pqzKey[ua][current]`).
+- **Residuals:** the registry's slots (`records` 0, `pqzKey` 2, `uaCount` 4, `uaAt` 5, `pqzVersions` 17) are hand-copied: the
+  registry layout pin (`ua-mtx-merge` group 3g, `UAStoreLayout.t.sol`) is not on this branch; `--registry` must be the generation
+  that lists the kind (a predecessor's list is not followed, the forwarding is in code); clientkeys' preference for UAs without a
+  recent `UAPqzKeyCurrent` is not applied (storage only, no event read); a list longer than 50,000 UAs is refused (one storage read per UA); the
+  Zether steps are two reads at two read blocks, both bounded by the same sync point; the order of the legs is the caller's
+  only when it omits `recipient` (it must then shuffle itself). UNAUDITED.
+
+<a id="CLI-UAL-42"></a>**CLI-UAL-42** — **pqz-core `hazmat`, defence in depth: PLANNED** (owner 2026-11-06, plan task T15h). A feature over `pqzl`
+`decrypt_raw`, pqz-ffi's `dec` and `dec_win` and the C `pqz_dec` family, which then only pqz-ffi's self-test, its vectors and `ua-rs`'s private
+decrypt path enable. It lands with the next pqz-core change; the four-set full gate is waived for this `cfg`-only change and replaced by a
+build at all four sets plus `kat`. Not built: pqz-core is unchanged in this round. Since `ua-rs` enables it, it is in every `ua-rs` + `pqz` binary; the
+command set is the boundary.
+
 **PQZ verifier mode and key versions** (groups 3f, 3g). A PQZ verifier is a UA like any other: `ua-rs` signs `PqzVerdict` under
 the `pqz-verdict` purpose, and the libraries carry the versioned PQZ key records (`UAPqzKeyVersionRecord`, `pqzKeyAt`,
-[CTR-UA-42](../contracts/accounts.md#CTR-UA-42)); SPECIFIED, branch `ua-rs-sign`. The JS reference is `clientkeys`
+[CTR-UA-42](../contracts/accounts.md#CTR-UA-42)): **BUILT** on branch `ua-rs-sign` (T15o, T20b; the
+[wallet surface](#the-wallet-surface-of-ua-rs-built) table). The JS reference is `clientkeys`
 ([CLI-SGN-49](signers-clientkeys.md#CLI-SGN-49), [verdict](signers-clientkeys.md#pqz-verdict-clients)).
 
 <a id="pqchat-clients"></a>**PqChat** (SPECIFIED; the contract is [pqchat.md](../contracts/pqchat.md), BUILT on EVM). Every
@@ -149,7 +743,97 @@ and reproduces every row of `smartcontracts/vectors/pqchat/` (`records.json`, `t
 with every unbound field non-zero in some row (`via`, `device`, `parents`, `ref`). Built today: the JS vector generator
 `clientkeys/src/pqchat.js` (**BUILT**, 3c T84, `test/pqchat.test.js`); `ua-rs` first, then every `ua-*` (PLANNED, UA-7
 T11–T14, T17–T20). Which device-id version a client defaults to is open (a controller proposal: v4 for a device that posts on
-chain, since v7 puts its creation time on chain).
+chain, since v7 puts its creation time on chain). The Rust client core that does all of this above `scaas-sdk`, with key handles only, is
+[`pqchat-core`](pqchat-core.md) (SPECIFIED).
 
-**Not here.** Signing (`UAKey`, the per-kind signers), PoP signatures and group vectors, the registry contract, the UA ledger.
-Not built yet: the FRB layer as a Flutter plugin and its Android, iOS and web builds (the web build needs nightly Rust, wasm-bindgen-cli and COOP/COEP headers; whether `scaas-ua` compiles to wasm is open), and Qt packaging for Windows and macOS.
+<a id="pqvault-clients"></a>**PqVault** (SPECIFIED, nothing built; the contract is [pqvault.md](../contracts/pqvault.md), the design
+the spec [`2026-11-17-pqvault.md`](../superpowers/specs/2026-11-17-pqvault.md)). The rules every PqVault client follows; the
+first seven state owner rulings, CLI-PQV-04 and CLI-PQV-08 to CLI-PQV-12 controller calls (owner may override):
+
+<a id="CLI-PQV-01"></a>**CLI-PQV-01** — **`pqvault-core`, a Rust crate of its own, builds, encrypts, opens and merges vault
+records as an app core above `scaas-sdk`: it depends on the SDK, the SDK knows nothing about PqVault, and every signature,
+KEM, KDF and AEAD still runs in `ua-rs`, reached through the SDK ([CLI-UAL-01](#CLI-UAL-01)); scaas-app links it in its one
+Rust library `app-core-rust` with the feature `pqvault` (which implies `scaas`; scaas-app's contract section 12)** (owner
+2026-11-17, N2: "agreed to reverse the dependency", which replaced V11's SDK module `pqvault` the same day). SPECIFIED. The
+SDK's `vault` stays the seed vault; `pqvault-core`'s calls are the spec's
+[§8](../superpowers/specs/2026-11-17-pqvault.md#8-the-app-facing-api-of-pqvault-core).
+
+<a id="CLI-PQV-02"></a>**CLI-PQV-02** — **A personal vault uses the same path as a shared one: a random 32-byte epoch key
+wrapped once to its own UA KEM key (ML-KEM-1024 + X25519); no seed-derived vault key exists; a personal vault is never
+rekeyed to add a member: sharing from it is a new shared vault and a copy of the chosen live items** (owner 2026-11-17,
+ruling "(a)", its sharing clause replaced by O1 (c) the same day). SPECIFIED. The bytes are [CLI-PQV-09](#CLI-PQV-09)'s.
+
+<a id="CLI-PQV-03"></a>**CLI-PQV-03** — **Metadata reduction: titles, usernames, URLs, folders, tags, item types, vault names
+and settings only inside ciphertexts and `sealedInfo`; padding buckets always; batch writes for imports and migrations;
+relayed submission; a personal vault held by a per-vault UA derived from the seed** (owner 2026-11-17, V8; PqChat's D10).
+SPECIFIED. The derivation and the node-side linkage are [CLI-PQV-09](#CLI-PQV-09) and [CLI-PQV-11](#CLI-PQV-11).
+
+<a id="CLI-PQV-04"></a>**CLI-PQV-04** — **Client hardening: secrets hidden until an explicit reveal and hidden again after
+30 s or on leaving the foreground, no screenshots of a revealed secret where the platform allows, copy only on an explicit
+action with the clipboard marked sensitive and cleared after 30 s, autofill on the exact host and scheme by default and from
+accepted vaults only, auto-lock after 5 min idle and at once on screen lock (keys and plaintexts zeroized), never a secret in
+a log, crash report, notification, URL or error** (controller call, owner may override). SPECIFIED.
+
+<a id="CLI-PQV-05"></a>**CLI-PQV-05** — **No decryption oracle, honest limits, files off chain: a client sends nothing that
+depends on whether a version or a passphrase check opened; it reads through an RPC list keeping the highest version seen per
+item; it tells its user that a removed member keeps what it read (and lists the secrets to change) and that a deleted
+item's bytes stay; files go off chain with their key and hashes inside an item, fetched only on the user's action** (owner
+2026-11-17, V5, V7; [ARCH-POS-13](../decisions.md#ARCH-POS-13), [ARCH-POS-15](../decisions.md#ARCH-POS-15)). SPECIFIED.
+
+<a id="CLI-PQV-06"></a>**CLI-PQV-06** — **Only a PQ-rooted 24-word (256-bit) seed owns a vault: `pqvault-core` refuses (from the
+seed set's `class` and warnings the SDK reports from its authenticated index), with `SeedNotPqRooted` and before any other work, a classical-rooted seed set (the EOA-signature root, the
+private-key root and their BIP-85 children), a phrase below 24 words and an imported raw key; the vault UA, a per-vault UA
+included, derives from such a seed** (owner 2026-11-17, P1). SPECIFIED. The check binds what a client does for its own user;
+the chain cannot show another member's seed class, so a shared vault is only as quantum-safe as its weakest member's seed.
+
+<a id="CLI-PQV-07"></a>**CLI-PQV-07** — **The vault passphrase is an option, on by default: the epoch key that opens items
+combines the KEM-unwrapped `K_e` with `Argon2id(passphrase, salt)`, the salt random per vault and stored in the vault's
+record with its parameter set's id; neither the seed nor the passphrase alone opens anything; a change re-encrypts no item;
+a wrong passphrase is detected by an AEAD check before any item is opened; the passphrase is never stored or sent;
+forgetting it loses the vault; the choice is a flag in state with no value and no hint; versions written before a change
+stay under the old passphrase** (owner 2026-11-17, P2, changing V9). SPECIFIED. The mechanics are
+[CLI-PQV-10](#CLI-PQV-10)'s.
+
+<a id="CLI-PQV-08"></a>**CLI-PQV-08** — **A migration tool moves the live items to vaults under a new seed and says that the
+old ciphertexts stay on chain and every secret must be changed at its service; until the audit round that covers the
+contract, `pqvault-core` and the `ua-rs` paths it uses, with its reviewers named, the app labels PqVault UNAUDITED and test
+data only** (controller call, owner may override). SPECIFIED.
+
+<a id="CLI-PQV-09"></a>**CLI-PQV-09** — **The key schedule's bytes: wraps under the label `scaas/pqvault/v1/wrap`; `K_v =
+HKDF(K_e ‖ P_k)` with the vault, epoch and parameter id in its info; per version a fresh 16-byte salt and one HKDF giving key
+and nonce, AES-256-GCM-SIV over the padded canonical JSON with the AAD (vault, epoch, item, version, author, home);
+`sealedInfo` under `K_v` with an optional `prev = {epochId, keyWrap}`, the earlier key sealed under a `KeyWrap` key derived
+from `K_v` with the key-wrap constant and its usage in the AAD, and a `file` item's key sealed under a derived `kFile`, never
+under `K_v`; every key handle has one usage, `Derive`, `Data` or `KeyWrap`; a personal vault held by `ua_secret(seed, FN-DSA-512 by
+default, PQV_ACCOUNT, i)`, index 0 the index vault listing the user's vaults** (controller call, owner may override).
+SPECIFIED. Exact bytes: [spec §6](../superpowers/specs/2026-11-17-pqvault.md#6-cryptography); every client reproduces
+`smartcontracts/vectors/pqvault/`.
+
+<a id="CLI-PQV-10"></a>**CLI-PQV-10** — **The passphrase's mechanics: a change, or turning it on or off, is an admin's rekey
+of the same members with a fresh salt; the history is as strong as the weakest epoch that links to it, so before a rekey
+that weakens it (passphrase off or weaker, a member added) the client shows what it would expose and offers the rekey
+without `prev`; a downgrade is accepted only from a verified admin record; Argon2id without associated data at a parameter
+set pinned after a measured run; a generated 5-word passphrase offered, a user-chosen one at least 16 characters with a
+strength meter, nothing more enforced; a shared vault's passphrase never equal to the user's personal one** (controller
+call, owner may override). SPECIFIED. Design: [spec §6.5](../superpowers/specs/2026-11-17-pqvault.md#65-the-vault-passphrase-p2).
+
+<a id="CLI-PQV-12"></a>**CLI-PQV-12** — **`pqvault-core` holds key handles only and signs only under PqVault's app purpose:
+the KEM-unwrapped epoch key, the passphrase output, the effective key and every key derived from them stay in `ua-rs`
+behind handles of one usage each (`Derive`, `Data`, `KeyWrap`), and wrap, unwrap, HKDF, Argon2id, AEAD and key sealing
+run there on those handles; the only bytes that come out are plaintexts it asks to decrypt for the user, which hold no
+key (earlier and file keys are sealed); it signs typed data of its own domain through the SDK's app signing call, which
+refuses every SCaaS purpose and every SCaaS contract's or the registry's domain by name; if either cannot be met, the task
+stops and the owner decides** (coordinator conditions, controller calls, owner may override). App scoping avoids
+collisions among the cores an app links; it does not isolate: an app holding the user's unlocked seed set acts for that UA
+in every app namespace, PqVault's included, so only reviewed app cores are linked. SPECIFIED. Design: the spec's
+[§7](../superpowers/specs/2026-11-17-pqvault.md#7-pqvault-core).
+
+<a id="CLI-PQV-11"></a>**CLI-PQV-11** — **Trust what is verified and accepted: a vault the user did not create stays pending
+until the user accepts it after seeing its creator and members, and the accepted set is kept as `vaultRef` items in the
+user's index vault; before encrypting under an epoch a client verifies the signature chain from the vault record through
+every epoch to its own wrap; members and admins with a classical UA kind are flagged; reads for different vault UAs are
+spread over the RPC list and over time so one node does not link them** (controller call, owner may override). SPECIFIED.
+Details: [spec §6.9](../superpowers/specs/2026-11-17-pqvault.md#69-what-a-client-verifies-before-it-trusts-state-vc15) and §9.
+
+**Not here.** Per-kind derivation and clientkeys' API ([signers-clientkeys](signers-clientkeys.md)), group vectors, the registry contract, the UA ledger.
+Not built yet: the FRB layer as a Flutter plugin and its Android and iOS builds (no web build: `SecretBytes` needs `dart:ffi`), the wasm-bindgen browser binding of `ua-rs` (the library compiles for wasm32), and Qt packaging for Windows and macOS.

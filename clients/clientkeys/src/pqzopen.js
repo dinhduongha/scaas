@@ -10,10 +10,11 @@ import { keccak_256, shake256 } from '@noble/hashes/sha3.js';
 import { gcm } from '@noble/ciphers/aes.js';
 import { ml_kem1024 } from '@noble/post-quantum/ml-kem.js';
 import { x25519 } from '@noble/curves/ed25519.js';
-import { concatBytes, utf8ToBytes, fromHex } from './bytes.js';
+import { equalBytes } from '@noble/curves/utils.js';
+import { concatBytes, utf8ToBytes, fromHex, intOf } from './bytes.js';
 import { encaps, combine, checkKemPk, kemKey } from './pqchat.js';
 import { pqzOwnTag } from './evm.js';
-import { uaMessage, portableDomainSeparator } from './ua.js';
+import { uaMessage, portableDomainSeparator, PQZ_SCOPED_KEY_TAG } from './ua.js';
 import { isPqzWallet, pqzUnpack } from './pqzopenWasm.js';
 
 // review 3w-delta U4h-3: a malformed value is refused, never changed (an odd nibble, a non-hex pair, an out-of-range integer).
@@ -30,7 +31,7 @@ const u32 = (x, what) => {
   const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, x); return b;
 };
 const be64 = (v) => {
-  const x = BigInt(v);
+  const x = intOf(v, 'version');
   if (x < 0n || x >= 1n << 64n) throw new Error('version must be a uint64');
   const b = new Uint8Array(8); new DataView(b.buffer).setBigUint64(0, x); return b;
 };
@@ -139,9 +140,10 @@ export const SKIP = 1n << 63n;
 export const OPENING = 1648;
 const slotOf = (slot) => (typeof slot === 'bigint' ? slot : BigInt(hexOf(asBytes(slot, 32, 'slot'))));
 const hexOf = (b) => '0x' + Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
-const w256 = (v) => {
-  let x = BigInt(v);
-  if (x < 0n || x >= 1n << 256n) throw new Error('a uint256 word is in [0, 2^256)');
+// T21 L79: `bits` the field's declared width (uint8, uint64), refused by name past it; the word itself is 32 bytes
+const w256 = (v, what = 'a uint256 word', bits = 256) => {
+  let x = intOf(v, what);
+  if (x < 0n || x >= 1n << BigInt(bits)) throw new Error(bits === 256 ? 'a uint256 word is in [0, 2^256)' : `${what}: a uint${bits} is in [0, 2^${bits})`);
   const o = new Uint8Array(32); for (let i = 31; i >= 0; i--) { o[i] = Number(x & 0xffn); x >>= 8n; } return o; };
 /** The pending slot `blob(160) ‖ offset(16) ‖ length(16) ‖ block(64)` (a bigint, or 32 bytes / hex) is skip-marked. */
 export const pqzSlotMarked = (slot) => (slotOf(slot) & SKIP) !== 0n;
@@ -154,13 +156,14 @@ export const pqzSlotTrivial = (slot) => ((slotOf(slot) >> 64n) & 0xffffn) === 0n
 export function pqzEntryHash(index, slot, code) {
   const e = slotOf(slot);
   const c = pqzSlotTrivial(e) ? new Uint8Array(32) : keccak_256(asBytes(code, undefined, 'code'));
-  return keccak_256(concatBytes(w256(index), w256(e & ~SKIP), c));
+  return keccak_256(concatBytes(w256(index, 'the entry index'), w256(e & ~SKIP), c));
 }
 /** `entriesHash = keccak256(h(rolled) ‖ … ‖ h(rolled + n − 1) ‖ h(skip_0) ‖ …)`. */
 export const pqzEntriesHash = (hs) => keccak_256(concatBytes(...hs.map((h) => asBytes(h, 32, 'h(i)'))));
 
 /** A set's packed sizes (P46): `P(u)` = `n · b / 8` bytes, `P(v)` = `16 · b / 8`, `b` = `PACK_BITS`. */
-export const pqzLayout = (n, packBits) => Object.freeze({ pkp: (n * packBits) / 8, vp: (16 * packBits) / 8 });
+export const pqzLayout = (n, packBits, kMax) => Object.freeze({ pkp: (n * packBits) / 8, vp: (16 * packBits) / 8,
+  ...(kMax === undefined ? {} : { kMax }) });
 
 /** CTR-PQZ-40: an opening token's op 1 blob `salt(16) ‖ P(u) ‖ P(v_t) ‖ [P(v_a)] ‖ toUA ‖ P(u_f) ‖ P(v_f) ‖ O_t ‖ [O_a] ‖ ownTag ‖
  *  be64 kv[0..n) ‖ u8(n)` from its code (`STOP ‖ data`); `n` 1 or 2, `kv[0]` the recipient's key version, `kv[1]` the auditor's.
@@ -193,7 +196,7 @@ export function pqzOpeningAad({ chainUid, token, ua, keyVersion, pu, pv }) {
 }
 
 /** K3-3 (CTR-UA-43): `keccak256("scaas.ua.purpose.pqz-scoped-key.v1")`. */
-export const PURPOSE_PQZ_SCOPED_KEY = keccak_256(utf8ToBytes('scaas.ua.purpose.pqz-scoped-key.v1'));
+export const PURPOSE_PQZ_SCOPED_KEY = PQZ_SCOPED_KEY_TAG;
 const SCOPED_KEY_TYPE = 'UAPqzScopedKey(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,bytes32 pqzKeyHash)';
 const SCOPED_KEY_RECORD_TYPE = 'UAPqzScopedKeyRecord(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,'
   + 'bytes32 pqzKeyHash,bytes32 pqzPopHash,bytes32 openKemHash,uint64 validUntilBlock)';
@@ -202,15 +205,15 @@ const addrW = (a) => concatBytes(new Uint8Array(12), asBytes(a, 20, 'token'));
 /** typed(`UAPqzScopedKey`): what a scoped key's `R_REG` proves over, as `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, ·)`;
  *  `keyClass` 2 (`token` the zero address) or 3. */
 export function pqzScopedKeyDigest({ ua, keyClass, chainUid, token, version, pqzKeyHash }) {
-  return portable(keccak_256(concatBytes(keccak_256(utf8ToBytes(SCOPED_KEY_TYPE)), asBytes(ua, 32, 'ua'), w256(keyClass),
-    asBytes(chainUid, 32, 'chainUid'), addrW(token), w256(version), asBytes(pqzKeyHash, 32, 'pqzKeyHash'))));
+  return portable(keccak_256(concatBytes(keccak_256(utf8ToBytes(SCOPED_KEY_TYPE)), asBytes(ua, 32, 'ua'), w256(keyClass, 'keyClass', 8),
+    asBytes(chainUid, 32, 'chainUid'), addrW(token), w256(version, 'version', 64), asBytes(pqzKeyHash, 32, 'pqzKeyHash'))));
 }
 /** typed(`UAPqzScopedKeyRecord`): what `setPqzScopedKey`'s `sig` signs, as `uaMessage(kind, PURPOSE_PQZ_SCOPED_KEY, ·)`;
  *  `openKemHash = keccak256(kemPk)` of the opening KEM key, 0 without one. */
 export function pqzScopedKeyRecordDigest({ ua, keyClass, chainUid, token, version, pqzKeyHash, pqzPopHash, openKemHash, validUntilBlock }) {
-  return portable(keccak_256(concatBytes(keccak_256(utf8ToBytes(SCOPED_KEY_RECORD_TYPE)), asBytes(ua, 32, 'ua'), w256(keyClass),
-    asBytes(chainUid, 32, 'chainUid'), addrW(token), w256(version), asBytes(pqzKeyHash, 32, 'pqzKeyHash'),
-    asBytes(pqzPopHash, 32, 'pqzPopHash'), asBytes(openKemHash, 32, 'openKemHash'), w256(validUntilBlock))));
+  return portable(keccak_256(concatBytes(keccak_256(utf8ToBytes(SCOPED_KEY_RECORD_TYPE)), asBytes(ua, 32, 'ua'), w256(keyClass, 'keyClass', 8),
+    asBytes(chainUid, 32, 'chainUid'), addrW(token), w256(version, 'version', 64), asBytes(pqzKeyHash, 32, 'pqzKeyHash'),
+    asBytes(pqzPopHash, 32, 'pqzPopHash'), asBytes(openKemHash, 32, 'openKemHash'), w256(validUntilBlock, 'validUntilBlock', 64))));
 }
 /** The two messages of a scoped record: `message = uaMessage(kind, PURPOSE_PQZ_SCOPED_KEY, recordDigest)` (what the UA signs) and
  *  `regMessage = uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, keyDigest)` (what the key's `R_REG` proves over). */
@@ -226,17 +229,18 @@ export function pqzScopedKeyMessages(kind, r) {
 const refuse = (why) => { throw new Error(`Refusing: ${why}.`); };
 const ZERO20 = new Uint8Array(20);
 const eq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
-const ACCEPTED = new WeakMap(); // acceptance object -> { handle, index, content }: only a handle's check makes one
+const ACCEPTED = new WeakMap(); // acceptance object -> { handle, token, index, content }: only a handle's check makes one
 
 /** Owner ruling 2026-11-14 (CLI-SGN-51's Change: "no bare class-2 decrypt", enforced in the clients; spec §6, §14.1, §14.18;
  *  Fable P1-1): the wallet's handle of one PQZ key with the opening, `offchain-shared` (`token` omitted) or `offchain-token` of
  *  a token with the opening, at one key version. It derives and holds that key's PQZ seed and its opening KEM secret; no member
- *  returns either. The PQZ seed reaches a function only through three gated entries, each counted: `withSecretOwn(own, f)`
- *  after the holder's own `ownTag` verifies, `withSecretWindow(entries, f)` when every entry is skip-marked, TRIVIAL or accepted
- *  by this handle with the same bytes, and `withSecretKeygen(f)` (the public key and the `R_REG` proof of registration).
+ *  returns either. The PQZ seed reaches a function only through two gated entries, each counted (T21 O5 (b), owner 2026-11-16
+ *  "ok, as proposed": the entry shape of ua-rs `with_secret_debit`): `withSecretDebit(debit, f)`, the debit's own part and its
+ *  window together (below), and `withSecretKeygen(f)` (the public key and the `R_REG` proof of registration), counted apart.
  *  `check(credit, verify)` runs K3-7 steps 2-4, 8 and the auditor's opening of step 9 here (the blob read, `aad`s built from the
  *  blob's own bytes, open `O_t`, `O_t` and `O_a` recomputed from `seed_leg`), then hands `seed_leg` to the binding's `verify`
- *  for the PQZ arithmetic of steps 5-7 and `v_a` (pqz-ffi `check_recipient`); `{ accepted, value }` or `{ skip }`, one outcome.
+ *  for the PQZ arithmetic of steps 5-7 and `v_a` (pqz-ffi `check_recipient`); `{ accepted, value }` (`accepted = { token, index, entryHash }`, the token named:
+ *  T21 L47) or `{ skip }`, one outcome.
  *  `verify` may be a wallet of `loadPqzWallet` (src/pqzopenWasm.js; TODO 3zf): the handle then hands its opening KEM seed and
  *  the credit read from the blob (`u`, `v` unpacked, `credit.pk` the holder's own PQZ key of this version) to the module's
  *  `check_recipient`, which runs K3-7 steps 3-9 again; `value` = `{ digits, amount }`. The seed goes to no other `verify`.
@@ -245,30 +249,40 @@ const ACCEPTED = new WeakMap(); // acceptance object -> { handle, index, content
 export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua, version, layout }) {
   const kind = token === undefined ? 'offchain-shared' : 'offchain-token';
   const scope = token === undefined ? ZERO20 : asBytes(token, 20, 'token');
-  const v = BigInt(version);
+  const v = intOf(version, 'version');
   const uaB = asBytes(ua, 32, 'ua');
   const cu = asBytes(chainUid, 32, 'chainUid');
-  if (!layout || !layout.pkp || !layout.vp) refuse('the set layout (pqzLayout(n, packBits)) is needed');
-  const id = keccak_256(concatBytes(utf8ToBytes('scaas.pqz3k.handle.v1'), cu, scope, uaB, be64(v)));
+  if (!layout || !layout.pkp || !layout.vp) refuse('Input: the set layout (pqzLayout(n, packBits, kMax)) is needed');
   let pqzSeed = scopedKeySeed(seed, { account, index, chainUid: cu, token: token === undefined ? undefined : scope, version: v });
   const okSeed = openKemSeed(seed, { ua: uaB, chainUid: cu, token: token === undefined ? undefined : scope, version: v });
   const k = openKemKey(okSeed);
   const kemPk = k.kemPk;
+  // the review (Codex 1, Fable F7): the id binds the key (its seed commitment: clientkeys derives no `pk`), the opening key, the
+  // derivation path and the class, so an acceptance of one handle is no acceptance of another key's
+  const be32 = (x) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, Number(x)); return b; };
+  const id = keccak_256(concatBytes(utf8ToBytes('scaas.pqz3k.handle.v2'), Uint8Array.of(token === undefined ? 2 : 3), be32(account),
+    be32(index), cu, scope, uaB, be64(v), keccak_256(pqzSeed), keccak_256(kemPk)));
+  const U_OFF = 16n;
+  const V_OFF = 16n + BigInt(layout.pkp);
   const kem = { dk: k.dk, x25519Secret: k.x25519Secret };
   let loads = 0;
   let keygens = 0;
   const tokenOk = (t) => kind === 'offchain-shared' || eq(asBytes(t, 20, 'token'), scope);
-  const live = () => { if (pqzSeed === null) refuse('this handle was wiped'); return pqzSeed; };
+  const live = () => { if (pqzSeed === null) refuse('KeyRevoked: this handle was wiped'); return pqzSeed; };
 
   function check(credit, verify) {
     live(); // review 3w-delta U4h-4: a wiped handle refuses, it never yields a (markable) skip
     const slot = slotOf(credit.slot);
-    if (pqzSlotTrivial(slot)) refuse('a TRIVIAL entry is accepted without a check');
+    if (pqzSlotTrivial(slot)) refuse('Input: a TRIVIAL entry is accepted without a check');
+    // the review's F1: the acceptance vouches for exactly the bytes checked, at an op 1 credit's offsets
+    if (((slot >> 80n) & 0xffffn) !== U_OFF || ((slot >> 64n) & 0xffffn) !== V_OFF) {
+      refuse('Input: the slot\'s offsets are not an op 1 credit\'s (16, 16 + P(u))');
+    }
     const code = asBytes(credit.code, undefined, 'code');
     const b = pqzOpeningBlobOf(code, layout);
     const tok = asBytes(credit.token, 20, 'token');
-    if (!tokenOk(tok) || !eq(b.toUA, uaB) || b.kv[0] !== v) refuse(`the credit is not this ${kind} handle's (token, recipient or key version)`);
-    if (b.n === 2 && !credit.auditor) refuse('an audited leg without the auditor\'s keys (a read error, not a skip)');
+    if (!tokenOk(tok) || !eq(b.toUA, uaB) || b.kv[0] !== v) refuse(`NotThisHandle: the credit is not this ${kind} handle's (token, recipient or key version)`);
+    if (b.n === 2 && !credit.auditor) refuse('Input: an audited leg without the auditor\'s keys (a read error, not a skip)');
     const wallet = isPqzWallet(verify);
     const lanes = (p) => pqzUnpack(p, layout.vp / 2);
     if (wallet && lanes(b.pu).length !== verify.pkBytes) refuse('the wallet module is of another parameter set than the layout');
@@ -276,7 +290,7 @@ export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua
     const aadT = pqzOpeningAad({ chainUid: cu, token: tok, ua: uaB, keyVersion: v, pu: b.pu, pv: b.pvt });
     const aadA = b.n === 2 ? pqzOpeningAad({ chainUid: cu, token: tok, ua: credit.auditor.ua, keyVersion: b.kv[1], pu: b.pu, pv: b.pva }) : null;
     const content = pqzEntryHash(credit.index, slot, code);
-    const skip = () => ({ skip: { index: BigInt(credit.index), entryHash: hexOf(content), reads: { ...credit.reads } } });
+    const skip = () => ({ skip: { index: intOf(credit.index, 'the entry index'), entryHash: hexOf(content), reads: { ...credit.reads } } });
     const seedLeg = openOpening({ opening: b.oT, kemPk, dk: kem.dk, x25519Secret: kem.x25519Secret, aad: aadT });
     if (seedLeg === null) return skip();
     if (!eq(sealOpening({ seedLeg, role: 0, kemPk, aad: aadT }).bytes, b.oT)) return skip(); // step 8
@@ -292,38 +306,69 @@ export function pqzKeyHandle(seed, { account = 0, index = 0, chainUid, token, ua
           v: lanes(b.pva), opening: b.oA } : null })
       : verify(seedLeg, { blob: b, aadT, aadA, auditor: credit.auditor ?? null }) ?? null;
     if (value === null) return skip();
-    const accepted = Object.freeze({ index: BigInt(credit.index), entryHash: hexOf(content) });
-    ACCEPTED.set(accepted, { handle: id, index: BigInt(credit.index), content });
+    const accepted = Object.freeze({ token: hexOf(tok), index: intOf(credit.index, 'the entry index'), entryHash: hexOf(content) });
+    ACCEPTED.set(accepted, { handle: id, token: tok.slice(), index: accepted.index, content }); // a copy (the review, Codex 2)
     return { accepted, value };
   }
 
   return Object.freeze({
     kind, scope: hexOf(scope), version: v, openKem: kemPk,
     check,
-    /** How many times the PQZ seed reached `withSecretOwn` / `withSecretWindow`; `withSecretKeygen` apart. */
+    /** How many times the PQZ seed reached `withSecretDebit`; `withSecretKeygen` apart. */
     get secretLoads() { return loads; },
     get keygens() { return keygens; },
     /** `keccak256(seed32)`: the KAT's view of the derivation, never the seed. */
     seedCommitment: () => hexOf(keccak_256(live())),
-    withSecretOwn({ token: t, sendCounter, pu, pvf, ownTag }, f) {
-      if (!tokenOk(t)) refuse(`the ciphertext is not this ${kind} handle's token`);
-      const s = live();
-      const { key, ownTag: want } = pqzOwnTag({ seed32: s, chainUid: cu, token: hexOf(asBytes(t, 20, 'token')), fromUA: uaB, sendCounter, pu, pvf });
-      key.fill(0);
-      if (want.toLowerCase() !== hexOf(asBytes(ownTag, 32, 'ownTag'))) refuse('the ownTag does not verify under this key');
-      loads += 1;
-      return f(s);
-    },
-    withSecretWindow(entries, f) {
-      for (const e of entries) {
+    /** T21 O5 (b): the PQZ seed for one debit (CTR-PQZ-33: `T = own (u_f, v_f) + Σ pending[p_last, p) + Trivial(shieldIn)`),
+     *  `{ token, lastDebit, own: { pu, pvf, ownTag } | undefined, window: [{ token, index, slot, code, accepted }], shieldIn }`,
+     *  every field named and required but `own`. Refused, in this order (ua-rs `PqzKeyHandle::gate`; the error names are its
+     *  `Refused` names): wiped (KeyRevoked); another token than the handle's (NotThisHandle); `lastDebit > 0` without `own`
+     *  (OwnRequired: no empty-window bypass); `own` at `lastDebit = 0` (Input); no `own`, no window entry and `shieldIn = 0`
+     *  (EmptyDebit; owner 2026-11-16: a first debit of `Trivial(shieldIn)` alone passes); the own part's counter `lastDebit − 1`
+     *  at or above 2^32 or its parts not of the layout's lengths (Input); more than `kMax − 2` entries, an entry of another token,
+     *  indexes not strictly ascending, or an entry neither skip-marked, TRIVIAL nor accepted by this handle for that token, index
+     *  and bytes (Window); the own part's `ownTag` (OwnTag, constant time). Then `f(seed32)`, counted. clientkeys has no PQZ
+     *  arithmetic: `f` is the binding's (ua-rs builds and decrypts `T` inside its handle). `f` must not wipe this handle. */
+    withSecretDebit({ token: t, lastDebit, own, window, shieldIn }, f) {
+      live();
+      const tok = asBytes(t, 20, 'token');
+      if (!tokenOk(tok)) refuse(`NotThisHandle: the debit is not this ${kind} handle's token`);
+      const last = intOf(lastDebit, 'lastDebit');
+      if (last < 0n || last >= 1n << 64n) refuse('Input: lastDebit: a uint64');
+      const shield = intOf(shieldIn, 'shieldIn');
+      if (shield < 0n || shield >= 1n << 64n) refuse('Input: shieldIn: a uint64');
+      if (!Array.isArray(window)) refuse('Input: the window: an array of entries (empty for none)');
+      if (!layout.kMax) refuse('Input: the layout\'s kMax (pqzLayout(n, packBits, kMax)) is needed for a debit');
+      if (last > 0n && !own) refuse('OwnRequired: lastDebit > 0 and no own part');
+      if (last === 0n && own) refuse('Input: an own part on an account that never debited (lastDebit 0)');
+      if (last === 0n && window.length === 0 && shield === 0n) refuse('EmptyDebit: no own part, no window entry and no shieldIn');
+      if (own && last - 1n >= 1n << 32n) refuse('Input: lastDebit − 1 at or above 2^32');
+      if (own && (asBytes(own.pu, undefined, 'own.pu').length !== layout.pkp || asBytes(own.pvf, undefined, 'own.pvf').length !== layout.vp)) {
+        refuse('Input: the own part\'s P(u), P(v_f) lengths');
+      }
+      if (window.length + 2 > layout.kMax) refuse('Window: more than kMax − 2 window entries');
+      let prev = null;
+      for (const e of window) {
+        if (!eq(asBytes(e.token, 20, 'the window entry\'s token'), tok)) refuse('Window: a window entry of another token than the debit\'s');
+        const i = intOf(e.index, 'the entry index');
+        if (prev !== null && i <= prev) refuse('Window: the window\'s indexes are not strictly ascending');
+        prev = i;
         const slot = slotOf(e.slot);
         if (pqzSlotMarked(slot) || pqzSlotTrivial(slot)) continue;
         const a = e.accepted && ACCEPTED.get(e.accepted);
-        if (!a || !eq(a.handle, id) || a.index !== BigInt(e.index) || !e.code || !eq(a.content, pqzEntryHash(e.index, slot, e.code))) {
-          refuse('a window entry is neither accepted by this handle, TRIVIAL nor skip-marked');
+        if (!a || !eq(a.handle, id) || !eq(a.token, tok) || a.index !== i || !e.code
+          || !eq(a.content, pqzEntryHash(e.index, slot, e.code))) {
+          refuse('Window: a window entry is neither accepted by this handle for its token, TRIVIAL nor skip-marked');
         }
       }
       const s = live();
+      if (own) {
+        const { key, ownTag: want } = pqzOwnTag({ seed32: s, chainUid: cu, token: hexOf(tok), fromUA: uaB, sendCounter: last - 1n,
+          pu: own.pu, pvf: own.pvf });
+        key.fill(0);
+        // constant time (T21 L42), as ua-rs: the tag gates the seed for a ciphertext a node supplies
+        if (!equalBytes(fromHex(want), asBytes(own.ownTag, 32, 'ownTag'))) refuse('OwnTag: the ownTag does not verify under this key');
+      }
       loads += 1;
       return f(s);
     },
@@ -343,5 +388,10 @@ export function pqzMarks(skips) {
   if (skips.some((s) => !(s.reads?.finalized && s.reads?.strictMajority))) {
     refuse('a skip read at one node or an unfinalized block is not a reason to mark');
   }
-  return [...new Set(skips.map((s) => BigInt(s.index)))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  const index = (s) => {
+    const i = intOf(s.index, 'the skip index');
+    if (i < 0n || i >= 1n << 64n) throw new Error('the skip index: a uint64 is in [0, 2^64)'); // T21 L79: `uint64[] skip`
+    return i;
+  };
+  return [...new Set(skips.map(index))].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }

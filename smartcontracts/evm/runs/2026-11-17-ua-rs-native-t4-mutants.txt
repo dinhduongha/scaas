@@ -1,0 +1,4 @@
+killed   | M1 the odd-parity rows dropped from the parity assertion's input | clients/clientkeys/scripts/native-vectors.mjs | rc=1 | 1 failed: Error: native-vectors: Taproot rows hold internal and output keys of both y parities
+killed   | M2 the byte-equal Taproot rows marked verify-only | clients/clientkeys/scripts/native-vectors.mjs | rc=1 | 1 failed: Error: native-vectors: a byte-equal signature row of bip340-taproot
+killed   | M3 a wrong pinned sha256 | clients/clientkeys/scripts/native-vectors.mjs | rc=1 | 1 failed: Error: sha256 mismatch test-vectors.csv
+3 mutants, 3 killed, 0 survived, 0 not loaded

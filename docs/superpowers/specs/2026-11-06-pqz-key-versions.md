@@ -56,7 +56,7 @@ Written as given; not reopened.
 | C6 | **No per-entry version storage.** Receivers find a credit's version by its queue or by trial decryption, senders by additive matching against the stored blob, the auditor by its own keys; on-chain disclosure names the version as a parameter. | KV-11 |
 | C7 | The registry emits `UAPqzKeyCurrent` when current moves; `register` keeps emitting only `UARegistered` for version 0 (F-10); PQZ's own events carry `keyVersion`; the shared `Shielded` stays as it is. | KV-3, KV-10 |
 | C8 | Client key material per version: single-key holders derive version v ≥ 1 with `be64(version)` appended to the HKDF `info` (version 0 unchanged); an `msig` operator generates each version's `seed32` fresh; vault entries and backups are keyed `(ua, version, pqzKeyHash)` (F-14). | §7.2 |
-| C9 | Rule ids next-free: CTR-UA-41 (unused: 3f dropped its draft of it), CTR-PQZ-31, CTR-PQZ-32, NODE-JOB-23, CLI-SGN-43. | §12 |
+| C9 | Rule ids next-free: CTR-UA-41 (unused: 3f dropped its draft of it), CTR-PQZ-31, CTR-PQZ-32, NODE-JOB-23, CLI-SGN-48 (CLI-SGN-43 to CLI-SGN-47 are `ua-rs-sign`'s, controller 2026-11-08 at its sync T20b). | §12 |
 
 ## 1. Scope and non-goals — SPECIFIED
 
@@ -641,7 +641,7 @@ Each lands in `docs/decisions.md` in T19 with its commit; the local labels KV-n 
 | KV-12, KV-13 | CTR-PQZ-32 | No version word in the statement or transcript: same `proofSystemId`, no pqz-core vector, no full gate, by distinct keys per UA, the per-UA counter and the capture-once rule; migration confidentiality assumes honest independent keys; OFFCHAIN reads the same `current` and attests per version | §4, §5 |
 | KV-14 | (in CTR-UA-41) | Versions ship in this release's generation on every chain; new releases only | §6.1 |
 | §7.3 | NODE-JOB-23 | `key_version` named on PQZ jobs; `PQZ_KEY_VERSION_UNKNOWN`, `PQZ_KEY_STALE`, `PQZ_KEY_REUSED`, `PQZ_KEY_ROTATION_PENDING` at intake, `PQZ_KEY_ROTATED` only after a `UAPqzKeyCurrent` since intake with the simulation error; keepers roll every version | §7.3 |
-| KV-15 | CLI-SGN-43 | Key material per version: single-key HKDF with `be64 version` for v ≥ 1, version 0 unchanged; `msig` fresh per version; vault and backups keyed `(ua, version, pqzKeyHash)`; k-of-n shares per version to current members, k = m by default or a stated read threshold; the decoy pending filter; the runbook's cross-chain first step | §7.2 |
+| KV-15 | CLI-SGN-48 | Key material per version: single-key HKDF with `be64 version` for v ≥ 1, version 0 unchanged; `msig` fresh per version; vault and backups keyed `(ua, version, pqzKeyHash)`; k-of-n shares per version to current members, k = m by default or a stated read threshold; the decoy pending filter; the runbook's cross-chain first step | §7.2 |
 
 ## 13. Invariants — SPECIFIED
 
