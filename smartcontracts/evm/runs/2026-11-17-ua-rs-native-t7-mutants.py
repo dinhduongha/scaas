@@ -14,7 +14,7 @@ MOD, DERIVE, SIGN, MAN = (RS + "/src/wallet/" + f for f in ("mod.rs", "derive.rs
 T = [os.path.abspath("scripts/capped"), "cargo", "test", "--locked", "--offline", "-j2", "--features", "vectors", "--test", "wallet_native", "--test", "native_fixed"]
 M = [(n, f, a, b, T, RS) for n, f, a, b in [
     ("untweaked key", SIGN, "let tweaked = zeroize::Zeroizing::new(*d + t);", "let tweaked = zeroize::Zeroizing::new(*d);"),
-    ("no odd-y negation", SIGN, "if p.as_bytes().first() == Some(&3) { -*d0 } else { *d0 }", "*d0"),
+    ("no odd-y negation", SIGN, "if p.as_bytes().first() == Some(&3) { -**d0 } else { **d0 }", "**d0"),  # T13 C3: d0 is Zeroizing
     ("Merkle root of 32 zero bytes in the tweak", DERIVE, ".chain_update(tag).chain_update(tag).chain_update(internal_x).finalize()",
      ".chain_update(tag).chain_update(tag).chain_update(internal_x).chain_update([0u8; 32]).finalize()"),
     ("bech32 on v1", DERIVE, "if version == 0 { 1 } else { 0x2bc8_30a3 }", "1"),

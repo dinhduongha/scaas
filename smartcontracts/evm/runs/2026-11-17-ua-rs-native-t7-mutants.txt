@@ -7,5 +7,5 @@ killed   | M6 bc for coin 1 | clients/ua-rs/src/wallet/derive.rs | rc=101 | 1 fa
 killed   | M7 change ignored | clients/ua-rs/src/wallet/mod.rs | rc=101 | 2 failed: native_json_bitcoin_addresses_both_chains_and_coins
 killed   | M8 witness program of the internal key | clients/ua-rs/src/wallet/derive.rs | rc=101 | 2 failed: native_json_bitcoin_addresses_both_chains_and_coins
 killed   | M9 self-check removed | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: taproot_self_check_refuses_a_fault_beside_the_right_key
-killed   | M10 change written when 0 | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 1 failed: manifest_change_written_only_when_one
+killed   | M10 change written when 0 | clients/ua-rs/src/wallet/manifest.rs | rc=101 | 3 failed: manifest_change_written_only_when_one
 10 mutants, 10 killed, 0 survived, 0 not loaded

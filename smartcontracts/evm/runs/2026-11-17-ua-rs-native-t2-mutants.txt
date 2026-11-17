@@ -1,11 +1,11 @@
-killed   | M1 untweaked key signs | clients/clientkeys/src/seed.js | rc=1 | 2 failed: BIP-341 keyPathSpending input 0: signDigest on a P2TR key
-killed   | M2 no odd-y negation of the internal key | clients/clientkeys/src/seed.js | rc=1 | 1 failed: P2TR keys of the mnemonic sign under their own output key, both y parities of P
-killed   | M3 bech32 constant on witness v1 | clients/clientkeys/src/seed.js | rc=1 | 2 failed: BIP-341 scriptPubKey[0]
-killed   | M4 bc for coin 1 | clients/clientkeys/src/seed.js | rc=1 | 1 failed: Bitcoin coin type: 1 gives tb1…, 0 is the default, 2 refused; change 2 refused; change off
-killed   | M5 change chain ignored | clients/clientkeys/src/seed.js | rc=1 | 2 failed: BIP-84 receive and change addresses of abandon ×11 about
-killed   | M6 extraEntropy true on native digests | clients/clientkeys/src/seed.js | rc=1 | 1 failed: BIP-143 native P2WPKH: signDigest is RFC 6979 with no extra data, r ‖ s ‖ v
-killed   | M7 signTyped guard removed | clients/clientkeys/src/seed.js | rc=1 | 1 failed: Bitcoin and NEAR keys: no key proof, no EIP-712, no EVM transaction
-killed   | M8 key proof accepted on near | clients/clientkeys/src/seed.js | rc=1 | 1 failed: Bitcoin and NEAR keys: no key proof, no EIP-712, no EVM transaction
-killed   | M9 NEAR coin override accepted | clients/clientkeys/src/seed.js | rc=1 | 1 failed: NEAR: m/44'/397'/i', implicit account id, ed25519:base58 text; no coin-type override
-killed   | M10 importedKind looks up NATIVE_NETWORKS too | clients/clientkeys/src/uakey.js | rc=1 | 1 failed: no import and no imported UA of the four networks
+killed   | M1 untweaked key signs | clients/clientkeys/src/seed.js | rc=1 | 6 failed: BIP-341 keyPathSpending input 0: signDigest on a P2TR key
+killed   | M2 no odd-y negation of the internal key | clients/clientkeys/src/seed.js | rc=1 | 4 failed: P2TR keys of the mnemonic sign under their own output key, both y parities of P
+killed   | M3 bech32 constant on witness v1 | clients/clientkeys/src/seed.js | rc=1 | 4 failed: BIP-341 scriptPubKey[0]
+killed   | M4 bc for coin 1 | clients/clientkeys/src/seed.js | rc=1 | 2 failed: Bitcoin coin type: 1 gives tb1…, 0 is the default, 2 refused; change 2 refused; change off
+killed   | M5 change chain ignored | clients/clientkeys/src/seed.js | rc=1 | 6 failed: BIP-84 receive and change addresses of abandon ×11 about
+killed   | M6 extraEntropy true on native digests | clients/clientkeys/src/seed.js | rc=1 | 3 failed: BIP-143 native P2WPKH: signDigest is RFC 6979 with no extra data, r ‖ s ‖ v
+killed   | M7 signTyped guard removed | clients/clientkeys/src/seed.js | rc=1 | 3 failed: Bitcoin and NEAR keys: no key proof, no EIP-712, no EVM transaction
+killed   | M8 key proof accepted on near | clients/clientkeys/src/seed.js | rc=1 | 2 failed: Bitcoin and NEAR keys: no key proof, no EIP-712, no EVM transaction
+killed   | M9 NEAR coin override accepted | clients/clientkeys/src/seed.js | rc=1 | 2 failed: NEAR: m/44'/397'/i', implicit account id, ed25519:base58 text; no coin-type override
+killed   | M10 importedKind looks up NATIVE_NETWORKS too | clients/clientkeys/src/uakey.js | rc=1 | 2 failed: native.json refusals: each refused
 10 mutants, 10 killed, 0 survived, 0 not loaded

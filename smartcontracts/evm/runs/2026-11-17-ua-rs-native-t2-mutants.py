@@ -13,7 +13,7 @@ CK = "clients/clientkeys"
 SEED, UAKEY = CK + "/src/seed.js", CK + "/src/uakey.js"
 T = [os.path.abspath("scripts/capped"), "node", "--test", "test/native.test.js"]
 M = [(n, f, a, b, T, CK) for n, f, a, b in [
-    ("untweaked key signs", SEED, "const sig = schnorr.sign(digest, tweaked, a);", "const sig = schnorr.sign(digest, b32(d), a);"),
+    ("untweaked key signs", SEED, "try { sig = schnorr.sign(digest, tweaked, a); }", "try { sig = schnorr.sign(digest, b32(d), a); }"),  # T13 C3 moved the line into a try
     ("no odd-y negation of the internal key", SEED, "if (P[0] === 3) d = SECP_N - d;", ""),
     ("bech32 constant on witness v1", SEED, "(version === 0 ? bech32 : bech32m).encode(", "(bech32).encode("),
     ("bc for coin 1", SEED, "const hrp = coin === 1 ? 'tb' : 'bc';", "const hrp = 'bc';"),

@@ -20,7 +20,7 @@ G = [os.path.abspath("scripts/capped"), "sh", "-c",
 M = [(n, f, a, b, T, CK) for n, f, a, b in [
     ("Sui intent dropped", SEED, "(t) => blake2b(concatBytes(new Uint8Array(3), t), { dkLen: 32 }));", "(t) => blake2b(t, { dkLen: 32 }));"),
     ("Stellar envelope type 5", SEED, "new Uint8Array([0, 0, 0, 2]), t)", "new Uint8Array([0, 0, 0, 5]), t)"),
-    ("NEAR without the hash", SEED, "envelope(key, 'near', txBorsh, allowRawDigest, (t) => sha256(t));", "envelope(key, 'near', txBorsh, allowRawDigest, (t) => t);"),
+    ("NEAR without the hash", SEED, "  return sha256(t);\n});", "  return t;\n});"),  # T13 C6 moved the hash below the tag check
     ("network check removed", SEED, "  if (key.network !== network) fail('Argument', `a ${network} key only`);\n", ""),
 ]] + [("a committed row changed (the append-only assertion refuses)", GEN, "const sighash = (n) => H(sha256(utf8ToBytes(`scaas ua-rs-native sighash ${n}`)));",
        "const sighash = (n) => H(sha256(utf8ToBytes(`scaas ua-rs-native sighash! ${n}`)));", G, CK)]
