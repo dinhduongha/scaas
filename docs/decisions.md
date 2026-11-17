@@ -10850,6 +10850,8 @@ Change (2026-11-17, Fable's review of `3a5ece097` applied, with the coordinator'
 **Cost if wrong.** A ruling restated from memory with a changed meaning.
 **Source.** owner 2026-11-17, relayed by the coordinator: "OK, pqchat-core cũng đảo chiều luôn"; chat "(b)" ("Ok, as proposed (b)"); the scaas-app contract's section 12 ("Ok, theo đề xuất, ghi vào contract scaas-app"); "Ok, đưa e2e vào plan pqchat-core"; [spec](superpowers/specs/2026-11-17-pqchat-core.md) §1.
 
+Change (owner 2026-11-17, "settle both points"; status: SPECIFIED): **O11 (a)**: the authorship of session, epoch, leave and removal records rests on the contract's check read through trusted reads (state keeps only their `sigHash`); keeping their signature bytes in state is asked for the next `PqChat` release (b). **O12 (a)**: rooms bound to a PqChat session carry their PQ-encrypted envelopes without Megolm, so the seed and the chain alone recover the history; ordinary Matrix rooms keep Megolm.
+
 ### CLI-PQC-31 — Coordinator and controller calls of the `pqchat-core` spec, 2026-11-17
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: decisions.md#CLI-PQC-31 · superseded-by: —
 

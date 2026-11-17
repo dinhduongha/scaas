@@ -510,11 +510,14 @@ endpoints. (b) A later `PqChat` release keeps these signatures' bytes in state, 
 (a contract change, a new catalogued release, the owner's). (c) Read them from the creating transaction's calldata (not state, and
 the transaction is found only through an event). **Recommendation: (a) now, (b) asked for the next `PqChat` release**; (c) breaks
 CTR-CHAT-14.
+**Settled (owner 2026-11-17, "chốt hai điểm": settle both points): (a) now, (b) asked for the next `PqChat` release.**
 
 **O12 — Matrix encryption in PqChat rooms** (from the review's K13; applied (a), the owner may override). (a) PqChat rooms carry
 their events without Megolm, so the seed alone recovers the Matrix history; the homeserver sees the event type and the hint. (b)
 Megolm on; Matrix history then needs Matrix's own recovery key or a verified device, and only a chain store gives messages from
 state alone. **Recommendation and applied: (a)**, since the main case is a 1:1 session with Matrix as its only store.
+**Settled (owner 2026-11-17, "chốt hai điểm"): (a).** Ordinary Matrix rooms of the default build keep Megolm; only rooms
+bound to a PqChat session carry their already PQ-encrypted envelopes without it.
 
 **Requests to other specs** (stated here, not edited there):
 
