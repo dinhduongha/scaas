@@ -104,6 +104,9 @@ Follow a stated rule as stated; do not add assumptions or reopen it with options
 - Full gate (`PQZ_SET=<set> scripts/capped pqz-core/gate.sh`, hours per set): only when `pqzl`, `pqzh/ligero/src`, `stmt`, `ffi/src` or set
   parameters change (code compiled only under feature `test-hooks` excepted: its affected steps, owner 2026-11-16). It resumes
   per step; read `runs/gate/last` first. Otherwise run the affected steps.
+- A format-only commit (formatter output only, no hand edit) in those paths never needs the full gate: run the affected steps
+  (kat, tbox, sv, fnv, rust, fuzz, `pqz-vectors --check`, `pqz_kat.py --check`) and require outputs byte-identical to the
+  baseline (owner 2026-11-17). Rust is formatted at rustfmt's default width (100), the other languages at 120.
 - **Gate once, on the final core tree.** Any edit to the paths above, the gate scripts or the files its steps read (harnesses, vectors,
   `negative.json`) restarts the gate. Before starting it, walk every remaining step of the plan and pull those edits forward, gate-script
   counts included (e.g. the relation count). Contract, client and node work runs beside it. A run on an older tree is only a scout.
