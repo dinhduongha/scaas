@@ -26,8 +26,8 @@ ver-anvil | 2650ede85 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dir
 ver-test | 2650ede85 | 0 | 40 passed, 0 failed, 1 ignored (6 binaries); tree dirty
 ver-clippy | 2650ede85 | 0 | -; tree dirty
 docs | 2650ede85 | 0 | -; tree dirty
-rpc-test | 69b8eda66 | 0 | 104 passed, 0 failed, 10 ignored (7 binaries); tree dirty
-rpc-clippy | 69b8eda66 | 0 | -; tree dirty
-rpc-wasm | 69b8eda66 | 0 | -; tree dirty
 node-test | 69b8eda66 | 0 | 790 passed, 0 failed, 72 ignored (18 binaries); tree dirty
 node-clippy | 69b8eda66 | 0 | -; tree dirty
+rpc-test | a7301086a | 0 | 111 passed, 0 failed, 10 ignored (7 binaries); tree dirty
+rpc-clippy | a7301086a | 0 | -; tree dirty
+rpc-wasm | a7301086a | 0 | -; tree dirty

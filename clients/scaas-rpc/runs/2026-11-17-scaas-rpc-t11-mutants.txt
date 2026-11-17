@@ -1,0 +1,5 @@
+# t11 mutants at commit a7301086a (name | outcome | test)
+dead from the nodes heard only | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_node_that_timed_out_on_submit_keeps_it_in_flight
+GivenUpByEveryNode read as terminal | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node all_dead_is_given_up_not_failed
+a refusal read as final | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node all_refused_is_not_queued_and_not_final
+3 mutants, 3 killed, 0 survived, 0 not loaded

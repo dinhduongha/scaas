@@ -172,3 +172,107 @@ fn answer(i: usize, status: u16, v: Value) -> NodeOutcome {
         revert_data: v["revert_data"].as_str().map(str::to_string).filter(|d| d.starts_with("0x") && d.len() <= 2 * ANSWER_MAX),
     })
 }
+
+// ---------------------------------------------------------------- plan T11: several nodes (spec §6.4, §4.8)
+
+pub use crate::endpoint::Fanout;
+
+/// The merge of one submit to several gateways (CLI-RPC-08): neither arm is final.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubmitOutcome {
+    /// at least one gateway queued it
+    Queued { by: Vec<usize>, refused: Vec<(usize, RpcError)>, unreachable: Vec<(usize, EndpointFailure)> },
+    /// none did: every gateway's outcome
+    NotQueued { outcomes: Vec<(usize, NodeOutcome)> },
+}
+
+impl SubmitOutcome {
+    /// Never: a refusal can be a dishonest node's, a queue is no landing (CLI-RPC-09).
+    pub fn is_terminal(&self) -> bool {
+        false
+    }
+}
+
+/// What one gateway reports of a submitted operation (its job states, job-api.md): `mined` / `final`, `dead`, still in its
+/// pipeline, or it does not know the intent; `None` in [`NodeClient::merged_state`] is a gateway that could not be asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntentState {
+    Mined,
+    Dead,
+    InFlight,
+    Unknown,
+}
+
+/// The merged state over several gateways (CLI-RPC-09): never terminal. `Landed`: a gateway reports it mined (the caller then
+/// reads the chain facts); `GivenUpByEveryNode`: every gateway the bytes were sent to reports `dead` or does not know it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MergedState {
+    Landed { by: Vec<usize> },
+    InFlight,
+    GivenUpByEveryNode,
+}
+
+impl MergedState {
+    /// Never: only the chain's facts end a relayed operation.
+    pub fn is_terminal(&self) -> bool {
+        false
+    }
+}
+
+impl NodeClient {
+    /// `POST /v1/op {chain, op}`: the same bytes to the gateways `fanout` selects, concurrently, merged.
+    pub async fn submit_op(&self, chain: u64, op: &Value, fanout: Fanout) -> Result<SubmitOutcome, RpcError> {
+        object(op, "op")?;
+        let body = format!(r#"{{"chain":{chain},"op":{}}}"#, serde_json::to_string(op).expect("a Value serialises")).into_bytes();
+        self.fan(fanout, "/v1/op", body).await
+    }
+
+    /// `POST /v1/ua-metatx`: the same bytes to the gateways `fanout` selects.
+    pub async fn submit_ua_metatx(&self, req: &UaMetaTxReq, fanout: Fanout) -> Result<SubmitOutcome, RpcError> {
+        object(&req.m, "m")?;
+        object(&req.auth, "auth")?;
+        self.fan(fanout, "/v1/ua-metatx", serde_json::to_vec(req).expect("a request serialises")).await
+    }
+
+    async fn fan(&self, fanout: Fanout, route: &str, body: Vec<u8>) -> Result<SubmitOutcome, RpcError> {
+        if body.len() > BODY_MAX {
+            return Err(RpcError::BodyTooLarge { len: body.len(), cap: BODY_MAX });
+        }
+        let to: Vec<usize> = match fanout {
+            Fanout::First => vec![0],
+            Fanout::All => (0..self.list.len()).collect(),
+        };
+        let outcomes = futures::future::join_all(to.iter().map(|&i| {
+            let body = body.clone();
+            async move { (i, self.submit_at(i, route, body).await) }
+        })).await;
+        let outcomes: Vec<(usize, NodeOutcome)> = outcomes.into_iter().map(|(i, o)| (i, o.expect("the cap is checked once"))).collect();
+        let by: Vec<usize> = outcomes.iter().filter(|(_, o)| matches!(o, NodeOutcome::Queued { .. })).map(|(i, _)| *i).collect();
+        if by.is_empty() {
+            return Ok(SubmitOutcome::NotQueued { outcomes });
+        }
+        let (mut refused, mut unreachable) = (vec![], vec![]);
+        for (i, o) in outcomes {
+            match o {
+                NodeOutcome::Refused(e) => refused.push((i, e)),
+                NodeOutcome::Unreachable(f) => unreachable.push((i, f)),
+                NodeOutcome::Queued { .. } => {}
+            }
+        }
+        Ok(SubmitOutcome::Queued { by, refused, unreachable })
+    }
+
+    /// The merge over `sent_to`, every gateway the bytes were sent to (whatever it answered at submit); `states` what each one
+    /// reports now (`None`: not reachable). Pure; never terminal.
+    pub fn merged_state(sent_to: &[usize], states: &[(usize, Option<IntentState>)]) -> MergedState {
+        let of = |i: usize| states.iter().find(|(j, _)| *j == i).and_then(|(_, s)| *s);
+        let by: Vec<usize> = sent_to.iter().copied().filter(|&i| of(i) == Some(IntentState::Mined)).collect();
+        if !by.is_empty() {
+            return MergedState::Landed { by };
+        }
+        if !sent_to.is_empty() && sent_to.iter().all(|&i| matches!(of(i), Some(IntentState::Dead | IntentState::Unknown))) {
+            return MergedState::GivenUpByEveryNode;
+        }
+        MergedState::InFlight
+    }
+}

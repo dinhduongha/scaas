@@ -210,3 +210,82 @@ async fn dex_reads_name_their_query() {
     assert_eq!(c.dex_orders(7, "0xab&x=1").await.unwrap_err().code(), "Argument");
 }
 
+
+// ---------------------------------------------------------------- plan T11: several nodes
+
+use scaas_rpc::node::{Fanout, IntentState, MergedState, SubmitOutcome};
+
+#[tokio::test]
+async fn the_same_bytes_to_every_selected_node() {
+    let (a, sa) = gateway(queued()).await;
+    let (b, sb) = gateway(queued()).await;
+    let (c, sc) = gateway(queued()).await;
+    let cl = client(&[(&a, None), (&b, None), (&c, None)]);
+    cl.submit_op(7622, &op(), Fanout::All).await.unwrap();
+    let bodies: Vec<Vec<u8>> = [sa, sb, sc].iter().map(|s| s.lock().unwrap()[0].body.clone()).collect();
+    assert!(bodies.iter().all(|b| *b == bodies[0]), "byte for byte");
+    let (d, sd) = gateway(queued()).await;
+    let (e, se) = gateway(queued()).await;
+    client(&[(&d, None), (&e, None)]).submit_op(7622, &op(), Fanout::First).await.unwrap();
+    assert_eq!((sd.lock().unwrap().len(), se.lock().unwrap().len()), (1, 0), "First: endpoint 0 only");
+}
+
+#[tokio::test]
+async fn one_queued_is_queued() {
+    let (a, _) = gateway(Arc::new(|_, _| (400, json!({"error": "RELAYER_NOT_OURS"})))).await;
+    let (b, _) = gateway(queued()).await;
+    let cl = client(&[(&a, None), (&b, None), ("http://127.0.0.1:9", None)]);
+    match cl.submit_op(1, &op(), Fanout::All).await.unwrap() {
+        SubmitOutcome::Queued { by, refused, unreachable } => {
+            assert_eq!(by, vec![1]);
+            assert_eq!(refused.iter().map(|r| r.0).collect::<Vec<_>>(), vec![0]);
+            assert_eq!(unreachable.iter().map(|r| r.0).collect::<Vec<_>>(), vec![2]);
+        }
+        o => panic!("{o:?}"),
+    }
+}
+
+#[tokio::test]
+async fn all_refused_is_not_queued_and_not_final() {
+    let (a, _) = gateway(Arc::new(|_, _| (400, json!({"error": "expired"})))).await;
+    let (b, _) = gateway(Arc::new(|_, _| (400, json!({"error": "expired"})))).await;
+    let o = client(&[(&a, None), (&b, None)]).submit_op(1, &op(), Fanout::All).await.unwrap();
+    assert!(matches!(o, SubmitOutcome::NotQueued { ref outcomes } if outcomes.len() == 2), "{o:?}");
+    assert!(!o.is_terminal());
+}
+
+#[test]
+fn a_node_that_timed_out_on_submit_keeps_it_in_flight() {
+    // A queued it, B's answer was lost (unreachable at submit) but B queued it; A now reports dead, B still works on it
+    let sent_to = [0, 1];
+    let s = NodeClient::merged_state(&sent_to, &[(0, Some(IntentState::Dead)), (1, Some(IntentState::InFlight))]);
+    assert_eq!(s, MergedState::InFlight);
+    let s = NodeClient::merged_state(&sent_to, &[(0, Some(IntentState::Dead)), (1, None)]);
+    assert_eq!(s, MergedState::InFlight, "an unreachable node keeps it in flight");
+}
+
+#[test]
+fn all_dead_is_given_up_not_failed() {
+    let s = NodeClient::merged_state(&[0, 1, 2], &[(0, Some(IntentState::Dead)), (1, Some(IntentState::Unknown)), (2, Some(IntentState::Dead))]);
+    assert_eq!(s, MergedState::GivenUpByEveryNode);
+    assert!(!s.is_terminal());
+    let s = NodeClient::merged_state(&[0, 1, 2], &[(0, Some(IntentState::Dead)), (1, Some(IntentState::Unknown))]);
+    assert_eq!(s, MergedState::InFlight, "control: one node not heard");
+}
+
+#[test]
+fn one_mined_is_landed() {
+    let s = NodeClient::merged_state(&[0, 1], &[(0, Some(IntentState::Dead)), (1, Some(IntentState::Mined))]);
+    assert_eq!(s, MergedState::Landed { by: vec![1] });
+    assert!(!s.is_terminal());
+}
+
+#[tokio::test]
+async fn reads_fail_over() {
+    let (b, _) = gateway(Arc::new(|_, _| (200, json!({"trades": []})))).await;
+    let cl = client(&[("http://127.0.0.1:9", None), (&b, None)]);
+    assert_eq!(cl.dex_trades(1, 0).await.unwrap(), json!({"trades": []}));
+    let (refuse, _) = gateway(Arc::new(|_, _| (400, json!({"error": "unknown market"})))).await;
+    let cl = client(&[(&refuse, None), (&b, None)]);
+    assert_eq!(cl.dex_trades(1, 0).await.unwrap_err().code(), "NodeRefused", "a refusal is the node's answer, not a failover");
+}
