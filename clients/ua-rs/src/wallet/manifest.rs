@@ -194,7 +194,7 @@ fn imported_ua_json(e: &ImportedUaEntry) -> String {
 /// `{kind, source, ua}`: `source` a canonical `native-import:` label, `kind` its network's scheme kind, `ua` canonical.
 fn imported_ua_of(v: &Value) -> Option<ImportedUaEntry> {
     let Held::Import(source) = Held::parse(v.get("source")?.as_str()?).ok()? else { return None };
-    let kind = u16::try_from(v.get("kind")?.as_u64()?).ok().filter(|k| *k == source.network.scheme_kind())?;
+    let kind = u16::try_from(v.get("kind")?.as_u64()?).ok().filter(|k| Some(*k) == source.network.scheme_kind())?;
     Some(ImportedUaEntry { kind, source, ua: ua_of(v.get("ua")?)? })
 }
 /// The UA the imported secret `s` gives under `kind` (CTR-UA-06: `keccak256(TAG(kind) ‖ key_data)`).
@@ -478,7 +478,7 @@ impl Wallet {
     /// link container (`Argument`). `WalletLocked` while locked.
     pub fn imported_ua_key(&self, network: Network, n: u32, kind: u16) -> Result<UaKey> {
         let source = ImportEntry { network, n };
-        if kind != network.scheme_kind() || !self.store.manifest().imports.contains(&source) {
+        if Some(kind) != network.scheme_kind() || !self.store.manifest().imports.contains(&source) {
             return Err(Error::Argument);
         }
         let (secret, _) = self.store.key(KeyId::Import(n), |_| Err(Error::Argument))?;

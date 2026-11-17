@@ -8,12 +8,19 @@
 //! guard with the generation check (spec §8.2). The PQ kinds sign through `pqsign` (T3b), the pairing kinds through
 //! `pairing` (T3c). UNAUDITED.
 use super::signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
-use super::{derive, pairing, pqsign, Error, NativeKey, Result, UaKey};
+use super::{derive, pairing, pqsign, Error, NativeKey, NativeScheme, Network, Result, UaKey};
 use crate::{keccak256, member_digest, purpose_tag, ua_message, ua8::portable_record_purposes, UAError, PURPOSES};
 use rand_core::{OsRng, RngCore};
 use sha2::{Digest, Sha256};
 
 const KEY_PROOF_PREFIX: &[u8] = b"scaas-subject-key-proof-v1";
+
+/// The raw-message bound (CLI-UAL-44; spec 2026-11-17-ua-rs-native §8): Aptos's 64 KiB transaction limit plus its prefix, with
+/// room; Solana's 1,232-byte and Hedera's 6 KiB limits lie below.
+pub const MAX_RAW_MESSAGE: usize = 131_072;
+/// The off-chain envelopes a SCaaS family verifies (Solana OCMS v1, Aptos AIP-62 `fullMessage`): never through the raw path, so
+/// `sign_message` opens no SCaaS payload to blind signing. A family envelope added later with another prefix joins this list.
+const ENVELOPES: [&[u8]; 2] = [b"\xffsolana offchain", b"APTOS\n"];
 
 /// A signature scheme of T3a.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -194,6 +201,14 @@ impl NativeKey {
     pub fn sign_digest(&self, digest: &[u8; 32], allow: AllowRawDigest) -> Result<Vec<u8>> {
         sign_digest_by(self, digest, allow)
     }
+
+    /// A native chain's message (1 to [`MAX_RAW_MESSAGE`] bytes), only with the marker value (CLI-UAL-44): Ed25519 (RFC 8032) and
+    /// sr25519 keys; `Argument` for a secp256k1 or Taproot key, an empty or over-long message, or one that starts with an off-chain
+    /// envelope a SCaaS family verifies (`0xff ‖ "solana offchain"`, `"APTOS\n"`). The caller builds it in-process from its own
+    /// encoder's transaction (CLI-SGN-54).
+    pub fn sign_message(&self, message: &[u8], allow: AllowRawDigest) -> Result<Vec<u8>> {
+        sign_message_by(self, message, allow)
+    }
 }
 
 /// [`NativeKey::sign_key_proof`] by any [`Signer`] (spec §9.4).
@@ -206,15 +221,27 @@ pub fn sign_digest_by(key: &dyn Signer, digest: &[u8; 32], _: AllowRawDigest) ->
     key.sign_request(&SignRequest::RawDigest { digest: *digest })
 }
 
-/// The 32 bytes a native key signs for `req`: a key proof's or raw digest; on a secp256k1 key also an EIP-712 digest or a
-/// transaction's sighash. `Argument` for any other request.
-pub(super) fn native_digest(req: &SignRequest, secp256k1: bool) -> Result<[u8; 32]> {
+/// [`NativeKey::sign_message`] by any [`Signer`], only with the marker value; the bound and the envelope refusal hold for every
+/// signer (a `UaKey` refuses the request: `Argument`).
+pub fn sign_message_by(key: &dyn Signer, message: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
+    if message.is_empty() || message.len() > MAX_RAW_MESSAGE || ENVELOPES.iter().any(|p| message.starts_with(p)) {
+        return Err(Error::Argument);
+    }
+    key.sign_request(&SignRequest::RawMessage { message: message.to_vec() })
+}
+
+/// The bytes a native key of `network` signs for `req` (ua-rs-native spec §4.2): a raw digest on every network; a key proof on
+/// the networks with a SCaaS family; an EIP-712 digest or a transaction's sighash on the secp256k1 networks of the nine; a raw
+/// message on an Ed25519 or sr25519 key. `Argument` for any other request.
+pub(super) fn native_bytes(network: Network, req: &SignRequest) -> Result<Vec<u8>> {
+    let scheme = network.scheme();
+    let evm = scheme == NativeScheme::Secp256k1Ecdsa && network.key_proof();
     match req {
-        SignRequest::KeyProof { digest } | SignRequest::RawDigest { digest } => Ok(*digest),
-        SignRequest::Eip712 { domain_separator, struct_hash, .. } if secp256k1 => {
-            Ok(super::eip712::eip712_digest(domain_separator, struct_hash))
-        }
-        SignRequest::Transaction { sighash, .. } if secp256k1 => Ok(*sighash),
+        SignRequest::RawDigest { digest } => Ok(digest.to_vec()),
+        SignRequest::KeyProof { digest } if network.key_proof() => Ok(digest.to_vec()),
+        SignRequest::Eip712 { domain_separator, struct_hash, .. } if evm => Ok(super::eip712::eip712_digest(domain_separator, struct_hash).to_vec()),
+        SignRequest::Transaction { sighash, .. } if evm => Ok(sighash.to_vec()),
+        SignRequest::RawMessage { message } if matches!(scheme, NativeScheme::Ed25519 | NativeScheme::Sr25519) => Ok(message.clone()),
         _ => Err(Error::Argument),
     }
 }
@@ -228,11 +255,15 @@ impl Signer for NativeKey {
             public_key: self.public_key.clone(),
         }
     }
-    /// A key proof, a raw digest, or (secp256k1 networks only) an EIP-712 digest or a transaction's sighash, `r ‖ s ‖ v`.
+    /// The requests of [`native_bytes`], in the network's scheme: secp256k1 `r ‖ s ‖ v`, ed25519 64 bytes.
     fn sign_request(&self, req: &SignRequest) -> Result<Vec<u8>> {
-        let scheme = if self.network.ed25519() { Scheme::Ed25519 } else { Scheme::Secp256k1 };
-        let digest = native_digest(req, scheme == Scheme::Secp256k1)?;
-        self.secret.with(|s| sign_scheme(scheme, s, &digest, None))?
+        let bytes = native_bytes(self.network, req)?;
+        let scheme = match self.network.scheme() {
+            NativeScheme::Secp256k1Ecdsa => Scheme::Secp256k1,
+            NativeScheme::Ed25519 => Scheme::Ed25519,
+            NativeScheme::Bip340Taproot | NativeScheme::Sr25519 => return Err(Error::Argument),
+        };
+        self.secret.with(|s| sign_scheme(scheme, s, &bytes, None))?
     }
 }
 

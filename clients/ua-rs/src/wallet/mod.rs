@@ -79,7 +79,7 @@ pub use seal::{
     seal, seal_container, AcceptedJson, ContainerExpect, ContainerExpectJson, ContainerSigner, ExpectedSender, LinkSession,
     MembersJson, Recipient, RecipientId, Sealed, SealedContainer, LINK_SKEW, LINK_WINDOW, MAX_PT, PURPOSE_BACKUP, PURPOSE_LINK,
 };
-pub use sign::{sign_digest_by, sign_key_proof_by};
+pub use sign::{sign_digest_by, sign_key_proof_by, sign_message_by, MAX_RAW_MESSAGE};
 #[cfg(feature = "vectors")]
 pub use signer::TestExternalKey;
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
@@ -240,17 +240,26 @@ impl Network {
     pub fn name(self) -> &'static str {
         NETWORK_NAMES.iter().find(|(net, _)| *net == self).map_or("", |(_, n)| n)
     }
-    fn ed25519(self) -> bool {
-        !matches!(self, Network::Evm | Network::Cosmos | Network::HederaEcdsa)
+    /// The signature scheme of this network's keys (ua-rs-native spec §4.1): every `match` on it names each scheme, so a new
+    /// one is a compile error where it is not handled, never a silent default.
+    pub fn scheme(self) -> NativeScheme {
+        match self {
+            Network::Evm | Network::Cosmos | Network::HederaEcdsa => NativeScheme::Secp256k1Ecdsa,
+            Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana => NativeScheme::Ed25519,
+        }
     }
     /// The derived UA kind of this network's scheme, the one kind an imported key of it may take (T20c, owner 2026-11-08):
-    /// `ed25519` (`0x0102`) or `secp256k1` (`0x0108`).
-    pub fn scheme_kind(self) -> u16 {
-        if self.ed25519() {
-            0x0102
-        } else {
-            0x0108
+    /// `ed25519` (`0x0102`) or `secp256k1` (`0x0108`) for the nine networks of clientkeys `NETWORKS`; `None` for the native
+    /// networks of `NATIVE_NETWORKS`, which have no import and no imported UA (ua-rs-native spec §4.1).
+    pub fn scheme_kind(self) -> Option<u16> {
+        match self {
+            Network::Evm | Network::Cosmos | Network::HederaEcdsa => Some(0x0108),
+            Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana => Some(0x0102),
         }
+    }
+    /// A network with a SCaaS family, whose key may sign the key proof (the nine; ua-rs-native spec §4.2).
+    pub(crate) fn key_proof(self) -> bool {
+        self.scheme_kind().is_some()
     }
     /// The SLIP-44 path of key `i`; element 1 is the coin type.
     fn path(self, i: u32) -> Vec<u32> {
@@ -267,6 +276,19 @@ impl Network {
             Network::Solana => vec![44 | H, 501 | H, i | H, H],
         }
     }
+}
+
+/// The signature scheme of a native network's keys (ua-rs-native spec §4.1, §4.2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NativeScheme {
+    /// ECDSA secp256k1, RFC 6979 (no extra data), low-s, `r ‖ s ‖ v`.
+    Secp256k1Ecdsa,
+    /// BIP-340 over the BIP-341 key-path tweaked key (BIP-86).
+    Bip340Taproot,
+    /// Ed25519 (RFC 8032).
+    Ed25519,
+    /// sr25519 (schnorrkel, context `substrate`).
+    Sr25519,
 }
 
 /// What the store keeps one slot for.

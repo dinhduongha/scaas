@@ -1,0 +1,6 @@
+killed   | M1 raw-message bound > to >= | clients/ua-rs/src/wallet/sign.rs | rc=101 | 3 failed: native_json_ed25519_message_rows_byte_equal
+killed   | M2 RawMessage accepted on secp256k1 | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: sign_message_bounds_and_envelopes_beside_their_accepted_neighbours
+killed   | M3 envelope prefix check removed | clients/ua-rs/src/wallet/sign.rs | rc=101 | 3 failed: errors_name_no_input
+killed   | M4 RawMessage mapped to a UaMsg in UaKey::sign_request | clients/ua-rs/src/wallet/sign.rs | rc=101 | 1 failed: sign_message_by_a_ua_key_is_refused_a_native_key_accepted
+killed   | M5 external_answer not verifying a message | clients/ua-rs/src/wallet/signer.rs | rc=101 | 1 failed: external_raw_message_answers_are_verified
+5 mutants, 5 killed, 0 survived, 0 not loaded

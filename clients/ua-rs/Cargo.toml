@@ -200,6 +200,11 @@ required-features = ["wallet"]
 name = "wallet_custody"
 required-features = ["wallet"]
 
+# ua-rs-native: the native networks and raw native signing against smartcontracts/vectors/native/native.json
+[[test]]
+name = "wallet_native"
+required-features = ["wallet"]
+
 [[test]]
 name = "wallet_memory"
 required-features = ["wallet"]

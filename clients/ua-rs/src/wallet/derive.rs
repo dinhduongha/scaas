@@ -270,19 +270,19 @@ pub fn native_secret(seed: &[u8], network: Network, index: u32, coin_type: Optio
     if let (Some(c), Some(p)) = (coin_type, path.get_mut(1)) {
         *p = range(c)? | HARDENED;
     }
-    Ok(if network.ed25519() {
-        head(slip10(Curve::Ed25519, seed, &path)?)
-    } else {
-        Zeroizing::new(bip32(seed, &path)?.to_vec())
+    Ok(match network.scheme() {
+        super::NativeScheme::Ed25519 => head(slip10(Curve::Ed25519, seed, &path)?),
+        super::NativeScheme::Secp256k1Ecdsa | super::NativeScheme::Bip340Taproot => Zeroizing::new(bip32(seed, &path)?.to_vec()),
+        super::NativeScheme::Sr25519 => return Err(Error::Argument),
     })
 }
 
 /// The public key of a native key: the compressed secp256k1 key or the ed25519 key (clientkeys `publicKey`).
 pub fn native_public(network: Network, s: &[u8]) -> Result<Vec<u8>> {
-    if network.ed25519() {
-        ed25519_public(s)
-    } else {
-        secp_public(s, true)
+    match network.scheme() {
+        super::NativeScheme::Ed25519 => ed25519_public(s),
+        super::NativeScheme::Secp256k1Ecdsa | super::NativeScheme::Bip340Taproot => secp_public(s, true),
+        super::NativeScheme::Sr25519 => Err(Error::Argument),
     }
 }
 
