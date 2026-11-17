@@ -522,6 +522,9 @@ impl Pool {
             );
             return Err(no(0, failures));
         }
+        // ponytail: one fallback, the next lower *named* number (T13 S13, liveness only): at n = 5 two liars within the
+        // tolerance can name numbers between the honest heads, so both rounds miss the block three honest endpoints share and
+        // the read is EndpointNoMajority (fail closed, asked again). Upgrade: try each named number down to the floor.
         let fallback = sorted.iter().copied().find(|&x| x < b && x >= floor);
         let mut largest = 0;
         for number in std::iter::once(b).chain(fallback) {
