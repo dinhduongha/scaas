@@ -63,6 +63,11 @@ MUTANTS = [
      T + "--lib endpoint::tests::debug_and_display_carry_no_url_or_secret"),
     ("S5 a list prints its URLs", [(EP, '.field("rpc_urls", &self.rpc_urls.as_ref().map(Vec::len))', '.field("rpc_urls", &self.rpc_urls)')],
      T + "--lib endpoint::tests::debug_and_display_carry_no_url_or_secret"),
+    ("S6 no timeout check", [(EP, "if policy == Policy::StrictMajority && timeout_ms >= read_timeout_ms {", "if false {")],
+     T + "--lib endpoint::tests::strict_majority_needs_a_request_timeout_below_the_read_deadline"),
+    ("S6 an equal timeout passes", [(EP, "if policy == Policy::StrictMajority && timeout_ms >= read_timeout_ms {",
+                                     "if policy == Policy::StrictMajority && timeout_ms > read_timeout_ms {")],
+     T + "--lib endpoint::tests::strict_majority_needs_a_request_timeout_below_the_read_deadline"),
 ]
 
 if __name__ == "__main__":

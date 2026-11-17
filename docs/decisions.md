@@ -10774,6 +10774,8 @@ The rules are in [clients/scaas-rpc.md](clients/scaas-rpc.md); the design is the
 **Cost if wrong.** A gateway's secret reaches another operator; a redirect from a discovered endpoint reaches an internal host with a provider key; an operator believes a one-endpoint majority protects them.
 **Source.** ARCH-POS-15; Fable review 2026-11-17 F8, F11, F21, F22; [spec](superpowers/specs/2026-11-17-scaas-rpc.md) §4.1.
 
+Change (2026-11-17, plan T13 S6, Fable code review; the controller's call, the owner may override; status: BUILT on branch `scaas-sdk`, UNAUDITED): a `strict_majority` list with `rpc_timeout_ms` at or above `rpc_read_timeout_ms` is refused when it is built (`Argument`). Step 1 of an agreed read waits for every endpoint's name; with a request timeout at the read's deadline one hung endpoint made every agreed read `EndpointNoMajority`. A `failover` list is unchanged (each request is bounded alone).
+
 ### CLI-RPC-03 — An endpoint answers only for the configured chain
 - old: — · status: current · owner: no · date: 2026-11-17 · normative: clients/scaas-rpc.md#CLI-RPC-03 · superseded-by: —
 

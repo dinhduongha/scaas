@@ -209,7 +209,7 @@ pub struct NodeList {
 
 impl NodeList {
     /// Refuses: no endpoint (`EndpointListEmpty`); two endpoints equal in scheme, host, port and path, a zero timeout, or
-    /// `strict_majority` with one endpoint (`Argument`). The scheme is checked when each [`Endpoint`] is built.
+    /// `strict_majority` with one endpoint or with `timeout_ms >= read_timeout_ms` (`Argument`, T13 S6). The scheme is checked when each [`Endpoint`] is built.
     pub fn new(
         endpoints: Vec<Endpoint>,
         policy: Policy,
@@ -233,6 +233,12 @@ impl NodeList {
         if policy == Policy::StrictMajority && endpoints.len() < 2 {
             return Err(RpcError::argument(
                 "strict_majority needs two endpoints or more",
+            ));
+        }
+        // T13 S6: an agreed read waits for each endpoint's answer, so one hung endpoint holds it for `timeout_ms`
+        if policy == Policy::StrictMajority && timeout_ms >= read_timeout_ms {
+            return Err(RpcError::argument(
+                "strict_majority needs rpc_timeout_ms below rpc_read_timeout_ms",
             ));
         }
         Ok(Self {
@@ -623,7 +629,7 @@ rpc_read_timeout_ms = 60000
     fn strict_majority_with_one_endpoint_is_refused() {
         let one = vec![Endpoint::named("https://a.example").unwrap()];
         assert_eq!(
-            NodeList::new(one, Policy::StrictMajority, 1, 1, 1)
+            NodeList::new(one, Policy::StrictMajority, 1, 1, 2)
                 .unwrap_err()
                 .code(),
             "Argument"
@@ -633,8 +639,37 @@ rpc_read_timeout_ms = 60000
             Endpoint::named("https://b.example").unwrap(),
         ];
         assert!(
-            NodeList::new(two, Policy::StrictMajority, 1, 1, 1).is_ok(),
+            NodeList::new(two, Policy::StrictMajority, 1, 1, 2).is_ok(),
             "control: two"
+        );
+    }
+
+    /// T13 S6: under `strict_majority` a request's timeout below the read's deadline, else one hung endpoint holds every agreed
+    /// read to the end of its deadline (`Argument`). Controls: one millisecond less; `failover` (each request bounded alone).
+    #[test]
+    fn strict_majority_needs_a_request_timeout_below_the_read_deadline() {
+        let two = || {
+            vec![
+                Endpoint::named("https://a.example").unwrap(),
+                Endpoint::named("https://b.example").unwrap(),
+            ]
+        };
+        for t in [2_000, 3_000] {
+            assert_eq!(
+                NodeList::new(two(), Policy::StrictMajority, t, 1, 2_000)
+                    .unwrap_err()
+                    .code(),
+                "Argument",
+                "{t}"
+            );
+        }
+        assert!(
+            NodeList::new(two(), Policy::StrictMajority, 1_999, 1, 2_000).is_ok(),
+            "control"
+        );
+        assert!(
+            NodeList::new(two(), Policy::Failover, 2_000, 1, 2_000).is_ok(),
+            "control: failover"
         );
     }
 

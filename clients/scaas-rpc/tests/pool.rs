@@ -127,7 +127,8 @@ fn list_of(classes: &[Class], policy: Policy, read_timeout_ms: u64) -> NodeList 
         .enumerate()
         .map(|(i, c)| Endpoint::new(&format!("http://e{i}.example"), *c, None, None).unwrap())
         .collect();
-    NodeList::new(e, policy, 5_000, 5_000, read_timeout_ms).unwrap()
+    // T13 S6: a request's timeout below the read's deadline (the fakes do not read it)
+    NodeList::new(e, policy, read_timeout_ms / 2, 5_000, read_timeout_ms).unwrap()
 }
 fn named(n: usize, policy: Policy) -> Pool {
     Pool::new(&list_of(&vec![Class::Named; n], policy, 5_000), true)

@@ -37,7 +37,7 @@ classes are ARCH-POS-15's). `class` is `named` (given by the operator or holder)
 control characters removed. `auth` is the endpoint's own credential and is sent to that endpoint only; a list has no list-wide
 credential. When the list is built it refuses: no endpoint (`EndpointListEmpty`); a scheme other than `http` / `https`
 (`EndpointScheme`); two endpoints equal in scheme, host, port and path (`Argument`; whether two URLs of one provider are independent
-is the operator's to judge); a zero timeout (`Argument`); `strict_majority` with one endpoint (`Argument`). A plain list of URL
+is the operator's to judge); a zero timeout (`Argument`); `strict_majority` with one endpoint, or with `rpc_timeout_ms` at or above `rpc_read_timeout_ms` (`Argument`: an agreed read waits for each endpoint's answer, so one hung endpoint would hold it to its deadline). A plain list of URL
 strings (the node's and the verifier's `rpc_urls`) is a list of `named` endpoints in that order, without credentials. No request
 follows a redirect: a 3xx is the endpoint's HTTP failure. The URL may carry a credential in its path or query: it never appears in a
 log line, an error or a `Debug` output (§5). A list also names its read policy: `failover` (the default) or `strict_majority`
