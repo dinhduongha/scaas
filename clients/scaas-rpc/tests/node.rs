@@ -549,3 +549,46 @@ async fn reads_fail_over() {
         "a refusal is the node's answer, not a failover"
     );
 }
+
+/// T13 S14: a route goes under the gateway's path prefix with the gateway's query kept, so two gateways under one host with
+/// different prefixes reach their own routes; a submit route's 2xx without the job's `status` is no answer of the node's.
+/// Controls: a duplicate's 200 with its stored state is `Queued`; `queued_202_and_duplicate_200`.
+#[tokio::test]
+async fn a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status() {
+    let (g, seen) = gateway(queued()).await;
+    let (a, b) = (format!("{g}/a/"), format!("{g}/b?k=1"));
+    let c = client(&[(&a, None), (&b, None)]);
+    c.submit_op_at(0, 1, &op()).await.unwrap();
+    c.submit_op_at(1, 1, &op()).await.unwrap();
+    let paths: Vec<String> = seen
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|s| s.path.clone())
+        .collect();
+    assert_eq!(paths, ["/a/v1/op", "/b/v1/op?k=1"]);
+    let (r, seen) = gateway(Arc::new(|_, _| (200, json!({"markets": []})))).await;
+    client(&[(&format!("{r}/p?k=1"), None)])
+        .dex_markets(7)
+        .await
+        .unwrap();
+    assert_eq!(
+        seen.lock().unwrap()[0].path,
+        "/p/v1/dex/markets?k=1&chain=7"
+    );
+    let (h, _) = gateway(Arc::new(|_, _| (200, json!({"ok": true})))).await;
+    let o = client(&[(&h, None)])
+        .submit_op_at(0, 1, &op())
+        .await
+        .unwrap();
+    assert!(matches!(o, NodeOutcome::Unreachable(_)), "{o:?}");
+    let (d, _) = gateway(Arc::new(|_, _| (200, json!({"status": "mined"})))).await;
+    let o = client(&[(&d, None)])
+        .submit_op_at(0, 1, &op())
+        .await
+        .unwrap();
+    assert!(
+        matches!(o, NodeOutcome::Queued { status: 200, .. }),
+        "control: {o:?}"
+    );
+}

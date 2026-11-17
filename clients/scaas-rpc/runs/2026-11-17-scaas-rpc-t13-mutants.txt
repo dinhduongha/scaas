@@ -1,4 +1,4 @@
-# t13 mutants at commit 02309d51c (name | outcome | test)
-S11 block 0 not checked at start | killed | ../scripts/capped cargo test --locked --offline -j2 --test service start_pins_block_0
-S11 connect_pinned without the pin | killed | ../scripts/capped cargo test --locked --offline -j2 --test service start_pins_block_0
+# t13 mutants at commit d5d8e87b6 (name | outcome | test)
+S14 the route joined as before | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status
+S14 any 2xx is queued | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status
 2 mutants, 2 killed, 0 survived, 0 not loaded

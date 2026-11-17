@@ -43,6 +43,24 @@ pub struct Http {
     timeout: Duration,
 }
 
+/// `route` (`/v1/…`, its own query after `?`) under the endpoint's URL: its path prefix kept and its query kept before the
+/// route's (T13 S14: `Url::join` of an absolute path dropped both, so two gateways under one host reached one route).
+fn under(base: &url::Url, route: &str) -> url::Url {
+    let (path, query) = route.split_once('?').unwrap_or((route, ""));
+    let mut u = base.clone();
+    u.set_path(&format!(
+        "{}/{}",
+        base.path().trim_end_matches('/'),
+        path.trim_start_matches('/')
+    ));
+    let q: Vec<&str> = [base.query().unwrap_or(""), query]
+        .into_iter()
+        .filter(|q| !q.is_empty())
+        .collect();
+    u.set_query((!q.is_empty()).then(|| q.join("&")).as_deref());
+    u
+}
+
 impl Http {
     /// Each request is bounded by `timeout_ms` (and by a read's deadline when it has one).
     pub fn new(timeout_ms: u64) -> Result<Self, crate::RpcError> {
@@ -244,9 +262,7 @@ impl Http {
             .ok_or_else(|| self.fail(list, i, FailureKind::Transport, "no such endpoint"))?;
         let timeout = self.timeout_for(i, deadline)?;
         let url = match path {
-            Some(p) => e.url().join(p).map_err(|_| {
-                self.fail(list, i, FailureKind::Transport, "a path that does not join")
-            })?,
+            Some(p) => under(e.url(), p),
             None => e.url().clone(),
         };
         let body = body.unwrap_or_default();

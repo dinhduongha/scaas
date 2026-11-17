@@ -85,6 +85,10 @@ MUTANTS = [
      VT + "start_pins_block_0"),
     ("S11 connect_pinned without the pin", [(VC, "let rpc = Self::build(urls, chain_id, Some(chain_uid), RPC_TIMEOUT)?;", "let rpc = Self::build(urls, chain_id, None, RPC_TIMEOUT)?;")],
      VT + "start_pins_block_0"),
+    ("S14 the route joined as before", [(H, "            Some(p) => under(e.url(), p),", "            Some(p) => e.url().join(p).unwrap(),")],
+     T + "--test node a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status"),
+    ("S14 any 2xx is queued", [(N, "                        && !v[\"status\"].is_string() =>", "                        && false =>")],
+     T + "--test node a_route_keeps_the_gateways_prefix_and_a_submit_2xx_needs_the_status"),
 ]
 
 if __name__ == "__main__":

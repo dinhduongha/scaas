@@ -193,6 +193,19 @@ impl NodeClient {
                 .await
             {
                 Err(f) => NodeOutcome::Unreachable(f),
+                // T13 S14: a submit route's 2xx carries the job's state (`queued`, or a duplicate's stored state, NODE-GW-06);
+                // any other 2xx JSON is no answer of the node's
+                Ok((status, v))
+                    if (200..300).contains(&status)
+                        && matches!(route, "/v1/op" | "/v1/ua-metatx")
+                        && !v["status"].is_string() =>
+                {
+                    NodeOutcome::Unreachable(EndpointFailure::new(
+                        i,
+                        crate::FailureKind::AnswerMalformed,
+                        &format!("HTTP {status} without the job's status"),
+                    ))
+                }
                 Ok((status, v)) => answer(i, status, v),
             },
         )
