@@ -1,139 +1,51 @@
 //! Kết nối RPC + ký vỏ tx. Khoá chỉ đi qua `EthereumWallet` dựng từ một signer (ruling R15):
 //! bản này là `PrivateKeySigner` từ biến môi trường; thay bằng custody broker không đổi nơi gọi.
+//! The chain reads go through `scaas_rpc::evm::EvmPool` (CLI-RPC-01, plan T5): the endpoint list, failover, identity, the
+//! bounded transport; this file keeps the lane key, signing and sending, and the reads over the node's own types.
 use alloy::eips::eip2718::Encodable2718;
-use alloy::eips::BlockNumberOrTag;
 use alloy::network::{EthereumWallet, TransactionBuilder};
 use alloy::primitives::{Address, Bytes, B256, U256};
-use alloy::providers::{DynProvider, Provider, ProviderBuilder};
+use alloy::providers::{DynProvider, Provider};
 use alloy::rpc::types::{Filter, TransactionRequest};
 use alloy::sol_types::{SolCall, SolEvent};
 use alloy::signers::local::PrivateKeySigner;
 use alloy::transports::TransportError;
 use anyhow::{anyhow, Result};
+use scaas_rpc::evm::EvmPool;
 
 use crate::abi::{decode_revert, IMtxIds, IToken, IUALedger};
 use crate::submit::MetaRef;
 use crate::config::ChainCfg;
 
-/// Simulation fail vì hợp đồng revert (vĩnh viễn với state này) hay vì đường truyền (tạm thời).
-/// Gộp hai cái làm một là giết job của khách vì một lần RPC chập chờn (review plan P7).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SimError {
-    Revert(String),
-    Transport(String),
-}
+pub use scaas_rpc::evm::{is_contract, BlockGas, SimError};
+pub use scaas_rpc::endpoint::redact_urls;
 
-impl std::fmt::Display for SimError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SimError::Revert(s) => write!(f, "revert: {s}"),
-            SimError::Transport(s) => write!(f, "transport: {s}"),
-        }
-    }
-}
-
-/// `SigCheck.isContract`: code, and not an EIP-7702 designator (`0xef0100 ‖ address`: an EOA, ECDSA by its own key only).
-pub fn is_contract(code: &[u8]) -> bool {
-    let designator = code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]);
-    !code.is_empty() && !designator
-}
-
-/// Fable E N-8: an endpoint URL (an RPC's, a verifier's: an internal host, a key in a path) never reaches a job's error or a
-/// gateway reply: each `scheme://…` up to a blank, a quote or a bracket becomes `<url>` (never ending at `,` or `;`: a key after
-/// one in a path or query is part of the URL; Fable recheck R-7).
-pub fn redact_urls(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut rest = s;
-    while let Some(i) = ["http://", "https://", "ws://", "wss://"].iter().filter_map(|p| rest.find(p)).min() {
-        out.push_str(&rest[..i]);
-        out.push_str("<url>");
-        let tail = &rest[i..];
-        rest = &tail[tail.find(|c: char| c.is_whitespace() || "()<>\"'".contains(c)).unwrap_or(tail.len())..];
-    }
-    out.push_str(rest);
-    out
-}
-
+/// The crate's classifier with the node's revert decoder (`abi::decode_revert`).
 pub fn classify(e: &TransportError) -> SimError {
-    match e.as_error_resp() {
-        Some(resp) => match resp.as_revert_data() {
-            Some(data) => SimError::Revert(decode_revert(&data)),
-            // Node trả lỗi JSON-RPC có nghĩa (execution reverted không data, out of gas…):
-            // đó là câu trả lời của EVM, không phải mạng.
-            // Fable recheck 2 P3-8, recheck 3 R3-6: a revert first; then a node's own limit, matched by its exact phrase, is the
-            // endpoint's answer, not the EVM's
-            None if resp.message.contains("revert") => SimError::Revert(resp.message.to_string()),
-            None if resp.message.contains("execution") && !node_limit(&resp.message) => SimError::Revert(resp.message.to_string()),
-            None => SimError::Transport(resp.message.to_string()),
-        },
-        None => SimError::Transport(e.to_string()),
-    }
+    scaas_rpc::evm::classify_with(e, decode_revert)
 }
 
-/// A node's own limit on one call, not the EVM's answer: geth's `execution aborted (timeout = 5s)` (`--rpc.evmtimeout`).
-/// Fable recheck 4 R4-5: Nethermind 2.2.0 (the client of this project's chains) answers its own timeout with
-/// `<method> request was canceled due to enabled timeout.` (the fragment from the local `nethermind/nethermind:2.2.0` image's
-/// `Nethermind.JsonRpc.dll`, its error name `Timeout`; the method-name prefix is how the fragment reads, not seen in a run):
-/// neither "revert" nor "execution", so [`classify`] reads it as transport already, no phrase here. Recheck 5 R5-6: a timed-out
-/// `eth_estimateGas` may answer instead the estimate's frame `err: <error> (supplied gas <n>)` (`Nethermind.JsonRpc.dll`) with
-/// the EVM's cancellation, `Cancellation Requested` (`Nethermind.Evm.dll`): read from the DLLs, not seen in a run; transport too
-/// (and not one of [`classify_sim`]'s two gas messages). Replace both by the real answers the first time a run times out.
-/// Erigon's and Reth's are not verified (no copy here): one containing "execution" would read as a revert.
-fn node_limit(m: &str) -> bool {
-    m.starts_with("execution aborted (timeout = ") && m.ends_with(')')
-}
-
-/// [`classify`] for a simulation without a gas field: "out of gas" / "gas required exceeds allowance" there is the
-/// call needing more than 2^24 regular gas (EIP-7825 under EIP-8037: execution gets at most 2^24 at any gas limit) or
-/// more than the RPC's gas cap — no gas limit makes it fit, so it is the job's answer, not the network's. Nethermind
-/// 2.2.0 answers exactly these two messages for an endless loop (`pqz-core/nethermind/runs/2026-10-22-genesis-200m-throwaway.txt`).
+/// [`classify`] for a simulation without a gas field (the crate's rule, the node's decoder).
 pub fn classify_sim(e: &TransportError) -> SimError {
-    match classify(e) {
-        SimError::Transport(m) if m.contains("out of gas") || m.contains("gas required exceeds allowance") => {
-            SimError::Revert(format!("over the 2^24 regular gas of a transaction or the RPC gas cap: {m}"))
-        }
-        x => x,
-    }
-}
-
-/// The smallest `eth_getLogs` span [`Chain::logs_back`] asks before it gives an endpoint up (R-6), and at most this many spans per
-/// window (Fable recheck 2 P3-3): a window is read in at most about 25 requests, a smaller cap gives the endpoint up.
-const LOG_SPAN_MIN: u64 = 10;
-const LOG_WINDOW_SPANS: u64 = 20;
-
-/// The `latest` header's gas facts ([`Chain::block_gas`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BlockGas {
-    pub limit: u64,
-    /// EIP-7928's `blockAccessListHash` is in the header: the Amsterdam two-dimensional gas model applies.
-    pub amsterdam: bool,
+    scaas_rpc::evm::classify_sim_with(e, decode_revert)
 }
 
 pub struct Chain {
     pub number: u64,
-    providers: Vec<DynProvider>,
+    pool: EvmPool,
     wallet: EthereumWallet,
     address: Address,
-    /// `chain_uid` from the config, checked against the RPC's block 0 (NODE-GW-07).
-    pinned_uid: Option<B256>,
-    uid: tokio::sync::OnceCell<B256>,
     /// `compliance_registry` and its pinned code hash (regulated-kinds spec §5, F-11).
     compliance: Option<(Address, B256)>,
-    /// Fable recheck 2 P2-1, recheck 3 R3-1, R3-2: the highest block this chain has seen from its first endpoint, one value
-    /// shared by every `Chain` of the same `[[chains]]` table (`ChainCfg::head`), raised by [`Chain::saw_block`] only; a
-    /// failover endpoint below it answers no read.
+    /// The table's highest block seen from its first endpoint (`ChainCfg::head`), the pool's own.
+    #[cfg_attr(not(test), allow(dead_code))]
     head: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    /// Fable recheck 2 P3-5, recheck 3 R3-3: per endpoint, its `eth_chainId` is `number` and its block 0 is this chain's (checked
-    /// once, at a failover endpoint's first use); `false`: another network, dropped from every read.
-    chain_ok: Vec<std::sync::OnceLock<bool>>,
-    /// Fable recheck 4 R4-1: the answers a failover endpoint (not the first) gave; a check that would refuse a job or blame an order
-    /// requeues instead when this moved during it ([`Chain::failover_answers`]).
-    failover: std::sync::atomic::AtomicU64,
-    /// The same over every `Chain` of the table (`ChainCfg::failover`), for health (R5-5).
-    failover_total: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    /// Fable recheck 4 R4-3: the same endpoints with each request bounded by `rpc_simulate_timeout_ms`, for the simulation only;
-    /// `providers` bound each request by `rpc_timeout_ms` (a read's, each log span's, the lane's nonce, fee, send, receipt).
-    simulators: Vec<DynProvider>,
+    /// The pool's identity cells, per endpoint (`false`: another network, dropped from every read).
+    #[cfg_attr(not(test), allow(dead_code))]
+    chain_ok: std::sync::Arc<Vec<std::sync::OnceLock<bool>>>,
+    /// The pool's `chain_uid` once read.
+    #[cfg_attr(not(test), allow(dead_code))]
+    uid: std::sync::Arc<std::sync::OnceLock<B256>>,
 }
 
 impl Chain {
@@ -144,60 +56,53 @@ impl Chain {
 
     pub fn with_signer(cfg: &ChainCfg, signer: PrivateKeySigner) -> Result<Self> {
         let address = signer.address();
-        // Fable recheck 2 P3-4, recheck 4 R4-3: a timeout per request, so an endpoint that accepts and never answers fails a read
-        // over; a simulation's requests get the larger one
-        let with = |ms: u64| cfg.rpc_urls.iter()
-            .map(|u| Ok(ProviderBuilder::new().disable_recommended_fillers()
-                .connect_reqwest(reqwest::Client::builder().timeout(std::time::Duration::from_millis(ms)).build()?, u.parse()?).erased()))
-            .collect::<Result<Vec<_>>>();
-        let (providers, simulators) = (with(cfg.rpc_timeout_ms)?, with(cfg.rpc_simulate_timeout_ms)?);
-        if providers.is_empty() {
+        if cfg.rpc_urls.is_empty() {
             return Err(anyhow!("chain {}: no rpc_urls", cfg.evm_chain_number));
         }
+        let endpoints = cfg.rpc_urls.iter().map(|u| scaas_rpc::Endpoint::named(u)).collect::<Result<Vec<_>, _>>()
+            .map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.evm_chain_number))?;
+        // each request bounded by rpc_timeout_ms, a simulation's by rpc_simulate_timeout_ms (recheck 2 P3-4, recheck 4 R4-3)
+        let list = scaas_rpc::NodeList::new(endpoints, scaas_rpc::Policy::Failover, cfg.rpc_timeout_ms, cfg.rpc_simulate_timeout_ms,
+            scaas_rpc::endpoint::READ_TIMEOUT_MS).map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.evm_chain_number))?;
+        let shared = scaas_rpc::evm::Shared { head: cfg.head.clone(), failover: cfg.failover.clone() };
+        let pool = EvmPool::connect_shared(list, cfg.evm_chain_number, cfg.chain_uid, shared, decode_revert)
+            .map_err(|e| anyhow!("chain {}: {e}", cfg.evm_chain_number))?;
         Ok(Self {
             number: cfg.evm_chain_number,
-            providers,
+            chain_ok: pool.pool().identity_cells(),
+            uid: pool.uid_cell(),
+            pool,
             wallet: EthereumWallet::from(signer),
             address,
-            pinned_uid: cfg.chain_uid,
-            uid: Default::default(),
             compliance: cfg.compliance_registry.zip(cfg.compliance_registry_codehash),
             head: cfg.head.clone(),
-            chain_ok: cfg.rpc_urls.iter().map(|_| Default::default()).collect(),
-            failover: Default::default(),
-            failover_total: cfg.failover.clone(),
-            simulators,
         })
     }
 
     pub fn primary(&self) -> &DynProvider {
-        &self.providers[0]
+        self.pool.primary()
     }
 
     pub fn others(&self) -> &[DynProvider] {
-        &self.providers[1..]
+        self.pool.others()
     }
 
     pub fn address(&self) -> Address {
         self.address
     }
 
-    /// ARCH-POS-15, failover (the default; the strict-majority option is deferred to `scaas-rpc`): one read, answered completely
-    /// by one endpoint, `rpc_urls` in the order given, never mixing answers of two endpoints. A transport error (the endpoint
-    /// down, an error answer that is no revert) moves the whole read to the next endpoint; a revert is the contract's answer and
-    /// is final only from the first endpoint: a failover endpoint's revert is a transport error (Fable recheck 3 R3-1), so no
-    /// revert of an endpoint other than the first makes a job `dead` or an order `invalid` (the venue's evidence read out of an
-    /// answer takes the first endpoint's only, [`Chain::read_at`]). A failover endpoint answers at all only when it is this chain
-    /// (its id and block 0, R3-3) and its head is at or above the highest block this chain has seen from its first endpoint
-    /// ([`Chain::saw_block`]; Fable recheck 2 P2-1; its own head never raises it, R3-2). Each endpoint gets `rpc_timeout_ms`
-    /// (R3-4). The lane's own sends, nonces, fees and receipts stay on the first endpoint, and the indexers keep their quorum
-    /// over all of them.
+    /// ARCH-POS-15, failover (CLI-RPC-04, `scaas_rpc::pool::Pool::failover`): one read, answered completely by one endpoint,
+    /// `rpc_urls` in the order given, never mixing answers of two endpoints. A transport error moves the whole read to the next
+    /// endpoint; a revert is final only from the first endpoint (a failover endpoint's revert is a transport error, recheck 3
+    /// R3-1). A failover endpoint answers only when it is this chain (R3-3) and its head is at or above the highest block seen
+    /// from the first endpoint ([`Chain::saw_block`], recheck 2 P2-1). The lane's own sends, nonces, fees and receipts stay on
+    /// the first endpoint, and the indexers keep their quorum over all of them.
     pub async fn read<T, F, Fut>(&self, f: F) -> std::result::Result<T, SimError>
     where
         F: Fn(DynProvider) -> Fut,
         Fut: std::future::Future<Output = std::result::Result<T, SimError>>,
     {
-        self.read_at(f).await.map(|(t, _)| t)
+        self.pool.raw_read(f).await
     }
 
     /// [`Chain::read`], with the index of the endpoint that answered: a caller that reads a refusal out of an `Ok` (the venue's
@@ -207,114 +112,29 @@ impl Chain {
         F: Fn(DynProvider) -> Fut,
         Fut: std::future::Future<Output = std::result::Result<T, SimError>>,
     {
-        self.read_within(false, f).await
-    }
-
-    /// [`Chain::read_at`]; `simulate`: `f` gets the endpoint's simulation client (R3-4, R4-3: each request its own limit).
-    async fn read_within<T, F, Fut>(&self, simulate: bool, f: F) -> std::result::Result<(T, usize), SimError>
-    where
-        F: Fn(DynProvider) -> Fut,
-        Fut: std::future::Future<Output = std::result::Result<T, SimError>>,
-    {
-        use std::sync::atomic::Ordering::Relaxed;
-        let mut last = String::new();
-        for (i, p) in self.providers.iter().enumerate() {
-            let fresh = async {
-                if i == 0 {
-                    return Ok(());
-                }
-                match self.same_chain(i, p).await {
-                    Ok(true) => {}
-                    Ok(false) => return Err(SimError::Transport(format!("endpoint {i} is not chain {}", self.number))),
-                    Err(e) => return Err(SimError::Transport(e)),
-                }
-                match p.get_block_number().await {
-                    Ok(n) if n >= self.head.load(Relaxed) => Ok(()),
-                    Ok(n) => Err(SimError::Transport(format!("endpoint {i} at block {n}, behind {}", self.head.load(Relaxed)))),
-                    Err(e) => Err(classify(&e)),
-                }
-            };
-            let answer = async {
-                fresh.await.map_err(|e| (false, e))?;
-                f(if simulate { self.simulators[i].clone() } else { p.clone() }).await.map_err(|e| (true, e))
-            }.await;
-            match answer {
-                Err((false, e)) => {
-                    let e = e.to_string();
-                    tracing::warn!(chain = self.number, endpoint = i, error = %redact_urls(&e), "chain read: endpoint not used; next");
-                    last = e;
-                }
-                Err((_, SimError::Transport(e))) => {
-                    tracing::warn!(chain = self.number, endpoint = i, error = %redact_urls(&e), "chain read failed; next endpoint");
-                    last = e;
-                }
-                Err((_, SimError::Revert(e))) if i > 0 => {
-                    tracing::warn!(chain = self.number, endpoint = i, "chain read: a failover endpoint's revert is no verdict; next");
-                    last = format!("endpoint {i} reverted (a failover endpoint decides nothing): {e}");
-                }
-                Err((_, e)) => return Err(e),
-                Ok(t) => {
-                    if i > 0 {
-                        self.failover.fetch_add(1, Relaxed);
-                        self.failover_total.fetch_add(1, Relaxed);
-                    }
-                    return Ok((t, i));
-                }
-            }
-        }
-        Err(SimError::Transport(last))
-    }
-
-    /// Endpoint `i` is this chain: its `eth_chainId` is `number` and its block 0 hash is the chain's (the pinned `chain_uid`, else
-    /// the one [`Chain::uid`] read, else the first endpoint's block 0): read once and kept; another network is dropped with one
-    /// log line (Fable recheck 2 P3-5, recheck 3 R3-3: a reset or forked network keeps its id). `Err`: unreadable, not kept,
-    /// asked again next time.
-    async fn same_chain(&self, i: usize, p: &DynProvider) -> std::result::Result<bool, String> {
-        if let Some(ok) = self.chain_ok[i].get() {
-            return Ok(*ok);
-        }
-        let unread = |what: &str| format!("endpoint {i}: {what} unreadable; not used");
-        let id = p.get_chain_id().await.map_err(|_| unread("chain id"))?;
-        let ok = id == self.number && {
-            let want = match self.pinned_uid.or(self.uid.get().copied()) {
-                Some(u) => u,
-                None => Self::block_hash(self.primary(), 0).await.ok_or_else(|| unread("the first endpoint's block 0"))?,
-            };
-            Self::block_hash(p, 0).await.ok_or_else(|| unread("block 0"))? == want
-        };
-        if !ok {
-            tracing::warn!(chain = self.number, endpoint = i, got = id, "rpc_urls endpoint is another network (chain id or block 0); dropped");
-        }
-        Ok(*self.chain_ok[i].get_or_init(|| ok))
+        self.pool.raw_read_at(f).await
     }
 
     /// A block of this chain from its first endpoint (a lane's receipt, a polled head): failover endpoints below it answer no
-    /// read. Never fed by a failover endpoint's own answer (R3-2): nothing lowers it, so one wrong number would refuse every
-    /// honest failover until a restart.
+    /// read. Never fed by a failover endpoint's own answer (R3-2).
     pub fn saw_block(&self, n: u64) {
-        self.head.fetch_max(n, std::sync::atomic::Ordering::Relaxed);
+        self.pool.saw_block(n)
     }
 
-    /// Fable recheck 4 R4-1: how many reads a failover endpoint answered (a value, never a verdict: its revert is a transport
-    /// error already). A failover endpoint may lag the head by a block (the shared head trails by a poll; a load-balanced URL
-    /// answers the head and the call from two backends), so a refusal or a blame read while this moved is no verdict: the lane
-    /// requeues the job, the venue answers 503. One rule for every check, present and future.
+    /// Recheck 4 R4-1: how many reads a failover endpoint answered (a value, never a verdict): a refusal or a blame read while
+    /// this moved is no verdict: the lane requeues the job, the venue answers 503.
     pub fn failover_answers(&self) -> u64 {
-        self.failover.load(std::sync::atomic::Ordering::Relaxed)
+        self.pool.failover_answers()
     }
 
     /// The highest block seen ([`Chain::saw_block`]).
     pub fn seen_head(&self) -> u64 {
-        self.head.load(std::sync::atomic::Ordering::Relaxed)
+        self.pool.seen_head()
     }
 
     /// [`Chain::read`] of one `eth_call` from `from` (with `gas` when given), classified by [`classify`].
     pub async fn call_tx(&self, tx: TransactionRequest) -> std::result::Result<Bytes, SimError> {
-        self.read(|p| {
-            let tx = tx.clone();
-            async move { p.call(tx).await.map_err(|e| classify(&e)) }
-        })
-        .await
+        self.pool.call_tx(tx).await
     }
 
     /// `eth_call` + `eth_estimateGas` từ địa chỉ relayer.
@@ -325,54 +145,24 @@ impl Chain {
     /// Mô phỏng với `from` tuỳ ý (gateway mô phỏng chân DEX bằng địa chỉ DEX). The estimate is the gas limit the
     /// transaction needs, regular + state (EIP-8037); no gas field, so both calls run at the RPC's gas cap.
     pub async fn simulate_from(&self, from: Address, to: Address, data: Bytes) -> std::result::Result<u64, SimError> {
-        let tx = TransactionRequest::default().with_from(from).with_to(to).with_input(data);
-        self.read_within(true, |p| {
-            let tx = tx.clone();
-            async move {
-                p.call(tx.clone()).await.map_err(|e| classify_sim(&e))?;
-                p.estimate_gas(tx).await.map_err(|e| classify_sim(&e))
-            }
-        })
-        .await
-        .map(|(g, _)| g)
+        self.pool.simulate_from(from, to, data).await
     }
 
-    /// The `latest` header's gas facts: its `gasLimit` (EIP-8037 includes a transaction only when its gas limit fits
-    /// it) and whether the chain runs Amsterdam — the header carries EIP-7928's `blockAccessListHash` (as
-    /// `pqz-core/nethermind/chain/e2e.py` decides it). Read from the raw header, so any RPC's block shape works.
+    /// The `latest` header's gas facts (`gasLimit`, Amsterdam by EIP-7928's `blockAccessListHash`), failed over.
     pub async fn block_gas(&self) -> Result<BlockGas> {
-        let b: serde_json::Value = self.read(|p| async move {
-            p.raw_request("eth_getBlockByNumber".into(), ("latest", false)).await.map_err(|e| SimError::Transport(e.to_string()))
-        }).await.map_err(|e| anyhow!("{e}"))?;
-        let g = b["gasLimit"].as_str().ok_or_else(|| anyhow!("chain {}: latest block without gasLimit", self.number))?;
-        Ok(BlockGas { limit: u64::from_str_radix(g.trim_start_matches("0x"), 16)?, amsterdam: b.get("blockAccessListHash").is_some() })
+        self.pool.block_gas().await.map_err(|e| anyhow!("{e}"))
     }
 
-    /// The gas limit and max fee per gas of the transaction `hash` as it was sent (`eth_getTransactionByHash`); `None`
-    /// if the RPC does not know it (the fee: if it gives none, e.g. a legacy transaction).
+    /// The gas limit and max fee per gas of the transaction `hash` as it was sent (`eth_getTransactionByHash`, the first
+    /// endpoint); `None` if the RPC does not know it (the fee: if it gives none, e.g. a legacy transaction).
     pub async fn tx_fees(&self, hash: B256) -> Result<Option<(u64, Option<u128>)>> {
-        let t: serde_json::Value = self.primary().raw_request("eth_getTransactionByHash".into(), (hash,)).await?;
-        let hex = |k: &str| t[k].as_str().map(|g| u128::from_str_radix(g.trim_start_matches("0x"), 16));
-        let Some(gas) = hex("gas") else { return Ok(None) };
-        Ok(Some((u64::try_from(gas?)?, hex("maxFeePerGas").transpose()?)))
+        self.pool.first_tx_fees(hash).await.map_err(|e| anyhow!("{e}"))
     }
 
     /// This chain's `chain_uid`: the RPC's block 0 hash, which must equal the configured `chain_uid` when one is set
     /// (a pruned RPC without block 0 trusts the configured one). Read once; an error is not remembered.
     pub async fn uid(&self) -> Result<B256> {
-        self.uid
-            .get_or_try_init(|| async {
-                // an RPC error is not "no block 0": nothing is cached, the next call asks again (review T4 m3)
-                let genesis = self.read(|p| async move { p.get_block_by_number(BlockNumberOrTag::Number(0)).await.map_err(|e| classify(&e)) })
-                    .await.map_err(|e| anyhow!("chain {}: block 0: {e}", self.number))?.map(|b| b.header.hash);
-                match (self.pinned_uid, genesis) {
-                    (Some(p), Some(g)) if p != g => Err(anyhow!("chain {}: RPC block 0 {g:#x} is not chain_uid {p:#x}", self.number)),
-                    (Some(p), _) | (None, Some(p)) => Ok(p),
-                    (None, None) => Err(anyhow!("chain {}: the RPC gives no block 0 hash; set chain_uid", self.number)),
-                }
-            })
-            .await
-            .copied()
+        self.pool.uid().await.map_err(|e| anyhow!("{e}"))
     }
 
     /// The configured `compliance_registry` once its runtime code hashes to the pinned `compliance_registry_codehash`
@@ -408,26 +198,27 @@ impl Chain {
     /// `who` is a contract signer (ERC-1271, `guard::erc1271_floor`): `is_contract` of its code, so an EIP-7702
     /// designator (an EOA, ECDSA only) is not.
     pub async fn is_contract_at(&self, who: Address) -> Result<bool> {
-        Ok(is_contract(&self.code_at(who).await.map_err(|e| anyhow!("{e}"))?))
+        self.pool.is_contract_at(who).await.map_err(|e| anyhow!("{e}"))
     }
 
     /// `who`'s runtime code, through [`Chain::read`].
     pub async fn code_at(&self, who: Address) -> std::result::Result<Bytes, SimError> {
-        self.read(|p| async move { p.get_code_at(who).await.map_err(|e| classify(&e)) }).await
+        self.pool.code(who).await
     }
 
+    /// The lane's EIP-1559 fees, from the first endpoint only (F4).
     pub async fn fees(&self) -> Result<(u128, u128)> {
-        let est = self.primary().estimate_eip1559_fees().await?;
-        Ok((est.max_fee_per_gas.max(1), est.max_priority_fee_per_gas))
+        self.pool.first_fees().await.map_err(|e| anyhow!("{e}"))
     }
 
+    /// The lane's pending nonce, from the first endpoint only (F4).
     pub async fn pending_nonce(&self) -> Result<u64> {
-        Ok(self.primary().get_transaction_count(self.address).pending().await?)
+        self.pool.first_pending_nonce(self.address).await.map_err(|e| anyhow!("{e}"))
     }
 
     /// Số tx của lane ĐÃ vào khối (`latest`), khác `pending_nonce`: nonce vỏ `n` đã bị dùng ⇔ `nonce_at() > n` (R80).
     pub async fn nonce_at(&self) -> Result<u64> {
-        Ok(self.primary().get_transaction_count(self.address).latest().await?)
+        self.pool.first_nonce_at(self.address).await.map_err(|e| anyhow!("{e}"))
     }
 
     async fn view<C: SolCall>(&self, to: Address, call: C) -> Result<C::Return> {
@@ -490,49 +281,13 @@ impl Chain {
 
     /// Round 3t (CTR-PQZ-36, spec §10): the logs `topic0` of `address` in the last `lookback` blocks (a token's `VerifierFeeSet`).
     pub async fn logs_since(&self, address: Address, topic0: B256, lookback: u64) -> Result<Vec<alloy::rpc::types::Log>> {
-        self.logs_back(Filter::new().address(address).event_signature(topic0), lookback).await
+        self.pool.logs_since(address, topic0, lookback).await.map_err(|e| anyhow!("{e}"))
     }
 
-    /// The logs of `filter` in the last `lookback` blocks, the head and the logs from one endpoint ([`Chain::read`]). Fable recheck
-    /// R-6: an RPC that caps the `eth_getLogs` range refuses the whole window, so a span it refuses (an error answer) is asked
-    /// again in tenths, down to a floor: [`LOG_SPAN_MIN`] blocks or a [`LOG_WINDOW_SPANS`]th of the window, whichever is larger;
-    /// an endpoint that refuses the floor fails the read over. Fable recheck 2 P3-3: a transport error never shrinks a span, it
-    /// fails the read over at once; after an answer the span grows back (doubles), staying below half of a span refused.
+    /// The logs of `filter` in the last `lookback` blocks, one endpoint answering the head and the logs (the crate's
+    /// `EvmPool::logs_back`: spans in tenths for an RPC that caps the range, R-6, recheck 2 P3-3).
     async fn logs_back(&self, filter: Filter, lookback: u64) -> Result<Vec<alloy::rpc::types::Log>> {
-        let (out, at) = self.read_at(|p| {
-            let filter = filter.clone();
-            async move {
-                let latest = p.get_block_number().await.map_err(|e| classify(&e))?;
-                let start = latest.saturating_sub(lookback);
-                let whole = latest - start + 1;
-                let floor = LOG_SPAN_MIN.max(whole.div_ceil(LOG_WINDOW_SPANS));
-                let (mut from, mut span, mut refused, mut out) = (start, whole, u64::MAX, vec![]);
-                while from <= latest {
-                    let to = latest.min(from.saturating_add(span - 1));
-                    match p.get_logs(&filter.clone().from_block(from).to_block(to)).await {
-                        Ok(l) => {
-                            out.extend(l);
-                            from = to + 1;
-                            span = span.saturating_mul(2).min(refused / 2).max(span);
-                        }
-                        Err(e) if e.as_error_resp().is_some() && span > floor => {
-                            tracing::debug!(span, error = %redact_urls(&e.to_string()), "eth_getLogs span refused; a tenth of it");
-                            refused = refused.min(span);
-                            span = (span / 10).max(floor);
-                        }
-                        // never a revert: a log read has no contract answer
-                        Err(e) => return Err(SimError::Transport(e.to_string())),
-                    }
-                }
-                Ok((latest, out))
-            }
-        })
-        .await
-        .map_err(|e| anyhow!("{e}"))?;
-        if at == 0 {
-            self.saw_block(out.0); // R3-2: the first endpoint's head only
-        }
-        Ok(out.1)
+        self.pool.logs_back(filter, lookback).await.map_err(|e| anyhow!("{e}"))
     }
 
     /// Ký EIP-1559; trả bytes thô và hash — hash biết TRƯỚC khi gửi (journal, review F5).
@@ -556,18 +311,13 @@ impl Chain {
         Ok(())
     }
 
+    /// The `finalized` block's number, from the first endpoint only (F4).
     pub async fn finalized_number(&self) -> Result<Option<u64>> {
-        Ok(self
-            .primary()
-            .get_block_by_number(BlockNumberOrTag::Finalized)
-            .await
-            .ok()
-            .flatten()
-            .map(|b| b.header.number))
+        Ok(self.pool.first_finalized_number().await)
     }
 
     pub async fn block_hash(p: &DynProvider, n: u64) -> Option<B256> {
-        p.get_block_by_number(BlockNumberOrTag::Number(n)).await.ok().flatten().map(|b| b.header.hash)
+        EvmPool::block_hash_on(p, n).await
     }
 }
 
@@ -1085,5 +835,35 @@ pub(crate) mod tests {
         assert_eq!(executed_events(&m(native, true)), vec![ua_ev, mtx_ev]);
         assert_eq!(executed_events(&m(B256::repeat_byte(1), true)), vec![ua_ev]);
         assert_eq!(executed_events(&m(native, false)), vec![ua_ev, mtx_ev], "an address job's lane too");
+    }
+
+    /// scaas-rpc F4 (plan T5): the lane's nonce, fee, receipt, landed-fee and final-number reads stay on the first endpoint: with
+    /// it hung, each is an error (or none) and endpoint 1 is never asked. Control: a view fails over to endpoint 1.
+    #[tokio::test]
+    async fn the_lane_reads_stay_on_the_first_endpoint() {
+        use std::sync::atomic::Ordering::SeqCst;
+        let hung = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let hung_url = format!("http://{}", hung.local_addr().unwrap());
+        tokio::spawn(async move {
+            let mut held = vec![];
+            while let Ok((c, _)) = hung.accept().await {
+                held.push(c);
+            }
+        });
+        let (good, good_n) = fake_rpc(|r| match r["method"].as_str() {
+            Some("eth_blockNumber") => json!({"result": "0x10"}),
+            Some("eth_getTransactionCount") => json!({"result": "0x7"}),
+            Some("eth_getTransactionReceipt") | Some("eth_getTransactionByHash") => json!({"result": null}),
+            _ => json!({"result": format!("0x{:064x}", 5)}),
+        }).await;
+        let c = Chain::with_signer(&ChainCfg { rpc_timeout_ms: 300, ..cfg_of(&[&hung_url, &good]) }, PrivateKeySigner::random()).unwrap();
+        assert!(c.pending_nonce().await.is_err());
+        assert!(c.nonce_at().await.is_err());
+        assert!(c.fees().await.is_err());
+        assert!(c.primary().get_transaction_receipt(B256::ZERO).await.is_err());
+        assert!(c.tx_fees(B256::ZERO).await.is_err());
+        assert_eq!(c.finalized_number().await.unwrap(), None);
+        assert_eq!(good_n.load(SeqCst), 0, "endpoint 1 is never asked");
+        assert_eq!(c.call_raw(Address::ZERO, Bytes::new()).await.unwrap().len(), 32, "control: a view fails over");
     }
 }

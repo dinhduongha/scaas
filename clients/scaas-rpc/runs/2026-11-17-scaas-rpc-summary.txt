@@ -14,14 +14,10 @@ baseline eip1898 | 0557f5ea0 | 0 | nethermind: canonical answered 5/5, made-up r
 baseline node-e2e-<family> | - | - | hedera above; solana, sui, aptos, near, algorand, cosmos, soroban, ton: deferred to T14-T22 (no family adapter changes in T1-T12)
 baseline anvil-port-0 | - | - | anvil 1.8.5 prints `Listening on 127.0.0.1:<port>` for --port 0; the tests bind a free port first anyway (F28)
 # latest runs:
-features | 0da3423ae | 0 | -
-node-clippy | 0da3423ae | 0 | -; tree dirty
 ua-json | 82d9754cd | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 ua-verify | 82d9754cd | 0 | 84 passed, 0 failed, 0 ignored (18 binaries); tree dirty
 ua-default | 82d9754cd | 0 | 25 passed, 0 failed, 0 ignored (2 binaries); tree dirty
-node-test | cf02717ed | 0 | 787 passed, 0 failed, 72 ignored (17 binaries); tree dirty
 node-e2e-hedera | 3260902e2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-node-e2e | ee12baf2c | 0 | 24 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 rpc-test | 3f422e87a | 0 | 75 passed, 0 failed, 0 ignored (5 binaries); tree dirty
 rpc-clippy | 3f422e87a | 0 | -; tree dirty
 rpc-wasm | 3f422e87a | 0 | -; tree dirty
@@ -30,3 +26,7 @@ ver-clippy | 3f422e87a | 0 | -; tree dirty
 ver-anvil | 3f422e87a | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 docs | 3f422e87a | 0 | -
 eip1898 | 0557f5ea0 | 0 | nethermind: canonical answered 5/5, made-up refused 5/5: PASS; anvil: canonical answered 5/5, made-up refused 5/5: PASS; hedera-relay: not verified (no local relay); tree dirty
+node-test | 1ffb4a964 | 0 | 788 passed, 0 failed, 72 ignored (17 binaries); tree dirty
+node-clippy | 1ffb4a964 | 0 | -; tree dirty
+node-e2e | 1ffb4a964 | 0 | 24 passed, 0 failed, 0 ignored (1 binaries); tree dirty
+features | 1ffb4a964 | 0 | -; tree dirty

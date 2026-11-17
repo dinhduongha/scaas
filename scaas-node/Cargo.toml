@@ -27,6 +27,8 @@ sha2 = "0.10"
 sha3 = "0.10"
 # UA8-D23: `ua8::check_*`, the only check of what Soroban stores on a relayer's word; without `pq` a PQ signature is `Pop`
 scaas-ua = { path = "../clients/ua-rs", default-features = false, features = ["pq"] }
+# the network crate (CLI-RPC-01): the EVM reads, failover, the bounded transport; each family task adds its feature
+scaas-rpc = { path = "../clients/scaas-rpc", features = ["evm", "node-internal"] }
 # Node store (R88/R111): SQLite now, PostgreSQL/MySQL in P1b. No default features: no `any`, no `json`.
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "migrate", "macros"] }
 stellar-xdr = { version = "28", features = ["base64"] }

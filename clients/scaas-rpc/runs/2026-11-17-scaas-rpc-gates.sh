@@ -13,7 +13,7 @@ cd "$W" || exit 2
 R=clients/scaas-rpc/runs
 SUMMARY=$R/2026-11-17-scaas-rpc-summary.txt
 export PATH="$HOME/.foundry/bin:$PATH"
-# J: the build jobs (default -j2; -j1 where a step meets its memory cap). T: test threads of the e2e steps (default all).
+# J: the build jobs (default -j2; -j1 where a step meets its memory cap). T: test threads of the e2e and anvil steps (default all).
 C="--locked --offline ${J:--j2}"
 TT=${T:+ --test-threads=$T}
 cap="$W/scripts/capped"
@@ -22,7 +22,7 @@ cap="$W/scripts/capped"
 STEPS=(
   "rpc-test|clients/scaas-rpc|$cap cargo test $C --all-features"
   "rpc-clippy|clients/scaas-rpc|$cap cargo clippy $C --all-targets --all-features -- -D warnings"
-  "rpc-anvil|clients/scaas-rpc|$cap cargo test $C --features evm --test anvil -- --ignored"
+  "rpc-anvil|clients/scaas-rpc|$cap cargo test $C --features evm --test anvil -- --ignored$TT"
   "rpc-wasm|clients/scaas-rpc|$cap cargo check $C --target wasm32-unknown-unknown --no-default-features --features evm,node-client"
   "node-test|scaas-node|CAPPED_MEM=6G $cap cargo test $C"
   "node-clippy|scaas-node|$cap cargo clippy $C --all-targets -- -D warnings"
@@ -30,7 +30,7 @@ STEPS=(
   "node-e2e-hedera|scaas-node|(cd ../smartcontracts/evm && $cap forge build test/hedera/HederaMocks.sol) && CAPPED_MEM=6G $cap cargo test $C --test e2e_hedera -- --ignored$TT"
   "ver-test|scaas-pqz-verifier|$cap cargo test $C"
   "ver-clippy|scaas-pqz-verifier|$cap cargo clippy $C --all-targets -- -D warnings"
-  "ver-anvil|scaas-pqz-verifier|$cap cargo test $C --test anvil -- --ignored"
+  "ver-anvil|scaas-pqz-verifier|$cap cargo test $C --test anvil -- --ignored$TT"
   "ua-json|clients/ua-rs|$cap cargo test $C --no-default-features --features json --test json && $cap cargo clippy $C --all-targets --no-default-features --features json -- -D warnings"
   "ua-verify|clients/ua-rs|$cap cargo clippy $C --all-targets --no-default-features -- -D warnings && $cap cargo test $C --no-default-features"
   "ua-default|clients/ua-rs|$cap cargo clippy $C --all-targets -- -D warnings && $cap cargo test $C --lib --test json"
