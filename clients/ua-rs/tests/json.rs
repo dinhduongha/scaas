@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! typed-signing R2c: the feature `json` shim (src/json.rs) against smartcontracts/vectors/ua/portable.json: every
 //! `registrations[i].args` / `kemCommit`, every `kemRecords[i].args` and `pqzKeyRecords[i].args` row, and the refusals.
-use scaas_ua::json::{inner_json, registration_args_json, replayed_member_sig_json, set_kem_key_args_json, set_pqz_key_args_json, set_pqz_key_version_args_json, JsonError};
+use scaas_ua::json::{depth_within, inner_json, DepthError, registration_args_json, replayed_member_sig_json, set_kem_key_args_json, set_pqz_key_args_json, set_pqz_key_version_args_json, JsonError};
 use scaas_ua::UAError;
 use serde_json::{json, Value};
 
@@ -182,4 +182,26 @@ fn small_uints_as_strings_are_digits_only() {
     for bad in ["+0", "", " 0", "-0", "0x0"] {
         assert_eq!(id(json!(bad)), Err(JsonError::Argument), "{bad:?}");
     }
+}
+
+/// scaas-rpc F20 (CLI-RPC-50): `depth_within` is `bounded`'s flat scan on its own. `Deep` where `bounded` refuses for depth (the
+/// "deep" case above, seen through `inner_json`), `Unbalanced` for a close with nothing open, `Ok` for the controls (a text at the
+/// cap, brackets inside strings and after an escaped quote, an open never closed: the parser's to refuse).
+#[test]
+fn depth_within_matches_bounded() {
+    let deep = format!("{}{}", "[".repeat(100_000), "]".repeat(100_000));
+    assert_eq!(inner_json(&deep[..65_536]), Err(JsonError::Argument), "bounded refuses it");
+    assert_eq!(depth_within(&deep.as_bytes()[..65_536], 1), Err(DepthError::Deep));
+    assert_eq!(depth_within(deep.as_bytes(), 64), Err(DepthError::Deep));
+    let nest = |d: usize| format!("{}{}", "[".repeat(d), "]".repeat(d));
+    assert_eq!(depth_within(nest(64).as_bytes(), 64), Ok(()), "control: at the cap");
+    assert_eq!(depth_within(nest(65).as_bytes(), 64), Err(DepthError::Deep), "one above");
+    assert_eq!(depth_within(br#"{"a": 1}"#, 1), Ok(()), "control: depth 1");
+    assert_eq!(depth_within(br#"{"a": [1]}"#, 1), Err(DepthError::Deep));
+    assert_eq!(depth_within(br#"["[[[[", "\"[[["]"#, 1), Ok(()), "brackets in strings, an escaped quote");
+    assert_eq!(depth_within(b"[[", 2), Ok(()), "an open never closed passes the scan");
+    for x in [&b"]"[..], b"{}}", b"[]]", b"1]"] {
+        assert_eq!(depth_within(x, 64), Err(DepthError::Unbalanced), "{}", String::from_utf8_lossy(x));
+    }
+    assert_eq!(inner_json("{}}"), Err(JsonError::Argument), "bounded refuses an unbalanced close too");
 }
