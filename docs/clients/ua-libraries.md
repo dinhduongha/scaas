@@ -622,8 +622,8 @@ requirements; the library's word checks stop a careless caller, never a forger. 
 | 7 (<a id="CLI-UAL-37"></a>CLI-UAL-37) | **Nothing back**: no result, failure, error code, result-dependent timing, follow-up read or log line that depends on a decryption goes back to the source; a result goes to the holder or a viewer the holder names | no request to the source after a decryption depends on its outcome (reviewable in the layer's code) |
 
 A Rust reading layer outside the reference readers takes its endpoint list, failover, strict majority and the discovered-endpoint
-rule from `scaas-rpc` ([CLI-RPC-05](scaas-rpc.md#CLI-RPC-05), [CLI-RPC-06](scaas-rpc.md#CLI-RPC-06); SPECIFIED); requirements 1
-to 7 stay the reading layer's.
+rule from `scaas-rpc` ([CLI-RPC-05](scaas-rpc.md#CLI-RPC-05), [CLI-RPC-06](scaas-rpc.md#CLI-RPC-06); BUILT for EVM in the crate);
+requirements 1 to 7 stay the reading layer's.
 
 Encryption to a public key is public: a debit's `pkT`, `pkA`, the op 7 legs' keys and the Zether `yTo` / `yAud` stay caller
 fields, and a wrong key is refused on chain.

@@ -13,6 +13,17 @@ baseline features | 0da3423ae | 0 | -
 baseline eip1898 | 0557f5ea0 | 0 | nethermind: canonical answered 5/5, made-up refused 5/5: PASS; anvil: canonical answered 5/5, made-up refused 5/5: PASS; hedera-relay: not verified (no local relay); tree dirty
 baseline node-e2e-<family> | - | - | hedera above; solana, sui, aptos, near, algorand, cosmos, soroban, ton: deferred to T14-T22 (no family adapter changes in T1-T12)
 baseline anvil-port-0 | - | - | anvil 1.8.5 prints `Listening on 127.0.0.1:<port>` for --port 0; the tests bind a free port first anyway (F28)
+# the families (plan T14-T22): family | (a) commit | (b) commit | e2e baseline -> after | mutants (a + b)
+family hedera | 4ee72cfcc | 96401a7a2 | node-e2e-hedera 1 -> 1 | 8 killed
+family soroban | 0ed608c33 | 604462f76 | node-e2e-soroban 11 -> 11 | 9 killed
+family solana | 23748267c | b3c203755 | node-e2e-solana 1 -> 1 | 8 killed
+family near | 9a31ccf1d | d091f1ca8 | node-e2e-near 12 -> 12 | 7 killed
+family algorand | 2633740cb | 7ae89ed28 | node-e2e-algorand 8 -> 8 | 7 killed
+family aptos | 6a0e68b1a | 679dda5b5 | node-e2e-aptos 1 -> 1 | 8 killed (1 survived its first run; a test case added)
+family sui | 118d28867 | ecb574968 | node-e2e-sui 1 -> 1 | 7 killed (2 survived their first run; the tests primed)
+family cosmos | - | - | not run | skipped: its e2e starts Docker without --memory (an edit of an existing test), and the adapter's unit tests do not cover its CometBFT reads (plan: step (a) only when they do); recorded, nothing moved
+family ton | ef4c78a40 | 58ff9b172 | node-e2e-ton 1 -> 1 | 10 killed
+lock | 983d63b8e | - | rustls-webpki 0.103.17, webpki-roots 1.0.12, tokio 1.54.1; rpc-deny | -
 # latest runs:
 ua-json | 82d9754cd | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 ua-verify | 82d9754cd | 0 | 84 passed, 0 failed, 0 ignored (18 binaries); tree dirty
@@ -38,4 +49,4 @@ rpc-clippy | ecb574968 | 0 | -; tree dirty
 node-test | ef4c78a40 | 0 | 815 passed, 0 failed, 72 ignored (18 binaries); tree dirty
 node-clippy | ef4c78a40 | 0 | -; tree dirty
 node-e2e-ton | ef4c78a40 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-docs | ef4c78a40 | 0 | -; tree dirty
+docs | 58ff9b172 | 0 | -; tree dirty
