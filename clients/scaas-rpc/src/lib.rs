@@ -7,6 +7,8 @@
 
 #[cfg(feature = "algorand")]
 pub mod algorand;
+#[cfg(feature = "aptos")]
+pub mod aptos;
 pub mod endpoint;
 pub mod error;
 #[cfg(feature = "evm")]

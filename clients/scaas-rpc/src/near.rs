@@ -15,12 +15,7 @@ pub struct Near {
     genesis: String,
 }
 
-/// Why `agreed` gave no answer: endpoint 0's own error, or too few endpoints repeating it.
-#[derive(Debug, Clone, PartialEq)]
-pub enum AgreedError {
-    First(FamilyError),
-    Quorum { agree: usize, quorum: usize },
-}
+pub use crate::family::AgreedError;
 
 impl Near {
     pub fn new(client: Client, genesis_b58: &str) -> Self {

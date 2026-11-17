@@ -1,0 +1,6 @@
+# t19 mutants at commit 7ae89ed28 (name | outcome | test)
+a: the quorum read on endpoint 0 only | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test aptos the_rest_reads_the_quorum_read_and_the_indexer
+a: the indexer key dropped | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::the_indexer_key_goes_to_the_indexer_only
+a: a 404 an error | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test aptos the_rest_reads_the_quorum_read_and_the_indexer
+a: the identity a constant | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test aptos the_failover_drops_another_network_and_skips_an_endpoint_behind
+4 mutants, 4 killed, 0 survived, 0 not loaded

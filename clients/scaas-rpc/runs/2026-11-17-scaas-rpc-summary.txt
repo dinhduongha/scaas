@@ -27,12 +27,13 @@ node-e2e-hedera | 4ee72cfcc | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tr
 node-e2e-soroban | 0ed608c33 | 0 | 11 passed, 0 failed, 0 ignored (2 binaries); tree dirty
 node-e2e-solana | 23748267c | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 node-e2e-near | 9a31ccf1d | 0 | 12 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-rpc-test | 2633740cb | 0 | 147 passed, 0 failed, 10 ignored (12 binaries); tree dirty
-rpc-clippy | 2633740cb | 0 | -; tree dirty
 rpc-anvil | 2633740cb | 0 | 10 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-rpc-wasm | 2633740cb | 0 | -; tree dirty
 rpc-deny | 2633740cb | 0 | -; tree dirty
-node-test | 983d63b8e | 0 | 806 passed, 0 failed, 72 ignored (18 binaries); tree dirty
-node-clippy | 983d63b8e | 0 | -; tree dirty
 node-e2e-algorand | 983d63b8e | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 docs | 983d63b8e | 0 | -; tree dirty
+rpc-test | 7ae89ed28 | 0 | 150 passed, 0 failed, 10 ignored (13 binaries); tree dirty
+rpc-clippy | 7ae89ed28 | 0 | -; tree dirty
+rpc-wasm | 7ae89ed28 | 0 | -; tree dirty
+node-test | 7ae89ed28 | 0 | 807 passed, 0 failed, 72 ignored (18 binaries); tree dirty
+node-clippy | 7ae89ed28 | 0 | -; tree dirty
+node-e2e-aptos | 7ae89ed28 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty

@@ -17,6 +17,13 @@ pub const FAMILY_TIMEOUT_MS: u64 = 20_000;
 /// The longest answer a family endpoint may send (CLI-RPC-07).
 pub const ANSWER_MAX: usize = 16 << 20;
 
+/// Why a quorum read (`agreed`) gave no answer: endpoint 0's own error, or too few endpoints repeating it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum AgreedError {
+    First(FamilyError),
+    Quorum { agree: usize, quorum: usize },
+}
+
 /// A family request's failure: the endpoint's (transport, HTTP, timeout, too large, too deep, malformed), its own JSON-RPC
 /// error object kept whole, or a REST answer's status other than 2xx with its message (capped), for the family to classify.
 #[derive(Debug, Clone, PartialEq)]

@@ -4,7 +4,6 @@
 //! một tx bay mỗi lane, tự trả phí (RS11-6). `RawTransaction` BCS dựng TẠI ĐÂY, không crate `aptos-sdk` (RS11-7);
 //! hash tx tính trước khi gửi. Event đọc qua Aptos Indexer API (GraphQL) làm GỢI Ý tx của package, nội dung và tính
 //! thành công đọc lại từ fullnode REST (owner OQ2; RS11-9).
-use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
@@ -670,10 +669,9 @@ pub fn normalize(package: &Addr, tokens: &[String], ev: &Value, block: u64, bloc
 pub struct AptosAdapter {
     key: String,
     chain_id: u8,
-    rest: Vec<String>,
-    indexer: String,
-    indexer_key: Option<String>,
-    http: reqwest::Client,
+    /// the REST endpoints and the Indexer API (scaas-rpc T19: the family client, bounded, 20 s per request; the indexer's key
+    /// to the indexer only, as before)
+    net: scaas_rpc::aptos::Aptos,
     package: Addr,
     ttl: u64,
     max_gas: u64,
@@ -722,10 +720,12 @@ impl AptosAdapter {
         Ok(Self {
             key: cfg.chain_key(),
             chain_id,
-            rest: cfg.rpc_urls.iter().map(|u| u.trim_end_matches('/').to_string()).collect(),
-            indexer: indexer.to_string(),
-            indexer_key,
-            http: reqwest::Client::builder().timeout(Duration::from_secs(20)).build()?,
+            net: scaas_rpc::aptos::Aptos::new(
+                scaas_rpc::family::Client::of_urls(&cfg.rpc_urls, None).map_err(|e| anyhow!("chain {}: rpc_urls: {e}", cfg.chain_key()))?,
+                scaas_rpc::family::Client::of_urls(&[indexer.to_string()], indexer_key.map(|k| scaas_rpc::EndpointAuth::Bearer(scaas_rpc::Secret::new(&k))))
+                    .map_err(|e| anyhow!("chain {}: params.indexer_url: {e}", cfg.chain_key()))?,
+                chain_id,
+            ),
             package,
             ttl: n("tx_ttl_s", DEFAULT_TTL).max(30),
             max_gas: n("max_gas_amount", DEFAULT_MAX_GAS),
@@ -736,44 +736,29 @@ impl AptosAdapter {
         })
     }
 
-    async fn get_at(&self, base: &str, path: &str) -> Result<Option<Value>> {
-        let r = self.http.get(format!("{base}{path}")).send().await?;
-        if r.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        let status = r.status();
-        let body = r.text().await?;
-        if !status.is_success() {
-            bail!("GET {path}: HTTP {status}: {body}");
-        }
-        Ok(Some(serde_json::from_str(&body)?))
+    /// GET on endpoint `i` (scaas-rpc T19: the family client): a 404 is `None`.
+    async fn get_at(&self, i: usize, path: &str) -> Result<Option<Value>> {
+        self.net.get_at(i, path).await.map_err(|e| anyhow!("GET {path}: {e}"))
     }
 
     async fn get(&self, path: &str) -> Result<Value> {
-        self.get_at(&self.rest[0], path).await?.ok_or_else(|| anyhow!("GET {path}: not found"))
+        self.get_at(0, path).await?.ok_or_else(|| anyhow!("GET {path}: not found"))
     }
 
     async fn view(&self, function: &str, type_args: &[&str], args: &[impl serde::Serialize]) -> Result<Value> {
-        let body = json!({"function": function, "type_arguments": type_args, "arguments": args});
-        let r = self.http.post(format!("{}/view", self.rest[0])).json(&body).send().await?;
-        let status = r.status();
-        let v: Value = r.json().await?;
-        if !status.is_success() {
+        let body = serde_json::to_vec(&json!({"function": function, "type_arguments": type_args, "arguments": args}))?;
+        let (status, v) = self.net.post_json(0, "/view", body, "application/json").await.map_err(|e| anyhow!("view {function}: {e}"))?;
+        if !(200..300).contains(&status) {
             bail!("view {function}: HTTP {status}: {v}");
         }
         Ok(v[0].clone())
     }
 
     async fn graphql(&self, query: &str, variables: Value) -> Result<Value> {
-        let mut req = self.http.post(&self.indexer).json(&json!({"query": query, "variables": variables}));
-        if let Some(k) = &self.indexer_key {
-            req = req.bearer_auth(k);
-        }
-        let v: Value = req.send().await?.error_for_status()?.json().await?;
-        if let Some(e) = v.get("errors") {
-            bail!("indexer: {e}");
-        }
-        Ok(v["data"].clone())
+        self.net.graphql(query, variables).await.map_err(|e| match e {
+            scaas_rpc::family::FamilyError::Rpc { error, .. } => anyhow!("indexer: {error}"),
+            e => anyhow!("indexer: {e}"),
+        })
     }
 
     /// Phiên bản ledger cuối mà processor `user_transactions` đã xử lý (cursor không vượt nó — owner OQ2).
@@ -836,27 +821,17 @@ impl AptosAdapter {
         num(&self.get("/estimate_gas_price").await?["gas_estimate"]).ok_or_else(|| anyhow!("bad gas estimate"))
     }
 
-    async fn block(&self, base: &str, height: u64) -> Result<Value> {
-        self.get_at(base, &format!("/blocks/by_height/{height}")).await?.ok_or_else(|| anyhow!("block {height} not served"))
+    async fn block(&self, i: usize, height: u64) -> Result<Value> {
+        self.get_at(i, &format!("/blocks/by_height/{height}")).await?.ok_or_else(|| anyhow!("block {height} not served"))
     }
 
     /// `path` từ `rest[0]`; `quorum > 1` ⇒ thêm endpoint phải trả cùng `pick` cho tới đủ quorum. Nội dung tx (event,
     /// thành công, hash) và block chịu cùng quy tắc với hash block ở `final_head` (review L3).
     async fn agreed(&self, path: &str, pick: fn(&Value) -> Value) -> Result<Value> {
-        let v = self.get(path).await?;
-        if self.quorum > 1 {
-            let want = pick(&v);
-            let mut agree = 1;
-            for url in &self.rest[1..] {
-                if matches!(self.get_at(url, path).await, Ok(Some(o)) if pick(&o) == want) {
-                    agree += 1;
-                }
-            }
-            if agree < self.quorum {
-                bail!("GET {path}: {agree} endpoint(s) agree, quorum is {}", self.quorum);
-            }
-        }
-        Ok(v)
+        self.net.agreed(path, pick, self.quorum).await.map_err(|e| match e {
+            scaas_rpc::family::AgreedError::First(e) => anyhow!("GET {path}: {e}"),
+            scaas_rpc::family::AgreedError::Quorum { agree, quorum } => anyhow!("GET {path}: {agree} endpoint(s) agree, quorum is {quorum}"),
+        })
     }
 
     fn block_hash_of(b: &Value) -> Result<String> {
@@ -924,11 +899,9 @@ impl ChainAdapter for AptosAdapter {
         let raw = raw_tx(&sender, seq, &payload, self.max_gas, price, exp, self.chain_id);
         let pk = &self.signers[lane].public_key();
         let body = signed_tx(&raw, pk, &[0u8; 64]);
-        let url = format!("{}/transactions/simulate?estimate_max_gas_amount=true&estimate_gas_unit_price=true", self.rest[0]);
-        let r = self.http.post(url).header("content-type", BCS_SIGNED_TX).body(body).send().await.map_err(|e| transport(e.into()))?;
-        let status = r.status();
-        let v: Value = r.json().await.map_err(|e| transport(e.into()))?;
-        if !status.is_success() {
+        let path = "/transactions/simulate?estimate_max_gas_amount=true&estimate_gas_unit_price=true";
+        let (status, v) = self.net.post_json(0, path, body, BCS_SIGNED_TX).await.map_err(|e| transport(e.into()))?;
+        if !(200..300).contains(&status) {
             return Err(SimError::Transport(format!("simulate HTTP {status}: {v}")));
         }
         let sim = &v[0];
@@ -952,15 +925,12 @@ impl ChainAdapter for AptosAdapter {
     }
 
     async fn submit(&self, signed: &Signed) -> Result<()> {
-        let r = self.http.post(format!("{}/transactions", self.rest[0]))
-            .header("content-type", BCS_SIGNED_TX).body(signed.raw.clone()).send().await?;
-        let status = r.status().as_u16();
-        let body = r.text().await?;
+        let (status, body) = self.net.post_text(0, "/transactions", signed.raw.clone(), BCS_SIGNED_TX).await?;
         classify_submit(status, &body)
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let Some(tx) = self.get_at(&self.rest[0], &format!("/transactions/by_hash/{tx_id}")).await? else {
+        let Some(tx) = self.get_at(0, &format!("/transactions/by_hash/{tx_id}")).await? else {
             return Ok(TxStatus::Unknown);
         };
         if tx["type"].as_str() == Some("pending_transaction") {
@@ -983,7 +953,7 @@ impl ChainAdapter for AptosAdapter {
     }
 
     async fn tx_fee(&self, tx_id: &str) -> Result<Option<u128>> {
-        let tx = self.get_at(&self.rest[0], &format!("/transactions/by_hash/{tx_id}")).await?.ok_or_else(|| anyhow!("{tx_id} not found"))?;
+        let tx = self.get_at(0, &format!("/transactions/by_hash/{tx_id}")).await?.ok_or_else(|| anyhow!("{tx_id} not found"))?;
         let fee = num(&tx["gas_used"]).zip(num(&tx["gas_unit_price"])).map(|(g, p)| g as u128 * p as u128);
         Ok(Some(fee.ok_or_else(|| anyhow!("{tx_id}: no gas_used or gas_unit_price"))?))
     }
@@ -998,10 +968,10 @@ impl ChainAdapter for AptosAdapter {
         let (Some(h), Some(last)) = (h, last) else { bail!("bad block for version {done}") };
         let indexed = if last == done { Some(h) } else { h.checked_sub(1) };
         let Some(height) = indexed.map(|i| i.min(head)) else { return Ok(None) };
-        let hash = Self::block_hash_of(&self.block(&self.rest[0], height).await?)?;
+        let hash = Self::block_hash_of(&self.block(0, height).await?)?;
         let mut agree = 1;
-        for url in &self.rest[1..] {
-            if self.block(url, height).await.ok().and_then(|b| Self::block_hash_of(&b).ok()).as_deref() == Some(hash.as_str()) {
+        for i in 1..self.net.client.len() {
+            if self.block(i, height).await.ok().and_then(|b| Self::block_hash_of(&b).ok()).as_deref() == Some(hash.as_str()) {
                 agree += 1;
             }
         }
@@ -1009,7 +979,7 @@ impl ChainAdapter for AptosAdapter {
     }
 
     async fn block_hash(&self, height: u64) -> Result<String> {
-        Self::block_hash_of(&self.block(&self.rest[0], height).await?)
+        Self::block_hash_of(&self.block(0, height).await?)
     }
 
     /// GỢI Ý từ Indexer API: tx người dùng gọi một entry function của package trong vùng block; nội dung (thành công,
@@ -1023,7 +993,7 @@ impl ChainAdapter for AptosAdapter {
         if tokens.is_empty() || from > to {
             return Ok(vec![]);
         }
-        let last = num(&self.block(&self.rest[0], to).await?["last_version"]).ok_or_else(|| anyhow!("bad block {to}"))?;
+        let last = num(&self.block(0, to).await?["last_version"]).ok_or_else(|| anyhow!("bad block {to}"))?;
         let done = self.indexed_version().await?;
         if done < last {
             bail!("indexer has processed version {done}, block {to} ends at {last}");
@@ -1568,5 +1538,37 @@ mod tests {
             op.chain_id = chain;
             prop_assert_eq!(MetaOp::decode(&op.encode()).unwrap(), op);
         }
+    }
+
+    /// scaas-rpc T19a: the Indexer API's key (`indexer_api_key_env`) goes to the indexer only, as before, never to a
+    /// fullnode. Control: unset, the indexer gets none.
+    #[tokio::test]
+    async fn the_indexer_key_goes_to_the_indexer_only() {
+        type Seen = std::sync::Arc<std::sync::Mutex<Vec<(String, Option<String>)>>>;
+        let seen: Seen = Default::default();
+        let s2 = seen.clone();
+        let app = axum::Router::new().fallback(move |uri: axum::http::Uri, h: axum::http::HeaderMap| {
+            let s2 = s2.clone();
+            async move {
+                s2.lock().unwrap().push((uri.path().to_string(), h.get("authorization").and_then(|v| v.to_str().ok()).map(str::to_string)));
+                axum::Json(json!({"data": {"processor_status": [{"last_success_version": 7}]}, "chain_id": 4, "block_height": "3"}))
+            }
+        });
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        let cfg = |key: &str| -> ChainCfg {
+            toml::from_str(&format!("family = \"aptos\"\nnetwork = \"4\"\nrpc_urls = [\"{url}/v1\"]\nlanes = [0]\n\
+                params = {{ package = \"0xb0b\", indexer_url = \"{url}/graphql\"{key} }}")).unwrap()
+        };
+        std::env::set_var("SCAAS_T19_INDEXER_KEY", "ikey");
+        let a = AptosAdapter::new(&cfg(", indexer_api_key_env = \"SCAAS_T19_INDEXER_KEY\""), &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap();
+        assert_eq!(a.indexed_version().await.unwrap(), 7);
+        a.get("").await.unwrap();
+        let got = std::mem::take(&mut *seen.lock().unwrap());
+        assert_eq!(got, [("/graphql".to_string(), Some("Bearer ikey".to_string())), ("/v1".to_string(), None)]);
+        let a = AptosAdapter::new(&cfg(""), &[LocalSigner::new(crate::signer::Curve::Ed25519, &[1; 32]).unwrap()]).unwrap();
+        a.indexed_version().await.unwrap();
+        assert_eq!(seen.lock().unwrap()[0].1, None, "control: no key configured");
     }
 }
