@@ -106,6 +106,7 @@ function checkSeed(s) {
     if (!/^[\x21-\x7e]{1,128}$/.test(k)) format(`vault key not printable ASCII of 1 to 128 bytes`);
     const t = s.vaults[k];
     if (!isStr(t) || utf8ToBytes(t).length > MAX_VAULT_BYTES) format(`vault ${k} not a string of at most 2 MiB`);
+    if (depthOf(t, 2) > 2) format(`vault ${k} nested deeper than 2 (ua-rs's vault reader)`);
     let inner;
     try { inner = JSON.parse(t); } catch { format(`vault ${k} not JSON`); }
     if (!isObj(inner) || inner.label !== k) format(`vault key ${k} is not its vault's label`);

@@ -1,0 +1,6 @@
+# t2c mutants at commit cf5455e4f (name | outcome | test)
+write in place instead of temp + rename | killed | ../../scripts/capped cargo test --locked --offline -j2 --no-default-features --features vault,file-store --lib filestore_writes_atomically
+skip the rev check | killed | ../../scripts/capped cargo test --locked --offline -j2 --no-default-features --features vault,file-store --lib filestore_writes_atomically
+drop keystore.prev | killed | ../../scripts/capped cargo test --locked --offline -j2 --no-default-features --features vault,file-store --lib keystore_prev_kept
+drop the depth scan | killed | ../../scripts/capped cargo test --locked --offline -j2 --no-default-features --features vault,file-store --lib depth_is_scanned_before_parsing
+4 mutants, 4 killed, 0 survived, 0 not loaded

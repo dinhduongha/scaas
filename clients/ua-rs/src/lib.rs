@@ -226,6 +226,13 @@ pub fn keccak256(data: &[u8]) -> [u8; 32] {
     keccak(&[data])
 }
 
+/// SHA-256 of `data` (FIPS 180-4): for a byte format a client fixes outside a signature, such as the scaas-sdk keystore anchor
+/// (scaas-sdk spec §6.3), so no client hashes on its own (CLI-SDK-01).
+pub fn sha256(data: &[u8]) -> [u8; 32] {
+    use sha2::Digest as _;
+    sha2::Sha256::digest(data).into()
+}
+
 /// CTR-MTX-26: the payment id that commits to its metadata, `keccak256("scaas.pay.meta" ‖ salt ‖ keccak256(meta))`
 /// (`meta = abi.encode(uint16 schema, bytes body)`; on chain `metaPayId`).
 pub fn meta_pay_id(salt: &[u8; 32], meta: &[u8]) -> [u8; 32] {

@@ -174,6 +174,7 @@ const refusedRows = [
   ['a label with a lone surrogate', 'VaultFormat', JSON.stringify(base()).replace('"label":"Main"', '"label":"Main\\ud800"')],
   ['a byte-order mark', 'VaultFormat', '\ufeff' + JSON.stringify(base())],
   ['a vault key with a space', 'VaultFormat', mutate((c) => { c.seeds[0].vaults = { 'native import': c.seeds[0].vaults.manifest.replace('"label":"manifest"', '"label":"native import"'), ...c.seeds[0].vaults }; })],
+  ['a vault text nested deeper than 2', 'VaultFormat', mutate((c) => { c.seeds[0].vaults.manifest = JSON.stringify({ ...JSON.parse(c.seeds[0].vaults.manifest), extra: [[1]] }); })],
   ['vaults not in key order', 'VaultFormat', mutate((c) => { const { seed, ...rest } = c.seeds[0].vaults; c.seeds[0].vaults = { seed, ...rest }; })],
 ].map(([id, error, text]) => ({ id, error, text }));
 must(serialize(base()) === JSON.stringify(base()), 'the refusals\' base is canonical');

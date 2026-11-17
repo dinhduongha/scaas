@@ -15,6 +15,7 @@ compile_error!("scaas-sdk needs the feature `vault` (every module does)");
 
 pub mod config;
 pub mod error;
+pub mod vault;
 
 pub use config::{
     ChainProfile, EndpointConfig, Family, Finality, Limits, RuntimeChoice, SdkConfig,

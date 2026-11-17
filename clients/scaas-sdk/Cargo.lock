@@ -3833,9 +3833,13 @@ dependencies = [
 name = "scaas-sdk"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "scaas-rpc",
  "scaas-ua",
+ "serde",
+ "serde_json",
  "tokio",
+ "unicode-normalization",
 ]
 
 [[package]]

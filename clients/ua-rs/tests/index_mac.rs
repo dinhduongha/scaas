@@ -97,3 +97,10 @@ fn index_mac_refusals() {
         assert_eq!(w.index_mac(f).err(), Some(Error::WalletLocked));
     });
 }
+
+/// `scaas_ua::sha256` (the keystore anchor's hash): FIPS 180-4's "abc" and empty-message answers.
+#[test]
+fn sha256_known_answers() {
+    assert_eq!(hex::encode(scaas_ua::sha256(b"abc")), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    assert_eq!(hex::encode(scaas_ua::sha256(b"")), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+}
