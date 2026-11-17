@@ -16,6 +16,8 @@ anyhow = "1"
 async-trait = "0.1"
 axum = "0.8"
 pqz-ffi = { path = "../pqz-core/ffi" }
+# the network crate (CLI-RPC-12): the endpoint list and the bounded transport; per-index providers (node-internal, F10)
+scaas-rpc = { path = "../clients/scaas-rpc", default-features = false, features = ["evm", "node-internal"] }
 pqz-offchain = { path = "../pqz-core/ffi/offchain" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

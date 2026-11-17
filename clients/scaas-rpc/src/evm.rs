@@ -203,6 +203,13 @@ impl EvmPool {
         self.uid.clone()
     }
 
+    /// Endpoint `i`'s provider, its requests bounded by `deadline` too when given (feature `node-internal`: a server that runs
+    /// its own read rule over the list, the PQZ verifier's per-index reads, F10).
+    #[cfg(feature = "node-internal")]
+    pub fn endpoint(&self, i: usize, deadline: Option<Instant>) -> DynProvider {
+        self.at(i, deadline)
+    }
+
     /// Endpoint 0's provider (feature `node-internal`: the node's lane and indexer reads).
     #[cfg(feature = "node-internal")]
     pub fn primary(&self) -> &DynProvider {

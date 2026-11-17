@@ -5,7 +5,9 @@
 
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, Bytes};
-use alloy::providers::{DynProvider, Provider, ProviderBuilder};
+use alloy::providers::{DynProvider, Provider};
+use scaas_rpc::evm::EvmPool;
+use scaas_rpc::{Endpoint, NodeList, Policy};
 use alloy::rpc::types::{BlockId, TransactionRequest};
 use alloy::transports::TransportError;
 use async_trait::async_trait;
@@ -33,9 +35,11 @@ pub trait Chain: Send + Sync {
 /// The longest one RPC read may take; past it the node counts as not answering, so the request fails over (Fable R-1).
 pub const RPC_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// The operator's JSON-RPC endpoints (`rpc_urls`), in order, each read under `timeout`.
+/// The operator's JSON-RPC endpoints (`rpc_urls`), in order, each read under `timeout`: per-index access to
+/// `scaas_rpc::evm::EvmPool`'s providers, on the crate's bounded transport (CLI-RPC-07: an answer above 16 MiB or deeper than
+/// 64 is that node's failure; no redirect is followed). The service's own failover stays `Service::on_nodes`.
 pub struct Rpc {
-    nodes: Vec<DynProvider>,
+    pool: EvmPool,
     timeout: Duration,
 }
 
@@ -53,16 +57,25 @@ impl Rpc {
 
     /// As [`Rpc::connect`], each read under `timeout` (the tests' short one).
     pub async fn connect_within(urls: &[String], chain_id: u64, timeout: Duration) -> anyhow::Result<Self> {
-        let mut nodes = Vec::new();
-        for (i, u) in urls.iter().enumerate() {
-            let p = ProviderBuilder::new().disable_recommended_fillers().connect_http(u.parse()?).erased();
+        let ms = u64::try_from(timeout.as_millis()).unwrap_or(u64::MAX).max(1);
+        let endpoints = urls.iter().enumerate()
+            .map(|(i, u)| Endpoint::named(u).map_err(|e| anyhow::anyhow!("rpc_urls[{i}]: {e}")))
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let list = NodeList::new(endpoints, Policy::Failover, ms, ms, scaas_rpc::endpoint::READ_TIMEOUT_MS)
+            .map_err(|e| anyhow::anyhow!("rpc_urls: {e}"))?;
+        let pool = EvmPool::connect(list, chain_id, None).map_err(|e| anyhow::anyhow!("rpc_urls: {e}"))?;
+        for i in 0..urls.len() {
+            let p = pool.endpoint(i, None);
             let id = timed(timeout, async { p.get_chain_id().await.map_err(|e| ChainError::Rpc(e.to_string())) })
                 .await
                 .map_err(|e| anyhow::anyhow!("rpc_urls[{i}]: eth_chainId: {e:?}"))?;
             anyhow::ensure!(id == chain_id, "rpc_urls[{i}] answers chain {id}, the config pins {chain_id}");
-            nodes.push(p);
         }
-        Ok(Self { nodes, timeout })
+        Ok(Self { pool, timeout })
+    }
+
+    fn node(&self, node: usize) -> DynProvider {
+        self.pool.endpoint(node, None)
     }
 }
 
@@ -83,21 +96,21 @@ fn classify(e: TransportError) -> ChainError {
 #[async_trait]
 impl Chain for Rpc {
     fn nodes(&self) -> usize {
-        self.nodes.len()
+        self.pool.list().len()
     }
 
     async fn head(&self, node: usize) -> Result<u64, ChainError> {
-        timed(self.timeout, async { self.nodes[node].get_block_number().await.map_err(|e| ChainError::Rpc(e.to_string())) }).await
+        timed(self.timeout, async { self.node(node).get_block_number().await.map_err(|e| ChainError::Rpc(e.to_string())) }).await
     }
 
     async fn call(&self, node: usize, block: u64, to: Address, data: Bytes) -> Result<Bytes, ChainError> {
         let tx = TransactionRequest::default().with_to(to).with_input(data);
-        timed(self.timeout, async { self.nodes[node].call(tx).block(BlockId::number(block)).await.map_err(classify) }).await
+        timed(self.timeout, async { self.node(node).call(tx).block(BlockId::number(block)).await.map_err(classify) }).await
     }
 
     async fn code(&self, node: usize, block: u64, at: Address) -> Result<Bytes, ChainError> {
         let f = async {
-            self.nodes[node].get_code_at(at).block_id(BlockId::number(block)).await.map_err(|e| ChainError::Rpc(e.to_string()))
+            self.node(node).get_code_at(at).block_id(BlockId::number(block)).await.map_err(|e| ChainError::Rpc(e.to_string()))
         };
         timed(self.timeout, f).await
     }
