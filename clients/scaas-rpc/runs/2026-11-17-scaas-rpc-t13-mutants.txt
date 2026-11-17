@@ -1,5 +1,3 @@
-# t13 mutants at commit c6ca8d9a2 (name | outcome | test)
-S7 Replaced at the read's own block | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes replaced_under_strict_majority_rests_on_the_finalized_block
-S7 FailedForGood at the read's own block | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes failed_for_good_under_strict_majority_rests_on_the_finalized_block
-S7 failover Replaced named a majority | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes replaced_under_strict_majority_rests_on_the_finalized_block
-3 mutants, 3 killed, 0 survived, 0 not loaded
+# t13 mutants at commit 973ad4576 (name | outcome | test)
+S9 priority unclamped | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --lib evm::tests::the_agreed_priority_fee_never_exceeds_the_max_fee
+1 mutants, 1 killed, 0 survived, 0 not loaded

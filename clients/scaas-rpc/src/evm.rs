@@ -1136,7 +1136,7 @@ impl EvmPool {
                 .await?;
             return Ok(Fees {
                 max_fee_per_gas: f.max_fee_per_gas.max(1),
-                max_priority_fee_per_gas: f.max_priority_fee_per_gas,
+                max_priority_fee_per_gas: f.max_priority_fee_per_gas.min(f.max_fee_per_gas.max(1)),
             });
         }
         let order = self.pool.usable(purpose)?;
@@ -1169,12 +1169,20 @@ impl EvmPool {
                 failures,
             });
         }
-        max.sort_unstable_by(|a, b| b.cmp(a));
-        prio.sort_unstable_by(|a, b| b.cmp(a));
-        Ok(Fees {
-            max_fee_per_gas: max[need - 1].max(1),
-            max_priority_fee_per_gas: prio[need - 1],
-        })
+        Ok(agreed_fees(max, prio, need))
+    }
+}
+
+/// Under strict majority each fee is the `need`-th highest answer, independently (§4.4); the priority fee is then clamped to
+/// the max fee, as two order statistics need not be a pair an endpoint gave (T13 S9: a priority above the max is an invalid
+/// transaction).
+fn agreed_fees(mut max: Vec<u128>, mut prio: Vec<u128>, need: usize) -> Fees {
+    max.sort_unstable_by(|a, b| b.cmp(a));
+    prio.sort_unstable_by(|a, b| b.cmp(a));
+    let max_fee_per_gas = max[need - 1].max(1);
+    Fees {
+        max_fee_per_gas,
+        max_priority_fee_per_gas: prio[need - 1].min(max_fee_per_gas),
     }
 }
 
@@ -1591,5 +1599,22 @@ impl EvmPool {
             Ok((executed, now > q.nonce, ts))
         })
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// T13 S9: one liar's high priority and honest maxima apart give a priority above the max; it is clamped. Control: a pair
+    /// within the max is kept.
+    #[test]
+    fn the_agreed_priority_fee_never_exceeds_the_max_fee() {
+        let f = super::agreed_fees(vec![10, 20, 30], vec![1_000, 15, 5], 2);
+        assert_eq!(
+            (f.max_fee_per_gas, f.max_priority_fee_per_gas),
+            (20, 15),
+            "control: 15 <= 20"
+        );
+        let f = super::agreed_fees(vec![10, 12, 30], vec![1_000, 15, 5], 2);
+        assert_eq!((f.max_fee_per_gas, f.max_priority_fee_per_gas), (12, 12));
     }
 }

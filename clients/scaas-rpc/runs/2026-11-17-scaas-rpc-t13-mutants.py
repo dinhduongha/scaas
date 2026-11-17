@@ -75,6 +75,8 @@ MUTANTS = [
     ("S7 failover Replaced named a majority", [(E, "                by_nonce: a.value.nonce,\n                basis: Basis::OneEndpoint,",
                                                 "                by_nonce: a.value.nonce,\n                basis: Basis::Majority,")],
      T + "--test evm_fakes replaced_under_strict_majority_rests_on_the_finalized_block"),
+    ("S9 priority unclamped", [(E, "max_priority_fee_per_gas: prio[need - 1].min(max_fee_per_gas),", "max_priority_fee_per_gas: prio[need - 1],")],
+     T + "--lib evm::tests::the_agreed_priority_fee_never_exceeds_the_max_fee"),
 ]
 
 if __name__ == "__main__":
