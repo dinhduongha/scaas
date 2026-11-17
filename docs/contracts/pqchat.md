@@ -636,7 +636,7 @@ Status: **PLANNED**.
   this contract is in [ua-libraries.md](../clients/ua-libraries.md#pqchat-clients) (SPECIFIED). The Rust client core is
   `pqchat-core`, an app core above `scaas-sdk` (owner 2026-11-17): its rules are
   [clients/pqchat-core.md](../clients/pqchat-core.md) ([CLI-PQC-01](../clients/pqchat-core.md#CLI-PQC-01) to
-  [CLI-PQC-12](../clients/pqchat-core.md#CLI-PQC-12), SPECIFIED), its spec and plan
+  [CLI-PQC-14](../clients/pqchat-core.md#CLI-PQC-14), SPECIFIED), its spec and plan
   `docs/superpowers/{specs,plans}/2026-11-17-pqchat-core.md`, with a real-crypto end-to-end run as its gate
   ([CLI-PQC-12](../clients/pqchat-core.md#CLI-PQC-12)); today's on-chain runs use stand-in wraps and test the contract only. BUILT today: only the JavaScript
   reference `clients/clientkeys/src/pqchat.js`, which writes the vectors (plan 3c T84; test `clients/clientkeys/test/pqchat.test.js`).
