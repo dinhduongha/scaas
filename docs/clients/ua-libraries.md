@@ -471,8 +471,8 @@ signatures) that clientkeys verifies, so randomized rows are checked both ways. 
 deterministic schemes; BIP-340 with a fixed `aux` and sr25519 with fixed bytes are byte-equal **test-only** rows (feature `vectors`;
 sr25519 only if both libraries read the bytes alike, else verify-only, and then no row pins sr25519's nonce derivation byte for byte,
 an accepted residual); soft-junction signatures verify-only. Published known answers (BIP-84, BIP-86, BIP-143, BIP-340, BIP-341,
-BIP-350, `substrate-bip39`, `subkey` keys and one `subkey` signature) carry source and sha256. BUILT (T4 `7e752faa2`, appended T6a `290021791`, both ways T9
-`5e4aa392c`).
+BIP-350, `substrate-bip39`, `subkey` keys, and one polkadot.js signature: `@polkadot/keyring` 14.0.3, verify-only) carry their
+source (the downloads also their sha256). BUILT (T4 `7e752faa2`, appended T6a `290021791`, both ways T9 `5e4aa392c`).
 
 ## Confidential-token facades: no decryption oracle
 

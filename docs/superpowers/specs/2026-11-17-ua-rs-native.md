@@ -557,7 +557,7 @@ Rules of the rows:
   `sign(sk, msg, random)` keys the same STROBE step with `random`. Plan T0 checks equality over {bare, `//Alice`, one soft-derived
   key given to both libraries as the same 64-byte secret} × {1 B, 32 B, 257 B}. If any pair differs, every sr25519 signature row is
   verify-only both ways (`native.json` and `rs_native.json`), and then **no row pins the nonce derivation byte for byte**: the
-  cross-library verify and the published `subkey` signature still pin the context string, the marker bit and the key, not the
+  cross-library verify and the published polkadot.js signature (built: `external.polkadotJsSignature`) still pin the context string, the marker bit and the key, not the
   witness; that residual is accepted and stated in CLI-UAL-47. Release builds draw `r` from the OS RNG (CLI-UAL-02).
 - **Both ways.** `ua-rs` verifies every clientkeys signature; clientkeys verifies every row of `rs_native.json` (OS-random Taproot and
   sr25519, soft keys), so a bug shared by one library's signer and verifier cannot pass.
