@@ -1,0 +1,5 @@
+# t22 mutants at commit ecb574968 (name | outcome | test)
+a: the TON Center key dropped | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::ton::tests::the_ton_center_key_goes_to_the_first_endpoint
+a: each endpoint the first's credential | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test ton the_reads_the_status_class_and_the_key_to_the_first_endpoint_only
+a: a non-2xx read as an answer | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test ton the_reads_the_status_class_and_the_key_to_the_first_endpoint_only
+3 mutants, 3 killed, 0 survived, 0 not loaded

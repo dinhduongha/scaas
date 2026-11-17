@@ -1135,41 +1135,41 @@ pub fn decode_event(body: &Arc<Cell>) -> Result<Option<TonEvent>> {
 
 #[derive(Clone)]
 pub struct Api {
-    http: reqwest::Client,
-    base: String,
-    key: Option<String>,
+    /// the TON Center endpoints (scaas-rpc T22: the family client, bounded, 20 s per request)
+    net: Arc<scaas_rpc::ton::Ton>,
 }
 
 impl Api {
+    /// One TON Center (the e2e's shim, tests), its API key when given.
     pub fn new(base: &str, key: Option<String>) -> Result<Self> {
-        Ok(Self {
-            http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build()?,
-            base: base.trim_end_matches('/').to_string(),
-            key,
-        })
+        Self::of(&[base.to_string()], key)
     }
 
-    async fn send(&self, rb: reqwest::RequestBuilder, what: &str) -> Result<Value> {
-        let rb = match &self.key {
-            Some(k) => rb.header("X-API-Key", k),
-            None => rb,
-        };
-        let res = rb.send().await.with_context(|| format!("{what}: transport"))?;
-        let status = res.status();
-        let text = res.text().await?;
-        if !status.is_success() {
-            let head: String = text.chars().take(300).collect();
-            bail!("{what}: HTTP {status}: {head}");
+    /// The configured list: the API key to the first endpoint only, as before (the one endpoint the adapter asked).
+    pub fn of(urls: &[String], key: Option<String>) -> Result<Self> {
+        let c = scaas_rpc::family::Client::of_urls_each(urls, |i| {
+            key.as_ref()
+                .filter(|_| i == 0)
+                .map(|k| scaas_rpc::EndpointAuth::Header { name: "X-API-Key".into(), value: scaas_rpc::Secret::new(k) })
+        })
+        .map_err(|e| anyhow!("rpc_urls: {e}"))?;
+        Ok(Self { net: Arc::new(scaas_rpc::ton::Ton::new(c)) })
+    }
+
+    /// A family error as before: `"{what}: HTTP {status}: {text}"` for a status other than 2xx.
+    fn error(what: &str, e: scaas_rpc::family::FamilyError) -> anyhow::Error {
+        match e {
+            scaas_rpc::family::FamilyError::Status { status, message } => anyhow!("{what}: HTTP {status}: {message}"),
+            e => anyhow!("{what}: {e}"),
         }
-        serde_json::from_str(&text).with_context(|| format!("{what}: decode"))
     }
 
     pub async fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value> {
-        self.send(self.http.get(format!("{}/api/v3/{path}", self.base)).query(query), path).await
+        self.net.get(0, path, query).await.map_err(|e| Self::error(path, e))
     }
 
     pub async fn post(&self, path: &str, body: Value) -> Result<Value> {
-        self.send(self.http.post(format!("{}/api/v3/{path}", self.base)).json(&body), path).await
+        self.net.post(0, path, &body).await.map_err(|e| Self::error(path, e))
     }
 
     /// Get-method; numeric results only (`num` entries, `0x…` hex or decimal).
@@ -1314,7 +1314,7 @@ impl TonAdapter {
             lanes,
             signers,
             w5,
-            api: Api::new(cfg.rpc_urls.first().ok_or_else(|| anyhow!("no rpc_urls"))?, key)?,
+            api: Api::of(&cfg.rpc_urls, key).map_err(|e| anyhow!("chain {}: {e}", cfg.chain_key()))?,
             global_id,
             attach: param_u128(cfg, "attach_nanoton", 150_000_000),
             forward: param_u128(cfg, "forward_nanoton", 0),
@@ -3251,5 +3251,29 @@ mod tests {
                 let _ = stack_num(&json!({"value": s}));
             }
         }
+    }
+
+    /// scaas-rpc T22a: the TON Center key (`api_key_env`) goes to the first endpoint, as before (the one endpoint asked).
+    /// Control: unset, none.
+    #[tokio::test]
+    async fn the_ton_center_key_goes_to_the_first_endpoint() {
+        type Seen = Arc<std::sync::Mutex<Vec<Option<String>>>>;
+        let seen: Seen = Default::default();
+        let s2 = seen.clone();
+        let app = axum::Router::new().fallback(move |h: axum::http::HeaderMap| {
+            let s2 = s2.clone();
+            async move {
+                s2.lock().unwrap().push(h.get("x-api-key").and_then(|v| v.to_str().ok()).map(str::to_string));
+                axum::Json(json!({"seqno": 3}))
+            }
+        });
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        std::env::set_var("SCAAS_T22_TON_KEY", "k");
+        let a = adapter_with(&url, toml::Table::from_iter([("api_key_env".to_string(), toml::Value::from("SCAAS_T22_TON_KEY"))]), vec![]).unwrap();
+        assert_eq!(a.sequence(0).await.unwrap(), 3);
+        assert_eq!(adapter(&url).sequence(0).await.unwrap(), 3);
+        assert_eq!(*seen.lock().unwrap(), [Some("k".to_string()), None], "the key, then control: none configured");
     }
 }

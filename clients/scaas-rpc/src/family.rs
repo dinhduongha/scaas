@@ -91,9 +91,19 @@ impl Client {
         urls: &[String],
         auth: Option<crate::endpoint::EndpointAuth>,
     ) -> Result<Self, RpcError> {
+        Self::of_urls_each(urls, |_| auth.clone())
+    }
+
+    /// [`Client::of_urls`] with each endpoint's own credential (`auth(i)`): a key that went to one endpoint only goes there
+    /// only (TON Center's key, plan T22).
+    pub fn of_urls_each(
+        urls: &[String],
+        auth: impl Fn(usize) -> Option<crate::endpoint::EndpointAuth>,
+    ) -> Result<Self, RpcError> {
         let e = urls
             .iter()
-            .map(|u| Endpoint::new(u, crate::Class::Named, None, auth.clone()))
+            .enumerate()
+            .map(|(i, u)| Endpoint::new(u, crate::Class::Named, None, auth(i)))
             .collect::<Result<Vec<_>, _>>()?;
         Self::new(NodeList::new(
             e,

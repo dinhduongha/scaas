@@ -38,6 +38,8 @@ STEPS=(
   # capped by `docker update`
   "node-e2e-aptos|scaas-node|D=../smartcontracts/move/aptos/scripts/devnet.sh; \$D down >/dev/null 2>&1; trap '\$D down >/dev/null 2>&1' EXIT; systemd-run --user --scope --quiet -p MemoryMax=3G -p MemorySwapMax=1G -- \$D up && $cap \$D publish && docker update --memory 2g --memory-swap 2g \$(docker ps -q --filter name=local-testnet) >/dev/null && CAPPED_MEM=6G $cap cargo test $C --test e2e_aptos -- --ignored$TT"
   "node-e2e-sui|scaas-node|CAPPED_MEM=6G $cap cargo test $C --test e2e_sui -- --ignored$TT"
+  # node-e2e-ton: the sandbox shim (smartcontracts/ton: npm ci when absent, the Tact build; both git-ignored), started by the test
+  "node-e2e-ton|scaas-node|TD=../smartcontracts/ton; { [ -d \$TD/node_modules ] || (cd \$TD && $cap npm ci); } && (cd \$TD && $cap npx tact --config tact.config.json) && CAPPED_MEM=6G $cap cargo test $C --test e2e_ton -- --ignored$TT"
   "ver-test|scaas-pqz-verifier|$cap cargo test $C"
   "ver-clippy|scaas-pqz-verifier|$cap cargo clippy $C --all-targets -- -D warnings"
   "ver-anvil|scaas-pqz-verifier|$cap cargo test $C --test anvil -- --ignored$TT"
