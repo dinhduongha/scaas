@@ -1,0 +1,154 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+//! Polkadot sr25519 (ua-rs-native spec §7; CLI-SGN-53, CLI-UAL-46): the `substrate-bip39` mini-secret from the BIP-39 entropy and
+//! the passphrase as given (computed at open, kept in the arena), schnorrkel 0.11's Ed25519-mode expansion (the bare account),
+//! the junction path grammar and chain codes of `sp-core` / polkadot.js with the refusals of §7.3, SS58, and signing with context
+//! `substrate` over a one-shot RNG fed by `os_aux()`: an OS-RNG failure is `Error::Rng`, never a panic inside merlin, and every
+//! signature is verified before it leaves. UNAUDITED.
+use super::{Error, Result};
+use rand_core::{CryptoRng, RngCore};
+use schnorrkel::{context::attach_rng, signing_context, ExpansionMode, MiniSecretKey, PublicKey, SecretKey, Signature};
+use zeroize::{Zeroize, Zeroizing};
+
+const CONTEXT: &[u8] = b"substrate";
+
+/// `substrate-bip39` `mini_secret_from_entropy`: `PBKDF2-HMAC-SHA512(entropy, "mnemonic" ‖ UTF-8(passphrase), 2048)[0..32]`; the
+/// passphrase as given, not NFKD (an NFC and an NFD spelling are two accounts).
+pub(crate) fn mini_secret(entropy: &[u8], passphrase: &str) -> Zeroizing<[u8; 32]> {
+    let salt = Zeroizing::new([&b"mnemonic"[..], passphrase.as_bytes()].concat());
+    let mut dk = Zeroizing::new([0u8; 64]);
+    pbkdf2::pbkdf2_hmac::<sha2::Sha512>(entropy, &salt, 2048, &mut dk[..]);
+    let mut mini = Zeroizing::new([0u8; 32]);
+    mini.iter_mut().zip(dk.iter()).for_each(|(m, d)| *m = *d);
+    mini
+}
+
+/// The bare account (spec §7.2): `MiniSecretKey::expand(ExpansionMode::Ed25519)`, as its 64-byte `SecretKey::to_bytes`.
+pub(crate) fn bare(mini: &[u8]) -> Result<Zeroizing<[u8; 64]>> {
+    let m = MiniSecretKey::from_bytes(mini).map_err(|_| Error::Argument)?;
+    Ok(Zeroizing::new(m.expand(ExpansionMode::Ed25519).to_bytes()))
+}
+
+fn secret(sk: &[u8]) -> Result<SecretKey> {
+    SecretKey::from_bytes(sk).map_err(|_| Error::Argument)
+}
+
+/// The 32-byte public key of a 64-byte secret.
+pub(crate) fn public(sk: &[u8]) -> Result<Vec<u8>> {
+    Ok(secret(sk)?.to_public().to_bytes().to_vec())
+}
+
+/// An RNG that yields 32 given bytes once, then wipes them; any further read, or a read of another length, yields zeros and marks
+/// it misused, and its caller then discards the result (`Error::Rng`). Only merlin's `finalize` reads it (one 32-byte
+/// `fill_bytes`, plan T0).
+struct OneShot {
+    r: Zeroizing<[u8; 32]>,
+    reads: u32,
+    misused: bool,
+}
+
+impl OneShot {
+    fn new(r: [u8; 32]) -> OneShot {
+        OneShot { r: Zeroizing::new(r), reads: 0, misused: false }
+    }
+    /// `Ok` only after exactly one read of 32 bytes.
+    fn check(&self) -> Result<()> {
+        #[cfg(feature = "vectors")]
+        vectors::note_reads(self.reads);
+        if self.reads == 1 && !self.misused {
+            Ok(())
+        } else {
+            Err(Error::Rng)
+        }
+    }
+}
+
+impl RngCore for OneShot {
+    fn next_u32(&mut self) -> u32 {
+        self.misused = true;
+        0
+    }
+    fn next_u64(&mut self) -> u64 {
+        self.misused = true;
+        0
+    }
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        self.reads = self.reads.saturating_add(1);
+        if self.reads == 1 && dest.len() == 32 {
+            dest.copy_from_slice(self.r.as_slice());
+        } else {
+            self.misused = true;
+            dest.fill(0);
+        }
+        self.r.zeroize();
+    }
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> core::result::Result<(), rand_core::Error> {
+        self.fill_bytes(dest);
+        Ok(())
+    }
+}
+impl CryptoRng for OneShot {}
+
+/// sr25519 over `msg` with context `substrate` and randomness `r` through the one-shot RNG, verified against `check` (the key's own
+/// public key in the release path) before it leaves; 64 bytes, schnorrkel's marker bit set.
+pub(crate) fn sign(sk: &[u8], msg: &[u8], r: [u8; 32], check: &[u8]) -> Result<Vec<u8>> {
+    let kp = secret(sk)?.to_keypair();
+    let mut rng = OneShot::new(r);
+    let sig = kp.sign(attach_rng(signing_context(CONTEXT).bytes(msg), &mut rng));
+    rng.check()?;
+    if !verify(check, msg, &sig.to_bytes()) {
+        return Err(Error::Argument);
+    }
+    Ok(sig.to_bytes().to_vec())
+}
+
+/// sr25519 Verify with context `substrate`.
+pub(crate) fn verify(pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
+    let (Ok(pk), Ok(sig)) = (PublicKey::from_bytes(pk), Signature::from_bytes(sig)) else { return false };
+    pk.verify(signing_context(CONTEXT).bytes(msg), &sig).is_ok()
+}
+
+/// SS58 (spec §7.4): `base58(pre ‖ pk ‖ BLAKE2b-512("SS58PRE" ‖ pre ‖ pk)[0..2])`, `pre` one byte below 64, else two; prefix 0 to
+/// 16,383, not 46 or 47.
+pub(crate) fn ss58(pk: &[u8], prefix: u16) -> Result<String> {
+    use blake2::Digest as _;
+    if prefix > 16_383 || prefix == 46 || prefix == 47 || pk.len() != 32 {
+        return Err(Error::Argument);
+    }
+    let [lo, hi] = prefix.to_le_bytes();
+    let pre = if prefix < 64 { vec![lo] } else { vec![((lo & 0xfc) >> 2) | 0x40, hi | ((lo & 0x03) << 6)] };
+    let sum = blake2::Blake2b512::digest([&b"SS58PRE"[..], &pre, pk].concat());
+    Ok(bs58::encode([&pre[..], pk, sum.get(..2).ok_or(Error::Argument)?].concat()).into_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    /// The one-shot RNG yields its bytes once; a second read gets zeros and marks it misused (spec §7.5).
+    #[test]
+    fn one_shot_yields_once() {
+        let mut o = OneShot::new([7; 32]);
+        let (mut a, mut b) = ([0u8; 32], [1u8; 32]);
+        o.fill_bytes(&mut a);
+        assert!(a == [7; 32] && o.check().is_ok());
+        o.fill_bytes(&mut b);
+        assert!(b == [0; 32] && o.misused && o.check() == Err(Error::Rng));
+        let mut short = OneShot::new([7; 32]);
+        short.fill_bytes(&mut [0u8; 16]);
+        assert!(short.misused);
+    }
+}
+
+#[cfg(feature = "vectors")]
+pub(crate) mod vectors {
+    use std::cell::Cell;
+    thread_local! {
+        static READS: Cell<u32> = const { Cell::new(0) };
+    }
+    pub(crate) fn note_reads(n: u32) {
+        READS.with(|r| r.set(n));
+    }
+    /// The reads of the last one-shot RNG this thread checked.
+    pub fn one_shot_reads() -> u32 {
+        READS.with(Cell::get)
+    }
+}

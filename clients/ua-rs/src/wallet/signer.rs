@@ -165,7 +165,7 @@ pub(crate) fn external_answer(key: &KeyRef, req: &SignRequest, sig: Vec<u8>) -> 
                     let q = super::derive::taproot_tweak(&x)?.output_key;
                     (crate::verify::bip340(&q, &digest, &sig), sig)
                 }
-                NativeScheme::Sr25519 => return Err(Error::Argument),
+                NativeScheme::Sr25519 => (super::substrate::verify(public_key, &bytes, &sig), sig),
             }
         }
         _ => return Err(Error::Argument),

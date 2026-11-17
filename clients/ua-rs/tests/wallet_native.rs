@@ -388,3 +388,100 @@ fn manifest_change_written_only_when_one() {
         assert_eq!(Manifest::from_json(j.as_bytes()).err(), Some(Error::Argument), "{bad}");
     }
 }
+
+// ------------------------------------------------------------------ T8a: Polkadot sr25519, the bare account, SS58
+
+#[test]
+fn native_json_polkadot_bare_addresses_and_ss58() {
+    let v = native();
+    let mut n = 0;
+    for r in arr(&v, "addresses").iter().filter(|r| r["network"] == "polkadot") {
+        let k = wallet(&v, r["mnemonic"].as_str().unwrap()).native_key(Network::Polkadot, 0, None).unwrap();
+        assert_eq!(hex::encode(k.public_key()), r["publicKey"].as_str().unwrap(), "{r}");
+        assert_eq!(k.address().as_deref(), r["address"].as_str(), "{r}");
+        for (p, a) in r["ss58"].as_object().unwrap() {
+            assert_eq!(k.ss58_address(p.parse().unwrap()).unwrap(), a.as_str().unwrap(), "{} prefix {p}", r["mnemonic"]);
+        }
+        n += 1;
+    }
+    assert_eq!(n, 6);
+}
+
+#[cfg(feature = "vectors")]
+#[test]
+fn native_json_polkadot_mini_secrets() {
+    let v = native();
+    for r in arr(&v, "addresses").iter().filter(|r| r["network"] == "polkadot") {
+        let w = wallet(&v, r["mnemonic"].as_str().unwrap());
+        assert_eq!(hex::encode(*w.vectors_substrate_mini().unwrap()), r["miniSecret"].as_str().unwrap(), "{}", r["mnemonic"]);
+    }
+}
+
+#[test]
+fn substrate_known_answers_and_the_passphrase_as_given() {
+    let v = native();
+    let dev = wallet(&v, "substrate_dev").native_key(Network::Polkadot, 0, None).unwrap();
+    let bare = &v["external"]["subkey"]["rows"][0];
+    assert_eq!(hex::encode(dev.public_key()), bare["publicKey"].as_str().unwrap());
+    assert_eq!(dev.ss58_address(42).unwrap(), bare["ss58"].as_str().unwrap());
+    let (nfc, nfd) = (wallet(&v, "non_ascii_nfc"), wallet(&v, "non_ascii_nfd"));
+    assert_eq!(nfc.native_key(Network::Evm, 0, None).unwrap().public_key(), nfd.native_key(Network::Evm, 0, None).unwrap().public_key(), "one BIP-39 seed");
+    assert_ne!(nfc.native_key(Network::Polkadot, 0, None).unwrap().public_key(), nfd.native_key(Network::Polkadot, 0, None).unwrap().public_key(), "two Polkadot accounts");
+}
+
+#[test]
+fn polkadot_refusals_beside_their_accepted_neighbours() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    assert_eq!(w.native_key(Network::Polkadot, 1, None).err(), Some(Error::Argument), "index 1");
+    for c in [0, 354] {
+        assert_eq!(w.native_key(Network::Polkadot, 0, Some(c)).err(), Some(Error::Argument), "coin {c}");
+    }
+    let k = w.native_key(Network::Polkadot, 0, None).unwrap();
+    for p in [46, 47, 16_384] {
+        assert_eq!(k.ss58_address(p).err(), Some(Error::Argument), "prefix {p}");
+    }
+    for p in [0, 42, 64, 16_383] {
+        assert!(k.ss58_address(p).is_ok(), "prefix {p}");
+    }
+    assert_eq!(w.native_key(Network::Solana, 0, None).unwrap().ss58_address(0).err(), Some(Error::Argument), "ss58 off Polkadot");
+    assert_eq!(k.sign_key_proof(&[0; 32]).err(), Some(Error::Argument));
+    assert_eq!(w.import_native_key(Network::Polkadot, &[1; 32]).err(), Some(Error::Argument));
+}
+
+#[test]
+fn polkadot_signatures_verify_and_differ_the_polkadot_js_row_verifies() {
+    let v = native();
+    let w = wallet(&v, "substrate_dev");
+    let k = w.native_key(Network::Polkadot, 0, None).unwrap();
+    let pk = k.public_key();
+    for m in [&[1u8][..], &[2; 32], &[3; 257]] {
+        let (a, b) = (k.sign_message(m, AllowRawDigest).unwrap(), k.sign_message(m, AllowRawDigest).unwrap());
+        assert_ne!(a, b);
+        assert!(sr_verify(&pk, m, &a) && sr_verify(&pk, m, &b));
+        assert_eq!(a.last().map(|x| x & 0x80), Some(0x80), "schnorrkel's marker bit");
+    }
+    let d = k.sign_digest(&[4; 32], AllowRawDigest).unwrap();
+    assert!(sr_verify(&pk, &[4; 32], &d));
+    let j = &v["external"]["polkadotJsSignature"];
+    let h = |k: &str| hex::decode(j[k].as_str().unwrap()).unwrap();
+    assert!(sr_verify(&h("publicKey"), &h("message"), &h("signature")));
+    assert!(!sr_verify(&h("publicKey"), &[&h("message")[..], &[0]].concat(), &h("signature")), "one byte appended");
+}
+
+/// An independent sr25519 verify (schnorrkel, context `substrate`), for the wallet's signatures.
+fn sr_verify(pk: &[u8], m: &[u8], sig: &[u8]) -> bool {
+    let (Ok(p), Ok(s)) = (schnorrkel::PublicKey::from_bytes(pk), schnorrkel::Signature::from_bytes(sig)) else { return false };
+    p.verify_simple(b"substrate", m, &s).is_ok()
+}
+
+#[test]
+fn polkadot_handle_after_lock_is_key_revoked() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    let k = w.native_key(Network::Polkadot, 0, None).unwrap();
+    assert!(k.sign_message(&[1], AllowRawDigest).is_ok());
+    w.lock();
+    assert_eq!(k.sign_message(&[1], AllowRawDigest).err(), Some(Error::KeyRevoked));
+    assert_eq!(w.native_key(Network::Polkadot, 0, None).err(), Some(Error::WalletLocked));
+}

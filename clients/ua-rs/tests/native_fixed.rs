@@ -83,3 +83,57 @@ fn bip340_csv_signing_rows_through_sign_raw() {
     }
     assert!(n >= 4, "{n}");
 }
+
+// ------------------------------------------------------------------ T8a: sr25519 with fixed randomness (test-only)
+
+#[test]
+fn native_json_sr25519_fixed_rows_byte_equal_one_read_each() {
+    let v = native();
+    let w = wallet(&v, "substrate_dev");
+    let mut n = 0;
+    for r in arr(&v, "signatures").iter().filter(|r| r["network"] == "polkadot" && r["mode"] == "fixed-randomness" && r["path"] == "") {
+        let k = w.native_key(Network::Polkadot, 0, None).unwrap();
+        let (m, aux) = (msg(r), h32(&r["aux"]));
+        let sig = if r["call"] == "sign_digest" {
+            k.vectors_sign_digest_fixed(&m.try_into().unwrap(), &aux).unwrap()
+        } else {
+            k.vectors_sign_message_fixed(&m, &aux).unwrap()
+        };
+        assert_eq!(hex::encode(sig), r["signature"].as_str().unwrap(), "{}", r["id"]);
+        assert_eq!(scaas_ua::wallet::vectors_one_shot_reads(), 1, "{}", r["id"]);
+        n += 1;
+    }
+    assert_eq!(n, 4, "the bare key: three messages and one digest");
+}
+
+#[test]
+fn a_failing_os_rng_is_error_rng_never_a_panic() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    let k = w.native_key(Network::Polkadot, 0, None).unwrap();
+    let t = w.native_key(Network::BitcoinP2tr, 0, None).unwrap();
+    scaas_ua::wallet::vectors_fail_os_rng(true);
+    let (a, b) = (k.sign_message(&[1], scaas_ua::wallet::AllowRawDigest), t.sign_digest(&[1; 32], scaas_ua::wallet::AllowRawDigest));
+    scaas_ua::wallet::vectors_fail_os_rng(false);
+    assert_eq!((a.err(), b.err()), (Some(Error::Rng), Some(Error::Rng)));
+    assert!(k.sign_message(&[1], scaas_ua::wallet::AllowRawDigest).is_ok(), "the RNG back");
+}
+
+#[test]
+fn sr25519_self_verify_refuses_a_wrong_public_key_beside_the_right_one() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    let k = w.native_key(Network::Polkadot, 0, None).unwrap();
+    let pk: [u8; 32] = k.public_key().try_into().unwrap();
+    assert!(k.vectors_sr25519_sign_check(&[1, 2], &[7; 32], &pk).is_ok());
+    let mut wrong = pk;
+    wrong[0] ^= 1;
+    assert_eq!(k.vectors_sr25519_sign_check(&[1, 2], &[7; 32], &wrong).err(), Some(Error::Argument));
+}
+
+#[test]
+fn polkadot_slot_in_the_arena() {
+    let v = native();
+    let w = wallet(&v, "pq_kat");
+    assert!(w.native_key(Network::Polkadot, 0, None).unwrap().vectors_secret_in_arena().unwrap());
+}

@@ -425,6 +425,8 @@ pub fn native_address(network: Network, coin_type: Option<u32>, public_key: &[u8
         Network::Solana => Some(bs58::encode(public_key).into_string()),
         // NEAR's implicit account id: the 64 lower-case hex digits of the ed25519 key
         Network::Near => Some(hex(public_key)),
+        // Polkadot: SS58 prefix 0 (`ss58_address` for any other)
+        Network::Polkadot => super::substrate::ss58(public_key, 0).ok(),
         Network::Ton | Network::HederaEd25519 => None,
     }
 }

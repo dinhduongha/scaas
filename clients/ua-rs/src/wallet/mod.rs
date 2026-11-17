@@ -52,6 +52,7 @@ pub mod sign;
 mod sign;
 mod signer;
 mod store;
+mod substrate;
 mod tx;
 mod uasig;
 mod vault;
@@ -91,7 +92,7 @@ pub use zeroize::ZeroizeOnDrop;
 #[cfg(feature = "vectors")]
 pub use vectors::{vectors_chunks_released, vectors_pause_after_copy};
 #[cfg(feature = "vectors")]
-pub use sign::{vectors_taproot_sign, vectors_taproot_sign_check};
+pub use sign::{vectors_fail_os_rng, vectors_one_shot_reads, vectors_taproot_sign, vectors_taproot_sign_check};
 
 use crate::UAError;
 use rand_core::{OsRng, RngCore};
@@ -227,9 +228,12 @@ pub enum Network {
     BitcoinP2tr,
     /// NEAR, `m/44'/397'/i'` (SLIP-10 ed25519), the implicit account id; no coin-type override.
     Near,
+    /// Polkadot sr25519 (`substrate-bip39`, the bare account; junction paths through `Wallet::polkadot_key`), SS58; index 0 and
+    /// no coin type only.
+    Polkadot,
 }
 
-const NETWORK_NAMES: [(Network, &str); 12] = [
+const NETWORK_NAMES: [(Network, &str); 13] = [
     (Network::Evm, "evm"),
     (Network::Cosmos, "cosmos"),
     (Network::HederaEcdsa, "hedera_ecdsa"),
@@ -242,6 +246,7 @@ const NETWORK_NAMES: [(Network, &str); 12] = [
     (Network::BitcoinP2wpkh, "bitcoin_p2wpkh"),
     (Network::BitcoinP2tr, "bitcoin_p2tr"),
     (Network::Near, "near"),
+    (Network::Polkadot, "polkadot"),
 ];
 
 impl Network {
@@ -258,6 +263,7 @@ impl Network {
         match self {
             Network::Evm | Network::Cosmos | Network::HederaEcdsa | Network::BitcoinP2wpkh => NativeScheme::Secp256k1Ecdsa,
             Network::BitcoinP2tr => NativeScheme::Bip340Taproot,
+            Network::Polkadot => NativeScheme::Sr25519,
             Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana | Network::Near => {
                 NativeScheme::Ed25519
             }
@@ -270,7 +276,7 @@ impl Network {
         match self {
             Network::Evm | Network::Cosmos | Network::HederaEcdsa => Some(0x0108),
             Network::HederaEd25519 | Network::Sui | Network::Stellar | Network::Ton | Network::Aptos | Network::Solana => Some(0x0102),
-            Network::BitcoinP2wpkh | Network::BitcoinP2tr | Network::Near => None,
+            Network::BitcoinP2wpkh | Network::BitcoinP2tr | Network::Near | Network::Polkadot => None,
         }
     }
     pub(crate) fn bitcoin(self) -> bool {
@@ -280,7 +286,7 @@ impl Network {
     /// 2^31 (checked at derivation).
     fn coin_ok(self, coin_type: Option<u32>) -> Result<()> {
         match (self, coin_type) {
-            (Network::Near, Some(_)) => Err(Error::Argument),
+            (Network::Near | Network::Polkadot, Some(_)) => Err(Error::Argument),
             (Network::BitcoinP2wpkh | Network::BitcoinP2tr, Some(c)) if c > 1 => Err(Error::Argument),
             _ => Ok(()),
         }
@@ -305,6 +311,8 @@ impl Network {
             Network::BitcoinP2wpkh => vec![84 | H, H, H, change, i],
             Network::BitcoinP2tr => vec![86 | H, H, H, change, i],
             Network::Near => vec![44 | H, 397 | H, i | H],
+            // Polkadot keys come from the substrate-bip39 mini-secret, not from a BIP-32 / SLIP-10 path
+            Network::Polkadot => vec![],
         }
     }
 }
@@ -571,9 +579,10 @@ impl Wallet {
         Wallet::from_entropy(&entropy, bip39_passphrase)
     }
 
+    /// The store from the entropy, its BIP-39 seed and its `substrate-bip39` mini-secret (the passphrase as given; spec §4.3).
     fn from_entropy(entropy: &[u8], bip39_passphrase: &str) -> Result<Wallet> {
         let w = Wallet { store: SecretStore::new() };
-        w.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?)?;
+        w.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?, &substrate::mini_secret(entropy, bip39_passphrase))?;
         Ok(w)
     }
 
@@ -590,7 +599,7 @@ impl Wallet {
     /// Reopens a locked wallet from its entropy at the raised generation; earlier handles stay revoked. `Argument` if open.
     /// [`Wallet::unlock`] calls it.
     pub(crate) fn unlock_entropy(&self, entropy: &[u8], bip39_passphrase: &str) -> Result<()> {
-        self.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?)
+        self.store.open(entropy, &*seed_of(entropy, bip39_passphrase)?, &substrate::mini_secret(entropy, bip39_passphrase))
     }
 
     /// The UA key `kind` of `account` / `index` (spec §4): `Argument` for a value ≥ 2^31, index ≠ 0 on an EIP-2333 kind
@@ -625,6 +634,12 @@ impl Wallet {
 
     fn derive_native(&self, network: Network, coin_type: Option<u32>, change: u32, index: u32) -> Result<NativeKey> {
         network.coin_ok(coin_type)?;
+        if network == Network::Polkadot {
+            if index != 0 {
+                return Err(Error::Argument);
+            }
+            return self.polkadot_bare();
+        }
         let id = if change == 0 { KeyId::Native(network, index, coin_type) } else { KeyId::BitcoinChange(network, coin_type, index) };
         let (secret, public_key) = self.store.key(id, |seed| {
             let s = derive::native_secret(seed, network, index, coin_type, change)?;
@@ -633,6 +648,17 @@ impl Wallet {
         })?;
         self.store.note(|m| m.add_native(network, coin_type, index, change));
         Ok(NativeKey { network, index, coin_type, change, public_key, secret })
+    }
+
+    /// The bare Polkadot account (spec §7.2): the mini-secret's Ed25519-mode expansion, a 64-byte schnorrkel secret in the arena.
+    fn polkadot_bare(&self) -> Result<NativeKey> {
+        let (secret, public_key) = self.store.key_from_mini(KeyId::Native(Network::Polkadot, 0, None), |mini| {
+            let sk = substrate::bare(mini)?;
+            let public = substrate::public(&sk[..])?;
+            Ok((Zeroizing::new(sk.to_vec()), public))
+        })?;
+        self.store.note(|m| m.add_native(Network::Polkadot, None, 0, 0));
+        Ok(NativeKey { network: Network::Polkadot, index: 0, coin_type: None, change: 0, public_key, secret })
     }
 }
 
@@ -828,6 +854,10 @@ mod vectors {
         }
         pub fn vectors_seed(&self) -> Result<Zeroizing<[u8; 64]>> {
             self.store.seed()
+        }
+        /// The `substrate-bip39` mini-secret the store computed at open (spec §7.1).
+        pub fn vectors_substrate_mini(&self) -> Result<Zeroizing<[u8; 32]>> {
+            self.store.with_arena(|a| Ok(Zeroizing::new(a.mini()?.try_into().map_err(|_| Error::Argument)?)))
         }
         /// Bytes written to the store's arena.
         pub fn vectors_arena_used(&self) -> Result<usize> {

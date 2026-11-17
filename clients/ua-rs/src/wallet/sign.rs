@@ -83,8 +83,13 @@ fn sign_scheme(scheme: Scheme, secret: &[u8], msg: &[u8], aux: Option<&[u8; 32]>
     }
 }
 
-/// 32 bytes of the OS RNG (`rand_core` 0.6 `OsRng`).
+/// 32 bytes of the OS RNG (`rand_core` 0.6 `OsRng`); under feature `vectors` a test can make it fail
+/// ([`vectors_fail_os_rng`]).
 pub(super) fn os_aux() -> Result<[u8; 32]> {
+    #[cfg(feature = "vectors")]
+    if vectors::FAIL_RNG.with(std::cell::Cell::get) {
+        return Err(Error::Rng);
+    }
     let mut aux = [0u8; 32];
     OsRng.try_fill_bytes(&mut aux).map_err(|_| Error::Rng)?;
     Ok(aux)
@@ -232,6 +237,14 @@ impl NativeKey {
         self.envelope(Network::Stellar, tx_xdr, |t| Sha256::digest([&network_id[..], &[0, 0, 0, 2], t].concat()).to_vec())
     }
 
+    /// The SS58 address of a Polkadot key at `prefix` (0 to 16,383, not 46 or 47; spec §7.4); `Argument` on any other network.
+    pub fn ss58_address(&self, prefix: u16) -> Result<String> {
+        if self.network != Network::Polkadot {
+            return Err(Error::Argument);
+        }
+        super::substrate::ss58(&self.public_key, prefix)
+    }
+
     /// Hedera Ed25519: ed25519 over the transaction's `bodyBytes` as given.
     pub fn sign_hedera_transaction(&self, body_bytes: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
         self.envelope(Network::HederaEd25519, body_bytes, <[u8]>::to_vec)
@@ -261,11 +274,19 @@ pub fn sign_digest_by(key: &dyn Signer, digest: &[u8; 32], _: AllowRawDigest) ->
 /// signer (a `UaKey` refuses the request: `Argument`).
 pub fn sign_message_by(key: &dyn Signer, message: &[u8], _: AllowRawDigest) -> Result<Vec<u8>> {
     // spec §8.1 (CLI-UAL-63 (11)): no message that starts as an EIP-7702 authorization (0x05) or an EIP-712 preimage (0x19 0x01)
+    message_ok(message)?;
+    key.sign_request(&SignRequest::RawMessage { message: message.to_vec() })
+}
+
+/// The raw-message checks of [`sign_message_by`]: 1 to [`MAX_RAW_MESSAGE`] bytes, no SCaaS off-chain envelope, no EIP-7702 or
+/// EIP-712 prefix.
+fn message_ok(message: &[u8]) -> Result<()> {
+    // spec §8.1 (CLI-UAL-63 (11)): no message that starts as an EIP-7702 authorization (0x05) or an EIP-712 preimage (0x19 0x01)
     let evm_prefix = message.first() == Some(&0x05) || message.starts_with(&[0x19, 0x01]);
     if message.is_empty() || message.len() > MAX_RAW_MESSAGE || ENVELOPES.iter().any(|p| message.starts_with(p)) || evm_prefix {
         return Err(Error::Argument);
     }
-    key.sign_request(&SignRequest::RawMessage { message: message.to_vec() })
+    Ok(())
 }
 
 /// The bytes a native key of `network` signs for `req` (ua-rs-native spec §4.2): a raw digest on every network; a key proof on
@@ -303,7 +324,10 @@ impl Signer for NativeKey {
                 let aux = os_aux()?;
                 return self.secret.with(|s| taproot_sign(s, &bytes, &aux, None))?;
             }
-            NativeScheme::Sr25519 => return Err(Error::Argument),
+            NativeScheme::Sr25519 => {
+                let r = os_aux()?;
+                return self.secret.with(|s| super::substrate::sign(s, &bytes, r, &self.public_key))?;
+            }
         };
         self.secret.with(|s| sign_scheme(scheme, s, &bytes, None))?
     }
@@ -344,9 +368,38 @@ mod vectors {
         pub fn vectors_sign_digest_fixed(&self, digest: &[u8; 32], r: &[u8; 32]) -> Result<Vec<u8>> {
             match self.network.scheme() {
                 NativeScheme::Bip340Taproot => self.secret.with(|s| taproot_sign(s, digest, r, None))?,
+                NativeScheme::Sr25519 => self.secret.with(|s| crate::wallet::substrate::sign(s, digest, *r, &self.public_key))?,
                 _ => self.sign_digest(digest, AllowRawDigest),
             }
         }
+        /// [`NativeKey::sign_message`] with fixed randomness: the sr25519 `r` (ed25519 ignores it), the same checks.
+        pub fn vectors_sign_message_fixed(&self, message: &[u8], r: &[u8; 32]) -> Result<Vec<u8>> {
+            match self.network.scheme() {
+                NativeScheme::Sr25519 => {
+                    message_ok(message)?;
+                    self.secret.with(|s| crate::wallet::substrate::sign(s, message, *r, &self.public_key))?
+                }
+                _ => self.sign_message(message, AllowRawDigest),
+            }
+        }
+        /// The sr25519 signer with its self-verify against `claimed_public_key` (the fault hook: a wrong key gives `Argument`).
+        pub fn vectors_sr25519_sign_check(&self, message: &[u8], r: &[u8; 32], claimed_public_key: &[u8; 32]) -> Result<Vec<u8>> {
+            self.secret.with(|s| crate::wallet::substrate::sign(s, message, *r, claimed_public_key))?
+        }
+    }
+
+    thread_local! {
+        pub(super) static FAIL_RNG: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+    /// While `on`, this thread's `os_aux()` fails (`Error::Rng`): a release signer must return it, never panic.
+    pub fn vectors_fail_os_rng(on: bool) {
+        FAIL_RNG.with(|f| f.set(on));
+    }
+    /// How often the last one-shot RNG this thread used was read (1 per signature and per soft step).
+    pub fn vectors_one_shot_reads() -> u32 {
+        crate::wallet::substrate::vectors::one_shot_reads()
+    }
+    impl NativeKey {
     }
 
     /// The release Taproot signer over a raw internal secret (BIP-341 `keyPathSpending` rows): negate, tweak, BIP-340, self-check.
@@ -382,7 +435,7 @@ mod vectors {
 }
 
 #[cfg(feature = "vectors")]
-pub use vectors::{vectors_taproot_sign, vectors_taproot_sign_check};
+pub use vectors::{vectors_fail_os_rng, vectors_one_shot_reads, vectors_taproot_sign, vectors_taproot_sign_check};
 
 /// The scheme primitive of `kind` over `msg` with a raw `secret` (feature `vectors`: the external answers): `0x0101` signs
 /// `sha256(msg)`; `0x0108` and the native EVM kind `0x0001` sign the 32-byte `msg` as it is; `0x0102` ed25519; `0x0103`
