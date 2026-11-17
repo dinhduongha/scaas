@@ -36,9 +36,23 @@ mod oracle {
         let mut b = cc::Build::new();
         b.no_default_flags(true).cargo_warnings(false);
         b.compiler(env::var("CC").unwrap_or("clang".into()));
-        for f in ["-std=gnu11", "-O2", "-fno-builtin", "-fno-math-errno", "-ffp-contract=off", "-DPQZ_SV", "-Wall", "-Wextra",
-                  "-Wno-unused-parameter", "-Wno-unused-function", "-Wno-sign-compare", "-fPIC", "-fstack-protector-strong",
-                  "-ffunction-sections", "-fdata-sections"] {
+        for f in [
+            "-std=gnu11",
+            "-O2",
+            "-fno-builtin",
+            "-fno-math-errno",
+            "-ffp-contract=off",
+            "-DPQZ_SV",
+            "-Wall",
+            "-Wextra",
+            "-Wno-unused-parameter",
+            "-Wno-unused-function",
+            "-Wno-sign-compare",
+            "-fPIC",
+            "-fstack-protector-strong",
+            "-ffunction-sections",
+            "-fdata-sections",
+        ] {
             b.flag(f);
         }
         if feat("OVERSIZE") {
@@ -49,17 +63,37 @@ mod oracle {
         }
         // the one set-<set> feature (as pqz-ffi's build.rs): CARGO_FEATURE_SET_N2304_KMAX4096 -> n2304-kmax4096
         let set: Vec<String> = env::vars()
-            .filter_map(|(k, _)| k.strip_prefix("CARGO_FEATURE_SET_").map(|x| x.to_lowercase().replace('_', "-")))
+            .filter_map(|(k, _)| {
+                k.strip_prefix("CARGO_FEATURE_SET_")
+                    .map(|x| x.to_lowercase().replace('_', "-"))
+            })
             .collect();
-        assert_eq!(set.len(), 1, "exactly one parameter set feature set-<set>: {set:?}");
+        assert_eq!(
+            set.len(),
+            1,
+            "exactly one parameter set feature set-<set>: {set:?}"
+        );
         let setdir = core.join("../params/sets").join(&set[0]);
-        b.include(&inc).include(core.join("src")).include(core.join("lazer")).include(&setdir);
-        for f in ["pqz_lazer", "pqz_ntt", "pqz_arena", "pqz_rel", "pqz_keys", "pqz_sv"] {
+        b.include(&inc)
+            .include(core.join("src"))
+            .include(core.join("lazer"))
+            .include(&setdir);
+        for f in [
+            "pqz_lazer",
+            "pqz_ntt",
+            "pqz_arena",
+            "pqz_rel",
+            "pqz_keys",
+            "pqz_sv",
+        ] {
             b.file(core.join(format!("src/{f}.c")));
         }
         b.file(core.join("rust/tests/oracle_shim.c")); // test entry points (never part of the core)
         b.compile("pqz");
-        println!("cargo:rerun-if-changed={}", core.join("rust/tests/oracle_shim.c").display());
+        println!(
+            "cargo:rerun-if-changed={}",
+            core.join("rust/tests/oracle_shim.c").display()
+        );
         for d in ["src", "lazer"] {
             println!("cargo:rerun-if-changed={}", core.join(d).display());
         }

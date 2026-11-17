@@ -48,7 +48,10 @@ fn main() {
             pqzl::ct::public(&m); // the driver checks the plaintext
             ok &= m.iter().zip(&msgs[k]).all(|(&a, &b)| a == b as i64);
         }
-        println!("{{\"keys\": {i}, \"dec_ok\": {ok}, \"ctr\": [{}, {}]}}", keys[1].ctr, enc.ctr);
+        println!(
+            "{{\"keys\": {i}, \"dec_ok\": {ok}, \"ctr\": [{}, {}]}}",
+            keys[1].ctr, enc.ctr
+        );
         fails += !ok as u32;
     }
     println!("{{\"fails\": {fails}}}");

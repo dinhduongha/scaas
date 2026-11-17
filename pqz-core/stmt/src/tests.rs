@@ -41,7 +41,11 @@ fn objs() -> Objs {
 
 /// this set's ids: PQZL and, where the set has PQZH (`HAS_PQZH`), PQZH
 fn ids() -> Vec<Word> {
-    if HAS_PQZH { vec![PQZL_ID, PQZH_ID] } else { vec![PQZL_ID] }
+    if HAS_PQZH {
+        vec![PQZL_ID, PQZH_ID]
+    } else {
+        vec![PQZL_ID]
+    }
 }
 /// the second id the tests mix in: PQZH, or PQZL at a set without PQZH (`n2816-kmax65536`)
 const ID2: Word = if HAS_PQZH { PQZH_ID } else { PQZL_ID };
@@ -49,12 +53,21 @@ const ID2: Word = if HAS_PQZH { PQZH_ID } else { PQZL_ID };
 /// A valid statement of `form` (both ids alternate with `id`).
 fn build(form: Form, o: &Objs, id: &Word) -> Vec<u8> {
     let s = match form {
-        Form::Register => Stmt::Register(Register { words: [form.op_tag(), *id, [7u8; 32]], pk: &o.pk }),
+        Form::Register => Stmt::Register(Register {
+            words: [form.op_tag(), *id, [7u8; 32]],
+            pk: &o.pk,
+        }),
         Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor => {
             let mut words = Disclose::words(form, id);
             words[2] = u64_word(22776);
             words[DW_AMOUNT] = u64_word(123_456);
-            Stmt::Disclose(Disclose { form, words, pk: &o.pk, u: &o.u, v: &o.v1 })
+            Stmt::Disclose(Disclose {
+                form,
+                words,
+                pk: &o.pk,
+                u: &o.u,
+                v: &o.v1,
+            })
         }
         _ => {
             let mut header = Debit::header(form, id);
@@ -90,17 +103,39 @@ fn lengths_and_constants() {
     // every set: the lengths from k (PK = 512 k); the v3 set's numbers pinned
     let (pk, v) = (PK_BYTES, V_BYTES);
     assert_eq!((pk, N), (512 * K, 64 * K));
-    let want = [640 + 5 * pk + 4 * v, 640 + 4 * pk + 3 * v, 640 + 3 * pk + 2 * v, 640 + 3 * pk + 2 * v, 96 + pk,
-                288 + 2 * pk + v, 288 + 2 * pk + v, 288 + 2 * pk + v];
+    let want = [
+        640 + 5 * pk + 4 * v,
+        640 + 4 * pk + 3 * v,
+        640 + 3 * pk + 2 * v,
+        640 + 3 * pk + 2 * v,
+        96 + pk,
+        288 + 2 * pk + v,
+        288 + 2 * pk + v,
+        288 + 2 * pk + v,
+    ];
     for (f, n) in FORMS.iter().zip(want) {
         assert_eq!(f.stmt_len(), n, "{f:?}");
     }
-    assert_eq!((Form::Transfer0.wit_len(), Form::Transfer.wit_len()), (6 * N + 96, 6 * N + 128));
+    assert_eq!(
+        (Form::Transfer0.wit_len(), Form::Transfer.wit_len()),
+        (6 * N + 96, 6 * N + 128)
+    );
     // R_TXS / R_TXS0 (K3-4): + r_f (int8) and e1_f (int16)
-    assert_eq!((Form::TransferSplit0.wit_len(), Form::TransferSplit.wit_len()), (9 * N + 96, 9 * N + 128));
-    assert_eq!((BUNDLE_BYTES, BUNDLE0_BYTES), (16 + pk + 2 * v + 32, 16 + pk + v + 32));
+    assert_eq!(
+        (
+            Form::TransferSplit0.wit_len(),
+            Form::TransferSplit.wit_len()
+        ),
+        (9 * N + 96, 9 * N + 128)
+    );
+    assert_eq!(
+        (BUNDLE_BYTES, BUNDLE0_BYTES),
+        (16 + pk + 2 * v + 32, 16 + pk + v + 32)
+    );
     if SET == "n2048-kmax1024" {
-        let want = [83_072, 66_560, 50_048, 50_048, 16_480, 33_184, 33_184, 33_184];
+        let want = [
+            83_072, 66_560, 50_048, 50_048, 16_480, 33_184, 33_184, 33_184,
+        ];
         for (f, n) in FORMS.iter().zip(want) {
             assert_eq!(f.stmt_len(), n, "{f:?}");
         }
@@ -122,7 +157,10 @@ fn lengths_and_constants() {
         assert!(built_legs(&PQZH_ID).is_empty());
         let rg = build(Form::Register, &objs(), &PQZH_ID);
         assert_eq!(parse(OP_REGISTER, &rg).err(), Some(Reject::ProofSystemId));
-        assert_eq!(parse_multi(&build_multi(&PQZH_ID, 1, true, 0)).err(), Some(Reject::ProofSystemId));
+        assert_eq!(
+            parse_multi(&build_multi(&PQZH_ID, 1, true, 0)).err(),
+            Some(Reject::ProofSystemId)
+        );
     }
     assert_eq!(MAX_INPUT, 524_288); // every set since the R0 review fix (owner 2026-10-25; n2048-kmax1024 was 393,216)
     assert_eq!(max_proof(&[0; 32]), None);
@@ -145,9 +183,17 @@ fn retired() -> impl Iterator<Item = Word> {
 #[test]
 fn other_sets_ids_refused() {
     let o = objs();
-    let mine: Vec<_> = ALL_IDS.iter().filter(|(s, _, _)| *s == SET).map(|(_, k, id)| (*k, *id)).collect();
+    let mine: Vec<_> = ALL_IDS
+        .iter()
+        .filter(|(s, _, _)| *s == SET)
+        .map(|(_, k, id)| (*k, *id))
+        .collect();
     let want: &[(&str, Word)] = if HAS_PQZH {
-        &[("pqzl", PQZL_ID), ("pqzl_split", PQZL_SPLIT_ID), ("pqzh", PQZH_ID)]
+        &[
+            ("pqzl", PQZL_ID),
+            ("pqzl_split", PQZL_SPLIT_ID),
+            ("pqzh", PQZH_ID),
+        ]
     } else {
         &[("pqzl", PQZL_ID), ("pqzl_split", PQZL_SPLIT_ID)]
     };
@@ -155,29 +201,57 @@ fn other_sets_ids_refused() {
     let others: Vec<_> = ALL_IDS.iter().filter(|(s, _, _)| *s != SET).collect();
     assert!(others.len() >= 5, "{} other ids", others.len());
     for (s, k, id) in others {
-        assert!(*id != PQZL_ID && *id != PQZH_ID && *id != PQZL_SPLIT_ID, "{s} {k}");
+        assert!(
+            *id != PQZL_ID && *id != PQZH_ID && *id != PQZL_SPLIT_ID,
+            "{s} {k}"
+        );
         assert_eq!(max_proof(id), None, "{s} {k}");
         assert!(forms(id).is_empty(), "{s} {k}");
         for f in FORMS.iter().chain(&SPLIT_FORMS).copied() {
-            assert_eq!(parse(f.op(), &build(f, &o, id)).err(), Some(Reject::ProofSystemId), "{s} {k} {f:?}");
+            assert_eq!(
+                parse(f.op(), &build(f, &o, id)).err(),
+                Some(Reject::ProofSystemId),
+                "{s} {k} {f:?}"
+            );
         }
-        assert_eq!(parse_multi(&build_multi(id, 2, true, 0)).err(), Some(Reject::ProofSystemId), "{s} {k} op 7");
-        assert_eq!(decode_input(&input(3, &build(Form::Register, &o, id), &[1])).err(), Some(Reject::ProofSystemId));
+        assert_eq!(
+            parse_multi(&build_multi(id, 2, true, 0)).err(),
+            Some(Reject::ProofSystemId),
+            "{s} {k} op 7"
+        );
+        assert_eq!(
+            decode_input(&input(3, &build(Form::Register, &o, id), &[1])).err(),
+            Some(Reject::ProofSystemId)
+        );
     }
 }
 
 #[test]
 fn retired_ids_refused() {
     let o = objs();
-    assert!(!retired().any(|r| r == PQZL_ID || r == PQZH_ID || r == PQZL_SPLIT_ID) && PQZL_ID != PQZH_ID);
+    assert!(
+        !retired().any(|r| r == PQZL_ID || r == PQZH_ID || r == PQZL_SPLIT_ID)
+            && PQZL_ID != PQZH_ID
+    );
     for id in retired() {
         for f in FORMS.iter().chain(&SPLIT_FORMS).copied() {
-            assert_eq!(parse(f.op(), &build(f, &o, &id)).err(), Some(Reject::ProofSystemId), "{f:?}");
+            assert_eq!(
+                parse(f.op(), &build(f, &o, &id)).err(),
+                Some(Reject::ProofSystemId),
+                "{f:?}"
+            );
         }
         for (m, aud) in [(1, true), (4, false)] {
-            assert_eq!(parse_multi(&build_multi(&id, m, aud, 0)).err(), Some(Reject::ProofSystemId), "M = {m}");
+            assert_eq!(
+                parse_multi(&build_multi(&id, m, aud, 0)).err(),
+                Some(Reject::ProofSystemId),
+                "M = {m}"
+            );
         }
-        assert_eq!(decode_input(&input(3, &build(Form::Register, &o, &id), &[1])).err(), Some(Reject::ProofSystemId));
+        assert_eq!(
+            decode_input(&input(3, &build(Form::Register, &o, &id), &[1])).err(),
+            Some(Reject::ProofSystemId)
+        );
     }
 }
 
@@ -198,7 +272,10 @@ fn round_trip_every_form_both_ids() {
         let b = build(f, &o, &PQZL_SPLIT_ID);
         assert_eq!(b.len(), f.stmt_len(), "{f:?}");
         let s = parse(f.op(), &b).unwrap_or_else(|e| panic!("split {f:?}: {e:?}"));
-        assert_eq!((s.form(), s.proof_system_id()), (Some(f), Some(&PQZL_SPLIT_ID)));
+        assert_eq!(
+            (s.form(), s.proof_system_id()),
+            (Some(f), Some(&PQZL_SPLIT_ID))
+        );
         assert_eq!(s.encode().unwrap(), b, "split {f:?}: encode(parse(x)) != x");
     }
 }
@@ -223,19 +300,34 @@ fn split_id_serves_its_forms_only() {
     ];
     for (f, want) in refused {
         assert!(!SPLIT_FORMS.contains(&f));
-        assert_eq!(parse(f.op(), &build(f, &o, &PQZL_SPLIT_ID)).err(), Some(want), "{f:?} under the split id");
+        assert_eq!(
+            parse(f.op(), &build(f, &o, &PQZL_SPLIT_ID)).err(),
+            Some(want),
+            "{f:?} under the split id"
+        );
     }
-    assert_eq!(parse_multi(&build_multi(&PQZL_SPLIT_ID, 1, true, 0)).err(), Some(Reject::ProofSystemId), "op 7");
+    assert_eq!(
+        parse_multi(&build_multi(&PQZL_SPLIT_ID, 1, true, 0)).err(),
+        Some(Reject::ProofSystemId),
+        "op 7"
+    );
     // a split statement under PQZL_ID / PQZH_ID: no op 1 length of theirs
     for id in ids() {
         for f in [Form::TransferSplit, Form::TransferSplit0] {
             let b = build(f, &o, &PQZL_SPLIT_ID);
-            assert_eq!(parse(OP_TRANSFER, &with(&b, 32, &id)).err(), Some(Reject::Length), "{f:?} under {id:x?}");
+            assert_eq!(
+                parse(OP_TRANSFER, &with(&b, 32, &id)).err(),
+                Some(Reject::Length),
+                "{f:?} under {id:x?}"
+            );
         }
     }
     // the precompile input: the split id's register refused, its transfer accepted with a proof up to MAX_PROOF_PQZL
     let rg = with(&build(Form::Register, &o, &PQZL_ID), 32, &PQZL_SPLIT_ID);
-    assert_eq!(decode_input(&input(3, &rg, &[1])).err(), Some(Reject::ProofSystemId));
+    assert_eq!(
+        decode_input(&input(3, &rg, &[1])).err(),
+        Some(Reject::ProofSystemId)
+    );
     let ts = build(Form::TransferSplit, &o, &PQZL_SPLIT_ID);
     assert!(decode_input(&input(1, &ts, &[1])).is_ok());
     // encode: u_f exactly on the split forms
@@ -256,14 +348,26 @@ fn split_id_serves_its_forms_only() {
 #[test]
 fn split_lengths_pinned() {
     let o = objs();
-    let op1 = [Form::Transfer, Form::Transfer0, Form::TransferSplit, Form::TransferSplit0].map(Form::stmt_len);
+    let op1 = [
+        Form::Transfer,
+        Form::Transfer0,
+        Form::TransferSplit,
+        Form::TransferSplit0,
+    ]
+    .map(Form::stmt_len);
     for i in 0..4 {
         for j in i + 1..4 {
             assert_ne!(op1[i], op1[j], "op 1 lengths {i} / {j}");
         }
     }
-    assert_eq!(Form::TransferSplit.stmt_len(), Form::Transfer.stmt_len() + PK_BYTES);
-    assert_eq!(Form::TransferSplit0.stmt_len(), Form::Transfer0.stmt_len() + PK_BYTES);
+    assert_eq!(
+        Form::TransferSplit.stmt_len(),
+        Form::Transfer.stmt_len() + PK_BYTES
+    );
+    assert_eq!(
+        Form::TransferSplit0.stmt_len(),
+        Form::Transfer0.stmt_len() + PK_BYTES
+    );
     let want = match SET {
         "n2048-kmax1024" => (99_456, 82_944),
         "n2304-kmax4096" => (111_744, 93_184),
@@ -271,8 +375,17 @@ fn split_lengths_pinned() {
         "n2816-kmax65536" => (136_320, 113_664),
         s => panic!("no pinned split lengths for {s}"),
     };
-    assert_eq!((Form::TransferSplit.stmt_len(), Form::TransferSplit0.stmt_len()), want);
-    for (f, g) in [(Form::Transfer, Form::TransferSplit), (Form::Transfer0, Form::TransferSplit0)] {
+    assert_eq!(
+        (
+            Form::TransferSplit.stmt_len(),
+            Form::TransferSplit0.stmt_len()
+        ),
+        want
+    );
+    for (f, g) in [
+        (Form::Transfer, Form::TransferSplit),
+        (Form::Transfer0, Form::TransferSplit0),
+    ] {
         let (a, b) = (build(f, &o, &PQZL_ID), build(g, &o, &PQZL_SPLIT_ID));
         assert_eq!(a[..32], b[..32]);
         assert_eq!(a[64..], b[64..a.len()], "{g:?}: earlier offsets moved");
@@ -326,61 +439,304 @@ fn every_d15_r6_rule_rejects() {
     let da = build(Form::DiscloseAuditor, &o, &PQZL_ID);
     let rg = build(Form::Register, &o, &ID2);
     let cases: Vec<(&str, u8, Vec<u8>, Reject)> = vec![
-        ("coefficient = q", 1, with(&t, 640, &Q.to_be_bytes()), Reject::Coefficient),
-        ("coefficient = 2^LOG2Q", 1, with(&t, 640, &(1u64 << LOG2Q).to_be_bytes()), Reject::Coefficient),
-        ("coefficient = q in v_a", 1, with(&t, t.len() - 8, &Q.to_be_bytes()), Reject::Coefficient),
-        ("coefficient = q in R_TX0", 1, with(&t0, 700, &Q.to_be_bytes()), Reject::Coefficient),
-        ("coefficient = q in pk (register)", 3, with(&rg, 96, &u64::MAX.to_be_bytes()), Reject::Coefficient),
-        ("coefficient = q in v (disclose)", 4, with(&ds, ds.len() - 8, &Q.to_be_bytes()), Reject::Coefficient),
+        (
+            "coefficient = q",
+            1,
+            with(&t, 640, &Q.to_be_bytes()),
+            Reject::Coefficient,
+        ),
+        (
+            "coefficient = 2^LOG2Q",
+            1,
+            with(&t, 640, &(1u64 << LOG2Q).to_be_bytes()),
+            Reject::Coefficient,
+        ),
+        (
+            "coefficient = q in v_a",
+            1,
+            with(&t, t.len() - 8, &Q.to_be_bytes()),
+            Reject::Coefficient,
+        ),
+        (
+            "coefficient = q in R_TX0",
+            1,
+            with(&t0, 700, &Q.to_be_bytes()),
+            Reject::Coefficient,
+        ),
+        (
+            "coefficient = q in pk (register)",
+            3,
+            with(&rg, 96, &u64::MAX.to_be_bytes()),
+            Reject::Coefficient,
+        ),
+        (
+            "coefficient = q in v (disclose)",
+            4,
+            with(&ds, ds.len() - 8, &Q.to_be_bytes()),
+            Reject::Coefficient,
+        ),
         ("fee top byte != 0", 1, with(&t, 256, &[1]), Reject::Fee),
         ("fee = 2^64", 1, with(&t, 256 + 23, &[1]), Reject::Fee),
-        ("burn amount >= 2^64", 2, with(&bu, 288 + 5, &[0x80]), Reject::Amount),
-        ("disclosure amount >= 2^64", 4, with(&ds, 224, &[1]), Reject::Amount),
+        (
+            "burn amount >= 2^64",
+            2,
+            with(&bu, 288 + 5, &[0x80]),
+            Reject::Amount,
+        ),
+        (
+            "disclosure amount >= 2^64",
+            4,
+            with(&ds, 224, &[1]),
+            Reject::Amount,
+        ),
         // kind = OpeningKind + 256 w (R0-1): w = 0 for SENDER_S / RECEIVER_X, w < S_AUD for AUDITOR, the word < 2^16
-        ("SENDER_S kind window 1", 4, with(&ds, 256 + 30, &[1]), Reject::Kind),
-        ("RECEIVER_X kind window 1", 5, with(&dr, 256 + 30, &[1]), Reject::Kind),
-        ("AUDITOR kind window S_AUD", 5, with(&da, 256 + 30, &[S_AUD as u8]), Reject::Kind),
-        ("AUDITOR kind window 255", 5, with(&da, 256 + 30, &[0xff]), Reject::Kind),
-        ("kind word >= 2^16", 5, with(&da, 256 + 29, &[1]), Reject::Kind),
+        (
+            "SENDER_S kind window 1",
+            4,
+            with(&ds, 256 + 30, &[1]),
+            Reject::Kind,
+        ),
+        (
+            "RECEIVER_X kind window 1",
+            5,
+            with(&dr, 256 + 30, &[1]),
+            Reject::Kind,
+        ),
+        (
+            "AUDITOR kind window S_AUD",
+            5,
+            with(&da, 256 + 30, &[S_AUD as u8]),
+            Reject::Kind,
+        ),
+        (
+            "AUDITOR kind window 255",
+            5,
+            with(&da, 256 + 30, &[0xff]),
+            Reject::Kind,
+        ),
+        (
+            "kind word >= 2^16",
+            5,
+            with(&da, 256 + 29, &[1]),
+            Reject::Kind,
+        ),
         ("kind word >= 2^64", 4, with(&ds, 256, &[1]), Reject::Kind),
         // T-36: the low byte is the form's OpeningKind (SENDER_S 0, RECEIVER_X 1, AUDITOR 2); positive controls: the
         // round trips (each form with its own byte) and the AUDITOR windows below
-        ("SENDER_S low byte 1", 4, with(&ds, 256 + 31, &[1]), Reject::Kind),
-        ("SENDER_S low byte 2", 4, with(&ds, 256 + 31, &[2]), Reject::Kind),
-        ("RECEIVER_X low byte 0", 5, with(&dr, 256 + 31, &[0]), Reject::Kind),
-        ("RECEIVER_X low byte 2", 5, with(&dr, 256 + 31, &[2]), Reject::Kind),
-        ("AUDITOR low byte 1 (window 1)", 5, with(&da, 256 + 30, &[1, 1]), Reject::Kind),
-        ("AUDITOR low byte 0", 5, with(&da, 256 + 31, &[0]), Reject::Kind),
-        ("AUDITOR low byte 3", 5, with(&da, 256 + 31, &[3]), Reject::Kind),
-        ("transfer amount >= 2^64 (decoder stricter than R_TX)", 1, with(&t, 288, &[1]), Reject::Amount),
-        ("salt word top byte set", 1, with(&t, 576, &[1]), Reject::Salt),
-        ("salt word byte 15 set (R_TX0)", 1, with(&t0, 591, &[0x80]), Reject::Salt),
-        ("burn salt word byte 0 set", 2, with(&bu, 576, &[0xff]), Reject::Salt),
-        ("transfer amount != 0", 1, with(&t, 288 + 31, &[1]), Reject::MustBeZero("amount")),
-        ("transfer recipient != 0", 1, with(&t, 320 + 12, &[1]), Reject::MustBeZero("recipient")),
-        ("R_TX0 recipient != 0", 1, with(&t0, 351, &[1]), Reject::MustBeZero("recipient")),
-        ("burn toUA != 0", 2, with(&bu, 192 + 31, &[1]), Reject::MustBeZero("toUA")),
-        ("burn auditorOn != 0", 2, with(&bu, 448 + 31, &[1]), Reject::MustBeZero("auditorOn")),
-        ("burn salt != 0 (low half)", 2, with(&bu, 607, &[1]), Reject::MustBeZero("salt")),
-        ("refresh toUA != 0", 2, with(&rf, 200, &[1]), Reject::MustBeZero("toUA")),
-        ("refresh amount != 0", 2, with(&rf, 319, &[1]), Reject::MustBeZero("amount")),
-        ("refresh recipient != 0", 2, with(&rf, 340, &[1]), Reject::MustBeZero("recipient")),
-        ("refresh auditorOn != 0", 2, with(&rf, 479, &[1]), Reject::MustBeZero("auditorOn")),
-        ("refresh salt != 0 (low half)", 2, with(&rf, 600, &[1]), Reject::MustBeZero("salt")),
-        ("auditorOn = 2", 1, with(&t, 448 + 31, &[2]), Reject::AuditorOn),
-        ("auditorOn = 0 on 83,072 B (dummy auditor)", 1, with(&t, 448 + 31, &[0]), Reject::AuditorOn),
-        ("auditorOn = 1 on 66,560 B", 1, with(&t0, 448 + 31, &[1]), Reject::AuditorOn),
-        ("auditorOn high byte", 1, with(&t, 448, &[1]), Reject::AuditorOn),
+        (
+            "SENDER_S low byte 1",
+            4,
+            with(&ds, 256 + 31, &[1]),
+            Reject::Kind,
+        ),
+        (
+            "SENDER_S low byte 2",
+            4,
+            with(&ds, 256 + 31, &[2]),
+            Reject::Kind,
+        ),
+        (
+            "RECEIVER_X low byte 0",
+            5,
+            with(&dr, 256 + 31, &[0]),
+            Reject::Kind,
+        ),
+        (
+            "RECEIVER_X low byte 2",
+            5,
+            with(&dr, 256 + 31, &[2]),
+            Reject::Kind,
+        ),
+        (
+            "AUDITOR low byte 1 (window 1)",
+            5,
+            with(&da, 256 + 30, &[1, 1]),
+            Reject::Kind,
+        ),
+        (
+            "AUDITOR low byte 0",
+            5,
+            with(&da, 256 + 31, &[0]),
+            Reject::Kind,
+        ),
+        (
+            "AUDITOR low byte 3",
+            5,
+            with(&da, 256 + 31, &[3]),
+            Reject::Kind,
+        ),
+        (
+            "transfer amount >= 2^64 (decoder stricter than R_TX)",
+            1,
+            with(&t, 288, &[1]),
+            Reject::Amount,
+        ),
+        (
+            "salt word top byte set",
+            1,
+            with(&t, 576, &[1]),
+            Reject::Salt,
+        ),
+        (
+            "salt word byte 15 set (R_TX0)",
+            1,
+            with(&t0, 591, &[0x80]),
+            Reject::Salt,
+        ),
+        (
+            "burn salt word byte 0 set",
+            2,
+            with(&bu, 576, &[0xff]),
+            Reject::Salt,
+        ),
+        (
+            "transfer amount != 0",
+            1,
+            with(&t, 288 + 31, &[1]),
+            Reject::MustBeZero("amount"),
+        ),
+        (
+            "transfer recipient != 0",
+            1,
+            with(&t, 320 + 12, &[1]),
+            Reject::MustBeZero("recipient"),
+        ),
+        (
+            "R_TX0 recipient != 0",
+            1,
+            with(&t0, 351, &[1]),
+            Reject::MustBeZero("recipient"),
+        ),
+        (
+            "burn toUA != 0",
+            2,
+            with(&bu, 192 + 31, &[1]),
+            Reject::MustBeZero("toUA"),
+        ),
+        (
+            "burn auditorOn != 0",
+            2,
+            with(&bu, 448 + 31, &[1]),
+            Reject::MustBeZero("auditorOn"),
+        ),
+        (
+            "burn salt != 0 (low half)",
+            2,
+            with(&bu, 607, &[1]),
+            Reject::MustBeZero("salt"),
+        ),
+        (
+            "refresh toUA != 0",
+            2,
+            with(&rf, 200, &[1]),
+            Reject::MustBeZero("toUA"),
+        ),
+        (
+            "refresh amount != 0",
+            2,
+            with(&rf, 319, &[1]),
+            Reject::MustBeZero("amount"),
+        ),
+        (
+            "refresh recipient != 0",
+            2,
+            with(&rf, 340, &[1]),
+            Reject::MustBeZero("recipient"),
+        ),
+        (
+            "refresh auditorOn != 0",
+            2,
+            with(&rf, 479, &[1]),
+            Reject::MustBeZero("auditorOn"),
+        ),
+        (
+            "refresh salt != 0 (low half)",
+            2,
+            with(&rf, 600, &[1]),
+            Reject::MustBeZero("salt"),
+        ),
+        (
+            "auditorOn = 2",
+            1,
+            with(&t, 448 + 31, &[2]),
+            Reject::AuditorOn,
+        ),
+        (
+            "auditorOn = 0 on 83,072 B (dummy auditor)",
+            1,
+            with(&t, 448 + 31, &[0]),
+            Reject::AuditorOn,
+        ),
+        (
+            "auditorOn = 1 on 66,560 B",
+            1,
+            with(&t0, 448 + 31, &[1]),
+            Reject::AuditorOn,
+        ),
+        (
+            "auditorOn high byte",
+            1,
+            with(&t, 448, &[1]),
+            Reject::AuditorOn,
+        ),
         ("length - 1", 1, t[..t.len() - 1].to_vec(), Reject::Length),
         ("length + 1", 1, [&t[..], &[0]].concat(), Reject::Length),
-        ("R_TX0 length + 1", 1, [&t0[..], &[0]].concat(), Reject::Length),
-        ("burn length - 1", 2, bu[..bu.len() - 1].to_vec(), Reject::Length),
-        ("register length + 1", 3, [&rg[..], &[0]].concat(), Reject::Length),
-        ("wrong opTag for op (transfer under op 2)", 2, t.clone(), Reject::OpTag),
-        ("REFRESH tag under op 1", 1, with(&t, 0, &Form::Refresh.op_tag()), Reject::OpTag),
-        ("AUDITOR tag under op 4", 4, with(&ds, 0, &Form::DiscloseAuditor.op_tag()), Reject::OpTag),
-        ("unknown proofSystemId", 1, with(&t, 32, &[0; 32]), Reject::ProofSystemId),
-        ("retired STARK id", 3, with(&rg, 32, &RETIRED_IDS.iter().find(|r| r.0.contains("stark")).unwrap().1), Reject::ProofSystemId),
+        (
+            "R_TX0 length + 1",
+            1,
+            [&t0[..], &[0]].concat(),
+            Reject::Length,
+        ),
+        (
+            "burn length - 1",
+            2,
+            bu[..bu.len() - 1].to_vec(),
+            Reject::Length,
+        ),
+        (
+            "register length + 1",
+            3,
+            [&rg[..], &[0]].concat(),
+            Reject::Length,
+        ),
+        (
+            "wrong opTag for op (transfer under op 2)",
+            2,
+            t.clone(),
+            Reject::OpTag,
+        ),
+        (
+            "REFRESH tag under op 1",
+            1,
+            with(&t, 0, &Form::Refresh.op_tag()),
+            Reject::OpTag,
+        ),
+        (
+            "AUDITOR tag under op 4",
+            4,
+            with(&ds, 0, &Form::DiscloseAuditor.op_tag()),
+            Reject::OpTag,
+        ),
+        (
+            "unknown proofSystemId",
+            1,
+            with(&t, 32, &[0; 32]),
+            Reject::ProofSystemId,
+        ),
+        (
+            "retired STARK id",
+            3,
+            with(
+                &rg,
+                32,
+                &RETIRED_IDS
+                    .iter()
+                    .find(|r| r.0.contains("stark"))
+                    .unwrap()
+                    .1,
+            ),
+            Reject::ProofSystemId,
+        ),
         ("unknown op 0", 0, t.clone(), Reject::Op),
         ("op 1 statement under op 7", 7, t.clone(), Reject::OpTag),
         ("unknown op 8", 8, t.clone(), Reject::Op),
@@ -393,10 +749,21 @@ fn every_d15_r6_rule_rejects() {
     assert_eq!(parse(6, &[]), Ok(Stmt::SelfTest));
     // the AUDITOR windows below S_AUD are accepted (R0-1), with the AUDITOR byte 2 (T-36)
     for w in 0..S_AUD {
-        assert!(parse(5, &with(&da, 256 + 30, &[w as u8, 2])).is_ok(), "AUDITOR window {w}");
+        assert!(
+            parse(5, &with(&da, 256 + 30, &[w as u8, 2])).is_ok(),
+            "AUDITOR window {w}"
+        );
     }
-    for (f, b) in [(Form::DiscloseSender, &ds), (Form::DiscloseReceiver, &dr), (Form::DiscloseAuditor, &da)] {
-        assert_eq!(b[256 + 31] as u64, f.opening_kind().unwrap(), "{f:?}'s builder byte");
+    for (f, b) in [
+        (Form::DiscloseSender, &ds),
+        (Form::DiscloseReceiver, &dr),
+        (Form::DiscloseAuditor, &da),
+    ] {
+        assert_eq!(
+            b[256 + 31] as u64,
+            f.opening_kind().unwrap(),
+            "{f:?}'s builder byte"
+        );
     }
 }
 
@@ -404,37 +771,87 @@ fn every_d15_r6_rule_rejects() {
 fn bundle_and_opening() {
     let o = objs();
     for v_a in [Some(&o.v3[..]), None] {
-        let b = Bundle { salt: [3; 16], u: &o.u, v_t: &o.v1, v_a, to_ua: [9; 32] };
+        let b = Bundle {
+            salt: [3; 16],
+            u: &o.u,
+            v_t: &o.v1,
+            v_a,
+            to_ua: [9; 32],
+        };
         let e = b.encode().unwrap();
-        assert_eq!(e.len(), if v_a.is_some() { BUNDLE_BYTES } else { BUNDLE0_BYTES });
+        assert_eq!(
+            e.len(),
+            if v_a.is_some() {
+                BUNDLE_BYTES
+            } else {
+                BUNDLE0_BYTES
+            }
+        );
         assert_eq!(parse_bundle(&e).unwrap(), b);
         assert_eq!(parse_bundle(&e[1..]).err(), Some(Reject::Length));
-        assert_eq!(parse_bundle(&with(&e, 16, &Q.to_be_bytes())).err(), Some(Reject::Coefficient));
+        assert_eq!(
+            parse_bundle(&with(&e, 16, &Q.to_be_bytes())).err(),
+            Some(Reject::Coefficient)
+        );
         for plen in [0usize, 1, 31, 32, 33, 42_741] {
             let proof: Vec<u8> = (0..plen).map(|i| i as u8).collect();
             let op = opening(&e, &proof);
             assert_eq!(op.len() % 32, 0);
             assert_eq!(parse_opening(&op), Ok((&e[..], &proof[..])));
-            assert_eq!(parse_opening(&[&op[..], &[0; 32]].concat()).err(), Some(Reject::Opening), "trailing");
-            assert_eq!(parse_opening(&op[..op.len() - 1]).err(), Some(Reject::Opening), "short");
-            assert_eq!(parse_opening(&with(&op, 31, &[96])).err(), Some(Reject::Opening), "head offset");
+            assert_eq!(
+                parse_opening(&[&op[..], &[0; 32]].concat()).err(),
+                Some(Reject::Opening),
+                "trailing"
+            );
+            assert_eq!(
+                parse_opening(&op[..op.len() - 1]).err(),
+                Some(Reject::Opening),
+                "short"
+            );
+            assert_eq!(
+                parse_opening(&with(&op, 31, &[96])).err(),
+                Some(Reject::Opening),
+                "head offset"
+            );
             if plen % 32 != 0 {
                 let last = op.len() - 1;
-                assert_eq!(parse_opening(&with(&op, last, &[1])).err(), Some(Reject::Opening), "padding");
+                assert_eq!(
+                    parse_opening(&with(&op, last, &[1])).err(),
+                    Some(Reject::Opening),
+                    "padding"
+                );
             }
         }
     }
     // length words near 2^64: rejected, no overflow (debug builds check arithmetic)
-    for n in [u64::MAX, u64::MAX - 31, u64::MAX - 63, (usize::MAX - 40) as u64, 1 << 40] {
+    for n in [
+        u64::MAX,
+        u64::MAX - 31,
+        u64::MAX - 63,
+        (usize::MAX - 40) as u64,
+        1 << 40,
+    ] {
         let mut op = opening(&[1; 33], &[2; 5]);
         op[64..96].copy_from_slice(&u64_word(n));
-        assert_eq!(parse_opening(&op).err(), Some(Reject::Opening), "bundle length {n}");
+        assert_eq!(
+            parse_opening(&op).err(),
+            Some(Reject::Opening),
+            "bundle length {n}"
+        );
         let mut op = opening(&[1; 33], &[2; 5]);
         op[160..192].copy_from_slice(&u64_word(n));
-        assert_eq!(parse_opening(&op).err(), Some(Reject::Opening), "proof length {n}");
+        assert_eq!(
+            parse_opening(&op).err(),
+            Some(Reject::Opening),
+            "proof length {n}"
+        );
         let mut op = opening(&[1; 33], &[2; 5]);
         op[32..64].copy_from_slice(&u64_word(n));
-        assert_eq!(parse_opening(&op).err(), Some(Reject::Opening), "second offset {n}");
+        assert_eq!(
+            parse_opening(&op).err(),
+            Some(Reject::Opening),
+            "second offset {n}"
+        );
     }
     // the opening layout of pqz_kat.py's self-test: bundle 33 B, proof 5 B
     let op = opening(&[1; 33], &[2; 5]);
@@ -449,17 +866,29 @@ fn precompile_input() {
     let proof = vec![0x5a; 42_415];
     let inp = input(OP_TRANSFER, &t0, &proof);
     let d = decode_input(&inp).unwrap();
-    assert_eq!((d.op, d.stmt.form(), d.proof.len(), d.stmt_bytes), (1, Some(Form::Transfer0), 42_415, &t0[..]));
-    assert_eq!(decode_input(&input(OP_TRANSFER, &t0, &[])).err(), Some(Reject::ProofLength));
+    assert_eq!(
+        (d.op, d.stmt.form(), d.proof.len(), d.stmt_bytes),
+        (1, Some(Form::Transfer0), 42_415, &t0[..])
+    );
+    assert_eq!(
+        decode_input(&input(OP_TRANSFER, &t0, &[])).err(),
+        Some(Reject::ProofLength)
+    );
     let big = vec![1; MAX_PROOF_PQZL + 1];
-    assert_eq!(decode_input(&input(OP_TRANSFER, &t0, &big)).err(), Some(Reject::ProofLength));
+    assert_eq!(
+        decode_input(&input(OP_TRANSFER, &t0, &big)).err(),
+        Some(Reject::ProofLength)
+    );
     let h = build(Form::Transfer, &o, &ID2);
     if HAS_PQZH {
         assert!(decode_input(&input(OP_TRANSFER, &h, &big)).is_ok()); // PQZH bound is larger
     }
     let max = vec![1; max_proof(&ID2).unwrap()];
     assert!(decode_input(&input(OP_TRANSFER, &h, &max)).is_ok()); // the largest R_TX input (n2048-kmax1024: 345,221 B)
-    assert_eq!(decode_input(&input(OP_TRANSFER, &h, &[max.as_slice(), &[1]].concat())).err(), Some(Reject::ProofLength));
+    assert_eq!(
+        decode_input(&input(OP_TRANSFER, &h, &[max.as_slice(), &[1]].concat())).err(),
+        Some(Reject::ProofLength)
+    );
     let mut over = input(OP_TRANSFER, &h, &max);
     over.resize(MAX_INPUT + 1, 0);
     assert_eq!(decode_input(&over).err(), Some(Reject::Input));
@@ -469,8 +898,14 @@ fn precompile_input() {
     let mut short_len = inp.clone(); // length field one short: the statement is cut, its last byte joins the proof
     short_len[1..5].copy_from_slice(&((t0.len() - 1) as u32).to_be_bytes());
     assert_eq!(decode_input(&short_len).err(), Some(Reject::Length));
-    assert_eq!(decode_input(&[6, 0, 0, 0, 0]).map(|d| d.stmt), Ok(Stmt::SelfTest));
-    assert_eq!(decode_input(&[6, 0, 0, 0, 0, 1]).err(), Some(Reject::ProofLength));
+    assert_eq!(
+        decode_input(&[6, 0, 0, 0, 0]).map(|d| d.stmt),
+        Ok(Stmt::SelfTest)
+    );
+    assert_eq!(
+        decode_input(&[6, 0, 0, 0, 0, 1]).err(),
+        Some(Reject::ProofLength)
+    );
     assert_eq!(decode_input(&[6, 0, 0, 0, 1, 0]).err(), Some(Reject::Op));
     assert_eq!(decode_input(&[1, 0, 0]).err(), Some(Reject::Input));
 }
@@ -486,7 +921,10 @@ fn coefficient_codec() {
     assert_eq!(back, c);
     assert_eq!(write_coeffs(&[Q], &mut b).err(), Some(Reject::Coefficient));
     assert_eq!(check_ct(&b).err(), Some(Reject::Length));
-    assert_eq!(read_coeffs(&Q.to_be_bytes(), &mut back[..1]).err(), Some(Reject::Coefficient));
+    assert_eq!(
+        read_coeffs(&Q.to_be_bytes(), &mut back[..1]).err(),
+        Some(Reject::Coefficient)
+    );
     assert_eq!(word_u64(&u64_word(u64::MAX)), Some(u64::MAX));
 }
 
@@ -495,9 +933,18 @@ fn coefficient_codec() {
 /// A valid op 7 statement: M keys / legs, G groups, auditor on / off, the given fee.
 fn build_multi(id: &Word, m: usize, aud: bool, fee: u64) -> Vec<u8> {
     let g = groups(m, aud);
-    let (pks, us, vs, v_as) =
-        (poly_bytes(m * K * D, 11), poly_bytes(g * K * D, 12), poly_bytes(16 * m, 13), poly_bytes(16 * m, 14));
-    let (pk_f, pk_a, t, v_f) = (poly_bytes(K * D, 1), poly_bytes(K * D, 3), poly_bytes(K * D + 16, 4), poly_bytes(16, 7));
+    let (pks, us, vs, v_as) = (
+        poly_bytes(m * K * D, 11),
+        poly_bytes(g * K * D, 12),
+        poly_bytes(16 * m, 13),
+        poly_bytes(16 * m, 14),
+    );
+    let (pk_f, pk_a, t, v_f) = (
+        poly_bytes(K * D, 1),
+        poly_bytes(K * D, 3),
+        poly_bytes(K * D + 16, 4),
+        poly_bytes(16, 7),
+    );
     let mut header = Multi::header(id, m, aud);
     header[H_FEE] = u64_word(fee);
     header[H_RECIPIENTS_HASH] = [0x5c; 32];
@@ -529,18 +976,40 @@ fn multi_lengths_and_sets() {
     ];
     for (m, on, off) in want {
         if SET == "n2048-kmax1024" {
-            assert_eq!((multi_len(m, true), multi_len(m, false)), (on, off), "M = {m}");
+            assert_eq!(
+                (multi_len(m, true), multi_len(m, false)),
+                (on, off),
+                "M = {m}"
+            );
         }
         let (pk, v) = (PK_BYTES, V_BYTES);
-        assert_eq!(multi_len(m, true), 640 + 3 * pk + 2 * v + (pk + 2 * v) * m + pk * m.div_ceil(S_AUD));
-        assert_eq!(multi_len(m, false), 640 + 2 * pk + 2 * v + (pk + v) * m + pk * m.div_ceil(4));
+        assert_eq!(
+            multi_len(m, true),
+            640 + 3 * pk + 2 * v + (pk + 2 * v) * m + pk * m.div_ceil(S_AUD)
+        );
+        assert_eq!(
+            multi_len(m, false),
+            640 + 2 * pk + 2 * v + (pk + v) * m + pk * m.div_ceil(4)
+        );
     }
-    assert_eq!([1, 2, 4, 5, 8, 9, 16].map(|m| groups(m, false)), [1, 1, 1, 2, 2, 3, 4]);
-    assert_eq!([1, 2, 3, 4, 8].map(|m| groups(m, true)), [1, 2, 3, 4, 8].map(|m: usize| m.div_ceil(S_AUD)));
+    assert_eq!(
+        [1, 2, 4, 5, 8, 9, 16].map(|m| groups(m, false)),
+        [1, 1, 1, 2, 2, 3, 4]
+    );
+    assert_eq!(
+        [1, 2, 3, 4, 8].map(|m| groups(m, true)),
+        [1, 2, 3, 4, 8].map(|m: usize| m.div_ceil(S_AUD))
+    );
     // M = 1 has op 1's lengths (F6); the lengths of the union of built sets are distinct except (M = 1, on) =
     // (M = 2, off), whose object counts are equal: the header's M and auditorOn words pick the shape (R4 as built)
-    assert_eq!((multi_len(1, true), multi_len(1, false)), (Form::Transfer.stmt_len(), Form::Transfer0.stmt_len()));
-    let shapes: Vec<(usize, bool)> = [1, 2, 4, 8, 16].iter().flat_map(|&m| [(m, true), (m, false)]).collect();
+    assert_eq!(
+        (multi_len(1, true), multi_len(1, false)),
+        (Form::Transfer.stmt_len(), Form::Transfer0.stmt_len())
+    );
+    let shapes: Vec<(usize, bool)> = [1, 2, 4, 8, 16]
+        .iter()
+        .flat_map(|&m| [(m, true), (m, false)])
+        .collect();
     for (i, &a) in shapes.iter().enumerate() {
         for &b in &shapes[i + 1..] {
             let same = multi_len(a.0, a.1) == multi_len(b.0, b.1);
@@ -548,7 +1017,13 @@ fn multi_lengths_and_sets() {
         }
     }
     #[cfg(not(feature = "oversize"))]
-    assert_eq!((built_legs(&PQZL_ID), built_legs(&PQZH_ID)), (&[1, 2, 4, 8][..], if HAS_PQZH { &[1, 2, 4][..] } else { &[][..] }));
+    assert_eq!(
+        (built_legs(&PQZL_ID), built_legs(&PQZH_ID)),
+        (
+            &[1, 2, 4, 8][..],
+            if HAS_PQZH { &[1, 2, 4][..] } else { &[][..] }
+        )
+    );
     assert!(built_legs(&[0; 32]).is_empty());
     // D8 / D20: every built op 7 shape leaves room for MAX_PROOF(id) within MAX_INPUT (owner 2026-10-25, the R0 review
     // fix: MAX_INPUT 512 KiB and MAX_PROOF_PQZH 320 KiB at every PQZH set; the largest PQZH input 5 + 165,760 + 327,680
@@ -558,7 +1033,10 @@ fn multi_lengths_and_sets() {
     for id in ids() {
         for aud in [true, false] {
             for &m in built_legs(&id) {
-                assert!(5 + multi_len(m, aud) + max_proof(&id).unwrap() <= MAX_INPUT, "M = {m}, A = {aud}");
+                assert!(
+                    5 + multi_len(m, aud) + max_proof(&id).unwrap() <= MAX_INPUT,
+                    "M = {m}, A = {aud}"
+                );
             }
         }
     }
@@ -575,11 +1053,21 @@ fn multi_round_trip_every_built_shape_fee_0() {
                     assert_eq!(b.len(), multi_len(m, aud));
                     let s = parse_multi(&b).unwrap_or_else(|e| panic!("M = {m}, A = {aud}: {e:?}"));
                     let g = groups(m, aud);
-                    assert_eq!((s.m, s.pk_a.is_some(), s.fee(), s.groups()), (m, aud, fee, g));
-                    assert_eq!(s.encode().unwrap(), b, "encode(parse(x)) != x, M = {m}, A = {aud}");
+                    assert_eq!(
+                        (s.m, s.pk_a.is_some(), s.fee(), s.groups()),
+                        (m, aud, fee, g)
+                    );
+                    assert_eq!(
+                        s.encode().unwrap(),
+                        b,
+                        "encode(parse(x)) != x, M = {m}, A = {aud}"
+                    );
                     // §4 offsets
                     let a = aud as usize;
-                    assert_eq!(s.pk(m - 1), &b[640 + PK_BYTES + PK_BYTES * (m - 1)..][..PK_BYTES]);
+                    assert_eq!(
+                        s.pk(m - 1),
+                        &b[640 + PK_BYTES + PK_BYTES * (m - 1)..][..PK_BYTES]
+                    );
                     let u0 = 640 + 2 * PK_BYTES + V_BYTES + PK_BYTES * (m + a);
                     assert_eq!(s.u(g - 1), &b[u0 + PK_BYTES * (g - 1)..][..PK_BYTES]);
                     let v0 = u0 + PK_BYTES * g;
@@ -623,9 +1111,11 @@ fn multi_m1_body_is_op1_body() {
         let op1 = Stmt::Debit(d).encode().unwrap();
         assert!(parse(OP_TRANSFER, &op1).is_ok());
         assert_eq!(op1[HEADER_BYTES..], b[HEADER_BYTES..], "A = {aud}");
-        let diff: Vec<usize> = (0..20).filter(|&i| op1[32 * i..32 * i + 32] != b[32 * i..32 * i + 32]).collect();
+        let diff: Vec<usize> = (0..20)
+            .filter(|&i| op1[32 * i..32 * i + 32] != b[32 * i..32 * i + 32])
+            .collect();
         assert_eq!(diff, [H_OPTAG, H_LEGS]); // word 192 equal here by construction
-        // the forms never decode as each other
+                                             // the forms never decode as each other
         assert_eq!(parse_multi(&op1).err(), Some(Reject::OpTag));
         assert_eq!(parse(OP_TRANSFER, &b).err(), Some(Reject::OpTag));
     }
@@ -641,39 +1131,123 @@ fn multi_every_rule_rejects() {
     let mut cases: Vec<(&str, Vec<u8>, Reject)> = vec![
         ("length - 1", l[..l.len() - 1].to_vec(), Reject::Length),
         ("length + 1", [&l[..], &[0]].concat(), Reject::Length),
-        ("M = 3 length, M word 2", build_multi_len(&l, multi_len(3, true)), Reject::Length),
-        ("M = 0 length (50,048 B), M word 2", build_multi_len(&l, multi_len(0, true)), Reject::Length),
+        (
+            "M = 3 length, M word 2",
+            build_multi_len(&l, multi_len(3, true)),
+            Reject::Length,
+        ),
+        (
+            "M = 0 length (50,048 B), M word 2",
+            build_multi_len(&l, multi_len(0, true)),
+            Reject::Length,
+        ),
         ("header cut (639 B)", l[..639].to_vec(), Reject::Length),
-        ("M word 0", with(&build_multi(&PQZL_ID, 1, true, 0), 320, &word(0)), Reject::Legs),
+        (
+            "M word 0",
+            with(&build_multi(&PQZL_ID, 1, true, 0), 320, &word(0)),
+            Reject::Legs,
+        ),
         ("M word 3", with(&l, 320, &word(3)), Reject::Legs),
         ("M word high byte", with(&l, 320, &[1]), Reject::Legs),
-        ("M word 4 on the M = 2 length", with(&l, 320, &word(4)), Reject::Length),
-        ("M word 1 on the M = 2 length", with(&l, 320, &word(1)), Reject::Length),
-        ("auditorOn 0 on an auditor-on statement", with(&l, 448, &word(0)), Reject::Length),
-        ("auditorOn 1 on an auditor-off statement", with(&l0, 448, &word(1)), Reject::Length),
+        (
+            "M word 4 on the M = 2 length",
+            with(&l, 320, &word(4)),
+            Reject::Length,
+        ),
+        (
+            "M word 1 on the M = 2 length",
+            with(&l, 320, &word(1)),
+            Reject::Length,
+        ),
+        (
+            "auditorOn 0 on an auditor-on statement",
+            with(&l, 448, &word(0)),
+            Reject::Length,
+        ),
+        (
+            "auditorOn 1 on an auditor-off statement",
+            with(&l0, 448, &word(1)),
+            Reject::Length,
+        ),
         ("auditorOn 2", with(&h, 448, &word(2)), Reject::AuditorOn),
-        ("auditorOn high byte", with(&h, 448, &[1]), Reject::AuditorOn),
-        ("amount 1", with(&l, 288, &word(1)), Reject::MustBeZero("amount")),
+        (
+            "auditorOn high byte",
+            with(&h, 448, &[1]),
+            Reject::AuditorOn,
+        ),
+        (
+            "amount 1",
+            with(&l, 288, &word(1)),
+            Reject::MustBeZero("amount"),
+        ),
         ("amount >= 2^64", with(&l, 288 + 23, &[1]), Reject::Amount),
         ("fee >= 2^64", with(&l, 256, &[1]), Reject::Fee),
-        ("salt word high half", with(&l0, 576 + 3, &[1]), Reject::Salt),
-        ("coefficient = q in pk_f", with(&l, 640, &Q.to_be_bytes()), Reject::Coefficient),
-        ("coefficient = q in pk_1", with(&l, 640 + 2 * PK_BYTES, &Q.to_be_bytes()), Reject::Coefficient),
-        ("coefficient = 2^LOG2Q in u_0", with(&h, 640 + 2 * PK_BYTES + V_BYTES + 4 * PK_BYTES, &(1u64 << LOG2Q).to_be_bytes()), Reject::Coefficient),
-        ("coefficient = q in v_{a,M-1}", with(&l, l.len() - 8, &Q.to_be_bytes()), Reject::Coefficient),
-        ("coefficient = q in v_f (auditor off)", with(&l0, l0.len() - 8, &Q.to_be_bytes()), Reject::Coefficient),
-        ("op 1 opTag", with(&l, 0, &Form::Transfer.op_tag()), Reject::OpTag),
+        (
+            "salt word high half",
+            with(&l0, 576 + 3, &[1]),
+            Reject::Salt,
+        ),
+        (
+            "coefficient = q in pk_f",
+            with(&l, 640, &Q.to_be_bytes()),
+            Reject::Coefficient,
+        ),
+        (
+            "coefficient = q in pk_1",
+            with(&l, 640 + 2 * PK_BYTES, &Q.to_be_bytes()),
+            Reject::Coefficient,
+        ),
+        (
+            "coefficient = 2^LOG2Q in u_0",
+            with(
+                &h,
+                640 + 2 * PK_BYTES + V_BYTES + 4 * PK_BYTES,
+                &(1u64 << LOG2Q).to_be_bytes(),
+            ),
+            Reject::Coefficient,
+        ),
+        (
+            "coefficient = q in v_{a,M-1}",
+            with(&l, l.len() - 8, &Q.to_be_bytes()),
+            Reject::Coefficient,
+        ),
+        (
+            "coefficient = q in v_f (auditor off)",
+            with(&l0, l0.len() - 8, &Q.to_be_bytes()),
+            Reject::Coefficient,
+        ),
+        (
+            "op 1 opTag",
+            with(&l, 0, &Form::Transfer.op_tag()),
+            Reject::OpTag,
+        ),
         ("opTag bit", with(&l, 31, &[l[31] ^ 1]), Reject::OpTag),
-        ("unknown proofSystemId", with(&l, 32, &[0; 32]), Reject::ProofSystemId),
+        (
+            "unknown proofSystemId",
+            with(&l, 32, &[0; 32]),
+            Reject::ProofSystemId,
+        ),
         ("empty", vec![], Reject::OpTag),
     ];
     #[cfg(not(feature = "oversize"))]
-    cases.push(("PQZL M = 16 (oversize only)", with(&build_multi_len(&l, multi_len(16, true)), 320, &word(16)), Reject::Legs));
+    cases.push((
+        "PQZL M = 16 (oversize only)",
+        with(&build_multi_len(&l, multi_len(16, true)), 320, &word(16)),
+        Reject::Legs,
+    ));
     #[cfg(not(feature = "oversize"))]
     if HAS_PQZH {
         cases.extend([
-            ("PQZH M = 8 (not built)", with(&build_multi_len(&h, multi_len(8, false)), 320, &word(8)), Reject::Legs),
-            ("PQZH M = 8 length, M word 4", build_multi_len(&h, multi_len(8, false)), Reject::Length),
+            (
+                "PQZH M = 8 (not built)",
+                with(&build_multi_len(&h, multi_len(8, false)), 320, &word(8)),
+                Reject::Legs,
+            ),
+            (
+                "PQZH M = 8 length, M word 4",
+                build_multi_len(&h, multi_len(8, false)),
+                Reject::Length,
+            ),
         ]);
     }
     for (what, b, want) in cases {
@@ -683,22 +1257,47 @@ fn multi_every_rule_rejects() {
     let one = build_multi(&PQZL_ID, 1, true, 0);
     let two = with(&with(&one, 320, &word(2)), 448, &word(0));
     let (a, b) = (parse_multi(&one).unwrap(), parse_multi(&two).unwrap());
-    assert_eq!((a.m, a.pk_a.is_some(), b.m, b.pk_a.is_some()), (1, true, 2, false));
-    assert_eq!((b.pk(1), b.v(1), b.v_f), (a.pk_a.unwrap(), a.v_f, a.v_a(0).unwrap()));
+    assert_eq!(
+        (a.m, a.pk_a.is_some(), b.m, b.pk_a.is_some()),
+        (1, true, 2, false)
+    );
+    assert_eq!(
+        (b.pk(1), b.v(1), b.v_f),
+        (a.pk_a.unwrap(), a.v_f, a.v_a(0).unwrap())
+    );
     assert_eq!(b.encode().unwrap(), two);
     // S3: op 7 goes through parse / decode_input as Stmt::Multi (no Form); the decoder's reasons are parse_multi's
     let s7 = parse(OP_TRANSFER_MULTI, &l).unwrap();
     let want = Stmt::Multi(parse_multi(&l).unwrap());
-    assert_eq!((&s7, s7.form(), s7.proof_system_id()), (&want, None, Some(&PQZL_ID)));
+    assert_eq!(
+        (&s7, s7.form(), s7.proof_system_id()),
+        (&want, None, Some(&PQZL_ID))
+    );
     assert_eq!(s7.encode().unwrap(), l);
     let inp = input(OP_TRANSFER_MULTI, &l, &[1; 100]);
     let d = decode_input(&inp).unwrap();
-    assert_eq!((d.op, d.stmt_bytes, d.proof.len()), (OP_TRANSFER_MULTI, &l[..], 100));
-    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &l, &[])).err(), Some(Reject::ProofLength));
-    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &l, &vec![1; MAX_PROOF_PQZL + 1])).err(), Some(Reject::ProofLength));
-    for (what, b, want) in [("M word 3", with(&l, 320, &word(3)), Reject::Legs), ("length + 1", [&l[..], &[0]].concat(), Reject::Length)] {
+    assert_eq!(
+        (d.op, d.stmt_bytes, d.proof.len()),
+        (OP_TRANSFER_MULTI, &l[..], 100)
+    );
+    assert_eq!(
+        decode_input(&input(OP_TRANSFER_MULTI, &l, &[])).err(),
+        Some(Reject::ProofLength)
+    );
+    assert_eq!(
+        decode_input(&input(OP_TRANSFER_MULTI, &l, &vec![1; MAX_PROOF_PQZL + 1])).err(),
+        Some(Reject::ProofLength)
+    );
+    for (what, b, want) in [
+        ("M word 3", with(&l, 320, &word(3)), Reject::Legs),
+        ("length + 1", [&l[..], &[0]].concat(), Reject::Length),
+    ] {
         assert_eq!(parse(OP_TRANSFER_MULTI, &b).err(), Some(want), "{what}");
-        assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &b, &[1; 100])).err(), Some(want), "{what}");
+        assert_eq!(
+            decode_input(&input(OP_TRANSFER_MULTI, &b, &[1; 100])).err(),
+            Some(want),
+            "{what}"
+        );
     }
     // op 7 bytes under op 1 and op 1 bytes under op 7: OpTag both ways
     assert_eq!(parse(OP_TRANSFER, &l).err(), Some(Reject::OpTag));
@@ -708,24 +1307,64 @@ fn multi_every_rule_rejects() {
     let h4 = build_multi(&ID2, 4, true, 0);
     let mp = max_proof(&ID2).unwrap();
     let room = MAX_INPUT - 5 - multi_len(4, true);
-    let (fit, over) = if room <= mp { (room, Reject::Input) } else { (mp, Reject::ProofLength) };
+    let (fit, over) = if room <= mp {
+        (room, Reject::Input)
+    } else {
+        (mp, Reject::ProofLength)
+    };
     assert!(room > mp);
     assert!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; fit])).is_ok());
-    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; fit + 1])).err(), Some(over));
+    assert_eq!(
+        decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; fit + 1])).err(),
+        Some(over)
+    );
     // an op 1 statement under op 7's decoder
     let o = objs();
-    assert_eq!(parse_multi(&build(Form::Transfer, &o, &PQZL_ID)).err(), Some(Reject::OpTag));
+    assert_eq!(
+        parse_multi(&build(Form::Transfer, &o, &PQZL_ID)).err(),
+        Some(Reject::OpTag)
+    );
     // encode refuses objects that do not fit M / the auditor flag
     let s = parse_multi(&l).unwrap();
-    assert_eq!(Multi { m: 3, ..s.clone() }.encode().err(), Some(Reject::Length));
-    assert_eq!(Multi { v_as: None, ..s.clone() }.encode().err(), Some(Reject::Length));
-    assert_eq!(Multi { us: s.pks, ..s.clone() }.encode().err(), Some(Reject::Length));
+    assert_eq!(
+        Multi { m: 3, ..s.clone() }.encode().err(),
+        Some(Reject::Length)
+    );
+    assert_eq!(
+        Multi {
+            v_as: None,
+            ..s.clone()
+        }
+        .encode()
+        .err(),
+        Some(Reject::Length)
+    );
+    assert_eq!(
+        Multi {
+            us: s.pks,
+            ..s.clone()
+        }
+        .encode()
+        .err(),
+        Some(Reject::Length)
+    );
     let mut hm = s.header;
     hm[H_LEGS] = word(4);
-    assert_eq!(Multi { header: hm, ..s.clone() }.encode().err(), Some(Reject::Legs));
+    assert_eq!(
+        Multi {
+            header: hm,
+            ..s.clone()
+        }
+        .encode()
+        .err(),
+        Some(Reject::Legs)
+    );
     let mut ha = s.header;
     ha[H_AUDITOR_ON] = word(0);
-    assert_eq!(Multi { header: ha, ..s }.encode().err(), Some(Reject::AuditorOn));
+    assert_eq!(
+        Multi { header: ha, ..s }.encode().err(),
+        Some(Reject::AuditorOn)
+    );
 }
 
 /// `b`'s header with a body of zeros to length `n` (a statement of another shape, every rule before Length holds)

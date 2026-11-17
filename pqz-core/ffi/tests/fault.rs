@@ -26,13 +26,25 @@ const ARENA_MIB: usize = match stmt::N {
 
 #[test]
 fn node_faults_are_status_4() {
-    let c = fixture::cases(&PQZL_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::Transfer).unwrap();
+    let c = fixture::cases(&PQZL_ID)
+        .unwrap()
+        .into_iter()
+        .find(|c| c.form == stmt::Form::Transfer)
+        .unwrap();
     let proof = prove(c.op(), &c.stmt, &c.wit, &[7; 32]).unwrap();
     let input = stmt::input(c.op(), &c.stmt, &proof);
     // PQZH: in the builds of the sets with PQZH (n2048-kmax1024, n2304-kmax4096, n2560-kmax16384; not n2816-kmax65536)
     let pqzh_input = PQZH.then(|| {
-        let h = fixture::cases(&PQZH_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::Register).unwrap();
-        stmt::input(h.op(), &h.stmt, &prove(h.op(), &h.stmt, &h.wit, &[7; 32]).unwrap())
+        let h = fixture::cases(&PQZH_ID)
+            .unwrap()
+            .into_iter()
+            .find(|c| c.form == stmt::Form::Register)
+            .unwrap();
+        stmt::input(
+            h.op(),
+            &h.stmt,
+            &prove(h.op(), &h.stmt, &h.wit, &[7; 32]).unwrap(),
+        )
     });
     assert_eq!(precompile(&input), Ok(VALID));
 
@@ -48,7 +60,10 @@ fn node_faults_are_status_4() {
     assert_eq!(precompile(&[6, 0, 0, 0, 0]), Err(Error::NodeFault));
     assert_eq!(c_abi(&[6, 0, 0, 0, 0]), (PQZ_FFI_NODE_FAULT, [0xEE; 32]));
     assert!(pqzl::keygen(&[1; 32]).is_none());
-    assert_eq!(prove(c.op(), &c.stmt, &c.wit, &[7; 32]), Err(ProveError::Pqzl(-1)));
+    assert_eq!(
+        prove(c.op(), &c.stmt, &c.wit, &[7; 32]),
+        Err(ProveError::Pqzl(-1))
+    );
     // PQZH needs no core
     if let Some(i) = &pqzh_input {
         assert_eq!(precompile(i), Ok(VALID));
@@ -61,7 +76,11 @@ fn node_faults_are_status_4() {
     if let Some(i) = &pqzh_input {
         pqzh::TEST_PANIC.store(true, Relaxed);
         assert_eq!(precompile(i), Ok(INVALID), "panic in the Ligero verifier");
-        assert_eq!(c_abi(i), (PQZ_FFI_INTERNAL, INVALID), "panic in the Ligero verifier: status 3");
+        assert_eq!(
+            c_abi(i),
+            (PQZ_FFI_INTERNAL, INVALID),
+            "panic in the Ligero verifier: status 3"
+        );
         pqzh::TEST_PANIC.store(false, Relaxed);
         assert_eq!(c_abi(i), (PQZ_FFI_OK, VALID), "after the Ligero panic");
     }
@@ -69,7 +88,11 @@ fn node_faults_are_status_4() {
     assert_eq!(st, selftest::report().unwrap().hash);
     eprintln!(
         "node faults: {}worker failure → status 4, out untouched; recovered",
-        if cfg!(feature = "pqzl-rust") { "Ctx and core allocation failures and " } else { "arena exhaustion and " }
+        if cfg!(feature = "pqzl-rust") {
+            "Ctx and core allocation failures and "
+        } else {
+            "arena exhaustion and "
+        }
     );
 }
 
@@ -96,16 +119,28 @@ mod deny {
     struct Deny;
     unsafe impl GlobalAlloc for Deny {
         unsafe fn alloc(&self, l: Layout) -> *mut u8 {
-            if ok(l.size()) { unsafe { System.alloc(l) } } else { std::ptr::null_mut() }
+            if ok(l.size()) {
+                unsafe { System.alloc(l) }
+            } else {
+                std::ptr::null_mut()
+            }
         }
         unsafe fn alloc_zeroed(&self, l: Layout) -> *mut u8 {
-            if ok(l.size()) { unsafe { System.alloc_zeroed(l) } } else { std::ptr::null_mut() }
+            if ok(l.size()) {
+                unsafe { System.alloc_zeroed(l) }
+            } else {
+                std::ptr::null_mut()
+            }
         }
         unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
             unsafe { System.dealloc(p, l) }
         }
         unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
-            if ok(n) { unsafe { System.realloc(p, l, n) } } else { std::ptr::null_mut() }
+            if ok(n) {
+                unsafe { System.realloc(p, l, n) }
+            } else {
+                std::ptr::null_mut()
+            }
         }
     }
 
@@ -120,7 +155,11 @@ fn rust_core_faults(input: &[u8]) {
     pqzl::drop_ctx();
     deny::SIZE.store(std::mem::size_of::<::pqzl::Ctx>(), Relaxed);
     let d0 = deny::DENIED.load(Relaxed);
-    assert_eq!(precompile(input), Err(Error::NodeFault), "Ctx allocation denied");
+    assert_eq!(
+        precompile(input),
+        Err(Error::NodeFault),
+        "Ctx allocation denied"
+    );
     assert_eq!(c_abi(input), (PQZ_FFI_NODE_FAULT, [0xEE; 32]));
     assert!(deny::DENIED.load(Relaxed) >= d0 + 2);
     deny::SIZE.store(0, Relaxed);
@@ -130,7 +169,11 @@ fn rust_core_faults(input: &[u8]) {
     pqzl::drop_ctx();
     deny::FROM.store(1 << 20, Relaxed);
     let d0 = deny::DENIED.load(Relaxed);
-    assert_eq!(precompile(input), Err(Error::NodeFault), "cache allocations denied");
+    assert_eq!(
+        precompile(input),
+        Err(Error::NodeFault),
+        "cache allocations denied"
+    );
     assert_eq!(c_abi(input), (PQZ_FFI_NODE_FAULT, [0xEE; 32]));
     assert!(deny::DENIED.load(Relaxed) > d0);
     deny::FROM.store(0, Relaxed);
@@ -155,14 +198,25 @@ fn c_abi(inp: &[u8]) -> (i32, [u8; 32]) {
 /// `tests/memory.rs`).
 #[cfg(not(feature = "pqzl-rust"))]
 fn arena_exhaustion(input: &[u8], op: u8, st: &[u8], proof: &[u8]) {
-    let r = fixture::cases(&PQZL_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::Register).unwrap();
-    let reg_input = stmt::input(r.op(), &r.stmt, &prove(r.op(), &r.stmt, &r.wit, &[7; 32]).unwrap());
+    let r = fixture::cases(&PQZL_ID)
+        .unwrap()
+        .into_iter()
+        .find(|c| c.form == stmt::Form::Register)
+        .unwrap();
+    let reg_input = stmt::input(
+        r.op(),
+        &r.stmt,
+        &prove(r.op(), &r.stmt, &r.wit, &[7; 32]).unwrap(),
+    );
     // arena exhaustion: `ARENA_MIB` (the set's probed band, above) holds A, R_REG's whole verify, and R_TX's ABDLOP keys
     // but not its whole verify; the core then fails gracefully (the specialised verifier's own allocations,
     // pqz_arena_try_alloc). Below the band the exhaustion is inside the relation's key generation (LaZer), which stops
     // the process (a trap since review round 2, Q-C; before it a SIGSEGV after writing past the shared sink: STATUS.md
     // Open 2).
-    let mib: usize = std::env::var("PQZ_FAULT_ARENA_MIB").ok().and_then(|v| v.parse().ok()).unwrap_or(ARENA_MIB);
+    let mib: usize = std::env::var("PQZ_FAULT_ARENA_MIB")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(ARENA_MIB);
     eprintln!("fault arena {mib} MiB");
     pqzl::TEST_ARENA_BYTES.store(mib << 20, Relaxed);
     pqzl::reinit(mib << 20);
@@ -176,6 +230,9 @@ fn arena_exhaustion(input: &[u8], op: u8, st: &[u8], proof: &[u8]) {
     assert_eq!(precompile(&reg_input), Ok(VALID), "fresh core at {mib} MiB");
     assert_eq!(precompile(&reg_input), Ok(VALID));
     pqzl::TEST_ARENA_BYTES.store(0, Relaxed);
-    assert_eq!(precompile(input), Ok(VALID), "re-initialised after the fault");
+    assert_eq!(
+        precompile(input),
+        Ok(VALID),
+        "re-initialised after the fault"
+    );
 }
-

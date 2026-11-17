@@ -10,11 +10,11 @@
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 
 use crate::cs::{self, Comb, Layout, Rel};
-use crate::fft::{Domain, GEN, smooth};
-use crate::fq::{Acc4, EB, F4, Fq, batch_inv};
-use crate::merkle::{H, Tree, depth, leaf, root_from};
+use crate::fft::{smooth, Domain, GEN};
+use crate::fq::{batch_inv, Acc4, Fq, EB, F4};
+use crate::merkle::{depth, leaf, root_from, Tree, H};
 use crate::transcript::Tr;
-use crate::{Oom, Wiped, ct, try_vec};
+use crate::{ct, try_vec, Oom, Wiped};
 #[cfg(feature = "bench")]
 use pqz_stmt::{OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER};
 
@@ -26,7 +26,11 @@ const BLIND: usize = 12;
 /// prover attempts before "proof length" (see `prove_inner`); one in practice: no proof exceeds max_proof_len.
 /// Fallback A (feature `fallback-retry`): 32, the limit is MAX_PROOF_PQZH and op 7 M = 4 with the auditor re-proves in
 /// 27.6 % of the attempts (failure after 32: ~ 10^-18 per proof; docs/research/pqzh-set-a-proof-limit.md)
-const ATTEMPTS: usize = if cfg!(feature = "fallback-retry") { 32 } else { 16 };
+const ATTEMPTS: usize = if cfg!(feature = "fallback-retry") {
+    32
+} else {
+    16
+};
 
 /// Fixed per proofSystemId; never read from the proof.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -78,8 +82,19 @@ impl Params {
     pub fn new(n: usize, k: usize, proven: bool) -> Params {
         let f = factor(n, k, proven);
         let t = ((LAMBDA - POW_BITS as f64) / -f.log2()).ceil() as usize;
-        assert!(k > t + 1 && smooth(n) && smooth(k) && n >= 4 * k, "bad parameters n {n} k {k} t {t}");
-        Params { n, k, ell: k - t - 1, t, pow_bits: POW_BITS, proven, johnson: false }
+        assert!(
+            k > t + 1 && smooth(n) && smooth(k) && n >= 4 * k,
+            "bad parameters n {n} k {k} t {t}"
+        );
+        Params {
+            n,
+            k,
+            ell: k - t - 1,
+            t,
+            pow_bits: POW_BITS,
+            proven,
+            johnson: false,
+        }
     }
 
     /// Johnson-bound proven parameters (reference only); requires (1 - delta) n >= 3k - 2 (degree correction)
@@ -87,8 +102,18 @@ impl Params {
     pub fn johnson(n: usize, k: usize) -> Params {
         let (f, _) = factor_johnson(n, k);
         let t = ((LAMBDA - POW_BITS as f64) / -f.log2()).ceil() as usize;
-        assert!(k > t + 1 && smooth(n) && smooth(k) && n >= 4 * k && f * n as f64 >= (3 * k - 2) as f64);
-        Params { n, k, ell: k - t - 1, t, pow_bits: POW_BITS, proven: true, johnson: true }
+        assert!(
+            k > t + 1 && smooth(n) && smooth(k) && n >= 4 * k && f * n as f64 >= (3 * k - 2) as f64
+        );
+        Params {
+            n,
+            k,
+            ell: k - t - 1,
+            t,
+            pow_bits: POW_BITS,
+            proven: true,
+            johnson: true,
+        }
     }
 
     /// The set's proven preset (pqzh_set.rs `PRESET_N / K / T`; review 3w u2-5): THE preset of the owner's 2026-10-14 (a),
@@ -98,7 +123,15 @@ impl Params {
     /// float code
     pub const fn proven() -> Params {
         use crate::set::{PRESET_K, PRESET_N, PRESET_T};
-        Params { n: PRESET_N, k: PRESET_K, ell: PRESET_K - PRESET_T - 1, t: PRESET_T, pow_bits: POW_BITS, proven: true, johnson: false }
+        Params {
+            n: PRESET_N,
+            k: PRESET_K,
+            ell: PRESET_K - PRESET_T - 1,
+            t: PRESET_T,
+            pow_bits: POW_BITS,
+            proven: true,
+            johnson: false,
+        }
     }
 
     /// the model's smallest Johnson preset with the field term >= 128 bits (charged once): runs/p1-params.txt.
@@ -271,7 +304,13 @@ fn draw(tr: &mut Tr, m: usize, ntri: usize) -> Result<Draw, Oom> {
 /// ciphertext (`u, v` or the balance `T`) and whether the prover succeeds depends on its decryption under the witness's
 /// key, so the result (the proof, the error, or only success or failure, and its timing) goes to the key holder only,
 /// never to whoever supplied the ciphertext. The decryption-dependent failures share one error, [`cs::NOT_DECRYPTABLE`].
-pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
+pub fn prove(
+    op: u8,
+    stmt: &[u8],
+    wit: &[u8],
+    rnd: [u8; 32],
+    p: &Params,
+) -> Result<Vec<u8>, &'static str> {
     let rel = cs::rel_of(op, stmt).ok_or("op")?;
     prove_inner(op, stmt, wit, rnd, p, true, prover_limit(p, rel))
 }
@@ -292,7 +331,13 @@ fn prover_limit(p: &Params, rel: Rel) -> usize {
 /// Test hook: skips the honest prover's checks so that invalid witnesses reach the proof system (tests and `bench`
 /// only: not in the production build).
 #[cfg(any(test, feature = "bench"))]
-pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
+pub fn prove_unchecked(
+    op: u8,
+    stmt: &[u8],
+    wit: &[u8],
+    rnd: [u8; 32],
+    p: &Params,
+) -> Result<Vec<u8>, &'static str> {
     let rel = cs::rel_of(op, stmt).ok_or("op")?;
     prove_inner(op, stmt, wit, rnd, p, false, p.max_proof_len(rel))
 }
@@ -315,15 +360,38 @@ pub enum Cheat {
 
 /// [`Cheat`]'s prover (tests and `bench` only: not in the production build)
 #[cfg(any(test, feature = "bench"))]
-pub fn prove_cheat(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, cheat: Cheat) -> Result<Vec<u8>, &'static str> {
-    prove_once(op, stmt, wit, p, false, &mut Rng::new(rnd, op, stmt, wit), Some(cheat))
+pub fn prove_cheat(
+    op: u8,
+    stmt: &[u8],
+    wit: &[u8],
+    rnd: [u8; 32],
+    p: &Params,
+    cheat: Cheat,
+) -> Result<Vec<u8>, &'static str> {
+    prove_once(
+        op,
+        stmt,
+        wit,
+        p,
+        false,
+        &mut Rng::new(rnd, op, stmt, wit),
+        Some(cheat),
+    )
 }
 
 /// Proves; if the proof is longer than `limit` (the verifier's bound) it proves again with the RNG stream continued
 /// (fresh masks and salts, so a fresh commitment, columns and multiproof), up to ATTEMPTS times (plan Task 9). A guard:
 /// every proof is <= max_len_exact by construction (fixed polynomials, <= t distinct columns, the largest multiproof),
 /// so with `limit` = max_proof_len the first attempt always returns; the unit test forces a lower limit.
-fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, check: bool, limit: usize) -> Result<Vec<u8>, &'static str> {
+fn prove_inner(
+    op: u8,
+    stmt: &[u8],
+    wit: &[u8],
+    rnd: [u8; 32],
+    p: &Params,
+    check: bool,
+    limit: usize,
+) -> Result<Vec<u8>, &'static str> {
     let mut rng = Rng::new(rnd, op, stmt, wit);
     for _ in 0..ATTEMPTS {
         let pf = prove_once(op, stmt, wit, p, check, &mut rng, None)?;
@@ -337,7 +405,15 @@ fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, check
 /// Every secret buffer is wiped on every exit (review P-C); the values that become public by design are marked for
 /// the constant-time check where they do (review P-B, `ct::public`): the root, w, q, h, the opened columns.
 /// `cheat`: always `None` outside tests and `bench` (the deviations are compiled there only).
-fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mut Rng, cheat: Option<Cheat>) -> Result<Vec<u8>, &'static str> {
+fn prove_once(
+    op: u8,
+    stmt: &[u8],
+    wit: &[u8],
+    p: &Params,
+    check: bool,
+    rng: &mut Rng,
+    cheat: Option<Cheat>,
+) -> Result<Vec<u8>, &'static str> {
     #[cfg(not(any(test, feature = "bench")))]
     let _ = cheat;
     let st = cs::parse(op, stmt).ok_or("statement")?;
@@ -383,8 +459,14 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
 
     // commit: rows evaluated on the coset 3 H_n; leaf j = keccak(salt_j || column j)
     #[allow(unused_mut)]
-    let mut enc =
-        Wiped(pc.iter().chain(u0.iter()).chain(ul.iter()).chain(uq.iter()).map(|c| hn.coset_fft(c, GEN)).collect::<Vec<_>>());
+    let mut enc = Wiped(
+        pc.iter()
+            .chain(u0.iter())
+            .chain(ul.iter())
+            .chain(uq.iter())
+            .map(|c| hn.coset_fft(c, GEN))
+            .collect::<Vec<_>>(),
+    );
     #[cfg(any(test, feature = "bench"))]
     if cheat == Some(Cheat::Proximity) {
         enc[0].iter_mut().for_each(|x| *x += Fq::ONE);
@@ -406,7 +488,9 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
     let (ca, cb, cl, cq, rho, rq) = draw(&mut tr, m, lay.triples.len()).map_err(|_| "memory")?;
 
     // proximity: w = sum_i (a_i + b_i X^(k-1)) p_i + c_lin u_lin + c_quad u_quad + u_0
-    let mut wp: Vec<F4> = (0..d2).map(|i| cl * get4(&ul, i) + cq * get4(&uq, i) + get4(&u0, i)).collect();
+    let mut wp: Vec<F4> = (0..d2)
+        .map(|i| cl * get4(&ul, i) + cq * get4(&uq, i) + get4(&u0, i))
+        .collect();
     for i in 0..m {
         for c in 0..k {
             wp[c] += ca[i] * pc[i][c];
@@ -447,7 +531,9 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
         }
     }
     let ifft4 = |e: &[F4]| -> Wiped<P4> {
-        Wiped(std::array::from_fn(|s| h2.ifft(&Wiped(e.iter().map(|v| v.0[s]).collect::<Vec<_>>()))))
+        Wiped(std::array::from_fn(|s| {
+            h2.ifft(&Wiped(e.iter().map(|v| v.0[s]).collect::<Vec<_>>()))
+        }))
     };
     let qc = ifft4(&qe);
     #[allow(unused_mut)]
@@ -480,8 +566,14 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
         }
     }
     ct::public(&hp[..]); // a proof field (b2)
-    // the prover's self-check: zero for every valid witness (b5)
-    if check && ct::verdict(rem.iter().fold(0, |a, v| v.0.iter().fold(a, |a, c| a | c.0)) != 0) {
+                         // the prover's self-check: zero for every valid witness (b5)
+    if check
+        && ct::verdict(
+            rem.iter()
+                .fold(0, |a, v| v.0.iter().fold(a, |a, c| a | c.0))
+                != 0,
+        )
+    {
         return Err("quadratic constraints");
     }
 
@@ -669,7 +761,12 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<Option<
         leaves.push((j, leaf(salt, b)));
         cols.push(c);
     }
-    if ok!(root_from(leaves, depth(n), || rd.take(32).map(|h| h.try_into().unwrap()))) != root || !rd.0.is_empty() {
+    if ok!(root_from(leaves, depth(n), || rd
+        .take(32)
+        .map(|h| h.try_into().unwrap())))
+        != root
+        || !rd.0.is_empty()
+    {
         return Ok(Some(Why::Merkle));
     }
 
@@ -679,7 +776,12 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<Option<
         return Ok(Some(Why::LinearSum));
     }
     let (hk, hn) = (Domain::try_new(k)?, Domain::try_new(n)?);
-    let own: Vec<(usize, &Vec<F4>)> = comb.own.iter().enumerate().filter_map(|(i, v)| v.as_ref().map(|v| (i, v))).collect();
+    let own: Vec<(usize, &Vec<F4>)> = comb
+        .own
+        .iter()
+        .enumerate()
+        .filter_map(|(i, v)| v.as_ref().map(|v| (i, v)))
+        .collect();
     let mut beta = try_vec(ell)?;
     beta.push(F4::ONE);
     for c in 1..ell {
@@ -697,7 +799,14 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<Option<
             x = x * eta;
         }
         let (we, qe, he) = (eval4(&wp, &xp), eval4(&qp, &xp), eval4(&hp, &xp));
-        let blind = |b: usize| F4([u[m + 4 * b], u[m + 4 * b + 1], u[m + 4 * b + 2], u[m + 4 * b + 3]]);
+        let blind = |b: usize| {
+            F4([
+                u[m + 4 * b],
+                u[m + 4 * b + 1],
+                u[m + 4 * b + 2],
+                u[m + 4 * b + 3],
+            ])
+        };
         let (b0, bl, bq) = (blind(0), blind(1), blind(2));
 
         // proximity
@@ -756,7 +865,14 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<Option<
 /// honest proving with `limit` (as `prove_inner`), returning every attempt's proof (the last one is the accepted one
 /// when it is <= limit)
 #[cfg(feature = "bench")]
-pub fn spike_prove_attempts(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, limit: usize) -> Result<Vec<Vec<u8>>, &'static str> {
+pub fn spike_prove_attempts(
+    op: u8,
+    stmt: &[u8],
+    wit: &[u8],
+    rnd: [u8; 32],
+    p: &Params,
+    limit: usize,
+) -> Result<Vec<Vec<u8>>, &'static str> {
     let mut rng = Rng::new(rnd, op, stmt, wit);
     let mut out = Vec::new();
     for _ in 0..ATTEMPTS {
@@ -818,13 +934,18 @@ pub fn spike_len_of(rel: impl Into<Rel>, idx: &[usize], p: &Params) -> usize {
 #[cfg(feature = "bench")]
 pub fn soundness(op: u8, stmt: &[u8], p: &Params) -> Vec<(&'static str, f64)> {
     let lay = Layout::new(cs::rel_of(op, stmt).expect("op"), p.ell);
-    let nw = cs::parse(op, stmt).map(|st| cs::comb(&lay, &st, F4::ONE).expect("memory").nweights).unwrap_or(0);
+    let nw = cs::parse(op, stmt)
+        .map(|st| cs::comb(&lay, &st, F4::ONE).expect("memory").nweights)
+        .unwrap_or(0);
     let fbits = 4.0 * ((crate::fq::Q) as f64).log2();
     let (f, prox) = if p.johnson {
         let (f, jb) = factor_johnson(p.n, p.k);
         (f, jb) // BCIKS20 list-decoding error charged once for the affine space (per word: jb - log2(2m + 3))
     } else {
-        (factor(p.n, p.k, p.proven), fbits - ((2 * lay.m + 3) as f64 * p.n as f64).log2())
+        (
+            factor(p.n, p.k, p.proven),
+            fbits - ((2 * lay.m + 3) as f64 * p.n as f64).log2(),
+        )
     };
     let q = p.t as f64 * -f.log2() + p.pow_bits as f64;
     let terms = vec![
@@ -848,7 +969,12 @@ pub fn breakdown(rel: impl Into<Rel>, proof: &[u8], p: &Params) -> Vec<(&'static
     let rest = proof.len().saturating_sub(32 + polys + 8);
     let cw = 32 + (m + BLIND) * EB;
     // columns are a multiple of cw, the multiproof of 32: d columns with d cw + 32 s = rest, d <= t
-    let d = (0..=p.t).rev().find(|&d| d * cw <= rest && (rest - d * cw) % 32 == 0 && (rest - d * cw) / 32 <= p.t * depth(p.n)).unwrap_or(0);
+    let d = (0..=p.t)
+        .rev()
+        .find(|&d| {
+            d * cw <= rest && (rest - d * cw) % 32 == 0 && (rest - d * cw) / 32 <= p.t * depth(p.n)
+        })
+        .unwrap_or(0);
     vec![
         ("total", proof.len()),
         ("root_nonce", 40),
@@ -874,10 +1000,20 @@ mod tests {
         // the model's 119, owner 2026-10-22)
         let m = Params::new(crate::set::PRESET_N, crate::set::PRESET_K, true);
         let t = crate::set::PRESET_T;
-        assert_eq!(Params::proven(), Params { t, ell: m.k - t - 1, ..m });
+        assert_eq!(
+            Params::proven(),
+            Params {
+                t,
+                ell: m.k - t - 1,
+                ..m
+            }
+        );
         assert!(m.t <= t);
         // more than the model's t: n2304-kmax4096 preset B (120 > 119), n2560-kmax16384 (122 > 121, owner 2026-10-23)
-        assert_eq!(m.t == t, crate::set::NAME == "n2048-kmax1024" || cfg!(feature = "fallback-retry"));
+        assert_eq!(
+            m.t == t,
+            crate::set::NAME == "n2048-kmax1024" || cfg!(feature = "fallback-retry")
+        );
     }
 
     /// D6: the same rnd32, op and statement with another witness give unrelated masks; equal inputs, equal masks
@@ -892,7 +1028,10 @@ mod tests {
         // no position agrees (each with probability 1/q)
         assert!(a.iter().zip(&b).all(|(x, y)| x != y));
         // the statement length is framed: moving a byte from the statement to the witness changes the stream
-        assert_ne!(Rng::new([3; 32], 1, &st[..99], &[&st[99..], &w[..]].concat()).vec(4)[..], draw(&w)[..4]);
+        assert_ne!(
+            Rng::new([3; 32], 1, &st[..99], &[&st[99..], &w[..]].concat()).vec(4)[..],
+            draw(&w)[..4]
+        );
     }
 
     /// max_len_exact: the multiproof term is reached (evenly spread columns) and never exceeded (random sets)
@@ -900,14 +1039,26 @@ mod tests {
     fn max_len_exact_multiproof_tight() {
         let p = Params::proven();
         let (n, t) = (p.n, p.t);
-        let tree = Tree::new((0..n as u32).map(|i| crate::merkle::keccak(&[&i.to_be_bytes()])).collect());
-        let worst = (1..depth(n)).map(|l| t.min(n.div_ceil(1 << l))).sum::<usize>() + 2 - t;
+        let tree = Tree::new(
+            (0..n as u32)
+                .map(|i| crate::merkle::keccak(&[&i.to_be_bytes()]))
+                .collect(),
+        );
+        let worst = (1..depth(n))
+            .map(|l| t.min(n.div_ceil(1 << l)))
+            .sum::<usize>()
+            + 2
+            - t;
         // evenly spread columns from the left or (n2304-kmax4096 preset B, n 45,752: the left spread reaches worst - 1) from the
         // right
         let left: Vec<usize> = (0..t).map(|i| i * n / t).collect();
         let mut right: Vec<usize> = (0..t).map(|i| n - 1 - i * n / t).collect();
         right.sort_unstable();
-        let spread = if tree.multiproof(&right).len() > tree.multiproof(&left).len() { right } else { left };
+        let spread = if tree.multiproof(&right).len() > tree.multiproof(&left).len() {
+            right
+        } else {
+            left
+        };
         assert_eq!(tree.multiproof(&spread).len(), worst);
         let mut x = 0x9E3779B97F4A7C15u64;
         for _ in 0..300 {
@@ -928,7 +1079,10 @@ mod tests {
             // the bound is the proof grammar at t evenly spread columns: root, polynomials, nonce, t columns, the
             // spread set's multiproof
             let cw = 32 + (Layout::new(f, p.ell).m + BLIND) * EB;
-            assert_eq!(32 + p.poly_bytes() + 8 + t * cw + 32 * tree.multiproof(&spread).len(), p.max_len_exact(f));
+            assert_eq!(
+                32 + p.poly_bytes() + 8 + t * cw + 32 * tree.multiproof(&spread).len(),
+                p.max_len_exact(f)
+            );
         }
     }
 
@@ -984,12 +1138,18 @@ mod tests {
         assert_eq!(expect.map(|e| e.0), RELS);
         for (f, max, fits) in expect {
             assert_eq!((p.max_len_exact(f), p.max_proof_len(f)), (max, max));
-            assert_eq!(max <= MAX_PROOF_PQZH && 5 + f.stmt_len() + max <= MAX_INPUT, fits, "{f:?}");
+            assert_eq!(
+                max <= MAX_PROOF_PQZH && 5 + f.stmt_len() + max <= MAX_INPUT,
+                fits,
+                "{f:?}"
+            );
             assert!(p.proof_len_ok(f, max) && p.proof_len_ok(f, 1));
             assert!(!p.proof_len_ok(f, max + 1) && !p.proof_len_ok(f, 0));
             assert_eq!(cs::form_of(f.op(), f.stmt_len()), Some(f));
         }
-        assert!([0, 6, 7, 255].iter().all(|&op| cs::form_of(op, 0).is_none()));
+        assert!([0, 6, 7, 255]
+            .iter()
+            .all(|&op| cs::form_of(op, 0).is_none()));
         // op 7 R_TXM, (M, auditorOn): exact bounds and inputs 5 + statement + bound, audited shapes with ceil(M / S_AUD)
         // groups (R0 review fix 2026-10-25: S_AUD 2 at n2048-kmax1024, 3 at n2304-kmax4096, 4 at n2560-kmax16384); built
         // shapes (M <= 4) within MAX_PROOF_PQZH (327,680 at every PQZH set) and MAX_INPUT (524,288), the fallback build's
@@ -1046,7 +1206,15 @@ mod tests {
         };
         for ((m, aud), max, input) in multi {
             let r = Rel::Multi { m, aud };
-            assert_eq!((p.max_len_exact(r), p.max_proof_len(r), 5 + r.stmt_len() + max), (max, max, input), "M {m} {aud}");
+            assert_eq!(
+                (
+                    p.max_len_exact(r),
+                    p.max_proof_len(r),
+                    5 + r.stmt_len() + max
+                ),
+                (max, max, input),
+                "M {m} {aud}"
+            );
             // every built shape within the set's limits (the oversize M = 8, 16 mostly above: only their margins differ)
             if m <= 4 {
                 assert!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, "M {m} {aud}");
@@ -1056,7 +1224,7 @@ mod tests {
         let built = cs::multi_rels();
         let want: Vec<Rel> = multi
             .iter()
-            .filter(|e| e.0.0 <= 4 || cfg!(feature = "oversize"))
+            .filter(|e| e.0 .0 <= 4 || cfg!(feature = "oversize"))
             .map(|&((m, aud), _, _)| Rel::Multi { m, aud })
             .collect();
         assert!(built.len() == want.len() && want.iter().all(|r| built.contains(r)));
@@ -1067,15 +1235,34 @@ mod tests {
     #[test]
     fn prover_retries_over_limit() {
         let s = crate::client::setup();
-        let (op, st, w, p) = (pqz_stmt::OP_REGISTER, &s.reg_stmt, &s.reg_wit, Params::proven());
+        let (op, st, w, p) = (
+            pqz_stmt::OP_REGISTER,
+            &s.reg_stmt,
+            &s.reg_wit,
+            Params::proven(),
+        );
         // the seed (of 1..=4) with the longest proof, so that a shorter one is a likely retry (n2048-kmax1024: seed 1 already is;
         // n2304-kmax4096's seed 1 proof was shorter than its 16 retries)
-        let rnd = (1..=4u8).max_by_key(|&x| prove(op, st, w, [x; 32], &p).unwrap().len()).unwrap();
-        let a = prove_inner(op, st, w, [rnd; 32], &p, true, p.max_proof_len(Form::Register)).unwrap();
+        let rnd = (1..=4u8)
+            .max_by_key(|&x| prove(op, st, w, [x; 32], &p).unwrap().len())
+            .unwrap();
+        let a = prove_inner(
+            op,
+            st,
+            w,
+            [rnd; 32],
+            &p,
+            true,
+            p.max_proof_len(Form::Register),
+        )
+        .unwrap();
         assert_eq!(a, prove(op, st, w, [rnd; 32], &p).unwrap());
         let b = prove_inner(op, st, w, [rnd; 32], &p, true, a.len() - 1).unwrap();
         assert!(b.len() < a.len() && b[..32] != a[..32]);
         assert!(verify(op, st, &a, &p) && verify(op, st, &b, &p));
-        assert_eq!(prove_inner(op, st, w, [rnd; 32], &p, true, 32), Err("proof length"));
+        assert_eq!(
+            prove_inner(op, st, w, [rnd; 32], &p, true, 32),
+            Err("proof length")
+        );
     }
 }

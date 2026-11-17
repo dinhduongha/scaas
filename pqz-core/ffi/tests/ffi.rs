@@ -21,13 +21,23 @@ fn honest() -> &'static [Honest] {
 fn round_trip_every_form() {
     for h in honest() {
         let r = precompile(&h.input());
-        eprintln!("{} {}: proof {} B, input {} B, {:?}", if h.pqzl() { "PQZL" } else { "PQZH" }, h.name(), h.proof.len(), h.input().len(), r);
+        eprintln!(
+            "{} {}: proof {} B, input {} B, {:?}",
+            if h.pqzl() { "PQZL" } else { "PQZH" },
+            h.name(),
+            h.proof.len(),
+            h.input().len(),
+            r
+        );
         assert_eq!(r, Ok(VALID), "{}", h.name());
         assert_eq!(precompile(&h.input()), Ok(VALID), "same input twice");
     }
     // 8 forms each; op 7: PQZL M in {1, 2, 4, 8}, PQZH {1, 2, 4}, auditor on and off (P6-ANON D3 / D20)
     assert_eq!(honest().iter().filter(|h| h.pqzl()).count(), 8 + 8);
-    assert_eq!(honest().iter().filter(|h| !h.pqzl()).count(), if PQZH { 8 + 6 } else { 0 });
+    assert_eq!(
+        honest().iter().filter(|h| !h.pqzl()).count(),
+        if PQZH { 8 + 6 } else { 0 }
+    );
 }
 
 /// Op 7 (P6-ANON S3, D3): every built shape's input within `MAX_INPUT` with the id's worst-case proof (PQZL
@@ -38,7 +48,11 @@ fn multi_limits_and_memo() {
     let mut largest = 0;
     for h in honest().iter().filter(|h| h.multi.is_some()) {
         let (m, aud) = h.multi.unwrap();
-        let bound = if h.pqzl() { stmt::MAX_PROOF_PQZL } else { pqzh::max_proof_len_multi(m, aud) };
+        let bound = if h.pqzl() {
+            stmt::MAX_PROOF_PQZL
+        } else {
+            pqzh::max_proof_len_multi(m, aud)
+        };
         let worst = 5 + h.stmt.len() + bound;
         eprintln!(
             "op 7 {} {}: statement {} B, proof {} B (bound {bound}), input {} B, worst-case input {worst} B (MAX_INPUT {MAX_INPUT})",
@@ -55,8 +69,17 @@ fn multi_limits_and_memo() {
     // PQZH (4, on) padded to exactly MAX_INPUT (n2048-kmax1024: 5 + 149,376 + 374,907, G = 2 since the R0 review fix)
     // decodes or fails ProofLength, so invalid; one byte more reverts (the set's MAX_INPUT, plan 5h Task 8c part 2)
     if PQZH {
-        let h = honest().iter().find(|h| !h.pqzl() && h.multi == Some((4, true))).unwrap();
-        let pad = |n: usize| stmt::input(7, &h.stmt, &[&h.proof[..], &vec![0; n - h.proof.len()]].concat());
+        let h = honest()
+            .iter()
+            .find(|h| !h.pqzl() && h.multi == Some((4, true)))
+            .unwrap();
+        let pad = |n: usize| {
+            stmt::input(
+                7,
+                &h.stmt,
+                &[&h.proof[..], &vec![0; n - h.proof.len()]].concat(),
+            )
+        };
         let room = MAX_INPUT - 5 - h.stmt.len();
         assert!(stmt::SET != "n2048-kmax1024" || room == 374_907);
         assert_eq!(pad(room).len(), MAX_INPUT);
@@ -65,28 +88,49 @@ fn multi_limits_and_memo() {
     }
     // oversize shapes (bench builds only) never decode here: PQZL M = 16, PQZH M = 8 (the decoder knows both ids in
     // every build of a set with PQZH; n2816-kmax65536 has none)
-    for (id, m) in [(PQZL_ID, 16), (PQZH_ID, 8)].into_iter().filter(|&(id, _)| id == PQZL_ID || stmt::HAS_PQZH) {
+    for (id, m) in [(PQZL_ID, 16), (PQZH_ID, 8)]
+        .into_iter()
+        .filter(|&(id, _)| id == PQZL_ID || stmt::HAS_PQZH)
+    {
         let mut st = vec![0u8; stmt::multi_len(m, true)];
         for (i, w) in stmt::Multi::header(&id, m, true).iter().enumerate() {
             st[32 * i..32 * i + 32].copy_from_slice(w);
         }
         // Legs; or Input where the oversize statement alone exceeds MAX_INPUT (PQZL M = 16 at k >= 36)
         let e = decode(&stmt::input(7, &st, &[1])).err();
-        assert!(matches!(e, Some(Reject::Legs | Reject::Input)), "M = {m}: {e:?}");
+        assert!(
+            matches!(e, Some(Reject::Legs | Reject::Input)),
+            "M = {m}: {e:?}"
+        );
     }
     // recipientsHash and the memo of the fixture
     for (m, aud) in [(1, false), (8, true)] {
         let c = fixture::multi_case(&PQZL_ID, m, aud).unwrap();
         let s = stmt::parse_multi(&c.stmt).unwrap();
         let uas: Vec<Word> = (0..m).map(fixture::leg_ua).collect();
-        assert_eq!(s.header[stmt::H_RECIPIENTS_HASH], fixture::recipients_hash(&uas));
+        assert_eq!(
+            s.header[stmt::H_RECIPIENTS_HASH],
+            fixture::recipients_hash(&uas)
+        );
         assert_eq!(s.header[stmt::H_MEMO_HASH], selftest::keccak(&[&c.memo]));
         assert_eq!(c.memo.len(), memo::memo_len(m));
         let (a, legs) = memo::open(&fixture::MEMO_KEY_SEED, &s.header, &c.memo).unwrap();
-        let want: Vec<(u64, Word)> = (0..m).map(|j| (if j == m - 1 { fixture::VALUE } else { 0 }, uas[j])).collect();
+        let want: Vec<(u64, Word)> = (0..m)
+            .map(|j| (if j == m - 1 { fixture::VALUE } else { 0 }, uas[j]))
+            .collect();
         assert_eq!((a, legs), (aud, want));
-        assert_ne!(memo::open(&[0x4e; 32], &s.header, &c.memo).map(|x| x.1), Some((0..m).map(|j| (0, uas[j])).collect()));
-        assert_eq!(memo::open(&fixture::MEMO_KEY_SEED, &s.header, &c.memo[..c.memo.len() - 1]), None);
+        assert_ne!(
+            memo::open(&[0x4e; 32], &s.header, &c.memo).map(|x| x.1),
+            Some((0..m).map(|j| (0, uas[j])).collect())
+        );
+        assert_eq!(
+            memo::open(
+                &fixture::MEMO_KEY_SEED,
+                &s.header,
+                &c.memo[..c.memo.len() - 1]
+            ),
+            None
+        );
     }
 }
 
@@ -161,16 +205,28 @@ fn c_abi_arguments() {
     let p = out.as_mut_ptr();
     unsafe {
         assert_eq!(pqz_precompile(std::ptr::null(), 5, p, 32), PQZ_FFI_BAD_ARGS);
-        assert_eq!(pqz_precompile([6u8, 0, 0, 0, 0].as_ptr(), 5, std::ptr::null_mut(), 32), PQZ_FFI_BAD_ARGS);
-        assert_eq!(pqz_precompile([6u8, 0, 0, 0, 0].as_ptr(), 5, p, 31), PQZ_FFI_BAD_ARGS);
+        assert_eq!(
+            pqz_precompile([6u8, 0, 0, 0, 0].as_ptr(), 5, std::ptr::null_mut(), 32),
+            PQZ_FFI_BAD_ARGS
+        );
+        assert_eq!(
+            pqz_precompile([6u8, 0, 0, 0, 0].as_ptr(), 5, p, 31),
+            PQZ_FFI_BAD_ARGS
+        );
         assert_eq!(out, [0xEE; 32], "nothing written");
         assert_eq!(pqz_precompile(std::ptr::null(), 0, p, 32), PQZ_FFI_OK);
         assert_eq!(out, INVALID);
         let big = vec![1u8; MAX_INPUT + 1];
         out = [0xEE; 32];
-        assert_eq!(pqz_precompile(big.as_ptr(), big.len(), out.as_mut_ptr(), 64), PQZ_FFI_REVERT);
+        assert_eq!(
+            pqz_precompile(big.as_ptr(), big.len(), out.as_mut_ptr(), 64),
+            PQZ_FFI_REVERT
+        );
         assert_eq!(out, INVALID);
-        assert_eq!(pqz_precompile([6u8, 0, 0, 0, 0].as_ptr(), 5, out.as_mut_ptr(), 32), PQZ_FFI_OK);
+        assert_eq!(
+            pqz_precompile([6u8, 0, 0, 0, 0].as_ptr(), 5, out.as_mut_ptr(), 32),
+            PQZ_FFI_OK
+        );
         assert_eq!(out, selftest::report().unwrap().hash);
     }
 }
@@ -201,7 +257,11 @@ fn selftest_vectors() {
     for (i, id) in ids().into_iter().enumerate() {
         let st = selftest::reg_statement(&id, &key.pk[..]);
         let proof = prove(3, &st, &fixture::wit_key(&key), &selftest::RND).unwrap();
-        assert_eq!(proof, selftest::proofs()[i], "self-test proof {i}: regenerate the vectors (pqz-vectors), then rebuild");
+        assert_eq!(
+            proof,
+            selftest::proofs()[i],
+            "self-test proof {i}: regenerate the vectors (pqz-vectors), then rebuild"
+        );
     }
 }
 
@@ -226,13 +286,24 @@ fn one_mib_stack() {
 /// `$PQZ_FFI_DIGESTS` when set (run.sh diffs them with wasm/run_wasm.mjs's output).
 #[test]
 fn digest_lines() {
-    let s = fixture::digest_lines(&PQZL_ID, true) + &fixture::digest_lines(&PQZH_ID, true) + &fixture::selftest_line();
+    let s = fixture::digest_lines(&PQZL_ID, true)
+        + &fixture::digest_lines(&PQZH_ID, true)
+        + &fixture::selftest_line();
     // 8 forms + the op 7 shapes with M <= 4, each id; PQZL without the shapes above WASM_PQZL_MAX_LEGS (the C backend's
     // wasm32 refusal, printed natively as `Statement(Legs)`: fixture::digest_lines)
-    let shapes = |id: &Word| 2 * [1, 2, 4].iter().filter(|&&m| *id != PQZL_ID || m <= pqzl::WASM_PQZL_MAX_LEGS).count();
+    let shapes = |id: &Word| {
+        2 * [1, 2, 4]
+            .iter()
+            .filter(|&&m| *id != PQZL_ID || m <= pqzl::WASM_PQZL_MAX_LEGS)
+            .count()
+    };
     let valid: usize = ids().iter().map(|id| 8 + shapes(id)).sum();
     assert_eq!(s.matches("\"valid\": true").count(), valid, "{s}");
-    assert_eq!(s.matches("\"proof\": \"Statement(Legs)\"").count(), ids().len() * 14 - valid, "{s}");
+    assert_eq!(
+        s.matches("\"proof\": \"Statement(Legs)\"").count(),
+        ids().len() * 14 - valid,
+        "{s}"
+    );
     if let Ok(p) = std::env::var("PQZ_FFI_DIGESTS") {
         std::fs::write(p, s).unwrap();
     }
@@ -244,7 +315,10 @@ fn digest_lines() {
 fn header_matches() {
     let h = include_str!("../pqz_ffi.h");
     let def = |name: &str| -> i64 {
-        let l = h.lines().find(|l| l.starts_with(&format!("#define {name} "))).unwrap_or_else(|| panic!("{name}"));
+        let l = h
+            .lines()
+            .find(|l| l.starts_with(&format!("#define {name} ")))
+            .unwrap_or_else(|| panic!("{name}"));
         l.split_whitespace().nth(2).unwrap().parse().unwrap()
     };
     assert_eq!(def("PQZ_FFI_OK"), PQZ_FFI_OK as i64);
@@ -257,12 +331,24 @@ fn header_matches() {
     assert_eq!(pqz_ffi::pqz_max_input(), MAX_INPUT);
     assert_eq!(MAX_INPUT, 524_288); // every set since the R0 review fix (owner 2026-10-25; n2048-kmax1024 was 393,216)
     assert_eq!(def("PQZ_FFI_OUT_BYTES"), 32);
-    assert!(h.contains("int pqz_precompile (const uint8_t *input, size_t len, uint8_t *out, size_t out_len);"));
+    assert!(h.contains(
+        "int pqz_precompile (const uint8_t *input, size_t len, uint8_t *out, size_t out_len);"
+    ));
     // review R4-C7: the decoder's MAX_PROOF_PQZL = the backends' buffers = the C core's PQZ_MAX_PROOF (the Rust core's
     // ::pqzl::MAX_PROOF is const-asserted in src/pqzl/rust.rs)
     let c = include_str!("../../pqzl/src/pqz.h");
-    let l = c.lines().find(|l| l.starts_with("#define PQZ_MAX_PROOF ")).expect("PQZ_MAX_PROOF");
-    assert_eq!(l.split_whitespace().nth(2).unwrap().parse::<usize>().unwrap(), stmt::MAX_PROOF_PQZL);
+    let l = c
+        .lines()
+        .find(|l| l.starts_with("#define PQZ_MAX_PROOF "))
+        .expect("PQZ_MAX_PROOF");
+    assert_eq!(
+        l.split_whitespace()
+            .nth(2)
+            .unwrap()
+            .parse::<usize>()
+            .unwrap(),
+        stmt::MAX_PROOF_PQZL
+    );
     assert_eq!(pqz_ffi::pqzl::MAX_PROOF, stmt::MAX_PROOF_PQZL);
 }
 
@@ -272,12 +358,17 @@ fn header_matches() {
 #[test]
 fn enc_multi_refuses_equal_keys() {
     let s = stmt::legs_per_group(true);
-    let k: Vec<_> = (1..=(s as u8 + 3)).map(|i| pqzl::keygen(&[i; 32]).unwrap().pk.clone()).collect();
+    let k: Vec<_> = (1..=(s as u8 + 3))
+        .map(|i| pqzl::keygen(&[i; 32]).unwrap().pk.clone())
+        .collect();
     let (d, se) = ([1u8; 16], [5u8; 32]);
     let (f, a) = (&*k[0], &*k[1]);
     let legs = |ix: &[usize]| ix.iter().map(|&i| (&*k[i], d)).collect::<Vec<_>>();
     let other: Vec<usize> = (2..s + 3).collect(); // s + 1 distinct leg keys: two groups with the auditor on
-    assert!(pqzl::enc_multi(f, d, &legs(&other), Some(a), &se).is_some(), "distinct keys, two groups");
+    assert!(
+        pqzl::enc_multi(f, d, &legs(&other), Some(a), &se).is_some(),
+        "distinct keys, two groups"
+    );
     let mut cross = other.clone();
     cross[s] = cross[0]; // leg s (group 1) = leg 0 (group 0)
     for (ls, aud, what) in [

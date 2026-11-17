@@ -10,15 +10,23 @@
 use pqzh_ligero::client::{inputs, rel_name, setup};
 use pqzh_ligero::ligero::{spike_len_of, spike_prove_attempts, spike_query_indices};
 use pqzh_ligero::pqz_stmt::MAX_PROOF_PQZH;
-use pqzh_ligero::{Form, Params, Rel, verify};
+use pqzh_ligero::{verify, Form, Params, Rel};
 
 fn stats(v: &mut [usize]) -> String {
     v.sort_unstable();
-    format!("{{\"min\": {}, \"median\": {}, \"max\": {}}}", v[0], v[v.len() / 2], v[v.len() - 1])
+    format!(
+        "{{\"min\": {}, \"median\": {}, \"max\": {}}}",
+        v[0],
+        v[v.len() / 2],
+        v[v.len() - 1]
+    )
 }
 
 fn main() {
-    let a: Vec<usize> = std::env::args().skip(1).map(|x| x.parse().expect("number")).collect();
+    let a: Vec<usize> = std::env::args()
+        .skip(1)
+        .map(|x| x.parse().expect("number"))
+        .collect();
     let (n, threads, mc) = (a[0], a[1], a[2]);
     let p = Params::proven();
     let s = setup();
@@ -51,9 +59,17 @@ fn main() {
                             .map(|i| {
                                 let mut rnd = [0xA5u8; 32];
                                 rnd[..8].copy_from_slice(&(i as u64).to_le_bytes());
-                                let at = spike_prove_attempts(r.op(), st, w, rnd, &p, MAX_PROOF_PQZH).expect("prove");
+                                let at =
+                                    spike_prove_attempts(r.op(), st, w, rnd, &p, MAX_PROOF_PQZH)
+                                        .expect("prove");
                                 let lens: Vec<usize> = at.iter().map(|x| x.len()).collect();
-                                let same = at.iter().filter(|x| spike_len_of(r, &spike_query_indices(r.op(), st, x, &p), &p) == x.len()).count();
+                                let same = at
+                                    .iter()
+                                    .filter(|x| {
+                                        spike_len_of(r, &spike_query_indices(r.op(), st, x, &p), &p)
+                                            == x.len()
+                                    })
+                                    .count();
                                 let ok = verify(r.op(), st, at.last().unwrap(), &p);
                                 (lens, ok, same)
                             })
@@ -113,5 +129,8 @@ fn main() {
         );
     }
     let h: Vec<String> = hist.iter().map(|(k, v)| format!("\"{k}\": {v}")).collect();
-    println!("{{\"monte_carlo_hist_R_TXM4_bytes_per_256\": {{{}}}}}", h.join(", "));
+    println!(
+        "{{\"monte_carlo_hist_R_TXM4_bytes_per_256\": {{{}}}}}",
+        h.join(", ")
+    );
 }

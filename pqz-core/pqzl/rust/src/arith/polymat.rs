@@ -38,11 +38,25 @@ impl PolyMat {
     }
 
     pub(crate) fn view(&mut self) -> Sm<'_> {
-        Sm { e: &mut self.e, nrows: self.nrows, ncols: self.ncols, rs: self.ncols, cs: 1 }
+        Sm {
+            e: &mut self.e,
+            nrows: self.nrows,
+            ncols: self.ncols,
+            rs: self.ncols,
+            cs: 1,
+        }
     }
 
     /// `polymat_get_submat (sub, self, row, col, nrows, ncols, stride_row, stride_col)`
-    pub(crate) fn sub(&mut self, row: usize, col: usize, nrows: usize, ncols: usize, sr: usize, sc: usize) -> Sm<'_> {
+    pub(crate) fn sub(
+        &mut self,
+        row: usize,
+        col: usize,
+        nrows: usize,
+        ncols: usize,
+        sr: usize,
+        sc: usize,
+    ) -> Sm<'_> {
         self.view().into_sub(row, col, nrows, ncols, sr, sc)
     }
 
@@ -89,18 +103,53 @@ pub(crate) struct Sm<'a> {
 
 impl<'a> Sm<'a> {
     fn new(e: &'a mut [Poly], nrows: usize, ncols: usize, rs: usize, cs: usize) -> Sm<'a> {
-        assert!(nrows == 0 || ncols == 0 || (nrows - 1) * rs + (ncols - 1) * cs < e.len(), "view out of range");
-        Sm { e, nrows, ncols, rs, cs }
+        assert!(
+            nrows == 0 || ncols == 0 || (nrows - 1) * rs + (ncols - 1) * cs < e.len(),
+            "view out of range"
+        );
+        Sm {
+            e,
+            nrows,
+            ncols,
+            rs,
+            cs,
+        }
     }
 
     /// `polymat_get_submat` of a view
-    pub(crate) fn sub(&mut self, row: usize, col: usize, nrows: usize, ncols: usize, sr: usize, sc: usize) -> Sm<'_> {
-        Sm { e: &mut *self.e, ..*self }.into_sub(row, col, nrows, ncols, sr, sc)
+    pub(crate) fn sub(
+        &mut self,
+        row: usize,
+        col: usize,
+        nrows: usize,
+        ncols: usize,
+        sr: usize,
+        sc: usize,
+    ) -> Sm<'_> {
+        Sm {
+            e: &mut *self.e,
+            ..*self
+        }
+        .into_sub(row, col, nrows, ncols, sr, sc)
     }
 
-    fn into_sub(self, row: usize, col: usize, nrows: usize, ncols: usize, sr: usize, sc: usize) -> Sm<'a> {
-        assert!(nrows == 0 || row + sr * (nrows - 1) < self.nrows, "rows out of range");
-        assert!(ncols == 0 || col + sc * (ncols - 1) < self.ncols, "columns out of range");
+    fn into_sub(
+        self,
+        row: usize,
+        col: usize,
+        nrows: usize,
+        ncols: usize,
+        sr: usize,
+        sc: usize,
+    ) -> Sm<'a> {
+        assert!(
+            nrows == 0 || row + sr * (nrows - 1) < self.nrows,
+            "rows out of range"
+        );
+        assert!(
+            ncols == 0 || col + sc * (ncols - 1) < self.ncols,
+            "columns out of range"
+        );
         let (off, rs, cs) = (row * self.rs + col * self.cs, sr * self.rs, sc * self.cs);
         let e = self.e;
         Sm::new(&mut e[off..], nrows, ncols, rs, cs)
@@ -204,14 +253,24 @@ mod tests {
         }
         let tag = |p: &Poly| p.v[0];
         let mut s = m.sub(1, 1, 2, 2, 2, 3); // rows 1, 3; cols 1, 4
-        assert_eq!([tag(s.get(0, 0)), tag(s.get(0, 1)), tag(s.get(1, 0)), tag(s.get(1, 1))], [11, 14, 31, 34]);
+        assert_eq!(
+            [
+                tag(s.get(0, 0)),
+                tag(s.get(0, 1)),
+                tag(s.get(1, 0)),
+                tag(s.get(1, 1))
+            ],
+            [11, 14, 31, 34]
+        );
         assert_eq!(tag(s.sub(1, 0, 1, 2, 1, 1).get(0, 1)), 34);
         assert_eq!([tag(s.row(1).get(0)), tag(s.row(1).get(1))], [31, 34]);
         assert_eq!([tag(s.col(1).get(0)), tag(s.col(1).get(1))], [14, 34]);
         assert_eq!(tag(m.row(2).get(4)), 24);
         assert_eq!([tag(m.col(3).get(0)), tag(m.col(3).get(3))], [3, 33]);
         let mut v = PolyVec::new(9).unwrap();
-        v.iter_mut().enumerate().for_each(|(i, p)| p.v[0] = i as u64);
+        v.iter_mut()
+            .enumerate()
+            .for_each(|(i, p)| p.v[0] = i as u64);
         let mut w = v.sub(1, 4, 2); // 1, 3, 5, 7
         let w2 = w.sub(1, 2, 2); // 3, 7
         assert_eq!((w2.len(), tag(w2.get(0)), tag(w2.get(1))), (2, 3, 7));

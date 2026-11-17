@@ -43,7 +43,9 @@ pub fn fft_kat() -> (Vec<u8>, bool) {
     use pqzh_ligero::fq::Fq;
     let n = 2 * 19 * 43;
     let d = Domain::new(n);
-    let a: Vec<Fq> = (0..n as u64).map(|i| Fq((i * i * 0x9E37_79B9 + 1) % pqzh_ligero::fq::Q)).collect();
+    let a: Vec<Fq> = (0..n as u64)
+        .map(|i| Fq((i * i * 0x9E37_79B9 + 1) % pqzh_ligero::fq::Q))
+        .collect();
     let f = d.fft(&a);
     let mut out = Vec::with_capacity(pqzh_ligero::fq::EB * n);
     f.iter().for_each(|x| x.put(&mut out));

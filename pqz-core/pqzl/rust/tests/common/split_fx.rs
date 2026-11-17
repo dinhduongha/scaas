@@ -36,7 +36,11 @@ pub struct Tx {
 pub const FEE: u64 = 7;
 
 pub fn tx() -> Tx {
-    let (kf, kt, ka) = (keygen(&[1; 32]).unwrap(), keygen(&[2; 32]).unwrap(), keygen(&[3; 32]).unwrap());
+    let (kf, kt, ka) = (
+        keygen(&[1; 32]).unwrap(),
+        keygen(&[2; 32]).unwrap(),
+        keygen(&[3; 32]).unwrap(),
+    );
     let (b, v) = (1_000_000u64, 123_456u64);
     let bp = b - v - FEE;
     let t = enc_seed(&[&kf.pk], &[digits(b)], &[4; 32]).unwrap();
@@ -44,7 +48,16 @@ pub fn tx() -> Tx {
     let seed_leg = enc_leg_seed(&seed_enc, &[6; 32], &[7; 32]); // pkt_hash: the caller's keccak (opaque here)
     let leg = enc_seed(&[&kt.pk, &ka.pk], &[digits(v), digits(v)], &seed_leg).unwrap();
     let own = enc_seed(&[&kf.pk], &[digits(bp)], &seed_enc).unwrap();
-    Tx { kf, kt, ka, t, leg, own, v, bp }
+    Tx {
+        kf,
+        kt,
+        ka,
+        t,
+        leg,
+        own,
+        v,
+        bp,
+    }
 }
 
 /// the statement (header under `id`, auditorOn `aud`) with the given out ciphertexts
@@ -71,7 +84,14 @@ pub fn stmt(x: &Tx, aud: bool, id: &[u8; 32], u: &[u8], vf: &[u8], uf: &[u8]) ->
 }
 
 pub fn honest_stmt(x: &Tx, aud: bool) -> Vec<u8> {
-    stmt(x, aud, &PROOF_SYSTEM_SPLIT_ID, &x.leg.u[..], &x.own.vs[0], &x.own.u[..])
+    stmt(
+        x,
+        aud,
+        &PROOF_SYSTEM_SPLIT_ID,
+        &x.leg.u[..],
+        &x.own.vs[0],
+        &x.own.u[..],
+    )
 }
 
 /// s_f || e_f || r || e1 || r_f || e1_f || e2_t || e2_f || [e2_a] || d || d' (pqz.h PQZ_TXS_WIT_BYTES)
@@ -93,4 +113,3 @@ pub fn wit(x: &Tx, aud: bool, own: &Enc) -> Vec<u8> {
     assert_eq!(w.len(), 9 * N + if aud { 128 } else { 96 });
     w
 }
-

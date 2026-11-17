@@ -17,9 +17,16 @@ use std::{env, fs};
 /// CARGO_FEATURE_SET_<SET> variable (`n2304-kmax4096` <- `N2304_KMAX4096`).
 fn set() -> String {
     let s: Vec<String> = env::vars()
-        .filter_map(|(k, _)| k.strip_prefix("CARGO_FEATURE_SET_").map(|x| x.to_lowercase().replace('_', "-")))
+        .filter_map(|(k, _)| {
+            k.strip_prefix("CARGO_FEATURE_SET_")
+                .map(|x| x.to_lowercase().replace('_', "-"))
+        })
         .collect();
-    assert_eq!(s.len(), 1, "exactly one parameter set feature set-<set>: {s:?}");
+    assert_eq!(
+        s.len(),
+        1,
+        "exactly one parameter set feature set-<set>: {s:?}"
+    );
     s[0].clone()
 }
 
@@ -27,7 +34,11 @@ fn set() -> String {
 /// every other set below it.
 fn vectors_dir(core: &Path, set: &str) -> PathBuf {
     let v = core.join("../../smartcontracts/vectors/pqz");
-    if set == "n2048-kmax1024" { v } else { v.join(set) }
+    if set == "n2048-kmax1024" {
+        v
+    } else {
+        v.join(set)
+    }
 }
 
 fn main() {
@@ -62,7 +73,11 @@ fn main() {
         let hex = &row[row.find("\"proof\": \"").expect("proof field") + 10..];
         let hex = &hex[..hex.find('"').unwrap()];
         let nib = |c: u8| (c as char).to_digit(16).expect("proof hex") as u8;
-        let bin: Vec<u8> = hex.as_bytes().chunks(2).map(|p| nib(p[0]) << 4 | nib(p[1])).collect();
+        let bin: Vec<u8> = hex
+            .as_bytes()
+            .chunks(2)
+            .map(|p| nib(p[0]) << 4 | nib(p[1]))
+            .collect();
         fs::write(out.join(format!("{id}_reg.bin")), bin).unwrap();
     }
 }
@@ -90,23 +105,54 @@ fn c_core(core: &Path, out: &Path, set: &str) {
     if !wasm {
         b.compiler(env::var("CC").unwrap_or("clang".into()));
     }
-    for f in ["-std=gnu11", "-O2", "-fno-builtin", "-fno-math-errno", "-ffp-contract=off", "-DPQZ_SV", "-Wall", "-Wextra", "-Wno-unused-parameter", "-Wno-unused-function", "-Wno-sign-compare"] {
+    for f in [
+        "-std=gnu11",
+        "-O2",
+        "-fno-builtin",
+        "-fno-math-errno",
+        "-ffp-contract=off",
+        "-DPQZ_SV",
+        "-Wall",
+        "-Wextra",
+        "-Wno-unused-parameter",
+        "-Wno-unused-function",
+        "-Wno-sign-compare",
+    ] {
         b.flag(f);
     }
     // the parameter set of this build (feature set-<set>, the same as pqz-stmt's and the Rust core's)
     let setdir = core.join("../params/sets").join(set);
-    b.include(&inc).include(core.join("src")).include(core.join("lazer")).include(&setdir);
-    for f in ["pqz_lazer", "pqz_ntt", "pqz_arena", "pqz_rel", "pqz_keys", "pqz_sv"] {
+    b.include(&inc)
+        .include(core.join("src"))
+        .include(core.join("lazer"))
+        .include(&setdir);
+    for f in [
+        "pqz_lazer",
+        "pqz_ntt",
+        "pqz_arena",
+        "pqz_rel",
+        "pqz_keys",
+        "pqz_sv",
+    ] {
         b.file(core.join(format!("src/{f}.c")));
     }
     if wasm {
-        for f in ["--target=wasm32-unknown-unknown", "-ffreestanding", "-DPQZ_FREESTANDING"] {
+        for f in [
+            "--target=wasm32-unknown-unknown",
+            "-ffreestanding",
+            "-DPQZ_FREESTANDING",
+        ] {
             b.flag(f);
         }
         b.include(core.join("src/freestanding"));
         b.file("csrc/wasm_ti3.c");
     } else {
-        for f in ["-fPIC", "-fstack-protector-strong", "-ffunction-sections", "-fdata-sections"] {
+        for f in [
+            "-fPIC",
+            "-fstack-protector-strong",
+            "-ffunction-sections",
+            "-fdata-sections",
+        ] {
             b.flag(f);
         }
     }
@@ -115,21 +161,41 @@ fn c_core(core: &Path, out: &Path, set: &str) {
     let fuzz = env::var_os("CARGO_FEATURE_FUZZ").is_some();
     if fuzz {
         // every UBSan check, vla-bound and pointer-overflow included since review Q-F (owner 2026-10-19)
-        for f in ["-g", "-fno-omit-frame-pointer", "-DPQZ_TEST_HOOKS", "-fsanitize=address,undefined,fuzzer-no-link",
-                  "-fno-sanitize-recover=all"] {
+        for f in [
+            "-g",
+            "-fno-omit-frame-pointer",
+            "-DPQZ_TEST_HOOKS",
+            "-fsanitize=address,undefined,fuzzer-no-link",
+            "-fno-sanitize-recover=all",
+        ] {
             b.flag(f);
         }
     }
     // review round 2, Q-G: the C prover's constant time depends on the compiler (fix E was checked with clang 18;
     // E-constant-time.md): record which one built this archive in the build script's log (target/*/build/pqz-ffi-*/output)
     let cc = b.get_compiler();
-    let ver = std::process::Command::new(cc.path()).arg("--version").output();
-    let ver = ver.map(|o| String::from_utf8_lossy(&o.stdout).lines().next().unwrap_or("").to_string());
-    println!("pqz-ffi C core compiler: {} ({})", cc.path().display(), ver.unwrap_or_else(|e| e.to_string()));
+    let ver = std::process::Command::new(cc.path())
+        .arg("--version")
+        .output();
+    let ver = ver.map(|o| {
+        String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .next()
+            .unwrap_or("")
+            .to_string()
+    });
+    println!(
+        "pqz-ffi C core compiler: {} ({})",
+        cc.path().display(),
+        ver.unwrap_or_else(|e| e.to_string())
+    );
     b.compile("pqz");
 
     if !fuzz {
-        let st = std::process::Command::new(core.join("check_symbols.sh")).arg(out.join("libpqz.a")).output().unwrap();
+        let st = std::process::Command::new(core.join("check_symbols.sh"))
+            .arg(out.join("libpqz.a"))
+            .output()
+            .unwrap();
         if !st.status.success() {
             panic!("check_symbols.sh: {}", String::from_utf8_lossy(&st.stderr));
         }

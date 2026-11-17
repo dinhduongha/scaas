@@ -63,7 +63,14 @@ mod vg {
     /// valgrind.h's amd64 client request (VALGRIND_DO_CLIENT_REQUEST_EXPR): a no-op sequence outside valgrind
     #[allow(unsafe_code)]
     pub(super) fn request<T: ?Sized>(req: u64, x: &T) {
-        let args = [req, x as *const T as *const u8 as u64, core::mem::size_of_val(x) as u64, 0, 0, 0];
+        let args = [
+            req,
+            x as *const T as *const u8 as u64,
+            core::mem::size_of_val(x) as u64,
+            0,
+            0,
+            0,
+        ];
         core::hint::black_box(&args);
         let mut res = 0u64;
         // SAFETY: the magic sequence rotates rdi by 128 bits (unchanged) and exchanges rbx with itself; valgrind

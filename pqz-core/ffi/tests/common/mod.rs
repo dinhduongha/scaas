@@ -2,7 +2,10 @@
 //! decoder-rejection corpus, the abort-freedom generator, the C ABI call.
 #![allow(dead_code)]
 use pqz_ffi::fixture;
-use pqz_ffi::stmt::{self, Form, Reject, H_AUDITOR_ON, H_FEE, H_SALT, H_TO, HEADER_BYTES, MAX_PROOF_PQZH, MAX_PROOF_PQZL};
+use pqz_ffi::stmt::{
+    self, Form, Reject, HEADER_BYTES, H_AUDITOR_ON, H_FEE, H_SALT, H_TO, MAX_PROOF_PQZH,
+    MAX_PROOF_PQZL,
+};
 use pqz_ffi::stmt::{H_LEGS, H_RECIPIENTS_HASH, OP_TRANSFER_MULTI};
 use pqz_ffi::*;
 
@@ -58,7 +61,11 @@ impl Honest {
 /// The ids of this build's parameter set (plan 5h Task 8d: one PQZL and one PQZH id per set): PQZL, and PQZH where it
 /// is compiled in.
 pub fn ids() -> Vec<Word> {
-    if PQZH { vec![PQZL_ID, PQZH_ID] } else { vec![PQZL_ID] }
+    if PQZH {
+        vec![PQZL_ID, PQZH_ID]
+    } else {
+        vec![PQZL_ID]
+    }
 }
 
 /// The "other id" of a negative case: the other proof system's, and at a set without PQZH (PQZL inputs only) another
@@ -71,7 +78,9 @@ pub fn other_id(pqzl: bool) -> Word {
         (false, _) => PQZL_ID,
         (true, true) => PQZH_ID,
         (true, false) => {
-            let w: Word = std::array::from_fn(|i| u8::from_str_radix(&FOREIGN[2 * i..2 * i + 2], 16).unwrap());
+            let w: Word = std::array::from_fn(|i| {
+                u8::from_str_radix(&FOREIGN[2 * i..2 * i + 2], 16).unwrap()
+            });
             assert_ne!(w, PQZL_ID, "the foreign id is this set's");
             w
         }
@@ -83,14 +92,30 @@ pub fn prove_all() -> Vec<Honest> {
     let mut v = Vec::new();
     for id in ids() {
         for c in fixture::cases(&id).expect("fixture") {
-            let proof = prove(c.op(), &c.stmt, &c.wit, &RND).unwrap_or_else(|e| panic!("prove {:?} {:?}: {e:?}", id[0], c.form));
-            v.push(Honest { id, op: c.op(), form: Some(c.form), multi: None, stmt: c.stmt, proof });
+            let proof = prove(c.op(), &c.stmt, &c.wit, &RND)
+                .unwrap_or_else(|e| panic!("prove {:?} {:?}: {e:?}", id[0], c.form));
+            v.push(Honest {
+                id,
+                op: c.op(),
+                form: Some(c.form),
+                multi: None,
+                stmt: c.stmt,
+                proof,
+            });
         }
     }
     for id in ids() {
         for c in fixture::multi_cases(&id, usize::MAX).expect("fixture op 7") {
-            let proof = prove(c.op(), &c.stmt, &c.wit, &RND).unwrap_or_else(|e| panic!("prove {:?} {}: {e:?}", id[0], c.name()));
-            v.push(Honest { id, op: c.op(), form: None, multi: Some((c.m, c.aud)), stmt: c.stmt, proof });
+            let proof = prove(c.op(), &c.stmt, &c.wit, &RND)
+                .unwrap_or_else(|e| panic!("prove {:?} {}: {e:?}", id[0], c.name()));
+            v.push(Honest {
+                id,
+                op: c.op(),
+                form: None,
+                multi: Some((c.m, c.aud)),
+                stmt: c.stmt,
+                proof,
+            });
         }
     }
     v
@@ -128,7 +153,11 @@ pub fn child(name: &str, arg: &str) {
 }
 
 pub fn word(b: bool) -> Word {
-    if b { VALID } else { INVALID }
+    if b {
+        VALID
+    } else {
+        INVALID
+    }
 }
 
 /// The C ABI on one input: (status, out), `out` pre-filled with 0xEE.
@@ -156,7 +185,11 @@ pub fn gen(hs: &[Honest], i: usize) -> Vec<u8> {
             v[0] = 1 + (r() % 6) as u8;
             v
         }
-        2 => stmt::input(h.op(), &h.stmt, &(0..1 + r() % 4096).map(|_| r() as u8).collect::<Vec<_>>()),
+        2 => stmt::input(
+            h.op(),
+            &h.stmt,
+            &(0..1 + r() % 4096).map(|_| r() as u8).collect::<Vec<_>>(),
+        ),
         4 if r() % 16 == 0 => h.input(),
         _ => {
             let mut v = h.input();
@@ -178,7 +211,10 @@ pub fn framing(hs: &[Honest]) -> Vec<(&'static str, Vec<u8>)> {
     vec![
         ("empty", vec![]),
         ("4 bytes", vec![1, 0, 0, 0]),
-        ("length field over the input", stmt::input(1, st, &[]).into_iter().take(5 + 100).collect()),
+        (
+            "length field over the input",
+            stmt::input(1, st, &[]).into_iter().take(5 + 100).collect(),
+        ),
         ("selftest + 1 byte", vec![6, 0, 0, 0, 0, 0]),
         ("selftest, length 1", vec![6, 0, 0, 0, 1, 0]),
     ]
@@ -187,7 +223,11 @@ pub fn framing(hs: &[Honest]) -> Vec<(&'static str, Vec<u8>)> {
 /// (name, mutated input, expected decoder verdict: Some(reason) or None = decodes, rejected by the verifier)
 pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
     let (op, st, pf) = (h.op(), &h.stmt, &h.proof);
-    let max = if h.pqzl() { MAX_PROOF_PQZL } else { MAX_PROOF_PQZH };
+    let max = if h.pqzl() {
+        MAX_PROOF_PQZL
+    } else {
+        MAX_PROOF_PQZH
+    };
     let inp = |op: u8, st: &[u8], pf: &[u8]| stmt::input(op, st, pf);
     let with = |off: usize, f: &dyn Fn(&mut [u8])| {
         let mut s = st.clone();
@@ -200,94 +240,352 @@ pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
     let mut v: Vec<(String, Vec<u8>, Option<Reject>)> = vec![
         ("op 0".into(), inp(0, st, pf), Some(Reject::Op)),
         ("op 8".into(), inp(8, st, pf), Some(Reject::Op)),
-        ("op 1 <-> op 7".into(), inp(if op == OP_TRANSFER_MULTI { 1 } else { OP_TRANSFER_MULTI }, st, pf), Some(Reject::OpTag)),
-        ("op 6 with the statement".into(), inp(6, st, pf), Some(Reject::Op)),
-        ("other op".into(), inp(op % 5 + 1, st, pf), Some(Reject::OpTag)),
-        ("opTag of another op".into(), inp(op, &with(0, &|s| {
-            s[..32].copy_from_slice(&if op == 3 { Form::Transfer } else { Form::Register }.op_tag())
-        }), pf), Some(Reject::OpTag)),
-        ("opTag bit".into(), inp(op, &with(0, &|s| s[0] ^= 1), pf), Some(Reject::OpTag)),
-        ("unknown id".into(), inp(op, &with(32, &|s| s[0] ^= 1), pf), Some(Reject::ProofSystemId)),
-        ("statement + 1".into(), inp(op, &[&st[..], &[0]].concat(), pf), Some(Reject::Length)),
-        ("statement - 1".into(), inp(op, &st[..st.len() - 1], pf), Some(Reject::Length)),
-        ("length field + 1".into(), { let mut i = inp(op, st, pf); i[4] += 1; i }, None),
-        ("coefficient = q".into(), inp(op, &with(st.len() - 8, &|s| s.copy_from_slice(&stmt::Q.to_be_bytes())), pf),
-            Some(Reject::Coefficient)),
-        ("coefficient = 2^LOG2Q".into(), inp(op, &with(st.len() - 8, &|s| s.copy_from_slice(&(1u64 << stmt::LOG2Q).to_be_bytes())), pf),
-            Some(Reject::Coefficient)),
-        ("coefficient top byte".into(), inp(op, &with(st.len() - 8, &|s| s[0] = 0x80), pf), Some(Reject::Coefficient)),
-        ("empty proof".into(), inp(op, st, &[]), Some(Reject::ProofLength)),
-        ("proof truncated".into(), inp(op, st, &pf[..pf.len() - 1]), None),
+        (
+            "op 1 <-> op 7".into(),
+            inp(
+                if op == OP_TRANSFER_MULTI {
+                    1
+                } else {
+                    OP_TRANSFER_MULTI
+                },
+                st,
+                pf,
+            ),
+            Some(Reject::OpTag),
+        ),
+        (
+            "op 6 with the statement".into(),
+            inp(6, st, pf),
+            Some(Reject::Op),
+        ),
+        (
+            "other op".into(),
+            inp(op % 5 + 1, st, pf),
+            Some(Reject::OpTag),
+        ),
+        (
+            "opTag of another op".into(),
+            inp(
+                op,
+                &with(0, &|s| {
+                    s[..32].copy_from_slice(
+                        &if op == 3 {
+                            Form::Transfer
+                        } else {
+                            Form::Register
+                        }
+                        .op_tag(),
+                    )
+                }),
+                pf,
+            ),
+            Some(Reject::OpTag),
+        ),
+        (
+            "opTag bit".into(),
+            inp(op, &with(0, &|s| s[0] ^= 1), pf),
+            Some(Reject::OpTag),
+        ),
+        (
+            "unknown id".into(),
+            inp(op, &with(32, &|s| s[0] ^= 1), pf),
+            Some(Reject::ProofSystemId),
+        ),
+        (
+            "statement + 1".into(),
+            inp(op, &[&st[..], &[0]].concat(), pf),
+            Some(Reject::Length),
+        ),
+        (
+            "statement - 1".into(),
+            inp(op, &st[..st.len() - 1], pf),
+            Some(Reject::Length),
+        ),
+        (
+            "length field + 1".into(),
+            {
+                let mut i = inp(op, st, pf);
+                i[4] += 1;
+                i
+            },
+            None,
+        ),
+        (
+            "coefficient = q".into(),
+            inp(
+                op,
+                &with(st.len() - 8, &|s| s.copy_from_slice(&stmt::Q.to_be_bytes())),
+                pf,
+            ),
+            Some(Reject::Coefficient),
+        ),
+        (
+            "coefficient = 2^LOG2Q".into(),
+            inp(
+                op,
+                &with(st.len() - 8, &|s| {
+                    s.copy_from_slice(&(1u64 << stmt::LOG2Q).to_be_bytes())
+                }),
+                pf,
+            ),
+            Some(Reject::Coefficient),
+        ),
+        (
+            "coefficient top byte".into(),
+            inp(op, &with(st.len() - 8, &|s| s[0] = 0x80), pf),
+            Some(Reject::Coefficient),
+        ),
+        (
+            "empty proof".into(),
+            inp(op, st, &[]),
+            Some(Reject::ProofLength),
+        ),
+        (
+            "proof truncated".into(),
+            inp(op, st, &pf[..pf.len() - 1]),
+            None,
+        ),
         ("proof half".into(), inp(op, st, &pf[..pf.len() / 2]), None),
-        ("proof + 1 byte".into(), inp(op, st, &[&pf[..], &[0]].concat()), None),
-        ("proof bit 0".into(), { let mut p = pf.clone(); p[0] ^= 1; inp(op, st, &p) }, None),
-        ("proof last bit".into(), { let mut p = pf.clone(); *p.last_mut().unwrap() ^= 0x80; inp(op, st, &p) }, None),
-        ("proof middle byte".into(), { let mut p = pf.clone(); let m = p.len() / 2; p[m] ^= 0x5a; inp(op, st, &p) }, None),
-        ("other system's id".into(), inp(op, &with(32, &|s| s[..32].copy_from_slice(&other_id(h.pqzl()))), pf),
+        (
+            "proof + 1 byte".into(),
+            inp(op, st, &[&pf[..], &[0]].concat()),
+            None,
+        ),
+        (
+            "proof bit 0".into(),
+            {
+                let mut p = pf.clone();
+                p[0] ^= 1;
+                inp(op, st, &p)
+            },
+            None,
+        ),
+        (
+            "proof last bit".into(),
+            {
+                let mut p = pf.clone();
+                *p.last_mut().unwrap() ^= 0x80;
+                inp(op, st, &p)
+            },
+            None,
+        ),
+        (
+            "proof middle byte".into(),
+            {
+                let mut p = pf.clone();
+                let m = p.len() / 2;
+                p[m] ^= 0x5a;
+                inp(op, st, &p)
+            },
+            None,
+        ),
+        (
+            "other system's id".into(),
+            inp(
+                op,
+                &with(32, &|s| s[..32].copy_from_slice(&other_id(h.pqzl()))),
+                pf,
+            ),
             // a set without PQZH: another set's PQZL id (review 8d1b M2), an unknown id refused by the decoder
-            (h.pqzl() && !stmt::HAS_PQZH).then_some(Reject::ProofSystemId)),
-        ("statement last coefficient - 1".into(), inp(op, &with(st.len() - 1, &|s| s[0] ^= 1), pf), None),
+            (h.pqzl() && !stmt::HAS_PQZH).then_some(Reject::ProofSystemId),
+        ),
+        (
+            "statement last coefficient - 1".into(),
+            inp(op, &with(st.len() - 1, &|s| s[0] ^= 1), pf),
+            None,
+        ),
     ];
     if over_fits {
-        v.push(("MAX_PROOF + 1".into(), inp(op, st, &vec![0; max + 1]), Some(Reject::ProofLength)));
+        v.push((
+            "MAX_PROOF + 1".into(),
+            inp(op, st, &vec![0; max + 1]),
+            Some(Reject::ProofLength),
+        ));
     }
     if let Some((m, aud)) = h.multi {
         let word = |x: u64| stmt::u64_word(x);
         let set = |i: usize, w: stmt::Word| with(32 * i, &move |s| s[..32].copy_from_slice(&w));
         let other_m = if m == 1 { 2 } else { 1 };
         v.extend([
-            ("fee 2^64".into(), inp(op, &with(32 * H_FEE + 23, &|s| s[0] = 1), pf), Some(Reject::Fee)),
-            ("amount 1".into(), inp(op, &set(stmt::H_AMOUNT, word(1)), pf), Some(Reject::MustBeZero("amount"))),
-            ("amount 2^64".into(), inp(op, &with(32 * stmt::H_AMOUNT + 23, &|s| s[0] = 1), pf), Some(Reject::Amount)),
-            ("salt high half".into(), inp(op, &with(32 * H_SALT, &|s| s[0] = 1), pf), Some(Reject::Salt)),
-            ("fee + 1".into(), inp(op, &with(32 * H_FEE + 31, &|s| s[0] ^= 1), pf), None),
-            ("auditorOn 2".into(), inp(op, &set(H_AUDITOR_ON, word(2)), pf), Some(Reject::AuditorOn)),
-            ("auditorOn flipped".into(), inp(op, &set(H_AUDITOR_ON, word(!aud as u64)), pf), Some(Reject::Length)),
-            ("M word 0".into(), inp(op, &set(H_LEGS, word(0)), pf), Some(Reject::Legs)),
-            ("M word 3".into(), inp(op, &set(H_LEGS, word(3)), pf), Some(Reject::Legs)),
-            ("M word 16".into(), inp(op, &set(H_LEGS, word(16)), pf), Some(Reject::Legs)),
-            ("M word high byte".into(), inp(op, &with(32 * H_LEGS, &|s| s[0] = 1), pf), Some(Reject::Legs)),
-            ("M word another built M".into(), inp(op, &set(H_LEGS, word(other_m)), pf), Some(Reject::Length)),
-            ("recipientsHash changed".into(), inp(op, &with(32 * H_RECIPIENTS_HASH + 31, &|s| s[0] ^= 1), pf), None),
-            ("memoHash changed".into(), inp(op, &with(32 * stmt::H_MEMO_HASH, &|s| s[0] ^= 0x80), pf), None),
-            ("body coefficient = q".into(), inp(op, &with(HEADER_BYTES, &|s| s[..8].copy_from_slice(&stmt::Q.to_be_bytes())), pf),
-                Some(Reject::Coefficient)),
+            (
+                "fee 2^64".into(),
+                inp(op, &with(32 * H_FEE + 23, &|s| s[0] = 1), pf),
+                Some(Reject::Fee),
+            ),
+            (
+                "amount 1".into(),
+                inp(op, &set(stmt::H_AMOUNT, word(1)), pf),
+                Some(Reject::MustBeZero("amount")),
+            ),
+            (
+                "amount 2^64".into(),
+                inp(op, &with(32 * stmt::H_AMOUNT + 23, &|s| s[0] = 1), pf),
+                Some(Reject::Amount),
+            ),
+            (
+                "salt high half".into(),
+                inp(op, &with(32 * H_SALT, &|s| s[0] = 1), pf),
+                Some(Reject::Salt),
+            ),
+            (
+                "fee + 1".into(),
+                inp(op, &with(32 * H_FEE + 31, &|s| s[0] ^= 1), pf),
+                None,
+            ),
+            (
+                "auditorOn 2".into(),
+                inp(op, &set(H_AUDITOR_ON, word(2)), pf),
+                Some(Reject::AuditorOn),
+            ),
+            (
+                "auditorOn flipped".into(),
+                inp(op, &set(H_AUDITOR_ON, word(!aud as u64)), pf),
+                Some(Reject::Length),
+            ),
+            (
+                "M word 0".into(),
+                inp(op, &set(H_LEGS, word(0)), pf),
+                Some(Reject::Legs),
+            ),
+            (
+                "M word 3".into(),
+                inp(op, &set(H_LEGS, word(3)), pf),
+                Some(Reject::Legs),
+            ),
+            (
+                "M word 16".into(),
+                inp(op, &set(H_LEGS, word(16)), pf),
+                Some(Reject::Legs),
+            ),
+            (
+                "M word high byte".into(),
+                inp(op, &with(32 * H_LEGS, &|s| s[0] = 1), pf),
+                Some(Reject::Legs),
+            ),
+            (
+                "M word another built M".into(),
+                inp(op, &set(H_LEGS, word(other_m)), pf),
+                Some(Reject::Length),
+            ),
+            (
+                "recipientsHash changed".into(),
+                inp(op, &with(32 * H_RECIPIENTS_HASH + 31, &|s| s[0] ^= 1), pf),
+                None,
+            ),
+            (
+                "memoHash changed".into(),
+                inp(op, &with(32 * stmt::H_MEMO_HASH, &|s| s[0] ^= 0x80), pf),
+                None,
+            ),
+            (
+                "body coefficient = q".into(),
+                inp(
+                    op,
+                    &with(HEADER_BYTES, &|s| {
+                        s[..8].copy_from_slice(&stmt::Q.to_be_bytes())
+                    }),
+                    pf,
+                ),
+                Some(Reject::Coefficient),
+            ),
         ]);
         if !h.pqzl() {
-            v.push(("M word 8 (PQZH, not built)".into(), inp(op, &set(H_LEGS, word(8)), pf), Some(Reject::Legs)));
+            v.push((
+                "M word 8 (PQZH, not built)".into(),
+                inp(op, &set(H_LEGS, word(8)), pf),
+                Some(Reject::Legs),
+            ));
         }
         if (m, aud) == (1, true) {
             // 83,072 B relabelled (M = 2, auditor off): decodes (the words pick the shape), the objects shift, rejected
-            let two = with(32 * H_LEGS, &|s| s[..32].copy_from_slice(&stmt::u64_word(2)));
-            let two = [&two[..32 * H_AUDITOR_ON], &word(0), &two[32 * H_AUDITOR_ON + 32..]].concat();
-            v.push(("(1, on) relabelled (2, off)".into(), inp(op, &two, pf), None));
+            let two = with(32 * H_LEGS, &|s| {
+                s[..32].copy_from_slice(&stmt::u64_word(2))
+            });
+            let two = [
+                &two[..32 * H_AUDITOR_ON],
+                &word(0),
+                &two[32 * H_AUDITOR_ON + 32..],
+            ]
+            .concat();
+            v.push((
+                "(1, on) relabelled (2, off)".into(),
+                inp(op, &two, pf),
+                None,
+            ));
         }
     }
     if let Some(Form::Transfer | Form::Transfer0 | Form::Burn | Form::Refresh) = h.form {
         let tr = matches!(h.form, Some(Form::Transfer | Form::Transfer0));
         v.extend([
-            ("fee 2^64".into(), inp(op, &with(32 * H_FEE + 23, &|s| s[0] = 1), pf), Some(Reject::Fee)),
-            ("amount 2^64".into(), inp(op, &with(32 * stmt::H_AMOUNT + 23, &|s| s[0] = 1), pf), Some(Reject::Amount)),
-            ("salt high half".into(), inp(op, &with(32 * H_SALT, &|s| s[0] = 1), pf), Some(Reject::Salt)),
-            ("fee + 1".into(), inp(op, &with(32 * H_FEE + 31, &|s| s[0] ^= 1), pf), None),
+            (
+                "fee 2^64".into(),
+                inp(op, &with(32 * H_FEE + 23, &|s| s[0] = 1), pf),
+                Some(Reject::Fee),
+            ),
+            (
+                "amount 2^64".into(),
+                inp(op, &with(32 * stmt::H_AMOUNT + 23, &|s| s[0] = 1), pf),
+                Some(Reject::Amount),
+            ),
+            (
+                "salt high half".into(),
+                inp(op, &with(32 * H_SALT, &|s| s[0] = 1), pf),
+                Some(Reject::Salt),
+            ),
+            (
+                "fee + 1".into(),
+                inp(op, &with(32 * H_FEE + 31, &|s| s[0] ^= 1), pf),
+                None,
+            ),
         ]);
         if tr {
             v.extend([
-                ("auditorOn 2".into(), inp(op, &with(32 * H_AUDITOR_ON + 31, &|s| s[0] = 2), pf), Some(Reject::AuditorOn)),
-                ("auditorOn flipped".into(), inp(op, &with(32 * H_AUDITOR_ON + 31, &|s| s[0] ^= 1), pf), Some(Reject::AuditorOn)),
-                ("recipient set".into(), inp(op, &with(32 * stmt::H_RECIPIENT + 31, &|s| s[0] = 1), pf),
-                    Some(Reject::MustBeZero("recipient"))),
+                (
+                    "auditorOn 2".into(),
+                    inp(op, &with(32 * H_AUDITOR_ON + 31, &|s| s[0] = 2), pf),
+                    Some(Reject::AuditorOn),
+                ),
+                (
+                    "auditorOn flipped".into(),
+                    inp(op, &with(32 * H_AUDITOR_ON + 31, &|s| s[0] ^= 1), pf),
+                    Some(Reject::AuditorOn),
+                ),
+                (
+                    "recipient set".into(),
+                    inp(op, &with(32 * stmt::H_RECIPIENT + 31, &|s| s[0] = 1), pf),
+                    Some(Reject::MustBeZero("recipient")),
+                ),
             ]);
         } else {
-            v.push(("toUA set".into(), inp(op, &with(32 * H_TO + 31, &|s| s[0] = 1), pf), Some(Reject::MustBeZero("toUA"))));
+            v.push((
+                "toUA set".into(),
+                inp(op, &with(32 * H_TO + 31, &|s| s[0] = 1), pf),
+                Some(Reject::MustBeZero("toUA")),
+            ));
         }
-        v.push(("body coefficient = q".into(), inp(op, &with(HEADER_BYTES, &|s| s[..8].copy_from_slice(&stmt::Q.to_be_bytes())), pf),
-            Some(Reject::Coefficient)));
+        v.push((
+            "body coefficient = q".into(),
+            inp(
+                op,
+                &with(HEADER_BYTES, &|s| {
+                    s[..8].copy_from_slice(&stmt::Q.to_be_bytes())
+                }),
+                pf,
+            ),
+            Some(Reject::Coefficient),
+        ));
     }
     if let Some(Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor) = h.form {
-        v.push(("disclosure amount 2^64".into(), inp(op, &with(32 * stmt::DW_AMOUNT + 23, &|s| s[0] = 1), pf), Some(Reject::Amount)));
-        v.push(("disclosure kind changed".into(), inp(op, &with(32 * stmt::DW_KIND + 31, &|s| s[0] ^= 4), pf), None));
+        v.push((
+            "disclosure amount 2^64".into(),
+            inp(op, &with(32 * stmt::DW_AMOUNT + 23, &|s| s[0] = 1), pf),
+            Some(Reject::Amount),
+        ));
+        v.push((
+            "disclosure kind changed".into(),
+            inp(op, &with(32 * stmt::DW_KIND + 31, &|s| s[0] ^= 4), pf),
+            None,
+        ));
     }
     v
 }
-

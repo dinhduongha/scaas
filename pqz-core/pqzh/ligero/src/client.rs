@@ -5,8 +5,8 @@
 //! Layout constants and the coefficient codec are pqz-stmt's.
 
 use pqz_stmt::{
-    DISC_WORDS, DW_AMOUNT, DW_KIND, Form, H_AMOUNT, H_AUDITOR_ON, H_FEE, H_LEGS, H_RECIPIENTS_HASH, H_SALT,
-    HEADER_BYTES, Multi, PQZH_ID, groups, legs_per_group, u64_word,
+    groups, legs_per_group, u64_word, Form, Multi, DISC_WORDS, DW_AMOUNT, DW_KIND, HEADER_BYTES,
+    H_AMOUNT, H_AUDITOR_ON, H_FEE, H_LEGS, H_RECIPIENTS_HASH, H_SALT, PQZH_ID,
 };
 
 use crate::cs::Rel;
@@ -72,7 +72,10 @@ impl Default for Rng {
 /// the first n coefficients of each polynomial, canonical, as pqz-stmt writes them (be8 < q)
 fn wr(out: &mut Vec<u8>, v: &[Poly], n: usize) {
     for p in v {
-        let c: Vec<u64> = p[..n].iter().map(|&x| x.rem_euclid(Q as i64) as u64).collect();
+        let c: Vec<u64> = p[..n]
+            .iter()
+            .map(|&x| x.rem_euclid(Q as i64) as u64)
+            .collect();
         pqz_stmt::write_coeffs(&c, out).unwrap();
     }
 }
@@ -123,7 +126,9 @@ impl Setup {
             Form::DiscloseSender => (&self.ds_stmt, &self.ds_wit),
             Form::DiscloseReceiver | Form::DiscloseAuditor => (&self.dr_stmt, &self.dr_wit),
             Form::Transfer0 => (&self.tx0_stmt, &self.tx0_wit),
-            Form::TransferSplit | Form::TransferSplit0 => panic!("PQZH has no split transfer (K3-4)"),
+            Form::TransferSplit | Form::TransferSplit0 => {
+                panic!("PQZH has no split transfer (K3-4)")
+            }
         }
     }
 }
@@ -134,7 +139,11 @@ impl Setup {
 pub fn disclose_auditor(w: usize, w_ct: usize) -> (Vec<u8>, Vec<u8>) {
     let mut rng = Rng::new();
     let k = keygen(&mut rng);
-    let (r, e1, e2) = (rng.short(N, 1, BS), rng.short(N, 20, BE), rng.short(16, 20, B2));
+    let (r, e1, e2) = (
+        rng.short(N, 1, BS),
+        rng.short(N, 20, BE),
+        rng.short(16, 20, B2),
+    );
     let v = 123_456u64;
     // v at window w_ct: the first 16 coefficients of (X^-16 w_ct pk)^T r (no wrap: 16 w_ct + 16 <= 64)
     let pk_w: Vec<Poly> = k.pk.iter().map(|p| xinv(p, 16 * w_ct)).collect();
@@ -241,7 +250,10 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     wr_vec(&mut reg_stmt, &kf.pk);
     let mut reg_wit: Vec<u8> = kf.s.iter().map(|&x| x as i8 as u8).collect();
     le16(&mut reg_wit, &kf.e);
-    assert_eq!((reg_stmt.len(), reg_wit.len()), (Form::Register.stmt_len(), Form::Register.wit_len()));
+    assert_eq!(
+        (reg_stmt.len(), reg_wit.len()),
+        (Form::Register.stmt_len(), Form::Register.wit_len())
+    );
 
     let (bal, v, fee) = (1_000_000u64, 123_456u64, 7u64);
     let bp = bal - v - fee;
@@ -267,7 +279,9 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     }
     let (u, vs) = encrypt(&[&kt.pk, &kf.pk, &ka.pk], &m, &polys(&r), &polys(&e1), &e2);
 
-    let mut tx: Vec<u8> = (0..HEADER_BYTES).map(|i| if i < PREFIX { 0x5A } else { (i * 3) as u8 }).collect();
+    let mut tx: Vec<u8> = (0..HEADER_BYTES)
+        .map(|i| if i < PREFIX { 0x5A } else { (i * 3) as u8 })
+        .collect();
     tx[..32].copy_from_slice(&Form::Transfer.op_tag());
     tx[32..64].copy_from_slice(&psid);
     tx[HDR_AUDITOR_ON..HDR_AUDITOR_ON + 32].fill(0);
@@ -296,7 +310,10 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     }
     w.extend_from_slice(&m[0]);
     w.extend_from_slice(&m[1]);
-    assert_eq!((tx.len(), w.len()), (Form::Transfer.stmt_len(), Form::Transfer.wit_len()));
+    assert_eq!(
+        (tx.len(), w.len()),
+        (Form::Transfer.stmt_len(), Form::Transfer.wit_len())
+    );
 
     // R_TX0 (auditor off, pqz_bench.c): the transfer without pk_a and v_a (same r, e1, e2_t, e2_f, so u, v_t, v_f
     // are R_TX's), R_TX's header with auditorOn 0; witness R_TX's without e2_a
@@ -311,11 +328,16 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     wr_v(&mut tx0, &vs[1]);
     let mut w0 = w[..6 * N + 64].to_vec();
     w0.extend_from_slice(&w[6 * N + 96..]);
-    assert_eq!((tx0.len(), w0.len()), (Form::Transfer0.stmt_len(), Form::Transfer0.wit_len()));
+    assert_eq!(
+        (tx0.len(), w0.len()),
+        (Form::Transfer0.stmt_len(), Form::Transfer0.wit_len())
+    );
 
     // R_DS / R_DR: header words chainId .. entryRef = (i * 7), amount v, kind 0 / 1; pk_t, u, v_t
     let disc = |k: u8| {
-        let mut st = [Form::DiscloseSender, Form::DiscloseReceiver][k as usize].op_tag().to_vec();
+        let mut st = [Form::DiscloseSender, Form::DiscloseReceiver][k as usize]
+            .op_tag()
+            .to_vec();
         st.extend_from_slice(&psid);
         st.extend((PREFIX..DISC_AMOUNT).map(|i| (i * 7) as u8));
         st.extend([0u8; 64]);
@@ -335,7 +357,12 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     let disc_len = Form::DiscloseSender.stmt_len();
     assert_eq!(
         (ds_stmt.len(), dr_stmt.len(), ds_wit.len(), dr_wit.len()),
-        (disc_len, disc_len, Form::DiscloseSender.wit_len(), Form::DiscloseReceiver.wit_len())
+        (
+            disc_len,
+            disc_len,
+            Form::DiscloseSender.wit_len(),
+            Form::DiscloseReceiver.wit_len()
+        )
     );
 
     // R_BURN: fresh (r, e1, e2_f) for the new balance
@@ -349,7 +376,9 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     }
     let mb = tw.burn_dp.unwrap_or(digits(bp));
     let (ub, vb) = encrypt(&[&kf.pk], &[mb], &polys(&rb), &polys(&e1b), &[e2b.clone()]);
-    let mut burn: Vec<u8> = (0..HEADER_BYTES).map(|i| if i < PREFIX { 0xB2 } else { (i * 5) as u8 }).collect();
+    let mut burn: Vec<u8> = (0..HEADER_BYTES)
+        .map(|i| if i < PREFIX { 0xB2 } else { (i * 5) as u8 })
+        .collect();
     burn[..32].copy_from_slice(&Form::Burn.op_tag());
     burn[32..64].copy_from_slice(&psid);
     burn[HDR_FEE..HDR_FEE + 64].fill(0);
@@ -369,9 +398,25 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     le16(&mut bw, &e1b);
     le16(&mut bw, &e2b);
     bw.extend_from_slice(&mb);
-    assert_eq!((burn.len(), bw.len()), (Form::Burn.stmt_len(), Form::Burn.wit_len()));
+    assert_eq!(
+        (burn.len(), bw.len()),
+        (Form::Burn.stmt_len(), Form::Burn.wit_len())
+    );
 
-    Setup { reg_stmt, reg_wit, tx_stmt: tx, tx_wit: w, tx0_stmt: tx0, tx0_wit: w0, burn_stmt: burn, burn_wit: bw, ds_stmt, ds_wit, dr_stmt, dr_wit }
+    Setup {
+        reg_stmt,
+        reg_wit,
+        tx_stmt: tx,
+        tx_wit: w,
+        tx0_stmt: tx0,
+        tx0_wit: w0,
+        burn_stmt: burn,
+        burn_wit: bw,
+        ds_stmt,
+        ds_wit,
+        dr_stmt,
+        dr_wit,
+    }
 }
 
 // ---- op 7 R_TXM ----
@@ -417,8 +462,17 @@ pub fn multi_ua(j: usize) -> [u8; 32] {
 /// v = (pk^T r)_{o + i} + e2 + Delta m (16 coefficients; o = 16 w, the window, R0-1)
 fn enc_v(pk: &[Poly], m: &[u8; 16], r: &[i64], e2: &[i64], o: usize) -> Poly {
     let rp = polys(r);
-    let y = dot_int(&pk.iter().collect::<Vec<_>>(), &rp.iter().collect::<Vec<_>>());
-    std::array::from_fn(|i| if i < 16 { modq(y[o + i] + e2[i] + DELTA * m[i] as i64) } else { 0 })
+    let y = dot_int(
+        &pk.iter().collect::<Vec<_>>(),
+        &rp.iter().collect::<Vec<_>>(),
+    );
+    std::array::from_fn(|i| {
+        if i < 16 {
+            modq(y[o + i] + e2[i] + DELTA * m[i] as i64)
+        } else {
+            0
+        }
+    })
 }
 
 /// An op 7 statement and witness of shape (m, aud): sender F with balance 1,000,000 in T (as `setup`), leg amounts
@@ -440,14 +494,20 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
     let (g, lpg) = (groups(m, aud), legs_per_group(aud));
 
     let bal = 1_000_000u64;
-    let amounts = tw.amounts.clone().unwrap_or_else(|| (0..m).map(|j| if j == m / 2 { 123_456 } else { 0 }).collect());
+    let amounts = tw.amounts.clone().unwrap_or_else(|| {
+        (0..m)
+            .map(|j| if j == m / 2 { 123_456 } else { 0 })
+            .collect()
+    });
     let fee = tw.fee.unwrap_or(7);
     let sum: u64 = amounts.iter().sum();
     let mut d: Vec<[u8; 16]> = amounts.iter().map(|&a| digits(a)).collect();
     if let Some((j, x)) = tw.d {
         d[j] = x;
     }
-    let dp = tw.dp.unwrap_or(digits(bal.wrapping_sub(sum).wrapping_sub(fee)));
+    let dp = tw
+        .dp
+        .unwrap_or(digits(bal.wrapping_sub(sum).wrapping_sub(fee)));
     let r0 = rng.short(N, 1, BS);
     let e10 = rng.short(N, 20, BE);
     let e20 = rng.short(16, 20, B2);
@@ -469,7 +529,9 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
     if let Some((x, v)) = &tw.e2 {
         e2[*x] = v.clone();
     }
-    let us: Vec<Vec<Poly>> = (0..g).map(|i| encrypt(&[], &[], &polys(&rs[i]), &polys(&e1s[i]), &[]).0).collect();
+    let us: Vec<Vec<Poly>> = (0..g)
+        .map(|i| encrypt(&[], &[], &polys(&rs[i]), &polys(&e1s[i]), &[]).0)
+        .collect();
     let grp = |j: usize| match tw.group {
         Some((jj, h)) if jj == j => h,
         _ => j / lpg,
@@ -582,12 +644,29 @@ impl R {
 }
 
 pub const KINDS: [&str; 12] = [
-    "bitflip", "byte_set", "random_bytes", "truncate", "extend", "stmt_coeff", "stmt_oob", "stmt_prefix",
-    "stmt_tail", "other_proof", "field_noncanon", "empty",
+    "bitflip",
+    "byte_set",
+    "random_bytes",
+    "truncate",
+    "extend",
+    "stmt_coeff",
+    "stmt_oob",
+    "stmt_prefix",
+    "stmt_tail",
+    "other_proof",
+    "field_noncanon",
+    "empty",
 ];
 
 /// mutated (statement, proof) of kind k
-pub fn mutate(k: usize, rel: impl Into<Rel>, st: &[u8], pf: &[u8], other: &[u8], r: &mut R) -> (Vec<u8>, Vec<u8>) {
+pub fn mutate(
+    k: usize,
+    rel: impl Into<Rel>,
+    st: &[u8],
+    pf: &[u8],
+    other: &[u8],
+    r: &mut R,
+) -> (Vec<u8>, Vec<u8>) {
     let (mut s, mut p) = (st.to_vec(), pf.to_vec());
     let rel = rel.into();
     let f = match rel {

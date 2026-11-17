@@ -115,7 +115,11 @@ fn cp_auto(a: &[i64]) -> Cp {
 fn cp_mulx(a: &[i64], n: usize) -> Cp {
     let mut r = [0i64; DEG];
     for i in 0..DEG {
-        r[(i + n) % DEG] = if i + n < DEG { a[i] } else { negq(a[i] as u64) as i64 };
+        r[(i + n) % DEG] = if i + n < DEG {
+            a[i]
+        } else {
+            negq(a[i] as u64) as i64
+        };
     }
     r
 }
@@ -144,7 +148,18 @@ struct Prime {
     perm: [u8; DEG],
 }
 
-const PRIME0: Prime = Prime { p: 0, pinv: 0, r2: 0, f1: 0, f2: 0, delta: 0, k: 0, g: [0; NP], zetas: [0; DEG], perm: [0; DEG] };
+const PRIME0: Prime = Prime {
+    p: 0,
+    pinv: 0,
+    r2: 0,
+    f1: 0,
+    f2: 0,
+    delta: 0,
+    k: 0,
+    g: [0; NP],
+    zetas: [0; DEG],
+    perm: [0; DEG],
+};
 
 /// t < p 2^32 -> t 2^-32 mod p, in [0, 2p)
 #[inline]
@@ -432,7 +447,14 @@ impl Ar {
 
     /// `primes_init` (with `aes_tables`'s place taken by the `aes` crate) and A in this form (`lz_mat (A, NPK, NPK)`, K x K)
     fn new(a: &PolyMat) -> Result<Ar, Error> {
-        let mut ar = Ar { pr: [PRIME0; NP], mq: [0; NP], pq: 0, hd: [0; NP], nj: NT0, sa: Vec::new() };
+        let mut ar = Ar {
+            pr: [PRIME0; NP],
+            mq: [0; NP],
+            pq: 0,
+            hd: [0; NP],
+            nj: NT0,
+            sa: Vec::new(),
+        };
         let mut p: u32 = (1 << 30) - 127; // = 1 mod 128
         let mut n = 0;
         while n < NP {
@@ -482,7 +504,9 @@ impl Ar {
             ntt_fwd(&mut x, &pm);
             ntt_fwd(&mut y, &pm);
             for s in 0..DEG {
-                let t = (0..DEG).position(|t| csub(x[t], pm.p) == csub(y[s], pm.p)).ok_or(Error::Internal)?;
+                let t = (0..DEG)
+                    .position(|t| csub(x[t], pm.p) == csub(y[s], pm.p))
+                    .ok_or(Error::Internal)?;
                 ar.pr[i].perm[s] = t as u8;
             }
         }
@@ -502,12 +526,30 @@ impl Ar {
         // self-check: (1 + X)(1 - X^63) = 2 + X - X^63 (negacyclic), through every step; o(1 + X) = 1 - X^63
         let (ta, tb) = (ar.fwd_small(1, 1, 1), ar.fwd_small(1, -1, DEG - 1));
         let r = ar.red_nt(&nt_mul(&ta, &tb, &ar.pr));
-        let want = |j: usize| if j == 0 { 2 } else if j == 1 { 1 } else if j == DEG - 1 { Q - 1 } else { 0 };
+        let want = |j: usize| {
+            if j == 0 {
+                2
+            } else if j == 1 {
+                1
+            } else if j == DEG - 1 {
+                Q - 1
+            } else {
+                0
+            }
+        };
         if (0..DEG).any(|j| r[j] as u64 != want(j)) {
             return Err(Error::Internal);
         }
         let r = ar.red_nt(&nt_auto(&ta, &ar.pr));
-        let want = |j: usize| if j == 0 { 1 } else if j == DEG - 1 { Q - 1 } else { 0 };
+        let want = |j: usize| {
+            if j == 0 {
+                1
+            } else if j == DEG - 1 {
+                Q - 1
+            } else {
+                0
+            }
+        };
         if (0..DEG).any(|j| r[j] as u64 != want(j)) {
             return Err(Error::Internal);
         }
@@ -606,7 +648,14 @@ fn tr8(mut x: u64) -> u64 {
 /// (seed, dom0 + i): ncols plus bits then ncols minus bits, LSB first. Eight rows at a time: T[x] = sum of the eight
 /// rows' challenges selected by the bits of x, indexed by each column's transposed plus / minus bits.
 /// |acc| < 256 q < 2^(L+8). rows: scratch of 8 ncols / 4 bytes.
-fn jl_fold(acc: &mut [i64], ncols: usize, v: &[[u64; JLR]; LAMBDA], seed: &[u8; 32], dom0: u64, rows: &mut [u8]) -> Result<(), Error> {
+fn jl_fold(
+    acc: &mut [i64],
+    ncols: usize,
+    v: &[[u64; JLR]; LAMBDA],
+    seed: &[u8; 32],
+    dom0: u64,
+    rows: &mut [u8],
+) -> Result<(), Error> {
     let (rb, half) = (ncols / 4, ncols / 8);
     let mut t = [[0i64; LAMBDA]; 256];
     acc[..LAMBDA * ncols].fill(0);
@@ -629,7 +678,10 @@ fn jl_fold(acc: &mut [i64], ncols: usize, v: &[[u64; JLR]; LAMBDA], seed: &[u8; 
             let (xp, xm) = (tr8(xp), tr8(xm));
             let a = &mut acc[LAMBDA * 8 * c..LAMBDA * 8 * (c + 1)];
             for (tt, a) in a.chunks_exact_mut(LAMBDA).enumerate() {
-                let (tp, tm) = (&t[((xp >> (8 * tt)) & 255) as usize], &t[((xm >> (8 * tt)) & 255) as usize]);
+                let (tp, tm) = (
+                    &t[((xp >> (8 * tt)) & 255) as usize],
+                    &t[((xm >> (8 * tt)) & 255) as usize],
+                );
                 for k in 0..LAMBDA {
                     a[k] += tp[k] - tm[k];
                 }
@@ -836,23 +888,48 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
         3 => {
             (s.n, s.m, s.nblk, s.dsel, s.pstart) = (NPK, 0, 2, 0, 0);
             s.nrb = 1;
-            s.rb[0] = Rb { tr: false, ox: 0, oy: NPK, rhs: V_PK };
+            s.rb[0] = Rb {
+                tr: false,
+                ox: 0,
+                oy: NPK,
+                rhs: V_PK,
+            };
         }
         4 => {
             // u = A^T r + e1; pk^T r + e2_t
             (s.n, s.m, s.nblk, s.dsel, s.pstart) = (NPK, 16, 3, 2 * NPK, 2 * NPK + 1);
             s.nrb = 1;
-            s.rb[0] = Rb { tr: true, ox: 0, oy: NPK, rhs: V_U };
+            s.rb[0] = Rb {
+                tr: true,
+                ox: 0,
+                oy: NPK,
+                rhs: V_U,
+            };
             s.nprod = 1;
-            s.pr[0] = Pr { v: V_PKT, ox: 0, win: 0, e2: Some(2 * NPK) };
+            s.pr[0] = Pr {
+                v: V_PKT,
+                ox: 0,
+                win: 0,
+                e2: Some(2 * NPK),
+            };
         }
         5 => {
             // pk = A s + e; u^T s
             (s.n, s.m, s.nblk, s.dsel, s.pstart) = (NPK, 16, 2, 0, 2 * NPK);
             s.nrb = 1;
-            s.rb[0] = Rb { tr: false, ox: 0, oy: NPK, rhs: V_PK };
+            s.rb[0] = Rb {
+                tr: false,
+                ox: 0,
+                oy: NPK,
+                rhs: V_PK,
+            };
             s.nprod = 1;
-            s.pr[0] = Pr { v: V_U, ox: 0, win: 0, e2: None };
+            s.pr[0] = Pr {
+                v: V_U,
+                ox: 0,
+                win: 0,
+                e2: None,
+            };
         }
         _ => {
             // the debit relations R_TX, R_TX0, R_BURN, R_TXM (pqz_rel.c shape_t): rows 1, 2 per group; products
@@ -864,7 +941,13 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
             s.txm = r.op == crate::OP_TRANSFER_MULTI;
             s.split = r.op == crate::OP_TRANSFER && r.code & rel::CODE_SPLIT != 0; // K3-4: the leg's group 0, the sender's group 1
             let lpg = rel::lpg(a); // legs per group (R0-1)
-            let g = if s.burn { 1 } else if s.split { 2 } else { rel::groups(m, a) };
+            let g = if s.burn {
+                1
+            } else if s.split {
+                2
+            } else {
+                rel::groups(m, a)
+            };
             let (e, e2f) = (2 * NPK + 2 * NPK * g, 2 * NPK + 2 * NPK * g + m);
             (s.debit, s.legs, s.groups, s.aud) = (true, m, g, a);
             s.nvec = NVEC + m.saturating_sub(1) + (g - 1);
@@ -878,22 +961,52 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
             if !ok {
                 return Err(Error::Internal);
             }
-            s.rb[0] = Rb { tr: false, ox: 0, oy: NPK, rhs: V_PKF };
+            s.rb[0] = Rb {
+                tr: false,
+                ox: 0,
+                oy: NPK,
+                rhs: V_PKF,
+            };
             for gi in 0..g {
-                s.rb[1 + gi] = Rb { tr: true, ox: 2 * NPK + 2 * NPK * gi, oy: 3 * NPK + 2 * NPK * gi, rhs: s.v_u(gi) };
+                s.rb[1 + gi] = Rb {
+                    tr: true,
+                    ox: 2 * NPK + 2 * NPK * gi,
+                    oy: 3 * NPK + 2 * NPK * gi,
+                    rhs: s.v_u(gi),
+                };
             }
             let mut k = 0;
             for j in 0..m {
-                s.pr[k] = Pr { v: s.v_pk(j), ox: 2 * NPK + 2 * NPK * (j / lpg), win: 0, e2: Some(e + j) };
+                s.pr[k] = Pr {
+                    v: s.v_pk(j),
+                    ox: 2 * NPK + 2 * NPK * (j / lpg),
+                    win: 0,
+                    e2: Some(e + j),
+                };
                 k += 1;
             }
-            s.pr[k] = Pr { v: V_PKF, ox: 2 * NPK + 2 * NPK * usize::from(s.split), win: 0, e2: Some(e2f) };
+            s.pr[k] = Pr {
+                v: V_PKF,
+                ox: 2 * NPK + 2 * NPK * usize::from(s.split),
+                win: 0,
+                e2: Some(e2f),
+            };
             k += 1;
             for j in 0..a * m {
-                s.pr[k] = Pr { v: V_PKA, ox: 2 * NPK + 2 * NPK * (j / lpg), win: j % lpg, e2: Some(e2f + 1 + j) };
+                s.pr[k] = Pr {
+                    v: V_PKA,
+                    ox: 2 * NPK + 2 * NPK * (j / lpg),
+                    win: j % lpg,
+                    e2: Some(e2f + 1 + j),
+                };
                 k += 1;
             }
-            s.pr[k] = Pr { v: V_UT, ox: 0, win: 0, e2: None };
+            s.pr[k] = Pr {
+                v: V_UT,
+                ox: 0,
+                win: 0,
+                e2: None,
+            };
             k += 1;
             s.nprod = k;
         }
@@ -930,7 +1043,8 @@ fn setup(ar: &Ar, r: &Rel, keys: &[PolyMat; 3]) -> Result<SvRel, Error> {
     // constants
     let u = |a: &Int| int_u64(a).ok_or(Error::Internal);
     (s.bz3sqr, s.bz4, s.bsq) = (u(&p.bz3sqr)?, u(&p.bz4)?, u(&qm.bsqr)?);
-    (s.gamma, s.gammaby2, s.dm, s.qm1) = (u(&dc.gamma)?, u(&dc.gammaby2)?, u(&dc.m)?, u(&dc.qminus1)?);
+    (s.gamma, s.gammaby2, s.dm, s.qm1) =
+        (u(&dc.gamma)?, u(&dc.gammaby2)?, u(&dc.m)?, u(&dc.qminus1)?);
     (s.d, s.log2m) = (dc.d, dc.log2m);
     ok &= s.log2m <= L;
     s.inv2 = int_modq(&ring.inv2);
@@ -1087,7 +1201,9 @@ fn parse_stmt(t: &mut Stmt, s: &SvRel, code: u8, stmt: &[u8]) -> bool {
         return ok;
     }
     match code {
-        crate::OP_REGISTER => len == rel::REG_STMT && rd_vec(&mut t.vec[V_PK], &stmt[PREFIX_BYTES + 32..]),
+        crate::OP_REGISTER => {
+            len == rel::REG_STMT && rd_vec(&mut t.vec[V_PK], &stmt[PREFIX_BYTES + 32..])
+        }
         crate::OP_DISCLOSE_SENDER | crate::OP_DISCLOSE_RECEIVER => {
             if len != rel::DISC_STMT {
                 return false;
@@ -1096,11 +1212,22 @@ fn parse_stmt(t: &mut Stmt, s: &SvRel, code: u8, stmt: &[u8]) -> bool {
             (t.amount, o) = rel::word64(&stmt[rel::DISC_AMOUNT..]);
             ok &= o;
             let (kind, o) = rel::word64(&stmt[rel::DISC_AMOUNT + 32..]);
-            let wmax = if code == crate::OP_DISCLOSE_SENDER { 1 } else { set::S_AUD as u64 };
+            let wmax = if code == crate::OP_DISCLOSE_SENDER {
+                1
+            } else {
+                set::S_AUD as u64
+            };
             ok &= o & (kind >> 16 == 0) & ((kind >> 8) < wmax);
             t.win = ((kind >> 8) & 3) as usize;
             let mut p = rel::DISC_PK;
-            ok &= rd_vec(&mut t.vec[if code == crate::OP_DISCLOSE_SENDER { V_PKT } else { V_PK }], &stmt[p..]);
+            ok &= rd_vec(
+                &mut t.vec[if code == crate::OP_DISCLOSE_SENDER {
+                    V_PKT
+                } else {
+                    V_PK
+                }],
+                &stmt[p..],
+            );
             p += POLYVEC_BYTES;
             ok &= rd_vec(&mut t.vec[V_U], &stmt[p..]);
             p += POLYVEC_BYTES;
@@ -1281,7 +1408,14 @@ fn hash_enc(hash: &[u8; 32], v: &mut polyvec::Sv<'_>) -> Result<[u8; 32], Error>
 
 /// `verify_body` (with `pqz_sv_verify`'s frame): false = reject; `Err(Error::Memory)` = an allocation failed (kept by
 /// `try_verify_fast`, a node fault in pqz-ffi); any other `Err` is C's sticky error, a reject
-fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], proof: &[u8]) -> Result<bool, Error> {
+fn verify_body(
+    ar: &Ar,
+    s: &SvRel,
+    code: u8,
+    hash_stmt: &[u8; 32],
+    stmt: &[u8],
+    proof: &[u8],
+) -> Result<bool, Error> {
     let pr = &ar.pr;
     let p = s.p;
     let (mq, m1s, z, km, m2r, mm) = (s.mq, s.m1s, s.z, s.kmsis, s.m2r, s.m);
@@ -1289,7 +1423,16 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     let ntot = LAMBDA / 2 + 2 + s.n;
 
     // statement (pqz_rel.c build_reg / parse_debit / parse_disc: every coefficient < q)
-    let mut t = Stmt { vec: vz(s.nvec, [[0; DEG]; NPK])?, vt: [0; 16], vf: [0; 16], v: [[0; 16]; SVL], va: [[0; 16]; SVL], fee: 0, amount: 0, win: 0 };
+    let mut t = Stmt {
+        vec: vz(s.nvec, [[0; DEG]; NPK])?,
+        vt: [0; 16],
+        vf: [0; 16],
+        v: [[0; 16]; SVL],
+        va: [[0; 16]; SVL],
+        fee: 0,
+        amount: 0,
+        win: 0,
+    };
     if !parse_stmt(&mut t, s, code, stmt) {
         return Ok(false);
     }
@@ -1415,7 +1558,9 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         wz[mq + i] = ar.fwd(&r);
         wsz[mq + i] = nt_auto(&wz[mq + i], pr);
     }
-    let zb: Cp = zc[DEG * ibeta..DEG * (ibeta + 1)].try_into().map_err(|_| Error::Internal)?;
+    let zb: Cp = zc[DEG * ibeta..DEG * (ibeta + 1)]
+        .try_into()
+        .map_err(|_| Error::Internal)?;
     let bp_ = nt_add(&wz[ibeta], &wsz[ibeta], pr); // beta + o(beta)
     let bm_ = nt_sub(&wsz[ibeta], &wz[ibeta], pr); // o(beta) - beta
     let cbp = nt_mul(&wc, &bp_, pr); // |.| < 2^52
@@ -1469,7 +1614,13 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         let mut r = ar.red(&acc);
         if w != 0 {
             let o = 16 * w;
-            let sh: Cp = core::array::from_fn(|j| if j + o < DEG { r[j + o] } else { negq(r[j + o - DEG] as u64) as i64 });
+            let sh: Cp = core::array::from_fn(|j| {
+                if j + o < DEG {
+                    r[j + o]
+                } else {
+                    negq(r[j + o - DEG] as u64) as i64
+                }
+            });
             r = sh;
             if let Some(e2) = pk.e2 {
                 for j in 0..DEG {
@@ -1676,7 +1827,8 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         let b = cp_mulx(&r, DEG / 2);
         let a = cp_auto(&g1p);
         for j in 0..DEG {
-            hh[2 * i + 1][j] = mulq(s.inv2, addq(addq(g1p[j] as u64, a[j] as u64), b[j] as u64)) as i64;
+            hh[2 * i + 1][j] =
+                mulq(s.inv2, addq(addq(g1p[j] as u64, a[j] as u64), b[j] as u64)) as i64;
         }
     }
 
@@ -1716,7 +1868,11 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
             let rb = s.rb[blk];
             let mut acc = ACC0; // |.| < 33 2^90
             for j in 0..NPK {
-                let aij = if rb.tr { &ar.sa[j * NPK + ii] } else { &ar.sa[ii * NPK + j] };
+                let aij = if rb.tr {
+                    &ar.sa[j * NPK + ii]
+                } else {
+                    &ar.sa[ii * NPK + j]
+                };
                 acc_mul(&mut acc, aij, &wz[rb.ox + j], pr);
             }
             acc_add(&mut acc, &wz[rb.oy + ii]);
@@ -1779,7 +1935,11 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         polyvec::redp_self(&mut tt);
         let mut c = Coder::new();
         c.urandom(&mut tt, &crate::arith::poly::RING_Q, L)?;
-        c.urandom(core::slice::from_mut(&mut vv), &crate::arith::poly::RING_Q, L)?;
+        c.urandom(
+            core::slice::from_mut(&mut vv),
+            &crate::arith::poly::RING_Q,
+            L,
+        )?;
         c.urandom(&mut *w1v, &Int::from_i64(1, s.dm as i64), s.log2m)?;
         let cseed = hash2(g2, &c.end()?);
         // the eta-filtered challenge (R0-C3)
@@ -1806,21 +1966,29 @@ impl Ctx {
     /// and its tables here are built at first use.
     pub(crate) fn verify_sv(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, Error> {
         // the exact statement length (rel_of) and the proof cap before the caches and the hash (fix A)
-        let Some(ri) = rel::rel_of(op, stmt) else { return Ok(false) };
+        let Some(ri) = rel::rel_of(op, stmt) else {
+            return Ok(false);
+        };
         if proof.len() > MAX_PROOF {
             return Ok(false);
         }
         let r = &RELS[ri];
         self.rel_state(ri)?;
-        let (Some(keys), Some(a)) = (&self.keys[ri], &self.a) else { return Err(Error::Internal) };
+        let (Some(keys), Some(a)) = (&self.keys[ri], &self.a) else {
+            return Err(Error::Internal);
+        };
         if self.sv.is_none() {
             self.sv = Some(Ar::new(a)?);
         }
-        let Some(ar) = &self.sv else { return Err(Error::Internal) };
+        let Some(ar) = &self.sv else {
+            return Err(Error::Internal);
+        };
         if self.svrel[ri].is_none() {
             self.svrel[ri] = Some(setup(ar, r, keys)?);
         }
-        let Some(s) = &self.svrel[ri] else { return Err(Error::Internal) };
+        let Some(s) = &self.svrel[ri] else {
+            return Err(Error::Internal);
+        };
         let h = rel::stmt_hash(op, stmt)?;
         verify_body(ar, s, r.code, &h, stmt, proof)
     }
@@ -1860,7 +2028,13 @@ mod tests {
             let mut tmp = Int::from_i64(1, 400);
             let (x, y) = (bnd, tmp);
             int_div(&mut bnd, &mut tmp, &x, &y);
-            assert_eq!(Some(s.z1bnd), int_u64(&bnd), "{} z1bnd (log2stdev1 {})", r.name, qm.log2stdev1);
+            assert_eq!(
+                Some(s.z1bnd),
+                int_u64(&bnd),
+                "{} z1bnd (log2stdev1 {})",
+                r.name,
+                qm.log2stdev1
+            );
             assert_eq!(Some(s.bz3sqr), int_u64(&p.bz3sqr), "{} bz3sqr", r.name);
             assert_eq!(Some(s.bz4), int_u64(&p.bz4), "{} bz4", r.name);
             assert_eq!(Some(s.bsq), int_u64(&qm.bsqr), "{} bsq", r.name);

@@ -12,7 +12,10 @@ use common::{ids, RND};
 use pqz_ffi::fixture::{wit_debit, wit_multi};
 use pqz_ffi::pqzl::{self, Key};
 use pqz_ffi::selftest::digits;
-use pqz_ffi::stmt::{self, u64_word, zero_words, Debit, Form, Multi, Stmt, Word, H_AMOUNT, H_AUDITOR_ON, H_FEE, H_LEGS, H_SALT};
+use pqz_ffi::stmt::{
+    self, u64_word, zero_words, Debit, Form, Multi, Stmt, Word, H_AMOUNT, H_AUDITOR_ON, H_FEE,
+    H_LEGS, H_SALT,
+};
 use pqz_ffi::*;
 
 const BALANCE: u64 = 1_000_000;
@@ -57,7 +60,12 @@ fn debit(id: &Word, form: Form, value: u64, fee: u64) -> (u8, Vec<u8>, Vec<u8>) 
     let rest = BALANCE.wrapping_sub(value).wrapping_sub(fee);
     let (stmt, wit) = match form {
         Form::Transfer0 => {
-            let c = pqzl::enc(&[&kt.pk, &kf.pk], &[digits(value), digits(rest)], &[0x12; 32]).expect("enc");
+            let c = pqzl::enc(
+                &[&kt.pk, &kf.pk],
+                &[digits(value), digits(rest)],
+                &[0x12; 32],
+            )
+            .expect("enc");
             let d = Debit {
                 form,
                 header: header(form, id, 0, fee),
@@ -71,7 +79,10 @@ fn debit(id: &Word, form: Form, value: u64, fee: u64) -> (u8, Vec<u8>, Vec<u8>) 
                 v_a: None,
                 u_f: None,
             };
-            (Stmt::Debit(d).encode().expect("encode"), wit_debit(&kf, &c, &[digits(value), digits(rest)]))
+            (
+                Stmt::Debit(d).encode().expect("encode"),
+                wit_debit(&kf, &c, &[digits(value), digits(rest)]),
+            )
         }
         _ => {
             let amount = if matches!(form, Form::Burn) { value } else { 0 };
@@ -89,7 +100,10 @@ fn debit(id: &Word, form: Form, value: u64, fee: u64) -> (u8, Vec<u8>, Vec<u8>) 
                 v_a: None,
                 u_f: None,
             };
-            (Stmt::Debit(d).encode().expect("encode"), wit_debit(&kf, &c, &[digits(rest)]))
+            (
+                Stmt::Debit(d).encode().expect("encode"),
+                wit_debit(&kf, &c, &[digits(rest)]),
+            )
         }
     };
     (form.op(), stmt, wit)
@@ -104,7 +118,11 @@ fn multi(id: &Word, value: u64, fee: u64) -> (u8, Vec<u8>, Vec<u8>) {
     let t = total(&kf);
     let d_legs = [digits(0), digits(value)];
     let d_f = digits(BALANCE.wrapping_sub(value).wrapping_sub(fee));
-    let legs: Vec<(&[u8; pqzl::PK_BYTES], [u8; 16])> = keys.iter().map(|k| &*k.pk).zip(d_legs.iter().copied()).collect();
+    let legs: Vec<(&[u8; pqzl::PK_BYTES], [u8; 16])> = keys
+        .iter()
+        .map(|k| &*k.pk)
+        .zip(d_legs.iter().copied())
+        .collect();
     let c = pqzl::enc_multi(&kf.pk, d_f, &legs, None, &[0x72; 32]).expect("enc_multi");
     let mut h = Multi::header(id, m, false);
     for (i, w) in h.iter_mut().enumerate().skip(2) {
@@ -115,10 +133,30 @@ fn multi(id: &Word, value: u64, fee: u64) -> (u8, Vec<u8>, Vec<u8>) {
     h[H_FEE] = u64_word(fee);
     h[H_SALT][16..].copy_from_slice(&[0xA5; 16]);
     let pks = keys.iter().map(|k| &k.pk[..]).collect::<Vec<_>>().concat();
-    let us = c.groups.iter().map(|g| &g.u[..]).collect::<Vec<_>>().concat();
+    let us = c
+        .groups
+        .iter()
+        .map(|g| &g.u[..])
+        .collect::<Vec<_>>()
+        .concat();
     let vs = c.v.concat();
-    let st = Multi { header: h, m, pk_f: &kf.pk[..], pks: &pks, pk_a: None, t: &t, us: &us, vs: &vs, v_f: &c.v_f, v_as: None };
-    (stmt::OP_TRANSFER_MULTI, st.encode().expect("encode"), wit_multi(&kf, &c, &d_legs, d_f))
+    let st = Multi {
+        header: h,
+        m,
+        pk_f: &kf.pk[..],
+        pks: &pks,
+        pk_a: None,
+        t: &t,
+        us: &us,
+        vs: &vs,
+        v_f: &c.v_f,
+        v_as: None,
+    };
+    (
+        stmt::OP_TRANSFER_MULTI,
+        st.encode().expect("encode"),
+        wit_multi(&kf, &c, &d_legs, d_f),
+    )
 }
 
 fn verdict(op: u8, st: &[u8], proof: &[u8]) -> Word {
@@ -146,12 +184,33 @@ fn fee_word_binds_the_verifier_fee() {
     for id in ids() {
         for (name, (op, st, wit)) in cases(&id, VALUE, FEE) {
             let tag = if id == PQZL_ID { "PQZL" } else { "PQZH" };
-            let proof = prove(op, &st, &wit, &RND).unwrap_or_else(|e| panic!("{tag} {name}: prove {e:?}"));
-            assert_eq!(verdict(op, &st, &proof), VALID, "{tag} {name}: fee = txFee + vf verifies 01");
-            assert_eq!(verdict(op, &with_fee(&st, FEE + 1), &proof), INVALID, "{tag} {name}: fee + 1 verifies 00");
-            assert_eq!(verdict(op, &with_fee(&st, FEE - 1), &proof), INVALID, "{tag} {name}: fee - 1 verifies 00");
-            assert_eq!(verdict(op, &with_fee(&st, TX_FEE), &proof), INVALID, "{tag} {name}: without vf verifies 00");
-            println!("{tag} {name}: 01 at fee {FEE}, 00 at {} / {} / {TX_FEE}", FEE + 1, FEE - 1);
+            let proof =
+                prove(op, &st, &wit, &RND).unwrap_or_else(|e| panic!("{tag} {name}: prove {e:?}"));
+            assert_eq!(
+                verdict(op, &st, &proof),
+                VALID,
+                "{tag} {name}: fee = txFee + vf verifies 01"
+            );
+            assert_eq!(
+                verdict(op, &with_fee(&st, FEE + 1), &proof),
+                INVALID,
+                "{tag} {name}: fee + 1 verifies 00"
+            );
+            assert_eq!(
+                verdict(op, &with_fee(&st, FEE - 1), &proof),
+                INVALID,
+                "{tag} {name}: fee - 1 verifies 00"
+            );
+            assert_eq!(
+                verdict(op, &with_fee(&st, TX_FEE), &proof),
+                INVALID,
+                "{tag} {name}: without vf verifies 00"
+            );
+            println!(
+                "{tag} {name}: 01 at fee {FEE}, 00 at {} / {} / {TX_FEE}",
+                FEE + 1,
+                FEE - 1
+            );
         }
     }
 }
@@ -166,19 +225,31 @@ fn overspend_has_no_valid_proof() {
                 continue; // a refresh moves no value; its over-spend is the fee alone (below)
             }
             match prove(op, &st, &wit, &RND) {
-                Ok(p) => assert_eq!(verdict(op, &st, &p), INVALID, "{tag} {name}: an over-spend verifies 00"),
+                Ok(p) => assert_eq!(
+                    verdict(op, &st, &p),
+                    INVALID,
+                    "{tag} {name}: an over-spend verifies 00"
+                ),
                 Err(e) => println!("{tag} {name}: the prover refuses the over-spend ({e:?})"),
             }
         }
         // a refresh of a balance below the fee: fee = BALANCE + 1
         let (op, st, wit) = debit(&id, Form::Refresh, 0, BALANCE + 1);
         match prove(op, &st, &wit, &RND) {
-            Ok(p) => assert_eq!(verdict(op, &st, &p), INVALID, "{tag} refresh: fee above the balance verifies 00"),
+            Ok(p) => assert_eq!(
+                verdict(op, &st, &p),
+                INVALID,
+                "{tag} refresh: fee above the balance verifies 00"
+            ),
             Err(e) => println!("{tag} refresh: the prover refuses ({e:?})"),
         }
         // the control: one unit less is an exact spend, valid
         let (op, st, wit) = debit(&id, Form::Burn, BALANCE - FEE, FEE);
         let p = prove(op, &st, &wit, &RND).expect("exact spend");
-        assert_eq!(verdict(op, &st, &p), VALID, "{tag}: the exact spend (new balance 0) verifies 01");
+        assert_eq!(
+            verdict(op, &st, &p),
+            VALID,
+            "{tag}: the exact spend (new balance 0) verifies 01"
+        );
     }
 }

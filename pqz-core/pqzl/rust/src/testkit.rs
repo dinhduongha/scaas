@@ -29,7 +29,12 @@ pub fn ntt_basemul(a: &[u64; 64], b: &[u64; 64]) -> [u64; 64] {
 
 /// `pqz_keygen` with lowered norm thresholds (the C core's PQZ_TEST_HOOKS knobs `pqz_test_bs` / `pqz_test_be`): the
 /// keys KAT pins the resample path and the counter-64 error with them; with `ctx` as `Ctx::keygen` (its cached A)
-pub fn keygen_lowered(ctx: Option<&mut crate::Ctx>, seed32: &[u8; 32], bs: i64, be: i64) -> Result<crate::Key, crate::Error> {
+pub fn keygen_lowered(
+    ctx: Option<&mut crate::Ctx>,
+    seed32: &[u8; 32],
+    bs: i64,
+    be: i64,
+) -> Result<crate::Key, crate::Error> {
     crate::keys::keygen(ctx.map_or(&mut None, |c| &mut c.a), seed32, bs, be)
 }
 
@@ -43,7 +48,14 @@ pub fn enc_seed_lowered(
     be: i64,
     b2: i64,
 ) -> Result<crate::Enc, crate::Error> {
-    crate::keys::enc_seed(ctx.map_or(&mut None, |c| &mut c.a), pks, None, msgs, seed_enc, (bs, be, b2))
+    crate::keys::enc_seed(
+        ctx.map_or(&mut None, |c| &mut c.a),
+        pks,
+        None,
+        msgs,
+        seed_enc,
+        (bs, be, b2),
+    )
 }
 
 /// `print_int`: up to two limbs as a decimal (a zero of either sign is `0`), else `"overflow"`
@@ -107,8 +119,22 @@ pub fn kat_json() -> Result<String, crate::Error> {
     let mut a = PolyVec::new(NP)?;
     let mut b = PolyVec::new(NP)?;
     for i in 0..NP {
-        a[i] = fill(if i < 4 { i + 1 } else if i < 8 { 4 } else if i < 12 { 5 } else { 0 });
-        b[i] = fill(if i < 4 { (i + 1) % 4 + 1 } else if i % 3 == 0 { 4 } else { 0 });
+        a[i] = fill(if i < 4 {
+            i + 1
+        } else if i < 8 {
+            4
+        } else if i < 12 {
+            5
+        } else {
+            0
+        });
+        b[i] = fill(if i < 4 {
+            (i + 1) % 4 + 1
+        } else if i % 3 == 0 {
+            4
+        } else {
+            0
+        });
     }
 
     let mut o = String::new();
@@ -132,27 +158,51 @@ pub fn kat_json() -> Result<String, crate::Error> {
     }
 
     let j = |i: usize| (i + 1) % NP;
-    per_pair(&mut o, &mut first, "mul", &mut a, &mut b, &|i, a, b| Ok(Poly::mul(&mut a[i], &mut b[i])))?;
-    per_pair(&mut o, &mut first, "add", &mut a, &mut b, &|i, a, b| Ok(Poly::add(&mut a[i], &mut b[i], false)))?;
-    per_pair(&mut o, &mut first, "sub", &mut a, &mut b, &|i, a, b| Ok(Poly::sub(&mut a[i], &mut b[i], false)))?;
-    per_pair(&mut o, &mut first, "neg", &mut a, &mut b, &|i, a, _| Ok(Poly::neg(&mut a[i])))?;
+    per_pair(&mut o, &mut first, "mul", &mut a, &mut b, &|i, a, b| {
+        Ok(Poly::mul(&mut a[i], &mut b[i]))
+    })?;
+    per_pair(&mut o, &mut first, "add", &mut a, &mut b, &|i, a, b| {
+        Ok(Poly::add(&mut a[i], &mut b[i], false))
+    })?;
+    per_pair(&mut o, &mut first, "sub", &mut a, &mut b, &|i, a, b| {
+        Ok(Poly::sub(&mut a[i], &mut b[i], false))
+    })?;
+    per_pair(&mut o, &mut first, "neg", &mut a, &mut b, &|i, a, _| {
+        Ok(Poly::neg(&mut a[i]))
+    })?;
     per_pair(&mut o, &mut first, "scale", &mut a, &mut b, &|i, _, b| {
         let sc = Int::from_i64(1, ((i as u64).wrapping_mul(1_234_567_891) % Q) as i64 - H);
         Ok(Poly::scale(&sc, &mut b[i]))
     })?;
-    per_pair(&mut o, &mut first, "auto", &mut a, &mut b, &|i, a, _| Ok(Poly::auto(&mut a[i])))?;
-    per_pair(&mut o, &mut first, "mul_add_crt", &mut a, &mut b, &|i, a, b| {
-        let mut r = Poly::mul(&mut a[i], &mut b[i]);
-        let (bi, bj) = pair(b, i, j(i));
-        r.add_assign(&mut Poly::mul(bi, bj), true);
-        Ok(r)
+    per_pair(&mut o, &mut first, "auto", &mut a, &mut b, &|i, a, _| {
+        Ok(Poly::auto(&mut a[i]))
     })?;
-    per_pair(&mut o, &mut first, "mul_sub_crt", &mut a, &mut b, &|i, a, b| {
-        let mut r = Poly::mul(&mut a[i], &mut b[i]);
-        let (ai, aj) = pair(a, i, j(i));
-        r.sub_assign(&mut Poly::mul(ai, aj), true);
-        Ok(r)
-    })?;
+    per_pair(
+        &mut o,
+        &mut first,
+        "mul_add_crt",
+        &mut a,
+        &mut b,
+        &|i, a, b| {
+            let mut r = Poly::mul(&mut a[i], &mut b[i]);
+            let (bi, bj) = pair(b, i, j(i));
+            r.add_assign(&mut Poly::mul(bi, bj), true);
+            Ok(r)
+        },
+    )?;
+    per_pair(
+        &mut o,
+        &mut first,
+        "mul_sub_crt",
+        &mut a,
+        &mut b,
+        &|i, a, b| {
+            let mut r = Poly::mul(&mut a[i], &mut b[i]);
+            let (ai, aj) = pair(a, i, j(i));
+            r.sub_assign(&mut Poly::mul(ai, aj), true);
+            Ok(r)
+        },
+    )?;
 
     begin_case(&mut o, &mut first, "l2sqr_linf");
     o.push('[');
@@ -204,7 +254,14 @@ pub fn kat_json() -> Result<String, crate::Error> {
         o.push(']');
     }
     o.push(']');
-    per_pair(&mut o, &mut first, "power2round", &mut a, &mut b, &|i, a, _| Ok(Poly::power2round(&mut a[i], &pqz_tx_dcomp)))?;
+    per_pair(
+        &mut o,
+        &mut first,
+        "power2round",
+        &mut a,
+        &mut b,
+        &|i, a, _| Ok(Poly::power2round(&mut a[i], &pqz_tx_dcomp)),
+    )?;
 
     // the library PRNG and the samplers driven by it
     let seed: [u8; 32] = core::array::from_fn(|i| (i * 7 + 1) as u8);
@@ -218,8 +275,12 @@ pub fn kat_json() -> Result<String, crate::Error> {
         let _ = write!(o, "{x:02x}");
     }
     o.push('"');
-    per_pair(&mut o, &mut first, "urandom", &mut a, &mut b, &|i, _, _| Poly::urandom(&RING_Q, crate::arith::poly::LOG2Q, &seed, i as u64))?;
-    per_pair(&mut o, &mut first, "brandom", &mut a, &mut b, &|i, _, _| Poly::brandom(2, &seed, i as u64))?;
+    per_pair(&mut o, &mut first, "urandom", &mut a, &mut b, &|i, _, _| {
+        Poly::urandom(&RING_Q, crate::arith::poly::LOG2Q, &seed, i as u64)
+    })?;
+    per_pair(&mut o, &mut first, "brandom", &mut a, &mut b, &|i, _, _| {
+        Poly::brandom(2, &seed, i as u64)
+    })?;
     o.push_str("\n  }\n}\n");
     Ok(o)
 }
@@ -227,8 +288,14 @@ pub fn kat_json() -> Result<String, crate::Error> {
 type PairFn<'a> = &'a dyn Fn(usize, &mut PolyVec, &mut PolyVec) -> Result<Poly, crate::Error>;
 
 /// `PER_PAIR (name, stmt)`: r = f(i) for every i, printed (and centred)
-fn per_pair(o: &mut String, first: &mut bool, name: &str, a: &mut PolyVec, b: &mut PolyVec, f: PairFn)
-            -> Result<(), crate::Error> {
+fn per_pair(
+    o: &mut String,
+    first: &mut bool,
+    name: &str,
+    a: &mut PolyVec,
+    b: &mut PolyVec,
+    f: PairFn,
+) -> Result<(), crate::Error> {
     begin_case(o, first, name);
     o.push('[');
     for i in 0..a.len() {
@@ -468,9 +535,22 @@ pub fn int_ops(inp: &[u64; INT_OPS_IN]) -> Result<alloc::vec::Vec<u64>, crate::E
     r2.set(&a);
     r2.mul_sgn_self(-1);
     dump_intn(&mut o, &r2);
-    let f = [a.eq(&b), a.lt(&b), a.le(&b), a.gt(&b), a.ge(&b), a.abslt(&b), a.absle(&b), a.absgt(&b), a.absge(&b),
-             a.abseq(&b)];
-    let bits = f.iter().enumerate().fold(0u64, |x, (i, &t)| x | (t as u64) << i);
+    let f = [
+        a.eq(&b),
+        a.lt(&b),
+        a.le(&b),
+        a.gt(&b),
+        a.ge(&b),
+        a.abslt(&b),
+        a.absle(&b),
+        a.absgt(&b),
+        a.absge(&b),
+        a.abseq(&b),
+    ];
+    let bits = f
+        .iter()
+        .enumerate()
+        .fold(0u64, |x, (i, &t)| x | (t as u64) << i);
     o.push(bits | ((a.sgn() + 1) as u64) << 10 | (a.eqzero() as u64) << 12);
     o.push(a.get_i64() as u64);
 
@@ -480,8 +560,13 @@ pub fn int_ops(inp: &[u64; INT_OPS_IN]) -> Result<alloc::vec::Vec<u64>, crate::E
     dump_intn(&mut o, &r2);
     w.linf(&mut r1);
     dump_intn(&mut o, &r1);
-    o.push(v.lt(&k) as u64 | (v.ge(&k) as u64) << 1 | (w.le(&k) as u64) << 2 | (w.gt(&k) as u64) << 3
-           | (v.eq(&w) as u64) << 4);
+    o.push(
+        v.lt(&k) as u64
+            | (v.ge(&k) as u64) << 1
+            | (w.le(&k) as u64) << 2
+            | (w.gt(&k) as u64) << 3
+            | (v.eq(&w) as u64) << 4,
+    );
     v.add_assign(&w);
     v.mod_self(&k);
     w.redc_self(&k);
@@ -513,7 +598,11 @@ pub fn rand_cbd(input: &[u8], eta: u32, bit_offset: usize, n: usize) -> alloc::v
 
 /// `pqz_shim_rng`: the `Rng (seed, dom)` stream read in pieces of `lens` bytes
 #[cfg(feature = "c-oracle")]
-pub fn rand_rng(seed: &[u8; 32], dom: u64, lens: &[u32]) -> Result<alloc::vec::Vec<u8>, crate::Error> {
+pub fn rand_rng(
+    seed: &[u8; 32],
+    dom: u64,
+    lens: &[u32],
+) -> Result<alloc::vec::Vec<u8>, crate::Error> {
     let mut out = alloc::vec![0u8; lens.iter().map(|&l| l as usize).sum()];
     let mut st = Rng::new(seed, dom);
     let mut o = &mut out[..];
@@ -554,14 +643,21 @@ pub fn rand_shake(which: u32, input: &[u8], alens: &[u32], slens: &[u32]) -> all
 
 /// `pqz_shim_grandom`: `_intvec_grandom` of `n` elements, then `polyvec_grandom` of 2 polys
 #[cfg(feature = "c-oracle")]
-pub fn rand_grandom(seed: &[u8; 32], dom: u32, log2o: u32, n: u32) -> Result<alloc::vec::Vec<i64>, crate::Error> {
+pub fn rand_grandom(
+    seed: &[u8; 32],
+    dom: u32,
+    log2o: u32,
+    n: u32,
+) -> Result<alloc::vec::Vec<i64>, crate::Error> {
     use crate::rand::grandom::{grandom, polyvec_grandom};
     let mut out = alloc::vec![0i64; n as usize];
     grandom(&mut out, log2o, seed, dom as u64)?;
     let mut pv = PolyVec::new(2)?;
     // a refusal (log2o >= 24, review 3w u1-2) is data, as the C shim's: 128 x i64::MIN
     match polyvec_grandom(&mut *pv, log2o, seed, dom) {
-        Ok(()) => pv.iter().for_each(|p| out.extend((0..D).map(|j| p.c(j).get_i64()))),
+        Ok(()) => pv
+            .iter()
+            .for_each(|p| out.extend((0..D).map(|j| p.c(j).get_i64()))),
         Err(crate::Error::Internal) => out.extend([i64::MIN; 2 * D]),
         Err(e) => return Err(e),
     }
@@ -578,21 +674,40 @@ fn intvec_of(v: &[i64]) -> Result<crate::arith::int::IntVec, crate::Error> {
 
 /// `pqz_shim_rej`: `rej_standard` / `rej_bimodal` on the `Rng (seed, dom)` stream: (reject, the next 8 stream bytes)
 #[cfg(feature = "c-oracle")]
-pub fn rand_rej(bimodal: bool, seed: &[u8; 32], dom: u64, z: &[i64], v: &[i64], scm: &[u64; 3], s2: &[u64; 2])
-                -> Result<(bool, [u8; 8]), crate::Error> {
+pub fn rand_rej(
+    bimodal: bool,
+    seed: &[u8; 32],
+    dom: u64,
+    z: &[i64],
+    v: &[i64],
+    scm: &[u64; 3],
+    s2: &[u64; 2],
+) -> Result<(bool, [u8; 8]), crate::Error> {
     use crate::rand::rejection::{rej_bimodal, rej_standard};
     let (z, v) = (intvec_of(z)?, intvec_of(v)?);
     let (scm, s2) = (Int::from_limbs(scm, 0), Int::from_limbs(s2, 0));
     let mut st = Rng::new(seed, dom);
-    let rej = if bimodal { rej_bimodal(&mut st, &z, &v, &scm, &s2)? } else { rej_standard(&mut st, &z, &v, &scm, &s2)? };
+    let rej = if bimodal {
+        rej_bimodal(&mut st, &z, &v, &scm, &s2)?
+    } else {
+        rej_standard(&mut st, &z, &v, &scm, &s2)?
+    };
     Ok((rej, st.u64().to_le_bytes()))
 }
 
 /// `pqz_shim_rej_limbs`: [`rand_rej`] on elements of `nl` limbs then the sign ((nl + 1) words each)
 #[cfg(feature = "c-oracle")]
 #[allow(clippy::too_many_arguments)]
-pub fn rand_rej_limbs(bimodal: bool, seed: &[u8; 32], dom: u64, z: &[u64], v: &[u64], nl: u32, scm: &[u64; 3],
-                      s2: &[u64; 2]) -> Result<(bool, [u8; 8]), crate::Error> {
+pub fn rand_rej_limbs(
+    bimodal: bool,
+    seed: &[u8; 32],
+    dom: u64,
+    z: &[u64],
+    v: &[u64],
+    nl: u32,
+    scm: &[u64; 3],
+    s2: &[u64; 2],
+) -> Result<(bool, [u8; 8]), crate::Error> {
     use crate::rand::rejection::{rej_bimodal, rej_standard};
     let w = nl as usize + 1;
     let vec = |x: &[u64]| -> Result<crate::arith::int::IntVec, crate::Error> {
@@ -605,7 +720,11 @@ pub fn rand_rej_limbs(bimodal: bool, seed: &[u8; 32], dom: u64, z: &[u64], v: &[
     let (z, v) = (vec(z)?, vec(v)?);
     let (scm, s2) = (Int::from_limbs(scm, 0), Int::from_limbs(s2, 0));
     let mut st = Rng::new(seed, dom);
-    let rej = if bimodal { rej_bimodal(&mut st, &z, &v, &scm, &s2)? } else { rej_standard(&mut st, &z, &v, &scm, &s2)? };
+    let rej = if bimodal {
+        rej_bimodal(&mut st, &z, &v, &scm, &s2)?
+    } else {
+        rej_standard(&mut st, &z, &v, &scm, &s2)?
+    };
     Ok((rej, st.u64().to_le_bytes()))
 }
 
@@ -631,8 +750,14 @@ fn dump_coeffs(o: &mut alloc::vec::Vec<u64>, p: &Poly) {
 
 /// `pqz_shim_urandom`: `intvec_urandom` (n elements of nl limbs), then `polymat_urandom` (2 x 2)
 #[cfg(feature = "c-oracle")]
-pub fn rand_urandom(seed: &[u8; 32], dom: u32, n: u32, nl: u32, m: &[u64; 5], log2mod: u32)
-                    -> Result<alloc::vec::Vec<u64>, crate::Error> {
+pub fn rand_urandom(
+    seed: &[u8; 32],
+    dom: u32,
+    n: u32,
+    nl: u32,
+    m: &[u64; 5],
+    log2mod: u32,
+) -> Result<alloc::vec::Vec<u64>, crate::Error> {
     use crate::arith::polymat::PmRef;
     use crate::rand::urandom::{polymat_urandom, urandom};
     let m = int_of(m);
@@ -653,8 +778,14 @@ pub fn rand_urandom(seed: &[u8; 32], dom: u32, n: u32, nl: u32, m: &[u64; 5], lo
 /// `pqz_shim_urandom_bnd`: `intvec_urandom_bnd` (n elements of nl limbs), then for one-limb lo and hi
 /// `polyvec_urandom_bnd` (2 polys)
 #[cfg(feature = "c-oracle")]
-pub fn rand_urandom_bnd(seed: &[u8; 32], dom: u32, n: u32, nl: u32, lo: &[u64; 5], hi: &[u64; 5])
-                        -> Result<alloc::vec::Vec<u64>, crate::Error> {
+pub fn rand_urandom_bnd(
+    seed: &[u8; 32],
+    dom: u32,
+    n: u32,
+    nl: u32,
+    lo: &[u64; 5],
+    hi: &[u64; 5],
+) -> Result<alloc::vec::Vec<u64>, crate::Error> {
     use crate::rand::urandom::{polyvec_urandom_bnd, urandom_bnd};
     let one_limb = lo[4] == 1 && hi[4] == 1;
     let (lo, hi) = (int_of(lo), int_of(hi));
@@ -672,7 +803,12 @@ pub fn rand_urandom_bnd(seed: &[u8; 32], dom: u32, n: u32, nl: u32, lo: &[u64; 5
 
 /// `pqz_shim_autostable`: `poly_urandom_autostable`
 #[cfg(feature = "c-oracle")]
-pub fn rand_autostable(seed: &[u8; 32], dom: u32, bnd: i64, log2: u32) -> Result<alloc::vec::Vec<u64>, crate::Error> {
+pub fn rand_autostable(
+    seed: &[u8; 32],
+    dom: u32,
+    bnd: i64,
+    log2: u32,
+) -> Result<alloc::vec::Vec<u64>, crate::Error> {
     let p = Poly::urandom_autostable(bnd, log2, seed, dom as u64)?;
     let mut o = alloc::vec::Vec::new();
     dump_coeffs(&mut o, &p);
@@ -683,7 +819,11 @@ pub fn rand_autostable(seed: &[u8; 32], dom: u32, bnd: i64, log2: u32) -> Result
 #[cfg(feature = "c-oracle")]
 fn rels() -> alloc::vec::Vec<(&'static str, &'static crate::params::Tbox)> {
     // the relation table without the R_TXM M = 1 entries, which reuse R_TX's / R_TX0's parameters
-    crate::rel::RELS.iter().filter(|r| r.op != crate::OP_TRANSFER_MULTI || r.legs > 1).map(|r| (r.name, r.p)).collect()
+    crate::rel::RELS
+        .iter()
+        .filter(|r| r.op != crate::OP_TRANSFER_MULTI || r.legs > 1)
+        .map(|r| (r.name, r.p))
+        .collect()
 }
 
 /// Every relation's parameters (src/params, generated from pqzl/params/pqz_*_params.h) as one word stream each, in
@@ -698,17 +838,39 @@ pub fn params_words() -> alloc::vec::Vec<(&'static str, alloc::vec::Vec<u64>)> {
     fn abdlop(o: &mut alloc::vec::Vec<u64>, a: &Abdlop) {
         let (r, d) = (a.ring, a.dcompress);
         int(o, &r.q);
-        o.extend_from_slice(&[r.d as u64, r.log2q as u64, r.log2d as u64, 0, r.nmoduli as u64]); // 0: moduli NULL
+        o.extend_from_slice(&[
+            r.d as u64,
+            r.log2q as u64,
+            r.log2d as u64,
+            0,
+            r.nmoduli as u64,
+        ]); // 0: moduli NULL
         int(o, &r.pmodq);
         r.ppmodq.iter().for_each(|x| int(o, x));
         int(o, &r.inv2);
-        for x in [&d.q, &d.qminus1, &d.m, &d.mby2, &d.gamma, &d.gammaby2, &d.pow2d, &d.pow2dby2] {
+        for x in [
+            &d.q,
+            &d.qminus1,
+            &d.m,
+            &d.mby2,
+            &d.gamma,
+            &d.gammaby2,
+            &d.pow2d,
+            &d.pow2dby2,
+        ] {
             int(o, x);
         }
         o.extend_from_slice(&[d.d as u64, d.m_odd as u64, d.log2m as u64]);
         o.extend_from_slice(&[a.m1, a.m2, a.l, a.lext, a.kmsis].map(u64::from));
         int(o, &a.bsqr);
-        o.extend_from_slice(&[a.nu as u64, a.omega as u64, a.log2omega as u64, a.eta, a.rej1 as u64, a.log2stdev1 as u64]);
+        o.extend_from_slice(&[
+            a.nu as u64,
+            a.omega as u64,
+            a.log2omega as u64,
+            a.eta,
+            a.rej1 as u64,
+            a.log2stdev1 as u64,
+        ]);
         int(o, &a.scm1);
         int(o, &a.stdev1sqr);
         o.extend_from_slice(&[a.rej2 as u64, a.log2stdev2 as u64]);
@@ -724,7 +886,12 @@ pub fn params_words() -> alloc::vec::Vec<(&'static str, alloc::vec::Vec<u64>)> {
             abdlop(&mut o, p.quad_eval.quad_many);
             o.extend_from_slice(&[p.quad_eval.lambda, p.nbin, p.z].map(u64::from));
             o.extend(p.n.iter().map(|&x| x as u64));
-            o.extend_from_slice(&[p.nprime as u64, p.nex as u64, p.rej3 as u64, p.log2stdev3 as u64]);
+            o.extend_from_slice(&[
+                p.nprime as u64,
+                p.nex as u64,
+                p.rej3 as u64,
+                p.log2stdev3 as u64,
+            ]);
             int(&mut o, &p.scm3);
             int(&mut o, &p.stdev3sqr);
             o.extend_from_slice(&[p.rej4 as u64, p.log2stdev4 as u64]);
@@ -769,7 +936,8 @@ pub fn ghint(i: usize, inp: &[i64; 192]) -> Option<alloc::vec::Vec<u64>> {
 pub fn chal(seed: &[u8; 32]) -> Option<([i64; 64], [i64; 64], u64)> {
     let co = |p: &Poly| -> [i64; 64] { core::array::from_fn(|j| p.c(j).get_i64()) };
     let c = co(&Poly::urandom_challenge(8, 5, 140, seed).ok()??);
-    let dom = (0..crate::arith::poly::CHAL_TRIES).find(|&d| Poly::urandom_autostable(8, 5, seed, d).is_ok_and(|p| co(&p) == c))?;
+    let dom = (0..crate::arith::poly::CHAL_TRIES)
+        .find(|&d| Poly::urandom_autostable(8, 5, seed, d).is_ok_and(|p| co(&p) == c))?;
     Some((c, co(&Poly::urandom_autostable(8, 5, seed, 0).ok()?), dom))
 }
 
@@ -813,10 +981,23 @@ pub fn synthetic_proof(code: u8, seed: u64) -> Option<alloc::vec::Vec<u8>> {
     fill(&mut f.t_b, &mut |r| (r % Q) as i64);
     fill(&mut f.h, &mut |r| (r % Q) as i64);
     fill(&mut f.t_a1, &mut |r| (r >> (64 - mt)) as i64);
-    fill(core::slice::from_mut(&mut f.c), &mut |r| (r % 17) as i64 - 8);
-    fill(&mut f.hint, &mut |r| if r % 8 == 0 { ((r >> 3) % 7) as i64 - 3 } else { 0 });
+    fill(core::slice::from_mut(&mut f.c), &mut |r| {
+        (r % 17) as i64 - 8
+    });
+    fill(&mut f.hint, &mut |r| {
+        if r % 8 == 0 {
+            ((r >> 3) % 7) as i64 - 3
+        } else {
+            0
+        }
+    });
     let qm = p.quad_eval.quad_many;
-    for (v, l) in [(&mut f.z1, qm.log2stdev1), (&mut f.z21, qm.log2stdev2), (&mut f.z3, p.log2stdev3), (&mut f.z4, p.log2stdev4)] {
+    for (v, l) in [
+        (&mut f.z1, qm.log2stdev1),
+        (&mut f.z21, qm.log2stdev2),
+        (&mut f.z3, p.log2stdev3),
+        (&mut f.z4, p.log2stdev4),
+    ] {
         fill(v, &mut |r| (r % (1 << (l + 2))) as i64 - (1 << (l + 1)));
     }
     encode_proof(&f, crate::MAX_PROOF).ok()
@@ -828,6 +1009,7 @@ pub fn proof_c_field(code: u8) -> Option<(usize, u32, i64)> {
     let p = crate::rel::tbox_by_code(code)?;
     let (tb, qm) = (p.tbox, p.quad_eval.quad_many);
     let log2q = tb.ring.log2q as usize;
-    let fixed = (tb.l + tb.lext + p.quad_eval.lambda / 2) as usize * log2q + tb.kmsis as usize * (log2q - qm.dcompress.d as usize);
+    let fixed = (tb.l + tb.lext + p.quad_eval.lambda / 2) as usize * log2q
+        + tb.kmsis as usize * (log2q - qm.dcompress.d as usize);
     Some((64 * fixed, qm.log2omega, qm.omega))
 }

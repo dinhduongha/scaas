@@ -39,7 +39,11 @@ const V3: bool = matches!(st::SET.as_bytes(), b"n2048-kmax1024");
 /// 12345 -> "12,345" (the descriptions' number format)
 fn th(x: impl Into<i128>) -> String {
     let d = x.into().to_string();
-    let (sign, d) = if let Some(t) = d.strip_prefix('-') { ("-", t.to_string()) } else { ("", d) };
+    let (sign, d) = if let Some(t) = d.strip_prefix('-') {
+        ("-", t.to_string())
+    } else {
+        ("", d)
+    };
     let mut out = String::new();
     for (i, c) in d.chars().enumerate() {
         if i > 0 && (d.len() - i) % 3 == 0 {
@@ -67,13 +71,26 @@ struct Key {
 
 fn keygen(seed: [u8; 32]) -> Key {
     let k = pqzl::keygen(&seed).expect("pqz keygen");
-    Key { label: hex(&seed), pk: k.pk.to_vec(), s: k.s.to_vec(), e: k.e.to_vec(), ctr: k.ctr }
+    Key {
+        label: hex(&seed),
+        pk: k.pk.to_vec(),
+        s: k.s.to_vec(),
+        e: k.e.to_vec(),
+        ctr: k.ctr,
+    }
 }
 
 /// pk = A s + e from chosen short vectors (no norm check: the caller keeps them inside the proven norms)
 fn key_from(label: &str, s: Vec<i8>, e: Vec<i16>) -> Key {
-    let pk = pqzl::keypair_from_secret(&s[..].try_into().unwrap(), &e[..].try_into().unwrap()).expect("keypair");
-    Key { label: label.into(), pk: pk.to_vec(), s, e, ctr: 0 }
+    let pk = pqzl::keypair_from_secret(&s[..].try_into().unwrap(), &e[..].try_into().unwrap())
+        .expect("keypair");
+    Key {
+        label: label.into(),
+        pk: pk.to_vec(),
+        s,
+        e,
+        ctr: 0,
+    }
 }
 
 impl Key {
@@ -119,10 +136,23 @@ fn enc(keys: &[&Key], values: &[u64], seed: [u8; 32]) -> Enc {
 }
 
 /// encryption with chosen (r, e1, e2_j): (u, [v_j])
-fn encrypt(keys: &[&Key], values: &[u64], r: &[i8], e1: &[i16], e2: &[[i16; 16]]) -> (Vec<u8>, Vec<[u8; 128]>) {
+fn encrypt(
+    keys: &[&Key],
+    values: &[u64],
+    r: &[i8],
+    e1: &[i16],
+    e2: &[[i16; 16]],
+) -> (Vec<u8>, Vec<[u8; 128]>) {
     let pks: Vec<&[u8; PK]> = keys.iter().map(|k| pk_ref(&k.pk)).collect();
     let msgs: Vec<[u8; 16]> = values.iter().map(|&v| digits(v)).collect();
-    let (u, vs) = pqzl::encrypt(&pks, &msgs, r.try_into().unwrap(), e1.try_into().unwrap(), e2).expect("pqz encrypt");
+    let (u, vs) = pqzl::encrypt(
+        &pks,
+        &msgs,
+        r.try_into().unwrap(),
+        e1.try_into().unwrap(),
+        e2,
+    )
+    .expect("pqz encrypt");
     (u.to_vec(), vs)
 }
 
@@ -140,8 +170,14 @@ impl Enc {
     fn json(&self) -> J {
         o(vec![
             ("seed_enc", hx(&self.seed)),
-            ("recipients", J::A(self.recips.iter().map(|s| J::from(s.as_str())).collect())),
-            ("values", J::A(self.values.iter().map(|&v| J::from(v)).collect())),
+            (
+                "recipients",
+                J::A(self.recips.iter().map(|s| J::from(s.as_str())).collect()),
+            ),
+            (
+                "values",
+                J::A(self.values.iter().map(|&v| J::from(v)).collect()),
+            ),
         ])
     }
 }
@@ -170,7 +206,13 @@ fn precompile(input: &[u8]) -> (&'static str, String) {
         pqz_ffi::PQZ_FFI_OK => {}
         rc => panic!("pqz_precompile status {rc}"),
     }
-    let res = if out == VALID { "1" } else if out == INVALID { "0" } else { "selftest" };
+    let res = if out == VALID {
+        "1"
+    } else if out == INVALID {
+        "0"
+    } else {
+        "selftest"
+    };
     let reason = match pqz_ffi::decode(input) {
         Err(r) => {
             assert_eq!(res, "0");
@@ -178,8 +220,13 @@ fn precompile(input: &[u8]) -> (&'static str, String) {
         }
         Ok(inp) => {
             if inp.stmt.proof_system_id() == Some(&PQZL_ID) {
-                let g = pqzl::verify_generic(inp.op, inp.stmt_bytes, inp.proof).expect("generic verify");
-                assert_eq!(g, res == "1", "specialised and generic PQZL verifiers disagree");
+                let g = pqzl::verify_generic(inp.op, inp.stmt_bytes, inp.proof)
+                    .expect("generic verify");
+                assert_eq!(
+                    g,
+                    res == "1",
+                    "specialised and generic PQZL verifiers disagree"
+                );
             }
             "verify".into()
         }
@@ -190,9 +237,13 @@ fn precompile(input: &[u8]) -> (&'static str, String) {
 /// pqz-offchain's `verify_offchain` (the off-chain verifier's entry, three-key spec K3-4: PQZL_SPLIT_ID too), the same
 /// steps: that crate depends on pqz-ffi, so this binary cannot call it (vectors/replay_wasm.mjs runs the crate itself)
 fn offchain(input: &[u8]) -> Result<bool, pqz_ffi::NodeFault> {
-    let Ok(d) = pqz_ffi::decode(input) else { return Ok(false) };
+    let Ok(d) = pqz_ffi::decode(input) else {
+        return Ok(false);
+    };
     match d.stmt.proof_system_id() {
-        Some(id) if *id == PQZL_ID || *id == st::PQZL_SPLIT_ID => pqzl::verify_fast(d.op, d.stmt_bytes, d.proof),
+        Some(id) if *id == PQZL_ID || *id == st::PQZL_SPLIT_ID => {
+            pqzl::verify_fast(d.op, d.stmt_bytes, d.proof)
+        }
         Some(id) if *id == PQZH_ID => pqz_ffi::pqzh::verify(d.op, d.stmt_bytes, d.proof),
         _ => Ok(false),
     }
@@ -221,7 +272,11 @@ fn shake256(parts: &[&[u8]], n: usize) -> Vec<u8> {
 }
 
 fn fnv(b: &[u8]) -> String {
-    format!("{:08x}", b.iter().fold(2166136261u32, |h, &x| (h ^ x as u32).wrapping_mul(16777619)))
+    format!(
+        "{:08x}",
+        b.iter()
+            .fold(2166136261u32, |h, &x| (h ^ x as u32).wrapping_mul(16777619))
+    )
 }
 
 fn hex(b: &[u8]) -> String {
@@ -229,7 +284,8 @@ fn hex(b: &[u8]) -> String {
 }
 
 fn le16(out: &mut Vec<u8>, v: &[i16]) {
-    v.iter().for_each(|x| out.extend_from_slice(&x.to_le_bytes()));
+    v.iter()
+        .for_each(|x| out.extend_from_slice(&x.to_le_bytes()));
 }
 
 fn digits(x: u64) -> [u8; 16] {
@@ -237,7 +293,9 @@ fn digits(x: u64) -> [u8; 16] {
 }
 
 fn coeffs(b: &[u8]) -> Vec<u64> {
-    b.chunks_exact(8).map(|c| u64::from_be_bytes(c.try_into().unwrap())).collect()
+    b.chunks_exact(8)
+        .map(|c| u64::from_be_bytes(c.try_into().unwrap()))
+        .collect()
 }
 
 fn from_coeffs(c: &[u64]) -> Vec<u8> {
@@ -246,8 +304,11 @@ fn from_coeffs(c: &[u64]) -> Vec<u8> {
 
 /// a ± b mod q, coefficient-wise (Add / Sub of §4.2)
 fn ct_add(a: &[u8], b: &[u8], sub: bool) -> Vec<u8> {
-    let c: Vec<u64> =
-        coeffs(a).iter().zip(coeffs(b)).map(|(&x, y)| if sub { (x + Q - y) % Q } else { (x + y) % Q }).collect();
+    let c: Vec<u64> = coeffs(a)
+        .iter()
+        .zip(coeffs(b))
+        .map(|(&x, y)| if sub { (x + Q - y) % Q } else { (x + y) % Q })
+        .collect();
     from_coeffs(&c)
 }
 
@@ -273,16 +334,31 @@ const EIP712_DOMAIN_TYPE: &[u8] = b"EIP712Domain(string name,string version,uint
 /// typehash, op, the 640 header bytes as words, bodyHash = keccak256(stmt[640..]), under the token's EIP-712 domain, whose
 /// chainId, verifyingContract and salt (chainUid) are the statement's own words 2, 3 and 16.
 fn auth_digest(op: u8, stmt: &[u8]) -> Word {
-    let domain = keccak(&[&keccak(&[EIP712_DOMAIN_TYPE]), &keccak(&[b"SCaaS PqzToken"]), &keccak(&[b"1"]), &stmt[64..96], &stmt[96..128],
-        &stmt[512..544]]);
+    let domain = keccak(&[
+        &keccak(&[EIP712_DOMAIN_TYPE]),
+        &keccak(&[b"SCaaS PqzToken"]),
+        &keccak(&[b"1"]),
+        &stmt[64..96],
+        &stmt[96..128],
+        &stmt[512..544],
+    ]);
     let mut o = [0u8; 32];
     o[31] = op;
-    let h = keccak(&[&keccak(&[PQZ_AUTH_TYPE]), &o, &stmt[..640], &keccak(&[&stmt[640..]])]);
+    let h = keccak(&[
+        &keccak(&[PQZ_AUTH_TYPE]),
+        &o,
+        &stmt[..640],
+        &keccak(&[&stmt[640..]]),
+    ]);
     keccak(&[b"\x19\x01", &domain, &h])
 }
 
 /// the ids whose proofs this build writes: PQZL, and PQZH where it is compiled in
-const IDS: &[(&str, Word)] = if pqz_ffi::PQZH { &[("pqzl", PQZL_ID), ("pqzh", PQZH_ID)] } else { &[("pqzl", PQZL_ID)] };
+const IDS: &[(&str, Word)] = if pqz_ffi::PQZH {
+    &[("pqzl", PQZL_ID), ("pqzh", PQZH_ID)]
+} else {
+    &[("pqzl", PQZL_ID)]
+};
 
 /// another set's PQZL id, keccak256 of n2304-kmax4096's current label: the foreign id of the "other id" rows at a set
 /// without PQZH (review 8d1b M2: its zero PQZH word would repeat the "unknown proofSystemId (zero word)" rows byte for
@@ -323,12 +399,21 @@ fn retired_ids(id: usize) -> Vec<(&'static str, Word)> {
         ];
         // a set without PQZH (n2816-kmax65536) has no PQZH rows: the retired PQZH v1 id goes on its PQZL inputs
         if !st::HAS_PQZH {
-            v.push(("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")));
+            v.push((
+                "PQZH v1",
+                k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1"),
+            ));
         }
         v
     } else {
-        vec![("PQZH v1", k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")), ("PQZH v2", prev(st::PQZH_LABEL, "/v4", "/v2")),
-             ("PQZH v3", prev(st::PQZH_LABEL, "/v4", "/v3"))]
+        vec![
+            (
+                "PQZH v1",
+                k("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1"),
+            ),
+            ("PQZH v2", prev(st::PQZH_LABEL, "/v4", "/v2")),
+            ("PQZH v3", prev(st::PQZH_LABEL, "/v4", "/v3")),
+        ]
     }
 }
 
@@ -409,7 +494,10 @@ fn write(j: &J, ind: usize, out: &mut String) {
         J::N(n) => out.push_str(&n.to_string()),
         J::B(b) => out.push_str(if *b { "true" } else { "false" }),
         J::S(s) => {
-            assert!(s.chars().all(|c| c != '"' && c != '\\' && !c.is_control()), "JSON string: {s}");
+            assert!(
+                s.chars().all(|c| c != '"' && c != '\\' && !c.is_control()),
+                "JSON string: {s}"
+            );
             out.push('"');
             out.push_str(s);
             out.push('"');
@@ -456,7 +544,10 @@ fn file(name: &str, desc: &str, mut body: Vec<(&str, J)>) -> (String, String) {
     let mut kv = vec![
         ("file", J::from(name)),
         ("description", J::from(desc)),
-        ("generator", J::from("pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11")),
+        (
+            "generator",
+            J::from("pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11"),
+        ),
     ];
     kv.append(&mut body);
     let mut s = String::new();
@@ -473,11 +564,38 @@ enum V {
 }
 
 const HNAMES: [&str; 20] = [
-    "opTag", "proofSystemId", "chainId", "token", "registry", "fromUA", "toUA", "beneficiaryUA", "fee", "amount",
-    "recipient", "sendCounter", "p", "validUntilBlock", "auditorOn", "plainUsed", "chainUid", "envelopeBinding", "salt",
+    "opTag",
+    "proofSystemId",
+    "chainId",
+    "token",
+    "registry",
+    "fromUA",
+    "toUA",
+    "beneficiaryUA",
+    "fee",
+    "amount",
+    "recipient",
+    "sendCounter",
+    "p",
+    "validUntilBlock",
+    "auditorOn",
+    "plainUsed",
+    "chainUid",
+    "envelopeBinding",
+    "salt",
     "memoHash",
 ];
-const DNAMES: [&str; 9] = ["opTag", "proofSystemId", "chainId", "chainUid", "token", "registry", "entryRef", "amount", "kind"];
+const DNAMES: [&str; 9] = [
+    "opTag",
+    "proofSystemId",
+    "chainId",
+    "chainUid",
+    "token",
+    "registry",
+    "entryRef",
+    "amount",
+    "kind",
+];
 
 fn vword(v: &V) -> Word {
     match v {
@@ -491,13 +609,28 @@ fn vword(v: &V) -> Word {
 }
 
 fn fields_json(f: &[(&str, V)]) -> J {
-    J::O(f.iter().map(|(k, v)| (k.to_string(), match v { V::I(x) => J::from(*x), V::B(b) => hx(b) })).collect())
+    J::O(
+        f.iter()
+            .map(|(k, v)| {
+                (
+                    k.to_string(),
+                    match v {
+                        V::I(x) => J::from(*x),
+                        V::B(b) => hx(b),
+                    },
+                )
+            })
+            .collect(),
+    )
 }
 
 /// header / disclosure words with the given fields (by name); opTag, proofSystemId (and R_TX's auditorOn) preset
 fn set_words(w: &mut [Word], names: &[&str], f: &[(&str, V)]) {
     for (k, v) in f {
-        w[names.iter().position(|n| n == k).unwrap_or_else(|| panic!("field {k}"))] = vword(v);
+        w[names
+            .iter()
+            .position(|n| n == k)
+            .unwrap_or_else(|| panic!("field {k}"))] = vword(v);
     }
 }
 
@@ -507,7 +640,14 @@ fn get(f: &[(&str, V)], k: &str) -> Word {
 
 fn entry_ref(f: &[(&str, V)]) -> Word {
     let t = keccak(&[b"SCAAS-PQZ-ENTRY-V1"]);
-    keccak(&[&t, &get(f, "chainId"), &get(f, "chainUid"), &get(f, "token"), &get(f, "fromUA"), &get(f, "sendCounter")])
+    keccak(&[
+        &t,
+        &get(f, "chainId"),
+        &get(f, "chainUid"),
+        &get(f, "token"),
+        &get(f, "fromUA"),
+        &get(f, "sendCounter"),
+    ])
 }
 
 /// One statement form of the scenario: its PQZL-id statement (the PQZH one differs in bytes 32..63 only), witness,
@@ -520,12 +660,31 @@ struct Row {
     json: Vec<(&'static str, J)>,
 }
 
-fn stmt_json(form: Form, stmt: &[u8], fields: J, objects: J, mut extra: Vec<(&'static str, J)>) -> Vec<(&'static str, J)> {
-    let ids = |f: &dyn Fn(&[u8]) -> Word| J::O(IDS.iter().map(|(n, id)| (n.to_string(), hx(&f(&with_id(stmt, id))))).collect());
+fn stmt_json(
+    form: Form,
+    stmt: &[u8],
+    fields: J,
+    objects: J,
+    mut extra: Vec<(&'static str, J)>,
+) -> Vec<(&'static str, J)> {
+    let ids = |f: &dyn Fn(&[u8]) -> Word| {
+        J::O(
+            IDS.iter()
+                .map(|(n, id)| (n.to_string(), hx(&f(&with_id(stmt, id)))))
+                .collect(),
+        )
+    };
     let mut v = vec![
         ("form", J::from(fname(form))),
         ("op", J::from(form.op())),
-        (if form.op() <= st::OP_BURN { "header" } else { "words" }, fields),
+        (
+            if form.op() <= st::OP_BURN {
+                "header"
+            } else {
+                "words"
+            },
+            fields,
+        ),
         ("objects", objects),
         ("stmt_bytes", J::from(stmt.len())),
         ("stmt", hx(stmt)),
@@ -568,10 +727,19 @@ fn rnd_of(f: Form) -> [u8; 32] {
 /// The scenario with `fee` 7 (the main rows) or 0 (owner 2026-10-14: fee 0 is accepted; fee0.json's debit rows: no
 /// beneficiary, Enc seeds and rnd32 of their own).
 fn scenario(fee: u64) -> Scenario {
-    let (kf, kt, ka, kr) = (keygen(SEED_F), keygen(SEED_T), keygen(SEED_A), keygen(SEED_KEY));
+    let (kf, kt, ka, kr) = (
+        keygen(SEED_F),
+        keygen(SEED_T),
+        keygen(SEED_A),
+        keygen(SEED_KEY),
+    );
     let (bal0, plain, v) = (1_000_000u64, 1_000u64, 123_456u64);
     let off: u8 = if fee == 0 { 0x10 } else { 0 };
-    let ben: Vec<(&str, V)> = if fee == 0 { vec![] } else { vec![("beneficiaryUA", V::B(vec![0xA3; 32]))] };
+    let ben: Vec<(&str, V)> = if fee == 0 {
+        vec![]
+    } else {
+        vec![("beneficiaryUA", V::B(vec![0xA3; 32]))]
+    };
     let acc = enc(&[&kf], &[bal0], [0x61; 32]);
     let t = ct_add(&acc.ct(0), &trivial(plain), false);
     let bal = bal0 + plain;
@@ -580,9 +748,17 @@ fn scenario(fee: u64) -> Scenario {
     let out0 = enc(&[&kt, &kf], &[v, bp], [0x62 + off; 32]);
     let bout = enc(&[&kf], &[bp], [0x64 + off; 32]);
     let rout = enc(&[&kf], &[bal - fee], [0x65 + off; 32]);
-    let rnd = |f: Form| if fee == 0 { [0xA0 + fidx(f) as u8; 32] } else { rnd_of(f) };
+    let rnd = |f: Form| {
+        if fee == 0 {
+            [0xA0 + fidx(f) as u8; 32]
+        } else {
+            rnd_of(f)
+        }
+    };
     let tjson = |e: &Enc| {
-        let J::O(mut kv) = e.json() else { unreachable!() };
+        let J::O(mut kv) = e.json() else {
+            unreachable!()
+        };
         kv.push(("plus_trivial".into(), J::from(plain)));
         J::O(kv)
     };
@@ -606,7 +782,10 @@ fn scenario(fee: u64) -> Scenario {
     txf.extend(ben.clone());
     txf.push(("fee", V::I(fee)));
     txf.extend(tail.clone());
-    txf.extend([("salt", V::B(vec![0x5A; 16])), ("memoHash", V::B(vec![0xD1; 32]))]);
+    txf.extend([
+        ("salt", V::B(vec![0x5A; 16])),
+        ("memoHash", V::B(vec![0xD1; 32])),
+    ]);
     let mut burnf = common.clone();
     burnf.extend(ben.clone());
     burnf.extend([
@@ -658,36 +837,80 @@ fn scenario(fee: u64) -> Scenario {
             objs.push(("pk_a", keyref(&ka)));
         }
         objs.extend([("T", tjson(&acc)), ("out", e.json())]);
-        let b = Bundle { salt, u: &e.u, v_t: &e.vs[0], v_a: aud.then(|| &e.vs[2][..]), to_ua }.encode().unwrap();
+        let b = Bundle {
+            salt,
+            u: &e.u,
+            v_t: &e.vs[0],
+            v_a: aud.then(|| &e.vs[2][..]),
+            to_ua,
+        }
+        .encode()
+        .unwrap();
         st::parse_bundle(&b).unwrap();
         let mut w = kf.wit();
         w.extend(e.wit(if aud { &[0, 1, 2] } else { &[0, 1] }));
         w.extend(digits(v));
         w.extend(digits(bp));
-        let extra = vec![("entry_ref", hx(&eref)), ("bundle_bytes", J::from(b.len())), ("bundle_keccak", hx(&keccak(&[&b])))];
+        let extra = vec![
+            ("entry_ref", hx(&eref)),
+            ("bundle_bytes", J::from(b.len())),
+            ("bundle_keccak", hx(&keccak(&[&b]))),
+        ];
         if aud {
             bundle = b;
         }
-        rows.push(Row { form, json: stmt_json(form, &s, fields_json(&txf), o(objs), extra), stmt: s, wit: w, rnd: rnd(form) });
+        rows.push(Row {
+            form,
+            json: stmt_json(form, &s, fields_json(&txf), o(objs), extra),
+            stmt: s,
+            wit: w,
+            rnd: rnd(form),
+        });
     }
-    for (form, f, e, newbal) in [(Form::Burn, &burnf, &bout, bp), (Form::Refresh, &reff, &rout, bal - fee)] {
+    for (form, f, e, newbal) in [
+        (Form::Burn, &burnf, &bout, bp),
+        (Form::Refresh, &reff, &rout, bal - fee),
+    ] {
         let s = debit(form, f, e);
-        let objs = o(vec![("pk_f", keyref(&kf)), ("T", tjson(&acc)), ("out", e.json())]);
+        let objs = o(vec![
+            ("pk_f", keyref(&kf)),
+            ("T", tjson(&acc)),
+            ("out", e.json()),
+        ]);
         let mut w = kf.wit();
         w.extend(e.wit(&[0]));
         w.extend(digits(newbal));
-        rows.push(Row { form, json: stmt_json(form, &s, fields_json(f), objs, vec![]), stmt: s, wit: w, rnd: rnd(form) });
+        rows.push(Row {
+            form,
+            json: stmt_json(form, &s, fields_json(f), objs, vec![]),
+            stmt: s,
+            wit: w,
+            rnd: rnd(form),
+        });
     }
     {
         let msg = keccak(&[b"SCAAS-PQZ-SELFTEST-V1"]);
-        let s = Stmt::Register(Register { words: [Form::Register.op_tag(), PQZL_ID, msg], pk: &kr.pk }).encode().unwrap();
+        let s = Stmt::Register(Register {
+            words: [Form::Register.op_tag(), PQZL_ID, msg],
+            pk: &kr.pk,
+        })
+        .encode()
+        .unwrap();
         let f = vec![("message", V::B(msg.to_vec()))];
         let objs = o(vec![("pk", keyref(&kr))]);
-        rows.push(Row { form: Form::Register, json: stmt_json(Form::Register, &s, fields_json(&f), objs, vec![]), stmt: s, wit: kr.wit(), rnd: RND_ST });
+        rows.push(Row {
+            form: Form::Register,
+            json: stmt_json(Form::Register, &s, fields_json(&f), objs, vec![]),
+            stmt: s,
+            wit: kr.wit(),
+            rnd: RND_ST,
+        });
     }
-    for (form, kind, key, leg) in
-        [(Form::DiscloseSender, 0u64, &kt, 0usize), (Form::DiscloseReceiver, 1, &kt, 0), (Form::DiscloseAuditor, 2, &ka, 2)]
-    {
+    for (form, kind, key, leg) in [
+        (Form::DiscloseSender, 0u64, &kt, 0usize),
+        (Form::DiscloseReceiver, 1, &kt, 0),
+        (Form::DiscloseAuditor, 2, &ka, 2),
+    ] {
         let f = vec![
             ("chainId", V::I(22776)),
             ("chainUid", V::B(vec![0xC1; 32])),
@@ -699,16 +922,41 @@ fn scenario(fee: u64) -> Scenario {
         ];
         let mut words = Disclose::words(form, &PQZL_ID);
         set_words(&mut words, &DNAMES, &f);
-        let s = Stmt::Disclose(Disclose { form, words, pk: &key.pk, u: &out.u, v: &out.vs[leg] }).encode().unwrap();
+        let s = Stmt::Disclose(Disclose {
+            form,
+            words,
+            pk: &key.pk,
+            u: &out.u,
+            v: &out.vs[leg],
+        })
+        .encode()
+        .unwrap();
         st::parse(form.op(), &s).expect("disclosure canonical");
-        let J::O(mut ct) = out.json() else { unreachable!() };
+        let J::O(mut ct) = out.json() else {
+            unreachable!()
+        };
         ct.push(("leg".into(), J::from(leg)));
         let objs = o(vec![("pk", keyref(key)), ("ct", J::O(ct))]);
-        let w = if form == Form::DiscloseSender { out.wit(&[0]) } else { key.wit() };
-        rows.push(Row { form, json: stmt_json(form, &s, fields_json(&f), objs, vec![]), stmt: s, wit: w, rnd: rnd_of(form) });
+        let w = if form == Form::DiscloseSender {
+            out.wit(&[0])
+        } else {
+            key.wit()
+        };
+        rows.push(Row {
+            form,
+            json: stmt_json(form, &s, fields_json(&f), objs, vec![]),
+            stmt: s,
+            wit: w,
+            rnd: rnd_of(form),
+        });
     }
     for r in &rows {
-        assert_eq!((r.stmt.len(), r.wit.len()), (r.form.stmt_len(), r.form.wit_len()), "{}", fname(r.form));
+        assert_eq!(
+            (r.stmt.len(), r.wit.len()),
+            (r.form.stmt_len(), r.form.wit_len()),
+            "{}",
+            fname(r.form)
+        );
     }
     rows.sort_by_key(|r| fidx(r.form));
     Scenario { rows, bundle }
@@ -744,7 +992,16 @@ fn sq<T: Copy + Into<i64>>(v: &[T]) -> i64 {
     v.iter().map(|&x| x.into() * x.into()).sum()
 }
 
-const KEYGEN_SEEDS: [[u8; 32]; 8] = [[0x00; 32], [0x01; 32], [0xff; 32], seq32(), SEED_F, SEED_T, SEED_A, SEED_KEY];
+const KEYGEN_SEEDS: [[u8; 32]; 8] = [
+    [0x00; 32],
+    [0x01; 32],
+    [0xff; 32],
+    seq32(),
+    SEED_F,
+    SEED_T,
+    SEED_A,
+    SEED_KEY,
+];
 
 const fn seq32() -> [u8; 32] {
     let mut s = [0u8; 32];
@@ -762,7 +1019,10 @@ const fn seq32() -> [u8; 32] {
 fn opening_file() -> (String, String) {
     use pqz_ffi::opening::{self as op, Credit, Party, Role};
     let bip39 = [0x4D; 64];
-    let (chains, tokens) = ([[0xC1u8; 32], [0xC2; 32]], [None, Some([0x70u8; 20]), Some([0x71; 20])]);
+    let (chains, tokens) = (
+        [[0xC1u8; 32], [0xC2; 32]],
+        [None, Some([0x70u8; 20]), Some([0x71; 20])],
+    );
     let mut seeds = vec![];
     for chain in &chains {
         for token in &tokens {
@@ -782,7 +1042,10 @@ fn opening_file() -> (String, String) {
     let (kf, kt, ka) = (keygen(SEED_F), keygen(SEED_T), keygen(SEED_A));
     let pk = |k: &Key| -> [u8; pqzl::PK_BYTES] { k.pk[..].try_into().expect("pk length") };
     let (pk_f, pk_t, pk_a) = (pk(&kf), pk(&kt), pk(&ka));
-    let (seed_t, seed_a) = (op::open_kem_seed(&bip39, &[0x11; 32], &chains[0], None, 0), op::open_kem_seed(&bip39, &[0xA0; 32], &chains[0], None, 0));
+    let (seed_t, seed_a) = (
+        op::open_kem_seed(&bip39, &[0x11; 32], &chains[0], None, 0),
+        op::open_kem_seed(&bip39, &[0xA0; 32], &chains[0], None, 0),
+    );
     let (kem_t, kem_a) = (op::open_kem_pk(&seed_t), op::open_kem_pk(&seed_a));
     let mut rejects = vec![];
     let rows = [false, true]
@@ -790,13 +1053,52 @@ fn opening_file() -> (String, String) {
         .map(|aud| {
             let d: [u8; 16] = core::array::from_fn(|i| (i as u8 * 5 + 1) % 16);
             let seed_enc = [0x7E; 32];
-            let s = op::enc_split(&pk_f, [2; 16], &[0x11; 32], &pk_t, d, aud.then_some(&pk_a), &seed_enc).expect("enc_split");
-            let to = Party { ua: &[0x11; 32], key_version: 0, pk: &pk_t, kem_pk: &kem_t, v: &s.leg.vs[0], opening: &[] };
-            let au = aud.then(|| Party { ua: &[0xA0; 32], key_version: 0, pk: &pk_a, kem_pk: &kem_a, v: &s.leg.vs[1], opening: &[] });
-            let c = Credit { chain_uid: &chains[0], token: &[0x70; 20], u: &s.leg.u, to, auditor: au };
+            let s = op::enc_split(
+                &pk_f,
+                [2; 16],
+                &[0x11; 32],
+                &pk_t,
+                d,
+                aud.then_some(&pk_a),
+                &seed_enc,
+            )
+            .expect("enc_split");
+            let to = Party {
+                ua: &[0x11; 32],
+                key_version: 0,
+                pk: &pk_t,
+                kem_pk: &kem_t,
+                v: &s.leg.vs[0],
+                opening: &[],
+            };
+            let au = aud.then(|| Party {
+                ua: &[0xA0; 32],
+                key_version: 0,
+                pk: &pk_a,
+                kem_pk: &kem_a,
+                v: &s.leg.vs[1],
+                opening: &[],
+            });
+            let c = Credit {
+                chain_uid: &chains[0],
+                token: &[0x70; 20],
+                u: &s.leg.u,
+                to,
+                auditor: au,
+            };
             let o_t = op::seal(Role::Recipient, &c, &to, &s.seed_leg).expect("seal O_t");
             let o_a = au.map(|a| op::seal(Role::Auditor, &c, &a, &s.seed_leg).expect("seal O_a"));
-            let c = Credit { to: Party { opening: &o_t, ..to }, auditor: au.map(|a| Party { opening: o_a.as_deref().unwrap_or(&[]), ..a }), ..c };
+            let c = Credit {
+                to: Party {
+                    opening: &o_t,
+                    ..to
+                },
+                auditor: au.map(|a| Party {
+                    opening: o_a.as_deref().unwrap_or(&[]),
+                    ..a
+                }),
+                ..c
+            };
             assert_eq!(op::check_recipient(&seed_t, &c), Some(d));
             let mut kv = vec![
                 ("auditorOn", J::from(aud)),
@@ -813,15 +1115,24 @@ fn opening_file() -> (String, String) {
                 ("v_f", hx(&s.own.vs[0])),
                 ("u_keccak", hx(&keccak(&[&s.leg.u[..]]))),
                 ("v_t", hx(&s.leg.vs[0])),
-                ("coins_t", hx(&op::coins(&s.seed_leg, Role::Recipient, &kem_t))),
+                (
+                    "coins_t",
+                    hx(&op::coins(&s.seed_leg, Role::Recipient, &kem_t)),
+                ),
                 ("aad_t", hx(&op::aad(&c, &c.to))),
                 ("opening_t", hx(&o_t)),
             ];
             if let Some(o_a) = &o_a {
                 kv.extend([
                     ("v_a", hx(&s.leg.vs[1])),
-                    ("coins_a", hx(&op::coins(&s.seed_leg, Role::Auditor, &kem_a))),
-                    ("aad_a", hx(&op::aad(&c, c.auditor.as_ref().expect("auditor")))),
+                    (
+                        "coins_a",
+                        hx(&op::coins(&s.seed_leg, Role::Auditor, &kem_a)),
+                    ),
+                    (
+                        "aad_a",
+                        hx(&op::aad(&c, c.auditor.as_ref().expect("auditor"))),
+                    ),
                     ("opening_a", hx(o_a)),
                 ]);
                 assert_eq!(op::check_auditor(&seed_a, &c), op::AuditorOutcome::Read(d));
@@ -857,11 +1168,17 @@ fn opening_file() -> (String, String) {
 /// opening.json's `rejects` (review 3w-delta U2-2, the rows of pqz-ffi tests/opening.rs's negatives): on the audited
 /// credit `c`, one field changed each, with the native outcomes of both readers. `open` says what the edited opening opens
 /// to for its reader; `seal` what sealing to an edited `kemPk` does.
-fn opening_rejects(c: &pqz_ffi::opening::Credit, seed_leg: &[u8; 32], seed_t: &[u8; 96], seed_a: &[u8; 96]) -> Vec<J> {
+fn opening_rejects(
+    c: &pqz_ffi::opening::Credit,
+    seed_leg: &[u8; 32],
+    seed_t: &[u8; 96],
+    seed_a: &[u8; 96],
+) -> Vec<J> {
     use pqz_ffi::opening::{self as op, AuditorOutcome as Ao, Credit, Party, Role};
     let a = c.auditor.expect("the audited row");
     let outcome = |x: &Credit| {
-        let r = op::check_recipient(seed_t, x).map_or("skip".to_string(), |d| format!("accepted:{}", hex(&d)));
+        let r = op::check_recipient(seed_t, x)
+            .map_or("skip".to_string(), |d| format!("accepted:{}", hex(&d)));
         let au = match op::check_auditor(seed_a, x) {
             Ao::Read(d) => format!("read:{}", hex(&d)),
             Ao::RecipientUnreadable => "recipient-unreadable".to_string(),
@@ -871,32 +1188,67 @@ fn opening_rejects(c: &pqz_ffi::opening::Credit, seed_leg: &[u8; 32], seed_t: &[
     };
     let row = |case: &str, field: &str, value: &[u8], x: &Credit, extra: (&str, J)| {
         let (r, au) = outcome(x);
-        o(vec![("case", J::from(case)), ("field", J::from(field)), ("value", hx(value)), extra, ("recipient", r), ("auditor", au)])
+        o(vec![
+            ("case", J::from(case)),
+            ("field", J::from(field)),
+            ("value", hx(value)),
+            extra,
+            ("recipient", r),
+            ("auditor", au),
+        ])
     };
     let none = || J::from("none");
     let mut out = vec![];
     // the auditor's Unreadable branch after its opening authenticates: O_a opens to seed_leg but under role 0's coins
     let other = op::seal(Role::Recipient, c, &a, seed_leg).expect("seal");
-    let x = Credit { auditor: Some(Party { opening: &other, ..a }), ..*c };
+    let x = Credit {
+        auditor: Some(Party {
+            opening: &other,
+            ..a
+        }),
+        ..*c
+    };
     assert_eq!(op::check_auditor(seed_a, &x), Ao::Unreadable);
-    out.push(row("O_a other coins (role 0's)", "auditor.opening", &other, &x, ("open", hx(seed_leg))));
+    out.push(row(
+        "O_a other coins (role 0's)",
+        "auditor.opening",
+        &other,
+        &x,
+        ("open", hx(seed_leg)),
+    ));
     // truncated, long and tampered openings, each reader's
     for (who, p) in [("O_t", c.to), ("O_a", a)] {
-        let field = if who == "O_t" { "to.opening" } else { "auditor.opening" };
-        let mut edits: Vec<(String, Vec<u8>)> = [("empty", 0usize), ("ct only", op::MLKEM_CT), ("one byte short", op::OPENING - 1), ("one byte long", op::OPENING + 1)]
-            .iter()
-            .map(|&(n, len)| {
-                let mut b = p.opening.to_vec();
-                b.resize(len, 0);
-                (n.to_string(), b)
-            })
-            .collect();
+        let field = if who == "O_t" {
+            "to.opening"
+        } else {
+            "auditor.opening"
+        };
+        let mut edits: Vec<(String, Vec<u8>)> = [
+            ("empty", 0usize),
+            ("ct only", op::MLKEM_CT),
+            ("one byte short", op::OPENING - 1),
+            ("one byte long", op::OPENING + 1),
+        ]
+        .iter()
+        .map(|&(n, len)| {
+            let mut b = p.opening.to_vec();
+            b.resize(len, 0);
+            (n.to_string(), b)
+        })
+        .collect();
         let mut t = p.opening.to_vec();
         t[op::OPENING - 1] ^= 1;
         edits.push(("tag flipped".to_string(), t));
         for (n, b) in &edits {
             let q = Party { opening: b, ..p };
-            let x = if who == "O_t" { Credit { to: q, ..*c } } else { Credit { auditor: Some(q), ..*c } };
+            let x = if who == "O_t" {
+                Credit { to: q, ..*c }
+            } else {
+                Credit {
+                    auditor: Some(q),
+                    ..*c
+                }
+            };
             out.push(row(&format!("{who} {n}"), field, b, &x, ("open", none())));
         }
     }
@@ -909,7 +1261,12 @@ fn opening_rejects(c: &pqz_ffi::opening::Credit, seed_leg: &[u8; 32], seed_t: &[
     ek_q[1..3].fill(0xff); // the first 12-bit ek coefficient 0xfff >= q
     let mut long = c.to.kem_pk.to_vec();
     long.push(0);
-    for (n, k) in [("kemPk 100 bytes", &short), ("kemPk scheme 2", &scheme), ("kemPk ek coefficient >= q", &ek_q), ("kemPk one byte long", &long)] {
+    for (n, k) in [
+        ("kemPk 100 bytes", &short),
+        ("kemPk scheme 2", &scheme),
+        ("kemPk ek coefficient >= q", &ek_q),
+        ("kemPk one byte long", &long),
+    ] {
         let q = Party { kem_pk: k, ..c.to };
         assert!(op::seal(Role::Recipient, c, &q, seed_leg).is_none(), "{n}");
         let x = Credit { to: q, ..*c };
@@ -920,29 +1277,66 @@ fn opening_rejects(c: &pqz_ffi::opening::Credit, seed_leg: &[u8; 32], seed_t: &[
     // given to the recipient, a flipped mlkemCt bit (implicit rejection), an aad of another chain and of another key
     // version (the honest O_t under the edited credit's aad_t, given as `aad`), a malformed auditor kemPk
     const low: [u8; 32] = [
-        0xe0, 0xeb, 0x7a, 0x7c, 0x3b, 0x41, 0xb8, 0xae, 0x16, 0x56, 0xe3, 0xfa, 0xf1, 0x9f, 0xc4, 0x6a, 0xda, 0x09, 0x8d, 0xeb,
-        0x9c, 0x32, 0xb1, 0xfd, 0x86, 0x62, 0x05, 0x16, 0x5f, 0x49, 0xb8, 0x00,
+        0xe0, 0xeb, 0x7a, 0x7c, 0x3b, 0x41, 0xb8, 0xae, 0x16, 0x56, 0xe3, 0xfa, 0xf1, 0x9f, 0xc4,
+        0x6a, 0xda, 0x09, 0x8d, 0xeb, 0x9c, 0x32, 0xb1, 0xfd, 0x86, 0x62, 0x05, 0x16, 0x5f, 0x49,
+        0xb8, 0x00,
     ];
     let mut lo = c.to.opening.to_vec();
     lo[op::MLKEM_CT..op::MLKEM_CT + 32].copy_from_slice(&low);
-    let other_ua = op::seal(Role::Recipient, c, &Party { kem_pk: a.kem_pk, ..c.to }, seed_leg).expect("seal to another key");
+    let other_ua = op::seal(
+        Role::Recipient,
+        c,
+        &Party {
+            kem_pk: a.kem_pk,
+            ..c.to
+        },
+        seed_leg,
+    )
+    .expect("seal to another key");
     let mut ct = c.to.opening.to_vec();
     ct[0] ^= 1;
-    for (n, b) in [("O_t low-order X25519 point", &lo), ("O_t mlkemCt of another UA's key", &other_ua),
-        ("O_t the auditor's sealed seed", &a.opening.to_vec()), ("O_t mlkemCt bit flipped", &ct)]
-    {
-        let x = Credit { to: Party { opening: b, ..c.to }, ..*c };
+    for (n, b) in [
+        ("O_t low-order X25519 point", &lo),
+        ("O_t mlkemCt of another UA's key", &other_ua),
+        ("O_t the auditor's sealed seed", &a.opening.to_vec()),
+        ("O_t mlkemCt bit flipped", &ct),
+    ] {
+        let x = Credit {
+            to: Party { opening: b, ..c.to },
+            ..*c
+        };
         out.push(row(n, "to.opening", b, &x, ("open", none())));
     }
     let chain = [0xC2u8; 32];
-    let x = Credit { chain_uid: &chain, ..*c };
-    let mut r = row("aad of another chain", "chainUid", &chain, &x, ("open", none()));
+    let x = Credit {
+        chain_uid: &chain,
+        ..*c
+    };
+    let mut r = row(
+        "aad of another chain",
+        "chainUid",
+        &chain,
+        &x,
+        ("open", none()),
+    );
     if let J::O(kv) = &mut r {
         kv.push(("aad".into(), hx(&op::aad(&x, &x.to))));
     }
     out.push(r);
-    let x = Credit { to: Party { key_version: 1, ..c.to }, ..*c };
-    let mut r = row("aad of another key version", "to.keyVersion", &1u64.to_be_bytes(), &x, ("open", none()));
+    let x = Credit {
+        to: Party {
+            key_version: 1,
+            ..c.to
+        },
+        ..*c
+    };
+    let mut r = row(
+        "aad of another key version",
+        "to.keyVersion",
+        &1u64.to_be_bytes(),
+        &x,
+        ("open", none()),
+    );
     if let J::O(kv) = &mut r {
         kv.push(("aad".into(), hx(&op::aad(&x, &x.to))));
     }
@@ -950,9 +1344,21 @@ fn opening_rejects(c: &pqz_ffi::opening::Credit, seed_leg: &[u8; 32], seed_t: &[
     let mut ak = a.kem_pk.to_vec();
     ak.truncate(100);
     let q = Party { kem_pk: &ak, ..a };
-    assert!(op::seal(Role::Auditor, c, &q, seed_leg).is_none(), "a malformed auditor kemPk");
-    let x = Credit { auditor: Some(q), ..*c };
-    out.push(row("auditor kemPk 100 bytes", "auditor.kemPk", &ak, &x, ("seal", J::from("refused"))));
+    assert!(
+        op::seal(Role::Auditor, c, &q, seed_leg).is_none(),
+        "a malformed auditor kemPk"
+    );
+    let x = Credit {
+        auditor: Some(q),
+        ..*c
+    };
+    out.push(row(
+        "auditor kemPk 100 bytes",
+        "auditor.kemPk",
+        &ak,
+        &x,
+        ("seal", J::from("refused")),
+    ));
     out
 }
 
@@ -968,66 +1374,101 @@ fn split_file(sc: &Scenario) -> ((String, String), Vec<(Form, Vec<u8>, Vec<u8>)>
     let (v, bp) = (123_456u64, 1_000_000 + 1_000 - 123_456 - 7); // scenario(7)'s value and new balance
     let seed_leg = pqzl::enc_leg_seed(&seed_enc, &to_ua, &keccak(&[&kt.pk]));
     let own = enc(&[&kf], &[bp], seed_enc);
-    let rows = [(Form::TransferSplit, Form::Transfer), (Form::TransferSplit0, Form::Transfer0)]
-        .into_iter()
-        .map(|(form, base)| {
-            let aud = form == Form::TransferSplit;
-            let leg = if aud { enc(&[&kt, &ka], &[v, v], seed_leg) } else { enc(&[&kt], &[v], seed_leg) };
-            let b = with_id(&sc.rows[fidx(base)].stmt, &st::PQZL_SPLIT_ID);
-            let pre = st::HEADER_BYTES + (if aud { 4 } else { 3 }) * PK + 128; // header, pk_f, pk_t, [pk_a], T
-            let mut s = b[..pre].to_vec();
-            s.extend_from_slice(&leg.u);
-            s.extend_from_slice(&leg.vs[0]);
-            s.extend_from_slice(&own.vs[0]);
-            if aud {
-                s.extend_from_slice(&leg.vs[1]);
-            }
-            s.extend_from_slice(&own.u);
-            assert_eq!(st::parse(form.op(), &s).expect("split statement canonical").form(), Some(form));
-            let mut w = kf.wit();
-            w.extend(leg.wit(&[]));
-            w.extend(own.wit(&[]));
-            le16(&mut w, &leg.e2[0]);
-            le16(&mut w, &own.e2[0]);
-            if aud {
-                le16(&mut w, &leg.e2[1]);
-            }
-            w.extend(digits(v));
-            w.extend(digits(bp));
-            assert_eq!((s.len(), w.len()), (form.stmt_len(), form.wit_len()), "{}", fname(form));
-            let rnd = [0x90 + aud as u8; 32];
-            let p = prove(&st::PQZL_SPLIT_ID, form.op(), &s, &w, &rnd);
-            let inp = st::input(form.op(), &s, &p);
-            let d = pqz_ffi::decode(&inp).expect("split input decodes");
-            assert_eq!(d.stmt.form(), Some(form));
-            assert!(pqzl::verify_fast(form.op(), &s, &p).expect("verify_fast"), "{}: specialised verifier", fname(form));
-            assert!(pqzl::verify_generic(form.op(), &s, &p).expect("verify_generic"), "{}: generic verifier", fname(form));
-            eprintln!("pqzl_split {:16} proof {:6} B", fname(form), p.len());
-            let mut objs = vec![("pk_f", keyref(&kf)), ("pk_t", keyref(&kt))];
-            if aud {
-                objs.push(("pk_a", keyref(&ka)));
-            }
-            objs.extend([("seed_leg", hx(&seed_leg)), ("leg", leg.json()), ("own", own.json())]);
-            let row = o(vec![
-                ("form", J::from(fname(form))),
-                ("op", J::from(form.op())),
-                ("base", o(vec![("file", J::from(sfile(base))), ("form", J::from(fname(base)))])),
-                ("toUA", hx(&to_ua)),
-                ("objects", o(objs)),
-                ("stmt", hx(&s)),
-                ("stmt_keccak", hx(&keccak(&[&s]))),
-                ("wit", hx(&w)),
-                ("wit_keccak", hx(&keccak(&[&w]))),
-                ("rnd32", hx(&rnd)),
-                ("proof_bytes", J::from(p.len())),
-                ("proof_keccak", hx(&keccak(&[&p]))),
-                ("proof_fnv", J::from(fnv(&p))),
-                ("expect", J::from(true)),
-                ("proof", hx(&p)),
-            ]);
-            (row, (form, s, p))
-        })
-        .unzip::<J, (Form, Vec<u8>, Vec<u8>), Vec<J>, Vec<_>>();
+    let rows = [
+        (Form::TransferSplit, Form::Transfer),
+        (Form::TransferSplit0, Form::Transfer0),
+    ]
+    .into_iter()
+    .map(|(form, base)| {
+        let aud = form == Form::TransferSplit;
+        let leg = if aud {
+            enc(&[&kt, &ka], &[v, v], seed_leg)
+        } else {
+            enc(&[&kt], &[v], seed_leg)
+        };
+        let b = with_id(&sc.rows[fidx(base)].stmt, &st::PQZL_SPLIT_ID);
+        let pre = st::HEADER_BYTES + (if aud { 4 } else { 3 }) * PK + 128; // header, pk_f, pk_t, [pk_a], T
+        let mut s = b[..pre].to_vec();
+        s.extend_from_slice(&leg.u);
+        s.extend_from_slice(&leg.vs[0]);
+        s.extend_from_slice(&own.vs[0]);
+        if aud {
+            s.extend_from_slice(&leg.vs[1]);
+        }
+        s.extend_from_slice(&own.u);
+        assert_eq!(
+            st::parse(form.op(), &s)
+                .expect("split statement canonical")
+                .form(),
+            Some(form)
+        );
+        let mut w = kf.wit();
+        w.extend(leg.wit(&[]));
+        w.extend(own.wit(&[]));
+        le16(&mut w, &leg.e2[0]);
+        le16(&mut w, &own.e2[0]);
+        if aud {
+            le16(&mut w, &leg.e2[1]);
+        }
+        w.extend(digits(v));
+        w.extend(digits(bp));
+        assert_eq!(
+            (s.len(), w.len()),
+            (form.stmt_len(), form.wit_len()),
+            "{}",
+            fname(form)
+        );
+        let rnd = [0x90 + aud as u8; 32];
+        let p = prove(&st::PQZL_SPLIT_ID, form.op(), &s, &w, &rnd);
+        let inp = st::input(form.op(), &s, &p);
+        let d = pqz_ffi::decode(&inp).expect("split input decodes");
+        assert_eq!(d.stmt.form(), Some(form));
+        assert!(
+            pqzl::verify_fast(form.op(), &s, &p).expect("verify_fast"),
+            "{}: specialised verifier",
+            fname(form)
+        );
+        assert!(
+            pqzl::verify_generic(form.op(), &s, &p).expect("verify_generic"),
+            "{}: generic verifier",
+            fname(form)
+        );
+        eprintln!("pqzl_split {:16} proof {:6} B", fname(form), p.len());
+        let mut objs = vec![("pk_f", keyref(&kf)), ("pk_t", keyref(&kt))];
+        if aud {
+            objs.push(("pk_a", keyref(&ka)));
+        }
+        objs.extend([
+            ("seed_leg", hx(&seed_leg)),
+            ("leg", leg.json()),
+            ("own", own.json()),
+        ]);
+        let row = o(vec![
+            ("form", J::from(fname(form))),
+            ("op", J::from(form.op())),
+            (
+                "base",
+                o(vec![
+                    ("file", J::from(sfile(base))),
+                    ("form", J::from(fname(base))),
+                ]),
+            ),
+            ("toUA", hx(&to_ua)),
+            ("objects", o(objs)),
+            ("stmt", hx(&s)),
+            ("stmt_keccak", hx(&keccak(&[&s]))),
+            ("wit", hx(&w)),
+            ("wit_keccak", hx(&keccak(&[&w]))),
+            ("rnd32", hx(&rnd)),
+            ("proof_bytes", J::from(p.len())),
+            ("proof_keccak", hx(&keccak(&[&p]))),
+            ("proof_fnv", J::from(fnv(&p))),
+            ("expect", J::from(true)),
+            ("proof", hx(&p)),
+        ]);
+        (row, (form, s, p))
+    })
+    .unzip::<J, (Form, Vec<u8>, Vec<u8>), Vec<J>, Vec<_>>();
     let (rows, bases) = rows;
     let f = file(
         "proof_pqzl_split.json",
@@ -1050,7 +1491,9 @@ fn split_file(sc: &Scenario) -> ((String, String), Vec<(Form, Vec<u8>, Vec<u8>)>
 
 /// The split negative rows (three-key spec K3-4; UNAUDITED): (name, base, edits); base Some(i) = the split form of
 /// `splits[i]` (proof_pqzl_split.json, id "pqzl_split"), None = the PQZL TRANSFER (id "pqzl") under PQZL_SPLIT_ID.
-fn split_negatives(splits: &[(Form, Vec<u8>, Vec<u8>)]) -> Vec<(String, Form, Option<usize>, Vec<E>)> {
+fn split_negatives(
+    splits: &[(Form, Vec<u8>, Vec<u8>)],
+) -> Vec<(String, Form, Option<usize>, Vec<E>)> {
     let w = |x: u64| st::u64_word(x).to_vec();
     let qb = |x: u64| x.to_be_bytes().to_vec();
     let mut v = Vec::new();
@@ -1063,28 +1506,84 @@ fn split_negatives(splits: &[(Form, Vec<u8>, Vec<u8>)]) -> Vec<(String, Form, Op
         for op in 2..=5u8 {
             add(format!("under op {op}"), vec![E::Op(op)]);
         }
-        add("unknown proofSystemId (zero word)".into(), vec![E::StmtSet(32, vec![0; 32])]);
-        add("PQZL proofSystemId (PQZL_ID never serves the split transfer)".into(), vec![E::StmtSet(32, PQZL_ID.to_vec())]);
+        add(
+            "unknown proofSystemId (zero word)".into(),
+            vec![E::StmtSet(32, vec![0; 32])],
+        );
+        add(
+            "PQZL proofSystemId (PQZL_ID never serves the split transfer)".into(),
+            vec![E::StmtSet(32, PQZL_ID.to_vec())],
+        );
         if pqz_ffi::PQZH {
-            add("PQZH proofSystemId".into(), vec![E::StmtSet(32, PQZH_ID.to_vec())]);
+            add(
+                "PQZH proofSystemId".into(),
+                vec![E::StmtSet(32, PQZH_ID.to_vec())],
+            );
         }
-        add(format!("auditorOn {} (R6)", 1 - aud as u64), vec![E::StmtSet(448, w(1 - aud as u64))]);
-        add("u_f coefficient 0 = q".into(), vec![E::StmtSet(n - PK, qb(Q))]);
-        add("u_f coefficient 0 low bit flipped".into(), vec![E::StmtFlip(n - PK + 7, 0)]);
-        add("v_f low bit flipped".into(), vec![E::StmtFlip(pre + PK + 2 * 128 - 1, 0)]);
-        add("v_t low bit flipped".into(), vec![E::StmtFlip(pre + PK + 128 - 1, 0)]);
-        add("u and u_f swapped".into(), vec![E::StmtSet(pre, s[n - PK..].to_vec()), E::StmtSet(n - PK, s[pre..pre + PK].to_vec())]);
-        add("proof truncated by 1 byte".into(), vec![E::ProofResize(pl - 1)]);
-        add("proof extended by 1 zero byte".into(), vec![E::ProofResize(pl + 1)]);
-        add("proof byte 0 bit 0 flipped".into(), vec![E::ProofFlip(0, 0)]);
-        add("proof middle byte bit 3 flipped".into(), vec![E::ProofFlip(pl / 2, 3)]);
-        add("proof last byte bit 7 flipped".into(), vec![E::ProofFlip(pl - 1, 7)]);
+        add(
+            format!("auditorOn {} (R6)", 1 - aud as u64),
+            vec![E::StmtSet(448, w(1 - aud as u64))],
+        );
+        add(
+            "u_f coefficient 0 = q".into(),
+            vec![E::StmtSet(n - PK, qb(Q))],
+        );
+        add(
+            "u_f coefficient 0 low bit flipped".into(),
+            vec![E::StmtFlip(n - PK + 7, 0)],
+        );
+        add(
+            "v_f low bit flipped".into(),
+            vec![E::StmtFlip(pre + PK + 2 * 128 - 1, 0)],
+        );
+        add(
+            "v_t low bit flipped".into(),
+            vec![E::StmtFlip(pre + PK + 128 - 1, 0)],
+        );
+        add(
+            "u and u_f swapped".into(),
+            vec![
+                E::StmtSet(pre, s[n - PK..].to_vec()),
+                E::StmtSet(n - PK, s[pre..pre + PK].to_vec()),
+            ],
+        );
+        add(
+            "proof truncated by 1 byte".into(),
+            vec![E::ProofResize(pl - 1)],
+        );
+        add(
+            "proof extended by 1 zero byte".into(),
+            vec![E::ProofResize(pl + 1)],
+        );
+        add(
+            "proof byte 0 bit 0 flipped".into(),
+            vec![E::ProofFlip(0, 0)],
+        );
+        add(
+            "proof middle byte bit 3 flipped".into(),
+            vec![E::ProofFlip(pl / 2, 3)],
+        );
+        add(
+            "proof last byte bit 7 flipped".into(),
+            vec![E::ProofFlip(pl - 1, 7)],
+        );
         if p[pl - 1] < 0x80 {
-            add("coder padding bit 7 set after the final 1-bit".into(), vec![E::ProofFlip(pl - 1, 7)]);
+            add(
+                "coder padding bit 7 set after the final 1-bit".into(),
+                vec![E::ProofFlip(pl - 1, 7)],
+            );
         }
     }
     for f in [Form::Transfer, Form::Transfer0] {
-        v.push((format!("{}: PQZL_SPLIT_ID (serves only the split transfer)", fname(f)), f, None, vec![E::StmtSet(32, st::PQZL_SPLIT_ID.to_vec())]));
+        v.push((
+            format!(
+                "{}: PQZL_SPLIT_ID (serves only the split transfer)",
+                fname(f)
+            ),
+            f,
+            None,
+            vec![E::StmtSet(32, st::PQZL_SPLIT_ID.to_vec())],
+        ));
     }
     v
 }
@@ -1119,17 +1618,37 @@ fn cbd_file() -> (String, String) {
     let mut rows = Vec::new();
     for seed in [[0x00; 32], SEED_F] {
         let k = keygen(seed);
-        let stream = [&b"SCAAS-PQZ-KEYGEN-V2"[..], &[st::SET.len() as u8], st::SET.as_bytes(), &seed, &k.ctr.to_be_bytes()].concat();
+        let stream = [
+            &b"SCAAS-PQZ-KEYGEN-V2"[..],
+            &[st::SET.len() as u8],
+            st::SET.as_bytes(),
+            &seed,
+            &k.ctr.to_be_bytes(),
+        ]
+        .concat();
         let e: Vec<i64> = k.e.iter().map(|&x| x as i64).collect();
         let s: Vec<i64> = k.s.iter().map(|&x| x as i64).collect();
         rows.push(o(vec![
             ("stream", hx(&stream)),
-            ("parts", J::A(vec![
-                part("s[0..64]", 1, 0, &s[..64]),
-                part(leak(format!("s[{}..{N}]", N - 64)), 1, 2 * (N - 64), &s[N - 64..]),
-                part("e[0..64]", 20, 2 * N, &e[..64]),
-                part(leak(format!("e[{}..{N}]", N - 64)), 20, 2 * N + 40 * (N - 64), &e[N - 64..]),
-            ])),
+            (
+                "parts",
+                J::A(vec![
+                    part("s[0..64]", 1, 0, &s[..64]),
+                    part(
+                        leak(format!("s[{}..{N}]", N - 64)),
+                        1,
+                        2 * (N - 64),
+                        &s[N - 64..],
+                    ),
+                    part("e[0..64]", 20, 2 * N, &e[..64]),
+                    part(
+                        leak(format!("e[{}..{N}]", N - 64)),
+                        20,
+                        2 * N + 40 * (N - 64),
+                        &e[N - 64..],
+                    ),
+                ]),
+            ),
         ]));
     }
     let (kf, kt, ka) = (keygen(SEED_F), keygen(SEED_T), keygen(SEED_A));
@@ -1137,16 +1656,22 @@ fn cbd_file() -> (String, String) {
     let stream = [&b"SCAAS-PQZ-ENC-V1"[..], &x.seed, &x.ctr.to_be_bytes()].concat();
     let r: Vec<i64> = x.r.iter().map(|&v| v as i64).collect();
     let e1: Vec<i64> = x.e1.iter().map(|&v| v as i64).collect();
-    let e2: Vec<Vec<i64>> = x.e2.iter().map(|l| l.iter().map(|&v| v as i64).collect()).collect();
+    let e2: Vec<Vec<i64>> =
+        x.e2.iter()
+            .map(|l| l.iter().map(|&v| v as i64).collect())
+            .collect();
     let o2 = 2 * N + 40 * N;
     rows.push(o(vec![
         ("stream", hx(&stream)),
-        ("parts", J::A(vec![
-            part("r[0..64]", 1, 0, &r[..64]),
-            part("e1[0..64]", 20, 2 * N, &e1[..64]),
-            part("e2_0", 20, o2, &e2[0]),
-            part("e2_2", 20, o2 + 2 * 40 * 16, &e2[2]),
-        ])),
+        (
+            "parts",
+            J::A(vec![
+                part("r[0..64]", 1, 0, &r[..64]),
+                part("e1[0..64]", 20, 2 * N, &e1[..64]),
+                part("e2_0", 20, o2, &e2[0]),
+                part("e2_2", 20, o2 + 2 * 40 * 16, &e2[2]),
+            ]),
+        ),
     ]));
     file(
         "cbd.json",
@@ -1158,7 +1683,12 @@ fn cbd_file() -> (String, String) {
 }
 
 fn part(what: &str, eta: u32, bit: usize, v: &[i64]) -> J {
-    o(vec![("what", J::from(what)), ("eta", J::from(eta)), ("bit_offset", J::from(bit)), ("samples", nums(v))])
+    o(vec![
+        ("what", J::from(what)),
+        ("eta", J::from(eta)),
+        ("bit_offset", J::from(bit)),
+        ("samples", nums(v)),
+    ])
 }
 
 fn enc_file() -> (String, String) {
@@ -1176,12 +1706,18 @@ fn enc_file() -> (String, String) {
     let rows = es
         .iter()
         .map(|e| {
-            let J::O(mut kv) = e.json() else { unreachable!() };
+            let J::O(mut kv) = e.json() else {
+                unreachable!()
+            };
             let legs: Vec<J> = (0..e.recips.len())
                 .map(|j| {
                     let (m, _) = dec(&key(&e.recips[j]).s, &e.ct(j));
                     assert_eq!(value(&m), e.values[j] as i128);
-                    o(vec![("v", hx(&e.vs[j])), ("M", nums(&m)), ("value", J::from(value(&m)))])
+                    o(vec![
+                        ("v", hx(&e.vs[j])),
+                        ("M", nums(&m)),
+                        ("value", J::from(value(&m))),
+                    ])
                 })
                 .collect();
             kv.extend([
@@ -1264,15 +1800,34 @@ mod ph {
         let fe = 4 * (2 * (2 * pp.k - 1) + (2 * pp.k - 1 - pp.ell)); // F_q elements of w, q, h
         let col0 = 32 + eb * fe + 8;
         let q6 = Q.to_be_bytes()[8 - eb..].to_vec();
-        let what = if matches!(s, Shape::Form(_)) { "form" } else { "shape" };
+        let what = if matches!(s, Shape::Form(_)) {
+            "form"
+        } else {
+            "shape"
+        };
         let rl = rel(&s);
         let blk = 32 + eb * (pqzh_ligero::cs::Layout::new(rl, pp.ell).m + 12);
         vec![
-            (format!("proof of max_proof_len({what}) + 1 bytes"), vec![E::ProofResize(pp.max_proof_len(rl) + 1)]),
-            ("w coefficient 0 element = q".into(), vec![E::ProofSet(32, q6.clone())]),
-            ("first opened column element 0 = q".into(), vec![E::ProofSet(col0 + 32, q6.clone())]),
-            ("opened columns 0 and 1 swapped (not increasing)".into(), vec![E::ProofSwap(col0, col0 + blk, blk)]),
-            ("opened column 0 repeated as column 1".into(), vec![E::ProofCopy(col0, col0 + blk, blk)]),
+            (
+                format!("proof of max_proof_len({what}) + 1 bytes"),
+                vec![E::ProofResize(pp.max_proof_len(rl) + 1)],
+            ),
+            (
+                "w coefficient 0 element = q".into(),
+                vec![E::ProofSet(32, q6.clone())],
+            ),
+            (
+                "first opened column element 0 = q".into(),
+                vec![E::ProofSet(col0 + 32, q6.clone())],
+            ),
+            (
+                "opened columns 0 and 1 swapped (not increasing)".into(),
+                vec![E::ProofSwap(col0, col0 + blk, blk)],
+            ),
+            (
+                "opened column 0 repeated as column 1".into(),
+                vec![E::ProofCopy(col0, col0 + blk, blk)],
+            ),
         ]
     }
 
@@ -1351,8 +1906,14 @@ impl E {
             E::StmtFlip(at, b) => pair("stmt_flip", *at, J::from(*b)),
             E::ProofFlip(at, b) => pair("proof_flip", *at, J::from(*b)),
             E::ProofSet(at, b) => pair("proof_set", *at, hx(b)),
-            E::ProofCopy(a, b, n) => o(vec![("proof_copy", J::A(vec![J::from(*a), J::from(*b), J::from(*n)]))]),
-            E::ProofSwap(a, b, n) => o(vec![("proof_swap", J::A(vec![J::from(*a), J::from(*b), J::from(*n)]))]),
+            E::ProofCopy(a, b, n) => o(vec![(
+                "proof_copy",
+                J::A(vec![J::from(*a), J::from(*b), J::from(*n)]),
+            )]),
+            E::ProofSwap(a, b, n) => o(vec![(
+                "proof_swap",
+                J::A(vec![J::from(*a), J::from(*b), J::from(*n)]),
+            )]),
             E::LenField(n) => o(vec![("len_field", J::from(*n))]),
             E::InputResize(n) => o(vec![("input_resize", J::from(*n))]),
             E::Raw(b) => o(vec![("raw", hx(b))]),
@@ -1362,16 +1923,34 @@ impl E {
 
 /// The precompile input of `edits` applied to the honest input of (form, id): op, statement, proof edited in order,
 /// then the input built (`u8(op) ‖ be32(len_field or len(stmt)) ‖ stmt ‖ proof`, or `raw`) and resized.
-fn apply(edits: &[E], form: Option<Form>, id: usize, stmts: &[Vec<u8>], proofs: &[[Vec<u8>; 8]; 2]) -> Vec<u8> {
+fn apply(
+    edits: &[E],
+    form: Option<Form>,
+    id: usize,
+    stmts: &[Vec<u8>],
+    proofs: &[[Vec<u8>; 8]; 2],
+) -> Vec<u8> {
     let (op, s, p) = match form {
-        Some(f) => (f.op(), with_id(&stmts[fidx(f)], &IDS[id].1), proofs[id][fidx(f)].clone()),
+        Some(f) => (
+            f.op(),
+            with_id(&stmts[fidx(f)], &IDS[id].1),
+            proofs[id][fidx(f)].clone(),
+        ),
         None => (0, vec![], vec![]),
     };
     apply_to(edits, op, s, p, id, proofs, &MProofs::new())
 }
 
 /// `edits` applied to the input `op`, statement `s`, proof `p` (of id `id`)
-fn apply_to(edits: &[E], mut op: u8, mut s: Vec<u8>, mut p: Vec<u8>, id: usize, proofs: &[[Vec<u8>; 8]; 2], mp: &MProofs) -> Vec<u8> {
+fn apply_to(
+    edits: &[E],
+    mut op: u8,
+    mut s: Vec<u8>,
+    mut p: Vec<u8>,
+    id: usize,
+    proofs: &[[Vec<u8>; 8]; 2],
+    mp: &MProofs,
+) -> Vec<u8> {
     let (mut lenf, mut raw, mut size) = (None, None, None);
     for e in edits {
         match e {
@@ -1418,37 +1997,99 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
         let pl = |f: Form| proofs[id][fidx(f)].len();
         for f in FORMS {
             let (n, nm) = (f.stmt_len(), fname(f));
-            add(format!("{nm}: statement length - 1"), f, vec![E::StmtResize(n - 1)]);
-            add(format!("{nm}: statement length + 1"), f, vec![E::StmtResize(n + 1)]);
+            add(
+                format!("{nm}: statement length - 1"),
+                f,
+                vec![E::StmtResize(n - 1)],
+            );
+            add(
+                format!("{nm}: statement length + 1"),
+                f,
+                vec![E::StmtResize(n + 1)],
+            );
             for op in 1..=5u8 {
                 if op != f.op() {
                     add(format!("{nm}: under op {op}"), f, vec![E::Op(op)]);
                 }
             }
-            add(format!("{nm}: unknown proofSystemId (zero word)"), f, vec![E::StmtSet(32, vec![0; 32])]);
-            add(format!("{nm}: {}", other_id(id).0), f, vec![E::StmtSet(32, other_id(id).1.to_vec())]);
+            add(
+                format!("{nm}: unknown proofSystemId (zero word)"),
+                f,
+                vec![E::StmtSet(32, vec![0; 32])],
+            );
+            add(
+                format!("{nm}: {}", other_id(id).0),
+                f,
+                vec![E::StmtSet(32, other_id(id).1.to_vec())],
+            );
             for (r, w) in retired_ids(id) {
-                add(format!("{nm}: retired {r} proofSystemId"), f, vec![E::StmtSet(32, w.to_vec())]);
+                add(
+                    format!("{nm}: retired {r} proofSystemId"),
+                    f,
+                    vec![E::StmtSet(32, w.to_vec())],
+                );
             }
-            add(format!("{nm}: proof truncated by 1 byte"), f, vec![E::ProofResize(pl(f) - 1)]);
-            add(format!("{nm}: proof extended by 1 zero byte"), f, vec![E::ProofResize(pl(f) + 1)]);
-            add(format!("{nm}: proof byte 0 bit 0 flipped"), f, vec![E::ProofFlip(0, 0)]);
-            add(format!("{nm}: proof middle byte bit 3 flipped"), f, vec![E::ProofFlip(pl(f) / 2, 3)]);
-            add(format!("{nm}: proof last byte bit 7 flipped"), f, vec![E::ProofFlip(pl(f) - 1, 7)]);
+            add(
+                format!("{nm}: proof truncated by 1 byte"),
+                f,
+                vec![E::ProofResize(pl(f) - 1)],
+            );
+            add(
+                format!("{nm}: proof extended by 1 zero byte"),
+                f,
+                vec![E::ProofResize(pl(f) + 1)],
+            );
+            add(
+                format!("{nm}: proof byte 0 bit 0 flipped"),
+                f,
+                vec![E::ProofFlip(0, 0)],
+            );
+            add(
+                format!("{nm}: proof middle byte bit 3 flipped"),
+                f,
+                vec![E::ProofFlip(pl(f) / 2, 3)],
+            );
+            add(
+                format!("{nm}: proof last byte bit 7 flipped"),
+                f,
+                vec![E::ProofFlip(pl(f) - 1, 7)],
+            );
         }
         for op in [0u8, 6, 7] {
-            add(format!("TRANSFER: under op {op}"), Transfer, vec![E::Op(op)]);
+            add(
+                format!("TRANSFER: under op {op}"),
+                Transfer,
+                vec![E::Op(op)],
+            );
         }
         let set = |at: usize, b: Vec<u8>| vec![E::StmtSet(at, b)];
         let d15: Vec<(&str, Form, Vec<E>)> = vec![
-            (leak(format!("auditorOn 0 on the {}-byte form (R6)", th(Transfer.stmt_len() as i128))), Transfer, set(448, w(0))),
+            (
+                leak(format!(
+                    "auditorOn 0 on the {}-byte form (R6)",
+                    th(Transfer.stmt_len() as i128)
+                )),
+                Transfer,
+                set(448, w(0)),
+            ),
             ("auditorOn 2 (R6)", Transfer, set(448, w(2))),
-            (leak(format!("auditorOn 1 on the {}-byte form (R6)", th(Transfer0.stmt_len() as i128))), Transfer0, set(448, w(1))),
+            (
+                leak(format!(
+                    "auditorOn 1 on the {}-byte form (R6)",
+                    th(Transfer0.stmt_len() as i128)
+                )),
+                Transfer0,
+                set(448, w(1)),
+            ),
             ("fee >= 2^64", Transfer, set(256 + 23, vec![1])),
             ("fee >= 2^64", Burn, set(256 + 23, vec![1])),
             ("fee >= 2^64", Refresh, set(256 + 23, vec![1])),
             ("amount >= 2^64", Burn, set(288 + 23, vec![1])),
-            ("amount >= 2^64 (decoder stricter than R_TX)", Transfer, set(288 + 23, vec![1])),
+            (
+                "amount >= 2^64 (decoder stricter than R_TX)",
+                Transfer,
+                set(288 + 23, vec![1]),
+            ),
             ("amount >= 2^64", DiscloseSender, set(224 + 23, vec![1])),
             ("salt word top byte set", Transfer, set(576, vec![1])),
             ("salt word byte 15 set", Transfer0, set(591, vec![0x80])),
@@ -1464,50 +2105,174 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
             ("auditorOn != 0", Refresh, set(479, vec![1])),
             ("salt != 0", Refresh, set(607, vec![1])),
             ("pk_f coefficient 0 = q", Transfer, set(640, qb(Q))),
-            (leak(format!("pk_a coefficient 0 = 2^{}", st::LOG2Q)), Transfer, set(640 + 2 * PK, qb(1 << st::LOG2Q))),
+            (
+                leak(format!("pk_a coefficient 0 = 2^{}", st::LOG2Q)),
+                Transfer,
+                set(640 + 2 * PK, qb(1 << st::LOG2Q)),
+            ),
             ("T coefficient 0 = q", Transfer, set(640 + 3 * PK, qb(Q))),
-            ("u coefficient 0 = 2^64 - 1", Transfer, set(640 + 3 * PK + st::CT_BYTES, qb(u64::MAX))),
-            ("v_a last coefficient = q", Transfer, set(Transfer.stmt_len() - 8, qb(Q))),
-            ("v_f last coefficient = q", Transfer0, set(Transfer0.stmt_len() - 8, qb(Q))),
-            ("v_f last coefficient = q", Burn, set(Burn.stmt_len() - 8, qb(Q))),
+            (
+                "u coefficient 0 = 2^64 - 1",
+                Transfer,
+                set(640 + 3 * PK + st::CT_BYTES, qb(u64::MAX)),
+            ),
+            (
+                "v_a last coefficient = q",
+                Transfer,
+                set(Transfer.stmt_len() - 8, qb(Q)),
+            ),
+            (
+                "v_f last coefficient = q",
+                Transfer0,
+                set(Transfer0.stmt_len() - 8, qb(Q)),
+            ),
+            (
+                "v_f last coefficient = q",
+                Burn,
+                set(Burn.stmt_len() - 8, qb(Q)),
+            ),
             ("pk coefficient 0 = q", Register, set(96, qb(Q))),
-            (leak(format!("pk last coefficient = 2^{}", st::LOG2Q)), Register, set(Register.stmt_len() - 8, qb(1 << st::LOG2Q))),
+            (
+                leak(format!("pk last coefficient = 2^{}", st::LOG2Q)),
+                Register,
+                set(Register.stmt_len() - 8, qb(1 << st::LOG2Q)),
+            ),
             ("pk coefficient 0 = q", DiscloseSender, set(288, qb(Q))),
-            ("u coefficient 0 = q", DiscloseReceiver, set(288 + PK, qb(Q))),
-            ("v last coefficient = q", DiscloseAuditor, set(DiscloseAuditor.stmt_len() - 8, qb(Q))),
-            ("REFRESH opTag on the BURN statement", Burn, set(0, Refresh.op_tag().to_vec())),
-            ("BURN opTag on the REFRESH statement", Refresh, set(0, Burn.op_tag().to_vec())),
-            ("AUDITOR opTag on the RECEIVER statement", DiscloseReceiver, set(0, DiscloseAuditor.op_tag().to_vec())),
-            ("RECEIVER opTag on the AUDITOR statement", DiscloseAuditor, set(0, DiscloseReceiver.op_tag().to_vec())),
-            ("REGISTER opTag under op 1", Transfer, set(0, Register.op_tag().to_vec())),
-            ("RECEIVER opTag under op 4", DiscloseSender, set(0, DiscloseReceiver.op_tag().to_vec())),
-            ("message bit flipped (the self-test's invalid case)", Register, vec![E::StmtFlip(95, 0)]),
-            ("chainId bit flipped", Transfer, vec![E::StmtFlip(64 + 31, 0)]),
-            ("pk_f coefficient 0 low bit flipped", Transfer, vec![E::StmtFlip(640 + 7, 0)]),
-            ("v_f low bit flipped", Transfer0, vec![E::StmtFlip(Transfer0.stmt_len() - 1, 0)]),
-            ("kind word changed", DiscloseSender, vec![E::StmtFlip(256 + 31, 0)]),
+            (
+                "u coefficient 0 = q",
+                DiscloseReceiver,
+                set(288 + PK, qb(Q)),
+            ),
+            (
+                "v last coefficient = q",
+                DiscloseAuditor,
+                set(DiscloseAuditor.stmt_len() - 8, qb(Q)),
+            ),
+            (
+                "REFRESH opTag on the BURN statement",
+                Burn,
+                set(0, Refresh.op_tag().to_vec()),
+            ),
+            (
+                "BURN opTag on the REFRESH statement",
+                Refresh,
+                set(0, Burn.op_tag().to_vec()),
+            ),
+            (
+                "AUDITOR opTag on the RECEIVER statement",
+                DiscloseReceiver,
+                set(0, DiscloseAuditor.op_tag().to_vec()),
+            ),
+            (
+                "RECEIVER opTag on the AUDITOR statement",
+                DiscloseAuditor,
+                set(0, DiscloseReceiver.op_tag().to_vec()),
+            ),
+            (
+                "REGISTER opTag under op 1",
+                Transfer,
+                set(0, Register.op_tag().to_vec()),
+            ),
+            (
+                "RECEIVER opTag under op 4",
+                DiscloseSender,
+                set(0, DiscloseReceiver.op_tag().to_vec()),
+            ),
+            (
+                "message bit flipped (the self-test's invalid case)",
+                Register,
+                vec![E::StmtFlip(95, 0)],
+            ),
+            (
+                "chainId bit flipped",
+                Transfer,
+                vec![E::StmtFlip(64 + 31, 0)],
+            ),
+            (
+                "pk_f coefficient 0 low bit flipped",
+                Transfer,
+                vec![E::StmtFlip(640 + 7, 0)],
+            ),
+            (
+                "v_f low bit flipped",
+                Transfer0,
+                vec![E::StmtFlip(Transfer0.stmt_len() - 1, 0)],
+            ),
+            (
+                "kind word changed",
+                DiscloseSender,
+                vec![E::StmtFlip(256 + 31, 0)],
+            ),
             // kind = OpeningKind + 256 w (R0-1): w = 0 but for AUDITOR (w < S_AUD), the word < 2^16 (decoder: Kind)
             ("kind window 1", DiscloseSender, set(256 + 30, vec![1])),
             ("kind window 1", DiscloseReceiver, set(256 + 30, vec![1])),
-            (leak(format!("kind window {} (S_AUD)", st::S_AUD)), DiscloseAuditor, set(256 + 30, vec![st::S_AUD as u8])),
+            (
+                leak(format!("kind window {} (S_AUD)", st::S_AUD)),
+                DiscloseAuditor,
+                set(256 + 30, vec![st::S_AUD as u8]),
+            ),
             ("kind word 2^16", DiscloseAuditor, set(256 + 29, vec![1])),
             ("amount + 1", DiscloseSender, set(224 + 24, qb(123_457))),
             ("amount + 1", Burn, set(288 + 24, qb(123_457))),
             ("TRANSFER0's proof", Transfer, vec![E::ProofFrom(Transfer0)]),
             ("REFRESH's proof", Burn, vec![E::ProofFrom(Refresh)]),
-            ("DISCLOSE-RECEIVER's proof", DiscloseSender, vec![E::ProofFrom(DiscloseReceiver)]),
-            ("DISCLOSE-RECEIVER's proof", Register, vec![E::ProofFrom(DiscloseReceiver)]),
-            ("BURN statement with TRANSFER's proof under op 2", Burn, vec![E::ProofFrom(Transfer)]),
+            (
+                "DISCLOSE-RECEIVER's proof",
+                DiscloseSender,
+                vec![E::ProofFrom(DiscloseReceiver)],
+            ),
+            (
+                "DISCLOSE-RECEIVER's proof",
+                Register,
+                vec![E::ProofFrom(DiscloseReceiver)],
+            ),
+            (
+                "BURN statement with TRANSFER's proof under op 2",
+                Burn,
+                vec![E::ProofFrom(Transfer)],
+            ),
             ("empty proof", Transfer, vec![E::ProofResize(0)]),
-            ("proof of MAX_PROOF(id) + 1 bytes", Transfer, vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap() + 1)]),
-            ("proof of MAX_PROOF(id) + 1 bytes", Register, vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap() + 1)]),
-            ("input of MAX_INPUT + 1 bytes (expected revert, P6f)", Transfer, vec![E::InputResize(st::MAX_INPUT + 1)]),
-            ("length field 0xffffffff", Transfer, vec![E::LenField(u32::MAX)]),
-            ("length field = statement + proof + 1", Transfer, vec![E::LenField((Transfer.stmt_len() + pl(Transfer) + 1) as u32)]),
-            ("length field = statement + 1", Transfer, vec![E::LenField(Transfer.stmt_len() as u32 + 1)]),
+            (
+                "proof of MAX_PROOF(id) + 1 bytes",
+                Transfer,
+                vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap() + 1)],
+            ),
+            (
+                "proof of MAX_PROOF(id) + 1 bytes",
+                Register,
+                vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap() + 1)],
+            ),
+            (
+                "input of MAX_INPUT + 1 bytes (expected revert, P6f)",
+                Transfer,
+                vec![E::InputResize(st::MAX_INPUT + 1)],
+            ),
+            (
+                "length field 0xffffffff",
+                Transfer,
+                vec![E::LenField(u32::MAX)],
+            ),
+            (
+                "length field = statement + proof + 1",
+                Transfer,
+                vec![E::LenField((Transfer.stmt_len() + pl(Transfer) + 1) as u32)],
+            ),
+            (
+                "length field = statement + 1",
+                Transfer,
+                vec![E::LenField(Transfer.stmt_len() as u32 + 1)],
+            ),
             ("input of 4 bytes", Transfer, vec![E::InputResize(4)]),
-            ("proof of exactly MAX_PROOF(id) bytes", Transfer, vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap())]),
-            ("input of exactly MAX_INPUT bytes (not a revert)", Transfer, vec![E::InputResize(st::MAX_INPUT)]),
+            (
+                "proof of exactly MAX_PROOF(id) bytes",
+                Transfer,
+                vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap())],
+            ),
+            (
+                "input of exactly MAX_INPUT bytes (not a revert)",
+                Transfer,
+                vec![E::InputResize(st::MAX_INPUT)],
+            ),
         ];
         for (name, f, e) in d15 {
             add(format!("{}: {name}", fname(f)), f, e);
@@ -1524,14 +2289,36 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
                 let p = &proofs[id][fidx(f)];
                 let last = *p.last().unwrap();
                 if last < 0x80 {
-                    add(format!("{}: coder padding bit 7 set after the final 1-bit", fname(f)), f, vec![E::ProofFlip(p.len() - 1, 7)]);
+                    add(
+                        format!(
+                            "{}: coder padding bit 7 set after the final 1-bit",
+                            fname(f)
+                        ),
+                        f,
+                        vec![E::ProofFlip(p.len() - 1, 7)],
+                    );
                 }
             }
         }
     }
-    v.push(("SELFTEST with a 1-byte proof".into(), None, None, vec![E::Raw(vec![6, 0, 0, 0, 0, 0])]));
-    v.push(("SELFTEST with a 1-byte statement".into(), None, None, vec![E::Raw(vec![6, 0, 0, 0, 1, 0])]));
-    v.push(("op 6 with an empty input tail of 3 bytes".into(), None, None, vec![E::Raw(vec![6, 0, 0, 0])]));
+    v.push((
+        "SELFTEST with a 1-byte proof".into(),
+        None,
+        None,
+        vec![E::Raw(vec![6, 0, 0, 0, 0, 0])],
+    ));
+    v.push((
+        "SELFTEST with a 1-byte statement".into(),
+        None,
+        None,
+        vec![E::Raw(vec![6, 0, 0, 0, 1, 0])],
+    ));
+    v.push((
+        "op 6 with an empty input tail of 3 bytes".into(),
+        None,
+        None,
+        vec![E::Raw(vec![6, 0, 0, 0])],
+    ));
     v
 }
 
@@ -1545,19 +2332,37 @@ const B_R: i64 = BS * BS;
 const B_E1: i64 = BE * BE;
 const CREDIT: u64 = (1 << 48) - 1;
 const B_FRESH: i64 = BE * BS + BS * BE + 64;
-const _: () = assert!(K_MAX as u128 * CREDIT as u128 <= u64::MAX as u128, "worst case: K_MAX credits overflow a value");
+const _: () = assert!(
+    K_MAX as u128 * CREDIT as u128 <= u64::MAX as u128,
+    "worst case: K_MAX credits overflow a value"
+);
 
 /// coefficient-0 weights: (x·y)[0] = Σ_k rot(x)_k y_k in Z[X]/(X^64 + 1), per poly
 fn rot(x: &[i64]) -> Vec<i64> {
-    (0..N).map(|i| if i % 64 == 0 { x[i] } else { -x[i - i % 64 + 64 - i % 64] }).collect()
+    (0..N)
+        .map(|i| {
+            if i % 64 == 0 {
+                x[i]
+            } else {
+                -x[i - i % 64 + 64 - i % 64]
+            }
+        })
+        .collect()
 }
 
 /// max Σ w_k r_k over integers with Σ r_k² ≤ b: greedy over the increments (k, a) (|r_k| a → a + 1, gain |w_k|,
 /// cost 2a + 1) by gain / cost descending, ties by (k, a); an increment is taken while the cost fits
 fn align_r(w: &[i64], b: i64) -> Vec<i64> {
-    let mut c: Vec<(i64, i64, usize)> =
-        (0..N).filter(|&k| w[k] != 0).flat_map(|k| (0..BS).map(move |a| (w[k].abs(), a, k))).collect();
-    c.sort_by(|x, y| (y.0 * (2 * x.1 + 1)).cmp(&(x.0 * (2 * y.1 + 1))).then(x.2.cmp(&y.2)).then(x.1.cmp(&y.1)));
+    let mut c: Vec<(i64, i64, usize)> = (0..N)
+        .filter(|&k| w[k] != 0)
+        .flat_map(|k| (0..BS).map(move |a| (w[k].abs(), a, k)))
+        .collect();
+    c.sort_by(|x, y| {
+        (y.0 * (2 * x.1 + 1))
+            .cmp(&(x.0 * (2 * y.1 + 1)))
+            .then(x.2.cmp(&y.2))
+            .then(x.1.cmp(&y.1))
+    });
     let (mut r, mut left) = (vec![0i64; N], b);
     for (_, a, k) in c {
         if 2 * a + 1 <= left {
@@ -1579,9 +2384,17 @@ fn align_e1(z: &[i64], k: u32) -> Vec<i64> {
         l += 1;
     }
     let x = ((B_E1 - l * l * n) / (2 * l + 1)) as usize;
-    let pr = shake256(&[b"SCAAS-PQZ-WORSTCASE-V1", &WC_GEN, &k.to_be_bytes()], 4 * N);
+    let pr = shake256(
+        &[b"SCAAS-PQZ-WORSTCASE-V1", &WC_GEN, &k.to_be_bytes()],
+        4 * N,
+    );
     let mut ord = s.clone();
-    ord.sort_by_key(|&i| (u32::from_be_bytes(pr[4 * i..4 * i + 4].try_into().unwrap()), i));
+    ord.sort_by_key(|&i| {
+        (
+            u32::from_be_bytes(pr[4 * i..4 * i + 4].try_into().unwrap()),
+            i,
+        )
+    });
     let mut e1 = vec![0i64; N];
     for (rank, &i) in ord.iter().enumerate() {
         e1[i] = -z[i].signum() * (l + (rank < x) as i64);
@@ -1598,10 +2411,18 @@ const MARGIN_E: &str = match EB {
     _ => panic!("margin key for this E"),
 };
 /// "both systems" (v3) or "PQZL" (a build without PQZH)
-const SYS: &str = if pqz_ffi::PQZH { "both systems" } else { "PQZL (PQZH not in this set's build)" };
+const SYS: &str = if pqz_ffi::PQZH {
+    "both systems"
+} else {
+    "PQZL (PQZH not in this set's build)"
+};
 
 fn ids_keccak(stmt: &[u8]) -> J {
-    J::O(IDS.iter().map(|(n, id)| (n.to_string(), hx(&keccak(&[&with_id(stmt, id)])))).collect())
+    J::O(
+        IDS.iter()
+            .map(|(n, id)| (n.to_string(), hx(&keccak(&[&with_id(stmt, id)]))))
+            .collect(),
+    )
 }
 
 /// both ids' proofs of `stmt` (PQZL-id bytes), each valid through pqz_precompile (and the generic PQZL verifier)
@@ -1610,8 +2431,18 @@ fn proofs_json(op: u8, stmt: &[u8], wit: &[u8], rnd: &[u8; 32]) -> Vec<(&'static
         .map(|i| {
             let s = with_id(stmt, &IDS[i].1);
             let p = prove(&IDS[i].1, op, &s, wit, rnd);
-            assert_eq!(precompile(&st::input(op, &s, &p)), ("1", "verify".to_string()), "worst case {}", IDS[i].0);
-            let j = o(vec![("proof_bytes", J::from(p.len())), ("proof_keccak", hx(&keccak(&[&p]))), ("proof_fnv", J::from(fnv(&p))), ("proof", hx(&p))]);
+            assert_eq!(
+                precompile(&st::input(op, &s, &p)),
+                ("1", "verify".to_string()),
+                "worst case {}",
+                IDS[i].0
+            );
+            let j = o(vec![
+                ("proof_bytes", J::from(p.len())),
+                ("proof_keccak", hx(&keccak(&[&p]))),
+                ("proof_fnv", J::from(fnv(&p))),
+                ("proof", hx(&p)),
+            ]);
             (IDS[i].0, j)
         })
         .collect()
@@ -1623,12 +2454,24 @@ fn ratio(a: i64, b: i64) -> String {
 
 /// T = n·ct + Trivial(plain) mod q
 fn aggregate(ct: &[u8], n: u64, plain: u64) -> Vec<u8> {
-    let c: Vec<u64> = coeffs(ct).iter().map(|&x| ((x as u128 * n as u128) % Q as u128) as u64).collect();
+    let c: Vec<u64> = coeffs(ct)
+        .iter()
+        .map(|&x| ((x as u128 * n as u128) % Q as u128) as u64)
+        .collect();
     ct_add(&from_coeffs(&c), &trivial(plain), false)
 }
 
 /// The receiver's debit R_TX over T: out = Enc({T: v, receiver: bp, A: v}, WC_OUT), v = 1,000,000, fee 7.
-fn debit(kr: &Key, kt: &Key, ka: &Key, t: &[u8], bal: u64, plain: u64, from: u8, rnd: [u8; 32]) -> J {
+fn debit(
+    kr: &Key,
+    kt: &Key,
+    ka: &Key,
+    t: &[u8],
+    bal: u64,
+    plain: u64,
+    from: u8,
+    rnd: [u8; 32],
+) -> J {
     let (v, fee) = (1_000_000u64, 7u64);
     let bp = bal - v - fee;
     let out = enc(&[kt, kr, ka], &[v, bp, v], WC_OUT);
@@ -1670,13 +2513,16 @@ fn debit(kr: &Key, kt: &Key, ka: &Key, t: &[u8], bal: u64, plain: u64, from: u8,
         ("form", J::from("TRANSFER")),
         ("op", J::from(1u8)),
         ("header", fields_json(&f)),
-        ("objects", o(vec![
-            ("pk_f", keyref(kr)),
-            ("pk_t", keyref(kt)),
-            ("pk_a", keyref(ka)),
-            ("T", J::from("the aggregate T above")),
-            ("out", out.json()),
-        ])),
+        (
+            "objects",
+            o(vec![
+                ("pk_f", keyref(kr)),
+                ("pk_t", keyref(kt)),
+                ("pk_a", keyref(ka)),
+                ("T", J::from("the aggregate T above")),
+                ("out", out.json()),
+            ]),
+        ),
         ("stmt_bytes", J::from(stmt.len())),
         ("stmt", hx(&stmt)),
         ("stmt_keccak", ids_keccak(&stmt)),
@@ -1689,7 +2535,13 @@ fn debit(kr: &Key, kt: &Key, ka: &Key, t: &[u8], bal: u64, plain: u64, from: u8,
 }
 
 fn sparse<T: Copy + Into<i64>>(v: &[T]) -> J {
-    J::A(v.iter().enumerate().filter(|x| (*x.1).into() != 0).map(|(i, &x)| nums(&[(i / 64) as i64, (i % 64) as i64, x.into()])).collect())
+    J::A(
+        v.iter()
+            .enumerate()
+            .filter(|x| (*x.1).into() != 0)
+            .map(|(i, &x)| nums(&[(i / 64) as i64, (i % 64) as i64, x.into()]))
+            .collect(),
+    )
 }
 
 /// The worst the verifier accepts (controller 2026-10-14): an attacker-registered receiver key at the norm bounds, its
@@ -1701,7 +2553,12 @@ fn bound_case(kf: &Key, kt: &Key, ka: &Key) -> J {
     e[0] = BE as i16; // poly 0, coefficient 0
     let kr = key_from("receiver", s, e);
     let msg = keccak(&[b"SCAAS-PQZ-WORSTCASE-KEY-V1"]);
-    let reg = Stmt::Register(Register { words: [Form::Register.op_tag(), PQZL_ID, msg], pk: &kr.pk }).encode().unwrap();
+    let reg = Stmt::Register(Register {
+        words: [Form::Register.op_tag(), PQZL_ID, msg],
+        pk: &kr.pk,
+    })
+    .encode()
+    .unwrap();
     let rrnd = [0x91u8; 32];
     let mut regj = vec![
         ("message", hx(&msg)),
@@ -1730,7 +2587,13 @@ fn bound_case(kf: &Key, kt: &Key, ka: &Key) -> J {
     // the sender (F) proves the credit: R_TX with r, e1, e2_t as above (e2_f = e2_a = 0)
     let acc = enc(&[kf], &[CREDIT + 7], [0x6A; 32]);
     let ts = ct_add(&acc.ct(0), &trivial(1000), false);
-    let (u, vs) = encrypt(&[&kr, kf, ka], &[CREDIT, 1000, CREDIT], &r, &e1, &[e2, [0; 16], [0; 16]]);
+    let (u, vs) = encrypt(
+        &[&kr, kf, ka],
+        &[CREDIT, 1000, CREDIT],
+        &r,
+        &e1,
+        &[e2, [0; 16], [0; 16]],
+    );
     assert_eq!([&u[..], &vs[0][..]].concat(), ct);
     let sf = vec![
         ("chainId", V::I(22776)),
@@ -1775,7 +2638,13 @@ fn bound_case(kf: &Key, kt: &Key, ka: &Key) -> J {
                 u_f: None,
             };
             let stmt = Stmt::Debit(d).encode().unwrap();
-            let mut kv = vec![("credit", J::from(k)), ("sendCounter", J::from(k)), ("stmt", hx(&stmt)), ("stmt_keccak", ids_keccak(&stmt)), ("rnd32", hx(&rnd))];
+            let mut kv = vec![
+                ("credit", J::from(k)),
+                ("sendCounter", J::from(k)),
+                ("stmt", hx(&stmt)),
+                ("stmt_keccak", ids_keccak(&stmt)),
+                ("rnd32", hx(&rnd)),
+            ];
             kv.extend(proofs_json(1, &stmt, &sw, &rnd));
             o(kv)
         })
@@ -1784,7 +2653,10 @@ fn bound_case(kf: &Key, kt: &Key, ka: &Key) -> J {
     let ncr = K_MAX as u64 - 1;
     let t = aggregate(&ct, ncr, CREDIT);
     let (tm, tn) = dec(&kr.s, &t);
-    assert_eq!((value(&tm), tn[0]), (K_MAX as i128 * CREDIT as i128, ncr as i64 * B_FRESH));
+    assert_eq!(
+        (value(&tm), tn[0]),
+        (K_MAX as i128 * CREDIT as i128, ncr as i64 * B_FRESH)
+    );
     let maxn = tn.iter().map(|x| x.abs()).max().unwrap();
     let mint = DELTA as i64 - E_RANGE;
     o(vec![
@@ -1869,8 +2741,16 @@ fn illustrative_case(kt: &Key, ka: &Key) -> J {
     let bal = (K_MAX as u64) * CREDIT;
     assert_eq!(value(&tm), bal as i128);
     let wr: i64 = w.iter().zip(&r).map(|(a, b)| a * b).sum();
-    let ze: i64 = -z.iter().zip(align_e1(&z, 0)).map(|(a, b)| a * b).sum::<i64>();
-    assert_eq!(noise0.unwrap(), wr + ze + 64, "credit noise = <w, r> - <z, e1> + e2[0]");
+    let ze: i64 = -z
+        .iter()
+        .zip(align_e1(&z, 0))
+        .map(|(a, b)| a * b)
+        .sum::<i64>();
+    assert_eq!(
+        noise0.unwrap(),
+        wr + ze + 64,
+        "credit noise = <w, r> - <z, e1> + e2[0]"
+    );
     assert_eq!(tn[0], ncr as i64 * noise0.unwrap());
     let maxn = tn.iter().map(|x| x.abs()).max().unwrap();
     assert!(maxn < E_RANGE);
@@ -1918,8 +2798,25 @@ fn worstcase() -> Vec<(&'static str, J)> {
 // ---------------------------------------------------------------- op 7 R_TXM (P6-ANON S4, plan D15, §4, §5.4)
 /// op 7 header names: word 192 = recipientsHash, word 320 = M (P6-ANON §4); the rest as op 1
 const MNAMES: [&str; 20] = [
-    "opTag", "proofSystemId", "chainId", "token", "registry", "fromUA", "recipientsHash", "beneficiaryUA", "fee", "amount",
-    "M", "sendCounter", "p", "validUntilBlock", "auditorOn", "plainUsed", "chainUid", "envelopeBinding", "salt",
+    "opTag",
+    "proofSystemId",
+    "chainId",
+    "token",
+    "registry",
+    "fromUA",
+    "recipientsHash",
+    "beneficiaryUA",
+    "fee",
+    "amount",
+    "M",
+    "sendCounter",
+    "p",
+    "validUntilBlock",
+    "auditorOn",
+    "plainUsed",
+    "chainUid",
+    "envelopeBinding",
+    "salt",
     "memoHash",
 ];
 /// op 7 proofs by (case, id index)
@@ -1947,17 +2844,43 @@ struct MRow {
 /// (D15), then a two-real-leg row, an all-decoy row and a group-boundary row (real legs b - 1 and b: `boundary()`)
 fn multi_specs() -> Vec<(String, usize, bool, u64, Vec<u64>)> {
     let v = 123_456u64;
-    let one = |m: usize, at: usize| (0..m).map(|j| if j == at { v } else { 0 }).collect::<Vec<u64>>();
+    let one = |m: usize, at: usize| {
+        (0..m)
+            .map(|j| if j == at { v } else { 0 })
+            .collect::<Vec<u64>>()
+    };
     let mut out = Vec::new();
     for (aud, pos) in [(true, [0usize, 1, 2, 5]), (false, [0, 0, 3, 7])] {
         for (m, at) in [1usize, 2, 4, 8].into_iter().zip(pos) {
-            out.push((format!("M{m}-{}", if aud { "on" } else { "off" }), m, aud, if aud { 7 } else { 0 }, one(m, at)));
+            out.push((
+                format!("M{m}-{}", if aud { "on" } else { "off" }),
+                m,
+                aud,
+                if aud { 7 } else { 0 },
+                one(m, at),
+            ));
         }
     }
     out.push(("M2-off-two-real".into(), 2, false, 7, vec![v, 7_000]));
     out.push(("M4-off-decoys".into(), 4, false, 0, vec![0; 4]));
     let b = boundary();
-    out.push(("M8-on-boundary".into(), 8, true, 7, (0..8).map(|j| if j == b - 1 { v } else if j == b { 7_000 } else { 0 }).collect()));
+    out.push((
+        "M8-on-boundary".into(),
+        8,
+        true,
+        7,
+        (0..8)
+            .map(|j| {
+                if j == b - 1 {
+                    v
+                } else if j == b {
+                    7_000
+                } else {
+                    0
+                }
+            })
+            .collect(),
+    ));
     out
 }
 
@@ -1988,11 +2911,22 @@ fn multi_rows() -> Vec<MRow> {
         .into_iter()
         .enumerate()
         .map(|(idx, (case, m, aud, fee, amounts))| {
-            let ids: Vec<usize> = (0..IDS.len()).filter(|&i| st::built_legs(&IDS[i].1).contains(&m)).collect();
+            let ids: Vec<usize> = (0..IDS.len())
+                .filter(|&i| st::built_legs(&IDS[i].1).contains(&m))
+                .collect();
             let bp = bal - amounts.iter().sum::<u64>() - fee;
             let seed = [0x70 + idx as u8; 32];
-            let legs: Vec<(&[u8; PK], [u8; 16])> = (0..m).map(|j| (pk_ref(&kr[j].pk), digits(amounts[j]))).collect();
-            let c = pqzl::enc_multi(pk_ref(&kf.pk), digits(bp), &legs, aud.then(|| pk_ref(&ka.pk)), &seed).expect("enc_multi");
+            let legs: Vec<(&[u8; PK], [u8; 16])> = (0..m)
+                .map(|j| (pk_ref(&kr[j].pk), digits(amounts[j])))
+                .collect();
+            let c = pqzl::enc_multi(
+                pk_ref(&kf.pk),
+                digits(bp),
+                &legs,
+                aud.then(|| pk_ref(&ka.pk)),
+                &seed,
+            )
+            .expect("enc_multi");
             let uas: Vec<Word> = (0..m).map(|j| vword(&V::B(leg_addr(j)))).collect();
             let rh = keccak(&[&uas.concat()]);
             let mut f: Vec<(&str, V)> = vec![
@@ -2017,9 +2951,13 @@ fn multi_rows() -> Vec<MRow> {
             ]);
             let mut header = st::Multi::header(&PQZL_ID, m, aud);
             set_words(&mut header, &MNAMES, &f);
-            let legs_memo: Vec<(u64, Word)> = amounts.iter().copied().zip(uas.iter().copied()).collect();
+            let legs_memo: Vec<(u64, Word)> =
+                amounts.iter().copied().zip(uas.iter().copied()).collect();
             let memo = pqz_ffi::memo::seal(&MEMO_KEY, &header, aud, &legs_memo).expect("memo");
-            assert_eq!(pqz_ffi::memo::open(&MEMO_KEY, &header, &memo), Some((aud, legs_memo)));
+            assert_eq!(
+                pqz_ffi::memo::open(&MEMO_KEY, &header, &memo),
+                Some((aud, legs_memo))
+            );
             let mh = keccak(&[&memo]);
             header[st::H_MEMO_HASH] = mh;
             f.push(("memoHash", V::B(mh.to_vec())));
@@ -2048,14 +2986,31 @@ fn multi_rows() -> Vec<MRow> {
                 w.extend(g.r.iter().map(|&x| x as u8));
                 le16(&mut w, &g.e1[..]);
             }
-            c.e2.iter().chain([&c.e2_f]).chain(&c.e2_a).for_each(|e| le16(&mut w, e));
-            amounts.iter().chain([&bp]).for_each(|&a| w.extend(digits(a)));
-            assert_eq!((s.len(), w.len()), (st::multi_len(m, aud), pqz_ffi::fixture::multi_wit_len(m, aud)));
+            c.e2.iter()
+                .chain([&c.e2_f])
+                .chain(&c.e2_a)
+                .for_each(|e| le16(&mut w, e));
+            amounts
+                .iter()
+                .chain([&bp])
+                .for_each(|&a| w.extend(digits(a)));
+            assert_eq!(
+                (s.len(), w.len()),
+                (
+                    st::multi_len(m, aud),
+                    pqz_ffi::fixture::multi_wit_len(m, aud)
+                )
+            );
             let groups: Vec<J> = c
                 .groups
                 .iter()
                 .enumerate()
-                .map(|(g, e)| o(vec![("seed_enc_g", hx(&pqzl::enc_group_seed(&seed, g))), ("ctr", J::from(e.ctr))]))
+                .map(|(g, e)| {
+                    o(vec![
+                        ("seed_enc_g", hx(&pqzl::enc_group_seed(&seed, g))),
+                        ("ctr", J::from(e.ctr)),
+                    ])
+                })
                 .collect();
             let mut objs = vec![
                 ("pk_f", keyref(&kf)),
@@ -2066,32 +3021,65 @@ fn multi_rows() -> Vec<MRow> {
             }
             objs.extend([
                 ("T", tj.clone()),
-                ("out", o(vec![
-                    ("seed_enc", hx(&seed)),
-                    ("values", nums(&amounts)),
-                    ("value_f", J::from(bp)),
-                    ("groups", J::A(groups)),
-                ])),
+                (
+                    "out",
+                    o(vec![
+                        ("seed_enc", hx(&seed)),
+                        ("values", nums(&amounts)),
+                        ("value_f", J::from(bp)),
+                        ("groups", J::A(groups)),
+                    ]),
+                ),
                 ("uas", J::A((0..m).map(|j| hx(&leg_addr(j))).collect())),
             ]);
-            let idsj = |g: &dyn Fn(&[u8]) -> Word| J::O(ids.iter().map(|&i| (IDS[i].0.to_string(), hx(&g(&with_id(&s, &IDS[i].1))))).collect());
+            let idsj = |g: &dyn Fn(&[u8]) -> Word| {
+                J::O(
+                    ids.iter()
+                        .map(|&i| (IDS[i].0.to_string(), hx(&g(&with_id(&s, &IDS[i].1)))))
+                        .collect(),
+                )
+            };
             let json = vec![
                 ("form", J::from("TRANSFER-MULTI")),
                 ("case", J::from(case.as_str())),
                 ("op", J::from(st::OP_TRANSFER_MULTI)),
                 ("M", J::from(m)),
                 ("auditorOn", J::from(aud as u8)),
-                ("ids", J::A(ids.iter().map(|&i| J::from(IDS[i].0)).collect())),
+                (
+                    "ids",
+                    J::A(ids.iter().map(|&i| J::from(IDS[i].0)).collect()),
+                ),
                 ("header", fields_json(&f)),
                 ("objects", o(objs)),
-                ("memo", o(vec![("key_seed", hx(&MEMO_KEY)), ("memo_bytes", J::from(memo.len())), ("memo", hx(&memo))])),
+                (
+                    "memo",
+                    o(vec![
+                        ("key_seed", hx(&MEMO_KEY)),
+                        ("memo_bytes", J::from(memo.len())),
+                        ("memo", hx(&memo)),
+                    ]),
+                ),
                 ("stmt_bytes", J::from(s.len())),
                 ("stmt", hx(&s)),
                 ("stmt_keccak", idsj(&|x| keccak(&[x]))),
-                ("auth_digest", idsj(&|x| auth_digest(st::OP_TRANSFER_MULTI, x))),
+                (
+                    "auth_digest",
+                    idsj(&|x| auth_digest(st::OP_TRANSFER_MULTI, x)),
+                ),
                 ("entry_ref", hx(&entry_ref(&f))),
             ];
-            MRow { case, m, aud, ids, stmt: s, wit: w, rnd: [0xB0 + idx as u8; 32], header, memo, json }
+            MRow {
+                case,
+                m,
+                aud,
+                ids,
+                stmt: s,
+                wit: w,
+                rnd: [0xB0 + idx as u8; 32],
+                header,
+                memo,
+                json,
+            }
         })
         .collect()
 }
@@ -2133,8 +3121,11 @@ fn multi_disclosures(mrows: &[MRow]) -> Vec<DRow> {
             let s = st::parse_multi(&r.stmt).unwrap();
             let lpg = st::legs_per_group(true);
             let kr = keygen([SEED_LEG0 + j as u8; 32]);
-            let (form, kind, w, key, v) =
-                if aud { (Form::DiscloseAuditor, 2u64, j % lpg, &ka, s.v_a(j).unwrap()) } else { (Form::DiscloseReceiver, 1, 0, &kr, s.v(j)) };
+            let (form, kind, w, key, v) = if aud {
+                (Form::DiscloseAuditor, 2u64, j % lpg, &ka, s.v_a(j).unwrap())
+            } else {
+                (Form::DiscloseReceiver, 1, 0, &kr, s.v(j))
+            };
             let mut hw = r.header;
             let f: Vec<(&str, V)> = vec![
                 ("chainId", V::B(hw[st::H_CHAIN_ID].to_vec())),
@@ -2147,7 +3138,15 @@ fn multi_disclosures(mrows: &[MRow]) -> Vec<DRow> {
             ];
             let mut words = Disclose::words(form, &PQZL_ID);
             set_words(&mut words, &DNAMES, &f);
-            let st_ = Stmt::Disclose(Disclose { form, words, pk: &key.pk, u: s.u(j / lpg), v }).encode().unwrap();
+            let st_ = Stmt::Disclose(Disclose {
+                form,
+                words,
+                pk: &key.pk,
+                u: s.u(j / lpg),
+                v,
+            })
+            .encode()
+            .unwrap();
             st::parse(form.op(), &st_).expect("op 7 disclosure canonical");
             let objs = o(vec![
                 ("pk", keyref(key)),
@@ -2157,7 +3156,14 @@ fn multi_disclosures(mrows: &[MRow]) -> Vec<DRow> {
             ]);
             let mut json = stmt_json(form, &st_, fields_json(&f), objs, vec![]);
             json.insert(1, ("case", J::from(case)));
-            DRow { case: case.into(), form, stmt: st_, wit: key.wit(), rnd: [0xD0 + i as u8; 32], json }
+            DRow {
+                case: case.into(),
+                form,
+                stmt: st_,
+                wit: key.wit(),
+                rnd: [0xD0 + i as u8; 32],
+                json,
+            }
         })
         .collect()
 }
@@ -2165,7 +3171,14 @@ fn multi_disclosures(mrows: &[MRow]) -> Vec<DRow> {
 /// entryRef of an op 7 header (as op 1: chainId, chainUid, token, fromUA, sendCounter)
 fn mentry_ref(h: &mut [Word; 20]) -> Word {
     let t = keccak(&[b"SCAAS-PQZ-ENTRY-V1"]);
-    keccak(&[&t, &h[st::H_CHAIN_ID], &h[st::H_CHAIN_UID], &h[st::H_TOKEN], &h[st::H_FROM], &h[st::H_SEND_COUNTER]])
+    keccak(&[
+        &t,
+        &h[st::H_CHAIN_ID],
+        &h[st::H_CHAIN_UID],
+        &h[st::H_TOKEN],
+        &h[st::H_FROM],
+        &h[st::H_SEND_COUNTER],
+    ])
 }
 
 /// memo::open on edited memos of one row (§5.4): (name, key seed, edits, result)
@@ -2175,13 +3188,41 @@ fn memo_opens(rows: &[MRow]) -> Vec<J> {
     let cases: Vec<(&str, [u8; 32], Vec<(&str, J)>)> = vec![
         ("the sender's memo", MEMO_KEY, vec![]),
         ("another key seed", [0x4e; 32], vec![]),
-        ("truncated by 1 byte", MEMO_KEY, vec![("resize", J::from(n - 1))]),
-        ("one more 40-byte leg (zero bytes)", MEMO_KEY, vec![("resize", J::from(n + 40))]),
-        ("shorter than one leg (17 bytes)", MEMO_KEY, vec![("resize", J::from(17usize))]),
-        ("flags byte bit 1 flipped", MEMO_KEY, vec![("flip", J::A(vec![J::from(16usize), J::from(1u8)]))]),
-        ("M byte bit 0 flipped", MEMO_KEY, vec![("flip", J::A(vec![J::from(17usize), J::from(0u8)]))]),
-        ("leg 1 amount low bit flipped", MEMO_KEY, vec![("flip", J::A(vec![J::from(18 + 40 + 7usize), J::from(0u8)]))]),
-        ("salt byte 0 bit 0 flipped", MEMO_KEY, vec![("flip", J::A(vec![J::from(0usize), J::from(0u8)]))]),
+        (
+            "truncated by 1 byte",
+            MEMO_KEY,
+            vec![("resize", J::from(n - 1))],
+        ),
+        (
+            "one more 40-byte leg (zero bytes)",
+            MEMO_KEY,
+            vec![("resize", J::from(n + 40))],
+        ),
+        (
+            "shorter than one leg (17 bytes)",
+            MEMO_KEY,
+            vec![("resize", J::from(17usize))],
+        ),
+        (
+            "flags byte bit 1 flipped",
+            MEMO_KEY,
+            vec![("flip", J::A(vec![J::from(16usize), J::from(1u8)]))],
+        ),
+        (
+            "M byte bit 0 flipped",
+            MEMO_KEY,
+            vec![("flip", J::A(vec![J::from(17usize), J::from(0u8)]))],
+        ),
+        (
+            "leg 1 amount low bit flipped",
+            MEMO_KEY,
+            vec![("flip", J::A(vec![J::from(18 + 40 + 7usize), J::from(0u8)]))],
+        ),
+        (
+            "salt byte 0 bit 0 flipped",
+            MEMO_KEY,
+            vec![("flip", J::A(vec![J::from(0usize), J::from(0u8)]))],
+        ),
     ];
     cases
         .into_iter()
@@ -2191,7 +3232,9 @@ fn memo_opens(rows: &[MRow]) -> Vec<J> {
                 match (*k, v) {
                     ("resize", J::N(x)) => b.resize(*x as usize, 0),
                     ("flip", J::A(x)) => {
-                        let (J::N(at), J::N(bit)) = (&x[0], &x[1]) else { unreachable!() };
+                        let (J::N(at), J::N(bit)) = (&x[0], &x[1]) else {
+                            unreachable!()
+                        };
                         b[*at as usize] ^= 1 << bit;
                     }
                     _ => unreachable!(),
@@ -2201,14 +3244,24 @@ fn memo_opens(rows: &[MRow]) -> Vec<J> {
                 None => J::from("none"),
                 Some((a, legs)) => o(vec![
                     ("auditorOn", J::from(a)),
-                    ("legs", J::A(legs.iter().map(|(x, ua)| J::A(vec![J::from(*x), hx(ua)])).collect())),
+                    (
+                        "legs",
+                        J::A(
+                            legs.iter()
+                                .map(|(x, ua)| J::A(vec![J::from(*x), hx(ua)]))
+                                .collect(),
+                        ),
+                    ),
                 ]),
             };
             o(vec![
                 ("name", J::from(name)),
                 ("case", J::from(base.case.as_str())),
                 ("key_seed", hx(&key)),
-                ("edits", J::A(edits.into_iter().map(|(k, v)| o(vec![(k, v)])).collect())),
+                (
+                    "edits",
+                    J::A(edits.into_iter().map(|(k, v)| o(vec![(k, v)])).collect()),
+                ),
                 ("result", res),
             ])
         })
@@ -2231,31 +3284,79 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
     let qb = |x: u64| x.to_be_bytes().to_vec();
     let row = |c: &str| rows.iter().find(|r| r.case == c).unwrap();
     for id in 0..IDS.len() {
-        let mut add = |name: String, case: &str, e: Vec<E>| v.push((format!("{case}: {name}"), case.to_string(), id, e));
-        let defaults: Vec<&MRow> = rows.iter().filter(|r| r.ids.contains(&id) && r.case == format!("M{}-{}", r.m, if r.aud { "on" } else { "off" })).collect();
+        let mut add = |name: String, case: &str, e: Vec<E>| {
+            v.push((format!("{case}: {name}"), case.to_string(), id, e))
+        };
+        let defaults: Vec<&MRow> = rows
+            .iter()
+            .filter(|r| {
+                r.ids.contains(&id)
+                    && r.case == format!("M{}-{}", r.m, if r.aud { "on" } else { "off" })
+            })
+            .collect();
         for r in &defaults {
-            let (n, pl, c) = (r.stmt.len(), mp[&(r.case.clone(), id)].len(), r.case.as_str());
+            let (n, pl, c) = (
+                r.stmt.len(),
+                mp[&(r.case.clone(), id)].len(),
+                r.case.as_str(),
+            );
             add("statement length - 1".into(), c, vec![E::StmtResize(n - 1)]);
             add("statement length + 1".into(), c, vec![E::StmtResize(n + 1)]);
             for op in 0..=6u8 {
                 add(format!("under op {op}"), c, vec![E::Op(op)]);
             }
-            add("unknown proofSystemId (zero word)".into(), c, vec![E::StmtSet(32, vec![0; 32])]);
-            add(other_id(id).0.into(), c, vec![E::StmtSet(32, other_id(id).1.to_vec())]);
+            add(
+                "unknown proofSystemId (zero word)".into(),
+                c,
+                vec![E::StmtSet(32, vec![0; 32])],
+            );
+            add(
+                other_id(id).0.into(),
+                c,
+                vec![E::StmtSet(32, other_id(id).1.to_vec())],
+            );
             for (r, w) in retired_ids(id) {
-                add(format!("retired {r} proofSystemId"), c, vec![E::StmtSet(32, w.to_vec())]);
+                add(
+                    format!("retired {r} proofSystemId"),
+                    c,
+                    vec![E::StmtSet(32, w.to_vec())],
+                );
             }
-            add("proof truncated by 1 byte".into(), c, vec![E::ProofResize(pl - 1)]);
-            add("proof extended by 1 zero byte".into(), c, vec![E::ProofResize(pl + 1)]);
-            add("proof byte 0 bit 0 flipped".into(), c, vec![E::ProofFlip(0, 0)]);
-            add("proof middle byte bit 3 flipped".into(), c, vec![E::ProofFlip(pl / 2, 3)]);
-            add("proof last byte bit 7 flipped".into(), c, vec![E::ProofFlip(pl - 1, 7)]);
+            add(
+                "proof truncated by 1 byte".into(),
+                c,
+                vec![E::ProofResize(pl - 1)],
+            );
+            add(
+                "proof extended by 1 zero byte".into(),
+                c,
+                vec![E::ProofResize(pl + 1)],
+            );
+            add(
+                "proof byte 0 bit 0 flipped".into(),
+                c,
+                vec![E::ProofFlip(0, 0)],
+            );
+            add(
+                "proof middle byte bit 3 flipped".into(),
+                c,
+                vec![E::ProofFlip(pl / 2, 3)],
+            );
+            add(
+                "proof last byte bit 7 flipped".into(),
+                c,
+                vec![E::ProofFlip(pl - 1, 7)],
+            );
             if IDS[id].1 == PQZH_ID {
                 for (name, e) in ph::negatives(ph::Shape::Multi(r.m, r.aud)) {
                     add(name, c, e);
                 }
             } else if *mp[&(r.case.clone(), id)].last().unwrap() < 0x80 {
-                add("coder padding bit 7 set after the final 1-bit".into(), c, vec![E::ProofFlip(pl - 1, 7)]);
+                add(
+                    "coder padding bit 7 set after the final 1-bit".into(),
+                    c,
+                    vec![E::ProofFlip(pl - 1, 7)],
+                );
             }
         }
         let set = |at: usize, b: Vec<u8>| vec![E::StmtSet(at, b)];
@@ -2269,45 +3370,129 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
             ("M word 16 (oversize only)", "M2-on", set(320, w(16))),
             ("M word with bit 64 set", "M2-on", set(320 + 23, vec![1])),
             ("M word 4 on the M = 2 length", "M2-on", set(320, w(4))),
-            ("auditorOn 0 on an auditor-on statement", "M2-on", set(448, w(0))),
-            ("auditorOn 1 on an auditor-off statement", "M4-off", set(448, w(1))),
+            (
+                "auditorOn 0 on an auditor-on statement",
+                "M2-on",
+                set(448, w(0)),
+            ),
+            (
+                "auditorOn 1 on an auditor-off statement",
+                "M4-off",
+                set(448, w(1)),
+            ),
             ("auditorOn 2", "M2-on", set(448, w(2))),
-            ("statement of the 640-byte header only", "M2-on", vec![E::StmtResize(640)]),
-            ("statement cut inside the header (639 bytes)", "M2-on", vec![E::StmtResize(639)]),
+            (
+                "statement of the 640-byte header only",
+                "M2-on",
+                vec![E::StmtResize(640)],
+            ),
+            (
+                "statement cut inside the header (639 bytes)",
+                "M2-on",
+                vec![E::StmtResize(639)],
+            ),
             ("amount 1", "M2-on", set(288, w(1))),
             ("amount >= 2^64", "M2-on", set(288 + 23, vec![1])),
             ("fee >= 2^64", "M2-on", set(256 + 23, vec![1])),
             ("salt word top byte set", "M2-on", set(576, vec![1])),
             ("salt word byte 15 set", "M4-off", set(591, vec![0x80])),
             ("pk_f coefficient 0 = q", "M2-on", set(640, qb(Q))),
-            (leak(format!("pk_1 coefficient 0 = 2^{}", st::LOG2Q)), "M2-on", set(pk0 + PK, qb(1 << st::LOG2Q))),
+            (
+                leak(format!("pk_1 coefficient 0 = 2^{}", st::LOG2Q)),
+                "M2-on",
+                set(pk0 + PK, qb(1 << st::LOG2Q)),
+            ),
             ("u_0 coefficient 0 = q", "M2-on", set(u0, qb(Q))),
             ("v_f last coefficient = q", "M2-on", set(vf + 120, qb(Q))),
-            ("v_{a,M-1} last coefficient = 2^64 - 1", "M2-on", set(n2 - 8, qb(u64::MAX))),
-            ("recipientsHash bit flipped", "M2-on", vec![E::StmtFlip(192 + 31, 0)]),
-            ("memoHash bit flipped", "M2-on", vec![E::StmtFlip(608 + 31, 0)]),
+            (
+                "v_{a,M-1} last coefficient = 2^64 - 1",
+                "M2-on",
+                set(n2 - 8, qb(u64::MAX)),
+            ),
+            (
+                "recipientsHash bit flipped",
+                "M2-on",
+                vec![E::StmtFlip(192 + 31, 0)],
+            ),
+            (
+                "memoHash bit flipped",
+                "M2-on",
+                vec![E::StmtFlip(608 + 31, 0)],
+            ),
             ("fee + 1", "M2-on", set(256 + 24, qb(8))),
-            ("chainId bit flipped", "M2-on", vec![E::StmtFlip(64 + 31, 0)]),
-            ("pk_0 coefficient 0 low bit flipped", "M2-on", vec![E::StmtFlip(pk0 + 7, 0)]),
+            (
+                "chainId bit flipped",
+                "M2-on",
+                vec![E::StmtFlip(64 + 31, 0)],
+            ),
+            (
+                "pk_0 coefficient 0 low bit flipped",
+                "M2-on",
+                vec![E::StmtFlip(pk0 + 7, 0)],
+            ),
             ("v_0 replaced by v_1", "M2-on", set(v0, v1)),
-            ("(1, on) read as (2, off): M word 2, auditorOn 0", "M1-on", vec![E::StmtSet(320, w(2)), E::StmtSet(448, w(0))]),
-            ("op 1 TRANSFER's proof (same statement length)", "M1-on", vec![E::ProofFrom(Form::Transfer)]),
-            ("op 1 TRANSFER0's proof (same statement length)", "M1-off", vec![E::ProofFrom(Form::Transfer0)]),
-            ("M4-on's proof", "M2-on", vec![E::ProofFromCase("M4-on".into())]),
-            ("M2-on's proof", "M2-off-two-real", vec![E::ProofFromCase("M2-on".into())]),
+            (
+                "(1, on) read as (2, off): M word 2, auditorOn 0",
+                "M1-on",
+                vec![E::StmtSet(320, w(2)), E::StmtSet(448, w(0))],
+            ),
+            (
+                "op 1 TRANSFER's proof (same statement length)",
+                "M1-on",
+                vec![E::ProofFrom(Form::Transfer)],
+            ),
+            (
+                "op 1 TRANSFER0's proof (same statement length)",
+                "M1-off",
+                vec![E::ProofFrom(Form::Transfer0)],
+            ),
+            (
+                "M4-on's proof",
+                "M2-on",
+                vec![E::ProofFromCase("M4-on".into())],
+            ),
+            (
+                "M2-on's proof",
+                "M2-off-two-real",
+                vec![E::ProofFromCase("M2-on".into())],
+            ),
             ("empty proof", "M2-on", vec![E::ProofResize(0)]),
-            ("proof of MAX_PROOF(id) + 1 bytes", "M2-on", vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap() + 1)]),
-            ("proof of exactly MAX_PROOF(id) bytes", "M2-on", vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap())]),
-            ("input of exactly MAX_INPUT bytes (not a revert)", "M4-on", vec![E::InputResize(st::MAX_INPUT)]),
-            ("input of MAX_INPUT + 1 bytes (expected revert, P6f)", "M4-on", vec![E::InputResize(st::MAX_INPUT + 1)]),
-            ("length field = statement + 1", "M2-on", vec![E::LenField(n2 as u32 + 1)]),
+            (
+                "proof of MAX_PROOF(id) + 1 bytes",
+                "M2-on",
+                vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap() + 1)],
+            ),
+            (
+                "proof of exactly MAX_PROOF(id) bytes",
+                "M2-on",
+                vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap())],
+            ),
+            (
+                "input of exactly MAX_INPUT bytes (not a revert)",
+                "M4-on",
+                vec![E::InputResize(st::MAX_INPUT)],
+            ),
+            (
+                "input of MAX_INPUT + 1 bytes (expected revert, P6f)",
+                "M4-on",
+                vec![E::InputResize(st::MAX_INPUT + 1)],
+            ),
+            (
+                "length field = statement + 1",
+                "M2-on",
+                vec![E::LenField(n2 as u32 + 1)],
+            ),
         ];
         let two = row("M2-off-two-real");
         let (_, _, tv0, _, _) = moff(2, false);
-        list.push(("v_0 and v_1 swapped", "M2-off-two-real", vec![
-            E::StmtSet(tv0, two.stmt[tv0 + 128..tv0 + 256].to_vec()),
-            E::StmtSet(tv0 + 128, two.stmt[tv0..tv0 + 128].to_vec()),
-        ]));
+        list.push((
+            "v_0 and v_1 swapped",
+            "M2-off-two-real",
+            vec![
+                E::StmtSet(tv0, two.stmt[tv0 + 128..tv0 + 256].to_vec()),
+                E::StmtSet(tv0 + 128, two.stmt[tv0..tv0 + 128].to_vec()),
+            ],
+        ));
         if IDS[id].1 == PQZH_ID {
             list.push(("M word 8 (not built for PQZH)", "M4-on", set(320, w(8))));
         } else {
@@ -2315,11 +3500,23 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
             let (_, _, bv0, _, _) = moff(8, true);
             let (j, g) = (boundary(), boundary() / st::legs_per_group(true)); // legs j - 1, j: groups g - 1, g
             let (v3, v4) = (bv0 + (j - 1) * 128, bv0 + j * 128);
-            list.push((leak(format!("v_{} and v_{j} swapped (legs across groups {} and {g})", j - 1, g - 1)), "M8-on-boundary", vec![
-                E::StmtSet(v3, b.stmt[v4..v4 + 128].to_vec()),
-                E::StmtSet(v4, b.stmt[v3..v3 + 128].to_vec()),
-            ]));
-            list.push(("M8-off's proof", "M8-on-boundary", vec![E::ProofFromCase("M8-off".into())]));
+            list.push((
+                leak(format!(
+                    "v_{} and v_{j} swapped (legs across groups {} and {g})",
+                    j - 1,
+                    g - 1
+                )),
+                "M8-on-boundary",
+                vec![
+                    E::StmtSet(v3, b.stmt[v4..v4 + 128].to_vec()),
+                    E::StmtSet(v4, b.stmt[v3..v3 + 128].to_vec()),
+                ],
+            ));
+            list.push((
+                "M8-off's proof",
+                "M8-on-boundary",
+                vec![E::ProofFromCase("M8-off".into())],
+            ));
             list.push(("M word 4 on the M = 8 length", "M8-on", set(320, w(4))));
         }
         for (name, c, e) in list {
@@ -2333,12 +3530,32 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
 fn generate() -> (Vec<(String, String)>, bool) {
     let stale;
     let t0 = Instant::now();
-    let mut files = vec![matrix_file(), cbd_file(), keygen_file(), enc_file(), opening_file()];
-    eprintln!("keys / cbd / matrix / enc: {:.1} s", t0.elapsed().as_secs_f64());
+    let mut files = vec![
+        matrix_file(),
+        cbd_file(),
+        keygen_file(),
+        enc_file(),
+        opening_file(),
+    ];
+    eprintln!(
+        "keys / cbd / matrix / enc: {:.1} s",
+        t0.elapsed().as_secs_f64()
+    );
 
     let sc = scenario(7);
-    for name in ["statement_transfer.json", "statement_burn.json", "statement_refresh.json", "statement_register.json", "statement_disclose.json"] {
-        let rows = sc.rows.iter().filter(|r| sfile(r.form) == name).map(|r| o(r.json.clone())).collect();
+    for name in [
+        "statement_transfer.json",
+        "statement_burn.json",
+        "statement_refresh.json",
+        "statement_register.json",
+        "statement_disclose.json",
+    ] {
+        let rows = sc
+            .rows
+            .iter()
+            .filter(|r| sfile(r.form) == name)
+            .map(|r| o(r.json.clone()))
+            .collect();
         files.push(file(
             name,
             "Statements (pq-zether.md 7.2, 7.7, 7.9; serialization v1, P6e plan D15 / R6) built from keygen seeds and Enc \
@@ -2363,9 +3580,23 @@ fn generate() -> (Vec<(String, String)>, bool) {
             let t = Instant::now();
             let s = with_id(&r.stmt, id);
             let p = prove(id, r.form.op(), &s, &r.wit, &r.rnd);
-            assert_eq!(p, prove(id, r.form.op(), &s, &r.wit, &r.rnd), "prover not deterministic");
-            assert_eq!(precompile(&st::input(r.form.op(), &s, &p)), ("1", "verify".to_string()), "{nm} {}", fname(r.form));
-            eprintln!("{nm} {:18} proof {:6} B  prove+verify {:.2} s", fname(r.form), p.len(), t.elapsed().as_secs_f64());
+            assert_eq!(
+                p,
+                prove(id, r.form.op(), &s, &r.wit, &r.rnd),
+                "prover not deterministic"
+            );
+            assert_eq!(
+                precompile(&st::input(r.form.op(), &s, &p)),
+                ("1", "verify".to_string()),
+                "{nm} {}",
+                fname(r.form)
+            );
+            eprintln!(
+                "{nm} {:18} proof {:6} B  prove+verify {:.2} s",
+                fname(r.form),
+                p.len(),
+                t.elapsed().as_secs_f64()
+            );
             proofs[i][fidx(r.form)] = p;
         }
     }
@@ -2378,9 +3609,23 @@ fn generate() -> (Vec<(String, String)>, bool) {
             let t = Instant::now();
             let s = with_id(&r.stmt, &id);
             let p = prove(&id, st::OP_TRANSFER_MULTI, &s, &r.wit, &r.rnd);
-            assert_eq!(p, prove(&id, st::OP_TRANSFER_MULTI, &s, &r.wit, &r.rnd), "prover not deterministic");
-            assert_eq!(precompile(&st::input(st::OP_TRANSFER_MULTI, &s, &p)), ("1", "verify".to_string()), "{nm} {}", r.case);
-            eprintln!("{nm} {:18} proof {:6} B  prove+verify {:.2} s", r.case, p.len(), t.elapsed().as_secs_f64());
+            assert_eq!(
+                p,
+                prove(&id, st::OP_TRANSFER_MULTI, &s, &r.wit, &r.rnd),
+                "prover not deterministic"
+            );
+            assert_eq!(
+                precompile(&st::input(st::OP_TRANSFER_MULTI, &s, &p)),
+                ("1", "verify".to_string()),
+                "{nm} {}",
+                r.case
+            );
+            eprintln!(
+                "{nm} {:18} proof {:6} B  prove+verify {:.2} s",
+                r.case,
+                p.len(),
+                t.elapsed().as_secs_f64()
+            );
             mp.insert((r.case.clone(), i), p);
         }
     }
@@ -2390,7 +3635,12 @@ fn generate() -> (Vec<(String, String)>, bool) {
         for (i, (nm, id)) in IDS.iter().enumerate() {
             let s = with_id(&r.stmt, id);
             let p = prove(id, r.form.op(), &s, &r.wit, &r.rnd);
-            assert_eq!(precompile(&st::input(r.form.op(), &s, &p)), ("1", "verify".to_string()), "{nm} {}", r.case);
+            assert_eq!(
+                precompile(&st::input(r.form.op(), &s, &p)),
+                ("1", "verify".to_string()),
+                "{nm} {}",
+                r.case
+            );
             eprintln!("{nm} {:18} proof {:6} B", r.case, p.len());
             mp.insert((r.case.clone(), i), p);
         }
@@ -2432,7 +3682,13 @@ fn generate() -> (Vec<(String, String)>, bool) {
                 let mut kv = vec![
                     ("form", J::from(fname(r.form))),
                     ("op", J::from(r.form.op())),
-                    ("statement", o(vec![("file", J::from(sfile(r.form))), ("form", J::from(fname(r.form)))])),
+                    (
+                        "statement",
+                        o(vec![
+                            ("file", J::from(sfile(r.form))),
+                            ("form", J::from(fname(r.form))),
+                        ]),
+                    ),
                     ("stmt_keccak", hx(&keccak(&[&with_id(&r.stmt, id)]))),
                     ("wit", hx(&r.wit)),
                     ("wit_keccak", hx(&keccak(&[&r.wit]))),
@@ -2442,9 +3698,15 @@ fn generate() -> (Vec<(String, String)>, bool) {
                     ("proof_fnv", J::from(fnv(p))),
                 ];
                 if *id == PQZH_ID {
-                    kv.push(("max_proof_len", J::from(ph::max_proof_len(ph::Shape::Form(r.form)))));
+                    kv.push((
+                        "max_proof_len",
+                        J::from(ph::max_proof_len(ph::Shape::Form(r.form))),
+                    ));
                 }
-                if matches!(r.form, Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor) {
+                if matches!(
+                    r.form,
+                    Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor
+                ) {
                     let op = st::opening(&sc.bundle, p);
                     assert_eq!(st::parse_opening(&op).unwrap(), (&sc.bundle[..], &p[..]));
                     kv.push(("opening_bytes", J::from(op.len())));
@@ -2460,7 +3722,13 @@ fn generate() -> (Vec<(String, String)>, bool) {
                 ("form", J::from("TRANSFER-MULTI")),
                 ("case", J::from(r.case.as_str())),
                 ("op", J::from(st::OP_TRANSFER_MULTI)),
-                ("statement", o(vec![("file", J::from(MULTI_FILE)), ("case", J::from(r.case.as_str()))])),
+                (
+                    "statement",
+                    o(vec![
+                        ("file", J::from(MULTI_FILE)),
+                        ("case", J::from(r.case.as_str())),
+                    ]),
+                ),
                 ("stmt_keccak", hx(&keccak(&[&with_id(&r.stmt, id)]))),
                 ("wit", hx(&r.wit)),
                 ("wit_keccak", hx(&keccak(&[&r.wit]))),
@@ -2470,7 +3738,10 @@ fn generate() -> (Vec<(String, String)>, bool) {
                 ("proof_fnv", J::from(fnv(p))),
             ];
             if *id == PQZH_ID {
-                kv.push(("max_proof_len", J::from(ph::max_proof_len(ph::Shape::Multi(r.m, r.aud)))));
+                kv.push((
+                    "max_proof_len",
+                    J::from(ph::max_proof_len(ph::Shape::Multi(r.m, r.aud))),
+                ));
             }
             kv.extend([("expect", J::from(true)), ("proof", hx(p))]);
             rows.push(o(kv));
@@ -2481,7 +3752,13 @@ fn generate() -> (Vec<(String, String)>, bool) {
                 ("form", J::from(fname(r.form))),
                 ("case", J::from(r.case.as_str())),
                 ("op", J::from(r.form.op())),
-                ("statement", o(vec![("file", J::from(MULTI_FILE)), ("disclosure", J::from(r.case.as_str()))])),
+                (
+                    "statement",
+                    o(vec![
+                        ("file", J::from(MULTI_FILE)),
+                        ("disclosure", J::from(r.case.as_str())),
+                    ]),
+                ),
                 ("stmt_keccak", hx(&keccak(&[&with_id(&r.stmt, id)]))),
                 ("wit", hx(&r.wit)),
                 ("wit_keccak", hx(&keccak(&[&r.wit]))),
@@ -2491,7 +3768,10 @@ fn generate() -> (Vec<(String, String)>, bool) {
                 ("proof_fnv", J::from(fnv(p))),
             ];
             if *id == PQZH_ID {
-                kv.push(("max_proof_len", J::from(ph::max_proof_len(ph::Shape::Form(r.form)))));
+                kv.push((
+                    "max_proof_len",
+                    J::from(ph::max_proof_len(ph::Shape::Form(r.form))),
+                ));
             }
             kv.extend([("expect", J::from(true)), ("proof", hx(p))]);
             rows.push(o(kv));
@@ -2515,7 +3795,15 @@ fn generate() -> (Vec<(String, String)>, bool) {
             )
         };
         let name = format!("proof_{nm}.json");
-        files.push(file(&name, desc, vec![("proof_system_id", hx(id)), ("params", params), ("rows", J::A(rows))]));
+        files.push(file(
+            &name,
+            desc,
+            vec![
+                ("proof_system_id", hx(id)),
+                ("params", params),
+                ("rows", J::A(rows)),
+            ],
+        ));
     }
     eprintln!("proofs: {:.1} s", t0.elapsed().as_secs_f64());
 
@@ -2527,14 +3815,21 @@ fn generate() -> (Vec<(String, String)>, bool) {
         let input = apply(edits, *form, id.unwrap_or(0), &stmts, &proofs);
         let (out, reason) = precompile(&input);
         assert!(out == "0" || out == "revert", "negative accepted: {name}");
-        if reason == "verify" { nver += 1 } else { ndec += 1 }
+        if reason == "verify" {
+            nver += 1
+        } else {
+            ndec += 1
+        }
         nrows.push(o(vec![
             ("name", J::from(name.as_str())),
             ("form", form.map_or(J::from("-"), |f| J::from(fname(f)))),
             ("id", id.map_or(J::from("-"), |i| J::from(IDS[i].0))),
             ("edits", J::A(edits.iter().map(E::json).collect())),
             ("input_bytes", J::from(input.len())),
-            ("input_sha3", hx(&<Sha3_256 as sha3::Digest>::digest(&input))),
+            (
+                "input_sha3",
+                hx(&<Sha3_256 as sha3::Digest>::digest(&input)),
+            ),
             ("expect", J::from(out)),
             ("reason", J::from(reason)),
         ]));
@@ -2548,17 +3843,41 @@ fn generate() -> (Vec<(String, String)>, bool) {
         for id in 0..IDS.len() {
             if st::S_AUD > 1 {
                 let w2 = ((w as usize + 1) % st::S_AUD) as u8;
-                dneg.push((format!("{}: kind window {w} -> {w2}", r.case), r.case.clone(), id, vec![E::StmtSet(256 + 30, vec![w2])], 5));
+                dneg.push((
+                    format!("{}: kind window {w} -> {w2}", r.case),
+                    r.case.clone(),
+                    id,
+                    vec![E::StmtSet(256 + 30, vec![w2])],
+                    5,
+                ));
             }
-            dneg.push((format!("{}: kind window {}", r.case, st::S_AUD), r.case.clone(), id, vec![E::StmtSet(256 + 30, vec![st::S_AUD as u8])], 5));
+            dneg.push((
+                format!("{}: kind window {}", r.case, st::S_AUD),
+                r.case.clone(),
+                id,
+                vec![E::StmtSet(256 + 30, vec![st::S_AUD as u8])],
+                5,
+            ));
         }
     }
     for (name, case, id, edits) in &mnegs {
         let r = mrows.iter().find(|r| &r.case == case).unwrap();
-        let input = apply_to(edits, st::OP_TRANSFER_MULTI, with_id(&r.stmt, &IDS[*id].1), mp[&(case.clone(), *id)].clone(), *id, &proofs, &mp);
+        let input = apply_to(
+            edits,
+            st::OP_TRANSFER_MULTI,
+            with_id(&r.stmt, &IDS[*id].1),
+            mp[&(case.clone(), *id)].clone(),
+            *id,
+            &proofs,
+            &mp,
+        );
         let (out, reason) = precompile(&input);
         assert!(out == "0" || out == "revert", "negative accepted: {name}");
-        if reason == "verify" { nver += 1 } else { ndec += 1 }
+        if reason == "verify" {
+            nver += 1
+        } else {
+            ndec += 1
+        }
         nrows.push(o(vec![
             ("name", J::from(name.as_str())),
             ("form", J::from("TRANSFER-MULTI")),
@@ -2566,17 +3885,32 @@ fn generate() -> (Vec<(String, String)>, bool) {
             ("id", J::from(IDS[*id].0)),
             ("edits", J::A(edits.iter().map(E::json).collect())),
             ("input_bytes", J::from(input.len())),
-            ("input_sha3", hx(&<Sha3_256 as sha3::Digest>::digest(&input))),
+            (
+                "input_sha3",
+                hx(&<Sha3_256 as sha3::Digest>::digest(&input)),
+            ),
             ("expect", J::from(out)),
             ("reason", J::from(reason)),
         ]));
     }
     for (name, case, id, edits, op) in &dneg {
         let r = mdisc.iter().find(|r| &r.case == case).unwrap();
-        let input = apply_to(edits, *op, with_id(&r.stmt, &IDS[*id].1), mp[&(case.clone(), *id)].clone(), *id, &proofs, &mp);
+        let input = apply_to(
+            edits,
+            *op,
+            with_id(&r.stmt, &IDS[*id].1),
+            mp[&(case.clone(), *id)].clone(),
+            *id,
+            &proofs,
+            &mp,
+        );
         let (out, reason) = precompile(&input);
         assert!(out == "0" || out == "revert", "negative accepted: {name}");
-        if reason == "verify" { nver += 1 } else { ndec += 1 }
+        if reason == "verify" {
+            nver += 1
+        } else {
+            ndec += 1
+        }
         nrows.push(o(vec![
             ("name", J::from(name.as_str())),
             ("form", J::from(fname(r.form))),
@@ -2584,7 +3918,10 @@ fn generate() -> (Vec<(String, String)>, bool) {
             ("id", J::from(IDS[*id].0)),
             ("edits", J::A(edits.iter().map(E::json).collect())),
             ("input_bytes", J::from(input.len())),
-            ("input_sha3", hx(&<Sha3_256 as sha3::Digest>::digest(&input))),
+            (
+                "input_sha3",
+                hx(&<Sha3_256 as sha3::Digest>::digest(&input)),
+            ),
             ("expect", J::from(out)),
             ("reason", J::from(reason)),
         ]));
@@ -2594,35 +3931,75 @@ fn generate() -> (Vec<(String, String)>, bool) {
     // here) and must refuse every row
     for (f, s, p) in &splits {
         let inp = st::input(f.op(), s, p);
-        assert_eq!(offchain(&inp), Ok(true), "{}: honest split input, off-chain", fname(*f));
-        assert_eq!(precompile(&inp).0, "0", "{}: honest split input, precompile", fname(*f));
+        assert_eq!(
+            offchain(&inp),
+            Ok(true),
+            "{}: honest split input, off-chain",
+            fname(*f)
+        );
+        assert_eq!(
+            precompile(&inp).0,
+            "0",
+            "{}: honest split input, precompile",
+            fname(*f)
+        );
     }
     let mut srows = Vec::new();
     for (name, f, base, edits) in split_negatives(&splits) {
         let input = match base {
-            Some(i) => apply_to(&edits, f.op(), splits[i].1.clone(), splits[i].2.clone(), 0, &proofs, &mp),
+            Some(i) => apply_to(
+                &edits,
+                f.op(),
+                splits[i].1.clone(),
+                splits[i].2.clone(),
+                0,
+                &proofs,
+                &mp,
+            ),
             None => apply(&edits, Some(f), 0, &stmts, &proofs),
         };
         let (out, reason) = precompile(&input);
         assert!(out == "0" || out == "revert", "negative accepted: {name}");
-        assert_eq!(offchain(&input), Ok(false), "split negative accepted off-chain: {name}");
+        assert_eq!(
+            offchain(&input),
+            Ok(false),
+            "split negative accepted off-chain: {name}"
+        );
         if let Ok(d) = pqz_ffi::decode(&input) {
-            assert!(!pqzl::verify_generic(d.op, d.stmt_bytes, d.proof).expect("generic verify"), "{name}: generic verifier");
+            assert!(
+                !pqzl::verify_generic(d.op, d.stmt_bytes, d.proof).expect("generic verify"),
+                "{name}: generic verifier"
+            );
         }
-        if reason == "verify" { nver += 1 } else { ndec += 1 }
+        if reason == "verify" {
+            nver += 1
+        } else {
+            ndec += 1
+        }
         srows.push(o(vec![
             ("name", J::from(name.as_str())),
             ("form", J::from(fname(f))),
-            ("id", J::from(if base.is_some() { "pqzl_split" } else { "pqzl" })),
+            (
+                "id",
+                J::from(if base.is_some() { "pqzl_split" } else { "pqzl" }),
+            ),
             ("edits", J::A(edits.iter().map(E::json).collect())),
             ("input_bytes", J::from(input.len())),
-            ("input_sha3", hx(&<Sha3_256 as sha3::Digest>::digest(&input))),
+            (
+                "input_sha3",
+                hx(&<Sha3_256 as sha3::Digest>::digest(&input)),
+            ),
             ("expect", J::from(out)),
             ("offchain", J::from("0")),
             ("reason", J::from(reason)),
         ]));
     }
-    eprintln!("negative: {} rows + {} split rows ({ndec} decoder, {nver} verifier): {:.1} s", nrows.len(), srows.len(), t0.elapsed().as_secs_f64());
+    eprintln!(
+        "negative: {} rows + {} split rows ({ndec} decoder, {nver} verifier): {:.1} s",
+        nrows.len(),
+        srows.len(),
+        t0.elapsed().as_secs_f64()
+    );
     // the disclosure opening's codec (pqz-stmt parse_opening, D15: the one canonical abi.encode(bytes, bytes)); base =
     // the TRANSFER bundle with the PQZL DISCLOSE-SENDER proof
     let ob = st::opening(&sc.bundle, &proofs[0][fidx(Form::DiscloseSender)]);
@@ -2632,15 +4009,26 @@ fn generate() -> (Vec<(String, String)>, bool) {
     let oedits: Vec<(&str, Vec<(usize, Vec<u8>)>, Option<usize>)> = vec![
         ("the canonical opening", vec![], None),
         ("head word 0 = 65", vec![(0, w(65))], None),
-        ("head word 1 off by 32", vec![(32, w(pad1 as u64 + 32))], None),
+        (
+            "head word 1 off by 32",
+            vec![(32, w(pad1 as u64 + 32))],
+            None,
+        ),
         ("bundle length word >= 2^64", vec![(64, vec![1])], None),
-        ("bundle padding byte non-zero", vec![(pad1 - 1, vec![1])], None),
+        (
+            "bundle padding byte non-zero",
+            vec![(pad1 - 1, vec![1])],
+            None,
+        ),
         ("proof length word = 2^63", vec![(pad1, w(1 << 63))], None),
         ("proof padding byte non-zero", vec![(n - 1, vec![1])], None),
         ("one trailing zero byte", vec![], Some(n + 1)),
         ("truncated by 1 byte", vec![], Some(n - 1)),
     ];
-    assert!(bl % 32 != 0 && ob[n - 1] == 0, "the padding rows need padding");
+    assert!(
+        bl % 32 != 0 && ob[n - 1] == 0,
+        "the padding rows need padding"
+    );
     let orows: Vec<J> = oedits
         .into_iter()
         .map(|(name, sets, size)| {
@@ -2662,7 +4050,11 @@ fn generate() -> (Vec<(String, String)>, bool) {
                 Err(r) => rname(r),
             };
             assert_eq!(reason == "ok", sets.is_empty() && size.is_none(), "{name}");
-            o(vec![("name", J::from(name)), ("edits", J::A(ej)), ("reason", J::from(reason))])
+            o(vec![
+                ("name", J::from(name)),
+                ("edits", J::A(ej)),
+                ("reason", J::from(reason)),
+            ])
         })
         .collect();
     files.push(file(
@@ -2697,15 +4089,25 @@ fn generate() -> (Vec<(String, String)>, bool) {
             s[95] ^= 1;
             let invalid = precompile(&st::input(3, &s, &proofs[i][reg])).0 == "1";
             res.extend([valid as u8, invalid as u8]);
-            per.push((nm.to_string(), o(vec![
-                ("proof_keccak", hx(&keccak(&[&proofs[i][reg]]))),
-                ("valid", J::from(valid as u8)),
-                ("invalid", J::from(invalid as u8)),
-            ])));
+            per.push((
+                nm.to_string(),
+                o(vec![
+                    ("proof_keccak", hx(&keccak(&[&proofs[i][reg]]))),
+                    ("valid", J::from(valid as u8)),
+                    ("invalid", J::from(invalid as u8)),
+                ]),
+            ));
         }
         // a build without PQZH: no PQZH proof, its two results 0 (selftest.rs)
         res.resize(4, 0);
-        assert_eq!(res, if pqz_ffi::PQZH { [1, 0, 1, 0] } else { [1, 0, 0, 0] });
+        assert_eq!(
+            res,
+            if pqz_ffi::PQZH {
+                [1, 0, 1, 0]
+            } else {
+                [1, 0, 0, 0]
+            }
+        );
         let hash = keccak(&[&kat, &res]);
         // the compiled-in proofs (build.rs: the REGISTER rows of the files) must be these; after a write that changed
         // them the crate must be rebuilt (stale: --check fails)
@@ -2714,7 +4116,11 @@ fn generate() -> (Vec<(String, String)>, bool) {
             assert_eq!(&res[..], &rep.results.map(|b| b as u8)[..]);
             let mut out = [0u8; 32];
             let rc = unsafe { pqz_precompile([6u8, 0, 0, 0, 0].as_ptr(), 5, out.as_mut_ptr(), 32) };
-            assert_eq!((rc, out, rep.hash), (pqz_ffi::PQZ_FFI_OK, hash, hash), "OP_SELFTEST through pqz_precompile");
+            assert_eq!(
+                (rc, out, rep.hash),
+                (pqz_ffi::PQZ_FFI_OK, hash, hash),
+                "OP_SELFTEST through pqz_precompile"
+            );
             assert_eq!(selftest::selftest(), Ok(hash));
         }
         files.push(file(
@@ -2770,7 +4176,11 @@ fn generate() -> (Vec<(String, String)>, bool) {
         .filter(|r| r.form.op() <= st::OP_BURN)
         .map(|r| {
             let mut kv = r.json.clone();
-            kv.extend([("wit", hx(&r.wit)), ("wit_keccak", hx(&keccak(&[&r.wit]))), ("rnd32", hx(&r.rnd))]);
+            kv.extend([
+                ("wit", hx(&r.wit)),
+                ("wit_keccak", hx(&keccak(&[&r.wit]))),
+                ("rnd32", hx(&r.rnd)),
+            ]);
             kv.extend(proofs_json(r.form.op(), &r.stmt, &r.wit, &r.rnd));
             o(kv)
         })
@@ -2816,8 +4226,13 @@ fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             // the set's vectors: v3 at the canonical path (the contracts' until plan 5h Task 8d), others below it
-            let v = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../smartcontracts/vectors/pqz");
-            if V3 { v } else { v.join(st::SET) }
+            let v =
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../smartcontracts/vectors/pqz");
+            if V3 {
+                v
+            } else {
+                v.join(st::SET)
+            }
         });
     std::fs::create_dir_all(&dir).unwrap();
     let (files, stale) = generate();
@@ -2844,19 +4259,32 @@ fn main() {
         if !n.ends_with(".json") || files.iter().any(|f| f.0 == n) {
             continue;
         }
-        if let Some((_, by, _)) = OTHER_WRITERS.iter().find(|o| o.0 == n && o.2.is_none_or(|s| s == st::SET)) {
+        if let Some((_, by, _)) = OTHER_WRITERS
+            .iter()
+            .find(|o| o.0 == n && o.2.is_none_or(|s| s == st::SET))
+        {
             println!("OTHER {n}: {by}");
         } else {
-            println!("EXTRA {n}: not written by this generator (nor owned by another writer at set {})", st::SET);
+            println!(
+                "EXTRA {n}: not written by this generator (nor owned by another writer at set {})",
+                st::SET
+            );
             bad += 1;
         }
     }
-    for (n, by, _) in OTHER_WRITERS.iter().filter(|o| o.2.is_none_or(|s| s == st::SET)) {
+    for (n, by, _) in OTHER_WRITERS
+        .iter()
+        .filter(|o| o.2.is_none_or(|s| s == st::SET))
+    {
         if !dir.join(n).exists() {
             println!("MISSING {n}: {by}");
             bad += 1;
         }
     }
-    println!("pqz-vectors --check: {} files, {total} B: {}", files.len(), if bad == 0 { "ok" } else { "FAIL" });
+    println!(
+        "pqz-vectors --check: {} files, {total} B: {}",
+        files.len(),
+        if bad == 0 { "ok" } else { "FAIL" }
+    );
     std::process::exit((bad != 0) as i32);
 }

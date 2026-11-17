@@ -21,7 +21,11 @@ pub type Poly = [i64; D];
 
 /// a canonical coefficient (< q) centred into (-q/2, q/2]
 pub fn centre(v: u64) -> i64 {
-    if v > (Q - 1) / 2 { v as i64 - Q as i64 } else { v as i64 }
+    if v > (Q - 1) / 2 {
+        v as i64 - Q as i64
+    } else {
+        v as i64
+    }
 }
 
 /// A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)): 8-byte BE words, low LOG2Q bits (n2048-kmax1024 42), accept if < q,
@@ -58,7 +62,8 @@ pub fn polys_of(b: &[u8], n: usize) -> Vec<Poly> {
     b.chunks(8 * n)
         .map(|c| {
             let mut v = [0u64; D];
-            pqz_stmt::read_coeffs(c, &mut v[..n]).expect("pqz_stmt::parse checked the coefficients");
+            pqz_stmt::read_coeffs(c, &mut v[..n])
+                .expect("pqz_stmt::parse checked the coefficients");
             v.map(centre)
         })
         .collect()
@@ -106,7 +111,13 @@ pub fn keypair(s: &[Poly], e: &[Poly]) -> Vec<Poly> {
 }
 
 /// u = A^T r + e1; v_k[i] = (pk_k^T r)[i] + e2_k[i] + Delta m_k[i] (i < 16)
-pub fn encrypt(pks: &[&Vec<Poly>], msgs: &[[u8; 16]], r: &[Poly], e1: &[Poly], e2: &[Vec<i64>]) -> (Vec<Poly>, Vec<Poly>) {
+pub fn encrypt(
+    pks: &[&Vec<Poly>],
+    msgs: &[[u8; 16]],
+    r: &[Poly],
+    e1: &[Poly],
+    e2: &[Vec<i64>],
+) -> (Vec<Poly>, Vec<Poly>) {
     let a = a_matrix();
     let rr: Vec<&Poly> = r.iter().collect();
     let u = (0..K)
@@ -122,7 +133,13 @@ pub fn encrypt(pks: &[&Vec<Poly>], msgs: &[[u8; 16]], r: &[Poly], e1: &[Poly], e
         .zip(e2)
         .map(|((pk, msg), e2)| {
             let y = Wiped(dot_int(&pk.iter().collect::<Vec<_>>(), &rr));
-            std::array::from_fn(|i| if i < 16 { modq(y[i] + e2[i] + DELTA * msg[i] as i64) } else { 0 })
+            std::array::from_fn(|i| {
+                if i < 16 {
+                    modq(y[i] + e2[i] + DELTA * msg[i] as i64)
+                } else {
+                    0
+                }
+            })
         })
         .collect();
     (u, vs)

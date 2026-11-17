@@ -4,7 +4,10 @@
 use pqz_stmt::*;
 
 fn unhex(s: &str) -> Vec<u8> {
-    (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+        .collect()
 }
 
 fn form_of(name: &str) -> Form {
@@ -53,14 +56,19 @@ fn words<const N: usize>(b: &[u8]) -> [Word; N] {
 fn build(form: Form, f: &std::collections::HashMap<&str, Vec<u8>>) -> Vec<u8> {
     let g = |k: &str| f.get(k).map(|v| v.as_slice());
     let s = match form {
-        Form::Register => Stmt::Register(Register { words: words::<3>(&f["words"]), pk: &f["pk"] }),
-        Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor => Stmt::Disclose(Disclose {
-            form,
-            words: words::<DISC_WORDS>(&f["words"]),
+        Form::Register => Stmt::Register(Register {
+            words: words::<3>(&f["words"]),
             pk: &f["pk"],
-            u: &f["u"],
-            v: &f["v"],
         }),
+        Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor => {
+            Stmt::Disclose(Disclose {
+                form,
+                words: words::<DISC_WORDS>(&f["words"]),
+                pk: &f["pk"],
+                u: &f["u"],
+                v: &f["v"],
+            })
+        }
         _ => Stmt::Debit(Debit {
             form,
             header: words::<20>(&f["hdr"]),
@@ -99,11 +107,20 @@ fn build_multi(f: &std::collections::HashMap<&str, Vec<u8>>) -> Vec<u8> {
 }
 
 fn fields_multi(s: &Multi) -> Vec<(&'static str, Vec<u8>)> {
-    let mut v = vec![("hdr", s.header.concat()), ("pk_f", s.pk_f.to_vec()), ("pks", s.pks.to_vec())];
+    let mut v = vec![
+        ("hdr", s.header.concat()),
+        ("pk_f", s.pk_f.to_vec()),
+        ("pks", s.pks.to_vec()),
+    ];
     if let Some(a) = s.pk_a {
         v.push(("pk_a", a.to_vec()));
     }
-    v.extend([("t", s.t.to_vec()), ("us", s.us.to_vec()), ("vs", s.vs.to_vec()), ("v_f", s.v_f.to_vec())]);
+    v.extend([
+        ("t", s.t.to_vec()),
+        ("us", s.us.to_vec()),
+        ("vs", s.vs.to_vec()),
+        ("v_f", s.v_f.to_vec()),
+    ]);
     if let Some(a) = s.v_as {
         v.push(("v_as", a.to_vec()));
     }
@@ -115,7 +132,12 @@ fn fields(s: &Stmt) -> Vec<(&'static str, Vec<u8>)> {
     match s {
         Stmt::Register(r) => vec![("words", r.words.concat()), ("pk", r.pk.to_vec())],
         Stmt::Disclose(d) => {
-            vec![("words", d.words.concat()), ("pk", d.pk.to_vec()), ("u", d.u.to_vec()), ("v", d.v.to_vec())]
+            vec![
+                ("words", d.words.concat()),
+                ("pk", d.pk.to_vec()),
+                ("u", d.u.to_vec()),
+                ("v", d.v.to_vec()),
+            ]
         }
         Stmt::Debit(d) => {
             let mut v = vec![("hdr", d.header.concat()), ("pk_f", d.pk_f.to_vec())];
@@ -126,7 +148,12 @@ fn fields(s: &Stmt) -> Vec<(&'static str, Vec<u8>)> {
             }
             v.push(("t", d.t.to_vec()));
             v.push(("u", d.u.to_vec()));
-            for (k, o) in [("v_t", d.v_t), ("v_f", Some(d.v_f)), ("v_a", d.v_a), ("u_f", d.u_f)] {
+            for (k, o) in [
+                ("v_t", d.v_t),
+                ("v_f", Some(d.v_f)),
+                ("v_a", d.v_a),
+                ("u_f", d.u_f),
+            ] {
                 if let Some(o) = o {
                     v.push((k, o.to_vec()));
                 }
@@ -173,8 +200,11 @@ fn xcheck_c_and_pqz_kat() {
             "c" => npyc += 1,
             "ok" if t[1] == "7" => {
                 let st = unhex(t[3]);
-                let f: std::collections::HashMap<&str, Vec<u8>> =
-                    t[4..].iter().map(|kv| kv.split_once('=').unwrap()).map(|(k, v)| (k, unhex(v))).collect();
+                let f: std::collections::HashMap<&str, Vec<u8>> = t[4..]
+                    .iter()
+                    .map(|kv| kv.split_once('=').unwrap())
+                    .map(|(k, v)| (k, unhex(v)))
+                    .collect();
                 let s = parse_multi(&st).unwrap_or_else(|e| panic!("op 7: {e:?}"));
                 let got = fields_multi(&s);
                 assert_eq!(got.len(), f.len(), "op 7 M = {}: field count", s.m);
@@ -187,8 +217,11 @@ fn xcheck_c_and_pqz_kat() {
             }
             "ok" => {
                 let (op, form, st) = (t[1].parse::<u8>().unwrap(), form_of(t[2]), unhex(t[3]));
-                let f: std::collections::HashMap<&str, Vec<u8>> =
-                    t[4..].iter().map(|kv| kv.split_once('=').unwrap()).map(|(k, v)| (k, unhex(v))).collect();
+                let f: std::collections::HashMap<&str, Vec<u8>> = t[4..]
+                    .iter()
+                    .map(|kv| kv.split_once('=').unwrap())
+                    .map(|(k, v)| (k, unhex(v)))
+                    .collect();
                 let s = parse(op, &st).unwrap_or_else(|e| panic!("{}: {e:?}", t[2]));
                 assert_eq!(s.form(), Some(form));
                 let got = fields(&s);
@@ -196,13 +229,22 @@ fn xcheck_c_and_pqz_kat() {
                 for (k, v) in &got {
                     assert_eq!(&f[k], v, "{}: field {k}", t[2]);
                 }
-                assert_eq!(build(form, &f), st, "{}: build from pqz_kat.py's fields", t[2]);
+                assert_eq!(
+                    build(form, &f),
+                    st,
+                    "{}: build from pqz_kat.py's fields",
+                    t[2]
+                );
                 assert_eq!(s.encode().unwrap(), st);
                 nok += 1;
             }
             "bad" => {
                 let (op, want, st) = (t[1].parse::<u8>().unwrap(), t[2], unhex(t[3]));
-                let got = if op == OP_TRANSFER_MULTI { parse_multi(&st).err() } else { parse(op, &st).err() };
+                let got = if op == OP_TRANSFER_MULTI {
+                    parse_multi(&st).err()
+                } else {
+                    parse(op, &st).err()
+                };
                 let got = got.unwrap_or_else(|| panic!("accepted, pqz_kat.py: {want}"));
                 nbad7 += (op == OP_TRANSFER_MULTI) as usize;
                 assert_eq!(reason(got), want, "{got:?}");
@@ -213,6 +255,9 @@ fn xcheck_c_and_pqz_kat() {
     }
     assert_eq!(npyc, 6, "pqz_kat.py rebuilt the six C statements");
     assert!(nok >= 8 && nbad >= 8);
-    assert!(nmulti >= 14 && nbad7 >= 50, "op 7: {nmulti} statements, {nbad7} rejections");
+    assert!(
+        nmulti >= 14 && nbad7 >= 50,
+        "op 7: {nmulti} statements, {nbad7} rejections"
+    );
     println!("xcheck: C {nc} / 6 forms equal; pqz_kat.py: {nok} statements + {nmulti} op 7 statements equal (fields and bytes), {nbad} rejections ({nbad7} op 7) with the same reason");
 }
