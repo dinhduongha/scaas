@@ -294,3 +294,16 @@ required-features = ["vectors", "pqz", "zether"]
 [[example]]
 name = "ua_bench"
 required-features = ["pqz"]
+
+# scaas-sdk T2a: SecretBytes and its copy calls, the master fingerprint and the keystore index MAC, the same-DEK re-seal
+[[test]]
+name = "secret_bytes"
+required-features = ["wallet"]
+
+[[test]]
+name = "index_mac"
+required-features = ["wallet"]
+
+[[test]]
+name = "reseal"
+required-features = ["wallet"]

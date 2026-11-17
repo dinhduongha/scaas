@@ -22,6 +22,9 @@ use serde_json::Value;
 use unicode_normalization::UnicodeNormalization;
 use zeroize::Zeroizing;
 
+/// A vault's data key.
+pub(crate) type Dek = Zeroizing<[u8; 32]>;
+
 /// The scrypt `N` an envelope may carry (CLI-SGN-21), as `log2 N`; new envelopes use the last.
 const LOG_N: [u8; 3] = [15, 16, 17];
 const LOG_N_NEW: u8 = 17;
@@ -145,12 +148,29 @@ impl Vault {
     /// A new vault of `secret` under `label`: a fresh DEK, the pin envelope at `N = 2^17` (the passphrase policy first), and
     /// the PRF envelope if given.
     pub(crate) fn seal(label: &str, secret: &[u8], pin: &str, prf: Option<&PrfEnvelope>) -> Result<Vault> {
+        Ok(Vault::seal_dek(label, secret, pin, prf)?.0)
+    }
+
+    /// [`Vault::seal`] and the new DEK.
+    pub(crate) fn seal_dek(label: &str, secret: &[u8], pin: &str, prf: Option<&PrfEnvelope>) -> Result<(Vault, Dek)> {
         check_passphrase(pin)?;
         let dek = Zeroizing::new(random::<32>()?);
         let data = gcm_seal(&dek, secret, &aad(label, "data"))?;
         let pin = pin_envelope(label, &dek, pin)?;
         let prf = prf.map(|p| prf_envelope(label, &dek, p)).transpose()?;
-        Ok(Vault { label: label.to_owned(), data, pin, prf })
+        Ok((Vault { label: label.to_owned(), data, pin, prf }, dek))
+    }
+
+    /// This vault with `data` replaced by `secret` sealed under `dek` (its DEK) and a fresh IV, both envelopes kept.
+    pub(crate) fn with_data(&self, dek: &[u8; 32], secret: &[u8]) -> Result<Vault> {
+        Ok(Vault { data: gcm_seal(dek, secret, &aad(&self.label, "data"))?, ..self.clone() })
+    }
+
+    /// The vault with `secret` in place of its payload, under its **same DEK** (opened by `unlock`) and a fresh IV: the pin and
+    /// PRF envelopes are kept byte for byte, so a session opened by either can persist a change and both still open it
+    /// (clientkeys `resealData`; scaas-sdk spec §6.10). Errors as [`Vault::open`].
+    pub fn reseal_data(&self, unlock: Unlock, secret: &[u8]) -> Result<Vault> {
+        self.with_data(&*self.dek(unlock)?, secret)
     }
 
     /// The DEK: the PRF envelope (`Argument` if the vault has none) or the pin envelope, its parameters checked before scrypt
@@ -172,7 +192,13 @@ impl Vault {
 
     /// The secret (errors as `dek`).
     pub(crate) fn open(&self, unlock: Unlock) -> Result<Zeroizing<Vec<u8>>> {
-        gcm_open(&*self.dek(unlock)?, &self.data, &aad(&self.label, "data"))
+        Ok(self.open_dek(unlock)?.0)
+    }
+
+    /// [`Vault::open`] and the DEK.
+    pub(crate) fn open_dek(&self, unlock: Unlock) -> Result<(Zeroizing<Vec<u8>>, Dek)> {
+        let dek = self.dek(unlock)?;
+        Ok((gcm_open(&dek, &self.data, &aad(&self.label, "data"))?, dek))
     }
 
     /// What the vault holds: `seed`, `manifest`, `native-import:<network>:<n>`, …

@@ -139,6 +139,18 @@ export async function openSeedVault(vault, unlock) {
   return entropy;
 }
 
+/** The vault with `data` replaced by `secret` sealed under the vault's same DEK (a fresh IV); the pin and PRF envelopes are kept
+ *  as they are, so a session opened by either can persist a changed secret (a manifest) and both still open it (scaas-sdk spec
+ *  §6.10). Returns a new vault object; the caller stores it. */
+export async function resealData(vault, unlock, secret) {
+  const dek = await dekFrom(vault, unlock);
+  try {
+    return { ...structuredClone(vault), data: await seal(dek, secret, `${vault.label}|data`) };
+  } finally {
+    wipe(dek);
+  }
+}
+
 /** Add passkey-PRF unlock to an existing vault (needs the PIN once). */
 export async function enablePrf(vault, pin, prf) {
   const dek = await dekFrom(vault, { pin });

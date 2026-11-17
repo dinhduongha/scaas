@@ -78,6 +78,13 @@ export function seedFromWords(text, passphrase = '') {
   return bip39.mnemonicToSeedSync(normalizeMnemonic(text), passphrase);
 }
 
+/** The BIP-32 master key's fingerprint (the first 4 bytes of HASH160 of its compressed public key) as 8 lower-case hex digits:
+ *  a seed's name in the scaas-sdk keystore, so a second import of the same words is found without unlocking (scaas-sdk spec
+ *  §6.1). `seed` is the 64-byte BIP-39 seed (the main set: the empty BIP-39 passphrase). */
+export function masterFingerprint(seed) {
+  return HDKey.fromMasterSeed(seed).fingerprint.toString(16).padStart(8, '0');
+}
+
 // ------------------------------------------------------------------ derivation
 
 // SLIP-10 curves: the HMAC key of the master step and the group order (ed25519: none, every IL is a key).

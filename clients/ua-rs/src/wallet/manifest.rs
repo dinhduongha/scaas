@@ -559,16 +559,47 @@ impl Wallet {
     /// A vault of label `manifest` (the manifest JSON), `native-import:<network>:<n>` (that imported key) or
     /// `pqz-held:<ua>:<version>:<pqzKeyHash>` (that rebuilt PQZ key's `seed32`, T16b), as [`Wallet::seal_vault`]; `Argument`
     /// for another label or a key the wallet does not hold.
+    /// The new vault's DEK is held in the arena while it is open (scaas-sdk spec §6.10), for [`Wallet::reseal_label_vault`].
     pub fn seal_label_vault(&self, label: &str, vault_passphrase: &str, prf: Option<&PrfEnvelope>) -> Result<Vault> {
         let _lease = self.store.lease(); // the secret's copy, through the seal (T21 L82)
-        let secret = if label == "manifest" {
-            Zeroizing::new(self.manifest().to_json().into_bytes())
+        let secret = self.label_secret(label)?;
+        super::store::copied();
+        let (vault, dek) = Vault::seal_dek(label, &secret, vault_passphrase, prf)?;
+        self.hold_dek(&dek, &vault);
+        Ok(vault)
+    }
+
+    /// The label vault `label` re-sealed under the DEK this wallet holds for it, with what the wallet holds now under that label
+    /// (the manifest as it stands, an imported key, a rebuilt PQZ key), a fresh IV and both envelopes as they were (clientkeys
+    /// `resealData`; scaas-sdk spec §6.10): a change made in a session opened by passphrase, passkey or platform secret persists
+    /// without asking for the passphrase, and the PRF envelope survives. The DEK is held from [`Wallet::open_label_vault`] or
+    /// [`Wallet::seal_label_vault`] until `lock()`: `Argument` for a label it holds none for (after a `lock()` too, until the
+    /// vault is opened again), `WalletLocked` while locked.
+    pub fn reseal_label_vault(&self, label: &str) -> Result<Vault> {
+        let _lease = self.store.lease();
+        let secret = self.label_secret(label)?;
+        super::store::copied();
+        self.store.with_all(|a, _| {
+            let (dek, vault) = a.dek(label).ok_or(Error::Argument)?;
+            let vault = vault.with_data(&dek, &secret)?;
+            a.resealed(vault.clone())?;
+            Ok(vault)
+        })
+    }
+
+    /// What a label vault holds: the manifest's JSON, or the held key's secret.
+    fn label_secret(&self, label: &str) -> Result<Zeroizing<Vec<u8>>> {
+        if label == "manifest" {
+            Ok(Zeroizing::new(self.manifest().to_json().into_bytes()))
         } else {
             let h = Held::parse(label)?;
-            self.store.with_all(|a, m| h.secret(a, m))?
-        };
-        super::store::copied();
-        Vault::seal(label, &secret, vault_passphrase, prf)
+            self.store.with_all(|a, m| h.secret(a, m))
+        }
+    }
+
+    /// Holds `dek` for `vault` while the arena is open (nothing while locked).
+    fn hold_dek(&self, dek: &[u8; 32], vault: &Vault) {
+        let _ = self.store.with_all(|a, _| a.hold_dek(dek, vault.clone()));
     }
 
     /// Opens a vault of [`Wallet::seal_label_vault`] into this wallet: `manifest` replaces the manifest (while unlocked only
@@ -577,12 +608,19 @@ impl Wallet {
     /// installs that key, `pqz-held:…` installs that PQZ key only if its `seed32` gives a key of the label's `pqzKeyHash`
     /// (`Argument` otherwise, nothing held; `KindUnavailable` on a build without `pqz`). `Argument` for another label (the
     /// seed vault opens with [`Wallet::open_vault`]); errors of the vault as [`Wallet::open_vault`].
+    /// The vault's DEK is held in the arena while it is open (scaas-sdk spec §6.10), for [`Wallet::reseal_label_vault`].
     pub fn open_label_vault(&self, vault: &Vault, unlock: Unlock) -> Result<()> {
         if vault.label() == "manifest" {
-            return self.store.set_manifest(Manifest::from_json(&vault.open(unlock)?)?);
+            let (secret, dek) = vault.open_dek(unlock)?;
+            self.store.set_manifest(Manifest::from_json(&secret)?)?;
+            self.hold_dek(&dek, vault);
+            return Ok(());
         }
         let h = Held::parse(vault.label())?;
-        self.install_held(h, &vault.open(unlock)?)
+        let (secret, dek) = vault.open_dek(unlock)?;
+        self.install_held(h, &secret)?;
+        self.hold_dek(&dek, vault);
+        Ok(())
     }
 
     fn install_held(&self, h: Held, secret: &[u8]) -> Result<()> {

@@ -37,6 +37,7 @@ pub mod pairing;
 mod pairing;
 mod manifest;
 mod policy;
+mod secret;
 mod service_pull;
 #[cfg(feature = "vectors")]
 pub mod seal;
@@ -86,6 +87,7 @@ pub use signer::TestExternalKey;
 pub use signer::{AllowRawDigest, KeyRef, SigRole, SignRequest, Signer};
 pub use tx::{sign_transaction_by, AccessListItem, EvmTx, SignedTx};
 pub use uasig::{membership_sig, membership_sig_current, msig_sig, msig_sig_current, msig_update_typed_data, ua_sig, Slot, UaSigRequest};
+pub use secret::{secret_dispose, secret_read, secret_write, secrets_live, SecretBytes, SECRET_MAX};
 pub use vault::{check_passphrase, PrfEnvelope, Unlock, Vault};
 pub use webauthn::{webauthn_assertion, webauthn_challenge};
 pub use zeroize::ZeroizeOnDrop;
@@ -385,6 +387,48 @@ pub(crate) fn sized<I: Iterator<Item = char>>(chars: impl Fn() -> I) -> Zeroizin
     s
 }
 
+const INDEX_INFO: &[u8] = b"scaas.keystore.index.v1";
+/// The longest `accounts` array an index MAC covers: 1,024 rows of a few hundred bytes.
+const INDEX_ACCOUNTS_MAX: usize = 1 << 20;
+
+/// The public fields of a keystore seed entry the index MAC covers (scaas-sdk spec §6.2), in its canonical order.
+/// `accounts_json` is the entry's `accounts` array as the container holds it: compact JSON, each row's fields in the order
+/// clientkeys writes them.
+pub struct IndexFields<'a> {
+    pub id: &'a str,
+    pub label: &'a str,
+    pub words: u32,
+    pub fingerprint: &'a str,
+    pub origin: &'a str,
+    pub class: &'a str,
+    pub warnings: &'a [String],
+    pub backup: &'a str,
+    pub accounts_json: &'a str,
+}
+
+/// The MAC's input (clientkeys `indexCanonical`): `{"id":…,"label":…,"words":…,"fingerprint":…,"origin":…,"class":…,
+/// "warnings":[…],"backup":…,"accounts":[…]}`, strings as `JSON.stringify` writes them. `Argument` when `accounts_json` is not
+/// one JSON array (1 MiB, depth 3) written without white space outside its strings.
+pub fn index_canonical(f: &IndexFields) -> Result<String> {
+    let v = bounded::json(f.accounts_json.as_bytes(), INDEX_ACCOUNTS_MAX, 3)?;
+    if !v.is_array() || serde_json::to_string(&v).map_or(0, |t| t.len()) != f.accounts_json.len() {
+        return Err(Error::Argument);
+    }
+    let s = |x: &str| serde_json::Value::from(x).to_string();
+    let warnings = serde_json::Value::from(f.warnings.to_vec()).to_string();
+    Ok(format!(
+        "{{\"id\":{},\"label\":{},\"words\":{},\"fingerprint\":{},\"origin\":{},\"class\":{},\"warnings\":{warnings},\"backup\":{},\"accounts\":{}}}",
+        s(f.id),
+        s(f.label),
+        f.words,
+        s(f.fingerprint),
+        s(f.origin),
+        s(f.class),
+        s(f.backup),
+        f.accounts_json
+    ))
+}
+
 /// The 64-byte BIP-39 seed of `entropy` with the passphrase (NFKD).
 fn seed_of(entropy: &[u8], bip39_passphrase: &str) -> Result<Zeroizing<[u8; 64]>> {
     let m = bip39::Mnemonic::from_entropy(entropy).map_err(|_| Error::Argument)?;
@@ -595,6 +639,30 @@ impl Wallet {
     /// Waits for every operation in flight, wipes every secret and revokes every handle made before (spec §8.2).
     pub fn lock(&self) {
         self.store.lock();
+    }
+
+    /// The BIP-32 master key's fingerprint of this wallet's seed (clientkeys `masterFingerprint`; scaas-sdk spec §6.1): the
+    /// first 4 bytes of HASH160 of the master public key. A wallet of the empty BIP-39 passphrase gives its seed's main-set
+    /// fingerprint, the keystore's duplicate check. `WalletLocked` while locked.
+    pub fn fingerprint(&self) -> Result<[u8; 4]> {
+        self.store.with_seed(|seed| Ok(bip32::XPrv::new(seed).map_err(|_| Error::Argument)?.public_key().fingerprint()))
+    }
+
+    /// The keystore index MAC of a seed entry (clientkeys `indexMac`; scaas-sdk spec §6.2): `HMAC-SHA256(HKDF-SHA256(entropy,
+    /// "", "scaas.keystore.index.v1", 32), canonical)` under this wallet's BIP-39 entropy. `Argument` for fields outside their
+    /// form ([`index_canonical`]); `WalletLocked` while locked.
+    pub fn index_mac(&self, fields: &IndexFields) -> Result<[u8; 32]> {
+        let canonical = index_canonical(fields)?;
+        self.store.with_arena(|a| {
+            let k = hkdf_sha256(a.entropy()?, &[], INDEX_INFO, 32)?;
+            Ok(hmac_sha256(&k, canonical.as_bytes()))
+        })
+    }
+
+    /// Whether `mac` is [`Wallet::index_mac`] of `fields` (compared in constant time); errors as `index_mac`.
+    pub fn verify_index_mac(&self, fields: &IndexFields, mac: &[u8; 32]) -> Result<bool> {
+        let want = self.index_mac(fields)?;
+        Ok(want.iter().zip(mac).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0)
     }
 
     /// The arena's memory protection now (spec §8.2, feature `mlock`, best effort): all zero while locked.

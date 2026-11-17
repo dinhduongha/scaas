@@ -38,6 +38,7 @@ STEPS=(
   "ua-clippy|clients/ua-rs|$cap cargo clippy $C --all-targets -- -D warnings"
   "ck-test|clients/clientkeys|$cap npm test"
   "rpc-test|clients/scaas-rpc|$cap cargo test $C --all-features"
+  "frb-dart|clients/ua-dart-frb|(cd rust && $cap cargo build $C) && $cap dart test --reporter expanded --no-color"
   "bind-dart|clients/scaas-sdk/bindings/dart|bash ./run.sh"
   "bind-cpp|clients/scaas-sdk/bindings/cpp|$cap cmake -B build && $cap cmake --build build && cd build && $cap ctest --output-on-failure"
   "docs|.|python3 scripts/docs_check.py check && python3 scripts/test_docs_check.py"

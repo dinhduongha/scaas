@@ -19,7 +19,7 @@
 // the readers of secrets (`Handle::with`, the entropy for the vault) are the signers (T3a–T3d) and the vault (T9)
 #![cfg_attr(not(feature = "vectors"), allow(dead_code))]
 use super::manifest::{entry_ua, Manifest};
-use super::{Error, KeyId, Result};
+use super::{Error, KeyId, Result, Vault};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Condvar, Mutex, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use zeroize::{Zeroize, Zeroizing};
@@ -184,6 +184,9 @@ pub(crate) struct Arena {
     keys: HashMap<KeyId, (Slot, Vec<u8>)>, // a derived key: its slot and its public key data
     tested: HashSet<KeyId>,                // the keys whose self-test ran in this store (a KEM key: FIPS 203 §7.3)
     self_tests: usize,                     // self-tests run in this store
+    /// The DEK of each label vault opened or sealed while this arena is open, and that vault as it stands (its public
+    /// envelopes): what `Wallet::reseal_label_vault` re-seals under the same DEK (scaas-sdk spec §6.10). Wiped with the arena.
+    deks: HashMap<String, (Slot, Vault)>,
 }
 
 impl Arena {
@@ -191,7 +194,7 @@ impl Arena {
     fn empty() -> Arena {
         let empty = Slot { chunk: 0, start: 0, len: 0 };
         let (keys, tested) = (HashMap::new(), HashSet::new());
-        Arena { chunks: Vec::new(), used: 0, total: 0, entropy: empty, seed: empty, mini: empty, keys, tested, self_tests: 0 }
+        Arena { chunks: Vec::new(), used: 0, total: 0, entropy: empty, seed: empty, mini: empty, keys, tested, self_tests: 0, deks: HashMap::new() }
     }
 
     fn new(entropy: &[u8], seed: &[u8; 64], mini: &[u8; 32]) -> Result<Arena> {
@@ -237,6 +240,28 @@ impl Arena {
     /// The secret of key `id`, if the arena holds it.
     pub(crate) fn secret(&self, id: KeyId) -> Option<&[u8]> {
         self.get(self.keys.get(&id)?.0).ok()
+    }
+
+    /// Holds `dek` as the DEK of label vault `vault` (opened or sealed anew), replacing what the label held.
+    // ponytail: a replaced DEK's slot stays in the arena (wiped with it at `lock`); 32 bytes per vault opened again.
+    pub(crate) fn hold_dek(&mut self, dek: &[u8; 32], vault: Vault) -> Result<()> {
+        let slot = self.put(dek)?;
+        self.deks.insert(vault.label().to_owned(), (slot, vault));
+        Ok(())
+    }
+
+    /// Records `vault` (re-sealed under the DEK its label holds) as the label's vault; `Argument` if the label holds none.
+    pub(crate) fn resealed(&mut self, vault: Vault) -> Result<()> {
+        let (_, v) = self.deks.get_mut(vault.label()).ok_or(Error::Argument)?;
+        *v = vault;
+        Ok(())
+    }
+
+    /// The DEK held for label vault `label` and that vault, if any.
+    pub(crate) fn dek(&self, label: &str) -> Option<(Zeroizing<[u8; 32]>, Vault)> {
+        let (slot, v) = self.deks.get(label)?;
+        let dek: [u8; 32] = self.get(*slot).ok()?.try_into().ok()?;
+        Some((Zeroizing::new(dek), v.clone()))
     }
 
     /// `secret` (and its public key data) as key `id`, a key not derived from the seed (an imported key).
