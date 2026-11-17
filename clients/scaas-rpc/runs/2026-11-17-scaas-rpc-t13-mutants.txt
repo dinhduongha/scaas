@@ -1,4 +1,7 @@
-# t13 mutants at commit 05e1b8f58 (name | outcome | test)
-point 6 endpoint 0 skipped on reads | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::an_endpoint_0_of_another_chain_is_dropped
-point 6 endpoint 0 skipped on admit | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib chain::tests::an_endpoint_0_of_another_chain_is_dropped
-2 mutants, 2 killed, 0 survived, 0 not loaded
+# t13 mutants at commit 890631299 (name | outcome | test)
+S4 a revert message kept whole | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_revert_text_is_capped_and_cleaned
+S4 a decoded reason kept whole | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test evm_fakes a_revert_text_is_capped_and_cleaned
+S4 intent_id kept whole | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_gateways_intent_id_and_revert_data_are_bounded
+S4 revert_data hex unchecked | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_gateways_intent_id_and_revert_data_are_bounded
+S4 revert_data uncapped | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test node a_gateways_intent_id_and_revert_data_are_bounded
+5 mutants, 5 killed, 0 survived, 0 not loaded

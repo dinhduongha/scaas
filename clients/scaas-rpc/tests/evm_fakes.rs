@@ -1644,3 +1644,41 @@ async fn an_endpoint_without_block_0_is_refused_unless_it_names_a_checkpoint() {
         "a checkpoint it does not match"
     );
 }
+
+/// T13 S4 (CLI-RPC-11): a revert's text, the endpoint's message or a contract's decoded `Error(string)`, is cut to 256 bytes
+/// with control characters removed, as every other text an endpoint sends. Control: a short reason is kept as sent.
+#[tokio::test]
+async fn a_revert_text_is_capped_and_cleaned() {
+    let clean = |e: Result<Bytes, SimError>| match e {
+        Err(SimError::Revert(s)) => {
+            assert!(
+                s.len() <= 256 && !s.chars().any(char::is_control),
+                "{} bytes: {s:?}",
+                s.len()
+            );
+            s
+        }
+        e => panic!("{e:?}"),
+    };
+    let (message, _) = fake_rpc(|_| {
+        json!({"error": {"code": 3, "message": format!("execution reverted: \u{1b}[31m{}", "x".repeat(1 << 16))}})
+    })
+    .await;
+    assert!(clean(call(&sdk_pool(&[&message], 30_000)).await)
+        .starts_with("execution reverted: [31mxxx"));
+    let (decoded, _) = fake_rpc(|_| {
+        use alloy::sol_types::SolValue;
+        let mut data = vec![0x08, 0xc3, 0x79, 0xa0];
+        data.extend(format!("bad\n{}", "y".repeat(1 << 16)).abi_encode());
+        json!({"error": {"code": 3, "message": "execution reverted", "data": alloy::hex::encode_prefixed(data)}})
+    })
+    .await;
+    assert!(clean(call(&sdk_pool(&[&decoded], 30_000)).await).starts_with("badyyy"));
+    let (short, _) =
+        fake_rpc(|_| json!({"error": {"code": 3, "message": "execution reverted: low"}})).await;
+    assert_eq!(
+        clean(call(&sdk_pool(&[&short], 30_000)).await),
+        "execution reverted: low",
+        "control"
+    );
+}

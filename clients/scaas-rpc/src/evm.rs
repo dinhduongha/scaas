@@ -5,7 +5,7 @@
 //! lane keys, sends and typed contract reads stay in the node.
 
 use crate::endpoint::{NodeList, Purpose};
-use crate::error::{EndpointFailure, FailureKind, RpcError};
+use crate::error::{endpoint_text, EndpointFailure, FailureKind, RpcError};
 use crate::http::{BoundedRpc, Http, ANSWER_MAX};
 /// The pinned-read types the SDK names with `EvmPool` (spec §13), the hash an EVM block hash.
 pub use crate::pool::{Agreed, BlockChoice, ReadAt};
@@ -69,12 +69,15 @@ pub fn classify(e: &TransportError) -> SimError {
 pub fn classify_with(e: &TransportError, decode: fn(&[u8]) -> String) -> SimError {
     match e.as_error_resp() {
         Some(resp) => match resp.as_revert_data() {
-            Some(data) => SimError::Revert(decode(&data)),
-            None if resp.message.contains("revert") => SimError::Revert(resp.message.to_string()),
-            None if resp.message.contains("execution") && !node_limit(&resp.message) => {
-                SimError::Revert(resp.message.to_string())
+            // T13 S4 (CLI-RPC-11): the endpoint's text, capped and cleaned, a decoded reason too
+            Some(data) => SimError::Revert(endpoint_text(&decode(&data))),
+            None if resp.message.contains("revert") => {
+                SimError::Revert(endpoint_text(&resp.message))
             }
-            None => SimError::Transport(resp.message.to_string()),
+            None if resp.message.contains("execution") && !node_limit(&resp.message) => {
+                SimError::Revert(endpoint_text(&resp.message))
+            }
+            None => SimError::Transport(endpoint_text(&resp.message)),
         },
         None => SimError::Transport(e.to_string()),
     }
@@ -1353,7 +1356,9 @@ impl EvmPool {
                         {
                             SendOutcome::Accepted
                         }
-                        Ok(Err(e)) => SendOutcome::Refused { reason: e.message },
+                        Ok(Err(e)) => SendOutcome::Refused {
+                            reason: endpoint_text(&e.message),
+                        },
                     },
                 )
             }

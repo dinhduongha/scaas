@@ -220,6 +220,73 @@ async fn revert_data_is_kept() {
     }
 }
 
+/// T13 S4 (CLI-RPC-11): a gateway's `intent_id` is endpoint text (cut to 256 bytes, control characters removed); its
+/// `revert_data` is kept only as hex of at most 4 KiB (else none). Controls: `queued_202_and_duplicate_200`,
+/// `revert_data_is_kept`.
+#[tokio::test]
+async fn a_gateways_intent_id_and_revert_data_are_bounded() {
+    let (q, _) = gateway(Arc::new(|_, _| {
+        (
+            202,
+            json!({"status": "queued", "intent_id": format!("i\u{1b}[2J{}", "z".repeat(1 << 16))}),
+        )
+    }))
+    .await;
+    match client(&[(&q, None)])
+        .submit_op_at(0, 1, &op())
+        .await
+        .unwrap()
+    {
+        NodeOutcome::Queued {
+            intent_id: Some(id),
+            ..
+        } => {
+            assert!(
+                id.len() <= 256 && id.starts_with("i[2Jzzz"),
+                "{} bytes",
+                id.len()
+            )
+        }
+        o => panic!("{o:?}"),
+    }
+    for bad in ["0xzz".to_string(), format!("0x{}", "ab".repeat(4097))] {
+        let (g, _) = gateway(Arc::new(move |_, _| {
+            (
+                400,
+                json!({"code": "SIM_REVERTED", "revert_data": bad.clone()}),
+            )
+        }))
+        .await;
+        match client(&[(&g, None)])
+            .submit_op_at(0, 1, &op())
+            .await
+            .unwrap()
+        {
+            NodeOutcome::Refused(RpcError::NodeRefused { revert_data, .. }) => {
+                assert_eq!(revert_data, None)
+            }
+            o => panic!("{o:?}"),
+        }
+    }
+    let (g, _) = gateway(Arc::new(|_, _| {
+        (
+            400,
+            json!({"code": "SIM_REVERTED", "revert_data": format!("0x{}", "ab".repeat(4096))}),
+        )
+    }))
+    .await;
+    match client(&[(&g, None)])
+        .submit_op_at(0, 1, &op())
+        .await
+        .unwrap()
+    {
+        NodeOutcome::Refused(RpcError::NodeRefused { revert_data, .. }) => {
+            assert_eq!(revert_data.map(|d| d.len()), Some(2 + 8192))
+        }
+        o => panic!("{o:?}"),
+    }
+}
+
 /// NODE-GW-02's HMAC: `X-Scaas-Timestamp`, a 16-byte base64url `X-Scaas-Nonce`, `X-Scaas-Signature = hex(HMAC-SHA256(secret, ts
 /// "." nonce "." METHOD " " path?query "\n" body))`, recomputed here; another body gives another signature.
 #[tokio::test]

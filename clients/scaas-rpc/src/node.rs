@@ -231,13 +231,17 @@ impl NodeClient {
     }
 }
 
+/// The longest `revert_data` kept from a gateway (T13 S4): a custom error with 127 words of arguments.
+const REVERT_DATA_MAX: usize = 4096;
+
 /// The node's answer by its contract (NODE-GW-06): 2xx `queued`; an error read by `code`, else the legacy `error` string, with
 /// `detail` and `revert_data`; `RPC_UNAVAILABLE` is unreachable.
 fn answer(i: usize, status: u16, v: Value) -> NodeOutcome {
     if (200..300).contains(&status) {
         return NodeOutcome::Queued {
             status,
-            intent_id: v["intent_id"].as_str().map(str::to_string),
+            // T13 S4: the gateway's text (CLI-RPC-11)
+            intent_id: v["intent_id"].as_str().map(crate::error::endpoint_text),
         };
     }
     let code = v["code"]
@@ -260,7 +264,14 @@ fn answer(i: usize, status: u16, v: Value) -> NodeOutcome {
         revert_data: v["revert_data"]
             .as_str()
             .map(str::to_string)
-            .filter(|d| d.starts_with("0x") && d.len() <= 2 * ANSWER_MAX),
+            // T13 S4: hex only, at most REVERT_DATA_MAX bytes, else none (never cut: cut data is another error)
+            .filter(|d| {
+                d.strip_prefix("0x").is_some_and(|h| {
+                    h.len() % 2 == 0
+                        && h.len() <= 2 * REVERT_DATA_MAX
+                        && h.bytes().all(|b| b.is_ascii_hexdigit())
+                })
+            }),
     })
 }
 

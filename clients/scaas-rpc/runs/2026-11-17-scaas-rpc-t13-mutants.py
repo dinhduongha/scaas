@@ -44,6 +44,19 @@ MUTANTS = [
     ("point 6 endpoint 0 skipped on admit", [(P, "    ) -> Result<(), EndpointFailure> {\n        self.identity_ok(probe, i, deadline).await\n",
                                                "    ) -> Result<(), EndpointFailure> {\n        if i == 0 {\n            return Ok(());\n        }\n        self.identity_ok(probe, i, deadline).await\n")],
      NT + "an_endpoint_0_of_another_chain_is_dropped"),
+    ("S4 a revert message kept whole", [(E, "            None if resp.message.contains(\"revert\") => {\n                SimError::Revert(endpoint_text(&resp.message))",
+                                         "            None if resp.message.contains(\"revert\") => {\n                SimError::Revert(resp.message.to_string())")],
+     T + "--test evm_fakes a_revert_text_is_capped_and_cleaned"),
+    ("S4 a decoded reason kept whole", [(E, "Some(data) => SimError::Revert(endpoint_text(&decode(&data))),",
+                                         "Some(data) => SimError::Revert(decode(&data)),")],
+     T + "--test evm_fakes a_revert_text_is_capped_and_cleaned"),
+    ("S4 intent_id kept whole", [(N, "intent_id: v[\"intent_id\"].as_str().map(crate::error::endpoint_text),",
+                                  "intent_id: v[\"intent_id\"].as_str().map(str::to_string),")],
+     T + "--test node a_gateways_intent_id_and_revert_data_are_bounded"),
+    ("S4 revert_data hex unchecked", [(N, "h.bytes().all(|b| b.is_ascii_hexdigit())", "true")],
+     T + "--test node a_gateways_intent_id_and_revert_data_are_bounded"),
+    ("S4 revert_data uncapped", [(N, "h.len() <= 2 * REVERT_DATA_MAX", "h.len() <= 2 * ANSWER_MAX")],
+     T + "--test node a_gateways_intent_id_and_revert_data_are_bounded"),
 ]
 
 if __name__ == "__main__":
