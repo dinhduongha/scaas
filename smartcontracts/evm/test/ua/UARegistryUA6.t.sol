@@ -213,7 +213,7 @@ contract UARegistryUA6Test is UARegistryBase {
         // a key without its R_REG registers unproven (UA8-D8: it claims nothing)
         uint256 snap = vm.snapshotState();
         UACall.register(r, 0x0131, pk, a, pop, "");
-        (,, bool proven) = r.pqzKeyOf(ua);
+        (,,, bool proven) = r.pqzKeyOf(ua);
         assertFalse(proven);
         assertEq(r.keyOwner(_h(key)), bytes32(0));
         vm.revertToState(snap);
@@ -349,7 +349,7 @@ contract UARegistryUA6Test is UARegistryBase {
         UACall.register(g2, UAKinds.MSIG, d, a, pop, rReg);
         assertEq(g2.kindOf(msUa), 0);
         assertEq(UACall.register(r, UAKinds.MSIG, d, a, pop, rReg), msUa);
-        (,, bool proven) = g2.pqzKeyOf(msUa); // gen 2 forwards gen 1's record
+        (,,, bool proven) = g2.pqzKeyOf(msUa); // gen 2 forwards gen 1's record
         assertTrue(proven);
         assertEq(g2.keyOwner(_h(key)), msUa);
     }
@@ -369,10 +369,10 @@ contract UARegistryUA6Test is UARegistryBase {
         bytes memory key = _pk(0x0142, 77);
         IUARegistry.UAAttrs memory a = _a(ua, 0x0131, key);
         UACall.register(n, 0x0131, pk, a, _pop(n, 0x0131, pk, a), _rReg(ua, 0x0131, key));
-        (, bytes32 ph, bool proven) = n.pqzKeyOf(ua);
+        (,, bytes32 ph, bool proven) = n.pqzKeyOf(ua);
         assertEq(ph, a.pqzPopHash);
         assertFalse(proven);
-        assertEq(n.pqzPopOf(ua), _rReg(ua, 0x0131, key));
+        assertEq(n.pqzPopOf(ua, 0), _rReg(ua, 0x0131, key));
         assertEq(n.keyOwner(_h(key)), bytes32(0));
         assertEq(n.uaCount(UAKinds.PQZ_MLWE), 0);
     }

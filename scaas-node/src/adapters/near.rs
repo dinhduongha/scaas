@@ -2305,7 +2305,7 @@ mod tests {
 
     const NV: &str = include_str!("../../../smartcontracts/near/vectors/near-vectors.json");
     const TXV: &str = include_str!("../../../smartcontracts/near/vectors/near-tx.json");
-    const PAYMETA: &str = include_str!("../../../smartcontracts/vectors/metatx/paymeta.json");
+    const PAYMETA: &str = include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json");
     const NET_B58: &str = "68XTWuVmYJkVmj4HM9zFwXdDiS4DE2KX7RbVBdRERiCk";
     const TOKEN: &str = "token.test.near";
     const ROUTER: &str = "relayfee.test.near";

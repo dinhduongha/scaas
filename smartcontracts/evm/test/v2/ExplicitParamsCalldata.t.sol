@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
 import {Test, console2} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
@@ -83,7 +84,7 @@ contract ExplicitParamsCalldataTest is Test {
         bytes vTo;
         bytes vFrom;
         bytes vAuditor; // empty: auditor off
-        bytes sealedMemo; // commit-reveal only: memo[16:] (41 B); the token prepends `salt`
+        bytes sealedMemo; // commit-reveal only: memo[16:] (2 + 40·1 B, op 7's encoding, CTR-PQZ-23); the token prepends `salt`
     }
 
     struct PqzLeg {
@@ -249,12 +250,12 @@ contract ExplicitParamsCalldataTest is Test {
             UAEnvelope memory x = _uaEnv();
             MetaTxLib.UAMetaTransaction memory u = MetaTxLib.UAMetaTransaction(x.from, data, 0, 0, x.validUntil, x.mode,
                 address(0), 7, address(0));
-            return abi.encodeCall(IUALedger.uaExecute, (u, abi.encode(bytes(""), _rnd(9, ML65_SIG))));
+            return abi.encodeCall(UAMetaTxBase.mtxExecute, (u, UACall.auth(u.from, abi.encode(bytes(""), _rnd(9, ML65_SIG)))));
         }
         Envelope memory y = _env();
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(y.from, data, 0, 0, y.validUntil, y.mode,
             address(0), 7, address(0));
-        return abi.encodeCall(IMetaTx.mtxExecute, (m, _rnd(8, ECDSA_SIG)));
+        return abi.encodeCall(IMetaTx.executeMetaTransaction, (m, _rnd(8, ECDSA_SIG)));
     }
 
     function _feeAuth() internal pure returns (UASig memory s) {
@@ -436,9 +437,9 @@ contract ExplicitParamsCalldataTest is Test {
                     _row(string.concat("op 1 BUNDLE", aud ? ", auditor" : ", no auditor"), ua, _today(ua, _op1Today(aud, pf, "")),
                         _op1Typed(ua, aud, pf, ""));
                     _reset(m0); }
-                bytes memory memo = bytes.concat(SALT, _rnd(0x3e30, 41));
+                bytes memory memo = bytes.concat(SALT, _rnd(0x3e30, 2 + 40 * 1));
                 { uint256 m0 = _fmp();
-                    _row(string.concat("op 1 commit-reveal (memo 57 B)", aud ? ", auditor" : ", no auditor"), ua,
+                    _row(string.concat("op 1 commit-reveal (memo 58 B)", aud ? ", auditor" : ", no auditor"), ua,
                         _today(ua, _op1Today(aud, pf, memo)), _op1Typed(ua, aud, pf, memo));
                     _reset(m0); }
             }
@@ -620,7 +621,7 @@ contract ExplicitParamsCalldataTest is Test {
     /// The explicit forms reassemble today's bytes exactly (Review Focus 5 at the ABI level; the contracts' own
     /// statement KATs come in C3 / C4): op 1, op 7 (M = 4, auditor) and burn payloads, Zether single / multi / burn.
     function test_x0_reassemblesPayload() public view {
-        bytes memory memo = bytes.concat(SALT, _rnd(0x3e30, 41));
+        bytes memory memo = bytes.concat(SALT, _rnd(0x3e30, 2 + 40 * 1));
         PqzTransferArgs memory a = _op1Args(true, memo);
         bytes memory pl = bytes.concat(abi.encode(uint256(a.p), a.validUntilBlock, a.shieldIn, a.fromUA, a.toUA,
             a.beneficiaryUA), a.salt, a.u, a.vTo, a.vFrom, a.vAuditor, a.salt, a.sealedMemo);

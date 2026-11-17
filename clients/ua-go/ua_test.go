@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -206,6 +207,36 @@ func TestNativesNativeSpaceCanonicalIDs(t *testing.T) {
 	}
 }
 
+// ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.
+func TestIDDisplayRows(t *testing.T) {
+	d := rows(load(t, "id_display.json"), "rows")
+	for _, r := range d {
+		got, err := IDDisplay(r["id"].(string), kind(r["kind"]))
+		if w, ok := r["display"].(obj); ok {
+			want, isAddr := w["address"]
+			if !isAddr {
+				want = w["urn"]
+			}
+			if err != nil || got != want {
+				t.Errorf("%v: got %q %v, want %v", r["name"], got, err, want)
+			}
+		} else if err == nil || code(err) != r["error"] {
+			t.Errorf("%v: got %q %v, want %v", r["name"], got, err, r["error"])
+		}
+	}
+	for _, k := range Kinds {
+		has := false
+		for _, r := range d {
+			w, _ := r["display"].(obj)
+			_, urn := w["urn"]
+			has = has || (kind(r["kind"]) == k.Number && ((k.Native && r["error"] == "UAKindNotDerived") || (!k.Native && urn)))
+		}
+		if !has {
+			t.Errorf("no row for %s", k.Name)
+		}
+	}
+}
+
 func TestMessages(t *testing.T) {
 	for _, r := range rows(load(t, "kinds.json"), "messages") {
 		p, _ := PurposeTagV(r["purpose"].(string), uint32(r["version"].(float64))) // each row carries its purpose `version` (A4-c1)
@@ -367,7 +398,15 @@ func hashStructJSON(types obj, name string, data obj) [32]byte {
 		case ft == "bytes32":
 			w = b32(v)
 		case ft == "uint8" || ft == "uint16" || ft == "uint64":
-			copy(w[:], word(uint64(v.(float64))))
+			if s, ok := v.(string); ok { // a uint64 above 32 bits is a decimal string (UAPqzKeyVersion.version)
+				n, err := strconv.ParseUint(s, 10, 64)
+				if err != nil {
+					panic(err)
+				}
+				copy(w[:], word(n))
+			} else {
+				copy(w[:], word(uint64(v.(float64))))
+			}
 		default:
 			panic("field type " + ft)
 		}
@@ -410,12 +449,16 @@ func TestPortableTyped(t *testing.T) {
 		t.Fatal("domain")
 	}
 	pinned := map[string]string{
-		"UAKemRecord":      "0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201",
-		"UAPortableRecord": "0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f",
-		"UARegistration":   "0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e",
-		"UAPqzKey":         "0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00",
-		"UAPqzKeyRecord":   "0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567",
-		"UAMembership":     "0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4",
+		"UAKemRecord":           "0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201",
+		"UAPortableRecord":      "0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f",
+		"UARegistration":        "0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e",
+		"UAPqzKey":              "0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00",
+		"UAPqzKeyRecord":        "0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567",
+		"UAPqzKeyVersion":       "0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158",
+		"UAPqzKeyVersionRecord": "0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5",
+		"UAMembership":          "0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4",
+		"UAMsigUpdate":          "0x4f444098cb5d1c5e604d10d13c9c803ac8429ef9938342ded6997343b9c48ac6",
+		"UAMsigMember":          "0x49ee2633d577df4283fdcf2546b6c8b72f1e3cddb2449cefdfc6eed31e26a05a",
 	}
 	types := ty["types"].(obj)
 	if len(types) != len(pinned) || len(PortableTypes) != len(pinned) {
@@ -571,6 +614,33 @@ func TestMembershipRows(t *testing.T) {
 	}
 }
 
+// CTR-UA-44: every updateMsig row: the typed digest, the message and memberDigest a derived member signs.
+func TestMsigUpdateRows(t *testing.T) {
+	p := load(t, "portable.json")
+	if len(rows(p, "msigUpdates")) != 4 {
+		t.Fatal("msigUpdates")
+	}
+	for _, r := range rows(p, "msigUpdates") {
+		var members []MsigMember
+		for _, m := range r["members"].([]any) {
+			o := m.(obj)
+			members = append(members, MsigMember{kind(o["kind"]), bs(o["id"]), uint16(o["weight"].(float64))})
+		}
+		e, err := strconv.ParseUint(r["enabled"].(string), 10, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ua := b32(r["ua"])
+		d := MsigUpdateDigest(ua, b32(r["chainUid"]), b20(r["registry"]), uint64(r["version"].(float64)), uint16(r["threshold"].(float64)),
+			members, w32(e), uint64(r["validUntilBlock"].(float64)))
+		m, err := UAMessage(0x0120, msigUpdatePurpose, d)
+		md := MemberDigest(ua, m)
+		if err != nil || hx(d[:]) != r["digest"] || hx(m[:]) != r["message"] || hx(md[:]) != r["memberDigest"] {
+			t.Fatalf("msig update %v", r["name"])
+		}
+	}
+}
+
 func TestKemRecord(t *testing.T) {
 	p := load(t, "portable.json")
 	for _, r := range rows(p, "kemRecords") {
@@ -583,13 +653,16 @@ func TestKemRecord(t *testing.T) {
 			t.Fatalf("kem %v", r["id"])
 		}
 		if kind(r["kind"]) == 0x0120 {
-			if md := MemberDigest(ua, m); hx(md[:]) != r["memberDigest"] {
-				t.Fatalf("kem member %v", r["id"])
-			}
+			t.Fatalf("kem %v: an msig holds no KEM key (CTR-UA-32)", r["id"])
 		}
 	}
-	if len(rows(p, "kemRecords")) == 0 {
+	if len(rows(p, "kemRecords")) != 12 {
 		t.Fatal("kem count")
+	}
+	// CTR-UA-32 (T66a): the single PQ kinds only; an msig has no KEM record message
+	mq := find(rows(p, "registrations"), "name", "msig-pq/n2048-kmax1024")
+	if _, err := KemRecordMessage(0x0120, b32(mq["ua"]), 1, bs(rows(p, "kemRecords")[0]["kemPk"])); err == nil || code(err) != "UAKemHolder" {
+		t.Fatalf("msig kem record message: %v", err)
 	}
 	u := bytes.Repeat([]byte{1}, 32)
 	var ua [32]byte
@@ -629,6 +702,78 @@ func TestKemRecord(t *testing.T) {
 	}
 	if c := ChainKeyHash(1<<40 + 7); hx(c[:]) != "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950" { // keccak256("evm:1099511627783")
 		t.Fatal("chain key hash")
+	}
+}
+
+// Group 3g: portable.json pqzKeyVersions by digest, message and args; the builder's refusals on pqzKeyVersionNegatives.
+func TestPqzKeyVersions(t *testing.T) {
+	p := load(t, "portable.json")
+	regs, zero, vers := rows(p, "registrations"), rows(p, "pqzKeyRecords"), rows(p, "pqzKeyVersions")
+	if len(vers) != 16 {
+		t.Fatal("rows")
+	}
+	storedOf := func(r obj, versions []uint64) (s []StoredPqzKey) {
+		base := strings.Split(r["name"].(string), "/")[0]
+		for _, v := range versions {
+			name := fmt.Sprintf("%s/%v", base, r["set"])
+			src := zero
+			if v > 0 {
+				name, src = fmt.Sprintf("%s/v%d/%v", base, v, r["set"]), vers
+			}
+			s = append(s, StoredPqzKey{v, b32(find(src, "name", name)["pqzKeyHash"])})
+		}
+		return
+	}
+	for _, r := range vers {
+		ua, h, ph, v, k := b32(r["ua"]), b32(r["pqzKeyHash"]), b32(r["pqzPopHash"]), uint64(r["version"].(float64)), kind(r["kind"])
+		kd := bs(find(regs, "ua", r["ua"])["keyData"])
+		want := []uint64{0}
+		if v == 2 {
+			want = []uint64{0, 1}
+		}
+		g, err := PqzKeyVersionRecordMessage(k, ua, kd, v, bs(r["pqzKey"]), nil, ph[:], storedOf(r, want), nil)
+		if err != nil {
+			t.Fatalf("%v: %v", r["name"], err)
+		}
+		if hx(g.PqzKeyHash[:]) != r["pqzKeyHash"] || hx(g.VersionDigest[:]) != r["versionDigest"] || hx(g.RecordDigest[:]) != r["recordDigest"] ||
+			hx(g.Message[:]) != r["message"] || hx(g.PqzRegMessage[:]) != r["pqzRegMessage"] || hxp(g.MemberDigest) != opt(r, "memberDigest") ||
+			g.VersionDigest != PqzKeyVersionDigest(ua, v, h) || g.RecordDigest != PqzKeyVersionRecordDigest(ua, v, h, ph) ||
+			hashTypedData(r["typedData"].(obj)) != r["recordDigest"] {
+			t.Fatalf("%v", r["name"])
+		}
+		sameJSON(t, r["name"].(string), NewSetPqzKeyVersionArgs(ua, v, bs(r["pqzKey"]), ph, recordSig(r)), r["args"])
+	}
+	negs, n := rows(p, "pqzKeyVersionNegatives"), 0
+	if len(negs) != 28 {
+		t.Fatal("negatives")
+	}
+	for _, x := range negs {
+		if x["error"] == "UAUnauthorized" {
+			continue // a signature's verdict, not the builder's
+		}
+		m := x["mutation"].(obj)
+		r := find(vers, "name", m["row"])
+		var versions []uint64
+		for _, v := range m["stored"].([]any) {
+			versions = append(versions, uint64(v.(float64)))
+		}
+		key := bs(r["pqzKey"])
+		if o, ok := m["set"].(obj)["pqzKey"]; ok {
+			key = bs(o)
+		}
+		_, err := PqzKeyVersionRecordMessage(kind(r["kind"]), b32(r["ua"]), bs(find(regs, "ua", r["ua"])["keyData"]), uint64(r["version"].(float64)), key, nil,
+			bs(r["pqzPopHash"]), storedOf(r, versions), nil)
+		if code(err) != x["error"] {
+			t.Fatalf("%v: %v", x["name"], err)
+		}
+		n++
+	}
+	if n != 16 {
+		t.Fatalf("builder rows %d", n)
+	}
+	r := vers[0]
+	if _, err := PqzKeyVersionRecordMessage(kind(r["kind"]), b32(r["ua"]), bs(find(regs, "ua", r["ua"])["keyData"]), 0, bs(r["pqzKey"]), nil, bs(r["pqzPopHash"]), nil, nil); code(err) != "UAPqzKeySet" {
+		t.Fatal("version 0")
 	}
 }
 
@@ -778,14 +923,30 @@ func TestHolderRefusals(t *testing.T) {
 				t.Fatalf("%v", name)
 			}
 			run++
+		case entry == "setKemKey" && want == "UAKemHolder":
+			// msig-kem-record (CTR-UA-32): a well-formed record of an msig is refused by its kind, before any signature
+			k := find(rows(p, "kemRecords"), "id", m["row"])
+			target := find(regs, "ua", set["ua"])
+			if kind(target["kind"]) != kind(m["kind"]) {
+				t.Fatalf("%v: kind", name)
+			}
+			if _, err := KemRecordMessage(kind(target["kind"]), b32(set["ua"]), u64(k["version"]), bs(set["kemPk"])); err == nil || code(err) != want {
+				t.Fatalf("%v: want %v got %v", name, want, err)
+			}
+			run++
 		default:
 			sigLevel++ // signatures / native personal_sign / another record's pop: verified by the signature vectors
 		}
 	}
-	if run != 57 || sigLevel != len(rows(p, "negatives"))-58 { // 58: 57 + the skipped msig-minimal row
+	if run != 58 || sigLevel != len(rows(p, "negatives"))-59 { // 59: 58 + the skipped msig-minimal row
 		t.Fatalf("negatives %d digest-layer, %d signature-level", run, sigLevel)
 	}
 	u, key, proof := b32(hx(bytes.Repeat([]byte{1}, 32))), make([]byte, 16384), bytes.Repeat([]byte{7}, 32)
+	mq := find(regs, "name", "msig-pq/n2048-kmax1024")
+	no := false
+	if _, _, err := RegistrationArgs(RegistrationInput{Kind: 0x0120, KeyData: bs(mq["keyData"]), KemPk: kemKey(1601, 1), KemCommit: &no}); err == nil || code(err) != "UAKemHolder" {
+		t.Fatalf("msig registration args with a KEM key: %v", err)
+	}
 	// malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
 	for _, kd := range [][]byte{{0, 2, 0}, {0, 2, 0, 2, 9, 9}} {
 		if _, err := HolderPopMessage(0x0120, u, kd, key, nil, proof, nil); code(err) != "UAKeyData" {
@@ -805,8 +966,10 @@ func TestHolderRefusals(t *testing.T) {
 		{0x0130, nil, nil, nil, nil, kemKey(1600, 1), "UAKemKeyLength"},
 		{0x0130, nil, nil, nil, nil, kemKey(1601, 0), "UAKemScheme"},
 		{0x0101, nil, nil, nil, nil, kemKey(1601, 1), "UAKemHolder"},
+		// CTR-UA-32: a PQ-eligible msig holds a PQZ key but no KEM key
+		{0x0120, bs(mq["keyData"]), nil, nil, nil, kemKey(1601, 1), "UAKemHolder"},
 	} {
-		if _, err := HolderPopMessage(c.kind, u, c.kd, c.key, c.pop, c.hash, c.kemPk); code(err) != c.code {
+		if _, err := HolderPopMessage(c.kind, u, c.kd, c.key, c.pop, c.hash, c.kemPk); err == nil || code(err) != c.code {
 			t.Fatalf("refusal %+v: %v", c, err)
 		}
 	}
@@ -907,7 +1070,7 @@ func TestRegistrationArgsTyped(t *testing.T) {
 		sameJSON(t, name, fill, c["fill"])
 		commits++
 	}
-	if commits != 11 { // + mldsa87, fndsa1024
+	if commits != 7 { // + mldsa87, fndsa1024; msig-pq/<set> without a KEM key (CTR-UA-32)
 		t.Fatal(commits)
 	}
 	for _, k := range rows(p, "kemRecords") {
@@ -1188,8 +1351,15 @@ func TestNestedRegistrations(t *testing.T) {
 func TestNestedRecords(t *testing.T) {
 	n := load(t, "nested.json")
 	kem, pqz := rows(n, "kemRecords"), rows(n, "pqzKeyRecords")
-	if len(kem) != 1 || len(pqz) != 4 {
+	if len(kem) != 0 || len(pqz) != 4 { // CTR-UA-32 (T66a): an msig holds no KEM key, so no KEM record
 		t.Fatal(len(kem), len(pqz))
+	}
+	pq := find(rows(n, "registrations"), "name", "msig-nested-pq")
+	if _, err := KemRecordMessage(0x0120, b32(pq["ua"]), 1, kemKey(1601, 1)); err == nil || code(err) != "UAKemHolder" {
+		t.Fatalf("nested msig kem record message: %v", err)
+	}
+	if _, err := HolderPopMessageWith(0x0120, b32(pq["ua"]), bs(pq["keyData"]), nil, nil, nil, kemKey(1601, 1), nestedKeys(n)); err == nil || code(err) != "UAKemHolder" {
+		t.Fatalf("nested msig holder pop with a KEM key: %v", err)
 	}
 	for _, r := range kem {
 		name, k, ua, v, pk := r["id"].(string), kind(r["kind"]), b32(r["ua"]), u64(r["version"]), bs(r["kemPk"])

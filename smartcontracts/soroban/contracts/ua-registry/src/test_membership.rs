@@ -241,8 +241,9 @@ fn pq_one_of_two(env: &Env, c: &UaRegistryClient) -> (Msig, Sk, Sk) {
     (m, p, q)
 }
 
-/// `set_kem_key` and `set_pqz_key` go through the accepted bits too: the `pop`'s signer writes, the same record by a good signature of
-/// the slot that only is listed is refused, and passes after it accepts. The `pop` itself is exempt.
+/// `set_pqz_key` goes through the accepted bits too: the same record by a good signature of the slot that only is listed is refused,
+/// and passes after it accepts. The `pop` itself is exempt. `set_kem_key` is `KemHolder` before any slot, accepted or not: an `msig`
+/// has no KEM key (CTR-UA-32).
 #[test]
 fn records_count_accepted_slots_only() {
     let (env, c) = test::setup();
@@ -257,17 +258,18 @@ fn records_count_accepted_slots_only() {
         let d = kem_record_digest(&env, &m.ua, v, &kem_pk_).to_bytes();
         test::msig_auth(&env, &[m.slot(&env, s, PURPOSE_KEM, &d)])
     };
-    assert_eq!(err(c.try_set_kem_key(&m.ua, &1, &kem, &kem_sig(1, &q), &None)), Error::Unauthorized);
-    c.set_kem_key(&m.ua, &1, &kem, &kem_sig(1, &p), &None);
+    for s in [&q, &p] {
+        assert_eq!(err(c.try_set_kem_key(&m.ua, &1, &kem, &kem_sig(1, s), &None)), Error::KemHolder);
+    }
     let (key, ph) = (b(&env, &[7; 16_384]), n(&env, [9; 32]));
     let d = pqz_key_record_digest(&env, &m.ua, &pqz_key_hash(&env, &key), &ph).to_bytes();
     let by_q = test::msig_auth(&env, &[m.slot(&env, &q, PURPOSE_PQZ_KEY, &d)]);
     assert_eq!(err(c.try_set_pqz_key(&m.ua, &key, &ph, &by_q, &None)), Error::Unauthorized);
     assert_eq!(c.pqz_key_of(&m.ua), None);
     m.accepted_by(&env, &c, &[&q]);
-    c.set_kem_key(&m.ua, &2, &kem, &kem_sig(2, &q), &None);
+    assert_eq!(err(c.try_set_kem_key(&m.ua, &2, &kem, &kem_sig(2, &q), &None)), Error::KemHolder);
     c.set_pqz_key(&m.ua, &key, &ph, &by_q, &None);
-    assert_eq!(c.kem_key_of(&m.ua).unwrap().0, 2);
+    assert_eq!(c.kem_key_of(&m.ua), None);
     assert!(c.pqz_key_of(&m.ua).is_some());
 }
 
@@ -284,10 +286,10 @@ fn a_relayer_checked_slot() {
     let rd = test::reg_digest(&env, &m.ua, 0x0120);
     m.register(&env, &c, &test::member_sigs(&env, &[m.slot(&env, &q, PURPOSE_POP_V2, &rd)]));
     let fi = m.index(&f.ua.to_array());
-    let kem = crate::test_ua8::kem_row_key(&env);
+    let (key, ph) = (b(&env, &[7; 16_384]), n(&env, [9; 32]));
     let attested = test::msig_auth(&env, &[(fi, vec![], vec![0xf5; 666])]);
-    assert_eq!(err(c.try_set_kem_key(&m.ua, &1, &kem, &attested, &by)), Error::Unauthorized, "the bit is asked before the relayer");
-    assert_eq!(err(c.try_set_kem_key(&m.ua, &1, &kem, &attested, &None)), Error::Unauthorized);
+    assert_eq!(err(c.try_set_pqz_key(&m.ua, &key, &ph, &attested, &by)), Error::Unauthorized, "the bit is asked before the relayer");
+    assert_eq!(err(c.try_set_pqz_key(&m.ua, &key, &ph, &attested, &None)), Error::Unauthorized);
     let slot = MemberSig { index: fi, key_data: Bytes::new(&env), sig: b(&env, &[0xf5; 666]) };
     assert_eq!(err(c.try_accept_membership(&m.ua, &slot, &None)), Error::NotVerifiable);
     assert_eq!(err(c.try_accept_membership(&m.ua, &slot, &Some(Address::generate(&env)))), Error::RelayerNotListed);
@@ -300,8 +302,8 @@ fn a_relayer_checked_slot() {
     assert_eq!(c.membership_sig_of(&m.ua, &m.index(&q.ua(&env).to_array())), Bytes::new(&env), "a `pop` slot: `pop_of` holds it");
     env.as_contract(&c.address, || env.storage().persistent().remove(&Key::AcceptSig(m.ua.clone(), fi)));
     assert_eq!(c.membership_sig_of(&m.ua, &fi), Bytes::new(&env));
-    c.set_kem_key(&m.ua, &1, &kem, &attested, &by); // no verify reads the entry
-    assert_eq!(c.kem_key_of(&m.ua).unwrap().3, Checked::Relayer(by.clone().unwrap()));
+    c.set_pqz_key(&m.ua, &key, &ph, &attested, &by); // no verify reads the entry
+    assert_eq!(c.pqz_key_of(&m.ua).unwrap().3, Checked::Relayer(by.clone().unwrap()));
     let pm = n(&env, PURPOSE_METATX);
     assert_eq!(err(c.try_require_authorized(&m.ua, &pm, &n(&env, [1; 32]), &attested)), Error::Unauthorized, "an attestation is never a signature");
 }
@@ -603,4 +605,66 @@ fn a_high_s_evm_eoa_slot_is_refused() {
 fn rows_cover_chain_and_relayer_kinds() {
     let kinds: StdVec<u32> = rows().iter().map(|r| kind_of(&r["memberKind"])).collect();
     assert_eq!(kinds, [0x0001, 0x0107, 0x0104, 0x0101, 0x0001, 0x0131]);
+}
+
+/// CTR-UA-33 Change 2026-11-08 (EVM `popSlotsOf`): every `msig` row of `portable.json` answers its `popSigners`, each with its
+/// `memberSigHashes` hash, `keccak256` of the slot's `sig`; `msig-classical`'s empty `pop` answers empty. (The Soroban suite
+/// registers no `nested.json` row.)
+#[test]
+fn pop_slots_of_rows() {
+    let rows: StdVec<Value> = json(PORTABLE)["registrations"].as_array().unwrap().iter().filter(|r| kind_of(&r["kind"]) == 0x0120).cloned().collect();
+    let mut signers = 0;
+    for row in &rows {
+        let name = row["name"].as_str().unwrap();
+        let (env, c, by) = relayed();
+        classical_members(&env, &c, &by);
+        portable(&env, "mldsa65#1").on(&c);
+        portable(&env, "mldsa65#2").on(&c);
+        let r = portable(&env, name);
+        r.on(&c);
+        let hashes = row["memberSigHashes"].as_array().unwrap();
+        let index: StdVec<u32> = row["popSigners"].as_array().unwrap().iter().map(|x| x.as_u64().unwrap() as u32).collect();
+        assert_eq!(hashes.iter().map(|h| h["index"].as_u64().unwrap() as u32).collect::<StdVec<_>>(), index, "{name}");
+        let hash: StdVec<BytesN<32>> = hashes.iter().map(|h| n32(&env, &h["hash"])).collect();
+        let (i, h) = c.pop_slots_of(&r.ua);
+        assert_eq!((i.iter().collect::<StdVec<_>>(), h.iter().collect::<StdVec<_>>()), (index, hash), "{name}");
+        signers += i.len();
+    }
+    assert_eq!((rows.len(), signers), (6, 10), "msig-classical none, msig-pq/<set> and msig-pq-native two each");
+}
+
+/// `PopSlots` is written once, at registration, and never by `accept_membership`: `msig-classical`'s empty `pop` answers empty after
+/// a slot accepts on the chain's check and one on a relayer's word, while `member_accepted` turns true; a 1-of-2 whose `pop` `p`
+/// signed answers `p` alone, its hash that of the stored `pop`'s slot, before and after `q` accepts. A single key's id and an
+/// unregistered one answer empty.
+#[test]
+fn pop_slots_of_never_from_acceptance() {
+    let (env, c, by) = relayed();
+    let none: (SVec<u32>, SVec<BytesN<32>>) = (SVec::new(&env), SVec::new(&env));
+    classical_members(&env, &c, &by);
+    let classical = portable(&env, "msig-classical");
+    classical.on(&c);
+    assert_eq!(c.pop_slots_of(&classical.ua), none);
+    for (name, relayer) in [("msig-classical/0", &None), ("msig-classical/1", &by)] {
+        let r = row(name);
+        let i = r["index"].as_u64().unwrap() as u32;
+        assert!(!c.member_accepted(&classical.ua, &i), "{name}");
+        c.accept_membership(&classical.ua, &slot_of(&env, &r), relayer);
+        assert!(c.member_accepted(&classical.ua, &i), "{name}");
+        assert_eq!(c.pop_slots_of(&classical.ua), none, "{name}: an acceptance is no `pop` slot");
+    }
+    let (m, p, q) = pq_one_of_two(&env, &c);
+    let slots = test::members_of(&env, &c.pop_of(&m.ua));
+    let s = slots.get(0).unwrap();
+    assert_eq!((slots.len(), s.index), (1, m.index(&p.ua(&env).to_array())));
+    let want = (SVec::from_array(&env, [s.index]), SVec::from_array(&env, [BytesN::from(env.crypto().keccak256(&s.sig))]));
+    assert_eq!(c.pop_slots_of(&m.ua), want);
+    let iq = m.index(&q.ua(&env).to_array());
+    m.accepted_by(&env, &c, &[&q]);
+    assert!(c.member_accepted(&m.ua, &iq));
+    assert_eq!(c.pop_slots_of(&m.ua), want, "`q` accepted later: no `pop` slot");
+    let single = portable(&env, "mldsa65#1");
+    single.on(&c);
+    assert_eq!(c.pop_slots_of(&single.ua), none, "a single key");
+    assert_eq!(c.pop_slots_of(&n(&env, [0x42; 32])), none, "no record");
 }

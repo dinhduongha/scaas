@@ -1,0 +1,18 @@
+# ua-mtx-merge T64 gate summary (group 3h, PQZ proof path spec §11.2, §11.3; full output in git-ignored .log files). UNAUDITED.
+# The known red of 3h: test_gas_rollMax_relayedFullTx (MtxSplitOverheadTest, PqzStatePinGasTest; ROLL_MAX kept at 96 / 80 / 64 / 32,
+# the move is the owner's, decided later). Nothing else red.
+step | commit | rc | counts
+invariants n2048-kmax1024 | a6040f9a + T64 | 0 | at-set.sh, PqzSet.sol restored: invariant_proofPath (runs 24, calls 768, reverts 0), test_handler_reachesEveryPath, test_P7_zetherPinsUnchanged pass; last run: landed 12, LOG 0, rollovers 6
+invariants n2304-kmax4096 | a6040f9a + T64 | 0 | same 3 pass; last run: landed 8, LOG 0, rollovers 11
+invariants n2560-kmax16384 | a6040f9a + T64 | 0 | same 3 pass; last run: landed 7, LOG 0, rollovers 10
+invariants n2816-kmax65536 | a6040f9a + T64 | 0 | same 3 pass; last run: landed 10, LOG 0, rollovers 7
+test/pqz n2304-kmax4096 | a6040f9a + T64 | 1 | forge-dirs.sh: 595 passed, 2 failed (test_gas_rollMax_relayedFullTx, the known red, in MtxSplitOverheadTest and PqzStatePinGasTest), 4 skipped (601)
+
+The positive control reaches every path (6 debits landed, 2 under LOG, an un-roll, a migration, cleared moved by 17 rolled entries,
+disableFeature(24) freezing NONE); the fuzz runs reach LOG too (M10 and M11 go red in invariant_proofPath alone); the printed counters
+are one run's.
+
+Mutants (runs/2026-11-09-ua-mtx-merge-proofpath/, plan T64; one at a time on a clean second work tree at the commit, restored): 20 run,
+17 killed by the invariant suite. M13 (bit 24 on a Zether token) and M14 (the bit-24 delay relaxed) are outside this suite's
+reach (no Zether token, no delay path) and are killed by test/governance/GovProofBit.t.sol alone (T61); M16 (_trivial's bound lo =
+rolled) is equivalent on the built code (cleared <= floor <= rolled, P1 asserts the order). Table: summary.txt there.

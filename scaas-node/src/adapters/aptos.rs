@@ -1338,7 +1338,7 @@ mod tests {
     /// those of `relay_pay` (whose payload the TS SDK pins, `tx_matches_the_ts_sdk`).
     #[test]
     fn aptos_pay_meta_payload_bytes() {
-        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
+        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap();
         let h = |v: &Value| alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap();
         assert_eq!(rows.len(), 6);
         for r in &rows {

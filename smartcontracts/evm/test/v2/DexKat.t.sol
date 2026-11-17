@@ -14,10 +14,12 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// KAT of the DEX side (CTR-DEX-16, -18, -02) on a real `SCaaSDex` clone on chain 7622 with its real `chain_uid`:
 /// `dex_order_kat.json` holds an outside-token maker order as a `DexOrder` in the DEX domain "SCaaS Dex", a SCaaS taker
-/// order in its token's domain, the `mtxSettle` calldata of one settlement between them, and the DEX-side
+/// order in its token's domain (ua-mtx-merge T6, R12: a `UATradeOrder`, shape 1, the signer's address zero-padded and its
+/// signature in `auth`; `taker_order_abi` is its 13 words, the same bytes as the address-shaped order), the `mtxSettle` calldata of one settlement between them, and the DEX-side
 /// `mtxCancelOrders` / `mtxInvalidateNonces` digests and calldata. Every calldata is executed here, so the node
 /// (`dex.rs`) and clientkeys encode what the contracts accept, byte for byte.
 /// `WRITE_KAT=true forge test --match-contract DexKatTest` rewrites the file.
@@ -44,13 +46,18 @@ contract DexKatTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        OpenFactory f = new OpenFactory(address(this), UID_, 0);
+        OpenFactory f = EnvKit.factory(address(this), UID_, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
+        // the DEX's two modules (governance, liquidity) are CREATEd by this contract: skip the nonce whose address is the
+        // vectors' outside token below (the liquidity module would land there and be overwritten by the token's code)
+        vm.setNonce(address(this), vm.getNonce(address(this)) + 2);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 6, 1e9, alice, address(0))), "a"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 500_000, TREASURY, false, 0, address(0))), "dex"));
-        usdc = new MockERC20("USD Coin", "USDC", 6);
-        dex.setMarket(address(a), address(usdc), true);
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 500_000, TREASURY, false, 0, address(0), 0, 0)), "dex"));
+        // the outside token at its vector address (T66b: the body modules this setUp deploys move the test's nonces)
+        usdc = MockERC20(vm.parseJsonAddress(vm.readFile(OUT), ".outside_token"));
+        deployCodeTo("Mocks.sol:MockERC20", abi.encode("USD Coin", "USDC", uint8(6)), address(usdc));
+        dex.setMarket(address(a), address(usdc), true, EnvKit.codeUidOf(address(dex)));
         usdc.mint(dave, 1e9);
         address p = dex.puller();
         vm.prank(dave);
@@ -93,7 +100,7 @@ contract DexKatTest is Test {
     {
         DexLegs.Settlement[] memory ss = new DexLegs.Settlement[](1);
         ss[0].ref = keccak256("scaas.kat.settlement");
-        ss[0].taker = DexLegs.Leg(address(a), t, _sign(ALICE_PK, a.tradeOrderDigest(t)), 500e6);
+        ss[0].taker = DexLegs.Leg(address(a), t, _sign(ALICE_PK, a.tradeOrderDigest(DexLegs.ua(t))), 500e6);
         ss[0].makers = new DexLegs.Leg[](1);
         ss[0].makers[0] = DexLegs.Leg(address(usdc), m, _sign(DAVE_PK, hm), 1000e6);
         bytes memory settleData = abi.encodeCall(ISCaaSDex.mtxSettle, (DexLegs.wire(ss)));
@@ -133,14 +140,15 @@ contract DexKatTest is Test {
         vm.serializeString(k, "invalidate_calldata", vm.toString(invData));
     }
 
-    /// The fixed exchange plan: the two settlement orders as tagged `ExchangeLeg`s (shape 0), one extra token.
+    /// The fixed exchange plan: the two settlement orders as tagged `ExchangeLeg`s (the outside maker shape 0, the SCaaS
+    /// taker shape 1), one extra token.
     function _plan(ITradeToken.TradeOrder memory m, ITradeToken.TradeOrder memory t, bytes32 hm)
         internal view returns (ISCaaSDex.ExchangePlan memory p)
     {
         p.ref = keccak256("scaas.kat.exchange");
         p.legs = new ISCaaSDex.ExchangeLeg[](2);
         p.legs[0] = DexLegs.xLeg(address(usdc), m, _sign(DAVE_PK, hm), 1000e6, 500e6);
-        p.legs[1] = DexLegs.xLeg(address(a), t, _sign(ALICE_PK, a.tradeOrderDigest(t)), 500e6, 1000e6);
+        p.legs[1] = DexLegs.xLeg(address(a), t, _sign(ALICE_PK, a.tradeOrderDigest(DexLegs.ua(t))), 500e6, 1000e6);
         p.extraTokens = new address[](1);
         p.extraTokens[0] = address(0xE7A);
     }
@@ -151,7 +159,7 @@ contract DexKatTest is Test {
     }
 
     /// `mtxExchange` / `mtxExchangeVia` / `mtxExchangeBatch` calldata for one fixed plan (review C6-2): the two
-    /// settlement orders as tagged `ExchangeLeg`s (shape 0), one extra token, one interaction. ENCODING ONLY (not
+    /// settlement orders as tagged `ExchangeLeg`s (shape 0 and 1, as `_plan`), one extra token, one interaction. ENCODING ONLY (not
     /// executed here: the exchange paths run in the exchange tests); the node pins its call table and its ABI structs
     /// against these bytes.
     function _exchange(string memory k, ITradeToken.TradeOrder memory m, ITradeToken.TradeOrder memory t, bytes32 hm)
@@ -168,14 +176,14 @@ contract DexKatTest is Test {
         vm.serializeString(k, "exchange_batch_calldata", vm.toString(abi.encodeCall(ISCaaSDex.mtxExchangeBatch, (ps, xss))));
     }
 
-    /// `mtxHybrid` / `mtxHybridVia` calldata for one fixed plan: Alice's order as the taker (shape 0), Dave's as the
+    /// `mtxHybrid` / `mtxHybridVia` calldata for one fixed plan: Alice's order as the taker (shape 1), Dave's as the
     /// one maker, 100 of the taker's sell routed outside for at least 200, one extra token. ENCODING ONLY, as `_exchange`.
     function _hybrid(string memory k, ITradeToken.TradeOrder memory m, ITradeToken.TradeOrder memory t, bytes32 hm)
         internal
     {
         ISCaaSDex.HybridPlan memory p;
         p.ref = keccak256("scaas.kat.hybrid");
-        p.taker = DexLegs.leg(address(a), t, _sign(ALICE_PK, a.tradeOrderDigest(t)), 500e6);
+        p.taker = DexLegs.leg(address(a), t, _sign(ALICE_PK, a.tradeOrderDigest(DexLegs.ua(t))), 500e6);
         p.makers = new ISCaaSDex.DexLeg[](1);
         p.makers[0] = DexLegs.leg(address(usdc), m, _sign(DAVE_PK, hm), 1000e6);
         p.outsideSell = 100e6;
@@ -268,7 +276,7 @@ contract DexKatTest is Test {
         vm.serializeString(k, "dex_order_struct_hash", vm.toString(dexOrderStruct));
         vm.serializeString(k, "dex_order_hash", vm.toString(hm));
         vm.serializeString(k, "taker_order_abi", vm.toString(abi.encode(t)));
-        vm.serializeString(k, "taker_order_hash", vm.toString(a.tradeOrderDigest(t)));
+        vm.serializeString(k, "taker_order_hash", vm.toString(a.tradeOrderDigest(DexLegs.ua(t))));
         _settle(k, m, t, hm);
         _cancels(k, m, hm, domainSep);
         _exchange(k, m, t, hm);

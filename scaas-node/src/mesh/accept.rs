@@ -234,39 +234,78 @@ mod tests {
         assert_eq!(lookup(&rows, "evm:2", "0xt", "0xaa"), None);
     }
 
-    // --- một envelope EVM thật (ký bằng khoá secp256k1 + khoá hub) cho các mã không có trong vector §4.6.
-    use crate::metatx::{Domain, Mtx};
+    // --- real EVM envelopes (a secp256k1 subject key and the hub key) for the codes and bodies the §4.6 vectors do not pin.
+    use crate::metatx::{Domain, Mtx, UaMtx};
     use crate::signer::{Curve, LocalSigner, Signer};
+    use alloy::primitives::{Address, B256};
     use ed25519_dalek::SigningKey;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use sha2::{Digest, Sha256};
 
     const TOKEN: &str = "0x00000000000000000000000000000000000070c0";
+    const WALLET: &str = "0x000000000000000000000000000000000000a11e";
+    const ACCOUNT: &str = "0x00000000000000000000000000000000000acc07";
     const NOW: u64 = 1_800_000_000;
-    const UID: alloy::primitives::B256 = alloy::primitives::B256::repeat_byte(0x24);
+    const UID: B256 = B256::repeat_byte(0x24);
 
-    fn envelope(mode: u32, fee_recipient: &str, exclusive: Option<([u8; 32], u64)>) -> Vec<u8> {
-        let user = LocalSigner::new(Curve::Secp256k1, &[9; 32]).unwrap();
-        let z = format!("{:#x}", alloy::primitives::Address::ZERO);
-        let m = json!({"from": user.address_hex(), "to": z, "value": "1", "entryRef": format!("{:#x}", alloy::primitives::B256::ZERO),
-            "batch": "1", "nonce": "0", "validUntil": (NOW + 300).to_string(), "mode": mode, "relayer": z, "fee": "7",
-            "feeRecipient": fee_recipient});
-        let d = Domain { name: "T".into(), version: "1".into(), chain_id: 1, verifying_contract: TOKEN.parse().unwrap(), salt: UID };
-        let id = Mtx::from_wire(Some("transfer"), &m).unwrap().digest(&d).0;
-        let body = json!({"domain": {"name": "T", "version": "1"}, "struct": "transfer", "meta_tx": m,
-            "signature": format!("0x{}", alloy::hex::encode(user.sign(&id).unwrap())), "sig_kind": "eoa"});
+    fn user() -> LocalSigner {
+        LocalSigner::new(Curve::Secp256k1, &[9; 32]).unwrap()
+    }
+
+    fn zero() -> String {
+        format!("{:#x}", Address::ZERO)
+    }
+
+    /// A native id: the address zero-padded (accounts.md §1.3).
+    fn pad(a: &str) -> String {
+        format!("0x{}{}", "00".repeat(12), &a[2..])
+    }
+
+    fn domain(name: &str, contract: &str) -> Domain {
+        Domain { name: name.into(), version: "1".into(), chain_id: 1, verifying_contract: contract.parse().unwrap(), salt: UID }
+    }
+
+    /// A wire `UAMetaTransfer` of `user()` (a plain transfer to a native id), `relayer` unbound and zero.
+    fn ua_transfer(mode: u32, fee_recipient: &str) -> Value {
+        json!({"from": pad(&user().address_hex()), "to": pad(TOKEN), "value": "1", "entryRef": format!("{:#x}", B256::ZERO),
+            "batch": "1", "nonce": "0", "validUntil": (NOW + 300).to_string(), "mode": mode, "relayer": zero(), "fee": "7",
+            "feeRecipient": fee_recipient})
+    }
+
+    /// The `evm` body on the UA structs (R45): `ua_meta_tx` and `auth`, a native signer's `UASig` (its signature only, R17)
+    /// over the UA digest; returns the body and that digest.
+    fn ua_body(kind: &str, m: &Value, name: &str, contract: &str) -> (Value, [u8; 32]) {
+        let id = UaMtx::from_wire(Some(kind), m).unwrap().digest(&domain(name, contract)).0;
+        let auth = json!({"keyData": "0x", "signature": format!("0x{}", alloy::hex::encode(user().sign(&id).unwrap())), "members": []});
+        (json!({"domain": {"name": name, "version": "1"}, "struct": kind, "ua_meta_tx": m, "auth": auth, "sig_kind": "eoa"}), id)
+    }
+
+    /// The address body (`meta_tx`, `signature`), signed over the address digest.
+    fn address_body(kind: &str, m: &Value, name: &str, contract: &str) -> (Value, [u8; 32]) {
+        let id = Mtx::from_wire(Some(kind), m).unwrap().digest(&domain(name, contract)).0;
+        let sig = format!("0x{}", alloy::hex::encode(user().sign(&id).unwrap()));
+        (json!({"domain": {"name": name, "version": "1"}, "struct": kind, "meta_tx": m, "signature": sig, "sig_kind": "eoa"}), id)
+    }
+
+    /// The envelope around `body`, sealed by the hub key.
+    fn seal(spec: &str, contract: &str, (body, id): (Value, [u8; 32]), exclusive: Option<([u8; 32], u64)>) -> Vec<u8> {
         let key = SigningKey::from_bytes(&[1; 32]);
         let hub = hubsig::peer_id(&key.verifying_key().to_bytes());
         let bh: [u8; 32] = Sha256::digest(envelope::canonical_body(&body).unwrap()).into();
         let msg = hubsig::hub_msg("evm:1", &id, &bh, &hub, NOW, false, exclusive.as_ref().map(|(r, u)| (r, *u))).unwrap();
-        let mut v = json!({"spec": envelope::SPEC, "intent_id": format!("0x{}", alloy::hex::encode(id)), "chain_key": "evm:1", "family": "evm",
-            "contract": TOKEN, "visibility": "open", "evm": body, "hop_count": 0,
+        let mut v = json!({"spec": spec, "intent_id": format!("0x{}", alloy::hex::encode(id)), "chain_key": "evm:1", "family": "evm",
+            "contract": contract, "visibility": "open", "evm": body, "hop_count": 0,
             "hub": {"id": alloy::hex::encode(hub), "pubkey": alloy::hex::encode(key.verifying_key().to_bytes()), "published_at": NOW,
                     "sig": alloy::hex::encode(hubsig::sign(&key, &msg))}});
         if let Some((r, u)) = exclusive {
             v["exclusive"] = json!({"relayer_id": alloy::hex::encode(r), "until": u});
         }
         serde_json::to_vec(&v).unwrap()
+    }
+
+    /// A token intent: a `UAMetaTransfer` of `user()` on `TOKEN` (`scaas-intent/1.3`, NODE-MESH-18).
+    fn envelope(mode: u32, fee_recipient: &str, exclusive: Option<([u8; 32], u64)>) -> Vec<u8> {
+        seal("scaas-intent/1.3", TOKEN, ua_body("transfer", &ua_transfer(mode, fee_recipient), "T", TOKEN), exclusive)
     }
 
     struct Known(bool);
@@ -287,6 +326,14 @@ mod tests {
     fn full(allow: FeeRecipientAllow) -> Vec<PolicyRow> {
         vec![PolicyRow { chain_key: "evm:1".into(), contract: TOKEN.into(), selector: "*".into(), support: Support::Full, submit: true,
                          pool_visibility: Visibility::Open, min_fee: "0".into(), fee_recipient_allow: allow }]
+    }
+
+    fn peer(bytes: &[u8]) -> Result<Accepted, Code> {
+        run(bytes, Source::Peer(PeerClass::Private), &full(FeeRecipientAllow::Any), false, "evm:1")
+    }
+
+    fn code(r: Result<Accepted, Code>) -> Option<&'static str> {
+        r.err().map(Code::as_str)
     }
 
     #[test]
@@ -328,5 +375,101 @@ mod tests {
         // min_fee compares the EFFECTIVE fee (FIXED 7)
         let min8 = vec![PolicyRow { min_fee: "8".into(), ..rows[0].clone() }];
         assert!(!run(&open, peer, &min8, false, "evm:1").unwrap().may_submit);
+    }
+
+    /// R45: a token's mesh body is the UA structs; the address body (`meta_tx`) names an entry no token has (CTR-MTX-30), refused
+    /// by name for a registered token, both structs; an address `MetaTransfer` has no entry on any contract, refused on any.
+    #[test]
+    fn a_token_address_body_is_refused_by_name() {
+        let addr_transfer = json!({"from": user().address_hex(), "to": TOKEN, "value": "1", "entryRef": format!("{:#x}", B256::ZERO),
+            "batch": "1", "nonce": "0", "validUntil": (NOW + 300).to_string(), "mode": 0x20, "relayer": zero(), "fee": "7",
+            "feeRecipient": zero()});
+        let addr_call = json!({"from": user().address_hex(), "data": format!("0xcfdd7aea{}01", "00".repeat(31)), "batch": "1",
+            "nonce": "0", "validUntil": (NOW + 300).to_string(), "mode": 0x20, "relayer": zero(), "fee": "7", "feeRecipient": zero()});
+        for spec in ["scaas-intent/1.2", "scaas-intent/1.3"] {
+            assert_eq!(code(peer(&seal(spec, TOKEN, address_body("transfer", &addr_transfer, "T", TOKEN), None))), Some("OP_KIND_MISMATCH"));
+            assert_eq!(code(peer(&seal(spec, TOKEN, address_body("call", &addr_call, "T", TOKEN), None))), Some("OP_KIND_MISMATCH"));
+            assert_eq!(code(peer(&seal(spec, ACCOUNT, address_body("transfer", &addr_transfer, "A", ACCOUNT), None))),
+                       Some("OP_KIND_MISMATCH"), "no contract takes an address MetaTransfer");
+        }
+        // positive control: the same transfer on ids is taken
+        assert!(peer(&envelope(0x20, &zero(), None)).unwrap().may_submit);
+    }
+
+    /// `SmartKeyAccount` keeps the address body (Q6): a `MetaTransaction` to a contract that is no registered token is taken as
+    /// before (held and served; not submittable, its contract being no token of ours).
+    #[test]
+    fn an_account_address_body_still_accepted() {
+        let m = json!({"from": user().address_hex(), "data": format!("0xcfdd7aea{}01", "00".repeat(31)), "batch": "1", "nonce": "0",
+            "validUntil": (NOW + 300).to_string(), "mode": 0x20, "relayer": zero(), "fee": "7", "feeRecipient": zero()});
+        let a = peer(&seal("scaas-intent/1.2", ACCOUNT, address_body("call", &m, "SCaaS SmartKeyAccount", ACCOUNT), None)).unwrap();
+        assert_eq!((a.decoded.selector.as_str(), a.decoded.from.clone(), a.may_submit), ("0xcfdd7aea", user().address_hex(), false));
+    }
+
+    /// The mandate wallets' body is the UA structs too (Q6): a `UAMetaTransaction` in the wallet's own domain is taken, its
+    /// intent id the UA digest there.
+    #[test]
+    fn a_mandate_wallet_ua_body_accepted() {
+        let m = json!({"from": pad(&user().address_hex()), "data": format!("0xcfdd7aea{}01", "00".repeat(31)), "batch": "1",
+            "nonce": "0", "validUntil": (NOW + 300).to_string(), "mode": 0x20, "relayer": zero(), "fee": "0", "feeRecipient": zero()});
+        let body = ua_body("call", &m, "SCaaS MandateWallet", WALLET);
+        let id = body.1;
+        let a = peer(&seal("scaas-intent/1.3", WALLET, body, None)).unwrap();
+        assert_eq!((a.decoded.intent_id, a.decoded.selector.as_str(), a.decoded.from.clone()), (id, "0xcfdd7aea", user().address_hex()));
+        assert_eq!((a.decoded.token.as_str(), a.may_submit), (WALLET, false), "no token of ours: held, never submitted");
+    }
+
+    /// NODE-MESH-08 on ids: the intent id is the token's UA digest (`mtxTransferDigest`), not the address one; `from` is the
+    /// canonical 20-byte key of the native id (NODE-MESH-18).
+    #[test]
+    fn intent_id_is_the_ua_digest() {
+        let m = ua_transfer(0x20, &zero());
+        let a = peer(&envelope(0x20, &zero(), None)).unwrap();
+        let ua = UaMtx::from_wire(None, &m).unwrap().digest(&domain("T", TOKEN)).0;
+        let mut addr = m.clone();
+        addr["from"] = json!(user().address_hex());
+        addr["to"] = json!(TOKEN);
+        let address = Mtx::from_wire(None, &addr).unwrap().digest(&domain("T", TOKEN)).0;
+        assert_ne!(ua, address);
+        assert_eq!((a.decoded.intent_id, a.decoded.from.clone(), a.decoded.selector.as_str()), (ua, user().address_hex(), "transfer"));
+        // the envelope claiming the address digest is a mismatch
+        let (body, _) = ua_body("transfer", &m, "T", TOKEN);
+        assert_eq!(peer(&seal("scaas-intent/1.3", TOKEN, (body, address), None)).err(), Some(Code::DigestMismatch));
+    }
+
+    /// NODE-LANE-10: unbound `relayer` / `feeRecipient` are not signed; garbage there leaves the intent id unchanged, and the
+    /// struct the submitter would encode carries 0 (relayer) and our fee recipient (feeRecipient, R84).
+    #[test]
+    fn unbound_fields_carry_zero() {
+        let clean = peer(&envelope(0x20, &zero(), None)).unwrap();
+        let mut m = ua_transfer(0x20, "0x000000000000000000000000000000000bad0bad");
+        m["relayer"] = json!("0x00000000000000000000000000000000deadbeef");
+        let dirty = peer(&seal("scaas-intent/1.3", TOKEN, ua_body("transfer", &m, "T", TOKEN), None)).unwrap();
+        assert_eq!(dirty.decoded.intent_id, clean.decoded.intent_id);
+        assert_eq!((dirty.decoded.relayer.clone(), dirty.decoded.fee_recipient.clone()), (None, None), "unbound: not routing fields");
+        let (_, w) = dirty.decoded.evm.as_ref().unwrap().submit_wire(Some("0x000000000000000000000000000000000000c01d".parse().unwrap()));
+        assert_eq!((w["relayer"].as_str().unwrap(), w["feeRecipient"].as_str().unwrap()),
+                   (zero().as_str(), "0x000000000000000000000000000000000000c01d"));
+    }
+
+    /// MD-10: a derived `from` is refused by name (no peer check of a derived `UASig` is ruled yet), before any digest or
+    /// signature work; R17: a native `UASig` with `keyData` or `members` is refused as the token refuses it; the UA body
+    /// travels as `scaas-intent/1.3` (NODE-MESH-18), never under 1.2.
+    #[test]
+    fn a_derived_from_is_refused_by_name() {
+        let mut m = ua_transfer(0x20, &zero());
+        m["from"] = json!(format!("{:#x}", B256::repeat_byte(0xaa)));
+        assert_eq!(code(peer(&seal("scaas-intent/1.3", TOKEN, ua_body("transfer", &m, "T", TOKEN), None))), Some("DERIVED_FROM_UNSUPPORTED"));
+        // a derived `to` is the token's business (its UA ledger), not the mesh's
+        let mut to = ua_transfer(0x20, &zero());
+        to["to"] = json!(format!("{:#x}", B256::repeat_byte(0xaa)));
+        assert!(peer(&seal("scaas-intent/1.3", TOKEN, ua_body("transfer", &to, "T", TOKEN), None)).is_ok());
+        for (k, v) in [("keyData", json!("0x01")), ("members", json!([{"index": 0, "members": [], "sig": "0x01"}]))] {
+            let (mut body, id) = ua_body("transfer", &ua_transfer(0x20, &zero()), "T", TOKEN);
+            body["auth"][k] = v;
+            assert_eq!(peer(&seal("scaas-intent/1.3", TOKEN, (body, id), None)).err(), Some(Code::BadSignature), "R17 {k}");
+        }
+        assert_eq!(peer(&seal("scaas-intent/1.2", TOKEN, ua_body("transfer", &ua_transfer(0x20, &zero()), "T", TOKEN), None)).err(),
+                   Some(Code::BadEnvelope), "the UA body is scaas-intent/1.3");
     }
 }

@@ -1,0 +1,6 @@
+T48 scaas-pqz-verifier gates (2026-11-08); full outputs in git-ignored runs/*.log; all heavy runs through scripts/capped, -j2
+step | commit | rc | counts
+red: tests first, Service::verdict and probe stubbed | before 06e11d23 | 101 | 13 tests: 12 failed (UNIMPLEMENTED), 1 passed (verdict_vectors: the digest function, not stubbed)
+cargo test --offline --locked | 06e11d23 | 0 | 14 passed, 0 failed (disclosure_names_the_leg_owner added after the red run)
+cargo clippy --offline --locked --all-targets -- -D warnings | 06e11d23 | 0 | 0 in the crate (path dep pqzl: 2 deprecation warnings, not this crate's)
+mutants (runs/2026-11-08-ua-mtx-merge-t48-mutants.py) | 06e11d23 | 0 | 5 of 5 killed, 0 survivors, tree clean after each

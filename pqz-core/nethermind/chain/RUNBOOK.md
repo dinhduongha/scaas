@@ -177,7 +177,7 @@ checkout. From `cd $L` on, the working directory is the live directory, so `gene
 ```sh
 L=~dockers/mba-chain-nethermind
 C=<repo>/pqz-core/nethermind/chain
-E=$C/engine-pqz.json
+E=$C/engine-pqz-provisional-n2304.json   # until the next calibration: engine-pqz.json holds retired ids (check-provisional-ids.py)
 TS=$(date +%Y%m%d-%H%M%S)
 B=~dockers/mba-chain-nethermind-backups/pqz-$TS          # dated, outside the repo and outside $L
 A="docker run --rm --memory 512m -v $L:/l -v $(dirname $B):/b alpine:3"
@@ -300,7 +300,10 @@ Success: the head hash equals the rollback head written down in step 1. Then rep
 - `OP_SELFTEST` (op 6) = `d6c01fbc…6f68d` (images `2.2.0-pqz5` / `2.2.0-pqz6` / `2.2.0-pqz7`, set `n2304-kmax4096`; `23d7a1db…c97c0` on `2.2.0-pqz4`, `ed910a2c…d205` before).
 
 A node fault (plan D4) stops the node with exit code 120 and the tag `PQZ-NODE-FAULT` in its log. The block in
-progress is never sealed; a restart re-processes it. **Restart policy (owner ruling 2026-10-31): `restart:
+progress is never sealed; a restart re-processes it. Exit 134 with the line `PQZ-NODE-FAULT exit watchdog: …; FailFast` is the same
+fault ended by the exit watchdog (branch `3zh-core`; bound and codes:
+[CTR-PQZ-10](../../../docs/contracts/pq-zero-knowledge.md#CTR-PQZ-10)): treat it exactly as 120. Keep core dumps off on
+the sealer (compose `ulimits: core: 0`, no `DOTNET_DbgEnableMiniDump`): a FailFast dump would hold the signer key. **Restart policy (owner ruling 2026-10-31): `restart:
 unless-stopped` on every service of the stack, the sealer included**, so Docker restarts a node after exit 120 or any
 other crash by itself (by hand: `docker compose up -d sealer` or `rpc`). A deterministic fault caused by a pooled
 transaction can loop on the sealer: it restarts, `rpc` gossips the same transaction to it again, it faults again. So
@@ -548,7 +551,9 @@ option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, 
 
 1. Image `scaas/nethermind-pqz:2.2.0-pqz6` = `sha256:656d91d6…3e83` (`CALIB=1 build-image.sh pqz6`, 2026-10-30): library
    `dd0e7668…e5601` (byte-identical to pqz5's), plugin of plan 5h Task 8d part 2b, label `scaas.pqz.selftest` `d6c01fbc…`.
-2. Rows: `chain/engine-pqz.json` = `runs/2026-10-31-fs3-t13-rows-one-baseline-engine-pqz.json` (README § Prices).
+2. Rows: `chain/engine-pqz.json` = `runs/2026-10-31-fs3-t13-rows-one-baseline-engine-pqz.json` (README § Prices). (Record of
+   that reset; today `engine-pqz.json` carries ids the plugin refuses, so a rerun uses `engine-pqz-provisional-n2304.json`
+   until the next calibration, owner's go.)
 3. Backups (stack directory `L=~dockers/mba-chain-nethermind`): `genesis.json.bak-pre-pqz6-20261031`,
    `docker-compose.yml.bak-pre-pqz6-20261031`, and `backup-pqz5-20261031-0621/` (genesis, config, compose, password,
    keystore and the pqz5 chain data through `alpine:3 cp -a`; sha256 manifests of the 150 data files identical).
@@ -573,7 +578,7 @@ option (b), the CREATE2 deployer in the genesis alloc, Blockscout on with caps, 
    `PRIVATE_KEY=0x…04 FOUNDRY_PROFILE=scaas-testnet CHAIN_UID=0xf1f491ab…3164 scripts/capped smartcontracts/scripts/deploy.sh
    evm http://127.0.0.1:8545`: 31 transactions, all status 1, through the genesis CREATE2 deployer (UA registry with 17
    `KindConfig`s + `msig`: no `zether-bls12381`, no `0x0142` — the run predates the branch's rebase onto `zether-ungate`;
-   OpenFactory, MtxRelayFee + executor, the NormalToken and SCaaSDex releases); `deployments/7622.json`
+   OpenFactory, the relay-fee router (formerly `MtxRelayFee`) + executor, the NormalToken and SCaaSDex releases); the book `7622.json` (now `scaas-testnet.json`, NET-EVM-13)
    (git-ignored; copy in `smartcontracts/evm/runs/2026-10-31-fs3-t13-deploy-7622.txt`). UniswapExecutor: no deploy
    script (plan decision PD7). **Superseded 2026-10-31** by the [salt-v2 set with Zether](#zether-on-the-scaas-testnet-executed-2026-10-31)
    (kept on chain, still verified on Blockscout).
@@ -586,11 +591,16 @@ docker-compose.yml}` back, replace `data/nethermind_data` with the backup's copy
 **Status: executed 2026-11-04** with [reset 1](#code-size-128-kib-on-the-scaas-testnet-reset-1-executed-2026-11-04): image
 `2.2.0-pqz7`, schedule 1 at `0x6aeb2cad` = schedule 0 + `mldsa87Gas` 102,000 (**PROVISIONAL**, not calibrated; the
 calibration waits for the owner's word, TODO pre-freeze item 5). On the live chain the probe answers 1 / 0 at 102,006 gas
-(`../runs/2026-11-04-mldsa87-probe.py`); `UAMldsaVerifier(0x0134, 0x…5caa0014)` `0x0e8D3A7A07252A4Eb62871F3318bc846FEeB6438`
+(`../runs/2026-11-04-mldsa87-probe.py`); `MldsaVerifier(0x0134, 0x…5caa0014)` `0x0e8D3A7A07252A4Eb62871F3318bc846FEeB6438`
 by `forge create` (`DeployBase` probes inside forge's EVM, which has no `MLDSA87`, so the gen-1 registry of `deploy.sh` has no
 `0x0134`); registry gen 2 `0xFA09Cb12c2bdc0d596Adf25c2D3160F5Ab1083DC` (predecessor the gen-1 `ua_registry`, kinds
 `[(0x0134, verifier, 250,000)]`, the PROVISIONAL cap until T-GAS); `mldsa87` registration on gen 2 status 1, 15,561,167 gas
 (`smartcontracts/evm/runs/2026-11-04-mldsa87-gen2-7622.sh`; summary `smartcontracts/evm/runs/2026-11-04-testnet-reset1-7622.txt`).
+**Calibrated 2026-11-15** (TODO 3zd, owner): `mldsa87Gas` **135,000** (two passes 135,000 / 123,000, the larger;
+`../runs/2026-11-15-mldsa87-calib.txt`). `add-schedule.py --mldsa87` writes it (`MLDSA87_GAS`, was `PROVISIONAL_MLDSA87_GAS`);
+the SCaaS testnet keeps 102,000 until reset 4. The probe of a chain at 135,000 expects 135,006 (the record script
+`../runs/2026-11-04-mldsa87-probe.py` checks 102,006: copy it with the new figure). The same passes move `mldsa44Gas`
+49,000 → **59,000** (owner 2026-11-15); `mldsa65Gas` 68,000 → **100,000** (owner 2026-11-15, TODO 3zg: the higher of 100,000 / 88,000, moved with 3zh-core group 2); `add-schedule.py --mldsa` writes 59,000 / 100,000 / 135,000 (44 / 65 / 87). The SCaaS testnet takes them at reset 5.
 The plan as written before the run:
 
 The plugin of branch `mldsa87` adds `MLDSA87` at `0x000000000000000000000000000000005caa0014` (EIP-8355 layout, ML-DSA-87). The
@@ -600,7 +610,7 @@ ML-DSA-65 ratio (68,000 at EIP-8355's 9,000), never a calibrated figure; the `Ca
 word. Steps, none run yet: build the image (`build-image.sh`, locally, never pushed); roll it out as image `2.2.0-pqz6` was; add a
 schedule with `add-schedule.py <chainspec> <calib-engine-pqz.json> <timestamp> <out> --mldsa87` (a copy of the last schedule plus
 `mldsa87Gas` = `PROVISIONAL_MLDSA87_GAS`; it prints "PROVISIONAL, not calibrated"); after the timestamp, deploy a
-`UAMldsaVerifier(0x0134, 0x…5caa0014, probe valid, probe invalid)` outside `forge script` (P6g D15) and a registry generation that
+`MldsaVerifier(0x0134, 0x…5caa0014, probe valid, probe invalid)` outside `forge script` (P6g D15) and a registry generation that
 enables `0x0134` with the T-GAS cap measured then. Replace the value when the calibration runs.
 
 ## Zether on the SCaaS testnet (executed 2026-10-31)
@@ -623,7 +633,7 @@ owner before 22776's gen-1 registry and for the audit).
    http://192.168.1.72:8545` (the public `rpc`; signed locally, `eth_sendRawTransaction`): 40 transactions, all status 1,
    **gasUsed 716,134,332** (forge's estimate 810,592,383), blocks 5157–5235. AdminLib, TradeLib and HederaLib were already
    on chain at their CREATE2 addresses (same code) and were reused; every other contract is new.
-2. The new set (`deployments/7622.json`, git-ignored; copy in the deploy log):
+2. The new set (the book `7622.json`, now `scaas-testnet.json`, git-ignored; copy in the deploy log):
 
    | Contract | Address |
    |---|---|
@@ -640,14 +650,14 @@ owner before 22776's gen-1 registry and for the audit).
    | ZetherDisclosure | `0xbC37b9B6a32Ece60aD8c9b0bFD69dFc7d64AD893` |
    | ZetherStatements | `0xF0279b8b5B455802AA0bd5B8AbDdb1E6659bd4d8` |
    | ZetherLib / WrappedLib / MtxPipelineLib | `0xD212702BF26d833f1904736C90354492d8eD2801` / `0xBfb57C6354384d9ba15966039ae5F823CaB92c60` / `0x9aabC1959D99b5C2F1021DA8BCeD5807eDDc4C01` |
-   | MtxRelayFee / its executor | `0x738720b3Fa18aB3E04eB2d5dbB600427f9CD6A5D` / `0x81e86a75de7E23b7b9a9d1C78313A868589ABe69` |
+   | RelayFeeRouter (formerly `MtxRelayFee`, the name it was verified under) / its executor | `0x738720b3Fa18aB3E04eB2d5dbB600427f9CD6A5D` / `0x81e86a75de7E23b7b9a9d1C78313A868589ABe69` |
    | SmartKeyAccountFactory / implementation | `0xbbFcF863ADc64cD6a2701C3e3d6D5edC895282A5` / `0xB2d07a27A1f7e187DFeAc6c0b458210F55dC3AB6` |
 
    The UA verifiers of the other kinds are listed in the deploy log. **Superseded:** the phase C set (registry
    `0x06d03D56…9776`, OpenFactory `0xC037D039a21646060E5b4ae441c1138e87000BDE`, NormalToken `0xCDb98d83…a551`, SCaaSDex
-   `0xe77d3D68…D3D9`, MtxRelayFee `0x7FB42079…fa48`, SmartKeyAccountFactory `0x3fAF952D…619D`) stays on chain and verified on
+   `0xe77d3D68…D3D9`, the relay-fee router (formerly `MtxRelayFee`) `0x7FB42079…fa48`, SmartKeyAccountFactory `0x3fAF952D…619D`) stays on chain and verified on
    Blockscout; nothing new is built on it (2026-10-31; reason above).
-3. The releases are usable `noticePeriod` (600 s) after `deployImplementation`; the e2e started after that.
+3. The releases are usable `noticePeriod` (600 s) after `deployTokenImplementation`; the e2e started after that.
 4. E2E: `RPC=http://192.168.1.72:8545 PRIVATE_KEY=<key 4> FOUNDRY_PROFILE=scaas-testnet scripts/capped scripts/e2e-zether.sh`
    (needs `cargo build --release --bin zether-cli` in `clients/zether-prover`, and `clients/clientkeys/node_modules`):
    six `zether-bls12381` UAs with clientkeys PoPs; `NORMAL_ZETHER` token `0x1161E91cAD5a3a3511Ea1E490f51a63cDaF348d3`
@@ -702,7 +712,7 @@ in the same reset. 22776 is the owner's and is never touched (`--testnet-reset` 
 3. Throwaway first: the exact file on a mining-off pqz7 node → genesis **`0xf1f491abec46eb7c1784b7fc75a0174171b41831530e510c46b7178c02d63164`,
    unchanged** (the inference held: params and `engine.Pqz` are not in the header; `chainUid` and `chain-uids.json` stay);
    on a throwaway-signer copy of the same params and rows: `codesize` 65,537 B and 119,800 B deploy at 199.9 M gas, probe
-   435 / 0, node e2e 84 / 0, `MLDSA87` inactive before the schedule and 1 / 0 after it, `UAMldsaVerifier`'s constructor
+   435 / 0, node e2e 84 / 0, `MLDSA87` inactive before the schedule and 1 / 0 after it, `MldsaVerifier`'s constructor
    reverting `UAMldsaNoPrecompile` before it (negative control).
 4. Live: `.bak-pre-reset1-20261104` copies of `genesis.json` (sha256 `4fd51bbd…b584`), `docker-compose.yml`, `config.json`,
    `config.rpc.json`; no chain-data backup (owner 2026-10-31): `data/{nethermind_data,nethermind_rpc_data,explorer_db_data,
@@ -714,12 +724,12 @@ in the same reset. 22776 is the owner's and is never touched (`--testnet-reset` 
    `MLDSA87` probe 1 / 0 at 102,006 gas; node e2e **84 ok, 0 FAIL**; `codesize` 65,537 B (100,505,947 gas, block 37) and
    119,800 B (183,562,782 gas, block 39), status 1.
 6. Deploy (below) rc 0: 49 transactions, all status 1, 986,967,204 gas, blocks 49–145; `eth_getCode` non-empty for every
-   address of `deployments/7622.json` and `7622-pqz.json` and the three PQZ releases (`WrappedPqzToken` 72,160 B, 112,574,619
+   address of the books `7622.json` and `7622-pqz.json` (now `scaas-testnet*.json`) and the three PQZ releases (`WrappedPqzToken` 72,160 B, 112,574,619
    gas: the first release above 64 KiB on 7622). PQZ e2e **386 ok, 0 FAIL**; Zether e2e **82 ok, 0 FAIL** (24 transactions);
    `mldsa87` and `fndsa1024` registrations status 1; governance smoke (`../../../smartcontracts/evm/runs/2026-11-04-gov-smoke-7622.sh`):
    `mtxSetListedOnly` through the `GovernanceRouter` at fee 0, relayed by another key, `listedOnly` false → true.
-7. Node: `scaas-node/node.example.toml` (7622 row) `governance_routers` = `0xB64D2D5f…b8E0` (`deployments/7622.json`) and
-   `0xFeC9586a…6F52` (`deployments/7622-pqz.json`).
+7. Node: `scaas-node/node.example.toml` (7622 row) `governance_routers` = `0xB64D2D5f…b8E0` (the book `7622.json`) and
+   `0xFeC9586a…6F52` (`7622-pqz.json`; both now `scaas-testnet*.json`, NET-EVM-13).
 8. Blockscout: DB reset (the renamed `explorer_*` dirs, fresh migrate); `verify-blockscout.sh` with the two broadcasts **and
    the new e2e log named**: 69 ok, 15 skip, 0 fail; by hand the `forge create` contracts, the node's probe and the governance
    smoke's DEX clone: **68 of 68 contracts with source verified, all full matches**, 5 clones linked; the 15 SSTORE2 data
@@ -765,12 +775,80 @@ anything is sent (GD-4).
 **Checks** (as the 2026-10-22 section, plus): `e2e.py codesize --rpc <rpc> --key <test key 0x…04> --sizes 65537:ok,119800:ok
 --gas 199900000` (arm C's rows: 65,537 B deploys once EIP-7954 is out); `eth_getCode` of every release of the deploy JSON
 non-empty; the node's `governance_routers` set to the deploy JSON's `governance_router` and, once `script/pqz/e2e.py` has run, the
-`governance_router` of `smartcontracts/evm/deployments/7622-pqz.json` (the PQZ stack's router on its own registry, by CREATE2 as well).
+`governance_router` of `smartcontracts/evm/deployments/scaas-testnet-pqz.json` (NET-EVM-13) (the PQZ stack's router on its own registry, by CREATE2 as well).
 
 **Rollback:** as the 2026-10-22 section: stop both nodes, put the `genesis.json` backup back, swap the data dirs back, start.
 For reset 1: `SCAAS_TESTNET_DIR=<stack> sh ../runs/2026-11-04-testnet-reset1.sh rollback` puts the four
 `.bak-pre-reset1-20261104` files back, moves the new data dirs to `*.failed-reset1-20261104` and the `*.pre-reset1-20261104`
 ones back (both nodes and Blockscout), and starts sealer, rpc and Blockscout (the pqz6 chain at head 69,993). Not used.
+
+## Reset 5 of the SCaaS testnet: two deploy sets (executed 2026-11-16)
+
+Resets 3, 4 and 4b used the same procedure (`smartcontracts/evm/runs/2026-11-12-scaas-testnet-reset3/`,
+`smartcontracts/evm/runs/2026-11-15-scaas-testnet-reset4/`, summaries `runs/2026-11-15-reset4.txt`); reset 5 is that procedure
+on the `ua-mtx-merge` tree before PR #18 (owner 2026-11-16, "Ok, reset 5 before PR #18"), scripts in
+`smartcontracts/evm/runs/2026-11-16-scaas-testnet-reset5/`, summary `smartcontracts/evm/runs/2026-11-16-reset5.txt`.
+No chain-data backup (owner 2026-10-24): data dirs renamed `*.pre-reset5-20261116`, `.bak-pre-reset5-20261116` copies of
+`genesis.json`, `docker-compose.yml`, `config.json`, `config.rpc.json`.
+
+```sh
+# 1. image: the plugin from the tree, the library from the commit whose build is the reviewed pin (FFI_REV; a
+#    test-hooks-only change since moves source lines and so the library's bytes: never edit the pin to go green)
+FFI_REV=9ddc814e9 scripts/capped pqz-core/nethermind/build-image.sh pqz11
+# 2. chainspec: the live genesis (its RescueVault alloc already there, NET-EVM-14), engine.Pqz = chain/engine-pqz.json
+#    (the calibrated rows) from genesis, then schedule 1 with the ML-DSA prices (>= 5 minutes ahead)
+python3 -I chain/patch-chainspec.py <live genesis> chain/engine-pqz.json 0 <p0> --testnet-reset
+python3 -I chain/add-schedule.py <p0> chain/engine-pqz.json <T> <new> --mldsa
+#    a throwaway node (the image, <new>, mining off, no ports): PQZ-START, block 0 as expected, then remove it
+# 3. stack (from smartcontracts/evm): reset, explorer, check (watch, e2e.py probe of every row, the ML-DSA probe)
+NEW=<new> SCAAS_TESTNET_DIR=<stack> RPC_7622=<rpc> sh runs/2026-11-16-scaas-testnet-reset5/reset5.sh reset   # then explorer, check
+# 4. the two deploy sets, mldsa-on first, then mldsa-off (the book's default set, the forge matrix's)
+RPC_7622=<rpc> SCAAS_TESTNET_MNEMONIC_FILE=<file> sh runs/2026-11-16-scaas-testnet-reset5/deploy5.sh mldsa-on
+RPC_7622=<rpc> SCAAS_TESTNET_MNEMONIC_FILE=<file> sh runs/2026-11-16-scaas-testnet-reset5/deploy5.sh mldsa-off
+python3 -I runs/2026-11-16-scaas-testnet-reset5/check5.py <rpc> mldsa-on    # and mldsa-off
+# 5. the matrix against mldsa-off (VERIFY=none with its reason), then ONE whole-chain verify of both sets
+RPC_7622=<rpc> VERIFY=none VERIFY_REASON=... MATRIX_OUT=runs/2026-11-16-matrix sh script/onchain/matrix.sh scaas-testnet
+sh script/onchain/verify.sh scaas-testnet     # DEPLOY_SET=all (the default): both sets, completeness with the children
+```
+
+**Two deploy sets** (owner 2026-11-16, "ok, option 2, one chain, two deploy sets"; then "agreed" to two full sets as a
+test-only layout; [NET-EVM-13](../../../docs/networks/evm.md#NET-EVM-13)'s Change). The chain carries two whole deploys of the
+same build, each with its own `DEPLOY_SALT`, `OpenFactory`, UA registry, `GovernanceRouter`, releases and tokens:
+`mldsa-on` (`MLDSA_PRECOMPILE=on`, the shipped default: the registry's ML-DSA kinds on `MldsaVerifier`s that call the chain's
+precompiles) and `mldsa-off` (the ML-DSA kinds on the registry's expanded-key cache). The one-`GovernanceRouter`-per-chain rule
+(owner 2026-11-04) applies per deploy set; a mainnet or a customer chain carries one set, chosen by the chain's precompile
+availability. The two sets share the chain, its genesis, the RescueVault genesis alloc and Blockscout, nothing else: a UA of
+one set is unknown to the other's registry. The forge matrix runs against `mldsa-off` (forge's own EVM has no ML-DSA or
+PQZ precompile, so a forge script that registers or signs with an ML-DSA UA is refused in its simulation against
+`mldsa-on`); `mldsa-on` is checked by real transactions only (`check5.py`, the live checks, eth_calls). The port of the
+`pqzkeys` / `pqzwallet` groups and of the ML-DSA rows of `tokens` / `pqchat` to real-transaction scripts is the follow-up
+against `mldsa-on`, on this chain, without a further reset. The book `smartcontracts/evm/deployments/scaas-testnet.json`
+(git-ignored) holds both under `sets.<label>`, `mldsa-off` at its top level; `DEPLOY_SET` names a set for `deploy.sh`,
+`matrix.sh`, `verify.sh` and `coverage.py`.
+
+Result: image `2.2.0-pqz11` (library `f397d9c1…` = the reviewed pin); genesis `0x9ae9048b…5b13`, unchanged from reset 4 (the
+chainspec's header, params and alloc did not move, only engine.Pqz: `chain-uids.json` unchanged; move any
+`cache/vcheck-7622-0x9ae9048b*.json` of the old chain aside before `verify.sh`); live checks 463 ok / 0 FAIL; ML-DSA
+59,006 / 100,006 / 135,006; deploys `mldsa-on` 151 transactions in 261 s, `mldsa-off` 138 in 220 s (batches of 16 without
+`--slow`, NET-EVM-11's Change), both `check5.py` all passed. The first `mldsa-on` attempt stopped before its plan at the
+verifiers step: the KAT check gave the transaction, not the verifier call, the `cap + cap / 63` gas, below the calldata floor
+(fixed in `script/pq_verifiers.py`). Matrix, verify and the wraplimits p5 / p6 times: the summary.
+
+**Outage during the matrix (2026-11-16, ~10:12-10:16 UTC; earlier short windows ~07:2x UTC).** Both nodes restart-looped
+(`restart: unless-stopped`, RestartCount 10, no OOM): Nethermind refuses to start, and so to keep running after a restart,
+with less free space on its data directory's filesystem than its check asks ("Not enough free disk space in
+'/nethermind/nethermind_datadir' to safely run a node - please provide at least 45.82 GB"); `/home` was at 99 % (19 GB free),
+filled by the host's work trees, not by the chain (data dirs under 100 MB each). Clients saw it as connection resets on the
+RPC port ("connection closed before message completed", "Connection reset by peer"), the explanation of the earlier windows
+too. Fixed by freeing disk (owner 2026-11-16, finished work trees removed: 215 GB free); the nodes came back by themselves
+at 10:15:56 / 10:15:59 UTC on the same chain (head advancing, genesis unchanged), nothing pending lost. Watch item: keep the
+stack's filesystem above the node's free-space check (`df -h` of the data directory beside `watch.sh`'s RestartCount).
+
+**Results** (summary `smartcontracts/evm/runs/2026-11-16-reset5.txt`): the matrix on `mldsa-off` green in every group that runs on
+a remote target (pqzwallet local only), the `mldsa-on` rows (`mldsa_on.py`) 547 records, 0 failures; wraplimits p5 and p6 run
+in their windows (2026-11-17 03:33 and 15:41 local): the group 165 transactions status 1, 63 negatives refused as expected. The Blockscout verify of the whole chain (both sets): 743 verified,
+218 linked clones, 265 SSTORE2 data, 150 CREATE3 proxies, genesis and the RescueVault alloc, 0 unverified. The `sc-verifier`
+container needs 4 GB to compile kind 13's modules (OOM-killed at 768 MiB and at 2 GB; owner 2026-11-17: `mem_limit` 4g).
 
 ## 7622 node layout and access (owner 2026-10-31)
 
@@ -1015,9 +1093,9 @@ docker compose stop sc-verifier
 `broadcast/ZetherE2E.s.sol/7622/run-latest.json` when present, and every `runs/*.txt` whose
 `# P6g e2e on chain 7622` header names the current genesis hash; `BLOCKSCOUT_API`, `RPC` default
 `http://192.168.1.72:8545`, `FOUNDRY_PROFILE` default `scaas-testnet`): one `forge verify-contract … --verifier blockscout`
-per CREATE / CREATE2 row and per factory child of the broadcast (MtxRelayExecutor, the SmartKeyAccount implementation,
+per CREATE / CREATE2 row and per factory child of the broadcast (RelayFeeExecutor, the SmartKeyAccount implementation,
 the NormalToken / SCaaSDex implementations), constructor arguments from the init code; for the PQZ e2e
-(`script/pqz/e2e.py`, no broadcast file; `deployments/7622-pqz.json` holds only its last run) every
+(`script/pqz/e2e.py`, no broadcast file; `deployments/scaas-testnet-pqz.json` holds only its last run) every
 `<Name> at 0x…` line of its run logs (constructor arguments from the creation transaction) and every
 `<Name> release at 0x…` (an OpenFactory release: arguments `abi.encode(envVersion, env, implArgs)` rebuilt from the
 factory's `releaseOf` / `envOf`); its tokens (pqUSD, pqW) are EIP-1167 clones of those releases (`Clones` in

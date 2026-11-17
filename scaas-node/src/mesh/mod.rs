@@ -25,6 +25,11 @@ pub enum Code {
     BadHubSig,
     PrivateFromOpenPeer,
     Unsupported,
+    /// R45: an address body (`meta_tx`) for an entry no contract has any more: an address `MetaTransfer`, or any address
+    /// body on a registered token (CTR-MTX-30; the job API's name, R43).
+    OpKindMismatch,
+    /// MD-10: a derived `from` in a UA body; no peer check of a derived `UASig` is ruled yet.
+    DerivedFromUnsupported,
     Duplicate,
 }
 
@@ -44,6 +49,8 @@ impl Code {
             Self::BadHubSig => "BAD_HUB_SIG",
             Self::PrivateFromOpenPeer => "PRIVATE_FROM_OPEN_PEER",
             Self::Unsupported => "UNSUPPORTED",
+            Self::OpKindMismatch => "OP_KIND_MISMATCH",
+            Self::DerivedFromUnsupported => "DERIVED_FROM_UNSUPPORTED",
             Self::Duplicate => "DUPLICATE",
         }
     }

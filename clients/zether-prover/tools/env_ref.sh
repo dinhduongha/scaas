@@ -25,3 +25,13 @@ echo "unshield_call $(cast calldata "mtxUnshield((uint64,uint64,uint256,bytes32,
 echo "entry_ref $(cast keccak $(cast abi-encode 'f(bytes32,uint256,bytes32,address,bytes32,uint256)' $(cast keccak SCAAS-ZETHER-ENTRY-V1) 31337 $CUID $TOK 0x5555555555555555555555555555555555555555555555555555555555555555 3))"
 echo "unwrap_binding $(cast keccak $(cast abi-encode 'f(bytes32,address,uint256)' $(cast keccak SCAAS-ZETHER-UNWRAP-V1) 0x4444444444444444444444444444444444444444 1000))"
 for s in 'mtxShield(bytes32,uint256)'; do echo "sel $s $(cast sig "$s")"; done
+# ua-mtx-merge T12 (R35, CTR-ZTH-51): the UA binding and the UAMetaTransaction digest of the merged entries, `from` a padded
+# native id and a derived id; and one UASig with keyData and members (the last parameter of every merged entry).
+UA_TAG=$(cast keccak "SCAAS-ZETHER-UA-ENVELOPE-V1")
+UATH=$(cast keccak "UAMetaTransaction(bytes32 from,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)")
+for UAFROM in 0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 0x7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a; do
+  echo "ua_binding $UAFROM $(cast keccak $(cast abi-encode 'f(bytes32,uint256,bytes32,address,bytes32,bytes32,uint256,uint256,uint32,address,uint256,address)' $UA_TAG 31337 $CUID $TOK $UAFROM $BATCH 7 1800000000 33 $REL 1000 $ZERO))"
+  USH=$(cast keccak $(cast abi-encode 'f(bytes32,bytes32,bytes32,bytes32,uint256,uint256,uint32,address,uint256,address)' $UATH $UAFROM $(cast keccak 0xdeadbeef) $BATCH 7 1800000000 33 $REL 1000 $ZERO))
+  echo "ua_digest $UAFROM $(cast keccak 0x1901${DS:2}${USH:2})"
+done
+echo "ua_sig $(cast abi-encode 'f((bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))' '(0xaa,0xbbcc,[(1,[(2,0xdd)],0x),(3,[],0xee)])')"

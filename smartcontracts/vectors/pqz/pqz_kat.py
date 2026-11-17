@@ -107,7 +107,9 @@ def shake256(data, n):
 PQZL_ID = keccak256(_S["pqzl_label"].encode())
 # a set without PQZH (set.json pqzh false, n2816-kmax65536) has no PQZH id: the zero word, refused (as pqz-stmt)
 PQZH_ID = keccak256(_S["pqzh_label"].encode()) if HAS_PQZH else bytes(32)
-KNOWN_IDS = (PQZL_ID, PQZH_ID) if HAS_PQZH else (PQZL_ID,)
+# PQZL_SPLIT_ID (three-key spec K3-4): opening tokens' id, SPLIT_FORMS only (FORMS_OF)
+PQZL_SPLIT_ID = keccak256(_S["pqzl_split_label"].encode())
+KNOWN_IDS = (PQZL_ID, PQZL_SPLIT_ID, PQZH_ID) if HAS_PQZH else (PQZL_ID, PQZL_SPLIT_ID)
 # the "other id" negative rows: the other proof system's id, at a set without PQZH another set's PQZL id (n2304-kmax4096's;
 # review 8d1b M2: not the zero word, which the "unknown proofSystemId" rows already carry)
 OTHER_ROW = "the other system's proofSystemId" if HAS_PQZH else "another set's proofSystemId (n2304-kmax4096 PQZL)"
@@ -115,11 +117,15 @@ ID2 = PQZH_ID if HAS_PQZH else PQZL_ID  # the second id the self-test mixes in (
 RETIRED_IDS = {"PQZL v2": "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f",  # forgeable (lazer#28, F9)
                "PQZL v3": "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef",  # .../mlwe-d64k32-q42l4/v3
                "PQZH v1": "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4"}  # .../ligero-fq-r431-.../v1
-# this set's ids of plan 5h Task 8d, retired by the R0 review fix (2026-10-25): its labels with /v5 -> /v4, /v3 -> /v2
-assert _S["pqzl_label"].endswith("/v5") and (not HAS_PQZH or _S["pqzh_label"].endswith("/v3"))
-RETIRED_IDS["PQZL v4"] = keccak256(_S["pqzl_label"][:-3].encode() + b"/v4").hex()
-if HAS_PQZH:
-    RETIRED_IDS["PQZH v2"] = keccak256(_S["pqzh_label"][:-3].encode() + b"/v2").hex()
+# this set's ids of plan 5h Task 8d (PQZL v4, PQZH v2), retired by the R0 review fix (2026-10-25), and of the R0 fix
+# (PQZL v5, PQZH v3), retired by the three-key round (2026-11-13, K3-4b: T-35 / T-36): its labels with /v6 -> /v4, /v5,
+# /v4 -> /v2, /v3
+assert _S["pqzl_label"].endswith("/v6") and (not HAS_PQZH or _S["pqzh_label"].endswith("/v4"))
+assert _S["pqzl_split_label"] == _S["pqzl_label"][:-3] + "/split-v1"
+for _v in ("4", "5"):
+    RETIRED_IDS["PQZL v" + _v] = keccak256(_S["pqzl_label"][:-3].encode() + b"/v" + _v.encode()).hex()
+    if HAS_PQZH:
+        RETIRED_IDS["PQZH v" + str(int(_v) - 2)] = keccak256(_S["pqzh_label"][:-3].encode() + b"/v" + str(int(_v) - 2).encode()).hex()
 OP_NAMES = ["TRANSFER", "BURN", "REFRESH", "REGISTER", "DISCLOSE-SENDER", "DISCLOSE-RECEIVER", "DISCLOSE-AUDITOR",
             "TRANSFER-MULTI"]
 OP_TAG = {n: keccak256(b"SCAAS-PQZ-OP-" + n.encode() + b"-V1") for n in OP_NAMES}
@@ -128,8 +134,18 @@ OP_BYTE = {"TRANSFER": 1, "BURN": 2, "REFRESH": 2, "REGISTER": 3, "DISCLOSE-SEND
 STMT_BYTES = {"TRANSFER": 640 + 5 * PK_BYTES + 4 * V_BYTES, "TRANSFER0": 640 + 4 * PK_BYTES + 3 * V_BYTES,
               "BURN": 640 + 3 * PK_BYTES + 2 * V_BYTES, "REFRESH": 640 + 3 * PK_BYTES + 2 * V_BYTES, "REGISTER": 96 + PK_BYTES,
               "DISCLOSE-SENDER": 288 + 2 * PK_BYTES + V_BYTES, "DISCLOSE-RECEIVER": 288 + 2 * PK_BYTES + V_BYTES,
-              "DISCLOSE-AUDITOR": 288 + 2 * PK_BYTES + V_BYTES}  # v3: 83,072 / 66,560 / 50,048 / 16,480 / 33,184
+              "DISCLOSE-AUDITOR": 288 + 2 * PK_BYTES + V_BYTES,  # v3: 83,072 / 66,560 / 50,048 / 16,480 / 33,184
+              # PQZL_SPLIT_ID's op 1 (K3-4): TRANSFER / TRANSFER0 with u_f appended (v3: 99,456 / 82,944)
+              "TRANSFER-SPLIT": 640 + 6 * PK_BYTES + 4 * V_BYTES, "TRANSFER-SPLIT0": 640 + 5 * PK_BYTES + 3 * V_BYTES}
 assert STMT_BYTES == _S["lengths"]["stmt"]
+# the forms each id serves (K3-4; pqz-stmt `forms`): PQZL_SPLIT_ID the split transfer, burn, refresh and the sender
+# disclosure; PQZL / PQZH every other form (op 7 too) and never the split transfer
+FORMS = ("TRANSFER", "TRANSFER0", "BURN", "REFRESH", "REGISTER", "DISCLOSE-SENDER", "DISCLOSE-RECEIVER", "DISCLOSE-AUDITOR",
+         "TRANSFER-MULTI")
+SPLIT_FORMS = ("TRANSFER-SPLIT", "TRANSFER-SPLIT0", "BURN", "REFRESH", "DISCLOSE-SENDER")
+FORMS_OF = {i: (SPLIT_FORMS if i == PQZL_SPLIT_ID else FORMS) for i in KNOWN_IDS}
+# the disclosure kind word's low byte, the form's OpeningKind (T-36, review 3w u3-6): SENDER_S 0, RECEIVER_X 1, AUDITOR 2
+OPENING_KIND = {"DISCLOSE-SENDER": 0, "DISCLOSE-RECEIVER": 1, "DISCLOSE-AUDITOR": 2}
 
 
 def word(x):
@@ -388,12 +404,14 @@ def build_header(op, f):
     return b"".join(word(w.get(k, 0)) for k in HEADER)
 
 
-def build_debit(op, f, pk_f, T, out, pk_t=None, pk_a=None):
-    """TRANSFER: header || pk_f || pk_t || [pk_a] || T || out (out = u || v_t || v_f || [v_a]); BURN / REFRESH: header
-    || pk_f || T || out (out = u || v_f). auditorOn follows pk_a (R6)."""
+def build_debit(op, f, pk_f, T, out, pk_t=None, pk_a=None, u_f=None):
+    """TRANSFER: header || pk_f || pk_t || [pk_a] || T || out (out = u || v_t || v_f || [v_a]) || [u_f] (u_f: the split
+    transfer of PQZL_SPLIT_ID, K3-4); BURN / REFRESH: header || pk_f || T || out (out = u || v_f). auditorOn follows
+    pk_a (R6)."""
     if op == "TRANSFER":
         f = dict(f, auditorOn=1 if pk_a is not None else 0)
-        body = pk_f + pk_t + (pk_a or b"") + T + out
+        assert u_f is None or len(u_f) == PK_BYTES
+        body = pk_f + pk_t + (pk_a or b"") + T + out + (u_f or b"")
         assert len(out) == PK_BYTES + (4 if pk_a is not None else 3) * V_BYTES - V_BYTES
     else:
         assert op in ("BURN", "REFRESH") and pk_t is None and pk_a is None and len(out) == CT_BYTES
@@ -437,11 +455,20 @@ def parse(op_byte, stmt, ids=KNOWN_IDS):
     if not names:
         raise ValueError("opTag does not belong to op")
     op = names[0]
-    if stmt[32:64] not in ids:
+    psid = stmt[32:64]
+    if psid not in ids:
+        raise ValueError("unknown proofSystemId")
+    n = len(stmt)
+    split = psid == PQZL_SPLIT_ID
+    # op 1's form by length under the id (K3-4: the two ids' op 1 lengths never collide), then the id serves the form
+    form = op
+    if op == "TRANSFER":
+        form = "TRANSFER-SPLIT" + ("0" if n == STMT_BYTES["TRANSFER-SPLIT0"] else "") if split else \
+            "TRANSFER0" if n == STMT_BYTES["TRANSFER0"] else "TRANSFER"
+    if form not in FORMS_OF[psid]:
         raise ValueError("unknown proofSystemId")
     if op == "TRANSFER-MULTI":
-        return parse_multi(stmt, stmt[32:64])
-    n = len(stmt)
+        return parse_multi(stmt, psid)
     out = {"op": op}
     if op == "REGISTER":
         if n != STMT_BYTES[op]:
@@ -456,9 +483,9 @@ def parse(op_byte, stmt, ids=KNOWN_IDS):
         for i, k in enumerate(DISC):
             out[k] = stmt[32 * i:32 * i + 32]
         _scalar(out["amount"], "amount")
-        # kind = OpeningKind + 256 w < 2^16: w = 0 but for AUDITOR, w < S_AUD there (R0-1)
+        # kind = OpeningKind + 256 w < 2^16: the form's OpeningKind (T-36); w = 0 but for AUDITOR, w < S_AUD there (R0-1)
         k = int.from_bytes(out["kind"], "big")
-        if k >> 16 or (k >> 8) >= (S_AUD if op == "DISCLOSE-AUDITOR" else 1):
+        if k >> 16 or (k >> 8) >= (S_AUD if op == "DISCLOSE-AUDITOR" else 1) or k & 255 != OPENING_KIND[op]:
             raise ValueError("kind")
         o = 32 * len(DISC)
         out["pk"], out["u"], out["v"] = stmt[o:o + PK_BYTES], stmt[o + PK_BYTES:o + 2 * PK_BYTES], stmt[o + 2 * PK_BYTES:]
@@ -466,7 +493,8 @@ def parse(op_byte, stmt, ids=KNOWN_IDS):
         return out
     aud = None
     if op == "TRANSFER":
-        aud = {STMT_BYTES["TRANSFER"]: 1, STMT_BYTES["TRANSFER0"]: 0}.get(n)
+        pre = "TRANSFER-SPLIT" if split else "TRANSFER"
+        aud = {STMT_BYTES[pre]: 1, STMT_BYTES[pre + "0"]: 0}.get(n)
         if aud is None:
             raise ValueError("length")
     elif n != STMT_BYTES[op]:
@@ -494,6 +522,8 @@ def parse(op_byte, stmt, ids=KNOWN_IDS):
     vk = (["v_t", "v_f"] + (["v_a"] if aud else [])) if op == "TRANSFER" else ["v_f"]
     for k in vk:
         out[k], o = body[o:o + V_BYTES], o + V_BYTES
+    if split and op == "TRANSFER":
+        out["u_f"], o = body[o:o + PK_BYTES], o + PK_BYTES
     assert o == len(body)
     return out
 
@@ -696,7 +726,11 @@ def selftest(log):
         ok(PQZH_ID.hex() == _S["pqzh_id"], f"PQZH proofSystemId {_S['pqzh_label']} = {PQZH_ID.hex()[:8]}... (set.json)")
     else:
         ok("pqzh_id" not in _S and _S["max_proof_pqzh"] == 0, "no PQZH id at this set (set.json)")
-    ok(not {PQZL_ID.hex(), PQZH_ID.hex()} & set(RETIRED_IDS.values()) and PQZL_ID != PQZH_ID, "ids not retired, distinct")
+    ok(PQZL_SPLIT_ID.hex() == _S["pqzl_split_id"] and _S["pqzl_split_label"].endswith("/split-v1"),
+       f"PQZL_SPLIT_ID {_S['pqzl_split_label']} = {PQZL_SPLIT_ID.hex()[:8]}... (set.json)")
+    ok(not {PQZL_ID.hex(), PQZH_ID.hex(), PQZL_SPLIT_ID.hex()} & set(RETIRED_IDS.values()) and
+       len({PQZL_ID, PQZH_ID, PQZL_SPLIT_ID}) == 3, "ids not retired, distinct")
+    ok(len(RETIRED_IDS) == 5 + 2 * HAS_PQZH, f"{len(RETIRED_IDS)} retired ids (PQZL v2 to v5, PQZH v1 to v3)")
     plan = {"TRANSFER": "ef22f3d1", "BURN": "7383374d", "REFRESH": "f118f2df", "REGISTER": "69562a9c",
             "DISCLOSE-SENDER": "868cc07c", "DISCLOSE-RECEIVER": "d8356cfb", "DISCLOSE-AUDITOR": "d6019aa4",
             "TRANSFER-MULTI": "6f6a773a"}
@@ -774,6 +808,31 @@ def selftest(log):
     rejects(da[:256] + word(2 + 2**16) + da[288:], 5, "kind word >= 2^16", "kind")
     ok(parse(5, da[:256] + word(2 + 256 * (S_AUD - 1)) + da[288:])["op"] == "DISCLOSE-AUDITOR",
        f"AUDITOR kind window {S_AUD - 1} accepted")
+    # T-36: the kind word's low byte is the form's OpeningKind (positive controls: the forms above, each with its own)
+    dr = forms["DISCLOSE-RECEIVER"]
+    for st, op_byte, k, what in ((d, 4, 1, "SENDER_S low byte 1"), (d, 4, 2, "SENDER_S low byte 2"),
+                                 (dr, 5, 0, "RECEIVER_X low byte 0"), (dr, 5, 2, "RECEIVER_X low byte 2"),
+                                 (da, 5, 1 + 256, "AUDITOR low byte 1 (window 1)"), (da, 5, 0, "AUDITOR low byte 0")):
+        rejects(st[:256] + word(k) + st[288:], op_byte, what, "kind")
+    # K3-4: PQZL_SPLIT_ID serves the split transfer, burn, refresh and the sender disclosure only; the split lengths
+    # never collide with op 1's under PQZL_ID / PQZH_ID
+    uf = keys[1][0]
+    sp = {"TRANSFER-SPLIT": build_debit("TRANSFER", dict(hdr, proofSystemId=PQZL_SPLIT_ID), pk, ct, out4, pk_t=pk, pk_a=pk, u_f=uf),
+          "TRANSFER-SPLIT0": build_debit("TRANSFER", dict(hdr, proofSystemId=PQZL_SPLIT_ID), pk, ct, out3, pk_t=pk, u_f=uf)}
+    for name, st in sp.items():
+        p = parse(1, st)
+        ok(len(st) == STMT_BYTES[name] and p["u_f"] == uf and st[:len(forms[name.replace("-SPLIT", "")])][64:] ==
+           forms[name.replace("-SPLIT", "")][64:], f"statement {name}: u_f appended, earlier offsets unchanged")
+    op1 = [STMT_BYTES[k] for k in ("TRANSFER", "TRANSFER0", "TRANSFER-SPLIT", "TRANSFER-SPLIT0")]
+    ok(len(set(op1)) == 4, f"op 1 lengths of both PQZL ids distinct: {op1}")
+    sid = lambda st: st[:32] + PQZL_SPLIT_ID + st[64:]  # noqa: E731
+    for name in ("BURN", "REFRESH", "DISCLOSE-SENDER"):
+        ok(parse(OP_BYTE[name], sid(forms[name]))["op"] == name, f"{name} under PQZL_SPLIT_ID accepted")
+    for name, why in (("TRANSFER", "length"), ("TRANSFER0", "length"), ("REGISTER", "unknown proofSystemId"),
+                      ("DISCLOSE-RECEIVER", "unknown proofSystemId"), ("DISCLOSE-AUDITOR", "unknown proofSystemId")):
+        rejects(sid(forms[name]), OP_BYTE[name.rstrip("0")], f"{name} under PQZL_SPLIT_ID", why)
+    for i in KNOWN_IDS[:1] + KNOWN_IDS[2:]:
+        rejects(sp["TRANSFER-SPLIT"][:32] + i + sp["TRANSFER-SPLIT"][64:], 1, "TRANSFER-SPLIT under PQZL / PQZH", "length")
     # op 7 R_TXM: every built shape of both ids (fee 0 too), round trip, op 1's body at M = 1, every rule
     lens = {(m, a): multi_len(m, a) for m in (1, 2, 4, 8, 16) for a in (1, 0)}
     v3 = SET != V3 or (lens[1, 1] == 83072 and lens[1, 0] == 66560 and lens[2, 1] == 99712 and lens[2, 0] == 83072 and
@@ -824,6 +883,7 @@ def selftest(log):
             (s2[:579] + b"\1" + s2[580:], 7, "salt word high half", "salt word not 16 zero bytes || salt"),
             (s2[:-8] + Q.to_bytes(8, "big"), 7, "coefficient = q in v_{a,M-1}", "coefficient >= q"),
             (s2[:32] + bytes(32) + s2[64:], 7, "unknown proofSystemId", "unknown proofSystemId"),
+            (s2[:32] + PQZL_SPLIT_ID + s2[64:], 7, "op 7 under PQZL_SPLIT_ID (K3-5)", "unknown proofSystemId"),
             (s2, 1, "op 7 statement under op 1", "opTag does not belong to op"),
             (t, 7, "op 1 statement under op 7", "opTag does not belong to op")):
         rejects(st, op_byte, f"op 7: {what}", why)
@@ -851,6 +911,14 @@ def selftest(log):
     o = opening(b"\1" * 33, b"\2" * 5)
     ok(len(o) == 64 + 32 + 64 + 32 + 32 and o[:64] == word(64) + word(160), "opening = abi.encode(bytes, bytes)")
     log(f"     entryRef(7622, 1, token, 2, 0) = {entry_ref(7622, 1, bytes(range(20)), 2, 0).hex()}")
+    # u5-2: check_proofs refuses a file whose id is not one of the set's (before any row is read); positive control:
+    # the set's own proof files in --check
+    for what, i in (("all-zero id", bytes(32)), ("retired PQZL v5", bytes.fromhex(RETIRED_IDS["PQZL v5"]))):
+        r = check_proofs({"file": "proof_pqzh.json", "proof_system_id": i.hex(), "rows": []}, VEC_DIR)
+        ok(len(r) == 1 and "is not one of this set's ids" in r[0], f"check_proofs refuses the {what}")
+    # K3-4: PQZL_SPLIT_ID's proofs only in proof_pqzl_split.json (check_split; positive control: that file in --check)
+    r = check_proofs({"file": "proof_pqzh.json", "proof_system_id": PQZL_SPLIT_ID.hex(), "rows": []}, VEC_DIR)
+    ok(len(r) == 1 and "proof_pqzl_split.json" in r[0], "check_proofs refuses PQZL_SPLIT_ID under another file name")
     return bad
 
 
@@ -932,7 +1000,7 @@ def check_c_keys(path, log):
 
 # ---------------------------------------------------------------- precompile decoder (pqz-stmt decode_input)
 MAX_INPUT = _S["max_input"]  # 524,288 at every set (n2048-kmax1024: 393,216 until the R0 review fix, owner 2026-10-25)
-MAX_PROOF = {PQZL_ID: 98304, PQZH_ID: _S["max_proof_pqzh"]}  # PQZH: 327,680 at every PQZH set (owner 2026-10-23 / 25)
+MAX_PROOF = {PQZL_ID: 98304, PQZL_SPLIT_ID: 98304, PQZH_ID: _S["max_proof_pqzh"]}  # PQZH: 327,680 at every PQZH set (owner 2026-10-23 / 25); PQZL_SPLIT_ID: PQZL's (K3-4)
 REASON = {"length": "Length", "opTag does not belong to op": "OpTag", "unknown proofSystemId": "ProofSystemId",
           "fee >= 2^64": "Fee", "amount >= 2^64": "Amount", "salt word not 16 zero bytes || salt": "Salt",
           "auditorOn does not match the length": "AuditorOn", "coefficient >= q": "Coefficient",
@@ -1169,6 +1237,33 @@ def check_enc(j, d):
     return bad
 
 
+def check_opening(j, d):
+    """opening.json (spec three-key model K3-4): seed_leg and the split Enc rebuilt here; the KEM rows (coins, openings,
+    openKemSeeds: ML-KEM-1024 + X25519 + AES-256-GCM) are pqz-vectors --check's and clientkeys' / ua-rs's."""
+    bad = []
+    for i, r in enumerate(j["rows"]):
+        pk_t = key(r["seed_t"])[0]
+        cmp(bad, f"row {i} pk_t_keccak", r["pk_t_keccak"], kec(pk_t).hex())
+        sl = shake256(b"SCAAS-PQZ-ENC-LEG-V1" + bytes.fromhex(r["seed_enc"]) + bytes(4) + bytes.fromhex(r["toUA"]) + kec(pk_t), 32)
+        cmp(bad, f"row {i} seed_leg", r["seed_leg"], sl.hex())
+        val = lambda ds: sum(x * 16 ** k for k, x in enumerate(ds))
+        uf, vf, _ = enc_of({"seed_enc": r["seed_enc"], "recipients": [r["seed_f"]], "values": [val(r["digits_f"])]})
+        cmp(bad, f"row {i} own", (r["u_f_keccak"], r["v_f"]), (kec(uf).hex(), vf[0].hex()))
+        rec = [r["seed_t"]] + ([r["seed_a"]] if r["auditorOn"] else [])
+        u, vs, _ = enc_of({"seed_enc": sl.hex(), "recipients": rec, "values": [val(r["digits"])] * len(rec)})
+        cmp(bad, f"row {i} leg", (r["u_keccak"], r["v_t"], r.get("v_a")),
+            (kec(u).hex(), vs[0].hex(), vs[1].hex() if r["auditorOn"] else None))
+        cmp(bad, f"row {i} u_f != u", uf != u, True)
+        # the sealed seed's aad (CTR-PQZ-40): chainUid || token || ua || be8(keyVersion) || keccak256(P(u) || P(v)), P the
+        # stored form of the op blob (pack_stored, the inverse of the unpack check_state checks against the contract's blobs)
+        for role, ua, v in [("t", b"\x11" * 32, vs[0])] + ([("a", b"\xa0" * 32, vs[1])] if r["auditorOn"] else []):
+            head = b"\xc1" * 32 + b"\x70" * 20 + ua + bytes(8)
+            cmp(bad, f"row {i} aad_{role}", r.get(f"aad_{role}"), (head + kec(pack_stored(u) + pack_stored(v))).hex())
+            if r.get(f"aad_{role}") == (head + kec(u + v)).hex():
+                bad.append(f"row {i} aad_{role}: keccak256 over the unpacked lanes, not P(u) || P(v)")
+    return bad
+
+
 def check_statement(j, d):
     bad = []
     for r in j["rows"]:
@@ -1370,9 +1465,62 @@ def proof_framing(idn, form, proof, params, row_max=None, bound=None):
     return bad
 
 
-def check_proofs(j, d):
+def check_split(j, d):
+    """proof_pqzl_split.json (spec three-key model K3-4; UNAUDITED): the split transfer under PQZL_SPLIT_ID, rebuilt from
+    the seeds (the base TRANSFER / TRANSFER0 statement's header, keys and T; seed_leg; the leg's and the sender's own
+    Enc), the witness, the decoder's acceptance; proof validity is pqz-vectors' (both verifiers)."""
     bad = []
-    idn = "pqzl" if bytes.fromhex(j["proof_system_id"]) == PQZL_ID else "pqzh"
+    if j["file"] != "proof_pqzl_split.json":
+        return [f"file name {j['file']}: PQZL_SPLIT_ID's proofs are proof_pqzl_split.json"]
+    cmp(bad, "params", j["params"], {"max_proof": MAX_PROOF[PQZL_ID]})
+    srows = statement_rows(d)
+    for r in j["rows"]:
+        form, ob = r["form"], r["objects"]
+        aud = form == "TRANSFER-SPLIT"
+        base = srows[r["base"]["form"]]
+        cmp(bad, f"{form} base", (r["base"], r["op"]), ({"file": "statement_transfer.json", "form": "TRANSFER" if aud else "TRANSFER0"}, 1))
+        pk_t = key(ob["pk_t"]["keygen"])[0]
+        sl = shake256(b"SCAAS-PQZ-ENC-LEG-V1" + bytes.fromhex(ob["own"]["seed_enc"]) + bytes(4) + bytes.fromhex(r["toUA"]) +
+                      kec(pk_t), 32)
+        cmp(bad, f"{form} seed_leg", (ob["seed_leg"], ob["leg"]["seed_enc"]), (sl.hex(), sl.hex()))
+        cmp(bad, f"{form} toUA", r["toUA"], fval(base["header"]["toUA"]).hex())
+        cmp(bad, f"{form} recipients", (ob["leg"]["recipients"], ob["own"]["recipients"]),
+            ([ob["pk_t"]["keygen"]] + ([ob["pk_a"]["keygen"]] if aud else []), [ob["pk_f"]["keygen"]]))
+        u, vs, ls = enc_of(ob["leg"])
+        uf, vf, os_ = enc_of(ob["own"])
+        b = with_id(bytes.fromhex(base["stmt"]), PQZL_SPLIT_ID)
+        pre = 640 + (4 if aud else 3) * PK_BYTES + V_BYTES  # header, pk_f, pk_t, [pk_a], T
+        st = b[:pre] + u + vs[0] + vf[0] + (vs[1] if aud else b"") + uf
+        cmp(bad, f"{form} stmt", (r["stmt"], r["stmt_keccak"]), (st.hex(), kec(st).hex()))
+        f = parse(1, st)
+        cmp(bad, f"{form} parsed", (f["op"], f["u_f"] == uf, uf != u, len(st)), ("TRANSFER", True, True, STMT_BYTES[form]))
+        lr, le1, le2, _ = ls
+        orr, oe1, oe2, _ = os_
+        vals = ob["leg"]["values"]
+        w = key_wit(ob["pk_f"]["keygen"]) + i8(lr) + i16(le1) + i8(orr) + i16(oe1) + i16(le2[0]) + i16(oe2[0]) + \
+            (i16(le2[1]) if aud else b"") + bytes(digits(vals[0])) + bytes(digits(ob["own"]["values"][0]))
+        cmp(bad, f"{form} wit", (r["wit"], r["wit_keccak"]), (w.hex(), keccak256(w).hex()))
+        proof = bytes.fromhex(r["proof"])
+        cmp(bad, f"{form} proof", (r["proof_bytes"], r["proof_keccak"], r["proof_fnv"]), (len(proof), kec(proof).hex(), fnv(proof)))
+        try:
+            decode_input(precompile_input(1, st, proof))
+        except Rejected as x:
+            bad.append(f"{form}: the honest input is rejected: {x}")
+        bad += proof_framing("pqzl", form, proof, j["params"])
+        cmp(bad, f"{form} expect", r["expect"], True)
+    cmp(bad, "forms", [r["form"] for r in j["rows"]], ["TRANSFER-SPLIT", "TRANSFER-SPLIT0"])
+    return bad
+
+
+def check_proofs(j, d):
+    if j.get("proof_system_id") == PQZL_SPLIT_ID.hex():
+        return check_split(j, d)
+    bad = []
+    # the file's id must be one of the set's proof systems with proofs (review 3w Codex u5-2: every id but PQZL's was
+    # read as PQZH, an all-zero, retired or foreign id passed)
+    idn = {v: k for k, v in IDS.items()}.get(bytes.fromhex(j["proof_system_id"]))
+    if idn is None:
+        return [f"proof_system_id {j['proof_system_id'][:16]}... is not one of this set's ids {sorted(IDS)}"]
     cmp(bad, "file name", j["file"], f"proof_{idn}.json")
     if idn == "pqzl":
         cmp(bad, "params", j["params"], {"max_proof": MAX_PROOF[PQZL_ID]})
@@ -1432,16 +1580,19 @@ def check_proofs(j, d):
         cmp(bad, f"{form} expect", r["expect"], True)
         if "case" not in r:
             seen.append(form)
-    cmp(bad, "forms", sorted(seen), sorted(STMT_BYTES))
+    cmp(bad, "forms", sorted(seen), sorted(f for f in STMT_BYTES if f in FORMS))  # the split forms: check_split
     cmp(bad, "op 7 disclosures", sorted(r["case"] for r in j["rows"] if "disclosure" in r["statement"]),
         sorted(r["case"] for r in load(d, MULTI_FILE).get("disclosures", [])))
     cmp(bad, "op 7 cases", seen_m, [c for c, m, _ in MULTI_CASES if idn in multi_ids(m)])
     return bad
 
 
-def apply_edits(r, stmts, proofs):
-    """negative.json: the honest input of (form, id) with the row's edits (see the file's description)."""
-    if r["form"] == "-":
+def apply_edits(r, stmts, proofs, base=None):
+    """negative.json: the honest input of (form, id) with the row's edits (see the file's description); base = (op,
+    stmt, proof) of a split row's own input (proof_pqzl_split.json)."""
+    if base is not None:
+        op, s, p = base
+    elif r["form"] == "-":
         op, s, p = 0, b"", b""
     elif r["form"] == "TRANSFER-MULTI":
         op, s, p = 7, with_id(stmts[r["case"]], IDS[r["id"]]), proofs[r["case"], r["id"]]
@@ -1549,7 +1700,7 @@ def check_negative(j, d):
     got = {r["reason"] for r in j["rows"]}
     if need - got or "revert" not in {r["expect"] for r in j["rows"]}:
         bad.append(f"missing reasons: {sorted(need - got)}")
-    for f in STMT_BYTES:
+    for f in (x for x in STMT_BYTES if x in FORMS):  # the split forms' file is proof_pqzl_split.json (check_split)
         op = OP_BYTE[f.rstrip("0")]
         want = [f"{f}: statement length - 1", f"{f}: statement length + 1", f"{f}: unknown proofSystemId (zero word)",
                 f"{f}: {OTHER_ROW}", f"{f}: proof truncated by 1 byte",
@@ -1592,6 +1743,56 @@ def check_negative(j, d):
         cmp(bad, "opening " + r["name"], r["reason"], got)
     if sorted({r["reason"] for r in j["openings"]}) != ["Opening", "ok"]:
         bad.append("openings: need the canonical one and Opening rejections")
+    bad += check_split_negative(j, d, stmts, proofs, honest)
+    return bad
+
+
+def check_split_negative(j, d, stmts, proofs, honest):
+    """negative.json split_rows (three-key spec K3-4; UNAUDITED): the split transfer of proof_pqzl_split.json (id
+    pqzl_split) or the PQZL TRANSFER / TRANSFER0 (id pqzl) with the edits; the precompile gives 0 (or reverts) and so
+    does the off-chain entry (offchain 0); the reason is this decoder's. Required: per split form the length, op, id and
+    proof edits and the u / u_f swap; TRANSFER / TRANSFER0 under PQZL_SPLIT_ID."""
+    bad = []
+    sp = {r["form"]: (r["op"], bytes.fromhex(r["stmt"]), bytes.fromhex(r["proof"]))
+          for r in load(d, "proof_pqzl_split.json")["rows"]}
+    honest = honest | {precompile_input(op, s, p) for op, s, p in sp.values()}
+    names = set()
+    for r in j.get("split_rows", []):
+        if r["name"] in names:
+            bad.append("duplicate split row " + r["name"])
+        names.add(r["name"])
+        if r["id"] == "pqzl_split":
+            base = sp[r["form"]]
+        elif r["id"] == "pqzl" and r["form"] in ("TRANSFER", "TRANSFER0"):
+            base = None
+        else:
+            bad.append(f"{r['name']}: split row of ({r['form']}, {r['id']})")
+            continue
+        b = apply_edits(r, stmts, proofs, base)
+        cmp(bad, r["name"] + " input", (r["input_bytes"], r["input_sha3"]), (len(b), hashlib.sha3_256(b).hexdigest()))
+        if b in honest:
+            bad.append(r["name"] + ": the edits give an honest input")
+        try:
+            decode_input(b)
+            why = "verify"
+        except Rejected as x:
+            why = x.args[0]
+        cmp(bad, r["name"] + " reason", r["reason"], why)
+        cmp(bad, r["name"] + " expect", r["expect"], "revert" if len(b) > MAX_INPUT else "0")
+        cmp(bad, r["name"] + " offchain", r["offchain"], "0")
+    want = [f"TRANSFER{a}: PQZL_SPLIT_ID (serves only the split transfer)" for a in ("", "0")]
+    for f in sp:
+        want += [f"{f}: {x}" for x in ("statement length - 1", "statement length + 1", "unknown proofSystemId (zero word)",
+                                       "PQZL proofSystemId (PQZL_ID never serves the split transfer)",
+                                       "u and u_f swapped", "u_f coefficient 0 low bit flipped", "v_f low bit flipped",
+                                       "proof truncated by 1 byte", "proof extended by 1 zero byte",
+                                       "proof byte 0 bit 0 flipped", "proof middle byte bit 3 flipped",
+                                       "proof last byte bit 7 flipped")]
+        want += [f"{f}: under op {o}" for o in range(2, 6)]
+    if set(want) - names:
+        bad.append(f"split rows missing {sorted(set(want) - names)}")
+    if "verify" not in {r["reason"] for r in j.get("split_rows", [])}:
+        bad.append("split rows: no verifier rejection")
     return bad
 
 
@@ -1827,9 +2028,101 @@ def check_worstcase(j, d):
     return bad
 
 
-CHECKERS = {MULTI_FILE: check_multi, "matrix.json": check_matrix, "cbd.json": check_cbd, "keygen.json": check_keygen, "enc.json": check_enc,
+# ---------------------------------------------------------------- state.json (ua-rs-sign T15e; no-decryption-oracle spec §4.4)
+PACK_B = (Q - 1).bit_length()  # PqzSet.PACK_BITS: ceil(log2 q), the stored form (P46)
+PKP, VP = PK_BYTES // 32 * PACK_B // 2, V_BYTES // 32 * PACK_B // 2
+
+
+def pack_stored(b):
+    """P46: the be8 lanes of a part as PACK_B bits each, big-endian, concatenated (the contract's stored form)."""
+    n = len(b) // 8
+    x = 0
+    for i in range(n):
+        x = (x << PACK_B) | int.from_bytes(b[8 * i:8 * i + 8], "big")
+    return x.to_bytes(n * PACK_B // 8, "big")
+
+
+def unpack_stored(b):
+    """The 64-bit lanes (be8) of a P46-packed part: every PACK_B bits big-endian, one coefficient."""
+    x, n = int.from_bytes(b, "big"), len(b) * 8 // PACK_B
+    assert len(b) * 8 == n * PACK_B
+    return b"".join(((x >> (PACK_B * (n - 1 - i))) & ((1 << PACK_B) - 1)).to_bytes(8, "big") for i in range(n))
+
+
+def check_state(j, d):
+    """The raw words of the forge state rows rebuilt here (third implementation, beside PqzCore and ua-rs): each account's
+    T = acc + Sum pending[rolled, p) + Trivial(shieldIn) at the clients' p (CTR-PQZ-06), acc from its reference blob or its
+    not() slots (checked against accHash); each entry's entryRef and leg ciphertexts from its op blob."""
+    bad = []
+    cmp(bad, "set", j["set"], SET)
+    hx = lambda s: bytes.fromhex(s[2:])
+    lo = lambda w, at, n: int.from_bytes(w[32 - at - n:32 - at], "big")
+    for a in j["accounts"]:
+        name = a["name"]
+        codes = {b["address"]: hx(b["code"])[1:] for b in a["blobs"]}
+        s0, s1, s2, s3 = (hx(w) for w in a["account"])
+        count, rolled, units, flags = lo(s0, 0, 8), lo(s0, 8, 8), lo(s1, 24, 4), lo(s1, 28, 1)
+        p = min(count, rolled + 16, rolled + K_MAX - 1 - units)
+        cmp(bad, f"{name}: p, sendCounter", (a["p"], a["sendCounter"]), (p, lo(s2, 0, 8)))
+        load = lambda ptr, u, v: unpack_stored(codes["0x" + ptr.hex()][u:u + PKP]) + unpack_stored(codes["0x" + ptr.hex()][v:v + VP])
+        if flags & 1:
+            stream = b"".join(bytes(255 - x for x in hx(w)) for w in a["accWords"])[:PKP + VP]
+            cmp(bad, f"{name}: accHash", keccak256(stream), s3)
+            t = unpack_stored(stream)
+        elif lo(s1, 0, 20):
+            t = load(s1[12:], lo(s1, 20, 2), lo(s1, 22, 2))
+        else:
+            t = bytes(CT_BYTES)
+        cmp(bad, f"{name}: pending indexes", [e["index"] for e in a["pending"]], list(range(rolled, p)))
+        for e in a["pending"]:
+            w = hx(e["word"])
+            t = ct_add(t, trivial(digits(lo(w, 12, 8))) if lo(w, 8, 2) == 0 else load(w[:20], lo(w, 10, 2), lo(w, 8, 2)))
+        t = ct_add(t, trivial(digits(a["shieldIn"])))
+        cmp(bad, f"{name}: T", t.hex(), a["T"][2:])
+    for e in j["entries"]:
+        name = e["name"]
+        cmp(bad, f"{name}: entryRef", "0x" + entry_ref(j["chainId"], hx(j["chainUid"]), hx(j["token"]), hx(e["fromUA"]),
+                                                       e["sendCounter"]).hex(), e["entryRef"])
+        r = hx(e["blob"]["code"])[1:-VP]
+        m = len(e["legs"])
+        aud = e["legs"][0]["auditorCt"] != ""
+        g = groups(m, aud)
+        ls = 32 + VP * (1 + aud)
+        for leg in e["legs"]:
+            k = leg["leg"]
+            at = 16 + PKP * g + ls * k
+            u = unpack_stored(r[16 + PKP * (k // lpg(aud)):][:PKP])
+            cmp(bad, f"{name} leg {k}: owner", "0x" + r[at + ls - 32:at + ls].hex(), leg["ua"])
+            cmp(bad, f"{name} leg {k}: ct", (u + unpack_stored(r[at:at + VP])).hex(), leg["ct"][2:])
+            if aud:
+                cmp(bad, f"{name} leg {k}: auditor copy", (u + unpack_stored(r[at + VP:at + 2 * VP])).hex(), leg["auditorCt"][2:])
+    return bad
+
+
+CHECKERS = {MULTI_FILE: check_multi, "matrix.json": check_matrix, "cbd.json": check_cbd, "keygen.json": check_keygen, "enc.json": check_enc, "opening.json": check_opening,
             "statement_*": check_statement, "proof_*": check_proofs, "negative.json": check_negative,
-            "selftest.json": check_selftest, "fee0.json": check_fee0, "worstcase_noise.json": check_worstcase}
+            "selftest.json": check_selftest, "fee0.json": check_fee0, "worstcase_noise.json": check_worstcase,
+            "state.json": check_state}
+
+
+# Files another writer owns and another test checks (review 3w u5-1), with the one set whose directory holds them (T-05:
+# n2304-kmax4096's pqz/<set>/); state.json also has check_state here and is required at every set (T-41). Keep equal to
+# OTHER_WRITERS in pqz-core/ffi/src/bin/pqz-vectors.rs. Any other file without a checker fails, as does such a file at
+# another set; a missing required file fails (--check on the set's directory).
+OTHER_WRITERS = {"verdict.json": ("n2304-kmax4096", "forge PqzVerdictVectors.t.sol; clientkeys pqz-verdict.test.js, scaas-node pqz.rs"),
+                 "verifier_fee.json": ("n2304-kmax4096", "forge PqzVerifierFeeVectors.t.sol; clientkeys pqz-verifier-fee.test.js, "
+                                                         "ua-rs tests/pqzfee.rs, scaas-node pqz.rs")}
+REQUIRED = ["state.json"] + [n for n, (s, _) in OTHER_WRITERS.items() if s == SET]
+
+# Files whose checker here rebuilds only part of the file (review 3w fix round, the S7 gate's tamper step: 8 of 12
+# changed state.json leaves were not caught); the file's writer and its other readers bind the rest. tamper.py counts
+# them but requires only that some change is caught.
+PARTIAL_CHECKERS = {"opening.json": "check_opening rebuilds seed_leg and the split Enc; the KEM rows (coins, openings, "
+                                    "openKemSeeds) are pqz-vectors --check's (a second generation, byte for byte) and the "
+                                    "clients' (clientkeys, ua-rs)",
+                    "state.json": "check_state rebuilds T, accHash, entryRef and the leg ciphertexts from the raw words; "
+                                  "the rest (layout, noneHeaders, records, block numbers) is forge PqzStateVectors.t.sol's "
+                                  "(test_noneHeaderRows reads it back) and ua-rs tests/facade_pqz_state.rs's"}
 
 
 def check_files(paths, log):
@@ -1837,6 +2130,9 @@ def check_files(paths, log):
     for p in paths:
         name = os.path.basename(p)
         fn = CHECKERS.get(name) or CHECKERS.get(name.split("_")[0] + "_*")
+        if fn is None and OTHER_WRITERS.get(name, ("",))[0] == SET:
+            log(f"other {name}: {OTHER_WRITERS[name][1]}")
+            continue
         if fn is None:
             bad.append(f"{name}: no checker in pqz_kat.py")
             continue
@@ -1859,6 +2155,8 @@ def main(argv):
     elif argv and argv[0] == "--check":
         bad = selftest(log)
         files = argv[1:] or sorted(glob.glob(os.path.join(VEC_DIR, "*.json")))
+        if not argv[1:]:
+            bad += [f"{n}: missing in {SET}'s directory (required)" for n in REQUIRED if not os.path.exists(os.path.join(VEC_DIR, n))]
         log(f"     parameter set {SET} (q = {Q}, n = {N}, K_MAX = {K_MAX:,}{', PQZH' if HAS_PQZH else ', no PQZH'})")
         log(f"     vector files: {len(files)}")
         bad += check_files(files, log)

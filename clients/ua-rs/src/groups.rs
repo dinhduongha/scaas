@@ -183,7 +183,7 @@ fn bn_pok(id: u16, c0: &[u8], r: &[u8], mu: &[u8]) -> bool {
 
 /// Every PoK `R_i == μ_i·G − c_i·C_i0`, `c_i = H_dkg(id_i ‖ C_i0 ‖ R_i)`, and `Y == Σ C_i0` (compared as encodings).
 /// secp256k1 (`w = 33`): a `C_i0` sharing its x with the partial sum (repeated or cancelling) is refused, as
-/// `UAFrostSecp256k1Verifier`'s mixed addition refuses it; bn254 (`ECADD`) has no such case.
+/// `FrostSecp256k1Verifier`'s mixed addition refuses it; bn254 (`ECADD`) has no such case.
 fn dkg_check<P: core::ops::Add<Output = P> + Copy>(
     kd: &[u8],
     w: usize,

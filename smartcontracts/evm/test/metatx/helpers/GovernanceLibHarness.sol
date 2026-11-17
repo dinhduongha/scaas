@@ -13,14 +13,16 @@ contract GovernanceLibHarness {
 
     function init(uint8 kind, uint256 features_, uint256 locked, bytes32 owner_, GovernanceLib.Roles memory roles) external {
         k = kind;
-        GovernanceLib.init(features_, locked, owner_, 0, address(0), roles, _validFor(kind), _roles(), _contractOnly());
+        GovernanceLib.init(features_, locked, owner_, 0, address(0), roles, _validFor(kind), _roles(), _contractOnly(),
+            address(0));
     }
 
-    /// The valid mask each kind passes to `init`: the plain kinds `_validBits() | REGULATED`, so 5-9 reach
-    /// `FeatureNotBuilt`; the confidential kinds `_validBits()`; an unknown kind has no valid flag.
+    /// The valid mask each kind passes to `init`: `_validBits()`, so 5-9 reach `FeatureInvalidForKind` on every plain kind
+    /// (ua-mtx-merge T24, regulated-kinds spec Q3: before, `NORMAL` and `WRAPPED` passed `| REGULATED` and reached
+    /// `FeatureNotBuilt`); an unknown kind has no valid flag.
     function _validFor(uint8 kind) private pure returns (uint256) {
-        if (kind == TokenStore.KIND_NORMAL) return GovernanceBits.NORMAL_BITS | GovernanceBits.REGULATED;
-        if (kind == TokenStore.KIND_WRAPPED) return GovernanceBits.WRAPPED_BITS | GovernanceBits.REGULATED;
+        if (kind == TokenStore.KIND_NORMAL) return GovernanceBits.NORMAL_BITS;
+        if (kind == TokenStore.KIND_WRAPPED) return GovernanceBits.WRAPPED_BITS;
         if (kind == TokenStore.KIND_NORMAL_ZETHER || kind == TokenStore.KIND_NORMAL_PQZ) return GovernanceBits.NORMAL_BITS;
         if (kind == TokenStore.KIND_WRAPPED_ZETHER || kind == TokenStore.KIND_WRAPPED_PQZ) return GovernanceBits.WRAPPED_BITS;
         return 0;
@@ -39,19 +41,19 @@ contract GovernanceLibHarness {
     }
 
     function grantRole(uint8 bit, bytes32 account) external {
-        GovernanceLib.grantRole(bit, account, nid(msg.sender), _roles(), _contractOnly());
+        GovernanceLib.grantRole(bit, account, nid(msg.sender), _roles(), _contractOnly(), address(0));
     }
-    function revokeRole(uint8 bit, bytes32 account) external { GovernanceLib.revokeRole(bit, account, nid(msg.sender)); }
-    function renounceRole(uint8 bit) external { GovernanceLib.renounceRole(bit, nid(msg.sender)); }
-    function disableFeature(uint8 bit) external { GovernanceLib.disableFeature(bit, nid(msg.sender)); }
-    function transferOwnership(bytes32 o) external { GovernanceLib.transferOwnership(o, nid(msg.sender)); }
-    function acceptOwnership() external { GovernanceLib.acceptOwnership(nid(msg.sender)); }
-    function renounceOwnership() external { GovernanceLib.renounceOwnership(nid(msg.sender), _roles()); }
+    function revokeRole(uint8 bit, bytes32 account) external { GovernanceLib.revokeRole(bit, account, nid(msg.sender), 0); }
+    function renounceRole(uint8 bit) external { GovernanceLib.renounceRole(bit, nid(msg.sender), 0); }
+    function disableFeature(uint8 bit) external { GovernanceLib.disableFeature(bit, nid(msg.sender), 0); }
+    function transferAdmin(bytes32 o) external { GovernanceLib.transferAdmin(o, nid(msg.sender)); }
+    function acceptAdmin() external { GovernanceLib.acceptAdmin(nid(msg.sender)); }
+    function renounceAdmin() external { GovernanceLib.renounceAdmin(nid(msg.sender), _roles()); }
     function use(uint8 bit, bytes32 a) external returns (bytes32) { return GovernanceUse.use(bit, a, 0); }
 
     function features() external view returns (uint256) { return GovernanceLib.$().features; }
     function lockedFeatures() external view returns (uint256) { return GovernanceLib.$().lockedFeatures; }
-    function owner() external view returns (bytes32) { return GovernanceLib.$().owner; }
-    function pendingOwner() external view returns (bytes32) { return GovernanceLib.$().pendingOwner; }
+    function admin() external view returns (bytes32) { return GovernanceLib.$().admin; }
+    function pendingAdmin() external view returns (bytes32) { return GovernanceLib.$().pendingAdmin; }
     function hasRole(uint8 bit, bytes32 a) external view returns (bool) { return GovernanceLib.hasRole(bit, a); }
 }

@@ -1,0 +1,22 @@
+ua-mtx-merge T82 (owner 2026-11-09): MtxRelayFee -> RelayFeeRouter, MtxRelayExecutor -> RelayFeeExecutor. Gate summary.
+Full outputs in git-ignored .log files (this directory; forge per directory in
+runs/2026-11-08-ua-mtx-merge-t66a-t82-test-<dir>.log, the T66a forge-dirs.sh with label t82; node in
+scaas-node/runs/2026-11-09-ua-mtx-merge-t82-*.log). Forge 1.8.5, solc 0.8.37, default set n2304-kmax4096; every heavy run
+through scripts/capped at 4 GB, -j2. Tree: 56fb0f3b + the T82 change. UNAUDITED.
+
+step | commit | rc | counts
+forge test/metatx | T82 | 1 | 492 passed, 1 failed (test_gas_rollMax_relayedFullTx, known red: owner kept ROLL_MAX), 1 skipped
+forge test/governance (first run) | T82 | 1 | 423 passed, 1 failed: the router pin, measured 0x6e5ADaD0b26E45d76250564dC569D2C05a082762
+forge test/governance (pin moved) | T82 | 0 | 424 passed
+forge test/merge | T82 | 0 | 341 passed
+forge test/as | T82 | 0 | 462 passed
+size gate (forge build src --sizes --json; size_gate.py) | T82 | 0 | 0 errors, 99 contracts; RelayFeeRouter 2,552 B, RelayFeeExecutor 554 B (unchanged figures); build rc 1 is the EIP-7954 notice (WrappedPqzRegulatedToken, pinned in _above64KiB)
+scaas-node cargo test --lib relay | T82 | 0 | 65 passed, 621 filtered out
+scaas-node cargo clippy --all-targets -- -D warnings | T82 | 0 | 0 warnings
+clientkeys npm test | T82 | 0 | 294 tests, 291 passed, 0 failed, 3 skipped
+vectors | T82 | - | none moved (the forge writers rewrote identical bytes); vectors-check not needed
+docs_check.py check | T82 | 0 | 0 errors, 5 warnings (line budgets, unchanged)
+
+CREATE2 (deterministic deployer, default DEPLOY_SALT), old -> new:
+router   0x8B56809BBf5f6595351F648a499E194292B6100C -> 0x6e5ADaD0b26E45d76250564dC569D2C05a082762 (GovDeploy.t.sol pin)
+executor 0x5ecDB11E3C7679637EdD6E4f0A47D48Fd9d7c01E -> 0x5E65D1Aa4f88e54D59f8974148B08BeDF04408Df (the router's CREATE at nonce 1; not pinned)

@@ -1,0 +1,21 @@
+mutant | test that went red | rc
+shieldin-payer-unchecked-single | test_frozenShieldInPayerRefused | 1
+shieldin-payer-unchecked-burn | test_frozenShieldInPayerRefused, test_refreshShieldInChecksThePayer | 1
+check-after-pullshieldin | test_checkBeforePullShieldIn | 1
+refresh-refused-under-freeze | test_refreshOpenUnderFreezeAndPause | 1
+r-on-refresh-zero-recipient | test_refreshAsksNoRegistry | 1
+check-after-proof-single | test_checkBeforePullShieldIn, test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed | 1
+check-after-proof-multi | test_checkBeforePullShieldIn, test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed | 1
+check-after-proof-burn | test_checkBeforePullShieldIn, test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed, test_unshieldUnwrapFrozenRefused | 1
+force-writes-pqz-state | test_forceMovesPublicOnly_pqzStateUntouched | 1
+force-reads-pqz-state | test_forceMovesPublicOnly_pqzStateUntouched | 1
+leg-note-read-by-check | test_deniedAndFrozenLegsReceive, test_frozenBeneficiaryRefused, test_frozenReceivesAndRollsOver | 1
+sender-account-read-by-check | test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed | 1
+multi-sender-check-dropped | test_checkBeforePullShieldIn, test_frozenSenderRefusedBeforeProof_direct, test_frozenSenderRefusedBeforeProof_signed, test_pauseStopsShieldTransfersUnshield, test_pauseStopsSignedTransfers | 1
+burn-beneficiary-unchecked | test_deniedBeneficiaryRefused, test_frozenBeneficiaryRefused | 1
+unshield-recipient-unchecked | test_deniedUnshieldRecipientRefused, test_refreshAsksNoRegistry | 1
+shield-payer-unchecked | test_pauseStopsShieldTransfersUnshield | 1
+wrapshield-payer-unchecked | test_pauseStopsWrapShieldAndUnshieldUnwrap | 1
+k12-pre-row-on-fee-none | test_envelopeSubjectNeverTheSender | 1
+k12-pre-row-dropped | test_envelopeSubjectNeverTheSender | 1
+k12-allowlist-in-mask | test_allowlistOutsideMask | 1

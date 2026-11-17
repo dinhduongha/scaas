@@ -1,0 +1,37 @@
+# ua-mtx-merge T66a fix: scaas-node/tests/e2e_ua8.rs on the T66a rule (CTR-UA-32: an msig has no KEM key). UNAUDITED.
+# Local Protocol 30 quickstart (smartcontracts/soroban/scripts/quickstart.sh: `docker run --memory 3g`, the script's own cap, unchanged)
+# and two local anvil chains, smartcontracts/soroban/scripts/e2e-ua8-local.sh <test>, one test per run (each its own quickstart, taken
+# down on exit; no container, anvil or port left after the last). Tree: 7558a364 + this commit's test change. Full output in the
+# git-ignored runs/2026-11-08-ua-mtx-merge-t66a-fix-e2e-ua8-<test>.log.
+step | commit | rc | counts
+red e2e_ua8_network_fit | 7558a364 + the first edit | 101 | 0 passed 1 failed: set_kem_key msig n=16 refused at the host's simulation, Error(Contract, #14) KemHolder, while the first edit expected the node's own check (relayer = None: the chain checks); assertion moved to the host's code
+e2e_ua8_network_fit | this commit | 0 | 1 passed
+e2e_ua8_relayer_table | this commit | 0 | 1 passed
+e2e_ua8_copy_evm_soroban_evm | this commit | 0 | 1 passed
+e2e_ua8_simulation_auth_mode | this commit | 0 | 1 passed
+e2e_ua8_unused_source_account_entry | this commit | 0 | 1 passed
+e2e_ua8_tx_size_limit | this commit | 0 | 1 passed
+e2e_ua8_spend_stop | this commit | 0 | 1 passed
+e2e_ua8_attestation_binds | this commit | 0 | 1 passed
+e2e_ua8_frost_every_size | this commit | 0 | 1 passed
+e2e_ua8_relayer_checked_msig_slot | this commit | 0 | 1 passed
+clippy --test e2e_ua8 -D warnings | this commit | 0 | clean
+
+What moved (meaning: <test> old -> new):
+- e2e_ua8_network_fit: register_msig n=16 "+ PQZ + KEM" -> "+ PQZ" (the KEM key stripped, pqz_only), whole and split, read back equal;
+  set_kem_key msig n=16 (mined, Ua(ua) loaded) -> refused, job dead, nothing signed, kem_key_of None.
+- e2e_ua8_relayer_table: register_msig c slots "+ PQZ + KEM" [+ proof] -> "+ PQZ" [+ proof], the asserted edges unchanged
+  (slhdsa128s 7, fndsa512 16 at every set); new rows: register_msig 1 slot + PQZ + KEM refused on the host, #14, per kind per set;
+  set_kem_key msig rows (edges slhdsa128s 7, fndsa512 15 and 16) -> refused on the host, #14, at every size;
+  register_msig n=16 mldsa65 Chain "+ PQZ + KEM + proof" -> "+ PQZ + proof", still landing.
+
+Figures (tx_size / largest entry, B; n2048-kmax1024 / n2304-kmax4096 / n2560-kmax16384 / n2816-kmax65536), old = docs/networks/soroban.md
+NET-SOR-27's "+ PQZ + KEM" rows:
+- register_msig 7 slhdsa128s + PQZ: 74,916 / 76,964 / 79,012 / 81,060 (57,492) (was + KEM 76,380 / 78,428 / 80,476 / 82,524)
+- the same + proof: 103,216 / 107,456 / 111,660 / 116,648 (57,492) (was 104,680 / 108,920 / 113,124 / 118,112)
+- register_msig 16 fndsa512 + PQZ: 33,276 / 35,324 / 37,372 / 39,420 (16,636 to 22,780) (was 34,740 / 36,788 / 38,836 / 40,884)
+- the same + proof: 61,576 / 65,816 / 70,020 / 75,008 (28,312 to 35,600) (was 63,040 / 67,280 / 71,484 / 76,472)
+- register_msig n=16 mldsa65 + PQZ + proof, one call: 64.05 M instructions at n2816-kmax65536, 117,260 B written, tx 117,352 B,
+  largest entry 57,644 B (was + KEM: 63.7 M, 118,764 B written, measured before the attestation change)
+- set_kem_key of an msig: none (KemHolder); the "set_kem_key 7 slhdsa128s 58,204 B" row and the msig set_kem_key limit leave the table.
+The docs change (NET-SOR-27, the B8 decision's set_kem_key 7) is T19's.

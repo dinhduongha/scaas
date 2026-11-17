@@ -1,0 +1,4213 @@
+{
+ "note": "governance T13 (spec section 10.1): every non-view external of the fifteen artifacts (plan T32: + the six regulated kinds 8-13, each its base kind's rows and the eight control entries; + the router's eight control ops), one class each, read by test/governance/SelectorAudit.t.sol against ./out. BIT(n): a holder of bit n, the feature on. OWNER: the owner (revokeRole and setGrant also a live grantor of a delegable grant). HOLDER_OWN: the caller's own role or pending ownership. OWN_BALANCE: the caller's own balance or an allowance its holder granted. SIGNED: a signature of the subject it acts for (a self-call or the DEX's puller only inside a signed settlement). FACTORY: the factory, once. PERMISSIONLESS(reason): anyone, for the reason given. `error`: what a stranger's call with zero arguments reverts with; required on BIT, OWNER, HOLDER_OWN, FACTORY. Written once, then classified by hand; never regenerated to go green.",
+ "NormalToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "burn(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  }
+ ],
+ "WrappedToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "addReserve(address,uint256)",
+   "class": "PERMISSIONLESS(adds the caller's own underlying as reserve, mints nothing; spec section 7.4)",
+   "error": ""
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "cancelRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "disableWrap(address,bytes32)",
+   "class": "BIT(4)",
+   "error": "NotGuardian()"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "executeRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "proposeRate(address,uint96,uint96)",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(address,uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrapToUA(address,uint256,bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrapToUA(address,uint256,bytes32)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  }
+ ],
+ "NormalZetherToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "burn(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverBatch((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverBatch(bytes32[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned(bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetRollOverMode((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetRollOverMode(bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  }
+ ],
+ "WrappedZetherToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "addReserve(address,uint256)",
+   "class": "PERMISSIONLESS(adds the caller's own underlying as reserve, mints nothing; spec section 7.4)",
+   "error": ""
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "cancelRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "disableWrap(address,bytes32)",
+   "class": "BIT(4)",
+   "error": "NotGuardian()"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "executeRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverBatch((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverBatch(bytes32[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned(bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetRollOverMode((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetRollOverMode(bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshieldUnwrap((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),(address,bytes32,uint256,uint256),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapShield((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapShield(address,uint256,bytes32)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "proposeRate(address,uint96,uint96)",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(address,uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrapToUA(address,uint256,bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrapToUA(address,uint256,bytes32)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  }
+ ],
+ "NormalPqzToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "burn(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPrepareAcc(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  }
+ ],
+ "WrappedPqzToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "addReserve(address,uint256)",
+   "class": "PERMISSIONLESS(adds the caller's own underlying as reserve, mints nothing; spec section 7.4)",
+   "error": ""
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "cancelRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "disableWrap(address,bytes32)",
+   "class": "BIT(4)",
+   "error": "NotGuardian()"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "executeRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPrepareAcc(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapShield((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapShield(address,uint256,bytes32)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "proposeRate(address,uint96,uint96)",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(address,uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrapToUA(address,uint256,bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrapToUA(address,uint256,bytes32)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  }
+ ],
+ "NormalRegulatedToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "burn(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "forceTransfer(bytes32,uint256)",
+   "class": "BIT(6)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "class": "BIT(22)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "pause(bytes32,uint64)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeOrder(bytes32,bytes32)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unfreeze(bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "unpause(bytes32)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  }
+ ],
+ "WrappedRegulatedToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "addReserve(address,uint256)",
+   "class": "PERMISSIONLESS(adds the caller's own underlying as reserve, mints nothing; spec section 7.4)",
+   "error": ""
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "cancelRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "disableWrap(address,bytes32)",
+   "class": "BIT(4)",
+   "error": "NotGuardian()"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "executeRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "forceTransfer(bytes32,uint256)",
+   "class": "BIT(6)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "class": "BIT(22)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "pause(bytes32,uint64)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "proposeRate(address,uint96,uint96)",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeOrder(bytes32,bytes32)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unfreeze(bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "unpause(bytes32)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "unwrap(address,uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrapToUA(address,uint256,bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrapToUA(address,uint256,bytes32)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  }
+ ],
+ "NormalZetherRegulatedToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "burn(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "forceTransfer(bytes32,uint256)",
+   "class": "BIT(6)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverBatch((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverBatch(bytes32[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned(bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetRollOverMode((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetRollOverMode(bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "class": "BIT(22)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "pause(bytes32,uint64)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeOrder(bytes32,bytes32)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unfreeze(bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "unpause(bytes32)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  }
+ ],
+ "WrappedZetherRegulatedToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "addReserve(address,uint256)",
+   "class": "PERMISSIONLESS(adds the caller's own underlying as reserve, mints nothing; spec section 7.4)",
+   "error": ""
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "cancelRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "disableWrap(address,bytes32)",
+   "class": "BIT(4)",
+   "error": "NotGuardian()"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "executeRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "forceTransfer(bytes32,uint256)",
+   "class": "BIT(6)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((uint64,uint64,uint256,bytes16,bytes32,uint256,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),((bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32))[],bytes),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((uint64,uint64,uint256,bytes16,bytes32,(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32),(bytes32,bytes32,bytes32,bytes32)),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverBatch((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverBatch(bytes32[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOverSigned(bytes32,uint64,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetRollOverMode((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetRollOverMode(bytes32,uint8,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshieldUnwrap((uint64,uint64,uint256,bytes32,(bytes32,bytes32,bytes32,bytes32)),(address,bytes32,uint256,uint256),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapShield((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapShield(address,uint256,bytes32)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "class": "BIT(22)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "pause(bytes32,uint64)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "proposeRate(address,uint96,uint96)",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeOrder(bytes32,bytes32)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unfreeze(bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "unpause(bytes32)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "unwrap(address,uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrapToUA(address,uint256,bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrapToUA(address,uint256,bytes32)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  }
+ ],
+ "NormalPqzRegulatedToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "burn(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "forceTransfer(bytes32,uint256)",
+   "class": "BIT(6)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBurn((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPrepareAcc(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "class": "BIT(22)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "pause(bytes32,uint64)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeOrder(bytes32,bytes32)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unfreeze(bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "unpause(bytes32)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  }
+ ],
+ "WrappedPqzRegulatedToken": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "addReserve(address,uint256)",
+   "class": "PERMISSIONLESS(adds the caller's own underlying as reserve, mints nothing; spec section 7.4)",
+   "error": ""
+  },
+  {
+   "sig": "approve(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "cancelRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "disableWrap(address,bytes32)",
+   "class": "BIT(4)",
+   "error": "NotGuardian()"
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "executeRate()",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "forceTransfer(bytes32,uint256)",
+   "class": "BIT(6)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "freeze(bytes32,bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mint(address,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mintToUA(bytes32,uint256)",
+   "class": "BIT(1)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "mtxAddReserve((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatchTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelOrder((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransfer((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,uint256,bytes16,bytes[],(bytes32,bytes,bytes)[],bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingle((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingleCompact((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxConfidentialTransferSingleCompact((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes32,bytes16,bytes,bytes,bytes,bytes,bytes),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecuteTransfer((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(bytes32,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayReceiverFee((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPayWithTax((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint8,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,string,uint16,bytes))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPrepareAcc((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPrepareAcc(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRelayFee(bytes32,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint64,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRollOver(bytes32,uint64,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxShield(bytes32,uint256)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTrade((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(uint256,uint256,uint256,address))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransfer(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferWithFee(bytes32,bytes32,uint256,uint256,uint256,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(uint256,bytes32),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshield((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),uint256,bytes32,bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshieldUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),(uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnshieldUnwrap((uint64,uint256,uint256,bytes32,uint64,bytes32,bytes,bytes),(address,bytes32,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapLeg((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnwrapToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrap((address,uint256,uint256,uint256,uint32,address,uint256,address),uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapLeg((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapOrder(address,(bytes32,address,uint256,uint256,uint256,uint256,address,bytes32,uint8,uint256,uint256,uint256),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapShield((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapShield(address,uint256,bytes32)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxWrapToUA((address,uint256,uint256,uint256,uint32,address,uint256,address),address,uint256,bytes32,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "operatorTransfer(bytes32,bytes32,uint256,bytes32)",
+   "class": "BIT(22)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "pause(bytes32,uint64)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "payWithFee(address,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "payWithTax(bytes32,uint256,uint8,uint256,bytes32,(bytes32,string,uint16,bytes))",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "proposeRate(address,uint96,uint96)",
+   "class": "BIT(3)",
+   "error": "NotRateAdmin()"
+  },
+  {
+   "sig": "recordOrder(bytes32,bytes32,bytes32,bytes32,uint256,uint64)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the surplus only, to the immutable rescueTo; spec section 6.2)",
+   "error": ""
+  },
+  {
+   "sig": "restorePulled((bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "revokeOrder(bytes32,bytes32)",
+   "class": "BIT(10)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setTaxRate(uint32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setTaxRecipient(bytes32)",
+   "class": "BIT(23)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "transfer(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferFrom(address,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "transferToUA(bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unfreeze(bytes32,bytes32)",
+   "class": "BIT(5)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "unpause(bytes32)",
+   "class": "BIT(7)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "unwrap(address,uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrap(uint256,address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "unwrapToUA(address,uint256,bytes32,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(address,uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrap(uint256)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  },
+  {
+   "sig": "wrapToUA(address,uint256,bytes32)",
+   "class": "OWN_BALANCE",
+   "error": ""
+  }
+ ],
+ "SCaaSDex": [
+  {
+   "sig": "acceptOwnership()",
+   "class": "HOLDER_OWN",
+   "error": "NotPendingOwner(bytes32)"
+  },
+  {
+   "sig": "cancelGrant(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "disableFeature(uint8)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "exchangeOne((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,uint256)[],address[]),(address,bytes)[],address)",
+   "class": "SIGNED",
+   "error": "NotSelf()"
+  },
+  {
+   "sig": "grantRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "initialize(address,uint64,bytes)",
+   "class": "FACTORY",
+   "error": "NotFactory()"
+  },
+  {
+   "sig": "mtxCancelOrders((address,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256))[],bytes[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExchange((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,uint256)[],address[]),(address,bytes)[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExchangeBatch((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,uint256)[],address[])[],(address,bytes)[][])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExchangeVia((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256,uint256)[],address[]),address,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxHybrid((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256),(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256)[],uint256,uint256,address[]),(address,bytes)[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxHybridVia((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256),(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256)[],uint256,uint256,address[]),address,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxInvalidateNonces(address,uint256,uint256,bytes)",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSettle((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256),(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256)[])[])",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "renounceOwnership()",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "renounceRole(uint8)",
+   "class": "HOLDER_OWN",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "revokeRole(uint8,bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setExchangeTarget(address,bool)",
+   "class": "BIT(11)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setFeeSplit(uint32,address)",
+   "class": "BIT(12)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setGrant(uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32))",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  },
+  {
+   "sig": "setListedOnly(bool)",
+   "class": "BIT(11)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "setMarket(address,address,bool)",
+   "class": "BIT(11)",
+   "error": "MissingRole(uint8,bytes32)"
+  },
+  {
+   "sig": "settleOne((bytes32,(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256),(address,uint8,(address,address,uint256,uint256,uint256,uint256,address,address,address,uint8,uint256,uint256,uint256),(bytes32,address,uint256,uint256,uint256,uint256,address,address,bytes32,uint8,uint256,uint256,uint256),bytes,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),uint256)[]),address)",
+   "class": "SIGNED",
+   "error": "NotSelf()"
+  },
+  {
+   "sig": "transferOwnership(bytes32)",
+   "class": "OWNER",
+   "error": "NotOwner(bytes32)"
+  }
+ ],
+ "DexPuller": [
+  {
+   "sig": "pull(address,address,uint256)",
+   "class": "SIGNED",
+   "error": "NotDex(address)"
+  },
+  {
+   "sig": "rescue(address)",
+   "class": "PERMISSIONLESS(the puller's whole balance to its immutable rescueTo; it holds no user's funds, R-16)",
+   "error": ""
+  }
+ ],
+ "GovernanceRouter": [
+  {
+   "sig": "cancelNonce(uint256)",
+   "class": "PERMISSIONLESS(bumps the caller's own lane)",
+   "error": ""
+  },
+  {
+   "sig": "executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)",
+   "class": "PERMISSIONLESS(refuses every call)",
+   "error": "MtxSelectorNotAllowed(bytes4)"
+  },
+  {
+   "sig": "mtxAcceptOwnership((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxBatch((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)[],(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[])[])",
+   "class": "PERMISSIONLESS(refuses every call)",
+   "error": "MtxSelectorNotAllowed(bytes4)"
+  },
+  {
+   "sig": "mtxCancelGrant((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelNonce((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxCancelRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxDisableFeature((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxDisableWrap((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxExecute((bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "PERMISSIONLESS(refuses every call)",
+   "error": "MtxSelectorNotAllowed(bytes4)"
+  },
+  {
+   "sig": "mtxExecuteRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxForceTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxFreeze((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxGrantRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxMint((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxMintToUA((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxOperatorTransfer((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,uint256,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxPause((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxProposeRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,uint96,uint96,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRecordOrder((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,bytes32,bytes32,uint256,uint64,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRenounceOwnership((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRenounceRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRevokeOrder((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxRevokeRole((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetExchangeTarget((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetFeeSplit((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint32,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetGrant((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint8,bytes32,(uint128,uint128,uint128,uint128,uint32,uint64,uint32,bool,bytes32),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetListedOnly((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetMarket((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,address,address,bool,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetTaxRate((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,uint32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxSetTaxRecipient((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxTransferOwnership((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnfreeze((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  },
+  {
+   "sig": "mtxUnpause((bytes32,uint256,uint256,uint256,uint32,address,uint256,address),address,bytes32,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))",
+   "class": "SIGNED",
+   "error": ""
+  }
+ ]
+}

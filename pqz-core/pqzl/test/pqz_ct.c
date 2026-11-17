@@ -7,6 +7,7 @@
  * the list is in research/code-review-2026-10-19/E-constant-time.md. Driven by test/ct.sh under valgrind.
  *   pqz_ct [rels] [nprove] [keys]    rels: pqz_bench's bit mask (1 = R_REG, ..., 32 = R_TX0, 64 << t = R_TXM);
  *   keys: rounds of KeyGen (seed secret), Enc to two recipients (seed_enc and the digits secret), Dec (s secret)
+ *   PQZ_ARENA_MB: the arena (default pqz_bench's 768 MiB; every R_TXM shape at once needs more: gate.sh step ct, 2048)
  */
 #define main pqz_bench_main
 #include "pqz_bench.c"
@@ -17,8 +18,10 @@ int
 main (int argc, char **argv)
 {
   int rels = argc > 1 ? atoi (argv[1]) : 1, np = argc > 2 ? atoi (argv[2]) : 1, fails = 0;
-  void *arena = malloc (ARENA_BYTES);
-  if (arena == NULL || step_init (arena, ARENA_BYTES) != 0)
+  const char *amb = getenv ("PQZ_ARENA_MB");
+  const size_t arena_bytes = amb != NULL ? (size_t)atoi (amb) << 20 : ARENA_BYTES;
+  void *arena = malloc (arena_bytes);
+  if (arena == NULL || step_init (arena, arena_bytes) != 0)
     return printf ("init failed\n"), 2;
   for (int rel = 0; rel < NREL; rel++)
     for (int i = 0; i < np && (rels >> rel & 1); i++)

@@ -8,12 +8,15 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {nid} from "../helpers/Ids.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UADexBase} from "../ua/UADex.t.sol";
 import {MockRouter, MockExecutor, Hostile} from "./DexExchange.t.sol";
 import {FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {HybridHarness} from "../helpers/HybridHarness.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A stand-in `o.dex` for `restorePulled` (DX7): pulls an order through the token's `mtxTrade` / `uaTrade` and gives
 /// part of it back, in one call or in separate ones (each top-level call of a test is its own transaction).
@@ -21,11 +24,11 @@ contract PullRestorer {
     function pull(ITradeToken t, ITradeToken.TradeOrder calldata o, bytes calldata sig, uint256 fill, uint256 recv)
         public
     {
-        t.mtxTrade(o, sig, ITradeToken.TradeFill(fill, recv, 0, msg.sender));
+        t.mtxTrade(DexLegs.ua(o), DexLegs.sigOf(sig), ITradeToken.TradeFill(fill, recv, 0, msg.sender));
     }
 
     function restore(ITradeToken t, ITradeToken.TradeOrder calldata o, uint256 amount) public {
-        t.restorePulled(o, amount);
+        t.restorePulled(DexLegs.ua(o), amount);
     }
 
     function pullThenRestore(ITradeToken t, ITradeToken.TradeOrder calldata o, bytes calldata sig, uint256 fill,
@@ -40,14 +43,32 @@ contract PullRestorer {
         uint256 recv, bytes calldata cancelSig, uint256 amount) external
     {
         pull(t, o, sig, fill, recv);
-        t.mtxCancelOrder(o, cancelSig);
+        t.mtxCancelOrder(DexLegs.ua(o), DexLegs.sigOf(cancelSig));
         restore(t, o, amount);
+    }
+
+    /// Fable B P2-1: a hostile `o.dex` loops pull, restore, pull in one transaction; the last pull stays.
+    function loop(ITradeToken t, ITradeToken.TradeOrder calldata o, bytes calldata sig, uint256 rounds) external {
+        for (uint256 i; i < rounds; ++i) {
+            pull(t, o, sig, o.amount, o.receiveAmount);
+            restore(t, o, o.amount);
+        }
+        pull(t, o, sig, o.amount, o.receiveAmount);
+    }
+
+    /// The dex spends what it pulled, then restores: the restore is the refund, so it reverts.
+    function pullSpendRestore(ITradeToken t, ITradeToken.TradeOrder calldata o, bytes calldata sig, uint256 fill,
+        uint256 recv, address sink) external
+    {
+        pull(t, o, sig, fill, recv);
+        IERC20(address(t)).transfer(sink, fill);
+        restore(t, o, fill);
     }
 
     function uaPullThenRestore(ITradeToken t, ITradeToken.UATradeOrder calldata o, IUARegistry.UASig calldata auth, uint256 fill,
         uint256 recv, uint256 amount) external
     {
-        t.uaTrade(o, auth, ITradeToken.TradeFill(fill, recv, 0, msg.sender));
+        t.mtxTrade(o, auth, ITradeToken.TradeFill(fill, recv, 0, msg.sender));
         t.restorePulled(o, amount);
     }
 }
@@ -149,8 +170,10 @@ contract DexHybridTest is UADexBase {
         return abi.encodeWithSelector(ISCaaSDex.InteractionFailed.selector, index, target, reason);
     }
 
+    /// A leg's order hash: a SCaaS leg's (shape 1) in its token's domain, an outside leg's `DexOrder` in the DEX's.
     function _h(ISCaaSDex.DexLeg memory l) internal view returns (bytes32) {
-        return ITradeToken(l.sellToken).tradeOrderDigest(l.order);
+        if (l.shape == 1) return ITradeToken(l.sellToken).tradeOrderDigest(l.uaOrder);
+        return dex.dexOrderDigest(l.sellToken, l.order);
     }
 
     function _executor() internal returns (MockExecutor e) {
@@ -190,14 +213,15 @@ contract DexHybridTest is UADexBase {
         return o;
     }
 
-    /// DX6: the maker `LegSettled` (paid first), the taker `ExchangeLegSettled` with `receivedFloor` = Σ maker sold +
+    /// DX6: the maker `LegSettled` (paid first), the taker `ExchangeLegSettled` (their `UA…` forms: SCaaS legs, T6 R18)
+    /// with `receivedFloor` = Σ maker sold +
     /// `outsideFloor`, `surplus` = output above `outsideFloor`, `limitReceive` on the taker's whole sell.
     function test_hybrid_events_makerLegSettled_takerExchangeLegSettled() public {
         ISCaaSDex.HybridPlan memory p = _base();
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.LegSettled("hy", _h(p.makers[0]), bob, bob, 800, 399, 1, 0, 0, 1);
+        emit ISCaaSDex.UALegSettled("hy", _h(p.makers[0]), DexLegs.pad(bob), DexLegs.pad(bob), 800, 399, 1, 0, 0, 1);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("hy", _h(p.taker), alice, alice, 1000, 1880, 70, 6, 0, 1800);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", _h(p.taker), DexLegs.pad(alice), DexLegs.pad(alice), 1000, 1880, 70, 6, 0, 1800);
         _hybrid(p, _route(600, 1150));
     }
 
@@ -208,9 +232,9 @@ contract DexHybridTest is UADexBase {
         ISCaaSDex.HybridPlan memory p =
             _plan(_taker(_nat(alice, address(B), 2000, 3600, 5_000), 2000), _ms(m), 1000, 1800);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.LegSettled("hy", _h(m), bob, bob, 2000, 990, 10, 0, 2, 8);
+        emit ISCaaSDex.UALegSettled("hy", _h(m), DexLegs.pad(bob), DexLegs.pad(bob), 2000, 990, 10, 0, 2, 8);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("hy", _h(p.taker), alice, alice, 2000, 3800, 500, 19, 0, 3600);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", _h(p.taker), DexLegs.pad(alice), DexLegs.pad(alice), 2000, 3800, 500, 19, 0, 3600);
         _hybrid(p, _route(1000, 2300));
         assertEq(A.balanceOf(bob), 990);
         assertEq(A.balanceOf(RELAYER), 2);
@@ -237,8 +261,12 @@ contract DexHybridTest is UADexBase {
         _expect(p, _route(600, 1150), abi.encodeWithSelector(ISCaaSDex.FillMismatch.selector, 1001, 1000));
     }
 
+    /// On a DEX made with bit 29 `CLOSED_MARKETS` (fix2-dex, owner 2026-11-12: open by default, `DexMarkets.t.sol`).
     function test_hybrid_marketNotListed() public {
-        dex.setMarket(address(A), address(B), false);
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(this)), 200_000, TREASURY, false, 0,
+            address(0), 1 << 29, 0)), "closed"));
+        dex.setMarket(address(A), address(B), true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(A), address(B), false, EnvKit.codeUidOf(address(dex)));
         _expect(_base(), _route(600, 1150),
             abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, address(A), address(B)));
     }
@@ -311,7 +339,7 @@ contract DexHybridTest is UADexBase {
         ISCaaSDex.HybridPlan memory p =
             _plan(_taker(_nat(alice, address(B), 1000, 1800, 3_000), 400), _ms(_bob(800)), 0, 0);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("hy", _h(p.taker), alice, alice, 400, 800, 0, 3, 0, 720);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", _h(p.taker), DexLegs.pad(alice), DexLegs.pad(alice), 400, 800, 0, 3, 0, 720);
         _hybrid(p, new ISCaaSDex.Interaction[](0));
         assertEq(B.balanceOf(alice), 797);
         assertEq(A.balanceOf(bob), 399);
@@ -351,7 +379,7 @@ contract DexHybridTest is UADexBase {
         ISCaaSDex.HybridPlan memory p = _base();
         p.taker = _taker(t, 1000);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("hy", _h(p.taker), alice, alice, 1000, 1880, 70, 6, 500, 1800);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", _h(p.taker), DexLegs.pad(alice), DexLegs.pad(alice), 1000, 1880, 70, 6, 500, 1800);
         _hybrid(p, _route(600, 1150));
         assertEq(A.balanceOf(alice), 900_000 - 1000);
         assertEq(B.balanceOf(alice), 1880 - 6 + 70);
@@ -365,7 +393,7 @@ contract DexHybridTest is UADexBase {
         ISCaaSDex.HybridPlan memory p = _base();
         p.makers[0] = _natLeg(address(B), m, 800);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.LegSettled("hy", _h(p.makers[0]), bob, bob, 800, 399, 1, 1200, 0, 1);
+        emit ISCaaSDex.UALegSettled("hy", _h(p.makers[0]), DexLegs.pad(bob), DexLegs.pad(bob), 800, 399, 1, 1200, 0, 1);
         _hybrid(p, _route(600, 1150));
         assertEq(B.balanceOf(bob), 800_000 - 800);
         assertEq(B.balanceOf(address(dex)), 0);
@@ -378,7 +406,7 @@ contract DexHybridTest is UADexBase {
         ISCaaSDex.HybridPlan memory p = _base();
         p.makers[0] = _uaLeg(address(B), u, 800);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UALegSettled("hy", B.uaTradeOrderDigest(u), uaB, uaB, 800, 399, 1, 0, 0, 1);
+        emit ISCaaSDex.UALegSettled("hy", B.tradeOrderDigest(u), uaB, uaB, 800, 399, 1, 0, 0, 1);
         _hybrid(p, _route(600, 1150));
         assertEq(A.balanceOfUA(uaB), 399);
         assertEq(B.balanceOfUA(uaB), 100_000 - 800);
@@ -475,7 +503,7 @@ contract DexHybridTest is UADexBase {
         MockExecutor e = _executor();
         ISCaaSDex.HybridPlan memory p = _base();
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("hy", _h(p.taker), alice, alice, 1000, 1880, 50, 6, 0, 1800);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", _h(p.taker), DexLegs.pad(alice), DexLegs.pad(alice), 1000, 1880, 50, 6, 0, 1800);
         vm.prank(RELAYER);
         dex.mtxHybridVia(p, address(e), abi.encode(int256(50)));
         assertEq(B.balanceOf(alice), 1880 - 6 + 50);
@@ -502,12 +530,12 @@ contract DexHybridTest is UADexBase {
         vm.prank(RELAYER);
         vm.expectRevert(_err(ISCaaSDex.TargetNotListed.selector, address(e)));
         dex.mtxHybridVia(p, address(e), abi.encode(int256(0)));
-        dex.setListedOnly(true);
+        dex.setListedOnly(true, EnvKit.codeUidOf(address(dex)));
         ISCaaSDex.HybridPlan memory q = _base();
         vm.prank(RELAYER);
         vm.expectRevert(_err(ISCaaSDex.TargetNotListed.selector, address(e)));
         dex.mtxHybridVia(q, address(e), abi.encode(int256(0)));
-        dex.setExchangeTarget(address(e), true);
+        dex.setExchangeTarget(address(e), true, EnvKit.codeUidOf(address(dex)));
         vm.prank(RELAYER);
         dex.mtxHybridVia(p, address(e), abi.encode(int256(0)));
         assertEq(A.balanceOf(bob), 399);
@@ -541,9 +569,9 @@ contract DexHybridTest is UADexBase {
     function test_hybrid_refund_soldAboveMinFill_settlesAndRefunds() public {
         ISCaaSDex.HybridPlan memory p = _refundPlan(400);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.LegSettled("hy", _h(p.makers[0]), bob, bob, 800, 399, 1, 0, 0, 1);
+        emit ISCaaSDex.UALegSettled("hy", _h(p.makers[0]), DexLegs.pad(bob), DexLegs.pad(bob), 800, 399, 1, 0, 0, 1);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("hy", _h(p.taker), alice, alice, 460, 980, 20, 3, 40, 828);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", _h(p.taker), DexLegs.pad(alice), DexLegs.pad(alice), 460, 980, 20, 3, 0, 828); // the 40: by the restore (B P2-1)
         _hybrid(p, _route(60, 200));
         assertEq(A.balanceOf(alice), 900_000 - 460);
         assertEq(B.balanceOf(alice), 980 - 3 + 20);
@@ -604,17 +632,21 @@ contract DexHybridTest is UADexBase {
         _expect(p, _route(0, 200), _err(ISCaaSDex.ZeroFill.selector, _h(p.taker)));
     }
 
-    /// PD5: the price check on the sold part cannot be reached through the entry (the token checked the larger fill
-    /// against the same floor); the harness runs `_takerSoldCheck` itself: 900 sold for a floor of 1600 is below the
-    /// limit 1800 per 1000 (900 · 1800 > 1600 · 1000); 1620 is exactly at it.
+    /// PD5: the price check on the sold part is reached through the entry only after hybrid (b) lowered the receive
+    /// (`DexMarkets.t.sol` `test_hybrid_feeTokenBook_leftover_priceOnTheCredit`); the harness runs `_takerSoldCheck`
+    /// itself: 900 sold for a floor of 1600 is below the limit 1800 per 1000 (900 · 1800 > 1600 · 1000); 1620 is exactly
+    /// at it, and so is 1600 with a surplus of 20 (F-3).
     function test_hybrid_refund_worsePrice_priceLimit() public {
-        HybridHarness hh = new HybridHarness(plainEnv(address(f), address(0), chainUidA, address(0), false));
+        HybridHarness hh = new HybridHarness(address(f));
         ITradeToken.UATradeOrder memory o = _ua(uaP, address(B), 1000, 1800, 0);
         o.minFill = 900;
         bytes32 h = keccak256("taker");
         vm.expectRevert(_err(ISCaaSDex.PriceLimit.selector, h));
         hh.takerSoldCheck(h, 1000, 1600, o, 100);
         hh.takerSoldCheck(h, 1000, 1620, o, 100);
+        hh.takerSoldCheck(h, 1000, 1600, o, 100, 20); // F-3: the surplus counts (1600 + 20 is at the limit)
+        vm.expectRevert(_err(ISCaaSDex.PriceLimit.selector, h));
+        hh.takerSoldCheck(h, 1000, 1600, o, 100, 19);
         vm.expectRevert(_err(ISCaaSDex.BelowMinFill.selector, h));
         hh.takerSoldCheck(h, 1000, 1620, o, 101);
         o.minFill = 0;
@@ -633,7 +665,7 @@ contract DexHybridTest is UADexBase {
         xs[2].data = abi.encodeCall(MockRouter.swap, (address(usdc), address(A), 0, 60, address(dex)));
         ISCaaSDex.HybridPlan memory p = _refundPlan(0);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("hy", _h(p.taker), alice, alice, 400, 980, 20, 3, 100, 720);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", _h(p.taker), DexLegs.pad(alice), DexLegs.pad(alice), 400, 980, 20, 3, 0, 720); // the 100: by the restore (B P2-1)
         _hybrid(p, xs);
         assertEq(A.pulled(_h(p.taker)), 400);
     }
@@ -644,7 +676,7 @@ contract DexHybridTest is UADexBase {
         t.flags = 3;
         ISCaaSDex.HybridPlan memory p = _plan(_taker(t, 500), _ms(_bob(800)), 100, 180);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("hy", _h(p.taker), alice, alice, 460, 980, 20, 3, 1040, 828);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", _h(p.taker), DexLegs.pad(alice), DexLegs.pad(alice), 460, 980, 20, 3, 1040, 828);
         _hybrid(p, _route(60, 200));
         assertEq(A.balanceOf(alice), 900_000 - 460);
         assertEq(A.pulled(_h(p.taker)), 1500);
@@ -667,7 +699,7 @@ contract DexHybridTest is UADexBase {
         e.setCall(address(A), abi.encodeCall(IERC20.transfer, (address(dex), 40)));
         ISCaaSDex.HybridPlan memory p = _refundPlan(400);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.ExchangeLegSettled("hy", _h(p.taker), alice, alice, 460, 980, 20, 3, 40, 828);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", _h(p.taker), DexLegs.pad(alice), DexLegs.pad(alice), 460, 980, 20, 3, 0, 828); // the 40: by the restore (B P2-1)
         vm.prank(RELAYER);
         dex.mtxHybridVia(p, address(e), abi.encode(int256(20)));
         assertEq(A.balanceOf(alice), 900_000 - 460);
@@ -681,7 +713,7 @@ contract DexHybridTest is UADexBase {
         ISCaaSDex.HybridPlan memory p = _refundPlan(0);
         bytes32 h = _h(p.taker);
         vm.expectEmit(address(A));
-        emit ITradeToken.TradeFilled(h, alice, 500, 980, 3);
+        emit ITradeToken.UATradeFilled(h, DexLegs.pad(alice), 500, 980, 3);
         vm.expectEmit(address(A));
         emit ITradeToken.PullRestored(h, 40);
         _hybrid(p, _route(60, 200));
@@ -723,60 +755,90 @@ contract DexHybridTest is UADexBase {
         r = new PullRestorer();
         o = _nat(alice, address(B), 1000, 1800, 0);
         o.dex = address(r);
-        sig = _ecdsa(ALICE_PK, A.tradeOrderDigest(o));
+        sig = _ecdsa(ALICE_PK, A.tradeOrderDigest(DexLegs.ua(o)));
     }
 
     function test_restorePulled_onlyOrderDex() public {
         (PullRestorer r, ITradeToken.TradeOrder memory o,) = _restorer();
         vm.prank(EVE);
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.NotDex.selector, EVE));
-        A.restorePulled(o, 0);
+        A.restorePulled(DexLegs.ua(o), 0);
         // another DEX (the real one, not `o.dex`) cannot either
         vm.prank(address(dex));
         vm.expectRevert(abi.encodeWithSelector(ITradeToken.NotDex.selector, address(dex)));
-        A.restorePulled(o, 0);
-        r.restore(A, o, 0); // `o.dex` itself, nothing pulled: a zero restore is the only one allowed
+        A.restorePulled(DexLegs.ua(o), 0);
+        r.restore(ITradeToken(address(A)), o, 0); // `o.dex` itself, nothing pulled: a zero restore is the only one allowed
     }
 
     function test_restorePulled_boundedByThisTxPull() public {
         (PullRestorer r, ITradeToken.TradeOrder memory o, bytes memory sig) = _restorer();
-        bytes32 h = A.tradeOrderDigest(o);
+        uint256 before = A.balanceOf(alice);
+        bytes32 h = A.tradeOrderDigest(DexLegs.ua(o));
         vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, h));
-        r.pullThenRestore(A, o, sig, 500, 900, 501);
+        r.pullThenRestore(ITradeToken(address(A)), o, sig, 500, 900, 501);
         vm.expectEmit(address(A));
         emit ITradeToken.PullRestored(h, 500);
-        r.pullThenRestore(A, o, sig, 500, 900, 500);
+        r.pullThenRestore(ITradeToken(address(A)), o, sig, 500, 900, 500);
         assertEq(A.pulled(h), 0);
-        assertEq(A.balanceOf(address(r)), 500); // the restore moves no funds: the DEX refunds them itself
+        assertEq(A.balanceOf(address(r)), 0); // the restore is the refund (B P2-1): the 500 are back with alice
+        assertEq(A.balanceOf(alice), before);
         // an IOC order stays closed
         o.flags = 1;
-        sig = _ecdsa(ALICE_PK, A.tradeOrderDigest(o));
-        vm.expectRevert(_err(ITradeToken.OrderClosed.selector, A.tradeOrderDigest(o)));
-        r.pullThenRestore(A, o, sig, 500, 900, 1);
+        sig = _ecdsa(ALICE_PK, A.tradeOrderDigest(DexLegs.ua(o)));
+        vm.expectRevert(_err(ITradeToken.OrderClosed.selector, A.tradeOrderDigest(DexLegs.ua(o))));
+        r.pullThenRestore(ITradeToken(address(A)), o, sig, 500, 900, 1);
+    }
+
+    /// Fable B P2-1 (CTR-DEX-19, -27 Change): a hostile `o.dex` that loops pull, restore, pull takes at most the signed
+    /// `amount`: each restore hands the tokens back with the capacity. Positive control: the loop runs (5 restores).
+    function test_restorePulled_hostileLoopBounded() public {
+        (PullRestorer r, ITradeToken.TradeOrder memory o, bytes memory sig) = _restorer();
+        bytes32 h = A.tradeOrderDigest(DexLegs.ua(o));
+        uint256 before = A.balanceOf(alice);
+        r.loop(ITradeToken(address(A)), o, sig, 5);
+        assertEq(A.balanceOf(alice), before - o.amount, "the signer loses the signed amount, no more");
+        assertEq(A.balanceOf(address(r)), o.amount);
+        assertEq(A.pulled(h), o.amount);
+        // a later transaction: the order is closed, the dex can neither pull nor restore (the counter is per transaction)
+        vm.expectRevert(_err(ITradeToken.OrderClosed.selector, h));
+        r.loop(ITradeToken(address(A)), o, sig, 0);
+        vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, h));
+        r.restore(ITradeToken(address(A)), o, 1);
+    }
+
+    /// The restore moves the tokens: a dex that spent what it pulled cannot restore the capacity.
+    function test_restorePulled_needsTheTokensBack() public {
+        (PullRestorer r, ITradeToken.TradeOrder memory o, bytes memory sig) = _restorer();
+        bytes32 h = A.tradeOrderDigest(DexLegs.ua(o));
+        uint256 before = A.balanceOf(alice);
+        vm.expectRevert(abi.encodeWithSignature("ERC20InsufficientBalance(address,uint256,uint256)", address(r), 0, 500));
+        r.pullSpendRestore(ITradeToken(address(A)), o, sig, 500, 900, EVE);
+        assertEq(A.pulled(h), 0);
+        assertEq(A.balanceOf(alice), before);
     }
 
     /// Each top-level call of a test is its own transaction (`isolate`): the counter does not carry over; a cancel in
     /// the same transaction clears it.
     function test_restorePulled_noCarryAcrossTx() public {
         (PullRestorer r, ITradeToken.TradeOrder memory o, bytes memory sig) = _restorer();
-        bytes32 h = A.tradeOrderDigest(o);
-        r.pull(A, o, sig, 500, 900);
+        bytes32 h = A.tradeOrderDigest(DexLegs.ua(o));
+        r.pull(ITradeToken(address(A)), o, sig, 500, 900);
         vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, h));
-        r.restore(A, o, 1);
+        r.restore(ITradeToken(address(A)), o, 1);
         assertEq(A.pulled(h), 500);
-        bytes memory cancelSig = _ecdsa(ALICE_PK, A.cancelOrderDigest(o));
+        bytes memory cancelSig = _ecdsa(ALICE_PK, A.cancelOrderDigest(DexLegs.ua(o)));
         vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, h));
-        r.pullCancelRestore(A, o, sig, 100, 180, cancelSig, 1);
+        r.pullCancelRestore(ITradeToken(address(A)), o, sig, 100, 180, cancelSig, 1);
     }
 
     /// A cancel that changes nothing (the order already closed by its full fill) still clears the counter (T4 review
     /// m1): else a restore after it would reopen part of the closed order.
     function test_restorePulled_noOpCancelClearsTheCounter() public {
         (PullRestorer r, ITradeToken.TradeOrder memory o, bytes memory sig) = _restorer();
-        bytes32 h = A.tradeOrderDigest(o);
-        bytes memory cancelSig = _ecdsa(ALICE_PK, A.cancelOrderDigest(o));
+        bytes32 h = A.tradeOrderDigest(DexLegs.ua(o));
+        bytes memory cancelSig = _ecdsa(ALICE_PK, A.cancelOrderDigest(DexLegs.ua(o)));
         vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, h));
-        r.pullCancelRestore(A, o, sig, 1000, 1800, cancelSig, 1);
+        r.pullCancelRestore(ITradeToken(address(A)), o, sig, 1000, 1800, cancelSig, 1);
     }
 
     /// A UA taker (shape 1) through the DEX: refunded into its ledger, its `pulled` restored; and the `UATradeOrder`
@@ -784,11 +846,11 @@ contract DexHybridTest is UADexBase {
     function test_restorePulled_uaOrder() public {
         ITradeToken.UATradeOrder memory u = _ua(uaP, address(B), 1000, 1800, 3_000);
         ISCaaSDex.HybridPlan memory p = _plan(_uaLeg(address(A), u, 500), _ms(_bob(800)), 100, 180);
-        bytes32 h = A.uaTradeOrderDigest(u);
+        bytes32 h = A.tradeOrderDigest(u);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("hy", h, uaP, uaP, 460, 980, 20, 3, 40, 828);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", h, uaP, uaP, 460, 980, 20, 3, 0, 828);
         vm.expectEmit(address(A));
-        emit ITradeToken.PullRestored(h, 40); // right after the refund
+        emit ITradeToken.PullRestored(h, 40); // the restore is the refund (B P2-1): the DEX's `refund` leaves it out
         _hybrid(p, _route(60, 200));
         assertEq(A.pulled(h), 460);
         assertEq(A.balanceOfUA(uaP), 100_000 - 460);
@@ -798,11 +860,12 @@ contract DexHybridTest is UADexBase {
         ITradeToken.UATradeOrder memory v = _ua(uaP, address(B), 1000, 1800, 0);
         v.dex = address(r);
         IUARegistry.UASig memory auth = _uaLeg(address(A), v, 0).auth;
-        bytes32 hv = A.uaTradeOrderDigest(v);
+        bytes32 hv = A.tradeOrderDigest(v);
         vm.expectRevert(_err(ITradeToken.RestoreExceedsPull.selector, hv));
-        r.uaPullThenRestore(A, v, auth, 500, 900, 501);
-        r.uaPullThenRestore(A, v, auth, 500, 900, 200);
+        r.uaPullThenRestore(ITradeToken(address(A)), v, auth, 500, 900, 501);
+        r.uaPullThenRestore(ITradeToken(address(A)), v, auth, 500, 900, 200);
         assertEq(A.pulled(hv), 300);
+        assertEq(A.balanceOf(address(r)), 300, "the restore moved 200 back");
     }
 
     /// T4-sec: interactions run as the DEX, the orders' `dex`: `restorePulled` (both overloads) is refused, else a
@@ -861,23 +924,24 @@ contract DexHybridTest is UADexBase {
         ISCaaSDex.HybridPlan memory p = _base();
         p.taker = _uaLeg(address(A), u, 1000);
         vm.expectEmit(address(dex));
-        emit ISCaaSDex.UAExchangeLegSettled("hy", A.uaTradeOrderDigest(u), uaP, uaP, 1000, 1880, 70, 6, 0, 1800);
+        emit ISCaaSDex.UAExchangeLegSettled("hy", A.tradeOrderDigest(u), uaP, uaP, 1000, 1880, 70, 6, 0, 1800);
         _hybrid(p, _route(600, 1150));
         assertEq(B.balanceOfUA(uaP), 1880 - 6 + 70);
         assertEq(A.balanceOfUA(uaP), 100_000 - 1000);
         assertEq(A.balanceOf(bob), 399);
     }
 
-    /// m4: a fee-on-transfer sell token, the taker's or a maker's (outside, through the puller): the DEX receives 1 %
-    /// less than it pulled, `ConservationBroken(token)` at the pull check.
-    function test_hybrid_feeOnTransferSellToken_conservationBroken() public {
+    /// m4: a fee-on-transfer sell token (outside, through the puller). The taker's: the DEX receives 1 % less than it
+    /// pulled, `ConservationBroken(token)` at the pull check (the route's amount is fixed). A maker's (hybrid option (b),
+    /// owner 2026-11-12; was `ConservationBroken`): the taker's share is what arrived, 792 + 1139, credited 1912 >= 1800.
+    function test_hybrid_feeOnTransferSellToken() public {
         FeeOnTransferERC20 fot = new FeeOnTransferERC20();
         fot.mint(dave, 1e6);
         fot.mint(address(router), 1e6);
         address puller = dex.puller();
         vm.prank(dave);
         fot.approve(puller, type(uint256).max);
-        dex.setMarket(address(A), address(fot), true);
+        dex.setMarket(address(A), address(fot), true, EnvKit.codeUidOf(address(dex)));
         vm.prank(alice);
         A.transfer(address(router), 1000);
         // the taker sells it
@@ -887,6 +951,8 @@ contract DexHybridTest is UADexBase {
         // a maker sells it
         p = _plan(_taker(_nat(alice, address(fot), 1000, 1800, 0), 1000),
             _ms(_dexLeg(address(fot), _nat(dave, address(A), 2000, 1000, 0), 800)), 600, 1080);
-        _expect(p, _swap(address(A), address(fot), 600, 1150), _err(ISCaaSDex.ConservationBroken.selector, address(fot)));
+        _hybrid(p, _swap(address(A), address(fot), 600, 1150));
+        assertEq(fot.balanceOf(alice), 1912);
+        assertEq(fot.balanceOf(address(dex)), 0);
     }
 }

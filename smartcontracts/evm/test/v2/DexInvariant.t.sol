@@ -14,6 +14,7 @@ import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {UADexBase} from "../ua/UADex.t.sol";
 import {MockRouter, MockExecutor} from "./DexExchange.t.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Builds only valid calls (`fail_on_revert`) of `mtxSettle`, `mtxExchange`, `mtxHybrid` / `mtxHybridVia` and
 /// `mtxExchangeBatch` over the listed pairs A/B (SCaaS, UA ledgers on) and A/usdc (outside, natives only). Five
@@ -389,10 +390,10 @@ contract DexHandler is Test {
         (s.party, s.sell, s.o) = (p, sell, o);
         if (p >= 3 || (sell != usdc && (r >> 17) & 1 == 1)) {
             s.shape = 1;
-            s.h = ITradeToken(sell).uaTradeOrderDigest(o);
+            s.h = ITradeToken(sell).tradeOrderDigest(o);
         } else {
             ITradeToken.TradeOrder memory t = abi.decode(abi.encode(o), (ITradeToken.TradeOrder));
-            s.h = sell == usdc ? dex.dexOrderDigest(sell, t) : ITradeToken(sell).tradeOrderDigest(t);
+            s.h = sell == usdc ? dex.dexOrderDigest(sell, t) : ITradeToken(sell).tradeOrderDigest(DexLegs.ua(t));
             s.t = t;
         }
         s.sig = _sign(p, s.h);
@@ -574,7 +575,7 @@ contract DexInvariantTest is UADexBase {
         usdc.mint(address(exec), 200_000);
         // every target listed: a `LISTED_POOLS` order still settles
         address[5] memory targets = [address(router), address(exec), address(A), address(B), address(usdc)];
-        for (uint256 i; i < targets.length; ++i) dex.setExchangeTarget(targets[i], true);
+        for (uint256 i; i < targets.length; ++i) dex.setExchangeTarget(targets[i], true, EnvKit.codeUidOf(address(dex)));
         h = new DexHandler(dex, lreg, router, exec, [address(A), address(B), address(usdc)],
             [ALICE_PK, BOB_PK, DAVE_PK], [uaP, uaB], [_key(UAKinds.P256), _key(UAKinds.BIP340)],
             [UAKinds.P256, UAKinds.BIP340]);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
 import {MtxFixture} from "../helpers/MtxFixture.sol";
 import {MtxRegistryMock} from "../helpers/MtxRegistryMock.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
@@ -100,11 +101,11 @@ contract MetaTxBaseBatchTest is MtxFixture {
     function test_batch_isNotAllowlisted() public {
         MetaTxLib.MetaTransaction[] memory inner = new MetaTxLib.MetaTransaction[](1);
         inner[0] = _m(alice, _setName("a"), 2, 0);
-        bytes memory data = abi.encodeCall(IMetaTx.mtxBatch, (inner, new bytes[](1)));
+        bytes memory data = abi.encodeCall(IMetaTxAddress.mtxBatch, (inner, new bytes[](1)));
         MetaTxLib.MetaTransaction memory m = _m(alice, data, 1, 0);
         bytes memory sig = _sign(ALICE_PK, m);
         vm.prank(relayer);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, IMetaTx.mtxBatch.selector));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, IMetaTxAddress.mtxBatch.selector));
         reg.mtxExecute(m, sig);
     }
 

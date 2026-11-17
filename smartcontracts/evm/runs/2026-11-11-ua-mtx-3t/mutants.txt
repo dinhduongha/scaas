@@ -1,0 +1,30 @@
+N2 | submit::tests::pqz_fee_precheck | 101
+N3 | submit::tests::auth_rejected_after_fee_set_not_dead | 101
+N1 | submit::tests::pqz_fee_precheck | 101
+V1 | refuses_stale_fee_word | 101
+M17 | test_deniedListVerifier_haltsDebits_shieldsLand_feeZeroRestores, test_deniedVerifier_notEligibleWhileFeeSet, test_frozenVerifier_haltsDebitsWhileFeeSet, test_verifierCheckedFirst | 1
+M22 | test_verifierCheckedFirst | 1
+M1 | test_builtOp_afterAChange, test_disclosure_movesNoBalance, test_feeWord_everyForm, test_payment_currentVerifierWhilePending, test_payment_derivedVerifierFromZero, test_payment_everyForm, test_setter_cancelByTheCurrentValue, test_split_direct, test_split_envelope | 1
+M2 | test_feeWord_precompileReadsNoFeeSlot | 1
+M3 | test_feeWord_everyForm, test_payment_everyForm, test_split_direct, test_split_envelope | 1
+M4 | test_payment_everyForm | 1
+M5 | test_payment_currentVerifierWhilePending, test_payment_derivedVerifierFromZero, test_payment_everyForm | 1
+M6 | test_payment_currentVerifierWhilePending, test_payment_derivedVerifierFromZero, test_payment_everyForm | 1
+M7 | test_init_order, test_init_rangeRowWithTheCap | 1
+M8 | test_init_feeAboveCap | 1
+M9 | test_init_order, test_init_precompileRefusesEitherField | 1
+M10 | test_verifierFee_zether_refused | 1
+M11 | test_setter_cancelByTheCurrentValue, test_setter_decreaseAtOnce, test_setter_decreaseCancelsThePending, test_setter_refusals | 1
+M12 | test_setter_proposerAndGeneration | 1
+M13 | test_setter_cancelByTheCurrentValue, test_setter_decreaseCancelsThePending, test_setter_increaseAfterTheNotice | 1
+M14 | test_setter_refusals | 1
+M15 | test_setter_noticeZeroAndFixed | 1
+M18 | test_bindingWord_direct, test_builtOp_afterAChange, test_router_setVerifierFee, test_setter_cancelByTheCurrentValue, test_setter_decreaseAtOnce, test_setter_decreaseCancelsThePending, test_setter_increaseAfterTheNotice, test_setter_noticeZeroAndFixed | 1
+M19 | test_payment_currentVerifierWhilePending, test_payment_derivedVerifierFromZero, test_payment_everyForm | 1
+M20 | test_setter_increaseAfterTheNotice, test_setter_proposerAndGeneration | 1
+M21 | test_feeWord_everyForm, test_payment_everyForm | 1
+M23 | test_bindingWord_direct, test_split_direct | 1
+M24 | test_bindingWord_direct, test_feeWord_precompileReadsNoFeeSlot | 1
+M25 | test_setter_cancelByTheCurrentValue | 1
+B1 | test_router_setVerifierFee | 1
+F5 | invariant_F1_pool, invariant_F3_payouts, invariant_F4_supply, test_handler_acts | 1

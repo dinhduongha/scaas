@@ -200,3 +200,127 @@ pub fn set_pqz_key_args_json(t: &str) -> JsonResult<String> {
     let sig = sig_json(&sig_in(&v["sig"])?);
     Ok(json!({ "ua": hx(&ua), "pqzKey": hx(&unhex(&v["pqzKey"])?), "pqzPopHash": hx(&hash), "sig": sig }).to_string())
 }
+
+/// CTR-UA-44 (TODO 3ze): `{ua, chainUid, registry, version, threshold, members: [{kind, id, weight}], enabled, validUntilBlock, sigs}` →
+/// `{digest, message, memberDigest, args}`: what a quorum of the stored structure signs for `updateMsig` on that one registry, and its
+/// named arguments (clientkeys `msigUpdateMessage`; `enabled` a number or a decimal string, `sigs` the member signatures, absent: none).
+/// At most 256 members (`Argument`).
+pub fn msig_update_json(t: &str) -> JsonResult<String> {
+    let v = parse(t)?;
+    let m = v["members"].as_array().filter(|a| a.len() <= 256).ok_or(Argument)?;
+    let member = |x: &Value| Ok(crate::ua8::MsigMember { kind: u16_of(&x["kind"])?, id: ua_in(&x["id"])?, weight: u16_of(&x["weight"])? });
+    let structure = crate::ua8::MsigStructure { threshold: u16_of(&v["threshold"])?, members: m.iter().map(member).collect::<JsonResult<_>>()? };
+    let u = crate::ua8::MsigUpdate { ua: ua_in(&v["ua"])?, chain_uid: ua_in(&v["chainUid"])?, registry: addr_in(&v["registry"])?,
+        version: small_in(&v["version"])?, structure, enabled: uint_in(&v["enabled"])?, valid_until_block: small_in(&v["validUntilBlock"])? };
+    let (digest, message, md) = crate::ua8::msig_update_message(&u)?;
+    let members: Vec<Value> = u.structure.members.iter().map(|m| json!({ "kind": m.kind, "id": hx(&m.id), "weight": m.weight })).collect();
+    let mut en = u.enabled.to_vec();
+    let mut dec = String::new(); // the uint256 in decimal, as the node's JSON takes it
+    while en.iter().any(|b| *b != 0) {
+        let mut r = 0u32;
+        for b in en.iter_mut() {
+            let x = (r << 8) | u32::from(*b);
+            (*b, r) = ((x / 10) as u8, x % 10);
+        }
+        dec.insert(0, char::from(b'0' + r as u8));
+    }
+    if dec.is_empty() {
+        dec.push('0');
+    }
+    let args = json!({ "ua": hx(&u.ua), "version": u.version, "structure": { "threshold": u.structure.threshold, "members": members },
+        "enabled": dec, "validUntilBlock": u.valid_until_block, "sigs": members_json(&members_in(&v["sigs"])?), "chainUid": hx(&u.chain_uid) });
+    Ok(json!({ "digest": hx(&digest), "message": hx(&message), "memberDigest": hx(&md), "args": args }).to_string())
+}
+
+/// Group 3g: `setPqzKey(ua, version, pqzKey, pqzPopHash, UASig)`'s named arguments; version 0 is [`set_pqz_key_args_json`]'s row.
+pub fn set_pqz_key_version_args_json(t: &str) -> JsonResult<String> {
+    let v = parse(t)?;
+    let ua = ua_in(&v["ua"])?;
+    let version = v["version"].as_u64().ok_or(Argument)?;
+    let hash: [u8; 32] = unhex(&v["pqzPopHash"])?.try_into().map_err(|_| UAError::PqzPopHash)?;
+    let sig = sig_json(&sig_in(&v["sig"])?);
+    Ok(json!({ "ua": hx(&ua), "version": version, "pqzKey": hx(&unhex(&v["pqzKey"])?), "pqzPopHash": hx(&hash), "sig": sig }).to_string())
+}
+
+// ------------------------------------------------------------------ pay-meta-tax T41: the pay structs (`crate::pay`)
+
+/// A uint of the JSON, a number or a decimal string, as its ABI word (`Argument` above 256 bits or not a number).
+fn uint_in(v: &Value) -> JsonResult<[u8; 32]> {
+    let s = match v {
+        Value::Number(n) => n.as_u64().ok_or(Argument)?.to_string(),
+        Value::String(s) if !s.is_empty() && s.len() <= 78 && s.bytes().all(|c| c.is_ascii_digit()) => s.clone(),
+        _ => return Err(Argument),
+    };
+    let mut w = [0u8; 32];
+    for d in s.bytes() {
+        let mut carry = (d - b'0') as u32;
+        for b in w.iter_mut().rev() {
+            let x = *b as u32 * 10 + carry;
+            *b = x as u8;
+            carry = x >> 8;
+        }
+        if carry != 0 {
+            return Err(Argument);
+        }
+    }
+    Ok(w)
+}
+fn addr_in(v: &Value) -> JsonResult<[u8; 20]> {
+    unhex(v)?.try_into().map_err(|_| Argument)
+}
+fn small_in<T: TryFrom<u64>>(v: &Value) -> JsonResult<T> {
+    let n = match v {
+        Value::Number(n) => n.as_u64(),
+        Value::String(s) => s.parse().ok(),
+        _ => None,
+    };
+    n.and_then(|n| T::try_from(n).ok()).ok_or(Argument)
+}
+fn transfer_in(m: &Value) -> JsonResult<crate::pay::UAMetaTransfer> {
+    Ok(crate::pay::UAMetaTransfer {
+        from: ua_in(&m["from"])?,
+        to: ua_in(&m["to"])?,
+        value: uint_in(&m["value"])?,
+        entry_ref: ua_in(&m["entryRef"])?,
+        batch: uint_in(&m["batch"])?,
+        nonce: uint_in(&m["nonce"])?,
+        valid_until: uint_in(&m["validUntil"])?,
+        mode: small_in(&m["mode"])?,
+        relayer: addr_in(&m["relayer"])?,
+        fee: uint_in(&m["fee"])?,
+        fee_recipient: addr_in(&m["feeRecipient"])?,
+    })
+}
+
+/// `{struct, domain: {name, chainId, verifyingContract, salt}, message}` → `{structHash, digest}`: what a payer signs for
+/// `UAMetaTransfer` (`mtxPay`), `UAPayWithTax` (`{payment, taxMode, tax}`, kinds 8-13) or `UARelayFee` (`{from, target,
+/// callDataHash, payee, value, batch, nonce, validUntil, relayer}`); uints as numbers or decimal strings, an unbound
+/// `relayer` / `feeRecipient` hashed as 0. `Argument` for anything else, a tax mode not 1 or 2, or `tax > value`.
+pub fn pay_digest_json(t: &str) -> JsonResult<String> {
+    use crate::pay::{pay_with_tax_hash, relay_fee_hash, token_domain_separator, transfer_hash, typed_digest, RelayFee};
+    let v = parse(t)?;
+    let (d, m) = (&v["domain"], &v["message"]);
+    let sh = match v["struct"].as_str() {
+        Some("UAMetaTransfer") => transfer_hash(&transfer_in(m)?),
+        Some("UAPayWithTax") => pay_with_tax_hash(&transfer_in(&m["payment"])?, small_in(&m["taxMode"])?, &uint_in(&m["tax"])?)
+            .map_err(|_| Argument)?,
+        Some("UARelayFee") => relay_fee_hash(&RelayFee { from: ua_in(&m["from"])?, target: addr_in(&m["target"])?,
+            call_data_hash: ua_in(&m["callDataHash"])?, payee: ua_in(&m["payee"])?, value: uint_in(&m["value"])?,
+            batch: uint_in(&m["batch"])?, nonce: uint_in(&m["nonce"])?, valid_until: uint_in(&m["validUntil"])?,
+            relayer: addr_in(&m["relayer"])? }),
+        _ => return Err(Argument),
+    };
+    let ds = token_domain_separator(d["name"].as_str().ok_or(Argument)?, small_in(&d["chainId"])?,
+        &addr_in(&d["verifyingContract"])?, &ua_in(&d["salt"])?);
+    Ok(json!({ "structHash": hx(&sh), "digest": hx(&typed_digest(&ds, &sh)) }).to_string())
+}
+
+/// `{salt, payNo, save, schema, body}` → `{payId}`: `metaPayId` under `scaas.pay.meta.v3`, after the shape checks (`Argument`
+/// when refused). `payNo` 32 bytes hex (absent: 0), `save` a boolean (absent: false).
+pub fn meta_pay_id_json(t: &str) -> JsonResult<String> {
+    let v = parse(t)?;
+    let pay_no = if v["payNo"].is_null() { [0; 32] } else { ua_in(&v["payNo"])? };
+    let save = if v["save"].is_null() { false } else { v["save"].as_bool().ok_or(Argument)? };
+    let m = crate::pay::PayMeta { salt: ua_in(&v["salt"])?, pay_no, save, schema: small_in(&v["schema"])?, body: unhex(&v["body"])? };
+    Ok(json!({ "payId": hx(&crate::pay::meta_pay_id_v3(&m).map_err(|_| Argument)?) }).to_string())
+}

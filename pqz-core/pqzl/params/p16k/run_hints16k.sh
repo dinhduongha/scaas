@@ -15,9 +15,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 [ "$(git -C "$LK" rev-parse HEAD)" = $LK_PIN ] || { echo "leaky-LWE-Estimator must be at $LK_PIN" >&2; exit 1; }
 [ "$(git -C "$LE" rev-parse HEAD)" = $LE_PIN ] || { echo "lattice-estimator must be at $LE_PIN" >&2; exit 1; }
 echo "p16k/run_hints16k.sh: ../anon/hints.sage with N = $N, Q = 2^50 - 42310535, BETA_S = $BS, BETA_E = $BE"
-exec docker run --rm --network none --memory 5g --cpus 2 -e PYTHONPATH=/le -e LE_COMMIT=$LE_PIN -e LK_COMMIT=$LK_PIN \
+exec docker run --rm --tmpfs /w --network none --memory 5g --cpus 2 -e PYTHONPATH=/le -e LE_COMMIT=$LE_PIN -e LK_COMMIT=$LK_PIN \
   -v "$LK":/lk:ro -v "$LE":/le:ro -v "$HERE/../anon":/p:ro --entrypoint /bin/sh "$IMG" -c \
-  "mkdir -p /tmp/w && sed -e 's/else (2048, 2048 + 16)/else ($N, $N + 16)/' -e 's/^Q = 2\*\*42 - 215$/Q = 2**50 - 42310535/' \
-     -e 's/^BETA_S, BETA_E = 36, 164$/BETA_S, BETA_E = $BS, $BE/' /p/hints.sage > /tmp/w/hints.sage &&
-   grep -c -e '($N, $N + 16)' -e '^Q = 2\*\*50 - 42310535' -e '^BETA_S, BETA_E = $BS, $BE' /tmp/w/hints.sage | grep -qx 3 &&
-   cd /lk/framework && sage /tmp/w/hints.sage"
+  "sed -e 's/else (2048, 2048 + 16)/else ($N, $N + 16)/' -e 's/^Q = 2\*\*42 - 215$/Q = 2**50 - 42310535/' \
+     -e 's/^BETA_S, BETA_E = 36, 164$/BETA_S, BETA_E = $BS, $BE/' /p/hints.sage > /w/hints.sage &&
+   grep -c -e '($N, $N + 16)' -e '^Q = 2\*\*50 - 42310535' -e '^BETA_S, BETA_E = $BS, $BE' /w/hints.sage | grep -qx 3 &&
+   cd /lk/framework && sage /w/hints.sage"

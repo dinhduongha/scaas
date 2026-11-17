@@ -2,8 +2,9 @@
 # Mirrors the local commands:
 #   contract-evm:  per PQZ set (matrix n2048-kmax1024, n2304-kmax4096, n2560-kmax16384, n2816-kmax65536): script/pqz/at-set.sh <set> test;
 #                  once, in the n2304-kmax4096 cell (the committed set, so its at-set run is the default-set `forge test`):
+#                  python3 -I ../../pqz-core/params/sets/gen_set.py --all --check (PqzSet.sol and every generated file equal set.toml's);
 #                  forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' (cold gas); FOUNDRY_PROFILE=scaas-testnet forge build;
-#                  forge build src --sizes --json > /tmp/sizes.json; python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
+#                  T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json; python3 ../../scripts/size_gate.py "$T"/sizes.json size-baseline.json
 #   contract-<family>: smartcontracts/scripts/test.sh <family> (unit and in-process tests; localnet e2e stays local), toolchains as local:
 #   contract-soroban:  test.sh soroban (cargo test)
 #   contract-solana:   test.sh solana (build.sh solana = cargo build-sbf, Agave 4.3.0 / platform-tools v1.57; cargo test on LiteSVM)
@@ -15,8 +16,16 @@
 #   contract-cosmos:   test.sh cosmos (cargo test)
 #   contract-ton:      test.sh ton (npm ci; npm test = tact build + jest; Node 26.8.1)
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
-#   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths
-#   clients/clientkeys:    npm ci --ignore-scripts; npm test
+#   pqz:           in pqz-core: params/sets/gen_set.py --all --check, pqzl/params/to_rust.py --check (generated files in sync);
+#                  sh gate-controls.sh (the gate scripts' negative controls, stubs only);
+#                  python3 -I nethermind/chain/check-provisional-ids.py (each provisional schedule's ids = PqzSetIds.cs);
+#                  at PQZ_SET n2304-kmax4096: pqzl/build.sh native, kat/check.py (KAT); pqzl/check_tbox_fixes.sh, sv/check_sv_fixes.sh;
+#                  ffi pqz-vectors --check, smartcontracts/vectors/pqz/pqz_kat.py --check, ffi/vectors/tamper.py; cargo test --release (stmt, pqzh/ligero, ffi);
+#                  fuzz smoke (fuzz/run.sh precompile, mutate, codec: 60 s each on the committed corpora)
+#   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check; ... paths;
+#                  ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*' (no temp path, AGENTS.md Security)
+#   clients/clientkeys:    npm ci --ignore-scripts; npm test; its ML-DSA-65 signer (script/pqz/mldsa.mjs) against the DEX:
+#                          MLDSA_CLIENTKEYS=../../clients/clientkeys forge test --ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol
 #   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke); zether-cli against the tokens (ZetherProverCross)
 #   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings; the same with --features signers (groups.json signers + regeneration), --features json (the JSON shim the wrappers call) and --features pq (the off-chain verifier's PQ kinds, ua8::check_*)
 #   clients/ua-py:         python3 -m unittest tests.test_vectors
@@ -118,6 +127,8 @@ jobs:
         working-directory: smartcontracts/evm
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # legacy_artifacts.py exports the pre-split src (d142b57c) with git archive
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: v1.8.5 # the forge every local build, gas figure and KAT was made with (stable drifts; Amsterdam since F185)
@@ -126,8 +137,21 @@ jobs:
         run: |
           ../../scripts/evm_libs.sh install
           ../../scripts/evm_libs.sh check
+      # the differential tests (test/modules/LegacyDiff.sol) read the pre-split releases, built here (not committed)
+      - name: pre-split releases (legacy_artifacts.py build)
+        run: python3 -I script/modules/legacy_artifacts.py build
+      # the committed PqzSet.sol and every other generated file equal set.toml's (review 3w u5-2: set.toml changes in
+      # contract rounds, where the core gate does not run)
+      - name: gen_set.py --all --check
+        if: matrix.set == 'n2304-kmax4096'
+        run: python3 -I ../../pqz-core/params/sets/gen_set.py --all --check
+      # test/modules/* compares with the pre-split releases, built here at the committed set only: at another set the
+      # pre-split side must be rebuilt at that set (at-set.sh's `modules` scope, under scripts/capped: local), so the
+      # other cells leave it out
       - name: forge test at ${{ matrix.set }} (at-set.sh)
-        run: script/pqz/at-set.sh ${{ matrix.set }} test
+        run: |
+          if [ "${{ matrix.set }}" = n2304-kmax4096 ]; then script/pqz/at-set.sh ${{ matrix.set }} test
+          else script/pqz/at-set.sh ${{ matrix.set }} test --no-match-path 'test/modules/*'; fi
       # the registry's gas bounds (msig at verifyBudget, stored-member bound, T-GAS) hold cold: every call its own tx
       - name: forge test --isolate (UAGas, UARegistryGroups)
         if: matrix.set == 'n2304-kmax4096'
@@ -136,8 +160,8 @@ jobs:
         if: matrix.set == 'n2304-kmax4096'
         run: |
           python3 ../../scripts/size_gate.py --self-test
-          forge build src --sizes --json > /tmp/sizes.json || true
-          python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
+          forge build src --sizes --json > "$RUNNER_TEMP"/sizes.json || true
+          python3 ../../scripts/size_gate.py "$RUNNER_TEMP"/sizes.json size-baseline.json
       - name: forge build (scaas-testnet profile)
         if: matrix.set == 'n2304-kmax4096'
         run: FOUNDRY_PROFILE=scaas-testnet forge build
@@ -177,10 +201,10 @@ jobs:
       # build.sh solana puts ~/.local/share/solana/install/active_release/bin on PATH, where agave-install puts it locally
       - name: Agave ${{ env.AGAVE }} (official release tarball)
         run: |
-          curl -sSfL -o /tmp/agave.tar.bz2 "https://github.com/anza-xyz/agave/releases/download/$AGAVE/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
-          echo "$AGAVE_SHA256  /tmp/agave.tar.bz2" | sha256sum -c -
+          curl -sSfL -o "$RUNNER_TEMP"/agave.tar.bz2 "https://github.com/anza-xyz/agave/releases/download/$AGAVE/solana-release-x86_64-unknown-linux-gnu.tar.bz2"
+          echo "$AGAVE_SHA256  $RUNNER_TEMP/agave.tar.bz2" | sha256sum -c -
           mkdir -p ~/.local/share/solana/install
-          tar -xjf /tmp/agave.tar.bz2 -C ~/.local/share/solana/install
+          tar -xjf "$RUNNER_TEMP"/agave.tar.bz2 -C ~/.local/share/solana/install
           mv ~/.local/share/solana/install/solana-release ~/.local/share/solana/install/active_release
           ~/.local/share/solana/install/active_release/bin/cargo-build-sbf --version
       # cargo build-sbf downloads its platform tools (v1.57 for Agave 4.3.0) into ~/.cache/solana on first use
@@ -241,9 +265,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: aptos CLI ${{ env.APTOS }} (official release zip)
         run: |
-          curl -sSfL -o /tmp/aptos.zip "https://github.com/aptos-labs/aptos-core/releases/download/aptos-cli-v$APTOS/aptos-cli-$APTOS-Linux-x86_64.zip"
-          echo "$APTOS_SHA256  /tmp/aptos.zip" | sha256sum -c -
-          mkdir -p ~/.local/bin && unzip -o /tmp/aptos.zip aptos -d ~/.local/bin
+          curl -sSfL -o "$RUNNER_TEMP"/aptos.zip "https://github.com/aptos-labs/aptos-core/releases/download/aptos-cli-v$APTOS/aptos-cli-$APTOS-Linux-x86_64.zip"
+          echo "$APTOS_SHA256  $RUNNER_TEMP/aptos.zip" | sha256sum -c -
+          mkdir -p ~/.local/bin && unzip -o "$RUNNER_TEMP"/aptos.zip aptos -d ~/.local/bin
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           ~/.local/bin/aptos --version
       # AptosFramework at the rev pinned in Move.toml (fetched once: --skip-fetch-latest-git-deps only skips updates)
@@ -268,10 +292,10 @@ jobs:
       - name: sui CLI ${{ env.SUI }} (official release tarball)
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          curl -sSfL -o /tmp/sui.tgz "https://github.com/MystenLabs/sui/releases/download/$SUI/sui-$SUI-ubuntu-x86_64.tgz"
-          echo "$SUI_SHA256  /tmp/sui.tgz" | sha256sum -c -
-          mkdir -p ~/.local/bin && tar -xzf /tmp/sui.tgz -C ~/.local/bin ./sui
-          rm /tmp/sui.tgz
+          curl -sSfL -o "$RUNNER_TEMP"/sui.tgz "https://github.com/MystenLabs/sui/releases/download/$SUI/sui-$SUI-ubuntu-x86_64.tgz"
+          echo "$SUI_SHA256  $RUNNER_TEMP/sui.tgz" | sha256sum -c -
+          mkdir -p ~/.local/bin && tar -xzf "$RUNNER_TEMP"/sui.tgz -C ~/.local/bin ./sui
+          rm "$RUNNER_TEMP"/sui.tgz
       - run: |
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           ~/.local/bin/sui --version
@@ -344,6 +368,17 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: unit + proptest
         run: cargo test
+      # the e2e signs through clients/clientkeys (zetherPop and others): its node_modules
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: clientkeys dependencies for the e2e
+        working-directory: clients/clientkeys
+        run: npm ci --ignore-scripts
+      # and through zether-cli (relayed_zether_proof_under_the_ua_tag; ZETHER_CLI's default path)
+      - name: zether-cli for the e2e
+        working-directory: clients/zether-prover
+        run: cargo build --release --bin zether-cli
       - name: e2e on anvil
         run: cargo test --test e2e -- --ignored --test-threads=1
 
@@ -361,6 +396,10 @@ jobs:
         run: python3 scripts/docs_check.py facts check
       - name: no machine paths in tracked files
         run: python3 scripts/docs_check.py paths
+      # AGENTS.md Security: no temp path in a committed file ([t]: the step does not match itself)
+      - name: no temp paths in tracked files
+        run: |
+          ! git grep -nE '/[t]mp/' -- . ':!*/legacy/*' ':!docs/history/*'
 
   clientkeys:
     needs: changes
@@ -379,6 +418,16 @@ jobs:
       # The vendored-bundle tests skip here: the bundle lives in the client repo that embeds scaas.
       - name: unit tests and vectors
         run: npm test
+      # As zether-prover's ZetherProverCross: the forge test signs through ffi with this job's node_modules (@noble/post-quantum),
+      # skipped by the default profile, run here (ua-mtx-liquidity L1d: an mldsa65 UA's two SCaaS inputs within 2^24).
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+      - name: ML-DSA-65 liquidity plan against the DEX (DexLiquidityMldsa, ffi)
+        run: |
+          cd ../../smartcontracts/evm
+          ../../scripts/evm_libs.sh install
+          MLDSA_CLIENTKEYS=../../clients/clientkeys forge test --ffi --match-path test/liquidity/DexLiquidityMldsa.t.sol
 
   # P6e Task 10 / gate A / gate B, at one parameter set (PQZ_SET below) — KAT, the tbox / SV fix checks, the vectors byte for byte
   # (Rust generator and the independent Python checker), the crates' tests, a fuzz smoke on the committed corpora.
@@ -406,6 +455,12 @@ jobs:
             pqz-core/ffi
             pqz-core/stmt
             pqz-core/pqzh/ligero
+      - name: generated files in sync (gen_set.py --all --check, to_rust.py --check)
+        run: python3 -I params/sets/gen_set.py --all --check && python3 -I pqzl/params/to_rust.py --check
+      - name: gate scripts fail on a failing check (gate-controls.sh)
+        run: sh gate-controls.sh
+      - name: provisional engine schedules carry their set's compiled-in ids (check-provisional-ids.py)
+        run: python3 -I nethermind/chain/check-provisional-ids.py
       - name: build (native) and KAT 19/19
         run: |
           cd pqzl && ./build.sh native

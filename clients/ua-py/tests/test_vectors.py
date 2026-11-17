@@ -9,6 +9,7 @@ VEC = pathlib.Path(__file__).resolve().parents[3] / 'smartcontracts' / 'vectors'
 K = json.loads((VEC / 'kinds.json').read_text())
 S = json.loads((VEC / 'structures.json').read_text())
 P = json.loads((VEC / 'portable.json').read_text())
+D = json.loads((VEC / 'id_display.json').read_text())
 
 
 def b(h):
@@ -130,6 +131,20 @@ class Vectors(unittest.TestCase):
                     ua.canonical_id(r['input'])
                 self.assertEqual(e.exception.code, r['error'])
 
+    def test_id_display_rows(self):
+        """ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table."""
+        for r in D['rows']:
+            with self.subTest(r['name']):
+                if 'display' in r:
+                    self.assertEqual(ua.id_display(r['id'], r['kind']), r['display'].get('address') or r['display']['urn'])
+                else:
+                    with self.assertRaises(ua.UAError) as e:
+                        ua.id_display(r['id'], r['kind'])
+                    self.assertEqual(e.exception.code, r['error'])
+        for kind, name, native, _, _ in ua.KINDS:
+            want = (lambda r: r.get('error') == 'UAKindNotDerived') if native else (lambda r: 'urn' in r.get('display', {}))
+            self.assertTrue(any(r['kind'] == kind and want(r) for r in D['rows']), name)
+
     def test_messages(self):
         for r in K['messages']:  # each row carries its purpose `version` (A4-c1)
             p = ua.purpose_tag(r['purpose'], r['version'])
@@ -191,6 +206,19 @@ class Vectors(unittest.TestCase):
             self.assertEqual(hx(m), r['message'], r['name'])
             self.assertEqual(hx(ua.member_digest(u, m)), r['memberDigest'], r['name'])
 
+    def test_msig_update_rows(self):
+        """CTR-UA-44: every updateMsig row: the typed digest, the message and memberDigest a derived member signs."""
+        self.assertEqual(len(P['msigUpdates']), 4)
+        for r in P['msigUpdates']:
+            u = b(r['ua'])
+            members = [(m['kind'], b(m['id']), m['weight']) for m in r['members']]
+            d = ua.msig_update_digest(u, b(r['chainUid']), b(r['registry']), r['version'], r['threshold'], members, int(r['enabled']),
+                                      r['validUntilBlock'])
+            self.assertEqual(hx(d), r['digest'], r['name'])
+            m = ua.ua_message(0x0120, ua.purpose_tag('msig-update'), d)
+            self.assertEqual(hx(m), r['message'], r['name'])
+            self.assertEqual(hx(ua.member_digest(u, m)), r['memberDigest'], r['name'])
+
     def test_portable_typed(self):
         """TS-D1: the domain separator and the five typehashes pinned and re-derived; every row's typedData (the JSON
         eth_signTypedData_v4 signs) hashes to its digest, its message carries the row's words (kind included)."""
@@ -206,7 +234,11 @@ class Vectors(unittest.TestCase):
                   'UARegistration': '0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e',
                   'UAPqzKey': '0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00',
                   'UAPqzKeyRecord': '0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567',
-                  'UAMembership': '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4'}
+                  'UAPqzKeyVersion': '0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158',
+                  'UAPqzKeyVersionRecord': '0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5',
+                  'UAMembership': '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4',
+                  'UAMsigUpdate': '0x4f444098cb5d1c5e604d10d13c9c803ac8429ef9938342ded6997343b9c48ac6',
+                  'UAMsigMember': '0x49ee2633d577df4283fdcf2546b6c8b72f1e3cddb2449cefdfc6eed31e26a05a'}
         self.assertEqual(set(t['types']), set(pinned))
         self.assertEqual(set(ua.PORTABLE_TYPES), set(pinned))
         for name, th in pinned.items():
@@ -254,6 +286,48 @@ class Vectors(unittest.TestCase):
             self.assertEqual(hx(ua.pqz_key_digest(u, h)), r['pqzKeyDigest'], r['name'])
             n += 1
         self.assertEqual(n, len(P['registrations']) + len(P['kemRecords']) + len(P['pqzKeyRecords']))
+
+    def test_pqz_key_versions(self):
+        """Group 3g: portable.json ``pqzKeyVersions`` by digest and message, and the builder's refusals."""
+        reg = {r['ua']: r for r in P['registrations']}
+        zero = {(r['ua'], r['set']): r for r in P['pqzKeyRecords']}
+        self.assertEqual(len(P['pqzKeyVersions']), 16)
+        at = {r['name']: r for r in P['pqzKeyVersions']}
+        for r in P['pqzKeyVersions']:
+            u, h, ph, v, kind = b(r['ua']), b(r['pqzKeyHash']), b(r['pqzPopHash']), r['version'], r['kind']
+            self.assertEqual(hx(hash_typed_data(r['typedData'])), r['recordDigest'], r['name'])
+            base, name = reg[r['ua']], r['name'].split('/')[0]
+            stored = [(0, b(zero[(r['ua'], r['set'])]['pqzKeyHash']))]
+            if v == 2:
+                stored.append((1, b(at[f"{name}/v1/{r['set']}"]['pqzKeyHash'])))
+            m = ua.pqz_key_version_record_message(kind, u, b(base['keyData']), v, b(r['pqzKey']), pqz_pop_hash=ph, stored=stored)
+            self.assertEqual((hx(m.pqz_key_hash), hx(m.version_digest), hx(m.record_digest), hx(m.message), hx(m.pqz_reg_message)),
+                             (r['pqzKeyHash'], r['versionDigest'], r['recordDigest'], r['message'], r['pqzRegMessage']), r['name'])
+            self.assertEqual(hx(m.member_digest) if m.member_digest else None, r.get('memberDigest'), r['name'])
+            self.assertEqual(hx(ua.pqz_key_version_digest(u, v, h)), r['versionDigest'], r['name'])
+            self.assertEqual(ua.set_pqz_key_version_args(u, v, b(r['pqzKey']), ph, r['args']['sig']), r['args'], r['name'])
+            self.assertEqual(hx(ua.pqz_key_version_record_digest(u, v, h, ph)), r['recordDigest'], r['name'])
+        self.assertEqual(len(P['pqzKeyVersionNegatives']), 28)
+        n = 0
+        for x in P['pqzKeyVersionNegatives']:
+            if x['error'] == 'UAUnauthorized':
+                continue  # a signature's verdict, not the builder's
+            r = at[x['mutation']['row']]
+            known = {0: zero[(r['ua'], r['set'])]['pqzKeyHash']}
+            known.update({v: at[f"fndsa512/v{v}/{r['set']}"]['pqzKeyHash'] for v in (1, 2)})
+            stored = [(v, b(known[v])) for v in x['mutation']['stored']]
+            key = b(x['mutation']['set'].get('pqzKey', r['pqzKey']))
+            with self.assertRaises(ua.UAError) as e:
+                ua.pqz_key_version_record_message(r['kind'], b(r['ua']), b(reg[r['ua']]['keyData']), r['version'], key,
+                                                  pqz_pop_hash=b(r['pqzPopHash']), stored=stored)
+            self.assertEqual(e.exception.code, x['error'], x['name'])
+            n += 1
+        self.assertEqual(n, 16)
+        with self.assertRaises(ua.UAError) as e:
+            r = at[f"fndsa512/v1/{P['pqzKeyVersions'][0]['set']}"]
+            ua.pqz_key_version_record_message(r['kind'], b(r['ua']), b(reg[r['ua']]['keyData']), 0, b(r['pqzKey']), pqz_pop_hash=b(r['pqzPopHash']),
+                                              stored=[(0, bytes(32))])
+        self.assertEqual(e.exception.code, 'UAPqzKeySet')
 
     def test_portable(self):
         t = P['tags']
@@ -305,9 +379,13 @@ class Vectors(unittest.TestCase):
             m = ua.kem_record_message(r['kind'], u, int(r['version']), pk)
             self.assertEqual(hx(m), r['message'])
             self.assertEqual(m, ua.ua_message(r['kind'], ua.purpose_tag('kem'), d))
-            if r['kind'] == 0x0120:
-                self.assertEqual(hx(ua.member_digest(u, m)), r['memberDigest'])
-        self.assertGreater(len(P['kemRecords']), 0)
+        # CTR-UA-32 (T66a): the single PQ kinds only; an msig holds no KEM key, so it has no KEM record message
+        self.assertEqual(len(P['kemRecords']), 12)
+        self.assertNotIn(0x0120, {r['kind'] for r in P['kemRecords']})
+        mq = next(x for x in P['registrations'] if x['name'] == 'msig-pq/n2048-kmax1024')
+        with self.assertRaises(ua.UAError) as e:
+            ua.kem_record_message(0x0120, b(mq['ua']), 1, b(P['kemRecords'][0]['kemPk']))
+        self.assertEqual(e.exception.code, 'UAKemHolder')
         u = bytes([1]) * 32
         kem = lambda n, scheme=1: bytes([scheme]) + bytes(n - 1)  # scheme byte, zeros, n bytes in all
         for args, code in (((u, 0, kem(1601)), 'UAKemVersion'), ((u, 2**64, kem(1601)), 'UAKemVersion'),
@@ -414,10 +492,23 @@ class Vectors(unittest.TestCase):
                 msg = ua.kem_record_message(t['kind'], b(s['ua']), int(k['version']), b(k['kemPk']))
                 self.assertNotEqual(k['message'], hx(msg))
                 run += 1
+            elif n['entry'] == 'setKemKey' and err == 'UAKemHolder':
+                # msig-kem-record (CTR-UA-32): a well-formed record of an msig is refused by its kind, before any signature
+                t = next(x for x in regs if x['ua'] == s['ua'])
+                self.assertEqual(t['kind'], m['kind'], n['name'])
+                k = next(x for x in P['kemRecords'] if x['id'] == m['row'])
+                with self.assertRaises(ua.UAError, msg=n['name']) as e:
+                    ua.kem_record_message(t['kind'], b(s['ua']), int(k['version']), b(s['kemPk']))
+                self.assertEqual(e.exception.code, err, n['name'])
+                run += 1
             else:
                 sig_level += 1  # signatures / native personal_sign / another record's pop: verified by the signature vectors
-        self.assertEqual((run, sig_level), (57, len(P['negatives']) - 58))  # 58: 57 + the skipped msig-minimal row
+        self.assertEqual((run, sig_level), (58, len(P['negatives']) - 59))  # 59: 58 + the skipped msig-minimal row
         u, key, proof = bytes([1]) * 32, bytes(16384), bytes([7]) * 32
+        mq = next(x for x in regs if x['name'] == 'msig-pq/n2048-kmax1024')
+        with self.assertRaises(ua.UAError) as e:
+            ua.registration_args(0x0120, b(mq['keyData']), kem_pk=bytes([1]) + bytes(1600), kem_commit=False)
+        self.assertEqual(e.exception.code, 'UAKemHolder')
         # malformed msig key data is UAKeyData, not "not a holder"; an msig without key data is not a holder
         for kd in (bytes([0, 2, 0]), bytes([0, 2, 0, 2, 9, 9])):
             with self.assertRaises(ua.UAError) as e:
@@ -429,6 +520,8 @@ class Vectors(unittest.TestCase):
                            ((0x0130, u, b'', None, None, None, bytes([1]) + bytes(1599)), 'UAKemKeyLength'),
                            ((0x0130, u, b'', None, None, None, bytes(1601)), 'UAKemScheme'),
                            ((0x0101, u, b'', None, None, None, bytes([1]) + bytes(1600)), 'UAKemHolder'),
+                           # CTR-UA-32: a PQ-eligible msig holds a PQZ key but no KEM key
+                           ((0x0120, b(mq['ua']), b(mq['keyData']), None, None, None, bytes([1]) + bytes(1600)), 'UAKemHolder'),
                            ((0x0130, u, b'', key, b'', None), 'UAPqzPopHash')):
             with self.assertRaises(ua.UAError, msg=args) as e:
                 ua.holder_pop_message(*args[:3] + ((args[3] if len(args) > 3 else None),) + args[4:])
@@ -533,7 +626,14 @@ class NestedRows(unittest.TestCase):
                 self.assertEqual(hx(ua.inner_digest(b(x['inner']), b(r['memberDigest']))), x['memberDigest'], name)
 
     def test_nested_records(self):
-        self.assertEqual((len(self.N['kemRecords']), len(self.N['pqzKeyRecords'])), (1, 4))
+        # CTR-UA-32 (T66a): an msig holds no KEM key, so no KEM record; a well-formed one is refused by its kind
+        self.assertEqual((len(self.N['kemRecords']), len(self.N['pqzKeyRecords'])), (0, 4))
+        pq = next(x for x in self.N['registrations'] if x['name'] == 'msig-nested-pq')
+        for f in (lambda pk: ua.kem_record_message(0x0120, b(pq['ua']), 1, pk),
+                  lambda pk: ua.holder_pop_message(0x0120, b(pq['ua']), b(pq['keyData']), kem_pk=pk, inner=self.keys.get)):
+            with self.assertRaises(ua.UAError) as e:
+                f(bytes([1]) + bytes(1600))
+            self.assertEqual(e.exception.code, 'UAKemHolder')
         for r in self.N['kemRecords']:
             u, v, pk = b(r['ua']), r['version'], b(r['kemPk'])
             m = ua.kem_record_message(r['kind'], u, v, pk)
@@ -614,7 +714,7 @@ class TypedRegistryArgs(unittest.TestCase):
             self.assertEqual(args, row['kemCommit']['register'], row['name'])
             self.assertEqual(fill, row['kemCommit']['fill'], row['name'])
             commits += 1
-        self.assertEqual(commits, 11)  # + mldsa87, fndsa1024
+        self.assertEqual(commits, 7)  # + mldsa87, fndsa1024; msig-pq/<set> without a KEM key (CTR-UA-32)
         for k in P['kemRecords']:
             self.assertEqual(ua.set_kem_key_args(b(k['ua']), k['version'], b(k['kemPk']), record_sig(k)), k['args'], k['id'])
         for r in P['pqzKeyRecords']:

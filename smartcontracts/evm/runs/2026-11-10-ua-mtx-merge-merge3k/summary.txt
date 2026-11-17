@@ -1,0 +1,94 @@
+ua-mtx-merge merge3k (2026-11-10): ua-mtx-liquidity (16832dd0) and ua-mtx-wraplimit (8ebd7dcf) merged into ua-mtx-merge
+(base 6b6d3109), the owner's rulings of 2026-11-10 applied, the gates run. Steps by gates.sh here; full output in the
+git-ignored <step>.log beside this file (a red first run kept as <step>.red.log). Foundry 1.8.5, solc 0.8.37, Amsterdam,
+default PQZ set n2304-kmax4096; every heavy run through scripts/capped (4 GB; the node 6 GB), one at a time. UNAUDITED.
+
+commits
+debb1a8c  merge ua-mtx-liquidity (conflicts: guard.rs, typed.rs row counts; matrix.sh GROUPS)
+95469064  merge ua-mtx-wraplimit (conflicts: decisions.md, abi.rs, guard.rs, typed.rs, matrix.sh, size-baseline.json,
+          GovDeploy.t.sol; WrapLimits.s.sol's token release renamed deployTokenImplementation)
+d042190b  owner rulings (a) R26 accepted / Q17 (a), (b) p256 / webauthn-p256 verify cap 400,000, (c) PQ lane gas note
+e9aec083  owner ruling (d): matrix.sh's table step fails closed on a missing book
+1bb15eac  pins moved by the merges (size baseline, router address, code-limit control, plus-zero gas)
+410fcab7  CI header: the pqz job's line
+a168d28d  t66b differential, msg.sender lint, scalar mask: the suites the branches did not run
+2ecd2caf  P7's mirror of the Zether plus-zero rows
+54087e01  clients: the ua-rs wrappers' governance-bit tests read bits 0-27
+
+step | commit | rc | counts
+generated faces: gen_faces.py --check | 95469064 | 0 | 27 files, 0 differ
+vectors: gen_liquidity.py --check, gen_wraplimits.py --check, typed-ops-vectors.mjs vs typed_ops.json | 95469064 | 0 | equal
+size: forge build src --sizes; size_gate.py (first) | e9aec083 | 1 | 6 errors: the six wrapped faces +166 B
+size: the same after the baseline moved | 1bb15eac | 0 | 0 errors, 162 contracts
+forge test/governance (first) | e9aec083 | 1 | 424 passed, 9 failed (router address, code-limit control, 7 plus-zero gas)
+forge test/governance | 1bb15eac | 0 | 433 passed
+forge test/v2 | e9aec083 | 0 | 655 passed (LinkClosure, Layout, module-opcodes, Factory ModuleNotPinned)
+forge test/wrap | e9aec083 | 0 | 278 passed
+forge test/liquidity | e9aec083 | 0 | 90 passed, 1 skipped (the ffi case, next row)
+forge test/liquidity DexLiquidityMldsa --ffi (the CI clientkeys job's case) | 1bb15eac | 0 | 2 passed; regular 12,145,367 gas, state 979,200
+forge test/t66b, the differential (first) | 1bb15eac | 1 | 24 passed, 8 failed (validBits() of 1, 3, 5, 9, 11, 13: +0x0e000000)
+forge test/t66b | a168d28d | 0 | 32 passed
+forge test/ua | 1bb15eac | 0 | 732 passed
+forge test/merge | 1bb15eac | 0 | 341 passed
+forge test/metatx (first) | 1bb15eac | 1 | 543 passed, 1 failed (MsgSenderLint ERC20MetaTx 5 != 4), 1 skipped
+forge test/metatx | a168d28d | 0 | 544 passed, 1 skipped
+forge test/pqchat | 1bb15eac | 0 | 94 passed
+forge test/zether | 1bb15eac | 0 | 441 passed, 4 skipped
+forge test/account | 1bb15eac | 0 | 98 passed
+forge test/as (first) | 1bb15eac | 1 | 462 passed, 1 failed (RegulatedSkeleton scalar mask, bit 27)
+forge test/as | a168d28d | 0 | 463 passed
+forge test/wallet | 1bb15eac | 0 | 181 passed
+forge test/confidential | a168d28d | 0 | 5 passed
+forge test/fork | a168d28d | 0 | 1 skipped (no fork RPC)
+forge test/hedera | a168d28d | 0 | 20 passed
+forge test/p6f | a168d28d | 0 | 4 passed
+forge test/pqzh | a168d28d | 0 | 42 passed
+forge test/research | a168d28d | 0 | 359 passed, 7 skipped
+forge test/pqz (first) | a168d28d | 1 | 597 passed, 1 failed (P7 mirror of plus_zero_gas.json), 4 skipped
+forge test/pqz | 2ecd2caf | 0 | 598 passed, 4 skipped
+forge test/*.t.sol (sparse over test/, first) | a168d28d | 143 | OOM-killed at 4 GB while compiling 563 files
+forge test/*.t.sol (copied to a sibling directory, its own compile set) | 2ecd2caf | 0 | 29 passed
+test/helpers, test/vectors | - | - | no tests (support and data)
+forge build of the on-chain scripts (Liquidity, WrapLimits, Misc, Dex, Gov) | 2ecd2caf | 0 | compiled
+four PQZ sets (script/pqz/at-set.sh <set> test) | - | - | deferred to after 3p (owner 2026-11-10)
+node cargo test --lib | 2ecd2caf | 0 | 705 passed
+node cargo clippy --all-targets -- -D warnings | 2ecd2caf | 0 | clean
+node mutant: verify_cap 0x0100 / 0x0101 back to 50,000 | 2ecd2caf + mutant | 101 | killed (liquidity_pre_checks)
+node cargo test --test e2e -- --ignored | - | - | deferred to after 3p (owner 2026-11-10)
+clientkeys npm test | 54087e01 | 0 | 322 tests: 320 passed, 2 skipped
+ua-rs cargo test, clippy, --features signers / json / pq | 2ecd2caf | 0 | 282 passed over the four cargo test runs (55 test binaries); clippy clean
+ua-py unittest tests.test_vectors | 54087e01 | 0 | 29 passed
+ua-go go vet, go test | 2ecd2caf | 0 | ok
+ua-cs dotnet test | 2ecd2caf | 0 | 28 passed
+ua-dart analyze, test, test -p node, run vectors_test | 2ecd2caf | 0 | no issues; 29 passed each
+ua-c (first) | 2ecd2caf | 1 | 23 of 24: test_governance_bits_rows 28 != 24
+ua-c clippy, build, cargo test (header drift), unittest | 54087e01 | 0 | 24 passed
+ua-cxx clippy, cmake, ctest | 54087e01 | 0 | 20 of 20
+ua-qt cmake, ctest (Qt 6.12, offscreen) | 54087e01 | 0 | 1 of 1
+ua-dart-frb pub get, cargo build, dart test | 54087e01 | 0 | 21 passed
+docs_check / test_docs_check | 54087e01 | 0 | 0 errors, 5 warnings (budgets), 16 notes / ok
+CI guards: git grep '/[t]mp/'; the ci.yml header against its jobs | 54087e01 | 0 | clean; the pqz job had no line (410fcab7)
+
+sizes (runtime B, forge build src --sizes) | margin
+SCaaSDex 32,809 | release line 33,594: 785 left
+WrappedPqzRegulatedTokenW (W 13) 33,407 | module line 33,780: 373 left (hard 35,570)
+module T, the largest WrappedPqzRegulatedTokenT 20,219 (the rest 17,418-20,170) | module line 33,780
+WrappedLib 28,044 | library line 33,903
+OpenFactory 29,238 | its row, unchanged
+SCaaSDexLiquidityModule 19,055 | module line 33,780
+faces +166 B each (both sides): WrappedPqzRegulatedToken 29,474, the largest face
+
+pins moved (old -> new, each with its reason in its commit)
+size-baseline.json: WrappedToken 19,366 -> 19,532, WrappedZetherToken 23,072 -> 23,238, WrappedPqzToken 25,860 -> 26,026,
+  WrappedRegulatedToken 22,766 -> 22,932, WrappedZetherRegulatedToken 26,506 -> 26,672, WrappedPqzRegulatedToken
+  29,293 -> 29,474
+GovDeploy: GovernanceRouter 0x9084894b49299A2b1DFdB271e2C5Fd8D4f9bA904 -> 0x1b8ae68e34f2710b8ba48b33fD53942F3b1a47A0; the
+  code-limit control 19,365 / 19,366 -> 19,531 / 19,532
+plus_zero_gas.json (gas only): uaExecuteTransfer_normal 97,723 -> 97,831, uaExecuteTransfer_wrapped 97,821 -> 97,799,
+  transferToUA_wrappedPqz 69,397 -> 69,287, transfer_normalPqz 46,484 -> 46,506, transfer_wrappedPqz 46,418 -> 46,440,
+  uaExecuteTransfer_normalZether 139,389 -> 139,434, uaExecuteTransfer_wrappedZether 139,446 -> 139,424; P7's mirror the same
+  plus mtxTransfer_wrappedZether 83,667 -> 83,645 (3l's move)
+MsgSenderLint ERC20MetaTx 4 -> 5 (mtxLiquidityPull's caller, CTR-DEX-30); RegulatedSkeleton scalar of 9 and 13 + bit 27
+the t66b differential's expected validBits() of the wrapped kinds + bits 25-27 (CTR-TOK-31)
+node (the merge's sums, no figure moved by hand): guard.rs entry rows 117 -> 120, the vector walk (114, 3, 114) -> (116, 3, 116),
+  ROWED 258 -> 261, EXEMPT 181 -> 193, GOVERNED 245 -> 257; typed.rs typed rows 87 -> 89, plain rows 31 -> 32

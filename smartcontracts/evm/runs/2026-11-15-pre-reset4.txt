@@ -1,0 +1,43 @@
+pre-reset4: the three finished build rounds in one tree for reset 4. Branch pre-reset4 from pqz-three-keys a1646696c, merge
+commits (no rebase): burner-wrap-caps ebb04936f (3zb + 3zc + O6/O8) at 3b056f7c9, msig-members 8311b50fd (3ze) at e47829374,
+the closed pqz-three-keys c5f038922 at 78245064b. On top: the 3ze merge note (scoped PQZ key record checks read the msig
+current structure, ua-rs + clientkeys) e9a3d5f2f, and three merge fixes: the merged GovernanceRouter address a8b90446b, the
+three-key gas tests' chain-word mints dbe1e024b, e2e.py's chain-word helper shadowed in run() b446bd123. Foundry 1.8.5,
+solc 0.8.37, Amsterdam; every heavy run through scripts/capped (4 GB; the node suite 6 GB under the node lock), one forge
+directory per job, at-set runs in a separate work tree; full output in git-ignored logs. Local only: anvil and a local
+Nethermind copy (image pqz8), never the SCaaS testnet stack. UNAUDITED.
+
+step | commit | rc | counts
+generators --check: gen_set --all, gen_faces, pqz3k, wraplimits, liquidity, servicepull | e47829374 | 0 | no drift (gen_set 93 files, faces 27)
+JS vector generators: typed-ops, ua, portable, sig, id-display, pqchat, pq, soroban | e47829374 | 0 | no drift; portable.json msigScopedKeyRecords added at e9a3d5f2f
+forge-side KAT writers (governance bits, regulated, create_config) as their tests | dbe1e024b | 0 | equal to the committed files
+frb codegen | e9a3d5f2f | 0 | no drift
+merge-note mutants (ua-rs / clientkeys) | e9a3d5f2f | - | 3/4 and 3/4 killed; class 2 unreachable by an msig, holder on every vs enabled slot equal on the vectors
+forge every directory at n2304-kmax4096 (22 jobs) | dbe1e024b | 0 | 4,334 passed, 16 skipped
+at-set.sh n2048-kmax1024, every directory | dbe1e024b | 0 | 4,337 passed, 13 skipped
+at-set.sh n2560-kmax16384, every directory | dbe1e024b | 0 | 4,331 passed, 19 skipped
+at-set.sh n2816-kmax65536, every directory | dbe1e024b | 0 | 4,319 passed, 31 skipped
+forge --isolate test/ua/{UAGas,UARegistryGroups} | dbe1e024b | 0 | 22
+size_gate.py | dbe1e024b | 0 | 0 errors, 170 contracts (UARegistryAuxLib 32,295 under its 32,372 row; OpenFactory, UARegistryCoreLib over their T-2 lines, as before)
+scaas-node cargo test | dbe1e024b | 0 | 767 (lib) + 4 + 1
+scaas-node cargo clippy --all-targets -D warnings | dbe1e024b | 0 | clean
+scaas-node e2e --ignored --test-threads=4, one run | b446bd123 | 0 | 24/24
+scaas-pqz-verifier cargo test --include-ignored | dbe1e024b | 0 | 30
+clientkeys npm test | dbe1e024b | 0 | 349 passed, 3 skipped
+ua-rs cargo test (default, signers, json, pq) + clippy | dbe1e024b | 0 | 79 / 87 / 85 / 101, clean
+ua-py / ua-go / ua-c / ua-cxx / ua-qt / ua-dart-frb / ua-cs / ua-dart | dbe1e024b | 0 | 30 / ok / 25 + cargo / 21 / ctest 1 / 22 / 29 / 30
+zether-prover cargo test | dbe1e024b | 0 | 12
+script/pqz/e2e.py --self-test | b446bd123 | 0 | 0 failures
+docs_check.py check / test_docs_check.py | b446bd123 | 0 | 0 errors (7 page-budget warnings, as before) / ok
+on-chain matrix, local anvil: tokens, gov, dex, liquidity, misc, zether, verifiers, pqchat, rescue, views, wraplimits | dbe1e024b | 0 | 536 / 170 / 117 / 23 / 103 / 176 / 30 calls / 41 / 25 txs; negatives 13 / 27 / 15 / 6 / 25 / 2 / 30 / 10 / 6; views 8,961 of 11,624 calls answered; wraplimits ok
+on-chain matrix, fresh tree, no hand build: pq, pqoff (Nethermind copy), pqzkeys, pqzwallet (fresh anvil) | b446bd123 | 0 | 241 / 215 / 710 / 35 txs; negatives 10 / 17 / 29 / -; the wallet simulator built by matrix.sh
+anvil / copy left running | - | 0 | none
+
+Reds on the way (each fixed at its root, no contract change):
+- the merged GovernanceRouter address (metadata hash of both rounds): 0xA243e3F1... / 0x25e38E5a... -> 0xEf29EBaC... (a8b90446b).
+- PqzThreeKeysGas / PqzRollSignedGas (written before 3zb) minted with mintToUA(to, amount): the chain word added (dbe1e024b).
+- matrix pq aborted at e2e section 4: 3zb's helper uid(t) was shadowed by run()'s local uid (bytes); renamed chain_word
+  (b446bd123); burner-wrap-caps never ran the PQ groups.
+- first runs in a fresh tree lacked built tools: zether-cli (one e2e test), the wallet simulator (pqzwallet, fixed in
+  matrix.sh by pqz-three-keys c5f038922); both re-run green above.
+Not run here: the full pqz-core gate (no core, statement or set change); the on-chain matrix on the SCaaS testnet (reset 4).

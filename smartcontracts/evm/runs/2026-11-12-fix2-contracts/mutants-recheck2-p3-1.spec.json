@@ -1,0 +1,82 @@
+[
+ {
+  "id": "P31-1 factory renounceAdmin unbound",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "    function renounceAdmin(bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {",
+  "new": "    function renounceAdmin(bytes32 chainUid_) external onlyAdmin {",
+  "path": "test/v2/Factory.t.sol",
+  "test": "test_siblingReplay_deploysAndRenounce"
+ },
+ {
+  "id": "P31-2 deployTokenImplementation unbound",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "    ) external onChain(chainUid_) returns (address implementation) {",
+  "new": "    ) external configured returns (address implementation) {",
+  "path": "test/v2/Factory.t.sol",
+  "test": "test_siblingReplay_deploysAndRenounce"
+ },
+ {
+  "id": "P31-3 deployDexImplementation unbound",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "        bytes32 chainUid_) external onChain(chainUid_) returns (address implementation)",
+  "new": "        bytes32 chainUid_) external configured returns (address implementation)",
+  "path": "test/v2/Factory.t.sol",
+  "test": "test_siblingReplay_deploysAndRenounce"
+ },
+ {
+  "id": "P31-4 deployImplementation unbound",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "        bytes calldata initcode, bytes calldata implArgs, bytes32 chainUid_) external onChain(chainUid_)\n",
+  "new": "        bytes calldata initcode, bytes calldata implArgs, bytes32 chainUid_) external configured\n",
+  "path": "test/v2/Factory.t.sol",
+  "test": "test_siblingReplay_deploysAndRenounce"
+ },
+ {
+  "id": "P31-5 factory renounce: chain before admin",
+  "file": "src/factory/OpenFactory.sol",
+  "old": "    function renounceAdmin(bytes32 chainUid_) external onlyAdmin onChain(chainUid_) {",
+  "new": "    function renounceAdmin(bytes32 chainUid_) external onChain(chainUid_) {",
+  "path": "test/governance/SelectorAudit.t.sol",
+  "test": "test_strangerRevertsOnEveryGatedRow"
+ },
+ {
+  "id": "P31-6 token/DEX renounce: chain check removed",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "        if (chainUid_ != u) revert IGovernance.ChainUidMismatch(u, chainUid_);\n",
+  "new": "",
+  "path": "test/governance/AdminNames.t.sol",
+  "test": "test_kind|test_dex"
+ },
+ {
+  "id": "P31-7 token/DEX renounce: admin pre-check removed (chain first)",
+  "file": "src/governance/GovernanceBase.sol",
+  "old": "        if (c == 0 || c != GovernanceLib.$().admin) revert IAdmin.NotAdmin(c);\n",
+  "new": "",
+  "path": "test/governance/SelectorAudit.t.sol",
+  "test": "test_strangerRevertsOnEveryGatedRow"
+ },
+ {
+  "id": "P31-8 token: the wrong word (0)",
+  "file": "src/metatx/MetaTokenBase.sol",
+  "old": "    function _govChainUid() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }",
+  "new": "    function _govChainUid() internal view override returns (bytes32) { return bytes32(0); }",
+  "path": "test/governance/AdminNames.t.sol",
+  "test": "test_kind0_|test_kind13_"
+ },
+ {
+  "id": "P31-9 DEX: the wrong word (the router)",
+  "file": "src/dex/SCaaSDexAdmin.sol",
+  "old": "    function _govChainUid() internal view override returns (bytes32) { return ChainEnvCode.chainUid(); }",
+  "new": "    function _govChainUid() internal view override returns (bytes32) { return bytes32(uint256(uint160(ChainEnvCode.govRouter()))); }",
+  "path": "test/governance/AdminNames.t.sol",
+  "test": "test_dex_"
+ },
+ {
+  "id": "P31-10 router: another word forwarded",
+  "file": "src/governance/GovernanceRouterBase.sol",
+  "old": "IGovernance.renounceAdmin.selector, abi.encode(chainUid),",
+  "new": "IGovernance.renounceAdmin.selector, abi.encode(bytes32(0)),",
+  "path": "test/governance/GovRouter.t.sol",
+  "test": "test_eachOpByNative|test_renounceAdmin_siblingWordRefused"
+ }
+]

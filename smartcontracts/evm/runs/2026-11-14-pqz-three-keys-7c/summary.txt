@@ -1,0 +1,42 @@
+# pqz-three-keys step 7c (spec 2026-11-13-pqz-three-keys §15.2): matrix.sh local at 88dc972f (branch pqz-three-keys, after the merge
+# of ua-mtx-merge 4ec8769b), MATRIX_OUT=runs/2026-11-14-pqz-three-keys-7c-full; full output in the git-ignored *.log there.
+# A fresh anvil (chain 31337, Amsterdam, 200 M gas, 128 KiB code), deploy.sh evm, every group. No Nethermind copy: pq and pqoff
+# not run (the local image 2.2.0-pqz7 predates step 2's moved proof-system ids; rebuilt after the final gate). Test keys only
+# (anvil accounts). UNAUDITED.
+step | commit | rc | counts
+deploy | 88dc972f | 0 | 106 txs
+tokens | 88dc972f | 0 | 504/504 txs, negatives 5/5
+gov | 88dc972f | 0 | 163/163 txs, negatives 21/21
+dex | 88dc972f | 0 | 117/117 txs, negatives 15/15
+liquidity | 88dc972f | 0 | 23/23 txs, negatives 6/6
+misc | 88dc972f | 0 | 103/103 txs, negatives 25/25
+zether | 88dc972f | 0 | 162/162 txs
+pq, pqoff | 88dc972f | - | not run (no PQZ node: see above)
+verifiers | 88dc972f | 0 | calls 30/30, negatives 30/30
+pqchat | 88dc972f | 0 | 41/41 txs, negatives 10/10
+rescue | 88dc972f | 0 | 25/25 txs, negatives 6/6
+pqzkeys | 88dc972f | 0 | 696/696 txs, negatives 27/27 (run 1 setup 21, run 2 roll 6)
+views | 88dc972f | 0 | 8172 of 10731 views answered (the rest need real arguments)
+wraplimits | 88dc972f | 0 | ok (its own table under the run dir)
+anvil left running | - | 0 | none
+
+## Coverage (coverage.py table + note --net local --reasons script/onchain/notrun.json; the entry list this directory's
+## coverage.json, coverage.py gen at step 7c; wraplimits' records counted in the main table)
+state-changing entries with no successful call and no reason: before 338 (the run of this branch at 4ec8769b before the
+pqzkeys group: runs/2026-11-14-pqz-three-keys-7c-before, the same list) -> after 0. Scope: this branch's anvil groups; the
+pq and pqoff groups (Nethermind copy) ran in neither. notrun.json unchanged: no reason added.
+
+## pqzkeys (PqzKeys.s.sol, pqzkeys.sh): the §15.2 rows on the local chain
+- built and green: the scoped records of class 2 (scope 0, with openKem), class 3 with and without the opening, an msig's
+  class-3-opening record; their negatives (no openKem on scope 0, another chainUid, expired, another key length at version 1,
+  openKem missing / present per class, the record of another token, an msig on class 2 UAPqzHolder, an msig without openKem);
+  shield, op 1 (direct, compact, named) with uFrom and the openings, op 7 and its compact form without the opening
+  (OpUnsupported with it), unshield, refresh, unshield-unwrap, wrap-shield; a scoped version 1 and a migration; the
+  RECEIVER_X / AUDITOR disclosures refused with the opening; the factory's key-class refusals; the signed rollover with skip
+  marks (direct, by the UA and the address envelopes, fee 0, mark-only n = 0) on every PQZ kind with its negatives (replayed
+  rollSeq, stale entriesHash, a mark on a TRIVIAL entry); the public rollover refused with the opening, the signed one refused
+  without it; the owner's verifier, fee and proof-store ops direct and through the GovernanceRouter; the PQZ kinds' public
+  layer, trades and liquidity pulls; the registry key records; the regulated powers on kinds 12, 13; wrap limits on 3, 9, 11.
+- pending (not reasons): class 1 PRECOMPILE rows and the msig's class-1 credit (the pq group on the Nethermind copy, after its
+  image is rebuilt); the wallet-side rows (an opening accepted and spent, the planted bad credit, the auditor outcomes: the pq
+  client's three-key path through pqz-ffi, after the core-gaps merge and its opening aad fix).

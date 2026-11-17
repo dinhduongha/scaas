@@ -1,0 +1,10 @@
+Node ERC-1271 floor input after B P3-2 (ERC-7739 signature on SmartKeyAccount, branch ua-mtx-fix2-contracts, 2026-11-12).
+forge test -j 1 -vv --match-path 'test/metatx/**/*.sol' under scripts/capped, Foundry 1.8.5; test/metatx/MtxCtx.t.sol, the account's
+key signs the token's MetaTransaction nested in ERC-7739 TypedDataSign. Read by scaas-node guard::erc1271_floor_covers_forge_minimum.
+
+[PASS] test_minGas_smartKeyAccountMtxExecute() (gas: 11459485)
+Logs:
+  min gas, SmartKeyAccount-signed mtxExecute (relayer's call gas): 446912
+  spec section 9 node floor ERC1271_FLOOR (21,000 + 400,000 * 64/63 + 5,000): 432349
+
+was 446904 (runs/2026-10-27-metatx-split-node-floor.txt) -> 446912; erc1271_floor(0) 512594 -> 512603.

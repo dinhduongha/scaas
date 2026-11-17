@@ -1,86 +1,86 @@
 {
  "pqzl": {
   "BURN": {
-   "input": 122511,
-   "proof": 54026,
+   "input": 122490,
+   "proof": 54005,
    "row": 4840000
   },
   "DISCLOSE-AUDITOR": {
-   "input": 82336,
-   "proof": 36859,
+   "input": 82319,
+   "proof": 36842,
    "row": 3337000
   },
   "DISCLOSE-RECEIVER": {
-   "input": 82305,
-   "proof": 36828,
+   "input": 82323,
+   "proof": 36846,
    "row": 3337000
   },
   "DISCLOSE-SENDER": {
-   "input": 81390,
-   "proof": 35913,
+   "input": 81408,
+   "proof": 35931,
    "row": 3381000
   },
   "M1-off": {
-   "input": 145645,
-   "proof": 54504,
+   "input": 145652,
+   "proof": 54511,
    "row": 5139000
   },
   "M1-on": {
-   "input": 168621,
-   "proof": 54824,
+   "input": 168669,
+   "proof": 54872,
    "row": 4712000
   },
   "M2-off": {
-   "input": 168817,
-   "proof": 55020,
+   "input": 168806,
+   "proof": 55009,
    "row": 4975000
   },
   "M2-on": {
-   "input": 194360,
-   "proof": 57779,
+   "input": 194346,
+   "proof": 57765,
    "row": 4823000
   },
   "M4-off": {
-   "input": 217195,
-   "proof": 58086,
+   "input": 217193,
+   "proof": 58084,
    "row": 5164000
   },
   "M4-on": {
-   "input": 241697,
-   "proof": 59548,
+   "input": 241644,
+   "proof": 59495,
    "row": 5357000
   },
   "M8-off": {
-   "input": 348601,
-   "proof": 76340,
+   "input": 348628,
+   "proof": 76367,
    "row": 6941000
   },
   "M8-on": {
-   "input": 375021,
-   "proof": 79208,
+   "input": 375030,
+   "proof": 79217,
    "row": 8030000
   },
   "REFRESH": {
-   "input": 122481,
-   "proof": 53996,
+   "input": 122514,
+   "proof": 54029,
    "row": 4840000
   },
   "REGISTER": {
-   "input": 58108,
-   "proof": 35479,
+   "input": 58115,
+   "proof": 35486,
    "row": 3504000
   },
   "TRANSFER": {
-   "input": 168646,
-   "proof": 54849,
+   "input": 168620,
+   "proof": 54823,
    "row": 7032000
   },
   "TRANSFER0": {
-   "input": 145646,
-   "proof": 54505,
+   "input": 145662,
+   "proof": 54521,
    "row": 6790000
   }
  },
  "set": "n2816-kmax65536",
- "source": "smartcontracts/evm/script/pqz/gas-inputs.py: the set's vectors (proof_pqz*.json), chain/engine-pqz-provisional-n2816.json (provisional rows, testnet only until Task 9)"
+ "source": "smartcontracts/evm/script/pqz/gas-inputs.py: the set's vectors (proof_pqz*.json), chain/engine-pqz-provisional-n2816.json (provisional rows, testnet only until calibrated)"
 }

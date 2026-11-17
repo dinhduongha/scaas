@@ -6,6 +6,7 @@ import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceLibHarness} from "./helpers/GovernanceLibHarness.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
 import {nid} from "../helpers/Ids.sol";
@@ -62,11 +63,13 @@ contract GovernanceLibTest is Test {
         }
     }
 
-    function test_regulatedFlags_notBuiltOnPublicKinds_invalidOnConfidential() public {
-        for (uint8 b = 5; b < 9; ++b) {
-            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotBuilt.selector, b));
+    /// ua-mtx-merge T24 (regulated-kinds spec Q3): every plain kind refuses 5-9 as invalid for the kind; before, `NORMAL`
+    /// and `WRAPPED` passed `| REGULATED` and reached `FeatureNotBuilt` (`test_regulatedFlags_notBuiltOnPublicKinds_invalidOnConfidential`).
+    function test_regulatedFlags_invalidOnEveryPlainKind() public {
+        for (uint8 b = 5; b <= 9; ++b) {
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, b));
             h.init(TokenStore.KIND_NORMAL, 1 << b, 0, bytes32(0), none);
-            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotBuilt.selector, b));
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, b));
             h.init(TokenStore.KIND_WRAPPED, 1 << b, 0, bytes32(0), none);
             vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, b));
             h.init(TokenStore.KIND_NORMAL_ZETHER, 1 << b, 0, bytes32(0), none);
@@ -78,8 +81,8 @@ contract GovernanceLibTest is Test {
     function test_unknownBitsAndKinds_refused() public {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(13)));
         h.init(TokenStore.KIND_NORMAL, 1 << 13, 0, bytes32(0), none); // bit 13 is never allocated (CTR-GOV-14)
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotBuilt.selector, uint8(9)));
-        h.init(TokenStore.KIND_NORMAL, 1 << 9, 0, bytes32(0), none); // DENYLIST, refused until built (CTR-GOV-18)
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(9)));
+        h.init(TokenStore.KIND_NORMAL, 1 << 9, 0, bytes32(0), none); // DENYLIST: a regulated kind's bit (CTR-GOV-18, T24)
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(0)));
         h.init(6, PAYABLE, 0, bytes32(0), none); // reserved *_ZETHER_PQZ kinds: nothing valid (P6g built 4, 5)
     }
@@ -118,9 +121,9 @@ contract GovernanceLibTest is Test {
         vm.expectEmit(address(h));
         emit IGovernance.RoleGranted(1, nid(minter), bytes32(0));
         vm.expectEmit(address(h));
-        emit IGovernance.OwnershipTransferred(bytes32(0), nid(ownerA));
+        emit IAdmin.AdminTransferred(bytes32(0), nid(ownerA));
         h.init(TokenStore.KIND_NORMAL, MINTABLE, 0, nid(ownerA), _roles(minter));
-        assertEq(h.owner(), nid(ownerA));
+        assertEq(h.admin(), nid(ownerA));
         assertTrue(h.hasRole(1, nid(minter)));
     }
 
@@ -129,7 +132,7 @@ contract GovernanceLibTest is Test {
     function test_grantRevokeRenounce() public {
         h.init(TokenStore.KIND_NORMAL, MINTABLE, 0, nid(ownerA), none);
         vm.prank(minter);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, minter));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, minter));
         h.grantRole(1, nid(minter));
         vm.prank(ownerA);
         vm.expectEmit(address(h));
@@ -205,35 +208,35 @@ contract GovernanceLibTest is Test {
         h.init(TokenStore.KIND_NORMAL, MINTABLE, MINTABLE, nid(ownerA), _roles(minter));
         vm.prank(ownerA);
         vm.expectEmit(address(h));
-        emit IGovernance.OwnershipTransferStarted(nid(ownerA), nid(ownerB));
-        h.transferOwnership(nid(ownerB));
-        assertEq(h.owner(), nid(ownerA));
+        emit IAdmin.AdminTransferStarted(nid(ownerA), nid(ownerB));
+        h.transferAdmin(nid(ownerB));
+        assertEq(h.admin(), nid(ownerA));
         vm.prank(minter);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotPendingOwner.selector, minter));
-        h.acceptOwnership();
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, minter));
+        h.acceptAdmin();
         vm.prank(ownerB);
         vm.expectEmit(address(h));
-        emit IGovernance.OwnershipTransferred(nid(ownerA), nid(ownerB));
-        h.acceptOwnership();
-        assertEq(h.owner(), nid(ownerB));
-        assertEq(h.pendingOwner(), bytes32(0));
+        emit IAdmin.AdminTransferred(nid(ownerA), nid(ownerB));
+        h.acceptAdmin();
+        assertEq(h.admin(), nid(ownerB));
+        assertEq(h.pendingAdmin(), bytes32(0));
         vm.prank(ownerB);
-        h.renounceOwnership();
-        assertEq(h.owner(), bytes32(0));
+        h.renounceAdmin();
+        assertEq(h.admin(), bytes32(0));
         assertTrue(h.hasRole(1, nid(minter)));
         vm.prank(ownerB);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, ownerB));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, ownerB));
         h.grantRole(1, nid(ownerB));
     }
 
     function test_noOwnerMeansNoAdministration() public {
         h.init(TokenStore.KIND_NORMAL, MINTABLE, MINTABLE, bytes32(0), _roles(minter)); // locked: B-06
         vm.prank(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, address(0)));
         h.disableFeature(1);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotPendingOwner.selector, address(0)));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, address(0)));
         vm.prank(address(0));
-        h.acceptOwnership();
+        h.acceptAdmin();
     }
 
     // ------------------------------------------------------------------ negative paths
@@ -253,13 +256,13 @@ contract GovernanceLibTest is Test {
         h.init(TokenStore.KIND_NORMAL, MINTABLE, 0, nid(ownerA), _roles(minter));
         address eve = address(0xE5);
         vm.startPrank(eve);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, eve));
-        h.transferOwnership(nid(eve));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, eve));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eve));
+        h.transferAdmin(nid(eve));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eve));
         h.revokeRole(1, nid(minter));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, eve));
-        h.renounceOwnership();
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, eve));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eve));
+        h.renounceAdmin();
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, eve));
         h.disableFeature(1);
         vm.stopPrank();
     }
@@ -267,32 +270,32 @@ contract GovernanceLibTest is Test {
     function test_renounceClearsPendingOwner() public {
         h.init(TokenStore.KIND_NORMAL, MINTABLE, 0, nid(ownerA), none);
         vm.startPrank(ownerA);
-        h.transferOwnership(nid(ownerB));
-        h.renounceOwnership();
+        h.transferAdmin(nid(ownerB));
+        h.renounceAdmin();
         vm.stopPrank();
         vm.prank(ownerB);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotPendingOwner.selector, ownerB));
-        h.acceptOwnership();
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, ownerB));
+        h.acceptAdmin();
     }
 
     function test_oldOwnerLosesPowerAfterTransfer() public {
         h.init(TokenStore.KIND_NORMAL, MINTABLE, 0, nid(ownerA), none);
         vm.prank(ownerA);
-        h.transferOwnership(nid(ownerB));
+        h.transferAdmin(nid(ownerB));
         vm.prank(ownerB);
-        h.acceptOwnership();
+        h.acceptAdmin();
         vm.prank(ownerA);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, ownerA));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, ownerA));
         h.grantRole(1, nid(minter));
     }
 
     function test_transferToZeroCannotBeAccepted() public {
         h.init(TokenStore.KIND_NORMAL, MINTABLE, 0, nid(ownerA), none);
         vm.prank(ownerA);
-        h.transferOwnership(bytes32(0));
+        h.transferAdmin(bytes32(0));
         vm.prank(address(0));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotPendingOwner.selector, address(0)));
-        h.acceptOwnership();
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotPendingAdmin.selector, address(0)));
+        h.acceptAdmin();
     }
 
     function test_ownerGrantRateAdminToEoaRefused() public {

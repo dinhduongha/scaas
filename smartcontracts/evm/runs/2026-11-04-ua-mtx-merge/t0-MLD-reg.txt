@@ -1,0 +1,19 @@
+T0DEPLOY | GovernanceLib | runtime 13181 | init 13233 | regular 883069 | state 20350530 | asked 22295278 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | GovernanceRouter | runtime 11371 | init 12410 | regular 828976 | state 17581230 | asked 19330716 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | MtxPipelineLib | runtime 10024 | init 10076 | regular 677099 | state 15520320 | asked 17007289 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | MtxRelayFee | runtime 2488 | init 3205 | regular 231870 | state 5021460 | asked 5515996 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | NormalPqzToken | runtime 40082 | init 43854 | regular 2874116 | state 61606980 | asked 67705150 | 60M NO | 70M fits | reg105<2^24 yes
+T0DEPLOY | NormalToken | runtime 30588 | init 33704 | regular 2214595 | state 47081160 | asked 51760542 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | NormalToken via deployImplementation | runtime 30588 | init 32872 | regular 2168823 | state 47472840 | asked 52123746 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | NormalToken via probe, same env | runtime 30588 | init 33704 | regular 2214595 | state 47081160 | asked 51760542 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | NormalZetherToken | runtime 38029 | init 42644 | regular 2795056 | state 58465890 | asked 64323993 | 60M NO | 70M fits | reg105<2^24 yes
+T0DEPLOY | PqzWrappedLib | runtime 4947 | init 4999 | regular 348379 | state 7752510 | asked 8505933 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | SCaaSDex | runtime 33345 | init 35699 | regular 2343586 | state 51299370 | asked 56325103 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | TokenBodyLib | runtime 9296 | init 9348 | regular 631328 | state 14406480 | asked 15789698 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | TradeLib | runtime 4842 | init 4894 | regular 340057 | state 7591860 | asked 8328512 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | WrappedLib | runtime 16761 | init 16813 | regular 1116086 | state 25827930 | asked 28291216 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | WrappedPqzToken | runtime 48863 | init 52770 | regular 3454577 | state 75041910 | asked 82421311 | 60M NO | 70M NO | reg105<2^24 yes
+T0DEPLOY | WrappedToken | runtime 38970 | init 42157 | regular 2763849 | state 59905620 | asked 65802942 | 60M NO | 70M fits | reg105<2^24 yes
+T0DEPLOY | WrappedZetherToken | runtime 47389 | init 52139 | regular 3412967 | state 72786690 | asked 80009639 | 60M NO | 70M NO | reg105<2^24 yes
+T0DEPLOY | ZetherLib | runtime 25065 | init 25117 | regular 1654938 | state 38533050 | asked 42197387 | 60M fits | 70M fits | reg105<2^24 yes
+T0DEPLOY | ZetherWrappedLib | runtime 11244 | init 11296 | regular 756158 | state 17386920 | asked 19050231 | 60M fits | 70M fits | reg105<2^24 yes

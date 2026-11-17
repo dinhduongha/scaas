@@ -1,0 +1,52 @@
+# Group 3h T60 (spec 2026-11-06-pqz-proof-path §7, Codex C4; O11, O13): the measurement matrix of proofStore NONE / LOG.
+# test/research/PqzProofStoreGas.t.sol (PqzProofStoreGasTest, PqzProofStoreGas13Test) through script/pqz/at-set.sh <set>, forge gas
+# (deterministic; nothing timed): the precompile at its schedule row (RowBurner), ML-DSA-65 at 68,006 [estimate], each row its own
+# transaction, the proofs pseudo-random at the set's largest length (test/vectors/pqz-gas/<set>.json); NONE and LOG on the same state
+# (slot 0 byte 23 written between them), each LOG row asserting exactly one PqzDebitProof and each NONE row none. regular = the
+# transaction's regular gas (intrinsic, calldata or the EIP-7976 floor, execution); state = EIP-8037 state gas. Verdicts: regular
+# <= 2^24 (EIP-7825); regular + state <= 60 M, <= 200 M (the SCaaS testnet block), <= 64 M (its node's max_gas_per_tx). Full output
+# in git-ignored runs/2026-11-08-ua-mtx-merge-3h-t60-matrix-<set>.log. UNAUDITED.
+step | commit | rc | counts
+matrix n2048-kmax1024 | T60 | 1 | 7 tests passed, 1 failed, 0 skipped (8 total tests); 206 MATRIX lines; the one failure is test_debitMinGas_isTheCheapestLogDebit red first (pin at the pre-LOG value)
+matrix n2304-kmax4096 | T60 | 1 | 7 tests passed, 1 failed, 0 skipped (8 total tests); 206 MATRIX lines; the one failure is test_debitMinGas_isTheCheapestLogDebit red first (pin at the pre-LOG value)
+matrix n2560-kmax16384 | T60 | 1 | 7 tests passed, 1 failed, 0 skipped (8 total tests); 206 MATRIX lines; the one failure is test_debitMinGas_isTheCheapestLogDebit red first (pin at the pre-LOG value)
+matrix n2816-kmax65536 | T60 | 1 | 4 tests passed, 1 failed, 3 skipped (8 total tests); 116 MATRIX lines; the one failure is test_debitMinGas_isTheCheapestLogDebit red first (pin at the pre-LOG value)
+pairs | T60 | - | 282 NONE / LOG pairs over the four sets (PQZL: op 1 with and without the auditor, materialised acc; op 7 M = 1, 2, 4, 8 with and without; burn 1 to an address; refresh; each direct, mtxExecute, uaExecute; the wide record (shieldIn 5), the 3g migration and kind 5's unwrap; kind 13's unwrap direct; PQZH the same forms up to M = 4, kind 13's unwrap direct; n2816-kmax65536 has no PQZH)
+LOG - NONE regular | T60 | - | PQZL: n2048-kmax1024 380,428 to 873,836; n2304-kmax4096 418,744 to 825,378; n2560-kmax16384 455,982 to 744,855; n2816-kmax65536 501,146 to 826,108. PQZH: 0 at every set and form (regular is the EIP-7976 floor, which hides the log's 8 per byte; each LOG row's event asserted). State gas: equal (a log stores nothing)
+spec §5 claim (NONE and LOG fit where today's forms fit) | T60 | - | holds for 281 of 282 pairs; REFUTED for one: n2560-kmax16384 PQZL op 7 M = 8 no auditor, direct: NONE 10,728,387 + 52,849,260 = 63,577,647 (fits the 64 M max_gas_per_tx), LOG 11,436,623 + 52,849,260 = 64,285,883 (does not); its relayed forms exceed 64 M under NONE already; 2^24 holds for every PQZL row under LOG
+PQZ_DEBIT_MIN_GAS (O11) | T60 | - | burn 1 to an address, uaExecute, LOG: n2048-kmax1024 6,836,182 -> 7,258,166; n2304-kmax4096 7,007,670 -> 7,468,098; n2560-kmax16384 7,177,969 -> 7,675,539; n2816-kmax65536 7,367,673 -> 7,910,833 (NONE today: 6,877,447 / 7,049,090 / 7,219,551 / 7,409,387, so the old pins sat 41,265 / 41,420 / 41,582 / 41,714 under the built form without LOG; refresh is 16,211 cheaper at n2304-kmax4096, CTR-PQZ-12 names burn 1)
+
+# rows over a limit, LOG (regular / state / regular + state); the limits a row exceeds; same under NONE unless marked
+n2048-kmax1024 | pqzh | op 7 M = 4, auditor | over 2^24 | mtxExecute 20,487,064 / 35,749,980 / 56,237,044, direct 20,452,248 / 35,554,140 / 56,006,388, uaExecute 20,704,152 / 35,749,980 / 56,454,132
+n2048-kmax1024 | pqzh | op 7 M = 4, no auditor | over 2^24 | uaExecute 16,784,280 / 18,773,100 / 35,557,380
+n2048-kmax1024 | pqzl | op 7 M = 8, auditor | over 60M, 64M tx | mtxExecute 14,104,674 / 70,707,420 / 84,812,094, direct 13,663,258 / 70,511,580 / 84,174,838, uaExecute 14,245,785 / 70,707,420 / 84,953,205
+n2304-kmax4096 | pqzh | kind 13 unwrap 1 to the leg | over 2^24 | direct 17,605,528 / 21,135,420 / 38,740,948
+n2304-kmax4096 | pqzh | op 1, auditor | over 2^24 | mtxExecute 17,664,920 / 21,612,780 / 39,277,700, direct 17,630,104 / 21,416,940 / 39,047,044, uaExecute 17,882,008 / 21,612,780 / 39,494,788
+n2304-kmax4096 | pqzh | op 1, no auditor | over 2^24 | mtxExecute 17,656,728 / 21,459,780 / 39,116,508, direct 17,621,912 / 21,263,940 / 38,885,852, uaExecute 17,873,816 / 21,459,780 / 39,333,596
+n2304-kmax4096 | pqzh | op 1, auditor, materialised acc, no hint | over 2^24 | mtxExecute 17,664,920 / 21,808,620 / 39,473,540, direct 17,630,104 / 21,612,780 / 39,242,884, uaExecute 17,882,008 / 21,808,620 / 39,690,628
+n2304-kmax4096 | pqzh | burn (unshield) 1 to an address | over 2^24 | mtxExecute 17,636,248 / 21,037,500 / 38,673,748, direct 17,601,432 / 20,841,660 / 38,443,092, uaExecute 17,853,336 / 21,037,500 / 38,890,836
+n2304-kmax4096 | pqzh | refresh | over 2^24 | mtxExecute 17,636,248 / 20,939,580 / 38,575,828, direct 17,601,432 / 20,743,740 / 38,345,172, uaExecute 17,853,336 / 20,939,580 / 38,792,916
+n2304-kmax4096 | pqzh | op 7 M = 1, auditor | over 2^24 | mtxExecute 17,677,208 / 21,612,780 / 39,289,988, direct 17,642,392 / 21,416,940 / 39,059,332, uaExecute 17,894,296 / 21,612,780 / 39,507,076
+n2304-kmax4096 | pqzh | op 7 M = 1, no auditor | over 2^24 | mtxExecute 17,669,016 / 21,459,780 / 39,128,796, direct 17,634,200 / 21,263,940 / 38,898,140, uaExecute 17,886,104 / 21,459,780 / 39,345,884
+n2304-kmax4096 | pqzh | op 7 M = 2, auditor | over 2^24 | mtxExecute 17,752,984 / 22,151,340 / 39,904,324, direct 17,718,168 / 21,955,500 / 39,673,668, uaExecute 17,970,072 / 22,151,340 / 40,121,412
+n2304-kmax4096 | pqzh | op 7 M = 2, no auditor | over 2^24 | mtxExecute 17,689,496 / 21,857,580 / 39,547,076, direct 17,654,680 / 21,661,740 / 39,316,420, uaExecute 17,906,584 / 21,857,580 / 39,764,164
+n2304-kmax4096 | pqzh | op 7 M = 4, auditor | over 2^24, 60M, 64M tx | mtxExecute 21,803,928 / 43,497,900 / 65,301,828, direct 21,769,112 / 43,302,060 / 65,071,172, uaExecute 22,021,016 / 43,497,900 / 65,518,916
+n2304-kmax4096 | pqzh | op 7 M = 4, no auditor | over 2^24 | mtxExecute 17,777,560 / 22,653,180 / 40,430,740, direct 17,742,744 / 22,457,340 / 40,200,084, uaExecute 17,994,648 / 22,653,180 / 40,647,828
+n2304-kmax4096 | pqzl | op 7 M = 8, auditor | over 60M, 64M tx | mtxExecute 13,686,145 / 65,921,580 / 79,607,725, direct 13,300,456 / 65,725,740 / 79,026,196, uaExecute 13,827,060 / 65,921,580 / 79,748,640
+n2560-kmax16384 | pqzh | kind 13 unwrap 1 to the leg | over 2^24 | direct 21,052,312 / 25,358,220 / 46,410,532
+n2560-kmax16384 | pqzh | op 1, auditor | over 2^24 | mtxExecute 21,167,000 / 25,860,060 / 47,027,060, direct 21,132,184 / 25,664,220 / 46,796,404, uaExecute 21,384,088 / 25,860,060 / 47,244,148
+n2560-kmax16384 | pqzh | op 1, no auditor | over 2^24 | mtxExecute 21,158,808 / 25,694,820 / 46,853,628, direct 21,123,992 / 25,498,980 / 46,622,972, uaExecute 21,375,896 / 25,694,820 / 47,070,716
+n2560-kmax16384 | pqzh | op 1, auditor, materialised acc, no hint | over 2^24 | mtxExecute 21,167,000 / 26,055,900 / 47,222,900, direct 21,132,184 / 25,860,060 / 46,992,244, uaExecute 21,384,088 / 26,055,900 / 47,439,988
+n2560-kmax16384 | pqzh | burn (unshield) 1 to an address | over 2^24 | mtxExecute 21,083,032 / 25,260,300 / 46,343,332, direct 21,048,216 / 25,064,460 / 46,112,676, uaExecute 21,300,120 / 25,260,300 / 46,560,420
+n2560-kmax16384 | pqzh | refresh | over 2^24 | mtxExecute 21,083,032 / 25,162,380 / 46,245,412, direct 21,048,216 / 24,966,540 / 46,014,756, uaExecute 21,300,120 / 25,162,380 / 46,462,500
+n2560-kmax16384 | pqzh | op 7 M = 1, auditor | over 2^24 | mtxExecute 21,179,288 / 25,860,060 / 47,039,348, direct 21,144,472 / 25,664,220 / 46,808,692, uaExecute 21,396,376 / 25,860,060 / 47,256,436
+n2560-kmax16384 | pqzh | op 7 M = 1, no auditor | over 2^24 | mtxExecute 21,171,096 / 25,694,820 / 46,865,916, direct 21,136,280 / 25,498,980 / 46,635,260, uaExecute 21,388,184 / 25,694,820 / 47,083,004
+n2560-kmax16384 | pqzh | op 7 M = 2, auditor | over 2^24 | mtxExecute 21,207,960 / 26,423,100 / 47,631,060, direct 21,173,144 / 26,227,260 / 47,400,404, uaExecute 21,425,048 / 26,423,100 / 47,848,148
+n2560-kmax16384 | pqzh | op 7 M = 2, no auditor | over 2^24 | mtxExecute 21,191,576 / 26,104,860 / 47,296,436, direct 21,156,760 / 25,909,020 / 47,065,780, uaExecute 21,408,664 / 26,104,860 / 47,513,524
+n2560-kmax16384 | pqzh | op 7 M = 4, auditor | over 2^24 | mtxExecute 21,318,552 / 27,549,180 / 48,867,732, direct 21,283,736 / 27,353,340 / 48,637,076, uaExecute 21,535,640 / 27,549,180 / 49,084,820
+n2560-kmax16384 | pqzh | op 7 M = 4, no auditor | over 2^24 | mtxExecute 21,232,536 / 26,924,940 / 48,157,476, direct 21,197,720 / 26,729,100 / 47,926,820, uaExecute 21,449,624 / 26,924,940 / 48,374,564
+n2560-kmax16384 | pqzl | op 7 M = 8, auditor | over 60M, 64M tx | mtxExecute 13,035,258 / 54,281,340 / 67,316,598, direct 12,722,448 / 54,085,500 / 66,807,948, uaExecute 13,175,888 / 54,281,340 / 67,457,228
+n2560-kmax16384 | pqzl | op 7 M = 8, no auditor | over 60M, 64M tx | mtxExecute 11,737,422 / 53,045,100 / 64,782,522, uaExecute 11,878,014 / 53,045,100 / 64,923,114
+n2560-kmax16384 | pqzl | op 7 M = 8, no auditor | over 60M, 64M tx [NONE: 60M] | direct 11,436,623 / 52,849,260 / 64,285,883
+n2816-kmax65536 | pqzl | op 7 M = 8, auditor | over 60M, 64M tx | mtxExecute 13,504,743 / 63,693,900 / 77,198,643, direct 13,158,047 / 63,498,060 / 76,656,107, uaExecute 13,645,535 / 63,693,900 / 77,339,435
+n2816-kmax65536 | pqzl | op 7 M = 8, no auditor | over 60M, 64M tx | mtxExecute 12,194,128 / 62,359,740 / 74,553,868, direct 11,860,192 / 62,163,900 / 74,024,092, uaExecute 12,334,845 / 62,359,740 / 74,694,585

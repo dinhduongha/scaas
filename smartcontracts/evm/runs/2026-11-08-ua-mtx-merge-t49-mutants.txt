@@ -1,0 +1,10 @@
+m1-setter-writes-mode | invariant_I1_modeImmutable, test_handler_acts | 1
+m2-offchain-calls-precompile | invariant_I2_I3_onlyTheCurrentVerdict, test_handler_acts | 1
+m3-precompile-reads-verdict | invariant_I4_sameWritesInBothModes, invariant_I5_preNeverReadsTheVerdict, test_handler_acts | 1
+v2-revocation-unchecked | invariant_I2_I3_onlyTheCurrentVerdict, test_handler_acts | 1
+v3-shape-not-recomputed | invariant_I2_I3_onlyTheCurrentVerdict, test_handler_acts | 1
+v10-epoch-not-bumped-transfer | invariant_I2_I3_onlyTheCurrentVerdict, invariant_I4_sameWritesInBothModes, test_handler_acts | 1
+v11-epoch-not-bumped-revoke | invariant_I2_I3_onlyTheCurrentVerdict, test_handler_acts | 1
+b4-proofhash-unchecked | invariant_I2_I3_onlyTheCurrentVerdict, invariant_I4_sameWritesInBothModes, test_handler_acts | 1
+b5-statement-with-prefix | invariant_I2_I3_onlyTheCurrentVerdict, test_handler_acts | 1
+b6-epoch-unchecked | invariant_I2_I3_onlyTheCurrentVerdict, invariant_I4_sameWritesInBothModes, test_handler_acts | 1

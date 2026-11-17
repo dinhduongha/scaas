@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {MetaTxLib} from "../common/MetaTxLib.sol";
-import {IUARegistry} from "../ua/IUARegistry.sol";
-
 /// @title The UA ledger of every SCaaS token (accounts.md CTR-UA-18, CTR-UA-19, CTR-UA-26): balances of derived UAs by
 ///        `bytes32` id, shown to ERC-20 observers as the one holder `UA_POOL`, and the `ua*` meta-transactions whose
 ///        `from` (and `to`) is a native id (address zero-padded) or a registered SIGNING UA.
-/// @notice Off (every `ua*` and `transferToUA` reverts `UALedgerOff`) while `registry()` is 0.
+/// @notice Reported by ERC-165 only while `registry()` is not 0 (a derived side then reverts `UALedgerOff`). The generic
+///         signed entries on ids (`mtxExecute`, `mtxBatch`, `mtxCancelNonce`, `UAMetaTxBase`), their views
+///         (`IUALedgerViews`) and the typed path (`mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransferDigest`,
+///         `mtxRelayFee`, `IERC20MetaTx`) are not here: they run for a native id with no registry (ua-mtx-merge C, R9).
 interface IUALedger {
     /// @notice Every movement with a derived side (a burn under a UA has `to = 0`).
     event UATransfer(bytes32 indexed from, bytes32 indexed to, uint256 value);
@@ -27,27 +27,15 @@ interface IUALedger {
     error UANotRegistered(bytes32 ua);
     error UAKindNotAccepted(bytes32 ua, uint16 kind);
     error UAInsufficientBalance(bytes32 ua, uint256 balance, uint256 needed);
+    /// @notice The unordered `uaCancelNonce` only (legacy/ua-mtx-merge/); no built entry reverts with it.
     error UACancelUsed();
     error MetaTxUnknownOp(bytes4 selector);
-    /// @notice A leg or receive token that is not a SCaaS token with its UA ledger on (accounts.md CTR-UA-27).
+    /// @notice A leg or receive token that is not a SCaaS token with its UA ledger on (accounts.md CTR-UA-27); on
+    ///         `mtxWrapOrder`, also a leg with no `mtxTrade` for any holder.
     error UALegNotLedger(address token);
 
     function registry() external view returns (address);
     function balanceOfUA(bytes32 ua) external view returns (uint256);
-    function uaNonce(bytes32 ua, uint256 batch) external view returns (uint256);
-    function uaDigest(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32);
-    function uaTransferDigest(MetaTxLib.UAMetaTransfer calldata t) external view returns (bytes32);
-    function uaCancelDigest(bytes32 ua, uint256 batch, uint256 validUntil) external view returns (bytes32);
 
     function transferToUA(bytes32 to, uint256 amount) external returns (bool);
-    function uaExecute(MetaTxLib.UAMetaTransaction calldata m, bytes calldata auth) external returns (bytes memory);
-    function uaBatch(MetaTxLib.UAMetaTransaction[] calldata ms, bytes[] calldata auths) external returns (bool);
-    function uaExecuteTransfer(MetaTxLib.UAMetaTransfer calldata t, IUARegistry.UASig calldata auth)
-        external returns (bool);
-    function uaBatchTransfer(MetaTxLib.UAMetaTransfer[] calldata ts, IUARegistry.UASig[] calldata auths)
-        external returns (bool);
-    /// @notice `mtxRelayFee` on ids: `from` signed `UARelayFee{…, relayer}` under `metatx`.
-    function uaRelayFee(bytes32 from, address target, bytes32 callDataHash, bytes32 payee, uint256 value,
-        uint256 validUntil, IUARegistry.UASig calldata auth) external;
-    function uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, IUARegistry.UASig calldata auth) external;
 }

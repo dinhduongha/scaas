@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs, dexArgs} from "../../script/KindModules.sol";
+
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UACall} from "../ua/UACall.sol";
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -22,14 +26,23 @@ import {Catalogue, plainEnv} from "../helpers/Catalogue.sol";
 import {UALedgerBase} from "../ua/UALedgerBase.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
+import {NormalRegulatedToken} from "../../src/regulated/NormalRegulatedToken.sol";
+import {WrappedRegulatedToken} from "../../src/regulated/WrappedRegulatedToken.sol";
+import {regArgs} from "../helpers/Catalogue.sol";
+import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
+import {RelayFeeRouter} from "../../src/metatx/RelayFeeRouter.sol";
+import {SmartKeyAccountFactory} from "../../src/account/SmartKeyAccountFactory.sol";
+import {SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
 
 /// governance T13, the selector audit (spec §10.1; CTR-GOV-11; GD-6). Every external that writes state on the six kinds,
 /// `SCaaSDex`, `DexPuller` and `GovernanceRouter`, read from its ABI in `FOUNDRY_OUT` (else `./out`), is a row of
-/// `test/vectors/selector_audit.json` with one class: `BIT(n)`, `OWNER`, `HOLDER_OWN`, `OWN_BALANCE`, `SIGNED`, `FACTORY`,
-/// `PERMISSIONLESS(reason)`. An unclassified or moved selector fails. The sentence it pins: no entry point moves, freezes or
+/// `test/vectors/selector_audit.json` with one class: `BIT(n)`, `ADMIN`, `HOLDER_OWN`, `OWN_BALANCE`, `SIGNED`, `FACTORY`,
+/// `PERMISSIONLESS(reason)`, `APPROVED(reason)` (round 3r: `OpenFactory`'s release deploys). An unclassified or moved selector fails. The sentence it pins: no entry point moves, freezes or
 /// pauses a balance its caller does not own unless gated by a feature bit. Each class is checked by behaviour, a stranger
 /// calling every row with zero arguments on a live instance (features on, owner and holders set, the stranger none of
-/// them): a `BIT`, `OWNER`, `HOLDER_OWN` or `FACTORY` row reverts with its named error, the refused subject the stranger's
+/// them): a `BIT`, `ADMIN`, `HOLDER_OWN` or `FACTORY` row reverts with its named error, the refused subject the stranger's
 /// own id and a `MissingRole` its own bit; any other row is refused by no governance gate. So a gated row pinned as
 /// another class goes red, and so does a gate removed. No governance selector is on a governed contract's allow-lists
 /// (`mtxSelectors()`, and `_uaAllowed` by a signed generic call); the router publishes no allow-list at all.
@@ -138,19 +151,22 @@ abstract contract SelectorAuditRows is Test {
         return n + 1;
     }
 
+    /// Owner 2026-11-12: `GUARDIAN`, the caller must be the account's guardian (`SmartKeyAccount.initiateRecovery`).
     function _named(string memory c) internal pure returns (bool) {
-        return _bitOf(c) != 0 || _eq(c, "OWNER") || _eq(c, "HOLDER_OWN") || _eq(c, "FACTORY");
+        return _bitOf(c) != 0 || _eq(c, "ADMIN") || _eq(c, "HOLDER_OWN") || _eq(c, "FACTORY") || _eq(c, "GUARDIAN");
     }
 
     function _known(string memory c) internal pure returns (bool) {
         if (_named(c) || _eq(c, "OWN_BALANCE") || _eq(c, "SIGNED")) return true;
+        // round 3r (spec 2026-11-10-admin-not-owner.md §5.6, §7): `APPROVED(reason)`, anyone against the admin's approval
+        if (_starts(c, "APPROVED(")) return bytes(c).length > 10 && bytes(c)[bytes(c).length - 1] == ")";
         return _starts(c, "PERMISSIONLESS(") && bytes(c).length > 16 && bytes(c)[bytes(c).length - 1] == ")";
     }
 
     /// The governance gates: the errors that refuse a caller for who it is.
     function _gate(bytes4 e) internal pure returns (bool) {
-        return e == bytes4(keccak256("MissingRole(uint8,bytes32)")) || e == bytes4(keccak256("NotOwner(bytes32)"))
-            || e == bytes4(keccak256("NotPendingOwner(bytes32)")) || e == bytes4(keccak256("NotGuardian()"))
+        return e == bytes4(keccak256("MissingRole(uint8,bytes32)")) || e == bytes4(keccak256("NotAdmin(bytes32)"))
+            || e == bytes4(keccak256("NotPendingAdmin(bytes32)")) || e == bytes4(keccak256("NotGuardian()"))
             || e == bytes4(keccak256("NotRateAdmin()"));
     }
 
@@ -160,10 +176,12 @@ abstract contract SelectorAuditRows is Test {
         if (_bitOf(r.class) != 0) {
             require(_eq(r.error, "MissingRole(uint8,bytes32)") || _eq(r.error, "NotGuardian()") || _eq(r.error, "NotRateAdmin()"),
                 string.concat(where, ": a BIT row names a role's refusal"));
-        } else if (_eq(r.class, "OWNER")) {
-            require(_eq(r.error, "NotOwner(bytes32)"), string.concat(where, ": an OWNER row names NotOwner"));
+        } else if (_eq(r.class, "ADMIN")) {
+            require(_eq(r.error, "NotAdmin(bytes32)"), string.concat(where, ": an ADMIN row names NotAdmin"));
+        } else if (_eq(r.class, "GUARDIAN")) {
+            require(_eq(r.error, "NotGuardian()"), string.concat(where, ": a GUARDIAN row names NotGuardian"));
         } else if (_eq(r.class, "HOLDER_OWN")) {
-            require(_eq(r.error, "MissingRole(uint8,bytes32)") || _eq(r.error, "NotPendingOwner(bytes32)"),
+            require(_eq(r.error, "MissingRole(uint8,bytes32)") || _eq(r.error, "NotPendingAdmin(bytes32)"),
                 string.concat(where, ": a HOLDER_OWN row names the holder's refusal"));
         } else {
             require(bytes(r.error).length == 0 || !_gate(e), string.concat(where, ": a gate's error on an ungated class"));
@@ -221,7 +239,7 @@ abstract contract SelectorAuditRows is Test {
                 (uint8 bit, bytes32 who) = abi.decode(_args(ret), (uint8, bytes32));
                 assertEq(who, me, where);
                 if (_bitOf(r.class) != 0) assertEq(uint256(bit) + 1, _bitOf(r.class), string.concat(where, ": another bit"));
-            } else if (_eq(r.error, "NotOwner(bytes32)") || _eq(r.error, "NotPendingOwner(bytes32)")) {
+            } else if (_eq(r.error, "NotAdmin(bytes32)") || _eq(r.error, "NotPendingAdmin(bytes32)")) {
                 assertEq(abi.decode(_args(ret), (bytes32)), me, where);
             }
         }
@@ -234,8 +252,10 @@ abstract contract SelectorAuditRows is Test {
 
     // ------------------------------------------------------------------ the allow-lists of a governed token
 
-    /// Every gated row (`BIT`, `OWNER`, `HOLDER_OWN`, `FACTORY`) is off `mtxSelectors()`, and a native signer's own
-    /// `mtxExecute` / `uaExecute` of it is refused by the allow-list (`_mtxRule`, `_uaAllowed`), past its valid signature.
+    /// Every gated row (`BIT`, `ADMIN`, `HOLDER_OWN`, `FACTORY`) is off `mtxSelectors()`, and a native signer's own
+    /// `executeMetaTransaction` / `mtxExecute` of it is refused by the allow-list, past its valid signature. (ua-mtx-merge
+    /// T1, meaning: on the merged `mtxExecute` a native signer reads `_mtxRule` (B), so `MtxSelectorNotAllowed` where
+    /// `uaExecute` answered `MetaTxUnknownOp` from `_uaAllowed`; the address `mtxExecute` left tokens, R3's alias stays.)
     function _relay(string memory name, address t) internal {
         AuditRow[] memory pin = _pin(name);
         (bytes4[] memory published,,) = IMetaTx(t).mtxSelectors();
@@ -244,8 +264,9 @@ abstract contract SelectorAuditRows is Test {
             bytes4 sel = bytes4(keccak256(bytes(pin[i].sig)));
             string memory where = string.concat(name, ".", pin[i].sig);
             for (uint256 k; k < published.length; ++k) assertTrue(published[k] != sel, string.concat(where, ": on mtxSelectors()"));
-            assertEq(_mtxProbe(t, sel), IMetaTx.MtxSelectorNotAllowed.selector, string.concat(where, ": relayable by mtxExecute"));
-            assertEq(_uaProbe(t, sel), IUALedger.MetaTxUnknownOp.selector, string.concat(where, ": relayable by uaExecute"));
+            assertEq(_mtxProbe(t, sel), IMetaTx.MtxSelectorNotAllowed.selector,
+                string.concat(where, ": relayable by executeMetaTransaction"));
+            assertEq(_uaProbe(t, sel), IMetaTx.MtxSelectorNotAllowed.selector, string.concat(where, ": relayable by mtxExecute"));
         }
     }
 
@@ -254,18 +275,18 @@ abstract contract SelectorAuditRows is Test {
         return abi.encodePacked(r, s, v);
     }
 
-    /// The revert of a signed `mtxExecute` of `sel` (one zero word), or 0 when it ran.
+    /// The revert of a signed `executeMetaTransaction` of `sel` (one zero word), or 0 when it ran.
     function _mtxProbe(address t, bytes4 sel) internal returns (bytes4) {
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction(vm.addr(SA_PK), bytes.concat(sel, bytes32(0)), 9,
-            MetaTxBase(t).mtxNonce(vm.addr(SA_PK), 9), block.timestamp + 300, 0, address(0), 0, address(0));
-        return _probe(t, abi.encodeCall(MetaTxBase.mtxExecute, (m, _sign(MetaTxBase(t).mtxDigest(m)))));
+            UAMetaTxBase(t).mtxNonce(MetaTxLib.pad(vm.addr(SA_PK)), 9), block.timestamp + 300, 0, address(0), 0, address(0));
+        return _probe(t, abi.encodeCall(MetaTxBase.executeMetaTransaction, (m, _sign(MtxDigest.metaTx(t, m)))));
     }
 
     function _uaProbe(address t, bytes4 sel) internal returns (bytes4) {
         bytes32 from = bytes32(uint256(uint160(vm.addr(SA_PK))));
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction(from, bytes.concat(sel, bytes32(0)), 9,
-            UAMetaTxBase(t).uaNonce(from, 9), block.timestamp + 300, 0, address(0), 0, address(0));
-        return _probe(t, abi.encodeCall(UAMetaTxBase.uaExecute, (m, _sign(UAMetaTxBase(t).uaDigest(m)))));
+            UAMetaTxBase(t).mtxNonce(from, 9), block.timestamp + 300, 0, address(0), 0, address(0));
+        return _probe(t, abi.encodeCall(UAMetaTxBase.mtxExecute, (m, UACall.auth(m.from, _sign(UAMetaTxBase(t).mtxDigest(m))))));
     }
 
     function _probe(address t, bytes memory cd) internal returns (bytes4 e) {
@@ -280,7 +301,7 @@ abstract contract SelectorAuditRows is Test {
     /// Features on for every power, owner `OWNER_ID`, the holders the test (a contract: the contract-only rate bit) and
     /// `OWNER_ID`; never the stranger.
     function _govern(IFactoryToken.TokenConfig memory c, address leg) internal view {
-        c.owner = OWNER_ID;
+        c.admin = OWNER_ID;
         c.features |= (uint256(1) << GovernanceBits.PAYABLE) | (uint256(1) << GovernanceBits.MINTABLE);
         c.roles.minter = bytes32(uint256(uint160(address(this))));
         if (leg == address(0)) return;
@@ -294,41 +315,76 @@ abstract contract SelectorAuditRows is Test {
     }
 }
 
-/// `NORMAL`, `WRAPPED`, `SCaaSDex`, its `DexPuller`, the `GovernanceRouter`; and the ABI of all nine against the pin.
+/// A contract id for the regulated kinds' compliance holder (contract-only bit 10; `FORCE` and `RECORD` never one id).
+contract AuditHolder {}
+
+/// `NORMAL`, `WRAPPED`, `SCaaSDex`, its `DexPuller`, the `GovernanceRouter`, `NORMAL_REGULATED`, `WRAPPED_REGULATED`; and
+/// the ABI of all fifteen against the pin (plan T32: the regulated kinds 8-13 are their base kind's rows and the eight
+/// control entries, each `BIT(n)` as the existing powers, F-31).
 contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
     GovernanceRouter internal router;
     NormalToken internal nt;
     WrappedToken internal wt;
     SCaaSDex internal dex;
+    NormalRegulatedToken internal nr;
+    WrappedRegulatedToken internal wr;
+    OpenFactory internal fac; // round 3r: the test its admin, configured (no router)
 
     /// The test is the factory of every clone and registered no token.
     function isToken(address) external pure returns (bool) { return false; }
+    /// fix2-dex: the DEX reads the kind at use (`versionOf`, version 0: not a factory token)
+    function versionOf(address) external pure returns (uint8, uint64) {}
 
     function setUp() public override {
         super.setUp();
         router = new GovernanceRouter(chainUidA, REG_L, address(0), false);
-        IFactoryToken.Env memory e = plainEnv(address(this), address(0), chainUidA, REG_L, false);
-        e.govRouter = address(router);
+        IFactoryToken.ChainEnv memory e = EnvKit.env(chainUidA, REG_L, address(0), false, address(router));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("N", "N", 6);
         _govern(c, address(0));
-        nt = NormalToken(Clones.clone(address(new NormalToken(1, e, ""))));
-        nt.initialize(address(this), 1, abi.encode(c));
+        nt = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), e));
+        nt.initialize(nid(address(this)), 1, abi.encode(c));
         IFactoryToken.TokenConfig memory w;
         (w.name, w.symbol, w.decimals) = ("W", "W", 6);
         _govern(w, address(new MockERC20("Leg", "LEG", 6)));
-        wt = WrappedToken(payable(Clones.clone(address(new WrappedToken(1, e, "")))));
-        wt.initialize(address(this), 1, abi.encode(w));
-        dex = SCaaSDex(Clones.clone(address(new SCaaSDex(1, e, ""))));
-        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0))));
+        wt = WrappedToken(payable(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), e)));
+        wt.initialize(nid(address(this)), 1, abi.encode(w));
+        dex = SCaaSDex(EnvKit.clone(address(new SCaaSDex(address(this), dexArgs(address(this)))), e));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(OWNER_ID, 0, address(0x7EA5), false, 0, address(0), 0, 0)));
+        _regulate(c);
+        nr = NormalRegulatedToken(EnvKit.clone(address(new NormalRegulatedToken(address(this), kindArgs(8, address(this), regArgs()))), e));
+        nr.initialize(nid(address(this)), 1, abi.encode(c));
+        _regulate(w);
+        wr = WrappedRegulatedToken(payable(EnvKit.clone(address(new WrappedRegulatedToken(address(this), kindArgs(9, address(this), regArgs()))), e)));
+        wr.initialize(nid(address(this)), 1, abi.encode(w));
+        fac = new OpenFactory(nid(address(this)));
+        EnvKit.genesis(chainUidA);
+        fac.configureChain(chainUidA, 0, address(0), bytes32(0), 0, bytes32(0));
+    }
+
+    /// The regulated controls on (5, 6, 7, 10, 22, 23): the issuer the test, the compliance holder another contract; bit 22
+    /// has no init holder, so the stranger's refusal is the role's; bit 23 (pay-meta-tax T39) is the issuer's, with a
+    /// recipient.
+    function _regulate(IFactoryToken.TokenConfig memory c) internal {
+        c.features |= (uint256(1) << 5) | (uint256(1) << 6) | (uint256(1) << 7) | (uint256(1) << 10)
+            | (uint256(1) << GovernanceBits.OPERATOR_TRANSFER) | (uint256(1) << GovernanceBits.TAX);
+        c.reg.taxRecipient = bytes32(uint256(0x7A0));
+        (c.roles.issuer, c.roles.compliance) = (bytes32(uint256(uint160(address(this)))),
+            bytes32(uint256(uint160(address(new AuditHolder())))));
+        c.reg.termsHash = keccak256("terms");
     }
 
     function test_everySelectorIsClassified() public {
-        string[9] memory all = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
-            "WrappedPqzToken", "SCaaSDex", "DexPuller", "GovernanceRouter"];
+        // Fable review of ua-mtx-merge E N-10: + UARegistry and SmartKeyAccountFactory (the node's `registry` and `factory` kinds);
+        // owner 2026-11-12: + SmartKeyAccount (`account`, class GUARDIAN); fix2 CTR-GOV-26: + `RelayFeeRouter`, `PqChat` (their
+        // `rescue`, and every other entry with them)
+        string[21] memory all = ["NormalToken", "WrappedToken", "NormalZetherToken", "WrappedZetherToken", "NormalPqzToken",
+            "WrappedPqzToken", "SCaaSDex", "DexPuller", "GovernanceRouter", "NormalRegulatedToken", "WrappedRegulatedToken",
+            "NormalZetherRegulatedToken", "WrappedZetherRegulatedToken", "NormalPqzRegulatedToken", "WrappedPqzRegulatedToken",
+            "OpenFactory", "UARegistry", "SmartKeyAccountFactory", "SmartKeyAccount", "RelayFeeRouter", "PqChat"];
         uint256 bad;
         for (uint256 i; i < all.length; ++i) bad += _classified(all[i]);
-        assertEq(bad, 0, "every non-view external of the nine has exactly one pinned row");
+        assertEq(bad, 0, "every non-view external of the twenty-one has exactly one pinned row");
     }
 
     function test_strangerRevertsOnEveryGatedRow() public {
@@ -337,17 +393,26 @@ contract SelectorAuditPlainTest is SelectorAuditRows, UALedgerBase {
         _stranger("SCaaSDex", address(dex));
         _stranger("DexPuller", dex.puller());
         _stranger("GovernanceRouter", address(router));
+        _stranger("NormalRegulatedToken", address(nr));
+        _stranger("WrappedRegulatedToken", address(wr));
+        _stranger("OpenFactory", address(fac));
+        _stranger("RelayFeeRouter", address(new RelayFeeRouter())); // fix2 CTR-GOV-26
+        // owner 2026-11-12: a live account with a guardian that is not the stranger (GUARDIAN: `NotGuardian()`, FACTORY: `NotFactory()`)
+        SmartKeyAccountFactory kf = new SmartKeyAccountFactory(chainUidA);
+        _stranger("SmartKeyAccount", kf.deploy(SubjectKey(KeyKind.SECP256K1, bytes32(uint256(0x5EED)), 0, 0, 0), address(0x6A2D)));
     }
 
     function test_noGovernanceSelectorIsRelayable() public {
         _relay("NormalToken", address(nt));
         _relay("WrappedToken", address(wt));
+        _relay("NormalRegulatedToken", address(nr));
+        _relay("WrappedRegulatedToken", address(wr));
         // positive controls: the probes tell an allow-listed selector from a refused one
         assertTrue(_mtxProbe(address(nt), IMetaTx.cancelNonce.selector) != IMetaTx.MtxSelectorNotAllowed.selector);
         assertTrue(_uaProbe(address(nt), NormalToken.burn.selector) != IUALedger.MetaTxUnknownOp.selector);
     }
 
-    /// The router's generic path refuses every call (`_execute`, `uaExecute`, `uaBatch`), `cancelNonce` included, so it
+    /// The router's generic path refuses every call (`_execute`, `mtxExecute`, `mtxBatch`), `cancelNonce` included, so it
     /// publishes no allow-list row: what it lists is what is reachable, and the node's list equals it (T15).
     function test_routerPublishesNoAllowList() public view {
         (bytes4[] memory s, uint8[] memory f, uint8[] memory a) = router.mtxSelectors();
@@ -392,11 +457,13 @@ contract SelectorAuditPqzTest is SelectorAuditRows, PqzFixture {
         _stack();
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         _govern(c, address(0));
+        c.features |= uint256(1) << GovernanceBits.PQZ_PROOF; // group 3h T61: bit 24 on, no holder: the stranger's MissingRole
         np = factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(c), "sa");
         _releaseWrapped();
         c = _cfg(uint256(1) << 40);
         c.features = 0;
         _govern(c, address(new MockERC20("USD", "USD", 6)));
+        c.features |= uint256(1) << GovernanceBits.PQZ_PROOF;
         wp = factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), "saw");
     }
 

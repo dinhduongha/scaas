@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {PqVectors} from "./PqVectors.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
 import {Shake} from "../../src/ua/Shake.sol";
-import {MlDsa, UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
+import {MlDsa, MldsaVerifier} from "../../src/ua/MlDsa.sol";
 
 /// FIPS 204 Table 1, ML-DSA-87, written out here (the test's own copy of `MlDsa.params87()`).
 function p87() pure returns (MlDsa.Params memory) {
@@ -38,6 +38,23 @@ contract MlHarness {
         assembly {
             mstore(out, outLen)
         }
+    }
+}
+
+/// The cached path on a formatted message `mprime` of the caller's (ACVP's): the parts read by `MlDsa.readParts`, the same library
+/// function `MldsaVerifier.verifyCached` reads them with (no copy, F-9), then the level's core on the expanded key.
+contract CachedM {
+    function verify(uint256 level, bytes calldata chunks, bytes calldata mprime, bytes calldata sig) external view returns (bool) {
+        MlDsa.Params memory P = level == 44 ? MlDsa.params44() : level == 65 ? MlDsa.params65() : p87();
+        (bytes memory ek, bool ok) = MlDsa.readParts(P, chunks, level == 44 ? 1 : level == 65 ? 2 : 3);
+        return ok && this.verifyExpanded(level, ek, mprime, sig);
+    }
+
+    function verifyExpanded(uint256 level, bytes calldata ek, bytes calldata mprime, bytes calldata sig)
+        external pure returns (bool)
+    {
+        Shake.reserve();
+        return MlDsa.verifyExpanded(level == 44 ? MlDsa.params44() : level == 65 ? MlDsa.params65() : p87(), ek, mprime, sig);
     }
 }
 
@@ -97,11 +114,11 @@ contract MlDsaTest is PqVectors {
     }
 
     function test_kat_mldsa44() public {
-        _uaVector("mldsa44", address(new UAMldsaVerifier(PqUA.MLDSA44, address(0), "", "")), PqUA.MLDSA44);
+        _uaVector("mldsa44", address(new MldsaVerifier(PqUA.MLDSA44, address(0), "", "")), PqUA.MLDSA44);
     }
 
     function test_kat_mldsa65() public {
-        _uaVector("mldsa65", address(new UAMldsaVerifier(PqUA.MLDSA65, address(0), "", "")), PqUA.MLDSA65);
+        _uaVector("mldsa65", address(new MldsaVerifier(PqUA.MLDSA65, address(0), "", "")), PqUA.MLDSA65);
     }
 
     /// The EIP-8051 expanded key: Solidity and clientkeys produce the same bytes, and it verifies the same signature.
@@ -112,7 +129,7 @@ contract MlDsaTest is PqVectors {
         uint16[2] memory kinds = [PqUA.MLDSA44, PqUA.MLDSA65];
         for (uint256 i; i < 2; ++i) {
             uint256 level = i == 0 ? 44 : 65;
-            bytes memory ek = new UAMldsaVerifier(kinds[i], address(0), "", "").expandedKey(_k(kat, names[i], "pk"));
+            bytes memory ek = new MldsaVerifier(kinds[i], address(0), "", "").expandedKey(_k(kat, names[i], "pk"));
             assertEq(ek, _k(kat, names[i], "expanded_key"), names[i]);
             bytes memory mprime = abi.encodePacked(bytes2(0), _k(kat, names[i], "signed_message"));
             bytes memory sig = _k(kat, names[i], "sig");
@@ -134,7 +151,7 @@ contract MlDsaTest is PqVectors {
         string[2] memory names = ["mldsa44", "mldsa65"];
         uint16[2] memory kinds = [PqUA.MLDSA44, PqUA.MLDSA65];
         for (uint256 i; i < 2; ++i) {
-            UAMldsaVerifier v = new UAMldsaVerifier(kinds[i], address(0), "", "");
+            MldsaVerifier v = new MldsaVerifier(kinds[i], address(0), "", "");
             bytes memory pk = _k(kat, names[i], "pk");
             uint256 parts = v.expandedKeyParts();
             assertEq(parts, i + 1, "parts");
@@ -149,7 +166,7 @@ contract MlDsaTest is PqVectors {
                 all = bytes.concat(all, part);
             }
             assertEq(all, _k(kat, names[i], "expanded_key"), names[i]);
-            vm.expectRevert(abi.encodeWithSelector(UAMldsaVerifier.UAMldsaPart.selector, parts));
+            vm.expectRevert(abi.encodeWithSelector(MldsaVerifier.UAMldsaPart.selector, parts));
             v.expandedKeyPart(pk, parts);
             bytes32 m = bytes32(_k(kat, names[i], "ua_msg"));
             bytes memory sig = _k(kat, names[i], "sig");
@@ -221,11 +238,11 @@ contract MlDsaTest is PqVectors {
             bytes memory valid = _k(kat, names[i], "eip8355_probe_valid");
             bytes memory invalid = _k(kat, names[i], "eip8355_probe_invalid");
             vm.etch(pc, ""); // no code: probe fails, pure Solidity
-            assertEq(new UAMldsaVerifier(kinds[i], pc, valid, invalid).PRECOMPILE(), address(0));
+            assertEq(new MldsaVerifier(kinds[i], pc, valid, invalid).PRECOMPILE(), address(0));
             vm.etch(pc, address(new AlwaysOne()).code); // answers 1 to everything: refused
-            assertEq(new UAMldsaVerifier(kinds[i], pc, valid, invalid).PRECOMPILE(), address(0));
+            assertEq(new MldsaVerifier(kinds[i], pc, valid, invalid).PRECOMPILE(), address(0));
             vm.etch(pc, address(new Eip8355Emulator()).code);
-            UAMldsaVerifier v = new UAMldsaVerifier(kinds[i], pc, valid, invalid);
+            MldsaVerifier v = new MldsaVerifier(kinds[i], pc, valid, invalid);
             assertEq(v.PRECOMPILE(), pc);
             bytes32 uaMsg = bytes32(_k(kat, names[i], "ua_msg"));
             assertTrue(v.verify(_k(kat, names[i], "pk"), uaMsg, _k(kat, names[i], "sig")));
@@ -237,18 +254,18 @@ contract MlDsaTest is PqVectors {
     }
 
     function test_refusesOtherKinds() public {
-        vm.expectRevert(abi.encodeWithSelector(UAMldsaVerifier.UAMldsaKind.selector, PqUA.FNDSA512));
-        new UAMldsaVerifier(PqUA.FNDSA512, address(0), "", "");
+        vm.expectRevert(abi.encodeWithSelector(MldsaVerifier.UAMldsaKind.selector, PqUA.FNDSA512));
+        new MldsaVerifier(PqUA.FNDSA512, address(0), "", "");
     }
 
     function test_malformed_mldsa() public {
         string memory kat = _kat();
-        UAMldsaVerifier v = new UAMldsaVerifier(PqUA.MLDSA44, address(0), "", "");
+        MldsaVerifier v = new MldsaVerifier(PqUA.MLDSA44, address(0), "", "");
         bytes memory pk = _k(kat, "mldsa44", "pk");
         bytes memory sig = _k(kat, "mldsa44", "sig");
         bytes32 m = bytes32(_k(kat, "mldsa44", "ua_msg"));
         assertFalse(v.verify(_k(kat, "mldsa65", "pk"), m, sig)); // a 65 key on the 44 verifier
-        assertFalse(new UAMldsaVerifier(PqUA.MLDSA65, address(0), "", "").verify(pk, m, sig)); // 44 on the 65 verifier
+        assertFalse(new MldsaVerifier(PqUA.MLDSA65, address(0), "", "").verify(pk, m, sig)); // 44 on the 65 verifier
         assertFalse(v.verify(pk, m, bytes.concat(sig, hex"00")));
         sig[2420 - 4] = 0x51; // hint count of row 0 above ω = 80
         assertFalse(v.verify(pk, m, sig));
@@ -325,48 +342,194 @@ contract MlDsaTest is PqVectors {
         string memory kat = _kat();
         address pc = 0x000000000000000000000000000000005caA0014; // the SCaaS testnet's MLDSA87
         vm.etch(pc, address(new Eip8355Emulator87()).code);
-        UAMldsaVerifier v = new UAMldsaVerifier(
+        MldsaVerifier v = new MldsaVerifier(
             PqUA.MLDSA87, pc, _k(kat, "mldsa87", "eip8355_probe_valid"), _k(kat, "mldsa87", "eip8355_probe_invalid"));
         assertEq(v.PRECOMPILE(), pc);
         _uaVector("mldsa87", address(v), PqUA.MLDSA87);
         assertEq(abi.encode(MlDsa.params87()), abi.encode(p87()));
     }
 
-    function deploy87(address pc, bytes calldata valid, bytes calldata invalid) external returns (address) {
-        return address(new UAMldsaVerifier(PqUA.MLDSA87, pc, valid, invalid));
-    }
-
-    /// CTR-UA-39 Q1: no verifier for `mldsa87` without a precompile that answers the probe (none, one that says 1 to everything,
-    /// a probe of another level), so the deploy profile cannot enable it; it has no expanded-key cache.
-    function test_mldsa87_needsPrecompile() public {
+    /// CTR-UA-39 Q1 as rewritten by the owner 2026-11-15: `mldsa87` has a verifier without a precompile too (none, an empty
+    /// account, one that says 1 to everything, a probe of another level: pure Solidity, `PRECOMPILE` 0) and the two-part cache;
+    /// with an answering precompile it uses it. The UA row and its mutations through `verifyCached` on the parts.
+    function test_mldsa87_withoutPrecompile() public {
         vm.pauseGasMetering();
         string memory kat = _kat();
         bytes memory valid = _k(kat, "mldsa87", "eip8355_probe_valid");
         bytes memory invalid = _k(kat, "mldsa87", "eip8355_probe_invalid");
         address pc = address(0x14);
-        bytes4 no = bytes4(keccak256("UAMldsaNoPrecompile()"));
-        // each through an external call: an expected revert of a verifier CREATE made by the test itself ended the test as a pass
-        // here (Foundry 1.8.5; an `assertTrue(false)` after the first one passed), so nothing after it ran
-        vm.expectRevert(no);
-        this.deploy87(address(0), "", "");
-        vm.expectRevert(no); // empty account
-        this.deploy87(pc, valid, invalid);
+        assertEq(new MldsaVerifier(PqUA.MLDSA87, address(0), "", "").PRECOMPILE(), address(0), "none");
+        assertEq(new MldsaVerifier(PqUA.MLDSA87, pc, valid, invalid).PRECOMPILE(), address(0), "empty account");
         vm.etch(pc, address(new AlwaysOne()).code);
-        vm.expectRevert(no);
-        this.deploy87(pc, valid, invalid);
+        assertEq(new MldsaVerifier(PqUA.MLDSA87, pc, valid, invalid).PRECOMPILE(), address(0), "answers 1 to everything");
         vm.etch(pc, address(new Eip8355Emulator()).code); // 44 / 65 only
-        vm.expectRevert(no);
-        this.deploy87(pc, _k(kat, "mldsa65", "eip8355_probe_valid"), _k(kat, "mldsa65", "eip8355_probe_invalid"));
+        assertEq(new MldsaVerifier(PqUA.MLDSA87, pc, _k(kat, "mldsa65", "eip8355_probe_valid"),
+            _k(kat, "mldsa65", "eip8355_probe_invalid")).PRECOMPILE(), address(0), "a probe of another level");
         vm.etch(pc, address(new Eip8355Emulator87()).code);
-        UAMldsaVerifier v = new UAMldsaVerifier(PqUA.MLDSA87, pc, valid, invalid);
-        assertEq(v.PRECOMPILE(), pc);
-        assertEq(v.expandedKeyParts(), 0, "no cache");
-        bytes memory pk = _k(kat, "mldsa87", "pk");
-        vm.expectRevert(abi.encodeWithSelector(UAMldsaVerifier.UAMldsaPart.selector, 0));
-        v.expandedKeyPart(pk, 0);
-        assertFalse(v.verifyCached("", bytes32(_k(kat, "mldsa87", "ua_msg")), _k(kat, "mldsa87", "sig")));
-        // the 44 / 65 verifiers keep their Solidity path without a precompile
-        assertEq(new UAMldsaVerifier(PqUA.MLDSA65, address(0), "", "").PRECOMPILE(), address(0));
+        assertEq(new MldsaVerifier(PqUA.MLDSA87, pc, valid, invalid).PRECOMPILE(), pc, "the precompile when it answers");
+        MldsaVerifier v = new MldsaVerifier(PqUA.MLDSA87, address(0), "", "");
+        _uaVector("mldsa87", address(v), PqUA.MLDSA87); // pure Solidity on the FIPS 204 key
+        (bytes memory chunks, bytes memory all) = _parts(v, _k(kat, "mldsa87", "pk"), 0xc0de87);
+        assertEq(all, v.expandedKey(_k(kat, "mldsa87", "pk")), "parts concatenate to expandedKey(pk)");
+        _cached87(v, kat, chunks);
+    }
+
+    /// The `mldsa87` UA row and its mutations of the same key through `verifyCached` on `chunks` (its parts).
+    function _cached87(MldsaVerifier v, string memory kat, bytes memory chunks) internal view {
+        bytes32 m = bytes32(_k(kat, "mldsa87", "ua_msg"));
+        bytes memory sig = _k(kat, "mldsa87", "sig");
+        assertTrue(v.verifyCached(chunks, m, sig), "cached");
+        assertFalse(v.verifyCached(chunks, ~m, sig), "other message");
+        assertEq(chunks.length, 60, "three pointers");
+        assertFalse(v.verifyCached(_slice(chunks, 0, 40), m, sig), "parts 0 + 1 only");
+        assertFalse(v.verifyCached(bytes.concat(_slice(chunks, 0, 20), _slice(chunks, 40, 20)), m, sig), "parts 0 + 2 only");
+        assertFalse(v.verifyCached(bytes.concat(_slice(chunks, 20, 20), _slice(chunks, 0, 20), _slice(chunks, 40, 20)), m, sig),
+            "parts out of order");
+        uint256 n;
+        uint256 same;
+        for (; vm.keyExistsJson(kat, string.concat(".kinds.mldsa87.mutations[", vm.toString(n), "]")); ++n) {
+            string memory mu = string.concat(".kinds.mldsa87.mutations[", vm.toString(n), "]");
+            if (keccak256(_b(kat, string.concat(mu, ".pk"))) != keccak256(_k(kat, "mldsa87", "pk"))) continue; // another key
+            bool got = v.verifyCached(chunks, bytes32(_b(kat, string.concat(mu, ".ua_msg"))), _b(kat, string.concat(mu, ".sig")));
+            assertEq(got, vm.parseJsonBool(kat, string.concat(mu, ".valid")), vm.parseJsonString(kat, string.concat(mu, ".what")));
+            ++same;
+        }
+        assertEq(n, 9, "mutations");
+        assertGt(same, 6, "most mutations keep the key");
+    }
+
+    /// The registry's parts of `pk` on `v`, each at its own pointer (`0x00 ‖ part`, as SSTORE2), and their concatenation.
+    function _parts(MldsaVerifier v, bytes memory pk, uint256 at) internal returns (bytes memory chunks, bytes memory all) {
+        for (uint256 p; p < v.expandedKeyParts(); ++p) {
+            bytes memory part = v.expandedKeyPart(pk, p);
+            address ptr = address(uint160(at * 16 + p));
+            vm.etch(ptr, bytes.concat(hex"00", part));
+            chunks = bytes.concat(chunks, bytes20(ptr));
+            all = bytes.concat(all, part);
+        }
+    }
+
+    /// Owner 2026-11-15 (CTR-UA-39 Q1, MD-4): the `mldsa87` parts are `Â` rows 0-2, 3-5 and 6-7 ‖ tr ‖ t̂1 (21,504 / 21,504 / 22,592 B),
+    /// each under EIP-170 with its STOP byte, 65,600 B in all; `mldsa65` keeps rows 0-2 | 3-5 ‖ tail (15,360 / 21,568 B), `mldsa44`
+    /// one part (20,544 B); `expandedKeyParts` is `PqUA.mldsaParts` (the one count). Each multi-part kind concatenates to
+    /// `expandedKey(pk)` byte for byte (the split; the expansion itself against an independent reference in
+    /// `test_expandedKey_nobleReference`); past the last part reverts `UAMldsaPart`.
+    function test_expandedKeyParts_split() public {
+        vm.pauseGasMetering();
+        string memory kat = _kat();
+        string[3] memory names = ["mldsa44", "mldsa65", "mldsa87"];
+        uint16[3] memory kinds = [PqUA.MLDSA44, PqUA.MLDSA65, PqUA.MLDSA87];
+        uint256[3][3] memory len = [[uint256(20_544), 0, 0], [uint256(15_360), 21_568, 0], [uint256(21_504), 21_504, 22_592]];
+        for (uint256 i; i < 3; ++i) {
+            MldsaVerifier v = new MldsaVerifier(kinds[i], address(0), "", "");
+            bytes memory pk = _k(kat, names[i], "pk");
+            uint256 parts = v.expandedKeyParts();
+            assertEq(parts, i + 1, "parts");
+            assertEq(parts, PqUA.mldsaParts(kinds[i]), "the one count");
+            bytes memory all;
+            for (uint256 p; p < parts; ++p) {
+                bytes memory part = v.expandedKeyPart(pk, p);
+                assertEq(part.length, len[i][p], string.concat(names[i], " part ", vm.toString(p), " length"));
+                assertLt(part.length + 1, 24_577, "EIP-170 with the STOP byte");
+                all = bytes.concat(all, part);
+            }
+            assertEq(all, v.expandedKey(pk), string.concat(names[i], ": parts = expandedKey(pk)"));
+            assertEq(all.length, MlDsa.expandedLen(i == 0 ? MlDsa.params44() : i == 1 ? MlDsa.params65() : p87()));
+            vm.expectRevert(abi.encodeWithSelector(MldsaVerifier.UAMldsaPart.selector, parts));
+            v.expandedKeyPart(pk, parts);
+        }
+        assertEq(PqUA.mldsaParts(PqUA.FNDSA512), 0, "no cache for another kind");
+        assertEq(PqUA.mldsaParts(PqUA.FNDSA1024), 0);
+    }
+
+    /// F-9 (owner 2026-11-15): the expansion against an independent reference, `mldsa_cache.json` (gen_mldsa_cache.mjs, built from noble's
+    /// post-quantum 0.7.1, its own XOF128 and NTT, not from this code; for 44 / 65 equal to clientkeys' `pq_kat.json` key):
+    /// 12 keys per level, the whole expanded key and every part by SHA-256 and length.
+    function test_expandedKey_nobleReference() public {
+        vm.pauseGasMetering();
+        string memory j = vm.readFile("../vectors/ua/mldsa_cache.json");
+        string[3] memory names = ["mldsa44", "mldsa65", "mldsa87"];
+        uint16[3] memory kinds = [PqUA.MLDSA44, PqUA.MLDSA65, PqUA.MLDSA87];
+        uint256 n;
+        for (uint256 i; i < 3; ++i) {
+            MldsaVerifier v = new MldsaVerifier(kinds[i], address(0), "", "");
+            for (uint256 r; vm.keyExistsJson(j, string.concat(".levels.", names[i], ".keys[", vm.toString(r), "]")); ++r) {
+                string memory row = string.concat(".levels.", names[i], ".keys[", vm.toString(r), "].");
+                bytes memory pk = vm.parseJsonBytes(j, string.concat(row, "pk"));
+                assertEq(sha256(v.expandedKey(pk)), vm.parseJsonBytes32(j, string.concat(row, "ek_sha256")), "expanded key");
+                bytes32[] memory ps = vm.parseJsonBytes32Array(j, string.concat(row, "parts_sha256"));
+                assertEq(ps.length, v.expandedKeyParts(), "parts");
+                for (uint256 p; p < ps.length; ++p) assertEq(sha256(v.expandedKeyPart(pk, p)), ps[p], "part");
+                ++n;
+            }
+        }
+        assertEq(n, 36, "12 keys per level");
+    }
+
+    /// F-9: NIST ACVP ML-DSA sigVer (`pq_external.json`, 30 cases per level, tgId 5 pure and tgId 12 internal) through both paths
+    /// with ACVP's verdict: the FIPS-key core and the cached path (each key's parts at pointers as SSTORE2 writes them, read by
+    /// `MlDsa.readParts` as `verifyCached` reads them, `CachedM`). `verifyCached` itself formats the UA's 32-byte message, so it
+    /// cannot take ACVP's M'; the UA rows and their mutations run through it (`test_mldsa87_withoutPrecompile`,
+    /// `test_mutations_bothPaths`).
+    function test_acvp_mldsa_cachedDifferential() public {
+        vm.pauseGasMetering();
+        string memory ext = _ext();
+        MlHarness h = new MlHarness();
+        CachedM c = new CachedM();
+        MldsaVerifier[3] memory v = [new MldsaVerifier(PqUA.MLDSA44, address(0), "", ""),
+            new MldsaVerifier(PqUA.MLDSA65, address(0), "", ""), new MldsaVerifier(PqUA.MLDSA87, address(0), "", "")];
+        uint256[3] memory per;
+        for (uint256 i; i < _cases(ext, "acvp_mldsa"); ++i) {
+            ++per[_acvpBoth(ext, i, h, c, v)];
+        }
+        assertEq(per[0], 30);
+        assertEq(per[1], 30);
+        assertEq(per[2], 30, "ML-DSA-87 cases");
+    }
+
+    /// One ACVP case through both paths (`test_acvp_mldsa_cachedDifferential`); returns its level index.
+    function _acvpBoth(string memory ext, uint256 i, MlHarness h, CachedM c, MldsaVerifier[3] memory v) internal returns (uint256 li) {
+        string memory cs = _case("acvp_mldsa", i);
+        bytes32 set = keccak256(bytes(vm.parseJsonString(ext, string.concat(cs, ".set"))));
+        li = set == keccak256("ML-DSA-44") ? 0 : set == keccak256("ML-DSA-65") ? 1 : 2;
+        uint256 level = li == 0 ? 44 : li == 1 ? 65 : 87;
+        bytes memory pk = _b(ext, string.concat(cs, ".pk"));
+        bytes memory mp = _b(ext, string.concat(cs, ".mprime"));
+        bytes memory sig = _b(ext, string.concat(cs, ".sig"));
+        bool want = vm.parseJsonBool(ext, string.concat(cs, ".valid"));
+        assertEq(h.verify(level, pk, mp, sig), want, "FIPS-key path");
+        (bytes memory chunks,) = _parts(v[li], pk, 0xacc000 + i);
+        assertEq(c.verify(level, chunks, mp, sig), want, "cached path (ACVP verdict)");
+    }
+
+    /// F-9: every `pq_kat.json` mutation of the three levels, and the UA row, through `verify` (FIPS key) and `verifyCached` (the
+    /// real function on the parts of its own key): the same verdict.
+    function test_mutations_bothPaths() public {
+        vm.pauseGasMetering();
+        string memory kat = _kat();
+        string[3] memory names = ["mldsa44", "mldsa65", "mldsa87"];
+        uint16[3] memory kinds = [PqUA.MLDSA44, PqUA.MLDSA65, PqUA.MLDSA87];
+        uint256 n;
+        for (uint256 i; i < 3; ++i) {
+            MldsaVerifier v = new MldsaVerifier(kinds[i], address(0), "", "");
+            for (uint256 m; vm.keyExistsJson(kat, string.concat(".kinds.", names[i], ".mutations[", vm.toString(m), "]")); ++m) {
+                if (_mutationBoth(kat, v, string.concat(".kinds.", names[i], ".mutations[", vm.toString(m), "]"), 0xbee000 + 64 * i + m)) ++n;
+            }
+        }
+        assertGt(n, 18, "mutations through both paths");
+    }
+
+    /// One mutation `mu` through `verify` and `verifyCached` on its own key's parts; false for a key of another length (no parts).
+    function _mutationBoth(string memory kat, MldsaVerifier v, string memory mu, uint256 at) internal returns (bool) {
+        bytes memory pk = _b(kat, string.concat(mu, ".pk"));
+        if (pk.length != (v.KIND() == PqUA.MLDSA44 ? 1312 : v.KIND() == PqUA.MLDSA65 ? 1952 : 2592)) return false;
+        bytes32 msg_ = bytes32(_b(kat, string.concat(mu, ".ua_msg")));
+        bytes memory sig = _b(kat, string.concat(mu, ".sig"));
+        bool want = vm.parseJsonBool(kat, string.concat(mu, ".valid"));
+        (bytes memory chunks,) = _parts(v, pk, at);
+        assertEq(v.verify(pk, msg_, sig), want, "FIPS-key path");
+        assertEq(v.verifyCached(chunks, msg_, sig), want, vm.parseJsonString(kat, string.concat(mu, ".what")));
+        return true;
     }
 
     /// The precompile path checks the lengths before calling; the probe needs this level's exact split and a non-reverting
@@ -378,9 +541,9 @@ contract MlDsaTest is PqVectors {
         bytes memory valid44 = _k(kat, "mldsa44", "eip8355_probe_valid");
         bytes memory invalid44 = _k(kat, "mldsa44", "eip8355_probe_invalid");
         vm.etch(pc, address(new Eip8355Emulator()).code); // answers both levels
-        UAMldsaVerifier v = new UAMldsaVerifier(PqUA.MLDSA44, pc, valid44, invalid44);
+        MldsaVerifier v = new MldsaVerifier(PqUA.MLDSA44, pc, valid44, invalid44);
         assertEq(v.PRECOMPILE(), pc);
-        assertEq(new UAMldsaVerifier(PqUA.MLDSA44, pc, _k(kat, "mldsa65", "eip8355_probe_valid"),
+        assertEq(new MldsaVerifier(PqUA.MLDSA44, pc, _k(kat, "mldsa65", "eip8355_probe_valid"),
             _k(kat, "mldsa65", "eip8355_probe_invalid")).PRECOMPILE(), address(0), "65 probe on the 44 verifier");
         vm.etch(pc, address(new AlwaysOne()).code); // now any call would answer 1
         bytes memory pk = _k(kat, "mldsa44", "pk");
@@ -389,7 +552,7 @@ contract MlDsaTest is PqVectors {
         assertFalse(v.verify(bytes.concat(pk, hex"00"), m, sig), "pk length");
         assertFalse(v.verify(pk, m, bytes.concat(sig, hex"00")), "sig length");
         vm.etch(pc, address(new RevertsOnInvalid()).code);
-        assertEq(new UAMldsaVerifier(PqUA.MLDSA44, pc, valid44, invalid44).PRECOMPILE(), address(0), "reverts on invalid");
+        assertEq(new MldsaVerifier(PqUA.MLDSA44, pc, valid44, invalid44).PRECOMPILE(), address(0), "reverts on invalid");
     }
 
     /// The degenerate expanded key `Â = 0`, `t̂1 = 0` with the vector's `tr` (level 44 for i = 0, else 65): it accepts

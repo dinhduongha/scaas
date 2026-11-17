@@ -1,0 +1,9 @@
+mutant | test that went red | rc
+reg-ignored-on-plain | test_plainKindRefusesReg_0, test_plainKindRefusesReg_1, test_plainKindRefusesReg_2, test_plainKindRefusesReg_3, test_plainKindRefusesReg_4, test_plainKindRefusesReg_5 | 1
+pqz-fixed-masks | test_wrappedPqzInitTakesKindMasks | 1
+reg-unchecked-metatokenbase | test_plainKindRefusesReg_0, test_plainKindRefusesReg_1, test_plainKindRefusesReg_4 | 1
+reg-unchecked-zether-normal | test_plainKindRefusesReg_2 | 1
+reg-unchecked-zether-wrapped | test_plainKindRefusesReg_3 | 1
+reg-unchecked-pqz-wrapped | test_plainKindRefusesReg_5 | 1
+zether-fixed-masks | test_wrappedZetherInitTakesKindMasks | 1
+normal-zether-fixed-kind | test_normalZetherInitTakesKind | 1

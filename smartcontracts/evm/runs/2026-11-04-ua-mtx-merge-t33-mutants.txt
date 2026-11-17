@@ -1,0 +1,14 @@
+mutant | test that went red | rc
+reglib-missing-from-libcodehashes | test_deployRegulatedPath, test_deployZetherRegulatedPath, test_envLibsEqualLinkClosure, test_linkClosureWithRegulatedLib, test_registryDeployedAndDexAttested, test_regulatedReleasesPublished_10, test_regulatedReleasesPublished_11, test_regulatedReleasesPublished_12, test_regulatedReleasesPublished_13, test_regulatedReleasesPublished_8, test_regulatedReleasesPublished_9, test_routerDeployedAndGated | 1
+registry-hash-out-of-implargs-8-9 | test_deployRegulatedPath, test_linkClosureWithRegulatedLib, test_registryDeployedAndDexAttested, test_regulatedReleasesPublished_10, test_regulatedReleasesPublished_11, test_regulatedReleasesPublished_12, test_regulatedReleasesPublished_13, test_regulatedReleasesPublished_8, test_regulatedReleasesPublished_9 | 1
+registry-hash-out-of-implargs-10-11 | test_deployZetherRegulatedPath, test_envLibsEqualLinkClosure, test_linkClosureWithRegulatedLib, test_regulatedReleasesPublished_10, test_regulatedReleasesPublished_11, test_routerDeployedAndGated | 1
+reglib-dropped-from-8-env | test_deployRegulatedPath, test_linkClosureWithRegulatedLib, test_regulatedReleasesPublished_8 | 1
+reglib-dropped-from-zether-env | test_deployZetherRegulatedPath, test_linkClosureWithRegulatedLib, test_regulatedReleasesPublished_10, test_regulatedReleasesPublished_11 | 1
+registry-not-deployed | test_registryDeployedAndDexAttested, test_regulatedReleasesPublished_10, test_regulatedReleasesPublished_11, test_regulatedReleasesPublished_12, test_regulatedReleasesPublished_13, test_regulatedReleasesPublished_8, test_regulatedReleasesPublished_9 | 1
+registry-on-every-deploy | test_deployRegulatedPath, test_deployWrappedPath, test_deployZetherRegulatedPath, test_envLibsEqualLinkClosure, test_publicGateUsesMeasuredReleaseGas, test_registryClosure, test_routerDeployedAndGated, test_testnetGateFormulaUnchanged, test_wrappedReleaseIsGated | 1
+registry-admin-the-deployer | test_registryDeployedAndDexAttested | 1
+registry-codehash-json-wrong | test_registryDeployedAndDexAttested | 1
+kind-8-not-enabled | test_deployRegulatedPath, test_registryDeployedAndDexAttested, test_regulatedReleasesPublished_8 | 1
+e2e-impl-args-not-on-13 | self-test: WrappedPqzRegulatedToken (kind 13): implArgs 32 B | 1
+e2e-13-not-released | self-test: releases: kinds [0, 4, 5, 12] | 1
+e2e-registry-hash-of-initcode | self-test: ComplianceRegistry runtime hash = Registry.t.sol's pin | 1

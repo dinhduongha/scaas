@@ -894,6 +894,11 @@ polyvec_grandom (polyvec_t r, unsigned int log2o, const uint8_t seed[32],
   unsigned int i;
   poly_ptr ri;
 
+  /* PQZ (review 3w u1-2): the prover's masks only; at log2o >= 24 _intvec_grandom gives every coefficient of a
+     polynomial the same sample (z1 = y1 + c s1 would give the witness away): refused, the sticky error set */
+  ERR (log2o >= 24, "%s", "log2o");
+  if (log2o >= 24)
+    return;
   _VEC_FOREACH_ELEM (r, i)
   {
     _dom.d32[0]++;

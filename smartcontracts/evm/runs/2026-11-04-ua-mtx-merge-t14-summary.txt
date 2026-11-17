@@ -1,0 +1,52 @@
+# ua-mtx-merge T14 gate summary (full output in git-ignored .log files, not committed)
+# T14: node core (plan T14, R43, R44, MD-7, MD-11, Q6; CTR-MTX-30): typed.rs rows on the regenerated 68-struct typed_ops.json,
+# every merged entry mtx<Op>(UAEnvelope, ..., UASig) a ua_metatx job; mtxCancelNonce / mtxInvalidateNonces split per kind;
+# gov_router 38 -> 19 rows + the ordered cancel; the mandate wallets' six UA<Op> rows, the flat builders and the wallet's
+# mtxExecuteAsOwner(Raw) to legacy; guard.rs both directions against selector_audit.json (token kinds, DEX, router) and
+# MandateWallet.sol's lists, the UA-ledger gate only for a derived from or to (R44), B (a derived subject on merged rows
+# only); metatx.rs UaMtx on mtxExecute / mtxExecuteTransfer / mtxPayMeta; chain.rs nonce view by kind; the job decoder
+# refuses the address MetaTransfer job by name (OP_KIND_MISMATCH). No contract, vector or doc changed.
+# Toolchain: rustc / cargo 1.99.0 (the local stable, as T12; CI's scaas-node job uses dtolnay/rust-toolchain@stable, no pin on
+# this branch); the shared node target directory of the main checkout (CARGO_TARGET_DIR), scripts/capped, cargo -j2.
+# Setup: smartcontracts/algorand/out copied in as a real directory (git-ignored input; its absence failed 20 algorand tests).
+# Base: f39d0a0e (T12). T14 commits: e9007af3 (legacy copies, MD-4), 6dadf3a2 (the build), this one (harness, mutants, summary).
+step | commit | rc | counts
+t14-base-lib | f39d0a0e | 101 | 579 passed, 22 failed: 20 algorand (no smartcontracts/algorand/out in the worktree), dex::tests::kat_hashes_and_calldata_match_forge (stale since T6), guard allow_lists_equal_the_selector_audit_both_directions (stale since T7: 20 != 40)
+t14-red | e9007af3 code + the new tests | 101 | 580 passed, 33 failed: 11 of the 13 new tests red (cancel_row_split_per_kind, invalidate_row_split_per_kind, wallet_rows_are_ua_structs, wallet_flat_builders_refused_by_name, account_keeps_address_rows, allow_lists_equal_the_selector_audit_both_directions, an_all_native_ua_metatx_runs_at_registry_zero, a_derived_side_at_registry_zero_is_refused_by_name, nonce_view_by_kind, wallet_nonce_view_is_bytes32, a_metatx_job_naming_a_merged_entry_is_refused_by_name); the two indexer pins green (indexer_reads_ua_topics_for_an_eoa, pay_ref_reads_ua_payment_settled: the indexer already decoded UA topics); 20 existing tests on the new rows; dex KAT
+t14-cargo-test | 6dadf3a2 | 101 | 616 passed, 2 failed, 56 ignored (lib 611/2, fuzz 4, mesh_vectors 1; every e2e_* ignored); red, owned by T17: dex::tests::kat_hashes_and_calldata_match_forge (since T6), dex::venue::tests::settle_jobs_are_one_per_market_and_cancels_go_where_the_order_lives (the venue builds the address CancelOrder no token has since T6; its row retired here)
+t14-clippy | 6dadf3a2 | 0 | cargo clippy --all-targets -- -D warnings: no warning
+t14-e2e | - | - | not run: plan T14 lists no e2e (targeted tests and clippy); tests/e2e.rs compiles (one view renamed, IMtxIds::mtxTransferDigest); its jobs move in T18
+t14-docs | 6dadf3a2 | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0; test_docs_check ok
+t14-mutants | this commit's harness on 6dadf3a2 | 101 each | 12 of 12 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t14-mutants.txt): row-on-wrong-kind, derived-subject-on-mtx-rule, nonce-view-by-address-on-wallet, nonce-view-by-address-on-token, old-shape-accepted, flat-builder-left-in-plain, row-on-node-side-only, row-on-contract-side-only, registry-gate-on-all-native, registry-gate-dropped, member-sig-bound-dropped, native-lane-ua-event-only
+#
+# Pins, old -> new (6dadf3a2's message has the list of tests whose meaning changed):
+#   TYPED 115 -> 70 rows (68 vector structs + the DEX's and the token's invalidation); PLAIN 21 -> 18; rows with an entry 135 -> 87.
+#   typed_ops_kat_every_entry (structs, domains, calldata) (112, 170, 169) -> (68, 101, 100); guard walk (163, 6, 163) -> (97, 3, 97);
+#   job_api_explicit_json_roundtrip 163 -> 97; digest_and_calldata_cannot_diverge walked > 1,500 -> > 1,200 (1,238).
+#   gov_router allow-list 40 -> 20 selectors; selector_audit walk: 229 SIGNED entries of the eight contracts, 127 rows, 102 named
+#   exemptions, 91 governance entries (counted by python over the two files).
+#   MtxRelayFee.relay: addresses + bytes -> relay(address,bytes,address,bytes32,bytes32,uint256,uint256,UASig); uaRelay gone.
+#   SEL_UA_INVALIDATE_NONCES (uaInvalidateNonces) -> SEL_TOKEN_INVALIDATE_NONCES (mtxInvalidateNonces(bytes32,...,UASig));
+#   SEL_MTX_INVALIDATE_NONCES (the DEX's, 0xdbac32d0) unchanged. Wallet selector pins (mtxExecuteAsOwner, ...Raw, flat
+#   mtxPayUnderMandate, mtxRevoke) -> asserted no wallet row; mtxExecuteAsOwner pinned on account.
+#
+# Conflicts with the plan:
+#   T14 Step 1 lists never_dead_while_a_tx_may_land "unchanged": no test of that name exists in the node (the e2e
+#   a_peer_landing_our_intent_makes_the_job_consumed_never_dead is T18's); R80 here is simulation_revert_is_classified_by_the_
+#   subject_nonce (unchanged, now on mtxNonce(bytes32)) and a_native_ua_subject_is_classified_on_both_paths (meaning changed:
+#   a native lane reads both executed events, whichever job spent it).
+#   B in the node: every merged row's operation is on _uaAllowed by construction, and an address row cannot carry a derived
+#   subject (its from is an address); the guard's B refusal is fail-closed defence, tested with the flag set by hand.
+#   R44's "derived to" is the field named to (and a payment's payee); the gate is the token rule's (router and wallet rows keep
+#   their simulation's UALedgerOff).
+#   MD-3 (every task ends green): the venue test above turns red here; its fix is the venue's UATradeOrder book (T17).
+#   6dadf3a2's message says "13 of 15 red": the count is 11 of 13 as above (a_derived_subject_signs_merged_entries_only was
+#   written with the implementation, its kill is mutant derived-subject-on-mtx-rule).
+#
+# Stale, owned by later tasks: gateway /v1/metatx still builds the address mtxExecuteTransfer for a token and /v1/op refuses
+# every merged entry FEATURE_UNSUPPORTED (T15: its door tests now run on Wrap); mesh digest/accept on the address Mtx body
+# (T16); dex.rs / venue.rs on TradeOrder legs, the address CancelOrder job, IToken's address mtxTrade / mtxInvalidateNonces /
+# tradeOrderDigest / minNonce views, the dex_order_kat.json reader (T17); the Hedera MetaOp and hedera_kat.json reader on
+# MetaTransfer, tests/e2e.rs jobs (uaRelayFee, address metatx jobs, mtxExecuteAsOwnerRaw), e2e_hedera (T18); job-api.md,
+# submit-lanes.md, gateway.md, the operator note (T19: OP_KIND_MISMATCH for an address MetaTransfer job, nonce view by kind,
+# R44's gate). metatx.rs keeps Mtx and the address KAT readers (legacy vectors) for the gateway door and the mesh until then.

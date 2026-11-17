@@ -1,0 +1,6 @@
+mutant | tests that went red | rc
+hedera-from-padded-as-ecdsa | hedera_ed25519_eoa_relayed | 101
+payment-settled-asserted-on-merged-path | derived_mtx_transfer_relayed, eoa_mtx_transfer_relayed_at_fee_zero_registry_zero, eoa_mtx_transfer_to_a_ua, hedera_ed25519_eoa_relayed, outbox_payment_reaches_chain_and_comes_back_final | 101
+wallet-call-on-mtx-execute-as-owner-raw | mandate_payment_relayed_by_an_eoa_delegate | 101
+registry-gate-dropped-on-transfer | eoa_mtx_transfer_relayed_at_fee_zero_registry_zero | 101
+unbound-zero-rule-dropped | dex_order_with_a_ua_trade_order_leg | 101

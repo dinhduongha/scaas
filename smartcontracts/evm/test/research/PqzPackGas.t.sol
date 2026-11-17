@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {console2} from "forge-std/Test.sol";
 import {PqzStatePinGasTest} from "../pqz/PqzStateGas.t.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
+import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 
 /// Research (measurement only, not a pin): the relayed full transactions through the real token at the build's set (the
@@ -24,11 +25,11 @@ contract PqzPackGasTest is PqzStatePinGasTest {
         for (uint256 n = 16; n <= PqzCore.ROLL_MAX; n += 16) {
             uint256 snap = vm.snapshotState();
             console2.log("scan: relayed mtxRollOver, full transaction, fee 7, entries", n);
-            (uint256 reg, uint256 st) = _fullTx(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, n)), 7);
+            (uint256 reg, uint256 st) = _fullTx(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), n)), 7);
             console2.log("scan row: entries / regular / state", n, reg, st);
             console2.log(reg <= CAP ? "  fits 0.75 * 2^24" : "  OVER 0.75 * 2^24");
             vm.revertToState(snap);
-            (uint256 ru, uint256 su) = _fullTxVia(true, abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, n)), 7);
+            (uint256 ru, uint256 su) = _fullTxVia(true, abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), n)), 7);
             console2.log("scan row uaExecute: entries / regular / state", n, ru, su);
             console2.log(ru <= CAP ? "  fits 0.75 * 2^24" : "  OVER 0.75 * 2^24");
             vm.revertToState(snap);

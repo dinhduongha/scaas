@@ -1,0 +1,44 @@
+[
+ {
+  "id": "forbidden-drop-0x00",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NUL: 0x1626ba7e00000000000000000000000000000000000000000000000000000000 != 0xffffffff00000000000000000000000000000000000000000000000000000000] test_erc77"
+ },
+ {
+  "id": "forbidden-drop-space",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a space: 0x1626ba7e00000000000000000000000000000000000000000000000000000000 != 0xffffffff00000000000000000000000000000000000000000000000000000000] test_e"
+ },
+ {
+  "id": "forbidden-drop-comma",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: explicit: a comma: 0x1626ba7e00000000000000000000000000000000000000000000000000000000 != 0xffffffff000000000000000000000000000000000000000000000000000000"
+ },
+ {
+  "id": "forbidden-drop-open",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: explicit: a ( in the name: 0x1626ba7e00000000000000000000000000000000000000000000000000000000 != 0xffffffff0000000000000000000000000000000000000000000000"
+ },
+ {
+  "id": "forbidden-drop-close",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: a ) in the name: 0x1626ba7e00000000000000000000000000000000000000000000000000000000 != 0xffffffff00000000000000000000000000000000000000000000000000000000"
+ },
+ {
+  "id": "empty-descr-guard-off",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: panic: arithmetic underflow or overflow (0x11)] test_erc7739ContentsNameRules() (gas: 654600)"
+ },
+ {
+  "id": "empty-name-allowed",
+  "killed": false,
+  "compiled": true,
+  "first_fail": ""
+ }
+]

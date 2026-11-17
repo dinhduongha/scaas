@@ -738,8 +738,8 @@ index 42010b9..01b600b 100644
 - [ ] **Step 4: Run** (each through `scripts/capped`, one at a time):
   - `forge test --match-path "test/v2/Factory*.t.sol"` → 19 passed (FactoryZether 5).
   - `forge test` → **954 passed**, 0 failed.
-  - Size gate: `forge build src --sizes --json > /tmp/sizes.json || true; python3 ../../scripts/size_gate.py
-    /tmp/sizes.json size-baseline.json` → `0 error(s)`.
+  - Size gate: `T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json || true; python3 ../../scripts/size_gate.py
+    "$T"/sizes.json size-baseline.json` → `0 error(s)`.
 - [ ] **Step 5: Commit** `P3: factory Zether gate, ConfidentialConfig fields, domain-name hook, overridable public kinds` + trailer.
 
 ---

@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {SaltedEIP712} from "../common/SaltedEIP712.sol";
+import {SaltedEIP712, SaltedEIP712Core} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
+import {RescueLib} from "../governance/RescueLib.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 import {IUARegistry} from "./IUARegistry.sol";
 import {IUAKindVerifier} from "./IUAVerifier.sol";
 import {UAKinds} from "./UAKinds.sol";
 import {UAStore} from "./UAStore.sol";
-import {UARegistryLib} from "./UARegistryLib.sol";
-import {UAMldsaVerifier} from "./MlDsa.sol";
+import {UARegistryCoreLib} from "./UARegistryCoreLib.sol";
+import {UARegistryAuxLib} from "./UARegistryAuxLib.sol";
+import {MldsaVerifier} from "./MlDsa.sol";
+import {PqUA} from "./PqUA.sol";
 
 /// @title UA registry, UA-2a/2c/3, P6c and UA-6 scope (accounts.md §1.8): the single-key kinds 0x0100–0x0108, the
 ///        group kinds 0x0110–0x0113 (MuSig2/FROST, stored), the structure `msig`, the Zether kind 0x0141
@@ -43,20 +46,24 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///
 ///         PQ kinds (P6c; CTR-UA-17, CTR-UA-23): `pk` stored with SSTORE2 like a group key, `auth.keyData` empty. ML-DSA
 ///         without a precompile verifies on the EIP-8051 expanded key the registry derives itself — never one from a
-///         caller — with `cacheExpandedKey(kind, pk, part)`: one part per transaction (ML-DSA-44 one, ML-DSA-65 two),
-///         each `UAMldsaVerifier.expandedKeyPart(pk, part)` stored once with SSTORE2 under its id (`uaOf(kind, pk)`,
-///         before or after `register`); once every part is there, PoP and verify go through `verifyCached` with the part
-///         pointers. Refused where the verifier uses a precompile (a cached Solidity path would exceed its cap).
+///         caller — with `cacheExpandedKey(kind, pk, part)`: one part per transaction (ML-DSA-44 one, ML-DSA-65 and
+///         ML-DSA-87 two), each `MldsaVerifier.expandedKeyPart(pk, part)` stored once with SSTORE2 under its id
+///         (`uaOf(kind, pk)`); once every part is there, PoP and verify go through `verifyCached` with the part pointers,
+///         and `register` needs them all first (`UAKeyNotCached`; CTR-UA-23, owner 2026-11-15: two paths only, the
+///         precompile or the cache). Refused where the verifier uses a precompile (a cached Solidity path would exceed its cap).
+///         KEM key (CTR-UA-32): the single PQ kinds only; an `msig` holds none (plan T66a), `UAKemHolder` at `register` and `setKemKey`.
 ///         PQZ key (UA-6, CTR-UA-30, CTR-PQZ-12/13): an attribute of a holder — `mldsa44`, `mldsa65`, `fndsa512`, `mldsa87`, `fndsa1024`, or an
 ///         `msig` whose members of kinds outside 0x0130–0x0135 weigh less than its threshold (PQ-eligible) — given in
 ///         its `register` (`attrs.pqzKey`, `attrs.pqzPopHash`) with the optional `R_REG` proof over the portable digest
-///         (UA-8 P1, P8), checked by `UAPqzVerifier` in slot 0x0142; stored with SSTORE2 (`recordOf`, `pqzKeyOf`),
+///         (UA-8 P1, P8), checked by `PqzKeyVerifier` in slot 0x0142; stored with SSTORE2 (`recordOf`, `pqzKeyOf`),
 ///         immutable. Only a proven key (proof checked by that verifier) is one UA per key (`keyOwner(h)`) and appended
 ///         to the `0x0142` list (UA8-D8); a key without its proof, or where the slot is empty, is stored unproven; anyone
 ///         may add the proof later (`storePqzPop`), and PQZ tokens take proven keys only (`pqzKeyOf`, UA8-D9). A record
 ///         registered without a PQZ key may get one later, once, by the UA's signed portable record (`setPqzKey`,
-///         ruling A1-I1), or replace a key this chain can never prove (another parameter set's length where slot 0x0142 has a
-///         verifier; ruling R-cross-set). A PQ-eligible `msig` always registers with an m-of-n PoP (U5).
+///         ruling A1-I1). Group 3g (CTR-UA-41 draft): PQZ key versions, each written once, strictly sequential, signed
+///         by the UA, distinct key bytes per UA, each with its own `R_REG`, `proven` and owner; `current` = the highest
+///         eligible version (`pqzKeyOf`), moving only where proof bytes are stored (`UAPqzKeyCurrent`); R2 retires ruling
+///         R-cross-set's replacement. A PQ-eligible `msig` always registers with an m-of-n PoP (U5).
 ///
 ///         UA-8 (portable registrations, spec 2026-10-25-ua8-portable-registrations): the PoP has no chain context, so
 ///         anyone may copy a registration to any registry; every `register` field is stored (UA8-D7): `keyData` once
@@ -77,14 +84,27 @@ import {UAMldsaVerifier} from "./MlDsa.sol";
 ///         that enables 0x0142 (so gen 1 does not) holds the PQZ attachment of gen-1 records — `setPqzKey`,
 ///         `storePqzPop`, `proven`, the owner and list entry of a proven key — and its PQZ reads prefer it (ruling A6-I1).
 ///
-///         typed-signing R2 (owner 2026-11-01): `cacheExpandedKey`, every `register*`, `storePqzPop`, `setPqzKey` and
-///         `setKemKey` run in `UARegistryLib` by DELEGATECALL (`_lib`), on this contract's storage (`UAStore.Layout`); the
-///         views and `requireAuthorized` stay here. The library's address is in this contract's code, so it is part of the
-///         registry's CREATE2 address.
+///         typed-signing R2 (owner 2026-11-01), T66b 3.1b (owner 2026-11-09, spec 2026-11-09-t66b-library-organisation.md
+///         §11 (f)): the writers run by DELEGATECALL (`_lib`), on this contract's storage (`UAStore.Layout`), in one of two
+///         libraries by domain: `UARegistryCoreLib` the `register` forms, the `msig`, `acceptMembership`, `requirePortable`;
+///         `UARegistryAuxLib` the key writes after registration (`setPqzKey`, `storePqzPop`, `setKemKey`, `cacheExpandedKey`).
+///         One DELEGATECALL per operation from here; an auxiliary writer runs the core's shared helpers by one nested
+///         DELEGATECALL each (T66b 3.1c). The reads off the hot path run there too, inside the view (`_libView`):
+///         `uaCount` in the core library; `registrationOf` (owner 2026-11-15, D1), `popOf`, `popSlotsOf`, `webAuthnKeyOf`, `pqzPopOf`, `pqzKeySigOf`,
+///         `uaAt`, `uaPage`, `uaIndex` in the auxiliary library. The hot views (`requireAuthorized`, `kindOf`, `recordOf`,
+///         `checkedOf`, the key and member readers), `uaAuthDigest` and the immutables' getters stay here; `muSig2KeyOf` and
+///         `frostKeyOf` stay too (their typed return does not compile in a library: stack too deep). Both libraries'
+///         addresses are in this contract's code, so they are part of the registry's CREATE2 address.
+///
+///         T66b R-1 (spec §5): the `pure` views whose code the core library holds (`uaOf`, `keyHashOf` and five digests) run
+///         there too (`_libPure`), one copy of their code.
+///
+///         UA-7 O1 (plan T66a): `requirePortable`, the portable check view a `PqChat` record takes, runs `UARegistryCoreLib`'s
+///         portable path by DELEGATECALL inside the view (`_libView`; the library entry writes nothing).
 ///
 ///         CTR-UA-37 (owner 2026-11-02): listing in an `msig` is no consent. A member accepts its slot (`acceptMembership`, a portable
-///         `UAMembership`, in `UARegistryLib`); `memberAccepted` reads it, the slots of the `pop` are accepted at registration, and
-///         every verification but that `pop` counts accepted slots only: one read of one word, here and in `UARegistryLib._msig`.
+///         `UAMembership`, in `UARegistryCoreLib`); `memberAccepted` reads it, the slots of the `pop` are accepted at registration, and
+///         every verification but that `pop` counts accepted slots only: one read of one word, here and in `UARegistryCoreLib._msig`.
 ///
 ///         Open in UA-2a: HIP-632 (`hedera-native` members' 64-byte ed25519 signatures) needs a non-static CALL, which a
 ///         `view` `requireAuthorized` cannot make; such members verify as ECDSA/1271 only.
@@ -98,10 +118,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// @notice A constructor argument is refused (kind outside this code's table, duplicate, verifier without code, cap
     ///         0 or above the budget, a keyHash group the predecessor enables, a predecessor of another chain/profile or
-    ///         without the UA-8 views), or `UARegistryLib` is not deployed.
+    ///         without the UA-8 views), or `UARegistryCoreLib` is not deployed.
     error UAConfig(uint16 kind);
 
-    /// @notice `UARegistryLib` writes SSTORE2; solc lists only the errors a contract uses or declares, so this line keeps
+    /// @notice `UARegistryCoreLib` writes SSTORE2; solc lists only the errors a contract uses or declares, so this line keeps
     ///         it on the registry's ABI.
     error SSTORE2WriteFailed();
 
@@ -152,13 +172,13 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         address smartKeyAccountImpl_,
         bool msig_,
         KindConfig[] memory kinds_
-    ) SaltedEIP712("SCaaS UARegistry", predecessor_ == address(0) ? "1" : "2", chainUid_) {
+    ) SaltedEIP712Core("SCaaS UARegistry", predecessor_ == address(0) ? "1" : "2", chainUid_) {
         if (verifyBudget_ == 0 || (smartKeyAccountImpl_ != address(0) && !SigCheck.isContract(smartKeyAccountImpl_))) {
             revert UAConfig(0);
         }
         // `_lib`'s DELEGATECALL would "succeed" on an empty account, every write a silent no-op; the library has no way to
         // leave once it is there (no SELFDESTRUCT, `LinkClosure.test_libraryOpcodes`)
-        if (address(UARegistryLib).code.length == 0) revert UAConfig(0);
+        if (address(UARegistryCoreLib).code.length == 0 || address(UARegistryAuxLib).code.length == 0) revert UAConfig(0);
         if (predecessor_ != address(0)) {
             IUARegistry p = IUARegistry(predecessor_);
             // D5 (owner ruling 2026-10-30): real code; a designator's delegate could change under gen 2
@@ -172,6 +192,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             try p.checkedOf(0) {} catch { revert UAConfig(0); }
             // and the `InnerSig` ABI of its hand-offs: on an older gen 1 every one would read as a refused signature
             try p.memberSigHashOf(0, 0) {} catch { revert UAConfig(0); }
+            // CTR-UA-44: and the current structure of its `msig` records (`msigStateOf`), which gen 2 forwards and reads
+            try p.msigStateOf(0) {} catch { revert UAConfig(0); }
         }
         uint256[21] memory k;
         for (uint256 i; i < kinds_.length; ++i) {
@@ -217,12 +239,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return CHAIN_UID;
     }
 
-    function uaOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32) {
-        return UAKinds.uaOf(kind, keyData);
+    function uaOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32 ua) {
+        _libPure(address(UARegistryCoreLib), UARegistryCoreLib.uaOf.selector);
     }
 
-    function keyHashOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32) {
-        return UAKinds.keyHashOf(kind, keyData);
+    function keyHashOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32 h) {
+        _libPure(address(UARegistryCoreLib), UARegistryCoreLib.keyHashOf.selector);
     }
 
     /// TS-D5: the name of a kind id of the table (enabled or not); an unknown id reverts `UAKindUnknown(kind)`.
@@ -237,9 +259,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function portableRecordDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_)
         external
         pure
-        returns (bytes32)
+        returns (bytes32 d)
     {
-        return UAKinds.portableRecordDigest(ua, kind, pqzKeyHash, kemRecordHash_);
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.portableRecordDigest.selector);
     }
 
     function kemRecordHash(bytes32 ua, uint64 version, KemKey calldata kem) external pure returns (bytes32) {
@@ -249,9 +271,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function registrationDigest(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemRecordHash_, bytes32 pqzPopHash)
         external
         pure
-        returns (bytes32)
+        returns (bytes32 d)
     {
-        return UAKinds.registrationDigest(ua, kind, pqzKeyHash, kemRecordHash_, pqzPopHash);
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.registrationDigest.selector);
     }
 
     function kemRecordDigest(bytes32 ua, uint64 version, KemKey calldata kem) external pure returns (bytes32) {
@@ -262,8 +284,20 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return UAKinds.pqzKeyDigest(ua, pqzKeyHash);
     }
 
-    function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32) {
-        return UAKinds.pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash);
+    function pqzKeyRecordDigest(bytes32 ua, bytes32 pqzKeyHash, bytes32 pqzPopHash) external pure returns (bytes32 d) {
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzKeyRecordDigest.selector);
+    }
+
+    function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) external pure returns (bytes32 d) {
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzKeyVersionDigest.selector);
+    }
+
+    function pqzKeyVersionRecordDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash, bytes32 pqzPopHash)
+        external
+        pure
+        returns (bytes32 d)
+    {
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzKeyVersionRecordDigest.selector);
     }
 
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32) {
@@ -274,15 +308,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return UAKinds.uaAuthDigest(_domainSeparatorV4(), ua, purposeTag, digest);
     }
 
-    /// `r.keyPtr ≠ 0` only for stored kinds; `pqzKey ≠ 0` only for PQZ holders with a key (proven or not). Gen 2: a
-    /// gen-1 record with this generation's PQZ attachment, if any (ruling A6-I1).
+    /// `r.keyPtr ≠ 0` only for stored kinds and an updated `msig` (CTR-UA-44 MM-7: its structure blob, no key); `pqzKey ≠ 0` only for PQZ holders with a key (proven or not): the current
+    /// version's (group 3g). Gen 2: a gen-1 record with gen 1's key, or a host's own current (ruling A6-I1).
     function recordOf(bytes32 ua) external view returns (Record memory r, address pqzKey) {
         r = _s.records[ua];
-        pqzKey = _s.pqzKey[ua].ptr;
         if (r.kind == 0 && predecessor != address(0)) {
-            (Record memory g, address p) = IUARegistry(predecessor).recordOf(ua);
-            return (g, pqzKey != address(0) ? pqzKey : p);
+            (r, pqzKey) = IUARegistry(predecessor).recordOf(ua);
+            if (!_pqzHost()) return (r, pqzKey);
         }
+        (, pqzKey,,) = pqzKeyOf(ua);
     }
 
     // ----- UA-8 reads (gen 2 forwards a record it does not hold, UA8-D11) -----
@@ -292,12 +326,19 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return predecessor != address(0) && _s.records[ua].kind == 0;
     }
 
-    /// Ruling A6-I1: a UA's PQZ attachment (the key from `setPqzKey`, the proof, `proven`, the owner of a proven key, the
-    /// `0x0142` list entry) lives in the oldest generation that enables 0x0142; the record stays where it was
-    /// registered. The PQZ reads of a gen-1 record on gen 2 take gen 2's own attachment (its `_pqzKey` slot, written
-    /// only by this generation) when there is one, else gen 1's.
-    function _pqzElsewhere(bytes32 ua) private view returns (bool) {
-        return _s.pqzKey[ua].ptr == address(0) && _elsewhere(ua);
+    /// Ruling A6-I1: a UA's PQZ attachment (the versions from `setPqzKey`, the proofs, `proven`, the owner of a proven key,
+    /// the `0x0142` list entry, `current`) lives in the oldest generation that enables 0x0142; the record stays where it
+    /// was registered. This gen 2 is such a host: it answers `current` itself and reads each version from its own record
+    /// when it holds one, else gen 1's (group 3g, host rules 2 and 3).
+    function _pqzHost() private view returns (bool) {
+        return predecessor != address(0) && uint160(_CFG18) != 0;
+    }
+
+    /// Version `v` of `ua`: this generation's record, else gen 1's for a gen-1 record (host rule 2).
+    function _pqzAt(bytes32 ua, uint64 v) private view returns (address ptr, bytes32 pqzPopHash, bool proven) {
+        UAStore.PqzKey memory k = _s.pqzKey[ua][v];
+        if (k.ptr == address(0) && _elsewhere(ua)) return IUARegistry(predecessor).pqzKeyAt(ua, v);
+        return (k.ptr, _s.pqzPopHash[ua][v], k.proven);
     }
 
     function registrationOf(bytes32 ua)
@@ -305,43 +346,18 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         view
         returns (uint16 kind, bytes memory keyData, UAAttrs memory attrs, bytes memory pop, bytes memory pqzPop)
     {
-        if (_elsewhere(ua)) {
-            (kind, keyData, attrs, pop, pqzPop) = IUARegistry(predecessor).registrationOf(ua);
-            // A5-c2 / A6-I1: gen 1's key proven here, its proof stored here (not a key this gen 2 added in its place,
-            // R-cross-set)
-            if (attrs.pqzKey.length != 0 && pqzPop.length == 0 && !_s.pqzKey[ua].added) {
-                pqzPop = SSTORE2.readChunks(_s.pqzPop[ua]);
-            }
-            return (kind, keyData, attrs, pop, pqzPop);
-        }
-        Record memory r = _s.records[ua];
-        kind = r.kind;
-        if (kind == 0) return (kind, keyData, attrs, pop, pqzPop);
-        (keyData, pop) = UAStore.registration(ua, r.keyPtr);
-        UAStore.KemCommit memory c = _s.kemCommit[ua];
-        if (c.kemPkHash != 0) (attrs.kem.scheme, attrs.kemPkHash) = (c.scheme, c.kemPkHash); // the committed form
-        else (attrs.kem,) = UAStore.kemAt(ua, 0); // the register KEM key is version 0
-        UAStore.PqzKey memory k = _s.pqzKey[ua];
-        if (k.added) {
-            // A4-c3: an added key is not a `register` argument; R-cross-set: the `register` key it replaced is (its
-            // proof was never stored: this chain refuses it)
-            (attrs.pqzKey, attrs.pqzPopHash) = (SSTORE2.read(_s.regPqzKey[ua]), _s.regPqzPopHash[ua]);
-            return (kind, keyData, attrs, pop, pqzPop);
-        }
-        (attrs.pqzKey, attrs.pqzPopHash) = (SSTORE2.read(k.ptr), _s.pqzPopHash[ua]);
-        pqzPop = SSTORE2.readChunks(_s.pqzPop[ua]);
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.registrationOf.selector, kind); // D1 (owner 2026-11-15)
     }
 
     function popOf(bytes32 ua) external view returns (bytes memory pop) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).popOf(ua);
-        if (_s.records[ua].kind == 0) return pop;
-        (, pop) = abi.decode(SSTORE2.readChunks(_s.reg[ua]), (bytes, bytes));
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.popOf.selector, 0);
     }
 
     function msigOf(bytes32 ua) external view returns (MsigStructure memory s) {
         if (_elsewhere(ua)) return IUARegistry(predecessor).msigOf(ua);
-        if (_s.records[ua].kind != UAKinds.MSIG) return s;
-        bytes memory d = UAStore.keyRest(ua);
+        Record memory r = _s.records[ua];
+        if (r.kind != UAKinds.MSIG) return s;
+        bytes memory d = UAStore.msig(ua, r.keyPtr); // CTR-UA-44: the current structure, every slot
         uint256 n = UAStore.u16(d, 2);
         s.threshold = uint16(UAStore.u16(d, 0));
         s.members = new MsigMember[](n);
@@ -353,12 +369,23 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     function memberAccepted(bytes32 ua, uint256 index) external view returns (bool) {
         if (_elsewhere(ua)) return IUARegistry(predecessor).memberAccepted(ua, index);
-        return _s.accepted[ua] >> index & 1 != 0;
+        Record memory r = _s.records[ua];
+        uint256 en = type(uint256).max; // never updated: every slot, and no accepted bit lies past them
+        if (r.kind == UAKinds.MSIG && r.keyPtr != address(0)) (en,) = UAStore.trailer(r.keyPtr);
+        return (_s.accepted[ua] & en) >> index & 1 != 0; // CTR-UA-44: enabled and accepted
+    }
+
+    function msigStateOf(bytes32 ua) external view returns (uint64 version, uint256 enabled, uint256 accepted) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.msigStateOf.selector, 0);
     }
 
     function memberSigHashOf(bytes32 ua, uint256 index) external view returns (bytes32) {
         if (_elsewhere(ua)) return IUARegistry(predecessor).memberSigHashOf(ua, index);
         return _s.memberSigHash[ua][index];
+    }
+
+    function popSlotsOf(bytes32 ua) external view returns (uint16[] memory index, bytes32[] memory hash) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.popSlotsOf.selector, 0);
     }
 
     function smartKeyCloneHash() external view returns (bytes32) {
@@ -367,10 +394,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     /// TS-D13: the typed keys of `webauthn-p256` / MuSig2 / FROST records (empty for any other id).
     function webAuthnKeyOf(bytes32 ua) external view returns (WebAuthnKey memory k) {
-        if (_elsewhere(ua)) return IUARegistry(predecessor).webAuthnKeyOf(ua);
-        if (_s.records[ua].kind != UAKinds.WEBAUTHN_P256) return k;
-        bytes memory d = UAStore.keyRest(ua);
-        (k.x, k.y, k.rpIdHash) = (bytes32(UAStore.word(d, 0)), bytes32(UAStore.word(d, 32)), bytes32(UAStore.word(d, 64)));
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.webAuthnKeyOf.selector, 0);
     }
 
     function muSig2KeyOf(bytes32 ua) external view returns (MuSig2Key memory k) {
@@ -406,31 +430,114 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         }
     }
 
-    function pqzPopOf(bytes32 ua) external view returns (bytes memory) {
-        if (_pqzElsewhere(ua)) return IUARegistry(predecessor).pqzPopOf(ua);
-        return SSTORE2.readChunks(_s.pqzPop[ua]);
+    function pqzPopOf(bytes32 ua, uint64 version) external view returns (bytes memory) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzPopOf.selector, 0);
     }
 
-    function pqzKeySigOf(bytes32 ua) external view returns (bytes memory) {
-        // gen 2 proving gen 1's `setPqzKey` key keeps no copy of the signature: gen 1 has it
-        if (_s.pqzKeySig[ua].length == 0 && _elsewhere(ua)) return IUARegistry(predecessor).pqzKeySigOf(ua);
-        return SSTORE2.readChunks(_s.pqzKeySig[ua]);
+    function pqzKeySigOf(bytes32 ua, uint64 version) external view returns (bytes memory) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzKeySigOf.selector, 0);
     }
 
-    function pqzKeyOf(bytes32 ua) external view returns (address ptr, bytes32 pqzPopHash, bool proven) {
-        UAStore.PqzKey memory k = _s.pqzKey[ua];
-        if (k.ptr == address(0) && _elsewhere(ua)) return IUARegistry(predecessor).pqzKeyOf(ua);
-        return (k.ptr, _s.pqzPopHash[ua], k.proven);
+    /// Group 3g (KV-3): one current per UA and registry generation; a gen 2 that is no PQZ host forwards a gen-1 record.
+    function pqzKeyOf(bytes32 ua) public view returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven) {
+        if (_elsewhere(ua) && !_pqzHost()) return IUARegistry(predecessor).pqzKeyOf(ua);
+        version = _s.pqzVersions[ua].current;
+        (ptr, pqzPopHash, proven) = _pqzAt(ua, version);
+    }
+
+    function pqzKeyAt(bytes32 ua, uint64 version) external view returns (address ptr, bytes32 pqzPopHash, bool proven) {
+        return _pqzAt(ua, version);
+    }
+
+    function pqzKeyLatest(bytes32 ua) external view returns (uint64 latest) {
+        latest = _s.pqzVersions[ua].latest;
+        if (_elsewhere(ua)) {
+            uint64 g = IUARegistry(predecessor).pqzKeyLatest(ua);
+            if (g > latest) latest = g;
+        }
+    }
+
+    function pqzKeyUsed(bytes32 ua, bytes32 pqzKeyHash) external view returns (bool) {
+        return _s.pqzKeyUsed[ua][pqzKeyHash] || (_elsewhere(ua) && IUARegistry(predecessor).pqzKeyUsed(ua, pqzKeyHash));
+    }
+
+    // ----- the PQZ three-key model: scoped PQZ key records (spec 2026-11-13-pqz-three-keys K3-3) -----
+
+    /// What a class-2 / class-3 PQZ token reads (the hot path, here as `pqzKeyOf`): the current scoped version of `(ua, scope)`.
+    function pqzScopedKeyOf(bytes32 ua, address scope)
+        external
+        view
+        returns (uint64 version, address ptr, bytes32 pqzPopHash, bool proven)
+    {
+        if (_elsewhere(ua) && !_pqzHost()) return IUARegistry(predecessor).pqzScopedKeyOf(ua, scope);
+        version = _s.scopedVersions[ua][scope].current;
+        UAStore.PqzKey memory k = _s.scopedKey[ua][scope][version];
+        (ptr, pqzPopHash, proven) = (k.ptr, _s.scopedPopHash[ua][scope][version], k.proven);
+    }
+
+    function pqzScopedKeyAt(bytes32 ua, address scope, uint64 version)
+        external
+        view
+        returns (address ptr, bytes32 pqzPopHash, bool proven)
+    {
+        if (_elsewhere(ua) && !_pqzHost()) return IUARegistry(predecessor).pqzScopedKeyAt(ua, scope, version);
+        UAStore.PqzKey memory k = _s.scopedKey[ua][scope][version];
+        return (k.ptr, _s.scopedPopHash[ua][scope][version], k.proven);
+    }
+
+    function pqzScopedKeyLatest(bytes32 ua, address scope) external view returns (uint64) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedKeyLatest.selector, 0);
+    }
+
+    function pqzScopedPopOf(bytes32 ua, address scope, uint64 version) external view returns (bytes memory) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedPopOf.selector, 0);
+    }
+
+    function pqzOpenKemAt(bytes32 ua, address scope, uint64 version) external view returns (KemKey memory) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzOpenKemAt.selector, 0);
+    }
+
+    function pqzScopedCount(address scope) external view returns (uint256) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedCount.selector, 0);
+    }
+
+    function pqzScopedAt(address scope, uint256 i) external view returns (bytes32) {
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedAt.selector, 0);
+    }
+
+    function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid_, address token, uint64 version,
+        bytes32 pqzKeyHash) external pure returns (bytes32)
+    {
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedKeyDigest.selector);
+    }
+
+    function pqzScopedKeyRecordDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid_, address token, uint64 version,
+        bytes32 pqzKeyHash, bytes32 pqzPopHash, bytes32 openKemHash, uint64 validUntilBlock) external pure returns (bytes32)
+    {
+        _libPure(address(UARegistryAuxLib), UARegistryAuxLib.pqzScopedKeyRecordDigest.selector);
+    }
+
+    function setPqzScopedKey(bytes32 ua, address scope, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash,
+        KemKey calldata openKem, uint64 validUntilBlock, UASig calldata sig) external
+    {
+        _lib(address(UARegistryAuxLib), UARegistryAuxLib.setPqzScopedKey.selector, _s.records[ua].kind);
+    }
+
+    function storePqzScopedPop(bytes32 ua, address scope, uint64 version, bytes calldata pqzPop) external {
+        _lib(address(UARegistryAuxLib), UARegistryAuxLib.storePqzScopedPop.selector, 0);
     }
 
     function checkedOf(bytes32 ua) external view returns (uint8 pop, uint8 pqzPop, uint8 kem) {
+        bool proven;
         if (_elsewhere(ua)) {
             (pop, pqzPop, kem) = IUARegistry(predecessor).checkedOf(ua);
-            if (_s.pqzKey[ua].proven) pqzPop = UAKinds.CHECKED_CHAIN; // A6-I1: proven here
-            return (pop, pqzPop, kem);
+            if (!_pqzHost()) return (pop, pqzPop, kem);
+            (,,, proven) = pqzKeyOf(ua); // A6-I1: the host's current
+            return (pop, UAStore.checked(proven), kem);
         }
         if (_s.records[ua].kind == 0) return (pop, pqzPop, kem);
-        return (UAKinds.CHECKED_CHAIN, UAStore.checked(_s.pqzKey[ua].proven), UAStore.checked(_hasKem(ua)));
+        (,,, proven) = pqzKeyOf(ua);
+        return (UAKinds.CHECKED_CHAIN, UAStore.checked(proven), UAStore.checked(_hasKem(ua)));
     }
 
     function kemKeyOf(bytes32 ua) external view returns (uint64 version, KemKey memory kem, bytes memory sig) {
@@ -453,6 +560,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function keyOf(bytes32 ua) external view returns (bytes memory) {
         Record memory r = _s.records[ua];
         if (r.kind == 0 && predecessor != address(0)) return IUARegistry(predecessor).keyOf(ua);
+        if (r.kind == UAKinds.MSIG) return ""; // CTR-UA-44 MM-10: its `keyPtr` is a structure, never a key
         return SSTORE2.read(r.keyPtr);
     }
 
@@ -465,32 +573,19 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function uaCount(uint16 kind) public view returns (uint256) {
-        if (!_listedHere(kind)) return IUARegistry(predecessor).uaCount(kind);
-        return _s.uaCount[kind];
+        _libView(address(UARegistryCoreLib), UARegistryCoreLib.uaCount.selector, kind);
     }
 
     function uaAt(uint16 kind, uint256 i) external view returns (bytes32) {
-        if (!_listedHere(kind)) return IUARegistry(predecessor).uaAt(kind, i);
-        if (i >= _s.uaCount[kind]) revert UAIndex(kind, i);
-        return _s.uaAt[kind][i];
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.uaAt.selector, kind);
     }
 
     function uaPage(uint16 kind, uint256 start, uint256 n) external view returns (bytes32[] memory page) {
-        if (!_listedHere(kind)) return IUARegistry(predecessor).uaPage(kind, start, n);
-        uint256 count = _s.uaCount[kind];
-        if (start >= count) return page;
-        if (n > count - start) n = count - start;
-        page = new bytes32[](n);
-        for (uint256 i; i < n; ++i) {
-            page[i] = _s.uaAt[kind][start + i];
-        }
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.uaPage.selector, kind);
     }
 
     function uaIndex(bytes32 ua) external view returns (uint256) {
-        Record memory r = _s.records[ua];
-        if (r.kind == 0 && predecessor != address(0)) return IUARegistry(predecessor).uaIndex(ua);
-        if (r.kind == 0) revert UANotIndexed(ua);
-        return r.index;
+        _libView(address(UARegistryAuxLib), UARegistryAuxLib.uaIndex.selector, 0);
     }
 
     function kindOf(bytes32 ua) public view returns (uint16 kind) {
@@ -507,20 +602,19 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (owner == 0 && predecessor != address(0)) owner = IUARegistry(predecessor).keyOwner(keyHash);
     }
 
-    /// The ML-DSA expanded-key parts stored for `ua` (0 = not yet; ML-DSA-44 uses the first only). This generation's
-    /// cache only.
-    function expandedKeyOf(bytes32 ua) external view returns (address[2] memory) {
+    /// The ML-DSA expanded-key parts stored for `ua` (0 = not yet; ML-DSA-44 uses the first only, ML-DSA-65 two, ML-DSA-87
+    /// three). This generation's cache only.
+    function expandedKeyOf(bytes32 ua) external view returns (address[3] memory) {
         return _s.ekPtr[ua];
     }
 
-    // ----- ML-DSA expanded-key cache, registration, the PQZ attachment, KEM records: in `UARegistryLib` -----
+    // ----- the writers and the reads off the hot path: in `UARegistryCoreLib` and `UARegistryAuxLib` -----
 
-    /// Runs `UARegistryLib`'s entry `sel` by DELEGATECALL: this call's arguments as they came, then three words the
+    /// Runs the library `lib`'s entry `sel` by DELEGATECALL (`UARegistryCoreLib` or `UARegistryAuxLib`, by the entry's domain): this call's arguments as they came, then three words the
     /// library cannot read for itself, `_cfg(kind)`, `_cfg(0x0142)`, the clone codehash (`kind` is the kind the entry knows).
     /// They come from this contract's immutables only and sit past the caller's bytes; the library reads them from the end
     /// of its calldata. Its return data or revert data is this call's, byte for byte.
-    function _lib(bytes4 sel, uint16 kind) private {
-        address lib = address(UARegistryLib);
+    function _lib(address lib, bytes4 sel, uint16 kind) private {
         (uint256 a, uint256 b, bytes32 c) = (_cfg(kind), _CFG18, _SMART_KEY_CLONE_CODEHASH);
         assembly {
             mstore(0, sel)
@@ -537,59 +631,117 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua) {
-        _lib(UARegistryLib.cacheExpandedKey.selector, kind);
+        _lib(address(UARegistryAuxLib), UARegistryAuxLib.cacheExpandedKey.selector, kind);
     }
 
     function register(uint16 kind, bytes calldata keyData, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua)
     {
-        _lib(UARegistryLib.register.selector, kind);
+        _lib(address(UARegistryCoreLib), UARegistryCoreLib.register.selector, kind);
     }
 
     function registerWebAuthn(WebAuthnKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua)
     {
-        _lib(UARegistryLib.registerWebAuthn.selector, UAKinds.WEBAUTHN_P256);
+        _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerWebAuthn.selector, UAKinds.WEBAUTHN_P256);
     }
 
     function registerMuSig2(uint16 kind, MuSig2Key calldata key, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua)
     {
-        _lib(UARegistryLib.registerMuSig2.selector, kind);
+        _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerMuSig2.selector, kind);
     }
 
     function registerFrost(uint16 kind, FrostKey calldata key, UAAttrs calldata attrs, bytes calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua)
     {
-        _lib(UARegistryLib.registerFrost.selector, kind);
+        _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerFrost.selector, kind);
     }
 
     function registerMsig(MsigStructure calldata structure, UAAttrs calldata attrs, MemberSig[] calldata pop,
         bytes calldata pqzPop) external returns (bytes32 ua)
     {
-        _lib(UARegistryLib.registerMsig.selector, UAKinds.MSIG);
+        _lib(address(UARegistryCoreLib), UARegistryCoreLib.registerMsig.selector, UAKinds.MSIG);
     }
 
-    function storePqzPop(bytes32 ua, bytes calldata pqzPop) external {
-        _lib(UARegistryLib.storePqzPop.selector, 0);
+    function storePqzPop(bytes32 ua, uint64 version, bytes calldata pqzPop) external {
+        _lib(address(UARegistryAuxLib), UARegistryAuxLib.storePqzPop.selector, 0);
     }
 
-    function setPqzKey(bytes32 ua, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external {
-        _lib(UARegistryLib.setPqzKey.selector, _s.records[ua].kind);
+    function setPqzKey(bytes32 ua, uint64 version, bytes calldata pqzKey, bytes32 pqzPopHash, UASig calldata sig) external {
+        _lib(address(UARegistryAuxLib), UARegistryAuxLib.setPqzKey.selector, _s.records[ua].kind);
     }
 
     function setKemKey(bytes32 ua, uint64 version, KemKey calldata kem, UASig calldata sig) external {
-        _lib(UARegistryLib.setKemKey.selector, _s.records[ua].kind);
+        _lib(address(UARegistryAuxLib), UARegistryAuxLib.setKemKey.selector, _s.records[ua].kind);
     }
 
     function acceptMembership(bytes32 ua, MemberSig calldata memberSig) external {
-        _lib(UARegistryLib.acceptMembership.selector, 0);
+        _lib(address(UARegistryCoreLib), UARegistryCoreLib.acceptMembership.selector, 0);
+    }
+
+    function updateMsig(bytes32 ua, uint64 version, MsigStructure calldata structure, uint256 enabled,
+        uint64 validUntilBlock, MemberSig[] calldata sigs, bytes32 chainUid_) external
+    {
+        _lib(address(UARegistryAuxLib), UARegistryAuxLib.updateMsig.selector, UAKinds.MSIG);
+    }
+
+    /// UA-7 O1 (plan T66a): gen 2 forwards a record it does not hold (UA8-D11: gen 1's verdict, its revert as it is), else the
+    /// library's check on this record.
+    function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig calldata auth) external view {
+        if (_elsewhere(ua)) IUARegistry(predecessor).requirePortable(ua, purposeTag, typedDigest, auth);
+        else _libView(address(UARegistryCoreLib), UARegistryCoreLib.requirePortable.selector, _s.records[ua].kind);
+    }
+
+    /// `_lib` inside a view (`requirePortable`): the library entry writes nothing, so it runs in a STATICCALL frame too. Solidity
+    /// types no DELEGATECALL as `view`; the function pointer is cast.
+    function _libView(address lib, bytes4 sel, uint16 kind) private view {
+        function(address, bytes4, uint16) f = _lib;
+        function(address, bytes4, uint16) view v;
+        assembly {
+            v := f
+        }
+        v(lib, sel, kind);
+    }
+
+    /// T66b R-1 (spec 2026-11-09-t66b-library-organisation.md §5): a `pure` view whose code a registry library holds runs there
+    /// (`lib`: the core for `uaOf` and `keyHashOf`, since 3.1d the Aux library for the five `*Digest` views), one copy of it in the pair: this call's
+    /// calldata under the library entry `sel` (the same ABI), none of `_lib`'s three words
+    /// appended (a pure body reads no configuration); its return or revert data is this call's, byte for byte. Only where the
+    /// view's own bytes exceed this stub (≈ 45–80 B); `uaAuthDigest` stays (it reads this contract's EIP-712 immutables).
+    function _libRaw(address lib, bytes4 sel) private {
+        assembly {
+            mstore(0, sel)
+            calldatacopy(4, 4, sub(calldatasize(), 4))
+            let ok := delegatecall(gas(), lib, 0, calldatasize(), 0, 0)
+            returndatacopy(0, 0, returndatasize())
+            if ok { return(0, returndatasize()) }
+            revert(0, returndatasize())
+        }
+    }
+
+    /// `_libRaw` inside a `pure` view (R-1): the library entry is `pure`; the function pointer is cast, as `_libView`'s.
+    function _libPure(address lib, bytes4 sel) private pure {
+        function(address, bytes4) f = _libRaw;
+        function(address, bytes4) pure v;
+        assembly {
+            v := f
+        }
+        v(lib, sel);
     }
 
     // ----- requireAuthorized -----
 
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig calldata auth) external view {
-        if (!_authorized(ua, purposeTag, digest, auth)) revert UAUnauthorized(ua);
+        if (!_authorized(ua, purposeTag, digest, auth)) {
+            // owner 2026-11-15, F-8: an ML-DSA record without its complete cache on a verifier without a precompile gets the named
+            // refusal (CTR-UA-23), asked only after a refused check, so an accepted one pays nothing for it
+            uint16 kind = _s.records[ua].kind;
+            uint256 cfg = _cfg(kind);
+            if (PqUA.mldsaParts(kind) != 0 && uint160(cfg) != 0 && UAStore.expanded(ua, kind).length == 0
+                && UAStore.noPrecompile(address(uint160(cfg)))) revert UAKeyNotCached(ua);
+            revert UAUnauthorized(ua);
+        }
     }
 
     /// TS-D12: native — `signature` only; `msig` — `members` only (the structure from the record); other derived ids —
@@ -605,8 +757,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         uint16 kind = _s.records[ua].kind;
         if (kind == 0) return UAStore.via(predecessor, ua, purposeTag, digest, auth);
         if (kind == UAKinds.MSIG) {
+            // CTR-UA-44: the current structure (the record's slot is warm: its `keyPtr` costs a warm read, single keys pay nothing)
             return auth.keyData.length == 0 && auth.signature.length == 0
-                && _msig(ua, purposeTag, digest, UAStore.keyRest(ua), auth.members);
+                && _msig(ua, purposeTag, digest, UAStore.msig(ua, _s.records[ua].keyPtr), auth.members);
         }
         return auth.members.length == 0 && _derived(ua, kind, purposeTag, digest, auth.keyData, auth.signature);
     }
@@ -637,7 +790,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
                     bytes memory ek = UAStore.expanded(id, kind);
                     if (ek.length != 0) {
                         bytes32 m = UAKinds.uaMessage(kind, purposeTag, digest);
-                        return _verifierCall(cfg, UAMldsaVerifier.verifyCached.selector, ek, m, sig);
+                        return _verifierCall(cfg, MldsaVerifier.verifyCached.selector, ek, m, sig);
                     }
                     keyData = SSTORE2.read(r.keyPtr);
                 }
@@ -653,7 +806,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         );
     }
 
-    /// accounts.md §1.9 `msig` row, a transaction authorization (the portable one: `UARegistryLib._msig`): strictly increasing
+    /// accounts.md §1.9 `msig` row, a transaction authorization (the portable one: `UARegistryCoreLib._msig`): strictly increasing
     /// member indexes, stop at the threshold (a MemberSig after it fails, which keeps the registration bound sound),
     /// `member_digest = keccak256(ua ‖ ua_msg)`; native members sign `UAAuth` (CTR-UA-24, CTR-MTX-14), derived members
     /// sign `member_digest` under `member`. (The members come typed, TS-D12: no encoding to canonicalise.) Only an accepted
@@ -666,7 +819,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     {
         bytes32 md = UAKinds.memberDigest(ua, UAKinds.uaMessage(UAKinds.MSIG, purposeTag, digest));
         (uint256 threshold, uint256 count) = (UAStore.u16(d, 0), UAStore.u16(d, 2));
-        uint256 accepted = _s.accepted[ua]; // CTR-UA-37: one slot, never `pop`
+        // CTR-UA-37: one slot, never `pop`; CTR-UA-44: a disabled slot signs nothing (its trailer word, or every slot)
+        uint256 accepted = _s.accepted[ua] & UAStore.enabledOf(d);
         uint256 acc;
         uint256 next; // lowest index the next MemberSig may use
         for (uint256 i; i < sigs.length; ++i) {
@@ -689,7 +843,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             if (s.sig.length != 0) return false;
             MemberSig[] memory inner = UAStore.lift(s.members);
             if (_s.records[id].kind == 0) return UAStore.via(predecessor, id, UAKinds.PURPOSE_MEMBER, md, UASig("", "", inner));
-            return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.keyRest(id), inner);
+            return _msig(id, UAKinds.PURPOSE_MEMBER, md, UAStore.msig(id, _s.records[id].keyPtr), inner);
         }
         if (s.members.length != 0) return false;
         if (!UAKinds.isNative(kind)) return _derived(id, kind, UAKinds.PURPOSE_MEMBER, md, "", s.sig);
@@ -760,4 +914,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return false;
     }
 
+    // ------------------------------------------------------------------ rescue (CTR-GOV-26)
+
+    /// @notice CTR-GOV-26 (owner 2026-11-12): anyone; the registry holds nothing by design (no owner, no setter, CTR-UA-15),
+    ///         so the whole balance of `asset` (`address(0)`: the native coin) goes to `RescueLib.SCAAS_DEV_RESCUE`,
+    ///         `IRescuable.Rescued`.
+    function rescue(address asset) external {
+        RescueLib.all(asset, RescueLib.SCAAS_DEV_RESCUE);
+    }
 }

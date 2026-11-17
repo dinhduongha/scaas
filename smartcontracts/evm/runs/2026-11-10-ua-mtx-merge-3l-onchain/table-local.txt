@@ -1,0 +1,6 @@
+group | contract | entries | state-changing | local: state-changing called / reached / views reached
+tokens | WrappedToken | 122 | 57 | 7 / 11 / 56
+tokens | WrappedPqzToken | 176 | 81 | 7 / 11 / 77
+tokens | WrappedPqzRegulatedToken | 195 | 93 | 7 / 11 / 84
+governance | GovernanceRouter | 52 | 43 | 5 / 5 / 8
+factory | OpenFactory | 62 | 16 | 5 / 5 / 41

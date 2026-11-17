@@ -26,10 +26,13 @@ library HederaAccountAuth {
         return ok && ret.length == 32 && uint256(bytes32(ret)) == 1;
     }
 
-    /// @notice Cùng hàm, kiểu `view`, cho chỗ gọi bị ràng `view` (`ERC20MetaTx._requireValidSignature`). An toàn vì
-    ///         mọi chỗ gọi là entry point không-view (`mtxExecute`, `mtxExecuteTransfer`, các hàm có tên; frame không
-    ///         tĩnh) và 0x16a không ghi state, không gọi ngược. ponytail: bỏ khi `_requireValidSignature` của lớp cha
-    ///         thôi là `view`.
+    /// @notice The same function as `view`, for the `view` signature checks of `MtxPipelineLib` (`_authorizeNative` on
+    ///         the merged entries, `_requireSignature` on `executeMetaTransaction`), through `HederaLib.requireValid`.
+    ///         Safe because every call site is a non-view entry point, so the frame is never static: the merged
+    ///         `mtx<Op>(UAEnvelope, …, UASig)` / `mtxExecuteTransfer` / `mtxBatchTransfer` / `mtxPay*` / `mtxExecute` /
+    ///         `mtxBatch` / `mtxCancelNonce` entries, `executeMetaTransaction` (ua-mtx-merge T8, R42), and the no-twin
+    ///         `mtxWrap*` / `mtxAddReserve` entries; 0x16a writes no state and calls nothing back. ponytail: drop it when
+    ///         those checks stop being `view`.
     function asView()
         internal pure returns (function (address, bytes32, bytes calldata) internal view returns (bool) f)
     {

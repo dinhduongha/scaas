@@ -1,0 +1,28 @@
+# ua-mtx-merge T5 gate summary (full output in git-ignored .log files, not committed)
+# T5: the PQZ pairs merged (plan T5, R36): the ua* PQZ entries under the mtx* names (UAEnvelope + UASig, native and derived
+# ids), relayed proofs bind SCAAS-PQZ-UA-ENVELOPE-V1 on every merged entry, executeMetaTransaction keeps SCAAS-PQZ-ENVELOPE-V1;
+# the address signed forms, their typehashes (MetaTxLib.SHIELD_TYPEHASH included) and the address envelopeBinding view to legacy.
+# The round's gate runner (T21) is not built yet: each command ran directly through scripts/capped.
+# Base: 4b752fa6 (T4). T5 commits: 602b1cbf (legacy copies), 62c18f2d (the build), this one (harness, mutants, summary).
+step | commit | rc | counts
+t5-red | 602b1cbf + test/merge/PqzPairs.t.sol | 1 | 7 failed 3 passed, 2 suites: 6 behaviour reds + test_pqzInterfaceIdsArePinned (a wrong guessed id, then pinned to the measured 0x5313635f: a guard); the passes guard what does not move (test_pqzStatementLayoutUnchanged; test_pqzExecuteMetaTransactionBindsAddressTag; test_pqzMtxExecuteBindsUATag, true since T1)
+t5-touched | 62c18f2d (worktree) | 1 then 0 | 344 passed 1 failed 4 skipped, 38 suites; the failure a wrong nonce count in the new test (8 entries on `tok`, not 9), fixed, PqzPairs re-run 10 passed (test/merge, test/pqz, NamedEntry, SelectorAudit, test/confidential)
+t5-forge-full | 62c18f2d (worktree) | 1 then 0 | 2566 passed 1 failed 14 skipped, 221 suites (default set n2304-kmax4096); the failure test_dexKat (MD-8), green after t5-dex-kat
+t5-dex-kat | 62c18f2d | 0 | dex_order_kat.json regenerated (WRITE_KAT): the MetaTxLib.sol edit moves the metadata hash, so the CREATE2 clones move; field by field only addresses, domains, digests and signatures moved, every length equal, the order ABIs equal after the address swap
+t5-forge-isolate | 62c18f2d | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t5-size-gate | 62c18f2d | 0 | 0 errors, 89 contracts, above 65536 B: none; baseline ratcheted down (t5-sizes); size_gate --self-test ok
+t5-baseline-readers | 62c18f2d | 0 | 70 passed (ZetherDeploy, PqzWrapped, HederaV2, Factory, UADeploy, GovDeploy, CodeCeiling)
+t5-sizes | 4b752fa6 -> 62c18f2d | 0 | NormalPqzToken 51,049 -> 48,878 (init 53,695 -> 51,524); WrappedPqzToken 60,861 -> 58,698 (init 63,514 -> 61,351); _above64KiB [] unchanged; plain and Zether kinds unchanged
+t5-at-n2048-kmax1024 | 62c18f2d | 0 | 791 passed 0 failed 1 skipped, 62 suites (at-set.sh test/{ua,pqz}); first run 2 failed (test_pqzhN2048FitsBothPaths called the retired address entry by its typed_ops row; repaired in 62c18f2d, then the whole set re-run); PqzSet.sol restored
+t5-at-n2560-kmax16384 | 62c18f2d | 0 | 787 passed 0 failed 5 skipped, 62 suites; PqzSet.sol restored
+t5-at-n2816-kmax65536 | 62c18f2d | 0 | 782 passed 0 failed 10 skipped, 62 suites; PqzSet.sol restored
+t5-pqzstategas-default | 62c18f2d | 0 | 39 passed 1 skipped (PqzStateGas at the default set after its repair)
+t5-r41-rollmax | 62c18f2d | 0 | relayed full rollover at ROLL_MAX, fee 7, regular gas, set.toml 2026-10-27 -> T5, executeMetaTransaction / mtxExecute (ML-DSA-65 fee UA): n2048 (96) 11,711,856 -> 11,712,519 / 11,870,208 -> 11,872,846; n2304 (80) 12,119,170 -> 12,119,833 / 12,277,522 -> 12,280,160; n2560 (64) 12,418,528 -> 12,419,191 / 12,576,880 -> 12,579,518 (margin under 0.75 * 2^24 = 12,582,912: 6,032 -> 3,394, TIGHT); n2816 (32) 11,089,680 -> 11,090,355 / 11,248,044 -> 11,250,682; ROLL_MAX + 16 over the cap on both paths at every set: ROLL_MAX holds (the 2026-10-27 rule does not fire)
+t5-r41-debit-min-gas | 62c18f2d | 0 | burn 1 to an address, fresh ref, mtxExecute with the ML-DSA-65 fee UA, regular gas, set.toml -> T5: n2048 6,836,182 -> 6,835,093; n2304 7,007,670 -> 7,006,582; n2560 7,177,969 -> 7,176,881; n2816 7,367,673 -> 7,366,587 (each 1,086-1,089 under its pin; not re-pinned: a set parameter is the owner's, R41)
+t5-clientkeys-evm | 62c18f2d | 0 | 23 passed 0 failed (node --test test/evm.test.js)
+t5-docs-check | 62c18f2d | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0
+t5-e2e-self-test | 62c18f2d | 1 | 12 failures, all abi_check rows of names that left tokens: 8 since T1 (mtxExecute/uaExecute/mtxDigest/uaDigest/mtxNonce/uaNonce forms), 4 from T5 (envelopeBinding(MetaTransaction), uaEnvelopeBinding, twice each); named_rows green; e2e.py is T10's
+t5-mutants | 62c18f2d | 1 each | 4 of 4 killed against test/merge + test/pqz, none a compile error (runs/2026-11-04-ua-mtx-merge-t5-mutants.txt)
+#
+# Not run in T5: the scaas-node suite (no node file changed); zether-prover (no prover file changed; Zether is T4's);
+# pqz-core gate (no pqzl, pqzh, stmt, ffi or set file moved; no statement layout moved).

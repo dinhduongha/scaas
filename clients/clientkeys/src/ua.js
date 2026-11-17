@@ -1,6 +1,6 @@
 // UNAUDITED. UA identity layer (accounts.md §1.3–§1.6; CTR-UA-02…05, 07, 09, 11, 12): the kind table, ids, keyHash, purpose tags,
 // ua_msg, the portable records as typed EIP-712 structs under the name + version domain (typed-signing TS-D1 … TS-D4: the
-// register PoP, R_REG, KEM and PQZ key records), the registry's UAAuth digest, member digests, canonical ids and key-data
+// register PoP, R_REG, KEM and PQZ key records), the registry's UAAuth digest, member digests, canonical ids, the id display and key-data
 // validation. The same rules live in Solidity (src/ua/UAKinds.sol), Rust (clients/ua-rs), Python (clients/ua-py),
 // Go (clients/ua-go) and C# (clients/ua-cs); smartcontracts/vectors/ua/kinds.json, structures.json and portable.json, written
 // by scripts/ua-vectors.mjs and scripts/ua-portable-vectors.mjs from this file, pin all six. No signing here (UAKey and the
@@ -12,7 +12,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { keccak_256, concatBytes, utf8ToBytes, fromHex, hex, word } from './bytes.js';
-import { encodeType } from './evm.js';
+import { encodeType, checksumAddress } from './evm.js';
 
 /** An error whose `code` every implementation and the vector files share. */
 export class UAError extends Error {
@@ -106,14 +106,15 @@ export function msigPqzEligible(keyData, inner) {
   let classical = 0;
   for (let o = 4; o < d.length; o += 36) {
     const k = u16(d, o);
-    if ((k < 0x0130 || k > 0x0135) && !(k === 0x0120 && innerPqEligible(d.subarray(o + 2, o + 34), inner))) classical += u16(d, o + 34);
+    // CTR-UA-44 MM-14: at a member's own level (`inner` null) its `msig` slots are classical weight, never followed
+    if ((k < 0x0130 || k > 0x0135) && !(k === 0x0120 && inner !== null && innerPqEligible(d.subarray(o + 2, o + 34), inner))) classical += u16(d, o + 34);
   }
   return classical < u16(d, 0);
 }
 function innerPqEligible(id, inner) {
   const kd = inner?.(hex(id));
   if (!kd) fail('UAMemberUnknown', hex(id));
-  return msigPqzEligible(kd);
+  return msigPqzEligible(kd, null);
 }
 /** The minimal form of a stored `msig` signature (`pop` v2, KEM record, PQZ key record; owner 2026-10-31): with T = the
  *  signing slots' total weight and N the threshold, T >= N and T − weight(i) < N for every slot (each slot necessary), i.e.
@@ -160,7 +161,7 @@ export const groupTagString = (group) => {
 export const GROUP = (group) => tagHash(groupTagString(group));
 export const MSG_TAG = tagHash('scaas.ua.msg.v1');
 export const PURPOSES = Object.freeze(['pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner',
-  'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership']);
+  'keyop', 'payee-fee', 'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update']);
 /** `keccak256("scaas.ua.purpose.<p>.v<version>")`; every purpose has v1, `pop` also v2 (the portable PoP, UA-8 P1). */
 export const purposeTagString = (p, version = 1) => {
   if (!PURPOSES.includes(p) || !(version === 1 || (version === 2 && p === 'pop'))) fail('UAPurposeUnknown', `${p} v${version}`);
@@ -173,8 +174,14 @@ export const POP_V2_TAG = purposeTag('pop', 2);
 export const KEM_TAG = purposeTag('kem');
 /** A PQZ key attached after `register` (`setPqzKey`, ruling A1-I1): its purpose. */
 export const PQZ_KEY_TAG = purposeTag('pqz-key');
+/** What a PQZ verifier UA signs a `PqzVerdict` under (group 3f, PQZ verifier mode spec §5.1; `UAKinds.PURPOSE_PQZ_VERDICT`): a
+ *  native verifier over `uaAuthDigest`, a derived one over `uaMessage`. Not in `PURPOSES` yet: that list writes the purpose
+ *  rows of vectors/ua/kinds.json, which every `ua-*` binding reads; it joins them with ua-rs's purpose (ua-rs-sign). */
+export const PQZ_VERDICT_TAG = tagHash('scaas.ua.purpose.pqz-verdict.v1');
 /** A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): its purpose. */
 export const MEMBERSHIP_TAG = purposeTag('membership');
+/** An `msig`'s structure update (`updateMsig`, CTR-UA-44): its purpose. Not a `requirePortable` purpose. */
+export const MSIG_UPDATE_TAG = purposeTag('msig-update');
 /** The KEM scheme byte, `kemPk[0]` (CTR-UA-32): 1 = ML-KEM-1024 + X25519 (X-Wing order), `kemPk = 0x01 ‖ ek (1,568 B) ‖
  *  X25519 pk (32 B)`; 2 = ML-KEM-1024 + HQC + X25519, reserved (after FIPS 207), refused today (`UAKemScheme`). */
 export const KEM_SCHEME = Object.freeze({ mlkem1024X25519: 1, mlkem1024HqcX25519: 2 });
@@ -233,7 +240,7 @@ const present = (v) => v !== undefined && v !== null && bytes(v).length > 0;
 const orEmpty = (v) => (v === undefined || v === null ? new Uint8Array(0) : bytes(v));
 
 /** `keyHash(0x0142, pqzKey)`; a key of no parameter set's length is `UAKeyData`. */
-function pqzKeyHashOf(pqzKey) {
+export function pqzKeyHashOf(pqzKey) {
   const k = orEmpty(pqzKey);
   if (!PQZ_KEY_LENGTHS.includes(k.length)) fail('UAKeyData', `PQZ key length ${k.length}`);
   return keyHashOf(0x0142, k);
@@ -266,7 +273,15 @@ export const PORTABLE_TYPES = Object.freeze({
   UARegistration: Object.freeze([field('record', 'UAPortableRecord'), field('pqzPopHash', 'bytes32')]),
   UAPqzKey: Object.freeze([field('ua', 'bytes32'), field('pqzKeyHash', 'bytes32')]),
   UAPqzKeyRecord: Object.freeze([field('key', 'UAPqzKey'), field('pqzPopHash', 'bytes32')]),
+  // group 3g (KV-1): a PQZ key version v ≥ 1 and the UA's consent to it; version 0 keeps `UAPqzKey` / `UAPqzKeyRecord`
+  UAPqzKeyVersion: Object.freeze([field('ua', 'bytes32'), field('version', 'uint64'), field('pqzKeyHash', 'bytes32')]),
+  UAPqzKeyVersionRecord: Object.freeze([field('key', 'UAPqzKeyVersion'), field('pqzPopHash', 'bytes32')]),
   UAMembership: Object.freeze([field('ua', 'bytes32'), field('member', 'bytes32')]),
+  // CTR-UA-44 (TODO 3ze): an `msig`'s structure update on one registry (`chainUid`, `registry`), version = stored + 1
+  UAMsigUpdate: Object.freeze([field('ua', 'bytes32'), field('chainUid', 'bytes32'), field('registry', 'address'),
+    field('version', 'uint64'), field('threshold', 'uint16'), field('members', 'UAMsigMember[]'), field('enabled', 'uint256'),
+    field('validUntilBlock', 'uint64')]),
+  UAMsigMember: Object.freeze([field('kind', 'uint16'), field('id', 'bytes32'), field('weight', 'uint16')]),
 });
 /** `keccak256(encodeType(T))` per struct (primary type, then the referenced types sorted by name). */
 export const PORTABLE_TYPEHASH = Object.freeze(Object.fromEntries(Object.keys(PORTABLE_TYPES)
@@ -312,7 +327,10 @@ export function kemRecordDigest({ ua, version, kemPk }) {
 }
 /** What the UA signs for a KEM record: `uaMessage(kind, PURPOSE_KEM, kemRecordDigest(ua, version, kemPk))`; an `msig`'s
  *  derived members sign `memberDigest(ua, ·)` of it under `member`, a native member the typed digest itself. */
-export const kemRecordMessage = (kind, record) => uaMessage(kind, KEM_TAG, kemRecordDigest(record));
+export const kemRecordMessage = (kind, record) => {
+  if (!isKemHolder(kind)) fail('UAKemHolder', `0x${Number(kind).toString(16).padStart(4, '0')} may not hold a KEM key`);
+  return uaMessage(kind, KEM_TAG, kemRecordDigest(record));
+};
 
 /** The `UAPortableRecord` message: `{ ua, kind, pqzKeyHash, kem }`, `kem` a `kemRecordStruct`. */
 export const portableRecordStruct = ({ ua, kind, pqzKeyHash = Z32, kem }) =>
@@ -332,6 +350,21 @@ export const pqzKeyDigest = (key) => typed(pqzKeyHash_(key));
 export const pqzKeyRecordDigest = ({ ua, pqzKeyHash, pqzPopHash }) =>
   typed(keccak_256(concatBytes(TH.UAPqzKeyRecord, pqzKeyHash_({ ua, pqzKeyHash }), sized(pqzPopHash, 32, 'pqzPopHash'))));
 
+const u64 = (v, what) => {
+  let n;
+  try { n = BigInt(v); } catch { fail('UAPqzKeyVersion', `${what}: ${v}`); }
+  if (n < 0n || n >= 1n << 64n) fail('UAPqzKeyVersion', `${what}: ${v}`);
+  return n;
+};
+const pqzKeyVersionHash_ = ({ ua, version, pqzKeyHash }) => keccak_256(concatBytes(TH.UAPqzKeyVersion, sized(ua, 32, 'ua'),
+  word(u64(version, 'version')), sized(pqzKeyHash, 32, 'pqzKeyHash')));
+/** Group 3g: the typed `UAPqzKeyVersion{ua, version, pqzKeyHash}` digest, what version v ≥ 1's R_REG proves over. */
+export const pqzKeyVersionDigest = (key) => typed(pqzKeyVersionHash_(key));
+/** Group 3g: the typed `UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}` digest, what the UA signs
+ *  for version v ≥ 1 (`setPqzKey(ua, version, …)`). */
+export const pqzKeyVersionRecordDigest = ({ ua, version, pqzKeyHash, pqzPopHash }) =>
+  typed(keccak_256(concatBytes(TH.UAPqzKeyVersionRecord, pqzKeyVersionHash_({ ua, version, pqzKeyHash }), sized(pqzPopHash, 32, 'pqzPopHash'))));
+
 /** The exact JSON a wallet signs with `eth_signTypedData_v4` for a portable record: `{ domain: { name, version }, types:
  *  { EIP712Domain, <primaryType>, <referenced types> }, primaryType, message }`; its `hashTypedData` is the record's digest. */
 export function portableTypedData(primaryType, message) {
@@ -339,16 +372,22 @@ export function portableTypedData(primaryType, message) {
   const types = { EIP712Domain: PORTABLE_TYPES.EIP712Domain.map((f) => ({ ...f })) };
   const walk = (t) => {
     types[t] = PORTABLE_TYPES[t].map((f) => ({ ...f }));
-    for (const f of PORTABLE_TYPES[t]) if (PORTABLE_TYPES[f.type] && !types[f.type]) walk(f.type);
+    for (const f of PORTABLE_TYPES[t]) {
+      const e = f.type.replace(/\[\]$/, ''); // an array of structs references its element type
+      if (PORTABLE_TYPES[e] && !types[e]) walk(e);
+    }
   };
   walk(primaryType);
   return { domain: { ...PORTABLE_DOMAIN }, types, primaryType, message };
 }
 
-/** A PQZ / KEM holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024, or an `msig` whose `keyData` is PQ-eligible (`inner`: see
+/** A PQZ key holder (UA-6 U3, UA-8 P7): mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024, or an `msig` whose `keyData` is PQ-eligible (`inner`: see
  *  `msigPqzEligible`). */
 export const isKeyHolder = (kind, keyData, inner) => isPqzHolder(kind) || (kind === 0x0120 && present(keyData) && msigPqzEligible(keyData, inner));
 const holds = isKeyHolder;
+/** A KEM key holder (CTR-UA-32; owner 2026-11-05, MD-11 (c), T66a): the single PQ kinds mldsa44, mldsa65, fndsa512, mldsa87, fndsa1024
+ *  only. An `msig` holds no KEM key (`UAKemHolder`, as the registry): a sender seals to each accepted member's own key. */
+export const isKemHolder = (kind) => isPqzHolder(kind);
 
 /**
  * The portable PoP of a registration (UA-8 P1, P2; typed-signing TS-D3): `{ pqzKeyHash, pqzPopHash, kemRecordHash,
@@ -357,15 +396,16 @@ const holds = isKeyHolder;
  * uaMessage(kind, POP_V2, registrationDigest)` (every kind signs it; an `msig` also returns `memberDigest = memberDigest(ua,
  * message)`, what each derived member signs under `member`; a native member signs `registrationDigest` itself, TS-D4). The
  * attributes: `pqzKey` with its proof `pqzPop` (or only its hash `pqzPopHash`), and the initial KEM key `kemPk` (its record is
- * always version 0, owner 2026-10-31; no version input); absent = omitted / empty. Only holders may carry them (`UAPqzHolder`, `UAKemHolder`; an `msig` needs
- * `keyData` to show it is PQ-eligible); a PQZ key always comes with its proof hash and only with it (`UAPqzPopHash`).
+ * always version 0, owner 2026-10-31; no version input); absent = omitted / empty. Only holders may carry them (`UAPqzHolder`: an `msig` needs
+ * `keyData` to show it is PQ-eligible; `UAKemHolder`: a single PQ kind only, CTR-UA-32, never an `msig`); a PQZ key always comes with its proof
+ * hash and only with it (`UAPqzPopHash`).
  */
 export function holderPopMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopHash, kemPk, inner } = {}) {
   const hasPqz = present(pqzKey);
   const hasKem = present(kemPk);
   const k = `0x${Number(kind).toString(16).padStart(4, '0')}`;
   if (hasPqz && !holds(kind, keyData, inner)) fail('UAPqzHolder', `${k} may not hold a PQZ key`);
-  if (hasKem && !holds(kind, keyData, inner)) fail('UAKemHolder', `${k} may not hold a KEM key`);
+  if (hasKem && !isKemHolder(kind)) fail('UAKemHolder', `${k} may not hold a KEM key`);
   const popHash = proofHashOf(pqzPop, pqzPopHash);
   if (hasPqz !== (popHash !== Z32)) fail('UAPqzPopHash', hasPqz ? 'a PQZ key needs its proof hash' : 'a proof hash without a PQZ key');
   const pqzKeyHash = hasPqz ? pqzKeyHashOf(pqzKey) : Z32;
@@ -388,7 +428,7 @@ export function registrationAttrsDigest(kind, { ua, keyData, attrs: a, pqzPop, i
   const pqz = present(a.pqzKey);
   const kemPk = commit ? null : a.kem ? kemPkOf(a.kem) : orEmpty(a.kemPk);
   if (pqz && !holds(kind, keyData, inner)) fail('UAPqzHolder', String(kind));
-  if ((commit || kemPk.length !== 0) && !holds(kind, keyData, inner)) fail('UAKemHolder', String(kind));
+  if ((commit || kemPk.length !== 0) && !isKemHolder(kind)) fail('UAKemHolder', String(kind));
   const popHash = a.pqzPopHash === undefined ? Z32 : sized(a.pqzPopHash, 32, 'pqzPopHash');
   if (pqz === popHash.every((b) => b === 0) || hex(popHash) === EMPTY_PROOF_HASH
     || (present(pqzPop) && hex(keccak_256(bytes(pqzPop))) !== hex(popHash))) fail('UAPqzPopHash', 'attrs');
@@ -434,6 +474,60 @@ export function pqzKeyRecordMessage(kind, { ua, keyData, pqzKey, pqzPop, pqzPopH
     pqzRegMessage: uaMessage(0x0142, PQZ_KEY_TAG, keyDigest), typedData, ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
 }
 
+/**
+ * Group 3g (CTR-UA-41 draft, KV-1): PQZ key version `version` ≥ 1 of `setPqzKey(ua, version, pqzKey, pqzPopHash, sig)`.
+ * `stored`: the UA's stored versions as `{ version, pqzKeyHash }` (the chain's `pqzKeyAt` / `UAPqzKeyAdded`), read first:
+ * version 0 is refused here (`UAPqzKeySet` once stored: R2, a new key gets a new version; version 0 is `pqzKeyRecordMessage`),
+ * a version other than `latest + 1` (`UAPqzKeyVersion`), a key equal to a stored version's (`UAKeyInUse`: the wallet never signs
+ * one, the chain refuses it at storage). Returns `{ pqzKeyHash, pqzPopHash, versionDigest, recordDigest, message, pqzRegMessage,
+ * typedData }` (+ `memberDigest` for an msig): `message = uaMessage(kind, PURPOSE_PQZ_KEY, recordDigest)`, `pqzRegMessage =
+ * uaMessage(0x0142, PURPOSE_PQZ_KEY, versionDigest)`.
+ */
+export function pqzKeyVersionRecordMessage(kind, { stored = [], ...record } = {}) {
+  if (!holds(kind, record.keyData, record.inner)) fail('UAPqzHolder', `0x${Number(kind).toString(16).padStart(4, '0')} may not hold a PQZ key`);
+  const v = u64(record.version, 'version');
+  if (v === 0n) fail('UAPqzKeySet', 'version 0 is write-once: a new key gets a new version');
+  const versions = stored.map((r) => u64(r.version, 'stored version'));
+  if (!versions.includes(0n) || v !== versions.reduce((m, x) => (x > m ? x : m), 0n) + 1n) fail('UAPqzKeyVersion', String(v));
+  const pqzKeyHash = pqzKeyHashOf(record.pqzKey);
+  if (stored.some((r) => hex(sized(r.pqzKeyHash, 32, 'pqzKeyHash')) === hex(pqzKeyHash))) fail('UAKeyInUse', 'a stored version holds this key');
+  return pqzKeyVersionRecordOf(kind, record);
+}
+
+/** `pqzKeyVersionRecordMessage` without the chain's state (no sequence, no marker): what `ua-verify.js` re-checks of a stored row. */
+export function pqzKeyVersionRecordOf(kind, { ua, keyData, version, pqzKey, pqzPop, pqzPopHash, inner } = {}) {
+  if (!holds(kind, keyData, inner)) fail('UAPqzHolder', `0x${Number(kind).toString(16).padStart(4, '0')} may not hold a PQZ key`);
+  const v = u64(version, 'version');
+  if (v === 0n) fail('UAPqzKeySet', 'version 0 is write-once: a new key gets a new version');
+  const pqzKeyHash = pqzKeyHashOf(pqzKey);
+  const popHash = proofHashOf(pqzPop, pqzPopHash);
+  if (popHash === Z32) fail('UAPqzPopHash', 'a PQZ key needs its proof hash');
+  const versionDigest = pqzKeyVersionDigest({ ua, version: v, pqzKeyHash });
+  const recordDigest = pqzKeyVersionRecordDigest({ ua, version: v, pqzKeyHash, pqzPopHash: popHash });
+  const message = uaMessage(kind, PQZ_KEY_TAG, recordDigest);
+  const typedData = portableTypedData('UAPqzKeyVersionRecord',
+    { key: { ua: h32(ua, 'ua'), version: v.toString(), pqzKeyHash: hex(pqzKeyHash) }, pqzPopHash: hex(popHash) });
+  return { pqzKeyHash, pqzPopHash: popHash, versionDigest, recordDigest, message, pqzRegMessage: uaMessage(0x0142, PQZ_KEY_TAG, versionDigest),
+    typedData, ...(kind === 0x0120 ? { memberDigest: memberDigest(ua, message) } : {}) };
+}
+
+/** KV-7 (R3, F-2): a UA's version is pending on a chain when its latest stored version has this build's PQZ key length and is not
+ *  yet eligible (its proof bytes are missing): the on-chain sign of an imminent rotation. A latest version of another set's length
+ *  is not pending: it never becomes current here. `latest`: the key byte length and eligibility of `pqzKeyAt(ua, pqzKeyLatest(ua))`. */
+export const pqzKeyPending = (latest, pkLength) => latest.length === pkLength && !latest.eligible;
+
+/** CTR-UA-29's selection with KV-7's filter: never a UA with a pending version as a decoy; UAs without a `UAPqzKeyCurrent` in the
+ *  look-back window come first. `candidates`: `{ ua, latest: { length, eligible }, rotatedRecently }`. */
+export const pqzDecoyCandidates = (candidates, pkLength) => {
+  const open = candidates.filter((c) => !pqzKeyPending(c.latest, pkLength));
+  return [...open.filter((c) => !c.rotatedRecently), ...open.filter((c) => c.rotatedRecently)];
+};
+
+/** F-14: the key of a vault entry or backup of a PQZ key, `(ua, version, pqzKeyHash)`, so two keys at one number (a rule broken
+ *  across chains) never overwrite each other. */
+export const pqzVaultKey = ({ ua, version, pqzKeyHash }) =>
+  `${h32(ua, 'ua')}/${u64(version, 'version')}/${hex(sized(pqzKeyHash, 32, 'pqzKeyHash'))}`;
+
 /** The typed `UAMembership{ua, member}` digest: what `member` signs to accept its slot in the `msig` `ua` (CTR-UA-37). */
 export const membershipDigest = ({ ua, member }) => typed(keccak_256(concatBytes(TH.UAMembership, sized(ua, 32, 'ua'), sized(member, 32, 'member'))));
 
@@ -449,6 +543,34 @@ export function membershipMessage({ ua, member }) {
   const message = uaMessage(0x0120, MEMBERSHIP_TAG, digest);
   const typedData = portableTypedData('UAMembership', { ua: h32(ua, 'ua'), member: h32(member, 'member') });
   return { digest, message, memberDigest: memberDigest(ua, message), typedData };
+}
+
+/**
+ * What a quorum of the **stored** structure of the `msig` `ua` on one registry signs to change it (`updateMsig`, CTR-UA-44):
+ * typed(`UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}`), `members` every slot of the
+ * target (disabled ones included; stored slots keep `kind` and `id`), `enabled` bit i = slot i, `version` the stored one + 1.
+ * `{ digest, message, memberDigest, typedData, args }`: a native member signs `digest` itself (or ERC-1271 over it), a derived
+ * member `memberDigest` under `member`, `message = uaMessage(MSIG, PURPOSE_MSIG_UPDATE, digest)`; `args` the named JSON of
+ * `updateMsig` without `sigs`. One registry per signature: sign it again for every `(chainUid, registry)` that holds the `msig`.
+ */
+export function msigUpdateMessage({ ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock }) {
+  const v = u64(version, 'version');
+  const until = u64(validUntilBlock, 'validUntilBlock');
+  const t = u16w(threshold);
+  const en = BigInt(enabled);
+  if (en < 0n || en >= 1n << 256n) throw new Error('enabled must be a uint256');
+  if (members.length > 256) throw new Error('at most 256 slots');
+  const m = members.map((x) => ({ kind: u16w(x.kind), id: h32(x.id, 'id'), weight: u16w(x.weight) }));
+  const mh = m.map((x) => keccak_256(concatBytes(TH.UAMsigMember, word(x.kind), fromHex(x.id), word(x.weight))));
+  const sh = keccak_256(concatBytes(TH.UAMsigUpdate, sized(ua, 32, 'ua'), sized(chainUid, 32, 'chainUid'), addressWord(registry),
+    word(v), word(t), keccak_256(concatBytes(...mh)), word(en), word(until)));
+  const digest = typed(sh);
+  const message = uaMessage(0x0120, MSIG_UPDATE_TAG, digest);
+  const msg = { ua: h32(ua, 'ua'), chainUid: h32(chainUid, 'chainUid'), registry: checksumAddress(hex(sized(registry, 20, 'registry'))),
+    version: num(v), threshold: t, members: m, enabled: en.toString(10), validUntilBlock: num(until) };
+  const args = { ua: msg.ua, version: num(v), structure: { threshold: t, members: m }, enabled: msg.enabled,
+    validUntilBlock: num(until), chainUid: msg.chainUid };
+  return { digest, message, memberDigest: memberDigest(ua, message), typedData: portableTypedData('UAMsigUpdate', msg), args };
 }
 
 /** The portable purposes (POP_V2, KEM, PQZ_KEY, MEMBERSHIP): the only ones where a code-less native msig member signs the record's typed
@@ -480,6 +602,21 @@ export function canonicalId(text) {
   if (!m) fail('UAIdFormat', String(text));
   const h = m[1].toLowerCase();
   return h.length === 64 && h.startsWith('0'.repeat(24)) ? `0x${h.slice(24)}` : `0x${h}`;
+}
+
+/** How a client shows a `bytes32` id before the user signs (ua-mtx-merge spec §6, MD-9): an id in the native space (top 96
+ *  bits zero, CTR-UA-03) is its EIP-55 address, as the contract reads it; any other id is derived and shown only as its URN
+ *  `urn:scaas:ua:v1:<kind name>:<hex32>` (NET-ALL-21), for which the caller gives the id's kind from its registry record
+ *  (`kind` 0 = none known: refused, never shown as an address). `id` is `0x` + 64 hex digits. Lives here, not in evm.js:
+ *  evm.js cannot import this module (ua.js runs encodeType at load). smartcontracts/vectors/ua/id_display.json pins it. */
+export function idDisplay(id, kind = 0) {
+  const m = /^0x([0-9a-fA-F]{64})$/.exec(typeof id === 'string' ? id : '');
+  if (!m) fail('UAIdFormat', String(id));
+  const h = m[1].toLowerCase();
+  if (h.startsWith('0'.repeat(24))) return { kind: 'native', address: checksumAddress(h.slice(24)) };
+  const k = kindInfo(kind);
+  if (k.native) fail('UAKindNotDerived', k.name);
+  return { kind: 'derived', urn: `urn:scaas:ua:v1:${k.name}:${h}` };
 }
 
 export function encodeMsig(threshold, members) {
@@ -598,6 +735,7 @@ export function registryCalldataLength(entry, a) {
 export function registrationArgs({ kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner } = {}) {
   const k = Number(kind);
   const hasPqz = present(pqzKey);
+  if (present(kemPk) && !isKemHolder(k)) fail('UAKemHolder', `0x${k.toString(16).padStart(4, '0')} may not hold a KEM key`);
   const attrs = { pqzKey: hex(orEmpty(pqzKey)), pqzPopHash: hex(hasPqz || present(pqzPopHash) ? proofHashOf(pqzPop, pqzPopHash) : Z32),
     kem: kemKeyOf(kemPk), kemPkHash: ZW };
   const msig = k === 0x0120;

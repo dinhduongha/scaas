@@ -1,0 +1,577 @@
+ua-mtx-merge T66b build (spec docs/superpowers/specs/2026-11-09-t66b-library-organisation.md §12; plan T66b Steps 3-5). Gate summary.
+Full outputs in git-ignored .log files: smartcontracts/evm/runs/2026-11-09-ua-mtx-merge-t66b-<label>-<step>.log (gates.sh here),
+forge per directory in runs/2026-11-08-ua-mtx-merge-t66a-t66b-<label>-test-<dir>.log (the T66a forge-dirs.sh). Forge 1.8.5, solc
+0.8.37, default set n2304-kmax4096; every heavy run through scripts/capped at 4 GB, -j2. Base 5e5fbce2 (T83). UNAUDITED.
+
+Step 1 refresh at 5e5fbce2 (the spec measured 7d653925, before T83; scratch detached worktree, real lib/ copies; the study tools of
+runs/2026-11-07-ua-mtx-merge-size-study/): forge build src --sizes --json, size_gate.py (0 errors, 99 contracts, above 65,536 B:
+WrappedPqzRegulatedToken 74,449), solc rerun "contracts 189 differ 0", size_map.py (size-map-5e5fbce2.out), gen_floor.py for the
+twelve kinds, run_fwd.sh V7 V8 MA MB MC MD1 MD2 MD3, mod_est.py (modules-5e5fbce2.out), token-forms-5e5fbce2.txt.
+T83 moved every kind +833 to +938 B (mostly dispatch and coders) and MtxPipelineLib 11,069 -> 12,054; the registry pair, the DEX
+and the factory did not move. Token V7 13,213 (kind 0) to 28,095 B (kind 13). Module bounds by §3.4's formula (lower = module -
+residue V8 + 20 B per entry + the take-in; upper = module + 20 B per entry + the take-in; P's take-in 3-7 KB with T83's +985 B, T's
+3.5-4.5 KB), KB, entries in brackets, bold = upper >= 31.7 KB:
+| kind | P | T | A | W | Z | Q |
+| 0 | 17.8-25.8 (23) | 10.1-15.1 (9) | 17.7-21.8 (44) | | | |
+| 1 | 18.4-26.7 (23) | 11.2-16.4 (10) | 14.1-18.3 (37) | 16.0-20.2 (35) | | |
+| 2 | 18.1-28.4 (23) | 9.4-16.7 (9) | 15.9-22.2 (44) | | 13.9-20.3 (36) | |
+| 3 | 18.8-29.3 (23) | 10.4-18.0 (10) | 10.4-17.0 (37) | 15.4-22.0 (31) | 19.1-25.6 (44) | |
+| 4 | 17.2-29.2 (23) | 8.4-17.4 (9) | 18.0-26.0 (44) | | | 19.4-27.3 (48) |
+| 5 | 18.0-30.9 (23) | 9.4-19.3 (10) | 9.8-18.7 (37) | 14.5-23.4 (31) | | **25.0-33.8** (58) |
+| 8 | 20.5-29.8 (28) | 10.2-16.6 (9) | 18.1-23.5 (43) | 5.7-11.1 (15) | | |
+| 9 | 21.2-30.7 (28) | 11.3-17.8 (10) | 14.5-20.0 (37) | 20.0-25.6 (49) | | |
+| 10 | **20.8-32.4** (28) | 9.5-18.1 (9) | 16.3-23.9 (43) | 5.6-13.2 (15) | 14.6-22.2 (36) | |
+| 11 | **21.6-33.4** (28) | 10.5-19.4 (10) | 10.8-18.7 (37) | 20.2-28.0 (48) | 19.0-26.9 (41) | |
+| 12 | **19.9-33.3** (28) | 8.5-18.9 (9) | 18.3-27.7 (43) | 4.6-14.0 (15) | | 19.8-29.2 (48) |
+| 13 | **20.8-35.2** (28) | 9.5-20.8 (10) | 10.2-20.5 (37) | 19.3-29.7 (48) | | **24.7-35.0** (55) |
+Every module still fits the 60 M module line (35,570 B) at its upper bound: largest kind 13's P 35.2 KB, then its Q 35.0 KB. Against
+the 57 M line (33,780 B): kind 13's P and Q miss at the top and Q on kind 5 misses by 0.1 KB, as the spec expected (§4.2's splits);
+P on kinds 10, 11, 12 sits within 2.1 KB (P on 10 is new against the spec's table, by T83's pay records).
+
+Task 3.1, the registry pair (spec §5; owner ruling d: R-1 then R-2, measured per step):
+step | tree | UARegistry B / asked | UARegistryLib B / asked | pair B
+before (5e5fbce2) | 5e5fbce2 | 33,151 / 56.38 M (spec §1) | 38,070 / 63.98 M (spec §1) | 71,221
+R-1 (seven pure views to the library, `_libPure`) | this commit | 31,497 / 53.61 M | 39,028 / 65.58 M | 70,525
+R-2 step 1 on R-1 (storePqzPop into the registry, r2-step1-storePqzPop.patch; not committed) | R-1 + patch | 35,275 / 59.94 M | 37,034 / 62.24 M | 72,309
+(asked = (regular + state) x 1.05 from DeployGas.t.sol test_t66bPair, regular x 1.05 < 2^24 in every row.) R-1 nets the pair -696 B
+(the spec estimated -0.8 to -1.2 KB of room: the library grew +958 B for the seven entries, not +0.2 to +0.4 KB). R-2's first move,
+the writer with the largest exclusive code (storePqzPop, 1,955 B), costs the registry +3,778 B and frees the library 1,994 B: the
+writer takes with it what it shares with `register`'s path in the library (`_pqzProof`, `_pqzOwn`, `_pqzCurrent`, `_list`, `_host`,
+SSTORE2.writeChunks, the verifier call), +1,784 B for the pair. The registry is then at 59.94 M, the library still 2.24 M (about
+1.3 KB) over: every further move adds to the registry. The other candidates (setKemKey, acceptMembership, cacheExpandedKey) share
+more with `register`'s path (the portable signature check `_sigOk` / `_msig` / `_memberOk`, `UAKinds.validateKeyData`). Spec §5
+item 3: both cannot reach 60 M with one library and no verification rule changed, so the build stops here and asks the owner (a
+second registry library, or the forward form on more registry entries). R-1 is kept (the specified first step, the pair smaller).
+
+Red first (the new tests against the old code):
+step | commit | rc | counts
+forge test/ua/UARegistryPair.t.sol on 5e5fbce2's src | a1353950 + test | 1 | 6 passed, 1 failed: test_r1_viewsRunInTheLibrary (expected call to UARegistryLib, called 0 times); the control test_r1_control_writerRunsInTheLibrary passed
+
+Gates on R-1:
+step | commit | rc | counts
+forge test/ua (forge-dirs.sh t66b-r1) | R-1 tree | 1 | 710 passed, 2 failed: test_T_GAS_register_ua8PerKind, test_T_GAS_setKemKey (UA-8 regular-gas pins, +14 to +71 gas: the library's dispatch holds seven more entries); 52 suites, UARegistryPair 7 new
+UA-8 gas rows at the four sets (GAS_REPIN=1, at-set.sh, sparse) | R-1 tree | 1 (expected: a repin run ends FAILED) | 79 rows, 17 above their pin (ua8-pins-r1.txt, old -> new; state gas unchanged on every row)
+UA-8 gas tests at n2048-kmax1024 / n2304-kmax4096 / n2560-kmax16384 / n2816-kmax65536, pins moved | this commit | 0 / 0 / 0 / 0 | 3 passed each; src/pqz/PqzSet.sol restored (git diff --exit-code) after each
+forge test/v2 | R-1 tree | 1 | 652 passed, 1 failed: test_registryClosure (the registry's DELEGATECALL count 2 != 1: `_libRaw`'s, to the same library)
+forge test/v2/LinkClosure.t.sol, the count moved 1 -> 2 | this commit | 0 | 4 passed
+forge test/governance | R-1 tree | 1 | 420 passed, 4 failed: test_plusZero_uaExecuteTransfer_{normal,wrapped,normalZether,wrappedZether} (exact gas pins, -4 to -44: the registry's requireAuthorized code moved)
+PlusZero.t.sol PLUS_ZERO_WRITE=1, then the check | this commit | 0 / 0 | plus_zero_gas.json 4 of 26 rows (below); plus_zero_slots.json unchanged
+forge test/governance | this commit | 0 | 424 passed; 47 suites
+forge test/metatx | this commit | 1 | 540 passed, 1 failed (test_gas_rollMax_relayedFullTx, the known red: owner kept ROLL_MAX), 1 skipped; 44 suites (as at T83)
+forge test/as | this commit | 0 | 463 passed; 76 suites
+forge test/merge | this commit | 0 | 341 passed; 29 suites
+forge test/wallet | this commit | 0 | 181 passed; 12 suites
+forge test/account | this commit | 0 | 98 passed; 5 suites
+forge test/hedera | this commit | 0 | 20 passed; 2 suites
+forge test/zether | this commit | 0 | 441 passed, 4 skipped; 37 suites
+forge test/ExpectRevertLint.t.sol | this commit | 0 | 3 passed
+size gate (forge build src --sizes --json; size_gate.py), size-baseline.json moved | this commit | 0 | 0 errors, 99 contracts; above 65,536 B: WrappedPqzRegulatedToken 74,449 (unchanged list)
+size_gate.py --self-test | this commit | 0 | ok
+pair deploy gas (DeployGas.t.sol test_t66bPair) | this commit | 0 | the R-1 row above
+docs_check.py check | this commit | 0 | 0 errors, 5 warnings (line budgets, unchanged)
+(test/ua's other 710 passed on the R-1 tree before the pins moved; the pin edits are numbers only, rerun as the UA-8 rows above.)
+
+Mutants (mutants.py, each alone on src/, its tests; the file restored byte-equal after each):
+mutant | tests that went red | rc
+R1-wrong-library-entry (keyHashOf forwarded to the library's uaOf) | test_r1_diff_vectors, test_r1_viewsRunInTheLibrary | 1
+1 of 1 killed.
+
+Pins old -> new: size-baseline.json UARegistry 33,151 -> 31,497, UARegistryLib 38,070 -> 39,028 (the `_comment` records it); UA-8
+regular-gas pins (UARegistryUA8.t.sol `_pin`, state gas unchanged): register bip340 161,415 -> 161,429, bls-bn254-minsig 353,608 ->
+353,626, bls12381-minsig 338,834 -> 338,848, ed25519 324,121 -> 324,135, mldsa44 4,348,695 -> 4,348,713, msig-classical 166,155 ->
+166,225, p256 164,621 -> 164,635, schnorr-bls12381 202,954 -> 202,968, schnorr-bn254 175,819 -> 175,833, secp256k1 160,434 ->
+160,448, slhdsa128s 1,123,403 -> 1,123,421, webauthn-p256 182,102 -> 182,139, zether-bls12381 215,671 -> 215,689; setKemKey
+fndsa512/v2 at n2048-kmax1024, n2560-kmax16384, n2816-kmax65536 2,516,039 -> 2,516,110 and at n2304-kmax4096 2,516,060 ->
+2,516,110; plus_zero_gas.json uaExecuteTransfer_normal 100,784 -> 100,740, uaExecuteTransfer_wrapped 100,807 -> 100,763,
+uaExecuteTransfer_normalZether 142,393 -> 142,389, uaExecuteTransfer_wrappedZether 142,472 -> 142,468; LinkClosure the registry's
+DELEGATECALL count 1 -> 2. UAGas and UARegistryGroups (test/ua, --isolate by foundry.toml) unchanged: green. Layout, typehash and
+CREATE2 pins unchanged.
+
+Task 3.1b, the registry's libraries (owner 2026-11-09, spec §11 (f): a second registry library by domain, R-2 dropped, the
+registry's reads off the hot path into the libraries, the names UARegistryCoreLib / UARegistryAuxLib; legacy copy a1353950):
+contract | 5e5fbce2 B / asked | R-1 (cb4abd33) B / asked | 3.1b B / asked (DeployGas.t.sol test_t66bPair)
+UARegistry | 33,151 / 56.38 M | 31,497 / 53.61 M | 28,006 / 47.76 M
+UARegistryLib | 38,070 / 63.98 M | 39,028 / 65.58 M | retired
+UARegistryCoreLib | | | 33,891 / 56.98 M (line 33,903 B / 57 M; hard 35,694 B / 60 M)
+UARegistryAuxLib | | | 33,407 / 56.17 M
+regular x 1.05 < 2^24 on every row. The split saves less than the moved code: CoreLib + AuxLib = 67,298 B against 39,028 B of
+library code at R-1 (+28,270 B), of which about 3.5 KB is the registry's moved reads and the rest the helpers both libraries
+compile in (the portable signature check, the holder checks, the PQZ proof, SSTORE2, the UAKinds coders): each library entry
+reaches about 30 KB of shared code, as Step 2's map showed. Every contract of the trio is within 57 M; one more deploy
+transaction per chain (56.17 M).
+Measured split variants (split2.py, from the R-1 sources; registry 31,718 B in each):
+variant | first library | second library
+the PQZ writers alone (setPqzKey, storePqzPop) | 34,344 (441 B over its 33,903 B line) | 22,464
++ setKemKey, cacheExpandedKey (taken: UARegistryAuxLib; acceptMembership stays in the core) | 31,857 | 29,660
++ acceptMembership too (first measured, before the owner's names) | 30,793 | 30,884
+The registry's reads moved one at a time (movev.py; a move kept only while both libraries stay within 33,903 B):
+view -> library | UARegistry | CoreLib | AuxLib | kept
+registrationOf -> core | 30,623 | 33,704 | 29,660 | yes
+popSlotsOf -> aux | 29,945 | 33,704 | 30,704 | yes
+webAuthnKeyOf -> aux | 29,698 | 33,704 | 31,304 | yes
+pqzPopOf -> aux | 29,535 | 33,704 | 31,688 | yes
+pqzKeySigOf -> aux | 29,322 | 33,704 | 31,902 | yes
+uaCount -> core | 29,244 | 33,891 | 31,902 | yes
+uaPage, uaIndex, uaAt, popOf -> core | 29,462 / 29,396 / 29,537 / 29,465 | 34,420 / 34,044 / 34,078 / 34,035 | | no (the core over its line)
+uaPage -> aux, uaIndex -> aux, uaAt -> aux, popOf -> aux | 28,761 / 28,459 / 28,239 / 28,006 | 33,891 | 32,497 / 32,843 / 33,161 / 33,407 | yes
+frostKeyOf, muSig2KeyOf -> either | | | | no: their typed return does not compile in a library (stack too deep); they stay
+Stays in the registry (the owner's list): requireAuthorized, requirePortable's entry, kindOf, recordOf, checkedOf, the key
+and member readers (keyOf, keyOwner, pqzKeyOf, pqzKeyAt, pqzKeyLatest, pqzKeyUsed, kemKeyOf, kemKeyAt, expandedKeyOf,
+msigOf, memberAccepted, memberSigHashOf), uaAuthDigest, the immutables' getters, eip712Domain, muSig2KeyOf, frostKeyOf.
+Per-call gas (UA-8 rows, forge isolate, the four sets): every writer row the same or lower (61 rows, -189 to 0: register
+-72 to -178, setKemKey -189, storePqzPop 0); the moved reads gain the library's DELEGATECALL and its getter self-calls: popOf
++4,124 to +7,839 (unregistered baseline 2,856 -> 10,695), registrationOf +6,541 to +11,230 on gen 1, +14,074 to +20,072 on gen 2
+for a gen-1 record (a gen-2 host's storePqzPop / setPqzKey reads gen 1's registrationOf / pqzKeySigOf: those writer rows did
+not move).
+
+Red first: test/ua/UARegistryPair.t.sol (the 3.1b tests) on cb4abd33's src | cb4abd33 + test | 1 | compile error: source
+src/ua/UARegistryKeyLib.sol not found (the second library did not exist; the test then named it so, renamed AuxLib after)
+Deploy gas (DeployGas.t.sol test_t66bPair, each its own CREATE2 transaction, regular + state, asked = x 1.05):
+UARegistry 2,455,933 + 43,032,780 = 45,488,713 (47,763,148 asked); UARegistryCoreLib 2,229,158 + 52,036,830 = 54,265,988
+(56,979,287); UARegistryAuxLib 2,197,950 + 51,296,310 = 53,494,260 (56,168,973).
+Shared code (registry-libs-shared.out, evmmap.py source-map labels): of UARegistryAuxLib's 33,407 B, 19,662 B are labels the
+core library holds too (functions 16,238 B: UAKinds.name 1,193, _slotCap 606, _sigOk 515, _worst 454, keyHashOf 452,
+validateKeyData 428, ...; coders and Yul helpers 3,424 B); 6,159 B its own functions, 4,947 B dispatch, 2,507 B other labels
+of its own, 132 B metadata. The owner's next lever (spec §11 (f), not built): the auxiliary library calling the core's
+shared helpers in place of its own copy.
+
+Gates on the 3.1b tree:
+step | tree | rc | counts
+forge test/ua | 3.1b, pins before | 1 | 715 passed, 2 failed: test_T_GAS_setKemKey, test_T_GAS_storePqzPop (the UA-8 read rows popOf / registrationOf)
+UA-8 gas rows at the four sets (GAS_REPIN=1) | 3.1b | 1 (expected) | 79 rows, 18 above their pin (ua8-pins-3.1b.txt)
+UA-8 gas tests at the four sets, pins moved | this commit | 0 / 0 / 0 / 0 | 3 passed each; PqzSet.sol restored
+forge test/v2 | 3.1b, before the order fix | 1 | 652 passed, 1 failed: test_registryClosure (the closure's order: link references by path, AuxLib first)
+forge test/governance | 3.1b, pin before | 1 | 423 passed, 1 failed: the GovernanceRouter CREATE2 pin
+UARegistryPair, UADeploy, LinkClosure, GovDeploy, after the fixes | this commit | 0 | 48 passed; 4 suites
+forge test/metatx | this commit | 1 | 540 passed, 1 failed (the known ROLL_MAX red), 1 skipped
+forge test/as, merge, wallet, account, hedera, zether | this commit | 0 each | 463, 341, 181, 98, 20, 441 (+4 skipped) passed
+forge test/ExpectRevertLint.t.sol | this commit | 0 | 3 passed
+size gate (out/ built by the gate; size_gate.py reads the libraries from out/) | this commit | 0 | 0 errors, 100 contracts
+docs_check.py check | this commit | 0 | 0 errors
+
+Mutants of 3.1b (mutants.py, each alone; UARegistry.sol restored byte-equal after each, md5 checked after the run):
+B1-writer-wrong-library (setKemKey to the core library) | test_b_keyWritersRunInTheAuxLibrary, test_T_GAS_setKemKey and 22 KEM tests | 1
+B2-library-addresses-swapped (every writer to the other library) | setUp, test_T_GAS_register_ua8PerKind, test_T_GAS_setKemKey, test_T_GAS_storePqzPop, test_b_keyWritersRunInTheAuxLibrary, test_b_registrationRunsInTheFirstLibrary, ... | 1
+B3-read-wrong-library (popOf to the core library) | test_b_readsRunInTheirLibrary, test_T_GAS_setKemKey, test_T_GAS_storePqzPop, ... | 1
+B4-aux-library-check-dropped | test_b_constructorNeedsTheAuxLibrary | 1
+R1-wrong-library-entry (rerun on the renamed tree) | test_r1_diff_vectors, test_r1_viewsRunInTheLibrary | 1
+5 of 5 killed (B2's first run was cut by the machine's shutdown and rerun whole).
+
+Pins old -> new (3.1b): size-baseline.json UARegistry 31,497 -> 28,006, UARegistryLib 39,028 -> UARegistryCoreLib 33,891,
+UARegistryAuxLib new 33,407; UA-8 read pins (18 rows; state gas 0 on all): popOf fndsa512/v2 13,355 -> 17,594 (four sets),
+popOf mldsa65/v2 15,294 -> 20,051 (four sets), popOf msig-12-slhdsa128s 13,137 -> 17,261, popOf unregistered 2,856 -> 10,695,
+registrationOf msig-pq on gen 1 86,449 -> 92,990 / 91,687 -> 99,640 / 97,149 -> 106,557 / 110,540 -> 121,770, on gen 2
+121,487 -> 135,561 / 130,032 -> 145,937 / 138,971 -> 156,768 / 156,204 -> 176,276 (n2048 / n2304 / n2560 / n2816);
+LinkClosure the registry's closure 1 -> 2 libraries (DELEGATECALL count 2 unchanged); GovernanceRouter CREATE2
+0x7d3C8bE73d8840bA378F83D8Ac1297080ceaCc03 -> 0x13CBB3D5DCb0736f87F136ad13276568A80d1aa9 (the metadata hash: UAKinds /
+UAStore comments). UAGas, UARegistryGroups, plus_zero_gas.json, layout and typehash pins unchanged.
+
+Task 3.1c, the auxiliary library calls the core's shared helpers (owner 2026-11-09, spec §11 (f), built now): UARegistryCoreLib gains
+four external helpers, each its internal twin and nothing else: `portableOk` (`_portableOk`: the portable signature check, `_sigOk`,
+`_msig`, `_memberOk`), `pqzHolder` (`_pqzHolder`: the holder rule and the msig debit bound), `pqzProof` (`_pqzProof` with the proof
+logged: SSTORE2 of the proof, the 0x0142 verifier call, owner, list, current), `keyUa` (`UAKinds.validateKeyData` + `uaOf`). None is
+`view` or `pure`, so solc's library call protection refuses a direct call. UARegistryAuxLib runs them by one nested DELEGATECALL each
+(`_core`): the helper's calldata followed by the three words the registry appended to the Aux entry (its last 96 bytes), so the core
+reads the same `_cfgKind` / `_cfgPqz` / `_cloneHash`; a core without code reverts `UAConfig(0)` (a DELEGATECALL to it would succeed
+with nothing checked); revert data verbatim; one level only (the core never calls back). The Aux library links the core (deploy order
+core -> Aux; forge, DeployBase and e2e.py link the closure recursively). Measured next move (the core under its 57 M line again):
+`registrationOf` and `uaCount` from the core to the Aux library (one `_libView` target each in the registry).
+contract | 3.1b B / asked | 3.1c B / asked (DeployGas.t.sol test_t66bPair: regular + state)
+UARegistryCoreLib | 33,891 / 56.98 M | 32,583 / 54.79 M (2,143,857 + 50,035,590)
+UARegistryAuxLib | 33,407 / 56.17 M | 20,828 / 35.10 M (1,380,311 + 32,050,440)
+UARegistry | 28,006 / 47.76 M | 28,045 / 47.83 M (2,458,014 + 43,092,450; +39 B is task 4.1's SaltedEIP712 split, not 3.1c)
+Steps (forge build of the trio): the four helpers alone: core 34,608 B (705 B over its 33,903 B line, under 35,694 B), Aux 19,596 B;
+then registrationOf + uaCount to the Aux library: core 32,583 B, Aux 20,828 B. The pair 67,298 -> 53,411 B; every one under 57 M;
+regular x 1.05 < 2^24 on every row.
+Per-call gas, execution only (auxgas/AuxGas.t.sol through GasProbe, cold accounts, mock verifiers on the PQ kinds and 0x0142;
+auxgas-3.1c.txt): setKemKey mldsa44 v1 3,091,750 -> 3,099,891 (+8,141), setPqzKey mldsa44 v0 26,296,469 -> 26,309,418 (+12,949: two
+nested calls), storePqzPop mldsa44 v0 981,733 -> 1,010,684 (+28,951: the 16,384 B key and the proof copied into the nested call),
+cacheExpandedKey mldsa44 part 0 40,308,365 -> 40,314,263 (+5,898); the reads -22 to +61 (dispatch), registrationOf -4. The spec's
+estimate was +3 to +6 k; storePqzPop pays the copy of its key and proof. UA-8 rows (charged gas: regular is max(execution, the
+EIP-7976 calldata floor); ua8-gas-3.1c.txt, 79 rows, 37 moved): setKemKey fndsa512/v2 2,515,921 -> 2,524,122 (+8,201) at the four
+sets; setKemKey mldsa65/v2 and every storePqzPop row unchanged (the calldata floor dominates both before and after); register
++28 to +160 and popOf +45, registrationOf -4 / +74 (the libraries' dispatch tables); state gas unchanged on every row.
+
+Red first: test/ua/UARegistryPair.t.sol (the 3.1c tests) on 3a837c85's registry sources | 3a837c85 + test | 1 | compile error: Member
+"registrationOf" not found in UARegistryAuxLib (the helpers and the moved reads did not exist)
+
+Gates on the 3.1c tree:
+step | tree | rc | counts
+forge test/ua (forge-dirs.sh t66b-c) | 3.1c | 1 | the run ended without its summary after 51 of 52 suites (UARegistryUA8 not reached: rerun alone below); failed only
+  where task 4.1/4.2 left them (UADeploy 7: DeployBase deploys no modules yet, DeployFailed; UAReceivers setUp: its harness builds
+  `NormalToken(msg.sender, "")` without implArgs; MandateWalletMerged test_smartKeyAccountByteIdentical: 4.1's byte pin, STATE.md);
+  UARegistryPair 17 passed (6 new), UAGas 8, UARegistryGroups 14 and every other registry suite passed
+forge test/ua/UARegistryUA8.t.sol alone (-j 1) | 3.1c, pins before | 1 | 85 passed, 3 failed: the gas pins of register msig-pq-native,
+  popOf mldsa65/v2, registrationOf gen 2 (the rows below)
+UA-8 gas rows at the four sets (GAS_REPIN=1; at-set.sh with FOUNDRY_TEST=test/ua: sparse mode compiled other directories, which
+  4.1 has not migrated) | 3.1c | 1 each (expected) | 79 rows, 19 above their pin (ua8-pins: register msig-pq-native 330,779 ->
+  330,810; popOf +45 on its 10 rows; registrationOf gen 2 +74 on 4 rows; setKemKey fndsa512/v2 2,516,110 -> 2,524,122 on 4 rows)
+forge test/v2/LinkClosure.t.sol | 3.1c | 1 | test_libraryOpcodes passed (UARegistryAuxLib: 1 DELEGATECALL); the three tests that
+  deploy through DeployBase fail DeployFailed() (task 4.2); test_registryClosure's link part (Aux -> core) runs before its deploy
+DeployGas.t.sol test_t66bPair | 3.1c | 0 | the rows above
+
+Mutants of 3.1c (mutants.py, each alone, FOUNDRY_TEST=test/ua; the registry files restored byte-equal, md5 checked after the run):
+C1-aux-wrong-core (`_core` to `address(this)`) | test_c_auxNeedsItsCore, test_c_cacheRunsTheCoreKeyCheck, test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
+C2a-core-helper-direct-call-portableOk (`view`: no call protection) | test_c_coreHelpersRefuseADirectCall | 1
+C2b-core-helper-direct-call-keyUa (`view`) | test_c_coreHelpersRefuseADirectCall | 1
+C3-helper-result-ignored (`portableOk`'s answer `|| true`) | test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
+4 of 4 killed.
+UA-8 gas tests at the four sets, pins moved (ua8-pins-3.1c.txt, 19 rows) | this commit | 0 / 0 / 0 / 0 | 3 passed each; src/pqz/PqzSet.sol restored after each
+Pins old -> new (3.1c): size-baseline.json UARegistryCoreLib 33,891 -> 32,583, UARegistryAuxLib 33,407 -> 20,828 (UARegistry's row
+moves with 4.1's rows in 4.4); UA-8 regular-gas pins, 19 rows (state gas unchanged): register msig-pq-native 330,779 -> 330,810, popOf
+fndsa512/v2 17,594 -> 17,639 and mldsa65/v2 20,051 -> 20,096 (four sets each), popOf msig-12-slhdsa128s 17,261 -> 17,306, popOf
+unregistered 10,695 -> 10,740, registrationOf gen 2 135,561 -> 135,635 / 145,937 -> 146,011 / 156,768 -> 156,842 / 176,276 -> 176,350,
+setKemKey fndsa512/v2 2,516,110 -> 2,524,122 (four sets); LinkClosure: UARegistryAuxLib links UARegistryCoreLib (0 -> 1 library,
+DELEGATECALL count 0 -> 1). UAGas, UARegistryGroups, layout and typehash pins unchanged.
+
+Task 4.1, rule 4 for TradeLib (spec §4.1 rule 4, §4.3; script/t66b/post2.py): TradeLib's public cancelHash, precheck, record,
+restore, cancel, invalidate become wrappers of internal twins (the DEX's library calls and ABI unchanged); the token's trade
+bodies (ERC20MetaTx) call the twins, so module T compiles TradeLib's code in (no DELEGATECALL to TradeLib on a token trade).
+Sizes (forge build src, f0c03715 -> this commit; nothing else moved): every kind's T +1,848 to +1,900 B (NormalTokenT 11,131 ->
+13,031, WrappedPqzRegulatedTokenT 13,611 -> 15,459, the largest), TradeLib 4,842 -> 4,919 (+77, the wrappers); the tokens unchanged.
+Red first: test/ua/UATrade.t.sol test_rule4_tokenTradeCallsNoTradeLib on f0c03715 | 1 | expected 0 calls to TradeLib, called 3
+times (precheck, record, cancelHash); this commit | 0 | 23 passed. test/ua UATrade, UATradeVectors, UADex, UADexInvariant: 38
+passed on this tree before the new test. Test gas of the trade tests -7.8 k to -26.5 k (one cold library call and its re-encoded
+arguments less per fill); the gas pins (DexGas, the trade rows) move in 4.4.
+
+Task 3.1c, follow-up (owner 2026-11-09, spec §11 (f) as of 63cbbba5: moving entries from the core to the Aux library after 3.1c
+is "considered and deferred", `registrationOf` and `uaCount` among them): b2ec0d85 had moved those two reads; they are back in
+UARegistryCoreLib, byte for byte as before 3.1c. 3.1c is now the four helpers and the nested call only.
+contract | 3.1b B / asked | 3.1c B / asked (DeployGas.t.sol test_t66bPair: regular + state)
+UARegistryCoreLib | 33,891 / 56.98 M | 34,608 / 58.18 M (2,277,010 + 53,133,840): above its 33,903 B / 57 M line, under 35,694 B /
+  60 M (R4: 60 M accepted for the registry pair); reported, not a stop
+UARegistryAuxLib | 33,407 / 56.17 M | 19,596 / 33.04 M (1,299,171 + 30,165,480)
+UARegistry | 28,006 / 47.76 M | 28,045 / 47.83 M (unchanged by 3.1c; +39 B is 4.1's)
+Per-call execution gas (auxgas-3.1c.txt, rerun): setKemKey +8,096, setPqzKey +12,967, storePqzPop +28,940, cacheExpandedKey part 0
++6,015, the no-op storePqzPop and every read 0 (uaCount -22). UA-8 rows (ua8-gas-3.1c.txt, rerun, 79 rows, 19 moved): setKemKey
+fndsa512/v2 2,515,921 -> 2,524,077 (+8,156) at the four sets; register +29 (+51 webauthn-p256, +117 the two msig rows: the core's
+dispatch table), within their pins; everything else unchanged, state gas unchanged. Pins moved (ua8-pins-3.1c.txt): setKemKey
+fndsa512/v2 2,516,110 -> 2,524,077 at the four sets (4 rows; b2ec0d85's other 15 pin moves undone). size-baseline.json:
+UARegistryCoreLib 33,891 -> 34,608, UARegistryAuxLib 33,407 -> 19,596.
+Gates on the follow-up tree: UA-8 gas tests at the four sets, pins moved | 0 / 0 / 0 / 0 | 3 passed each, PqzSet.sol restored;
+forge test/ua, the 17 registry suites (UARegistryPair, UARegistry, UARegistryMembership, PqzKeyVersions, UARegistryPq,
+UARegistryNested, UAGas, UARegistryGroups, UARegistryPortable, UARegistryCoreLibMsig, UARegistryNestedGas, UARegistryNestedVectors,
+UARegistryVectors, UARegistryUA6, UARegistryZether, UARegistryPqzBound, UAKinds) | 0 | 279 passed; DeployGas test_t66bPair | 0 |
+the rows above. Mutants C1, C2a, C2b, C3 rerun: 4 of 4 killed (mutants.txt), the registry files md5-equal after the run.
+
+Task 4.1, rule 4 for MtxPipelineLib (spec §4.1 rule 4, §4.3; script/t66b/post3.py, gen_faces.py `PIPE`): MtxPipelineLib's
+external entries become thin wrappers of internal twins (the private steps take `Ctx`, `Envelope`, `CallFacts` in memory);
+every token-side call (ERC20MetaTx, UAMetaTxBaseCore, MetaTokenBase, RegulatedBase) is a hook `_pipe<Name>` in
+UAMetaTxBaseCore whose default is the library call; module P overrides all 15 with the twins, T `_pipeAuthorize`, A the two
+payment views. W, Z, Q, the router and the wallets keep the library call (controller 2026-11-09). No P passes 33,780 B: no P2.
+Sizes, runtime B (forge build src, 23955351 -> this commit): P +3,473 to +3,541 (NormalTokenP 20,759 -> 24,300, the largest
+WrappedPqzRegulatedTokenP 27,310 -> 30,783); T +1,196 to +1,618 (largest 17,045); A -17 to +70 (largest 28,131); W, Z, Q +56 to
++113 (the hook's call frame; largest Q 32,423, kind 12); the tokens unchanged; MtxPipelineLib 12,054 -> 12,460 (the wrappers);
+GovernanceRouter 15,493 -> 15,572, MandateWallet / HederaMandateWallet 17,820 -> 17,891 (the hook's call frame); SCaaSDex unchanged.
+Measured, not built (gen_faces.py with the named pipeline also in A, W, Z, Q): +3.3 to +3.4 KB each, kind 4's Q 33,888 B (above
+33,780) and kind 12's Q 35,663 B (above the 35,570 B module line).
+Red first, on 23955351: test/ua/UALedger.t.sol test_rule4_pipelineCallsNoMtxPipelineLib | 1 | expected 0 calls to MtxPipelineLib,
+called 5 times; test/metatx/PayRecords.t.sol test_rule4_payCallsNoMtxPipelineLib | 1 | called 98 times (7 kinds); this commit | 0 |
+both green, and test_rule4_tokenTradeCallsNoTradeLib (test/ua/UATrade.t.sol) now also asserts no call to MtxPipelineLib.
+MtxCtx (meaning, T66b): the Ctx is read where it still crosses into the library (mtxBurn in A, mtxUnwrap in W); the SmartKeyAccount
+ERC-1271 cap, the mldsa65 registry verify and HIP-632 are found inside module P's frame: 6 passed; min gas logged: SmartKeyAccount
+mtxExecute 446,800, mldsa65 mtxExecute 237,600 (frame 221,600).
+NamedEntry test_c0_gasNamedVsGeneric (warm lane, mtxUnwrap / mtxExecute / executeMetaTransaction): 23955351 160,958 / 163,269 /
+161,038 -> this commit 160,749 / 154,866 / 153,462; its bound `named < generic + 2,000` -> 7,000 (the generic path runs the
+pipeline in P, a named entry of A, W, Z, Q keeps the library call).
+PayRecords gas (7 kinds): test_records_mtxPay 5,944,491 -> 5,793,410, test_records_receiverFeeNet 6,124,142 -> 5,937,844.
+Gates on this commit (forge-dirs.sh, label t66b-p1):
+step | tree | rc | counts
+forge test/metatx | this commit | 1 | 536 passed, 6 failed, 1 skipped: the 6 of 3a837c85 (self-call lint, TokenKat x2, MandateWalletMerged
+  byte pin, DeployBase relay fee router, ROLL_MAX)
+forge test/ua (without UARegistryUA8) | this commit | 1 | 602 passed, 9 failed: UADeploy 7, UAReceivers setUp, MandateWalletMerged
+  byte pin (4.1 / 4.2 leftovers)
+forge test/wallet | this commit | 1 | 180 passed, 1 failed (MandateWalletMerged byte pin); same on 23955351
+forge test/account | this commit | 1 | 96 passed, 2 failed (test_mandateWalletKat address, the byte pin); same on 23955351
+forge test/hedera | this commit | 1 | 18 passed, 2 failed (the KAT address and digest); same on 23955351
+forge test/governance | this commit | 1 | compile error in test/governance/GovRegulatedBits.t.sol (not migrated by 4.1; 4.3)
+Mutants (mutants.py, each alone; NormalTokenModules.sol md5-equal after): 4 of 4 killed (mutants.txt).
+
+Task 4.1, the DEX's admin module D (spec §4.2, §4.5, owner 2026-11-09 ruling (a)): src/dex/SCaaSDexAdmin.sol holds
+SCaaSDexGovernance (the DEX's governance hooks: `_guardIn` / `_guardOut`, `_caller`, the bit masks, `_govRouter`; one definition,
+inherited by the DEX and by D) and SCaaSDexD (the 22 governance entries calling GovernanceBaseCore's bodies, `onlyDelegated` but
+the `pure` `validBits`, `moduleGroup()` 10, `factory()`, constructor `(factory_, bytes)`). SCaaSDex keeps every other entry and
+forwards the 22 (S1 `_forward` with `_guardIn` / `_guardOut` for the 9 governed, S2 casts for the 12 views and `validBits`);
+constructor `(factory_, abi.encode(ImplArgs([D])))` checks D (ModuleMissing: count, code; ModuleMismatch: group, factory);
+`modules()` added. Test helpers: KindModules.sol `deployDexModules` / `dexArgs` (gen_faces.py), Catalogue.dex pins D in the env.
+Sizes, runtime B: SCaaSDex 35,210 -> 32,991 (-2,219; spec estimate 33,202; T-2's release line 33,594 B met); SCaaSDexD 6,459 (new;
+estimate 5-9 KB); nothing else moved.
+Red first: test/ua/UADexAdmin.t.sol does not compile on 3e00abf3 (no SCaaSDexD, no `modules()` on the DEX); here 3 passed
+(the governance views and a write run in D, D refuses direct calls, the constructor's checks). test/ua UADex, UADexInvariant,
+UATradeVectors, UATrade: 39 passed. test/metatx: 536 passed, 6 failed (the same 6); MsgSenderLint's SCaaSDex row 14 -> 12 and a
+SCaaSDexAdmin row 2 (`_caller` moved with the hooks).
+Mutants: 3 of 3 killed (the DEX's group check dropped, its factory check dropped, D's onlyDelegated dropped).
+
+Task 3.1d (owner 2026-11-09, spec §11 (f) as of 592b6fd2): the five external `*Digest` views (`registrationDigest`,
+`portableRecordDigest`, `pqzKeyRecordDigest`, `pqzKeyVersionDigest`, `pqzKeyVersionRecordDigest`) leave UARegistryCoreLib for
+UARegistryAuxLib; the registry's `_libPure(lib, sel)` names the library (Aux for the five, the core for `uaOf` and `keyHashOf`);
+their internal twins (UAKinds) stay in the core for `register` and `requirePortable`; `registrationOf`, `uaCount`, `uaOf`,
+`keyHashOf` stay in the core.
+contract | 5a8fccda B / asked | 3.1d B / asked (DeployGas.t.sol test_t66bPair: regular + state)
+UARegistryCoreLib | 34,608 / 58,181,392 | 33,685 / 56,635,241 (2,216,675 + 51,721,650): under its 33,903 B / 57 M line
+UARegistryAuxLib | 19,596 / 33,037,883 | 20,192 / 34,036,864 (1,338,701 + 31,077,360)
+UARegistry | 28,045 / 47,827,987 | 28,165 / 48,029,505 (2,466,336 + 43,276,050): +120 B, `_libPure`'s library argument
+Per-call execution gas (auxgas-3.1d.txt): registrationDigest 8,184 -> 8,129, portableRecordDigest 7,985 -> 7,982,
+pqzKeyRecordDigest 7,861 -> 7,914, pqzKeyVersionDigest 7,905 -> 7,825, pqzKeyVersionRecordDigest 8,104 -> 8,090; Aux writers
++35 to +76, Aux reads -33 to +67 (the Aux dispatcher's five more entries), core reads 0.
+Red first: test/ua/UARegistryPair.t.sol test_d_digestsRunInTheAuxLibrary on 5a8fccda | 1 | expected a call to UARegistryAuxLib,
+none (the forward ran in the core); here | 0 | UARegistryPair 18 passed.
+Pins old -> new: size-baseline.json UARegistryCoreLib 34,608 -> 33,685, UARegistryAuxLib 19,596 -> 20,192, UARegistry 28,006 ->
+28,165 (+39 B 4.1's SaltedEIP712 split, +120 B 3.1d); UA-8 regular-gas pins, 14 rows (ua8-pins-3.1d.txt): popOf +67 (10 rows,
+e.g. mldsa65/v2 20,051 -> 20,118), setKemKey fndsa512/v2 2,524,077 -> 2,524,153 (four sets); state gas unchanged; LinkClosure
+unchanged (the registry links both libraries, the Aux library the core, the core nothing); UAGas, UARegistryGroups, layout,
+typehash pins unchanged.
+Gates: the 17 registry suites of test/ua (--isolate) | 0 | 280 passed; UA-8 gas tests at the four sets, pins moved | 0 / 0 / 0 /
+0 | src/pqz/PqzSet.sol restored after each.
+Mutants: R1-wrong-library-entry (now an Aux forward: pqzKeyVersionDigest -> pqzKeyRecordDigest), R1d-digest-routed-to-core
+(registrationDigest's forward to the core again): 2 of 2 killed; UARegistry.sol md5-equal after.
+
+Task 4.1, the §11 (g) pay block (owner 2026-11-09: pay stays in P; prep: the pay cut clean in 4.1, the per-kind pay-module
+comparison in 4.4): gen_faces.py splits P into P (pipeline, named transfers) and P2 (the `pay` domain of entries.json: mtxPay,
+mtxPayReceiverFee, mtxRelayFee, payWithFee, payWithFeeToUA, metaPayId, payLane, receiverFeeDigest; on 8-13 the tax entries) for a
+kind listed in SPLITS with 'P'; none is (largest P 30,783 B < 33,780 B). T66B_SPLIT_PAY=1 splits every kind, for the comparison
+build only. Measured at 5a8fccda with every kind split (out/t66b-pay, not committed): P 20,077-23,539 B, P2 15,336-15,407 B on
+kinds 0-5 and 19,883-19,962 B on 8-13; the twelve P2 runtimes, immutables zeroed and metadata cut, are all different (twelve
+hashes; first difference at byte 22-23 against kinds 0 and 8, the dispatcher's jump targets: each kind's hooks, `_mtxRule`,
+`_uaAllowed`, `_update` and the regulated hooks, are compiled into its P2). A shared pay module needs those hooks as data (§7).
+
+Task 4.2 (1c7f59a0, 3344959b): OpenFactory `_checkModules` (ModuleNotPinned, ModulesUnreadable) on deployImplementation,
+deployDexImplementation, createTokenUnregistered; DeployBase modules by CREATE2 (DEPLOY_SALT), env pins, implArgs, D in the
+DEX env, releases.json rows; TradeLib out of the token closures; e2e.py modules + self-test closure; LinkClosure §4.5 closure
+and module opcode scan; DeployGas.t.sol with modules. OpenFactory 28,438 -> 29,225 B (49,282,524 asked); size-baseline row moved.
+Deploy gas (DeployGas.t.sol, every contract its own CREATE2): max asked UARegistryCoreLib 56,635,241; SCaaSDex 55,703,974;
+largest module NormalPqzRegulatedTokenQ 32,423 B / 54,760,898. e2e.py --self-test: 0 failures.
+
+Task 4.3, the test migration (fork commits 7f50bc68 v2, 543bc276 governance, 3922013a merge, 2f4bab2b pqz, 2732a769 as,
+0646db77 zether; 2f65cbaa ua UAReceivers) and the §10 tests so far (6ec405b9, 7d55ed52: test/t66b, differential per entry on
+every kind and the DEX, module checks, path tests). Gates, label t66b-c1 (forge-dirs.sh, the tree at 2f65cbaa / 7d55ed52):
+step | rc | counts | reds
+test/v2 | 1 | 652 passed, 2 failed | SmartKeyAccount byte pin; Wrapped test_libraryErrorsAreInTheTokenAbi (R4: the faces' ABI lacks
+  the interface errors; fix B approved, after the checkpoint)
+test/governance | 1 | 399 passed, 25 failed | 24 PlusZero gas pins (old != new in the failure text); RelayFeeRouter address pin
+test/merge | 1 | 339 passed, 2 failed | SmartKeyAccount / wallet byte pins
+test/pqz | 1 | 592 passed, 6 failed, 4 skipped | byte pin; MtxSplitOverhead bound (owner pending: PQZL diff 75,487 / 77,225 /
+  75,774 vs 9,000, PQZH 299,515 / 303,659 / 300,232 vs 14,000, n2304-kmax4096); P7 zether gas pin 86,106 -> 86,128;
+  PqzWrapped init > 49,152 now 28,126 B (fits EIP-3860: a size relation to flip); ROLL_MAX
+test/as | 1 | 461 passed, 2 failed | byte pin; regulated_kat.json stale (addresses / digests of the new code)
+test/zether | 1 | 440 passed, 1 failed, 4 skipped | byte pin
+test/metatx | 1 | 537 passed, 5 failed, 1 skipped | self-call lint non-vacuity (4.1's `I<X>.f.selector` leaves 0 `this.` reads);
+  TokenKat x2; MandateWallet byte pin; ROLL_MAX
+test/ua (without UARegistryUA8) | 1 | 643 passed, 1 failed | byte pin
+test/ua UARegistryUA8 (alone, -j 1) | 0 | 88 passed (its gas pins at the default set unchanged)
+test/wallet | 1 | 180 passed, 1 failed | byte pin
+test/account | 1 | 96 passed, 2 failed | MandateWallet KAT address, byte pin
+test/hedera | 1 | 18 passed, 2 failed | KAT address and digest
+test/research | 1 | 354 passed, 5 failed, 7 skipped | byte pin; ROLL_MAX; set.toml debit_min_gas pinned 7,468,120, measured
+  7,513,388 (a set parameter: the owner's)
+test/confidential | 0 | 5 passed
+test/fork | 0 | 1 skipped
+test/p6f | 0 | 4 passed
+test/pqzh | 0 | 42 passed
+test/vectors | 0 | no tests (compiles)
+top (test/*.t.sol, from a copy dir: sparse mode compiles every test dir) | 0 | 29 passed
+test/t66b (gates.sh t66b, label q43, + DiffPqzRegulated) | 0 | 11 suites, 30 passed
+
+Task 4.4, the gates on the final tree (816f226d + the commit of this summary: docs, a test comment, DeployGas.t.sol's wallet rows,
+gates.sh's four-set steps; no src change). Label q44.
+The four-set gate (gates.sh pqz-<set> / research-<set>: script/pqz/at-set.sh, FOUNDRY_TEST=<dir>, -vv; src/pqz/PqzSet.sol restored
+and checked by git diff after each run). Pass criterion (spec §10, owner ruling (c)): only test_gas_rollMax_relayedFullTx red, at
+n2048-kmax1024, n2304-kmax4096, n2816-kmax65536.
+step | set | rc | counts | reds
+test/pqz | n2048-kmax1024 | 1 | 598 passed, 2 failed, 2 skipped | ROLL_MAX only (2 suites)
+test/pqz | n2304-kmax4096 | 1 | 596 passed, 2 failed, 4 skipped | ROLL_MAX only (2 suites)
+test/pqz | n2560-kmax16384 | 0 | 595 passed, 0 failed, 7 skipped | -
+test/pqz | n2816-kmax65536 | 1 | 588 passed, 2 failed, 12 skipped | ROLL_MAX only (2 suites)
+test/research | n2048-kmax1024 | 1 | 359 passed, 3 failed, 4 skipped | ROLL_MAX only (3 suites)
+test/research | n2304-kmax4096 | 1 | 356 passed, 3 failed, 7 skipped | ROLL_MAX only (3 suites)
+test/research | n2560-kmax16384 | 0 | 359 passed, 0 failed, 7 skipped | -
+test/research | n2816-kmax65536 | 1 | 347 passed, 3 failed, 16 skipped | ROLL_MAX only (3 suites)
+@UA8@
+Four-set gate: PASS (no red row but the listed ROLL_MAX rows).
+
+Task 4.5, ROLL_MAX at the four sets (figures only; ROLL_MAX stays 96 / 80 / 64 / 32, no bound moves: owner 2026-11-09). From the
+q44 test/pqz logs, PqzStatePinGasTest.test_gas_rollMax_relayedFullTx: the ROLL_MAX rollover as a full relayed transaction (fee 7)
+and the linear fit of ROLL_MAX + 16 against the cap 0.75 x 2^24 = 12,582,912 (the test is red when the fit is still under it):
+n2048-kmax1024 red | mtxExecute: ROLL_MAX 96 regular 10,697,626 (state 195,840), ROLL_MAX+16 fit 11,693,722 (under 0.75*2^24 = 12,582,912), per entry 62,256 | uaExecute: ROLL_MAX 96 regular 10,856,706 (state 195,840), ROLL_MAX+16 fit 11,852,802 (under 0.75*2^24 = 12,582,912), per entry 62,256
+n2304-kmax4096 red | mtxExecute: ROLL_MAX 80 regular 11,269,324 (state 195,840), ROLL_MAX+16 fit 12,376,172 (under 0.75*2^24 = 12,582,912), per entry 69,178 | uaExecute: ROLL_MAX 80 regular 11,428,404 (state 195,840), ROLL_MAX+16 fit 12,535,252 (under 0.75*2^24 = 12,582,912), per entry 69,178
+n2560-kmax16384 green | mtxExecute: ROLL_MAX 64 regular 11,733,066 (state 195,840), ROLL_MAX+16 fit 12,951,110 (over 0.75*2^24 = 12,582,912), per entry 76,127 | uaExecute: ROLL_MAX 64 regular 11,892,146 (state 195,840), ROLL_MAX+16 fit 13,110,178 (over 0.75*2^24 = 12,582,912), per entry 76,127
+n2816-kmax65536 red | mtxExecute: ROLL_MAX 32 regular 10,732,998 (state 195,840), ROLL_MAX+16 fit 12,062,550 (under 0.75*2^24 = 12,582,912), per entry 83,097 | uaExecute: ROLL_MAX 32 regular 10,892,078 (state 195,840), ROLL_MAX+16 fit 12,221,630 (under 0.75*2^24 = 12,582,912), per entry 83,097
+
+Task 4.4, deploy gas of every deployed contract (DeployGas.t.sol test_t66bDeployGas, LABEL=q44 gates.sh deploy-gas; each its own
+CREATE2 transaction through a probe, isolate: regular = gasTotalUsed x 64/63, state = EIP-8037's, asked = (regular + state) x 1.05).
+93 contracts, every one <= 60 M asked and regular x 1.05 < 2^24. A release through deployImplementation adds the factory frame,
+test_t66bReleaseFrame: 310,633 asked (NormalToken). Before 4.4 the table had no wallet rows; added: SmartKeyAccount,
+MandateWallet, HederaMandateWallet (each its own transaction; the SmartKeyAccount implementation is also inside
+SmartKeyAccountFactory's row).
+contract | runtime B | init B | regular | state | asked (x1.05) | regular x1.05 < 2^24
+NormalTokenP | 24,300 | 25,997 | 1,713,192 | 37,460,520 | 41,132,397 | yes
+NormalTokenT | 14,259 | 15,893 | 1,055,752 | 22,097,790 | 24,311,219 | yes
+NormalTokenA | 23,994 | 25,837 | 1,702,790 | 36,992,340 | 40,629,886 | yes
+NormalToken | 13,734 | 16,829 | 1,116,086 | 21,294,540 | 23,531,157 | yes
+WrappedTokenP | 24,728 | 26,425 | 1,740,239 | 38,115,360 | 41,848,378 | yes
+WrappedTokenT | 15,635 | 17,276 | 1,145,213 | 24,203,070 | 26,615,697 | yes
+WrappedTokenA | 19,629 | 21,417 | 1,415,680 | 30,313,890 | 33,316,048 | yes
+WrappedTokenW | 21,873 | 23,682 | 1,563,396 | 33,747,210 | 37,076,136 | yes
+WrappedToken | 17,808 | 21,086 | 1,392,794 | 27,527,760 | 30,366,581 | yes
+NormalZetherTokenP | 25,288 | 27,007 | 1,777,688 | 38,972,160 | 42,787,340 | yes
+NormalZetherTokenT | 14,253 | 15,909 | 1,057,832 | 22,088,610 | 24,303,764 | yes
+NormalZetherTokenA | 23,463 | 25,328 | 1,669,501 | 36,179,910 | 39,741,881 | yes
+NormalZetherTokenZ | 21,948 | 23,793 | 1,569,637 | 33,861,960 | 37,203,176 | yes
+NormalZetherToken | 17,088 | 20,373 | 1,347,023 | 26,426,160 | 29,161,842 | yes
+WrappedZetherTokenP | 25,835 | 27,554 | 1,815,137 | 39,809,070 | 43,705,417 | yes
+WrappedZetherTokenT | 15,635 | 17,298 | 1,147,294 | 24,203,070 | 26,617,882 | yes
+WrappedZetherTokenA | 16,746 | 18,556 | 1,228,434 | 25,902,900 | 28,487,900 | yes
+WrappedZetherTokenW | 21,697 | 23,500 | 1,550,913 | 33,477,930 | 36,780,285 | yes
+WrappedZetherTokenZ | 27,996 | 29,897 | 1,967,014 | 43,115,400 | 47,336,534 | yes
+WrappedZetherToken | 21,520 | 24,994 | 1,648,696 | 33,207,120 | 36,598,606 | yes
+NormalPqzTokenP | 25,495 | 27,211 | 1,792,251 | 39,288,870 | 43,135,177 | yes
+NormalPqzTokenT | 14,309 | 15,962 | 1,059,913 | 22,174,290 | 24,395,913 | yes
+NormalPqzTokenA | 26,411 | 28,280 | 1,860,908 | 40,690,350 | 44,678,820 | yes
+NormalPqzTokenQ | 30,641 | 32,567 | 2,139,696 | 47,162,250 | 51,767,043 | yes
+NormalPqzToken | 19,045 | 22,577 | 1,490,578 | 29,420,370 | 32,456,495 | yes
+WrappedPqzTokenP | 26,086 | 27,802 | 1,829,701 | 40,193,100 | 44,123,941 | yes
+WrappedPqzTokenT | 15,684 | 17,344 | 1,149,374 | 24,278,040 | 26,698,784 | yes
+WrappedPqzTokenA | 16,875 | 18,689 | 1,238,836 | 26,100,270 | 28,706,061 | yes
+WrappedPqzTokenW | 21,903 | 23,703 | 1,563,396 | 33,793,110 | 37,124,331 | yes
+WrappedPqzTokenQ | 28,283 | 30,048 | 1,975,336 | 43,554,510 | 47,806,338 | yes
+WrappedPqzTokenQ2 | 18,216 | 20,030 | 1,324,137 | 28,152,000 | 30,949,943 | yes
+WrappedPqzToken | 24,314 | 28,126 | 1,850,506 | 37,481,940 | 41,299,068 | yes
+NormalRegulatedTokenP | 28,943 | 30,823 | 2,027,349 | 44,564,310 | 48,921,241 | yes
+NormalRegulatedTokenT | 15,527 | 17,295 | 1,147,294 | 24,037,830 | 26,444,380 | yes
+NormalRegulatedTokenA | 25,702 | 27,679 | 1,821,379 | 39,605,580 | 43,498,306 | yes
+NormalRegulatedTokenW | 11,778 | 13,575 | 905,955 | 18,301,860 | 20,168,205 | yes
+NormalRegulatedToken | 17,484 | 21,062 | 1,392,794 | 27,032,040 | 29,846,075 | yes
+WrappedRegulatedTokenP | 29,378 | 31,258 | 2,054,395 | 45,229,860 | 49,648,467 | yes
+WrappedRegulatedTokenT | 16,996 | 18,771 | 1,242,997 | 26,285,400 | 28,904,816 | yes
+WrappedRegulatedTokenA | 21,348 | 23,277 | 1,536,349 | 32,943,960 | 36,204,324 | yes
+WrappedRegulatedTokenW | 28,021 | 30,055 | 1,977,417 | 43,153,650 | 47,387,620 | yes
+WrappedRegulatedToken | 21,249 | 24,911 | 1,642,455 | 32,792,490 | 36,156,692 | yes
+NormalZetherRegulatedTokenP | 29,960 | 31,866 | 2,093,925 | 46,120,320 | 50,624,957 | yes
+NormalZetherRegulatedTokenT | 15,527 | 17,321 | 1,149,374 | 24,037,830 | 26,446,564 | yes
+NormalZetherRegulatedTokenA | 25,190 | 27,193 | 1,790,171 | 38,822,220 | 42,643,010 | yes
+NormalZetherRegulatedTokenW | 11,778 | 13,601 | 908,036 | 18,301,860 | 20,170,390 | yes
+NormalZetherRegulatedTokenZ | 23,880 | 25,863 | 1,704,870 | 36,817,920 | 40,448,929 | yes
+NormalZetherRegulatedToken | 20,619 | 24,394 | 1,609,167 | 31,828,590 | 35,109,644 | yes
+WrappedZetherRegulatedTokenP | 30,507 | 32,413 | 2,129,294 | 46,957,230 | 51,540,850 | yes
+WrappedZetherRegulatedTokenT | 16,996 | 18,797 | 1,245,078 | 26,285,400 | 28,907,001 | yes
+WrappedZetherRegulatedTokenA | 18,481 | 20,436 | 1,351,184 | 28,557,450 | 31,404,065 | yes
+WrappedZetherRegulatedTokenW | 29,011 | 31,064 | 2,041,912 | 44,668,350 | 49,045,775 | yes
+WrappedZetherRegulatedTokenZ | 28,865 | 30,883 | 2,031,510 | 44,444,970 | 48,800,304 | yes
+WrappedZetherRegulatedToken | 24,995 | 28,868 | 1,900,438 | 38,523,870 | 42,445,523 | yes
+NormalPqzRegulatedTokenP | 30,177 | 32,080 | 2,108,489 | 46,452,330 | 50,988,859 | yes
+NormalPqzRegulatedTokenT | 15,576 | 17,367 | 1,151,455 | 24,112,800 | 26,527,467 | yes
+NormalPqzRegulatedTokenA | 28,131 | 30,138 | 1,981,578 | 43,321,950 | 47,568,704 | yes
+NormalPqzRegulatedTokenW | 11,827 | 13,647 | 910,116 | 18,376,830 | 20,251,293 | yes
+NormalPqzRegulatedTokenQ | 32,423 | 34,487 | 2,264,527 | 49,888,710 | 54,760,898 | yes
+NormalPqzRegulatedToken | 22,556 | 26,555 | 1,748,561 | 34,792,200 | 38,367,799 | yes
+WrappedPqzRegulatedTokenP | 30,783 | 32,686 | 2,148,018 | 47,379,510 | 52,003,904 | yes
+WrappedPqzRegulatedTokenT | 17,045 | 18,843 | 1,247,158 | 26,360,370 | 28,987,904 | yes
+WrappedPqzRegulatedTokenA | 18,594 | 20,553 | 1,359,506 | 28,730,340 | 31,594,338 | yes
+WrappedPqzRegulatedTokenW | 29,202 | 31,252 | 2,054,395 | 44,960,580 | 49,365,723 | yes
+WrappedPqzRegulatedTokenQ | 29,465 | 31,354 | 2,060,637 | 45,362,970 | 49,794,787 | yes
+WrappedPqzRegulatedTokenQ2 | 19,038 | 20,983 | 1,386,552 | 29,409,660 | 32,336,022 | yes
+WrappedPqzRegulatedToken | 27,713 | 31,897 | 2,096,006 | 42,682,410 | 47,017,336 | yes
+SCaaSDexD | 6,459 | 7,033 | 479,451 | 10,065,870 | 11,072,587 | yes
+SCaaSDex | 32,991 | 34,927 | 2,293,654 | 50,757,750 | 55,703,974 | yes
+GovernanceRouter | 15,572 | 16,622 | 1,103,603 | 24,008,760 | 26,367,981 | yes
+OpenFactory | 29,225 | 29,478 | 1,939,968 | 44,995,770 | 49,282,524 | yes
+RelayFeeRouter | 2,552 | 3,269 | 236,032 | 5,119,380 | 5,623,182 | yes
+ComplianceRegistry | 2,538 | 2,760 | 202,743 | 4,164,660 | 4,585,773 | yes
+SmartKeyAccountFactory | 1,264 | 23,254 | 1,534,268 | 34,659,090 | 38,003,025 | yes
+SmartKeyAccount | 21,085 | 21,802 | 1,440,646 | 32,541,570 | 35,681,326 | yes
+MandateWallet | 17,891 | 19,000 | 1,257,561 | 27,556,830 | 30,255,110 | yes
+HederaMandateWallet | 17,891 | 18,955 | 1,255,480 | 27,556,830 | 30,252,925 | yes
+UARegistryCoreLib | 33,685 | 33,737 | 2,216,675 | 51,721,650 | 56,635,241 | yes
+UARegistryAuxLib | 20,192 | 20,244 | 1,338,701 | 31,077,360 | 34,036,864 | yes
+ZetherLib | 26,991 | 27,043 | 1,781,849 | 41,479,830 | 45,424,762 | yes
+PqzTransferLib | 24,456 | 24,508 | 1,615,408 | 37,601,280 | 41,177,522 | yes
+PqzViewLib | 24,201 | 24,253 | 1,598,764 | 37,211,130 | 40,750,388 | yes
+WrappedLib | 17,095 | 17,147 | 1,136,891 | 26,338,950 | 28,849,633 | yes
+PqzBurnLib | 15,404 | 15,456 | 1,026,625 | 23,751,720 | 26,017,262 | yes
+GovernanceLib | 14,513 | 14,565 | 970,451 | 22,388,490 | 24,526,888 | yes
+PqzStateLib | 14,062 | 14,114 | 941,324 | 21,698,460 | 23,771,773 | yes
+ZetherWrappedLib | 12,067 | 12,119 | 810,252 | 18,646,110 | 20,429,180 | yes
+MtxPipelineLib | 12,460 | 12,512 | 835,218 | 19,247,400 | 21,086,748 | yes
+RegulatedLib | 10,418 | 10,470 | 704,146 | 16,123,140 | 17,668,650 | yes
+PqzWrappedLib | 5,563 | 5,615 | 387,909 | 8,694,990 | 9,537,043 | yes
+TradeLib | 4,919 | 4,971 | 346,298 | 7,709,670 | 8,458,766 | yes
+HederaLib | 767 | 819 | 75,832 | 1,357,110 | 1,504,589 | yes
+UARegistry | 28,165 | 37,577 | 2,466,336 | 43,276,050 | 48,029,505 | yes
+
+Task 4.4, the §11 (g) pay-module comparison on the final tree (owner 2026-11-09: pay stays in P; 4.4 reports whether the per-kind pay
+modules' runtime is identical apart from immutables and metadata). T66B_SPLIT_PAY=1 gen_faces.py splits every kind's P into P and P2
+(the `pay` domain of entries.json), forge build src into out/t66b-pay (git-ignored), then gen_faces.py regenerated the committed
+sources (gen_faces.py --check: 27 files, 0 differ; git status of src/ script/ test/ clean). Each P2 runtime with every immutable
+zeroed, every link placeholder zeroed and the CBOR metadata cut, hashed:
+kind | P2 runtime B | compared B | hash (first 16 hex)
+NormalToken | 15,336 | 15,269 | 5a0ff2c4cca6ca6b
+WrappedToken | 15,358 | 15,291 | 99c8d3ee36fbc583
+NormalZetherToken | 15,337 | 15,270 | e25ad2ed9b14f117
+WrappedZetherToken | 15,358 | 15,291 | 82f24b59a4dc6453
+NormalPqzToken | 15,386 | 15,319 | 5e28ef752e576993
+WrappedPqzToken | 15,407 | 15,340 | 4acabd0e2340988e
+NormalRegulatedToken | 19,883 | 19,816 | 10f451f0d5938fe3
+WrappedRegulatedToken | 19,904 | 19,837 | fbc5ed410aa316fa
+NormalZetherRegulatedToken | 19,892 | 19,825 | 31da5af95fefd611
+WrappedZetherRegulatedToken | 19,913 | 19,846 | 697bb49d53475d17
+NormalPqzRegulatedToken | 19,941 | 19,874 | a396a567ef53b5da
+WrappedPqzRegulatedToken | 19,962 | 19,895 | 3c69a722a142a93a
+Result: twelve different runtimes, as at 5a8fccda (the same twelve hashes: no pay body moved since). The first difference against
+kind 0 or kind 8 is at byte 22-23 (the dispatcher's jump targets) for every pair but NormalToken / NormalZetherToken (byte 72) and
+NormalRegulatedToken / NormalZetherRegulatedToken (byte 515): each kind's hooks (`_mtxRule`, `_uaAllowed`, `_update`, the regulated
+hooks) are compiled into its pay bodies, so a shared pay module (C or B of §11 (g)) needs those hooks as data. No P2 is built (the
+largest P 30,783 B < 33,780 B).
+
+Task 4.4, the T65 e2e on the local copy with kind 13 (no --skip-kind; never the live stack): pqz-core/nethermind/chain/copy.sh, the
+T65 copy wiped and started from its genesis (image scaas/nethermind-pqz:2.2.0-pqz7, n2304-kmax4096, 200 M block, maxCodeSize
+0x20000; docker mem_limit 1700 MB per node); contracts built at the default set into out/t66b-e2e (forge build src
+test/helpers/Mocks.sol); script/pqz/e2e.py --proof-path-only through the signer's RPC inside the copy's network.
+step | rc | counts
+e2e.py --self-test (EVM_OUT=out/t66b-e2e) | 0 | 0 failures (kind 13's implArgs 320 B, the module list)
+e2e.py --proof-path-only, n2304-kmax4096 | 0 | 289 checks ok, 0 failures, 1,134 s; record runs/2026-11-10-ua-mtx-merge-t66b-e2e-n2304.txt
+The five releases with their modules, each module its own CREATE2 transaction: NormalToken 22,156,559 gas, NormalPqzToken
+30,444,573, WrappedPqzToken 38,657,185, NormalPqzRegulatedToken 35,914,018, WrappedPqzRegulatedToken (kind 13) 43,936,313 (T65:
+DeployFailed() under the RPC's 100 M estimate cap; now within 60 M). Section 7 as T65: 8 debits rebuilt from the §9 interface
+equal the proven statements and verify, 9 negatives fail. The largest transactions of the run are not deploys: the PQZ holders'
+one-call registrations (register + pqz-mlwe key + KEM, R_REG proof in the same call) at 91.6-91.7 M gas (T65: 91,741,247 for
+alice; now 91,735,941), above 60 M and within the copy's 200 M block; e2e.py --split (register, then storePqzPop) is the form
+that keeps each under 60 M (next run).
+
+Task 4.4, forge per directory on the final tree at the default set (forge-dirs.sh, label t66b-q44; test/pqz and test/research are
+the four-set rows above at n2304-kmax4096, the default):
+step | rc | counts | reds
+test/v2 | 0 | 654 passed | -
+test/governance | 0 | 425 passed | -
+test/merge | 0 | 341 passed | -
+test/zether | 0 | 441 passed, 4 skipped | -
+test/as | 0 | 463 passed | -
+test/metatx | 1 | 541 passed, 1 failed, 1 skipped | ROLL_MAX only (the known red)
+test/wallet | 0 | 181 passed | -
+test/account | 0 | 98 passed | -
+test/hedera | 0 | 20 passed | -
+test/confidential | 0 | 5 passed | -
+test/fork | 0 | 1 skipped | -
+test/p6f | 0 | 4 passed | -
+test/pqzh | 0 | 42 passed | -
+test/vectors | 0 | no tests (compiles) | -
+test/ua without UARegistryUA8 | 0 | 644 passed | -
+test/ua UARegistryUA8 alone (-j 1) | 0 | 88 passed | -
+test/t66b (gates.sh t66b: the pre-split d142b57c build, then the suites) | 0 | 11 suites, 32 passed | -
+top: the five files directly in test/, copied into a temporary test directory (sparse mode would compile every test
+directory), FOUNDRY_TEST=that copy | 0 | 29 passed (5 suites); the copy removed after the run.
+e2e.py --proof-path-only --split, n2304-kmax4096 (the copy wiped and started again) | 0 | 299 checks ok, 0 failures, 1,235 s;
+  record runs/2026-11-10-ua-mtx-merge-t66b-e2e-n2304-split.txt; 122 transactions, none above 60 M gas used: the largest a relayed
+  op 7 M = 4 under LOG 52,816,021, the library UARegistryCoreLib 52,299,751, the module NormalPqzRegulatedTokenQ 50,497,243.
+  This is the form Step 5 runs on the SCaaS testnet.
+
+Step 5, the full deploy on the SCaaS testnet (7622, RPC only): runs/2026-11-10-ua-mtx-merge-t66b-step5-7622.txt (the four conditions,
+addresses, tx hashes, gas, code checks, smoke). step | rc | counts
+forge script simulation (dry run, same key / salt / flags) | 0 | 104 transactions; release list 49 rows
+deploy.sh evm (DeployBase: kinds 0-3, 8-11, the DEX and D, the registry trio, factory, routers, ComplianceRegistry, Zether stack) | 0 |
+  104 transactions, all status 1, 2,165,830,059 gas, largest 52,317,793 (UARegistryCoreLib); deployments JSON = the dry run's
+code hashes | 0 | the 48 contract rows of the release list equal on chain; 27 addresses of the deploy JSON equal their build artifact
+  (immutables, link slots and library self-addresses masked), 2 demo-token clones
+smoke 1, 2 (Smoke.s.sol): relayed mtxTransfer; RelayFeeRouter.relay with a relay fee of 1 | 0 | 182,095 and 243,835 gas
+e2e.py --proof-path-only --split (kinds 0, 4, 5, 12, 13 and smoke 3, PQZ op 1) | 1 | 289 ok, 5 failures, all in the off-chain
+  reference rebuild of the LOG debits (the RPC caps eth_getLogs at 100 blocks without the log index); 122 transactions, all status
+  1, none above 60 M; op 1 rebuilt and verified (d1, d2, d7); code of the 49 contracts it deployed equal to the build

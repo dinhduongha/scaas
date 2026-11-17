@@ -1,6 +1,6 @@
 // Shared by the NEAR and Algorand clients (near-algorand T18): the scaas.metaop.v1 envelope parts both families use.
 import { keccak_256, concatBytes, utf8ToBytes, hex, fromHex, b64url } from './bytes.js';
-import { metaPayId, payLane } from './evm.js';
+import { metaPayIdV1 as metaPayId, payLane } from './evm.js';
 
 export const LABEL = utf8ToBytes('scaas.metaop.v1');
 

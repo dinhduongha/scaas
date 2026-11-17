@@ -18,6 +18,7 @@ import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Router (v3 style): pulls `amountIn` (+ `extraIn`) from the caller under its allowance, pays `amountOut`
 /// (- `shortOut`) to `to` and always claims `amountOut` (the DEX never reads it).
@@ -155,12 +156,12 @@ contract DexExchangeTest is Test {
     MockRouter router;
 
     function setUp() public {
-        f = new OpenFactory(address(this), UID_, 0);
+        f = EnvKit.factory(address(this), UID_, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "a"));
         b = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("B", "B", 0, 1e6, bob, address(0))), "b"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0))), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0), 0, 0)), "dex"));
         puller = dex.puller();
         usdc = new MockERC20("USD Coin", "USDC", 6);
         c = new MockERC20("Hop", "C", 18);
@@ -177,8 +178,8 @@ contract DexExchangeTest is Test {
         vm.prank(bob);
         b.transfer(address(router), 500_000);
         vm.startPrank(admin);
-        dex.setMarket(address(a), address(b), true);
-        dex.setMarket(address(usdc), address(b), true);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(usdc), address(b), true, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
     }
 
@@ -203,7 +204,7 @@ contract DexExchangeTest is Test {
         internal view returns (DexLegs.ExchangeLeg memory)
     {
         bytes32 d = dex.tokenKind(sellToken) == 1
-            ? ITradeToken(sellToken).tradeOrderDigest(o) : dex.dexOrderDigest(sellToken, o);
+            ? ITradeToken(sellToken).tradeOrderDigest(DexLegs.ua(o)) : dex.dexOrderDigest(sellToken, o);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, d);
         return DexLegs.ExchangeLeg(sellToken, o, abi.encodePacked(r, s, v), sellFill, floor);
     }
@@ -280,7 +281,7 @@ contract DexExchangeTest is Test {
     /// The `ExchangeLegSettled` fields after the indexed ones, of the `i`-th such event.
     function _legEvent(Vm.Log[] memory logs, uint256 i) internal pure returns (bytes32 h, uint256[7] memory v) {
         for (uint256 k; k < logs.length; ++k) {
-            if (logs[k].topics[0] != ISCaaSDex.ExchangeLegSettled.selector) continue;
+            if (logs[k].topics[0] != ISCaaSDex.UAExchangeLegSettled.selector) continue;
             if (i != 0) {
                 --i;
                 continue;
@@ -301,8 +302,8 @@ contract DexExchangeTest is Test {
     function test_exchange_twoLegs_floorsPlusSurplus_feesOnTheFloor() public {
         DexLegs.ExchangePlan memory p = _twoLegs();
         ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 2000, 3800);
-        bytes32 ha = a.tradeOrderDigest(p.legs[0].o);
-        bytes32 hc = a.tradeOrderDigest(p.legs[1].o);
+        bytes32 ha = a.tradeOrderDigest(DexLegs.ua(p.legs[0].o));
+        bytes32 hc = a.tradeOrderDigest(DexLegs.ua(p.legs[1].o));
         vm.recordLogs();
         _exchange(p, xs);
         assertEq(b.balanceOf(alice), 1900 - 6 + 51);
@@ -473,7 +474,7 @@ contract DexExchangeTest is Test {
         vm.prank(dave);
         fot.approve(puller, type(uint256).max);
         vm.prank(admin);
-        dex.setMarket(address(fot), address(b), true);
+        dex.setMarket(address(fot), address(b), true, EnvKit.codeUidOf(address(dex)));
         DexLegs.ExchangePlan memory p =
             _plan(_leg(DAVE_PK, address(fot), _order(dave, address(b), 1000, 1000, 0), 1000, 1000));
         _expectExchange(p, _swap(address(fot), address(b), 990, 1000),
@@ -490,7 +491,7 @@ contract DexExchangeTest is Test {
         vm.prank(dave);
         bon.approve(puller, type(uint256).max);
         vm.prank(admin);
-        dex.setMarket(address(bon), address(b), true);
+        dex.setMarket(address(bon), address(b), true, EnvKit.codeUidOf(address(dex)));
         DexLegs.ExchangePlan memory p =
             _plan(_leg(DAVE_PK, address(bon), _order(dave, address(b), 1000, 1900, 0), 1000, 1900));
         _expectExchange(p, _swap(address(bon), address(b), 1001, 2000),
@@ -513,7 +514,7 @@ contract DexExchangeTest is Test {
 
     function test_exchange_forbiddenTargets_theDexAndThePuller() public {
         DexLegs.ExchangePlan memory p = _plan(_alice());
-        _expectExchange(p, _ix(address(dex), abi.encodeCall(ISCaaSDex.setListedOnly, (true))),
+        _expectExchange(p, _ix(address(dex), abi.encodeCall(ISCaaSDex.setListedOnly, (true, EnvKit.codeUidOf(address(dex))))),
             _err(ISCaaSDex.ForbiddenTarget.selector, address(dex)));
         _expectExchange(p, _ix(puller, abi.encodeCall(DexPuller.pull, (address(usdc), dave, 1))),
             _err(ISCaaSDex.ForbiddenTarget.selector, puller));
@@ -523,9 +524,9 @@ contract DexExchangeTest is Test {
     /// `receiveFill` and the plan pays his 1000 B to Alice as surplus; conservation would balance.
     function test_exchange_forbiddenSelector_mtxTradeOfARestingOrder_andShortData() public {
         ITradeToken.TradeOrder memory ob = _order(bob, address(a), 1000, 500, 0);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOB_PK, b.tradeOrderDigest(ob));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOB_PK, b.tradeOrderDigest(DexLegs.ua(ob)));
         bytes memory steal = abi.encodeCall(ITradeToken.mtxTrade,
-            (ob, abi.encodePacked(r, s, v), ITradeToken.TradeFill(1000, 1e9, 0, relayer)));
+            (DexLegs.ua(ob), DexLegs.sigOf(abi.encodePacked(r, s, v)), ITradeToken.TradeFill(1000, 1e9, 0, relayer)));
         DexLegs.ExchangePlan memory p = _plan(_alice());
         ISCaaSDex.Interaction[] memory route = _swap(address(a), address(b), 1000, 2000);
         _expectExchange(p, _cat(_ix(address(b), steal), route), abi.encodeWithSelector(
@@ -667,7 +668,7 @@ contract DexExchangeTest is Test {
             bool via = k & 4 != 0;
             if (mode) {
                 vm.prank(admin);
-                dex.setListedOnly(true);
+                dex.setListedOnly(true, EnvKit.codeUidOf(address(dex)));
             }
             ITradeToken.TradeOrder memory o = _order(alice, address(b), 1000, 1900, 0);
             if (flag) o.flags = 4;
@@ -684,10 +685,10 @@ contract DexExchangeTest is Test {
         if (needsListing) {
             _expectExchange(p, xs, _err(ISCaaSDex.TargetNotListed.selector, address(a)));
             vm.prank(admin);
-            dex.setExchangeTarget(address(a), true);
+            dex.setExchangeTarget(address(a), true, EnvKit.codeUidOf(address(dex)));
             _expectExchange(p, xs, _err(ISCaaSDex.TargetNotListed.selector, address(router)));
             vm.prank(admin);
-            dex.setExchangeTarget(address(router), true);
+            dex.setExchangeTarget(address(router), true, EnvKit.codeUidOf(address(dex)));
         }
         _exchange(p, xs);
     }
@@ -700,7 +701,7 @@ contract DexExchangeTest is Test {
             vm.expectRevert(_err(ISCaaSDex.TargetNotListed.selector, address(e)));
             dex.mtxExchangeVia(DexLegs.wire(p), address(e), data);
             vm.prank(admin);
-            dex.setExchangeTarget(address(e), true);
+            dex.setExchangeTarget(address(e), true, EnvKit.codeUidOf(address(dex)));
         }
         vm.prank(relayer);
         dex.mtxExchangeVia(DexLegs.wire(p), address(e), data);
@@ -709,16 +710,23 @@ contract DexExchangeTest is Test {
     // ------------------------------------------------------------------ plan checks
 
     /// Known = a side of a listed market (counted per listed market, so a repeated listing is one): an unlisted token,
-    /// or one whose last market was delisted, is refused on either side of a leg.
+    /// or one whose last market was delisted, is refused on either side of a leg, on a DEX made with bit 29
+    /// `CLOSED_MARKETS` (fix2-dex, owner 2026-11-12: open by default, `DexMarkets.t.sol`).
     function test_exchange_tokenNotKnown() public {
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0),
+            1 << 29, 0)), "closed"));
+        vm.startPrank(admin);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(usdc), address(b), true, EnvKit.codeUidOf(address(dex)));
+        vm.stopPrank();
         DexLegs.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(c), _order(alice, address(b), 1000, 1900, 0),
             1000, 1900));
         _expectExchange(p, new ISCaaSDex.Interaction[](0), _err(ISCaaSDex.TokenNotKnown.selector, address(c)));
         p = _plan(_leg(ALICE_PK, address(a), _order(alice, address(c), 1000, 1900, 0), 1000, 1900));
         _expectExchange(p, new ISCaaSDex.Interaction[](0), _err(ISCaaSDex.TokenNotKnown.selector, address(c)));
         vm.startPrank(admin);
-        dex.setMarket(address(a), address(b), true); // already listed: no second count
-        dex.setMarket(address(a), address(b), false);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex))); // already listed: no second count
+        dex.setMarket(address(a), address(b), false, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
         assertFalse(dex.tokenKnown(address(a)));
         assertTrue(dex.tokenKnown(address(b))); // still a side of USDC/B
@@ -726,7 +734,7 @@ contract DexExchangeTest is Test {
         _expectExchange(_plan(_alice()), new ISCaaSDex.Interaction[](0),
             _err(ISCaaSDex.TokenNotKnown.selector, address(a)));
         vm.prank(admin);
-        dex.setMarket(address(a), address(b), true);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
         assertTrue(dex.tokenKnown(address(a)));
     }
 
@@ -744,7 +752,7 @@ contract DexExchangeTest is Test {
         _expectExchange(p, xs, _err(ISCaaSDex.WrongRelayer.selector, relayer));
         // a floor below the signed limit: the token refuses it (Path A)
         p = _plan(_leg(ALICE_PK, address(a), _order(alice, address(b), 1000, 1900, 0), 1000, 1899));
-        bytes32 h = a.tradeOrderDigest(p.legs[0].o);
+        bytes32 h = a.tradeOrderDigest(DexLegs.ua(p.legs[0].o));
         _expectExchange(p, _swap(address(a), address(b), 1000, 2000),
             abi.encodeWithSelector(ITradeToken.PriceLimit.selector, h));
     }
@@ -788,10 +796,11 @@ contract DexExchangeTest is Test {
         MockExecutor e = _executor();
         bytes memory data = abi.encode(int256(0));
         ITradeToken.TradeOrder memory ob = _order(bob, address(a), 1000, 500, 0);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOB_PK, b.tradeOrderDigest(ob));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOB_PK, b.tradeOrderDigest(DexLegs.ua(ob)));
         bytes[3] memory calls = [
             abi.encodeCall(ISCaaSDex.mtxSettle, (DexLegs.wire(new DexLegs.Settlement[](0)))),
-            abi.encodeCall(ITradeToken.mtxTrade, (ob, abi.encodePacked(r, s, v), ITradeToken.TradeFill(1000, 1e9, 0, relayer))),
+            abi.encodeCall(ITradeToken.mtxTrade,
+                (DexLegs.ua(ob), DexLegs.sigOf(abi.encodePacked(r, s, v)), ITradeToken.TradeFill(1000, 1e9, 0, relayer))),
             abi.encodeCall(DexPuller.pull, (address(usdc), dave, 1))
         ];
         address[3] memory targets = [address(dex), address(b), puller];
@@ -812,16 +821,16 @@ contract DexExchangeTest is Test {
 
     function test_setExchangeTarget_setListedOnly_onlyAdmin() public {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(11), address(this)));
-        dex.setExchangeTarget(address(router), true);
+        dex.setExchangeTarget(address(router), true, EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(11), address(this)));
-        dex.setListedOnly(true);
+        dex.setListedOnly(true, EnvKit.codeUidOf(address(dex)));
         vm.startPrank(admin);
         vm.expectEmit(address(dex));
         emit ISCaaSDex.ExchangeTargetSet(address(router), true);
-        dex.setExchangeTarget(address(router), true);
+        dex.setExchangeTarget(address(router), true, EnvKit.codeUidOf(address(dex)));
         vm.expectEmit(address(dex));
         emit ISCaaSDex.ListedOnlySet(true);
-        dex.setListedOnly(true);
+        dex.setListedOnly(true, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
         assertTrue(dex.exchangeTarget(address(router)));
         assertTrue(dex.listedOnly());
@@ -862,8 +871,8 @@ contract DexExchangeTest is Test {
     /// Delisting every market of the quote token makes it unknown.
     function test_exchange_delistQuote_makesItUnknown() public {
         vm.startPrank(admin);
-        dex.setMarket(address(a), address(b), false);
-        dex.setMarket(address(usdc), address(b), false);
+        dex.setMarket(address(a), address(b), false, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(usdc), address(b), false, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
         assertFalse(dex.tokenKnown(address(b)));
     }
@@ -885,7 +894,7 @@ contract DexExchangeTest is Test {
         _exchange(p, _swap(address(a), address(b), 1000, 2000));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 k; k < logs.length; ++k) {
-            if (logs[k].topics[0] != ISCaaSDex.ExchangeLegSettled.selector) continue;
+            if (logs[k].topics[0] != ISCaaSDex.UAExchangeLegSettled.selector) continue;
             assertEq(logs[k].topics[1], bytes32("x"));
             assertEq(logs[k].topics[3], bytes32(uint256(uint160(alice))));
             return;

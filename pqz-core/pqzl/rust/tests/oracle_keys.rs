@@ -2,9 +2,9 @@
 //! including what the vectors and the keys KAT never feed: short vectors over the whole i8 / i16 range, digits up to
 //! 255 and non-canonical pk / u / v coefficients (up to 2^64 - 1) into `encrypt` / `decrypt_raw`, which check nothing,
 //! and non-canonical ciphertexts and keys into `dec` / `enc_seed`, which reject them.
-use pqzl::c_oracle::{c_dec_win, c_decrypt_raw_win, c_enc_group_seed, c_enc_seed_win, c_encrypt_win, c_keygen,
+use pqzl::c_oracle::{c_dec_win, c_decrypt_raw_win, c_enc_group_seed, c_enc_leg_seed, c_enc_seed_win, c_encrypt_win, c_keygen,
                      c_keypair_from_secret};
-use pqzl::{dec_win, decrypt_raw_win, enc_group_seed, enc_seed, enc_seed_win, encrypt, encrypt_win, keygen,
+use pqzl::{dec_win, decrypt_raw_win, enc_group_seed, enc_leg_seed, enc_seed, enc_seed_win, encrypt, encrypt_win, keygen,
            keypair_from_secret, CT_BYTES, POLYVEC_BYTES, V_BYTES};
 
 const N: usize = 200;
@@ -140,7 +140,36 @@ fn keygen_enc_dec_eq_c() {
 
         let g = [0, 1, rnd.next() as u32][it % 3];
         assert_eq!(enc_group_seed(&se, g), c_enc_group_seed(&se, g), "enc_group_seed {it} g {g}");
+        let (ua, ph): ([u8; 32], [u8; 32]) = (core::array::from_fn(|_| rnd.next() as u8), core::array::from_fn(|_| rnd.next() as u8));
+        assert_eq!(enc_leg_seed(&se, &ua, &ph), c_enc_leg_seed(&se, &ua, &ph), "enc_leg_seed {it}");
     }
     println!("keygen_enc_dec_eq_c: {ok} encryptions, {rejected} rejected inputs, all equal");
     assert!(ok >= N / 2 && rejected >= N / 20, "ok {ok}, rejected {rejected}");
+}
+
+/// Review 3w u3-4 (the contract's KV-9): an equal key at an equal window in one encryption is refused by both cores
+/// (`Input`); the same key at two windows (the auditor's copies) and two keys at one window are encrypted; Rust = C.
+#[test]
+fn enc_seed_refuses_an_equal_key_at_an_equal_window() {
+    let (a, b) = (keygen(&[1; 32]).unwrap().pk, keygen(&[2; 32]).unwrap().pk);
+    let m = [[3u8; 16]; 3];
+    let se = [9u8; 32];
+    for (pks, win, ok) in [
+        (vec![&*a, &*b], vec![0u8, 0], true),
+        (vec![&*a, &*a], vec![0, 0], false),
+        (vec![&*a, &*a], vec![0, 1], true),
+        (vec![&*a, &*b, &*a], vec![0, 0, 0], false),
+        (vec![&*b, &*a, &*a], vec![0, 1, 1], false),
+    ] {
+        let n = pks.len();
+        let r = enc_seed_win(&pks, &win[..n], &m[..n], &se);
+        let c = c_enc_seed_win(&pks, Some(&win[..n]), &m[..n], &se);
+        assert_eq!(r.is_ok(), ok, "Rust, windows {:?}", &win[..n]);
+        assert_eq!(c.is_ok(), ok, "C, windows {:?}", &win[..n]);
+        if !ok {
+            assert_eq!((r.err(), c.err()), (Some(pqzl::Error::Input), Some(pqzl::Error::Input)));
+        } else if win[..n].iter().all(|&w| w == 0) {
+            assert_eq!(enc_seed(&pks, &m[..n], &se).is_ok(), ok);
+        }
+    }
 }

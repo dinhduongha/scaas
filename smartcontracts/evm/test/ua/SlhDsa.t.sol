@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {PqVectors} from "./PqVectors.sol";
 import {PqUA} from "../../src/ua/PqUA.sol";
-import {SlhDsaSha2128s, UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
+import {SlhDsaSha2128s, SlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
 
 contract SlhHarness {
     function verify(bytes calldata pk, bytes calldata mprime, bytes calldata sig) external view returns (bool) {
@@ -14,7 +14,7 @@ contract SlhHarness {
 /// `slhdsa128s` (CTR-UA-23): ACVP SLH-DSA-SHA2-128s sigVer (pure and internal interfaces) and the SCaaS UA vector.
 contract SlhDsaTest is PqVectors {
     function test_kat_slhdsa128s() public {
-        _uaVector("slhdsa128s", address(new UASlhdsaVerifier()), PqUA.SLHDSA128S);
+        _uaVector("slhdsa128s", address(new SlhdsaVerifier()), PqUA.SLHDSA128S);
     }
 
     function test_acvp_slhdsa() public {
@@ -32,7 +32,7 @@ contract SlhDsaTest is PqVectors {
 
     function test_malformed_slhdsa() public {
         string memory kat = _kat();
-        UASlhdsaVerifier v = new UASlhdsaVerifier();
+        SlhdsaVerifier v = new SlhdsaVerifier();
         bytes memory pk = _k(kat, "slhdsa128s", "pk");
         bytes memory sig = _k(kat, "slhdsa128s", "sig");
         bytes32 m = bytes32(_k(kat, "slhdsa128s", "ua_msg"));

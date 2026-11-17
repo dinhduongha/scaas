@@ -28,6 +28,7 @@ extern "C" {
                        e1: *const i16, e2: *const [i16; 16], u: *mut u8, vs: *mut [u8; V_BYTES]) -> i32;
     fn pqz_decrypt_raw_win(s: *const i8, u: *const u8, v: *const u8, win: u32, w: *mut i64) -> i32;
     fn pqz_enc_group_seed(seed_enc: *const u8, g: u32, out: *mut u8);
+    fn pqz_enc_leg_seed(seed_enc: *const u8, to_ua: *const u8, pkt_hash: *const u8, out: *mut u8);
     fn pqz_ntt_fwd(c: *mut u64);
     fn pqz_ntt_inv(c: *mut u64);
     fn pqz_ntt_basemul(r: *mut u64, a: *const u64, b: *const u64);
@@ -224,6 +225,13 @@ pub fn c_enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
     let mut out = [0u8; 32];
     // SAFETY: 32-byte input and output
     with_core(|| unsafe { pqz_enc_group_seed(seed_enc.as_ptr(), g, out.as_mut_ptr()) });
+    out
+}
+
+pub fn c_enc_leg_seed(seed_enc: &[u8; 32], to_ua: &[u8; 32], pkt_hash: &[u8; 32]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    // SAFETY: three 32-byte inputs and a 32-byte output
+    with_core(|| unsafe { pqz_enc_leg_seed(seed_enc.as_ptr(), to_ua.as_ptr(), pkt_hash.as_ptr(), out.as_mut_ptr()) });
     out
 }
 

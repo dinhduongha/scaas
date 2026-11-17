@@ -3,6 +3,7 @@ package ua
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
 	"strconv"
 )
 
@@ -280,6 +281,20 @@ func NewSetPqzKeyArgs(ua [32]byte, pqzKey []byte, pqzPopHash [32]byte, sig UASig
 	return &SetPqzKeyArgs{ua[:], pqzKey, pqzPopHash[:], sig}
 }
 
+// SetPqzKeyVersionArgs is setPqzKey(ua, version, pqzKey, pqzPopHash, sig) (group 3g); version 0 is SetPqzKeyArgs' row.
+type SetPqzKeyVersionArgs struct {
+	UA         Hex    `json:"ua"`
+	Version    uint64 `json:"version"`
+	PqzKey     Hex    `json:"pqzKey"`
+	PqzPopHash Hex    `json:"pqzPopHash"`
+	Sig        UASig  `json:"sig"`
+}
+
+// NewSetPqzKeyVersionArgs builds setPqzKey's arguments for a version.
+func NewSetPqzKeyVersionArgs(ua [32]byte, version uint64, pqzKey []byte, pqzPopHash [32]byte, sig UASig) *SetPqzKeyVersionArgs {
+	return &SetPqzKeyVersionArgs{ua[:], version, pqzKey, pqzPopHash[:], sig}
+}
+
 // RegisterArgs is one registry call: register (Kind, KeyData), registerMsig (Structure), registerWebAuthn (Key) or
 // registerMuSig2 / registerFrost (Kind, Key). Pop is a Hex, or []MemberSig for registerMsig.
 type RegisterArgs struct {
@@ -356,6 +371,9 @@ type RegistrationInput struct {
 // a PQZ key) or KemCommit, the hash commit (Kem = {scheme, empty, 0}, KemPkHash = keccak256(kemPk)) plus the returned fill
 // setKemKey(ua, 0, kem, UASig{}), open to anyone (the pop signed the same record).
 func RegistrationArgs(in RegistrationInput) (*RegisterArgs, *SetKemKeyArgs, error) {
+	if len(in.KemPk) != 0 && !IsKemHolder(in.Kind) {
+		return nil, nil, fail("UAKemHolder", fmt.Sprintf("0x%04x may not hold a KEM key", in.Kind))
+	}
 	var popHash [32]byte
 	if len(in.PqzKey) > 0 || len(in.PqzPopHash) > 0 {
 		h, err := proofHashOf(in.PqzPop, in.PqzPopHash)

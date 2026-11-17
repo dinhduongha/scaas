@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {NormalToken} from "../../src/metatx/NormalToken.sol";
+
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {V2Fixture} from "./helpers/V2Fixture.sol";
@@ -12,6 +15,7 @@ import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Người nhận có hook (ERC-777): trong lúc unwrap không gas đang chạy, đọc nonce, số dư của người ký và của người
 /// nhận phí, gọi `transfer` của wrapper (không có guard), hoặc thử vào lại một hàm có guard.
@@ -36,7 +40,7 @@ contract HookRecipient is ITokensReceived {
 
     function tokensReceived(address, uint256) external {
         if (msg.sender != w.underlying()) return;
-        seenNonce = w.mtxNonce(watched, watchedBatch);
+        seenNonce = w.mtxNonce(MetaTxLib.pad(watched), watchedBatch);
         seenBalance = w.balanceOf(watched);
         seenFeeBalance = w.balanceOf(watchedFeeTo);
         if (reenterGuarded) {
@@ -87,13 +91,13 @@ contract UnwrapOpTest is V2Fixture {
         bytes memory s = _signCall(PK, w, m);
         vm.prank(relayer);
         vm.expectRevert(err);
-        MetaTokenBase(w).mtxExecute(m, s);
-        assertEq(MetaTokenBase(w).mtxNonce(alice, m.batch), 0);
+        NormalToken(w).executeMetaTransaction(m, s);
+        assertEq(NormalToken(w).mtxNonce(MetaTxLib.pad(alice), m.batch), 0);
     }
 
     function test_gaslessUnwrapPaysTheRecipient() public {
         MetaTxLib.MetaTransaction memory m = _op(100e6, shop, 100e6);
-        bytes32 d = t.mtxDigest(m);
+        bytes32 d = MtxDigest.metaTx(address(t), m);
         vm.expectEmit(address(t));
         emit IWrappedToken.Unwrapped(alice, address(usdc), shop, 100e6, 100e6);
         vm.expectEmit(address(t));
@@ -232,8 +236,8 @@ contract UnwrapOpTest is V2Fixture {
         bytes memory s = _signCall(PK, address(h), m);
         vm.prank(relayer);
         vm.expectRevert();
-        h.mtxExecute(m, s);
-        assertEq(h.mtxNonce(alice, 9), 0);
+        h.executeMetaTransaction(m, s);
+        assertEq(h.mtxNonce(MetaTxLib.pad(alice), 9), 0);
         assertEq(h.balanceOf(alice), 10 ether);
     }
 
@@ -242,11 +246,11 @@ contract UnwrapOpTest is V2Fixture {
         RateAdminForwarder adm = new RateAdminForwarder();
         WrappedToken a = _single(address(usdc), 6, 1, 1, _adjustable(address(adm)));
         _wrapFor(a, usdc, alice, 100);
-        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 101, 100)));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.proposeRate, (address(usdc), 101, 100, EnvKit.codeUidOf(address(a)))));
         _run(address(a), _op(50, shop, 50));
         assertEq(usdc.balanceOf(shop), 50);
         vm.warp(block.timestamp + 7 days);
-        adm.exec(address(a), abi.encodeCall(WrappedToken.executeRate, ()));
+        adm.exec(address(a), abi.encodeCall(WrappedToken.executeRate, (EnvKit.codeUidOf(address(a)))));
         MetaTxLib.MetaTransaction memory m = _op(50, shop, 50);
         m.batch = 10;
         _runRevert(address(a), m, abi.encodeWithSelector(IWrappedToken.UnwrapBelowMin.selector, 49, 50));

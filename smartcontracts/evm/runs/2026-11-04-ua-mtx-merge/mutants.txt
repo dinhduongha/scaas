@@ -1,0 +1,11 @@
+mutant | test that went red | rc
+native-on-ua-list | test_nativeRunsAddressAllowlist | 1
+derived-off-ua-list | test_derivedStaysOnUAAllowlist | 1
+no-signature-check | test_badSignatureRefused, test_designatorSignsWithItsOwnKey, test_erc1271Holder | 1
+no-receiver-check | test_unregisteredReceiverRefused | 1
+registry-for-every-receiver | setUp, test_eoaToEoa | 1
+registry-read-for-native | test_eoaToEoa, test_eoaToUA | 1
+cancel-refuses-native | test_nativeSignedCancel, test_signedCancelIsOrdered | 1
+no-ua-credit | test_eoaToUA | 1
+r17-off | test_nativeKeyDataRefused | 1
+cancel-wrong-lane | test_derivedSignedCancel, test_nativeSignedCancel | 1

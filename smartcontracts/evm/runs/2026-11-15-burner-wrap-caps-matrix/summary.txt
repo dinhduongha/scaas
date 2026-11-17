@@ -1,0 +1,19 @@
+On-chain matrix of round 3zb + 3zc (spec 2026-11-13-burner-wrap-caps.md §8 step 12), local anvil only (no SCaaS testnet
+RPC), at 3971a3918 with this commit's script/onchain changes, src clean. Command, from smartcontracts/evm:
+  CAPPED_SLOTS=4 PORT=18720 MATRIX_OUT=runs/2026-11-15-burner-wrap-caps-matrix MATRIX_GROUPS="tokens gov views wraplimits" \
+    RPC_7622=http://127.0.0.1:9 sh script/onchain/matrix.sh local
+seeded with a fresh `coverage.py gen` entry list; full output in the git-ignored *.log here. UNAUDITED.
+
+target | group | result
+local | deploy | ok, 106 txs
+local | tokens | ok, 536/536 txs, negatives 13/13 (8 new)
+local | gov | ok, 170/170 txs, negatives 27/27 (6 new)
+local | views | ok, 3,350 of 5,560 views answered (the rest need real arguments)
+local | wraplimits | ok, 170/170 txs, negatives 63/63 (3 new)
+
+New cases: a BURNER token of kinds 0 and 8 (the seat's burn, a derived UA's mtxBurn, a limited grant within and beyond:
+GrantExhausted(1), a non-holder MissingRole(30, id), disableFeature(30) then FeatureNotSet(2)); setMaxSupply /
+setMaxWrapSupply on the six wrapped kinds; the router's mtxSetMaxSupply / mtxSetMaxWrapSupply on a grantDelay-0 hybrid
+(at once) and a delayed one (proposed, then GrantNotReady), a sibling's word ChainUidMismatch, mtxDisableFeature(31) then
+FeatureNotSet(31); kinds 1, 5, 13: totalWrapped() == totalSupply() after a wrap, an unwrap, a signature wrap and a wrap to
+the cap, MaxWrapSupplyExceeded(201 Q, 200 Q) one over; the four views on the six wrapped kinds. Nothing in notrun.json.

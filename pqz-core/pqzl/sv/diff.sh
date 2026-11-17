@@ -15,8 +15,10 @@ L=$1 NR=${2:-40} NT=${3:-20} MU=${4:-3} FZ=${5:-20}
 ./build.sh native >/dev/null 2>&1
 ./build.sh native-x86v3 >/dev/null 2>&1
 rc=0
-part diff/portable sh -c "$CAPPED $PB/native/pqz_sv_diff $NR $NT $MU 1 $FZ > sv/runs/$L-portable.jsonl" || { echo "portable rc=$?"; rc=1; }
-part diff/x86v3 sh -c "$CAPPED $PB/native-x86v3/pqz_sv_diff $((NR / 2)) $((NT / 2)) $MU 2 $FZ > sv/runs/$L-x86v3.jsonl" || { echo "x86v3 rc=$?"; rc=1; }
+# both parts with a 2 GiB arena: the R_TXS cases at n2560-kmax16384 and above need more than the default 768 MiB (the
+# final gate's n2560 diff/portable trapped in pqz_arena at 20 10 2 10); 3w S7 gave ct and fnv the same arena
+part diff/portable sh -c "PQZ_ARENA_MB=2048 $CAPPED $PB/native/pqz_sv_diff $NR $NT $MU 1 $FZ > sv/runs/$L-portable.jsonl" || { echo "portable rc=$?"; rc=1; }
+part diff/x86v3 sh -c "PQZ_ARENA_MB=2048 $CAPPED $PB/native-x86v3/pqz_sv_diff $((NR / 2)) $((NT / 2)) $MU 2 $FZ > sv/runs/$L-x86v3.jsonl" || { echo "x86v3 rc=$?"; rc=1; }
 part diff/z21diff sh -c "$CAPPED sv/review/review.sh zdiff ${ZN:-1} > sv/runs/$L-z21diff.jsonl" || { echo "z21diff rc=$?"; rc=1; }
 grep -h -e z21diff -e '"accepted"' "sv/runs/$L-z21diff.jsonl" || rc=1
 grep -h -e '"seed"' -e '"mismatch"' -e prg -e arena "sv/runs/$L-portable.jsonl" "sv/runs/$L-x86v3.jsonl" || rc=1

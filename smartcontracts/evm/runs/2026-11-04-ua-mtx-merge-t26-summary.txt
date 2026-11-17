@@ -1,0 +1,72 @@
+# ua-mtx-merge T26 gate summary (full output in git-ignored .log files, not committed)
+# T26: the eight empty regulated hooks (regulated-kinds spec §2.2) at every seat of §2.2, §3.2, §4.1, §4.2: _regPre, _regFeeTo
+# (UAMetaTxBase), _regMove, _regPayer, _regSender, _regName, _regReceiver (ERC20MetaTx), _regZetherSender (ZetherLayer);
+# `internal view virtual`, empty bodies, raw arguments; supportsInterface virtual; no storage, no ABI change.
+# Base: d973a70d (T25 tip). T26 commits: ee181f0e (legacy note, no copy: MD-4), f55f43c0 (the build), this one (harness,
+# mutants, summary).
+step | commit | rc | counts
+t26-red-build | ee181f0e + test/governance/PlusZero.t.sol | 1 | 44 compile errors, all 7792 "override specified but does not override anything": _regPre, _regFeeTo, _regMove, _regPayer, _regSender, _regName, _regReceiver x6 probes, _regZetherSender x2
+t26-decl-build | ee181f0e + the eight hooks declared, no seat | 0 | builds, no new warning; sizes of the six kinds and GovernanceRouter equal to the T25 rows (NormalToken 32,776 ... WrappedPqzToken 56,507)
+t26-red | same | 1 | PlusZero 0 passed 32 failed: 24 kind rows (slots pass, gas pin file absent), 2 router rows (no pin), 6 seat tests (no Seat revert)
+t26-pin-write | same | 0 | PLUS_ZERO_WRITE=true -j1, the four row contracts: 26 rows; plus_zero_slots.json: 24 rows byte-identical, 2 router rows added; plus_zero_gas.json new
+t26-pin-check | same | 0 | 26 passed (pins reproduce)
+t26-green | worktree, seats placed | 1 | PlusZero 14 passed 18 failed: every slot row passes; 18 gas rows moved (below); 6 seat tests pass
+t26-pin-move | worktree | 0 | PLUS_ZERO_WRITE=true: plus_zero_slots.json byte-identical; plus_zero_gas.json old -> new (below)
+t26-sizegate-before | worktree | 1 | 9 errors (the six kinds' rows, three init rows); size-baseline.json moved (below)
+t26-sizegate | f55f43c0 | 0 | 0 errors, 89 contracts, above 65536 B: none
+t26-forge-full | worktree before the other pins | 1 | 231 suites, 2648 passed 4 failed 14 skipped: test_dexKat (MD-8), test_wrappedReleaseIsGated, test_routerAndRelayFeeNewAddresses, test_msgSenderReadsArePinned (each pin moved, below)
+t26-dexkat | f55f43c0 | 0 | DexKatTest WRITE_KAT=true, then DexKat, GovDeploy, MsgSenderLint: green
+t26-clientkeys-evm | f55f43c0 | 0 | node --test test/evm.test.js test/governance-bits.test.js: 25 passed 0 failed (reads dex_order_kat.json)
+t26-node-kat | f55f43c0 | 0 | cargo test --lib: kat_hashes_and_calldata_match_forge, the_plain_rows_are_pinned, call_op_round_trips_a_plain_entry, invalidate_digests_match_the_vectors: 4 passed
+t26-forge-final | f55f43c0 | 0 | forge test: 231 suites, 2652 passed 0 failed 14 skipped (T25: 227 suites, 2644: +4 suites, +8 tests); Layout 3 passed (no namespace moved)
+t26-at-set-n2048-kmax1024 | f55f43c0 | 0 | test/{ua,pqz,as}: 65 suites, 802 passed 0 failed 1 skipped
+t26-at-set-n2304-kmax4096 | f55f43c0 | 0 | test/{ua,pqz,as}: 65 suites, 799 passed 0 failed 4 skipped
+t26-at-set-n2560-kmax16384 | f55f43c0 | 0 | test/{ua,pqz,as}: 65 suites, 798 passed 0 failed 5 skipped
+t26-at-set-n2816-kmax65536 | f55f43c0 | 0 | test/{ua,pqz,as}: 65 suites, 793 passed 0 failed 10 skipped; src/pqz/PqzSet.sol restored (git status src clean)
+t26-isolate | f55f43c0 | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t26-docs | f55f43c0 | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0
+t26-mutants | f55f43c0 | 1 each | 20 of 20 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t26-mutants.txt); src restored after each
+#
+# Pins, old -> new. Gas (plus_zero_gas.json, vm.lastCallGas of the isolated call): transfer +5 on all six kinds (46,439 ->
+# 46,444 normal); mtxTransfer normal 85,275 -> 85,332, normalPqz 85,263 -> 85,320, normalZether 85,251 -> 85,320, wrapped
+# 85,319 -> 85,376, wrappedPqz 85,282 -> 85,339, wrappedZether 85,241 -> 85,286; uaExecuteTransfer normal 100,007 -> 100,064,
+# normalZether 141,628 -> 141,673, wrapped 100,008 -> 100,065, wrappedZether 141,572 -> 141,641, normalPqz / wrappedPqz
+# 265,112 unchanged; transferToUA unchanged on all six; router mtxCancelNonce 72,538 -> 72,597, mtxMint 99,347 -> 99,352.
+# Slots: every row unchanged (no SLOAD, no SSTORE added on any I0 entry). Sizes (size-baseline.json, runtime B):
+# NormalToken 32,776 -> 32,945; WrappedToken 43,333 -> 43,552; NormalZetherToken 40,963 -> 41,132; WrappedZetherToken 51,385
+# -> 51,604 (init 55,005 -> 55,224); NormalPqzToken 47,019 -> 47,183 (init 49,686 -> 49,850); WrappedPqzToken 56,507 ->
+# 56,721 (init 59,174 -> 59,388); not rows: GovernanceRouter 11,748 -> 11,771, MandateWallet 17,326 -> 17,414. GovDeploy
+# control 43,333 -> 43,552 B; GovernanceRouter CREATE2 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 ->
+# 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34; MsgSenderLint WrappedToken 2 -> 3; dex_order_kat.json token
+# 0xE6eE855B4C22fAc4235F6221818Ab156E438c9ce -> 0xebf66719dB6a01646dCa5bAe6999d6A837d5DdCc (DEX address and domain unchanged).
+# No typehash, selector, storage slot, layout or governance_bits.json row moved.
+#
+# Measured on the way: mtxCancelNonce's _regPre read from the calldata envelope (e.from, e.mode) cost the router +191 gas;
+# from the memory copy m (m.from, m.mode) the call costs nothing measurable; _namedCallUA and _namedCall read m likewise.
+# The legacy code generator keeps an empty internal call as a jump with its arguments (+164 to +219 B a kind, the gas above).
+#
+# Not run in T26: the whole node suite and e2e (no node source changed; the four KAT unit tests run); pqz-core gate (no core,
+# statement or set touched); scripts/e2e-zether.sh.
+#
+# Conflicts with the plan / spec:
+#   Legacy (MD-4): the eight files already have pre-round copies in legacy/ua-mtx-merge/; T26 supersedes no body, typehash,
+#   struct, builder, row or handler, so no copy was made and none overwritten (T24 and T25 left theirs); legacy/README.md says so.
+#   Files beyond the plan's list: src/zether/WrappedZetherToken.sol and src/pqz/WrappedPqzToken.sol carry the wrap-shield and
+#   Zether unshield-unwrap seats the spec places "token, before WrappedLib.wrap" / "token, top"; test/governance/GovDeploy.t.sol,
+#   test/metatx/MsgSenderLint.t.sol, test/vectors/dex_order_kat.json moved pins.
+#   Pin file: the plan names smartcontracts/vectors/governance/plus_zero_slots.json; the pin is test/vectors/plus_zero_slots.json
+#   (since governance T1), kept there; its 24 rows unchanged, 2 router rows added; gas in test/vectors/plus_zero_gas.json.
+#   Test names: the existing rows keep test_plusZero_<entry>_<kind> and check slots and gas in one row (labels ": reads",
+#   ": writes", ": gas"), not separate test_plusZeroSlots_{kind} / test_plusZeroGas_{kind}; the router rows are mtxMint (a typed
+#   op) and mtxCancelNonce (the inherited seat). The seat test is test_hookSeatsCalled and test_hookSeatsCalledRelayed in three
+#   contracts (plain, Zether, PQZ fixtures).
+#   "+0" in gas: slots are +0 on every row; gas moves +0 to +69 by the compiler (above), recorded old -> new as the plan allows.
+#   The gas pins of the confidential kinds also move with unrelated code layout: several mutants that drop a seat elsewhere move a
+#   Zether or PQZ row by a few gas (mutants.txt), so a later task's code change will move them too.
+#   The plan's mutant "uaOf evaluated at the Zether call site" is killed by test_hookSeatsCalled only: no gas pin covers a Zether
+#   transfer (it needs a proof).
+#   mtxWrapOrder: _regSender(o.from) sits first (before the pull), _regFeeTo(pad(msg.sender), fee) after WrappedLib.wrapBySigUA
+#   (the fee is the computed amount, known only there) and before the mints, as spec §3.2 "before the mints".
+#   PQZ unshield: _regReceiver in the entry, first; the sender check in _burn on `e.amount != 0` (a refresh names no sender, spec
+#   §4.2); an unshield-unwrap of amount 0 cannot pass its quote, so it never skips the sender either.
+#   vm.lastCallGas is deprecated in Foundry 1.8.5 (lastFrameGas); kept, as test/ua/UAGas.t.sol uses it.

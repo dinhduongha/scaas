@@ -1,0 +1,40 @@
+{
+  "_comment": "T66b Step 5b: why a state-changing entry has no transaction of its own (coverage.py note --reasons). {contract label or *: {signature glob: reason}}; the first match wins, the contract's own rows before *. A reason names what stops the call, never 'not done'.",
+  "GovernanceRouter": {
+    "executeMetaTransaction(*": "refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)",
+    "mtxExecute(*": "refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)",
+    "mtxBatch(*": "refused by design: the router has no generic path (governance spec §3.6, B-14); its negative MtxSelectorNotAllowed runs (gov)",
+    "mtxExecuteRate(*": "waits the token's rate delay (2 days) after mtxProposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (gov)",
+    "mtxCreateInstance(*": "needs a class release on the deploy's factory, and deploy.sh publishes none (misc's own factory runs createInstance directly); through the router: its negative ReleaseUnknown runs (gov)"
+  },
+  "MandateWallet": {
+    "executeMetaTransaction(*": "refused by design (an address meta-transaction: none is taken); its negative runs (misc)"
+  },
+  "SmartKeyAccount": {
+    "completeRecovery(*": "waits RECOVERY_DELAY (2 days) after initiateRecovery; a real chain cannot skip time: its negative runs (gov)"
+  },
+  "OpenFactory": {
+    "renounceAdmin(bytes32)": "ends the factory's administration for ever (CTR-GOV-23 Q1: no env, release or deprecation after it), so no matrix factory renounces; its refusals (before configureChain, a non-admin) and its effect are forge's (test/v2/FactoryAdmin.t.sol)"
+  },
+  "NormalZetherRegulatedToken": {
+    "setAllowed(*": "refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (gov), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind"
+  },
+  "WrappedZetherRegulatedToken": {
+    "setAllowed(*": "refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (gov), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind"
+  },
+  "NormalPqzRegulatedToken": {
+    "setAllowed(*": "refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (pq), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind"
+  },
+  "WrappedPqzRegulatedToken": {
+    "setAllowed(*": "refused on every call: bit 8 is outside the masks of kinds 10-13, so no holder of it can exist (token-lists spec §6.2, MissingRole); its negative runs (pq), with enableFeature(ALLOWLIST)'s FeatureInvalidForKind"
+  },
+  "*": {
+    "initialize(*": "the factory's own call on a fresh clone (OpenFactory.createToken / createDex / createInstance, SmartKeyAccountFactory.deploy): runs inside those transactions; a second call is refused (initialised)",
+    "executeRate(*": "waits the token's rate delay (2 days) after proposeRate; a real chain cannot skip time: its negative RateChangeNotReady runs (tokens)"
+  },
+  "_gaps": {
+    "*": [
+      "pqzwallet on a registry with a PqzKeyVerifier (set mldsa-on): the wallet's scoped records are written without storePqzScopedPop and stay unproven (owner 2026-11-16, D3: ua-rs PqzKeyHandle has no R_REG prover; an OFFCHAIN token reads an unproven record); the proven-record rows are pqzkeys' (mldsa_on.py, README-mldsa-on.md)"
+    ]
+  }
+}

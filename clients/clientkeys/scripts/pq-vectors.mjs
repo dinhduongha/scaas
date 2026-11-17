@@ -8,8 +8,12 @@
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { shake256 } from '@noble/hashes/sha3.js';
 import { seedFromWords } from '../src/seed.js';
-import { PQ_KINDS, pqKeygen, kindTag, uaMessage, signedMessage, signUA, verifyUA, purposeTag, mldsaExpandedKey } from '../src/pq.js';
+import { PQ_KINDS, pqKeygen, kindTag, uaMessage, signedMessage, signUA, verifyUA, purposeTag, mldsaExpandedKey, pqzKeySeed } from '../src/pq.js';
 import { hex, keccak_256, utf8ToBytes, concatBytes } from '../src/bytes.js';
+import { pqzOwnTag, pqzMemoHash } from '../src/evm.js';
+import { hkdf } from '@noble/hashes/hkdf.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { pqzOpeningMemoHash } from '../src/pqzopen.js';
 
 const M = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author '
   + 'capable act festival slice deposit sauce coconut afford frown better';
@@ -65,6 +69,45 @@ for (const name of Object.keys(PQ_KINDS)) {
   }
   out.kinds[name] = k;
 }
+// group 3g (C8, CTR-PQZ-13): a single-key holder's PQZ key seed of (account 0, index 0) at versions 0, 1, 2; version 0 is the
+// `info` without a suffix (today's), v ≥ 1 appends be64(v)
+out.pqzSeeds = [0, 1, 2].map((version) => ({ account: 0, index: 0, version, seed32: hex(pqzKeySeed(seed, 0, 0, version)) }));
+// group 3h (pqz-proof-path spec §3.1, C4; the shared KAT of both specs): `ownTag` of (account 0, index 0) at versions 0 and 1,
+// label `PQZ/owntag/v1` (HKDF-SHA256 info, empty salt), then HMAC-SHA256 over chainUid ‖ token ‖ fromUA ‖ be32(sendCounter) ‖
+// ctHash, `ctHash = keccak256(P(u) ‖ P(v_f))` of the debit (given: the packed parts are a set's size, not a KAT's)
+const kat = (h) => keccak_256(utf8ToBytes(`scaas 3h owntag kat ${h}`));
+const TAG_IN = { chainUid: hex(kat('chainUid')), token: '0x5ca00000000000000000000000000000000000a3', fromUA: hex(kat('fromUA')) };
+out.ownTag = [[0, 0], [0, 7], [1, 8]].map(([version, sendCounter]) => {
+  const seed32 = hex(pqzKeySeed(seed, 0, 0, version));
+  const ctHash = hex(kat(`ct ${version} ${sendCounter}`));
+  const t = pqzOwnTag({ seed32, ...TAG_IN, sendCounter, ctHash });
+  return { label: 'PQZ/owntag/v1', version, seed32, ...TAG_IN, sendCounter, ctHash, key: hex(t.key), message: t.message, ownTag: t.ownTag };
+});
+// group 3h (spec §3.3, C3): `memoHash = keccak256(memo ‖ ownTag)`: an op 1 commit-reveal (HASH) memo `salt(16) ‖ sealedMemo(42)`,
+// a BUNDLE transfer and a burn (memo empty); forge reads these rows against the statement views (PqzOwnTag.t.sol)
+const memo = hex(keccak_256(utf8ToBytes('scaas 3h memo')).subarray(0, 16)) + hex(concatBytes(keccak_256(utf8ToBytes('scaas 3h sealed 0')),
+  keccak_256(utf8ToBytes('scaas 3h sealed 1')).subarray(0, 10))).slice(2);
+const tag0 = out.ownTag[0].ownTag;
+out.memoHash = [['hash', memo], ['bundle', '0x'], ['burn', '0x']].map(([form, m]) => ({ form, memo: m, ownTag: tag0,
+  memoHash: pqzMemoHash(m, tag0) }));
+// the three-key model (spec 2026-11-13 pqz-three-keys K3-2, CLI-SGN-50): the scoped key seeds of (account 0, index 0), class
+// offchain-shared on two chains and offchain-token for two tokens, versions 0 and 1 (pairwise distinct from each other and from
+// `pqzSeeds`); the opening KEM seeds and the sealed openings are pqz-ffi's KAT (smartcontracts/vectors/pqz/opening.json)
+const CHAINS = [hex(kat('chain A')), hex(kat('chain B'))];
+// the generator's own K3-2 derivation (the library keeps scoped seeds inside pqzKeyHandle, Fable P1-1): account 0, index 0
+const be = (n, v) => { const b = new Uint8Array(n); let x = BigInt(v); for (let i = n - 1; i >= 0; i--) { b[i] = Number(x & 0xffn); x >>= 8n; } return b; };
+const scopedSeed = (chainUid, token, version) => hkdf(sha256, seed, utf8ToBytes('scaas.ua.pq.v1'), concatBytes(
+  utf8ToBytes(token === undefined ? 'scaas.ua.pqz-mlwe.offchain-shared.v1' : 'scaas.ua.pqz-mlwe.offchain-token.v1'), be(4, 0), be(4, 0),
+  Uint8Array.from(Buffer.from(chainUid.slice(2), 'hex')), token === undefined ? new Uint8Array(0) : Uint8Array.from(Buffer.from(token.slice(2), 'hex')),
+  be(8, version)), 32);
+const TOKENS = ['0x5ca00000000000000000000000000000000000a3', '0x5ca00000000000000000000000000000000000a4'];
+out.pqzScopedSeeds = CHAINS.flatMap((chainUid) => [0, 1].flatMap((version) => [undefined, ...TOKENS].map((token) => ({
+  keyClass: token === undefined ? 'offchain-shared' : 'offchain-token', account: 0, index: 0, chainUid, ...(token ? { token } : {}), version,
+  seed32: hex(scopedSeed(chainUid, token, version)) }))));
+// CTR-PQZ-40: an opening token's op 1 `memoHash = keccak256(memo ‖ ownTag ‖ keccak256(O_t ‖ [O_a]))`, filler openings of 1,648 B
+const op = (i) => concatBytes(...Array.from({ length: 52 }, (_, j) => keccak_256(utf8ToBytes(`scaas three-keys opening ${i} ${j}`)))).subarray(0, 1648);
+out.memoHashOpening = [[op(0)], [op(0), op(1)]].map((os) => ({ form: os.length === 1 ? 'bundle, no auditor' : 'bundle, auditor', memo: '0x',
+  ownTag: tag0, openings: os.map(hex), memoHash: hex(pqzOpeningMemoHash('0x', tag0, os)) }));
 mkdirSync(new URL('../../../smartcontracts/vectors/ua/', import.meta.url), { recursive: true });
 writeFileSync(new URL('../../../smartcontracts/vectors/ua/pq_kat.json', import.meta.url), JSON.stringify(out, null, 2) + '\n');
 console.log('wrote smartcontracts/vectors/ua/pq_kat.json');

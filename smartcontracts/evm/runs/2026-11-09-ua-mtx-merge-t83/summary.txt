@@ -1,0 +1,79 @@
+ua-mtx-merge T83 (plan T83, owner rulings 2026-11-09: payNo as bytes32, PayMeta.save, the on-chain pay records). Gate summary.
+Full outputs in git-ignored .log files: smartcontracts/evm/runs/2026-11-09-ua-mtx-merge-t83-<step>.log (gates.sh here), forge per
+directory in runs/2026-11-08-ua-mtx-merge-t66a-t83-test-<dir>.log (the T66a forge-dirs.sh, label t83), mutants in
+runs/2026-11-09-ua-mtx-merge-t83-mut-<id>.log (mutants.py here). Forge 1.8.5, solc 0.8.37, default set n2304-kmax4096; every heavy
+run through scripts/capped at 4 GB (the node suite at 6 GB, alone), -j2. Base 32d73310; commits 0faf793c (legacy copies),
+ba280ade (source, tests, pins, vectors, clients, node), this one (summary, gates.sh, mutants.py, mutants.txt). UNAUDITED.
+
+Red first (the new tests against the old code):
+step | commit | rc | counts
+forge red: PayRecords.t.sol + PayMeta.t.sol on 32d73310's src | 32d73310 + tests | 1 | compile error 7920: MetaTxLib.PayRecord not found
+clientkeys red: test/paymeta.test.js on 32d73310's src/evm.js | 32d73310 + test | 1 | 0 of 1 file: no export payNoFromUuid
+node red: 32d73310's src (its tests) on the v3 vectors, cargo test --lib -- pay meta | 32d73310 + vectors | 101 | 98 passed, 4 failed (mtx_pay_decodes_and_meta_pay_id_v2_rows, pay_job_named_meta_builds_body, tax_job_signer_is_payer_and_outer_digest_is_job_id, a_receiver_fee_is_recognised_by_its_payment_digest)
+
+Gates on the T83 tree (ba280ade):
+step | commit | rc | counts
+forge test/metatx (forge-dirs.sh t83) | ba280ade | 1 | 540 passed, 1 failed (test_gas_rollMax_relayedFullTx, known red: owner kept ROLL_MAX), 1 skipped; 44 suites; new PayRecordsTest 8, PayMetaTest 12 (3 new: anyPayNoIndexed, saveWithoutPayNoRefused, saveInCommitment; the 256 / 257-byte payNo tests gone)
+forge test/v2 | ba280ade | 0 | 653 passed; 54 suites (Layout's payRecords namespace, MetaTxGasV2 test_gasP_paySave_logOnly, the size ratchet moved)
+forge test/governance (first run) | ba280ade | 1 | 422 passed, 2 failed: the GovernanceRouter CREATE2 pin (measured 0x7d3C8bE7...) and the WrappedToken code-limit control (45,522 B); both moved
+forge test/governance | ba280ade | 0 | 424 passed; 47 suites (RelayFeeRouter and GovernanceRouter pins, plus_zero_gas.json re-recorded, selector_audit.json)
+forge test/as | ba280ade | 0 | 463 passed; 76 suites (Tax.t.sol test_payWithTax_recordsNet; TaxConfidential's four confidential-ops tests with the no-record check; paytax.json re-written)
+forge test/merge | ba280ade | 0 | 341 passed; 29 suites (interface-id pins moved)
+forge test/ua | ba280ade | 0 | 705 passed; 51 suites (UAReceivers test_payWithFeeToUA_record)
+forge test/wallet | ba280ade | 0 | 181 passed; 12 suites (selector pins moved)
+forge test/account | ba280ade | 0 | 98 passed; 5 suites (mandate_kat.json re-written)
+forge test/hedera | ba280ade | 0 | 20 passed; 2 suites
+forge test/zether | ba280ade | 0 | 441 passed, 4 skipped; 37 suites
+forge top-level | ba280ade | - | not run (OOM-killed at the 4 GB cap in 3i); ExpectRevertLint run alone, next row
+forge test/ExpectRevertLint.t.sol (scans every test's source) | ba280ade | 0 | 3 passed
+pay / record / confidential tests at n2304-kmax4096 (at-set.sh, sparse: PayRecords, PayMeta, PayLanes, TaxConfidential) | ba280ade | 0 | 38 passed, 9 suites (every kind of the parity rigs, PQZ and Zether included)
+the same at n2048-kmax1024 | ba280ade | 0 | 38 passed
+the same at n2560-kmax16384 | ba280ade | 0 | 38 passed
+the same at n2816-kmax65536 | ba280ade | 0 | 38 passed
+src/pqz/PqzSet.sol restored after each at-set run (git diff --exit-code) | ba280ade | 0 | no diff
+gas (MetaTxGasV2 test_gasP_*, -vv) | ba280ade | 0 | 2 passed; figures below
+size gate (forge build src --sizes --json; size_gate.py), first run | ba280ade | 1 | 20 errors: every kind's runtime (and 8 init rows) above its ratchet row
+size gate, size-baseline.json moved | ba280ade | 0 | 0 errors, 99 contracts; above 65,536 B: WrappedPqzRegulatedToken 74,449 (pinned in _above64KiB, unchanged list)
+vectors (every writer twice: PAYMETA_WRITE PayMeta/PayRecords, WRITE_KAT AccountKat, PAYTAX_WRITE Tax, clientkeys typed-ops-vectors.mjs and ua-sig-vectors.mjs) | ba280ade | 0 | both passes identical; the 10 vector files byte-equal to the committed ones (md5)
+clientkeys npm test | ba280ade | 0 | 300 tests, 298 passed, 0 failed, 2 skipped (bundle checks); paymeta.test.js 11 (payNoFromUuid / payNoToUuid, payrecords.json)
+scaas-node cargo test --lib -- pay meta indexer (dev) | ba280ade | 0 | 112 passed
+scaas-node cargo clippy --all-targets -- -D warnings | ba280ade | 0 | 0 warnings (e2e.rs compiled)
+scaas-node cargo test (the whole suite, CAPPED_MEM=6G, no other capped job of this task live) | ba280ade | 0 | lib 696 passed, fuzz 4, mesh_vectors 1 passed; e2e suites ignored in this run (next row)
+scaas-node cargo test --test e2e -- --ignored --test-threads=1, the three pay tests (outbox_payment_reaches_chain_and_comes_back_final, ua_pay_meta_and_relay_fee_jobs_on_anvil, mandate_payment_relayed_by_an_eoa_delegate; anvil, forge script Deploy.s.sol) | ba280ade | 0 | 3 passed, 18 filtered out; no anvil left
+ua-rs cargo test --features json --test pay (the five ua-* readers' v2 rows from legacy/ua-mtx-merge/t83/) | ba280ade | 0 | 6 passed
+ua-rs cargo test --features json --no-fail-fast | ba280ade | 101 | 65 passed, 1 failed: governance_bits_rows (24 rows expected, the file has 25: bit 24 PQZ_PROOF from T61, before T83; ua-rs-sign T20d1 carries it); the regenerated typed_ops / metatx3 / pq_signatures / paytax rows pass
+ua-c, ua-cxx, ua-dart-frb, ua-qt | ba280ade | - | not run: only their test paths moved to the v2 rows (the same ua-rs function the row above runs); ua-rs-sign's next sync repoints them
+docs_check.py check | ba280ade | 0 | 0 errors, 5 warnings (line budgets, unchanged)
+
+Mutants (mutants.py, each alone on src/, the pay and record tests and test/as/Tax.t.sol; the file restored byte-equal after each):
+mutant | tests that went red | rc
+M1-record-before-transfer | test_records_writtenAfterTheTransfer | 1
+M2-gross-amount-recorded | test_payWithTax_recordsNet, test_records_receiverFeeNet | 1
+M3-save-false-recorded | test_payMetaVectors, test_payWithTax_recordsNet, test_records_saveFalseWritesNothing | 1
+M4-save-outside-commitment | 42 tests, among them test_payMetaVectors, test_payMeta_oldTagRefused, test_payMeta_saveInCommitment, test_payWithTax_typedOpsRow | 1
+M5-length-not-advanced | test_payMetaVectors, test_payRecordsVectors, test_payWithTax_recordsNet, test_records_mtxPay, test_records_paging, test_records_payWithFee_amountBound, test_records_receiverFeeNet, test_records_twoPayeesOnePayNo | 1
+M6-page-past-end-not-empty | test_records_paging | 1
+M7-v2-tag-kept | 42 tests, among them test_payMetaVectors, test_payMeta_oldTagRefused, test_payMeta_saveInCommitment, test_payWithTax_typedOpsRow | 1
+M8-save-without-payNo-accepted | test_payMetaVectors, test_payMeta_saveWithoutPayNoRefused | 1
+M9-amount-bound-dropped | test_records_payWithFee_amountBound | 1
+M10-receiver-fee-record-skipped | test_records_receiverFeeNet | 1
+10 of 10 killed, none a compile error; src/ byte-equal after each (and git diff --stat unchanged after the run).
+
+Gas (MetaTxGasV2, logged, forge isolate, fresh lane, relayer bound, fee NONE): mtxPay salt-only 202,886 -> 202,574; with a payNo,
+save off 202,814; save on, the first payment of a payNo 534,203 (+331,389: the length and the record's two words, new); a later one
+436,300 (+233,486: two new slots); mtxExecuteTransfer 192,068 -> 191,960. The owner's estimate (+300 k / +200 k) accepted.
+
+Sizes (runtime, size-baseline.json moved with them): NormalToken 33,889 -> 34,757 (+868), WrappedToken 44,635 -> 45,522 (+887),
+NormalZetherToken 42,222 -> 43,055 (+833), WrappedZetherToken 52,709 -> 53,552 (+843), NormalPqzToken 51,821 -> 52,657 (+836),
+WrappedPqzToken 61,174 -> 62,022 (+848; 2,490 B under the 64,512 B stop line), NormalRegulatedToken 41,561 -> 42,486 (+925),
+WrappedRegulatedToken 52,302 -> 53,221 (+919), NormalZetherRegulatedToken 50,030 -> 50,885 (+855), WrappedZetherRegulatedToken
+60,724 -> 61,599 (+875), NormalPqzRegulatedToken 59,371 -> 60,234 (+863), WrappedPqzRegulatedToken 73,511 -> 74,449 (+938; above
+its line before T83 too, in _above64KiB, T66b splits it); MtxPipelineLib 11,069 -> 12,054, MandateWallet 17,699 -> 17,704.
+
+Pins old -> new: layout namespaces.json + payRecords (scaas.pay.records, root 0x51f719d8...1a00; NamespaceProbe and
+_payRecordsPinned); storage layout files unchanged (namespaced); typehashes unchanged (no signed struct holds PayMeta); interface ids
+IMetaTokenV2 0xcd9d6940 -> 0x62cce053, IERC20Payment 0xced674ba -> 0x6a4938cb, IRegulatedToken 0xaf5683ea -> 0x01a22b62 (node
+abi.rs); CREATE2 RelayFeeRouter 0x6e5ADaD0b26E45d76250564dC569D2C05a082762 -> 0x70ba50D63EC511e4a39bf34d8EE01F3e85D3cEaC,
+GovernanceRouter 0x8D4632FcCd353fb46400D356B79A7171eE44d2d0 -> 0x7d3C8bE73d8840bA378F83D8Ac1297080ceaCc03 (the metadata hash);
+the WrappedToken code-limit control 44,635 -> 45,522 B; plus_zero_gas.json 14 of 26 rows (the dispatcher table): mtxMint_router 100,174 -> 100,152, mtxTransfer_normalZether 86,106 -> 86,128, mtxTransfer_wrapped 86,162 -> 86,184, mtxTransfer_wrappedPqz 86,163 -> 86,078, mtxTransfer_wrappedZether 86,084 -> 86,106, transferToUA_wrapped 69,254 -> 69,187, transferToUA_wrappedZether 69,133 -> 69,155, transfer_wrapped 46,445 -> 46,467, transfer_wrappedPqz 46,412 -> 46,434, transfer_wrappedZether 46,456 -> 46,478, uaExecuteTransfer_normal 100,892 -> 100,784, uaExecuteTransfer_normalZether 142,438 -> 142,393, uaExecuteTransfer_wrapped 100,870 -> 100,807, uaExecuteTransfer_wrappedZether 142,450 -> 142,472 (plus_zero_slots.json unchanged);
+selector_audit.json and the selector pins of MandateWallet, MandateWalletMerged, Allowlist (the PayMeta tuple).

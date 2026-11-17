@@ -38,7 +38,7 @@ const MNEMONIC: &str = "abandon abandon abandon abandon abandon abandon abandon 
 const SHOP: &str = "0x5e";
 
 fn dir() -> PathBuf {
-    std::env::var("APTOS_LOCALNET_DIR").unwrap_or_else(|_| "/tmp/scaas-aptos-localnet".into()).into()
+    std::env::var_os("APTOS_LOCALNET_DIR").map_or_else(|| std::env::temp_dir().join("scaas-aptos-localnet"), PathBuf::from)
 }
 
 fn read(name: &str) -> String {

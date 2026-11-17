@@ -1,0 +1,21 @@
+# ua-mtx-merge T40 gate summary (full output in git-ignored .log files, not committed)
+# T40 (pay-meta-tax spec §5, §6.4; O6-O8, O13; B-2, B-3; C6, C7): mtxPayWithTax and payWithTax on kinds 8-13, the split in
+# _uaExecuteTransfer (withheld, withheldTo), PaymentTaxed, paytax.json; kind 13 measured first, the levers of §6.4 in order.
+# UNAUDITED.
+# Base: ff5f18f5. Commits: 66eafd56 (legacy copy), bc6592b1 (implementation), this one (summary, mutants table).
+step | commit | rc | counts
+t40-red | 66eafd56 + tests only | 1 | compile error: IRegulatedToken.mtxPayWithTax not found (test/as/Tax.t.sol)
+t40-size-kind13 | bc6592b1 - levers | 0 | the tax entry alone 64,740 B; + payWithTax 65,142 B (T39 tip 63,615)
+t40-levers | bc6592b1 | 0 | 3: 65,118; 4: 65,150 (reverted); 5: 64,820; 6: 64,583; 7: 0 B on tokens (not applied); 8 checks: 64,663 (reverted); 8 events: 64,522; owner 2026-11-07: accepted 10 B over the 64,512 B stop line, size task T66b after 3h
+t40-build | bc6592b1 | 0 | src then each test directory one at a time
+t40-green | bc6592b1 | 0 | test/as/{Tax,confidential/TaxConfidential}.t.sol: 51 passed 0 failed
+t40-forge-full | bc6592b1 - pins | 1 | 2944 passed 16 failed 14 skipped, 284 suites: the 16 were pins of the change (router CREATE2, plus-zero gas 12 rows, dex_order_kat.json, regulated_kat.json, 12 selector_audit rows), moved, then 61 of 61 passed in their 13 suites (runs/...-t40-rerun.log)
+t40-size-gate | bc6592b1 | 0 | 0 errors, 97 contracts, none above 65,536 B (size-baseline.json moved with the owner's reason)
+t40-gas | bc6592b1 | 0 | MetaTxGasV2 (logged): mtxPay fresh lane 202,216 (T37: 200,232), mtxExecuteTransfer 191,312
+t40-at-set-n2048-kmax1024 | bc6592b1 | 0 | 878 passed 0 failed 1 skipped, 91 suites (at-set.sh test --match-path 'test/{ua,pqz,as/confidential}/*'); PqzSet.sol restored
+t40-at-set-n2304-kmax4096 | bc6592b1 | 0 | 875 passed 0 failed 4 skipped, 91 suites; PqzSet.sol restored
+t40-at-set-n2560-kmax16384 | bc6592b1 | 0 | 874 passed 0 failed 5 skipped, 91 suites; PqzSet.sol restored
+t40-at-set-n2816-kmax65536 | bc6592b1 | 0 | 869 passed 0 failed 10 skipped, 91 suites; PqzSet.sol restored
+t40-mutants | bc6592b1 (uncommitted then, same source) | 1 each | 12 of 12 killed, none a compile error (runs/2026-11-07-ua-mtx-merge-t40-mutants.txt), run with MUTANTS_UNCOMMITTED=1 (the file equal to its pre-run text after each); test_payTaxVectors then read the deployment's domain and also went red on code-moving mutants: its digest row now uses a fixed domain, the other red tests of each row stand
+#
+# Not measured: deploy gas of the six releases (spec §6.4's figure is for T66b's recount). Clients and node: T41, T42.

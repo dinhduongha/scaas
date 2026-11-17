@@ -35,7 +35,51 @@ pub struct Config {
     pub keys: Option<KeysCfg>,
     #[serde(default)]
     pub modules: Modules,
+    /// Group 3f (spec 2026-11-06-attested-verify §11.1): the PQZ verifier (off-chain) endpoints and the shield switch, one section
+    /// for every chain (copied into each [`ChainCfg::pqz_verifier`] at load). No secret: endpoint URLs only.
+    #[serde(default)]
+    pub pqz_verifier: PqzVerifierCfg,
     pub chains: Vec<ChainCfg>,
+}
+
+/// `[pqz_verifier]` (group 3f, NODE-JOB-22 draft): where the node asks for a `PqzVerdict` signature an `OFFCHAIN` PQZ job does not
+/// carry (`POST {endpoint}/v1/pqz-verdict`, in order), the bounds of that answer, and the opt-in refusal of shields into a token
+/// nobody serves. The node holds no verifier key and signs nothing.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct PqzVerifierCfg {
+    /// Base URLs of PQZ verifiers (off-chain), asked in order; empty: a job without `pqz_verdict` is `PQZ_VERDICT_MISSING`.
+    #[serde(default)]
+    pub endpoints: Vec<String>,
+    /// Refuse shield and wrap-shield jobs into an `OFFCHAIN` token whose verifier is revoked or that no endpoint serves
+    /// (`PQZ_VERIFIER_UNREACHABLE`; a probe transport error requeues). Off by default.
+    #[serde(default)]
+    pub refuse_shield_when_unserved: bool,
+    /// One endpoint's whole request (connect, send, answer).
+    #[serde(default = "default_pqz_timeout_ms")]
+    pub timeout_ms: u64,
+    /// An answer above this is no answer (read in chunks, never buffered past it).
+    #[serde(default = "default_pqz_max_response")]
+    pub max_response_bytes: usize,
+    /// A verdict whose `validUntil` is within this many seconds of now is not sent (the expected inclusion plus the margin).
+    #[serde(default = "default_pqz_margin")]
+    pub valid_margin_secs: u64,
+}
+
+impl Default for PqzVerifierCfg {
+    fn default() -> Self {
+        Self { endpoints: vec![], refuse_shield_when_unserved: false, timeout_ms: default_pqz_timeout_ms(),
+            max_response_bytes: default_pqz_max_response(), valid_margin_secs: default_pqz_margin() }
+    }
+}
+
+fn default_pqz_timeout_ms() -> u64 {
+    5_000
+}
+fn default_pqz_max_response() -> usize {
+    256 * 1024
+}
+fn default_pqz_margin() -> u64 {
+    30
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -287,6 +331,20 @@ pub struct ChainCfg {
     /// config row. Empty: every router job is refused.
     #[serde(default)]
     pub governance_routers: Vec<Address>,
+    /// The chain's canonical `ComplianceRegistry` (regulated-kinds spec §5, §7; the deployments JSON's `compliance_registry`): the
+    /// registry the venue's pre-check reads for a regulated leg (NODE-DEX-11). An address, no secret. Set with
+    /// `compliance_registry_codehash`, or neither.
+    #[serde(default)]
+    pub compliance_registry: Option<Address>,
+    /// The registry's runtime code hash (the deployments JSON's `compliance_registry_codehash`, the releases' `COMPLIANCE_REGISTRY_CODEHASH`):
+    /// checked against the chain's `eth_getCode` when the venue loads; another code or none stops it (fail closed).
+    #[serde(default)]
+    pub compliance_registry_codehash: Option<B256>,
+    /// Proposed NODE-JOB-25 (spec 2026-11-09-service-pull §8): the chain's services, `[[chains.services]] address, entries =
+    /// [{entry, op_type}]`, at most 32 entries each and 1,024 bytes per `op_type`; equal to the contract's
+    /// `servicePullEntries()` both directions at startup; one kind per address. EVM only.
+    #[serde(default)]
+    pub services: Vec<crate::service::ServiceCfg>,
     /// Ví lạnh nhận phí của meta-tx không ràng buộc `feeRecipient` (R84, EVM/Hedera); không phải khoá lane.
     /// Không đặt ⇒ ghi 0: contract trả phí cho `msg.sender` (lane gửi).
     #[serde(default)]
@@ -316,6 +374,33 @@ pub struct ChainCfg {
     pub gossip: bool,
     #[serde(default = "default_exclusive_ms")]
     pub exclusive_ms: u64,
+    /// The top-level `[pqz_verifier]`, set by [`Config::load`] (never read from a `[[chains]]` table).
+    #[serde(skip)]
+    pub pqz_verifier: PqzVerifierCfg,
+    /// Fable recheck 3 R3-4, recheck 4 R4-3: one request's time (a read's, each span of a log window, the lane's nonce, fee,
+    /// send and receipt requests); past it a read fails over. Above 0.
+    #[serde(default = "default_rpc_timeout_ms")]
+    pub rpc_timeout_ms: u64,
+    /// The same for each request of a simulation (`eth_call`, `eth_estimateGas`, which runs the call several times): a PQZ or
+    /// Zether proof check is the slowest call the node makes. Unmeasured default, generous. Above 0.
+    #[serde(default = "default_rpc_simulate_timeout_ms")]
+    pub rpc_simulate_timeout_ms: u64,
+    /// Fable recheck 3 R3-1: the highest block of this chain the node has seen from its first endpoint (the lanes' receipts, the
+    /// heads the indexer, the venue and the health probe poll), shared by every `Chain` built from this table (clones share it);
+    /// a runtime value, never read from the file, cleared by a restart.
+    #[serde(skip)]
+    pub head: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Fable recheck 5 R5-5: the chain reads a failover endpoint answered, over every `Chain` of this table (health:
+    /// `scaas_rpc_failover_answers_total`); a runtime value, never read from the file.
+    #[serde(skip)]
+    pub failover: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+
+fn default_rpc_timeout_ms() -> u64 {
+    30_000
+}
+fn default_rpc_simulate_timeout_ms() -> u64 {
+    120_000
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -400,6 +485,9 @@ impl Default for ChainCfg {
             token_factory: None,
             ua_registry: None,
             governance_routers: vec![],
+            compliance_registry: None,
+            compliance_registry_codehash: None,
+            services: vec![],
             fee_recipient: None,
             poll_ms: default_poll(),
             stuck_after_secs: default_stuck(),
@@ -411,6 +499,11 @@ impl Default for ChainCfg {
             profile: private(),
             gossip: false,
             exclusive_ms: default_exclusive_ms(),
+            pqz_verifier: PqzVerifierCfg::default(),
+            rpc_timeout_ms: default_rpc_timeout_ms(),
+            rpc_simulate_timeout_ms: default_rpc_simulate_timeout_ms(),
+            head: Default::default(),
+            failover: Default::default(),
         }
     }
 }
@@ -526,7 +619,10 @@ impl Config {
     }
     pub fn load(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-        let cfg: Config = toml::from_str(&raw).context("parse config")?;
+        let mut cfg: Config = toml::from_str(&raw).context("parse config")?;
+        for c in &mut cfg.chains {
+            c.pqz_verifier = cfg.pqz_verifier.clone();
+        }
         cfg.validate()?;
         Ok(cfg)
     }
@@ -554,6 +650,13 @@ impl Config {
             keys::lane_path_coin(&c.family, 0, c.coin_type).with_context(|| format!("chain {key}"))?;
             if c.rpc_urls.is_empty() || c.rpc_urls.len() < c.finality.quorum {
                 bail!("chain {key}: {} rpc_urls < quorum {}", c.rpc_urls.len(), c.finality.quorum);
+            }
+            if c.compliance_registry.is_some() != c.compliance_registry_codehash.is_some() {
+                bail!("chain {key}: compliance_registry and compliance_registry_codehash are set together");
+            }
+            // Fable recheck 4 R4-3: a 0 timeout fails every read at once (nothing dies, nothing lands): refused at start
+            if c.rpc_timeout_ms == 0 || c.rpc_simulate_timeout_ms == 0 {
+                bail!("chain {key}: rpc_timeout_ms and rpc_simulate_timeout_ms must be above 0");
             }
             if c.is_evm() {
                 if c.evm_chain_number == 0 {
@@ -590,6 +693,7 @@ impl Config {
                 c.canonical(&t.address).with_context(|| format!("chain {key}: token {}", t.address))?;
             }
             c.relay_params().with_context(|| format!("chain {key}"))?;
+            c.check_services().with_context(|| format!("chain {key}"))?;
             if !(1..=100).contains(&c.breaker.call_budget_pct) {
                 bail!("chain {key}: breaker.call_budget_pct is a share of the budget, 1 to 100");
             }
@@ -601,6 +705,13 @@ impl Config {
             if c.family == "soroban" && self.modules.submit && !c.params.get("max_resource_fee_per_job").and_then(|v| v.as_integer()).is_some_and(|n| n > 0) {
                 bail!("chain {key}: a soroban lane needs params.max_resource_fee_per_job above 0 (stroops; node.example.toml)");
             }
+        }
+        let v = &self.pqz_verifier;
+        if let Some(e) = v.endpoints.iter().find(|e| !(e.starts_with("https://") || e.starts_with("http://"))) {
+            bail!("pqz_verifier.endpoints: {e:?} is not an http(s) URL");
+        }
+        if v.timeout_ms == 0 || v.max_response_bytes == 0 {
+            bail!("pqz_verifier: timeout_ms and max_response_bytes above 0");
         }
         self.validate_store_sections(&seen)
     }
@@ -852,6 +963,9 @@ pub struct RelayParams {
     pub relay_bound_payee: bool,
     /// `max_pay_meta_bytes` (default 2,048, spec §9): the cap on a pay-meta `meta`.
     pub max_pay_meta_bytes: usize,
+    /// `max_service_op_bytes` (default 2,048; proposed NODE-JOB-25): the cap on one `bytes` / `string` field of a service
+    /// job's `<Op>`.
+    pub max_service_op_bytes: usize,
 }
 
 pub const DEFAULT_MAX_PAY_META_BYTES: usize = 2048;
@@ -859,7 +973,8 @@ pub const DEFAULT_MAX_PAY_META_BYTES: usize = 2048;
 impl Default for RelayParams {
     /// The defaults of an unset key set: no router, `min_amount` 1, no bound-payee relays, 2,048 B of meta.
     fn default() -> Self {
-        Self { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: DEFAULT_MAX_PAY_META_BYTES }
+        Self { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: DEFAULT_MAX_PAY_META_BYTES,
+            max_service_op_bytes: crate::service::DEFAULT_MAX_OP_BYTES }
     }
 }
 
@@ -871,6 +986,10 @@ impl ChainCfg {
         let max_pay_meta_bytes = match self.params.get("max_pay_meta_bytes") {
             None => DEFAULT_MAX_PAY_META_BYTES,
             Some(v) => uint(v, "max_pay_meta_bytes")? as usize,
+        };
+        let max_service_op_bytes = match self.params.get("max_service_op_bytes") {
+            None => crate::service::DEFAULT_MAX_OP_BYTES,
+            Some(v) => uint(v, "max_service_op_bytes")? as usize,
         };
         let t = match self.params.get("relay_fee") {
             None => None,
@@ -914,7 +1033,7 @@ impl ChainCfg {
             None => false,
             Some(v) => v.as_bool().with_context(|| format!("params.relay_fee.relay_bound_payee must be true or false, not {v}"))?,
         };
-        Ok(RelayParams { router, min_amount, relay_bound_payee, max_pay_meta_bytes })
+        Ok(RelayParams { router, min_amount, relay_bound_payee, max_pay_meta_bytes, max_service_op_bytes })
     }
 
     /// Dạng chuẩn của một địa chỉ trên chain này (`addresses::canonical`, như Odoo `canonical_for_chain`).
@@ -922,6 +1041,35 @@ impl ChainCfg {
         let prefix = self.params.get("prefix").and_then(|v| v.as_str());
         let ton_testnet = (self.family == "ton").then_some(()).and(self.network.as_deref()).map(|n| n == "-3");
         crate::addresses::canonical(&self.family, value, prefix, ton_testnet)
+    }
+
+    /// Proposed NODE-JOB-25 at startup: EVM only, each service under its bounds ([`crate::service::entries_of`]), no address
+    /// twice, and one kind per address: a service is no other configured kind (the DEX, a `GovernanceRouter`, the UA registry,
+    /// the account or token factory, the relay-fee router or its executor). A registered token is refused at run time (the
+    /// list is the client's).
+    pub fn check_services(&self) -> Result<()> {
+        if self.services.is_empty() {
+            return Ok(());
+        }
+        if !self.is_evm() {
+            bail!("[[chains.services]] is EVM only (spec §9: each family's form in its own round)");
+        }
+        let router = self.relay_params()?.router.map(|r| crate::metatx::addr(&r)).transpose()?;
+        let mut others: Vec<(Address, &str)> = vec![];
+        others.extend(self.dex.map(|a| (a, "dex")));
+        others.extend(self.governance_routers.iter().map(|a| (*a, "governance_routers")));
+        others.extend(self.ua_registry.map(|a| (a, "ua_registry")));
+        others.extend(self.account_factory.map(|a| (a, "account_factory")));
+        others.extend(self.token_factory.map(|a| (a, "token_factory")));
+        others.extend(router.map(|r| (r, "relay_fee.router")));
+        others.extend(router.map(|r| (r.create(1), "the relay-fee executor")));
+        crate::service::Types::from_cfg(&self.services, crate::service::DEFAULT_MAX_OP_BYTES)?;
+        for s in &self.services {
+            if let Some((_, k)) = others.iter().find(|(a, _)| *a == s.address) {
+                bail!("service {:#x} is also {k} (one kind per address)", s.address);
+            }
+        }
+        Ok(())
     }
 
     pub fn is_evm(&self) -> bool {
@@ -971,20 +1119,74 @@ finality = { mode = "depth", depth = 1, quorum = 1 }
         assert_eq!(c.chains[0].stuck_after_secs, 60);
     }
 
+    /// Group 3f (spec §11.1): the top-level `[pqz_verifier]` reaches every chain at load (off and empty by default, no secret: URLs
+    /// only); an endpoint that is no http(s) URL, or a zero bound, is a startup error.
+    #[test]
+    fn pqz_verifier_section_reaches_every_chain() {
+        let load = |extra: &str| -> Result<Config> {
+            let p = std::env::temp_dir().join(format!("pqz-verifier-{}-{}.toml", std::process::id(), extra.len()));
+            std::fs::write(&p, format!("{OK}{extra}"))?;
+            let c = Config::load(&p);
+            let _ = std::fs::remove_file(&p);
+            c
+        };
+        let c = load("").unwrap();
+        assert_eq!(c.chains[0].pqz_verifier, PqzVerifierCfg::default());
+        assert!(!c.pqz_verifier.refuse_shield_when_unserved && c.pqz_verifier.endpoints.is_empty());
+        let c = load("[pqz_verifier]\nendpoints = [\"https://v.example\", \"http://127.0.0.1:7\"]\nrefuse_shield_when_unserved = true\n").unwrap();
+        assert_eq!((c.chains[0].pqz_verifier.endpoints.len(), c.chains[0].pqz_verifier.refuse_shield_when_unserved), (2, true));
+        assert_eq!(c.chains[0].pqz_verifier.timeout_ms, 5_000);
+        for bad in ["[pqz_verifier]\nendpoints = [\"v.example\"]\n", "[pqz_verifier]\ntimeout_ms = 0\n"] {
+            assert!(load(bad).unwrap_err().to_string().contains("pqz_verifier"), "{bad}");
+        }
+    }
+
+    /// Regulated-kinds spec §7: `compliance_registry` and its code hash are set together, or neither (no secret: an address and a
+    /// hash; `chain::compliance_registry_code_hash_fails_closed` checks the code).
+    #[test]
+    fn compliance_registry_and_its_code_hash_together() {
+        let with = |extra: &str| -> Result<Config> {
+            let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"", &format!("signer_key_env = \"K\"\n{extra}")))?;
+            c.validate().map(|_| c)
+        };
+        let (a, h) = (format!("{:#x}", Address::repeat_byte(0xc0)), format!("{:#x}", B256::repeat_byte(1)));
+        assert!(with(&format!("compliance_registry = \"{a}\"")).unwrap_err().to_string().contains("set together"));
+        assert!(with(&format!("compliance_registry_codehash = \"{h}\"")).unwrap_err().to_string().contains("set together"));
+        let c = with(&format!("compliance_registry = \"{a}\"\ncompliance_registry_codehash = \"{h}\"")).unwrap();
+        assert_eq!((c.chains[0].compliance_registry, c.chains[0].compliance_registry_codehash), (Some(Address::repeat_byte(0xc0)), Some(B256::repeat_byte(1))));
+        assert_eq!(with("").unwrap().chains[0].compliance_registry, None);
+    }
+
+    /// Fable recheck 4 R4-3: the chain read timeouts default to 30 s and 120 s, are read from the table, and 0 is refused at start.
+    #[test]
+    fn rpc_timeouts_default_and_refuse_zero() {
+        let with = |extra: &str| -> Result<Config> {
+            let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"", &format!("signer_key_env = \"K\"\n{extra}")))?;
+            c.validate().map(|_| c)
+        };
+        let c = with("").unwrap();
+        assert_eq!((c.chains[0].rpc_timeout_ms, c.chains[0].rpc_simulate_timeout_ms), (30_000, 120_000));
+        assert_eq!(with("rpc_timeout_ms = 5000").unwrap().chains[0].rpc_timeout_ms, 5000);
+        for zero in ["rpc_timeout_ms = 0", "rpc_simulate_timeout_ms = 0"] {
+            assert!(with(zero).unwrap_err().to_string().contains("must be above 0"), "{zero}");
+        }
+    }
+
     /// T17: the relay-fee / pay-meta keys of every family: defaults, and a set-but-invalid value is a startup error.
     #[test]
     fn relay_params_default_and_refuse_invalid_values() {
         let c: Config = toml::from_str(OK).unwrap();
         assert_eq!(c.chains[0].relay_params().unwrap(),
-            RelayParams { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: 2048 });
+            RelayParams { router: None, min_amount: 1, relay_bound_payee: false, max_pay_meta_bytes: 2048, max_service_op_bytes: 2048 });
         let with = |p: &str| -> Result<RelayParams> {
             let c: Config = toml::from_str(&OK.replace("signer_key_env = \"K\"", &format!("signer_key_env = \"K\"\nparams = {{ {p} }}")))?;
             c.validate()?;
             c.chains[0].relay_params()
         };
-        let p = with(r#"max_pay_meta_bytes = 4096, relay_fee = { router = "0x7f", min_amount = 0, relay_bound_payee = true }"#).unwrap();
-        assert_eq!(p, RelayParams { router: Some("0x7f".into()), min_amount: 0, relay_bound_payee: true, max_pay_meta_bytes: 4096 });
-        for bad in ["max_pay_meta_bytes = -1", r#"max_pay_meta_bytes = "2048""#, "relay_fee = 7", "relay_fee = { router = 7 }",
+        let p = with(r#"max_pay_meta_bytes = 4096, max_service_op_bytes = 512, relay_fee = { router = "0x7f", min_amount = 0, relay_bound_payee = true }"#).unwrap();
+        assert_eq!(p, RelayParams { router: Some("0x7f".into()), min_amount: 0, relay_bound_payee: true, max_pay_meta_bytes: 4096,
+            max_service_op_bytes: 512 });
+        for bad in ["max_pay_meta_bytes = -1", "max_service_op_bytes = -1", r#"max_service_op_bytes = "2048""#, r#"max_pay_meta_bytes = "2048""#, "relay_fee = 7", "relay_fee = { router = 7 }",
                     "relay_fee = { min_amount = -1 }", r#"relay_fee = { min_amount = "9" }"#, "relay_fee = { min_amount = 1.5 }",
                     r#"relay_fee = { relay_bound_payee = "yes" }"#, "relay_fee = { min_ammount = 5 }",
                     "relay_fee = { min_ton_value = {} }", "relay_fee = { min_lamports_value = {} }"] {

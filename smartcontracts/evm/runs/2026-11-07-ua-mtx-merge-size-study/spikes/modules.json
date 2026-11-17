@@ -1,0 +1,566 @@
+{
+ "NormalToken": {
+  "MA": {
+   "kept": 25,
+   "build": 22965,
+   "module": 18079
+  },
+  "MB": {
+   "kept": 9,
+   "build": 15475,
+   "module": 9263
+  },
+  "MC": {
+   "kept": 38,
+   "build": 22433,
+   "module": 18623
+  },
+  "MD1": {
+   "kept": 0,
+   "build": 11056,
+   "module": 4099
+  },
+  "MD2": {
+   "kept": 0,
+   "build": 11056,
+   "module": 4099
+  },
+  "MD3": {
+   "kept": 0,
+   "build": 11056,
+   "module": 4099
+  },
+  "Mpay": {
+   "kept": 8,
+   "build": 17109,
+   "module": 10815
+  },
+  "MAB": {
+   "kept": 34,
+   "build": 26005,
+   "module": 21864
+  },
+  "V8": {
+   "kept": 0,
+   "build": 11056,
+   "module": 4099
+  }
+ },
+ "WrappedToken": {
+  "MA": {
+   "kept": 25,
+   "build": 26794,
+   "module": 18953
+  },
+  "MB": {
+   "kept": 10,
+   "build": 20475,
+   "module": 11297
+  },
+  "MC": {
+   "kept": 31,
+   "build": 21309,
+   "module": 14002
+  },
+  "MD1": {
+   "kept": 0,
+   "build": 14682,
+   "module": 4613
+  },
+  "MD2": {
+   "kept": 35,
+   "build": 25997,
+   "module": 19047
+  },
+  "MD3": {
+   "kept": 0,
+   "build": 14682,
+   "module": 4613
+  },
+  "Mpay": {
+   "kept": 8,
+   "build": 20499,
+   "module": 11143
+  },
+  "MAB": {
+   "kept": 35,
+   "build": 30640,
+   "module": 23690
+  },
+  "V8": {
+   "kept": 0,
+   "build": 14406,
+   "module": 4337
+  }
+ },
+ "NormalZetherToken": {
+  "MA": {
+   "kept": 25,
+   "build": 27767,
+   "module": 20184
+  },
+  "MB": {
+   "kept": 9,
+   "build": 19125,
+   "module": 10264
+  },
+  "MC": {
+   "kept": 38,
+   "build": 25388,
+   "module": 18842
+  },
+  "MD1": {
+   "kept": 0,
+   "build": 15402,
+   "module": 5823
+  },
+  "MD2": {
+   "kept": 0,
+   "build": 15402,
+   "module": 5823
+  },
+  "MD3": {
+   "kept": 36,
+   "build": 25562,
+   "module": 18857
+  },
+  "Mpay": {
+   "kept": 8,
+   "build": 20836,
+   "module": 11896
+  },
+  "MAB": {
+   "kept": 34,
+   "build": 30720,
+   "module": 23855
+  },
+  "V8": {
+   "kept": 0,
+   "build": 15402,
+   "module": 5823
+  }
+ },
+ "WrappedZetherToken": {
+  "MA": {
+   "kept": 25,
+   "build": 31799,
+   "module": 21107
+  },
+  "MB": {
+   "kept": 10,
+   "build": 24263,
+   "module": 12318
+  },
+  "MC": {
+   "kept": 31,
+   "build": 22671,
+   "module": 12480
+  },
+  "MD1": {
+   "kept": 0,
+   "build": 19150,
+   "module": 6370
+  },
+  "MD2": {
+   "kept": 31,
+   "build": 30573,
+   "module": 20382
+  },
+  "MD3": {
+   "kept": 44,
+   "build": 33234,
+   "module": 24129
+  },
+  "Mpay": {
+   "kept": 8,
+   "build": 24338,
+   "module": 12226
+  },
+  "MAB": {
+   "kept": 35,
+   "build": 35603,
+   "module": 25747
+  },
+  "V8": {
+   "kept": 0,
+   "build": 18864,
+   "module": 6084
+  }
+ },
+ "NormalPqzToken": {
+  "MA": {
+   "kept": 25,
+   "build": 29031,
+   "module": 20812
+  },
+  "MB": {
+   "kept": 9,
+   "build": 21237,
+   "module": 11690
+  },
+  "MC": {
+   "kept": 38,
+   "build": 29188,
+   "module": 22049
+  },
+  "MD1": {
+   "kept": 40,
+   "build": 29485,
+   "module": 22512
+  },
+  "MD2": {
+   "kept": 0,
+   "build": 17737,
+   "module": 7443
+  },
+  "MD3": {
+   "kept": 0,
+   "build": 17737,
+   "module": 7443
+  },
+  "Mpay": {
+   "kept": 8,
+   "build": 21973,
+   "module": 12343
+  },
+  "MAB": {
+   "kept": 34,
+   "build": 32126,
+   "module": 24655
+  },
+  "V8": {
+   "kept": 0,
+   "build": 17737,
+   "module": 7443
+  }
+ },
+ "WrappedPqzToken": {
+  "MA": {
+   "kept": 25,
+   "build": 34306,
+   "module": 22570
+  },
+  "MB": {
+   "kept": 10,
+   "build": 26636,
+   "module": 13586
+  },
+  "MC": {
+   "kept": 31,
+   "build": 26199,
+   "module": 14988
+  },
+  "MD1": {
+   "kept": 50,
+   "build": 38393,
+   "module": 28846
+  },
+  "MD2": {
+   "kept": 31,
+   "build": 32939,
+   "module": 21728
+  },
+  "MD3": {
+   "kept": 0,
+   "build": 22652,
+   "module": 8726
+  },
+  "Mpay": {
+   "kept": 8,
+   "build": 26651,
+   "module": 13426
+  },
+  "MAB": {
+   "kept": 35,
+   "build": 38159,
+   "module": 27298
+  },
+  "V8": {
+   "kept": 0,
+   "build": 22366,
+   "module": 8440
+  }
+ },
+ "NormalRegulatedToken": {
+  "MA": {
+   "kept": 30,
+   "build": 28214,
+   "module": 22006
+  },
+  "MB": {
+   "kept": 9,
+   "build": 18686,
+   "module": 10692
+  },
+  "MC": {
+   "kept": 37,
+   "build": 25995,
+   "module": 20382
+  },
+  "MD1": {
+   "kept": 0,
+   "build": 14192,
+   "module": 5433
+  },
+  "MD2": {
+   "kept": 15,
+   "build": 17806,
+   "module": 10323
+  },
+  "MD3": {
+   "kept": 0,
+   "build": 14192,
+   "module": 5433
+  },
+  "Mpay": {
+   "kept": 13,
+   "build": 22270,
+   "module": 14617
+  },
+  "MAB": {
+   "kept": 39,
+   "build": 31320,
+   "module": 25878
+  },
+  "V8": {
+   "kept": 0,
+   "build": 14192,
+   "module": 5433
+  }
+ },
+ "WrappedRegulatedToken": {
+  "MA": {
+   "kept": 30,
+   "build": 32074,
+   "module": 22927
+  },
+  "MB": {
+   "kept": 10,
+   "build": 23705,
+   "module": 12765
+  },
+  "MC": {
+   "kept": 31,
+   "build": 24813,
+   "module": 15756
+  },
+  "MD1": {
+   "kept": 0,
+   "build": 17790,
+   "module": 5953
+  },
+  "MD2": {
+   "kept": 49,
+   "build": 31570,
+   "module": 24127
+  },
+  "MD3": {
+   "kept": 0,
+   "build": 17790,
+   "module": 5953
+  },
+  "Mpay": {
+   "kept": 13,
+   "build": 25664,
+   "module": 14993
+  },
+  "MAB": {
+   "kept": 40,
+   "build": 35966,
+   "module": 27716
+  },
+  "V8": {
+   "kept": 0,
+   "build": 17504,
+   "module": 5667
+  }
+ },
+ "NormalZetherRegulatedToken": {
+  "MA": {
+   "kept": 30,
+   "build": 32884,
+   "module": 24140
+  },
+  "MB": {
+   "kept": 9,
+   "build": 22113,
+   "module": 11685
+  },
+  "MC": {
+   "kept": 37,
+   "build": 28727,
+   "module": 20545
+  },
+  "MD1": {
+   "kept": 0,
+   "build": 18315,
+   "module": 7165
+  },
+  "MD2": {
+   "kept": 15,
+   "build": 21889,
+   "module": 11942
+  },
+  "MD3": {
+   "kept": 36,
+   "build": 29126,
+   "module": 20864
+  },
+  "Mpay": {
+   "kept": 13,
+   "build": 25844,
+   "module": 15737
+  },
+  "MAB": {
+   "kept": 39,
+   "build": 35903,
+   "module": 27881
+  },
+  "V8": {
+   "kept": 0,
+   "build": 18315,
+   "module": 7165
+  }
+ },
+ "WrappedZetherRegulatedToken": {
+  "MA": {
+   "kept": 30,
+   "build": 37095,
+   "module": 25128
+  },
+  "MB": {
+   "kept": 10,
+   "build": 27416,
+   "module": 13764
+  },
+  "MC": {
+   "kept": 31,
+   "build": 26104,
+   "module": 14221
+  },
+  "MD1": {
+   "kept": 0,
+   "build": 22214,
+   "module": 7719
+  },
+  "MD2": {
+   "kept": 48,
+   "build": 36570,
+   "module": 26120
+  },
+  "MD3": {
+   "kept": 41,
+   "build": 36511,
+   "module": 25471
+  },
+  "Mpay": {
+   "kept": 13,
+   "build": 29499,
+   "module": 16100
+  },
+  "MAB": {
+   "kept": 40,
+   "build": 40912,
+   "module": 29788
+  },
+  "V8": {
+   "kept": 0,
+   "build": 21918,
+   "module": 7423
+  }
+ },
+ "NormalPqzRegulatedToken": {
+  "MA": {
+   "kept": 30,
+   "build": 34267,
+   "module": 24894
+  },
+  "MB": {
+   "kept": 9,
+   "build": 24309,
+   "module": 13194
+  },
+  "MC": {
+   "kept": 37,
+   "build": 32631,
+   "module": 23838
+  },
+  "MD1": {
+   "kept": 40,
+   "build": 32857,
+   "module": 24313
+  },
+  "MD2": {
+   "kept": 15,
+   "build": 23384,
+   "module": 12766
+  },
+  "MD3": {
+   "kept": 0,
+   "build": 20765,
+   "module": 8903
+  },
+  "Mpay": {
+   "kept": 13,
+   "build": 27073,
+   "module": 16289
+  },
+  "MAB": {
+   "kept": 39,
+   "build": 37395,
+   "module": 28768
+  },
+  "V8": {
+   "kept": 0,
+   "build": 20765,
+   "module": 8903
+  }
+ },
+ "WrappedPqzRegulatedToken": {
+  "MA": {
+   "kept": 30,
+   "build": 39720,
+   "module": 26718
+  },
+  "MB": {
+   "kept": 10,
+   "build": 29897,
+   "module": 15138
+  },
+  "MC": {
+   "kept": 31,
+   "build": 29740,
+   "module": 16826
+  },
+  "MD1": {
+   "kept": 47,
+   "build": 41498,
+   "module": 29990
+  },
+  "MD2": {
+   "kept": 48,
+   "build": 39002,
+   "module": 27582
+  },
+  "MD3": {
+   "kept": 0,
+   "build": 25835,
+   "module": 10198
+  },
+  "Mpay": {
+   "kept": 13,
+   "build": 31903,
+   "module": 17408
+  },
+  "MAB": {
+   "kept": 40,
+   "build": 43624,
+   "module": 31501
+  },
+  "V8": {
+   "kept": 0,
+   "build": 25539,
+   "module": 9902
+  }
+ }
+}

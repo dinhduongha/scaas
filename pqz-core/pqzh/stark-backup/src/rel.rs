@@ -31,9 +31,9 @@ pub const MAX_PROOF: usize = 160 * 1024;
 /// (the precompile dispatches on it). Provisional until the FRI parameters (soundness regime) are fixed.
 pub const PQZH_PROOF_SYSTEM_ID: [u8; 32] = hex32("aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304");
 /// PQZL's id as pqz-core writes it at the set n2048-kmax1024 (its pqz_set.h PQZ_PROOF_SYSTEM_ID =
-/// keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v5"), the R0 review fix 2026-10-25; v4, v3 and v2 retired), used only for
-/// the byte cross-check against pqz_bench.c (pqzh/xcheck/run.sh, n2048-kmax1024 only).
-pub const PQZL_PROOF_SYSTEM_ID: [u8; 32] = hex32("c752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe");
+/// keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v6"), three-key step 2a; v5 (the R0 review fix 2026-10-25), v4, v3 and
+/// v2 retired), used only for the byte cross-check against pqz_bench.c (pqzh/xcheck/run.sh, n2048-kmax1024 only).
+pub const PQZL_PROOF_SYSTEM_ID: [u8; 32] = hex32("a626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee");
 
 const fn nib(c: u8) -> u8 {
     if c <= b'9' { c - b'0' } else { c - b'a' + 10 }
@@ -370,11 +370,11 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
         let et = wv - DELTA * m;
         let s = m + cprev - dp[i] - d[i] - ((t.fee >> (4 * i)) & 15) as i64;
         if check && (s % 16 != 0 || d[i] > 15 || dp[i] > 15 || !(0..1 << 14).contains(&m) || !(-(1 << 24)..1 << 24).contains(&et)) {
-            return Err("digits");
+            return Err(NOT_DECRYPTABLE);
         }
         let c = s / 16;
         if check && !(-64..1984).contains(&c) {
-            return Err("carry");
+            return Err(NOT_DECRYPTABLE);
         }
         let row = &mut rows[i];
         for x in 0..4 {
@@ -402,10 +402,14 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
         cprev = c;
     }
     if check && cprev != 0 {
-        return Err("carry out");
+        return Err(NOT_DECRYPTABLE);
     }
     Ok(finish(poly, vec![mv], Some((digit, rows)), Some(w)))
 }
+
+/// One error for every prover failure that depends on the decryption of T (review 3w u2-3, as pqzh-ligero's
+/// `cs::NOT_DECRYPTABLE`; ARCH-POS-13: the result goes to the key holder only).
+pub const NOT_DECRYPTABLE: &str = "the ciphertext does not decrypt to the statement under this key";
 
 pub fn build(op: u8, stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Result<Built, &'static str> {
     match op {

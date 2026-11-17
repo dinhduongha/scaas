@@ -1,0 +1,13 @@
+# ua-mtx-merge T70 gate summary (full output in git-ignored .log files, not committed)
+# T70 (factory index spec §8, CTR-TOK-28; Q7-Q12 as recommended, owner 2026-11-07): the generic catalogue and createInstance
+# on the chain-neutral factory. UNAUDITED.
+# Base: 612981b9 (T72 tip). Commits: db7dee7a (legacy copies), a01f3e8d (implementation), this one (summary).
+step | commit | rc | counts
+t70-red | - | - | not run as its own step: the tests were drafted before the implementation and applied with it; they name ReleaseId, publishClassEnv, deployRelease, createInstance and creating(), none of which 612981b9 has, so they cannot compile there; the T68 mutants are the evidence each can fail
+t70-build | a01f3e8d | 0 | the first form stopped on "stack too deep" (deployRelease, createInstance): split into _newRelease / _register and _usableRelease / _initInstance / _recordInstance, no logic moved
+t70-generic | a01f3e8d | 0 | FOUNDRY_TEST=test/v2 forge test FactoryGenericKind, Factory, FactoryIndex, ChainNeutralFactory, Dex: 128 tests, 127 passed, 1 failed (Factory test_sizes: the factory's 24,576 B bound), then the bound reads the baseline row: green
+t70-gov | a01f3e8d | 0 | GovGas, CodeCeiling, GovDeploy: 34 passed
+t70-forge-full | a01f3e8d | 0 | 3114 passed 0 failed 14 skipped, 300 suites (built per directory first: the factory change rebuilds every test directory)
+t70-size | a01f3e8d | 0 | size_gate.py: 0 errors, 99 contracts; OpenFactory 19,971 -> 28,236 B (init 20,164 -> 28,457), over the spec's 22-25 KB estimate (§8.7); under 65,536 B
+t70-gas | a01f3e8d | 0 | GovGas (log rows): NoteKind createInstance 1,826,732 (new row); createToken 2,183,102 and createDex 4,383,367 unchanged by T70
+t70-mutants | see T68 | - | §8.9's mutants run in T68 on the final factory

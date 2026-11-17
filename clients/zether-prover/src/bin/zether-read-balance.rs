@@ -218,7 +218,7 @@ mod tests {
         let c = curl_config("https://node/x?key=a\"b", r#"{"a":"\\"}"#);
         assert!(c.contains(r#"url = "https://node/x?key=a\"b""#), "{c}");
         assert!(c.contains(r#"data-binary = "{\"a\":\"\\\\\"}""#), "{c}");
-        assert!(!curl_config("-o /tmp/x", "{}\nurl = \"evil\"").contains("\nurl = \"evil"), "no injected lines");
+        assert!(!curl_config("-o out/x", "{}\nurl = \"evil\"").contains("\nurl = \"evil"), "no injected lines");
         let mut v: Value = serde_json::from_str(r#"{"key":{"x":"0x1234","n":[ "ab" ]}}"#).unwrap();
         wipe(&mut v);
         assert_eq!(v["key"]["x"], json!(""));

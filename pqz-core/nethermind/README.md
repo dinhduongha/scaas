@@ -56,9 +56,9 @@ was the literal 393,216 of `n2048-kmax1024`).
 | Address | Name | What it checks | Gas |
 |---|---|---|---|
 | `0x000000000000000000000000000000005caa0f01` | `PQZ` | a proof of either proof system (PQZL or PQZH), through `pqz-ffi`'s C function `pqz_precompile` (P/Invoke into `libpqz_ffi.so`) | the active schedule's row `(op, id, stmtLen)` — the multi-recipient transfer (op 7) also `(M, auditorOn)` from header words 320 / 448 — + 3·⌈len/32⌉; a miss = the smallest row (and `…00`, no FFI call); op 6 = `selftestGas` |
-| `0x000000000000000000000000000000005caa0012` | `MLDSA44` | an ML-DSA-44 signature; EIP-8355 input layout `pk ‖ sig ‖ msg`, empty context; .NET 10 `MLDsa` (OpenSSL 3.5 of the base image); never reverts: a short input or a `CryptographicException` from .NET is `…00` (review W-R) | `mldsa44Gas` (≥ 6,500; calibrated 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
-| `0x000000000000000000000000000000005caa0013` | `MLDSA65` | the same for ML-DSA-65 | `mldsa65Gas` (≥ 9,000; calibrated 68,000) + 6·⌈max(0, L − 5,261)/32⌉ |
-| `0x000000000000000000000000000000005caa0014` | `MLDSA87` | the same for ML-DSA-87 (CTR-UA-39, owner 2026-11-04); active only under a schedule that carries `mldsa87Gas` | `mldsa87Gas` (optional per schedule, ≥ 13,500; **PROVISIONAL ≈ 102,000**, `MlDsa.Provisional87Gas`, not calibrated: the run waits for the owner) + 6·⌈max(0, L − 7,219)/32⌉ |
+| `0x000000000000000000000000000000005caa0012` | `MLDSA44` | an ML-DSA-44 signature; EIP-8355 input layout `pk ‖ sig ‖ msg`, empty context; .NET 10 `MLDsa` (OpenSSL 3.5 of the base image); never reverts: a short input or a `CryptographicException` from .NET is `…00` (review W-R); any other exception in the call is `PQZ-NODE-FAULT` and exit 120, as a managed exception in a `PQZ` call (D4, review 3w T-16) | `mldsa44Gas` (≥ 6,500; calibrated 59,000 on 2026-11-15, `MlDsa.Calibrated44Gas`; was 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
+| `0x000000000000000000000000000000005caa0013` | `MLDSA65` | the same for ML-DSA-65 | `mldsa65Gas` (≥ 9,000; calibrated 100,000 on 2026-11-15, `MlDsa.Calibrated65Gas`, TODO 3zg; was 68,000) + 6·⌈max(0, L − 5,261)/32⌉ |
+| `0x000000000000000000000000000000005caa0014` | `MLDSA87` | the same for ML-DSA-87 (CTR-UA-39, owner 2026-11-04); active only under a schedule that carries `mldsa87Gas` | `mldsa87Gas` (optional per schedule, ≥ 13,500; **135,000**, `MlDsa.Calibrated87Gas`, calibrated 2026-11-15, `runs/2026-11-15-mldsa87-calib.txt`; reset 1's schedule 1 carries the provisional 102,000) + 6·⌈max(0, L − 7,219)/32⌉ |
 
 How to read the gas column: `id` is the statement's `proofSystemId`, `stmtLen` its length in bytes and `len` the
 length of the whole input, so `PQZ` adds 3 gas per 32-byte input word to the row price. For ML-DSA, `L` is the input
@@ -217,7 +217,7 @@ image). Changes Nethermind 2.x forced:
 | Nethermind 2.x | Plugin change |
 |---|---|
 | `IPrecompile.BaseGasCost` / `DataGasCost` and the spec provider's block numbers are `ulong` (2.0.0: numeric API types) | gas returns `ulong`; no schedule ⇒ `ulong.MaxValue` (out of gas, as before) |
-| `ReleaseSpec` indexes precompiles by number and throws for an address with a non-zero byte above its low 32 bits ("a precompile number must fit 32 bits") | `PqzReleaseSpec` re-implements `IReleaseSpec.Precompiles` / `IsPrecompile` over its own set; every caller in Nethermind goes through the interface, and the code-info repositories fall back to the provider's dictionary for a number they cannot index. Test `IsPrecompile_finds_the_three_from_T` |
+| `ReleaseSpec` indexes precompiles by number and throws for an address with a non-zero byte above its low 32 bits ("a precompile number must fit 32 bits") | for P6f D3's `0x5caa5000…` addresses `PqzReleaseSpec` re-implemented `IReleaseSpec.Precompiles` / `IsPrecompile` over its own set. The 32-bit addresses (image `2.2.0-pqz4` on) fit Nethermind's own lookup (a number of 64 or more is looked up in the set), so the re-implementation is gone (review 3w T-21; the spec tests pass without it, `runs/2026-11-13-3w-s5-test.txt`). Test `IsPrecompile_finds_the_three_from_T` |
 | The plugin `Init` hook is gone (init steps, #12326): `Init` still compiled and was never called | `PqzStartupCheck` step; test `Startup_checks_are_a_step_before_genesis` (the first `2.2.0-pqz3` build ran a few minutes without `PQZ-START` before this was found, see the run log) |
 | `IJsonSerializer.Deserialize<T>` returns `T?` | `!` in the harness, calibration and tests |
 
@@ -269,6 +269,16 @@ throwaway container: a library with one appended byte gives `PQZ-REFUSE … != t
 allowlist) for `-f Dockerfile`; the default build sends 16 MB (`runs/2026-10-22-default-context-check.txt`). (e)
 `e2e.py burst` / `fill` pick the largest input under the calldata floor and size `tx.gas` by `intrinsic()` (M2; not
 run: Task 13 drills). Not done (owner's go): the 200 M block load rehearsal (M3), timing / gas calibration.
+
+<a id="prices-calibrated-2026-11-15"></a>
+## Prices (calibrated 2026-11-15, the three-key ids)
+
+`chain/engine-pqz.json` = `runs/2026-11-15-3zh-calib-engine-pqz.json` (3zh-core, owner 2026-11-15): the 26
+`n2304-kmax4096` rows under the three-key ids (PQZH v4, PQZL v6), calibrated in the image `2.2.0-pqz10-calib` (library
+`f397d9c1…0f31`) by the method and rule below, unchanged: two runs in slices, one ecMul baseline 0.016 ms,
+`min(provisional, max(run 1, run 2))`; `selftestGas` 2,012,000. Rows and the three kept at the provisional price:
+`runs/2026-11-15-3zh-calib-rows.md`. It passes the start-up id check (`chain/check-provisional-ids.py`). Live on the
+SCaaS testnet from reset 5; until then the testnet runs `engine-pqz-provisional-n2304.json`.
 
 <a id="prices-calibrated-2026-10-31"></a>
 ## Prices (calibrated 2026-10-31)
@@ -349,7 +359,7 @@ ML-DSA-44 / -65: 49,000 / 68,000 + 6 per message word (unchanged).
 | Image `2.2.0-pqz4` (plan 5h Task 8d part 1) | image `sha256:55037b0b…`, library `0894d191…`, set `n2304-kmax4096`, 26 provisional rows; SCaaS testnet reset on path B 2026-10-25; probe 398 ok / 0 FAIL | `runs/2026-10-25-*` |
 | Image `2.2.0-pqz5` (R0 review fix part b) | tests 49 / 49 at `n2304-kmax4096` and `n2816-kmax65536`; image `sha256:4d906b55…`, library `dd0e7668…`, PQZL v5 / PQZH v3; SCaaS testnet reset on path B 2026-10-26: `PQZ-START`, genesis hash `0xa17faef4…2ac2` unchanged, probe 420 ok / 0 FAIL, e2e 84 ok / 0 FAIL | `runs/2026-10-26-r01b-*`, `runs/2026-10-26-*pqz5*` |
 | plan 5h Task 8d part 2b (not in an image yet) | tests 51 / 51 at `n2304-kmax4096` and `n2816-kmax65536` (the input-panic child process and `IdCheckHead` added); start-up runs with the `id_check_head` field on an empty and on an initialised database (head block 0; with genesis timestamp 0 and 16; no head past genesis); `docker build --check` of the Dockerfile: no warnings | `runs/2026-10-26-t8d2b-*` |
-| Image `2.2.0-pqz6` + calibration (fs3 Task 13, plan 5h Task 9) | image `sha256:656d91d6…`, library `dd0e7668…` (= pqz5's), plugin `bf38997a…`; two calibration runs, rows from one ecMul baseline 0.016 ms (option (b)), 26 rows −4…−55 % against the provisional rows, 0 above them, `selftestGas` 1,721,000; native p99 ≤ 16.6 ms (60 ms limit); SCaaS testnet reset on path B 2026-10-31 (genesis `0xf1f491ab…3164`): `PQZ-START` 26 rows, probe 420 ok / 0 FAIL, node e2e 84 ok / 0 FAIL, type-4 refused (`InvalidTxType`), PQZ contract e2e full 254 ok (2 stale list checks, fixed) / `--split` 265 ok / via the hardened public RPC 256 ok, 0 FAIL; `Deploy.s.sol` 31 txs (MtxRelayFee, DEX release) | `runs/2026-10-3[01]-*fs3-t13*`, `runs/2026-10-31-pqz6-live.txt` |
+| Image `2.2.0-pqz6` + calibration (fs3 Task 13, plan 5h Task 9) | image `sha256:656d91d6…`, library `dd0e7668…` (= pqz5's), plugin `bf38997a…`; two calibration runs, rows from one ecMul baseline 0.016 ms (option (b)), 26 rows −4…−55 % against the provisional rows, 0 above them, `selftestGas` 1,721,000; native p99 ≤ 16.6 ms (60 ms limit); SCaaS testnet reset on path B 2026-10-31 (genesis `0xf1f491ab…3164`): `PQZ-START` 26 rows, probe 420 ok / 0 FAIL, node e2e 84 ok / 0 FAIL, type-4 refused (`InvalidTxType`), PQZ contract e2e full 254 ok (2 stale list checks, fixed) / `--split` 265 ok / via the hardened public RPC 256 ok, 0 FAIL; `Deploy.s.sol` 31 txs (the relay-fee router, formerly `MtxRelayFee`; DEX release) | `runs/2026-10-3[01]-*fs3-t13*`, `runs/2026-10-31-pqz6-live.txt` |
 
 In this table, "path A" and "path B" are the two ways to switch the precompiles on (a future timestamp, or from
 genesis; see the [runbook](chain/RUNBOOK.md)); "probe" and "e2e" count the checks that passed in `chain/probe.sh` (read-only

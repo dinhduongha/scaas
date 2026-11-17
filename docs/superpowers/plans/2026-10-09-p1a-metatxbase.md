@@ -128,8 +128,9 @@ cd smartcontracts/evm
 Expected: `Ran 50 test suites in …: 639 tests passed, 0 failed, 0 skipped (639 total tests)`.
 
 ```bash
-../../scripts/capped forge build --sizes --json 2>/dev/null > /tmp/p1a-sizes-before.json
-jq -r 'to_entries[] | select(.value.runtime_size > 24576) | .key' /tmp/p1a-sizes-before.json
+T=$(mktemp -d)
+../../scripts/capped forge build --sizes --json 2>/dev/null > "$T"/p1a-sizes-before.json
+jq -r 'to_entries[] | select(.value.runtime_size > 24576) | .key' "$T"/p1a-sizes-before.json
 ```
 
 Expected: `ZetherToken` (only).
@@ -2424,10 +2425,10 @@ Expected: `692 tests passed, 0 failed, 0 skipped`; no `Error` line, `exit=0`.
 - [ ] **Step 2: Size gate**
 
 ```bash
-../../scripts/capped forge build --sizes --json 2>/dev/null > /tmp/p1a-sizes-after.json
-jq -r 'to_entries[] | select(.value.runtime_size > 24576) | .key' /tmp/p1a-sizes-after.json
-jq -r '.MtxRegistryMock.runtime_size' /tmp/p1a-sizes-after.json
-jq -r --slurpfile b /tmp/p1a-sizes-before.json 'to_entries[] | select($b[0][.key] != null and .value.runtime_size > $b[0][.key].runtime_size) | "\(.key) \($b[0][.key].runtime_size) -> \(.value.runtime_size)"' /tmp/p1a-sizes-after.json
+../../scripts/capped forge build --sizes --json 2>/dev/null > "$T"/p1a-sizes-after.json
+jq -r 'to_entries[] | select(.value.runtime_size > 24576) | .key' "$T"/p1a-sizes-after.json
+jq -r '.MtxRegistryMock.runtime_size' "$T"/p1a-sizes-after.json
+jq -r --slurpfile b "$T"/p1a-sizes-before.json 'to_entries[] | select($b[0][.key] != null and .value.runtime_size > $b[0][.key].runtime_size) | "\(.key) \($b[0][.key].runtime_size) -> \(.value.runtime_size)"' "$T"/p1a-sizes-after.json
 ```
 
 Expected: first command prints only `ZetherToken` (pre-existing, P3); second prints `9410` (≤ 20,480: the

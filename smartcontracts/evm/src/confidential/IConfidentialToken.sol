@@ -41,11 +41,10 @@ interface IConfidentialToken {
     event RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash);
 
     /// @notice Moves `amount · shieldScale` public units of the signer (a derived UA signer: its UA-ledger balance) to
-    ///         `SHIELD_POOL` and credits `amount` to `toUA`; no proof.
+    ///         `SHIELD_POOL` and credits `amount` to `toUA`; no proof. (Group 3g: the rollovers take each layer's parameters,
+    ///         `IZetherToken.mtxRollOver(ua, n)`, `IPqzToken.mtxRollOver(ua, keyVersion, n)`; the PQZ layer emits
+    ///         `PqzRolledOver`, `RolledOver` stays Zether's.)
     function mtxShield(bytes32 toUA, uint256 amount) external;
-    /// @notice Pending into `acc`: PQZ the next `n` entries (`1 ≤ n ≤ ROLL_MAX`), Zether its one aggregated pending for
-    ///         any `n ≥ 1`.
-    function mtxRollOver(bytes32 ua, uint256 n) external;
 }
 
 /// @title The wrapper kinds `WRAPPED_ZETHER` and `WRAPPED_PQZ`: `mtxWrapShield`, one selector, and the leg of an

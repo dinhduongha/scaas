@@ -1,0 +1,357 @@
+# P6g e2e on chain 7622, 2026-11-10 02:40:51 +0700; genesis 0x76c87b2ed09c1f23d0f34c6f0cc75fd89aa3f211fdfbd64ed930a836754c47c9; head 5, gasLimit 200,000,000, baseFee 0
+ok    chain id 7622
+deployer 0x7e5f4552091a69125d5dfcb7b8c2659029395bdf (key 1), relayer 0x2b5ad5c4795c026514f8317c7a215e218dccd6cf (key 2), envelope signer 0x6813eb9362372eef6200f3b1dbc3f819671cba69 (key 3)
+PQZ tokens: PRECOMPILE, the empty verdict
+ok    PQZ OP_SELFTEST = 0xd6c01fbcda23be8d… (set n2304-kmax4096)
+
+## 1. deploy (P6g plan D15)
+ok    tx UAMldsaVerifier 44: 0x4d6f1153523508787e6056b4e9010a601231f763ad9a6ca3f07196135458f2a1 block 7 gasUsed 18,216,506 (calldata 21,323 B)
+      UAMldsaVerifier at 0xf2e246bb76df876cef8b38ae84130f4f55de395b
+ok    UAMldsaVerifier(0x0130).PRECOMPILE() = 0x000000000000000000000000000000005caa0012 (probe passed)
+ok    tx UAMldsaVerifier 65: 0xe3bcb22967ef4dcb4f9cc5e17c38299d6b02d3f4e026b2b516403ad18a6def3e block 9 gasUsed 18,305,822 (calldata 24,395 B)
+      UAMldsaVerifier at 0x2946259e0334f33a064106302415ad3391bed384
+ok    UAMldsaVerifier(0x0131).PRECOMPILE() = 0x000000000000000000000000000000005caa0013 (probe passed)
+ok    tx UAPqzVerifier PQZL: 0x249d768dd1106f671f27f64148db022412a458a476a39e15d576ec36422c861a block 11 gasUsed 8,276,721 (calldata 51,757 B)
+      UAPqzVerifier at 0xde09e74d4888bc4e65f589e8c13bce9f71ddf4c7
+ok    UAPqzVerifier.isSupportedOnThisChain()
+ok    tx Secp256k1Verifier: 0xee56889a4e7b9128b31ea8534eaea459b909c827978d8991d149a074f67f7969 block 13 gasUsed 1,579,530 (calldata 915 B)
+      Secp256k1Verifier at 0x51a240271ab8ab9f9a21c82d9a85396b704e164d
+ok    tx library UARegistryCoreLib: 0x714ed737264db6a1ff086268f189f1e136932676af363c1886c9095eb4110083 block 15 gasUsed 52,299,751 (calldata 33,737 B)
+      UARegistryCoreLib at 0xb9816fc57977d5a786e654c7cf76767be63b966e
+ok    tx library UARegistryAuxLib: 0xed3a62edcd85bf4232ba072ac2934b696dcc950e01666c3d518c7185bfeba643 block 17 gasUsed 31,434,083 (calldata 20,244 B)
+      UARegistryAuxLib at 0x6d411e0a54382ed43f02410ce1c7a7c122afa6e1
+ok    tx UARegistry gen 1: 0xd05a0230fd82a73be10464428aaafb5b596c05519dd814cce823a0eca5d3b7f4 block 19 gasUsed 43,889,806 (calldata 36,137 B)
+      UARegistry at 0x5cf7f96627f3c9903763d128a1cc5d97556a6b99
+ok    tx library HederaLib: 0x2dd9ddc7e2b5616fe05f8296a4377fecae60e4cbee87981d5de63ef2595fd37a block 21 gasUsed 1,394,224 (calldata 819 B)
+      HederaLib at 0xa3183498b579bd228aa2b62101c40cc1da978f24
+ok    tx library MtxPipelineLib: 0x9a28faee5bb8fc08cda8cc74b613f241c0615b6c245150867ee16b4c31837aec block 23 gasUsed 19,476,717 (calldata 12,512 B)
+      MtxPipelineLib at 0x63f58053c9499e1104a6f6c6d2581d6d83067eeb
+ok    tx deploy GovernanceRouter (CREATE2): 0x585586c2d88cb4aa237cff4032bb7d62062fb86fd2ab03ae0743e2ff5eda6a0d block 25 gasUsed 24,310,375 (calldata 16,654 B)
+ok    GovernanceRouter at 0x63f6c29810e6ed8d87994034b7f9044dc4542adb (CREATE2, salt c0621b4e…)
+ok    tx deploy OpenFactory: 0x685beee36fa913f069225ddb31121a5f65b9394154578f61a343bb1ce1256bd2 block 27 gasUsed 45,512,236 (calldata 29,478 B)
+      OpenFactory at 0x00de48310d77a4d56aa400248b0b1613508f5b73
+ok    tx configureChain: 0x427281e48d427e4954203192f992d40fa1f253fd6662c0517eac0dc363217d8e block 29 gasUsed 244,086 (calldata 164 B)
+ok    tx deploy NormalTokenP (CREATE2): 0x0a74fc256ade54038da8eb74a129f792b7e5beb09fdf808cb0afc6f4317b1151 block 31 gasUsed 37,936,081 (calldata 26,029 B)
+ok    NormalTokenP at 0xb53dc10f38e022b2aaee9f352583ba05dc5831ba (CREATE2, salt c0621b4e…)
+ok    tx deploy NormalTokenT (CREATE2): 0xfe8c84cc52cfdfde8a00fc174547755a9df1c66c8580ab7cc66ae592f972ffd9 block 33 gasUsed 22,405,616 (calldata 15,925 B)
+ok    NormalTokenT at 0x8b00dcd896c5bb89dc31f9f9745597c2686fee5d (CREATE2, salt c0621b4e…)
+ok    tx library GovernanceLib: 0x805d9801dcc762eaa360d5a77ecdb494a2689489f84be96784147162f34b29db block 35 gasUsed 22,651,142 (calldata 14,565 B)
+      GovernanceLib at 0x7758f98c1c487e5653795470eeab6c4698be541b
+ok    tx deploy NormalTokenA (CREATE2): 0x2cc48f4caedbc1ec8eef8df3850dc10e0d944c1a088ad4b3e5510a089d8f38ca block 37 gasUsed 37,456,848 (calldata 25,869 B)
+ok    NormalTokenA at 0x6d35f48a09c2818d371485da4b0975ebd73f061a (CREATE2, salt c0621b4e…)
+ok    tx publishEnv(kind 0, 1): 0x518c7da97c7e2d19278a0b51d2cff43bc6ef8c4bccc6f2abb5175dda91b64ef1 block 39 gasUsed 1,922,079 (calldata 836 B)
+ok    tx deployImplementation(kind 0, 1) NormalToken: 0x6ce762699ee326daa7452423c73b4ac78778c3e853c214cd59b5140520ee438a block 41 gasUsed 22,156,559 (calldata 16,964 B)
+      NormalToken release at 0xe86175b6ac42824cd13204e39f7eddcd85e6fad4 (22,156,559 gas)
+ok    tx deploy NormalPqzTokenP (CREATE2): 0x5d325b088fdc3ee18fb6998de14503b0bc2a7442f474bc6aa383a2396cd7ace6 block 43 gasUsed 39,785,031 (calldata 27,243 B)
+ok    NormalPqzTokenP at 0x0d766576d08bd2a83958b5e18f445218c7022e03 (CREATE2, salt c0621b4e…)
+ok    tx deploy NormalPqzTokenT (CREATE2): 0x3f4b44bfa9719aa6470c9a233f6708fe88504e79e3863dbe078b5e816f3ce26f block 45 gasUsed 22,483,304 (calldata 15,994 B)
+ok    NormalPqzTokenT at 0x7fe8c20d28911eb833f29177f11af554be42314a (CREATE2, salt c0621b4e…)
+ok    tx library PqzStateLib: 0x1e1c6cd3a093671bec345efaeabccecac8cbecfae2444c8b80ae86f7805e57b6 block 47 gasUsed 21,953,424 (calldata 14,114 B)
+      PqzStateLib at 0x6d5a4d246617d711595a1657c55b17b97e20bdda
+ok    tx deploy NormalPqzTokenA (CREATE2): 0x5fda4b15eec159735d646504738cd6135dd4daff4c9d90e3234a7d72d48628f9 block 49 gasUsed 41,195,906 (calldata 28,312 B)
+ok    NormalPqzTokenA at 0x20420aa83acc546799aae63677edcd61a706aa65 (CREATE2, salt c0621b4e…)
+ok    tx library PqzBurnLib: 0x955fa1b8c6cfbf11a39e7ff51b4e2675cc1dab3ad7caf725d3a7dadf38bfb888 block 51 gasUsed 24,028,685 (calldata 15,456 B)
+      PqzBurnLib at 0xc705034ded85e817b9e56c977e61a2098362898b
+ok    tx library PqzTransferLib: 0x7164cda935b30d5bb7d815cb4e2767bba0510255c31ebb9d8e7334b683ac7e49 block 53 gasUsed 38,027,669 (calldata 24,508 B)
+      PqzTransferLib at 0x91eb86019fd8d7c5a9e31143d422850a13f670a3
+ok    tx library PqzViewLib: 0x93e5baea5b700d7fb15e5e6a0aa96807b92f703c71cc2a4593a66d05ed5b1217 block 55 gasUsed 37,633,303 (calldata 24,253 B)
+      PqzViewLib at 0xac361518bb9535d0e3172dc45a4e56d71a7fdfc4
+ok    tx deploy NormalPqzTokenQ (CREATE2): 0x237bcaac94044c1e9359267a7e88c9e8e54781daa08f6d79174189c0450a25a3 block 57 gasUsed 47,738,205 (calldata 32,599 B)
+ok    NormalPqzTokenQ at 0x9e91b97d6dd2c5239a8bda672effbfb9ae5eff4a (CREATE2, salt c0621b4e…)
+ok    tx publishEnv(kind 4, 1): 0x12e983b3353385ad2a2f5a989e2db26d231e66309e1fc93afca8c476a696f391 block 59 gasUsed 3,250,475 (calldata 1,188 B)
+ok    tx deployImplementation(kind 4, 1) NormalPqzToken: 0x1981f2d2dac111e1b79af577f3c7e1a5d06da1d4a03696287a8060ccf5b2eec0 block 61 gasUsed 30,444,573 (calldata 22,724 B)
+      NormalPqzToken release at 0xdb54d63dc3268e53c7806b368b2aaaa0475ffc8d (30,444,573 gas)
+ok    tx deploy WrappedPqzTokenP (CREATE2): 0x75bc7f602be2ef0b1f0153b45b88543f2981c8030c437223041791ad7817ac60 block 63 gasUsed 40,699,089 (calldata 27,834 B)
+ok    WrappedPqzTokenP at 0x8e36bf158b17888f4a5b655f51a9b37a833f3005 (CREATE2, salt c0621b4e…)
+ok    tx library WrappedLib: 0x27bd83605cb0d26c7c0b7abe75ef9237df5da88525694c4ec9f6d961d48b019f block 65 gasUsed 26,644,371 (calldata 17,147 B)
+      WrappedLib at 0xd4c901550b69069dadc5f5d8a56d4b92d45b6a60
+ok    tx deploy WrappedPqzTokenT (CREATE2): 0xa79291d17d63334cb81ee4a2c2bb6a153d88d0489bd246275ac87d993d17333a block 67 gasUsed 24,610,056 (calldata 17,376 B)
+ok    WrappedPqzTokenT at 0x8110f62ddb29bf8fedb1c2e834b22d9dcf1836b5 (CREATE2, salt c0621b4e…)
+ok    tx library PqzWrappedLib: 0xcc31ed0d34a2b10f1e90bc37d4cc1f4275eb3c66e5e7fe20afd75a59e2bff9dd block 69 gasUsed 8,810,806 (calldata 5,615 B)
+      PqzWrappedLib at 0xe3a0c8943356982867fc2b93739bd0f70c4b3a70
+ok    tx deploy WrappedPqzTokenA (CREATE2): 0x1005d2b23992ef7a402dacb1db70c12b7fb0a8f9051772abced738f964f8148d block 71 gasUsed 26,446,567 (calldata 18,721 B)
+ok    WrappedPqzTokenA at 0x898b4c3add9577dd73020e2b4eed64449df8535d (CREATE2, salt c0621b4e…)
+ok    tx deploy WrappedPqzTokenW (CREATE2): 0xdf5a4056b8d5f84828ffac3ab389951ea2b68b20233fc5d330bedc62915e6859 block 73 gasUsed 34,225,321 (calldata 23,735 B)
+ok    WrappedPqzTokenW at 0x2514153251e3cdd21c599ab342d5ebe3263577b3 (CREATE2, salt c0621b4e…)
+ok    tx deploy WrappedPqzTokenQ (CREATE2): 0xac84bebde1b5bbce2dabd999bfa7df1d743aa9672a7e8ce4b57c4b4952ff20af block 75 gasUsed 44,096,314 (calldata 30,080 B)
+ok    WrappedPqzTokenQ at 0x1fcc5743651a4cef9f58ae786e873216b8c70e2b (CREATE2, salt c0621b4e…)
+ok    tx deploy WrappedPqzTokenQ2 (CREATE2): 0xee4cc26addbf190b6df438de4ee6217865e22ec8602aae120bec38826f99c9f7 block 77 gasUsed 28,521,042 (calldata 20,062 B)
+ok    WrappedPqzTokenQ2 at 0x962ad0f5106b34bf083cc515ebf17351f518b904 (CREATE2, salt c0621b4e…)
+ok    tx publishEnv(kind 5, 1): 0x3f49528c83d5995dca98780aea251d65a044a6f5a0013146bc223da475a972e6 block 79 gasUsed 4,138,217 (calldata 1,444 B)
+ok    tx deployImplementation(kind 5, 1) WrappedPqzToken: 0xcb51e6424480144445d0735fdd964d010b6b159a12dad34a7793096e3c2a9206 block 81 gasUsed 38,657,185 (calldata 28,260 B)
+      WrappedPqzToken release at 0xb56d1fb4e5b89c1ebd20677e4e1361da7acb4cf3 (38,657,185 gas)
+ok    tx library RegulatedLib: 0x3ca4f0febd58b22bf0b10df1552f372d4ee9b9e84c6b0e780f193075fa142f53 block 83 gasUsed 16,318,345 (calldata 10,470 B)
+      RegulatedLib at 0x63e0f79244f01106b2ddc7d83a53a26916b61238
+ok    tx deploy NormalPqzRegulatedTokenP (CREATE2): 0xcd1766dc1e1a5279a9b7663d37f42cb1c4b4d84157c3695e78e5a3beba3c39de block 85 gasUsed 47,028,483 (calldata 32,112 B)
+ok    NormalPqzRegulatedTokenP at 0xac23a22d2a354d1fbf7cddc9c097b767f4ca7816 (CREATE2, salt c0621b4e…)
+ok    tx deploy NormalPqzRegulatedTokenT (CREATE2): 0x94423905e5548978d3b30d5d93ecc3bfd9184694e5150f8e4a745998669b5a65 block 87 gasUsed 24,445,279 (calldata 17,399 B)
+ok    NormalPqzRegulatedTokenT at 0xaf271809098a2a3ab0cae9f77ec850e657091b16 (CREATE2, salt c0621b4e…)
+ok    tx deploy NormalPqzRegulatedTokenA (CREATE2): 0xb55e84dc159bf0b8e575fc814e750300b01df8a6af019fc35f6b2ef99abcee70 block 89 gasUsed 43,858,990 (calldata 30,170 B)
+ok    NormalPqzRegulatedTokenA at 0x3f0eff45e867f647828a6178ffb56b7398ab38c4 (CREATE2, salt c0621b4e…)
+ok    tx deploy NormalPqzRegulatedTokenW (CREATE2): 0x4a5da4c13e311fa7629d5119cd4f2ee3230e0bd553ba08b535511c1b1305713e block 91 gasUsed 18,645,475 (calldata 13,679 B)
+ok    NormalPqzRegulatedTokenW at 0x94fa59b068af08e6128f1888f702ff4522872736 (CREATE2, salt c0621b4e…)
+ok    tx deploy NormalPqzRegulatedTokenQ (CREATE2): 0x1b513a527fcbc41b23b03c04efadcf41caef6f0855390f8a26643f99c2c6a4e6 block 93 gasUsed 50,497,243 (calldata 34,519 B)
+ok    NormalPqzRegulatedTokenQ at 0xad5993e1d84d4bbb415a4491f2657fe75210ef0a (CREATE2, salt c0621b4e…)
+ok    tx publishEnv(kind 12, 1): 0x152d2b8af454ea9f0d8503c22881362d83edd9b73fd9d48718138233dd2f43c7 block 95 gasUsed 3,694,340 (calldata 1,316 B)
+ok    tx deployImplementation(kind 12, 1) NormalPqzRegulatedToken: 0xcce19c5ae887bc6dcc7284f68b272c61f36d370d085c10a60f9b319b376f9ed7 block 97 gasUsed 35,914,018 (calldata 26,692 B)
+      NormalPqzRegulatedToken release at 0x4bbd15cdef3b2d73879d64827fe1e52761955518 (35,914,018 gas)
+ok    tx deploy WrappedPqzRegulatedTokenP (CREATE2): 0xead0563a529db1fb0d658834a95a06be994314136287941947dd891ce88eb102 block 99 gasUsed 47,965,696 (calldata 32,718 B)
+ok    WrappedPqzRegulatedTokenP at 0x6b9020b19ad58cc6e7fc1be89accf89d00b6a86a (CREATE2, salt c0621b4e…)
+ok    tx deploy WrappedPqzRegulatedTokenT (CREATE2): 0xaa968ee24954cfe63a39ce43234a8fa368fb15e420f64e7691e8ef9ffb8396dd block 101 gasUsed 26,717,485 (calldata 18,875 B)
+ok    WrappedPqzRegulatedTokenT at 0x3ee5faa67d5b7cef0cea9ad26912371119294bd1 (CREATE2, salt c0621b4e…)
+ok    tx deploy WrappedPqzRegulatedTokenA (CREATE2): 0x4a9e42e4ed71457b0668c280f83b148d58bc242f68474002aa3c862a7c3320e4 block 103 gasUsed 29,107,837 (calldata 20,585 B)
+ok    WrappedPqzRegulatedTokenA at 0x47d9e73975b3b0cbde8d35a99cd4b2cef3c849d1 (CREATE2, salt c0621b4e…)
+ok    tx deploy WrappedPqzRegulatedTokenW (CREATE2): 0x92d92cbe1bb8e176edf461f1725200c74b72b81629bb6522dc1e8c30bd2aec73 block 105 gasUsed 45,515,028 (calldata 31,284 B)
+ok    WrappedPqzRegulatedTokenW at 0xb92d1398ce30228bfb5ca0edfd354ad066af995a (CREATE2, salt c0621b4e…)
+ok    tx deploy WrappedPqzRegulatedTokenQ (CREATE2): 0x78acc5979efe3beace53a9c42e0ddccb3b041207f8d3fe8119cb9ca040c71cf6 block 107 gasUsed 45,927,402 (calldata 31,386 B)
+ok    WrappedPqzRegulatedTokenQ at 0x0da72e04110c34a03d6081f150148f378338d06b (CREATE2, salt c0621b4e…)
+ok    tx deploy WrappedPqzRegulatedTokenQ2 (CREATE2): 0x80dd38788b8f6a64fb0f965d9383f0fed79e68dfb181c727aed1a4e590e91f3a block 109 gasUsed 29,795,080 (calldata 21,015 B)
+ok    WrappedPqzRegulatedTokenQ2 at 0x50b686386de92c1bc358bc8a111b7fe949b83d5e (CREATE2, salt c0621b4e…)
+ok    tx publishEnv(kind 13, 1): 0x00edf974374ba447c2ca68c386b122888d99b972d632a852f5262a5991646464 block 111 gasUsed 4,360,125 (calldata 1,508 B)
+ok    tx deployImplementation(kind 13, 1) WrappedPqzRegulatedToken: 0x478089dd4abc40f0d20f1bc12e82d7a90a4f12504127607c491aba43e548db9e block 113 gasUsed 43,936,313 (calldata 32,036 B)
+      WrappedPqzRegulatedToken release at 0xf9594b4471048a328ae738d085c63279486ebced (43,936,313 gas)
+ok    tx setKindEnabled(4, true): 0xfe7915fd1132a5e1bd456727118348680c93c9ad78bbd54c221c019ac19d2542 block 115 gasUsed 29,904 (calldata 68 B)
+ok    tx setKindEnabled(5, true): 0x159206fd059904202dc86e58973218aed6658481e0e3898f25e1a2e0c94dfa2f block 117 gasUsed 29,904 (calldata 68 B)
+ok    tx setKindEnabled(12, true): 0x1c914c503fce77c73eb98ef422a5376a205f56844833ffd3b81fc81ca206a50d block 119 gasUsed 29,904 (calldata 68 B)
+ok    tx setKindEnabled(13, true): 0x6471f488369d8e0f53d8f2e9578162a02c20624c7b0127acab07287dcac8d282 block 121 gasUsed 29,904 (calldata 68 B)
+
+## 2. UAs: ML-DSA UAs and PQZ holders (ML-DSA UA + pqz-mlwe key attribute, real R_REG proofs)
+test seeds: keccak256('p6g-e2e-7622/<name>')
+ok    tx register mldsa44-ua (mldsa44, seed 63f90d6c…): 0xebb5275880834f104123a0f4891b80dcc2db78764149699f16842cfde006336e block 123 gasUsed 7,175,458 (calldata 4,292 B)
+ok    tx register fee-ua (mldsa65, seed e6c081ba…): 0x038e9f24c153a6738b0b7ae09adcb112def4d686c4aa3843df368c2466f8b557 block 125 gasUsed 9,578,843 (calldata 5,828 B)
+ok    proof op 3: 30,375 B, proved in 0.48 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    alice registrationArgs: pqzPopHash = keccak256(proof)
+ok    tx register alice (0x0131 + pqz-mlwe key + KEM v0, R_REG 30,375 B, proof by storePqzPop): 0x9fc5fcf7f23fc7b03458799043409bdc040b800a9b8c4978ac97d68d1165d164 block 127 gasUsed 41,578,196 (calldata 25,828 B)
+ok    tx storePqzPop alice: 0xc2d63015fc1ad13a5098e220249e74be5fac4ea26a4db5b2b33925797d3907cd block 129 gasUsed 50,237,802 (calldata 30,532 B)
+ok    alice = 6f912d8914d89eb2… recordOf: PQZ key pointer set
+ok    alice pqzKeyOf: version 0 current, proof hash set, proven
+ok    alice checkedOf = (chain, chain, chain)
+ok    alice kemKeyOf = (0, kem, "")
+ok    alice kindOf 0x0131
+ok    proof op 3: 30,375 B, proved in 0.48 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    bob registrationArgs: pqzPopHash = keccak256(proof)
+ok    tx register bob (0x0131 + pqz-mlwe key + KEM v0, R_REG 30,375 B, proof by storePqzPop): 0x3cda4d0709dc7e5576c7dc912e6df0f738ed2d63be8f85610fced96ca6573ad4 block 131 gasUsed 41,578,112 (calldata 25,828 B)
+ok    tx storePqzPop bob: 0x5bb5673dd4c19deab3d262be0c6cd1ff60770585287d104f3bbe9ed09667cf63 block 133 gasUsed 50,140,170 (calldata 30,532 B)
+ok    bob = d125e1d7d21da945… recordOf: PQZ key pointer set
+ok    bob pqzKeyOf: version 0 current, proof hash set, proven
+ok    bob checkedOf = (chain, chain, chain)
+ok    bob kemKeyOf = (0, kem, "")
+ok    bob kindOf 0x0131
+ok    proof op 3: 30,404 B, proved in 0.20 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    aud registrationArgs: pqzPopHash = keccak256(proof)
+ok    tx register aud (0x0131 + pqz-mlwe key + KEM v0, R_REG 30,404 B, proof by storePqzPop): 0xab97c6be5d4034f57d8f51c0c4b40c5cc2142ae75e30584b463ee3d5e6bce745 block 135 gasUsed 41,577,452 (calldata 25,828 B)
+ok    tx storePqzPop aud: 0x9fe297da7b080880b26625366aa57696274eb5c8bf2ba7fa06fca6c103aa1421 block 137 gasUsed 50,185,476 (calldata 30,564 B)
+ok    aud = 1244e541a8580086… recordOf: PQZ key pointer set
+ok    aud pqzKeyOf: version 0 current, proof hash set, proven
+ok    aud checkedOf = (chain, chain, chain)
+ok    aud kemKeyOf = (0, kem, "")
+ok    aud kindOf 0x0131
+ok    proof op 3: 30,369 B, proved in 0.17 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    carol registrationArgs: pqzPopHash = keccak256(proof)
+ok    tx register carol (0x0131 + pqz-mlwe key + KEM v0, R_REG 30,369 B, proof by storePqzPop): 0x99222b476211de2dd1465cc2cae7363dc1f184a0d7e88051903b7722f7b7319d block 139 gasUsed 41,578,064 (calldata 25,828 B)
+ok    tx storePqzPop carol: 0x7bef7f2377a99c99bc24522d5534abdf9daeb4592755ce7c150763c0d8fd3ea0 block 141 gasUsed 50,130,990 (calldata 30,532 B)
+ok    carol = 73f2073d72200f08… recordOf: PQZ key pointer set
+ok    carol pqzKeyOf: version 0 current, proof hash set, proven
+ok    carol checkedOf = (chain, chain, chain)
+ok    carol kemKeyOf = (0, kem, "")
+ok    carol kindOf 0x0131
+ok    tx setKemKey v2 (alice, ML-DSA-65 sig): 0x9f14c424924fba23d3de6e34c2d436876a70886c8da410294a6a642b4d18f048 block 143 gasUsed 8,317,592 (calldata 5,348 B)
+ok    alice kemKeyOf: version 2, its key and sig
+ok    tx register dave (mldsa65, seed 3b36c51e…): 0x564c7e53d9f5149911f64013807b9af67ebc481afd270b28c0cbe419197c208a block 145 gasUsed 9,481,055 (calldata 5,828 B)
+ok    proof op 3: 30,373 B, proved in 0.27 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    tx setPqzKey dave (ML-DSA-65 sig over PURPOSE_PQZ_KEY): 0x7c188590f738eb817cbe39cb43396a1e46e8f84ba1c42f490a47076214df894e block 147 gasUsed 34,904,304 (calldata 22,148 B)
+ok    dave pqzKeyOf: the added key's proof hash, unproven
+ok    dave pqzKeySigOf(0) = the setPqzKey signature
+ok    tx storePqzPop dave (R_REG 30,373 B over PURPOSE_PQZ_KEY): 0xb84c80167abb4ca5f110735cdf9f2be7ec7b84c47fd32fcc0497413453178d5f block 149 gasUsed 50,114,992 (calldata 30,532 B)
+ok    dave pqzKeyOf: proven
+ok    dave checkedOf = (chain, chain, none)
+ok    dave: the key a PQZ token reads (pqzKeyOf, proven) is the added key
+ok    proof op 3: 30,365 B, proved in 0.23 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    decoy0 registrationArgs: pqzPopHash = keccak256(proof)
+ok    tx register decoy0 (0x0131 + pqz-mlwe key + KEM v0, R_REG 30,365 B, proof by storePqzPop): 0xd7ee313a594677e2d1a1862e4477b61a97a6c1f3d34bde7426eadcd1b7956d36 block 151 gasUsed 41,578,304 (calldata 25,828 B)
+ok    tx storePqzPop decoy0: 0xce0073751fd94a435c628143dd0d255aa0805debdf771ac92e8044d8d879e01e block 153 gasUsed 50,124,281 (calldata 30,500 B)
+ok    decoy0 = b086bfd834ee5dca… recordOf: PQZ key pointer set
+ok    decoy0 pqzKeyOf: version 0 current, proof hash set, proven
+ok    decoy0 checkedOf = (chain, chain, chain)
+ok    decoy0 kemKeyOf = (0, kem, "")
+ok    decoy0 kindOf 0x0131
+ok    proof op 3: 30,368 B, proved in 0.28 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    decoy1 registrationArgs: pqzPopHash = keccak256(proof)
+ok    tx register decoy1 (0x0131 + pqz-mlwe key + KEM v0, R_REG 30,368 B, proof by storePqzPop): 0x1a2c38c847b6a534defa33e0f39f968a17f87a3c89235ec46b69a18b311200d3 block 155 gasUsed 41,578,148 (calldata 25,828 B)
+ok    tx storePqzPop decoy1: 0x69ac52745c15b0b5ab3fc28f498e41cd736478ffa1c27004b6ecfc098bb1836d block 157 gasUsed 50,128,683 (calldata 30,500 B)
+ok    decoy1 = 77711c58aabdb38f… recordOf: PQZ key pointer set
+ok    decoy1 pqzKeyOf: version 0 current, proof hash set, proven
+ok    decoy1 checkedOf = (chain, chain, chain)
+ok    decoy1 kemKeyOf = (0, kem, "")
+ok    decoy1 kindOf 0x0131
+ok    proof op 3: 30,386 B, proved in 0.23 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    decoy2 registrationArgs: pqzPopHash = keccak256(proof)
+ok    tx register decoy2 (0x0131 + pqz-mlwe key + KEM v0, R_REG 30,386 B, proof by storePqzPop): 0x9e61bc79527a778b74a61699961d16b472ccb081e54de1519311290a89dc62f5 block 159 gasUsed 41,577,428 (calldata 25,828 B)
+ok    tx storePqzPop decoy2: 0x67fceb8b773c1bb1600b12e3ec644b6b790b8390a14fb7424d0ed3bb4a8f88d7 block 161 gasUsed 50,157,122 (calldata 30,532 B)
+ok    decoy2 = 644f58229faf2a7c… recordOf: PQZ key pointer set
+ok    decoy2 pqzKeyOf: version 0 current, proof hash set, proven
+ok    decoy2 checkedOf = (chain, chain, chain)
+ok    decoy2 kemKeyOf = (0, kem, "")
+ok    decoy2 kindOf 0x0131
+ok    proof op 3: 30,376 B, proved in 0.26 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    decoy3 registrationArgs: pqzPopHash = keccak256(proof)
+ok    tx register decoy3 (0x0131 + pqz-mlwe key + KEM v0, R_REG 30,376 B, proof by storePqzPop): 0x5a692d98f6a5bed9d57c71f0ff3830440712c6160c5555a488c69b1db19018c2 block 163 gasUsed 41,577,392 (calldata 25,828 B)
+ok    tx storePqzPop decoy3: 0xa307dc4bc3d4ce73160287ef0793f8d28e932449c9ce2ec8701458f17374f87e block 165 gasUsed 50,141,654 (calldata 30,532 B)
+ok    decoy3 = 8f2f8be072801328… recordOf: PQZ key pointer set
+ok    decoy3 pqzKeyOf: version 0 current, proof hash set, proven
+ok    decoy3 checkedOf = (chain, chain, chain)
+ok    decoy3 kemKeyOf = (0, kem, "")
+ok    decoy3 kindOf 0x0131
+ok    proof op 3: 30,391 B, proved in 0.16 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    decoy4 registrationArgs: pqzPopHash = keccak256(proof)
+ok    tx register decoy4 (0x0131 + pqz-mlwe key + KEM v0, R_REG 30,391 B, proof by storePqzPop): 0x1c54ea272b05b992c2803a955af8c2b1f097230ab46ceffe3bb6c28fa7f03ad6 block 167 gasUsed 41,577,992 (calldata 25,828 B)
+ok    tx storePqzPop decoy4: 0x24f6934464776deb3f973f5f1fe37cf667b0185173d190e14295f3c1bc5b90b2 block 169 gasUsed 50,164,894 (calldata 30,532 B)
+ok    decoy4 = 3a19c6c019ed84d6… recordOf: PQZ key pointer set
+ok    decoy4 pqzKeyOf: version 0 current, proof hash set, proven
+ok    decoy4 checkedOf = (chain, chain, chain)
+ok    decoy4 kemKeyOf = (0, kem, "")
+ok    decoy4 kindOf 0x0131
+ok    secp256k1 UA = keccak256(TAG ‖ x ‖ y)
+ok    tx register secp256k1 (ECDSA PoP): 0xa2c431f177634b602d6fe39b1766c0c6e58b5f9267aeefea57400b408ebf7179 block 171 gasUsed 1,373,693 (calldata 708 B)
+ok    secp256k1 UA 0078cb049a35df4d… kindOf 0x0108; the same key's EOA 0x6e59a72ff53e21b9ec9aede9b4412d96f68647cc is a separate native id
+      gas registry.requireAuthorized(secp256k1) = 85,823 (eth_estimateGas, incl. 21,000 intrinsic and calldata)
+ok    secp256k1 signature over another digest is refused (UAUnauthorized)
+ok    registry list of kind 0x0142: uaCount 10, uaAt / uaIndex (kind lists) in registration order, uaPage 10 ids
+ok    registry list of kind 0x0131: uaCount 11, uaAt / uaIndex (kind lists) in registration order, uaPage 11 ids
+ok    registry list of kind 0x0130: uaCount 1, uaAt / uaIndex (kind lists) in registration order, uaPage 1 ids
+ok    registry list of kind 0x0108: uaCount 1, uaAt / uaIndex (kind lists) in registration order, uaPage 1 ids
+ok    tx register erin-m0 (mldsa65, seed 1a912a6f…): 0x82f07f51821461453a82b786094f3f74ac88a9bc44dd64763bbb3483e58e24f4 block 173 gasUsed 9,480,995 (calldata 5,828 B)
+ok    tx register erin-m1 (mldsa65, seed 7ee00c3f…): 0xb2fd1e5e1abf2083b919396d3e67362252212505f2c8be24a254360b2f059b3e block 175 gasUsed 9,481,139 (calldata 5,828 B)
+ok    proof op 3: 30,388 B, proved in 0.25 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    erin: registerMsig with a KEM key is refused (UAKemHolder, CTR-UA-32)
+ok    erin registrationArgs: pqzPopHash = keccak256(proof)
+ok    tx registerMsig erin (0x0120 + pqz-mlwe key, R_REG 30,388 B, proof by storePqzPop): 0xc95f2d15f7c1c3ed7e7901c500f4adba1f1a15d6ab7fc896b56f5ddd26b2bf94 block 177 gasUsed 31,218,591 (calldata 26,244 B)
+ok    tx storePqzPop erin: 0x0e315a590357041de5808d0c64fa432b0d52df89e800307fc684ebaa4cfa5fc5 block 179 gasUsed 50,147,642 (calldata 30,532 B)
+ok    erin = 08463f866691fa1b… recordOf: PQZ key pointer set
+ok    erin pqzKeyOf: version 0 current, proof hash set, proven
+ok    erin checkedOf = (chain, chain, none)
+ok    erin kemKeyOf = (0, kem, "")
+ok    erin kindOf 0x0120
+ok    erin msigOf: 2-of-2, the members in index order
+ok    registry list of kind 0x0120: erin
+ok    erin: the key a PQZ token reads is the msig's
+      gas registry.requireAuthorized(mldsa44) = 282,839 (eth_estimateGas, incl. 21,000 intrinsic and calldata)
+      gas registry.requireAuthorized(mldsa65) = 298,841 (eth_estimateGas, incl. 21,000 intrinsic and calldata)
+
+## 3. tokens
+ok    tx tUSD (MockERC20): 0x6164feb14b93d81f5356dd541593a78871e72391f35495942efd57e1a05c1012 block 181 gasUsed 3,395,366 (calldata 2,863 B)
+      MockERC20 at 0x0b4f643f875ce89ee92c5dbedd0771804ebb4d73
+ok    tx tUSD mint: 0x979d64658a9e2dec6a7fb0b61fdf2802c116ee058fe5a3e7fce9050b378b0361 block 183 gasUsed 238,431 (calldata 68 B)
+ok    tx createToken pqUSD (kind 4): 0x72911afe5ab378da8ea99fb669ec8e6fcfedea4e592b4421bfce27b796955d23 block 185 gasUsed 5,264,707 (calldata 1,572 B)
+      pqUSD at 0xd662ca532500c4080b53311b4317bbd706851cb2
+ok    pqUSD pqzVerifyConfig (mode, verifier, fixed_, epoch) = ['0x0', '0x0', '0x0', '0x0']
+ok    tx createToken pqW (kind 5): 0xd03ab410f309ca6ab58c2507924d9df969e155382d8bc457ba179d55695f4e2a block 187 gasUsed 5,659,498 (calldata 1,668 B)
+      pqW at 0x48d3f0b6ba334a71c287e45a7578951b7ee00a94
+ok    pqW pqzVerifyConfig (mode, verifier, fixed_, epoch) = ['0x0', '0x0', '0x0', '0x0']
+
+## 7. the proof path (group 3h T65): debits under NONE, LOG, NONE; each rebuilt from the interface and verified
+ok    tx createToken pqPP (kind 4): 0xb3bfd39889466a69fe9e3a579bc1ff31ad2cff9acc11ab655f7f83bc649ddd1a block 189 gasUsed 5,203,677 (calldata 1,572 B)
+      pqPP at 0xfea0358a2086cbb8f17c9dc5c7a67be4bd23db2c
+ok    pqPP pqzVerifyConfig (mode, verifier, fixed_, epoch) = ['0x0', '0x0', '0x0', '0x0']
+ok    tx pqPP mint 10,000 public: 0x20ef3847ba1ce39217f28a0048b4432521c36d7bd525fe8875a13154a28a25de block 191 gasUsed 251,917 (calldata 68 B)
+ok    tx pqPP mtxShield(alice, 600): 0x8f827d83f6d974f8877c5245d9e968ecc007a5f1cb4676a2df9be1213a4d83f4 block 193 gasUsed 508,432 (calldata 68 B)
+ok    tx pqPP mtxShield(bob, 200): 0x37802d13c2b72b65f3cf80b0fa68a7e48a3da2f331786da4181c3676bb271c0a block 195 gasUsed 312,592 (calldata 68 B)
+ok    tx pqPP mtxShield(carol, 100): 0x2f1421b2c817c5524359e88449ebff5bb49f1984f2e438302f3fd844252ac5de block 197 gasUsed 312,592 (calldata 68 B)
+ok    pqPP statement of NONE: op 1 alice→bob 50, auditor on: T and out as built
+ok    proof op 1: 46,686 B, proved in 0.83 s, pqz-ffi verify = 1 (stmt 93,312 B)
+      NONE: op 1 alice→bob 50, auditor on: balance 600 → 550 (+50 to bob, fee 0, shieldIn 0), p 1, rolled 0, hint 0 B, proof 46,686 B
+ok    tx pqPP NONE: op 1 alice→bob 50, auditor on: 0x1e009377f7fe9367253e5d2ad7a2018afaeda16c372bf1d480fd339b579db773 block 199 gasUsed 26,747,172 (calldata 70,308 B)
+ok    pqPP pqzAcc(6f912d89…) = the new u' ‖ v_f after the debit
+ok    pqPP pqzEntryBlob(ref) = R ‖ v_f ‖ ownTag ‖ kv [0, 0] ‖ n as built, packed (13,621 B)
+ok    tx pqPP mtxPrepareAcc(bob, 0): 0x2db3a3cb790c68861fe08dbe7af1375c63d019d51157a8738484853888024332 block 201 gasUsed 23,157,783 (calldata 100 B)
+ok    tx pqPP mtxPrepareAcc(bob, 1): 0xa42993a9c6aaa9badd170d7756fa6c0d8aff051349b4b24612f57bef5c64c402 block 203 gasUsed 22,949,879 (calldata 100 B)
+ok    tx pqPP mtxRollOver(bob, 1): bob's credit: 0x1a4a1ef066fa967d839da24b2f9b7f4142361097e2948afa5b2c22deb32e87c1 block 205 gasUsed 5,606,945 (calldata 100 B)
+ok    pqPP bob rolled 0 → 1, acc materialised, accUnits 1
+ok    pqPP statement of NONE: op 1 bob→carol 20, auditor off, after a rollover: T and out as built
+ok    proof op 1: 46,362 B, proved in 1.08 s, pqz-ffi verify = 1 (stmt 74,752 B)
+      NONE: op 1 bob→carol 20, auditor off, after a rollover: balance 250 → 230 (+20 to carol, fee 0, shieldIn 0), p 2, rolled 1, hint 13340 B, proof 46,362 B
+ok    tx pqPP NONE: op 1 bob→carol 20, auditor off, after a rollover: 0x2cb603a0adbef3e50b34d8d70f0f17fe80cfb81c1ece4c88914bc74ed954486f block 207 gasUsed 26,632,730 (calldata 83,204 B)
+ok    pqPP pqzAcc(d125e1d7…) = the new u' ‖ v_f after the debit
+ok    pqPP pqzEntryBlob(ref) = R ‖ v_f ‖ ownTag ‖ kv [0] ‖ n as built, packed (13,521 B)
+ok    tx pqPP mtxShield(alice, 3), a block of its own: 0x4228b2156e86dd6a7303fdb22b02375038f483a98093bfbaaaee4000c949ce86 block 210 gasUsed 217,430 (calldata 68 B)
+ok    tx pqPP mtxShield(alice, 4), a block of its own: 0xecfa6ce25982b8559141f32a2ab89b9a107ee508b2572e69ac8edd21aa257c00 block 213 gasUsed 217,481 (calldata 68 B)
+ok    tx pqPP mtxShield(alice, 5), a block of its own: 0x30665cd3d43d1b6a15a4cdc228a4c83634b30e0217c87d2848e498e804ee6f82 block 216 gasUsed 217,481 (calldata 68 B)
+ok    tx pqPP mtxPrepareAcc(alice, 0): 0x287a44fc2caff3e95bf8f83687690c1e368e1787dc0bec4f6063e07ad5fe789c block 218 gasUsed 23,059,851 (calldata 100 B)
+ok    tx pqPP mtxPrepareAcc(alice, 1): 0x20c3b1eaa7b128399a4d0278d32ddc68f58efb5bef12395a3d173c7f2ad6cc8c block 220 gasUsed 22,949,867 (calldata 100 B)
+ok    tx pqPP mtxRollOver(alice, 2): two of alice's three entries: 0x890cffbedda1f3c7f8bbd0de775d2d83b4d9a51fe705fb805c26722455afcbfd block 222 gasUsed 5,703,018 (calldata 100 B)
+ok    pqPP alice rolled 1 → 3, acc materialised, accUnits 3
+ok    proof op 3: 30,369 B, proved in 0.19 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    tx setPqzKey carol version 1: 0x35399c9d7b2d0a18f5e40b5139ecc69c4d2c5dea156f19d830fc6f3aa33dee9f block 224 gasUsed 34,916,451 (calldata 22,148 B)
+ok    tx storePqzPop carol version 1: 0x1f248d6b7d620f57d828e7a555f83687cc47b931949d547c62b6e08c1edd08c7 block 226 gasUsed 49,887,919 (calldata 30,532 B)
+ok    carol pqzKeyOf: version 1 current
+ok    proof op 3: 30,386 B, proved in 0.18 s, pqz-ffi verify = 1 (stmt 18,528 B)
+ok    tx setPqzKey aud version 1: 0xe94c71dd4465354e357cc9eb853a3b32a4057d16c2333421015b80f0d47260d3 block 228 gasUsed 34,916,271 (calldata 22,148 B)
+ok    tx storePqzPop aud version 1: 0xe31f90bc185c02abcbb0571f65d726824db15a7c9a0f43f4aecf776f94d35e8f block 230 gasUsed 49,914,075 (calldata 30,532 B)
+ok    aud pqzKeyOf: version 1 current
+ok    tx pqPP setProofStore(LOG): the deployer holds bit 24: 0x0d01ba6e109c921b0694681764db6c867d0880ca8c2b5fdfeaae252e540c239f block 232 gasUsed 46,164 (calldata 36 B)
+ok    pqPP proofStore() = LOG
+ok    pqPP op 7 statement of LOG: op 7 M = 4 alice→[carol/v1 10, bob 5, two decoys], auditor/v1 on, p = rolled − 1 = 2 (an un-roll): 167,808 B, T and out as built
+ok    proof op 7: 63,896 B, proved in 1.24 s, pqz-ffi verify = 1 (stmt 167,808 B)
+      LOG: op 7 M = 4 alice→[carol/v1 10, bob 5, two decoys], auditor/v1 on, p = rolled − 1 = 2 (an un-roll): M 4, balance 553 → 530, header fee 8, hint 13340 B, proof 63,896 B in 1.27 s, calldata 120,900 B
+ok    tx pqPP LOG: op 7 M = 4 alice→[carol/v1 10, bob 5, two decoys], auditor/v1 on, p = rolled − 1 = 2 (an un-roll): 0xaf0401c543097d911f2dca4abc1a139eb686995e1fb7d779248607e051603f53 block 234 gasUsed 52,816,021 (calldata 120,900 B)
+ok    pqPP pqzAcc(6f912d89…) = the new u' ‖ v_f after the debit
+ok    pqPP pqzEntryBlob(ref) = R ‖ v_f ‖ ownTag ‖ kv [1, 0, 0, 0, 1] ‖ n as built, packed (27,541 B)
+ok    proof op 2: 45,846 B, proved in 1.39 s, pqz-ffi verify = 1 (stmt 56,192 B)
+      LOG: burn alice 20 → deployer: balance 539 → 519, p 4, rolled 2, hint 0 B, proof 45,846 B
+ok    tx pqPP LOG: burn alice 20 → deployer: 0xe50e3af303fae4f70731b80256b89353aefe742d1df63e71f69540028b436bb7 block 236 gasUsed 26,240,605 (calldata 69,028 B)
+ok    pqPP pqzAcc(6f912d89…) = the new u' ‖ v_f after the debit
+ok    proof op 2: 45,817 B, proved in 0.61 s, pqz-ffi verify = 1 (stmt 56,192 B)
+      LOG: refresh alice: balance 519 → 519, p 4, rolled 4, hint 0 B, proof 45,817 B
+ok    tx pqPP LOG: refresh alice: 0xfc78abaa057fdea61cfb6079965aa905c8472484eb799dd1daac65ae65211c77 block 238 gasUsed 26,179,901 (calldata 68,996 B)
+ok    pqPP pqzAcc(6f912d89…) = the new u' ‖ v_f after the debit
+ok    pqPP statement of LOG: op 1 alice→carol/v1 7, auditor/v1 on: T and out as built
+ok    proof op 1: 46,667 B, proved in 1.12 s, pqz-ffi verify = 1 (stmt 93,312 B)
+      LOG: op 1 alice→carol/v1 7, auditor/v1 on: balance 519 → 512 (+7 to carol/v1, fee 0, shieldIn 0), p 4, rolled 4, hint 0 B, proof 46,667 B
+ok    tx pqPP LOG: op 1 alice→carol/v1 7, auditor/v1 on: 0x60002920547c99e48f1a4f95f6fa9cc64464c9e9f3423ee532db18fd2a7dfea6 block 240 gasUsed 26,965,068 (calldata 70,308 B)
+ok    pqPP pqzAcc(6f912d89…) = the new u' ‖ v_f after the debit
+ok    pqPP pqzEntryBlob(ref) = R ‖ v_f ‖ ownTag ‖ kv [1, 1] ‖ n as built, packed (13,621 B)
+ok    tx pqPP setProofStore(NONE): 0x33dc066665a61326de18c86eb3a81b404192627dd532b53eb024b23841c35026 block 242 gasUsed 46,152 (calldata 36 B)
+ok    pqPP statement of NONE: the migration, op 1 from (carol, 0) to carol/v1: T and out as built
+ok    proof op 1: 46,332 B, proved in 1.05 s, pqz-ffi verify = 1 (stmt 74,752 B)
+      NONE: the migration, op 1 from (carol, 0) to carol/v1: balance 120 → 90 (+30 to carol/v1, fee 0, shieldIn 0), p 2, rolled 0, hint 0 B, proof 46,332 B
+ok    tx pqPP NONE: the migration, op 1 from (carol, 0) to carol/v1: 0xaeb832d79c6cfe838900d377fb031260b74fbd0a856b71919b9bd492e58e793a block 244 gasUsed 26,569,294 (calldata 69,828 B)
+ok    pqPP pqzAcc(73f2073d…) = the new u' ‖ v_f after the debit
+ok    pqPP pqzEntryBlob(ref) = R ‖ v_f ‖ ownTag ‖ kv [1] ‖ n as built, packed (13,521 B)
+ok    tx createToken pqPW (kind 5): 0x0665c4567dfcbbe179e447a31dbe66e9a7b5dc29916aee527ec10a881419600f block 246 gasUsed 5,463,742 (calldata 1,668 B)
+      pqPW at 0x0463c249feee23909ee9de2f1c2fe7ab8ba0f94b
+ok    pqPW pqzVerifyConfig (mode, verifier, fixed_, epoch) = ['0x0', '0x0', '0x0', '0x0']
+ok    tx tUSD approve pqPW: 0xceea66631f26d051d5aa24ca6961fcea42df0cd0ba621519134dd637d22daa2c block 248 gasUsed 128,262 (calldata 68 B)
+ok    tx mtxWrapShield(tUSD 100, alice) into pqPW: 0x06285ff22a3c7e32ab59cd64e69d17224ae9ccb029955ebb2ee236f3c75d6e22 block 250 gasUsed 871,793 (calldata 100 B)
+ok    proof op 2: 45,822 B, proved in 0.48 s, pqz-ffi verify = 1 (stmt 56,192 B)
+      LOG: unshield-unwrap alice 30 → deployer in tUSD (kind 5): balance 100 → 70, p 1, rolled 0, hint 0 B, proof 45,822 B
+ok    tx pqPW LOG: unshield-unwrap alice 30 → deployer in tUSD (kind 5): 0x6f8e1371c305e236e6eac7ea4ac5f7cad1482908796009ce1e17c5b2fd7b3cb9 block 252 gasUsed 26,495,078 (calldata 69,060 B)
+ok    pqPW pqzAcc(6f912d89…) = the new u' ‖ v_f after the debit
+
+   the reference rebuild (spec §9.4, §9.5), the positive control
+ok    d1 op 1 auditor on, NONE: rebuilt = the proven statement (93,312 B; header words off []; body =), P from the calldata, record (p 1, Δp 1, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d2 op 1 auditor off, NONE: rebuilt = the proven statement (74,752 B; header words off []; body =), P from the calldata, record (p 2, Δp 2, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d3 op 7 M = 4 auditor on, rotated leg, un-roll, LOG: rebuilt = the proven statement (167,808 B; header words off []; body =), P from the log, record (p 2, Δp 1, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d3 op 7 M = 4 auditor on, rotated leg, un-roll, LOG: the header rebuilt from the calldata = the logged header
+ok    d4 burn 20, LOG: rebuilt = the proven statement (56,192 B; header words off []; body =), P from the log, record (p 4, Δp 2, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d4 burn 20, LOG: the header rebuilt from the calldata = the logged header
+ok    d5 refresh, LOG: rebuilt = the proven statement (56,192 B; header words off []; body =), P from the log, record (p 4, Δp 0, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d5 refresh, LOG: the header rebuilt from the calldata = the logged header
+ok    d6 op 1 to a rotated receiver, rotated auditor, LOG: rebuilt = the proven statement (93,312 B; header words off []; body =), P from the log, record (p 4, Δp 0, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d6 op 1 to a rotated receiver, rotated auditor, LOG: the header rebuilt from the calldata = the logged header
+ok    d7 migration of a rotated sender, NONE: rebuilt = the proven statement (74,752 B; header words off []; body =), P from the calldata, record (p 2, Δp 2, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d8 unwrap 30, kind 5, LOG: rebuilt = the proven statement (56,192 B; header words off []; body =), P from the log, record (p 1, Δp 1, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d8 unwrap 30, kind 5, LOG: the header rebuilt from the calldata = the logged header
+
+   the negatives (spec §11.4), one at a time: each must fail the verification or the lookup
+ok    negative wrong-historical-key-version on d6 op 1 to a rotated receiver, rotated auditor, LOG: pqz-ffi verify = 0
+ok    negative swapped-leg on d3 op 7 M = 4 auditor on, rotated leg, un-roll, LOG: pqz-ffi verify = 0
+ok    negative wrong-auditor-window on d6 op 1 to a rotated receiver, rotated auditor, LOG: pqz-ffi verify = 0
+ok    negative wrong-shieldIn on d2 op 1 auditor off, NONE: pqz-ffi verify = 0
+ok    negative wrong-predecessor on d5 refresh, LOG: pqz-ffi verify = 0
+ok    negative wrong-deltaP on d4 burn 20, LOG: pqz-ffi verify = 0
+ok    negative version-boundary on d7 migration of a rotated sender, NONE: pqz-ffi verify = 0
+ok    negative P-of-another-debit on d1 op 1 auditor on, NONE: pqz-ffi verify = 0
+ok    negative mode-of-another-record on d1 op 1 auditor on, NONE: the lookup fails (LookupError: 0 PqzDebitProof logs for (6f912d89…, 0))
+elapsed 1235 s
+
+result: 0 failure(s)

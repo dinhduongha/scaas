@@ -1,0 +1,24 @@
+# ua-mtx-merge T7 gate summary (full output in git-ignored .log files, not committed)
+# T7: GovernanceRouter (plan T7, spec §3.1, R14, R18, Q2/R19): each of the 19 ops has one signed entry,
+# mtx<Op>(UAEnvelope, target, <op params>, UASig) over UA<Op> with target signed (the ua<Op> body under the mtx<Op> name);
+# a native id by its own key with no registry call, its subject pad(addr) (_govSubject unchanged), a derived id through
+# requireAuthorized; UA events only. The 19 address mtx<Op>(Envelope, ..., bytes) entries, _mtxCall and their typehashes
+# to legacy. The ordered mtxCancelNonce and the generic refusals (T1) unchanged. New bytecode: new CREATE2 address.
+# The round's gate runner (T21) is not built yet: each command ran directly through scripts/capped.
+# Base: 0b7ed2fe (T6). T7 commits: ebd14b0d (legacy copies), ea793101 (the build), this one (harness, mutants, summary).
+step | commit | rc | counts
+t7-red | 0b7ed2fe + test/merge/RouterPairs.t.sol + GovRouter.t fixture split | 1 | 0 passed 25 failed, 1 suite (every test red on the base)
+t7-focus | ea793101 (worktree, before one test expectation fix) | 1 | 382 passed 3 failed, 40 suites (test/{merge/RouterPairs,governance/*,metatx/TypedOps,metatx/MsgSenderLint}); the three: a derived rate admin is refused NotRateAdmin, the test expected MissingRole (test fixed, code unchanged)
+t7-forge-full | ea793101 | 0 | 2587 passed 0 failed 14 skipped, 223 suites (forge, default set n2304-kmax4096)
+t7-forge-isolate | ea793101 | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t7-size-gate | ea793101 | 0 | 0 errors, 89 contracts, above 65536 B: none; size-baseline.json unchanged; size_gate --self-test ok
+t7-sizes | 0b7ed2fe -> ea793101 | 0 | GovernanceRouter runtime 15,888 -> 11,748 B, init 16,799 -> 12,659 B (T0: 11,744 for M); every other contract unchanged
+t7-pins | ea793101 | 0 | GovRouterTypehash 39 -> 22 pins (19 UA<Op> + GrantTerms unchanged, 19 address <Op> as one legacy pin, UACancelNonce added, unchanged); selector_audit.json GovernanceRouter 43 -> 24 rows; MsgSenderLint GovernanceRouterBase 3 -> 2; IGovernanceRouter unchanged; storage layout: none moved; LinkClosure green
+t7-dex-kat | ea793101 | 0 | dex_order_kat.json unchanged (test_dexKat green: no token or DEX bytecode moved; MD-8 not triggered)
+t7-gas | ea793101 | 0 | no gas pin moved (no GovGas or DexGas row reads the router)
+t7-clientkeys-evm | ea793101 | 0 | 23 passed 0 failed (node --test test/evm.test.js)
+t7-docs-check | ea793101 | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0
+t7-mutants | ea793101 | 1 each | 4 of 4 killed against test/merge + test/{governance/*,metatx/TypedOps}, none a compile error (runs/2026-11-04-ua-mtx-merge-t7-mutants.txt): target-out-of-digest, subject-from-msg-sender, generic-refusal-dropped-on-mtxBatch (red: test_fixed_theRoutersOpIsNotReachableAsABytesBlob, a native's cancelNonce blob ran through the base batch; test_routerGenericEntriesRefuseEveryCall; SelectorAudit's mutability row), cancel-unordered (the pipeline's one nonce check takes a stale nonce: the router's and the token's ordered-cancel tests red)
+#
+# Not run in T7: the other three PQZ sets (no PQZ file or shared base touched: only src/governance); the scaas-node suite
+# and zether-prover (no file of theirs changed; their router rows are T11 / T14); pqz-core gate.

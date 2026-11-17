@@ -735,6 +735,7 @@ dependencies = [
  "ark-ff",
  "curve25519-dalek",
  "ed25519-dalek",
+ "hmac",
  "k256",
  "p256",
  "serde_json",

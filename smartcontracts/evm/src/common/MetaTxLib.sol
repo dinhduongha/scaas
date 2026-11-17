@@ -58,7 +58,7 @@ library MetaTxLib {
     uint32 internal constant MODE_KNOWN_MASK             = 0x0000_00F3;
 
     error ModeFeeInvalid(uint32 mode);
-    error ModeUnknownBits(uint32 mode);
+    // `ModeUnknownBits(uint32)` moved with `validateMode` to legacy/ua-mtx-fix-contracts/ (re-check C6): nothing raises it.
 
     /// @notice v3 (CTR-MTX-15): the signed call of one of THIS contract's allowlisted functions.
     struct MetaTransaction {
@@ -80,7 +80,7 @@ library MetaTxLib {
 
     /// @notice Chuẩn hoá hai trường do relayer điền, trước khi băm.
     /// @dev Đây là quy tắc PHẢI giống hệt nhau ở ba nơi: verifier Solidity, SDK client,
-    ///      và builder phía Odoo. Lệch một chỗ thì mọi chữ ký fail — fail-closed nên
+    ///      và builder phía node. Lệch một chỗ thì mọi chữ ký fail — fail-closed nên
     ///      không mất tiền, nhưng là một nguy cơ tích hợp phải nhớ mãi.
     ///
     ///      Chọn "băm với address(0)" chứ KHÔNG phải "bỏ trường khỏi struct". Lý do
@@ -94,44 +94,12 @@ library MetaTxLib {
         f = (m.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
     }
 
-    function hashStruct(MetaTransaction memory m) internal pure returns (bytes32) {
-        (address r, address f) = canon(m);
-        return keccak256(abi.encode(
-            METATX_TYPEHASH, m.from, keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode, r, m.fee, f
-        ));
-    }
+    // `hashStruct(MetaTransaction)`, `hashStruct(UAMetaTransaction)`, `hashStruct(UAMetaTransfer)` and `validateMode` are in
+    // legacy/ua-mtx-fix-contracts/src/common/MetaTxLibHash.sol (Fable B P3-3): no contract called them; every contract hashes
+    // through `MtxPipelineLib._structHash` / `_namedHash` and checks the mode in `_checkEnvelope`. `canon` stays (Zether, PQZ).
 
-    /// @notice CTR-MTX-15/23 (tokens only): the typed transfer (`entryRef == 0`) or payment (`entryRef != 0`).
-    struct MetaTransfer {
-        address from;           // signer and payer
-        address to;             // payee
-        uint256 value;          // amount moved
-        bytes32 entryRef;       // 0 = transfer; != 0 = payment reference (PaymentSettled)
-        uint256 batch;          // lane, shared with MetaTransaction (one nonce space)
-        uint256 nonce;
-        uint256 validUntil;
-        uint32  mode;
-        address relayer;
-        uint256 fee;
-        address feeRecipient;
-    }
-
-    /// @dev Pinned by `test_metaTransferTypehashIsPinned` (test/metatx/MetaTxLib.t.sol).
-    bytes32 internal constant METATRANSFER_TYPEHASH = keccak256(
-        "MetaTransfer(address from,address to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
-
-    function canon(MetaTransfer memory t) internal pure returns (address r, address f) {
-        r = (t.mode & MODE_RESTRICT_RELAYER)       != 0 ? t.relayer      : address(0);
-        f = (t.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? t.feeRecipient : address(0);
-    }
-
-    function hashStruct(MetaTransfer memory t) internal pure returns (bytes32) {
-        (address r, address f) = canon(t);
-        return keccak256(abi.encode(
-            METATRANSFER_TYPEHASH, t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, r, t.fee, f
-        ));
-    }
+    // The address `MetaTransfer`, its typehash and `hashStruct` are in legacy/ua-mtx-merge/src/common/MetaTxLib.sol
+    // (ua-mtx-merge R46): no EVM entry takes it; a token's typed transfer is the `UAMetaTransfer` below.
 
     // ------------------------------------------------------------------ the UA ledger (accounts.md CTR-UA-18/19/26)
 
@@ -187,21 +155,30 @@ library MetaTxLib {
         "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
-    function hashStruct(UAMetaTransaction memory m) internal pure returns (bytes32) {
-        address r = (m.mode & MODE_RESTRICT_RELAYER) != 0 ? m.relayer : address(0);
-        address f = (m.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
-        return keccak256(abi.encode(
-            UAMETATX_TYPEHASH, m.from, keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode, r, m.fee, f
-        ));
+    /// @notice The payment metadata, the last parameter of every pay entry (CTR-MTX-26, pay-meta-tax spec §3.1, O2, O11;
+    ///         plan T83, owner 2026-11-09): never empty; `entryRef == metaPayId(meta)`, which the contract checks and never
+    ///         parses further. `payNo`: 0 = none; **recommended: a UUIDv7, right-aligned** (its 128 bits in the low 16
+    ///         bytes, the high 16 bytes zero, as `pad` places an address): unique without coordination, time-ordered so an
+    ///         indexer's or ERP's index stays compact, and no business sequence number on chain. Any other 32-byte id is
+    ///         accepted; the contract never parses it. A readable document number stays off chain or goes in `body`.
+    ///         `save`: the payer's choice to store a `PayRecord` under `payNo` (`paymentsOf`); `save` with `payNo == 0` is
+    ///         refused (`PayMetaShape`).
+    struct PayMeta {
+        bytes32 salt;    // 32 bytes from a CSPRNG; never 0
+        bytes32 payNo;   // the payment request's id; 0 = none; recommended a right-aligned UUIDv7
+        bool    save;    // store a `PayRecord` under `payNo` after the transfer
+        uint16  schema;  // 0 = no body; 1 note, 2 structured reference, 3 bound call, 4 encrypted
+        bytes   body;    // the schema's encoding; empty iff schema == 0
     }
 
-    function hashStruct(UAMetaTransfer memory t) internal pure returns (bytes32) {
-        address r = (t.mode & MODE_RESTRICT_RELAYER) != 0 ? t.relayer : address(0);
-        address f = (t.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? t.feeRecipient : address(0);
-        return keccak256(abi.encode(
-            UAMETATRANSFER_TYPEHASH, t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, r, t.fee, f
-        ));
+    /// @notice One stored payment of a `payNo` (plan T83, owner 2026-11-09), two slots: `to` the payee id, `amount` what
+    ///         the payee received (net of a fee or a tax withheld from it), `blockNumber` the block.
+    struct PayRecord {
+        bytes32 to;
+        uint192 amount;
+        uint64  blockNumber;
     }
+
 
     /// @notice TS-D14: the signed fields of a named entry around the op's own explicit parameters, in the struct
     ///         `<Op>(address from,<op params>,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)`. The lanes of `MetaTransaction`.
@@ -228,13 +205,17 @@ library MetaTxLib {
         address feeRecipient;
     }
 
-    /// @dev The struct of `mtxShield(Envelope, …)` on the Zether and PQZ kinds.
-    bytes32 internal constant SHIELD_TYPEHASH = keccak256(
-        "Shield(address from,bytes32 toUA,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-    );
-
+    /// @dev The struct of the signed `mtxShield(UAEnvelope, …, UASig)` on the Zether and PQZ kinds (R35, R36); the address
+    ///      `Shield` struct is in legacy/ua-mtx-merge/.
     bytes32 internal constant UA_SHIELD_TYPEHASH = keccak256(
         "UAShield(bytes32 from,bytes32 toUA,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
+    /// @dev The signed `cancelNonce(lane)` on ids (ua-mtx-merge Q2, CTR-MTX-30): `mtxCancelNonce(UAEnvelope, lane, UASig)`,
+    ///      nonce-ordered on its own lane `batch`. Pinned by `test_uaCancelNonceTypehashIsPinned` (test/metatx/MetaTxLib.t.sol);
+    ///      the unordered `UACancelNonce(bytes32 ua,uint256 batch,uint256 validUntil)` is in legacy/ua-mtx-merge/.
+    bytes32 internal constant UA_CANCEL_NONCE_TYPEHASH = keccak256(
+        "UACancelNonce(bytes32 from,uint256 lane,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
     );
 
     /// @notice Đọc cách tính phí từ nửa byte sau của `mode`.
@@ -246,15 +227,5 @@ library MetaTxLib {
         if (v == 1) return FeeMode.PERCENT;
         if (v == 2) return FeeMode.FIXED;
         revert ModeFeeInvalid(mode);
-    }
-
-    /// @notice Từ chối mọi bit không hiểu. Gọi ở bước 3 của §04.6.1, TRƯỚC verify chữ ký.
-    /// @dev Hai kiểm tra khác nhau, vì hai nửa byte có bản chất khác nhau:
-    ///      nửa đầu là cờ nên chỉ cần bit lạ = 0; nửa sau là giá trị liệt kê nên
-    ///      `0x30`–`0xF0` là bit hợp lệ nhưng giá trị vô nghĩa, và phải revert.
-    ///      Chấp nhận bit/giá trị không hiểu nghĩa là khoá chết ngữ nghĩa tương lai.
-    function validateMode(uint32 mode) internal pure {
-        if (mode & ~MODE_KNOWN_MASK != 0) revert ModeUnknownBits(mode);
-        feeModeOf(mode);  // revert ModeFeeInvalid nếu nửa byte sau > 2
     }
 }

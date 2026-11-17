@@ -1,0 +1,82 @@
+# ua-mtx-merge T65 gate summary (group 3h, PQZ proof path spec §11.4, Codex C7): the integration gate, real proofs rebuilt and
+# verified. script/pqz/e2e.py --proof-path-only (sections 1-3: deploy, UAs, tokens; then section 7) on a local Nethermind copy
+# chain with the PQZ precompile (pqz-core/nethermind/chain/copy.sh; never the live testnet stack). Run records:
+# runs/2026-11-09-ua-mtx-merge-3h-t65-e2e-n2304.txt and -n2048.txt. UNAUDITED.
+# The known red of 3h (forge, not this gate): test_gas_rollMax_relayedFullTx (ROLL_MAX kept at 96 / 80 / 64 / 32, the owner's).
+step | commit | rc | counts
+self-test n2304-kmax4096 | f2bd37ba + T65 | 0 | e2e.py --self-test: 0 failures
+self-test n2048-kmax1024 | f2bd37ba + T65 | 0 | PQZ_SET=n2048-kmax1024 EVM_OUT=out/at-set-n2048-kmax1024: 0 failures
+e2e n2304-kmax4096 | f2bd37ba + T65 | 0 | image scaas/nethermind-pqz:2.2.0-pqz7; 238 checks ok, 0 failures, 862 s; 8 debits rebuilt = proven and verified; 9 negatives fail
+e2e n2048-kmax1024 | f2bd37ba + T65 | 0 | image 2.2.0-pqz7-n2048 (library sha256 1800cae7..., the reviewed one; self-test 37c45f20...); contracts at-set.sh build; prover --features set-n2048-kmax1024; 238 ok, 0 failures, 864 s; same 8 + 9
+
+Scenario (both sets): a NORMAL_PQZ token with bit 24 (OPTIONAL auditor), then a WRAPPED_PQZ token (kind 5) created under LOG.
+d1 op 1 auditor on (NONE); a rollover; d2 op 1 auditor off after it (NONE); three shields in blocks of their own, two rolled;
+carol (a receiver, a leg, then a sender) and the auditor rotated to version 1; setProofStore(LOG); d3 op 7 M = 4 with the
+auditor, a rotated leg, at p = rolled - 1 (an un-roll); d4 burn 20; d5 refresh; d6 op 1 to the rotated receiver with the rotated
+auditor; setProofStore(NONE); d7 the migration of carol from version 0; d8 an unwrap on kind 5 (LOG). Every debit has its own
+ownTag. The reference rebuild (e2e.py `rebuild`, test code) reads only the §9 interface: pqzDebitRecord, pqzPendingCt, the op
+blob (pqzEntryBlob, or the next same-version record's prevBlob / the account's accBlob for a burn) with its kv tail, pqzKeyAt by
+version, the header from the PqzDebitProof log (LOG) or rebuilt from the calldata, record and token (NONE; and checked against
+the logged header for every LOG debit), P from the log or the calldata; then pqz-ffi verify.
+
+Negatives, one at a time, each must fail verification or the lookup: a wrong historical key version (d6 receiver), a swapped leg
+(d3), a wrong auditor window (d6), a wrong shieldIn (d2, 0 -> 1), a wrong predecessor (d5 with d3's), a wrong Δp (d4), a
+version boundary crossed (d7, the pending of version 1), P of another debit (d1 with d2's), a mode read from the wrong record
+(d1, NONE, looked up as LOG: no log). Not covered here: a debit with shieldIn != 0 (P2 of T64 covers it), PQZH, OFFCHAIN, the
+relayed paths (their binding is the envelope's), kind 13 (--skip-kind 13: its createToken reverts DeployFailed() on this copy).
+
+Harness changes (e2e.py): section 7 and the rebuild; --proof-path-only; --skip-kind; EVM_OUT / PQZ_PROVE for another set; `at`
+(a p below rolled) on transfer / transfer_multi / burn; burn returns its receipt; every proof kept (PROVEN); rpc() retries HTTP
+429 and a refused connection. The runs send to the signer's RPC inside the copy's network: one 83,204 B transaction sent through
+the follower never reached the signer (mined when sent to the signer directly), and the copy's nginx front answers 429 at its
+10 r/s limit.
+
+# evidence n2304-kmax4096
+# checks: 238 ok, 0 FAIL; result: 0 failure(s)
+ok    d1 op 1 auditor on, NONE: rebuilt = the proven statement (93,312 B; header words off []; body =), P from the calldata, record (p 1, Δp 1, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d2 op 1 auditor off, NONE: rebuilt = the proven statement (74,752 B; header words off []; body =), P from the calldata, record (p 2, Δp 2, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d3 op 7 M = 4 auditor on, rotated leg, un-roll, LOG: rebuilt = the proven statement (167,808 B; header words off []; body =), P from the log, record (p 2, Δp 1, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d3 op 7 M = 4 auditor on, rotated leg, un-roll, LOG: the header rebuilt from the calldata = the logged header
+ok    d4 burn 20, LOG: rebuilt = the proven statement (56,192 B; header words off []; body =), P from the log, record (p 4, Δp 2, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d4 burn 20, LOG: the header rebuilt from the calldata = the logged header
+ok    d5 refresh, LOG: rebuilt = the proven statement (56,192 B; header words off []; body =), P from the log, record (p 4, Δp 0, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d5 refresh, LOG: the header rebuilt from the calldata = the logged header
+ok    d6 op 1 to a rotated receiver, rotated auditor, LOG: rebuilt = the proven statement (93,312 B; header words off []; body =), P from the log, record (p 4, Δp 0, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d6 op 1 to a rotated receiver, rotated auditor, LOG: the header rebuilt from the calldata = the logged header
+ok    d7 migration of a rotated sender, NONE: rebuilt = the proven statement (74,752 B; header words off []; body =), P from the calldata, record (p 2, Δp 2, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d8 unwrap 30, kind 5, LOG: rebuilt = the proven statement (56,192 B; header words off []; body =), P from the log, record (p 1, Δp 1, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d8 unwrap 30, kind 5, LOG: the header rebuilt from the calldata = the logged header
+ok    negative wrong-historical-key-version on d6 op 1 to a rotated receiver, rotated auditor, LOG: pqz-ffi verify = 0
+ok    negative swapped-leg on d3 op 7 M = 4 auditor on, rotated leg, un-roll, LOG: pqz-ffi verify = 0
+ok    negative wrong-auditor-window on d6 op 1 to a rotated receiver, rotated auditor, LOG: pqz-ffi verify = 0
+ok    negative wrong-shieldIn on d2 op 1 auditor off, NONE: pqz-ffi verify = 0
+ok    negative wrong-predecessor on d5 refresh, LOG: pqz-ffi verify = 0
+ok    negative wrong-deltaP on d4 burn 20, LOG: pqz-ffi verify = 0
+ok    negative version-boundary on d7 migration of a rotated sender, NONE: pqz-ffi verify = 0
+ok    negative P-of-another-debit on d1 op 1 auditor on, NONE: pqz-ffi verify = 0
+ok    negative mode-of-another-record on d1 op 1 auditor on, NONE: the lookup fails (LookupError: 0 PqzDebitProof logs for (6f912d89…, 0))
+
+# evidence n2048-kmax1024
+# checks: 238 ok, 0 FAIL; result: 0 failure(s)
+ok    d1 op 1 auditor on, NONE: rebuilt = the proven statement (83,072 B; header words off []; body =), P from the calldata, record (p 1, Δp 1, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d2 op 1 auditor off, NONE: rebuilt = the proven statement (66,560 B; header words off []; body =), P from the calldata, record (p 2, Δp 2, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d3 op 7 M = 4 auditor on, rotated leg, un-roll, LOG: rebuilt = the proven statement (149,376 B; header words off []; body =), P from the log, record (p 2, Δp 1, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d3 op 7 M = 4 auditor on, rotated leg, un-roll, LOG: the header rebuilt from the calldata = the logged header
+ok    d4 burn 20, LOG: rebuilt = the proven statement (50,048 B; header words off []; body =), P from the log, record (p 4, Δp 2, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d4 burn 20, LOG: the header rebuilt from the calldata = the logged header
+ok    d5 refresh, LOG: rebuilt = the proven statement (50,048 B; header words off []; body =), P from the log, record (p 4, Δp 0, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d5 refresh, LOG: the header rebuilt from the calldata = the logged header
+ok    d6 op 1 to a rotated receiver, rotated auditor, LOG: rebuilt = the proven statement (83,072 B; header words off []; body =), P from the log, record (p 4, Δp 0, shieldIn 0, keyVersion 0, hasPrev 1), pqz-ffi verify = 1, ownTag in the blob
+ok    d6 op 1 to a rotated receiver, rotated auditor, LOG: the header rebuilt from the calldata = the logged header
+ok    d7 migration of a rotated sender, NONE: rebuilt = the proven statement (66,560 B; header words off []; body =), P from the calldata, record (p 2, Δp 2, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d8 unwrap 30, kind 5, LOG: rebuilt = the proven statement (50,048 B; header words off []; body =), P from the log, record (p 1, Δp 1, shieldIn 0, keyVersion 0, hasPrev 0), pqz-ffi verify = 1, ownTag in the blob
+ok    d8 unwrap 30, kind 5, LOG: the header rebuilt from the calldata = the logged header
+ok    negative wrong-historical-key-version on d6 op 1 to a rotated receiver, rotated auditor, LOG: pqz-ffi verify = 0
+ok    negative swapped-leg on d3 op 7 M = 4 auditor on, rotated leg, un-roll, LOG: pqz-ffi verify = 0
+ok    negative wrong-auditor-window on d6 op 1 to a rotated receiver, rotated auditor, LOG: pqz-ffi verify = 0
+ok    negative wrong-shieldIn on d2 op 1 auditor off, NONE: pqz-ffi verify = 0
+ok    negative wrong-predecessor on d5 refresh, LOG: pqz-ffi verify = 0
+ok    negative wrong-deltaP on d4 burn 20, LOG: pqz-ffi verify = 0
+ok    negative version-boundary on d7 migration of a rotated sender, NONE: pqz-ffi verify = 0
+ok    negative P-of-another-debit on d1 op 1 auditor on, NONE: pqz-ffi verify = 0
+ok    negative mode-of-another-record on d1 op 1 auditor on, NONE: the lookup fails (LookupError: 0 PqzDebitProof logs for (6f912d89…, 0))

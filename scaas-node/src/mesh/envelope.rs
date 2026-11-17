@@ -7,6 +7,8 @@ use super::Code;
 use crate::adapter::Family;
 
 pub const SPEC: &str = "scaas-intent/1.2";
+/// NODE-MESH-18: an envelope carrying the UA body (`evm.ua_meta_tx`) is `scaas-intent/1.3`; every other body stays 1.2.
+pub const SPEC_UA: &str = "scaas-intent/1.3";
 const SPEC_PREFIX: &str = "scaas-intent/";
 pub const MAX_BYTES: usize = 32 * 1024;
 
@@ -54,6 +56,11 @@ impl Envelope {
 
     pub fn private(&self) -> bool {
         self.visibility == "private"
+    }
+
+    /// The minor of `spec` (`parse()` checked major 1, minor ≥ 2).
+    pub fn minor(&self) -> u32 {
+        self.spec.strip_prefix("scaas-intent/1.").and_then(|m| m.parse().ok()).unwrap_or(0)
     }
 }
 

@@ -1746,9 +1746,10 @@ Full suite: Task 1's count + 22.
 - [ ] **Step 1: Size record**
 
 ```bash
-timeout 900 scripts/capped bash -c 'cd smartcontracts/evm && forge build --sizes --json 2>/dev/null' > /tmp/p1d-sizes.json || true
-jq -r 'to_entries[] | select(.value.runtime_size > 24576) | "\(.key) \(.value.runtime_size)"' /tmp/p1d-sizes.json
-jq -r 'to_entries[] | select(.key | test("^(NormalToken|WrappedToken|WrappedLib|AdminLib|HederaLib)$")) | "\(.key) \(.value.runtime_size)"' /tmp/p1d-sizes.json
+T=$(mktemp -d)
+timeout 900 scripts/capped bash -c 'cd smartcontracts/evm && forge build --sizes --json 2>/dev/null' > "$T"/p1d-sizes.json || true
+jq -r 'to_entries[] | select(.value.runtime_size > 24576) | "\(.key) \(.value.runtime_size)"' "$T"/p1d-sizes.json
+jq -r 'to_entries[] | select(.key | test("^(NormalToken|WrappedToken|WrappedLib|AdminLib|HederaLib)$")) | "\(.key) \(.value.runtime_size)"' "$T"/p1d-sizes.json
 ```
 
 Expected over 24,576: exactly `WrappedToken` and `ZetherToken`. Anything else over: stop, report. Use the measured

@@ -1867,7 +1867,7 @@ mod tests {
         assert!(a.events(10, 100, &[]).await.unwrap().is_empty(), "no tokens at all: index_step holds the cursor");
     }
 
-    // CTR-MTX-26 / -27 vectors: `smartcontracts/vectors/metatx/paymeta.json` and `programs/scaas/tests/vectors.rs`
+    // CTR-MTX-26 / -27 vectors: `smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json` and `programs/scaas/tests/vectors.rs`
     // (`gen_vectors.py` `relay_fee_vectors`); the marker and the two instruction-data hashes are pinned in the program's
     // `tests/relay_fee.rs` too.
     const MARKER: &str = "9wtnhXbQazahGQXbNLD5ZAERPfzmvFvC2mYwCRjPvT5t";
@@ -1891,7 +1891,7 @@ mod tests {
     const WRAP_IX_SHA: &str = "20f4568ccb15c76a7fbdad15b2cf6d2117adfd3a407be9d016f61877af60796a";
 
     fn meta_rows() -> Vec<Value> {
-        serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap()
+        serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap()
     }
 
     fn h(v: &Value) -> Vec<u8> {

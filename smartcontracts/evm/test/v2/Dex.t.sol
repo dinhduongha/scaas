@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
@@ -17,6 +19,7 @@ import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A DEX release answering `factory()` (its deployer) on another chain.
 contract OtherChainDex {
@@ -60,7 +63,7 @@ contract DexTest is Test {
     NormalToken b; // the makers sell B
 
     function setUp() public {
-        f = new OpenFactory(registrar, UID_, 0);
+        f = EnvKit.factory(registrar, UID_, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0),
             false);
         dexImpl = SCaaSDex(Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0)));
@@ -69,9 +72,9 @@ contract DexTest is Test {
         b = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(cb), "b"));
         vm.prank(bob);
         b.transfer(carol, 500_000);
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0))), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0), 0, 0)), "dex"));
         vm.prank(admin);
-        dex.setMarket(address(a), address(b), true);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
     }
 
     // ------------------------------------------------------------------ helpers
@@ -93,7 +96,7 @@ contract DexTest is Test {
     function _leg(uint256 pk, NormalToken sell, ITradeToken.TradeOrder memory o, uint256 fill)
         internal view returns (DexLegs.Leg memory l)
     {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, sell.tradeOrderDigest(o));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, sell.tradeOrderDigest(DexLegs.ua(o)));
         l = DexLegs.Leg(address(sell), o, abi.encodePacked(r, s, v), fill);
     }
 
@@ -132,7 +135,7 @@ contract DexTest is Test {
         assertEq(b.balanceOf(address(dex)), 0);
         uint256 legs;
         Vm.Log[] memory logs = vm.getRecordedLogs();
-        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == ISCaaSDex.LegSettled.selector) ++legs;
+        for (uint256 i; i < logs.length; ++i) if (logs[i].topics[0] == ISCaaSDex.UALegSettled.selector) ++legs;
         assertEq(legs, 3);
     }
 
@@ -185,7 +188,7 @@ contract DexTest is Test {
         s.makers = new DexLegs.Leg[](1);
         s.makers[0] = _leg(BOB_PK, b, mo, 400);
         s.taker = _leg(ALICE_PK, a, _order(alice, b, 200, 400, 0), 200);
-        bytes32 h = b.tradeOrderDigest(mo);
+        bytes32 h = b.tradeOrderDigest(DexLegs.ua(mo));
         vm.prank(relayer);
         vm.expectRevert(ISCaaSDex.NothingSettled.selector);
         dex.mtxSettle(DexLegs.wire(_one(s)));
@@ -215,7 +218,7 @@ contract DexTest is Test {
         assertTrue(ok[0]);
         assertEq(b.balanceOf(alice), 100);
         assertEq(a.balanceOf(bob), 50);
-        assertEq(b.pulled(b.tradeOrderDigest(mo)), 100);
+        assertEq(b.pulled(b.tradeOrderDigest(DexLegs.ua(mo))), 100);
     }
 
     function test_settle_minFill_remainderClosesBelowMinFill() public {
@@ -235,7 +238,7 @@ contract DexTest is Test {
         bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
         assertTrue(ok[0]);
         assertTrue(ok[1]);
-        assertEq(b.pulled(b.tradeOrderDigest(mo)), 1000);
+        assertEq(b.pulled(b.tradeOrderDigest(DexLegs.ua(mo))), 1000);
     }
 
     function test_settle_pathAOrderFilledInFiveSettlements() public {
@@ -252,7 +255,7 @@ contract DexTest is Test {
         vm.prank(relayer);
         bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
         for (uint256 i; i < 5; ++i) assertTrue(ok[i]);
-        assertEq(b.pulled(b.tradeOrderDigest(mo)), 1000);
+        assertEq(b.pulled(b.tradeOrderDigest(DexLegs.ua(mo))), 1000);
         assertEq(a.balanceOf(bob), 500);
         assertEq(b.balanceOf(alice), 1000);
     }
@@ -282,7 +285,7 @@ contract DexTest is Test {
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.FillMismatch.selector, 1020, 1019));
         s = _book();
         s.makers[1] = s.makers[0];
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.DuplicateOrder.selector, b.tradeOrderDigest(s.makers[0].o)));
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.DuplicateOrder.selector, b.tradeOrderDigest(DexLegs.ua(s.makers[0].o))));
         s = _book();
         s.makers[0] = _leg(ALICE_PK, b, _order(alice, a, 1000, 500, 1_000), 1000);
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.SelfTrade.selector, bytes32(uint256(uint160(alice)))));
@@ -297,8 +300,14 @@ contract DexTest is Test {
         s = _book();
         s.makers = new DexLegs.Leg[](0);
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.NoMakers.selector));
-        vm.prank(admin);
-        dex.setMarket(address(a), address(b), false);
+        // fix2-dex (owner 2026-11-12): markets are open by default; a DEX made with bit 29 `CLOSED_MARKETS` refuses a
+        // delisted pair
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 200_000, treasury, false, 0, address(0),
+            1 << 29, 0)), "closed"));
+        vm.startPrank(admin);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
+        dex.setMarket(address(a), address(b), false, EnvKit.codeUidOf(address(dex)));
+        vm.stopPrank();
         _expectOne(_book(), abi.encodeWithSelector(ISCaaSDex.MarketNotListed.selector, address(a), address(b)));
     }
 
@@ -306,11 +315,11 @@ contract DexTest is Test {
     function test_C6_9_setMarketGuards() public {
         vm.startPrank(admin);
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadMarket.selector, address(a), address(a)));
-        dex.setMarket(address(a), address(a), true);
+        dex.setMarket(address(a), address(a), true, EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadMarket.selector, address(0), address(b)));
-        dex.setMarket(address(0), address(b), true);
+        dex.setMarket(address(0), address(b), true, EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.BadMarket.selector, address(a), address(0)));
-        dex.setMarket(address(a), address(0), false);
+        dex.setMarket(address(a), address(0), false, EnvKit.codeUidOf(address(dex)));
         vm.stopPrank();
     }
 
@@ -318,9 +327,9 @@ contract DexTest is Test {
 
     function test_legSettled_receivedIsNetOfTheFee_everyField() public {
         DexLegs.Settlement[] memory ss = _one(_book());
-        bytes32 hT = a.tradeOrderDigest(ss[0].taker.o);
-        bytes32 hB = b.tradeOrderDigest(ss[0].makers[0].o);
-        bytes32 hC = b.tradeOrderDigest(ss[0].makers[1].o);
+        bytes32 hT = a.tradeOrderDigest(DexLegs.ua(ss[0].taker.o));
+        bytes32 hB = b.tradeOrderDigest(DexLegs.ua(ss[0].makers[0].o));
+        bytes32 hC = b.tradeOrderDigest(DexLegs.ua(ss[0].makers[1].o));
         vm.recordLogs();
         vm.prank(relayer);
         dex.mtxSettle(DexLegs.wire(ss));
@@ -328,7 +337,7 @@ contract DexTest is Test {
         uint256 n;
         // taker, then the makers in order
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] != ISCaaSDex.LegSettled.selector) continue;
+            if (logs[i].topics[0] != ISCaaSDex.UALegSettled.selector) continue;
             if (n == 0) _checkLeg(logs[i], hT, alice, 1020, 2000, 6, 1);
             if (n == 1) _checkLeg(logs[i], hB, bob, 1000, 500, 1, 0);
             if (n == 2) _checkLeg(logs[i], hC, carol, 1000, 520, 1, 0);
@@ -363,7 +372,7 @@ contract DexTest is Test {
         ITradeToken.TradeOrder memory o = _order(alice, b, 500, 1050, 0); // wants 2.1 B per A, the maker gives 2
         o.flags = 3;
         s.taker = _leg(ALICE_PK, a, o, 500);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(o)));
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(DexLegs.ua(o))));
     }
 
     /// SOL-02 (review W-S): an ESCROW taker's limit with a product past 2^256 is `PriceLimit`, not a panic.
@@ -375,7 +384,7 @@ contract DexTest is Test {
         ITradeToken.TradeOrder memory o = _order(alice, b, 500, 1 << 250, 0); // 500 · 2^250 > 2^256
         o.flags = 3;
         s.taker = _leg(ALICE_PK, a, o, 500);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(o)));
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(DexLegs.ua(o))));
     }
 
     /// CHAIN-03 (review T2, 2026-10-19): a 1 % taker fee on 2^250 B, its signed bound (`TradeLib`) and the relayer
@@ -384,7 +393,7 @@ contract DexTest is Test {
         NormalToken big = NormalToken(
             f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("G", "G", 0, 1 << 251, bob, address(0))), "g"));
         vm.prank(admin);
-        dex.setMarket(address(a), address(big), true);
+        dex.setMarket(address(a), address(big), true, EnvKit.codeUidOf(address(dex)));
         DexLegs.Settlement memory s;
         s.ref = "r";
         s.makers = new DexLegs.Leg[](1);
@@ -416,7 +425,7 @@ contract DexTest is Test {
         assertEq(b.balanceOf(address(dex)), 0);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] != ISCaaSDex.LegSettled.selector || address(uint160(uint256(logs[i].topics[3]))) != alice) continue;
+            if (logs[i].topics[0] != ISCaaSDex.UALegSettled.selector || address(uint160(uint256(logs[i].topics[3]))) != alice) continue;
             (, uint256 sold,,, uint256 refund,,) = abi.decode(logs[i].data, (address, uint256, uint256, uint256, uint256, uint256, uint256));
             assertEq(sold, 1020);
             assertEq(refund, 180);
@@ -438,7 +447,7 @@ contract DexTest is Test {
         ITradeToken.TradeOrder memory mo = _order(bob, a, 1000, 500, 0);
         mo.minFill = 1000; // fill-or-kill
         DexLegs.Settlement memory s = _escrowMaker(mo, 600);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BelowMinFill.selector, b.tradeOrderDigest(mo)));
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BelowMinFill.selector, b.tradeOrderDigest(DexLegs.ua(mo))));
     }
 
     function test_pathB_makerFeeIsAtTheSignedRate() public {
@@ -468,7 +477,7 @@ contract DexTest is Test {
         DexLegs.Settlement memory s = _book(); // the taker receives 2000 B for 1020 A
         ITradeToken.TradeOrder memory o = _order(alice, b, 1020, 2001, 3_000);
         s.taker = _leg(ALICE_PK, a, o, 1020);
-        _expectOne(s, abi.encodeWithSelector(ITradeToken.PriceLimit.selector, a.tradeOrderDigest(o)));
+        _expectOne(s, abi.encodeWithSelector(ITradeToken.PriceLimit.selector, a.tradeOrderDigest(DexLegs.ua(o))));
     }
 
     function test_pathA_takerExactlyAtItsLimit_settles() public {
@@ -488,7 +497,7 @@ contract DexTest is Test {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         uint256 seen;
         for (uint256 i; i < logs.length; ++i) {
-            if (logs[i].topics[0] != ITradeToken.TradeFilled.selector) continue;
+            if (logs[i].topics[0] != ITradeToken.UATradeFilled.selector) continue;
             (, uint256 rf, uint256 fee) = abi.decode(logs[i].data, (uint256, uint256, uint256));
             if (logs[i].emitter == address(a)) {
                 assertEq(rf, 2000); // the taker's gross receive and fee
@@ -517,7 +526,7 @@ contract DexTest is Test {
         assertEq(a.balanceOf(bob), 500);
         assertEq(b.balanceOf(alice), 1000);
         vm.prank(admin);
-        dex.setMarket(address(b), address(a), false);
+        dex.setMarket(address(b), address(a), false, EnvKit.codeUidOf(address(dex)));
         assertFalse(dex.marketListed(address(a), address(b)));
     }
 
@@ -538,7 +547,7 @@ contract DexTest is Test {
         dex.mtxSettle(DexLegs.wire(ss));
         assertEq(b.balanceOf(dest), 1994);
         assertEq(b.balanceOf(alice), 0);
-        // to the DEX itself: the balance check refuses it
+        // to the DEX itself: conservation refuses it (a SCaaS payout is not measured, owner 2026-11-12)
         o.destination = address(dex);
         o.nonce = 2;
         s.taker = _leg(ALICE_PK, a, o, 1020);
@@ -550,7 +559,8 @@ contract DexTest is Test {
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(b)));
     }
 
-    function test_makerDestinationIsTheDex_conservationBroken() public {
+    /// A SCaaS payout is not measured (owner 2026-11-12): conservation refuses a destination that is the DEX.
+    function test_makerDestinationIsTheDex_refused() public {
         DexLegs.Settlement memory s = _book();
         ITradeToken.TradeOrder memory o = _order(bob, a, 1000, 500, 1_000);
         o.destination = address(dex);
@@ -558,21 +568,23 @@ contract DexTest is Test {
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(a)));
     }
 
-    function test_classification_deprecatedAndUnregisteredAreOutside() public {
-        address impl = address(new NormalToken(1, plainEnv(address(f), address(0), UID_, address(0), false), ""));
+    /// Owner 2026-11-12: an unregistered token is outside; a deprecated release's token stays SCaaS (the DEX never reads
+    /// deprecation; the earlier "deprecated is outside" test is in `legacy/ua-mtx-fix2-dex/`).
+    function test_classification_unregisteredIsOutside_deprecatedStaysScaas() public {
+        address impl = address(new NormalToken(address(f), Catalogue.argsOn(f, IOpenFactory.TokenKind.NORMAL,
+            f.latestTokenEnvVersion(IOpenFactory.TokenKind.NORMAL), ""))); // the env's pinned modules
         address u = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl, abi.encode(normalInit("C", "C", 0, 1e6, alice, address(0))), "c");
         vm.startPrank(admin);
-        dex.setMarket(address(a), u, true);
+        dex.setMarket(address(a), u, true, EnvKit.codeUidOf(address(dex)));
         assertEq(dex.tokenKind(u), 2);
         assertEq(dex.tokenKind(address(a)), 1);
         vm.stopPrank();
         vm.prank(registrar);
-        f.deprecate(IOpenFactory.TokenKind.NORMAL, 1, "x");
-        assertEq(dex.tokenKind(address(a)), 1); // a snapshot: unchanged until the market is listed again
+        f.deprecateToken(IOpenFactory.TokenKind.NORMAL, 1, EnvKit.uidOf(address(f)), "x");
         vm.prank(admin);
-        dex.setMarket(address(a), address(b), true);
-        assertEq(dex.tokenKind(address(a)), 2);
-        assertEq(dex.tokenKind(address(b)), 2);
+        dex.setMarket(address(a), address(b), true, EnvKit.codeUidOf(address(dex)));
+        assertEq(dex.tokenKind(address(a)), 1);
+        assertEq(dex.tokenKind(address(b)), 1);
     }
 
     // ------------------------------------------------------------------ CTR-DEX-11: the fee rounds up
@@ -647,28 +659,12 @@ contract DexTest is Test {
     function test_gasBurning1271Maker_othersStillSettle() public { _hostileMaker(address(new Burner1271())); }
     function test_returndataBomb1271Maker_othersStillSettle() public { _hostileMaker(address(new Bomb1271())); }
 
-    /// The kind is the DEX's listing, never the leg's: once the version is deprecated and the market listed again, `a`
-    /// and `b` are outside, a leg signed on the token is checked against its `DexOrder` digest, and the fill is pulled
-    /// through the puller (EOAs cannot approve a SCaaS token, CTR-TOK-01, so it fails on the allowance).
-    function test_deprecatedTokenListedAsOutside_isADexOrderPulledByThePuller() public {
-        vm.prank(registrar);
-        f.deprecate(IOpenFactory.TokenKind.NORMAL, 1, "x");
-        vm.prank(admin);
-        dex.setMarket(address(a), address(b), true);
-        DexLegs.Settlement memory s = _book();
-        bytes32 h = dex.dexOrderDigest(address(a), s.taker.o);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, h));
-        s.taker = _dexLeg(ALICE_PK, address(a), s.taker.o, 1020);
-        // the puller drops the token's revert data (W-O): a fixed error names the token
-        _expectOne(s, abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(a)));
-    }
-
     /// Alice sells 1020 of an outside token (a `DexOrder`, pulled by the puller) against the SCaaS makers of `_book`.
     function test_takerSellsAnOutsideToken_settles() public {
         MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);
         usdc.mint(alice, 5000);
         vm.prank(admin);
-        dex.setMarket(address(usdc), address(b), true);
+        dex.setMarket(address(usdc), address(b), true, EnvKit.codeUidOf(address(dex)));
         assertEq(dex.tokenKind(address(usdc)), 2);
         assertEq(dex.tokenKind(address(b)), 1);
         address p = dex.puller();
@@ -718,19 +714,19 @@ contract DexTest is Test {
         assertTrue(f.isDex(address(dex)));
         assertEq(f.dexVersionOf(address(dex)), 1);
         assertFalse(f.isDex(address(dexImpl)));
-        assertEq(dex.owner(), nid(admin));
+        assertEq(dex.admin(), nid(admin));
         assertEq(dex.treasury(), treasury);
         assertEq(dex.relayerSharePpm(), 200_000);
         vm.expectRevert(ISCaaSDex.NotFactory.selector);
-        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)));
         vm.prank(address(f));
         vm.expectRevert(ISCaaSDex.AlreadyInitialized.selector);
-        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))));
+        dex.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)));
         vm.prank(address(f));
-        vm.expectRevert(ISCaaSDex.AlreadyInitialized.selector);
-        dexImpl.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))));
+        vm.expectRevert(IFactoryToken.EnvMissing.selector); // the release carries no env (chain-neutral spec §2.1)
+        dexImpl.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 2));
-        f.createDex(2, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))), "x");
+        f.createDex(2, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "x");
     }
 
     function test_dexCatalogue_versionZeroRefused_latestTracksTheHighest() public {
@@ -738,7 +734,7 @@ contract DexTest is Test {
         bytes memory code = type(SCaaSDex).creationCode;
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 0));
-        f.deployDexImplementation(0, 1, code, "");
+        f.deployDexImplementation(0, 1, code, "", EnvKit.uidOf(address(f)));
         address v5 = Catalogue.dex(f, 5, code, address(0));
         assertEq(f.latestDexVersion(), 5);
         address v2 = Catalogue.dex(f, 2, code, address(0)); // an older version does not lower it
@@ -746,7 +742,7 @@ contract DexTest is Test {
         assertEq(f.dexImplementationOf(2), v2);
         assertEq(f.dexImplementationOf(5), v5);
         assertEq(f.dexReleaseOf(2).envVersion, 1);
-        address d = f.createDex(2, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))), "v2");
+        address d = f.createDex(2, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "v2");
         assertEq(f.dexVersionOf(d), 2); // the requested version, not the latest
         assertEq(f.dexVersionOf(address(dex)), 1);
     }
@@ -754,23 +750,23 @@ contract DexTest is Test {
     /// `deprecateDex` is registrar-only and immediate: `createDex` refuses that version (owner 2026-10-20), an existing
     /// DEX of it keeps its record.
     function test_deprecateDex_refusesNewDexOfThatVersion() public {
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.deprecateDex(1, "x");
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
+        f.deprecateDex(1, EnvKit.uidOf(address(f)), "x");
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 9));
-        f.deprecateDex(9, "x");
+        f.deprecateDex(9, EnvKit.uidOf(address(f)), "x");
         vm.prank(registrar);
         vm.expectEmit(true, false, false, true, address(f));
         emit IOpenFactory.DexImplementationDeprecated(1, "bug");
-        f.deprecateDex(1, "bug");
+        f.deprecateDex(1, EnvKit.uidOf(address(f)), "bug");
         assertTrue(f.isDexDeprecated(1));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionDeprecated.selector, 1));
-        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))), "after");
+        f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "after");
         assertEq(f.dexVersionOf(address(dex)), 1, "the existing DEX keeps its record");
     }
 
     function test_createDex_saltScopedByCreator_andNotReusable() public {
-        ISCaaSDex.DexConfig memory cfg = ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0));
+        ISCaaSDex.DexConfig memory cfg = ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0);
         vm.prank(address(0xA1));
         address d1 = f.createDex(1, abi.encode(cfg), "same");
         vm.prank(address(0xA2));
@@ -784,44 +780,45 @@ contract DexTest is Test {
     function test_createDex_emitsDexCreated() public {
         address creator = address(0xA1);
         vm.expectEmit(false, true, false, true, address(f)); // the clone address is derived, not asserted
-        emit IOpenFactory.DexCreated(address(0), creator, 1, address(dexImpl), nid(address(0xADD)));
+        emit IOpenFactory.DexCreated(address(0), nid(creator), 1, address(dexImpl)); // no owner (3r R1)
         vm.prank(creator);
-        address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(0xADD)), 0, treasury, false, 0, address(0))), "ev");
-        assertEq(SCaaSDex(d).owner(), nid(address(0xADD)));
+        address d = f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(0xADD)), 0, treasury, false, 0, address(0), 0, 0)), "ev");
+        assertEq(SCaaSDex(d).admin(), nid(address(0xADD)));
     }
 
     /// Where `deployDexImplementation(version, latest DEX env, code, "")` puts the release.
+    /// Chain-neutral releases (plan T71): the factory's address and `implArgs` appended, no env.
     function _predictDex(uint64 version, bytes memory code) internal view returns (address) {
-        uint16 v = f.latestDexEnvVersion();
         return vm.computeCreate2Address(keccak256(abi.encode("dex", version)),
-            keccak256(bytes.concat(code, abi.encode(v, f.dexEnvOf(v), bytes("")))), address(f));
+            keccak256(bytes.concat(code, abi.encode(address(f), bytes("")))), address(f));
     }
 
     /// Plan 5g-Z2: the factory deploys the DEX release from init code on the DEX env it names (registrar only; the
-    /// release answers `factory()` / `chainUid()`, both from the env); the release hashes in the event; a notice period applies.
+    /// release answers `factory()` and accepts the env, `validateEnv`: chain-neutral releases carry no `chainUid()`); the
+    /// release hashes in the event; a notice period applies.
     function test_deployDexImplementation() public {
         bytes memory code = type(SCaaSDex).creationCode;
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.deployDexImplementation(3, 1, code, "");
+        vm.expectPartialRevert(IOpenFactory.ReleaseNotApproved.selector);
+        f.deployDexImplementation(3, 1, code, "", EnvKit.uidOf(address(f)));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionAlreadyRegistered.selector, 1, address(dexImpl)));
-        f.deployDexImplementation(1, 1, code, "");
+        f.deployDexImplementation(1, 1, code, "", EnvKit.uidOf(address(f)));
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("other chain")));
-        f.deployDexImplementation(3, 1, type(OtherChainDex).creationCode, "");
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvRefused.selector, _predictDex(3, type(OtherChainDex).creationCode)));
+        f.deployDexImplementation(3, 1, type(OtherChainDex).creationCode, "", EnvKit.uidOf(address(f)));
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 255, 9)); // the env is named, explicit
-        f.deployDexImplementation(3, 9, code, "");
+        f.deployDexImplementation(3, 9, code, "", EnvKit.uidOf(address(f)));
         address muted = _predictDex(3, type(MutedDex).creationCode);
         address empty = _predictDex(3, "");
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector, muted));
-        f.deployDexImplementation(3, 1, type(MutedDex).creationCode, ""); // no factory()
+        f.deployDexImplementation(3, 1, type(MutedDex).creationCode, "", EnvKit.uidOf(address(f))); // no factory()
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector, empty));
-        f.deployDexImplementation(3, 1, "", ""); // an empty init code makes an account without code
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.publishDexEnv(2, plainEnv(address(f), address(0xBEEF), UID_, address(0), false));
+        f.deployDexImplementation(3, 1, "", "", EnvKit.uidOf(address(f))); // an empty init code makes an account without code
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
+        f.publishDexEnv(2, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0xBEEF), UID_, address(0), false));
         vm.recordLogs();
         address v3 = Catalogue.dex(f, 3, code, address(0xBEEF));
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -832,15 +829,18 @@ contract DexTest is Test {
         assertEq(eh, keccak256(abi.encode(f.dexEnvOf(2))));
         assertEq(ih, keccak256(code));
         assertEq(ch, v3.codehash);
-        assertEq(SCaaSDex(v3).SMART_KEY_ACCOUNT_IMPL(), address(0xBEEF), "the env's, an immutable");
+        // chain-neutral spec §2.1: the env's value is the clone's, from its code; the release has none
+        assertEq(SCaaSDex(v3).SMART_KEY_ACCOUNT_IMPL(), address(0), "the release carries no env");
+        address d3 = f.createDex(3, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "v3");
+        assertEq(SCaaSDex(d3).SMART_KEY_ACCOUNT_IMPL(), address(0xBEEF), "the env's, in the clone's code");
         // the notice period
-        OpenFactory g = new OpenFactory(registrar, UID_, 1 days);
+        OpenFactory g = EnvKit.factory(registrar, UID_, 1 days);
         Catalogue.dex(g, 1, code, address(0));
         uint64 from = uint64(block.timestamp + 1 days);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionNotYetUsable.selector, 1, from));
-        g.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))), "early");
+        g.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "early");
         vm.warp(from);
-        assertTrue(g.isDex(g.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))), "on time")));
+        assertTrue(g.isDex(g.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "on time")));
     }
 
     /// Owner ruling 2026-10-30 (D2): an admin with an EIP-7702 designator (its delegate's code calls) is refused.
@@ -848,25 +848,25 @@ contract DexTest is Test {
         vm.etch(admin, abi.encodePacked(hex"ef0100", address(0x5EE9)));
         vm.prank(admin);
         vm.expectRevert(abi.encodeWithSelector(SigCheck.CallerDelegated.selector, admin));
-        dex.setFeeSplit(0, treasury);
+        dex.setFeeSplit(0, treasury, EnvKit.codeUidOf(address(dex)));
         vm.etch(admin, "");
         vm.prank(admin);
-        dex.setFeeSplit(0, treasury);
+        dex.setFeeSplit(0, treasury, EnvKit.codeUidOf(address(dex)));
     }
 
     function test_adminOnly_feeSplitBounds() public {
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(11), address(this)));
-        dex.setMarket(address(a), address(b), false);
+        dex.setMarket(address(a), address(b), false, EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(12), address(this)));
-        dex.setFeeSplit(0, treasury);
+        dex.setFeeSplit(0, treasury, EnvKit.codeUidOf(address(dex)));
         vm.startPrank(admin);
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.FeeSplitInvalid.selector, 1, address(0)));
-        dex.setFeeSplit(1, address(0));
+        dex.setFeeSplit(1, address(0), EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.FeeSplitInvalid.selector, 1, address(dex)));
-        dex.setFeeSplit(1, address(dex));
+        dex.setFeeSplit(1, address(dex), EnvKit.codeUidOf(address(dex)));
         vm.expectRevert(abi.encodeWithSelector(ISCaaSDex.FeeSplitInvalid.selector, 1_000_001, treasury));
-        dex.setFeeSplit(1_000_001, treasury);
-        dex.setFeeSplit(1_000_000, address(0)); // all to the relayer: no treasury needed
+        dex.setFeeSplit(1_000_001, treasury, EnvKit.codeUidOf(address(dex)));
+        dex.setFeeSplit(1_000_000, address(0), EnvKit.codeUidOf(address(dex))); // all to the relayer: no treasury needed
         vm.stopPrank();
         DexLegs.Settlement[] memory ss = _one(_book());
         vm.prank(relayer);

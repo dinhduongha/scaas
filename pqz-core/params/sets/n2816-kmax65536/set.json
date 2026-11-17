@@ -50,13 +50,17 @@
    "REGISTER": 22624,
    "DISCLOSE-SENDER": 45472,
    "DISCLOSE-RECEIVER": 45472,
-   "DISCLOSE-AUDITOR": 45472
+   "DISCLOSE-AUDITOR": 45472,
+   "TRANSFER-SPLIT": 136320,
+   "TRANSFER-SPLIT0": 113664
   },
   "bundle": 22832,
   "bundle0": 22704
  },
  "max_proof_pqzh": 0,
  "max_input": 524288,
- "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v5",
- "pqzl_id": "a801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9"
+ "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k44-q54l4/v6",
+ "pqzl_id": "7a3e76790c331d1ff5b7b8e9897e876dc11773afed874fcd65c145aeba1da28f",
+ "pqzl_split_label": "scaas/pqz/lnp22/mlwe-d64k44-q54l4/split-v1",
+ "pqzl_split_id": "f4dcd2f646d99936b73878c9b3767af0ecc3161ac63b431e4a1e170c86c257fb"
 }

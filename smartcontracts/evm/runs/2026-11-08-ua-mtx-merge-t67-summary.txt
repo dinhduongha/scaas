@@ -1,0 +1,13 @@
+# ua-mtx-merge T67 gate summary (full output in git-ignored .log files, not committed)
+# T67 (factory index spec §2-§4, §7; CTR-TOK-27): the record, the per-class lists, the paged views. UNAUDITED.
+# Base: e1336e60 (3g tip). Commits: 82887c13 (legacy copies), 658f684f (implementation), this one (summary).
+step | commit | rc | counts
+t67-red | 82887c13 + tests | 1 | test/v2/FactoryIndex.t.sol does not compile on the old interface (IOpenFactory.Created, infoOf, the list views missing); the slot-count rows count 1 new slot on the old record
+t67-index | 658f684f | 0 | forge test test/v2/FactoryIndex.t.sol: 34 passed (FactoryIndexTest 26, FactoryIndexZetherTest 4, FactoryIndexPqzTest 4)
+t67-forge-full | 658f684f (before the fixes below) | 1 | 3075 passed 5 failed 14 skipped, 296 suites: DexKat, RegulatedKat (addresses moved), PlusZero x2 (gas -12), ZetherStateVectors (read _info)
+t67-regen | 658f684f | 0 | WRITE_KAT DexKatTest, WRITE_REGULATED_KAT RegulatedKat, PLUS_ZERO_WRITE the two rows (slots unchanged); generators only
+t67-touched | 658f684f | 0 | 21 suites, 150 passed 0 failed (FactoryIndex, Factory, Dex, DexKat, RegulatedKat, PlusZero, GovGas, ZetherStateVectors)
+t67-readers | 658f684f | 0 | clientkeys node --test test/evm.test.js test/regulated.test.js: 29 passed; ua-rs cargo test --test regulated: 4 passed; scaas-node cargo test --lib (5 KAT readers): 5 passed
+t67-gas | 658f684f | 0 | GovGas createToken 1,446,879 -> 1,805,428 (owner 0); createDex (new row) 3,416,944 -> 4,006,661
+t67-size | 658f684f | 0 | size_gate.py: 0 errors, 97 contracts; OpenFactory 15,821 -> 17,598 (init 16,215 -> 17,992), row added (a note: it fits EIP-170)
+t67-mutants | see T68 | - | spec §7's mutants run in T68 on the final factory (plan: T68 after T70, T74, T76)

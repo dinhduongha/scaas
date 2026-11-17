@@ -14,6 +14,16 @@ LaZer 3330e487228f633eceb322807b13a596b516770f; image sagemath/sagemath@sha256:4
    // protocol is simulatable under MLWE(42,30,[-1,1])
    // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(18,269,2^(36.094673))
    // ~ 55.5742187500000 KiB
+== txs: 8163 B, sha256 5e3d98ef6aa7e92a
+   // protocol is statistically complete with correctness error >= 1 - 2^(-3)
+   // protocol is simulatable under MLWE(42,32,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(20,360,2^(37.363921))
+   // ~ 74.4609375000000 KiB
+== txs0: 8169 B, sha256 edeb3243f8a3cd0c
+   // protocol is statistically complete with correctness error >= 1 - 2^(-3)
+   // protocol is simulatable under MLWE(42,32,[-1,1])
+   // protocol is knowledge-sound with knowledge error <= 2^(-127.0) under MSIS(20,359,2^(37.359014))
+   // ~ 74.1015625000000 KiB
 == burn: 7669 B, sha256 4302542dddfa612f
    // protocol is statistically complete with correctness error >= 1 - 2^(-4)
    // protocol is simulatable under MLWE(42,30,[-1,1])

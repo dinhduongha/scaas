@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Test} from "forge-std/Test.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -10,7 +11,9 @@ import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {SlashableERC20, RateAdminForwarder} from "./helpers/V2Mocks.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// @notice Handler cho `WrappedToken` ba chân (thường / phí-chuyển / chịu sốc âm), tỉ lệ điều chỉnh được,
 ///         có guardian (TW2 §10.4, review M6). Mọi revert CÓ CHỦ ĐÍCH được bắt và phân loại; revert ngoài danh sách
@@ -185,9 +188,9 @@ contract WrapperHandler is Test {
                 | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_PERCENT,
             relayer: relayer, fee: bound(feePpm, 0, 10_000), feeRecipient: feeTaker
         });
-        (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pks[who % 3], t.mtxDigest(m));
+        (uint8 v, bytes32 rr, bytes32 ss) = vm.sign(pks[who % 3], MtxDigest.metaTx(address(t), m));
         vm.prank(relayer);
-        try t.mtxExecute(m, abi.encodePacked(rr, ss, v)) {
+        try t.executeMetaTransaction(m, abi.encodePacked(rr, ss, v)) {
             ghostReserve[c.i] -= c.balBefore - c.u.balanceOf(address(t));
         } catch (bytes memory err) {
             _expect(err, _sels(IWrappedToken.UnwrapTooSmall.selector,
@@ -196,9 +199,10 @@ contract WrapperHandler is Test {
         }
     }
 
-    function _sign(uint256 pk, MetaTxLib.MetaTransfer memory x) internal view returns (bytes memory) {
+    /// The native signer's `UASig` over `x` (ua-mtx-merge T2: the token's one typed struct, `UAMetaTransfer`).
+    function _sign(uint256 pk, MetaTxLib.UAMetaTransfer memory x) internal view returns (IUARegistry.UASig memory a) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, t.mtxTransferDigest(x));
-        return abi.encodePacked(r, s, v);
+        a.signature = abi.encodePacked(r, s, v);
     }
 
     function addReserve(uint256 leg, uint256 amount) external tracked(false) {
@@ -235,12 +239,12 @@ contract WrapperHandler is Test {
     function transferMeta(uint256 from, uint256 to, uint256 frac, uint256 feePpm) external tracked(false) {
         uint256 pk = pks[from % 3];
         address f = vm.addr(pk);
-        MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer({
-            from: f, to: actor(to), value: bound(frac, 0, t.balanceOf(f) / 2), entryRef: 0, batch: ++seq, nonce: 0,
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
+            from: MetaTxLib.pad(f), to: MetaTxLib.pad(actor(to)), value: bound(frac, 0, t.balanceOf(f) / 2), entryRef: 0, batch: ++seq, nonce: 0,
             validUntil: block.timestamp + 1, mode: MetaTxLib.MODE_FEE_PERCENT | MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT,
             relayer: address(0), fee: bound(feePpm, 0, 10_000), feeRecipient: feeTaker
         });
-        bytes memory sig = _sign(pk, x);
+        IUARegistry.UASig memory sig = _sign(pk, x);
         vm.prank(relayer);
         try t.mtxExecuteTransfer(x, sig) {} catch (bytes memory err) {
             _expect(err, new bytes4[](0));
@@ -256,7 +260,7 @@ contract WrapperHandler is Test {
         (uint256 n2, uint256 d2) = _candidate(n, d, bound(stepSeed, 0, t.maxRateStepBps()), up);
         if (n2 == 0 || d2 == 0 || n2 > type(uint96).max || d2 > type(uint96).max) return;
         if (!_withinStep(n, d, n2, d2)) return; // outside the bound: not this handler's business
-        adm.exec(address(t), abi.encodeCall(WrappedToken.proposeRate, (address(legs[i]), uint96(n2), uint96(d2))));
+        adm.exec(address(t), abi.encodeCall(WrappedToken.proposeRate, (address(legs[i]), uint96(n2), uint96(d2), EnvKit.codeUidOf(address(t)))));
         proposedAt = block.timestamp;
         (pOldNum, pOldDen) = (uint96(n), uint96(d));
     }
@@ -277,7 +281,7 @@ contract WrapperHandler is Test {
     }
 
     function cancel() external tracked(false) {
-        try adm.exec(address(t), abi.encodeCall(WrappedToken.cancelRate, ())) {} catch (bytes memory err) {
+        try adm.exec(address(t), abi.encodeCall(WrappedToken.cancelRate, (EnvKit.codeUidOf(address(t))))) {} catch (bytes memory err) {
             _expect(err, _sels(IWrappedToken.NoRateChangePending.selector, NONE, NONE, NONE, NONE));
         }
     }
@@ -291,8 +295,8 @@ contract WrapperHandler is Test {
         }
         // only the admin executes
         vm.prank(attacker);
-        try t.executeRate() { badExecution = true; } catch {}
-        try adm.exec(address(t), abi.encodeCall(WrappedToken.executeRate, ())) {
+        try t.executeRate(EnvKit.codeUidOf(address(t))) { badExecution = true; } catch {}
+        try adm.exec(address(t), abi.encodeCall(WrappedToken.executeRate, (EnvKit.codeUidOf(address(t))))) {
             if (u == address(0) || shortfall || block.timestamp < eta || eta != proposedAt + t.rateDelay()) {
                 badExecution = true;
             }
@@ -318,10 +322,10 @@ contract WrapperHandler is Test {
     function disable(uint256 leg) external tracked(false) {
         uint256 i = leg % 3;
         if (disabled[i]) {
-            try t.disableWrap(address(legs[i]), "again") { badExecution = true; } catch {}
+            try t.disableWrap(address(legs[i]), "again", EnvKit.codeUidOf(address(t))) { badExecution = true; } catch {}
             return;
         }
-        t.disableWrap(address(legs[i]), "depeg");
+        t.disableWrap(address(legs[i]), "depeg", EnvKit.codeUidOf(address(t)));
         disabled[i] = true;
     }
 }

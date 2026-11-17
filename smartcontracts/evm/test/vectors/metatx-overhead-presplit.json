@@ -10,7 +10,8 @@
   "fndsa512|pqzl-M8-on": 13066631,
   "fndsa512|pqzh-M4-on": 12703869,
   "direct|pqzl-M8-on": 10390385,
-  "direct|pqzh-M4-on": 8977001
+  "direct|pqzh-M4-on": 8977001,
+  "direct|S|7558a364": 5728613
  },
  "n2048-kmax1024": {
   "ecdsa|S": 4767560,
@@ -23,6 +24,7 @@
   "fndsa512|pqzl-M8-on": 13235874,
   "fndsa512|pqzh-M4-on": 12303066,
   "direct|pqzl-M8-on": 10504919,
-  "direct|pqzh-M4-on": 8720786
+  "direct|pqzh-M4-on": 8720786,
+  "direct|S|7558a364": 4707657
  }
 }

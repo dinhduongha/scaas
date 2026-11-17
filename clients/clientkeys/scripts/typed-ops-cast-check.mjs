@@ -38,7 +38,8 @@ try {
   for (const [name, r] of Object.entries(V.ops)) {
     for (const [kind, d] of Object.entries(r.domains)) {
       const json = join(dir, 'td.json');
-      writeFileSync(json, JSON.stringify({ types: r.types, primaryType: name, domain: d.domain, message: r.message }));
+      // group 3g: a per-kind row (`UAPqzRollOver`) names its primary type
+      writeFileSync(json, JSON.stringify({ types: r.types, primaryType: r.primaryType ?? name, domain: d.domain, message: r.message }));
       const sig = cast('wallet', 'sign', '--private-key', V.key.private, '--data', '--from-file', json);
       if (sig !== d.signature) throw new Error(`${name} ${kind}: cast signs ${sig}, row ${d.signature}`);
       signed++;

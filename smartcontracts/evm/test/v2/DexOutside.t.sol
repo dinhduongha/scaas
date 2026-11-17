@@ -22,6 +22,8 @@ import {Sweeper} from "../metatx/Sweeper7702.t.sol";
 import {UID_, normalInit} from "./helpers/V2Fixture.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
 
 /// ERC-1271 wallet that needs ~100 k gas to say "valid": passes under 400 k (a `SmartKeyAccount` clone), not under 50 k.
 contract Work1271 {
@@ -129,6 +131,24 @@ contract Reenter {
     }
 }
 
+/// Round 3zb + 3zc (O8, Fable F-3): the four power entries now in SCaaSDexGovernanceModule, called from inside a settlement
+/// (a hook token's pull): each stub runs the guard before the module, so each is refused `ReentrancyGuardReentrantCall`
+/// (a stub on `_forwardRaw` would reach the module's role check instead). Its own hook: the settlement's gas stays as above.
+contract ReenterPowers {
+    ISCaaSDex immutable dex;
+    bytes4[] public errs;
+    constructor(ISCaaSDex d) { dex = d; }
+    function n() external view returns (uint256) { return errs.length; }
+    function hook() external {
+        if (errs.length != 0) return;
+        bytes32 u = bytes32(0);
+        try dex.setMarket(address(1), address(2), true, u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setExchangeTarget(address(1), true, u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setListedOnly(true, u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setFeeSplit(1, address(1), u) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+    }
+}
+
 /// Outside-token legs (CTR-DEX-18, -22, -08, -02): the same `TradeOrder` signed in the DEX's domain as `DexOrder`, the
 /// token's checks run by the DEX on its own state, the fill pulled through the `DexPuller` under the party's allowance
 /// to the puller, `ESCROW` refused, cancels per DEX, the ERC-1271 cap by codehash, a bounded `MatchFailed` reason, a
@@ -152,11 +172,11 @@ contract DexOutsideTest is Test {
 
     function setUp() public {
         work = address(new Work1271());
-        f = new OpenFactory(address(this), UID_, 0);
+        f = EnvKit.factory(address(this), UID_, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), work, false);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, work);
         a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(normalInit("A", "A", 0, 1e6, alice, address(0))), "a"));
-        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0))), "dex"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(admin), 0, treasury, false, 0, address(0), 0, 0)), "dex"));
         usdc = _list(new MockERC20("USD Coin", "USDC", 6));
         _fund(usdc, dave);
     }
@@ -165,7 +185,7 @@ contract DexOutsideTest is Test {
 
     function _list(MockERC20 t) internal returns (MockERC20) {
         vm.prank(admin);
-        dex.setMarket(address(a), address(t), true);
+        dex.setMarket(address(a), address(t), true, EnvKit.codeUidOf(address(dex)));
         return t;
     }
 
@@ -213,7 +233,7 @@ contract DexOutsideTest is Test {
     }
 
     function _taker(ITradeToken.TradeOrder memory t, uint256 fill) internal view returns (DexLegs.Leg memory) {
-        return DexLegs.Leg(address(a), t, _sig(ALICE_PK, a.tradeOrderDigest(t)), fill);
+        return DexLegs.Leg(address(a), t, _sig(ALICE_PK, a.tradeOrderDigest(DexLegs.ua(t))), fill);
     }
 
     function _one(DexLegs.Settlement memory s) internal pure returns (DexLegs.Settlement[] memory ss) {
@@ -372,31 +392,36 @@ contract DexOutsideTest is Test {
 
     // ------------------------------------------------------------------ tokens that are not exact
 
-    function test_feeOnTransferToken_conservationCatchesIt() public {
+    /// Owner 2026-11-12 (the outcome rule): 1980 arrive, alice signed 2000, she is credited 1961: below her floor.
+    function test_feeOnTransferToken_belowTheFloorFails() public {
         MockERC20 fot = _list(new FeeOnTransferERC20());
         _fund(fot, dave);
         DexLegs.Settlement[] memory ss = _one(_settlement(_dave(address(fot), 1, 2000), 1));
-        // the DEX receives 1 % less than it pulled: paying the taker fails, nothing moves
         vm.prank(relayer);
         vm.expectRevert(ISCaaSDex.NothingSettled.selector);
         dex.mtxSettle(DexLegs.wire(ss));
-        // with a donated balance the payment goes through and conservation reverts the settlement
+        // a stray balance changes nothing: only what arrived is paid out (was: conservation, `ConservationBroken`)
         fot.mint(address(dex), 10_000);
-        _expectOne(ss[0], abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(fot)));
+        _expectOne(ss[0], abi.encodeWithSelector(ISCaaSDex.InsufficientOutput.selector, address(fot)));
     }
 
-    function test_rebasingUpToken_conservationCatchesIt() public {
+    /// Owner 2026-11-12 (the outcome rule; was `ConservationBroken`): 2020 arrive of the 2000 pulled, all of it is paid to
+    /// alice (credited 1 % more again by the token), the DEX keeps nothing.
+    function test_rebasingUpToken_moreArrives_paidOut() public {
         MockERC20 up = _list(new RebaseUpERC20());
         _fund(up, dave);
-        DexLegs.Settlement memory s = _settlement(_dave(address(up), 1, 2000), 1);
-        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.ConservationBroken.selector, address(up)));
+        DexLegs.Settlement[] memory ss = _one(_settlement(_dave(address(up), 1, 2000), 1));
+        vm.prank(relayer);
+        dex.mtxSettle(DexLegs.wire(ss));
+        assertEq(up.balanceOf(alice), 2020 + 20);
+        assertEq(up.balanceOf(address(dex)), 0);
     }
 
     /// `transfer`/`transferFrom` without a return value (USDT): settles through `SafeERC20`.
     function test_noReturnValueToken_settles() public {
         NoReturnERC20 t = new NoReturnERC20();
         vm.prank(admin);
-        dex.setMarket(address(a), address(t), true);
+        dex.setMarket(address(a), address(t), true, EnvKit.codeUidOf(address(dex)));
         t.mint(dave, 5000);
         address p = dex.puller();
         vm.prank(dave);
@@ -414,7 +439,7 @@ contract DexOutsideTest is Test {
     function test_fallbackOnlyToken_isOutside_andFails() public {
         address fb = address(new FallbackOnly());
         vm.prank(admin);
-        dex.setMarket(address(a), fb, true);
+        dex.setMarket(address(a), fb, true, EnvKit.codeUidOf(address(dex)));
         assertEq(dex.tokenKind(fb), 2);
         DexLegs.Settlement[] memory ss = _one(_settlement(_dave(fb, 1, 2000), 1));
         vm.prank(relayer);
@@ -444,7 +469,7 @@ contract DexOutsideTest is Test {
     function test_returnbombToken_reasonIsBounded_othersSettle() public {
         address bomb = address(new BombERC20());
         vm.prank(admin);
-        dex.setMarket(address(a), bomb, true);
+        dex.setMarket(address(a), bomb, true, EnvKit.codeUidOf(address(dex)));
         DexLegs.Settlement[] memory ss = _two(
             _settlement(_dave(bomb, 1, 2000), 1), _settlement(_dave(address(usdc), 2, 2000), 2));
         vm.recordLogs();
@@ -546,6 +571,29 @@ contract DexOutsideTest is Test {
         vm.prank(relayer);
         dex.mtxSettle(DexLegs.wire(ss));
         assertEq(a.balanceOf(address(w)), 1000);
+    }
+
+    /// recheck2 P2-2 (CTR-ACC-02): real wallets, a `SmartKeyAccount` clone and a `MandateWallet` (50 k cap), sign an
+    /// outside order in ERC-7739 `TypedDataSign` over `DexOrder` (nesting `TradeOrder`, implicit); the raw digest is refused.
+    function test_erc7739RealWallets_outsideMaker() public {
+        uint256 pk = 0x7739;
+        (address ska, address mw) = Erc7739Kit.wallets(pk, UID_);
+        address[2] memory ws = [ska, mw];
+        for (uint256 i; i < 2; ++i) {
+            address w = ws[i];
+            _fund(usdc, w);
+            ITradeToken.TradeOrder memory mo = _order(w, address(a), 2000, 1000, 1);
+            bytes32 h = dex.dexOrderDigest(address(usdc), mo);
+            bytes32 c = keccak256(abi.encode(keccak256(bytes(Erc7739Kit.DEX_ORDER_TYPE)), address(usdc), TradeLib.hashStruct(mo)));
+            assertEq(keccak256(abi.encodePacked(hex"1901", Erc7739Kit.separator(address(dex)), c)), h, "the kit rebuilds it");
+            DexLegs.Settlement memory st = _settlement(DexLegs.Leg(address(usdc), mo, Erc7739Kit.raw(pk, w, h), 2000), 10 + i);
+            _expectOne(st, abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, h));
+            st.makers[0].sig = Erc7739Kit.sign(pk, w, address(dex), "DexOrder", Erc7739Kit.DEX_ORDER_TYPE,
+                Erc7739Kit.DEX_ORDER_TYPE, c);
+            vm.prank(relayer);
+            dex.mtxSettle(DexLegs.wire(_one(st)));
+            assertEq(a.balanceOf(w), 1000, "positive control: the ERC-7739 order settles");
+        }
     }
 
     /// 400 k for a clone of this chain's `SmartKeyAccount` implementation, 50 k for any other contract: in settle,
@@ -746,6 +794,22 @@ contract DexOutsideTest is Test {
         assertEq(r.errs(3), ISCaaSDex.NotSelf.selector);
         assertEq(r.errs(4), guard);
         assertEq(r.errs(5), guard);
+    }
+
+    /// Round 3zb + 3zc (O8, Fable F-3): the four moved power entries, re-entered during a pull, each refused by the guard.
+    function test_hookTokenReentry_powerEntriesRefused() public {
+        HookERC20 hk = new HookERC20();
+        _list(MockERC20(address(hk)));
+        _fund(MockERC20(address(hk)), dave);
+        ReenterPowers r = new ReenterPowers(ISCaaSDex(address(dex)));
+        hk.setHook(address(r));
+        DexLegs.Settlement[] memory ss = _one(_settlement(_dave(address(hk), 1, 2000), 1));
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
+        assertTrue(ok[0]);
+        assertEq(r.n(), 4);
+        bytes4 guard = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
+        for (uint256 i; i < 4; ++i) assertEq(r.errs(i), guard, "a power entry inside a settlement (O8)");
     }
 
     /// `SigCheckGasStarved` raised by a SCaaS token's own check (Path A taker that is a `SmartKeyAccount` clone, so the

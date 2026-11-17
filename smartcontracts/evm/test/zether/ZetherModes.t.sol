@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {Vm} from "forge-std/Test.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
@@ -49,8 +52,8 @@ abstract contract ZetherModesSuite is ZetherFixture {
         c = _cfg(auditor, uint256(1) << 40);
     }
 
-    function _newToken(bool auditor, bytes32 salt_, uint256) internal virtual override returns (ZetherLayer) {
-        return ZetherLayer(factory.createToken(_kind(), 1, abi.encode(_kindCfg(auditor)), salt_));
+    function _newToken(bool auditor, bytes32 salt_, uint256) internal virtual override returns (NormalZetherToken) {
+        return NormalZetherToken(factory.createToken(_kind(), 1, abi.encode(_kindCfg(auditor)), salt_));
     }
 
     // ------------------------------------------------------------------ the matrix
@@ -210,10 +213,10 @@ abstract contract ZetherModesSuite is ZetherFixture {
             batch: 3, nonce: 0, validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer,
             fee: 0, feeRecipient: address(0)
         });
-        (uint8 v, bytes32 r, bytes32 s_) = vm.sign(pk, tok.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s_) = vm.sign(pk, MtxDigest.metaTx(address(tok), m));
         vm.prank(relayer);
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
-        tok.mtxExecute(m, abi.encodePacked(r, s_, v));
+        tok.executeMetaTransaction(m, abi.encodePacked(r, s_, v));
     }
 
     /// M3 (review T2 m5): `disclosureMode` at byte 20 and `auditorMode` at byte 21 of the verifier's slot (`ns`), nothing
@@ -223,7 +226,8 @@ abstract contract ZetherModesSuite is ZetherFixture {
         tok = _newToken(true, "pack", 0);
         bytes32 ns = 0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00;
         uint256 w = uint256(vm.load(address(tok), ns));
-        assertEq(address(uint160(w)), address(ver));
+        // chain-neutral releases (plan T72): the verifier is the clone's env, no longer copied into this slot
+        assertEq(address(uint160(w)), address(0), "no verifier copy");
         assertEq((w >> 160) & 0xff, COMPACT, "disclosureMode, byte 20");
         assertEq((w >> 168) & 0xff, OPTIONAL, "auditorMode, byte 21");
         assertEq(w >> 176, 0);
@@ -268,7 +272,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         IFactoryToken.TokenConfig memory ok = _kindCfg(true);
         ok.conf.auditorMode = FULL;
         ok.conf.disclosureMode = COMPACT;
-        ZetherLayer t = ZetherLayer(factory.createToken(_kind(), 1, abi.encode(ok), "ok"));
+        NormalZetherToken t = NormalZetherToken(factory.createToken(_kind(), 1, abi.encode(ok), "ok"));
         assertEq(uint8(t.auditorMode()), FULL);
         assertEq(uint8(t.disclosureMode()), COMPACT);
     }
@@ -377,7 +381,7 @@ contract ZetherModesWrappedTest is ZetherModesSuite {
     }
 
     /// @dev Public units by a USD wrap.
-    function _public(ZetherLayer t, address to, uint256 units) internal override {
+    function _public(NormalZetherToken t, address to, uint256 units) internal override {
         usd.mint(address(this), units);
         usd.approve(address(t), units);
         WrappedToken(payable(address(t))).wrap(address(usd), units);

@@ -56,7 +56,7 @@ checkers 0 errors and 0 fact misses, mutation probe 69/69 killed.
   `scripts/capped`, one at a time. `/usr/bin/grep`; in worktrees a hook blocks bare `git`: use `/usr/bin/git`. Rust:
   `CARGO_TARGET_DIR=<repo>/scaas-node/target` for the node.
 - The family commands are the repo's own (`smartcontracts/scripts/test.sh <family>`, CI `.github/workflows/ci.yml`):
-  `forge test`; size gate `forge build src --sizes --json > /tmp/sizes.json; python3 scripts/size_gate.py /tmp/sizes.json
+  `forge test`; size gate `T=$(mktemp -d); forge build src --sizes --json > "$T"/sizes.json; python3 scripts/size_gate.py "$T"/sizes.json
   smartcontracts/evm/size-baseline.json`; `FOUNDRY_PROFILE=private7622 forge build`; `test.sh solana` (builds the SBF
   program first, LiteSVM loads `target/deploy/scaas.so`), `test.sh sui`, `test.sh aptos`, `test.sh soroban`,
   `test.sh cosmos`, `test.sh ton`; `npm test` in `clients/clientkeys`; in `scaas-node` `cargo clippy --all-targets -- -D
@@ -3491,8 +3491,8 @@ index 5f6f095..f8fe9b4 100644
   --test-threads=1` → 4 passed; `scripts/capped cargo test --test e2e_hedera -- --ignored` → 1 passed. The written
   `smartcontracts/evm/deployments/31901.json` carries `smart_key_account_factory` and `smart_key_account_implementation`
   (and no `subject_account_*`). Size gate → 0 errors, 59 contracts.
-- [ ] **Step 3: The mutation probe.** Save as `/tmp/p4-mutate.py` (paths are the worktree's) and run
-  `python3 /tmp/p4-mutate.py`; every mutant must be killed (the script restores each file in `finally`; check `git diff
+- [ ] **Step 3: The mutation probe.** Save as `"$T"/p4-mutate.py` (`T=$(mktemp -d)`; paths are the worktree's) and run
+  `python3 "$T"/p4-mutate.py`; every mutant must be killed (the script restores each file in `finally`; check `git diff
   --stat src` is empty afterwards). Result of the validation run: **69/69 killed**.
 
 ```python
@@ -3595,7 +3595,7 @@ for mid, f, old, new in M:
     finally:
         open(p, 'w').write(src)
     res.append((mid, status, killer)); print(mid, status, killer, flush=True)
-json.dump(res, open('/tmp/p4-mutants.json', 'w'))
+json.dump(res, open(__file__.replace('mutate.py', 'mutants.json'), 'w'))
 print(sum(1 for r in res if r[1] == 'killed'), '/', len(res), 'killed')
 ```
 | Mutant | File | Mutation | Killed by |

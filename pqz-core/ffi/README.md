@@ -60,6 +60,7 @@ clients only; a native build with `panic = abort` is a compile error.
 | `precompile(&[u8]) -> Result<[u8; 32], Error>` | the same in Rust: `Error::Revert`, `Error::NodeFault`; a caught input-caused panic gives `…00` |
 | `decode(&[u8])` | `pqz_stmt::decode_input` (the crate re-exports `pqz_stmt` as `stmt`) |
 | `verify_input(&[u8]) -> Result<bool, NodeFault>` | decode, then run the id's verifier (ops 1–5 and 7) |
+| `pqz_offchain::verify_offchain(&[u8]) -> Result<bool, NodeFault>` (crate `offchain/`) | the off-chain verifier's entry (three-key spec K3-4; UNAUDITED): `verify_input` plus `PQZL_SPLIT_ID` (the split transfer of opening tokens, `R_TXS` / `R_TXS0`, which the precompile never serves), same decode, same verifiers; an input-caused panic gives `false`. A crate of its own because the plugin's library carries the checksums of this crate's sources in its debug info (an edit here, a comment too, moves `ExpectedLibrarySha256`). Tests: `offchain/tests/offchain.rs`; `vectors/replay_wasm.mjs` (wasm32); `negative.json` `split_rows` |
 | `pqzl::verify_fast` / `pqzl::verify_generic` / `pqzh::verify` | the verifiers, on already-decoded parts. The generic PQZL verifier is only the reference for the differential test; it is never on the precompile path (R5) |
 | `selftest::selftest()`, `selftest::report()` | `OP_SELFTEST` (P6e D13); see "Self-test" below |
 | feature `prove`: `prove(op, stmt, wit, rnd32)` | proves with PQZL (`pqz_prove` / `pqzl::Ctx::prove`) or PQZH (Ligero), chosen by the statement's id; deterministic and hedged (CTR-PQZ-19) |
@@ -67,6 +68,7 @@ clients only; a native build with `panic = abort` is a compile error.
 | features `pqzl-rust` + `pqzl-c` together: `pqzl::c::*` | the C core next to the Rust one (`pqzl::`), for differential tests and the fuzz mode `pqzl-diff` |
 | feature `prove`: `fixture::{wit_key, wit_debit, wit_ds, cases, digest_lines}` | the witness layouts of the prover API (R3), and one honest instance of every form, built from seeds (for the tests, the bench, the wasm32 run and the vector generator of P6e Task 11) |
 | feature `prove`: `fixture::{wit_multi, multi_case, multi_cases, recipients_hash}`, `pqzl::{enc_group_seed, enc_multi}`, `memo::{seal, open}` | the multi-recipient transfer (`R_TXM`, op 7; P6-ANON S3): encryption per group of legs (P6-ANON D13: group seeds; first the legs, then `pk_f`, then the auditor copies), the `R_TXM` witness layout, `recipientsHash`, the sender memo of spec §5.4; one honest case per built (M, auditorOn) of each id |
+| feature `prove`: `pqzl::enc_leg_seed`, `opening::{leg_seed, enc_split, coins, seal, open_kem_seed, open_kem_pk, check_recipient, check_auditor, taken}` | opening tokens (spec three-key model K3-4, K3-6, K3-6b, K3-7; UNAUDITED): the leg seed and split randomness of op 1, the deterministic sealed opening (CTR-UA-32's hybrid KEM + one-shot AES-256-GCM), the opening KEM seed, and the holder check / auditor tool, which take public bytes and the opening KEM seed only (never the PQZ secret) and give one outcome per failure; `opening.json` in the vectors. Tests: `tests/opening.rs` |
 
 ## Inside
 
@@ -152,7 +154,10 @@ inject the faults (`tests/fault.rs`, in its own process, with a denying allocato
 
 **Integration.** The C ABI needs no lock from the caller and at most 1 MiB of the caller's stack. A wasm32 wallet that
 embeds the `prove` feature must link with an 8 MiB stack (`-zstack-size=8388608`, as in `wasm/.cargo/config.toml`):
-wasm32 has no worker thread, so the core runs on the module's own stack.
+wasm32 has no worker thread, so the core runs on the module's own stack. The browser wallet's holder check is its own crate,
+`wallet-wasm/` (TODO 3zf; `opening::check_recipient` / `check_auditor` behind safe exports, loaded by `clientkeys`
+`src/pqzopenWasm.js`; [signers-clientkeys.md](../../docs/clients/signers-clientkeys.md#pqz-wallet-wasm)); `wasm/` stays the
+test harness for a trusted caller.
 
 **Self-test (P6e D13).** Op 6 (`OP_SELFTEST`, input exactly `06 00000000`) returns
 

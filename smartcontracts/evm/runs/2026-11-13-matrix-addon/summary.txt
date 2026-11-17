@@ -1,0 +1,113 @@
+# Matrix add-on (owner 2026-11-13: "Dời matrix local sau khi bổ sung Matrix mới hợp lý."), branch ua-mtx-fix3-chainuid.
+# matrix.sh local (fresh anvil 31337 + a local Nethermind copy 7622 for pq / pqoff), MATRIX_OUT=runs/2026-11-13-matrix-addon;
+# full output in the git-ignored *.log there. Test keys only (anvil accounts; the copy's 0x..01-0x..03). UNAUDITED.
+# src unchanged across the three runs (scripts only): run A d52be8cf (every group), run B ba5f0394 (every group but pq,
+# pqoff: after the tokens script fix and the pqchat group), run C c6da1eb5 (pqchat alone, PqChat.rescue added). The table
+# below is coverage.py over the records of pq, pqoff (A), pqchat (C) and the rest (B).
+step | commit | rc | counts
+run A: deploy | d52be8cf | 0 | 106 txs
+run A: tokens | d52be8cf | 1 | forge refused the script: a staticcall after vm.broadcast (Tokens.s.sol renounceRole, from 8f8c0536); fixed in ba5f0394
+run A: gov, dex, liquidity, misc, zether | d52be8cf | 0 | 163, 117, 23, 103, 162 txs; negatives 21, 15, 6, 25 all refused as expected
+run A: pq | d52be8cf | 0 | 236/236 txs, negatives 10/10 (2394 s)
+run A: pqoff | d52be8cf | 0 | 178/178 txs, negatives 17/17 (1925 s)
+run A: verifiers, rescue, views, wraplimits | d52be8cf | 0 | calls 30/30 + negatives 30/30; 21 txs + 6/6; views answered; wraplimits ok
+run B: deploy | ba5f0394 | 0 | 106 txs
+run B: tokens | ba5f0394 | 0 | 504/504 txs, negatives 5/5
+run B: gov | ba5f0394 | 0 | 163/163 txs, negatives 21/21 (4 new: CTR-GOV-27/28 sibling word on ComplianceRegistry, router mtxSetKycProvider, router mtxRenounceRole, OpenFactory)
+run B: dex | ba5f0394 | 0 | 117/117 txs, negatives 15/15 (7 new: MarketNotListed, TokenNotKnown on a closed DEX; enableFeature(29) no entry; InsufficientOutput with FOT; sibling word on kind 8 renounceRole, DEX disableFeature, DEX renounceRole)
+run B: liquidity | ba5f0394 | 0 | 23/23 txs, negatives 6/6
+run B: misc | ba5f0394 | 0 | 103/103 txs, negatives 25/25 (1 new: deployTokenImplementation with a sibling word)
+run B: zether | ba5f0394 | 0 | 162/162 txs
+run B: verifiers | ba5f0394 | 0 | calls 30/30, negatives 30/30
+run B: pqchat | ba5f0394 | 0 | 39/39 txs, negatives 10/10
+run B: rescue | ba5f0394 | 0 | 25/25 txs, negatives 6/6
+run B: views | ba5f0394 | 0 | 5244 of 7605 views answered (the rest need real arguments)
+run B: wraplimits | ba5f0394 | 0 | 140/140 txs, negatives 60/60
+run C: pqchat | c6da1eb5 | 0 | 41/41 txs, negatives 10/10
+negatives over the whole tally | - | 0 | 205 refused as expected, 0 BAD
+anvil / copy left running | - | 0 | none
+
+## Coverage per contract (state-changing called = a transaction of this net called the entry and succeeded;
+## reached = it also ran inside another call, by the trace (local only); views reached = answered an eth_call)
+group | contract | entries | state-changing | local: state-changing called / reached / views reached
+tokens | NormalToken | 89 | 38 | 31 / 38 / 48
+tokens | WrappedToken | 123 | 58 | 48 / 56 / 56
+tokens | NormalZetherToken | 125 | 56 | 49 / 55 / 64
+tokens | WrappedZetherToken | 163 | 80 | 68 / 76 / 73
+tokens | NormalPqzToken | 138 | 59 | 28 / 28 / 0
+tokens | WrappedPqzToken | 178 | 83 | 27 / 31 / 77
+tokens | NormalRegulatedToken | 112 | 53 | 39 / 52 / 55
+tokens | WrappedRegulatedToken | 146 | 73 | 53 / 69 / 64
+tokens | NormalZetherRegulatedToken | 148 | 71 | 56 / 69 / 72
+tokens | WrappedZetherRegulatedToken | 186 | 95 | 75 / 90 / 81
+tokens | NormalPqzRegulatedToken | 161 | 74 | 24 / 24 / 0
+tokens | WrappedPqzRegulatedToken | 201 | 98 | 23 / 26 / 85
+dex | SCaaSDex | 62 | 26 | 23 / 26 / 35
+dex | SCaaSDexGovernanceModule | 24 | 9 | 0 / 9 / 3 | via SCaaSDex
+dex | SCaaSDexLiquidityModule | 8 | 3 | 0 / 3 / 3 | via SCaaSDex
+relay | RelayFeeRouter | 4 | 2 | 2 / 2 / 1
+relay | RelayFeeExecutor | 2 | 1 | 0 / 1 / 1
+governance | GovernanceRouter | 73 | 63 | 58 / 58 / 9
+registry | UARegistry | 65 | 11 | 11 / 11 / 46
+registry | UARegistryCoreLib | 15 | 13 | 0 / 8 / 0 | via UARegistry
+registry | UARegistryAuxLib | 17 | 12 | 0 / 1 / 5 | via UARegistry
+factory | OpenFactory | 80 | 25 | 16 / 24 / 51
+accounts | SmartKeyAccountFactory | 5 | 1 | 1 / 1 / 4
+accounts | SmartKeyAccount | 40 | 21 | 13 / 20 / 18
+wallets | MandateWallet | 33 | 17 | 16 / 16 / 14
+wallets | HederaMandateWallet | 33 | 17 | 0 / 0 / 0 | needs Hedera
+compliance | ComplianceRegistry | 12 | 4 | 1 / 4 / 8
+reference | RefServiceEscrow | 13 | 3 | 3 / 3 / 9
+verifiers | Secp256k1Verifier | 2 | 0 | 0 / 0 / 2
+verifiers | Ed25519Verifier | 3 | 0 | 0 / 0 / 2
+verifiers | Bip340Verifier | 2 | 0 | 0 / 0 / 2
+verifiers | P256Verifier | 3 | 0 | 0 / 0 / 3
+verifiers | WebAuthnP256Verifier | 3 | 0 | 0 / 0 / 3
+verifiers | SchnorrBn254Verifier | 4 | 0 | 0 / 0 / 4
+verifiers | SchnorrBls12381Verifier | 4 | 0 | 0 / 0 / 4
+verifiers | BlsMinSigBls12381Verifier | 4 | 0 | 0 / 0 / 4
+verifiers | BlsMinSigBn254Verifier | 4 | 0 | 0 / 0 / 4
+verifiers | ZetherSchnorrBls12381Verifier | 4 | 0 | 0 / 0 / 4
+verifiers | Musig2Secp256k1Verifier | 2 | 0 | 0 / 0 / 1
+verifiers | FrostSecp256k1Verifier | 2 | 0 | 0 / 0 / 1
+verifiers | Musig2Bn254Verifier | 5 | 0 | 0 / 0 / 4
+verifiers | FrostBn254Verifier | 2 | 0 | 0 / 0 / 1
+verifiers | MldsaVerifier | 10 | 0 | 0 / 0 / 9
+verifiers | FndsaVerifier | 3 | 0 | 0 / 0 / 3
+verifiers | SlhdsaVerifier | 3 | 0 | 0 / 0 / 3
+verifiers | PqzKeyVerifier | 5 | 0 | 0 / 0 / 0
+zether | ZetherStatements | 5 | 0 | 0 / 0 / 1
+zether | ZetherDisclosure | 2 | 0 | 0 / 0 / 0
+zether | ZetherTransferVerifierBls12381 | 19 | 0 | 0 / 0 / 16
+zether | ZetherBurnVerifierBls12381 | 10 | 0 | 0 / 0 / 10
+zether | ZetherInnerProductVerifierBls12381 | 10 | 0 | 0 / 0 / 9
+libraries | GovernanceLib | 15 | 14 | 0 / 14 / 1 | via GovernanceRouter, tokens
+libraries | HederaLib | 1 | 0 | 0 / 0 / 0 | needs Hedera | via tokens
+libraries | ZetherLib | 16 | 11 | 0 / 11 / 4 | via NormalZetherToken, WrappedZetherToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken
+libraries | ZetherWrappedLib | 4 | 2 | 0 / 2 / 2 | via WrappedZetherToken, WrappedZetherRegulatedToken
+libraries | WrappedLib | 26 | 16 | 0 / 13 / 5 | via WrappedToken, WrappedZetherToken, WrappedPqzToken, WrappedRegulatedToken, WrappedZetherRegulatedToken, WrappedPqzRegulatedToken
+libraries | RegulatedLib | 15 | 14 | 0 / 14 / 1 | via NormalRegulatedToken, WrappedRegulatedToken, NormalZetherRegulatedToken, WrappedZetherRegulatedToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | MtxPipelineLib | 16 | 7 | 0 / 3 / 2 | via tokens
+libraries | TradeLib | 6 | 4 | 0 / 1 / 1 | via tokens, SCaaSDex
+libraries | PqzStateLib | 13 | 9 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzViewLib | 11 | 0 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzWrappedLib | 2 | 1 | 0 / 0 / 0 | via WrappedPqzToken, WrappedPqzRegulatedToken
+libraries | PqzBurnLib | 1 | 1 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+libraries | PqzTransferLib | 2 | 2 | 0 / 0 / 0 | via NormalPqzToken, WrappedPqzToken, NormalPqzRegulatedToken, WrappedPqzRegulatedToken
+rescue | RescueVault | 11 | 3 | 3 / 3 / 8
+pqchat | PqChat | 60 | 15 | 13 / 15 / 37
+pqchat | PqChatTopics | 21 | 6 | 0 / 6 / 12 | via PqChat
+state-changing entries not called and without a reason: (212 without a reason)
+by contract (count): mostly the PQZ kinds' generic entries the pq groups do not call (the final gate 2026-11-12 had 248):
+  48 NormalPqzRegulatedToken
+  30 NormalPqzToken
+  1 NormalRegulatedToken
+  1 NormalZetherRegulatedToken
+  1 NormalZetherToken
+  70 WrappedPqzRegulatedToken
+  51 WrappedPqzToken
+  3 WrappedRegulatedToken
+  1 WrappedToken
+  3 WrappedZetherRegulatedToken
+  3 WrappedZetherToken
+non-PQZ kinds: mtxLiquidityPull on kinds 1, 2, 3, 8, 9, 10, 11 (the liquidity group uses kind 0); setWrapLimits / setWrapMember on kinds 3, 9, 11 (the wraplimits group uses kinds 1, 5, 13)

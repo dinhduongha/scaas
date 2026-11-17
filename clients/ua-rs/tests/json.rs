@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! typed-signing R2c: the feature `json` shim (src/json.rs) against smartcontracts/vectors/ua/portable.json: every
 //! `registrations[i].args` / `kemCommit`, every `kemRecords[i].args` and `pqzKeyRecords[i].args` row, and the refusals.
-use scaas_ua::json::{inner_json, registration_args_json, replayed_member_sig_json, set_kem_key_args_json, set_pqz_key_args_json, JsonError};
+use scaas_ua::json::{inner_json, registration_args_json, replayed_member_sig_json, set_kem_key_args_json, set_pqz_key_args_json, set_pqz_key_version_args_json, JsonError};
 use scaas_ua::UAError;
 use serde_json::{json, Value};
 
@@ -96,14 +96,19 @@ fn registration_args_rows() {
             commits += 1;
         }
     }
-    assert_eq!(commits, 11); // + mldsa87, fndsa1024
+    assert_eq!(commits, 7); // + mldsa87, fndsa1024; msig-pq/<set> without a KEM key (CTR-UA-32)
+    // CTR-UA-32 (T66a): a PQ-eligible msig holds no KEM key
+    let mq = p["registrations"].as_array().unwrap().iter().find(|r| r["name"] == "msig-pq/n2048-kmax1024").unwrap();
+    let mut i: Value = serde_json::from_str(&reg_input(mq, None)).unwrap();
+    i["kemPk"] = p["kemRecords"][0]["kemPk"].clone();
+    assert_eq!(registration_args_json(&i.to_string()).unwrap_err(), JsonError::Ua(UAError::KemHolder(0x0120)));
 }
 
 #[test]
 fn set_key_args_rows() {
     let p = portable();
     let kem = p["kemRecords"].as_array().unwrap();
-    assert_eq!(kem.len(), 15);
+    assert_eq!(kem.len(), 12); // CTR-UA-32: no msig KEM record
     for k in kem {
         let i = json!({ "ua": k["ua"], "version": k["version"], "kemPk": k["kemPk"], "sig": record_sig(k) });
         assert_eq!(out(set_kem_key_args_json(&i.to_string())), k["args"], "{}", k["id"]);
@@ -113,6 +118,14 @@ fn set_key_args_rows() {
     for r in pqz {
         let i = json!({ "ua": r["ua"], "pqzKey": r["pqzKey"], "pqzPopHash": r["pqzPopHash"], "sig": record_sig(r) });
         assert_eq!(out(set_pqz_key_args_json(&i.to_string())), r["args"], "{}", r["name"]);
+    }
+    let vers = p["pqzKeyVersions"].as_array().unwrap();
+    assert_eq!(vers.len(), 16);
+    for r in vers {
+        let i = json!({ "ua": r["ua"], "version": r["version"], "pqzKey": r["pqzKey"], "pqzPopHash": r["pqzPopHash"], "sig": record_sig(r) });
+        assert_eq!(out(set_pqz_key_version_args_json(&i.to_string())), r["args"], "{}", r["name"]);
+        let no_version = json!({ "ua": r["ua"], "pqzKey": r["pqzKey"], "pqzPopHash": r["pqzPopHash"], "sig": record_sig(r) });
+        assert_eq!(set_pqz_key_version_args_json(&no_version.to_string()).unwrap_err(), JsonError::Argument, "{}", r["name"]);
     }
     // no `sig`: the version-0 fill of a hash commit
     for r in p["registrations"].as_array().unwrap().iter().filter(|r| r.get("kemCommit").is_some()) {

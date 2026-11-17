@@ -1,0 +1,23 @@
+# ua-mtx-merge T4 gate summary (full output in git-ignored .log files, not committed)
+# T4: the Zether pairs merged (plan T4, R35): the ua* Zether entries under the mtx* names (UAEnvelope + UASig, native and
+# derived ids), relayed proofs bind SCAAS-ZETHER-UA-ENVELOPE-V1 on every merged entry, executeMetaTransaction keeps
+# SCAAS-ZETHER-ENVELOPE-V1; the address signed forms, their typehashes and builders and the address envelopeBinding view to legacy.
+# The round's gate runner (T21) is not built yet: each command ran directly through scripts/capped.
+# Base: 37e0b519 (T3b). T4 commits: 134ab360 (legacy copies), cbad22ae (the build), this one (harness, mutants, summary).
+step | commit | rc | counts
+t4-red | 134ab360 + test/merge/ZetherPairs.t.sol | 1 | 7 failed 2 passed, 2 suites (the passes guard what does not move: test_zetherStatementLayoutUnchanged; test_zetherExecuteMetaTransactionBindsAddressTag, true since T1)
+t4-pin-interface-id | cbad22ae (worktree) | 1 then 0 | test_zetherInterfaceIdsArePinned red at 0x00000000, then IZetherToken 0xaefc54bc -> 0x66b526f6
+t4-touched | cbad22ae (worktree) | 0 | 403 passed 0 failed 4 skipped, 32 suites (forge, test/merge + test/zether, after the pin)
+t4-forge-full | cbad22ae | 0 | 2557 passed 0 failed 14 skipped, 219 suites (forge, default set n2304-kmax4096)
+t4-forge-isolate | cbad22ae | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t4-size-gate | cbad22ae | 0 | 0 errors, 89 contracts, above 65536 B: none; baseline ratcheted down (t4-sizes); size_gate --self-test ok
+t4-baseline-readers | cbad22ae | 0 | 70 passed (ZetherDeploy, PqzWrapped, HederaV2, Factory, UADeploy, GovDeploy, CodeCeiling)
+t4-sizes | 37e0b519 -> cbad22ae | 0 | NormalZetherToken 45,264 -> 43,011 (init 46,603); WrappedZetherToken 55,613 -> 53,502 (init 59,212 -> 57,101); ZetherLib 26,210 -> 25,065; ZetherWrappedLib 11,244 (not a row); PQZ and plain kinds unchanged
+t4-dex-kat | cbad22ae | 0 | dex_order_kat.json unchanged: no NormalToken byte moved (DexKatTest green in t4-forge-full, no WRITE_KAT)
+t4-zether-cross | cbad22ae | 0 | 10 passed 0 failed 0 skipped (ZetherProverCross --ffi with the release zether-cli; the three named tests assert the prover's address namedCall has no entry until T12)
+t4-clientkeys-evm | cbad22ae | 0 | 23 passed 0 failed (node --test test/evm.test.js)
+t4-docs-check | cbad22ae | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0; test_docs_check ok
+t4-mutants | cbad22ae | 1 each | 4 of 4 killed against test/merge + test/zether, none a compile error (runs/2026-11-04-ua-mtx-merge-t4-mutants.txt)
+#
+# Not run in T4: the other three PQZ sets (T5 runs them; no PQZ byte moved); the scaas-node suite (no node file changed);
+# zether-prover cargo tests (T12; no prover file changed).

@@ -1,0 +1,7 @@
+tax-bit-on-plain-kind | test_taxBit_plainKindRefuses | 1
+tax-bit-contract-only | test_masks, test_taxBit_eoaHolderGrantedAfterCreation, test_taxBit_issuerOnlyBit23Init | 1
+tax-bit-not-issuer | test_setTaxRate_decreaseCancelsPending, test_setTaxRate_decreaseImmediate, test_setTaxRate_increaseAtEta, test_setTaxRate_increaseNotBeforeEta, test_setTaxRate_noticeZeroImmediate, test_setTaxRecipient_frozenRefused, test_setTaxRecipient_paddedNativeAccepted, test_setTaxRecipient_poolRefused, test_setTaxRecipient_tokenRefused, test_setTaxRecipient_unattestedRefused, test_setTaxRecipient_unregisteredRefused, test_taxBit_eoaHolderGrantedAfterCreation, test_taxBit_issuerOnlyBit23Init | 1
+tax-bit-delay-relaxed | test_masks, test_taxBit_revokeAndDisableImmediate | 1
+tax-increase-before-eta | test_setTaxRate_increaseNotBeforeEta | 1
+tax-decrease-delayed | test_setTaxRate_decreaseCancelsPending | 1
+tax-recipient-no-R | test_setTaxRecipient_unattestedRefused | 1

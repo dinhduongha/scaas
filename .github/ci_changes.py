@@ -37,7 +37,7 @@ JOBS = {
     # the directories the pqz job builds and tests (pqzl, ffi, stmt, pqzh/ligero, params, fuzz); pqz-core/nethermind/ (chain
     # scripts, the C# plugin), artifact/, glic/, research/, runs/ and the top-level gate scripts are run on the owner's machine
     'pqz': ['pqz-core/pqzl/', 'pqz-core/ffi/', 'pqz-core/stmt/', 'pqz-core/pqzh/', 'pqz-core/params/', 'pqz-core/fuzz/',
-            'smartcontracts/vectors/pqz/'] + RT,
+            'pqz-core/gate-controls.sh', 'smartcontracts/vectors/pqz/'] + RT,
     'zether-prover': ['clients/zether-prover/', 'smartcontracts/evm/', 'smartcontracts/vectors/'] + RT,
     'ua-rs': ['clients/ua-rs/', 'smartcontracts/'] + RT,
     'ua-cxx': ['clients/ua-cxx/', 'clients/ua-rs/', 'smartcontracts/vectors/'] + RT,
@@ -121,7 +121,7 @@ if __name__ == '__main__':
         r = needed([f'smartcontracts/{d}/x'])
         assert [j for j in r if j.startswith('contract-') and r[j]] == [f'contract-{fam}'], fam
     assert all(needed(['pqz-core/params/sets/a'])[j] for j in ('contract-evm', 'pqz'))
-    for p in ('smartcontracts/scripts/test.sh', 'smartcontracts/vectors/metatx/paymeta.json'):
+    for p in ('smartcontracts/scripts/test.sh', 'smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json'):
         assert all(needed([p])[j] for j in GROUPS['ci-full-contracts']), p
     # groups: a label on a docs-only pull request runs `docs` and that group, nothing else
     for g, js in GROUPS.items():

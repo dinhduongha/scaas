@@ -15,7 +15,7 @@ import { domainCell, metaOpCell, METAOP_SCHEMA, payMetaParams, SCHEMA_CRC, signD
 const FILE = join(__dirname, '..', 'vectors', 'ton-vectors.json');
 // CTR-MTX-26 shared vectors (`[{name, schema, salt, meta, payId, payLane}]`, hex), read by every family.
 const PAYMETA: { name: string; salt: string; meta: string; payId: string; payLane: string }[] =
-    JSON.parse(readFileSync(join(__dirname, '..', '..', 'vectors', 'metatx', 'paymeta.json'), 'utf8'));
+    JSON.parse(readFileSync(join(__dirname, '..', '..', 'vectors', 'metatx', 'legacy', 'ua-mtx-merge', 'paymeta.json'), 'utf8'));
 const bytes = (h: string) => Buffer.from(h.slice(2), 'hex');
 const hex = (c: Cell) => c.toBoc({ idx: false, crc32: false }).toString('hex');
 const h = (c: Cell) => '0x' + c.hash().toString('hex');

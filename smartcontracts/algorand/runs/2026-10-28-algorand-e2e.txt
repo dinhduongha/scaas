@@ -41,7 +41,7 @@ deploy on dockernet-v1 (genesis whm+Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq/974=) fr
   create dex: app 1012 (961 B approval, extra_pages 0)
   fund app 1012 (3X4ABWUJOBYVXI6HC245NYWR5VYXDMFIAQDKQLNV5G3GQ7FRWZAUVAQ3YM): 100000 µALGO (its minimum balance)
 deploy gate: 6 apps match artifacts.json (approval and clear sha512_256); links, executor and funding checked
-wrote /tmp/scaas-algorand-e2e/deployments/whm-Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq_974=.json
+wrote <tmp>/scaas-algorand-e2e/deployments/whm-Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq_974=.json
 
 QUOTE mtx_pay (native payer): quote 54400 µALGO (fee 7000 = 3 txns + 4 inner, 0 of them budget-only calls; MBR 47400) >= the lane's ALGO decrease 54400
 ROUNDS 29 rounds in 4 s up to round 30 (dev mode: one block per group, the ticker one per second)
@@ -92,7 +92,7 @@ partial deploy: deploy on dockernet-v1 (genesis whm+Wmtq7QjMuFo665bVD75Ng68BbL6t
   create relayfee: app 1172 (857 B approval, extra_pages 0)
   relayfee app 1172: salt 0 (the lowest for this id), executor V53MJOZNILUHSZFSQBDWBTSUG6K23QY45H6L25M3NKALXTFPSR2BTLYS2Q off-curve
   fund app 1172 (RQX7I65SNIZXZAHGTCUFFPNICPYNWRBY44SRI7ZJTW22VBF3OBZPMKA2MM): 100000 µALGO (its minimum balance)
-create token:TKA: algod refused it: TransactionPool.Remember: transaction B2V52JGIUHPFFOBEIKO4VSKYYZSMX5ADFQZFB2RDLBIOJYY3YS4Q: account MADD73GBXJRI76O34Y3EZM7V5F77KRMAGU5OQAMCW32OMELWVLCHS3QGGQ balance 695000 below min 1035500 (0 assets) (the deployment so far is kept in /tmp/scaas-algorand-e2e/deploy2/whm-Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq_974=.MADD73GBXJRI76O34Y3EZM7V5F77KRMAGU5OQAMCW32OMELWVLCHS3QGGQ.resume.json: rerun to resume)
+create token:TKA: algod refused it: TransactionPool.Remember: transaction B2V52JGIUHPFFOBEIKO4VSKYYZSMX5ADFQZFB2RDLBIOJYY3YS4Q: account MADD73GBXJRI76O34Y3EZM7V5F77KRMAGU5OQAMCW32OMELWVLCHS3QGGQ balance 695000 below min 1035500 (0 assets) (the deployment so far is kept in <tmp>/scaas-algorand-e2e/deploy2/whm-Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq_974=.MADD73GBXJRI76O34Y3EZM7V5F77KRMAGU5OQAMCW32OMELWVLCHS3QGGQ.resume.json: rerun to resume)
 
 partial deploy: 0 orphan router(s) []
 GATE d key_sets(subject) = [(1006, Some([[152, 45, 135, 108, 55, 195, 233, 242, 138, 207, 75, 60, 104, 95, 54, 122, 55, 167, 162, 46, 76, 26, 36, 29, 140, 44, 20, 154, 236, 169, 161, 72]])), (1008, Some([[152, 45, 135, 108, 55, 195, 233, 242, 138, 207, 75, 60, 104, 95, 54, 122, 55, 167, 162, 46, 76, 26, 36, 29, 140, 44, 20, 154, 236, 169, 161, 72]]))]
@@ -113,7 +113,7 @@ deploy on dockernet-v1 (genesis whm+Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq/974=) fr
   create dex: app 1285 (961 B approval, extra_pages 0)
   fund app 1285 (7JFEE23ENOGHW3B6MGIG3KQIOREHEK54ET7WSOX47WN4HYOUZCGEXTNPJM): 100000 µALGO (its minimum balance)
 deploy gate: 5 apps match artifacts.json (approval and clear sha512_256); links, executor and funding checked
-wrote /tmp/scaas-algorand-e2e/deploy2/whm-Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq_974=.json
+wrote <tmp>/scaas-algorand-e2e/deploy2/whm-Wmtq7QjMuFo665bVD75Ng68BbL6tWYvtunq_974=.json
 
 QUOTE router -> token.mtx_invalidate_nonces (native subject, min_nonce 5, box new): quote 51800 µALGO (fee 14000 = 5 txns + 9 inner, 0 of them budget-only calls; MBR 37800) >= the lane's ALGO decrease 51800
 QUOTE router -> token.mtx_invalidate_nonces (native subject, min_nonce 9, box exists): quote 31900 µALGO (fee 13000 = 4 txns + 9 inner, 0 of them budget-only calls; MBR 18900) >= the lane's ALGO decrease 31900

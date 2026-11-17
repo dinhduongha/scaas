@@ -1,12 +1,12 @@
 /*
  * P6-SV differential test: the generic verifier (pqz_verify, the reference) against the specialised one
- * (pqz_verify_fast) on honest and mutated proofs of R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0 and every R_TXM shape (op
- * 7, P6-ANON L2). Every case must get the same accept / reject from both. Deterministic: everything derives from the
- * seed argument.
+ * (pqz_verify_fast) on honest and mutated proofs of R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0, every R_TXM shape (op
+ * 7, P6-ANON L2) and R_TXS / R_TXS0 (op 1 under PQZL_SPLIT_ID, three-key spec K3-4). Every case must get the same
+ * accept / reject from both. Deterministic: everything derives from the seed argument.
  *
- *   pqz_sv_diff [n_reg] [n_tx] [muts] [seed] [fuzz] [n_burn] [n_ds] [n_dr] [n_tx0] [n_txm]
+ *   pqz_sv_diff [n_reg] [n_tx] [muts] [seed] [fuzz] [n_burn] [n_ds] [n_dr] [n_tx0] [n_txm] [n_txs]
  *     n_*           honest proofs per relation, each on a fresh statement (new keys, amounts, fee); n_burn,
- *                   n_ds, n_dr, n_tx0 default to n_tx; n_txm (per R_TXM shape) to 0
+ *                   n_ds, n_dr, n_tx0 and n_txs (each of R_TXS, R_TXS0) default to n_tx; n_txm (per R_TXM shape) to 0
  *   PQZ_ARENA_MB    arena size (default 768 MiB)
  *     muts          rounds of the mutation list per proof (each round runs every kind once)
  *     fuzz          random multi-edit mutations per proof
@@ -108,6 +108,8 @@ static uint8_t tx0_stmt[PQZ_TX0_STMT_BYTES], tx0_wit[PQZ_TX0_WIT_BYTES];
 static uint8_t burn_stmt[PQZ_BURN_STMT_BYTES], burn_wit[PQZ_BURN_WIT_BYTES];
 static uint8_t ds_stmt[PQZ_DISC_STMT_BYTES], ds_wit[PQZ_DS_WIT_BYTES];
 static uint8_t dr_stmt[PQZ_DISC_STMT_BYTES], dr_wit[PQZ_DR_WIT_BYTES];
+static uint8_t txs_stmt[PQZ_TXS_STMT_BYTES], txs_wit[PQZ_TXS_WIT_BYTES];
+static uint8_t txs0_stmt[PQZ_TXS0_STMT_BYTES], txs0_wit[PQZ_TXS0_WIT_BYTES];
 
 /* R_TXM (op 7) shapes, relation 6 + t: as pqz_bench's TXB */
 static const struct
@@ -123,7 +125,8 @@ static const struct
 static uint8_t txm_stmt[NTXD][TXM_ST_MAX], txm_wit[NTXD][PQZ_TXM_WIT_BYTES (PQZ_TXM_MAX_LEGS, 1)];
 static char txm_name[NTXD][16];
 
-#define NREL (6 + NTXD) /* R_TX0 is op 1 with the 66,560-byte statement: relations are named by index, not by op */
+#define TXS_REL (6 + NTXD) /* R_TXS, then R_TXS0 (as pqz_bench's order) */
+#define NREL (8 + NTXD) /* R_TX0 is op 1 with the 66,560-byte statement: relations are named by index, not by op */
 static const char *RN[NREL] = { "R_REG", "R_TX", "R_BURN", "R_DS", "R_DR", "R_TX0" };
 static uint8_t OPS[NREL] = { PQZ_OP_REGISTER, PQZ_OP_TRANSFER, PQZ_OP_BURN, PQZ_OP_DISCLOSE_SENDER,
                              PQZ_OP_DISCLOSE_RECEIVER, PQZ_OP_TRANSFER };
@@ -155,8 +158,17 @@ txm_tables (void)
       WIT[rel] = txm_wit[t], WLEN[rel] = PQZ_TXM_WIT_BYTES (TXD[t].m, TXD[t].a);
       POLY0[rel] = PQZ_HEADER_BYTES, NCOEF[rel] = (STLEN[rel] - PQZ_HEADER_BYTES) / 8;
     }
+  for (int a = 1; a >= 0; a--) /* R_TXS (a = 1), R_TXS0: codes PQZ_REL_TXS / PQZ_REL_TXS0 (pqz_int.h) */
+    {
+      const int rel = TXS_REL + 1 - a;
+      RN[rel] = a ? "R_TXS" : "R_TXS0", OPS[rel] = PQZ_OP_TRANSFER, MOP[rel] = (uint8_t)(a ? 0x41 : 0xc1);
+      STMT[rel] = a ? txs_stmt : txs0_stmt, STLEN[rel] = a ? sizeof txs_stmt : sizeof txs0_stmt;
+      WIT[rel] = a ? txs_wit : txs0_wit, WLEN[rel] = a ? sizeof txs_wit : sizeof txs0_wit;
+      POLY0[rel] = PQZ_HEADER_BYTES, NCOEF[rel] = (STLEN[rel] - PQZ_HEADER_BYTES) / 8;
+    }
 }
 static const uint8_t PSID[32] = PQZ_PROOF_SYSTEM_ID; /* statement bytes 32..63 (hashed only) */
+static const uint8_t PSID_SPLIT[32] = PQZ_PROOF_SYSTEM_SPLIT_ID; /* R_TXS / R_TXS0 */
 static void
 be8 (uint8_t *p, uint64_t v)
 {
@@ -255,6 +267,46 @@ make_tx (void)
   memcpy (p, vs[1], PQZ_V_BYTES);
   memcpy (tx0_wit, tx_wit, (6 * PQZ_N) + 64); /* s_f, e_f, r, e1, e2_t, e2_f */
   memcpy (tx0_wit + (6 * PQZ_N) + 64, tx_wit + (6 * PQZ_N) + 96, 32); /* d, d' */
+}
+
+/* the R_TXS (a = 1) or R_TXS0 statement of make_tx's transfer (as pqz_bench.c setup_txs): R_TX's / R_TX0's statement
+   under PQZL_SPLIT_ID with the sender's own v_f and u_f under fresh (r_f, e1_f, e2_f); the leg is R_TX's */
+static int
+make_txs (int a)
+{
+  static int8_t rf[PQZ_N];
+  static int16_t e1f[PQZ_N], e2f[1][16];
+  static uint8_t uf[PQZ_POLYVEC_BYTES], vf[1][PQZ_V_BYTES];
+  const uint8_t *pkf[1] = { tx_stmt + PQZ_HEADER_BYTES };
+  uint8_t md[1][16];
+  const size_t W6 = 6 * PQZ_N, VF = PQZ_HEADER_BYTES + 4 * PQZ_POLYVEC_BYTES + PQZ_V_BYTES + PQZ_POLYVEC_BYTES
+                                    + PQZ_V_BYTES; /* v_f in R_TX's statement */
+  short8 (rf, PQZ_N, 1, PQZ_BETA_S), short16 (e1f, PQZ_N, 20, PQZ_BETA_E), short16 (e2f[0], 16, 20, 64);
+  memcpy (md[0], tx_wit + W6 + 96 + 16, 16); /* d' */
+  int rc = pqz_encrypt (pkf, 1, (const uint8_t (*)[16])md, rf, e1f, (const int16_t (*)[16])e2f, uf, vf);
+  uint8_t *st = a ? txs_stmt : txs0_stmt, *p = a ? txs_wit : txs0_wit;
+  const uint8_t *base = a ? tx_stmt : tx0_stmt;
+  const size_t bl = a ? sizeof tx_stmt : sizeof tx0_stmt;
+  memcpy (st, base, bl);
+  memcpy (st + 32, PSID_SPLIT, 32);
+  memcpy (st + VF - (a ? 0 : PQZ_POLYVEC_BYTES), vf[0], PQZ_V_BYTES);
+  memcpy (st + bl, uf, PQZ_POLYVEC_BYTES);
+  /* witness: s_f || e_f || r || e1 || r_f || e1_f || e2_t || e2_f || [e2_a] || d || d' */
+  memcpy (p, tx_wit, W6), p += W6;
+  for (int j = 0; j < PQZ_N; j++)
+    p[j] = (uint8_t)rf[j];
+  p += PQZ_N;
+  for (int j = 0; j < PQZ_N; j++)
+    le16 (p + 2 * j, e1f[j]);
+  p += 2 * PQZ_N;
+  memcpy (p, tx_wit + W6, 32), p += 32;
+  for (int j = 0; j < 16; j++)
+    le16 (p + 2 * j, e2f[0][j]);
+  p += 32;
+  if (a)
+    memcpy (p, tx_wit + W6 + 64, 32), p += 32;
+  memcpy (p, tx_wit + W6 + 96, 32);
+  return rc == 0;
 }
 
 /* a fresh R_BURN statement: new key, balance in T, amount, fee; fresh (r, e1, e2_f) for the new balance; random
@@ -654,7 +706,8 @@ bad_length_before_keys (void)
   } C[] = { { PQZ_OP_REGISTER, PQZ_REG_STMT_BYTES, 0, 0 },          { PQZ_OP_TRANSFER, PQZ_TX_STMT_BYTES, 0, 1 },
             { PQZ_OP_TRANSFER, PQZ_TX0_STMT_BYTES, 0, 0 },          { PQZ_OP_BURN, PQZ_BURN_STMT_BYTES, 0, 0 },
             { PQZ_OP_DISCLOSE_SENDER, PQZ_DISC_STMT_BYTES, 0, 0 },  { PQZ_OP_DISCLOSE_RECEIVER, PQZ_DISC_STMT_BYTES, 0, 0 },
-            { PQZ_OP_TRANSFER_MULTI, PQZ_TXM_STMT_BYTES (2, 1), 2, 1 } };
+            { PQZ_OP_TRANSFER_MULTI, PQZ_TXM_STMT_BYTES (2, 1), 2, 1 }, { PQZ_OP_TRANSFER, PQZ_TXS_STMT_BYTES, 0, 1 },
+            { PQZ_OP_TRANSFER, PQZ_TXS0_STMT_BYTES, 0, 0 } };
   const size_t used = pqz_arena_used ();
   int bad = 0;
   memset (st2, 0, sizeof st2);
@@ -685,7 +738,8 @@ main (int argc, char **argv)
   const unsigned long seed = argc > 4 ? strtoul (argv[4], NULL, 0) : 1;
   const int nps[NREL] = { nreg, ntx, argc > 6 ? atoi (argv[6]) : ntx, argc > 7 ? atoi (argv[7]) : ntx,
                           argc > 8 ? atoi (argv[8]) : ntx, argc > 9 ? atoi (argv[9]) : ntx };
-  const int ntxm = argc > 10 ? atoi (argv[10]) : 0;
+  const int ntxm = argc > 10 ? atoi (argv[10]) : 0, ntxs = argc > 11 ? atoi (argv[11]) : ntx;
+#define NP(rel) ((rel) < 6 ? nps[rel] : (rel) >= TXS_REL ? ntxs : ntxm)
   const char *amb = getenv ("PQZ_ARENA_MB");
   const size_t arena_bytes = amb != NULL ? (size_t)atoi (amb) << 20 : ARENA_BYTES;
   void *arena = malloc (arena_bytes);
@@ -704,8 +758,8 @@ main (int argc, char **argv)
   fails += bad_length_before_keys ();
   for (int rel = 0; rel < NREL; rel++)
     {
-      const size_t per = (size_t)(rel < 6 ? nps[rel] : ntxm) * (1 + muts * (14 + 16 + fuzz));
-      const int np = rel < 6 ? nps[rel] : ntxm;
+      const int np = NP (rel);
+      const size_t per = (size_t)np * (1 + muts * (14 + 16 + fuzz));
       tf[rel][0] = malloc (sizeof (double) * (np + 1));
       tf[rel][1] = malloc (sizeof (double) * (per + 1));
     }
@@ -714,7 +768,7 @@ main (int argc, char **argv)
       const uint8_t op = OPS[rel];
       const uint8_t *st = STMT[rel];
       const size_t stlen = STLEN[rel];
-      for (int i = 0; i < (rel < 6 ? nps[rel] : ntxm); i++)
+      for (int i = 0; i < NP (rel); i++)
         {
           uint8_t r32[32];
           size_t len = PQZ_MAX_PROOF;
@@ -727,6 +781,16 @@ main (int argc, char **argv)
             make_tx (); /* both transfer forms */
           else if (rel == 2)
             make_burn ();
+          else if (rel >= TXS_REL)
+            {
+              make_tx ();
+              if (!make_txs (rel == TXS_REL))
+                {
+                  printf ("{\"encrypt_failed\": \"%s\"}\n", RN[rel]);
+                  fails++;
+                  continue;
+                }
+            }
           else if (rel >= 6)
             make_txm (rel - 6);
           else

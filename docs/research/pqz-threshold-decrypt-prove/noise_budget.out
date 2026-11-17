@@ -1,0 +1,67 @@
+== per set
+n2048-kmax1024: log2q 42.00 q/D 2^16 D 67108863 (2^26.00) D/2 2^25.00 BF 11872 (2^13.54) acc 12145056 (2^23.53) E 2^24 head fresh 2^25.00 acc 2^24.35 ratio fresh 2826 acc 2.763
+n2304-kmax4096: log2q 45.80 q/D 2^18 D 233747196 (2^27.80) D/2 2^26.80 BF 13212 (2^13.69) acc 54103140 (2^25.69) E 2^26 head fresh 2^26.80 acc 2^25.90 ratio fresh 8846 acc 2.160
+n2560-kmax16384: log2q 50.00 q/D 2^20 D 1073741783 (2^30.00) D/2 2^29.00 BF 14624 (2^13.84) acc 239584992 (2^27.84) E 2^28 head fresh 2^29.00 acc 2^28.15 ratio fresh 36712 acc 2.241
+n2816-kmax65536: log2q 54.00 q/D 2^22 D 4294967295 (2^32.00) D/2 2^31.00 BF 15940 (2^13.96) acc 1044627900 (2^29.96) E 2^30 head fresh 2^31.00 acc 2^30.04 ratio fresh 134723 acc 2.056
+== uniform smudging: log2 B_sm, log2(B + t B_sm) over D/2, log2 q needed (q/D kept)
+n2048-kmax1024 fresh k40 Q2^0 t2: Bsm 2^56.5 over 2^32.5 q>=2^74.5 | t3: Bsm 2^56.5 over 2^33.1 q>=2^75.1 | t4: Bsm 2^56.5 over 2^33.5 q>=2^75.5
+n2048-kmax1024 fresh k40 Q2^20 t2: Bsm 2^76.5 over 2^52.5 q>=2^94.5 | t3: Bsm 2^76.5 over 2^53.1 q>=2^95.1 | t4: Bsm 2^76.5 over 2^53.5 q>=2^95.5
+n2048-kmax1024 fresh k80 Q2^0 t2: Bsm 2^96.5 over 2^72.5 q>=2^114.5 | t3: Bsm 2^96.5 over 2^73.1 q>=2^115.1 | t4: Bsm 2^96.5 over 2^73.5 q>=2^115.5
+n2048-kmax1024 fresh k80 Q2^20 t2: Bsm 2^116.5 over 2^92.5 q>=2^134.5 | t3: Bsm 2^116.5 over 2^93.1 q>=2^135.1 | t4: Bsm 2^116.5 over 2^93.5 q>=2^135.5
+n2048-kmax1024 acc k40 Q2^0 t2: Bsm 2^66.5 over 2^42.5 q>=2^84.5 | t3: Bsm 2^66.5 over 2^43.1 q>=2^85.1 | t4: Bsm 2^66.5 over 2^43.5 q>=2^85.5
+n2048-kmax1024 acc k40 Q2^20 t2: Bsm 2^86.5 over 2^62.5 q>=2^104.5 | t3: Bsm 2^86.5 over 2^63.1 q>=2^105.1 | t4: Bsm 2^86.5 over 2^63.5 q>=2^105.5
+n2048-kmax1024 acc k80 Q2^0 t2: Bsm 2^106.5 over 2^82.5 q>=2^124.5 | t3: Bsm 2^106.5 over 2^83.1 q>=2^125.1 | t4: Bsm 2^106.5 over 2^83.5 q>=2^125.5
+n2048-kmax1024 acc k80 Q2^20 t2: Bsm 2^126.5 over 2^102.5 q>=2^144.5 | t3: Bsm 2^126.5 over 2^103.1 q>=2^145.1 | t4: Bsm 2^126.5 over 2^103.5 q>=2^145.5
+n2304-kmax4096 fresh k40 Q2^0 t2: Bsm 2^56.7 over 2^30.9 q>=2^76.7 | t3: Bsm 2^56.7 over 2^31.5 q>=2^77.3 | t4: Bsm 2^56.7 over 2^31.9 q>=2^77.7
+n2304-kmax4096 fresh k40 Q2^20 t2: Bsm 2^76.7 over 2^50.9 q>=2^96.7 | t3: Bsm 2^76.7 over 2^51.5 q>=2^97.3 | t4: Bsm 2^76.7 over 2^51.9 q>=2^97.7
+n2304-kmax4096 fresh k80 Q2^0 t2: Bsm 2^96.7 over 2^70.9 q>=2^116.7 | t3: Bsm 2^96.7 over 2^71.5 q>=2^117.3 | t4: Bsm 2^96.7 over 2^71.9 q>=2^117.7
+n2304-kmax4096 fresh k80 Q2^20 t2: Bsm 2^116.7 over 2^90.9 q>=2^136.7 | t3: Bsm 2^116.7 over 2^91.5 q>=2^137.3 | t4: Bsm 2^116.7 over 2^91.9 q>=2^137.7
+n2304-kmax4096 acc k40 Q2^0 t2: Bsm 2^68.7 over 2^42.9 q>=2^88.7 | t3: Bsm 2^68.7 over 2^43.5 q>=2^89.3 | t4: Bsm 2^68.7 over 2^43.9 q>=2^89.7
+n2304-kmax4096 acc k40 Q2^20 t2: Bsm 2^88.7 over 2^62.9 q>=2^108.7 | t3: Bsm 2^88.7 over 2^63.5 q>=2^109.3 | t4: Bsm 2^88.7 over 2^63.9 q>=2^109.7
+n2304-kmax4096 acc k80 Q2^0 t2: Bsm 2^108.7 over 2^82.9 q>=2^128.7 | t3: Bsm 2^108.7 over 2^83.5 q>=2^129.3 | t4: Bsm 2^108.7 over 2^83.9 q>=2^129.7
+n2304-kmax4096 acc k80 Q2^20 t2: Bsm 2^128.7 over 2^102.9 q>=2^148.7 | t3: Bsm 2^128.7 over 2^103.5 q>=2^149.3 | t4: Bsm 2^128.7 over 2^103.9 q>=2^149.7
+n2560-kmax16384 fresh k40 Q2^0 t2: Bsm 2^56.8 over 2^28.8 q>=2^78.8 | t3: Bsm 2^56.8 over 2^29.4 q>=2^79.4 | t4: Bsm 2^56.8 over 2^29.8 q>=2^79.8
+n2560-kmax16384 fresh k40 Q2^20 t2: Bsm 2^76.8 over 2^48.8 q>=2^98.8 | t3: Bsm 2^76.8 over 2^49.4 q>=2^99.4 | t4: Bsm 2^76.8 over 2^49.8 q>=2^99.8
+n2560-kmax16384 fresh k80 Q2^0 t2: Bsm 2^96.8 over 2^68.8 q>=2^118.8 | t3: Bsm 2^96.8 over 2^69.4 q>=2^119.4 | t4: Bsm 2^96.8 over 2^69.8 q>=2^119.8
+n2560-kmax16384 fresh k80 Q2^20 t2: Bsm 2^116.8 over 2^88.8 q>=2^138.8 | t3: Bsm 2^116.8 over 2^89.4 q>=2^139.4 | t4: Bsm 2^116.8 over 2^89.8 q>=2^139.8
+n2560-kmax16384 acc k40 Q2^0 t2: Bsm 2^70.8 over 2^42.8 q>=2^92.8 | t3: Bsm 2^70.8 over 2^43.4 q>=2^93.4 | t4: Bsm 2^70.8 over 2^43.8 q>=2^93.8
+n2560-kmax16384 acc k40 Q2^20 t2: Bsm 2^90.8 over 2^62.8 q>=2^112.8 | t3: Bsm 2^90.8 over 2^63.4 q>=2^113.4 | t4: Bsm 2^90.8 over 2^63.8 q>=2^113.8
+n2560-kmax16384 acc k80 Q2^0 t2: Bsm 2^110.8 over 2^82.8 q>=2^132.8 | t3: Bsm 2^110.8 over 2^83.4 q>=2^133.4 | t4: Bsm 2^110.8 over 2^83.8 q>=2^133.8
+n2560-kmax16384 acc k80 Q2^20 t2: Bsm 2^130.8 over 2^102.8 q>=2^152.8 | t3: Bsm 2^130.8 over 2^103.4 q>=2^153.4 | t4: Bsm 2^130.8 over 2^103.8 q>=2^153.8
+n2816-kmax65536 fresh k40 Q2^0 t2: Bsm 2^57.0 over 2^27.0 q>=2^81.0 | t3: Bsm 2^57.0 over 2^27.5 q>=2^81.5 | t4: Bsm 2^57.0 over 2^28.0 q>=2^82.0
+n2816-kmax65536 fresh k40 Q2^20 t2: Bsm 2^77.0 over 2^47.0 q>=2^101.0 | t3: Bsm 2^77.0 over 2^47.5 q>=2^101.5 | t4: Bsm 2^77.0 over 2^48.0 q>=2^102.0
+n2816-kmax65536 fresh k80 Q2^0 t2: Bsm 2^97.0 over 2^67.0 q>=2^121.0 | t3: Bsm 2^97.0 over 2^67.5 q>=2^121.5 | t4: Bsm 2^97.0 over 2^68.0 q>=2^122.0
+n2816-kmax65536 fresh k80 Q2^20 t2: Bsm 2^117.0 over 2^87.0 q>=2^141.0 | t3: Bsm 2^117.0 over 2^87.5 q>=2^141.5 | t4: Bsm 2^117.0 over 2^88.0 q>=2^142.0
+n2816-kmax65536 acc k40 Q2^0 t2: Bsm 2^73.0 over 2^43.0 q>=2^97.0 | t3: Bsm 2^73.0 over 2^43.5 q>=2^97.5 | t4: Bsm 2^73.0 over 2^44.0 q>=2^98.0
+n2816-kmax65536 acc k40 Q2^20 t2: Bsm 2^93.0 over 2^63.0 q>=2^117.0 | t3: Bsm 2^93.0 over 2^63.5 q>=2^117.5 | t4: Bsm 2^93.0 over 2^64.0 q>=2^118.0
+n2816-kmax65536 acc k80 Q2^0 t2: Bsm 2^113.0 over 2^83.0 q>=2^137.0 | t3: Bsm 2^113.0 over 2^83.5 q>=2^137.5 | t4: Bsm 2^113.0 over 2^84.0 q>=2^138.0
+n2816-kmax65536 acc k80 Q2^20 t2: Bsm 2^133.0 over 2^103.0 q>=2^157.0 | t3: Bsm 2^133.0 over 2^103.5 q>=2^157.5 | t4: Bsm 2^133.0 over 2^104.0 q>=2^158.0
+== best SD inside today's parameters, Q = 1
+n2048-kmax1024 fresh t2: SD 2^-7.5 t3: SD 2^-6.9 t4: SD 2^-6.5
+n2048-kmax1024 acc t2: SD 2^3.2 t3: SD 2^3.8 t4: SD 2^4.2
+n2304-kmax4096 fresh t2: SD 2^-9.1 t3: SD 2^-8.5 t4: SD 2^-8.1
+n2304-kmax4096 acc t2: SD 2^3.8 t3: SD 2^4.4 t4: SD 2^4.8
+n2560-kmax16384 fresh t2: SD 2^-11.2 t3: SD 2^-10.6 t4: SD 2^-10.2
+n2560-kmax16384 acc t2: SD 2^3.7 t3: SD 2^4.3 t4: SD 2^4.7
+n2816-kmax65536 fresh t2: SD 2^-13.0 t3: SD 2^-12.5 t4: SD 2^-12.0
+n2816-kmax65536 acc t2: SD 2^3.9 t3: SD 2^4.5 t4: SD 2^4.9
+== Renyi (order 2 <= e) Gaussian flooding: largest Q per key, tail 13 sigma
+n2048-kmax1024 fresh t2: Qmax 2^10.5 t3: Qmax 2^9.9 t4: Qmax 2^9.5
+n2048-kmax1024 acc t2: Qmax <1 (2^-10.8) t3: Qmax <1 (2^-11.4) t4: Qmax <1 (2^-11.8)
+n2304-kmax4096 fresh t2: Qmax 2^13.8 t3: Qmax 2^13.2 t4: Qmax 2^12.8
+n2304-kmax4096 acc t2: Qmax <1 (2^-12.0) t3: Qmax <1 (2^-12.6) t4: Qmax <1 (2^-13.0)
+n2560-kmax16384 fresh t2: Qmax 2^17.9 t3: Qmax 2^17.3 t4: Qmax 2^16.9
+n2560-kmax16384 acc t2: Qmax <1 (2^-11.8) t3: Qmax <1 (2^-12.4) t4: Qmax <1 (2^-12.8)
+n2816-kmax65536 fresh t2: Qmax 2^21.7 t3: Qmax 2^21.1 t4: Qmax 2^20.7
+n2816-kmax65536 acc t2: Qmax <1 (2^-12.2) t3: Qmax <1 (2^-12.8) t4: Qmax <1 (2^-13.2)
+check Renyi n2304 fresh t3 Q=2^12: 2^26.18 < D/2 2^26.80
+== chosen-credit key recovery if noise is ever opened: ceil(2n/16) credits
+n2048-kmax1024 256
+n2304-kmax4096 288
+n2560-kmax16384 320
+n2816-kmax65536 352
+== honest fresh noise sigma (context)
+n2048-kmax1024 143.1
+n2304-kmax4096 151.8
+n2560-kmax16384 160.0
+n2816-kmax65536 167.8

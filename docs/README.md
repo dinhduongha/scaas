@@ -52,7 +52,9 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
   Universal Account of any signing kind, post-quantum included, through the UA ledger in the token base
   ([CTR-UA-18](contracts/accounts.md#CTR-UA-18), [CTR-UA-23](contracts/accounts.md#CTR-UA-23)).
 - **Features** are chosen at creation and never set later (disableable flags can be cleared): `PAYABLE`, `MINTABLE`,
-  `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, and for regulated tokens `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`.
+  `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, and for regulated tokens `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`;
+  SPECIFIED for build 3zb + 3zc: `BURNER` (only a role holder burns its own units, [CTR-GOV-29](decisions.md#CTR-GOV-29)) and
+  `SUPPLY_CAP_ADJUSTABLE` (wrapped supply caps, [CTR-GOV-30](decisions.md#CTR-GOV-30)).
 - **Owner.** One owner administers a token, grants roles and may renounce
   ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). An open factory creates tokens and DEX clones. One governance layer, `GovernanceBase`, holds owner, bits, holders, grants and the delay on every token kind and the DEX; every identity is a UA id, and a UA governs through the chain's `GovernanceRouter` (BUILT on branch `governance`, EVM; [contracts/README.md](contracts/README.md#governance), [CTR-GOV-01](decisions.md#ctr-gov-01--governancebase-on-every-token-kind-and-the-dex)).
 
@@ -151,14 +153,15 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | Doc | Covers |
 |---|---|
 | [README](contracts/README.md) | Immutability, admin powers, production gates, build pins |
-| [metatx.md](contracts/metatx.md) | `MetaTransaction` / `MetaTransfer`, lanes, `mtxExecute`, fees, names |
-| [token-wrappers.md](contracts/token-wrappers.md) | Token tree and kinds, features and owner, libraries, rates and reserve, factory |
+| [metatx.md](contracts/metatx.md) | `MetaTransaction` / `MetaTransfer`, lanes, `mtxExecute`, fees, names, payment metadata and records, service pull |
+| [token-wrappers.md](contracts/token-wrappers.md) | Token tree and kinds, features and owner, libraries, rates and reserve, factory: index, class catalogue, chain-neutral releases |
 | [accounts.md](contracts/accounts.md) | Native accounts, Universal Account registry, `SmartKeyAccount` |
 | [mandates.md](contracts/mandates.md) | `MandateWallet`: delegated payments without allowances |
 | [dex.md](contracts/dex.md) | `TradeOrder`, the DEX, AMM exchange path, `DexPuller` |
 | [tender.md](contracts/tender.md) | Sealed-bid tender |
 | [asset-suite.md](contracts/asset-suite.md) | Regulated flags, vesting, distributions, `ExchangeOffer`, templates |
-| [zether.md](contracts/zether.md) · [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) | Classical Zether and PQZ: shield / transfer / unshield, proofs, disclosure |
+| [zether.md](contracts/zether.md) · [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) | Classical Zether; PQZ: shield / transfer / unshield, proofs, disclosure (PQZ also: verifier mode, key versions, proof path) |
+| [pqchat.md](contracts/pqchat.md) | `PqChat`: post-quantum chat sessions, epochs, messages, public topics |
 | [settlement.md](contracts/settlement.md) | Map of every settlement kind: entry points, who checks what, fees, finality |
 
 ### Node (`NODE-*`)

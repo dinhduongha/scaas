@@ -82,18 +82,26 @@ _BY = {k[0]: k for k in KINDS}
 _SCHEME = {s[0]: s for s in SCHEMES}
 GROUPS = ('p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
           'fndsa512', 'slhdsa128s', 'mldsa87', 'fndsa1024', 'pqz-mlwe')
-PURPOSES = ('pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee',
-            'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership')
+PURPOSES = ('pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'payee-fee',
+            'vp', 'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update')
 
 
-# The governance bits 0-21 (spec 2026-11-02-governance 1.2): (name, type) by bit. The disclosure sentences are read by the app
-# from smartcontracts/vectors/governance/governance_bits.json; bits 22-127 are free, 128-255 the application's bitLabel(bit).
+# The governance bits 0-31 (spec 2026-11-02-governance 1.2): (name, type) by bit. The disclosure sentences are read by the app
+# from smartcontracts/vectors/governance/governance_bits.json; bits 32-127 are free, 128-255 the application's bitLabel(bit).
 GOVERNANCE_BITS = (
     ('PAYABLE', 'capability'), ('MINTABLE', 'power'), ('BURNABLE', 'capability'), ('RATE_ADJUSTABLE', 'power'),
-    ('WRAP_DISABLEABLE', 'power'), ('FREEZE', 'power'), ('FORCE', 'power'), ('PAUSE', 'power'), ('ALLOWLIST', 'capability'),
-    ('DENYLIST', 'capability'), ('RECORD', 'power'), ('LISTING', 'power'), ('FEE_ROUTING', 'power'), ('', 'unused'), ('', 'unused'),
+    ('WRAP_DISABLEABLE', 'power'), ('FREEZE', 'power'), ('FORCE', 'power'), ('PAUSE', 'power'), ('ALLOWLIST', 'power'),
+    ('DENYLIST', 'power'), ('RECORD', 'power'), ('LISTING', 'power'), ('FEE_ROUTING', 'power'), ('', 'unused'), ('', 'unused'),
     ('ARBITRATE', 'reserved'), ('CORRECT', 'reserved'), ('RESCUABLE', 'capability'), ('PUBLISH', 'power'), ('DEPRECATE', 'power'),
-    ('ENABLE_KIND', 'power'), ('MODERATE', 'power'),
+    ('ENABLE_KIND', 'power'), ('MODERATE', 'power'), ('OPERATOR_TRANSFER', 'power'), ('TAX', 'power'), ('PQZ_PROOF', 'power'),
+    # group 3l (wrap limits spec 2026-11-10 §2): the hybrids' wrap controls
+    ('WRAP_LIMIT', 'capability'), ('WRAP_LIST', 'power'), ('REDEEMER', 'power'),
+    # round 3s (CTR-GOV-24): 8, 9 the token's lists (powers), 28 the compliance registry check
+    ('KYC', 'capability'),
+    # CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
+    ('CLOSED_MARKETS', 'capability'),
+    # round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
+    ('BURNER', 'power'), ('SUPPLY_CAP_ADJUSTABLE', 'capability'),
 )
 
 
@@ -252,6 +260,7 @@ PORTABLE_DOMAIN_SEPARATOR = keccak256(keccak256(PORTABLE_DOMAIN_TYPE.encode()), 
 _KEM_TYPE = 'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)'
 _RECORD_TYPE = 'UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)'
 _PQZ_KEY_TYPE = 'UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)'
+_PQZ_KEY_VERSION_TYPE = 'UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)'
 # encodeType of each portable struct: primary, then the referenced types sorted by name
 PORTABLE_TYPES = {
     'UAKemRecord': _KEM_TYPE,
@@ -259,7 +268,13 @@ PORTABLE_TYPES = {
     'UARegistration': 'UARegistration(UAPortableRecord record,bytes32 pqzPopHash)' + _KEM_TYPE + _RECORD_TYPE,
     'UAPqzKey': _PQZ_KEY_TYPE,
     'UAPqzKeyRecord': 'UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + _PQZ_KEY_TYPE,
+    'UAPqzKeyVersion': _PQZ_KEY_VERSION_TYPE,
+    'UAPqzKeyVersionRecord': 'UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)' + _PQZ_KEY_VERSION_TYPE,
     'UAMembership': 'UAMembership(bytes32 ua,bytes32 member)',
+    # CTR-UA-44 (TODO 3ze): an msig's structure update on one registry
+    'UAMsigUpdate': 'UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,'
+                    'uint256 enabled,uint64 validUntilBlock)UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
+    'UAMsigMember': 'UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
 }
 
 
@@ -317,15 +332,22 @@ def registration_digest(ua, kind, pqz_key_hash, kem_record_hash_, pqz_pop_hash):
 
 
 def kem_record_message(kind, ua, version, kem_pk):
-    """What the UA signs for a KEM record: ``ua_message(kind, PURPOSE_KEM, kem_record_digest)``."""
+    """What the UA signs for a KEM record: ``ua_message(kind, PURPOSE_KEM, kem_record_digest)``; a KEM holder only (UAKemHolder)."""
+    if not is_kem_holder(kind):
+        raise UAError('UAKemHolder', f'0x{kind:04x} may not hold a KEM key')
     return ua_message(kind, purpose_tag('kem'), kem_record_digest(ua, version, kem_pk))
 
 
 def _holds(kind, key_data, inner=None):
-    """A PQZ / KEM holder: a single-key PQ kind, or an msig whose key data is PQ-eligible (malformed -> UAKeyData)."""
+    """A PQZ key holder: a single-key PQ kind, or an msig whose key data is PQ-eligible (malformed -> UAKeyData)."""
     if is_pqz_holder(kind):
         return True
     return kind == 0x0120 and len(_bytes(key_data)) > 0 and msig_pqz_eligible(key_data, inner)
+
+
+def is_kem_holder(kind):
+    """A KEM key holder (CTR-UA-32, T66a): the single PQ kinds only; an msig holds no KEM key (UAKemHolder, as the registry)."""
+    return is_pqz_holder(kind)
 
 
 def _pqz_key_hash_of(pqz_key):
@@ -362,14 +384,14 @@ UAPortableRecord, ``registration_digest`` the typed UARegistration. ``member_dig
 def holder_pop_message(kind, ua, key_data=b'', pqz_key=None, pqz_pop=None, pqz_pop_hash=None, kem_pk=None, inner=None):
     """The portable PoP of a registration (UA-8 P1, P2): a HolderPop. ``pqz_key`` with its proof ``pqz_pop`` (or only its hash
     ``pqz_pop_hash``) and the initial KEM key ``kem_pk`` (its record is always version 0, owner 2026-10-31); None / b'' = absent. Only holders
-    carry them (UAPqzHolder, UAKemHolder; an msig needs ``key_data`` to show it is PQ-eligible); a PQZ key always comes with
+    carry them (UAPqzHolder: an msig needs ``key_data`` to show it is PQ-eligible; UAKemHolder: a single PQ kind only, never an msig); a PQZ key always comes with
     its proof hash and only with it (UAPqzPopHash). ``inner``: see msig_pqz_eligible."""
     if pqz_key is not None and len(pqz_key) == 0:
         pqz_key = None
     kem = kem_pk if kem_pk is not None and len(kem_pk) else None
-    if (pqz_key is not None or kem is not None) and not _holds(kind, key_data, inner):
-        if pqz_key is not None:
-            raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
+    if pqz_key is not None and not _holds(kind, key_data, inner):
+        raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
+    if kem is not None and not is_kem_holder(kind):
         raise UAError('UAKemHolder', f'0x{kind:04x} may not hold a KEM key')
     pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash)
     if (pqz_key is not None) != any(pop_hash):
@@ -406,6 +428,15 @@ def membership_digest(ua, member):
     return _typed(hash_struct('UAMembership', ua, member))
 
 
+def msig_update_digest(ua, chain_uid, registry, version, threshold, members, enabled, valid_until_block):
+    """CTR-UA-44: the typed ``UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}``, ``members``
+    ``(kind, id, weight)`` tuples hashed as an EIP-712 array of ``UAMsigMember``, ``enabled`` the uint256 bitmap (bit i = slot i): what a
+    quorum of the stored structure signs for ``updateMsig`` on that one registry, under ``ua_message(MSIG, PURPOSE_MSIG_UPDATE, ·)``."""
+    hs = b''.join(hash_struct('UAMsigMember', _word(k), i, _word(w)) for k, i, w in members)
+    return _typed(hash_struct('UAMsigUpdate', ua, chain_uid, _address_word(registry), _word(version), _word(threshold), keccak256(hs),
+                              _word(enabled), _word(valid_until_block)))
+
+
 PqzKeyRecord = namedtuple('PqzKeyRecord', 'pqz_key_hash pqz_pop_hash pqz_key_digest record_digest message pqz_reg_message '
                                           'member_digest')
 
@@ -427,6 +458,47 @@ def pqz_key_record_message(kind, ua, key_data, pqz_key, pqz_pop=None, pqz_pop_ha
     tag = purpose_tag('pqz-key')
     msg = ua_message(kind, tag, rd)
     return PqzKeyRecord(kh, pop_hash, kd, rd, msg, ua_message(0x0142, tag, kd), member_digest(ua, msg) if kind == 0x0120 else None)
+
+
+def pqz_key_version_digest(ua, version, pqz_key_hash):
+    """Group 3g: the typed ``UAPqzKeyVersion{ua, version, pqzKeyHash}``, what version v >= 1's R_REG proves over."""
+    return _typed(hash_struct('UAPqzKeyVersion', ua, _word(version), pqz_key_hash))
+
+
+def pqz_key_version_record_digest(ua, version, pqz_key_hash, pqz_pop_hash):
+    """Group 3g: the typed ``UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}``, what the UA signs for
+    version v >= 1 under ``ua_message(kind, PURPOSE_PQZ_KEY, ·)``."""
+    return _typed(hash_struct('UAPqzKeyVersionRecord', hash_struct('UAPqzKeyVersion', ua, _word(version), pqz_key_hash), pqz_pop_hash))
+
+
+PqzKeyVersionRecord = namedtuple('PqzKeyVersionRecord', 'pqz_key_hash pqz_pop_hash version_digest record_digest message pqz_reg_message '
+                                 'member_digest')
+
+
+def pqz_key_version_record_message(kind, ua, key_data, version, pqz_key, pqz_pop=None, pqz_pop_hash=None, stored=(), inner=None):
+    """Group 3g (KV-1): PQZ key version ``version`` >= 1 of ``setPqzKey(ua, version, ...)``: a PqzKeyVersionRecord. ``stored``: the UA's
+    stored versions as ``(version, pqz_key_hash)`` (the chain's ``pqzKeyAt``), read first: version 0 (UAPqzKeySet: a new key gets a new
+    version), a version other than latest + 1 or no version 0 (UAPqzKeyVersion), a key a stored version holds (UAKeyInUse)."""
+    if not _holds(kind, key_data, inner):
+        raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
+    if not 0 <= version < 1 << 64:
+        raise UAError('UAPqzKeyVersion', str(version))
+    if version == 0:
+        raise UAError('UAPqzKeySet', 'version 0 is write-once: a new key gets a new version')
+    versions = [v for v, _ in stored]
+    if 0 not in versions or version != max(versions) + 1:
+        raise UAError('UAPqzKeyVersion', str(version))
+    kh = _pqz_key_hash_of(pqz_key)
+    if any(bytes(h) == kh for _, h in stored):
+        raise UAError('UAKeyInUse', 'a stored version holds this key')
+    pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash)
+    if not any(pop_hash):
+        raise UAError('UAPqzPopHash', 'a PQZ key record needs its proof hash')
+    vd = pqz_key_version_digest(ua, version, kh)
+    rd = pqz_key_version_record_digest(ua, version, kh, pop_hash)
+    tag = purpose_tag('pqz-key')
+    msg = ua_message(kind, tag, rd)
+    return PqzKeyVersionRecord(kh, pop_hash, vd, rd, msg, ua_message(0x0142, tag, vd), member_digest(ua, msg) if kind == 0x0120 else None)
 
 
 def is_portable_purpose(purpose_tag_bytes):
@@ -466,6 +538,28 @@ def canonical_id(text):
         raise UAError('UAIdFormat', repr(text))
     h = m.group(1).lower()
     return '0x' + (h[24:] if len(h) == 64 and h.startswith('0' * 24) else h)
+
+
+
+_ID32 = re.compile(r'0x([0-9a-fA-F]{64})')
+
+
+def id_display(id, kind=0):
+    """How a client shows a bytes32 id before the user signs (ua-mtx-merge spec §6, MD-9): the EIP-55 address of an id in the
+    native space (top 96 bits zero, CTR-UA-03), else the URN ``urn:scaas:ua:v1:<kind name>:<hex32>`` (NET-ALL-21) under ``kind``,
+    the id's registry kind (0 = none known: refused, never an address). ``id`` is ``0x`` + 64 hex digits."""
+    m = _ID32.fullmatch(id) if isinstance(id, str) else None
+    if not m:
+        raise UAError('UAIdFormat', repr(id))
+    h = m.group(1).lower()
+    if h.startswith('0' * 24):
+        a = h[24:]
+        d = keccak256(a.encode()).hex()
+        return '0x' + ''.join(c.upper() if int(d[i], 16) >= 8 else c for i, c in enumerate(a))
+    k = kind_info(kind)
+    if k[2]:
+        raise UAError('UAKindNotDerived', k[1])
+    return 'urn:scaas:ua:v1:%s:%s' % (k[1], h)
 
 
 def msig_pqz_eligible(key_data, inner=None):
@@ -818,6 +912,12 @@ def set_pqz_key_args(ua, pqz_key, pqz_pop_hash, sig):
             'sig': sig}
 
 
+def set_pqz_key_version_args(ua, version, pqz_key, pqz_pop_hash, sig):
+    """Group 3g: ``setPqzKey(ua, version, pqzKey, pqzPopHash, UASig)``; version 0 is set_pqz_key_args' row."""
+    return {'ua': _hx(_sized(ua, 32, 'ua')), 'version': version, 'pqzKey': _hx(_bytes(pqz_key)),
+            'pqzPopHash': _hx(_sized(pqz_pop_hash, 32, 'pqzPopHash')), 'sig': sig}
+
+
 def _tail(h):  # a `bytes` tail: length word + data padded to 32
     return 32 + -(-(len(h) - 2) // 64) * 32
 
@@ -876,6 +976,8 @@ def registration_args(kind, key_data, pqz_key=None, pqz_pop_hash=None, pqz_pop=N
     forces the full key. ``pop``: the signer's signature bytes, or for an msig (index, inner, sig) member tuples."""
     key_data = _bytes(key_data)
     has = lambda v: v is not None and len(v) > 0
+    if has(kem_pk) and not is_kem_holder(kind):
+        raise UAError('UAKemHolder', f'0x{kind:04x} may not hold a KEM key')
     pop_hash = _proof_hash_of(pqz_pop, pqz_pop_hash) if has(pqz_key) or has(pqz_pop_hash) else bytes(32)
     attrs = {'pqzKey': _hx(pqz_key or b''), 'pqzPopHash': _hx(pop_hash), 'kem': kem_key_of(kem_pk), 'kemPkHash': _ZW}
     entry = _TYPED_ENTRY.get(kind, 'register')

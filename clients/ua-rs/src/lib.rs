@@ -43,6 +43,10 @@ pub enum UAError {
     PqzPopHash,
     /// `setPqzKey` on a registration that already has a PQZ key (write-once).
     PqzKeySet,
+    /// Group 3g (KV-1): a PQZ key version other than `latest + 1`, or no version 0 stored.
+    PqzKeyVersion,
+    /// Group 3g (KV-1): a stored version of the UA holds this PQZ key.
+    KeyInUse,
     /// `ua8::check_registration`: the `pop` is not a valid signature of the record.
     Pop,
     /// `ua8::check_kem_record`, `ua8::check_pqz_key_record`: the signature is not the UA's over the record.
@@ -70,6 +74,8 @@ impl UAError {
             UAError::KemScheme => "UAKemScheme",
             UAError::PqzPopHash => "UAPqzPopHash",
             UAError::PqzKeySet => "UAPqzKeySet",
+            UAError::PqzKeyVersion => "UAPqzKeyVersion",
+            UAError::KeyInUse => "UAKeyInUse",
             UAError::Pop => "UAPoP",
             UAError::Unauthorized => "UAUnauthorized",
             UAError::MemberUnknown => "UAMemberUnknown",
@@ -157,8 +163,8 @@ pub const GROUPS: &[&str] = &[
 ];
 
 pub const PURPOSES: &[&str] = &[
-    "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
-    "vc-anchor", "trade", "kem", "pqz-key", "membership",
+    "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "payee-fee", "vp",
+    "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update",
 ];
 
 pub const DOMAIN_TYPE: &str =
@@ -179,7 +185,7 @@ pub fn meta_pay_id(salt: &[u8; 32], meta: &[u8]) -> [u8; 32] {
 pub fn pay_lane(p: &[u8; 32]) -> [u8; 32] {
     keccak(&[b"scaas.pay.lane", p])
 }
-/// CTR-MTX-27 (EVM `MtxRelayFee.relayRef`): `keccak256("scaas.relayfee" ‖ uint256 chain_id ‖ target ‖ keccak256(call_data))`.
+/// CTR-MTX-27 (EVM `RelayFeeRouter.relayRef`): `keccak256("scaas.relayfee" ‖ uint256 chain_id ‖ target ‖ keccak256(call_data))`.
 /// Other families use their own `ref` forms (salted, family address bytes); this is the EVM one only.
 pub fn relay_ref(chain_id: u64, target: &[u8; 20], call_data: &[u8]) -> [u8; 32] {
     keccak(&[b"scaas.relayfee", &word(chain_id), target, &keccak256(call_data)])
@@ -197,7 +203,7 @@ pub(crate) fn keccak(parts: &[&[u8]]) -> [u8; 32] {
 /// (`GovBitsVector.t.sol`), one row per line.
 pub const GOVERNANCE_BITS_JSON: &str = include_str!("../../../smartcontracts/vectors/governance/governance_bits.json");
 
-/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-21; `None` past them (bits 22-127
+/// Governance bit `bit`'s row as the file's JSON object, `{bit, name, type, sentences}`: rows 0-31; `None` past them (bits 32-127
 /// are free, bits 128-255 the application contract's own, labelled by its `bitLabel(bit)`).
 pub fn governance_bit(bit: u8) -> Option<&'static str> {
     let head = format!("{{\"bit\": {bit}, ");
@@ -242,8 +248,12 @@ pub fn msig_pqz_eligible(key_data: &[u8]) -> Result<bool> {
     msig_pqz_eligible_with(key_data, &|_| None)
 }
 /// `msig_pqz_eligible` with `inner`, an `msig` member's key data by its id: a member is PQ if its kind is in 0x0130-0x0135, or it is an
-/// `msig` that is PQ-eligible itself; none, or an `inner` that holds an `msig` (two levels only), is `MemberUnknown`.
+/// `msig` that is PQ-eligible itself; none is `MemberUnknown`. CTR-UA-44 MM-14: at that member's own level its `msig` slots are classical
+/// weight, never followed (a member that grew a level since it was listed).
 pub fn msig_pqz_eligible_with(key_data: &[u8], inner: &dyn Fn([u8; 32]) -> Option<Vec<u8>>) -> Result<bool> {
+    eligible_at(key_data, Some(inner))
+}
+fn eligible_at(key_data: &[u8], inner: Option<&dyn Fn([u8; 32]) -> Option<Vec<u8>>>) -> Result<bool> {
     let u16_at = |o: usize| key_data.get(o..o + 2).map(|s| u16::from_be_bytes([s[0], s[1]]) as usize);
     let bad = || UAError::KeyData("length");
     let count = u16_at(2).ok_or_else(bad)?;
@@ -254,10 +264,13 @@ pub fn msig_pqz_eligible_with(key_data: &[u8], inner: &dyn Fn([u8; 32]) -> Optio
     for i in 0..count {
         let o = 4 + 36 * i;
         let kind = u16_at(o).ok_or_else(bad)?;
-        let pq = (0x0130..=0x0135).contains(&kind) || (kind == 0x0120 && {
-            let id: [u8; 32] = key_data[o + 2..o + 34].try_into().expect("32 bytes");
-            msig_pqz_eligible(&inner(id).ok_or(UAError::MemberUnknown)?)?
-        });
+        let pq = (0x0130..=0x0135).contains(&kind) || match (kind, inner) {
+            (0x0120, Some(f)) => {
+                let id: [u8; 32] = key_data[o + 2..o + 34].try_into().expect("32 bytes");
+                eligible_at(&f(id).ok_or(UAError::MemberUnknown)?, None)?
+            }
+            _ => false,
+        };
         if !pq {
             classical += u16_at(o + 34).ok_or_else(bad)?;
         }
@@ -434,6 +447,47 @@ pub fn canonical_id(text: &str) -> Result<String> {
     })
 }
 
+/// How a client shows a `bytes32` id before the user signs (ua-mtx-merge spec §6, MD-9).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IdDisplay {
+    /// The top 96 bits are zero (CTR-UA-03): the EIP-55 address the contract reads.
+    Native { address: String },
+    /// Any other id: `urn:scaas:ua:v1:<kind name>:<hex32>` (NET-ALL-21), never an address.
+    Derived { urn: String },
+}
+impl IdDisplay {
+    /// The address or the URN.
+    pub fn text(&self) -> &str {
+        match self {
+            IdDisplay::Native { address } => address,
+            IdDisplay::Derived { urn } => urn,
+        }
+    }
+}
+
+/// `id` is `0x` + 64 hex digits; `kind` is a derived id's kind from its registry record (0 = none known: refused). A native-space
+/// id ignores `kind`. Pinned by smartcontracts/vectors/ua/id_display.json.
+pub fn id_display(id: &str, kind: u16) -> Result<IdDisplay> {
+    let h = id.strip_prefix("0x").filter(|h| h.len() == 64 && h.bytes().all(|c| c.is_ascii_hexdigit())).ok_or(UAError::IdFormat)?;
+    let h = h.to_ascii_lowercase();
+    if h.as_bytes()[..24].iter().all(|c| *c == b'0') {
+        return Ok(IdDisplay::Native { address: checksum_address(&h[24..]) });
+    }
+    let k = kind_info(kind)?;
+    if k.native {
+        return Err(UAError::KindNotDerived(kind));
+    }
+    Ok(IdDisplay::Derived { urn: format!("urn:scaas:ua:v1:{}:{h}", k.name) })
+}
+
+/// EIP-55 of 40 lower-case hex digits: a letter is upper case where its nibble of `keccak256(digits)` is 8 or more.
+fn checksum_address(lower: &str) -> String {
+    let h = keccak256(lower.as_bytes());
+    let up = |i: usize| (h[i / 2] >> (4 * (1 - i % 2))) & 0xf >= 8;
+    let body: String = lower.chars().enumerate().map(|(i, c)| if up(i) { c.to_ascii_uppercase() } else { c }).collect();
+    format!("0x{body}")
+}
+
 /// `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)`.
 pub fn encode_msig(threshold: u16, members: &[(u16, [u8; 32], u16)]) -> Vec<u8> {
     let mut out = Vec::with_capacity(4 + 36 * members.len());
@@ -446,3 +500,14 @@ pub fn encode_msig(threshold: u16, members: &[(u16, [u8; 32], u16)]) -> Vec<u8> 
     }
     out
 }
+
+/// ua-mtx-merge T34: the regulated kinds' router ops, `recordId`, the relaxation `commit`, `R` (regulated-kinds spec §3, §5).
+pub mod regulated;
+pub mod pay;
+pub mod wraplimit;
+/// Round 3t: the router's `UASetVerifierFee` and a PQZ debit's fee word (CTR-PQZ-36).
+pub mod pqzfee;
+/// Round 3r: the router's 18 admin ops and the factory's release approval keys (CTR-GOV-23).
+pub mod admin;
+/// The PQZ three-key model: the scoped seeds, the opening KEM seed, the leg seed, `memoHash`, `PqzRollOver` (CTR-PQZ-37 .. -41).
+pub mod pqz3k;

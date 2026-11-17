@@ -1,0 +1,131 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+pragma solidity ^0.8.24;
+
+/// @title The governance surface of every SCaaS contract (CTR-GOV-01, CTR-TOK-22); events and errors raised by
+///        `GovernanceLib`. Every name of the former `ITokenAdmin` is kept.
+interface IGovernance {
+    /// @notice A capability has no holder and binds or serves everyone; a power has holders. The type is `_roleBits()`.
+    enum BitType { CAPABILITY, POWER }
+
+    /// @notice What a grantor chooses (CTR-GOV-02). 0 = no bound, except `max`: `type(uint128).max` = no bound. `delegable`
+    ///         only from the owner: a leaf cannot delegate. `scope` is opaque to the base; the contract reads it.
+    struct GrantTerms {
+        uint128 min;
+        uint128 max;
+        uint128 total;
+        uint128 perWindow;
+        uint32 window;
+        uint64 validUntil;
+        uint32 maxUses;
+        bool delegable;
+        bytes32 scope;
+    }
+
+    /// @notice A limited holder's record: the terms plus what has been spent, which an edit carries (six slots).
+    ///         Every identity this interface names is a UA id (`bytes32`): a native account's is its padded address, a
+    ///         derived UA's its registered id (CTR-GOV-01 Change, owner 2026-11-04).
+    struct Grant {
+        uint128 min;
+        uint128 max;
+        uint128 total;
+        uint128 spentTotal;
+        uint128 perWindow;
+        uint128 spentInWindow;
+        uint32 window;
+        uint32 windowStart;
+        uint64 validUntil;
+        uint32 maxUses;
+        uint32 uses;
+        uint32 grantorEpoch;
+        bool delegable;
+        /// @dev Set by the owner's revoke: only the owner re-admits the account (B-05, spec §1.5).
+        bool barred;
+        bytes32 scope;
+        /// @dev The UA that granted a leaf; 0 on a root (CTR-GOV-01 Change: every identity is a UA id).
+        bytes32 grantor;
+    }
+
+    event RoleGranted(uint8 indexed bit, bytes32 indexed account, bytes32 indexed sender);
+    event RoleRevoked(uint8 indexed bit, bytes32 indexed account, bytes32 indexed sender);
+    event FeatureDisabled(uint8 indexed bit, bytes32 indexed by);
+    event GrantSet(uint8 indexed bit, bytes32 indexed holder, bytes32 indexed grantor);
+    event GrantUsed(uint8 indexed bit, bytes32 indexed holder, uint256 scalar);
+    event OwnershipTransferStarted(bytes32 indexed previousOwner, bytes32 indexed newOwner);
+    event OwnershipTransferred(bytes32 indexed previousOwner, bytes32 indexed newOwner);
+    /// @notice The first of the owner's two calls (spec §1.6): `terms` for a wallet to compare with `termsHash`; `whole` is
+    ///         a `grantRole`, its terms empty.
+    event GrantProposed(uint8 indexed bit, bytes32 indexed account, bytes32 indexed proposer, uint64 eta, bool whole,
+        GrantTerms terms);
+    event GrantCancelled(uint8 indexed bit, bytes32 indexed account, bytes32 indexed by);
+
+    error FeatureInvalidForKind(uint8 bit);
+    error FeatureNotBuilt(uint8 bit);
+    error LockedNotSubset();
+    error RoleWithoutFeature(uint8 bit);
+    error RoleNotContract(uint8 bit, bytes32 account);
+    error RoleAccountZero(uint8 bit);
+    error NoSuchRole(uint8 bit);
+    error FeatureLocked(uint8 bit);
+    error FeatureNotSet(uint8 bit);
+    error NotOwner(bytes32 caller);
+    error NotPendingOwner(bytes32 caller);
+    error MissingRole(uint8 bit, bytes32 account);
+    /// @notice No band is refused since CTR-GOV-10's Change (owner 2026-11-04): bits 0-127 are SCaaS's, 128-255 each
+    ///         application's, and a `uint8` bit and the `uint256` word hold no other. No path raises it; the declaration stays.
+    error FeatureReserved(uint8 bit);
+    /// @notice `UA_POOL` and `SHIELD_POOL` hold no power.
+    error RoleAccountPool(uint8 bit, bytes32 account);
+    /// @notice A leaf's term is wider than its parent's (`field`: 0 min, 1 max, 2 total, 3 perWindow, 4 validUntil, 5 maxUses,
+    ///         6 delegable, 7 scope, 8 window).
+    error GrantNotNarrower(uint8 field);
+    /// @notice A word the contract does not bind for `bit` (spec §1.5, B-09, B-10): outside `_scalarBits()` any of `min` (0),
+    ///         `max` (1), `total` (2), `perWindow` (3), `window` (8); outside `_scopeBits()` a non-zero `scope`, inside it a zero
+    ///         one (7); `perWindow` and `window` not set together (3).
+    error GrantWordRefused(uint8 bit, uint8 field);
+    /// @notice A `delegable` grant with no finite budget: `total` on a scalar bit, `maxUses` on another (B-02). The budget
+    ///         bounds what the leaves spend, not how many leaves exist: a leaf spends nothing until it acts.
+    error GrantBudgetRequired(uint8 bit);
+    /// @notice `UA_POOL` and `SHIELD_POOL` are never owner (B-19).
+    error OwnerAccountPool(bytes32 account);
+    /// @notice The scalar or the use is outside the grant (`field`: 0 min, 1 max, 2 total, 3 perWindow, 5 maxUses, 7 parent).
+    error GrantExhausted(uint8 field);
+    error GrantExpired(uint8 bit, bytes32 holder);
+    /// @notice The owner's revoke barred `account`: only the owner re-admits it (B-05, spec §1.5).
+    error GrantBarred(uint8 bit, bytes32 account);
+    /// @notice A change of `window` while the spent period still runs on the new grid (B-12, spec §1.5).
+    error GrantWindowInUse(uint8 bit, bytes32 holder);
+    /// @notice `renounceOwnership` while a bit that is not locked has holders (CTR-GOV-02).
+    error OwnerHasHolders(uint8 bit);
+    /// @notice A `grantDelay` above 30 days at creation (B-27).
+    error GrantDelayTooLong(uint64 delay);
+    /// @notice The confirm before `eta`.
+    error GrantNotReady(uint8 bit, bytes32 account, uint64 eta);
+    /// @notice A live pending at `(bit, account)` holds other terms: cancel it, or let it die, and propose again.
+    error GrantTermsMismatch(uint8 bit, bytes32 account);
+
+    function features() external view returns (uint256);
+    function lockedFeatures() external view returns (uint256);
+    function owner() external view returns (bytes32);
+    function pendingOwner() external view returns (bytes32);
+    function hasRole(uint8 bit, bytes32 account) external view returns (bool);
+    function validBits() external view returns (uint256);
+    function holderCount(uint8 bit) external view returns (uint256);
+    function grantDelay() external view returns (uint64);
+    function lastProposedAt() external view returns (uint64);
+    /// @notice A pending at `(bit, account)`, dead ones too: `live` while `eta != 0`, the owner generation that proposed it
+    ///         is the current one and `now <= eta + grantDelay` (spec §1.6).
+    function pendingGrant(uint8 bit, bytes32 account)
+        external view returns (uint64 eta, bytes32 proposer, bytes32 termsHash, bool live);
+    function cancelGrant(uint8 bit, bytes32 account) external;
+    function grantOf(uint8 bit, bytes32 holder) external view returns (Grant memory);
+    function setGrant(uint8 bit, bytes32 holder, GrantTerms calldata terms) external;
+    /// @notice The label of an application bit (128-255): its type, the entry it gates, a name for a wallet.
+    function bitLabel(uint8 bit) external view returns (BitType, bytes4, string memory);
+    function grantRole(uint8 bit, bytes32 account) external;
+    function revokeRole(uint8 bit, bytes32 account) external;
+    function renounceRole(uint8 bit) external;
+    function disableFeature(uint8 bit) external;
+    function transferOwnership(bytes32 newOwner) external;
+    function acceptOwnership() external;
+    function renounceOwnership() external;
+}

@@ -1,0 +1,133 @@
+# ua-mtx-merge T27: the regulated kinds 9 and 13 measured first on a skeleton (regulated-kinds spec §6.2, F-19; plan T27)
+# Tree: T27 build (src/regulated/: RegulatedBase, RegulatedLib, IRegulatedToken, WrappedRegulatedToken,
+# WrappedPqzRegulatedToken). Forge 1.8.5, solc 0.8.37, Amsterdam, optimizer 200, via_ir off, default set n2304-kmax4096.
+# Skeleton: every hook seat and row of spec §3.2 wired (the public pre row on 9, the fee-bearing pre row on 13), the eight
+# stubs and five views at their final arity, the init path through RegulatedLib.init; F, P, R, the mirror sync, the views and
+# RegulatedLib's bodies revert RegulatedNotBuilt. Not in it yet: the bodies of F / P / R (T28, T29: storage reads, the
+# bounded hasFlags STATICCALL), the pause-open set (T28), REGISTRY_CODEHASH (T29), group 3e (T37-T43). So these figures are a
+# floor for the token side. A measurement of size and gas used (forge is deterministic), not a timing calibration.
+#
+# Sizes: forge build src --sizes --json; scripts/size_gate.py: 0 errors, 92 contracts, above 65,536 B: none.
+| Release | base kind B | regulated skeleton B | delta | init B | spec §6.2 estimate (on M) | stop line 64,512 B |
+|---|---:|---:|---:|---:|---|---|
+| `WrappedRegulatedToken` (9) | `WrappedToken` 43,552 | 46,754 | +3,202 | 49,067 | 45.7-47.2 K (+3.0 to +4.5 K) | under by 17,758 |
+| `WrappedPqzRegulatedToken` (13) | `WrappedPqzToken` 56,721 | 60,127 | +3,406 | 62,817 | 59.5-61.2 K (+3.3 to +5.0 K) | under by 4,385 |
+| `RegulatedLib` (skeleton) | - | 919 | | 971 | 8-12 K | - |
+#
+# Stop rule (owner 2026-11-06): kind 13 at 60,127 B is under 64,512 B, so no lever was applied and no _above64KiB row added.
+#
+# Deploy gas, spec §6.2 method: each release one isolated CREATE2 transaction (GovDeploy.t.sol test_releaseGasPerKind,
+# Create2Probe); regular = gasTotalUsed x 64/63, state = EIP-8037's; asked = (regular + state) x 1.05 + 0.37 M (the
+# deployImplementation frame, measured in T10). Fits = asked <= the limit (EIP-8037 inclusion: regular + state, never a
+# block's gas_used). SCaaS testnet gate: runtime x 1,530 + 2^24 <= 200 M and runtime <= 131,072 B.
+| Release | runtime B | regular | state | (r + s) x 1.05 | asked (+ 0.37 M frame) | §6.2 estimate | 60 M | 70 M | regular x 1.05 < 2^24 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---|---|---|---|---:|
+| `WrappedToken (base of 9)` | 43,552 | 3,057,200 | 66,916,080 | 73.47 M | 73.84 M | (base) | no | no | yes | 83.41 M |
+| `WrappedRegulatedToken (9)` | 46,754 | 3,271,493 | 71,815,140 | 78.84 M | 79.21 M | 77.4-80.0 M | no | no | yes | 88.31 M |
+| `WrappedPqzToken (base of 13)` | 56,721 | 3,960,141 | 87,064,650 | 95.58 M | 95.95 M | (base) | no | no | yes | 103.56 M |
+| `WrappedPqzRegulatedToken (13)` | 60,127 | 4,188,997 | 92,275,830 | 101.29 M | 101.66 M | 100.6-103.5 M | no | no | yes | 108.77 M |
+#
+# Reading: both measured figures sit inside the spec §6.2 estimate (no figure is more than 50 % over it). Kind 13 is
+# 4,385 B under the stop line on the skeleton; still to come on its token side: the F / P / R bodies and the bounded call
+# (T28, T29), the pause-open set, REGISTRY_CODEHASH, the views' storage reads, and group 3e (pay-meta-tax §6.4: +2.3 to
+# +4.0 K on kind 13), so T31 / T33 / T37 / T40 re-measure it first and reduce lever by lever at or above 64,512 B.
+#
+# ua-mtx-merge T28 (the bodies of FREEZE, RECORD, FORCE, PAUSE, the fee seats, the pause-open set, the mirror, the views; kind 8
+# added). Still not in: the bounded registry call and REGISTRY_CODEHASH (T29), operatorTransfer (T32), group 3e. Same method.
+| Release | base kind B | T27 B | T28 B | delta vs base | init B | stop line 64,512 B |
+|---|---:|---:|---:|---:|---:|---|
+| `NormalRegulatedToken` (8) | `NormalToken` 32,945 | - | 37,163 | +4,218 | 39,476 | under by 27,349 |
+| `WrappedRegulatedToken` (9) | `WrappedToken` 43,552 | 46,754 | 47,847 | +4,295 | 50,167 | under by 16,665 |
+| `WrappedPqzRegulatedToken` (13) | `WrappedPqzToken` 56,721 | 60,127 | 61,225 | +4,504 | 63,922 | under by 3,287 |
+| `RegulatedLib` | - | 919 | 7,193 | | 7,245 | - |
+# Stop rule: kind 13 measured after T28 at 61,225 B, under 64,512 B: no lever, no _above64KiB row. The six plain kinds and
+# GovernanceRouter unchanged (NormalToken 32,945 ... WrappedPqzToken 56,721; router 11,771).
+| Release | runtime B | regular | state | (r + s) x 1.05 | asked (+ 0.37 M frame) | §6.2 estimate | 60 M | 70 M | regular x 1.05 < 2^24 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---|---|---|---|---:|
+| `NormalRegulatedToken (8)` | 37,163 | 2,643,179 | 57,140,910 | 62.77 M | 63.14 M | 59.7-62.2 M | no | yes | yes | 73.64 M |
+| `WrappedRegulatedToken (9)` | 47,847 | 3,342,230 | 73,487,430 | 80.67 M | 81.04 M | 77.4-80.0 M | no | no | yes | 89.98 M |
+| `WrappedPqzRegulatedToken (13)` | 61,225 | 4,259,734 | 93,955,770 | 103.13 M | 103.50 M | 100.6-103.5 M | no | no | yes | 110.45 M |
+# Reading: kind 8 is 0.9 M over the top of its estimate and misses 60 M (spec: "at the edge"), fits 70 M; kind 9 is 1.0 M over
+# its estimate (1.3 %), kind 13 at the top of its estimate; none is more than 50 % over. Kind 13 has 3,287 B left for T29 (the
+# bounded call, the code pin, canReceive), T32 and group 3e (+2.3 to +4.0 K, pay-meta-tax §6.4): T29 / T31 re-measure it
+# first and reduce lever by lever at or above 64,512 B.
+#
+# ua-mtx-merge T29 (the receiver check: the bounded hasFlags STATICCALL with its cap, the starvation check and the named
+# failures, canReceive with two bounded calls, REGISTRY_CODEHASH from implArgs and its getter, the registry written at init;
+# the new ComplianceRegistry). Kind 13 measured first. Same method.
+| Release | base kind B | T28 B | T29 B | delta vs T28 | init B | stop line 64,512 B |
+|---|---:|---:|---:|---:|---:|---|
+| `NormalRegulatedToken` (8) | `NormalToken` 32,945 | 37,163 | 38,257 | +1,094 | 40,674 | under by 26,255 |
+| `WrappedRegulatedToken` (9) | `WrappedToken` 43,552 | 47,847 | 48,938 | +1,091 | 51,362 | under by 15,574 |
+| `WrappedPqzRegulatedToken` (13) | `WrappedPqzToken` 56,721 | 61,225 | 62,285 | +1,060 | 65,088 | under by 2,227 |
+| `RegulatedLib` | - | 7,193 | 7,275 | +82 | 7,327 | - |
+| `ComplianceRegistry` (new, a plain deploy) | - | - | 2,462 | | 2,652 | - |
+# Stop rule: kind 13 measured after T29 at 62,285 B, under 64,512 B: no lever, no _above64KiB row. The six plain kinds and
+# GovernanceRouter unchanged. Deploy gas (GovDeploy test_releaseGasPerKind -vv; the registry is a plain CREATE, no factory frame):
+| Release | runtime B | regular | state | (r + s) x 1.05 | asked (+ 0.37 M frame) | §6.2 estimate | 60 M | 70 M | regular x 1.05 < 2^24 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---|---|---|---|---:|
+| `NormalRegulatedToken (8)` | 38,257 | 2,724,319 | 58,814,730 | 64.62 M | 64.99 M | 59.7-62.2 M | no | yes | yes | 75.31 M |
+| `WrappedRegulatedToken (9)` | 48,938 | 3,423,370 | 75,156,660 | 82.51 M | 82.88 M | 77.4-80.0 M | no | no | yes | 91.65 M |
+| `WrappedPqzRegulatedToken (13)` | 62,285 | 4,336,713 | 95,577,570 | 104.91 M | 105.28 M | 100.6-103.5 M | no | no | yes | 112.07 M |
+| `ComplianceRegistry` | 2,462 | 196,502 | 4,048,380 | 4.46 M | 4.46 M (no frame) | 3-5 K / 5-8.5 M | yes | yes | yes | 20.54 M |
+# Reading: kinds 8, 9, 13 grow by about 1.1 K each (the same RegulatedBase code); kind 8 is 2.8 M (4.5 %), kind 9 2.9 M (3.6 %)
+# and kind 13 1.8 M (1.7 %) over the top of their estimates, none more than 50 % over; the registry is under its estimate.
+# Kind 13 has 2,227 B left for T31 (the PQZ sites), T32 (operatorTransfer) and group 3e (+2.3 to +4.0 K, pay-meta-tax §6.4):
+# T31 / T32 / T33 re-measure it first and reduce lever by lever at or above 64,512 B.
+#
+# ua-mtx-merge T30 (the regulated Zether kinds 10 and 11: `_regZetherSender` computing `uaOf(yFrom)` from the raw G1, the
+# confidential pre row; NormalZetherToken / WrappedZetherToken only mark overrides `virtual`). Kind 13 re-checked first:
+# no shared code changed for it. Same method.
+| Release | base kind B | T30 B | delta vs base | init B | spec §6.2 estimate (on M) | stop line 64,512 B |
+|---|---:|---:|---:|---:|---|---|
+| `NormalZetherRegulatedToken` (10) | `NormalZetherToken` 41,132 | 46,717 | +5,585 | 50,444 | 43.8-45.5 K | under by 17,795 |
+| `WrappedZetherRegulatedToken` (11) | `WrappedZetherToken` 51,604 | 57,353 | +5,749 | 61,087 | 54.3-56.0 K | under by 7,159 |
+| `WrappedPqzRegulatedToken` (13) | `WrappedPqzToken` 56,721 | 62,285 (T29 62,285) | +5,564 | 65,088 | 59.5-61.2 K | under by 2,227 |
+# Stop rule: no kind at or above 64,512 B: no lever, no _above64KiB row. Kinds 0-5, 8, 9, RegulatedLib, ZetherLib and
+# GovernanceRouter unchanged. Deploy gas (GovDeploy test_releaseGasPerKind -vv):
+| Release | runtime B | regular | state | (r + s) x 1.05 | asked (+ 0.37 M frame) | §6.2 estimate | 60 M | 70 M | regular x 1.05 < 2^24 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---|---|---|---|---:|
+| `NormalZetherRegulatedToken (10)` | 46,717 | 3,371,357 | 71,758,530 | 78.89 M | 79.26 M | 74.4-77.3 M | no | no | yes | 88.25 M |
+| `WrappedZetherRegulatedToken (11)` | 57,353 | 4,070,408 | 88,031,610 | 96.71 M | 97.08 M | 92.0-94.9 M | no | no | yes | 104.53 M |
+| `WrappedPqzRegulatedToken (13)` | 62,285 | 4,336,713 | 95,577,570 | 104.91 M | 105.28 M | 100.6-103.5 M | no | no | yes | 112.07 M |
+# Reading: kinds 10 and 11 run about 1.2-1.4 K (2.7 %, 2.4 %) over the top of their size estimates and about 2 M (2.5 %,
+# 2.3 %) over their gas estimates, none more than 50 % over; both miss 60 and 70 M (accepted, Q7) and fit the SCaaS testnet.
+#
+# ua-mtx-merge, owner ruling 2026-11-06 (ComplianceRegistry: only the admin overwrites or revokes an admin-written slot,
+# `attesterId == 0 && flags != 0`; AdminWrittenSlot). Kind 13 re-checked first: no token code changed. Same method.
+| Release | T29 B | now B | delta | init B | regular | state | (r x 64/63 + s) x 1.05 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `ComplianceRegistry` (a plain deploy, no frame) | 2,462 | 2,538 | +76 | 2,728 | 202,743 (was 196,502) | 4,164,660 (was 4,048,380) | 4.59 M (was 4.46 M) | 20.66 M |
+| `WrappedPqzRegulatedToken` (13) | 62,285 | 62,285 | 0 | 65,088 | | | | |
+#
+# ua-mtx-merge T31 (the regulated PQZ kinds 12 and 13: kind 12 new on NormalPqzToken, whose overrides only become `virtual`;
+# the PQZ seats of PqzLayer / WrappedPqzToken and kind 13 unchanged). Kind 13 measured first, before and after. Same method.
+| Release | base kind B | T31 B | delta vs base | init B | spec §6.2 estimate (on M) | stop line 64,512 B |
+|---|---:|---:|---:|---:|---|---|
+| `WrappedPqzRegulatedToken` (13) | `WrappedPqzToken` 56,721 | 62,285 (T30 62,285) | +5,564 | 65,088 | 59.5-61.2 K | under by 2,227 |
+| `NormalPqzRegulatedToken` (12) | `NormalPqzToken` 47,183 | 52,626 | +5,443 | 55,426 | 49.7-51.4 K | under by 11,886 |
+# Stop rule: no kind at or above 64,512 B: no lever, no _above64KiB row. NormalPqzToken 47,183 and WrappedPqzToken 56,721
+# unchanged. Deploy gas (GovDeploy test_releaseGasPerKind -vv; regular already x 64/63):
+| Release | runtime B | regular | state | (r + s) x 1.05 | asked (+ 0.37 M frame) | §6.2 estimate | 60 M | 70 M | regular x 1.05 < 2^24 | SCaaS testnet need (<= 200 M) |
+|---|---:|---:|---:|---:|---:|---|---|---|---|---:|
+| `NormalPqzRegulatedToken (12)` | 52,626 | 3,702,158 | 80,799,300 | 88.73 M | 89.10 M | 84.2-87.0 M | no | no | yes | 97.29 M |
+| `WrappedPqzRegulatedToken (13)` | 62,285 | 4,336,713 | 95,577,570 | 104.91 M | 105.28 M | 100.6-103.5 M | no | no | yes | 112.07 M |
+# Reading: kind 12 runs 1.2 K (2.4 %) over the top of its size estimate and 2.1 M (2.4 %) over its gas estimate, not more than
+# 50 % over; both PQZ kinds miss 60 and 70 M (not a target, CTR-GOV-19) and fit the SCaaS testnet. Kind 13 keeps 2,227 B for
+# T32 (operatorTransfer) and group 3e.
+#
+# ua-mtx-merge T32 (bit 22 `operatorTransfer`, CTR-GOV-20: the body in RegulatedLib, the token stub unchanged since T27; the
+# router's eight regulated control ops). Kind 13 measured first. Same method.
+| Release | T31 B | T32 B | delta | init B | stop line 64,512 B |
+|---|---:|---:|---:|---:|---|
+| `WrappedPqzRegulatedToken` (13) | 62,285 | 62,285 | 0 | 65,088 | under by 2,227 |
+| `NormalPqzRegulatedToken` (12) | 52,626 | 52,626 | 0 | 55,426 | under by 11,886 |
+| `WrappedZetherRegulatedToken` (11) | 57,353 | 57,353 | 0 | 61,087 | under by 7,159 |
+| `NormalZetherRegulatedToken` (10) | 46,717 | 46,717 | 0 | 50,444 | under by 17,795 |
+| `WrappedRegulatedToken` (9) | 48,938 | 48,938 | 0 | 51,362 | under by 15,574 |
+| `NormalRegulatedToken` (8) | 38,257 | 38,257 | 0 | 40,674 | under by 26,255 |
+| `RegulatedLib` (library, not in the baseline) | 7,275 | 8,201 | +926 | 8,253 | - |
+| `GovernanceRouter` (not in the baseline) | 11,771 | 13,136 | +1,365 | 14,047 | - |
+# Stop rule: no kind at or above 64,512 B: no lever, no _above64KiB row; the token side of group 3e and 3f keeps 2,227 B on
+# kind 13. Deploy gas (GovDeploy test_releaseGasPerKind -vv): kinds 8-13 regular and state unchanged (8 64.99 M, 9 82.88 M,
+# 10 79.26 M, 11 97.08 M, 12 89.10 M, 13 105.28 M asked); GovernanceRouter regular 943,404, state 20,281,680, x 1.05 22.29 M.

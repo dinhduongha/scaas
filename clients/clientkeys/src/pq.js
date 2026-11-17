@@ -63,6 +63,20 @@ export function pqSeed(seed, name, account, index) {
   return hkdf(sha256, seed, utf8ToBytes('scaas.ua.pq.v1'), info, s.seedLen);
 }
 
+/** CTR-PQZ-13 with group 3g's C8: a single-key holder's PQZ key seed `seed32_v = HKDF-SHA256(ikm = BIP-39 seed, salt =
+ *  "scaas.ua.pq.v1", info = utf8("scaas.ua.pqz-mlwe.v1") ‖ u32 account ‖ u32 index [‖ be64 version])`, 32 bytes; version 0 keeps
+ *  the `info` without the suffix (today's keys stay), every version v ≥ 1 appends `be64(v)` (the map stays injective). An `msig`
+ *  operator draws each version's `seed32` fresh instead, never from this. */
+export function pqzKeySeed(seed, account, index, version = 0) {
+  if (!(seed instanceof Uint8Array)) throw new Error('seed must be a Uint8Array');
+  const v = BigInt(version);
+  if (v < 0n || v >= 1n << 64n) throw new Error('version must be a uint64');
+  const be64 = new Uint8Array(8);
+  new DataView(be64.buffer).setBigUint64(0, v);
+  const info = concatBytes(utf8ToBytes('scaas.ua.pqz-mlwe.v1'), u32(account, 'account'), u32(index, 'index'), v === 0n ? new Uint8Array(0) : be64);
+  return hkdf(sha256, seed, utf8ToBytes('scaas.ua.pq.v1'), info, 32);
+}
+
 /** Deterministic key pair of a PQ kind. Falcon keys are implementation-specific: pinned to @noble/post-quantum 0.7.1 by the vectors. */
 export function pqKeygen(seed, name, account, index) {
   const xi = pqSeed(seed, name, account, index);

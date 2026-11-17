@@ -1,0 +1,36 @@
+Round 3zb + 3zc (role BURNER, wrapped supply caps) with the CTR-GOV-28 Change (O6: every role holder's direct entry carries
+the chain word) and the DEX powers in SCaaSDexGovernanceModule (O8), branch burner-wrap-caps from 3fa153e4. Spec
+docs/superpowers/specs/2026-11-13-burner-wrap-caps.md; rules CTR-GOV-29, CTR-GOV-30 and the Changes on CTR-GOV-10, -12, -28,
+CTR-TOK-30. Gates run 2026-11-14 / 15 on the round's final source tree (the code commit's tree; later commits change docs,
+lockfiles and this file only); Foundry 1.8.5, solc 0.8.37, Amsterdam, default PQZ set n2304-kmax4096; every heavy run
+through scripts/capped (4 GB; the node suite 6 GB under the node lock), one forge directory per job; full output in
+git-ignored logs. Local only, no SCaaS testnet RPC. UNAUDITED.
+
+step | tree | rc | counts
+forge every directory at n2304 (one capped job per directory) | final | 0 | all green (whole suite 4,285 tests before the last pin moves; reruns of the moved suites green)
+forge test/governance | final | 0 | 589 + the new GovBurner 16, GovBurnerKinds 13, HolderChainWord 34
+forge test/wrap | final | 0 | 110 (SupplyCaps 16, SupplyCapsKinds 5)
+forge test/modules (differential vs d142b57c) | final | 0 | 35
+at-set.sh n2048-kmax1024 sensitive | final | 0 | 1,374 passed, 3 skipped
+at-set.sh n2560-kmax16384 sensitive | final | 0 | 1,368 passed, 9 skipped
+at-set.sh n2816-kmax65536 sensitive | final | 0 | 1,356 passed, 21 skipped
+forge --isolate test/ua/{UAGas,UARegistryGroups} | final | 0 | 22
+size_gate.py | final | 0 | 0 errors, 170 contracts (note: OpenFactory over its T-2 line, as before)
+mutants (one source edit each, its killing test alone) | final | 0 | 69/69 killed (3zb 11, 3zc 28, O6 28, O8 2, router 3)
+scaas-node cargo test | final | 0 | 766 passed (lib) + the integration suites
+scaas-node cargo clippy --all-targets -D warnings | final | 0 | clean
+scaas-node e2e --ignored | final | 0 | 24/24 (pqz_rotation_on_anvil passes alone; it failed only beside an at-set run rewriting PqzSet.sol)
+clientkeys npm test | final | 0 | 344 passed, 3 skipped
+ua-rs cargo test (default, signers, json, pq) + clippy | final | 0 | 76 / 84 / 82 / 96, clean
+ua-c / ua-cxx / ua-qt / ua-dart-frb | final | 0 | 24 / 20 / 29 / 21
+ua-py / ua-go / ua-cs / ua-dart | final | 0 | 29 / 28 / 28 / 29
+script/pqz/e2e.py --self-test | final | 0 | 0 failures
+docs_check.py check / test_docs_check.py | final | 0 | 0 errors (7 page-budget warnings, as before) / ok
+Fable review (no P0 / P1) fixes: tests + docs | 3971a3918 | 0 | DexOutside 30, SupplyCaps 17, SupplyCapsKinds, HolderChainWord, SelectorAudit green
+review-fix mutants | 3971a3918 | 0 | 11/11 killed (round total 80/80); src clean vs HEAD after
+on-chain matrix, local anvil (tokens, gov, views, wraplimits) | 3971a3918 | 0 | 536 / 170 / 3,350 views / 170 txs; negatives 13 / 27 / - / 63
+on-chain matrix, local anvil (zether, pqzkeys) | 3971a3918 | 0 | 176 / 710 txs; negatives 2 / 29
+
+Gas pins old -> new, each cause measured against 3fa153e4 (bare-selector dispatch probe, -vvvv call trees, slot sets):
+see the code commit's message (plus_zero_gas.json, WrapLimitsGas, RegulatedGas, ProofPathInvariants P7 rows).
+Not run here: the full pqz-core gate (no core, statement or set change); the on-chain matrix on the SCaaS testnet (reset 4).

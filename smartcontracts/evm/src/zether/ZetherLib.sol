@@ -2,7 +2,11 @@
 pragma solidity ^0.8.24;
 
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {
+    IFactoryToken, requireRegOfKind, ENV_ZETHER_TRANSFER, ENV_ZETHER_BURN, ENV_ZETHER_INNER_PRODUCT, ENV_ZETHER_DISCLOSURE
+} from "../factory/IFactoryToken.sol";
+import {ChainEnvCode} from "../factory/ChainEnvCode.sol";
+import {SigCheck} from "../common/SigCheck.sol";
 import {GovernanceLib} from "../governance/GovernanceLib.sol";
 import {TokenStore} from "../metatx/TokenStore.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
@@ -15,6 +19,11 @@ import {IConfidentialToken, IConfidentialWrappedToken} from "../confidential/ICo
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
+
+/// @dev What the Zether env check reads from a transfer / burn verifier besides `IZetherVerifierCommon`.
+interface IInnerProductBound {
+    function innerProduct() external view returns (address);
+}
 
 /// @title The confidential layer of the `*_ZETHER` kinds (CTR-ZTH-44, CTR-TOK-24), in the ERC-7201 namespace
 ///        `scaas.zether`: statements, verifier calls, account updates, roll-over, shield / unshield, disclosure entries.
@@ -43,6 +52,8 @@ library ZetherLib {
 
     /// @custom:storage-location erc7201:scaas.zether
     struct ZetherStorage {
+        /// @dev Unused since chain-neutral releases (plan T72): the transfer verifier is the clone's env dependency
+        ///      `ENV_ZETHER_TRANSFER`, read from its code (`_ver`); kept, the layout is pinned (test/v2/layout/).
         IZetherVerifier verifier;
         /// @dev Both modes share the verifier's slot (the offsets of the fields below are unchanged).
         ZetherTypes.DisclosureMode disclosureMode;
@@ -66,15 +77,16 @@ library ZetherLib {
     }
 
     /// @notice The token's immutables a call needs, and the statement's binding: `(ZTX_V1_DIRECT, 0)` for a direct
-    ///         call, `(ZTX_V1_RELAYED, envelopeBinding)` inside `mtxExecute` / `uaExecute` (the UA envelope's binding,
-    ///         CTR-ZTH-51), `(ZTX_V1_DIRECT, unwrapBinding)` for a direct `mtxUnshieldUnwrap`.
+    ///         call, `(ZTX_V1_RELAYED, binding)` inside a merged signed entry or `mtxExecute` (the UA envelope's binding,
+    ///         CTR-ZTH-51, R35) or `executeMetaTransaction` (the address one, CTR-ZTH-06), `(ZTX_V1_DIRECT, unwrapBinding)`
+    ///         for a direct `mtxUnshieldUnwrap`.
     struct Env {
         address registry;
         bytes32 chainUid;
         bytes32 tag;
         bytes32 binding;
-        /// @dev The implementation's burn verifier (CTR-ZTH-20): the unshield proofs. The transfer verifier is copied to
-        ///      storage at `init` (shield and roll-over use its group operations without an `Env`).
+        /// @dev The release's burn verifier (CTR-ZTH-20): the unshield proofs. The transfer verifier is read from the
+        ///      clone's code (`_ver`: shield and roll-over use its group operations without an `Env`).
         IZetherBurnVerifier burnVer;
         /// @dev The token's EIP-712 domain: the owner digests (TS-D19) are typed under it.
         bytes32 domainSeparator;
@@ -165,27 +177,16 @@ library ZetherLib {
         "ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)"
     );
     bytes32 private constant TH_UNWRAP = keccak256("Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)");
-    /// @dev The typehashes of the signed entries whose builders live here (CTR-ZTH-94; moved from `ZetherLayer`, unchanged).
-    bytes32 private constant TRANSFER_SINGLE_TYPEHASH = keccak256(
-        "ZetherTransferSingle(address from,ZetherSingle args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherSingle(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,G1 yFrom,G1 yTo,G1 cOut,G1 dOut,G1 cDeb,G1 cAud)"
-    );
+    /// @dev The typehashes of the signed entries whose builders live here (CTR-ZTH-94; moved from `ZetherLayer`, unchanged);
+    ///      the address forms' (`ZetherTransfer…`, `ZetherUnshield`) are in legacy/ua-mtx-merge/ (R35).
     bytes32 private constant UA_TRANSFER_SINGLE_TYPEHASH = keccak256(
         "UAZetherTransferSingle(bytes32 from,ZetherSingle args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherSingle(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,G1 yFrom,G1 yTo,G1 cOut,G1 dOut,G1 cDeb,G1 cAud)"
-    );
-    bytes32 private constant TRANSFER_TYPEHASH = keccak256(
-        "ZetherTransfer(address from,ZetherMulti args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherLeg(G1 yTo,G1 cOut,G1 cAud,G1 dAud)ZetherMulti(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo)"
     );
     bytes32 private constant UA_TRANSFER_TYPEHASH = keccak256(
         "UAZetherTransfer(bytes32 from,ZetherMulti args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherLeg(G1 yTo,G1 cOut,G1 cAud,G1 dAud)ZetherMulti(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo)"
     );
-    bytes32 private constant TRANSFER_COMPACT_TYPEHASH = keccak256(
-        "ZetherTransferCompact(address from,ZetherMulti args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherLeg(G1 yTo,G1 cOut,G1 cAud,G1 dAud)ZetherMulti(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo)"
-    );
     bytes32 private constant UA_TRANSFER_COMPACT_TYPEHASH = keccak256(
         "UAZetherTransferCompact(bytes32 from,ZetherMulti args,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherLeg(G1 yTo,G1 cOut,G1 cAud,G1 dAud)ZetherMulti(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes16 salt,bytes32 beneficiaryUA,uint256 decoyFee,G1 yFrom,G1 dOut,G1 cDeb,ZetherLeg[] legs,bytes sealedMemo)"
-    );
-    bytes32 private constant UNSHIELD_TYPEHASH = keccak256(
-        "ZetherUnshield(address from,ZetherBurn args,uint256 amount,bytes32 recipient,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
     );
     bytes32 private constant UA_UNSHIELD_TYPEHASH = keccak256(
         "UAZetherUnshield(bytes32 from,ZetherBurn args,uint256 amount,bytes32 recipient,bytes proof,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)G1(bytes32 x0,bytes32 x1,bytes32 y0,bytes32 y1)ZetherBurn(uint64 accSeq,uint64 sendCounter,uint256 validUntilBlock,bytes32 beneficiaryUA,G1 yFrom)"
@@ -205,6 +206,48 @@ library ZetherLib {
 
     // ------------------------------------------------------------------ init
 
+    /// @notice The Zether kinds' checks of an instance env (CTR-ZTH-20; the constructor's before chain-neutral releases, now
+    ///         `validateEnv`, which the factory calls once per release and chain): four deps (`ENV_ZETHER_*`), never Hedera,
+    ///         a registry with code; the two verifiers and the disclosure with code, of one proof system, the inner-product
+    ///         verifier fixed inside both, and each verifier in its role (review 5g-Z2 P2-2): two addresses, the transfer
+    ///         verifier answers `ringSize()` and the burn verifier does not (a swapped or duplicated pair would accept shields
+    ///         and lock them).
+    function validateEnv(address[] calldata d, bool hedera, address registry) public view {
+        if (d.length != 4 || hedera || !SigCheck.isContract(registry)) revert IZetherToken.BadInit(); // never on Hedera
+        IZetherVerifier t = IZetherVerifier(d[ENV_ZETHER_TRANSFER]);
+        IZetherBurnVerifier b = IZetherBurnVerifier(d[ENV_ZETHER_BURN]);
+        address ip = d[ENV_ZETHER_INNER_PRODUCT];
+        if (!SigCheck.isContract(address(t)) || !SigCheck.isContract(address(b)) || !SigCheck.isContract(d[ENV_ZETHER_DISCLOSURE])
+            || t.proofSystemId() != b.proofSystemId() || ip == address(0)
+            || IInnerProductBound(address(t)).innerProduct() != ip || IInnerProductBound(address(b)).innerProduct() != ip
+            || address(t) == address(b) || !_answers(address(t), IZetherVerifier.ringSize.selector)
+            || _answers(address(b), IZetherVerifier.ringSize.selector)) {
+            revert IZetherToken.BadInit();
+        }
+    }
+
+    /// @dev `target` answers `sel()` with one word. The call gets exactly `_PROBE_GAS` (the gas floor of
+    ///      `OpenFactory._supports` first) and a failed call that used all of it reverts `BadInit`: a starved or costly
+    ///      answer never reads as "does not answer", so the negative probe of the burn verifier fails closed too (spec 3r
+    ///      §5.6 N3; Fable 3r3s3t P3-9).
+    function _answers(address target, bytes4 sel) private view returns (bool) {
+        uint256 g = gasleft();
+        if (g < _PROBE_GAS * 64 / 63 + _PROBE_GAS_MARGIN) revert IZetherToken.BadInit();
+        (bool ok, bytes memory r) = target.staticcall{gas: _PROBE_GAS}(abi.encodeWithSelector(sel));
+        if (!ok && g - gasleft() >= _PROBE_GAS) revert IZetherToken.BadInit();
+        return ok && r.length == 32;
+    }
+
+    /// @dev The probe's cap and margin, `OpenFactory`'s (`_PROBE_GAS`, `_PROBE_GAS_MARGIN`).
+    uint256 private constant _PROBE_GAS = 30_000;
+    uint256 private constant _PROBE_GAS_MARGIN = 5_000;
+
+    /// @dev The transfer verifier: the clone's env dependency `ENV_ZETHER_TRANSFER` (its code, under the token's
+    ///      `DELEGATECALL`; chain-neutral spec §2.2: the copy into storage at `init` is dropped).
+    function _ver() internal view returns (IZetherVerifier) {
+        return IZetherVerifier(ChainEnvCode.dep(ENV_ZETHER_TRANSFER));
+    }
+
     /// @notice The kind's `_init` (every chain, CTR-ZTH-02 superseded 2026-10-31): `v` the release's transfer verifier (CTR-ZTH-20, running
     ///         on this chain: `VerifierUnsupportedOnThisChain`), scale, cap `≤ 2^54`, inner fee `< 2^64` and `< cap`,
     ///         `minDecoyFee < 2^64` with `confidentialFee + 16 · minDecoyFee` `< 2^64` and `< cap` (16 legs at most; no
@@ -213,6 +256,13 @@ library ZetherLib {
     ///         `disclosureMode` BUNDLE or COMPACT (CTR-ZTH-48), `auditorMode` NONE without a key, FULL or OPTIONAL with
     ///         one (CTR-ZTH-49).
     function init(IFactoryToken.ConfidentialConfig memory c, IZetherVerifier v) public {
+        // group 3f (PQZ verifier mode spec §3, §9): the PQZ verifier fields are another kind's (Zether ≠ PQZ); group 3h (pqz-proof-path
+        // spec §4.1, C8): `proofStore` too, in the same check (no Zether body moves); round 3t (CTR-PQZ-36): the verifier fee
+        // and its cap too
+        if (c.pqzVerifyMode != 0 || c.pqzVerifierUA != 0 || c.pqzVerifierFixed || c.proofStore != 0 || c.verifierFee != 0
+            || c.verifierFeeMax != 0 || c.pqzOwnKey || c.pqzOpening) {
+            revert IFactoryToken.ConfigFieldForOtherKind(4);
+        }
         // the release's verifier must run here (an absent precompile answers success with empty output; moved from the
         // factory's creation gate, plan 5g-Z2)
         (bool ok, bytes memory r) = address(v).staticcall(abi.encodeCall(v.isSupportedOnThisChain, ()));
@@ -237,7 +287,6 @@ library ZetherLib {
             revert IZetherToken.BadAuditorMode(c.auditorMode);
         }
         ZetherStorage storage s = $();
-        s.verifier = v;
         s.disclosureMode = ZetherTypes.DisclosureMode(c.disclosureMode);
         s.auditorMode = ZetherTypes.AuditorMode(c.auditorMode);
         s.shieldScale = c.shieldScale;
@@ -250,21 +299,23 @@ library ZetherLib {
     }
 
     /// @notice `NormalZetherToken`'s init from the factory's raw `initArgs`, part 1 (CTR-ZTH-94, size lever 1 as
-    ///         `ZetherWrappedLib.init`): `legs`, `rate` and `maxSupply` must be empty, the metadata is written; returns what
-    ///         the token hands `GovernanceLib.init`, so this library holds no DELEGATECALL (`LinkClosure`).
-    function initNormal(bytes calldata initArgs) public returns (uint256 features, uint256 lockedFeatures, bytes32 owner,
+    ///         `ZetherWrappedLib.init`): `legs`, `rate` and `maxSupply` must be empty, `reg` too on a plain kind, the metadata
+    ///         and the token's `kind` are written; returns what the token hands `GovernanceLib.init`, so this library holds no
+    ///         DELEGATECALL (`LinkClosure`).
+    function initNormal(bytes calldata initArgs, uint8 kind) public returns (uint256 features, uint256 lockedFeatures, bytes32 admin,
         uint64 grantDelay, address rescueTo, GovernanceLib.Roles memory roles)
     {
         IFactoryToken.TokenConfig memory cfg = abi.decode(initArgs, (IFactoryToken.TokenConfig));
         if (cfg.legs.length != 0) revert IFactoryToken.ConfigFieldForOtherKind(2);
-        if (cfg.maxSupply != 0) revert IFactoryToken.ConfigFieldForOtherKind(5);
+        if (cfg.maxSupply != 0 || cfg.maxWrapSupply != 0) revert IFactoryToken.ConfigFieldForOtherKind(5);
         if (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0) revert IFactoryToken.ConfigFieldForOtherKind(3);
+        requireRegOfKind(kind, cfg.reg);
         TokenStore.TokenStorage storage t = TokenStore.$();
         t.name = cfg.name;
         t.symbol = cfg.symbol;
         t.decimals = cfg.decimals;
-        t.kind = TokenStore.KIND_NORMAL_ZETHER;
-        return (cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles);
+        t.kind = kind;
+        return (cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, cfg.rescueTo, cfg.roles);
     }
 
     /// @notice Part 2, after the token's `GovernanceLib.init`: `init` of `conf`; returns the initial mint the token makes.
@@ -288,7 +339,7 @@ library ZetherLib {
         (s[4], c[4]) = (IZetherToken.mtxConfidentialTransferCompact.selector, abs);
         (s[5], c[5]) = (IZetherToken.mtxConfidentialTransferSingle.selector, abs);
         (s[6], c[6]) = (IZetherToken.mtxUnshield.selector, abs);
-        (s[7], c[7]) = (IConfidentialToken.mtxRollOver.selector, abs);
+        (s[7], c[7]) = (IZetherToken.mtxRollOver.selector, abs);
         (s[8], c[8]) = (IZetherToken.mtxRollOverBatch.selector, abs);
         (s[9], c[9]) = (IZetherToken.mtxRollOverSigned.selector, abs);
         (s[10], c[10]) = (IZetherToken.mtxSetRollOverMode.selector, abs);
@@ -305,7 +356,7 @@ library ZetherLib {
         uint256 room = s.maxShielded - s.totalShielded;
         if (amount == 0 || amount > room) revert IZetherToken.AmountOutOfRange(amount, room);
         s.totalShielded += amount;
-        _credit(s, ua, s.verifier.g1MulBase(amount), "");
+        _credit(s, ua, _ver().g1MulBase(amount), "");
         emit IConfidentialToken.Shielded(ZetherTypes.UA.unwrap(ua), from, amount, s.acct[ua].pendingSeq);
     }
 
@@ -490,30 +541,15 @@ library ZetherLib {
 
     // ------------------------------------------------------------------ signed entries (TS-D14, TS-D16, CTR-ZTH-94)
 
-    /// @notice What a signed `mtxConfidentialTransfer…` / `uaConfidentialTransfer…` entry signs and runs, from its own
-    ///         arguments as the token got them (`ZetherLayer._namedZ`): the typehash, the words its struct hashes
-    ///         (TS-D17: `args` and `proof` by hash) and the op's call. The tail word picks the compact form.
-    function multiCall(MetaTxLib.Envelope calldata, IZetherToken.ZetherMulti calldata t, bytes calldata proof, bytes calldata)
-        public pure returns (bytes32, bytes memory, bytes memory)
-    {
-        bool compact = _compactTail();
-        return (compact ? TRANSFER_COMPACT_TYPEHASH : TRANSFER_TYPEHASH, abi.encode(hashMulti(t), keccak256(proof)),
-            _multiOp(compact, t, proof));
-    }
-
+    /// @notice What a signed `mtxConfidentialTransfer…` entry signs and runs, from its own arguments as the token got them
+    ///         (`ZetherLayer._namedZUA`): the typehash, the words its struct hashes (TS-D17: `args` and `proof` by hash)
+    ///         and the op's call. The tail word picks the compact form.
     function uaMultiCall(MetaTxLib.UAEnvelope calldata, IZetherToken.ZetherMulti calldata t, bytes calldata proof,
         IUARegistry.UASig calldata) public pure returns (bytes32, bytes memory, bytes memory)
     {
         bool compact = _compactTail();
         return (compact ? UA_TRANSFER_COMPACT_TYPEHASH : UA_TRANSFER_TYPEHASH, abi.encode(hashMulti(t), keccak256(proof)),
             _multiOp(compact, t, proof));
-    }
-
-    function singleCall(MetaTxLib.Envelope calldata, IZetherToken.ZetherSingle calldata t, bytes calldata proof, bytes calldata)
-        public pure returns (bytes32, bytes memory, bytes memory)
-    {
-        return (TRANSFER_SINGLE_TYPEHASH, abi.encode(hashSingle(t), keccak256(proof)),
-            abi.encodeCall(IZetherToken.mtxConfidentialTransferSingle, (t, proof)));
     }
 
     function uaSingleCall(MetaTxLib.UAEnvelope calldata, IZetherToken.ZetherSingle calldata t, bytes calldata proof,
@@ -524,13 +560,6 @@ library ZetherLib {
     }
 
     /// @notice The signed `mtxUnshield`: `amount` and `recipient` flat in the struct, as in the op.
-    function unshieldCall(MetaTxLib.Envelope calldata, IZetherToken.ZetherBurn calldata b, uint256 amount, bytes32 recipient,
-        bytes calldata proof, bytes calldata) public pure returns (bytes32, bytes memory, bytes memory)
-    {
-        return (UNSHIELD_TYPEHASH, abi.encode(hashBurn(b), amount, recipient, keccak256(proof)),
-            abi.encodeCall(IZetherToken.mtxUnshield, (b, amount, recipient, proof)));
-    }
-
     function uaUnshieldCall(MetaTxLib.UAEnvelope calldata, IZetherToken.ZetherBurn calldata b, uint256 amount,
         bytes32 recipient, bytes calldata proof, IUARegistry.UASig calldata)
         public pure returns (bytes32, bytes memory, bytes memory)
@@ -546,7 +575,7 @@ library ZetherLib {
             : IZetherToken.mtxConfidentialTransfer.selector, t, proof);
     }
 
-    /// @dev The last word of a forwarded call: the token's `bool` (`ZetherLayer._namedZ`).
+    /// @dev The last word of a forwarded call: the token's `bool` (`ZetherLayer._namedZUA`).
     function _compactTail() private pure returns (bool) {
         return abi.decode(msg.data[msg.data.length - 32:], (bool));
     }
@@ -597,7 +626,7 @@ library ZetherLib {
 
     /// @notice The statement context of the token itself (`address(this)` under `DELEGATECALL`).
     function ctx(ZetherStorage storage s, Env memory e) internal view returns (Ctx memory c) {
-        c.ver = s.verifier;
+        c.ver = _ver();
         c.burnVer = e.burnVer;
         c.registry = e.registry;
         c.token = address(this);
@@ -869,8 +898,9 @@ library ZetherLib {
     function _credit(ZetherStorage storage s, ZetherTypes.UA ua, bytes memory cPt, bytes memory dPt) private {
         Account storage a = s.acct[ua];
         uint256 p = s.p;
-        a.pendC = s.verifier.g1Add(_pt(a.pendC, p), cPt);
-        if (dPt.length != 0) a.pendD = s.verifier.g1Add(_pt(a.pendD, p), dPt);
+        IZetherVerifier v = _ver();
+        a.pendC = v.g1Add(_pt(a.pendC, p), cPt);
+        if (dPt.length != 0) a.pendD = v.g1Add(_pt(a.pendD, p), dPt);
         a.pendingSeq += 1;
     }
 
@@ -879,8 +909,9 @@ library ZetherLib {
         Account storage a = s.acct[ua];
         if (a.pendingSeq == a.lastRolledPendingSeq) return;
         uint256 p = s.p;
-        a.accC = s.verifier.g1Add(_pt(a.accC, p), _pt(a.pendC, p));
-        a.accD = s.verifier.g1Add(_pt(a.accD, p), _pt(a.pendD, p));
+        IZetherVerifier v = _ver();
+        a.accC = v.g1Add(_pt(a.accC, p), _pt(a.pendC, p));
+        a.accD = v.g1Add(_pt(a.accD, p), _pt(a.pendD, p));
         delete a.pendC;
         delete a.pendD;
         a.accSeq += 1;

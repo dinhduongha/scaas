@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./helpers/PqzVerdicts.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -17,7 +18,7 @@ contract PqzUA8Test is PqzFixture {
     /// An `mldsa65` UA registered with a PQZ key and its proof hash but without the proof bytes: unproven.
     function _unproven(uint8 seed) internal returns (bytes32 u) {
         u = UACall.register(reg, UAKinds.MLDSA65, _mlPk(seed), _pqzAttrs(_pk(seed)), new bytes(ML65_SIG), "");
-        (address ptr,, bool proven) = reg.pqzKeyOf(u);
+        (, address ptr,, bool proven) = reg.pqzKeyOf(u);
         assertTrue(ptr != address(0), "the key is stored");
         assertFalse(proven);
     }
@@ -32,10 +33,10 @@ contract PqzUA8Test is PqzFixture {
         bytes memory out = _out(60, true);
         bytes memory pl = _payload(1, 0, alice, u, bytes32(0), out, "");
         vm.expectRevert(err); // credit to `u`
-        tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
         pl = _payload(0, 0, u, bob, bytes32(0), out, "");
         vm.expectRevert(err); // `u` as sender
-        tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "");
+        tok.mtxConfidentialTransferSingle(_ts(pl), hex"01", _pqAuth(), "", noVerdict());
     }
 
     function test_ua8_pqzTokenRefusesUnproven() public {
@@ -46,7 +47,7 @@ contract PqzUA8Test is PqzFixture {
     function _assertAccount(bytes32 u) internal {
         _fund(tok, u, 5);
         _transfer(tok, carol, u, bytes32(0), 101, false);
-        assertEq(tok.pqzAccount(u).pendingCount, 2, "a shield and a credit");
+        assertEq(tok.pqzAccount(u, 0).pendingCount, 2, "a shield and a credit");
     }
 
     /// The proof stored later by a third party (`storePqzPop`, `R_REG` accepted by the verifier) makes the key proven:
@@ -54,8 +55,8 @@ contract PqzUA8Test is PqzFixture {
     function test_ua8_pqzTokenAcceptsAfterStorePqzPop() public {
         bytes32 u = _unproven(31);
         vm.prank(address(0x7111D), address(0x7111D));
-        reg.storePqzPop(u, hex"aa");
-        (,, bool proven) = reg.pqzKeyOf(u);
+        reg.storePqzPop(u, 0, hex"aa");
+        (,,, bool proven) = reg.pqzKeyOf(u);
         assertTrue(proven);
         _assertAccount(u);
     }
@@ -64,10 +65,10 @@ contract PqzUA8Test is PqzFixture {
     /// `uaMessage(0x0142, PURPOSE_PQZ_KEY, pqzKeyDigest(ua, keyHash))`, is stored by `storePqzPop`.
     function test_ua8_pqzTokenSetPqzKeyThenProve() public {
         bytes32 u = _mldsaUA(32);
-        reg.setPqzKey(u, _pk(32), keccak256(hex"bb"), UACall.sig(new bytes(ML65_SIG)));
+        reg.setPqzKey(u, 0, _pk(32), keccak256(hex"bb"), UACall.sig(new bytes(ML65_SIG)));
         _assertNoAccount(u);
-        reg.storePqzPop(u, hex"bb");
-        (,, bool proven) = reg.pqzKeyOf(u);
+        reg.storePqzPop(u, 0, hex"bb");
+        (,,, bool proven) = reg.pqzKeyOf(u);
         assertTrue(proven);
         _assertAccount(u);
     }

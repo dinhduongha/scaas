@@ -153,7 +153,43 @@ pub struct EncMulti {
     pub e2_a: Vec<[i16; 16]>,
 }
 
-/// `legs` = `(pk_j, digits of a_j)` in leg order, `d_f` = the new balance's digits.
+/// Clears a secret buffer (review 3w u3-3, as the cores' `Wiped`): plain stores plus `black_box`, best effort; copies
+/// the compiler or the allocator made (moves, spills, a reallocated buffer) are not reached.
+pub(crate) fn clear<T: Default + Copy>(x: &mut [T]) {
+    x.fill(T::default());
+    std::hint::black_box(&*x);
+}
+
+/// The secret key and its noise are cleared on drop (review 3w u3-3); `pk` is public.
+impl Drop for Key {
+    fn drop(&mut self) {
+        clear(&mut self.s[..]);
+        clear(&mut self.e[..]);
+    }
+}
+
+/// The encryption randomness and noise are cleared on drop (review 3w u3-3); `u`, `vs` are the ciphertext.
+impl Drop for Enc {
+    fn drop(&mut self) {
+        clear(&mut self.r[..]);
+        clear(&mut self.e1[..]);
+        clear(&mut self.e2[..]);
+    }
+}
+
+/// The leg, balance and auditor-copy noise are cleared on drop (review 3w u3-3); each group's `Enc` clears itself.
+impl Drop for EncMulti {
+    fn drop(&mut self) {
+        clear(&mut self.e2[..]);
+        clear(&mut self.e2_f[..]);
+        clear(&mut self.e2_a[..]);
+    }
+}
+
+/// `legs` = `(pk_j, digits of a_j)` in leg order, `d_f` = the new balance's digits. `None` when two of the keys
+/// (`pk_f`, every leg's, `pk_a`) are equal: the contract refuses that statement (KV-9 `_distinct`, `KeyReused`), and
+/// equal keys under one randomness publish digit differences (review 3w u3-4); the cores refuse an equal key at an
+/// equal window within one encryption too.
 pub fn enc_multi(
     pk_f: &[u8; PK_BYTES],
     d_f: [u8; 16],
@@ -162,6 +198,10 @@ pub fn enc_multi(
     seed_enc: &[u8; 32],
 ) -> Option<EncMulti> {
     let m = legs.len();
+    let keys: Vec<&[u8; PK_BYTES]> = std::iter::once(pk_f).chain(legs.iter().map(|l| l.0)).chain(pk_a).collect();
+    if (1..keys.len()).any(|k| keys[..k].contains(&keys[k])) {
+        return None;
+    }
     let mut out = EncMulti {
         groups: Vec::new(),
         v: Vec::with_capacity(m),

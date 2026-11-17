@@ -13,19 +13,25 @@ derived (see [`../README.md`](../README.md)).
 | Δ | ⌊q / 2^20⌋ = 1,073,741,783 (odd) |
 | `K_MAX` | 16,384; digit sums `M_i` 18 bits, carries 15 bits, `e_T` / `e'` + 2^28 in 29 bits |
 | norm bounds | β_s 40 (CBD(1)), β_e 182 (CBD(20)), β_2 64; B_FRESH 14,624; worst case 16,383 · B_FRESH = 239,584,992 < E = 2^28 (margin 1.12), mint margin 3.36 (`worstcase_noise.json`) |
-| proof MLWE rank (`kmlwe_min`) | 39 (`e-s1.txt`: every one of the 14 specs meets MSIS β 455–468, hiding MLWE uSVP 470–475, dual_hybrid 462 / 463 at `pqz_delta` 1.00366; the codegen default rank 38 gives dual_hybrid 446 / 447) |
+| proof MLWE rank (`kmlwe_min`) | 39 (`e-s1.txt`: every one of the 16 specs (txs / txs0 since the three-key round, K3-4) meets MSIS β 455–468, hiding MLWE uSVP 470–475, dual_hybrid 462 / 463 at `pqz_delta` 1.00366; the codegen default rank 38 gives dual_hybrid 446 / 447) |
 | encryption, no hints | uSVP β 508; 2^145.7 classical / 2^132.7 quantum (dual_hybrid β 499 / 500) (`p16k/results-16k.md` §2) |
 | encryption with hints (op 7 groups) | since the R0 review fix (R0-1, `s_aud` = 4: 32·4 = 128 worst-case hints with the auditor): DDGR20 β 467.60, dual_hybrid − offset 458.60 / 460.60 [estimate] (`pqzl/params/anon/hints-s.txt`); 64 hints without the auditor; was 482.43 / 474.43 at 80 |
-| e_s0 | budget, exactness of every norm proof (14 relations) and Fiat–Shamir rounds (λ = 4 read from the headers: 200.00 bits; the final challenge from the η-filtered set the cores sample since the R0 review fix, R0-C3: P = 0.9143, 2/\|C\| = 2^-129.67): MET (`e-s0.txt`) |
-| proofSystemId | PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5")` = `0xeacf34a3…276882` (R0 review fix 2026-10-25; v4 `0xa3db21fc…70262d` retired); PQZH `keccak256("scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3")` = `0xc93f3bdd…3f3662` (R0 review fix; v2 `0xe83ad1da…109851` retired) (set.toml `pqzl_id` / `pqzh_id`; plan 5h Task 8d, the one bump of Task 8: controller proposal, decisions CTR-PQZ-09) |
+| e_s0 | budget, exactness of every norm proof (16 relations) and Fiat–Shamir rounds (λ = 4 read from the headers: 200.00 bits; the final challenge from the η-filtered set the cores sample since the R0 review fix, R0-C3: P = 0.9143, 2/\|C\| = 2^-129.67): MET (`e-s0.txt`) |
+| proofSystemId | PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v6")` = `0x53aa6870…d83841` (three-key round 2026-11-13, K3-4b: T-36; v5 `0xeacf34a3…276882` retired); PQZL_SPLIT_ID `keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/split-v1")` = `0x296b284f…cdb74e` (opening tokens, `R_TXS`, K3-4); PQZH `keccak256("scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v4")` = `0x4b2d2ff2…9a9ba7` (T-35 role tags, T-36; v3 `0xc93f3bdd…3f3662` retired) (set.toml `pqzl_id` / `pqzl_split_id` / `pqzh_id`; decisions CTR-PQZ-09; the R0 review fix's v4 / v2 and earlier ids retired, gen_set.py `RETIRED`) |
 | owner approval | 2026-10-20 (Q1, the Task 8 set), 2026-10-21 (superseded as default by `n2304-kmax4096`; kept shippable) |
 | stored-blob packing width (P46 ruling) | ⌈log2 q⌉ = 50 bits; `PqzSet.sol` `PACK_BITS`; built in 8d part 2: stored `ct` 16,100 B (64-bit lanes 20,608), `acc` 504 slots |
 | PQZH | built (plan 5h Task 8c part 2): THE preset's radices and n / k (n 32,756, k 817) with t = 122 (owner 2026-10-23), `pqzh_set.rs` generated from `set.toml` `[pqzh_preset]`; debit bounds 303,412–305,120 B exceed 262,144 → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB)** (decisions CTR-PQZ-10; first for this set only, since 2026-10-25 every PQZH set's), in `pqz-stmt` with `MAX_INPUT` 524,288; in pqz-ffi, the vectors and the gate; conditions: [PQZH.md](PQZH.md) |
-| `ROLL_MAX` | 64 (`set.toml` `roll_max` → `PqzSet.ROLL_MAX`, plan 5h Task 8d part 2b; below) |
-| LaZer codegen headers | byte-identical to the p16k record's (`pqzl/params/p16k/`, the 12 relations it has) until the R0 review fix, which regenerated reg / dr (`Bprime` 8, R0-C2; `9ac573ad`) |
+| `ROLL_MAX` | **48** since the three-key round (decision 2026-11-14 on CTR-PQZ-41; item 5); before it 64 (`set.toml` `roll_max` → `PqzSet.ROLL_MAX`, plan 5h Task 8d part 2b; below) |
+| LaZer codegen headers | byte-identical to the research record's (`pqzl/params/p16k/`, the 12 relations it has) until the R0 review fix, which regenerated reg / dr (`Bprime` 8, R0-C2; `9ac573ad`) |
 | upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL), 19/19 |
 
 ## Conditions for this set to work on a chain
+
+**Opening tokens (three-key round, measured 2026-11-14, `test/pqz/PqzThreeKeysGas.t.sol`; [CTR-PQZ-37](../../../docs/contracts/pq-zero-knowledge.md#CTR-PQZ-37)):
+an opening token at this set needs a chain whose block gas limit is at least 63.40 M under EIP-8037** (one op 1 with the auditor,
+relayed: 7,725,976 regular + 55,676,700 state = 63,402,676; without the auditor 60,578,780), above a 60 M Ethereum-like block.
+A scoped key record fits it (`setPqzScopedKey` 36,292,108, `storePqzScopedPop` 56,081,285). Owner ruling 2026-11-14 (verbatim in `docs/decisions.md`, CTR-PQZ-37):
+this set is only for customer chains with larger blocks; no factory refusal, no design change.
 
 Measured where marked: plan 5h Task 8d part 2b, forge 1.8.5 under Amsterdam through the real token and registry, the
 `PQZ` precompile at its provisional testnet row (`pqz-core/nethermind/chain/engine-pqz-provisional-n2560.json`, until
@@ -50,7 +56,7 @@ Task 9) + 3 per input word (`smartcontracts/evm/runs/2026-10-26-t8d2b-gas-n2560-
    without [measured]. Block gas used = max(Σ regular, Σ state) (EIP-8037), so Ethereum mainnet's 60 M block holds two
    op 1 debits of this set and one op 7 M = 8; a transaction needs a block limit ≥ its state gas (the SCaaS testnet:
    200 M); no rule assumes a larger limit. The real cost (state gas is paid) applies on a customer chain.
-5. **`ROLL_MAX` 64** (largest multiple of 16 with the relayed rollover ≤ 0.75·2^24 regular gas on both relay paths;
+5. **`ROLL_MAX` 48** since the three-key round (decision 2026-11-14 on CTR-PQZ-41): the holder's signed rollover sizes it, worst case `n` entries + `n` skip marks, an `mldsa65` or 2-of-2 `mldsa65` `msig` holder through the ML-DSA precompile, both relay paths: 11,936,882 at 48 on `uaExecute` with the `msig`, 13,501,299 at 64 (`test/pqz/PqzRollSignedGas.t.sol`). Before it, **`ROLL_MAX` 64** (largest multiple of 16 with the relayed rollover ≤ 0.75·2^24 regular gas on both relay paths;
    80 gives 13,800,944 / 13,959,296 via `mtxExecute` / `uaExecute`) [measured, linear fit on the split bytecode, `smartcontracts/evm/runs/2026-10-27-metatx-split-gas-n2560-kmax16384.txt:572,581`;
    the pre-split scan: `smartcontracts/evm/runs/2026-10-26-t8d2b-fix-rollscan-n2560-kmax16384.txt`; the Task 7b measurement, with the contracts of then, gave 80]. **Tight:** on `uaExecute` (the binding path) 64 is
    only 6,032 gas under the cap (12,576,880 of 12,582,912; the metatx split moved it from 15,281), so the next contract change may move it to 48: re-run the rollscan

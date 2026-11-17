@@ -1,0 +1,30 @@
+# ua-mtx-merge T12 gate summary (full output in git-ignored .log files, not committed)
+# T12: zether-prover (Zether only; plan T12, R35, CTR-ZTH-51, CTR-MTX-30): ua_envelope_binding over SCAAS-ZETHER-UA-ENVELOPE-V1
+# and ua_digest (UAMetaTransaction, `from` a bytes32 id) beside the address envelope_binding of executeMetaTransaction; the
+# `uaEnvelope` command; namedCall builds the merged entries mtx<Op>(UAEnvelope, ..., bytes proof, UASig auth) for a native or
+# derived `from`, `sig` raw or {keyData, signature, members}; typed::OPS on the 27 Zether rows of the 68-row typed_ops.json;
+# ZetherProverCross and ZetherE2E.s.sol / e2e-zether.sh on the merged named entries (T10's SKIP cleared). No contract under src
+# changed. The round's gate runner (T21) is not built yet: each command ran directly (heavy ones through scripts/capped, cargo -j2).
+# Toolchain: rustc / cargo 1.99.0 (the local stable; CI's zether-prover job uses dtolnay/rust-toolchain@stable, no pin on this
+# branch), wasm32-unknown-unknown, wasm-bindgen 0.2.129, node, Foundry 1.8.5.
+# Base: bc44aea2 (T11). T12 commits: 1a408180 (legacy copies, MD-4), dd6dab02 (the build), this one (harness, mutants, summary).
+step | commit | rc | counts
+t12-red-cargo | bc44aea2 code, the new tests | 101 | 6 passed 5 failed (envelope_disclosure 4/1: ua_envelope_matches_cast; typed_ops 2/4: every_zether_row_digest_equals_the_vector, named_call_equals_the_vector_calldata, named_call_takes_a_derived_from, named_call_encodes_a_full_ua_sig); the passes guard what does not move (envelope_matches_cast: the address binding; unbound_relayer_and_fee_recipient_hash_as_zero: UABurn / UAReceiverFee were rows before)
+t12-red-cross | the pre-T12 release zether-cli, the new ZetherProverCross | 1 | 7 passed 5 failed (the four named rows and test_uaEnvelopeEqualsTheToken: no `uaEnvelope` command)
+t12-cargo-test | dd6dab02 | 0 | cargo test (CI's command): 70 passed 0 failed 0 ignored, 12 binaries (lib 15, envelope_disclosure 5, r33_keys 9, read_balance 1, zether-read-balance 1, recover 9, s2_crosscheck 4, typed_ops 6, vectors 3, zether_proofs 17); 2 warnings, unused imports in tests/recover.rs, as on bc44aea2
+t12-wasm-smoke | dd6dab02 | 0 | ./wasm-smoke.sh (release zether-cli, wasm32 lib, wasm-bindgen nodejs, node smoke): 9 checks passed
+t12-zether-cli | dd6dab02 | 0 | cargo build --release --bin zether-cli (the binary zether-cross and e2e-zether used)
+t12-zether-cross | dd6dab02 | 0 | forge test --ffi --match-path test/zether/ZetherProverCross.t.sol: 12 passed 0 failed 0 skipped (T4: 10; + test_uaEnvelopeEqualsTheToken native and derived, test_named_single_relayed_derived; the three named rows settle again)
+t12-e2e-zether | dd6dab02 | 0 | scripts/e2e-zether.sh (own anvil, chain 31337, 200 M): passed, 96 ok lines, 27 transactions all status 1, 0 FAIL, 0 SKIP (T10's named-entry SKIP cleared: named single 15, Compact M = 2 10, unshield 5 on mtx<Op>(UAEnvelope, ..., UASig), every UA binding equal to zether-cli uaEnvelope and the token's view); no anvil left
+t12-docs-check | dd6dab02 | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0; test_docs_check ok
+t12-mutants | this commit's harness on dd6dab02 | 101 each | 4 of 4 killed against typed_ops.rs + envelope_disclosure.rs, none a compile error (runs/2026-11-04-ua-mtx-merge-t12-mutants.txt): ua-tag-swapped-for-address-tag and from-hashed-as-address (ua_envelope_matches_cast; the second on the derived id only), ua-sig-members-dropped (named_call_encodes_a_full_ua_sig), single-signs-bytes-sig (named_call_encodes_a_full_ua_sig, named_call_equals_the_vector_calldata)
+#
+# Pins, old -> new:
+#   vectors the prover reads: vectors/typed/legacy/ua-mtx-merge/typed_ops.json (112 rows, 47 Zether) -> vectors/typed/typed_ops.json
+#   (68 rows, 27 Zether; T11's generator, not edited). UACancelNonce 0xf5d81494... -> 0xcd17c212... (the vector's).
+#   namedCall selectors: mtxConfidentialTransferSingle 0xe7a3ea6f -> 0x19107db3, mtxConfidentialTransfer 0xfe088642 -> 0x5aefe761,
+#   mtxConfidentialTransferCompact 0x924dae36 -> 0xdaf44d97, mtxUnshield 0x83ea2dcd -> 0xf7553e18, mtxUnshieldUnwrap
+#   0x8f884c16 -> 0xad61f16d. Vectors the prover writes (clients/zether-prover/vectors/, envelope.json): unchanged.
+#
+# Not run in T12: clippy (CI's zether-prover job runs none); the full forge suite (no src change; the only forge files
+# changed are ZetherProverCross.t.sol, run above, and the script, run by e2e-zether); the scaas-node suite; pqz-core.

@@ -17,7 +17,7 @@ built code differs from the target.
 | [indexer-feeds.md](indexer-feeds.md) | finality gates, event-set quorum, event normalization, `/v1/jobs` and `/v1/events` feeds |
 | [gateway.md](gateway.md) | door A: `/v1/metatx`, `/v1/ops`, `/v1/gateway`, UA routes, intake, CORS, errors |
 | [admin-auth.md](admin-auth.md) | admin API, built-in users, OIDC, roles, CLI, audit, app serving |
-| [sponsorship.md](sponsorship.md) | gas sponsorship policies, budgets, receiver-pays touchpoints, SponsorshipPool (PLANNED) |
+| [sponsorship.md](sponsorship.md) | gas sponsorship policies, budgets, payee fee touchpoints, SponsorshipPool (PLANNED) |
 | [dex-venue.md](dex-venue.md) | order book, matching, intake, `/v1/dex/*`, watcher, book gossip, managed markets |
 | [mesh.md](mesh.md) | intent envelope, pull bus, acceptance policy, exclusivity, private profile |
 | [gossip.md](gossip.md) | libp2p gossip, PQ transport, validation, numbers, hints, announces |
@@ -49,8 +49,9 @@ cancels and re-queues. The worked ERP example is in [integration.md](../integrat
 
 In scope:
 
-1. **Direction**: clients call the node; the node never calls a client (no webhooks, no callbacks). Latency is bounded
-   by client polling ([indexer-feeds.md#feeds](indexer-feeds.md#feeds)).
+1. **Direction**: clients call the node; the node sends a client nothing but the optional content-free doorbell ping of
+   [NODE-IDX-09](indexer-feeds.md#NODE-IDX-09) (no data webhooks, no callbacks). Latency is bounded by client polling or the
+   ping ([indexer-feeds.md#feeds](indexer-feeds.md#feeds)).
 2. **Store** — one store, always on, on SQLite, PostgreSQL or MySQL ([store.md](store.md)): jobs, job events, chain
    index ranges, configuration, key metadata, audit log, DEX book, mesh and gossip tables.
 3. **Multi-tenancy without companies**: namespaces and per-namespace machine credentials
@@ -64,14 +65,14 @@ In scope:
    journaled nonces. Two gaps of the built code close: door A work becomes journaled and digest-guarded, and
    relayer-bound jobs go to their lane.
 7. Gateway capability route, CORS, error contract, `/v1/ops`, UA routes and app serving; denylist, FinOps, restore and
-   integrity tooling; sponsorship, receiver-pays and registered chain contracts; UA jobs and records; planned asset
+   integrity tooling; sponsorship, payee fee and registered chain contracts; UA jobs and records; planned asset
    snapshots, batching and non-EVM DEX books.
 
 Non-goals:
 
 | Out | Why / where it goes |
 |---|---|
-| Node calling a client for anything (webhooks, callbacks) | [ARCH-POS-05](../decisions.md#ARCH-POS-05). Latency: the client re-triggers its own polling. |
+| Node sending a client data (data webhooks, callbacks) | [ARCH-POS-05](../decisions.md#ARCH-POS-05). The one exception is the content-free doorbell ping ([NODE-IDX-09](indexer-feeds.md#NODE-IDX-09)); the data is read from the feeds. |
 | Two nodes owning jobs of one (client, chain), or HA on a shared database | [NODE-JOB-06](job-api.md#NODE-JOB-06), [NODE-STO-06](store.md#NODE-STO-06). Failover = restore the store on another host ([limitations](#limitations)). |
 | Uploading lane keys, RPC URLs, database URLs, the master key or OIDC issuers through the admin API | [NODE-STO-03](store.md#NODE-STO-03): secrets and dial targets stay in `node.toml`/keystores. The one exception is `mesh_peer.url`. |
 | Opaque-token introspection (RFC 7662), DPoP, mTLS-bound tokens | [NODE-ADM-02](admin-auth.md#NODE-ADM-02): JWT access tokens only; follow-up. |
@@ -348,7 +349,7 @@ Additions for the store-backed rulings (each lands with the change it covers):
   `/v1/ops` accept order per family; 64-byte signatures accepted only on Hedera; UA routes (miss cached 60 s,
   `UA_KEY_IN_USE`, the [NODE-GW-03](gateway.md#NODE-GW-03) target); app headers byte-exact.
 - Accept/lease: denylist per party, door and lease re-check (no address in logs, labels, audit mirror,
-  [NODE-OPS-14](ops.md#NODE-OPS-14)); the [sponsorship tests](sponsorship.md); `receiver_fee` rules; `traceparent` →
+  [NODE-OPS-14](ops.md#NODE-OPS-14)); the [sponsorship tests](sponsorship.md); `payee_fee` rules; `traceparent` →
   `trace_id`; cost fields per family; golden metrics with pre-emitted zeros; `/readyz` per-chain body. Client side:
   acknowledgement cancels, cursor reset ([job-api.md#client-tests](job-api.md#client-tests)).
 - Cancel-by-origin tombstones: ungranted chain `403`, TTL over cap `422`, expired ⇒ no row, `max_tombstones` `429`,

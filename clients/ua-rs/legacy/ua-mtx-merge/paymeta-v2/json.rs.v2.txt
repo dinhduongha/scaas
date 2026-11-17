@@ -1,0 +1,9 @@
+// clients/ua-rs/src/json.rs at ca8a4773: meta_pay_id_json (v2) only. Not built.
+/// `{salt, payNo, schema, body}` → `{payId}`: `metaPayId` under `scaas.pay.meta.v2`, after the shape and `payNo` checks
+/// (`Argument` when refused).
+pub fn meta_pay_id_json(t: &str) -> JsonResult<String> {
+    let v = parse(t)?;
+    let m = crate::pay::PayMeta { salt: ua_in(&v["salt"])?, pay_no: v["payNo"].as_str().unwrap_or("").to_string(),
+        schema: small_in(&v["schema"])?, body: unhex(&v["body"])? };
+    Ok(json!({ "payId": hx(&crate::pay::meta_pay_id_v2(&m).map_err(|_| Argument)?) }).to_string())
+}

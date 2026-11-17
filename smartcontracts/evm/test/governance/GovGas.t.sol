@@ -8,19 +8,26 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
+import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
+import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {plainEnv, Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {PQZ_UID} from "../pqz/helpers/PqzRegistryBase.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {NoteKind, INoteKind} from "../v2/mocks/GenericKinds.sol";
 
 /// @notice Plain `transfer` and `mtxTransfer` per kind, for the governance prototype (D1, D2; before and after,
 ///         `docs/research/governance/prototype/`). One row per test, so each measures from a fresh `setUp`. Written against
-///         ABI strings and literal bits only: the same file compiles on the code before and after the prototype.
+///         ABI strings and literal bits only: the same file compiles on the code before and after the prototype
+///         (ua-mtx-merge T2: `mtxTransfer` is the merged form, through `IMetaTokenV2`).
 abstract contract GovRows is Test {
     uint256 internal constant G_PK = 0xA11CE;
     address internal constant G_TO = address(0xCAFE);
@@ -40,14 +47,17 @@ abstract contract GovRows is Test {
         assertTrue(ok, "prime mtxTransfer");
     }
 
+    /// ua-mtx-merge T2: the merged `mtxTransfer` (today's `uaTransfer` body): the EOA signs `UAMetaTransfer` with its own
+    /// key, ids padded, `UASig{signature}`.
     function _mtxCall(address t, uint256 nonce) internal view returns (bytes memory) {
-        MetaTxLib.MetaTransfer memory x = MetaTxLib.MetaTransfer({from: _gSigner(), to: G_TO, value: 1, entryRef: 0,
-            batch: G_LANE, nonce: nonce, validUntil: block.timestamp + 600, mode: 0, relayer: address(0), fee: 0,
-            feeRecipient: address(0)});
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({from: MetaTxLib.pad(_gSigner()),
+            to: MetaTxLib.pad(G_TO), value: 1, entryRef: 0, batch: G_LANE, nonce: nonce,
+            validUntil: block.timestamp + 600, mode: 0, relayer: address(0), fee: 0, feeRecipient: address(0)});
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(G_PK, IERC20MetaTx(t).mtxTransferDigest(x));
-        return abi.encodeWithSignature(
-            "mtxTransfer(address,address,uint256,uint256,uint256,uint256,uint32,address,bytes)",
-            x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, abi.encodePacked(r, s, v));
+        IUARegistry.UASig memory a;
+        a.signature = abi.encodePacked(r, s, v);
+        return abi.encodeCall(IMetaTokenV2.mtxTransfer,
+            (x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, a));
     }
 
     function _row(string memory label, address t, address sender, bytes memory cd) internal {
@@ -89,7 +99,7 @@ contract GovGasNormal is GovRows {
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        f = new OpenFactory(address(this), UID, 0);
+        f = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(_tokenConfig(1_000 ether)), "n");
         _prime(t);
@@ -104,7 +114,7 @@ contract GovGasNormal is GovRows {
 
     /// A whole-shape holder: `use` pays one feature read and one role read, no call (B-26).
     function test_mintWholeShape() public {
-        _row("NormalToken mint whole-shape", m, G_MINTER, abi.encodeWithSignature("mint(address,uint256)", G_TO, 1));
+        _row("NormalToken mint whole-shape", m, G_MINTER, abi.encodeWithSignature("mint(address,uint256,bytes32)", G_TO, 1, EnvKit.codeUidOf(m)));
     }
 
     function test_createToken() public {
@@ -117,6 +127,50 @@ contract GovGasNormal is GovRows {
         c.features = 3; // PAYABLE | MINTABLE
         c.lockedFeatures = 2; // no owner: the minter survives creation on a locked bit (B-06)
         c.roles.minter = nid(G_MINTER);
+    }
+}
+
+/// Factory index spec §3 (plan T67): `createDex` beside `createToken`, steady state (the creator has a DEX already, so the
+/// row pays the record and the list elements, not a first list length; no owner word or list since round 3r R1).
+contract GovGasDex is GovRows {
+    bytes32 constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
+    OpenFactory f;
+
+    function setUp() public {
+        vm.warp(1_800_000_000);
+        f = EnvKit.factory(address(this), UID, 0);
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+        f.createDex(1, abi.encode(_dexConfig()), "d0");
+    }
+
+    function _dexConfig() internal pure returns (ISCaaSDex.DexConfig memory) {
+        return ISCaaSDex.DexConfig(nid(G_TO), 0, G_TO, false, 0, address(0), 0, 0);
+    }
+
+    function test_createDex() public {
+        _row("SCaaSDex createDex", address(f), address(this), abi.encodeCall(OpenFactory.createDex, (1, abi.encode(_dexConfig()), "d1")));
+    }
+}
+
+/// Factory index spec §8.7 (plan T70): `createInstance` of the test kind `NoteKind` (class 4, kind 0), steady state (the
+/// creator has an instance already), beside `createDex`.
+contract GovGasInstance is GovRows {
+    bytes32 constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
+    OpenFactory f;
+
+    function setUp() public {
+        vm.warp(1_800_000_000);
+        f = EnvKit.factory(address(this), UID, 0);
+        f.publishClassEnv(4, 0, 1, EnvKit.uidOf(address(f)), plainEnv(address(f), address(0), UID, address(0), false));
+        f.deployImplementation(IOpenFactory.ReleaseId(4, 0, 1), 1, INoteKind.initialize.selector, type(INoteKind).interfaceId,
+            type(NoteKind).creationCode, "", EnvKit.uidOf(address(f)));
+        f.setClassKindEnabled(4, 0, true, EnvKit.uidOf(address(f)));
+        f.createInstance(IOpenFactory.ReleaseId(4, 0, 1), "i0", abi.encodeCall(INoteKind.initialize, (nid(G_TO), "n")));
+    }
+
+    function test_createInstance() public {
+        _row("NoteKind createInstance", address(f), address(this), abi.encodeCall(OpenFactory.createInstance,
+            (IOpenFactory.ReleaseId(4, 0, 1), "i1", abi.encodeCall(INoteKind.initialize, (nid(G_TO), "n")))));
     }
 }
 
@@ -150,7 +204,7 @@ contract GovGasWrapped is GovRows {
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        OpenFactory f = new OpenFactory(address(this), UID, 0);
+        OpenFactory f = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _tokenConfig(0);

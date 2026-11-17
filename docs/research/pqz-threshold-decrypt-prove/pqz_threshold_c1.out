@@ -1,0 +1,151 @@
+== set n2048-kmax1024: q = 4398046510889 (2^41+), Delta = 67108863, K = 32, MBITS = 14
+-- n = 5, degree d = 2, reconstruct t = 3, multiplications need 5 online
+   ok   enc row 0 leg 0 (fresh, value 1000000): MPC M == frozen M: True
+   ok   enc row 1 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 1 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 1 leg 2 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 3 leg 0 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 4 leg 0 (fresh, value 1000993): MPC M == frozen M: True
+   ok   enc row 5 leg 0 (fresh, value 0): MPC M == frozen M: True
+   ok   enc row 5 leg 1 (fresh, value 18446744073709551615): MPC M == frozen M: True
+   ok   enc op add trivial 1000: MPC M == frozen M: True
+   ok   enc op sub trivial 1000: MPC M == frozen M: True
+   ok   enc op add row 5 leg 0: MPC M == frozen M: True
+   ok   enc op sub row 5 leg 0: MPC M == frozen M: True
+   ok   worst case T: 1,023 credits at B_FRESH, noise 12,145,056: MPC M == frozen M: True
+   ok   window 3 copy (not a frozen vector; expected from the reference Dec): MPC M == frozen M: True
+   cost per decryption (16 coefficients): offline 24 rounds, 10656 multiplications, 1620 openings, 55296 field elements sent per party; online 9 rounds, 4784 multiplications, 32 openings, 19264 field elements sent per party (8 B each)
+   online openings: ['M (output)', 'c = y + r mod q (uniform mask)']
+   N1 wrong key share of party 2, all 5 shares checked at the opening: Abort (c = y + r mod q (uniform mask): shares do not lie on one degree-2 polynomial)
+   N1b the same share, fast path opening from parties 1-3 only: M == frozen: False
+   N2a only d = 2 parties online: Abort (multiplication needs 2d + 1 = 5 online parties, 2 online)
+   N2b two partials (d < t) interpolated and rounded in the clear: M == frozen: False
+   N3 caller-supplied ciphertext: Abort (NotChainState: the service decrypts only ciphertexts it reads from chain state)
+   N3b without the state rule: 256 crafted queries (8 K) recover s exactly: True (2 of them also run through the MPC, same answers)
+   N4 comparator mutant (frozen M with M_0 + 1): equal: False
+== set n2048-kmax1024: all checks passed
+== set n2304-kmax4096: q = 61275424977257 (2^45+), Delta = 233747196, K = 36, MBITS = 16
+-- n = 3, degree d = 1, reconstruct t = 2, multiplications need 3 online
+   ok   enc row 0 leg 0 (fresh, value 1000000): MPC M == frozen M: True
+   ok   enc row 1 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 1 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 1 leg 2 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 3 leg 0 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 4 leg 0 (fresh, value 1000993): MPC M == frozen M: True
+   ok   enc row 5 leg 0 (fresh, value 0): MPC M == frozen M: True
+   ok   enc row 5 leg 1 (fresh, value 18446744073709551615): MPC M == frozen M: True
+   ok   enc op add trivial 1000: MPC M == frozen M: True
+   ok   enc op sub trivial 1000: MPC M == frozen M: True
+   ok   enc op add row 5 leg 0: MPC M == frozen M: True
+   ok   enc op sub row 5 leg 0: MPC M == frozen M: True
+   ok   worst case T: 4,095 credits at B_FRESH, noise 54,103,140: MPC M == frozen M: True
+   ok   window 3 copy (not a frozen vector; expected from the reference Dec): MPC M == frozen M: True
+   cost per decryption (16 coefficients): offline 24 rounds, 11301 multiplications, 1704 openings, 29280 field elements sent per party; online 9 rounds, 5264 multiplications, 32 openings, 10592 field elements sent per party (8 B each)
+   online openings: ['M (output)', 'c = y + r mod q (uniform mask)']
+-- n = 5, degree d = 2, reconstruct t = 3, multiplications need 5 online
+   ok   enc row 0 leg 0 (fresh, value 1000000): MPC M == frozen M: True
+   ok   enc row 1 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 1 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 1 leg 2 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 3 leg 0 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 4 leg 0 (fresh, value 1000993): MPC M == frozen M: True
+   ok   enc row 5 leg 0 (fresh, value 0): MPC M == frozen M: True
+   ok   enc row 5 leg 1 (fresh, value 18446744073709551615): MPC M == frozen M: True
+   ok   enc op add trivial 1000: MPC M == frozen M: True
+   ok   enc op sub trivial 1000: MPC M == frozen M: True
+   ok   enc op add row 5 leg 0: MPC M == frozen M: True
+   ok   enc op sub row 5 leg 0: MPC M == frozen M: True
+   ok   worst case T: 4,095 credits at B_FRESH, noise 54,103,140: MPC M == frozen M: True
+   ok   window 3 copy (not a frozen vector; expected from the reference Dec): MPC M == frozen M: True
+   cost per decryption (16 coefficients): offline 24 rounds, 11301 multiplications, 1704 openings, 58560 field elements sent per party; online 9 rounds, 5264 multiplications, 32 openings, 21184 field elements sent per party (8 B each)
+   online openings: ['M (output)', 'c = y + r mod q (uniform mask)']
+-- n = 7, degree d = 3, reconstruct t = 4, multiplications need 7 online
+   ok   enc row 0 leg 0 (fresh, value 1000000): MPC M == frozen M: True
+   ok   enc row 1 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 1 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 1 leg 2 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 3 leg 0 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 4 leg 0 (fresh, value 1000993): MPC M == frozen M: True
+   ok   enc row 5 leg 0 (fresh, value 0): MPC M == frozen M: True
+   ok   enc row 5 leg 1 (fresh, value 18446744073709551615): MPC M == frozen M: True
+   ok   enc op add trivial 1000: MPC M == frozen M: True
+   ok   enc op sub trivial 1000: MPC M == frozen M: True
+   ok   enc op add row 5 leg 0: MPC M == frozen M: True
+   ok   enc op sub row 5 leg 0: MPC M == frozen M: True
+   ok   worst case T: 4,095 credits at B_FRESH, noise 54,103,140: MPC M == frozen M: True
+   ok   window 3 copy (not a frozen vector; expected from the reference Dec): MPC M == frozen M: True
+   cost per decryption (16 coefficients): offline 48 rounds, 14296 multiplications, 2192 openings, 111552 field elements sent per party; online 9 rounds, 5264 multiplications, 32 openings, 31776 field elements sent per party (8 B each)
+   online openings: ['M (output)', 'c = y + r mod q (uniform mask)']
+   N1 wrong key share of party 2, all 5 shares checked at the opening: Abort (c = y + r mod q (uniform mask): shares do not lie on one degree-2 polynomial)
+   N1b the same share, fast path opening from parties 1-3 only: M == frozen: False
+   N2a only d = 2 parties online: Abort (multiplication needs 2d + 1 = 5 online parties, 2 online)
+   N2b two partials (d < t) interpolated and rounded in the clear: M == frozen: False
+   N3 caller-supplied ciphertext: Abort (NotChainState: the service decrypts only ciphertexts it reads from chain state)
+   N3b without the state rule: 288 crafted queries (8 K) recover s exactly: True (2 of them also run through the MPC, same answers)
+   N4 comparator mutant (frozen M with M_0 + 1): equal: False
+== set n2304-kmax4096: all checks passed
+== set n2560-kmax16384: q = 1125899864532089 (2^49+), Delta = 1073741783, K = 40, MBITS = 18
+-- n = 5, degree d = 2, reconstruct t = 3, multiplications need 5 online
+   ok   enc row 0 leg 0 (fresh, value 1000000): MPC M == frozen M: True
+   ok   enc row 1 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 1 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 1 leg 2 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 3 leg 0 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 4 leg 0 (fresh, value 1000993): MPC M == frozen M: True
+   ok   enc row 5 leg 0 (fresh, value 0): MPC M == frozen M: True
+   ok   enc row 5 leg 1 (fresh, value 18446744073709551615): MPC M == frozen M: True
+   ok   enc op add trivial 1000: MPC M == frozen M: True
+   ok   enc op sub trivial 1000: MPC M == frozen M: True
+   ok   enc op add row 5 leg 0: MPC M == frozen M: True
+   ok   enc op sub row 5 leg 0: MPC M == frozen M: True
+   ok   worst case T: 16,383 credits at B_FRESH, noise 239,584,992: MPC M == frozen M: True
+   ok   window 3 copy (not a frozen vector; expected from the reference Dec): MPC M == frozen M: True
+   cost per decryption (16 coefficients): offline 48 rounds, 15288 multiplications, 2226 openings, 78624 field elements sent per party; online 9 rounds, 5744 multiplications, 32 openings, 23104 field elements sent per party (8 B each)
+   online openings: ['M (output)', 'c = y + r mod q (uniform mask)']
+   N1 wrong key share of party 2, all 5 shares checked at the opening: Abort (c = y + r mod q (uniform mask): shares do not lie on one degree-2 polynomial)
+   N1b the same share, fast path opening from parties 1-3 only: M == frozen: False
+   N2a only d = 2 parties online: Abort (multiplication needs 2d + 1 = 5 online parties, 2 online)
+   N2b two partials (d < t) interpolated and rounded in the clear: M == frozen: False
+   N3 caller-supplied ciphertext: Abort (NotChainState: the service decrypts only ciphertexts it reads from chain state)
+   N3b without the state rule: 320 crafted queries (8 K) recover s exactly: True (2 of them also run through the MPC, same answers)
+   N4 comparator mutant (frozen M with M_0 + 1): equal: False
+== set n2560-kmax16384: all checks passed
+== set n2816-kmax65536: q = 18014398509481657 (2^53+), Delta = 4294967295, K = 44, MBITS = 20
+-- n = 5, degree d = 2, reconstruct t = 3, multiplications need 5 online
+   ok   enc row 0 leg 0 (fresh, value 1000000): MPC M == frozen M: True
+   ok   enc row 1 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 1 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 1 leg 2 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 0 (fresh, value 123456): MPC M == frozen M: True
+   ok   enc row 2 leg 1 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 3 leg 0 (fresh, value 877537): MPC M == frozen M: True
+   ok   enc row 4 leg 0 (fresh, value 1000993): MPC M == frozen M: True
+   ok   enc row 5 leg 0 (fresh, value 0): MPC M == frozen M: True
+   ok   enc row 5 leg 1 (fresh, value 18446744073709551615): MPC M == frozen M: True
+   ok   enc op add trivial 1000: MPC M == frozen M: True
+   ok   enc op sub trivial 1000: MPC M == frozen M: True
+   ok   enc op add row 5 leg 0: MPC M == frozen M: True
+   ok   enc op sub row 5 leg 0: MPC M == frozen M: True
+   ok   worst case T: 65,535 credits at B_FRESH, noise 1,044,627,900: MPC M == frozen M: True
+   ok   window 3 copy (not a frozen vector; expected from the reference Dec): MPC M == frozen M: True
+   cost per decryption (16 coefficients): offline 24 rounds, 14328 multiplications, 2052 openings, 73440 field elements sent per party; online 9 rounds, 6224 multiplications, 32 openings, 25024 field elements sent per party (8 B each)
+   online openings: ['M (output)', 'c = y + r mod q (uniform mask)']
+   N1 wrong key share of party 2, all 5 shares checked at the opening: Abort (c = y + r mod q (uniform mask): shares do not lie on one degree-2 polynomial)
+   N1b the same share, fast path opening from parties 1-3 only: M == frozen: False
+   N2a only d = 2 parties online: Abort (multiplication needs 2d + 1 = 5 online parties, 2 online)
+   N2b two partials (d < t) interpolated and rounded in the clear: M == frozen: False
+   N3 caller-supplied ciphertext: Abort (NotChainState: the service decrypts only ciphertexts it reads from chain state)
+   N3b without the state rule: 352 crafted queries (8 K) recover s exactly: True (2 of them also run through the MPC, same answers)
+   N4 comparator mutant (frozen M with M_0 + 1): equal: False
+== set n2816-kmax65536: all checks passed
+pqz_threshold_c1: all sets passed

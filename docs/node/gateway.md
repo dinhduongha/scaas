@@ -2,8 +2,9 @@
 
 The gateway is the node's public intake: anyone — a wallet, the console app, a partner, an agent — may post a signed
 meta-transaction, a signed family op, a UA meta-transaction or a DEX order. It is served on `[modules] gateway_bind`
-(default `127.0.0.1:8547`, normally behind a reverse proxy). Status: `/v1/metatx`, `/v1/op` (EVM) and `/v1/dex/*` **BUILT**;
-durable door-A jobs, `/v1/gateway`, `/v1/ops`, UA routes, CORS and the error contract **SPECIFIED**.
+(default `127.0.0.1:8547`, normally behind a reverse proxy). Status: `/v1/op`, `/v1/ua-metatx` (EVM), `/v1/metatx` (a refusal by
+name since the `ua*` / `mtx*` merge) and `/v1/dex/*` **BUILT**; durable door-A jobs, `/v1/gateway`, `/v1/ops`,
+`/v1/ua/register`, the UA record cache, CORS and the error contract **SPECIFIED**.
 
 **Contents**
 
@@ -64,7 +65,7 @@ only) and the error contract ([errors](#errors)).
 
 Shape: `{"api": 1, "chains": [{chain, chain_key, chain_uid?, family, routes, tokens, fee_recipient, breaker_open,
 max_valid_for_secs, dex?: {address, relayer, markets: [{id, min_base_amount}], relayer_fee_policy: {modes, max_ppm},
-max_open_per_maker, min_ttl_secs, max_ttl_secs}}]}`. `chain` is numeric for EVM and Hedera (the `/v1/metatx` body);
+max_open_per_maker, min_ttl_secs, max_ttl_secs}}]}`. `chain` is numeric for EVM and Hedera (chain ids 295–298, [hedera.md](../networks/hedera.md)) (the `/v1/op` body);
 `chain_key` is always present. `routes` ⊆ `metatx`, `ops`, `ua-metatx`, `ua-register`, `dex`. `chain_uid` is present
 for chains with a UA registry; clients compare it with the EIP-712 `salt` before signing; UA routes are listed only
 while the [chain binding](#chain-binding) holds. Target (SPECIFIED): `chain_uid` is present for every EVM and Hedera
@@ -83,10 +84,10 @@ A duplicate returns `200` with the stored state (idempotent).
 | Route | Body / answer | Accept checks, in order |
 |---|---|---|
 | `GET /v1/gateway` | above | — |
-| `POST /v1/op {chain, op}` (EVM, typed-signing N1) | `202 {"status":"queued"}` | `op` = one `mtx*` [named entry](job-api.md#named-entries) on a **registered token**: an entry reaches this route only if the old door allowed it (`token not served` otherwise, zero simulations: the factory, the registry, a DEX, a wallet, a relay fee are jobs of a namespace with the grant, never door A; a `ua*` entry is `FEATURE_UNSUPPORTED`, the old door had no UA path, it is a `ua_metatx` job); parse; expiry (`expired`); the guard with its signature pre-check; the simulation; the typed digest as the in-flight key, computed locally |
-| `POST /v1/metatx {chain, token, contract?, m, signature}` (a `MetaTransfer`; `contract` = its token kind, default `token`; `struct = call` is refused `HEX_DATA_REFUSED`; [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)) | `202 {"status":"queued"}` today; the target adds `"intent_id"` (+ `exclusive` when published on the mesh) | token registered and active (`TOKEN_NOT_SERVED`); strict parse; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) before simulation; expiry; the guard (chain binding, the node's named-entry table per contract kind and its signature pre-check, [NODE-JOB-20](job-api.md#NODE-JOB-20)), refused ⇒ `400`; simulation; then the typed digest, computed locally (no `mtxDigest` / `mtxTransferDigest` read); [door A rules](#door-a-intake). `sig_bytes` is 65–2048 bytes (the gateway serves no Hedera chain, 295–298, so no 64-byte HIP-632 signature arrives here) |
+| `POST /v1/op {chain, op}` (EVM, typed-signing N1; the merged entries ua-mtx-merge T15) | `202 {"status":"queued"}` | `op` = one `mtx*` [named entry](job-api.md#named-entries) on a **registered token**: the merged entries with `auth` a `UASig` ([CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30)) and the address ones left (the wraps, `signature` 65–2048 bytes by `sig_bytes`); `token not served` otherwise, zero simulations: the factory, the registry, a DEX, a wallet, a relay fee and a router op are jobs of a namespace with the grant, never door A; parse; expiry (`expired`); the guard with its signature pre-check, a derived `from` or `to` needing the token's UA ledger (`FEATURE_UNSUPPORTED` at `registry() == 0`); the simulation; the typed digest as the in-flight key, computed locally. Test: `op_door_takes_a_merged_entry_with_uasig` |
+| `POST /v1/metatx {chain, token, contract?, …}` (an address `MetaTransfer`) | `400` | no token and no mandate wallet has that entry since the merge ([CTR-MTX-30](../contracts/metatx.md#CTR-MTX-30)): a served token or `contract = wallet` ⇒ `OP_KIND_MISMATCH` by name, pointing at `/v1/ua-metatx` and `/v1/op`; any other token ⇒ `token not served`; the rest of the body is never read. Tests: `metatx_door_refuses_a_token_by_name`, `metatx_door_refuses_a_mandate_wallet_by_name` |
 | `POST /v1/ops {chain, op}` | `op` = the job API `signed_op` payload; `202 {"status": "queued", "intent_id": "<digest hex>"}` | below |
-| `POST /v1/ua-metatx {chain, token, struct?, m: WireUAMetaTransaction \| WireUAMetaTransfer, auth}` | `ua_metatx` job | token `features ∋ ua` (v3: `registry() ≠ 0`); `from >> 160 ≠ 0` ⇒ registry record ([UA record cache](#ua-cache), `UA_NOT_REGISTERED`); cheap kinds verified locally ([NODE-GSP-15](gossip.md#NODE-GSP-15)); node computes `uaDigest` |
+| `POST /v1/ua-metatx {chain, token, contract?, struct?, m: WireUAMetaTransfer, auth}` (BUILT, ua-mtx-merge T15) | `202 {"status":"queued"}` | the job API's `ua_metatx` struct job with the same checks: token served; `m` a `UAMetaTransfer` on ids and `auth` its `UASig`, relayed as `mtxExecuteTransfer` (any `entryRef`, no `PayMeta`: a pay with its metadata is the entry `mtxPay` on `/v1/op`); `struct = call` and a `data` field refused `HEX_DATA_REFUSED`; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)); expiry; the guard: a derived `from` or `to` needs `registry() ≠ 0` (`FEATURE_UNSUPPORTED`), an all-native transfer runs at `registry() == 0`; the simulation; the typed digest, computed locally. Tests: `ua_metatx_door_runs_an_eoa_at_registry_zero`, `ua_metatx_door_refuses_a_derived_side_at_registry_zero_by_name`. SPECIFIED: the registry-record read of a derived `from` (`from >> 160 ≠ 0`; [UA record cache](#ua-cache), `UA_NOT_REGISTERED`) and the local verify of cheap kinds ([NODE-GSP-15](gossip.md#NODE-GSP-15)) |
 | `POST /v1/ua/register {chain, entry, …args}` (the [CTR-UA-36](../contracts/accounts.md#CTR-UA-36) arguments as named fields, the shape of clientkeys `registrationArgs`: `{chain, entry, kind?, keyData? \| structure? \| key?, attrs: {pqzKey?: 0x…, pqzPopHash?: 0x…, kem?: {scheme: n, mlkemEk: 0x…, x25519: 0x…}, kemPkHash?: 0x…}, pop, pqzPop?: 0x…}`; the PQZ and KEM attributes only for a PQ holder, [CTR-UA-16](../contracts/accounts.md#CTR-UA-16), [CTR-UA-32](../contracts/accounts.md#CTR-UA-32); `pqzPop` may be omitted and given later by a `storePqzPop` call job) | `call` job to `chain.ua_registry` ([NODE-GW-03](#NODE-GW-03)) with the entry's selector; a PQ registration whose full-call estimate exceeds min(block gas limit, relayer cap) is relayed split: `register` without the proof, then `storePqzPop` | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); the node recomputes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)` and the KEM record hash and verifies the PoP of cheap kinds over the portable `registrationDigest` ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07): no `chain_uid` in it); it never verifies `R_REG` locally (simulation does); body limit 160 KiB; per-chain registration quota |
 | `GET /v1/intents/{intent_id}` | the `~gateway` job: `{"intent_id", "state", "consumed_kind"?, "tx_hash"?, "updated_at"}` | **only for gateway-origin rows**: rows from peers or from the job API (incl. private-chain intents) answer 404, the same as unknown or expired ids |
 | `POST /v1/dex/orders`, `…/cancel`, `…/cancel-all`; `GET /v1/dex/{markets,depth,trades,ticker,orders}` (`GET /v1/dex/orders?maker=`), `GET /v1/dex/exchanges/{ref}` (SPECIFIED) | [dex-venue.md#routes](dex-venue.md#routes) | managed markets add `NOT_ELIGIBLE {reason}`, `UNBOUND_FORBIDDEN`, `FEE_FORBIDDEN`, `PAUSED`, `ATTESTATION_SHORTER`; mesh `route_order` ⇒ `MANAGED_LOCAL` ([dex-venue.md#managed-markets](dex-venue.md#managed-markets)) |
@@ -148,13 +149,13 @@ from the store: before that, the built gateway's in-memory `mpsc` feeds only the
 door A work is not journaled and has no digest guard until it becomes a `~gateway` job).
 
 <a id="ua-register"></a><a id="NODE-GW-03"></a>**NODE-GW-03** — **Gateway `call` jobs exist only for the UA
-registry's nine writes.** `POST /v1/op` is no such door: it takes a registered token's signed `mtx*` entries only (typed-signing N1). Gateway `call` jobs in `~gateway` go only to the chain's `ua_registry` (node config `[[chains]] ua_registry`), for the eight
+registry's writes.** `POST /v1/op` is no such door: it takes a registered token's signed `mtx*` entries only (typed-signing N1). Gateway `call` jobs in `~gateway` go only to the chain's `ua_registry` (node config `[[chains]] ua_registry`), for the
 writes of [CTR-UA-36](../contracts/accounts.md#CTR-UA-36): `register` (`0x4e229efb`), `registerMsig` (`0x61947129`), `registerWebAuthn` (`0xee03a1fe`), `registerMuSig2` (`0xe1eddcdf`),
-`registerFrost` (`0x7bd63410`), `setKemKey` (`0x6a3318f9`), `storePqzPop` (`0x7fac161a`), `setPqzKey` (`0x0052c1b5`) and `acceptMembership` (`0x2c1ac986`, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)) — all relayable by anyone, gasless, no fee
+`registerFrost` (`0x7bd63410`), `setKemKey` (`0x6a3318f9`), `storePqzPop` (`0x7fac161a`), `setPqzKey` (`0x0052c1b5`) and `acceptMembership` (`0x2c1ac986`, [CTR-UA-37](../contracts/accounts.md#CTR-UA-37)), and since 3ze `updateMsig` (`0x533f2d73`, [CTR-UA-44](../contracts/accounts.md#CTR-UA-44)) — all relayable by anyone, gasless, no fee
 ([CTR-UA-31](../contracts/accounts.md#CTR-UA-31)); `POST /v1/ua/register` builds the entry's calldata from the checked body, as the plain rows of [the table](job-api.md#named-entries) do. A relayed PQ registration whose `eth_estimateGas`
 of the full call exceeds min(block gas limit, relayer per-transaction cap) is split: `register` without `pqzPop`, then
 `storePqzPop` (the SCaaS testnet: 200 M block, relayer cap `max_gas_per_tx` 64 M, so every PQ registration with its
-proof, 84.7–108.9 M, is relayed split there). Owner 2026-10-30, ruling R-node: the node relays all nine writes (call
+proof, 84.7–108.9 M, is relayed split there). Owner 2026-10-30, ruling R-node: the node relays every registry write (call
 table rows, guard rule `Rule::UaRegistry`; a relayed `register` / `registerMsig` with its proof over the cap is refused `UA_REGISTER_SPLIT: <why>;
 send register without pqzPop, then storePqzPop`) and the sponsor policy below covers all nine; the call-table rows and the refusal
 are built (`ua8` `64c233d4`, the typed rows in `typed-signing` Part R); **this route and the sponsor policy are not built** (no gateway route, no sponsor-policy code;
@@ -211,7 +212,7 @@ block 0 is the `chain_uid`); every contract a meta-transaction, order entry or `
 <a id="eip-7702"></a>An EIP-7702 delegated `from` (code `0xef0100 ‖ address`) is an EOA: only its own key's ECDSA
 counts, never ERC-1271 through its delegate ([CTR-UA-24](../contracts/accounts.md#CTR-UA-24), owner ruling D1,
 2026-10-30). In code today:
-- `POST /v1/metatx` and `POST /v1/op` run the guard's local pre-check over the typed digest (every lane runs it too): a 65-byte
+- `POST /v1/op` and `POST /v1/ua-metatx` run the guard's local pre-check over the typed digest (every lane runs it too): a 65-byte
   signature that recovers to `from` passes without a chain read; one that does not reads `from`'s code: none ⇒ `BAD_SIGNATURE`, nothing
   simulated; code, a designator's included, goes on to the simulation, where the contracts refuse a designator's signature that does not
   recover (`MetaTxBadSignature` ⇒ `400 simulation: …`). Any other length is the contract's (a Hedera account signature is 64 bytes).
@@ -257,4 +258,9 @@ chars>", "revert_data": "0x…"?}`; the legacy `"error"` keeps the code, so old 
 ([dex-venue.md#trade-orders](dex-venue.md#trade-orders)), and the
 managed-market codes above. Clients decode revert data with their own ABI and map codes (the console app maps
 `errors.node.<code>`); no logic keys on free text. The gateway and the job API keep per-listener code sets over the same checks (gateway
-`TOKEN_NOT_SERVED` and `EXPIRED` for too long a validity, job API `UNKNOWN_TOKEN` and `VALID_TOO_LONG`).
+`TOKEN_NOT_SERVED` and `EXPIRED` for too long a validity, job API `UNKNOWN_TOKEN` and `VALID_TOO_LONG`). No error text, of a
+gateway reply or of a job's `error`, carries an endpoint URL (an RPC's, a verifier's: an internal host, a key in a path): each is
+`<url>` (the whole token: a `,` or `;` inside it does not end it), a verifier endpoint is named by its index (`endpoint 1`), the
+URL goes to the node's log only; the admin listener's `/readyz` reasons are redacted the same way (BUILT; Fable review of
+ua-mtx-merge E N-8, recheck R-7; tests `gateway_errors_carry_no_endpoint_url`, `a_job_error_carries_no_endpoint_url`,
+`ready_only_when_rpc_odoo_and_lag_are_fine`). When the node's own queue replaces the pull path, its `last_error` sink redacts too.

@@ -1,0 +1,5 @@
+mutant | tests that went red | rc
+ua-tag-swapped-for-address-tag | ua_envelope_matches_cast | 101
+from-hashed-as-address | ua_envelope_matches_cast | 101
+ua-sig-members-dropped | named_call_encodes_a_full_ua_sig | 101
+single-signs-bytes-sig | named_call_encodes_a_full_ua_sig, named_call_equals_the_vector_calldata | 101

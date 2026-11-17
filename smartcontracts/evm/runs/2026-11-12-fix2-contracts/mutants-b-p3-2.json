@@ -1,0 +1,50 @@
+[
+ {
+  "id": "ska-1271-raw-hash",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: positive control: the wrapped message: 0xffffffff00000000000000000000000000000000000000000000000000000000 != 0x1626ba7e0000000000000000000000000000000000"
+ },
+ {
+  "id": "ska-wrap-no-domain",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0xf9e9b80891354e8da7963ce08e531ab5c44d51a15425ffaef701c5431bba12e0 != 0x042ee35980869dd0a18292bcc1b11f5687adf38be324aae01f4df7effd4e80e"
+ },
+ {
+  "id": "ska-own-digest-not-self-only",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_erc1271IsBoundToTheAccount() (gas: 448408)"
+ },
+ {
+  "id": "ska-self-path-wrapped",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: MetaTxBadSignature()] test_accountCancelsItsOwnLane() (gas: 113457)"
+ },
+ {
+  "id": "ska-self-path-false-accepted",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_mtxBatchIsAtomic() (gas: 552057)"
+ },
+ {
+  "id": "mw-1271-raw-hash",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: positive control: a native owner's ECDSA: 0xffffffff00000000000000000000000000000000000000000000000000000000 != 0x1626ba7e0000000000000000000000000000000"
+ },
+ {
+  "id": "mw-wrap-no-domain",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: digest formula: 0x97b8272a2c41d1b3aad300d840b55fd3f134c440f92496882b6b7821dd0d080e != 0x421119e2ef24cce79bd609338fd3714830c087538638da077d1da3792335f438]"
+ },
+ {
+  "id": "typehash-string",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: assertion failed: 0x56fd5f9296d099a917422278fd4cddf680727fc4f8cdc842cb2c9294576feb6d != 0xff8bbe299de1266e571c68af5b71b4e716412184ca1bd495927110f9581950c"
+ }
+]

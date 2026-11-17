@@ -15,6 +15,6 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 [ "$(git -C "$LK" rev-parse HEAD)" = $LK_PIN ] || { echo "leaky-LWE-Estimator must be at $LK_PIN" >&2; exit 1; }
 [ "$(git -C "$LE" rev-parse HEAD)" = $LE_PIN ] || { echo "lattice-estimator must be at $LE_PIN" >&2; exit 1; }
 SETS=$(cd "$HERE/../../../params/sets" && pwd)
-exec docker run --rm --network none --memory "${MEM:-6g}" --cpus "${CPUS:-4}" -e PYTHONUNBUFFERED=1 -e SET="${SET:-}" -e PYTHONPATH=/le -e LE_COMMIT=$LE_PIN -e LK_COMMIT=$LK_PIN -e SMOKE="${SMOKE:-}" \
+exec docker run --rm --tmpfs /w --network none --memory "${MEM:-6g}" --cpus "${CPUS:-4}" -e PYTHONUNBUFFERED=1 -e SET="${SET:-}" -e PYTHONPATH=/le -e LE_COMMIT=$LE_PIN -e LK_COMMIT=$LK_PIN -e SMOKE="${SMOKE:-}" \
   -v "$LK":/lk:ro -v "$LE":/le:ro -v "$HERE":/p:ro -v "$SETS":/sets:ro --entrypoint /bin/sh "$IMG" -c \
-  "mkdir -p /tmp/w && cp /p/*.sage /tmp/w/ && cd /lk/framework && sage /tmp/w/${SCRIPT:-hints.sage}"
+  "cp /p/*.sage /w/ && cd /lk/framework && sage /w/${SCRIPT:-hints.sage}"

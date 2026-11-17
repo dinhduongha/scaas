@@ -1,0 +1,12 @@
+# ua-mtx-merge T63 gate summary (group 3h, PQZ proof path spec §10, NODE-JOB-24; full output in git-ignored .log files). UNAUDITED.
+# Commits: f01ff0ec (legacy copies), 39fa296c (the lane cap, the ProofStoreSet alert, the tests), this one (node mutants, summary).
+# The known red of 3h: test_gas_rollMax_relayedFullTx (forge; ROLL_MAX with the owner), not a node test.
+step | commit | rc | counts
+red | 77e9ddf4 + the T63 tests | 101 | 4 failed: proof_store_over_lane_cap_refused and proof_store_over_cap_not_dead ("gas 70000000 above max_gas_per_tx 64000000" dead), indexer_proof_store_set_alert (no row), pqz_old_shape_refused_by_name (named BAD_PAYLOAD already: the test was held to it); pqz_own_tag_named and proof_store_router_row_equal_contract held (T59, T61)
+node suite | 39fa296c | 0 | CAPPED_MEM=6G cargo test -j2, alone: lib 686 passed; integration 4 + 1 passed; e2e 21, e2e_ua8 10 and the other families' e2e ignored
+node e2e | 39fa296c | 0 | cargo test --test e2e -- --ignored --test-threads=1 on local anvil (Amsterdam, 200 M): 21 passed, pqz_debit_with_own_tag_on_anvil among them; anvils stopped by the tests, none left
+clippy | 39fa296c | 0 | cargo clippy --all-targets -- -D warnings clean
+
+Mutants (runs/2026-11-08-ua-mtx-merge-3h/node-mutants.py, plan T63 Step 5; one at a time on a clean scaas-node tree at 39fa296c,
+restored, git diff clean): N1 the router row missing on the node's side, N2 ownTag defaulted to zero, N3 the lane check ignoring
+proofStore(): 3 of 3 killed. Table: runs/2026-11-08-ua-mtx-merge-3h/mutants.txt.

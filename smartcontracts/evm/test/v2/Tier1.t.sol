@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {SigCheck} from "../../src/common/SigCheck.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {V2Fixture, UID_, normalInit} from "./helpers/V2Fixture.sol";
@@ -15,6 +17,7 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// T2: tầng 1 `NormalToken` (TW2 §4, R141).
 contract Tier1Test is V2Fixture {
@@ -37,24 +40,24 @@ contract Tier1Test is V2Fixture {
     function test_onlyMinterMints() public {
         NormalToken t = _normal(address(this), 0, minter);
         vm.prank(minter);
-        t.mint(bob, 7);
+        t.mint(bob, 7, EnvKit.codeUidOf(address(t)));
         assertEq(t.balanceOf(bob), 7);
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), bob));
-        t.mint(bob, 1);
+        t.mint(bob, 1, EnvKit.codeUidOf(address(t)));
     }
 
     /// P1c: "zero minter means fixed supply" is now "no `MINTABLE` flag".
     function test_noMintableMeansFixedSupply() public {
-        normalImpl = address(new NormalToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
+        normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         IFactoryToken.TokenConfig memory c = normalInit("Points", "PTS", 0, 100, address(this), address(0));
         c.features &= ~uint256(1 << 1); // no MINTABLE
         NormalToken t = NormalToken(_clone(normalImpl, address(this), new address[](0), abi.encode(c)));
         vm.prank(address(0));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, uint8(1)));
-        t.mint(bob, 1);
+        t.mint(bob, 1, EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), address(this)));
-        t.renounceRole(1);
+        t.renounceRole(1, EnvKit.codeUidOf(address(t)));
     }
 
     function test_renounceMinterIsOneWay() public {
@@ -62,11 +65,11 @@ contract Tier1Test is V2Fixture {
         vm.expectEmit(address(t));
         emit IGovernance.RoleRevoked(1, nid(minter), nid(minter));
         vm.prank(minter);
-        t.renounceRole(1);
+        t.renounceRole(1, EnvKit.codeUidOf(address(t)));
         assertFalse(t.hasRole(1, nid(minter)));
         vm.prank(minter);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, uint8(1), minter));
-        t.mint(bob, 1);
+        t.mint(bob, 1, EnvKit.codeUidOf(address(t)));
     }
 
     function test_holderBurnsOwnBalance() public {
@@ -95,11 +98,11 @@ contract Tier1Test is V2Fixture {
         assertEq(t.totalSupply(), 900e6);
         assertEq(t.balanceOf(alice), 899e6);
         assertEq(t.balanceOf(feeTaker), 1e6);
-        assertEq(t.mtxNonce(alice, 1), 1);
+        assertEq(t.mtxNonce(MetaTxLib.pad(alice), 1), 1);
     }
 
     function test_initRefusesUnderlyings() public {
-        normalImpl = address(new NormalToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
+        normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
         address[] memory us = new address[](1);
         us[0] = address(0x1234);
         // E5/E6: the underlyings are the config's `legs`, a field of another kind for NORMAL
@@ -150,6 +153,6 @@ contract Tier1Test is V2Fixture {
         bytes memory s = _signCall(pk, address(t), m);
         vm.prank(relayer);
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, sel));
-        t.mtxExecute(m, s);
+        t.executeMetaTransaction(m, s);
     }
 }

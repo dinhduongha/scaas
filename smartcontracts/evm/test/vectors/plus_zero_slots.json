@@ -1,4 +1,22 @@
 {
+  "mtxCancelNonce_router": {
+    "reads": [
+      "0x6fd298bcc2b13f34f7fc36e4d644c31aa054c24335dbb54bfa7de2e04f49fbbb",
+      "0xba639227da1c3fc0450a44bfe1d55238407eb1cf7e2765f396c542cc8f71407c"
+    ],
+    "writes": [
+      "0x6fd298bcc2b13f34f7fc36e4d644c31aa054c24335dbb54bfa7de2e04f49fbbb",
+      "0xba639227da1c3fc0450a44bfe1d55238407eb1cf7e2765f396c542cc8f71407c"
+    ]
+  },
+  "mtxMint_router": {
+    "reads": [
+      "0x6fd298bcc2b13f34f7fc36e4d644c31aa054c24335dbb54bfa7de2e04f49fbbb"
+    ],
+    "writes": [
+      "0x6fd298bcc2b13f34f7fc36e4d644c31aa054c24335dbb54bfa7de2e04f49fbbb"
+    ]
+  },
   "mtxTransfer_normal": {
     "reads": [
       "0x950250a79e3b9137c3c756dfa8d78e0f7e6d9001071d50ef0991bfb17dbda752",

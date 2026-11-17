@@ -1,0 +1,137 @@
+== red_skip-pass1
+1 errors in 1 files
+test/helpers/DexLegs.sol 1 ('7920', 'Identifier not found or not unique.')
+== red_skip-pass2
+20 errors in 20 files
+test/fork/UniswapFork.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/governance/GovGrant.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/governance/GovHybrid.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/metatx/TradeTyped.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/ua/UADex.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/ua/UADexInvariant.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/ua/UATradeVectors.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/ua/UAWrap.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/v2/Dex.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/v2/DexBatch.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/v2/DexExchange.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/v2/DexGas.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/v2/DexHybrid.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/v2/DexInvariant.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/v2/DexKat.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/v2/DexModes.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/v2/DexOutside.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/v2/MtxWrap.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/v2/UniswapExecutor.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+test/zether/ZetherWrapped.t.sol 1 ('6275', 'Source "test/helpers/DexLegs.sol" not found: File not found. Searched the following locati')
+== red_skip-pass3
+2 errors in 2 files
+test/governance/GovRescue.t.sol 1 ('6275', 'Source "test/zether/ZetherWrapped.t.sol" not found: File not found. Searched the following')
+test/pqz/PqzWrapped.t.sol 1 ('6275', 'Source "test/zether/ZetherWrapped.t.sol" not found: File not found. Searched the following')
+== red_skip-pass4
+17 errors in 4 files
+script/ZetherE2E.s.sol 2 ('9553', 'Invalid type for argument in function call. Invalid implicit conversion from address to by')
+test/account/SmartKeyAccount.t.sol 8 ('9553', 'Invalid type for argument in function call. Invalid implicit conversion from struct MetaTx')
+test/metatx/helpers/ERC20MetaTxHarness.sol 1 ('3656', 'Contract "ERC20MetaTxHarness" should be marked as abstract.')
+test/v2/helpers/V2Fixture.sol 6 ('9553', 'Invalid type for argument in function call. Invalid implicit conversion from struct MetaTx')
+== red_skip-pass5
+41 errors in 40 files
+test/account/AccountKat.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/hedera/HederaKat.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/hedera/HederaV2.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/metatx/ERC20MetaTx.t.sol 1 ('6275', 'Source "test/metatx/helpers/ERC20MetaTxHarness.sol" not found: File not found. Searched th')
+test/metatx/MetaTxParity.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/metatx/MtxCtx.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/metatx/MtxRelayFee.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/metatx/NamedEntry.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/metatx/TokenKat.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/metatx/TradeKat.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/metatx/TypedOps.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/metatx/UAMetaTxBase.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/ua/UAAllowlist5a.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/ua/UALedger.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/ua/UALedgerBase.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/ua/UALedgerNamed.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/ua/UAMetaTx3Pq.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/ua/UAMetaTx3Vectors.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/ua/UAReceiverFee.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/ua/UAReceivers.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/ua/UATrade.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/Allowlist.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/Base.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/Factory.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/FactoryZether.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/Layout.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/MetaTxGasV2.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/Multi.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/NativeLeg.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/RateVectors.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/Rates.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/ReceiverPays.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/Tier1.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/Tier2.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/Trade.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/UnwrapOp.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/Wrapped.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/v2/WrapperInvariant.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/wallet/MandateWallet.t.sol 1 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+test/wallet/NamedWallets.t.sol 2 ('6275', 'Source "test/v2/helpers/V2Fixture.sol" not found: File not found. Searched the following l')
+== red_skip-pass6
+10 errors in 10 files
+test/governance/PlusZero.t.sol 1 ('6275', 'Source "test/ua/UALedgerBase.sol" not found: File not found. Searched the following locati')
+test/governance/SelectorAudit.t.sol 1 ('6275', 'Source "test/ua/UALedgerBase.sol" not found: File not found. Searched the following locati')
+test/helpers/OrderJson.sol 1 ('6275', 'Source "test/metatx/NamedEntry.t.sol" not found: File not found. Searched the following lo')
+test/metatx/PayMeta.t.sol 1 ('6275', 'Source "test/metatx/MetaTxParity.t.sol" not found: File not found. Searched the following ')
+test/metatx/Sweeper7702.t.sol 1 ('6275', 'Source "test/wallet/MandateWallet.t.sol" not found: File not found. Searched the following')
+test/pqz/PqzStateGas.t.sol 1 ('6275', 'Source "test/metatx/NamedEntry.t.sol" not found: File not found. Searched the following lo')
+test/pqz/PqzTyped.t.sol 1 ('6275', 'Source "test/metatx/NamedEntry.t.sol" not found: File not found. Searched the following lo')
+test/ua/UALedgerInvariant.t.sol 1 ('6275', 'Source "test/ua/UALedgerBase.sol" not found: File not found. Searched the following locati')
+test/zether/ZetherGasLimit.t.sol 1 ('6275', 'Source "test/metatx/NamedEntry.t.sol" not found: File not found. Searched the following lo')
+test/zether/ZetherTyped.t.sol 1 ('6275', 'Source "test/metatx/NamedEntry.t.sol" not found: File not found. Searched the following lo')
+== red_skip-pass7
+2 errors in 2 files
+test/pqz/MtxSplitOverhead.t.sol 1 ('6275', 'Source "test/pqz/PqzStateGas.t.sol" not found: File not found. Searched the following loca')
+test/research/PqzPackGas.t.sol 1 ('6275', 'Source "test/pqz/PqzStateGas.t.sol" not found: File not found. Searched the following loca')
+== red_skip-pass8
+1 errors in 1 files
+test/governance/GovGas.t.sol 1 ('9582', 'Member "mtxTransferDigest" not found or not visible after argument-dependent lookup in con')
+== red_skip-pass9
+1 errors in 1 files
+test/governance/GovRouter.t.sol 1 ('9582', 'Member "uaGrantRole" not found or not visible after argument-dependent lookup in contract ')
+== red_skip-pass10
+1 errors in 1 files
+test/governance/GovRouterTypehash.t.sol 1 ('9582', 'Member "GRANT_ROLE" not found or not visible after argument-dependent lookup in type(libra')
+== red_skip-pass11
+1 errors in 1 files
+test/helpers/MtxFixture.sol 1 ('9582', 'Member "mtxDigest" not found or not visible after argument-dependent lookup in contract Mt')
+== red_skip-pass12
+4 errors in 4 files
+test/metatx/MetaTxBase.t.sol 1 ('6275', 'Source "test/helpers/MtxFixture.sol" not found: File not found. Searched the following loc')
+test/metatx/MetaTxBaseBatch.t.sol 1 ('6275', 'Source "test/helpers/MtxFixture.sol" not found: File not found. Searched the following loc')
+test/metatx/MetaTxBaseFee.t.sol 1 ('6275', 'Source "test/helpers/MtxFixture.sol" not found: File not found. Searched the following loc')
+test/metatx/MetaTxBaseLane.t.sol 1 ('6275', 'Source "test/helpers/MtxFixture.sol" not found: File not found. Searched the following loc')
+== red_skip-pass13
+2 errors in 1 files
+test/metatx/MtxPipelineLib.t.sol 2 ('6160', 'Wrong argument count for function call: 5 arguments given but expected 4.')
+== red_skip-pass14
+25 errors in 2 files
+test/pqz/PqzPool.t.sol 10 ('9553', 'Invalid type for argument in function call. Invalid implicit conversion from struct MetaTx')
+test/pqz/PqzRelay.t.sol 15 ('9553', 'Invalid type for argument in function call. Invalid implicit conversion from struct MetaTx')
+== red_skip-pass15
+1 errors in 1 files
+test/pqz/PqzShared.t.sol 1 ('9582', 'Member "uaNonce" not found or not visible after argument-dependent lookup in contract PqzL')
+== red_skip-pass16
+1 errors in 1 files
+test/v2/ExplicitParamsCalldata.t.sol 1 ('9582', 'Member "uaExecute" not found or not visible after argument-dependent lookup in type(contra')
+== red_skip-pass17
+32 errors in 4 files
+test/v2/Features.t.sol 24 ('9553', 'Invalid type for argument in function call. Invalid implicit conversion from struct MetaTx')
+test/zether/ZetherModes.t.sol 3 ('9553', 'Invalid type for argument in function call. Invalid implicit conversion from struct MetaTx')
+test/zether/ZetherMulti.t.sol 4 ('9553', 'Invalid type for argument in function call. Invalid implicit conversion from address to by')
+test/zether/ZetherNormal.t.sol 1 ('9582', 'Member "uaNonce" not found or not visible after argument-dependent lookup in contract Zeth')
+== red_skip-pass18
+54 errors in 3 files
+test/zether/ZetherProverCross.t.sol 11 ('9553', 'Invalid type for argument in function call. Invalid implicit conversion from address to by')
+test/zether/ZetherRelay.t.sol 42 ('9553', 'Invalid type for argument in function call. Invalid implicit conversion from address to by')
+test/zether/ZetherUA5c.t.sol 1 ('9582', 'Member "uaNonce" not found or not visible after argument-dependent lookup in contract Zeth')
+== red_skip-pass19
+(pass 19: no error; its build JSON is followed by more output, read with raw_decode since)

@@ -164,6 +164,7 @@ final Uint8List portableDomainSeparator =
 const _kemType = 'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)';
 const _recordType = 'UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)';
 const _pqzKeyType = 'UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)';
+const _pqzKeyVersionType = 'UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)';
 
 /// The EIP-712 `encodeType` of each portable struct (primary, then the referenced types sorted by name).
 const portableTypes = {
@@ -172,7 +173,13 @@ const portableTypes = {
   'UARegistration': 'UARegistration(UAPortableRecord record,bytes32 pqzPopHash)' + _kemType + _recordType,
   'UAPqzKey': _pqzKeyType,
   'UAPqzKeyRecord': 'UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + _pqzKeyType,
+  'UAPqzKeyVersion': _pqzKeyVersionType,
+  'UAPqzKeyVersionRecord': 'UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)' + _pqzKeyVersionType,
   'UAMembership': 'UAMembership(bytes32 ua,bytes32 member)',
+  // CTR-UA-44 (TODO 3ze): an msig's structure update on one registry
+  'UAMsigUpdate': 'UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,'
+      'uint256 enabled,uint64 validUntilBlock)UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
+  'UAMsigMember': 'UAMsigMember(uint16 kind,bytes32 id,uint16 weight)',
 };
 
 Uint8List portableTypehash(String name) =>
@@ -224,14 +231,19 @@ Uint8List portableRecordDigest(Uint8List ua, int kind, Uint8List pqzKeyHash, Uin
 Uint8List registrationDigest(Uint8List ua, int kind, Uint8List pqzKeyHash, Uint8List kemRecordHash, Uint8List pqzPopHash) =>
     _typed(hashStruct('UARegistration', [portableRecordHash(ua, kind, pqzKeyHash, kemRecordHash), pqzPopHash]));
 
-/// What the UA signs for a KEM record: `uaMessage(kind, PURPOSE_KEM, kemRecordDigest)`.
-Uint8List kemRecordMessage(int kind, Uint8List ua, BigInt version, Uint8List kemPk) =>
-    uaMessage(kind, purposeTag('kem'), kemRecordDigest(ua, version, kemPk));
+/// What the UA signs for a KEM record: `uaMessage(kind, PURPOSE_KEM, kemRecordDigest)`; a KEM holder only (UAKemHolder).
+Uint8List kemRecordMessage(int kind, Uint8List ua, BigInt version, Uint8List kemPk) {
+  if (!isKemHolder(kind)) throw UAError('UAKemHolder', '${_kindHex(kind)} may not hold a KEM key');
+  return uaMessage(kind, purposeTag('kem'), kemRecordDigest(ua, version, kemPk));
+}
 
 /// The register KEM key's record: always version 0 (owner 2026-10-31); `null` / empty = the zero record.
 Uint8List _kemHash(Uint8List ua, Uint8List? kemPk) => kemRecordHash(ua, BigInt.zero, kemPk ?? Uint8List(0));
 
-/// A PQZ / KEM holder: a single-key PQ kind, or an `msig` whose key data is PQ-eligible (malformed key data is UAKeyData).
+/// A KEM key holder (CTR-UA-32, T66a): a single PQ kind only; an `msig` holds no KEM key (UAKemHolder, as the registry).
+bool isKemHolder(int kind) => isPqzHolder(kind);
+
+/// A PQZ key holder: a single-key PQ kind, or an `msig` whose key data is PQ-eligible (malformed key data is UAKeyData).
 bool _holds(int kind, Uint8List keyData, Uint8List? Function(Uint8List id)? inner) {
   if (isPqzHolder(kind)) return true;
   return kind == 0x0120 && keyData.isNotEmpty && msigPqzEligible(keyData, inner);
@@ -276,17 +288,15 @@ typedef HolderPop = ({
 /// The portable PoP message of a registration. Attributes: [pqzKey] with its proof [pqzPop] (or only its hash [pqzPopHash]; a
 /// relayer may hold only that) and the initial KEM key [kemPk] (its record is always version 0, owner 2026-10-31); null /
 /// empty = absent. Only
-/// holders may carry them (UAPqzHolder, UAKemHolder; an `msig` needs [keyData] to show it is PQ-eligible); a PQZ key always
+/// holders may carry them (UAPqzHolder: an `msig` needs [keyData] to show it is PQ-eligible; UAKemHolder: a single PQ kind only,
+/// never an `msig`); a PQZ key always
 /// comes with its proof hash and only with it (UAPqzPopHash).
 HolderPop holderPopMessage(int kind, Uint8List ua,
     {Uint8List? keyData, Object? pqzKey, Uint8List? pqzPop, Uint8List? pqzPopHash, Uint8List? kemPk, Uint8List? Function(Uint8List id)? inner}) {
   final hasKey = pqzKey != null && keyBytes(pqzKey).isNotEmpty;
   final hasKem = kemPk != null && kemPk.isNotEmpty;
-  if ((hasKey || hasKem) && !_holds(kind, keyData ?? Uint8List(0), inner)) {
-    throw hasKey
-        ? UAError('UAPqzHolder', '${_kindHex(kind)} may not hold a PQZ key')
-        : UAError('UAKemHolder', '${_kindHex(kind)} may not hold a KEM key');
-  }
+  if (hasKey && !_holds(kind, keyData ?? Uint8List(0), inner)) throw UAError('UAPqzHolder', '${_kindHex(kind)} may not hold a PQZ key');
+  if (hasKem && !isKemHolder(kind)) throw UAError('UAKemHolder', '${_kindHex(kind)} may not hold a KEM key');
   final popHash = _proofHashOf(pqzPop, pqzPopHash);
   if (hasKey != !_isZero(popHash)) throw UAError('UAPqzPopHash', 'a PQZ key comes with its proof hash and only with it');
   final kh = hasKey ? _pqzKeyHashOf(pqzKey) : Uint8List(32);
@@ -323,6 +333,23 @@ Uint8List pqzKeyRecordDigest(Uint8List ua, Uint8List pqzKeyHash, Uint8List pqzPo
 /// this digest itself, a derived member `memberDigest(ua, uaMessage(MSIG, PURPOSE_MEMBERSHIP, ·))` under `member`.
 Uint8List membershipDigest(Uint8List ua, Uint8List member) => _typed(hashStruct('UAMembership', [ua, member]));
 
+/// CTR-UA-44: the typed `UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}`, [members]
+/// `(kind, id, weight)` records hashed as an EIP-712 array of `UAMsigMember`, [enabled] the uint256 bitmap (bit i = slot i): what a quorum
+/// of the stored structure signs for `updateMsig` on that one registry, under `uaMessage(MSIG, PURPOSE_MSIG_UPDATE, ·)`.
+Uint8List msigUpdateDigest(Uint8List ua, Uint8List chainUid, Uint8List registry, int version, int threshold,
+    List<({int kind, Uint8List id, int weight})> members, BigInt enabled, int validUntilBlock) {
+  if (enabled < BigInt.zero || enabled.bitLength > 256) throw ArgumentError('enabled must be a uint256');
+  final en = Uint8List(32);
+  var x = enabled;
+  for (var i = 31; i >= 0; i--) {
+    en[i] = (x & BigInt.from(0xff)).toInt();
+    x >>= 8;
+  }
+  final hs = members.map((m) => hashStruct('UAMsigMember', [_word(m.kind), m.id, _word(m.weight)])).toList();
+  return _typed(hashStruct('UAMsigUpdate', [ua, chainUid, _addressWord(registry), _word(version), _word(threshold), _k(hs), en,
+    _word(validUntilBlock)]));
+}
+
 /// The PQZ key record of `setPqzKey` (ruling A1-I1), see [pqzKeyRecordMessage]. [message] is what the UA signs,
 /// [pqzRegMessage] what the key's `R_REG` proves over.
 typedef PqzKeyRecord = ({
@@ -355,6 +382,54 @@ PqzKeyRecord pqzKeyRecordMessage(int kind, Uint8List ua, Uint8List keyData, Obje
     recordDigest: rd,
     message: msg,
     pqzRegMessage: uaMessage(0x0142, tag, kd),
+    memberDigest: kind == 0x0120 ? memberDigest(ua, msg) : null,
+  );
+}
+
+/// Group 3g: the typed `UAPqzKeyVersion{ua, version, pqzKeyHash}`, what version v >= 1's `R_REG` proves over.
+Uint8List pqzKeyVersionDigest(Uint8List ua, int version, Uint8List pqzKeyHash) =>
+    _typed(hashStruct('UAPqzKeyVersion', [ua, _word(version), pqzKeyHash]));
+
+/// Group 3g: the typed `UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}`, what the UA signs for version
+/// v >= 1 under `uaMessage(kind, PURPOSE_PQZ_KEY, ·)`.
+Uint8List pqzKeyVersionRecordDigest(Uint8List ua, int version, Uint8List pqzKeyHash, Uint8List pqzPopHash) =>
+    _typed(hashStruct('UAPqzKeyVersionRecord', [hashStruct('UAPqzKeyVersion', [ua, _word(version), pqzKeyHash]), pqzPopHash]));
+
+/// PQZ key version v >= 1 of `setPqzKey(ua, version, ...)`, see [pqzKeyVersionRecordMessage].
+typedef PqzKeyVersionRecord = ({
+  Uint8List pqzKeyHash,
+  Uint8List pqzPopHash,
+  Uint8List versionDigest,
+  Uint8List recordDigest,
+  Uint8List message,
+  Uint8List pqzRegMessage,
+  Uint8List? memberDigest,
+});
+
+/// Group 3g (KV-1). [stored]: the UA's stored versions as `(version, pqzKeyHash)` (the chain's `pqzKeyAt`). Refuses version 0
+/// (UAPqzKeySet: a new key gets a new version), a version other than latest + 1 or no version 0 (UAPqzKeyVersion), a key a stored
+/// version holds (UAKeyInUse).
+PqzKeyVersionRecord pqzKeyVersionRecordMessage(int kind, Uint8List ua, Uint8List keyData, int version, Object? pqzKey,
+    {Uint8List? pqzPop, Uint8List? pqzPopHash, List<(int, Uint8List)> stored = const [], Uint8List? Function(Uint8List id)? inner}) {
+  if (!_holds(kind, keyData, inner)) throw UAError('UAPqzHolder', '${_kindHex(kind)} may not hold a PQZ key');
+  if (version == 0) throw UAError('UAPqzKeySet', 'version 0 is write-once: a new key gets a new version');
+  final versions = stored.map((s) => s.$1);
+  if (!versions.contains(0) || version != versions.reduce((a, b) => a > b ? a : b) + 1) throw UAError('UAPqzKeyVersion', '$version');
+  final kh = _pqzKeyHashOf(pqzKey);
+  if (stored.any((s) => _hexOf(s.$2) == _hexOf(kh))) throw UAError('UAKeyInUse', 'a stored version holds this key');
+  final popHash = _proofHashOf(pqzPop, pqzPopHash);
+  if (_isZero(popHash)) throw UAError('UAPqzPopHash', 'a PQZ key record needs its proof hash');
+  final vd = pqzKeyVersionDigest(ua, version, kh);
+  final rd = pqzKeyVersionRecordDigest(ua, version, kh, popHash);
+  final tag = purposeTag('pqz-key');
+  final msg = uaMessage(kind, tag, rd);
+  return (
+    pqzKeyHash: kh,
+    pqzPopHash: popHash,
+    versionDigest: vd,
+    recordDigest: rd,
+    message: msg,
+    pqzRegMessage: uaMessage(0x0142, tag, vd),
     memberDigest: kind == 0x0120 ? memberDigest(ua, msg) : null,
   );
 }
@@ -428,6 +503,26 @@ String canonicalId(String text) {
   if (m == null) throw UAError('UAIdFormat', text);
   final h = m.group(1)!.toLowerCase();
   return '0x${h.length == 64 && h.startsWith('0' * 24) ? h.substring(24) : h}';
+}
+
+final _id32Pattern = RegExp(r'^0x([0-9a-fA-F]{64})$');
+
+/// How a client shows a bytes32 id before the user signs (ua-mtx-merge spec §6, MD-9): the EIP-55 address of an id in the native
+/// space (top 96 bits zero, CTR-UA-03), else the URN `urn:scaas:ua:v1:<kind name>:<hex32>` (NET-ALL-21) under [kind], the id's
+/// registry kind (0 = none known: refused, never an address). [id] is `0x` + 64 hex digits.
+String idDisplay(String id, int kind) {
+  final m = _id32Pattern.firstMatch(id);
+  if (m == null) throw UAError('UAIdFormat', id);
+  final h = m.group(1)!.toLowerCase();
+  if (h.startsWith('0' * 24)) {
+    final a = h.substring(24);
+    final d = keccak256([Uint8List.fromList(ascii.encode(a))]);
+    final up = [for (var i = 0; i < 40; i++) (d[i ~/ 2] >> (i.isEven ? 4 : 0)) & 0xf >= 8 ? a[i].toUpperCase() : a[i]];
+    return '0x${up.join()}';
+  }
+  final k = kindInfo(kind);
+  if (k.native) throw UAError('UAKindNotDerived', k.name);
+  return 'urn:scaas:ua:v1:${k.name}:$h';
 }
 
 /// u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight). Members: (kind, id, weight).
@@ -582,6 +677,15 @@ Map<String, Object?> setKemKeyArgs(Uint8List ua, int version, Uint8List? kemPk, 
   return {'ua': _hexOf(_sized(ua, 32, 'ua')), 'version': version, 'kem': kemKeyOf(kemPk), 'sig': sig};
 }
 
+/// Group 3g: `setPqzKey(ua, version, pqzKey, pqzPopHash, UASig)`; version 0 is [setPqzKeyArgs]' row.
+Map<String, Object?> setPqzKeyVersionArgs(Uint8List ua, int version, Uint8List pqzKey, Uint8List pqzPopHash, Map<String, Object?> sig) => {
+      'ua': _hexOf(_sized(ua, 32, 'ua')),
+      'version': version,
+      'pqzKey': _hexOf(pqzKey),
+      'pqzPopHash': _hexOf(_sized(pqzPopHash, 32, 'pqzPopHash')),
+      'sig': sig,
+    };
+
 /// `setPqzKey(ua, pqzKey, pqzPopHash, UASig)`.
 Map<String, Object?> setPqzKeyArgs(Uint8List ua, Uint8List pqzKey, Uint8List pqzPopHash, Map<String, Object?> sig) => {
       'ua': _hexOf(_sized(ua, 32, 'ua')),
@@ -635,6 +739,7 @@ int registryCalldataLength(String entry, Map<String, Object?> a) {
     List<MemberSig> members = const [],
     bool? kemCommit}) {
   final d = keyBytes(keyData);
+  if ((kemPk?.isNotEmpty ?? false) && !isKemHolder(kind)) throw UAError('UAKemHolder', '${_kindHex(kind)} may not hold a KEM key');
   final popHash = (pqzKey?.isNotEmpty ?? false) || (pqzPopHash?.isNotEmpty ?? false) ? _proofHashOf(pqzPop, pqzPopHash) : Uint8List(32);
   final attrs = <String, Object?>{'pqzKey': _hexOf(pqzKey), 'pqzPopHash': _hexOf(popHash), 'kem': kemKeyOf(kemPk), 'kemPkHash': _zeroWord};
   final tail = <String, Object?>{'attrs': attrs, 'pqzPop': _hexOf(pqzPop)};

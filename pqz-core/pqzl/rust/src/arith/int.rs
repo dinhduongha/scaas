@@ -389,6 +389,21 @@ pub(crate) struct IntVec {
     w: Vec<u64>,
 }
 
+/// the rejection tests' operands (z and c s, or the R s images of the witness): cleared on drop where held in
+/// `Wiped` (review 3w u1-3)
+impl crate::Wipe for IntVec {
+    fn wipe(&mut self) {
+        crate::wipe(&mut self.w[..]);
+    }
+}
+
+impl IntVec {
+    /// its heap buffer, for the wipe test hook (`crate::name_buf`)
+    pub(crate) fn buf(&self) -> &alloc::vec::Vec<u64> {
+        &self.w
+    }
+}
+
 impl IntVec {
     /// zero vector; `Error::Memory` if the allocation fails
     pub(crate) fn new(len: usize, nlimbs: usize) -> Result<IntVec, Error> {

@@ -1,0 +1,13 @@
+mutant | test that went red | rc
+admin-check-removed | test_adminWrittenSlotOnlyAdmin, test_registryRuntimeHashPinned | 1
+check-on-caller-not-writer | test_adminWrittenSlotOnlyAdmin, test_attesterDisableVoids, test_disabledListStopsChecking, test_eachListAlone, test_receiverTruthTableThroughToken, test_registryFailureNeverEligible, test_registryGasCapBounds, test_registryRuntimeHashPinned, test_registryStarvedReverts, test_truthTable | 1
+empty-slot-as-admin | test_adminWrittenSlotOnlyAdmin, test_attest, test_attesterDisableVoids, test_disabledListStopsChecking, test_eachListAlone, test_initialSupplyRecipientChecked, test_receiverTruthTableThroughToken, test_registryFailureNeverEligible, test_registryGasCapBounds, test_registryGasPinned, test_registryRuntimeHashPinned, test_registryStarvedBoundary, test_registryStarvedReverts, test_truthTable | 1
+writer-mismatch-locks | test_adminWrittenSlotOnlyAdmin, test_attest, test_attesterDisableVoids, test_disabledListStopsChecking, test_eachListAlone, test_receiverTruthTableThroughToken, test_registryRuntimeHashPinned, test_truthTable | 1
+admin-revoke-stays-locked | test_adminWrittenSlotOnlyAdmin, test_registryRuntimeHashPinned | 1
+admin-locked-out-too | test_adminWrittenSlotOnlyAdmin, test_attest, test_receiverTruthTableThroughToken, test_registryRuntimeHashPinned, test_truthTable | 1
+check-after-write | test_adminWrittenSlotOnlyAdmin, test_registryRuntimeHashPinned | 1
+# 7 of 7 killed, none a compile error; the registry source copied back after each (the fix was not yet committed). The
+# controller's three: admin-check-removed, check-on-caller-not-writer (`id != 0 && flags != 0`: the stored writer not read),
+# empty-slot-as-admin (`flags != 0` dropped). Own: writer-mismatch-locks, admin-revoke-stays-locked, admin-locked-out-too,
+# check-after-write. Every mutant also moves test_registryRuntimeHashPinned (a pin); each is killed by a behaviour test too
+# (test_adminWrittenSlotOnlyAdmin at least).

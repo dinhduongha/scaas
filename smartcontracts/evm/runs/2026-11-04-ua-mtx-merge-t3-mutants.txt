@@ -1,0 +1,5 @@
+mutant | test that went red | rc
+ledger-asked-of-every-leg | test_feeZero_everyMergedEntry, test_mtxWrapOrder_eoaLegNoRegistry | 1
+cap-skipped-on-wrap-order | test_wrapOrderCapStillHolds | 1
+unwrap-to-ua-native-receiver | test_mtxUnwrapToUA_nativeAndDerived | 1
+no-twin-wrap-on-ua-envelope | test_kindPairInterfaceIdsArePinned, test_noTwinWrapsStayAddress | 1

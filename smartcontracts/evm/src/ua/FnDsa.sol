@@ -177,7 +177,7 @@ library Falcon {
 ///        Falcon-1024 over the 32-byte `ua_msg`, the message size of EIP-8052 (Falcon has no context string; `ua_msg` already
 ///        carries `TAG(kind)`). One deployment per kind, the kind a constructor immutable. Pure Solidity: EIP-8052 has no
 ///        addresses yet and no EIP defines a Falcon-1024 precompile. **UNAUDITED.**
-contract UAFndsaVerifier is IUAPopVerifier {
+contract FndsaVerifier is IUAPopVerifier {
     uint16 public immutable KIND;
     uint256 private immutable _LOGN;
 

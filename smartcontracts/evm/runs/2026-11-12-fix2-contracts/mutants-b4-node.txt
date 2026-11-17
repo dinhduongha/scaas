@@ -1,0 +1,8 @@
+Item 4 (payee-fee rename, CTR-MTX-86): node mutants, applied by hand to scaas-node/src/submit.rs, one at a time, then
+restored (git diff clean against the edit). Test: cargo test --lib outbox_jobs_are_normalized_and_keyed_by_the_token_digest
+(under scripts/capped). Control: the unmutated test passes.
+id | mutation | result | first failure
+node-1 receiver-fee-refusal-off | `if job.receiver_fee.is_some()` -> `if false && job.receiver_fee.is_some()` | KILLED | panicked at src/submit.rs:1833 (RECEIVER_FEE_REFUSED expected)
+node-2 payee-fee-checked-first | the `payee_fee` refusal moved before the `receiver_fee` one | KILLED | panicked at src/submit.rs:1833 (a job with both fields names RECEIVER_FEE_REFUSED)
+node-3 payee-fee-refusal-off | `if job.payee_fee.is_some()` -> `if false && job.payee_fee.is_some()` | KILLED | panicked at src/submit.rs:1827 (payee fee is not built)
+killed 3 / 3

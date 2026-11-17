@@ -14,7 +14,7 @@ import { hashStruct, hashTypedData } from '../src/evm.js';
 import { personalSignDigest } from '../legacy/typed-signing/ua-portable-raw.js';
 import { portableJson } from '../scripts/ua-portable-vectors.mjs';
 import * as signers from '../scripts/ua-signers.mjs';
-import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyMembership, decodeMemberSigs,
+import { B, nativeOk, bytesAt, sigOk, memberSigs, msigOk, SECP_N, verifyRegistration, verifyKemRecord, verifyPqzKeyRecord, verifyPqzKeyVersionRecord, verifyPqzScopedKeyRecord, verifyMembership, verifyAuthorization, decodeMemberSigs,
   encodeMemberSigs, kindVerify } from './ua-verify.js';
 
 import { dir } from './ua-vectors-dir.js';
@@ -32,6 +32,7 @@ const DS_P = '0x9a2c390d4dc940ccdb5fa6b21e673e87159bdd99aeef22ea791bcea9efc64ca1
 const KEM_T = 'UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)';
 const REC_T = 'UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)';
 const PK_T = 'UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)';
+const PKV_T = 'UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)';
 const TYPES = {
   UAKemRecord: [KEM_T, '0x0ab7989827627b89c268e88a0a0b06b62aefa70b0a466014931ca44acfa9a201'],
   UAPortableRecord: [REC_T + KEM_T, '0x0c1553cfab3c35326558484df79963dced75ead85272d2a85985f264757bfe7f'],
@@ -39,7 +40,14 @@ const TYPES = {
     '0xc78b548ceb2fadf1f0a895f79f88b517327c120f0f9ab345f02981441048c87e'],
   UAPqzKey: [PK_T, '0x827d90728b100bc830d06b04dd2b9b5f7853adaa05502b4082875f881d925a00'],
   UAPqzKeyRecord: ['UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)' + PK_T, '0xaba20a80603724f71232573a76d2506ae38f60f39ea9cd8e71f4b64775dd7567'],
+  // group 3g: the contract's pins (test/ua/PqzKeyVersions.t.sol)
+  UAPqzKeyVersion: [PKV_T, '0x56bb760a3968427f1aa06b0497de42c05374beae46765175b61976c12e38b158'],
+  UAPqzKeyVersionRecord: ['UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)' + PKV_T, '0x2e00b7c0ff5cfbca3f50e0445bcd02bb227e0154c239c812b38d9b8fa6e7d6e5'],
   UAMembership: ['UAMembership(bytes32 ua,bytes32 member)', '0x2ffb61cab130ef54f9af88d7255ca81c570651b2562c2c368286a1f43bfe5cb4'],
+  // CTR-UA-44 (TODO 3ze): the contract's pins (test/ua/UARegistryMsigUpdate.t.sol)
+  UAMsigUpdate: ['UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,uint256 enabled,uint64 validUntilBlock)'
+    + 'UAMsigMember(uint16 kind,bytes32 id,uint16 weight)', '0x4f444098cb5d1c5e604d10d13c9c803ac8429ef9938342ded6997343b9c48ac6'],
+  UAMsigMember: ['UAMsigMember(uint16 kind,bytes32 id,uint16 weight)', '0x49ee2633d577df4283fdcf2546b6c8b72f1e3cddb2449cefdfc6eed31e26a05a'],
 };
 const TH = Object.fromEntries(Object.entries(TYPES).map(([k, [, t]]) => [k, B(t)]));
 const typedHand = (structHash) => keccak_256(concatBytes(Uint8Array.of(0x19, 0x01), B(DS_P), structHash));
@@ -163,11 +171,12 @@ test('portable PoP has no chain context', () => {
     PURPOSE_KEM: { tag: 'scaas.ua.purpose.kem.v1', hash: hex(h('scaas.ua.purpose.kem.v1')) },
     PURPOSE_PQZ_KEY: { tag: 'scaas.ua.purpose.pqz-key.v1', hash: hex(h('scaas.ua.purpose.pqz-key.v1')) },
     PURPOSE_MEMBERSHIP: { tag: 'scaas.ua.purpose.membership.v1', hash: hex(h('scaas.ua.purpose.membership.v1')) },
+    PURPOSE_MSIG_UPDATE: { tag: 'scaas.ua.purpose.msig-update.v1', hash: hex(h('scaas.ua.purpose.msig-update.v1')) },
     PQZ_KEY_GROUP: { tag: 'scaas.ua.group.pqz-mlwe.v1', hash: hex(h('scaas.ua.group.pqz-mlwe.v1')) },
   });
   assert.deepEqual(P.checked, { none: 0, chain: 1, relayer: 2 });
   assert.equal('KEM_RECORD_TAG' in ua || 'PQZ_KEY_RECORD_TAG' in ua, false, 'the raw record tags are legacy (TS-D3)');
-  assert.deepEqual([ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG, ua.MEMBERSHIP_TAG, ua.GROUP('pqz-mlwe')].map(hex),
+  assert.deepEqual([ua.POP_V2_TAG, ua.KEM_TAG, ua.PQZ_KEY_TAG, ua.MEMBERSHIP_TAG, ua.MSIG_UPDATE_TAG, ua.GROUP('pqz-mlwe')].map(hex),
     Object.values(P.tags).map((t) => t.hash));
   // pqzKeyHash = keyHash(0x0142, pqzKey) = keccak256(PQZ_KEY_GROUP ‖ pqzKey), not a plain keccak of the key
   const k = row('mldsa65/n2048-kmax1024');
@@ -187,7 +196,13 @@ test('portable PoP has no chain context', () => {
     assert.equal(hex(ua.deriveUA(x.kind, B(x.keyData))), x.ua, x.name);
     assert.equal(x.kindName, ua.kindInfo(x.kind).name, x.name);
   }
-  assert.doesNotMatch(TEXT, /chainId|chainUid|registry"/);
+  // CTR-UA-44: the one record whose struct names a chain and a registry is `UAMsigUpdate` (one update per registry, in the portable domain);
+  // every other row and type stays chain-free
+  // and the scoped PQZ key records of an updated msig (K3-3: a scoped record names its chain word)
+  const { msigUpdates, msigUpdated, msigScopedKeyRecords, note, typed: { types: { UAMsigUpdate, ...types }, ...typed }, ...rest } = P;
+  assert.ok(msigUpdates.length && msigUpdated && msigScopedKeyRecords && note && UAMsigUpdate);
+  assert.doesNotMatch(JSON.stringify({ ...rest, typed: { ...typed, types } }), /chainId|chainUid|registry"/);
+  assert.doesNotMatch(JSON.stringify(msigUpdated), /chainId|chainUid|registry"/);
 });
 
 test('registration digest covers the proof hash', () => {
@@ -224,7 +239,8 @@ test('registration digest covers the proof hash', () => {
 
 test('kem record digest matches the hand-built words', () => {
   // mldsa87 (CTR-UA-39 Q2), fndsa1024 (CTR-UA-40 Q2): holders, fndsa512's rows each
-  assert.deepEqual([...new Set(P.kemRecords.map((k) => k.name))], ['mldsa65', 'fndsa512', 'msig-pq', 'mldsa87', 'fndsa1024']);
+  // CTR-UA-32 (T66a): the single PQ kinds only, an msig holds no KEM key (its refusal: negatives msig-with-kem/<set>, msig-kem-record)
+  assert.deepEqual([...new Set(P.kemRecords.map((k) => k.name))], ['mldsa65', 'fndsa512', 'mldsa87', 'fndsa1024']);
   for (const k of P.kemRecords) {
     const sh = kemHand(k.ua, k.version, B(k.kemPk)[0], hex(keccak_256(B(k.kemPk))));
     assert.equal(hex(sh), k.structHash, `${k.name} v${k.version}`);
@@ -237,7 +253,7 @@ test('kem record digest matches the hand-built words', () => {
     assert.equal(B(k.kemPk).length, 1601);
     assert.equal(B(k.kemPk)[0], ua.KEM_SCHEME.mlkem1024X25519, 'scheme byte');
   }
-  for (const name of ['mldsa65', 'fndsa512', 'msig-pq', 'mldsa87', 'fndsa1024']) {
+  for (const name of ['mldsa65', 'fndsa512', 'mldsa87', 'fndsa1024']) {
     const ks = P.kemRecords.filter((k) => k.name === name);
     assert.deepEqual(ks.map((k) => k.version), [1, 2, 3], name);
     assert.equal(new Set(ks.map((k) => k.kemPk)).size, 3, `${name}: a key per version`);
@@ -278,6 +294,13 @@ test('holder refusals', () => {
   assert.throws(() => ua.holderPopMessage(0x0133, withPqz(row('slhdsa128s'))), code('UAPqzHolder'));
   assert.throws(() => ua.holderPopMessage(0x0133, withKem(row('slhdsa128s'))), code('UAKemHolder'));
   assert.throws(() => ua.holderPopMessage(0x0120, withKem(row('msig-classical'))), code('UAKemHolder'));
+  // CTR-UA-32 (T66a): a PQ-eligible msig holds a PQZ key but no KEM key, in every builder
+  const mq = row('msig-pq/n2048-kmax1024');
+  assert.ok(ua.isKeyHolder(0x0120, B(mq.keyData)) && !ua.isKemHolder(0x0120), 'a PQZ holder, no KEM holder');
+  assert.throws(() => ua.holderPopMessage(0x0120, withKem(mq)), code('UAKemHolder'));
+  assert.throws(() => ua.registrationArgs({ ...args(mq), kemPk: kem.kemPk, pop: [] }), code('UAKemHolder'));
+  assert.throws(() => ua.kemRecordMessage(0x0120, { ua: mq.ua, version: 1, kemPk: kem.kemPk }), code('UAKemHolder'));
+  assert.throws(() => ua.registrationAttrsDigest(0x0120, { ua: mq.ua, keyData: mq.keyData, attrs: { kemPk: kem.kemPk } }), code('UAKemHolder'));
   assert.throws(() => ua.holderPopMessage(0x0120, { ...withPqz(row('msig-pq/n2048-kmax1024')), keyData: undefined }), code('UAPqzHolder'));
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzPopHash: undefined }), code('UAPqzPopHash'));
   assert.throws(() => ua.holderPopMessage(0x0131, { ...args(mlz), pqzKey: undefined }), code('UAPqzPopHash'));
@@ -353,7 +376,13 @@ test('holder refusals', () => {
       const k = P.kemRecords.find((x) => x.id === n.mutation.row);
       const target = set.ua ?? k.ua;
       const t = regOf(target);
-      const m = ua.kemRecordMessage(t.kind, { ua: target, version: set.version ?? k.version, kemPk: set.kemPk ?? k.kemPk });
+      const rec = { ua: target, version: set.version ?? k.version, kemPk: set.kemPk ?? k.kemPk };
+      if (n.error === 'UAKemHolder') {
+        assert.equal(t.kind, n.mutation.kind, n.name);
+        assert.throws(() => ua.kemRecordMessage(t.kind, rec), code('UAKemHolder'), n.name);
+        continue;
+      }
+      const m = ua.kemRecordMessage(t.kind, rec);
       assert.equal(n.error, 'UAUnauthorized', n.name);
       assert.equal(sigOk(t.kind, t.keyData, hex(m), set.sig ?? k.sig), false, n.name);
     } else if (n.entry === 'setPqzKey') {
@@ -453,6 +482,47 @@ test('acceptance (CTR-UA-37): every row by hand, the wallet JSON, the native sig
       const key = P.registrations.find((x) => x.ua === r.member).keyData;
       assert.ok(r.memberKind >= 0x0130 ? sigOk(r.memberKind, key, m, r.sig) : kindVerify(r.memberKind, key, m, r.sig, false), r.name);
     }
+  }
+});
+
+test('updateMsig (CTR-UA-44): every row by hand, the wallet JSON, each signer; the negatives are signed for another chain or registry', () => {
+  assert.equal(P.msigUpdates.length, 4);
+  assert.equal(hex(ua.MSIG_UPDATE_TAG), P.tags.PURPOSE_MSIG_UPDATE.hash);
+  assert.equal(ua.isPortablePurpose(ua.MSIG_UPDATE_TAG), false, 'not a requirePortable purpose');
+  const memberHand = (m) => keccak_256(concatBytes(TH.UAMsigMember, word(m.kind), B(m.id), word(m.weight)));
+  const addr = (a) => concatBytes(new Uint8Array(12), B(a));
+  const digestOf = (r, chainUid, registry) => typedHand(keccak_256(concatBytes(TH.UAMsigUpdate, B(r.ua), B(chainUid), addr(registry),
+    word(r.version), word(r.threshold), keccak_256(concatBytes(...r.members.map(memberHand))), word(BigInt(r.enabled)), word(r.validUntilBlock))));
+  for (const r of P.msigUpdates) {
+    assert.equal(r.digest, hex(digestOf(r, r.chainUid, r.registry)), r.name);
+    assert.equal(hex(hashTypedData(r.typedData)), r.digest, r.name);
+    assert.equal(r.typedData.primaryType, 'UAMsigUpdate', r.name);
+    const m = ua.msigUpdateMessage({ ...r, ua: B(r.ua) });
+    assert.equal(hex(m.digest), r.digest, r.name);
+    assert.equal(hex(m.message), r.message, r.name);
+    assert.equal(hex(m.message), hex(ua.uaMessage(0x0120, ua.MSIG_UPDATE_TAG, B(r.digest))), r.name);
+    assert.equal(r.memberDigest, hex(keccak_256(concatBytes(B(r.ua), B(r.message)))), r.name);
+    assert.deepEqual({ ...m.args, sigs: r.args.sigs }, r.args, r.name);
+    // the stored structure's prefix: stored slots keep kind and id, appended ones follow
+    const stored = ua.msigStructure(r.stored).members;
+    stored.forEach((x, i) => assert.deepEqual([r.members[i].kind, r.members[i].id], [x.kind, x.id], r.name));
+    // each signer over what this row was signed for
+    const signed = r.signedFor ? digestOf(r, r.signedFor.chainUid, r.signedFor.registry) : B(r.digest);
+    const md = keccak_256(concatBytes(B(r.ua), ua.uaMessage(0x0120, ua.MSIG_UPDATE_TAG, signed)));
+    for (const s of decodeMemberSigs(B(r.sigs))) {
+      const x = stored[s.index];
+      if (x.kind === 1) assert.ok(nativeOk(`0x${x.id.slice(26)}`, signed, hex(s.sig)), r.name);
+      else if (x.kind !== 0x0120) assert.ok(sigOk(x.kind, keyOf(x.id), hex(ua.uaMessage(x.kind, ua.purposeTag('member'), md)), hex(s.sig)), r.name);
+      else assert.equal(s.members.length, 2, `${r.name}: the inner's own list`);
+    }
+    if (r.signedFor) {
+      assert.equal(r.error, 'UAUnauthorized', r.name);
+      assert.notEqual(hex(signed), r.digest, `${r.name}: another digest`);
+    }
+  }
+  const nested = P.msigUpdates.find((r) => r.name === 'nested');
+  for (const i of nested.innerDigests) {
+    assert.equal(i.innerDigest, hex(ua.innerDigest(B(i.member), B(nested.memberDigest))));
   }
 });
 
@@ -601,7 +671,7 @@ test('portable.json msig rows are minimal', () => {
     assert.ok(ua.msigSlotsMinimal(regOf(k.ua).keyData, ix(k.sig)), k.id ?? k.name);
     n++;
   }
-  assert.equal(n, 12, '5 pops, 3 KEM records, 4 PQZ key records');
+  assert.equal(n, 9, '5 pops, 4 PQZ key records (CTR-UA-32: no msig KEM record)');
   // the negative: 2-of-(1, 2) over the registered mldsa65#1 / #2 (lower id weight 1), both slots sign
   const neg = P.negatives.find((x) => x.name === 'msig-pop-not-minimal') ?? assert.fail('no msig-pop-not-minimal');
   assert.deepEqual([neg.entry, neg.rule, neg.error], ['register', 'msig-minimal', 'UAPoP']);
@@ -774,7 +844,7 @@ const pqzRow = (k, over = {}) => ({ ua: k.ua, pqzKey: k.pqzKey, pqzPopHash: k.pq
 
 test('verifyRegistration accepts every row and refuses every negative', () => {
   const [n, commits] = [P.registrations.length, P.registrations.filter((r) => r.kemCommit).length];
-  assert.deepEqual([n, commits], [27, 11]); // + mldsa87, fndsa1024 (CTR-UA-39 / -40)
+  assert.deepEqual([n, commits], [27, 7]); // + mldsa87, fndsa1024 (CTR-UA-39 / -40); msig-pq/<set> without a KEM key (CTR-UA-32)
   for (const r of P.registrations) {
     verifyRegistration(r, keysOf);
     verifyRegistration({ ...r, pqzPop: '0x' }, keysOf); // the proof bytes are optional
@@ -829,7 +899,56 @@ test('verifyRegistration accepts every row and refuses every negative', () => {
       otherEntry++;
     }
   }
-  assert.deepEqual([refused, stateful, otherEntry], [63, 4, 1]);
+  assert.deepEqual([refused, stateful, otherEntry], [64, 4, 1]); // + msig-kem-record (T66a)
+});
+
+test('CTR-UA-44: every record check reads the current structure of an updated msig (ua-rs check_*_current rows)', () => {
+  const U = P.msigUpdated;
+  const now = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData, current: U.current, enabled: U.enabled } : keysOf(id));
+  const first = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData } : keysOf(id));
+  const slots = ua.msigStructure(U.current).members.length;
+  const accepted = (id, i) => id !== U.ua || ((BigInt(U.enabled) >> BigInt(i)) & 1n) === 1n; // every slot accepted; counts iff enabled
+  const domain = { generation: 1, ...JSON.parse(readFileSync(new URL('structures.json', dir), 'utf8')).contexts.A };
+  assert.equal(U.rows.length, 7);
+  for (const r of U.rows) {
+    const row = { ...r, ua: r.ua ?? U.ua };
+    const run = (members) => {
+      if (r.entry === 'setPqzKey' && !r.version) verifyPqzKeyRecord(row, members, accepted);
+      else if (r.entry === 'setPqzKey') verifyPqzKeyVersionRecord(row, members, accepted);
+      else if (r.entry === 'acceptMembership') verifyMembership(row, members, accepted);
+      else if (r.entry === 'requireAuthorized') verifyAuthorization(row, members, domain, accepted);
+      else verifyRegistration({ kind: 0x0120, keyData: r.keyData, attrs: {}, pop: r.pop, pqzPop: '0x' }, members, accepted);
+    };
+    if (r.valid) run(now);
+    else assert.throws(() => run(now), { code: 'UAUnauthorized' }, r.name);
+    // Fable P2-4: a disabled slot is refused from the enabled word alone, with the raw accepted bits too
+    if (!r.valid && r.entry === 'setPqzKey') assert.throws(() => verifyPqzKeyRecord(row, now, () => true), { code: 'UAUnauthorized' }, r.name);
+    if (!r.valid && r.entry === 'requireAuthorized') {
+      assert.throws(() => verifyAuthorization(row, now, domain, () => true), { code: 'UAUnauthorized' }, r.name);
+    }
+    // the first structure is never the authority once the registry was updated: each valid row fails against it
+    if (r.valid) assert.throws(() => run(first), (e) => e instanceof ua.UAError, `${r.name}: the first structure`);
+  }
+  assert.ok(slots > ua.msigStructure(U.keyData).members.length, 'an appended slot');
+});
+
+test('K3-3 with CTR-UA-44: a scoped key record of an updated msig reads its current structure (ua-rs scoped_key_records_read_the_current_structure)', () => {
+  const U = P.msigScopedKeyRecords;
+  const now = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData, current: U.current, enabled: U.enabled } : keysOf(id));
+  const first = (id) => (id === U.ua ? { kind: 0x0120, keyData: U.keyData } : keysOf(id));
+  const accepted = (id, i) => id !== U.ua || ((BigInt(U.enabled) >> BigInt(i)) & 1n) === 1n;
+  assert.equal(U.rows.length, 4);
+  for (const r of U.rows) {
+    const row = { ...r, ua: U.ua };
+    if (!r.error) {
+      verifyPqzScopedKeyRecord(row, now, accepted);
+      assert.throws(() => verifyPqzScopedKeyRecord(row, first, accepted), (e) => e instanceof ua.UAError, `${r.name}: the first structure`);
+      assert.throws(() => verifyPqzScopedKeyRecord({ ...row, validUntilBlock: r.validUntilBlock + 1 }, now, accepted), { code: 'UAUnauthorized' }, r.name);
+    } else {
+      assert.throws(() => verifyPqzScopedKeyRecord(row, now, accepted), { code: r.error }, r.name);
+      assert.throws(() => verifyPqzScopedKeyRecord(row, now, () => true), { code: r.error }, `${r.name}: the enabled mask`);
+    }
+  }
 });
 
 test('verifyMembership accepts every row and refuses a flipped byte (ua-rs check_membership_rows)', () => {
@@ -855,7 +974,7 @@ test('verifyKemRecord accepts every row and refuses a flipped byte', () => {
     refuses(() => verifyKemRecord(kemRow(k, { kemPk: '0x' }), keysOf), 'UAKemKeyLength', k.id);
     refuses(() => verifyKemRecord(kemRow(k, { kemPk: flipAt(k.kemPk, 0).replace(/^0x00/, '0x02') }), keysOf), 'UAKemScheme', k.id);
   }
-  assert.equal(flips, 3 * 12 + 3 * 2 * 3); // 3 per signature: 12 single keys, 3 msig of 2 slots
+  assert.equal(flips, 3 * 12); // 3 per signature: 12 single keys (CTR-UA-32: no msig KEM record)
   const s = row('slhdsa128s');
   refuses(() => verifyKemRecord(kemRow(P.kemRecords[0], { ua: s.ua, sig: s.pop }), keysOf), 'UAKemHolder', 'a valid signature cannot reach the signature check');
   // one field off: the record's `ua` is not the id of the key read. Key K must not sign for a victim's `ua`; a non-holder key, so
@@ -878,6 +997,62 @@ test('verifyPqzKeyRecord accepts every row and refuses a flipped byte', () => {
   const k = P.pqzKeyRecords[0];
   refuses(() => verifyPqzKeyRecord(pqzRow(k, { ua: s.ua }), keysOf), 'UAPqzHolder', 'the control');
   refuses(() => verifyPqzKeyRecord(pqzRow(k), () => keysOf(s.ua)), 'UAUnauthorized', 'not the key data\'s id');
+});
+
+// --- group 3g (KV-1, KV-2): the version records ---
+const kvRow = (k, over = {}) => ({ ua: k.ua, version: k.version, pqzKey: k.pqzKey, pqzPopHash: k.pqzPopHash, sig: k.sig, ...over });
+
+test('pqzKeyVersions: two holders, versions 1 and 2, every set; digests by hand; a member signature over the record; the args', () => {
+  assert.equal(P.pqzKeyVersions.length, 2 * 2 * SETS.length);
+  assert.deepEqual([...new Set(P.pqzKeyVersions.map((k) => k.name.split('/')[0]))], ['fndsa512', 'msig-pq-native']);
+  const hashes = new Set();
+  for (const k of P.pqzKeyVersions) {
+    const vh = keccak_256(concatBytes(TH.UAPqzKeyVersion, B(k.ua), word(k.version), B(k.pqzKeyHash)));
+    assert.equal(k.versionDigest, hex(typedHand(vh)), k.name);
+    assert.equal(k.recordDigest, hex(typedHand(keccak_256(concatBytes(TH.UAPqzKeyVersionRecord, vh, B(k.pqzPopHash))))), k.name);
+    assert.equal(k.message, hex(ua.uaMessage(k.kind, ua.PQZ_KEY_TAG, B(k.recordDigest))), k.name);
+    assert.equal(k.pqzRegMessage, hex(ua.uaMessage(0x0142, ua.PQZ_KEY_TAG, B(k.versionDigest))), k.name);
+    assert.equal(k.pqzKeyHash, hex(keccak_256(concatBytes(h('scaas.ua.group.pqz-mlwe.v1'), B(k.pqzKey)))), k.name);
+    assert.equal(k.pqzPopHash, hex(keccak_256(B(k.pqzPop))), k.name);
+    assert.equal(hex(hashTypedData(k.typedData)), k.recordDigest, k.name);
+    assert.deepEqual(k.args, { ua: k.ua, version: k.version, pqzKey: k.pqzKey, pqzPopHash: k.pqzPopHash,
+      sig: ua.uaSig(k.kind === 0x0120 ? { members: memberList(k.sig) } : { signature: k.sig }) }, k.name);
+    assert.ok(!hashes.has(k.pqzKeyHash), `${k.name}: every version its own key`);
+    hashes.add(k.pqzKeyHash);
+    assert.ok(!P.pqzKeyRecords.some((r) => r.pqzKeyHash === k.pqzKeyHash), `${k.name}: not version 0's key`);
+  }
+});
+
+test('verifyPqzKeyVersionRecord accepts every row and refuses a flipped byte, version 0, the other version\'s consent', () => {
+  for (const k of P.pqzKeyVersions) {
+    verifyPqzKeyVersionRecord(kvRow(k), keysOf);
+    for (const bad of flipped(k.kind, k.sig)) refuses(() => verifyPqzKeyVersionRecord(kvRow(k, { sig: bad }), keysOf), 'UAUnauthorized', k.name);
+    refuses(() => verifyPqzKeyVersionRecord(kvRow(k, { version: k.version + 1 }), keysOf), 'UAUnauthorized', `${k.name}: another version`);
+    refuses(() => verifyPqzKeyVersionRecord(kvRow(k, { version: 0 }), keysOf), 'UAPqzKeySet', `${k.name}: version 0`);
+    refuses(() => verifyPqzKeyVersionRecord(kvRow(k, { pqzPopHash: Z }), keysOf), 'UAPqzPopHash', k.name);
+    refuses(() => verifyPqzKeyVersionRecord(kvRow(k, { pqzKey: flipAt(k.pqzKey, 0) }), keysOf), 'UAUnauthorized', k.name);
+  }
+});
+
+test('pqzKeyVersionNegatives: every row by its table, the signature cases by the verifier, the state cases by the builder', () => {
+  assert.equal(P.pqzKeyVersionNegatives.length, 7 * SETS.length);
+  const refused = {};
+  for (const x of P.pqzKeyVersionNegatives) {
+    const k = P.pqzKeyVersions.find((y) => y.name === x.mutation.row) ?? assert.fail(x.name);
+    const zero = rec(`fndsa512/${k.set}`);
+    assert.equal(k.name.split('/')[0], 'fndsa512', x.name);
+    const set = x.mutation.set;
+    const key = set.pqzKey ?? k.pqzKey;
+    if (x.error === 'UAUnauthorized') {
+      refuses(() => verifyPqzKeyVersionRecord(kvRow(k, set), keysOf), x.error, x.name);
+    } else {
+      const known = (v) => (v === 0 ? zero : P.pqzKeyVersions.find((y) => y.name === `fndsa512/v${v}/${k.set}`));
+      refuses(() => ua.pqzKeyVersionRecordMessage(k.kind, { ua: k.ua, keyData: keysOf(k.ua).keyData, version: k.version, pqzKey: key, pqzPopHash: k.pqzPopHash,
+        stored: x.mutation.stored.map((v) => ({ version: v, pqzKeyHash: known(v).pqzKeyHash })) }), x.error, x.name);
+    }
+    refused[x.error] = (refused[x.error] ?? 0) + 1;
+  }
+  assert.deepEqual(refused, { UAPqzKeyVersion: 3 * SETS.length, UAKeyInUse: SETS.length, UAUnauthorized: 3 * SETS.length });
 });
 
 test('verify* fail closed: each case one field off a row that passes (ua-rs check_fails_closed)', () => {

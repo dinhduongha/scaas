@@ -34,10 +34,10 @@ RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq 
  && ln -s /usr/bin/clang-18 /usr/local/bin/clang \
  && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" \
- && echo "$NODE_SHA256  /tmp/node.tar.xz" | sha256sum -c - \
- && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --exclude='*/include' --exclude='*/share' \
- && rm /tmp/node.tar.xz
+RUN T=$(mktemp -d) && curl -fsSLo "$T/node.tar.xz" "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz" \
+ && echo "$NODE_SHA256  $T/node.tar.xz" | sha256sum -c - \
+ && tar -xJf "$T/node.tar.xz" -C /usr/local --strip-components=1 --exclude='*/include' --exclude='*/share' \
+ && rm -rf "$T"
 
 # LaZer source for --upstream (source only; built at run time, never part of the image's pqz-core build)
 RUN git clone -q https://github.com/lazer-crypto/lazer /opt/lazer && git -C /opt/lazer checkout -q "$LAZER_COMMIT"
@@ -46,11 +46,11 @@ RUN git clone -q https://github.com/lazer-crypto/lazer /opt/lazer && git -C /opt
 # Parallelism capped (2 cargo / cc jobs, 2 test threads): docker build work is not under the host's memory cap.
 ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH \
     CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=2
-RUN curl -fsSLo /tmp/rustup-init "https://static.rust-lang.org/rustup/archive/$RUSTUP_VERSION/x86_64-unknown-linux-gnu/rustup-init" \
- && echo "$RUSTUP_SHA256  /tmp/rustup-init" | sha256sum -c - && chmod +x /tmp/rustup-init \
- && /tmp/rustup-init -y -q --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" \
+RUN T=$(mktemp -d) && curl -fsSLo "$T/rustup-init" "https://static.rust-lang.org/rustup/archive/$RUSTUP_VERSION/x86_64-unknown-linux-gnu/rustup-init" \
+ && echo "$RUSTUP_SHA256  $T/rustup-init" | sha256sum -c - && chmod +x "$T/rustup-init" \
+ && "$T/rustup-init" -y -q --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" \
       --target wasm32-unknown-unknown --component clippy \
- && rm /tmp/rustup-init && rustc --version && cargo --version && chmod -R a+rwX "$RUSTUP_HOME" "$CARGO_HOME"
+ && rm -rf "$T" && rustc --version && cargo --version && chmod -R a+rwX "$RUSTUP_HOME" "$CARGO_HOME"
 
 COPY . /src
 WORKDIR /src/pqz-core

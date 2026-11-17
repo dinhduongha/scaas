@@ -32,7 +32,8 @@ them. Nothing above bit 4 is built.
 | 19 | `0x80000` | `DEPRECATE` | a holder marks a release unusable for new instances | power | later |
 | 20 | `0x100000` | `ENABLE_KIND` | a holder turns a catalogue kind on or off | power | later |
 | 21 | `0x200000` | `MODERATE` | a holder moves units out of an account, public balances only | power | decided, CTR-GOV-08, -13, later |
-| 22-127 | | free | | | |
+| 22 | `0x400000` | `OPERATOR_TRANSFER` | a holder, any account, moves units out of an account to another, public balances only, regulated kinds 8–13 | power | decided, CTR-GOV-20 (owner 2026-11-05); 21's transfer moved here, 21 re-scoped |
+| 23-127 | | free | | | |
 
 **Bands (CTR-GOV-10 and its Change, owner 2026-11-04).** 0-127 SCaaS, one meaning everywhere. 128-255 per application
 contract, with a label (`APPROVE_LOAN`, `ADD_MEMBER`). No band is refused: a contract's `_validBits()` is the only check.

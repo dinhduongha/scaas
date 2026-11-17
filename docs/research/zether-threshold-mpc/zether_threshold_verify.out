@@ -1,0 +1,12 @@
+verifier: clients/zether-prover/target/release/zether-cli
+P0 positive control, frozen vector transfer_bls12381.json: {'ok': True}
+P1 one-holder proof by the Python port (prover port check): {'ok': True}
+P2 joint 3-of-5 proof, holders [1, 3, 4]: {'ok': True} blamed []
+P2 joint 3-of-5 proof, holders [2, 4, 5]: {'ok': True} blamed []
+N1 two holders answer for a 3-of-5 key: {'error': 'verification failed: E1', 'ok': False} blamed []
+N2 holder 3 adds 1 to z_i: {'error': 'verification failed: E1', 'ok': False} blamed [3]
+N3 holder 4 uses another nonce on D_acc: {'error': 'verification failed: E5', 'ok': False} blamed [4]
+N4 a valid joint proof with its last byte flipped (Bulletproof scalar b): {'error': 'verification failed: range proof: BP-2 (inner product)', 'ok': False}
+N5 the same joint proof against another Y_f: {'error': 'verification failed: E1', 'ok': False}
+N6 a joint proof by group 1 for a statement naming group 2 as sender: {'error': 'verification failed: E1', 'ok': False}
+all checks passed

@@ -1,0 +1,38 @@
+# ua-mtx-merge T24 gate summary (full output in git-ignored .log files, not committed)
+# T24: GovernanceLib relaxation state machine (regulated-kinds spec §3.6, RK-2, RK-3: action-tagged commit on the pending
+# record, proposer binding NotProposer, mutual exclusion, effects at confirm only, RelaxProposed, owner generation and window),
+# msig holders of the regulated contract-only bits (RK-1, registry kindOf at grant only), issuer and compliance at init,
+# RoleConflict, pad(this) refused, disableFeature returns applied, plain kinds refuse 5-9 as FeatureInvalidForKind (Q3);
+# GovernanceBits.OPERATOR_TRANSFER = 22 as a constant (CTR-GOV-20, owner 2026-11-05; entry in T32, regulated kinds only).
+# Base: d2a061fd (T18 tip + the spec's owner block). T24 commits: 363f90df (legacy copies, MD-4), 295e073b (the build), this
+# one (harness, mutants, summary).
+step | commit | rc | counts
+t24-red-build | d2a061fd + test/governance/GovRelax.t.sol | 1 | compile error on HEAD: IGovernance.NotProposer not found; GovernanceLib.init 10 args / disableFeature 3 args and a bool return not declared; _delayedRelaxBits / _uaRegistry override nothing (solc stops at 6 errors)
+t24-red | d2a061fd + the re-pinned rows | 1 | 41 passed 4 failed, 5 suites: test_plainKindsRefuseRegulatedAsInvalid, test_regulatedFlags_invalidOnEveryPlainKind, test_initRefusesFlagsOfAnotherKind, test_unknownBitsAndKinds_refused (FeatureNotBuilt(n) != FeatureInvalidForKind(n))
+t24-focus | worktree before the GovDelay re-pin | 1 | 545 passed 5 failed, 53 suites: GovDelay commit rows (4, re-pinned), GovDeploy router address (re-pinned)
+t24-forge-full | 295e073b (worktree, before the deploy-gate control) | 1 | 2633 passed 1 failed 14 skipped, 224 suites (default set n2304-kmax4096); the one: GovDeploy test_wrappedReleaseIsGated, its control reads the WrappedToken baseline row (42,668 -> 42,984 B, fixed)
+t24-govdeploy | 295e073b | 0 | GovDeploy 9 passed 0 failed
+t24-isolate | 295e073b | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t24-size-gate | 295e073b | 0 | 0 errors, 89 contracts, above 65536 B: none; size-baseline.json moved (rows below)
+t24-sizes | d2a061fd -> 295e073b | 0 | runtime B: NormalToken 32,089 -> 32,498; WrappedToken 42,669 -> 42,985; NormalZetherToken 40,543 -> 40,941; WrappedZetherToken 51,031 -> 51,342 (init 54,630 -> 54,962); NormalPqzToken 46,384 -> 46,740 (init 49,030 -> 49,407, .init row back); WrappedPqzToken 56,223 -> 56,464 (init 58,876 -> 59,131); SCaaSDex 33,399 -> 33,704; GovernanceLib 13,181 -> 14,510; WrappedLib 16,859 -> 16,905 (not a row)
+t24-layout | 295e073b | 0 | Layout.t green; label pending[1][A].termsHash -> pending[1][A].commit, no slot moved
+t24-plus-zero | 295e073b | 0 | PlusZero 24 passed (plain, Zether, PQZ rows): slots unchanged
+t24-dexkat | 295e073b | 0 | DexKatTest 2 passed with WRITE_KAT=true (MD-8: dex, token, domains, order ABIs, struct hashes, digests, calldata moved)
+t24-clientkeys-evm | 295e073b | 0 | 25 passed 0 failed (node --test test/evm.test.js test/governance-bits.test.js; reads the regenerated dex_order_kat.json)
+t24-docs | 295e073b | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0
+t24-mutants | 295e073b | 1 each | 10 of 10 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t24-mutants.txt): the plan's eight (proposer-not-compared, action-out-of-commit, barred-at-propose, features-cleared-at-propose, generation-not-read, msig-on-rate-adjustable, any-derived-on-bit-5, roleconflict-skipped-on-leaf), window-not-checked, applied-at-propose
+#
+# Pins, old -> new: as t24-sizes and t24-layout; GovernanceRouter CREATE2 0x2AEfB2af419765600eC00a7D0CfC4dE30f2d3750 ->
+# 0xAb151Df7DC7CbbD9755028a27Ad0bc55a34b5b53 (metadata hash, IGovernance.sol); GovDelay commit rows; no gas pin reads
+# grantRole / setGrant (GovGas has no such row); no typehash, selector or governance_bits.json row moved.
+#
+# Not run in T24: the other three PQZ sets (no PQZ statement, verifier or PqzSet touched; PqzWrappedLib / the PQZ tokens only
+# pass the registry to init); the scaas-node suite (no node file changed; no selector or typed row moved); pqz-core gate.
+#
+# Conflicts with the plan / spec:
+#   An owner narrowing (spec §1.6) still deletes any pending at its key, a relaxation's included (the owner may cancel any
+#   pending anyway); mutual exclusion holds between pendings (_due), and the exclusion test uses a widening.
+#   The roleconflict-skipped-on-leaf mutant skips all of _check on the leaf path (the conflict check lives in the shared _check).
+#   The plan's "mirror cleared at proposal" mutant is applied-at-propose: the mirror itself is built in T26+.
+#   Bit 22: the masks of 8-13 and the entry come with the kinds (T25+) and T32; governance_bits.json and its seven readers
+#   (clientkeys, ua-rs, ua-c, ua-cxx, ua-py, ua-qt, ua-dart-frb) gain row 22 then.

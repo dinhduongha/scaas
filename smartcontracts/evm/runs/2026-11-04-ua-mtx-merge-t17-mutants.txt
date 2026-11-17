@@ -1,0 +1,12 @@
+mutant | tests that went red | rc
+destination-dropped-from-digest | dex::tests::kat_hashes_and_calldata_match_forge | 101
+destination-dropped-from-wire | dex::tests::wire_round_trips_and_rejects_garbage | 101
+legsettled-for-a-scaas-leg | dex::venue::tests::watcher_settles_on_ua_leg_settled | 101
+ua-leg-settled-not-asked | dex::venue::tests::watcher_settles_on_ua_leg_settled | 101
+shape-zero-accepted | dex::tests::book_refuses_shape_zero_for_a_scaas_leg, dex::venue::tests::a_cancel_needs_the_token_kind_and_keeps_the_book_without_it, dex::venue::tests::book_takes_a_ua_trade_order_from_an_eoa, dex::venue::tests::cancel_all_signs_the_ua_invalidate | 101
+scaas-leg-sent-shape-zero | dex::tests::a_planned_settlement_encodes_as_the_dex_reads_it, dex::tests::kat_hashes_and_calldata_match_forge, dex::tests::outside_leg_keeps_trade_order, dex::venue::tests::book_takes_a_ua_trade_order_from_an_eoa | 101
+r17-dropped | dex::venue::tests::book_takes_a_ua_trade_order_from_an_eoa | 101
+registry-zero-accepted | dex::venue::tests::a_derived_seller_is_authorized_by_its_registry | 101
+invalidate-job-kind-metatx | dex::venue::tests::cancel_all_signs_the_ua_invalidate | 101
+cancel-job-kind-metatx | dex::venue::tests::settle_jobs_are_one_per_market_and_cancels_go_where_the_order_lives | 101
+token-order-event-from-the-dex | dex::venue::tests::the_watcher_checks_who_emitted_the_log | 101

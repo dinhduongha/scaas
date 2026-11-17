@@ -1,0 +1,537 @@
+# T66b part 4 size study: the measured map at the scratch build of ua-mtx-merge 937b454f (UNAUDITED; research)
+# solc 0.8.37, optimizer 200, legacy codegen, amsterdam; runtime bytes; source-map attribution (an instruction to the
+# innermost function of its source location; optimizer-merged blocks to one user), so a row is where the bytes are
+# written, not what a move frees. Domains: see size_map.py.
+
+## 1. Every contract by domain (bytes)
+| contract | runtime | dispatch | abi-decode | abi-encode | yul-other | guard | erc20-core | pipeline | named-transfer | pay | trade | governance | token-meta | init | tables | kind-normal | wrapped | zether | pqz | regulated | shared-math | metadata | other | other:<free> | other:Clones | other:ERC165Checker | other:GovernanceRouter | other:GovernanceRouterBase | other:GovernanceRouterTypes | other:HederaAccountAuth | other:HederaLib | other:MandateWallet | other:MtxRelayFee | other:OpenFactory | other:ReentrancyGuardTransient | other:SCaaSDex | other:SSTORE2 | other:TokenCall | other:TransientSlot | other:UARegistry | other:UARegistryLib | other:UAStore |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| NormalToken | 32870 | 5397 | 4144 | 4553 | 1239 | 571 | 1947 | 5983 | 347 | 1823 | 1813 | 2308 | 391 | 1083 | 541 | 242 | 0 | 0 | 0 | 0 | 215 | 196 | 0 | 77 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| WrappedToken | 43503 | 7100 | 5228 | 5784 | 997 | 863 | 2109 | 6515 | 369 | 1911 | 2146 | 2394 | 361 | 942 | 1315 | 0 | 4917 | 0 | 0 | 0 | 215 | 260 | 0 | 77 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| NormalZetherToken | 41076 | 7117 | 5091 | 5505 | 1084 | 837 | 1947 | 6269 | 347 | 1815 | 1656 | 2232 | 393 | 879 | 461 | 218 | 0 | 4675 | 0 | 0 | 215 | 228 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 107 | 0 | 0 | 0 | 0 | 0 |
+| WrappedZetherToken | 51522 | 8586 | 6067 | 6222 | 1094 | 1160 | 2110 | 6774 | 369 | 1903 | 2105 | 2313 | 357 | 541 | 811 | 0 | 4136 | 6392 | 0 | 0 | 215 | 260 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 107 | 0 | 0 | 0 | 0 | 0 |
+| NormalPqzToken | 47714 | 7793 | 5900 | 7645 | 1417 | 807 | 1927 | 6194 | 347 | 1819 | 1857 | 2252 | 408 | 1244 | 1381 | 221 | 0 | 0 | 5907 | 0 | 215 | 196 | 0 | 77 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 107 | 0 | 0 | 0 | 0 | 0 |
+| WrappedPqzToken | 57026 | 9119 | 6717 | 8365 | 1127 | 1123 | 2090 | 6781 | 369 | 1880 | 2146 | 2332 | 371 | 548 | 972 | 0 | 4134 | 0 | 8370 | 0 | 215 | 260 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 107 | 0 | 0 | 0 | 0 | 0 |
+| NormalRegulatedToken | 40638 | 7068 | 4574 | 5428 | 1294 | 751 | 1972 | 6102 | 347 | 2988 | 1775 | 2185 | 354 | 1285 | 651 | 235 | 0 | 0 | 0 | 3109 | 215 | 228 | 0 | 77 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| WrappedRegulatedToken | 51292 | 8696 | 5605 | 6660 | 1052 | 1040 | 2138 | 6635 | 369 | 3120 | 2166 | 2371 | 361 | 1141 | 1438 | 0 | 4466 | 0 | 0 | 3450 | 215 | 292 | 0 | 77 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| NormalZetherRegulatedToken | 49020 | 8675 | 5472 | 6434 | 1139 | 1011 | 1968 | 6394 | 347 | 2963 | 1656 | 2111 | 352 | 1085 | 575 | 211 | 0 | 4869 | 0 | 3176 | 215 | 260 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 107 | 0 | 0 | 0 | 0 | 0 |
+| WrappedZetherRegulatedToken | 59678 | 10176 | 6448 | 7152 | 1119 | 1335 | 2139 | 6896 | 369 | 3104 | 2125 | 2300 | 357 | 747 | 923 | 0 | 4100 | 6256 | 0 | 3518 | 215 | 292 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 107 | 0 | 0 | 0 | 0 | 0 |
+| NormalPqzRegulatedToken | 55472 | 9353 | 6287 | 8521 | 1442 | 975 | 1952 | 6311 | 347 | 2967 | 1819 | 2131 | 367 | 1443 | 1516 | 214 | 0 | 0 | 6030 | 3170 | 215 | 228 | 0 | 77 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 107 | 0 | 0 | 0 | 0 | 0 |
+| WrappedPqzRegulatedToken | 64996 | 10708 | 7064 | 9241 | 1152 | 1301 | 2119 | 6907 | 369 | 3081 | 2166 | 2319 | 371 | 747 | 1094 | 0 | 4097 | 0 | 8135 | 3511 | 215 | 292 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 107 | 0 | 0 | 0 | 0 | 0 |
+| SCaaSDex | 33704 | 4906 | 2316 | 4628 | 834 | 276 | 0 | 1160 | 0 | 0 | 678 | 2387 | 0 | 627 | 49 | 0 | 0 | 0 | 0 | 0 | 325 | 1499 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 44 | 13890 | 0 | 75 | 10 | 0 | 0 | 0 |
+| UARegistry | 31438 | 4940 | 4515 | 2446 | 860 | 0 | 0 | 4450 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 100 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 418 | 0 | 0 | 11984 | 0 | 1725 |
+| GovernanceRouter | 13396 | 1959 | 2533 | 1991 | 525 | 60 | 54 | 2667 | 0 | 0 | 0 | 0 | 0 | 0 | 19 | 0 | 0 | 0 | 0 | 0 | 0 | 68 | 0 | 0 | 0 | 0 | 951 | 1566 | 1003 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| OpenFactory | 15821 | 3088 | 1466 | 1834 | 761 | 462 | 0 | 101 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 68 | 0 | 0 | 213 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7828 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| MandateWallet | 17704 | 3335 | 2150 | 2186 | 782 | 584 | 54 | 4228 | 0 | 0 | 0 | 0 | 0 | 0 | 776 | 0 | 0 | 0 | 0 | 0 | 0 | 132 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3477 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| MtxRelayFee | 2552 | 339 | 379 | 659 | 131 | 16 | 127 | 72 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 68 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 609 | 0 | 143 | 0 | 0 | 0 | 9 | 0 | 0 | 0 |
+| UARegistryLib | 37536 | 5433 | 2652 | 2861 | 1188 | 0 | 0 | 7988 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 7 | 0 | 0 | 164 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 855 | 0 | 0 | 0 | 14620 | 1768 |
+| ZetherLib | 25351 | 3427 | 2807 | 3798 | 1059 | 0 | 0 | 63 | 0 | 0 | 0 | 0 | 36 | 0 | 0 | 0 | 0 | 13835 | 0 | 0 | 0 | 132 | 0 | 77 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 117 | 0 | 0 | 0 | 0 | 0 |
+| PqzViewLib | 19886 | 2164 | 1069 | 1136 | 456 | 0 | 0 | 57 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 14932 | 0 | 0 | 68 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| PqzTransferLib | 19724 | 2472 | 717 | 1334 | 876 | 0 | 0 | 73 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 14031 | 0 | 0 | 100 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 117 | 0 | 0 | 0 | 0 | 0 |
+| WrappedLib | 17029 | 2922 | 1992 | 1507 | 877 | 0 | 310 | 87 | 0 | 0 | 0 | 545 | 34 | 0 | 36 | 0 | 7591 | 0 | 0 | 0 | 351 | 68 | 0 | 0 | 0 | 114 | 0 | 0 | 0 | 0 | 595 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| GovernanceLib | 14512 | 2657 | 1110 | 878 | 287 | 0 | 261 | 116 | 0 | 0 | 0 | 9103 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 100 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| ZetherWrappedLib | 11672 | 1606 | 1861 | 1737 | 686 | 0 | 0 | 40 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 5591 | 0 | 0 | 0 | 68 | 0 | 81 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| MtxPipelineLib | 11069 | 1540 | 1748 | 1288 | 459 | 0 | 0 | 5319 | 0 | 432 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 215 | 68 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| RegulatedLib | 10337 | 2019 | 1891 | 521 | 323 | 0 | 0 | 460 | 0 | 395 | 0 | 325 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 4088 | 215 | 100 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| PqzBurnLib | 10697 | 1714 | 623 | 959 | 477 | 0 | 0 | 100 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 6603 | 0 | 0 | 100 | 4 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 117 | 0 | 0 | 0 | 0 | 0 |
+| PqzStateLib | 9050 | 1252 | 841 | 283 | 327 | 0 | 0 | 15 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 6219 | 0 | 0 | 100 | 13 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| PqzWrappedLib | 5357 | 703 | 1253 | 889 | 187 | 0 | 0 | 38 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0 | 0 | 0 | 2136 | 0 | 0 | 68 | 0 | 81 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| TradeLib | 4842 | 616 | 656 | 486 | 197 | 0 | 0 | 72 | 0 | 0 | 2386 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 329 | 100 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| HederaLib | 767 | 128 | 129 | 134 | 38 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 68 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 213 | 57 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+## 2. Functions across the twelve token kinds (bytes per kind; top 150 by the largest copy)
+| function | domain | kinds holding it | sum over kinds | 0 | 1 | 2 | 3 | 4 | 5 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| mod:MetaTxBase.nonReentrant | guard | 12 | 10241 | 429 | 741 | 695 | 1038 | 664 | 1001 | 628 | 917 | 888 | 1212 | 851 | 1177 |
+| fn:NormalPqzToken.mtxSelectors | tables | 2 | 1833 |  |  |  |  | 928 |  |  |  |  |  | 905 |  |
+| fn:WrappedToken.mtxSelectors | tables | 2 | 1537 |  | 786 |  |  |  |  |  | 751 |  |  |  |  |
+| fn:WrappedZetherToken.mtxUnshieldUnwrap | zether | 2 | 1079 |  |  |  | 527 |  |  |  |  |  | 552 |  |  |
+| fn:UAMetaTxBase.mtxCancelNonce | pipeline | 12 | 6186 | 496 | 507 | 496 | 507 | 496 | 507 | 524 | 535 | 524 | 535 | 524 | 535 |
+| fn:MetaTokenBase._receiverFee | pay | 12 | 5856 | 483 | 483 | 483 | 483 | 483 | 483 | 493 | 493 | 493 | 493 | 493 | 493 |
+| fn:NormalZetherToken._initRaw | init | 2 | 932 |  |  | 466 |  |  |  |  |  | 466 |  |  |  |
+| fn:ERC20MetaTx.mtxTrade | trade | 12 | 5286 | 437 | 444 | 437 | 444 | 437 | 444 | 437 | 444 | 437 | 444 | 437 | 444 |
+| fn:MetaTokenBase.initialize | init | 12 | 5050 | 420 | 431 | 413 | 424 | 420 | 431 | 413 | 424 | 413 | 424 | 413 | 424 |
+| fn:WrappedPqzToken.mtxUnshieldUnwrap | pqz | 2 | 854 |  |  |  |  |  | 427 |  |  |  |  |  | 427 |
+| fn:ERC20MetaTx._uaExecuteTransfer | pipeline | 12 | 4914 | 400 | 400 | 400 | 400 | 400 | 400 | 419 | 419 | 419 | 419 | 419 | 419 |
+| fn:WrappedZetherToken.mtxWrapShield | zether | 2 | 822 |  |  |  | 407 |  |  |  |  |  | 415 |  |  |
+| fn:WrappedPqzToken.mtxWrapShield | pqz | 2 | 822 |  |  |  |  |  | 407 |  |  |  |  |  | 415 |
+| fn:NormalPqzToken._init | init | 2 | 802 |  |  |  |  | 401 |  |  |  |  |  | 401 |  |
+| yul:abi_encode_struct_UASig_calldata | abi-encode | 12 | 4468 | 397 | 397 | 360 | 360 | 360 | 360 | 397 | 397 | 360 | 360 | 360 | 360 |
+| fn:RegulatedBase.canReceive | regulated | 6 | 2343 |  |  |  |  |  |  | 385 | 396 | 385 | 396 | 385 | 396 |
+| yul:abi_decode_tuple_t_struct$_TokenConfig_$22911_memory_ptr | abi-decode | 6 | 2268 | 378 | 378 |  |  | 378 |  | 378 | 378 |  |  | 378 |  |
+| fn:WrappedToken.mtxWrapOrder | trade | 6 | 2184 |  | 354 |  | 354 |  | 354 |  | 374 |  | 374 |  | 374 |
+| fn:WrappedPqzToken._unwrapCall | pqz | 2 | 746 |  |  |  |  |  | 373 |  |  |  |  |  | 373 |
+| fn:PqzLayer.verifyTransferAmount | pqz | 4 | 1438 |  |  |  |  | 354 | 365 |  |  |  |  | 354 | 365 |
+| fn:RegulatedBase.taxConfig | pay | 6 | 2094 |  |  |  |  |  |  | 343 | 355 | 343 | 355 | 343 | 355 |
+| fn:PqzLayer._multi | pqz | 4 | 1308 |  |  |  |  | 305 | 305 |  |  |  |  | 349 | 349 |
+| fn:WrappedToken.unwrapToUA | wrapped | 6 | 1974 |  | 329 |  | 329 |  | 329 |  | 329 |  | 329 |  | 329 |
+| fn:WrappedToken._unwrap | wrapped | 6 | 1962 |  | 327 |  | 327 |  | 327 |  | 327 |  | 327 |  | 327 |
+| yul:abi_encode_tuple_t_struct$_PqzMultiArgs_$46063_calldata_ptr_t_bytes_calldata_ptr_t_str | abi-encode | 4 | 1292 |  |  |  |  | 323 | 323 |  |  |  |  | 323 | 323 |
+| fn:MetaTokenBase._requireUnused | init | 6 | 1926 | 321 | 321 |  |  | 321 |  | 321 | 321 |  |  | 321 |  |
+| fn:RegulatedBase.mtxPayWithTax | pay | 6 | 1843 |  |  |  |  |  |  | 307 | 318 | 299 | 310 | 299 | 310 |
+| yul:abi_encode_tuple_t_struct$_TokenConfig_$22911_memory_ptr_t_bool_t_uint8_t_uint256_t_ui | abi-encode | 2 | 608 |  | 304 |  |  |  |  |  | 304 |  |  |  |  |
+| fn:PqzLayer.transferEntry | pqz | 4 | 1186 |  |  |  |  | 291 | 302 |  |  |  |  | 291 | 302 |
+| yul:abi_encode_tuple_t_struct$_PqzTransferArgs_$46026_calldata_ptr_t_bytes_calldata_ptr_t_ | abi-encode | 4 | 1200 |  |  |  |  | 300 | 300 |  |  |  |  | 300 | 300 |
+| fn:ZetherLayer.mtxShield | zether | 4 | 1132 |  |  | 279 | 279 |  |  |  |  | 287 | 287 |  |  |
+| fn:GovernanceBase.grantOf | governance | 12 | 3266 | 275 | 286 | 265 | 276 | 265 | 276 | 265 | 276 | 265 | 276 | 265 | 276 |
+| yul:abi_encode_struct_PqzTransferArgs_calldata | abi-encode | 4 | 1144 |  |  |  |  | 286 | 286 |  |  |  |  | 286 | 286 |
+| fn:NormalToken.mtxSelectors | tables | 2 | 537 | 280 |  |  |  |  |  | 257 |  |  |  |  |  |
+| fn:PqzLayer._unshieldCall | pqz | 4 | 1080 |  |  |  |  | 270 | 270 |  |  |  |  | 270 | 270 |
+| fn:UAMetaTxBase.mtxBatch | pipeline | 12 | 3082 | 254 | 269 | 247 | 262 | 251 | 262 | 254 | 265 | 247 | 258 | 251 | 262 |
+| fn:ZetherLayer.accountState | zether | 4 | 1004 |  |  | 268 | 234 |  |  |  |  | 268 | 234 |  |  |
+| fn:PqzLayer._multiCall | pqz | 4 | 1072 |  |  |  |  | 268 | 268 |  |  |  |  | 268 | 268 |
+| fn:ZetherLayer.transferEntry | zether | 4 | 1012 |  |  | 266 | 240 |  |  |  |  | 266 | 240 |  |  |
+| fn:MtxPipelineLib._checkTo | pipeline | 12 | 3180 | 265 | 265 | 265 | 265 | 265 | 265 | 265 | 265 | 265 | 265 | 265 | 265 |
+| fn:WrappedToken._mtxRule | tables | 6 | 1590 |  | 265 |  | 265 |  | 265 |  | 265 |  | 265 |  | 265 |
+| fn:WrappedToken.disableFeature | wrapped | 1 | 255 |  | 255 |  |  |  |  |  |  |  |  |  |  |
+| fn:WrappedZetherToken.disableFeature | zether | 1 | 255 |  |  |  | 255 |  |  |  |  |  |  |  |  |
+| fn:WrappedPqzToken.disableFeature | pqz | 1 | 255 |  |  |  |  |  | 255 |  |  |  |  |  |  |
+| fn:WrappedRegulatedToken.disableFeature | regulated | 1 | 255 |  |  |  |  |  |  |  | 255 |  |  |  |  |
+| fn:WrappedZetherRegulatedToken.disableFeature | regulated | 1 | 255 |  |  |  |  |  |  |  |  |  | 255 |  |  |
+| fn:WrappedPqzRegulatedToken.disableFeature | regulated | 1 | 255 |  |  |  |  |  |  |  |  |  |  |  | 255 |
+| yul:abi_encode_tuple_t_uint256_t_uint256__to_t_uint256_t_uint256__fromStack_reversed | abi-encode | 6 | 1320 |  | 177 |  | 217 |  | 230 |  | 201 |  | 241 |  | 254 |
+| fn:ERC20MetaTx._update | erc20-core | 12 | 2976 | 243 | 243 | 243 | 243 | 243 | 243 | 253 | 253 | 253 | 253 | 253 | 253 |
+| fn:WrappedToken._wrap | wrapped | 6 | 1476 |  | 239 |  | 239 |  | 239 |  | 253 |  | 253 |  | 253 |
+| yul:abi_encode_struct_PqzMultiArgs_calldata | abi-encode | 4 | 988 |  |  |  |  | 247 | 247 |  |  |  |  | 247 | 247 |
+| yul:abi_encode_tuple_t_struct$_Grant_$31370_memory_ptr__to_t_struct$_Grant_$31370_memory_p | abi-encode | 12 | 2928 | 244 | 244 | 244 | 244 | 244 | 244 | 244 | 244 | 244 | 244 | 244 | 244 |
+| fn:PqzLayer.mtxShield | pqz | 4 | 916 |  |  |  |  | 214 | 236 |  |  |  |  | 222 | 244 |
+| fn:NormalToken._init | init | 2 | 486 | 243 |  |  |  |  |  | 243 |  |  |  |  |  |
+| fn:ZetherLayer.mtxUnshield | zether | 4 | 856 |  |  | 197 | 191 |  |  |  |  | 237 | 231 |  |  |
+| yul:abi_encode_tuple_t_struct$_PqzBurnArgs_$46081_calldata_ptr_t_uint256_t_bytes32_t_bytes | abi-encode | 4 | 656 |  |  |  |  | 234 | 94 |  |  |  |  | 234 | 94 |
+| fn:ERC20MetaTx.mtxInvalidateNonces | trade | 12 | 2566 | 222 | 233 | 181 | 192 | 222 | 233 | 222 | 233 | 181 | 192 | 222 | 233 |
+| fn:ERC20MetaTx._poolMove | erc20-core | 12 | 2688 | 224 | 224 | 224 | 224 | 224 | 224 | 224 | 224 | 224 | 224 | 224 | 224 |
+| fn:PqzLayer._singleCall | pqz | 4 | 892 |  |  |  |  | 223 | 223 |  |  |  |  | 223 | 223 |
+| yul:abi_encode_tuple_t_uint8_t_bytes32_t_struct$_GrantTerms_$31334_calldata_ptr_t_bytes32_ | abi-encode | 12 | 2652 | 221 | 221 | 221 | 221 | 221 | 221 | 221 | 221 | 221 | 221 | 221 | 221 |
+| fn:PqzLayer._burn | pqz | 4 | 756 |  |  |  |  | 167 | 157 |  |  |  |  | 221 | 211 |
+| fn:PqzLayer.mtxPrepareAcc | pqz | 4 | 786 |  |  |  |  | 217 | 197 |  |  |  |  | 175 | 197 |
+| fn:ERC20MetaTx.mtxCancelOrder | trade | 12 | 2502 | 203 | 214 | 203 | 214 | 203 | 214 | 203 | 214 | 203 | 214 | 203 | 214 |
+| fn:RegulatedBase.forceTransfer | regulated | 6 | 1251 |  |  |  |  |  |  | 203 | 214 | 203 | 214 | 203 | 214 |
+| fn:RegulatedBase.payWithTax | pay | 6 | 1254 |  |  |  |  |  |  | 211 | 213 | 202 | 213 | 202 | 213 |
+| fn:WrappedToken.addReserve | wrapped | 6 | 1272 |  | 212 |  | 212 |  | 212 |  | 212 |  | 212 |  | 212 |
+| fn:ZetherLayer.mtxSetRollOverMode | zether | 4 | 804 |  |  | 190 | 212 |  |  |  |  | 190 | 212 |  |  |
+| fn:GovernanceBase.setGrant | governance | 12 | 2454 | 199 | 210 | 199 | 210 | 199 | 210 | 199 | 210 | 199 | 210 | 199 | 210 |
+| fn:ZetherLayer.transferMemo | zether | 4 | 816 |  |  | 209 | 199 |  |  |  |  | 209 | 199 |  |  |
+| yul:abi_decode_tuple_t_struct$_UAEnvelope_$14761_calldata_ptrt_struct$_PqzMultiArgs_$46063 | abi-decode | 4 | 836 |  |  |  |  | 209 | 209 |  |  |  |  | 209 | 209 |
+| fn:PqzLayer._single | pqz | 4 | 740 |  |  |  |  | 163 | 163 |  |  |  |  | 207 | 207 |
+| fn:GovernanceUse.use | governance | 12 | 2428 | 205 | 205 | 201 | 201 | 201 | 201 | 205 | 205 | 201 | 201 | 201 | 201 |
+| yul:abi_decode_tuple_t_bytes32t_struct$_Paid_$95284_memory_ptr_fromMemory | abi-decode | 4 | 820 |  |  | 205 | 205 |  |  |  |  | 205 | 205 |  |  |
+| fn:MetaTokenBase.payWithFeeToUA | pay | 12 | 2337 | 185 | 196 | 185 | 196 | 185 | 196 | 195 | 203 | 195 | 203 | 195 | 203 |
+| yul:abi_encode_tuple_t_address_t_struct$_UAWrapOrder_$65751_calldata_ptr_t_struct$_UASig_$ | abi-encode | 6 | 1218 |  | 203 |  | 203 |  | 203 |  | 203 |  | 203 |  | 203 |
+| fn:ERC20._update | erc20-core | 12 | 2364 | 192 | 202 | 192 | 202 | 192 | 202 | 192 | 202 | 192 | 202 | 192 | 202 |
+| yul:abi_decode_tuple_t_array$_t_bytes4_$dyn_memory_ptrt_array$_t_uint8_$dyn_memory_ptrt_ar | abi-decode | 6 | 1212 |  |  | 202 | 202 |  | 202 |  |  | 202 | 202 |  | 202 |
+| yul:abi_decode_tuple_t_struct$_UAEnvelope_$14761_calldata_ptrt_struct$_PqzBurnArgs_$46081_ | abi-decode | 4 | 792 |  |  |  |  | 198 | 198 |  |  |  |  | 198 | 198 |
+| yul:abi_decode_tuple_t_struct$_UAEnvelope_$14761_calldata_ptrt_struct$_PqzBurnArgs_$46081_ | abi-decode | 2 | 396 |  |  |  |  |  | 198 |  |  |  |  |  | 198 |
+| fn:MetaTokenBase.payWithFee | pay | 12 | 2256 | 179 | 190 | 179 | 190 | 179 | 190 | 186 | 197 | 186 | 197 | 186 | 197 |
+| fn:ERC20MetaTx._execute | pipeline | 12 | 2292 | 186 | 186 | 186 | 186 | 186 | 186 | 196 | 196 | 196 | 196 | 196 | 196 |
+| fn:RegulatedBase._initRaw | init | 6 | 1176 |  |  |  |  |  |  | 196 | 196 | 196 | 196 | 196 | 196 |
+| fn:UAMetaTxBase._uaExecute | pipeline | 12 | 2280 | 185 | 185 | 185 | 185 | 185 | 185 | 195 | 195 | 195 | 195 | 195 | 195 |
+| fn:PqzLayer.pqzAccount | pqz | 4 | 750 |  |  |  |  | 182 | 193 |  |  |  |  | 182 | 193 |
+| fn:SaltedEIP712.eip712Domain | pipeline | 12 | 2220 | 179 | 191 | 179 | 191 | 179 | 191 | 179 | 191 | 179 | 191 | 179 | 191 |
+| yul:abi_decode_tuple_t_struct$_UATradeOrder_$65725_memory_ptr | abi-decode | 12 | 2292 | 191 | 191 | 191 | 191 | 191 | 191 | 191 | 191 | 191 | 191 | 191 | 191 |
+| fn:MetaTxLib.pad | pipeline | 8 | 1127 |  | 72 | 137 | 180 |  | 159 |  | 80 | 144 | 188 |  | 167 |
+| fn:ZetherLayer.mtxConfidentialTransferSingle | zether | 4 | 662 |  |  | 143 | 163 |  |  |  |  | 168 | 188 |  |  |
+| fn:ERC20MetaTx.mtxBatchTransfer | pipeline | 12 | 2178 | 176 | 187 | 176 | 187 | 176 | 187 | 176 | 187 | 176 | 187 | 176 | 187 |
+| fn:MetaTxBase._selfCall | pipeline | 12 | 2208 | 187 | 187 | 178 | 178 | 187 | 187 | 187 | 187 | 178 | 178 | 187 | 187 |
+| fn:WrappedToken.pendingRate | wrapped | 6 | 1116 |  | 186 |  | 186 |  | 186 |  | 186 |  | 186 |  | 186 |
+| fn:MetaTokenBase.supportsInterface | tables | 12 | 1833 | 157 | 184 | 151 | 178 | 151 | 178 | 139 | 139 | 139 | 139 | 139 | 139 |
+| fn:GovernanceBase._govSubject | governance | 12 | 1992 | 184 | 148 | 184 | 148 | 184 | 148 | 184 | 148 | 184 | 148 | 184 | 148 |
+| yul:abi_encode_tuple_t_struct$_AccountState_$90042_memory_ptr__to_t_struct$_AccountState_$ | abi-encode | 4 | 736 |  |  | 184 | 184 |  |  |  |  | 184 | 184 |  |  |
+| fn:ZetherLayer.mtxRollOver | zether | 4 | 680 |  |  | 159 | 181 |  |  |  |  | 159 | 181 |  |  |
+| fn:MetaTokenBase.name | erc20-core | 12 | 2012 | 166 | 178 | 166 | 178 | 153 | 165 | 166 | 178 | 166 | 178 | 153 | 165 |
+| fn:WrappedToken.underlyings | wrapped | 6 | 897 |  | 177 |  | 144 |  | 144 |  | 144 |  | 144 |  | 144 |
+| fn:RegulatedBase.operatorTransfer | regulated | 6 | 1019 |  |  |  |  |  |  | 166 | 177 | 161 | 172 | 166 | 177 |
+| fn:ZetherLayer.mtxRollOverSigned | zether | 4 | 660 |  |  | 154 | 176 |  |  |  |  | 154 | 176 |  |  |
+| fn:ZetherLayer._env | zether | 4 | 704 |  |  | 176 | 176 |  |  |  |  | 176 | 176 |  |  |
+| fn:UAMetaTxBase._uaSettle | pipeline | 12 | 2024 | 161 | 161 | 165 | 165 | 165 | 165 | 171 | 171 | 175 | 175 | 175 | 175 |
+| fn:UAMetaTxBase._callFacts | pipeline | 12 | 2084 | 170 | 174 | 174 | 174 | 174 | 174 | 174 | 174 | 174 | 174 | 174 | 174 |
+| fn:ZetherLayer._uaEnvelopeBinding | zether | 4 | 692 |  |  | 173 | 173 |  |  |  |  | 173 | 173 |  |  |
+| fn:PqzLayer.burnStatement | pqz | 4 | 670 |  |  |  |  | 162 | 173 |  |  |  |  | 162 | 173 |
+| fn:PqzLayer._uaEnvelopeBinding | pqz | 4 | 692 |  |  |  |  | 173 | 173 |  |  |  |  | 173 | 173 |
+| fn:PqzLayer.mtxUnshield | pqz | 4 | 624 |  |  |  |  | 140 | 157 |  |  |  |  | 155 | 172 |
+| yul:abi_decode_tuple_t_struct$_UAMetaTransfer_$14572_calldata_ptrt_struct$_UASig_$67516_ca | abi-decode | 12 | 2052 | 171 | 171 | 171 | 171 | 171 | 171 | 171 | 171 | 171 | 171 | 171 | 171 |
+| fn:WrappedToken._init | init | 2 | 340 |  | 170 |  |  |  |  |  | 170 |  |  |  |  |
+| fn:ZetherLayer._multi | zether | 4 | 680 |  |  | 170 | 170 |  |  |  |  | 170 | 170 |  |  |
+| yul:abi_decode_array_struct_Leg_dyn | abi-decode | 6 | 994 | 169 | 165 |  |  | 165 |  | 165 | 165 |  |  | 165 |  |
+| fn:WrappedToken.unwrap | wrapped | 6 | 1014 |  | 169 |  | 169 |  | 169 |  | 169 |  | 169 |  | 169 |
+| fn:MetaTokenBase.receiverFeeDigest | pay | 12 | 1934 | 157 | 168 | 157 | 168 | 153 | 164 | 157 | 168 | 157 | 168 | 153 | 164 |
+| fn:Math.mulDiv | shared-math | 12 | 2016 | 168 | 168 | 168 | 168 | 168 | 168 | 168 | 168 | 168 | 168 | 168 | 168 |
+| yul:abi_encode_tuple_t_struct$_Ctx_$37889_memory_ptr_t_struct$_UAMetaTransfer_$14572_memor | abi-encode | 12 | 2016 | 168 | 168 | 168 | 168 | 168 | 168 | 168 | 168 | 168 | 168 | 168 | 168 |
+| fn:ZetherLayer.mtxRollOverBatch | zether | 4 | 577 |  |  | 167 | 144 |  |  |  |  | 122 | 144 |  |  |
+| fn:RegulatedBase.setTaxRecipient | pay | 6 | 969 |  |  |  |  |  |  | 156 | 167 | 156 | 167 | 156 | 167 |
+| yul:abi_decode_tuple_t_struct$_PqzBurnArgs_$46081_calldata_ptrt_uint256t_bytes32t_bytes_ca | abi-decode | 4 | 664 |  |  |  |  | 166 | 166 |  |  |  |  | 166 | 166 |
+| fn:WrappedToken.mint | wrapped | 6 | 972 |  | 165 |  | 165 |  | 165 |  | 159 |  | 159 |  | 159 |
+| yul:abi_decode_tuple_t_bytes32t_bytes32t_uint256t_uint256t_uint256t_uint256t_uint32t_addre | abi-decode | 12 | 1920 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 |
+| yul:abi_decode_tuple_t_struct$_UAMetaTransfer_$14572_memory_ptr | abi-decode | 12 | 1920 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 | 160 |
+| yul:convert_t_struct$_UAMetaTransaction_$14542_calldata_ptr_to_t_struct$_UAMetaTransaction | yul-other | 12 | 1908 | 159 | 159 | 159 | 159 | 159 | 159 | 159 | 159 | 159 | 159 | 159 | 159 |
+| fn:PqzLayer.transferSingleStatement | pqz | 4 | 614 |  |  |  |  | 148 | 159 |  |  |  |  | 148 | 159 |
+| fn:MetaTokenBase.mtxTransferWithFee | named-transfer | 12 | 1830 | 147 | 158 | 147 | 158 | 147 | 158 | 147 | 158 | 147 | 158 | 147 | 158 |
+| fn:ERC20MetaTx.mtxTransferDigest | pipeline | 12 | 1830 | 147 | 158 | 147 | 158 | 147 | 158 | 147 | 158 | 147 | 158 | 147 | 158 |
+| yul:abi_encode_struct_UATradeOrder | abi-encode | 12 | 1896 | 158 | 158 | 158 | 158 | 158 | 158 | 158 | 158 | 158 | 158 | 158 | 158 |
+| fn:ERC20MetaTx.cancelOrderDigest | trade | 12 | 1818 | 146 | 157 | 146 | 157 | 146 | 157 | 146 | 157 | 146 | 157 | 146 | 157 |
+| fn:WrappedZetherToken.mtxSelectors | tables | 2 | 268 |  |  |  | 157 |  |  |  |  |  | 111 |  |  |
+| fn:WrappedPqzToken.mtxSelectors | tables | 2 | 268 |  |  |  |  |  | 157 |  |  |  |  |  | 111 |
+| fn:GovernanceBase.pendingGrant | governance | 12 | 1806 | 145 | 156 | 145 | 156 | 145 | 156 | 145 | 156 | 145 | 156 | 145 | 156 |
+| fn:PqzLayer.pqzPendingCt | pqz | 4 | 600 |  |  |  |  | 144 | 156 |  |  |  |  | 144 | 156 |
+| yul:abi_encode_struct_UATradeOrder_calldata | abi-encode | 12 | 1860 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 155 | 155 |
+| yul:abi_decode_tuple_t_uint256t_uint256t_bytes32t_uint64t_addresst_struct$_Roles_$26440_me | abi-decode | 2 | 310 |  |  | 155 |  |  |  |  |  | 155 |  |  |  |
+| fn:RegulatedBase._eligible | regulated | 6 | 930 |  |  |  |  |  |  | 155 | 155 | 155 | 155 | 155 | 155 |
+| fn:MetaTokenBase.mtxTransfer | named-transfer | 12 | 1782 | 143 | 154 | 143 | 154 | 143 | 154 | 143 | 154 | 143 | 154 | 143 | 154 |
+| fn:WrappedToken.previewUnwrap | wrapped | 6 | 924 |  | 154 |  | 154 |  | 154 |  | 154 |  | 154 |  | 154 |
+| fn:MetaTxBase._envelopeOf | pipeline | 12 | 1836 | 153 | 153 | 153 | 153 | 153 | 153 | 153 | 153 | 153 | 153 | 153 | 153 |
+| yul:abi_encode_tuple_t_uint256__to_t_uint256__fromStack_reversed | abi-encode | 8 | 1004 |  |  | 120 | 133 | 98 | 111 |  |  | 140 | 153 | 118 | 131 |
+| fn:PqzLayer.mtxConfidentialTransferCompact | pqz | 4 | 568 |  |  |  |  | 131 | 153 |  |  |  |  | 131 | 153 |
+| fn:WrappedToken.mintToUA | wrapped | 6 | 912 |  | 152 |  | 152 |  | 152 |  | 152 |  | 152 |  | 152 |
+| yul:abi_decode_tuple_t_struct$_PqzMultiArgs_$46063_calldata_ptrt_bytes_calldata_ptrt_struc | abi-decode | 4 | 608 |  |  |  |  | 152 | 152 |  |  |  |  | 152 | 152 |
+| fn:ERC20._approve | erc20-core | 12 | 1800 | 150 | 150 | 150 | 150 | 150 | 150 | 150 | 150 | 150 | 150 | 150 | 150 |
+| fn:UAMetaTxBase._uaEnvelopeOf | pipeline | 12 | 1788 | 149 | 149 | 149 | 149 | 149 | 149 | 149 | 149 | 149 | 149 | 149 | 149 |
+| fn:ERC20MetaTx._settle | pipeline | 12 | 1756 | 141 | 141 | 149 | 149 | 149 | 149 | 141 | 141 | 149 | 149 | 149 | 149 |
+| fn:UAMetaTxBase._uaMetaOf | pipeline | 12 | 1764 | 147 | 147 | 147 | 147 | 147 | 147 | 147 | 147 | 147 | 147 | 147 | 147 |
+| yul:abi_decode_tuple_t_struct$_UAEnvelope_$14761_calldata_ptrt_userDefinedValueType$_UA_$1 | abi-decode | 4 | 584 |  |  | 146 | 146 |  |  |  |  | 146 | 146 |  |  |
+| fn:NormalRegulatedToken.disableFeature | regulated | 1 | 146 |  |  |  |  |  |  | 146 |  |  |  |  |  |
+| fn:NormalZetherRegulatedToken.disableFeature | regulated | 1 | 146 |  |  |  |  |  |  |  |  | 146 |  |  |  |
+| fn:NormalPqzRegulatedToken.disableFeature | regulated | 1 | 146 |  |  |  |  |  |  |  |  |  |  | 146 |  |
+| fn:MetaTokenBase.mtxRelayFee | pay | 12 | 1614 | 124 | 135 | 124 | 135 | 124 | 135 | 134 | 145 | 134 | 145 | 134 | 145 |
+| fn:NormalZetherToken.mtxSelectors | tables | 2 | 256 |  |  | 145 |  |  |  |  |  | 111 |  |  |  |
+
+## 3. Shared against unique, per kind (source-map bytes of labels present in all twelve kinds / in some / in this kind only)
+| kind | runtime | in all 12 | in 2-11 | only here | dispatch+metadata |
+|---|---|---|---|---|---|
+| NormalToken (0) | 32870 | 23533 | 3446 | 298 | 5593 |
+| WrappedToken (1) | 43503 | 24640 | 10925 | 578 | 7360 |
+| NormalZetherToken (2) | 41076 | 23489 | 10059 | 183 | 7345 |
+| WrappedZetherToken (3) | 51522 | 24657 | 17515 | 504 | 8846 |
+| NormalPqzToken (4) | 47714 | 23704 | 15753 | 268 | 7989 |
+| WrappedPqzToken (5) | 57026 | 24741 | 22428 | 478 | 9379 |
+| NormalRegulatedToken (8) | 40638 | 23829 | 8857 | 656 | 7296 |
+| WrappedRegulatedToken (9) | 51292 | 24941 | 16532 | 831 | 8988 |
+| NormalZetherRegulatedToken (10) | 49020 | 23842 | 15686 | 557 | 8935 |
+| WrappedZetherRegulatedToken (11) | 59678 | 24991 | 23409 | 810 | 10468 |
+| NormalPqzRegulatedToken (12) | 55472 | 24013 | 21275 | 603 | 9581 |
+| WrappedPqzRegulatedToken (13) | 64996 | 25075 | 28144 | 777 | 11000 |
+
+## 4. Entry points: count by domain, and the bytes only that domain reaches (closure view)
+| kind | entries | pay | named-transfer | trade | governance | pipeline | erc20-core | token-meta | tables | init | wrapped | zether | pqz | regulated | kind-normal | dispatcher-only blocks |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| NormalToken | 84 | 8 / 2243 | 2 / 760 | 9 / 3557 | 22 / 3563 | 15 / 3955 | 11 / 1294 | 9 / 458 | 3 / 871 | 1 / 3080 |  |  |  |  | 4 / 886 | 1124 |
+| WrappedToken | 113 | 8 / 2315 | 2 / 784 | 10 / 3855 | 21 / 2495 | 15 / 2743 | 11 / 1317 | 7 / 297 | 3 / 1694 | 1 / 3164 | 35 / 7142 |  |  |  |  | 1527 |
+| NormalZetherToken | 119 | 8 / 3515 | 2 / 760 | 9 / 3443 | 22 / 3611 | 15 / 4377 | 11 / 1165 | 9 / 485 | 3 / 1031 | 1 / 1558 |  | 35 / 7776 |  |  | 4 / 649 | 1842 |
+| WrappedZetherToken | 152 | 8 / 3622 | 2 / 784 | 10 / 4344 | 21 / 3629 | 15 / 3868 | 11 / 1250 | 7 / 347 | 3 / 1042 | 1 / 834 | 31 / 6024 | 43 / 10258 |  |  |  | 2198 |
+| NormalPqzToken | 123 | 8 / 3542 | 2 / 746 | 9 / 3516 | 22 / 3576 | 15 / 4535 | 11 / 1262 | 9 / 495 | 3 / 1664 | 1 / 3343 |  |  | 39 / 11802 |  | 4 / 651 | 1888 |
+| WrappedPqzToken | 158 | 8 / 3641 | 2 / 770 | 10 / 4364 | 21 / 3624 | 15 / 4031 | 11 / 1375 | 7 / 346 | 3 / 1076 | 1 / 834 | 31 / 6039 |  | 49 / 15460 |  |  | 2273 |
+| NormalRegulatedToken | 103 | 13 / 3570 | 2 / 760 | 9 / 100 | 21 / 2819 | 15 / 3357 | 11 / 1078 | 9 / 314 | 3 / 921 | 1 / 3377 |  |  |  | 15 / 2849 | 4 / 544 | 1095 |
+| WrappedRegulatedToken | 132 | 13 / 3868 | 2 / 784 | 10 / 3828 | 21 / 2511 | 15 / 4504 | 11 / 1325 | 7 / 297 | 3 / 1768 | 1 / 3461 | 32 / 6782 |  |  | 17 / 3209 |  | 1714 |
+| NormalZetherRegulatedToken | 138 | 13 / 3736 | 2 / 760 | 9 / 2936 | 21 / 2086 | 15 / 3076 | 11 / 1162 | 9 / 399 | 3 / 1069 | 1 / 1856 |  | 35 / 7381 |  | 15 / 3157 | 4 / 640 | 1815 |
+| WrappedZetherRegulatedToken | 171 | 13 / 5935 | 2 / 784 | 10 / 4317 | 21 / 3646 | 15 / 3909 | 11 / 1258 | 7 / 347 | 3 / 1105 | 1 / 1131 | 31 / 5986 | 40 / 9802 |  | 17 / 3858 |  | 2407 |
+| NormalPqzRegulatedToken | 142 | 13 / 3912 | 2 / 746 | 9 / 2908 | 21 / 2254 | 15 / 3210 | 11 / 1170 | 9 / 447 | 3 / 1713 | 1 / 3641 |  |  | 39 / 8029 | 15 / 3112 | 4 / 642 | 1850 |
+| WrappedPqzRegulatedToken | 177 | 13 / 3951 | 2 / 770 | 10 / 3811 | 21 / 1724 | 15 / 2596 | 11 / 1271 | 7 / 346 | 3 / 1139 | 1 / 1131 | 31 / 5749 |  | 46 / 10823 | 17 / 3919 |  | 2191 |
+| SCaaSDex | 56 |  |  | 4 / 685 | 22 / 3485 | 1 / 388 |  |  | 1 / 106 | 1 / 1277 |  |  |  |  |  | 875 |
+| UARegistry | 62 |  |  |  |  | 1 / 441 |  |  |  |  |  |  |  |  |  | 941 |
+| GovernanceRouter | 43 |  |  |  |  | 10 / 3485 |  |  | 1 / 198 |  |  |  |  |  |  | 608 |
+(cell: entries / bytes reachable only from them; the shared pipeline, moves and coders are reached by many domains)
+
+## 5. NormalToken: every entry (declared in, mutability, domain, exclusive bytes, reachable bytes)
+| declared in | entry | mutability | domain | exclusive | reachable | selector |
+|---|---|---|---|---|---|---|
+| ERC20 | allowance | view | erc20-core | 111 | 157 | dd62ed3e |
+| ERC20 | balanceOf | view | erc20-core | 40 | 120 | 70a08231 |
+| ERC20 | totalSupply | view | erc20-core | 8 | 31 | 18160ddd |
+| ERC20 | transfer | nonpayable | erc20-core | 42 | 1369 | a9059cbb |
+| ERC20MetaTx | approve | nonpayable | erc20-core | 175 | 782 | 095ea7b3 |
+| ERC20MetaTx | balanceOfUA | view | erc20-core | 19 | 166 | 64d960cb |
+| ERC20MetaTx | cancelOrderDigest | view | trade | 19 | 898 | a50b2d30 |
+| ERC20MetaTx | invalidateNoncesDigest | view | trade | 60 | 579 | 3fc1dbe8 |
+| ERC20MetaTx | minNonce | view | trade | 73 | 128 | 92376002 |
+| ERC20MetaTx | mtxBatchTransfer | nonpayable | pipeline | 0 | 4107 | ce34a162 |
+| ERC20MetaTx | mtxCancelOrder | nonpayable | trade | 334 | 3259 | 8f50a845 |
+| ERC20MetaTx | mtxDigest | view | pipeline | 221 | 1534 | 1554a376 |
+| ERC20MetaTx | mtxExecuteTransfer | nonpayable | pipeline | 127 | 3807 | 7b945016 |
+| ERC20MetaTx | mtxInvalidateNonces | nonpayable | trade | 396 | 2058 | cf2d8d70 |
+| ERC20MetaTx | mtxNonce | view | pipeline | 91 | 153 | 776cae70 |
+| ERC20MetaTx | mtxTrade | nonpayable | trade | 1011 | 4541 | 874ab327 |
+| ERC20MetaTx | mtxTransferDigest | view | pipeline | 132 | 835 | 5d1719e3 |
+| ERC20MetaTx | pulled | view | trade | 62 | 108 | 5d64e3fb |
+| ERC20MetaTx | registry | view | pipeline | 38 | 71 | 7b103999 |
+| ERC20MetaTx | restorePulled | nonpayable | trade | 196 | 2017 | 8c4a5df6 |
+| ERC20MetaTx | supportedModes | pure | pipeline | 15 | 24 | 521b8438 |
+| ERC20MetaTx | tradeOrderDigest | view | trade | 19 | 1422 | fd773b8b |
+| ERC20MetaTx | transferFrom | nonpayable | erc20-core | 320 | 1862 | 23b872dd |
+| ERC20MetaTx | transferToUA | nonpayable | erc20-core | 74 | 7560 | b3dcb494 |
+| GovernanceBase | GOV_ROUTER | view | governance | 39 | 72 | 7f14c811 |
+| GovernanceBase | acceptOwnership | nonpayable | governance | 83 | 863 | 79ba5097 |
+| GovernanceBase | bitLabel | view | governance | 134 | 260 | 035ed5e8 |
+| GovernanceBase | cancelGrant | nonpayable | governance | 117 | 958 | b73aa8a4 |
+| GovernanceBase | disableFeature | nonpayable | governance | 212 | 1004 | 45e5ac68 |
+| GovernanceBase | features | view | governance | 20 | 43 | 2b521416 |
+| GovernanceBase | grantDelay | view | governance | 48 | 81 | 74feaadc |
+| GovernanceBase | grantOf | view | governance | 841 | 911 | d6be828a |
+| GovernanceBase | grantRole | nonpayable | governance | 174 | 1015 | ac0e63c3 |
+| GovernanceBase | hasRole | view | governance | 90 | 179 | ed016624 |
+| GovernanceBase | holderCount | view | governance | 0 | 150 | ca3d4458 |
+| GovernanceBase | lastProposedAt | view | governance | 51 | 84 | 32d21213 |
+| GovernanceBase | lockedFeatures | view | governance | 39 | 62 | e47528cf |
+| GovernanceBase | owner | view | governance | 39 | 62 | 8da5cb5b |
+| GovernanceBase | pendingGrant | view | governance | 283 | 389 | 240f3575 |
+| GovernanceBase | pendingOwner | view | governance | 39 | 62 | e30c3978 |
+| GovernanceBase | renounceOwnership | nonpayable | governance | 92 | 872 | 715018a6 |
+| GovernanceBase | renounceRole | nonpayable | governance | 111 | 943 | 057c9cb8 |
+| GovernanceBase | revokeRole | nonpayable | governance | 123 | 964 | d2dfd8d9 |
+| GovernanceBase | setGrant | nonpayable | governance | 697 | 1541 | e0a44abe |
+| GovernanceBase | transferOwnership | nonpayable | governance | 106 | 913 | f807e3da |
+| GovernanceBase | validBits | pure | governance | 9 | 32 | fb2cbbc1 |
+| MetaTokenBase | FACTORY | view | token-meta | 39 | 72 | 2dd31000 |
+| MetaTokenBase | SMART_KEY_ACCOUNT_IMPL | view | token-meta | 39 | 72 | 94bc462d |
+| MetaTokenBase | creator | view | token-meta | 25 | 58 | 02d05d3f |
+| MetaTokenBase | decimals | view | erc20-core | 30 | 57 | 313ce567 |
+| MetaTokenBase | factory | view | token-meta | 0 | 71 | c45a0155 |
+| MetaTokenBase | implementation | view | token-meta | 38 | 71 | 5c60da1b |
+| MetaTokenBase | initialize | nonpayable | init | 3080 | 4575 | 56ee0020 |
+| MetaTokenBase | metaPayId | pure | pay | 0 | 532 | cc574852 |
+| MetaTokenBase | mtxPay | nonpayable | pay | 189 | 4191 | 4db715d0 |
+| MetaTokenBase | mtxPayReceiverFee | nonpayable | pay | 919 | 5398 | 3ed4d357 |
+| MetaTokenBase | mtxRelayFee | nonpayable | pay | 510 | 4052 | 9da4562d |
+| MetaTokenBase | mtxTransfer | nonpayable | named-transfer | 311 | 3866 | 1d191b3f |
+| MetaTokenBase | mtxTransferWithFee | nonpayable | named-transfer | 449 | 3976 | 5200ac59 |
+| MetaTokenBase | name | view | erc20-core | 38 | 316 | 06fdde03 |
+| MetaTokenBase | payLane | pure | pay | 82 | 128 | dfe8a97e |
+| MetaTokenBase | payWithFee | nonpayable | pay | 0 | 2934 | ced674ba |
+| MetaTokenBase | payWithFeeToUA | nonpayable | pay | 257 | 7704 | 9e175bec |
+| MetaTokenBase | receiverFeeDigest | view | pay | 91 | 922 | 7c4fa261 |
+| MetaTokenBase | rescue | nonpayable | token-meta | 143 | 432 | 839006f2 |
+| MetaTokenBase | rescueTo | view | token-meta | 48 | 81 | 68fcfe70 |
+| MetaTokenBase | supportsInterface | view | tables | 375 | 409 | 01ffc9a7 |
+| MetaTokenBase | symbol | view | erc20-core | 38 | 316 | 95d89b41 |
+| MetaTokenBase | underlyings | view | token-meta | 90 | 99 | 0add145e |
+| MetaTokenBase | version | view | token-meta | 36 | 69 | 54fd4d50 |
+| MetaTxBase | cancelNonce | nonpayable | pipeline | 255 | 738 | cfdd7aea |
+| MetaTxBase | chainUid | view | pipeline | 38 | 61 | 860b26d9 |
+| MetaTxBase | executeMetaTransaction | nonpayable | pipeline | 832 | 4648 | 47aea5b5 |
+| NormalToken | burn | nonpayable | kind-normal | 118 | 1568 | 42966c68 |
+| NormalToken | kind | pure | tables | 2 | 29 | 04baa00b |
+| NormalToken | mint | nonpayable | kind-normal | 54 | 2118 | 40c10f19 |
+| NormalToken | mintToUA | nonpayable | kind-normal | 74 | 8080 | f6b2d1e0 |
+| NormalToken | mtxBurn | nonpayable | kind-normal | 333 | 5197 | 78eb02fa |
+| NormalToken | mtxSelectors | pure | tables | 494 | 533 | f2fabfdb |
+| SaltedEIP712 | eip712Domain | view | pipeline | 441 | 502 | 84b0196e |
+| UAMetaTxBase | IS_HEDERA | view | pipeline | 39 | 60 | 2fbd2093 |
+| UAMetaTxBase | mtxBatch | nonpayable | pipeline | 490 | 5492 | 36704d52 |
+| UAMetaTxBase | mtxCancelNonce | nonpayable | pipeline | 686 | 4355 | d164f40b |
+| UAMetaTxBase | mtxExecute | nonpayable | pipeline | 138 | 5104 | 09313a74 |
+
+## 5. WrappedPqzRegulatedToken: every entry (declared in, mutability, domain, exclusive bytes, reachable bytes)
+| declared in | entry | mutability | domain | exclusive | reachable | selector |
+|---|---|---|---|---|---|---|
+| ERC20 | allowance | view | erc20-core | 0 | 165 | dd62ed3e |
+| ERC20 | balanceOf | view | erc20-core | 52 | 128 | 70a08231 |
+| ERC20 | totalSupply | view | erc20-core | 20 | 39 | 18160ddd |
+| ERC20 | transfer | nonpayable | erc20-core | 54 | 2577 | a9059cbb |
+| ERC20MetaTx | approve | nonpayable | erc20-core | 195 | 1470 | 095ea7b3 |
+| ERC20MetaTx | balanceOfUA | view | erc20-core | 31 | 174 | 64d960cb |
+| ERC20MetaTx | cancelOrderDigest | view | trade | 31 | 22544 | a50b2d30 |
+| ERC20MetaTx | invalidateNoncesDigest | view | trade | 31 | 627 | 3fc1dbe8 |
+| ERC20MetaTx | minNonce | view | trade | 85 | 136 | 92376002 |
+| ERC20MetaTx | mtxBatchTransfer | nonpayable | pipeline | 0 | 22144 | ce34a162 |
+| ERC20MetaTx | mtxCancelOrder | nonpayable | trade | 346 | 23724 | 8f50a845 |
+| ERC20MetaTx | mtxDigest | view | pipeline | 184 | 22779 | 1554a376 |
+| ERC20MetaTx | mtxExecuteTransfer | nonpayable | pipeline | 139 | 22329 | 7b945016 |
+| ERC20MetaTx | mtxInvalidateNonces | nonpayable | trade | 0 | 2144 | cf2d8d70 |
+| ERC20MetaTx | mtxNonce | view | pipeline | 103 | 161 | 776cae70 |
+| ERC20MetaTx | mtxTrade | nonpayable | trade | 1023 | 24000 | 874ab327 |
+| ERC20MetaTx | mtxTransferDigest | view | pipeline | 144 | 22465 | 5d1719e3 |
+| ERC20MetaTx | pulled | view | trade | 74 | 116 | 5d64e3fb |
+| ERC20MetaTx | registry | view | pipeline | 50 | 83 | 7b103999 |
+| ERC20MetaTx | restorePulled | nonpayable | trade | 208 | 23427 | 8c4a5df6 |
+| ERC20MetaTx | supportedModes | pure | pipeline | 19 | 49 | 521b8438 |
+| ERC20MetaTx | tradeOrderDigest | view | trade | 31 | 23035 | fd773b8b |
+| ERC20MetaTx | transferFrom | nonpayable | erc20-core | 292 | 3049 | 23b872dd |
+| ERC20MetaTx | transferToUA | nonpayable | erc20-core | 86 | 3525 | b3dcb494 |
+| GovernanceBase | GOV_ROUTER | view | governance | 51 | 84 | 7f14c811 |
+| GovernanceBase | acceptOwnership | nonpayable | governance | 95 | 877 | 79ba5097 |
+| GovernanceBase | bitLabel | view | governance | 127 | 287 | 035ed5e8 |
+| GovernanceBase | cancelGrant | nonpayable | governance | 129 | 972 | b73aa8a4 |
+| GovernanceBase | features | view | governance | 32 | 51 | 2b521416 |
+| GovernanceBase | grantDelay | view | governance | 60 | 93 | 74feaadc |
+| GovernanceBase | grantOf | view | governance | 0 | 22144 | d6be828a |
+| GovernanceBase | grantRole | nonpayable | governance | 191 | 1034 | ac0e63c3 |
+| GovernanceBase | hasRole | view | governance | 102 | 193 | ed016624 |
+| GovernanceBase | holderCount | view | governance | 0 | 156 | ca3d4458 |
+| GovernanceBase | lastProposedAt | view | governance | 63 | 96 | 32d21213 |
+| GovernanceBase | lockedFeatures | view | governance | 51 | 70 | e47528cf |
+| GovernanceBase | owner | view | governance | 11 | 68 | 8da5cb5b |
+| GovernanceBase | pendingGrant | view | governance | 295 | 396 | 240f3575 |
+| GovernanceBase | pendingOwner | view | governance | 40 | 68 | e30c3978 |
+| GovernanceBase | renounceOwnership | nonpayable | governance | 106 | 888 | 715018a6 |
+| GovernanceBase | renounceRole | nonpayable | governance | 126 | 960 | 057c9cb8 |
+| GovernanceBase | revokeRole | nonpayable | governance | 0 | 979 | d2dfd8d9 |
+| GovernanceBase | setGrant | nonpayable | governance | 0 | 22144 | e0a44abe |
+| GovernanceBase | transferOwnership | nonpayable | governance | 118 | 927 | f807e3da |
+| GovernanceBase | validBits | pure | governance | 21 | 40 | fb2cbbc1 |
+| MetaTokenBase | FACTORY | view | token-meta | 51 | 84 | 2dd31000 |
+| MetaTokenBase | SMART_KEY_ACCOUNT_IMPL | view | token-meta | 51 | 84 | 94bc462d |
+| MetaTokenBase | creator | view | token-meta | 36 | 84 | 02d05d3f |
+| MetaTokenBase | decimals | view | erc20-core | 42 | 69 | 313ce567 |
+| MetaTokenBase | factory | view | token-meta | 50 | 83 | c45a0155 |
+| MetaTokenBase | implementation | view | token-meta | 50 | 83 | 5c60da1b |
+| MetaTokenBase | initialize | nonpayable | init | 1131 | 2019 | 56ee0020 |
+| MetaTokenBase | metaPayId | pure | pay | 0 | 540 | cc574852 |
+| MetaTokenBase | mtxPay | nonpayable | pay | 201 | 22376 | 4db715d0 |
+| MetaTokenBase | mtxPayReceiverFee | nonpayable | pay | 941 | 23466 | 3ed4d357 |
+| MetaTokenBase | mtxRelayFee | nonpayable | pay | 536 | 22811 | 9da4562d |
+| MetaTokenBase | mtxTransfer | nonpayable | named-transfer | 309 | 22598 | 1d191b3f |
+| MetaTokenBase | mtxTransferWithFee | nonpayable | named-transfer | 461 | 22708 | 5200ac59 |
+| MetaTokenBase | name | view | erc20-core | 50 | 328 | 06fdde03 |
+| MetaTokenBase | payLane | pure | pay | 0 | 136 | dfe8a97e |
+| MetaTokenBase | payWithFee | nonpayable | pay | 0 | 4210 | ced674ba |
+| MetaTokenBase | payWithFeeToUA | nonpayable | pay | 287 | 5423 | 9e175bec |
+| MetaTokenBase | receiverFeeDigest | view | pay | 103 | 22628 | 7c4fa261 |
+| MetaTokenBase | rescueTo | view | token-meta | 60 | 93 | 68fcfe70 |
+| MetaTokenBase | symbol | view | erc20-core | 50 | 328 | 95d89b41 |
+| MetaTokenBase | version | view | token-meta | 48 | 81 | 54fd4d50 |
+| MetaTxBase | cancelNonce | nonpayable | pipeline | 0 | 752 | cfdd7aea |
+| MetaTxBase | chainUid | view | pipeline | 50 | 69 | 860b26d9 |
+| MetaTxBase | executeMetaTransaction | nonpayable | pipeline | 453 | 23670 | 47aea5b5 |
+| PqzLayer | auditorMode | view | pqz | 78 | 149 | 35d330fe |
+| PqzLayer | auditorUA | view | pqz | 38 | 93 | 0b0425bd |
+| PqzLayer | burnStatement | view | pqz | 196 | 1645 | 23a72649 |
+| PqzLayer | disclosureMode | view | pqz | 0 | 161 | cb056540 |
+| PqzLayer | disclosureStatement | view | pqz | 247 | 1374 | 5ef9b1d0 |
+| PqzLayer | envelopeBinding | view | pqz | 49 | 22615 | 35ad08aa |
+| PqzLayer | maxShielded | view | pqz | 29 | 93 | 58de8dc9 |
+| PqzLayer | minDecoyFee | view | pqz | 0 | 93 | d1653db6 |
+| PqzLayer | mtxConfidentialTransfer | nonpayable | pqz | 119 | 23419 | e8bdcfa4 |
+| PqzLayer | mtxConfidentialTransfer | nonpayable | pqz | 57 | 23298 | e680f327 |
+| PqzLayer | mtxConfidentialTransferCompact | nonpayable | pqz | 119 | 23419 | 9b5e3d48 |
+| PqzLayer | mtxConfidentialTransferCompact | nonpayable | pqz | 55 | 23296 | 23594763 |
+| PqzLayer | mtxConfidentialTransferSingle | nonpayable | pqz | 0 | 22144 | d95c5699 |
+| PqzLayer | mtxConfidentialTransferSingle | nonpayable | pqz | 0 | 22144 | caa40ce6 |
+| PqzLayer | mtxConfidentialTransferSingleCompact | nonpayable | pqz | 119 | 22263 | e786c51e |
+| PqzLayer | mtxConfidentialTransferSingleCompact | nonpayable | pqz | 55 | 22199 | 4656b841 |
+| PqzLayer | mtxPrepareAcc | nonpayable | pqz | 168 | 531 | c1c9502a |
+| PqzLayer | mtxPrepareAcc | nonpayable | pqz | 136 | 22336 | 10f35104 |
+| PqzLayer | mtxRollOver | nonpayable | pqz | 0 | 484 | de014fdc |
+| PqzLayer | mtxRollOver | nonpayable | pqz | 136 | 22336 | 658527fe |
+| PqzLayer | mtxShield | nonpayable | pqz | 233 | 2442 | e9385800 |
+| PqzLayer | mtxShield | nonpayable | pqz | 190 | 22345 | 2041dc70 |
+| PqzLayer | mtxUnshield | nonpayable | pqz | 803 | 23180 | fe5a5882 |
+| PqzLayer | mtxUnshield | nonpayable | pqz | 390 | 23147 | b60ab0c4 |
+| PqzLayer | pqzAcc | view | pqz | 105 | 559 | 3a458107 |
+| PqzLayer | pqzAccount | view | pqz | 0 | 626 | cf19c974 |
+| PqzLayer | pqzEntryBlob | view | pqz | 237 | 454 | 6ea95fbb |
+| PqzLayer | pqzPending | view | pqz | 96 | 237 | b856e953 |
+| PqzLayer | pqzPendingCt | view | pqz | 109 | 583 | 03ccd4f0 |
+| PqzLayer | precompile | view | pqz | 29 | 113 | 13a4e8c0 |
+| PqzLayer | proofSystemId | view | pqz | 29 | 93 | 1f3b28f2 |
+| PqzLayer | shieldScale | view | pqz | 29 | 93 | 5f64c53c |
+| PqzLayer | totalShielded | view | pqz | 38 | 93 | 516b9ff0 |
+| PqzLayer | transferCiphertextHash | view | pqz | 110 | 471 | eda74ca6 |
+| PqzLayer | transferEntry | view | pqz | 335 | 865 | 4a19383e |
+| PqzLayer | transferSingleStatement | view | pqz | 181 | 22612 | 3a3bb45a |
+| PqzLayer | transferStatement | view | pqz | 181 | 23144 | ffdee909 |
+| PqzLayer | verifier | view | pqz | 50 | 83 | 2b7ac3f3 |
+| PqzLayer | verifyTransferAmount | view | pqz | 604 | 1849 | 3e4d6881 |
+| RegulatedBase | REGISTRY_CODEHASH | view | regulated | 51 | 70 | beb598de |
+| RegulatedBase | canReceive | view | regulated | 592 | 947 | bffff6d2 |
+| RegulatedBase | forceTransfer | nonpayable | regulated | 263 | 3105 | 6757815b |
+| RegulatedBase | freeze | nonpayable | regulated | 133 | 944 | 883ae631 |
+| RegulatedBase | freezeOf | view | regulated | 281 | 313 | 0ccaf809 |
+| RegulatedBase | isFrozen | view | regulated | 41 | 340 | 238afcc5 |
+| RegulatedBase | mtxPayWithTax | nonpayable | pay | 564 | 22885 | 1e1f5f38 |
+| RegulatedBase | operatorTransfer | nonpayable | regulated | 295 | 3106 | 3515aee3 |
+| RegulatedBase | order | view | regulated | 299 | 331 | e80160ab |
+| RegulatedBase | pause | nonpayable | regulated | 135 | 970 | c620d896 |
+| RegulatedBase | payWithTax | nonpayable | pay | 0 | 4433 | de3a62eb |
+| RegulatedBase | recordOrder | nonpayable | regulated | 304 | 1035 | baaf8b3f |
+| RegulatedBase | regulatedConfig | view | regulated | 344 | 360 | 46825269 |
+| RegulatedBase | revokeOrder | nonpayable | regulated | 78 | 924 | 54cfd9f0 |
+| RegulatedBase | setTaxRate | nonpayable | pay | 173 | 992 | 433b79b6 |
+| RegulatedBase | setTaxRecipient | nonpayable | pay | 213 | 1582 | 1a68bfdc |
+| RegulatedBase | taxConfig | view | pay | 738 | 822 | c57da029 |
+| RegulatedBase | unfreeze | nonpayable | regulated | 78 | 924 | 1014f5e9 |
+| RegulatedBase | unpause | nonpayable | regulated | 114 | 905 | 2f4dae9f |
+| SaltedEIP712 | eip712Domain | view | pipeline | 453 | 514 | 84b0196e |
+| UAMetaTxBase | IS_HEDERA | view | pipeline | 51 | 76 | 2fbd2093 |
+| UAMetaTxBase | mtxBatch | nonpayable | pipeline | 594 | 23335 | 36704d52 |
+| UAMetaTxBase | mtxCancelNonce | nonpayable | pipeline | 0 | 5832 | d164f40b |
+| UAMetaTxBase | mtxExecute | nonpayable | pipeline | 139 | 22913 | 09313a74 |
+| WrappedPqzRegulatedToken | disableFeature | nonpayable | regulated | 433 | 1271 | 45e5ac68 |
+| WrappedPqzRegulatedToken | kind | pure | tables | 15 | 42 | 04baa00b |
+| WrappedPqzRegulatedToken | mtxSelectors | pure | tables | 703 | 853 | f2fabfdb |
+| WrappedPqzRegulatedToken | rescue | nonpayable | regulated | 107 | 449 | 839006f2 |
+| WrappedPqzRegulatedToken | supportsInterface | view | tables | 400 | 494 | 01ffc9a7 |
+| WrappedPqzRegulatedToken | underlyings | view | regulated | 326 | 380 | 0add145e |
+| WrappedPqzToken | executeRate | nonpayable | pqz | 109 | 873 | f32f4e51 |
+| WrappedPqzToken | mtxUnshieldUnwrap | nonpayable | pqz | 632 | 23488 | 9c0c3fbe |
+| WrappedPqzToken | mtxUnshieldUnwrap | nonpayable | pqz | 942 | 23319 | 929cf295 |
+| WrappedPqzToken | mtxWrapShield | nonpayable | pqz | 110 | 23594 | f1991276 |
+| WrappedPqzToken | mtxWrapShield | payable | pqz | 531 | 2835 | 15e6cbcc |
+| WrappedPqzToken | unshieldUnwrapStatement | view | pqz | 183 | 1926 | f4834cb9 |
+| WrappedPqzToken | unwrapBinding | pure | pqz | 0 | 217 | cba2008c |
+| WrappedToken | RATE_WINDOW | view | wrapped | 22 | 41 | 60e70d58 |
+| WrappedToken | addReserve | payable | wrapped | 253 | 998 | 556a4ffb |
+| WrappedToken | cancelRate | nonpayable | wrapped | 95 | 859 | eb7ed217 |
+| WrappedToken | collateralValue | view | wrapped | 92 | 175 | 31533029 |
+| WrappedToken | disableWrap | nonpayable | wrapped | 108 | 972 | 5d6385bc |
+| WrappedToken | legOf | view | wrapped | 202 | 431 | ac7d296e |
+| WrappedToken | maxRateStepBps | view | wrapped | 59 | 68 | 5eff8803 |
+| WrappedToken | maxSupply | view | wrapped | 0 | 68 | d5abeb01 |
+| WrappedToken | mint | nonpayable | wrapped | 184 | 3433 | 40c10f19 |
+| WrappedToken | mintToUA | nonpayable | wrapped | 184 | 4175 | f6b2d1e0 |
+| WrappedToken | mtxAddReserve | nonpayable | wrapped | 153 | 23657 | 213d9f7d |
+| WrappedToken | mtxUnwrap | nonpayable | wrapped | 0 | 22144 | d20e032e |
+| WrappedToken | mtxUnwrapLeg | nonpayable | wrapped | 277 | 22433 | aa9ceecd |
+| WrappedToken | mtxUnwrapToUA | nonpayable | wrapped | 266 | 22422 | a9f0a9ed |
+| WrappedToken | mtxWrap | nonpayable | wrapped | 198 | 23613 | 53ae18d7 |
+| WrappedToken | mtxWrapLeg | nonpayable | wrapped | 153 | 23657 | 7e43c6be |
+| WrappedToken | mtxWrapOrder | nonpayable | trade | 796 | 23205 | 45eaa8e1 |
+| WrappedToken | mtxWrapToUA | nonpayable | wrapped | 135 | 23619 | 9477a274 |
+| WrappedToken | pendingRate | view | wrapped | 370 | 436 | ea2b4ca3 |
+| WrappedToken | previewUnwrap | view | wrapped | 102 | 305 | 2eba6021 |
+| WrappedToken | previewWrap | view | wrapped | 106 | 309 | 9a5bf2da |
+| WrappedToken | proposeRate | nonpayable | wrapped | 226 | 1025 | 59ec4068 |
+| WrappedToken | rateAdjustable | view | wrapped | 31 | 93 | 1dc33605 |
+| WrappedToken | rateDelay | view | wrapped | 39 | 69 | 3d3c5cf0 |
+| WrappedToken | underlying | view | wrapped | 92 | 131 | 6f307dc3 |
+| WrappedToken | unwrap | nonpayable | wrapped | 146 | 3427 | b5819a02 |
+| WrappedToken | unwrap | nonpayable | wrapped | 109 | 3313 | 7647691d |
+| WrappedToken | unwrap | nonpayable | wrapped | 110 | 3321 | 3f069a43 |
+| WrappedToken | unwrapToUA | nonpayable | wrapped | 493 | 3357 | e4a9f766 |
+| WrappedToken | wrap | payable | wrapped | 53 | 3745 | ea598cb0 |
+| WrappedToken | wrap | payable | wrapped | 43 | 3840 | bf376c7a |
+| WrappedToken | wrapToUA | payable | wrapped | 70 | 4665 | 1b0237ad |
+
+## 6. Libraries and other contracts: top functions (source map)
+- **UARegistryLib** 37536 B, entries 10: dispatch:no-source 5263; fn:UAKinds.name 1193; fn:UARegistryLib.setPqzKey 1096; fn:UARegistryLib.setKemKey 698; fn:UARegistryLib._slotCap 606; fn:UARegistryLib.cacheExpandedKey 549; fn:UARegistryLib._record 525; fn:UARegistryLib._sigOk 525; fn:UARegistryLib.acceptMembership 516; fn:UARegistryLib._attrs 511; fn:UARegistryLib._register 464; fn:UARegistryLib._pqzRecord 456
+- **ZetherLib** 25351 B, entries 15: dispatch:no-source 3172; fn:ZetherLib.init 1117; fn:ZetherLib.normalSelectors 1045; yul:abi_encode_struct_G1_calldata 805; fn:ZetherLib.prepareSingle 575; fn:ZetherLib.prepareMulti 573; fn:ZetherLib._rollOver 475; fn:ZetherLib._debit 468; yul:abi_encode_tuple_t_bytes32_t_bytes32_t_bytes32_t_struct$_UASig_$67516_calldata_ptr__to_t_bytes32_t_bytes32_t_bytes32_t_struct$_UASig_$67516_memory_ptr__fromStack_reversed 424; fn:ZetherLib.unshieldWith 391; fn:ZetherLib._settleSingle 381; yul:abi_decode_tuple_t_struct$_TokenConfig_$22911_memory_ptr 378
+- **PqzViewLib** 19886 B, entries 9: dispatch:no-source 2005; fn:PqzCore._parseMulti 1337; fn:PqzCore._multiBuffer 1034; fn:PqzCore._parseTransfer 753; fn:PqzCore._distinct 547; fn:PqzCore._legs 508; fn:PqzCore.prepareBurn 487; fn:PqzCt._addPacked 429; fn:PqzCore._transferBuffer 428; fn:PqzCore._total 409; fn:PqzCore._window 360; fn:PqzCore._creditKey 335
+- **PqzTransferLib** 19724 B, entries 2: dispatch:no-source 2405; fn:PqzCore._parseMulti 1314; fn:PqzCore._multiBuffer 992; fn:PqzCore._parseTransfer 769; fn:PqzCore._distinct 569; fn:PqzCore._bundleMulti 560; fn:PqzCore._settleTransfer 547; fn:PqzCore._legs 497; fn:PqzCore._transferBuffer 490; fn:PqzCore._total 448; fn:PqzCt._addPacked 429; yul:abi_encode_tuple_t_bytes32_t_bytes32_t_bytes32_t_struct$_UASig_$67516_calldata_ptr__to_t_bytes32_t_bytes32_t_bytes32_t_struct$_UASig_$67516_memory_ptr__fromStack_reversed 424
+- **WrappedLib** 17029 B, entries 20: dispatch:no-source 2612; fn:WrappedLib._addLeg 978; fn:WrappedLib.initToken 663; fn:WrappedLib.rescue 581; fn:WrappedLib.proposeRate 567; yul:abi_decode_tuple_t_struct$_TokenConfig_$22911_memory_ptrt_boolt_uint8t_uint256t_uint256t_uint256t_address 453; fn:WrappedLib.executeRate 438; fn:HederaLib.checkAndAssociate 396; yul:abi_encode_struct_UASig_calldata 393; fn:WrappedLib.wrapBySigUA 388; fn:WrappedLib.payOutToUA 370; fn:WrappedLib._pull 365
+- **GovernanceLib** 14512 B, entries 14: dispatch:no-source 2413; fn:GovernanceLib._write 905; fn:GovernanceLib.init 649; fn:GovernanceLib._narrows 566; fn:GovernanceLib._due 513; fn:GovernanceLib._narrowing 482; fn:GovernanceLib._debit 477; fn:GovernanceLib._words 380; fn:GovernanceLib.revokeRole 369; fn:GovernanceLib._check 360; fn:GovernanceLib._leafPath 359; fn:GovernanceLib.useLimited 337
+- **ZetherWrappedLib** 11672 B, entries 4: fn:ZetherWrappedLib.selectors 1888; dispatch:no-source 1517; fn:ZetherLib.unshieldWith 424; yul:abi_decode_tuple_t_struct$_TokenConfig_$22911_memory_ptr 378; fn:ZetherLib.ctx 376; fn:ZetherWrappedLib.init 318; yul:abi_encode_tuple_t_struct$_TokenConfig_$22911_memory_ptr_t_bool_t_uint8_t_uint256_t_uint256_t_uint256_t_address__to_t_struct$_TokenConfig_$22911_memory_ptr_t_bool_t_uint8_t_uint256_t_uint256_t_uint256_t_address__fromStack_library_reversed 316; fn:ZetherLib._check 301; fn:ZetherLib.prepareUnshield 280; fn:ZetherLib._pt 224; fn:ZetherLib._header 182; yul:abi_decode_array_struct_Leg_dyn 169
+- **MtxPipelineLib** 11069 B, entries 13: dispatch:no-source 1322; yul:abi_encode_tuple_t_bytes32_t_bytes32_t_bytes32_t_struct$_UASig_$67516_calldata_ptr__to_t_bytes32_t_bytes32_t_bytes32_t_struct$_UASig_$67516_memory_ptr__fromStack_reversed 424; fn:MtxPipelineLib._authorizeNative 317; fn:MtxPipelineLib._close 314; fn:MtxPipelineLib.payMeta 296; fn:MtxPipelineLib._checkTo 270; fn:MtxPipelineLib._checkTransfer 247; fn:MtxPipelineLib._checkCall 241; fn:MtxPipelineLib._authorize 236; fn:MtxPipelineLib._requireSignature 236; dispatch:MtxPipelineLib.<contract> 218; fn:ECDSA.tryRecover 214
+- **RegulatedLib** 10337 B, entries 14: dispatch:no-source 1775; fn:RegulatedLib.freeze 558; fn:RegulatedLib.init 438; yul:abi_decode_tuple_t_struct$_TokenConfig_$22911_memory_ptr 378; fn:RegulatedLib.forceTransfer 373; fn:RegulatedLib.recordOrder 369; fn:RegulatedLib.setTaxRate 340; fn:RegulatedLib.revokeOrder 301; fn:RegulatedLib.pause 284; fn:RegulatedLib.operatorTransfer 270; fn:MtxPipelineLib._checkTo 265; dispatch:RegulatedLib.<contract> 244
+- **PqzBurnLib** 10697 B, entries 1: dispatch:no-source 1658; fn:PqzCore.prepareBurn 486; fn:PqzCore._total 448; fn:PqzCt._addPacked 429; yul:abi_encode_tuple_t_bytes32_t_bytes32_t_bytes32_t_struct$_UASig_$67516_calldata_ptr__to_t_bytes32_t_bytes32_t_bytes32_t_struct$_UASig_$67516_memory_ptr__fromStack_reversed 424; fn:PqzCore._window 371; fn:PqzCore._debit 325; fn:PqzCore._debitKey 320; fn:PqzCore._common 314; fn:PqzCore._check 313; yul:abi_decode_tuple_t_struct$_Env_$47130_memory_ptrt_struct$_PqzBurnArgs_$46081_calldata_ptrt_bytes_calldata_ptrt_bytes_calldata_ptrt_struct$_UASig_$67516_calldata_ptr 297; fn:PqzCore._burnBuffer 287
+- **PqzStateLib** 9050 B, entries 6: dispatch:no-source 1141; fn:PqzStateLib.init 832; fn:PqzCt._addPacked 429; fn:PqzStateLib._roll 420; fn:PqzCore._creditKey 390; fn:PqzCore._trivial 361; fn:PqzCore._window 360; fn:PqzCore._accOf 247; fn:PqzStateLib.prepareAcc 214; fn:PqzCt.packMem 200; yul:abi_decode_tuple_t_struct$_ConfidentialConfig_$22859_memory_ptrt_addresst_address 196; fn:PqzStateLib.pendingCt 164
+- **PqzWrappedLib** 5357 B, entries 2: fn:PqzWrappedLib.selectors 1808; dispatch:no-source 636; yul:abi_decode_tuple_t_struct$_TokenConfig_$22911_memory_ptr 378; fn:PqzWrappedLib.init 328; yul:abi_encode_tuple_t_struct$_TokenConfig_$22911_memory_ptr_t_bool_t_uint8_t_uint256_t_uint256_t_uint256_t_address__to_t_struct$_TokenConfig_$22911_memory_ptr_t_bool_t_uint8_t_uint256_t_uint256_t_uint256_t_address__fromStack_library_reversed 316; yul:abi_decode_array_struct_Leg_dyn 167; yul:abi_decode_tuple_t_bytes_calldata_ptrt_addresst_addresst_uint8t_uint256t_uint256t_uint256 156; yul:abi_decode_struct_ConfidentialConfig 134; yul:abi_encode_tuple_t_array$_t_bytes4_$dyn_memory_ptr_t_array$_t_uint8_$dyn_memory_ptr_t_array$_t_uint8_$dyn_memory_ptr__to_t_array$_t_bytes4_$dyn_memory_ptr_t_array$_t_uint8_$dyn_memory_ptr_t_array$_t_uint8_$dyn_memory_ptr__fromStack_library_reversed 103; yul:abi_decode_struct_RateConfig 99; yul:abi_decode_struct_RegulatedParams 98; yul:abi_encode_struct_ConfidentialConfig 98
+- **TradeLib** 4842 B, entries 6: fn:TradeLib.record 555; dispatch:no-source 505; fn:TradeLib.precheck 462; fn:TradeLib.invalidate 285; fn:Math.mulDiv 234; fn:TradeLib.restore 195; yul:abi_decode_struct_UATradeOrder 191; fn:TradeLib.cancel 186; yul:abi_encode_tuple_t_bytes32__to_t_bytes32__fromStack_library_reversed 152; fn:TradeLib._inTx 125; yul:abi_encode_tuple_t_bytes32_t_bytes32_t_address_t_uint256_t_uint256_t_uint256_t_uint256_t_address_t_address_t_bytes32_t_uint8_t_uint256_t_uint256_t_uint256__to_t_bytes32_t_bytes32_t_address_t_uint256_t_uint256_t_uint256_t_uint256_t_address_t_address_t_bytes32_t_uint8_t_uint256_t_uint256_t_uint256__fromStack_reversed 121; fn:TradeLib._wrapHash 120
+- **HederaLib** 767 B, entries 1: fn:HederaAccountAuth.isAuthorizedRaw 198; yul:abi_decode_tuple_t_addresst_bytes32t_bytes_calldata_ptr 129; yul:abi_encode_tuple_t_address_t_bytes_memory_ptr_t_bytes_calldata_ptr__to_t_address_t_bytes_memory_ptr_t_bytes_memory_ptr__fromStack_reversed 107; dispatch:no-source 72; data:metadata+auxdata 68; fn:HederaLib.requireValid 57; dispatch:HederaLib.<contract> 56; yul:convert_bytes_to_fixedbytes_from_t_bytes_memory_ptr_to_t_bytes32 38; yul:abi_encode_tuple_packed_t_bytes_memory_ptr__to_t_bytes_memory_ptr__nonPadded_inplace_fromStack_reversed 20; yul:abi_encode_tuple_packed_t_bytes32__to_t_bytes32__nonPadded_inplace_fromStack_reversed 7; fn:HederaAccountAuth.IS_AUTHORIZED_RAW 5; fn:HederaAccountAuth.HAS_GAS 4
+- **SCaaSDex** 33704 B, entries 56: dispatch:no-source 4031; data:metadata+auxdata 1499; fn:SCaaSDex._exchangeIn 1045; dispatch:SCaaSDex.<contract> 875; fn:SCaaSDex._hybridIn 866; fn:SCaaSDex._flows 729; fn:SCaaSDex._pull 633; fn:SCaaSDex.settleOne 632; fn:SCaaSDex.initialize 627; fn:SCaaSDex._route 527; fn:SCaaSDex._interact 504; fn:SCaaSDex._makers 487
+- **UARegistry** 31438 B, entries 62: dispatch:no-source 3999; fn:UAKinds.name 1193; fn:UARegistry._cfg 1029; dispatch:UARegistry.<contract> 941; fn:UARegistry.frostKeyOf 757; fn:UARegistry.registrationOf 654; fn:UARegistry.muSig2KeyOf 480; fn:UARegistry._derived 473; fn:UARegistry._authorized 462; fn:UARegistry.msigOf 456; fn:UAKinds.keyHashOf 452; fn:UARegistry.uaPage 386
+- **GovernanceRouter** 13396 B, entries 43: dispatch:no-source 1347; dispatch:GovernanceRouter.<contract> 612; fn:UAMetaTxBase.mtxCancelNonce 481; fn:GovernanceRouterBase._uaCall 400; yul:abi_encode_struct_UASig_calldata 393; fn:GovernanceRouterBase._call 260; yul:abi_encode_tuple_t_struct$_Ctx_$37889_memory_ptr_t_bytes32_t_struct$_Envelope_$37909_memory_ptr_t_bytes_memory_ptr_t_struct$_CallFacts_$37927_memory_ptr_t_struct$_UASig_$67516_calldata_ptr__to_t_struct$_Ctx_$37889_memory_ptr_t_bytes32_t_struct$_Envelope_$37909_memory_ptr_t_bytes_memory_ptr_t_struct$_CallFacts_$37927_memory_ptr_t_struct$_UASig_$67516_memory_ptr__fromStack_library_reversed 199; fn:SaltedEIP712.eip712Domain 179; fn:UAMetaTxBase.mtxDigest 168; yul:convert_t_struct$_UAMetaTransaction_$14542_calldata_ptr_to_t_struct$_UAMetaTransaction_$14542_memory_ptr 159; fn:UAMetaTxBase._uaEnvelopeOf 149; yul:abi_decode_tuple_t_struct$_UAEnvelope_$14761_calldata_ptrt_addresst_bytes32t_bytes32t_bytes32t_bytes32t_uint256t_uint64t_struct$_UASig_$67516_calldata_ptr 148
+- **OpenFactory** 15821 B, entries 40: dispatch:no-source 2509; fn:OpenFactory._create 1033; fn:OpenFactory.deployImplementation 714; fn:OpenFactory.deployDexImplementation 580; dispatch:OpenFactory.<contract> 579; fn:OpenFactory._publish 554; fn:OpenFactory._deploy 529; mod:OpenFactory.onlyRegistrar 462; fn:OpenFactory.createDex 448; fn:OpenFactory.envOf 431; fn:OpenFactory.dexEnvOf 413; fn:OpenFactory._checkImplementation 311
+- **MandateWallet** 17704 B, entries 33: dispatch:no-source 2835; fn:MandateWallet.payUnderMandate 835; dispatch:MandateWallet.<contract> 500; fn:UAMetaTxBase.mtxCancelNonce 492; fn:MandateWallet.mtxSelectors 463; fn:MandateWallet.setMandate 451; yul:abi_encode_struct_UASig_calldata 393; mod:MetaTxBase.nonReentrant 332; fn:UAMetaTxBase.mtxBatch 262; mod:MandateWallet.onlyOwner 252; fn:MandateWallet.isValidSignature 233; fn:MandateWallet.revoke 225
+- **MtxRelayFee** 2552 B, entries 3: yul:abi_encode_tuple_t_bytes32_t_address_t_bytes32_t_bytes32_t_uint256_t_uint256_t_uint256_t_uint256_t_struct$_UASig_$67516_calldata_ptr__to_t_bytes32_t_address_t_bytes32_t_bytes32_t_uint256_t_uint256_t_uint256_t_uint256_t_struct$_UASig_$67516_memory_ptr__fromStack_reversed 484; fn:MtxRelayFee.relay 338; dispatch:no-source 272; yul:abi_decode_tuple_t_addresst_bytes_calldata_ptrt_addresst_bytes32t_bytes32t_uint256t_uint256t_uint256t_uint256t_struct$_UASig_$67516_calldata_ptr 186; fn:ReentrancyGuardTransient.REENTRANCY_GUARD_STORAGE 99; fn:MtxRelayFee.relayRef 96; fn:MtxRelayFee._shape 92; fn:SafeERC20._callOptionalReturn 80; yul:abi_decode_tuple_t_addresst_bytes_calldata_ptr 74; yul:abi_decode_bytes_calldata 68; data:metadata+auxdata 68; dispatch:MtxRelayFee.<contract> 67
+
+## 7. Yul utilities per kind: decoders, encoders, other (bytes and count)
+| kind | abi_decode B / n | abi_encode B / n | other B / n |
+|---|---|---|---|
+| NormalToken | 4144 / 64 | 4553 / 69 | 1239 / 34 |
+| WrappedToken | 5228 / 83 | 5784 / 85 | 997 / 30 |
+| NormalZetherToken | 5091 / 82 | 5505 / 89 | 1084 / 35 |
+| WrappedZetherToken | 6067 / 99 | 6222 / 98 | 1094 / 36 |
+| NormalPqzToken | 5900 / 88 | 7645 / 105 | 1417 / 40 |
+| WrappedPqzToken | 6717 / 105 | 8365 / 118 | 1127 / 36 |
+| NormalRegulatedToken | 4574 / 71 | 5428 / 85 | 1294 / 36 |
+| WrappedRegulatedToken | 5605 / 89 | 6660 / 101 | 1052 / 32 |
+| NormalZetherRegulatedToken | 5472 / 88 | 6434 / 106 | 1139 / 37 |
+| WrappedZetherRegulatedToken | 6448 / 105 | 7152 / 115 | 1119 / 37 |
+| NormalPqzRegulatedToken | 6287 / 94 | 8521 / 119 | 1442 / 41 |
+| WrappedPqzRegulatedToken | 7064 / 110 | 9241 / 132 | 1152 / 37 |

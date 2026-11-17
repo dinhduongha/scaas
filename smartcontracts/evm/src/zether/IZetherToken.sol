@@ -12,12 +12,16 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 ///        `acc`/`pending` balances over the token's public ERC-20 balance.
 /// @notice **UNAUDITED.** Byte-exact contract with the prover: `docs/contracts/zether.md`.
 ///         The token is also an `IERC20MetaTx` on the one meta-transaction base: every proof-carrying entry point is a
-///         direct call (statement `ZTX_V1_DIRECT`, binding 0) or an allowlisted self-call of `mtxExecute` / `uaExecute` or
-///         of its signed overload (`ZetherLayer`, TS-D14), whose envelope binding the statement carries (`ZTX_V1_RELAYED`,
-///         CTR-ZTH-34, CTR-ZTH-51). The proof alone authorises (UA-6): no `auth`, no `accHint`. The shared entry points
+///         direct call (statement `ZTX_V1_DIRECT`, binding 0) or an allowlisted self-call of `mtxExecute`,
+///         `executeMetaTransaction` or its signed overload (`ZetherLayer`, TS-D14), whose envelope binding the statement
+///         carries (`ZTX_V1_RELAYED`, CTR-ZTH-34, CTR-ZTH-51, R35). The proof alone authorises (UA-6): no `auth`, no `accHint`. The shared entry points
 ///         and events are `IConfidentialToken`'s; `mtxWrapShield` and `mtxUnshieldUnwrap` are on `WRAPPED_ZETHER` only
 ///         (`IZetherWrappedToken`); the prover views are in `ZetherStatements` (CTR-ZTH-46).
 interface IZetherToken is IConfidentialToken {
+    /// @notice Pending into `acc`: Zether's one aggregated pending for any `n ≥ 1` (`IConfidentialToken`'s until group 3g,
+    ///         when the PQZ rollover took a key version; the selector is unchanged).
+    function mtxRollOver(bytes32 ua, uint256 n) external;
+
     /// @notice A curve point, EIP-2537 encoded: `abi.encode(G1)` is its 128 bytes (BLS12-381 is the only curve, CTR-ZTH-32).
     struct G1 {
         bytes32 x0;
@@ -184,10 +188,10 @@ interface IZetherToken is IConfidentialToken {
     function registered(ZetherTypes.UA account) external view returns (bool);
     function accountState(ZetherTypes.UA account) external view returns (AccountState memory);
     function sendCounter(ZetherTypes.UA account) external view returns (uint256);
-    /// @notice The binding a relayed proof carries (CTR-ZTH-06): every envelope field except `data`, plus `chainUid`.
-    function envelopeBinding(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32);
-    /// @notice The UA path's binding (CTR-ZTH-51): tag `SCAAS-ZETHER-UA-ENVELOPE-V1`, `from` as `bytes32`.
-    function uaEnvelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32);
+    /// @notice The binding a relayed proof carries on the merged entries and `mtxExecute` (CTR-ZTH-51, R35): tag
+    ///         `SCAAS-ZETHER-UA-ENVELOPE-V1`, `from` as `bytes32`, every envelope field except `data`, plus `chainUid`.
+    ///         `executeMetaTransaction`'s address binding (CTR-ZTH-06) has no view (legacy/ua-mtx-merge/).
+    function envelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32);
 
     // ------------------------------------------------------------------ Zether-only entry points (CTR-ZTH-45)
 

@@ -1,0 +1,52 @@
+# ua-mtx-merge T28 gate summary (full output in git-ignored .log files, not committed)
+# T28: RegulatedLib, RegulatedBase, kinds 8 and 9 (Hedera included): FREEZE, RECORD, FORCE, PAUSE, the fee seats
+# (regulated-kinds spec §2.3, §2.4, §3.1-§3.4; RK-3..8). RegulatedLib: the scaas.regulated namespace, init, T1-T6, record,
+# force, pause; F and P internal (inlined by the token). RegulatedBase: the pause-open set, TokenPaused(pausedUntil), the
+# mirror sync, the views, forceTransfer's R and receiver rule. NormalRegulatedToken (8). DeployBase: 8 and 9, enabled.
+# Base: 59f18aae (T27 tip). T28 commits: legacy note (no copy, MD-4), the build, this one (sizes, harness, mutants, summary).
+step | commit | rc | counts
+t28-red | worktree (T28 tests, T27's RegulatedLib / RegulatedBase) | 1 | test/as 12 suites, 14 passed 10 failed: 8 suites RegulatedNotBuilt at setUp (creation fails closed), RegulatedSkeleton test_createKinds9And13, test_hookSeatsWired
+t28-green | worktree | 0 | test/as 12 suites, 72 passed 0 failed
+t28-forge-full | build commit's tree | 0 | forge test: 240 suites, 2715 passed 0 failed 14 skipped (T27: 232 suites, 2659: +8 suites Freeze 11, Record 8, Force 7, Pause 8, FeeLegs 8, Mirror 5, RegulatedInit 7, RegulatedHedera 2)
+t28-touched | build commit | 0 | MsgSenderLint, GovDeploy, LinkClosure, Layout, test/as: 16 suites, 90 passed
+t28-sizes | build commit | 0 | NormalRegulatedToken 37,163 B (init 39,476); WrappedRegulatedToken 46,754 -> 47,847 (init 49,067 -> 50,167); WrappedPqzRegulatedToken 60,127 -> 61,225 (init 62,817 -> 63,922); RegulatedLib 919 -> 7,193; plain kinds and GovernanceRouter unchanged
+t28-stop-rule | build commit | 0 | kind 13 61,225 < 64,512 B (3,287 B left): no lever, no _above64KiB row
+t28-deploy-gas | build commit | 0 | GovDeploy test_releaseGasPerKind -vv, asked = (regular x 64/63 + state) x 1.05 + 0.37 M: kind 8 63.14 M, kind 9 81.04 M, kind 13 103.50 M (runs/2026-11-04-ua-mtx-merge-regulated-sizes.txt)
+t28-sizegate | build commit | 0 | 0 errors, 93 contracts, above 65536 B: none
+t28-isolate | build commit | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t28-docs | build commit | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0
+t28-mutants | build commit | 1 each | 36 of 36 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t28-mutants.txt); src and script restored after each
+t28-at-set-n2048-kmax1024 | build commit | 0 | test/{ua,pqz,as}: 74 suites, 864 passed 0 failed 1 skipped
+t28-at-set-n2304-kmax4096 | build commit | 0 | test/{ua,pqz,as}: 74 suites, 861 passed 0 failed 4 skipped
+t28-at-set-n2560-kmax16384 | build commit | 0 | test/{ua,pqz,as}: 74 suites, 860 passed 0 failed 5 skipped
+t28-at-set-n2816-kmax65536 | build commit | 0 | test/{ua,pqz,as}: 74 suites, 855 passed 0 failed 10 skipped; src/pqz/PqzSet.sol restored (git status src clean)
+#
+# Pins, old -> new: size-baseline.json (above, + the new rows NormalRegulatedToken and WrappedRegulatedToken.init);
+# LinkClosure RegulatedLib DELEGATECALL 0 -> 1 (GovernanceUse.use -> GovernanceLib.useLimited); namespaces.json +
+# scaas.regulated (new); MsgSenderLint FILES 30 -> 31; GovDeploy test_deployRegulatedPath (8 and 9, enabled; was 9
+# disabled) and kind 8 in its release lists. No gas pin, typehash, selector, plain-kind slot, layout of an existing
+# namespace, dex_order_kat.json row or GovernanceRouter address moved; so no KAT reader (clientkeys, node) was rerun.
+#
+# Not run in T28: node suite and e2e (no node source or vector changed); pqz-core gate (no core, statement or set);
+# scripts/e2e-zether.sh; e2e.py; deploy.sh (spec §6.1's DEPLOY_REGULATED=1 there and the registry deploy are T29 / T33).
+#
+# Conflicts with the plan / spec (none resolved silently):
+#   Two errors not in spec §3.1's list were added to IRegulatedToken: AmountZero() (forceTransfer(..., 0), F-08 names no
+#   error; T32's operatorTransfer can use it) and NotPaused() (spec §3.4 "unpause: paused" names none).
+#   Errors the spec leaves open, chosen from its list: recordOrder with orderId or documentHash 0 -> RefRequired; a subject
+#   or beneficiary 0 / a pool / the token / equal -> ForceTargetRefused; maxAmount 0 with freezeUntil <= now ->
+#   OrderInactive(recordId); forceTransfer with RECORD active but no compliance root -> OrderInactive; a frozen beneficiary
+#   -> Frozen(beneficiary).
+#   frozen(a) of §3.3 ("F without the controls and roots terms") is read as until > now and (!recordBacked or RECORD in
+#   controls): the bit-5 and roots terms dropped, the record term kept, so "T1 replacing a value that no longer counts"
+#   applies to a record-backed freeze after RECORD is disabled (Record.t.sol test_recordDisabledEndsBackedFreezesStopsForce).
+#   T4 on an account not frozen leaves episodeStart and issuerCooldownUntil as they were (the table writes neither).
+#   init takes the kind's _validBits() so a bit outside the mask is FeatureInvalidForKind before RegulatedConfigInvalid
+#   (§2.4's first row); a config naming a compliance registry is refused RegulatedNotBuilt until T29 (codehash, bounded
+#   call); R with both lists off makes no call; with a list on it is unreachable and fails closed.
+#   The DEX relayer share test uses a venue stand-in paying by an ordinary transfer, not SCaaSDex itself (T35's venue).
+#   "test_supportsIRegulatedToken_{8,9} and not on 0-5": 8 and 9 in RegulatedInit.t.sol; 0-5 by one assertion added to
+#   RegConfig.t.sol's _refusesReg (each plain kind created there).
+#   The plan's file list has no MsgSenderLint, LinkClosure, GovDeploy, RegulatedSkeleton, RegConfig, Layout.t.sol; each
+#   moved a pin or a placeholder row (above). deploy.sh is unchanged (spec §6.1 DEPLOY_REGULATED=1 there: T33).
+#   Plan step 4 asks the size gate for RegulatedLib: it is not a row (7,193 B, under 24,576 B).

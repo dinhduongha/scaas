@@ -1,85 +1,85 @@
 {
  "pqzh": {
   "BURN": {
-   "honest": 298116,
+   "honest": 299284,
    "input": 365753,
    "proof": 303412,
    "row": 4859000
   },
   "DISCLOSE-AUDITOR": {
-   "honest": 231230,
+   "honest": 230654,
    "input": 275619,
    "proof": 234238,
    "row": 3745000
   },
   "DISCLOSE-RECEIVER": {
-   "honest": 231614,
+   "honest": 231166,
    "input": 275619,
    "proof": 234238,
    "row": 3745000
   },
   "DISCLOSE-SENDER": {
-   "honest": 231454,
+   "honest": 229196,
    "input": 275619,
    "proof": 234238,
    "row": 4268000
   },
   "M1-off": {
-   "honest": 301162,
+   "honest": 300618,
    "input": 387215,
    "proof": 304266,
    "row": 5608000
   },
   "M1-on": {
-   "honest": 301066,
+   "honest": 301802,
    "input": 407823,
    "proof": 304266,
    "row": 5023000
   },
   "M2-off": {
-   "honest": 300650,
+   "honest": 301034,
    "input": 407823,
    "proof": 304266,
    "row": 5740000
   },
   "M2-on": {
-   "honest": 300714,
+   "honest": 299123,
    "input": 428559,
    "proof": 304266,
    "row": 5201000
   },
   "M4-off": {
-   "honest": 300554,
+   "honest": 300874,
    "input": 449039,
    "proof": 304266,
    "row": 6360000
   },
   "M4-on": {
-   "honest": 300610,
+   "honest": 301856,
    "input": 470885,
    "proof": 305120,
    "row": 6416000
   },
   "REFRESH": {
-   "honest": 299860,
+   "honest": 300244,
    "input": 365753,
    "proof": 303412,
    "row": 4859000
   },
   "REGISTER": {
-   "honest": 230910,
+   "honest": 230430,
    "input": 254819,
    "proof": 234238,
    "row": 4319000
   },
   "TRANSFER": {
-   "honest": 301194,
+   "honest": 300426,
    "input": 407823,
    "proof": 304266,
    "row": 5492000
   },
   "TRANSFER0": {
-   "honest": 299123,
+   "honest": 300970,
    "input": 387215,
    "proof": 304266,
    "row": 5227000
@@ -87,8 +87,8 @@
  },
  "pqzl": {
   "BURN": {
-   "input": 111877,
-   "proof": 49536,
+   "input": 111884,
+   "proof": 49543,
    "row": 4840000
   },
   "DISCLOSE-AUDITOR": {
@@ -97,76 +97,76 @@
    "row": 3337000
   },
   "DISCLOSE-RECEIVER": {
-   "input": 75247,
-   "proof": 33866,
+   "input": 75268,
+   "proof": 33887,
    "row": 3337000
   },
   "DISCLOSE-SENDER": {
-   "input": 74348,
-   "proof": 32967,
+   "input": 74324,
+   "proof": 32943,
    "row": 3381000
   },
   "M1-off": {
-   "input": 133040,
-   "proof": 50091,
+   "input": 132996,
+   "proof": 50047,
    "row": 5139000
   },
   "M1-on": {
-   "input": 153933,
-   "proof": 50376,
+   "input": 153943,
+   "proof": 50386,
    "row": 4712000
   },
   "M2-off": {
-   "input": 154100,
-   "proof": 50543,
+   "input": 154091,
+   "proof": 50534,
    "row": 4975000
   },
   "M2-on": {
-   "input": 175512,
-   "proof": 51219,
+   "input": 175528,
+   "proof": 51235,
    "row": 4823000
   },
   "M4-off": {
-   "input": 196329,
-   "proof": 51556,
+   "input": 196341,
+   "proof": 51568,
    "row": 5164000
   },
   "M4-on": {
-   "input": 220626,
-   "proof": 54861,
+   "input": 220615,
+   "proof": 54850,
    "row": 5357000
   },
   "M8-off": {
-   "input": 317548,
-   "proof": 69863,
+   "input": 317566,
+   "proof": 69881,
    "row": 6941000
   },
   "M8-on": {
-   "input": 341950,
-   "proof": 72761,
+   "input": 341918,
+   "proof": 72729,
    "row": 8030000
   },
   "REFRESH": {
-   "input": 111883,
-   "proof": 49542,
+   "input": 111888,
+   "proof": 49547,
    "row": 4840000
   },
   "REGISTER": {
-   "input": 53120,
-   "proof": 32539,
+   "input": 53123,
+   "proof": 32542,
    "row": 3504000
   },
   "TRANSFER": {
-   "input": 153949,
-   "proof": 50392,
+   "input": 153973,
+   "proof": 50416,
    "row": 7032000
   },
   "TRANSFER0": {
-   "input": 133002,
-   "proof": 50053,
+   "input": 132991,
+   "proof": 50042,
    "row": 6790000
   }
  },
  "set": "n2560-kmax16384",
- "source": "smartcontracts/evm/script/pqz/gas-inputs.py: the set's vectors (proof_pqz*.json), chain/engine-pqz-provisional-n2560.json (provisional rows, testnet only until Task 9)"
+ "source": "smartcontracts/evm/script/pqz/gas-inputs.py: the set's vectors (proof_pqz*.json), chain/engine-pqz-provisional-n2560.json (provisional rows, testnet only until calibrated)"
 }

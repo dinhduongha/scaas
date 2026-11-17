@@ -13,16 +13,19 @@ import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
-import {plainEnv} from "../helpers/Catalogue.sol";
+import {plainEnv, pinned, withModules} from "../helpers/Catalogue.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {NormalTokenP, NormalTokenT, NormalTokenA} from "../../src/metatx/NormalTokenModules.sol";
+import {probeModules} from "../helpers/ProbeModules.sol";
 
 /// @notice What lands now for the regulated round (spec §1.2, §4.2; CTR-GOV-03, -17, -18; GD-19): bits 5-9 refused on every
-///         kind of this release, with each kind's error (`FeatureNotBuilt` on `NORMAL` and `WRAPPED`, `FeatureInvalidForKind`
-///         on the four confidential kinds), and none of them in `validBits()`, so a wallet reads the truth.
+///         plain kind, `FeatureInvalidForKind` on all six (ua-mtx-merge T24, regulated-kinds spec Q3: `NORMAL` and `WRAPPED`
+///         refused them `FeatureNotBuilt` before), and none of them in `validBits()`, so a wallet reads the truth.
 abstract contract GovRegulatedRows is Test {
     uint256 internal constant REGULATED = (1 << 5) | (1 << 6) | (1 << 7) | (1 << 8) | (1 << 9);
 
@@ -61,6 +64,16 @@ abstract contract GovRegulatedRows is Test {
         _rCreate(wrapped, c, "c");
     }
 
+    /// pay-meta-tax T39 (spec §5.1, O8): bit 23 `TAX` is valid on 8-13 only; each plain kind refuses it at creation.
+    function test_taxBit_plainKindRefuses() public {
+        for (uint256 w; w < 2; ++w) {
+            IFactoryToken.TokenConfig memory c = _rCfg(w == 1, 1 | (1 << 23));
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(23)));
+            _rCreate(w == 1, c, "tax");
+            assertEq(IGovernance(_rCreate(w == 1, _rCfg(w == 1, 1), "ok23")).validBits() & (1 << 23), 0, "validBits");
+        }
+    }
+
     function _noRegulatedValid(bool wrapped) internal {
         address t = _rCreate(wrapped, _rCfg(wrapped, 1), "v");
         uint256 v = IGovernance(t).validBits();
@@ -69,24 +82,63 @@ abstract contract GovRegulatedRows is Test {
     }
 }
 
-/// The shape of what a regulated release decodes beside `TokenConfig` (spec §4.2, §4.4). Test only: nothing of it lands now.
+/// The shape of what a regulated release decodes beside `IFactoryToken.TokenConfig` (spec §4.2, §4.4). Test only: nothing of it lands now.
 struct MockRegulatedParams {
     address complianceRegistry;
     uint256 requiredFlags;
     uint256 deniedFlags;
 }
 
-/// A mock implementation of kind 8 `NORMAL_REGULATED`: its own encoding, `abi.encode(TokenConfig, MockRegulatedParams)`, read
+/// A mock implementation of kind 8 `NORMAL_REGULATED`: its own encoding, `abi.encode(IFactoryToken.TokenConfig, MockRegulatedParams)`, read
 /// in its own `_initRaw`. The factory passes `initArgs` opaque, so nothing in it changes.
 contract MockNormalRegulated is NormalToken {
     MockRegulatedParams public params;
 
-    constructor(uint16 v, Env memory env, bytes memory a) NormalToken(v, env, a) {}
+    constructor(address f_, bytes memory a) NormalToken(f_, a) {}
 
     function kind() public pure override returns (uint8) { return 8; }
 
     function _initRaw(bytes calldata initArgs) internal override {
-        (TokenConfig memory cfg, MockRegulatedParams memory p) = abi.decode(initArgs, (TokenConfig, MockRegulatedParams));
+        (IFactoryToken.TokenConfig memory cfg, MockRegulatedParams memory p) = abi.decode(initArgs, (IFactoryToken.TokenConfig, MockRegulatedParams));
+        params = p;
+        _init(cfg);
+    }
+}
+
+/// `MockNormalRegulated`'s overrides in its kind's module P (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
+contract MockNormalRegulatedP is NormalTokenP {
+    constructor(address f_, bytes memory a) NormalTokenP(f_, a) {}
+
+    MockRegulatedParams public params;
+
+    function _initRaw(bytes calldata initArgs) internal override {
+        (IFactoryToken.TokenConfig memory cfg, MockRegulatedParams memory p) = abi.decode(initArgs, (IFactoryToken.TokenConfig, MockRegulatedParams));
+        params = p;
+        _init(cfg);
+    }
+}
+
+/// `MockNormalRegulated`'s overrides in its kind's module T (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
+contract MockNormalRegulatedT is NormalTokenT {
+    constructor(address f_, bytes memory a) NormalTokenT(f_, a) {}
+
+    MockRegulatedParams public params;
+
+    function _initRaw(bytes calldata initArgs) internal override {
+        (IFactoryToken.TokenConfig memory cfg, MockRegulatedParams memory p) = abi.decode(initArgs, (IFactoryToken.TokenConfig, MockRegulatedParams));
+        params = p;
+        _init(cfg);
+    }
+}
+
+/// `MockNormalRegulated`'s overrides in its kind's module A (T66b: the bodies run there; `probeArgs`, test/helpers/ProbeModules.sol).
+contract MockNormalRegulatedA is NormalTokenA {
+    constructor(address f_, bytes memory a) NormalTokenA(f_, a) {}
+
+    MockRegulatedParams public params;
+
+    function _initRaw(bytes calldata initArgs) internal override {
+        (IFactoryToken.TokenConfig memory cfg, MockRegulatedParams memory p) = abi.decode(initArgs, (IFactoryToken.TokenConfig, MockRegulatedParams));
         params = p;
         _init(cfg);
     }
@@ -99,13 +151,13 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
     OpenFactory f;
 
     function setUp() public {
-        f = new OpenFactory(address(this), UID, 0);
+        f = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
     }
 
     function _rCfg(bool wrapped, uint256 features) internal override returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.features, c.owner) = ("R", "R", 18, features, nid(OWNER));
+        (c.name, c.symbol, c.decimals, c.features, c.admin) = ("R", "R", 18, features, nid(OWNER));
         if (wrapped) {
             c.legs = new IFactoryToken.Leg[](1);
             c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
@@ -116,9 +168,20 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         return f.createToken(wrapped ? IOpenFactory.TokenKind.WRAPPED : IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), salt);
     }
 
-    function test_regulatedBitsRefusedOnPlainKinds() public {
-        _refusesEach(false, IGovernance.FeatureNotBuilt.selector);
-        _refusesEach(true, IGovernance.FeatureNotBuilt.selector);
+    /// ua-mtx-merge T24 (Q3): was `test_regulatedBitsRefusedOnPlainKinds`, expecting `FeatureNotBuilt`.
+    function test_plainKindsRefuseRegulatedAsInvalid() public {
+        _refusesEach(false, IGovernance.FeatureInvalidForKind.selector);
+        _refusesEach(true, IGovernance.FeatureInvalidForKind.selector);
+    }
+
+    /// CTR-GOV-20 (owner 2026-11-05): bit 22 `OPERATOR_TRANSFER` is on the regulated kinds only; each plain kind refuses it.
+    function test_plainKindsRefuseOperatorTransfer() public {
+        for (uint256 w; w < 2; ++w) {
+            IFactoryToken.TokenConfig memory c = _rCfg(w == 1, 1 | (1 << 22));
+            vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(22)));
+            _rCreate(w == 1, c, "op");
+            _rCreate(w == 1, _rCfg(w == 1, 1), "ok"); // positive control
+        }
     }
 
     function test_validBitsHoldsNoRegulatedBit() public {
@@ -147,11 +210,14 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         bytes memory args = abi.encode(_rCfg(false, 1), MockRegulatedParams(address(0xC0), 3, 4));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, k8, 1));
         f.createToken(k8, 1, args, "r");
-        Catalogue.release(f, k8, 1, plainEnv(address(f), address(0), UID, address(0), false),
-            type(MockNormalRegulated).creationCode);
+        // T66b: the stand-in's bodies run in kind 0's modules (the face checks them against kind 0), its hook there too
+        (address[] memory ms, bytes memory implArgs) = probeModules("GovRegulatedBits.t.sol:MockNormalRegulated", 0, address(f), "");
+        uint16 ev = Catalogue.env(f, k8, withModules(pinned(plainEnv(address(f), address(0), UID, address(0), false), k8), ms));
+        vm.prank(address(uint160(uint256(f.admin()))));
+        f.deployTokenImplementation(k8, 1, ev, type(MockNormalRegulated).creationCode, implArgs, EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, k8));
         f.createToken(k8, 1, args, "r");
-        f.setKindEnabled(k8, true);
+        f.setTokenKindEnabled(k8, true, EnvKit.uidOf(address(f)));
         address t = f.createToken(k8, 1, args, "r");
         assertTrue(f.isRegisteredToken(t));
         assertEq(NormalToken(t).kind(), 8);
@@ -160,10 +226,10 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         assertEq(req, 3);
         assertEq(den, 4);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         address n = _rCreate(false, _rCfg(false, 1), "n");
         vm.prank(OWNER);
-        d.setMarket(t, n, true);
+        d.setMarket(t, n, true, EnvKit.codeUidOf(address(d)));
         assertEq(d.tokenKind(t), 1, "KIND_SCAAS");
         assertEq(d.tokenKind(n), 1, "control: a NORMAL token");
     }
@@ -174,11 +240,11 @@ contract GovRegulatedBitsTest is GovRegulatedRows {
         NormalToken n = NormalToken(_rCreate(false, _rCfg(false, 1), "n"));
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(3)));
-        n.grantRole(3, nid(holder));
+        n.grantRole(3, nid(holder), EnvKit.codeUidOf(address(n)));
         WrappedToken w = WrappedToken(payable(_rCreate(true, _rCfg(true, 1), "w")));
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleWithoutFeature.selector, uint8(3)));
-        w.grantRole(3, nid(holder));
+        w.grantRole(3, nid(holder), EnvKit.codeUidOf(address(w)));
     }
 }
 

@@ -1,0 +1,114 @@
+ua-mtx-3p (group 3p, owner rulings 2026-11-10, before the SCaaS testnet reset 2): the UA verifiers drop the UA prefix
+(CTR-UA-41), the body modules split by function on every kind (CTR-TOK-30's Change), the PqChat topic name 1-512 B
+(CTR-CHAT-15's Change). Base ua-mtx-merge a168d28d, ua-mtx-merge merged at 394dd9cc (f255121f). Steps by gates.sh here; full
+output in the git-ignored <step>.log beside this file (a red first run kept as <step>.red.log). Foundry 1.8.5, solc 0.8.37,
+Amsterdam, default PQZ set n2304-kmax4096; every heavy run through scripts/capped (4 GB; the node 6 GB), one at a time.
+UNAUDITED.
+
+commits
+825925f2  item 3: PqChat topic name bound 1-128 -> 1-512 B
+1b746309  item 1: the UA verifiers drop the UA prefix (PqzKeyVerifier for UAPqzVerifier)
+394dd9cc  merge ua-mtx-merge (2ecd2caf, 54087e01, f255121f), no conflict
+7b4bdd33  item 2: body modules split by function (W wrap, R regulated, S was Q2)
+53f854d9  pins moved by the gates (PqChatTopics size / state gas, GovDeploy router address, regulated_kat.json)
+fc5fb743  test/t66b -> test/modules, script/t66b -> script/modules (owner ruling 2026-11-10, rename only)
+ec30fdfd  GovDeploy router pin moved by the rename (metadata hash)
+f585e093  node e2e harness: the body modules named in implArgs, the plain rows named (reds before 3p)
+
+step | commit | rc | counts
+generated faces: gen_faces.py --check; gen_set.py --all --check; the scripts' Python parses; test_vcheck.py | 7b4bdd33 | 0 | 27 files, 0 differ; 4 sets, 84 files; ok
+size: forge build src --sizes; size_gate.py, the old baseline (first) | 7b4bdd33 tree | 1 | 3 errors: the faces of 9, 11, 13 +318-321 B
+size: the same, the baseline moved (in 7b4bdd33) | 7b4bdd33 | 0 | 0 errors, 166 contracts
+forge test/pqchat PqTopicsTest, red first on the 128 bound | 825925f2 tree | 1 | 11 passed, 3 failed (bodiesAndRefs, longAboutAndNameChain, updateNameBound: PqTopicShape)
+forge test/pqchat PqTopicsTest | 825925f2 | 0 | 14 passed
+forge test/pqz PqzKeyVerifier + PqzNormal (item 1) | 1b746309 | 0 | 28 passed
+forge test/ua PQ / FROST / registry suites (item 1) | 1b746309 | 0 | 16 suites, 251 passed
+forge test/t66b, now test/modules (Diff, Modules, Paths, Groups; the differential against the pre-split releases) | 7b4bdd33 | 0 | 12 suites, 35 passed
+mutants (mutants.py, mutants.txt) | 7b4bdd33 | - | 11 of 11 killed, each alone, its files restored and checked byte-equal
+module probe: every module and face, deploy gas and opcode figures (probe/Probe3p.t.sol) | 7b4bdd33 | 0 | 58 modules + 12 faces, all within 60 M asked
+forge test/account | 7b4bdd33 | 0 | 98 passed
+forge test/as (first) | 7b4bdd33 | 1 | 462 passed, 1 failed (RegulatedKat: regulated_kat.json stale, the CREATE nonce +1)
+forge test/as | 53f854d9 tree | 0 | 463 passed
+forge test/confidential | 7b4bdd33 | 0 | 5 passed
+forge test/fork | 7b4bdd33 | 0 | 1 skipped (no fork RPC)
+forge test/hedera | 7b4bdd33 | 0 | 20 passed
+forge test/p6f | 7b4bdd33 | 0 | 4 passed
+forge test/pqchat (first) | 7b4bdd33 | 1 | 95 passed, 1 failed (PqChatGas test_gas_deployModule: PqChatTopics 16,398 != 16,396)
+forge test/pqchat | 53f854d9 tree | 0 | 96 passed
+forge test/liquidity | 7b4bdd33 | 0 | 90 passed, 1 skipped (the ffi case, next row)
+forge test/liquidity DexLiquidityMldsa --ffi | 53f854d9 tree | 0 | 2 passed
+forge test/wallet | 53f854d9 tree | 0 | 181 passed
+forge test/wrap | 53f854d9 tree | 0 | 278 passed
+forge test/governance (first) | 7b4bdd33 + the as / pqchat pins | 1 | 432 passed, 1 failed (GovDeploy router address: the metadata hash)
+forge test/governance | 53f854d9 tree | 0 | 433 passed
+forge test/merge | 53f854d9 tree | 0 | 341 passed
+forge test/metatx | 53f854d9 tree | 0 | 544 passed, 1 skipped
+forge test/pqzh | 53f854d9 tree | 0 | 42 passed
+forge test/v2 (LinkClosure, module-opcodes, Layout) | 53f854d9 tree | 0 | 655 passed
+forge test/zether | 53f854d9 tree | 0 | 441 passed, 4 skipped
+forge test/ua | 7b4bdd33 | 0 | 54 suites, 732 passed
+forge test/pqz | 53f854d9 | 0 | 598 passed, 4 skipped
+forge test/research | 53f854d9 | 0 | 359 passed, 7 skipped
+forge test/*.t.sol (copied to a sibling directory) | 53f854d9 | 0 | 29 passed
+test/helpers, test/vectors | - | - | no tests (support and data)
+forge build Deploy.s.sol and the on-chain scripts (Liquidity, WrapLimits, Misc, Dex, Gov, Tokens) | 53f854d9 | 0 | compiled
+four PQZ sets, test/pqz (script/pqz/at-set.sh; PqzSet.sol restored and checked after each) | 53f854d9 | 0 / 0 / 0 / 0 | n2048 600 passed 2 skipped; n2304 598 / 4; n2560 595 / 7; n2816 590 / 12
+four PQZ sets, test/research | 53f854d9 | 0 / 0 / 0 / 0 | n2048 362 passed 4 skipped; n2304 359 / 7; n2560 359 / 7; n2816 350 / 16
+node cargo test --lib (CAPPED_MEM=6G, alone) | 53f854d9 | 0 | 705 passed
+node cargo clippy --all-targets -- -D warnings | 53f854d9, f585e093 | 0 | clean
+node e2e, 22 tests in parallel (first) | 53f854d9 | 143 | OOM-killed at 6 GB (CI runs --test-threads=1; gates.sh does now)
+node e2e --test-threads=1 (second) | 53f854d9 | 101 | 16 passed, 6 failed, none from 3p: 4 DeployFailed (the harness released NormalToken / NormalPqzToken with implArgs empty, pre-T66b form), plain rows 32 != 30 (mtxLiquidity, PqChat remove), zether-cli not built
+node e2e --test-threads=1 | f585e093 | 0 | 22 passed; no anvil left
+clientkeys npm test | 53f854d9 | 0 | 322 tests: 320 passed, 2 skipped (regulated_kat.json's moved rows recomputed)
+ua-rs cargo test, clippy, --features signers / json / pq | 53f854d9 | 0 | 282 passed over 55 test binaries; clippy clean
+after the directory rename: FOUNDRY_TEST=test/modules | fc5fb743 | 0 | 12 suites, 35 passed
+after the rename: test/governance (first) | fc5fb743 | 1 | 432 passed, 1 failed (GovDeploy router address: the metadata hash)
+after the rename: test/governance | ec30fdfd | 0 | 433 passed
+after the rename: test/as, test/v2 | f585e093 | 0 | 463 passed; 655 passed
+after the rename: gen_faces.py --check; .github/ci_changes.py self-test; git grep '(script|test)/t66b' outside records | fc5fb743 | 0 | 27 files, 0 differ; ok; none
+docs_check / test_docs_check | this commit | 0 | 0 errors, 5 warnings (budgets), 16 notes / ok
+CI guards: git grep '/[t]mp/' | this commit | 0 | clean
+
+sizes (runtime B, forge build src --sizes) | before (a168d28d) -> after
+W 9 / 11 / 13 | 32,226 / 33,216 / 33,407 -> 27,239 / 28,229 / 28,420 (-4,987 each; module line 33,780)
+R 9 / 11 / 13 | new 11,999 / 11,999 / 12,048
+R 8 / 10 / 12 (was W) | 11,778 / 11,778 / 11,827 -> 11,778 / 11,778 / 11,820
+S 5 / 13 (was Q2) | 18,216 / 19,038 -> 18,216 / 19,038
+faces 9 / 11 / 13 | 22,932 / 26,672 / 29,474 -> 23,250 / 26,992 / 29,795 (release line 33,594)
+faces 0-5, 8, 10, 12; W 1, 3, 5 | unchanged
+PqChatTopics | 16,396 -> 16,398 (the 512 B bound)
+
+deploy gas (probe/Probe3p.t.sol: each its own CREATE2, asked = (regular + state) x 1.05; every row regular x 1.05 < 2^24)
+R 8 / 10 / 12 | 20,168,205 / 20,170,390 / 20,240,047
+R 9 / 11 / 13 | 20,538,534 / 20,538,534 / 20,621,622
+W 9 / 11 / 13 | 46,074,538 / 47,732,694 / 48,052,643
+S 5 / 13 | 30,949,943 / 32,336,022
+faces 9 / 11 / 13 | 39,517,662 / 45,797,882 / 50,512,802 (+ the factory frame, about 0.31 M)
+largest module | NormalPqzRegulatedTokenQ 54,760,898 (unchanged)
+
+pins moved (old -> new, the reason in each commit)
+size-baseline.json: WrappedRegulatedToken 22,932 -> 23,250, WrappedZetherRegulatedToken 26,672 -> 26,992, WrappedPqzRegulatedToken
+  29,474 -> 29,795; WrappedRegulatedTokenW 32,226 -> 27,239, WrappedZetherRegulatedTokenW 33,216 -> 28,229, WrappedPqzRegulatedTokenW
+  33,407 -> 28,420 (7b4bdd33)
+module-opcodes.json: W 9 / 11 / 13 [26, 0] -> [21, 0]; R 9 / 11 / 13 [8, 0] new; W -> R of 8 / 10 / 12 and Q2 -> S of 5 / 13
+  renamed, figures unchanged (7b4bdd33)
+test/t66b/Modules.t.sol (now test/modules/) module rows 55 -> 58 (7b4bdd33)
+PqChatGas: PqChatTopics runtime 16,396 -> 16,398, state 25,269,480 -> 25,272,540 (53f854d9)
+GovDeploy router 0x1b8ae68e34f2710b8ba48b33fD53942F3b1a47A0 -> 0xe3E535A28d5aBCa856dE18bdc46AaD334ab71f42 (53f854d9, item 1's
+  comment in IFactoryToken) -> 0xb0E39bCa5EA2C70840e28Ba356606f607F54a1D3 (ec30fdfd, the rename's comment in UAMetaTxBase)
+regulated_kat.json: the five `commit` rows' accounts and commits (the fixture's CREATE nonce +1: kind 9's R; 53f854d9)
+e2e plain rows 30 -> 32 (named: mtxLiquidity, remove; f585e093)
+layout pins: none (each module has its core's layout)
+
+mutants (mutants.py; mutant | tests that went red | rc): 11 of 11 killed
+M-T1 | test_topics_bodiesAndRefs, test_topics_updateNameBound | 1
+M-T2 | test_topics_bodiesAndRefs, test_topics_longAboutAndNameChain | 1
+M-T3 | test_topics_updateNameBound | 1
+M-R0 | test_g_regulatedEntriesRunInR, test_g_stateEntriesRunInS, test_m_layoutEqualsTheKind | 1
+M-R1 | test_g_everyStubForwardsToItsModule | 1
+M-R2 | test_g_regulatedEntriesRunInR, test_m_layoutEqualsTheKind | 1
+M-R3 | test_g_everyStubForwardsToItsModule, test_m_constructorChecksEveryModule | 1
+M-R4 | test_g_everyStubForwardsToItsModule | 1
+M-W1 | test_g_regulatedEntriesRunInR | 1
+M-S1 | test_g_everyStubForwardsToItsModule | 1
+M-S2 | test_g_stateEntriesRunInS | 1

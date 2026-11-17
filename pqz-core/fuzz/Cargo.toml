@@ -15,6 +15,8 @@ crate-type = ["staticlib"]
 # the Rust PQZL core, pinned here (default-features off, pqzl-rust on): the production core (CTR-PQZ-09) even if
 # pqz-ffi's default feature changes; mode pqzl-diff adds the C core (feature pqzl-diff = pqz-ffi/pqzl-c)
 pqz-ffi = { path = "../ffi", default-features = false, features = ["fuzz", "pqzl-rust"] }
+# target `offchain`: the off-chain verifier's entry (three-key spec K3-4), on the same pqz-ffi build
+pqz-offchain = { path = "../ffi/offchain", default-features = false }
 
 [features]
 # the parameter set (pqz-core/params/sets/<set>, one per build): n2304-kmax4096 by default (pqz-ffi's); build.sh: PQZ_SET

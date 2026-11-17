@@ -1597,7 +1597,7 @@ mod tests {
     /// `0x0::meta::relay_pay_meta<0x2::sui::SUI>(Input 3..10, Result 0, Input 11)`.
     #[test]
     fn sui_pay_meta_job_builds_ptb() {
-        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
+        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap();
         let h = |v: &Value| alloy::hex::decode(v.as_str().unwrap().trim_start_matches("0x")).unwrap();
         assert_eq!(rows.len(), 6);
         for r in &rows {

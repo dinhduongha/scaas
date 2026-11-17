@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./PqzVerdicts.sol";
 import {PqzRegistryBase, PQZ_UID, PQZL_ID} from "./PqzRegistryBase.sol";
 import {PqzCtHarness} from "./PqzCtHarness.sol";
 import {PqzArgs} from "./PqzArgs.sol";
@@ -19,9 +20,12 @@ import {PqzCore} from "../../../src/pqz/PqzCore.sol";
 import {PqzSet} from "../../../src/pqz/PqzSet.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
+import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
+import {UARegistry} from "../../../src/ua/UARegistry.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {Catalogue, pqzEnv} from "../../helpers/Catalogue.sol";
 import {nid} from "../../helpers/Ids.sol";
+import {EnvKit} from "../../helpers/EnvKit.sol";
 
 /// @notice The PQZ token stack of chain 7622 in forge (P6g plan D6): the gen-1 registry (`PqzRegistryBase`), `OpenFactory`
 ///         with the PQZ gate on, `NormalPqzToken` clones. The `PQZ` precompile answers 1 for ops 1, 2, 4, 5 unless
@@ -31,7 +35,7 @@ import {nid} from "../../helpers/Ids.sol";
 abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     OpenFactory internal factory;
     NormalPqzToken internal normalImpl;
-    PqzLayer internal tok;
+    NormalPqzToken internal tok;
     PqzCtHarness internal ct;
     address internal registrar = address(0xF00D);
     uint256 internal constant SCALE = 10_000;
@@ -49,6 +53,18 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     uint256 internal minted;
     uint256 internal minDecoy; // the token's `minDecoyFee` (op 7)
     uint256 internal decoy; // the sender's per-leg `decoyFee` in an op 7 payload
+    // group 3f (PQZ verifier mode spec §3): the next token's `pqzVerifyMode`, verifier UA and fixed flag (PRECOMPILE: 0)
+    uint8 internal vMode;
+    bytes32 internal vUA;
+    bool internal vFixed;
+    // group 3h (pqz-proof-path spec §4.1): the next token's `proofStore` (0 `NONE` by default, 1 `LOG`)
+    uint8 internal pStore;
+    // round 3t (CTR-PQZ-36): the next token's `verifierFee` and `verifierFeeMax` (`OFFCHAIN` only; 0 by default)
+    uint64 internal vFee;
+    uint64 internal vFeeMax;
+    // the three-key model (CTR-PQZ-37): the next token's `pqzOwnKey` and `pqzOpening` (`OFFCHAIN` only)
+    bool internal vOwnKey;
+    bool internal vOpening;
 
     /// the client's view of each account: `acc` and every entry ever appended (TRIVIAL amounts in `triv`)
     mapping(bytes32 => bytes) internal accOf;
@@ -60,13 +76,13 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     function _stack() internal virtual {
         _registryStack();
         ct = new PqzCtHarness();
-        factory = new OpenFactory(registrar, PQZ_UID, 0);
+        factory = EnvKit.factory(registrar, PQZ_UID, 0);
         // plan 5g-Z2: the PQZL release, its verifier the env's (CTR-ZTH-20)
         normalImpl = NormalPqzToken(Catalogue.release(factory, IOpenFactory.TokenKind.NORMAL_PQZ, 1,
             pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NormalPqzToken).creationCode));
         vm.startPrank(registrar);
-        factory.setKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true);
-        factory.setKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true);
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.NORMAL_PQZ, true, EnvKit.uidOf(address(factory)));
+        factory.setTokenKindEnabled(IOpenFactory.TokenKind.WRAPPED_PQZ, true, EnvKit.uidOf(address(factory)));
         vm.stopPrank();
         for (uint8 op = 1; op <= 5; ++op) if (op != 3) _mockOp(op, 1);
         txStmt = _vecHex("statement_transfer.json", ".rows[0].stmt");
@@ -86,12 +102,36 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         c.lockedFeatures = 1 << GovernanceBits.MINTABLE; // no owner: the minter survives creation on a locked bit (B-06, GD-14)
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
-            withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, minDecoy
+            withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, minDecoy, vMode, vUA, vFixed, pStore, vFee, vFeeMax,
+            vOwnKey || (vMode == PqzCore.OFFCHAIN && !vOpening), vOpening
         );
     }
 
-    function _newToken(bytes32 s) internal returns (PqzLayer) {
-        return PqzLayer(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), s));
+    /// A `NORMAL_PQZ` token of the fixture's factory with the next token's settings. `OFFCHAIN` without either flag set:
+    /// class `offchain-token` without the opening (CTR-PQZ-37: the registry-key form cannot be created), and the four
+    /// holders' records of its scope registered (scope 0 once for `offchain-shared`).
+    function _newToken(bytes32 s) internal returns (NormalPqzToken t) {
+        if (vMode == PqzCore.OFFCHAIN && !vOwnKey && vOpening) _shared(); // the auditor's record is read at init
+        t = NormalPqzToken(factory.createToken(IOpenFactory.TokenKind.NORMAL_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), s));
+        _holders(address(t));
+    }
+
+    bool internal sharedDone; // the four holders' `offchain-shared` records (scope 0) registered
+
+    /// The records `t`'s holders need by its class (none for `registry`).
+    function _holders(address t) internal {
+        if (t.code.length == 0) return; // an expected refusal of the creation returned no token
+        IPqzToken.PqzVerifyConfig memory c = IPqzToken(t).pqzVerifyConfig();
+        if (c.pqzVerifyMode != PqzCore.OFFCHAIN) return;
+        if (c.pqzOwnKey) _scopedAll(t, c.pqzOpening);
+        else _shared();
+    }
+
+    /// The four holders' `offchain-shared` records (scope 0, with the opening KEM key), once.
+    function _shared() internal {
+        if (sharedDone) return;
+        sharedDone = true;
+        _scopedAll(address(0), true);
     }
 
     function _releaseWrapped() internal {
@@ -107,7 +147,9 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         c.roles.minter = 0;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
-        return WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), s)));
+        WrappedPqzToken w = WrappedPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_PQZ, 1, abi.encode(c), s)));
+        _holders(address(w));
+        return w;
     }
 
     // ------------------------------------------------------------------ ciphertexts
@@ -156,7 +198,7 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     }
 
     function _memo() internal view returns (bytes memory) {
-        return bytes.concat(salt, _slice(_blob(0x3e30, 64), 0, 41));
+        return bytes.concat(salt, _slice(_blob(0x3e30, 64), 0, PqzCore.SEALED));
     }
 
     // ------------------------------------------------------------------ the client
@@ -177,8 +219,8 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     /// The client's mirror of a TRIVIAL entry (D18), the merge rule computed here, not read from the token: merge into
     /// the tail when it is TRIVIAL, of this block and at an index `≥ max(floor, rolled)`, else append; the token must
     /// agree. `pend` holds "" and `triv` the amount (16.5 KB of test storage per entry would cost ≈ 11 M gas).
-    function _mirrorTrivial(PqzLayer t, bytes32 ua, uint256 amount) internal {
-        IPqzToken.AccountState memory a = t.pqzAccount(ua);
+    function _mirrorTrivial(NormalPqzToken t, bytes32 ua, uint256 amount) internal {
+        IPqzToken.AccountState memory a = t.pqzAccount(ua, 0);
         uint256 n = pend[ua].length;
         uint256 lo = a.floor > a.rolled ? a.floor : a.rolled;
         if (n != 0 && pend[ua][n - 1].length == 0 && trivBlk[ua][n - 1] == block.number && n - 1 >= lo) {
@@ -219,35 +261,35 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
         return ct.sumMixed(base, cs, am);
     }
 
-    function _public(PqzLayer t, address to, uint256 units) internal {
-        NormalPqzToken(address(t)).mint(to, units);
+    function _public(NormalPqzToken t, address to, uint256 units) internal {
+        NormalPqzToken(address(t)).mint(to, units, EnvKit.codeUidOf(address(t)));
         minted += units;
     }
 
     /// Shield `amount` from the test's public balance (a TRIVIAL entry, D18).
-    function _fund(PqzLayer t, bytes32 ua, uint256 amount) internal {
+    function _fund(NormalPqzToken t, bytes32 ua, uint256 amount) internal {
         _public(t, address(this), amount * SCALE);
         t.mtxShield(ua, amount);
         _mirrorTrivial(t, ua, amount);
     }
 
     /// A direct transfer at `p = pendingCount` (the client's rule), `shieldIn = 0`, no hint; the client's mirror.
-    function _transfer(PqzLayer t, bytes32 from, bytes32 to, bytes32 ben, uint256 seed, bool withAud)
+    function _transfer(NormalPqzToken t, bytes32 from, bytes32 to, bytes32 ben, uint256 seed, bool withAud)
         internal returns (bytes32 ref, bytes memory out)
     {
         out = _out(seed, withAud);
         bytes memory pl = _payloadFor(t, from, to, ben, out);
-        ref = t.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "");
+        ref = t.mtxConfidentialTransferSingle(_ts(pl), hex"c0de", _pqAuth(), "", noVerdict());
         _afterDebit(from, _cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, PqzCt.V));
         pend[to].push(_cut(out, 0, PqzCt.CT));
         if (ben != 0) feeIn[ben] += t.confidentialFee(); // txFee: the beneficiary's public balance (D19)
     }
 
-    function _payloadFor(PqzLayer t, bytes32 from, bytes32 to, bytes32 ben, bytes memory out)
+    function _payloadFor(NormalPqzToken t, bytes32 from, bytes32 to, bytes32 ben, bytes memory out)
         internal view returns (bytes memory)
     {
         bytes memory memo = t.disclosureMode() == ZetherTypes.DisclosureMode.COMPACT ? _memo() : bytes("");
-        return _payload(t.pqzAccount(from).pendingCount, 0, from, to, ben, out, memo);
+        return _payload(t.pqzAccount(from, 0).pendingCount, 0, from, to, ben, out, memo);
     }
 
     /// The client's `acc` after any debit: `u ‖ v_f` (D4: a debit below `rolled` un-rolls, it keeps nothing).
@@ -256,23 +298,23 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     }
 
     /// Both halves of the account's `acc` words (D8), once.
-    function _prepare(PqzLayer t, bytes32 ua) internal {
-        uint8 f = t.pqzAccount(ua).flags;
-        if (f & 2 == 0) t.mtxPrepareAcc(ua, 0);
-        if (f & 4 == 0) t.mtxPrepareAcc(ua, 1);
+    function _prepare(NormalPqzToken t, bytes32 ua) internal {
+        uint8 f = t.pqzAccount(ua, 0).flags;
+        if (f & 2 == 0) t.mtxPrepareAcc(ua, 0, 0);
+        if (f & 4 == 0) t.mtxPrepareAcc(ua, 0, 1);
     }
 
     /// Anyone's rollover of up to `n` entries after `ROLL_AGE` blocks; the client's mirror adds what was rolled.
-    function _roll(PqzLayer t, bytes32 ua, uint256 n) internal {
+    function _roll(NormalPqzToken t, bytes32 ua, uint256 n) internal {
         _prepare(t, ua);
         vm.roll(block.number + ROLL_AGE);
-        uint256 r = t.pqzAccount(ua).rolled;
-        t.mtxRollOver(ua, n);
-        accOf[ua] = _sumRange(_acc(ua), ua, r, t.pqzAccount(ua).rolled, 0);
+        uint256 r = t.pqzAccount(ua, 0).rolled;
+        t.mtxRollOver(ua, 0, n);
+        accOf[ua] = _sumRange(_acc(ua), ua, r, t.pqzAccount(ua, 0).rolled, 0);
     }
 
     /// D19: shields, unshields and fees move public units to / from `SHIELD_POOL`; nothing is minted or burnt.
-    function _assertConservation(PqzLayer t) internal view {
+    function _assertConservation(NormalPqzToken t) internal view {
         assertEq(t.totalSupply(), minted, "totalSupply = created");
         assertEq(t.balanceOf(MetaTxLib.SHIELD_POOL), t.totalShielded() * SCALE, "pool = totalShielded * scale");
     }
@@ -285,6 +327,53 @@ abstract contract PqzFixture is PqzRegistryBase, PqzArgs {
     /// A relayed transfer's binding word: the envelope's with the mode folded in (plan 5h D15, review L1).
     function _relayed(bytes32 envelope, ZetherTypes.TransferMode m) internal pure returns (bytes32) {
         return keccak256(abi.encode(envelope, uint8(m)));
+    }
+
+    /// @dev `executeMetaTransaction`'s binding (CTR-PQZ-21: `SCAAS-PQZ-ENVELOPE-V1` over the address `MetaTransaction`), as
+    ///      a client computes it: the token has no view of it since ua-mtx-merge T5 (R36; its `envelopeBinding` is the UA
+    ///      one of the merged entries).
+    function _addrBinding(NormalPqzToken t, MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
+        (address r, address f) = MetaTxLib.canon(m);
+        return keccak256(bytes.concat(
+            abi.encode(keccak256("SCAAS-PQZ-ENVELOPE-V1"), block.chainid, t.chainUid(), address(t), m.from, m.batch),
+            abi.encode(m.nonce, m.validUntil, m.mode, r, m.fee, f)));
+    }
+
+    // ------------------------------------------------------------------ the three-key model (CTR-PQZ-37, CTR-UA-43)
+
+    /// the next scoped version of `(ua, scope)` the fixture registers
+    mapping(bytes32 => mapping(address => uint64)) internal scopedNext;
+
+    /// A scoped PQZ record of `ua` at its next version on the fixture's registry: `pk`, the filler proof `0xaa` stored too
+    /// (op 3 mocked, so it is proven), the opening KEM key when `kem` (scheme 1, filler bytes); the holder's filler ML-DSA
+    /// signature (mocked) over the record.
+    function _scoped(bytes32 ua, address scope, bytes memory pk, bool kem) internal returns (uint64 v) {
+        return _scopedOn(reg, ua, scope, pk, kem, true);
+    }
+
+    /// `_scoped` on registry `r`, its proof stored only when `pop`.
+    function _scopedOn(UARegistry r, bytes32 ua, address scope, bytes memory pk, bool kem, bool pop) internal returns (uint64 v) {
+        v = scopedNext[ua][scope]++;
+        IUARegistry.KemKey memory k;
+        if (kem) (k.scheme, k.mlkemEk, k.x25519) = (1, _blob(uint256(ua) ^ v, 1568), keccak256(abi.encode(ua, scope, v)));
+        r.setPqzScopedKey(ua, scope, v, pk, keccak256(hex"aa"), k, type(uint64).max, _pqAuth());
+        if (pop) r.storePqzScopedPop(ua, scope, v, hex"aa");
+    }
+
+    /// A key of the scoped space: `PK` canonical bytes, coefficient 1 = `seed` (never a fixture's registry key).
+    function _spk(uint256 seed) internal pure returns (bytes memory k) {
+        k = new bytes(PqzCt.PK);
+        (k[14], k[15]) = (bytes1(uint8(seed >> 8)), bytes1(uint8(seed)));
+    }
+
+    uint256 internal keySeed; // distinct key bytes for every record the fixture registers (UAKeyInUse spans every scope)
+
+    /// The fixture's four holders' scoped records for `scope`, each with fresh key bytes, the opening KEM key when `kem`.
+    function _scopedAll(address scope, bool kem) internal {
+        _scoped(alice, scope, _spk(++keySeed), kem);
+        _scoped(bob, scope, _spk(++keySeed), kem);
+        _scoped(carol, scope, _spk(++keySeed), kem);
+        _scoped(aud, scope, _spk(++keySeed), kem);
     }
 
     function _cut(bytes memory b, uint256 off, uint256 len) internal pure returns (bytes memory) {

@@ -1,8 +1,8 @@
 
-== /tmp/w/txm2_params.sage
+== <tmp>/w/txm2_params.sage
 LaZer codegen as is: kmsis 23, kmlwe 33, m2 68, B 2^35.99, D 11, gamma 704254: MSIS beta 456, MLWE uSVP beta 470, proof ~45518 B
   pqz_delta 1.00366, kmlwe_min 33: kmsis 23, kmlwe 33, m2 68, B 2^35.99, D 11, gamma 704254: MSIS beta 456, MLWE beta 470, proof ~45518 B
-=> /tmp/w/txm2_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 68, D = 11, gamma = 704254, codegen proof size ~45518 B)
+=> <tmp>/w/txm2_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 68, D = 11, gamma = 704254, codegen proof size ~45518 B)
 lattice  :: rop: ≈2^133.2, red: ≈2^133.2, δ: 1.003634, β: 456, d: 3435, tag: euclidean
   MSIS(23,217,2^35.99) classical: 133.2 (lattice, beta 456)
 usvp                 :: rop: ≈2^137.2, red: ≈2^137.2, δ: 1.003557, β: 470, d: 4031, tag: usvp
@@ -18,10 +18,10 @@ dual                 :: rop: ≈2^126.1, mem: ≈2^107.7, m: ≈2^11.0, β: 476,
 dual_hybrid          :: rop: ≈2^123.0, red: ≈2^123.0, guess: ≈2^113.5, β: 464, p: 3, ζ: 0, t: 60, β': 464, N: ≈2^94.4, m: ≈2^11.0
   MLWE(33,35,[-1,1]) quantum: 123.0 (dual_hybrid); uSVP beta 470
 
-== /tmp/w/txm4_params.sage
+== <tmp>/w/txm4_params.sage
 LaZer codegen as is: kmsis 23, kmlwe 33, m2 68, B 2^36.03, D 11, gamma 704254: MSIS beta 454, MLWE uSVP beta 470, proof ~47278 B
   pqz_delta 1.00366, kmlwe_min 33: kmsis 23, kmlwe 33, m2 68, B 2^36.03, D 11, gamma 704254: MSIS beta 454, MLWE beta 470, proof ~47278 B
-=> /tmp/w/txm4_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 68, D = 11, gamma = 704254, codegen proof size ~47278 B)
+=> <tmp>/w/txm4_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 68, D = 11, gamma = 704254, codegen proof size ~47278 B)
 lattice  :: rop: ≈2^132.6, red: ≈2^132.6, δ: 1.003645, β: 454, d: 3431, tag: euclidean
   MSIS(23,223,2^36.03) classical: 132.6 (lattice, beta 454)
 usvp                 :: rop: ≈2^137.2, red: ≈2^137.2, δ: 1.003557, β: 470, d: 4031, tag: usvp
@@ -37,10 +37,10 @@ dual                 :: rop: ≈2^126.1, mem: ≈2^107.7, m: ≈2^11.0, β: 476,
 dual_hybrid          :: rop: ≈2^123.0, red: ≈2^123.0, guess: ≈2^113.5, β: 464, p: 3, ζ: 0, t: 60, β': 464, N: ≈2^94.4, m: ≈2^11.0
   MLWE(33,35,[-1,1]) quantum: 123.0 (dual_hybrid); uSVP beta 470
 
-== /tmp/w/txm8_params.sage
+== <tmp>/w/txm8_params.sage
 LaZer codegen as is: kmsis 25, kmlwe 33, m2 70, B 2^37.47, D 13, gamma 3122486: MSIS beta 458, MLWE uSVP beta 470, proof ~64578 B
   pqz_delta 1.00366, kmlwe_min 33: kmsis 25, kmlwe 33, m2 70, B 2^37.47, D 13, gamma 3122486: MSIS beta 458, MLWE beta 470, proof ~64578 B
-=> /tmp/w/txm8_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 25, m2 = 70, D = 13, gamma = 3122486, codegen proof size ~64578 B)
+=> <tmp>/w/txm8_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 25, m2 = 70, D = 13, gamma = 3122486, codegen proof size ~64578 B)
 lattice  :: rop: ≈2^133.7, red: ≈2^133.7, δ: 1.003622, β: 458, d: 3586, tag: euclidean
   MSIS(25,301,2^37.47) classical: 133.7 (lattice, beta 458)
 usvp                 :: rop: ≈2^137.2, red: ≈2^137.2, δ: 1.003557, β: 470, d: 4031, tag: usvp
@@ -56,10 +56,10 @@ dual                 :: rop: ≈2^126.1, mem: ≈2^107.7, m: ≈2^11.0, β: 476,
 dual_hybrid          :: rop: ≈2^123.0, red: ≈2^123.0, guess: ≈2^113.5, β: 464, p: 3, ζ: 0, t: 60, β': 464, N: ≈2^94.4, m: ≈2^11.0
   MLWE(33,37,[-1,1]) quantum: 123.0 (dual_hybrid); uSVP beta 470
 
-== /tmp/w/txm20_params.sage
+== <tmp>/w/txm20_params.sage
 LaZer codegen as is: kmsis 23, kmlwe 33, m2 68, B 2^35.98, D 11, gamma 704254: MSIS beta 456, MLWE uSVP beta 470, proof ~44814 B
   pqz_delta 1.00366, kmlwe_min 33: kmsis 23, kmlwe 33, m2 68, B 2^35.98, D 11, gamma 704254: MSIS beta 456, MLWE beta 470, proof ~44814 B
-=> /tmp/w/txm20_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 68, D = 11, gamma = 704254, codegen proof size ~44814 B)
+=> <tmp>/w/txm20_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 68, D = 11, gamma = 704254, codegen proof size ~44814 B)
 lattice  :: rop: ≈2^133.2, red: ≈2^133.2, δ: 1.003634, β: 456, d: 3437, tag: euclidean
   MSIS(23,215,2^35.98) classical: 133.2 (lattice, beta 456)
 usvp                 :: rop: ≈2^137.2, red: ≈2^137.2, δ: 1.003557, β: 470, d: 4031, tag: usvp
@@ -75,10 +75,10 @@ dual                 :: rop: ≈2^126.1, mem: ≈2^107.7, m: ≈2^11.0, β: 476,
 dual_hybrid          :: rop: ≈2^123.0, red: ≈2^123.0, guess: ≈2^113.5, β: 464, p: 3, ζ: 0, t: 60, β': 464, N: ≈2^94.4, m: ≈2^11.0
   MLWE(33,35,[-1,1]) quantum: 123.0 (dual_hybrid); uSVP beta 470
 
-== /tmp/w/txm40_params.sage
+== <tmp>/w/txm40_params.sage
 LaZer codegen as is: kmsis 23, kmlwe 33, m2 68, B 2^36.00, D 11, gamma 704254: MSIS beta 455, MLWE uSVP beta 470, proof ~45870 B
   pqz_delta 1.00366, kmlwe_min 33: kmsis 23, kmlwe 33, m2 68, B 2^36.00, D 11, gamma 704254: MSIS beta 455, MLWE beta 470, proof ~45870 B
-=> /tmp/w/txm40_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 68, D = 11, gamma = 704254, codegen proof size ~45870 B)
+=> <tmp>/w/txm40_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 68, D = 11, gamma = 704254, codegen proof size ~45870 B)
 lattice  :: rop: ≈2^132.9, red: ≈2^132.9, δ: 1.003639, β: 455, d: 3434, tag: euclidean
   MSIS(23,219,2^36.00) classical: 132.9 (lattice, beta 455)
 usvp                 :: rop: ≈2^137.2, red: ≈2^137.2, δ: 1.003557, β: 470, d: 4031, tag: usvp
@@ -94,10 +94,10 @@ dual                 :: rop: ≈2^126.1, mem: ≈2^107.7, m: ≈2^11.0, β: 476,
 dual_hybrid          :: rop: ≈2^123.0, red: ≈2^123.0, guess: ≈2^113.5, β: 464, p: 3, ζ: 0, t: 60, β': 464, N: ≈2^94.4, m: ≈2^11.0
   MLWE(33,35,[-1,1]) quantum: 123.0 (dual_hybrid); uSVP beta 470
 
-== /tmp/w/txm80_params.sage
+== <tmp>/w/txm80_params.sage
 LaZer codegen as is: kmsis 25, kmlwe 33, m2 70, B 2^37.43, D 13, gamma 3122486: MSIS beta 459, MLWE uSVP beta 470, proof ~61634 B
   pqz_delta 1.00366, kmlwe_min 33: kmsis 25, kmlwe 33, m2 70, B 2^37.43, D 13, gamma 3122486: MSIS beta 459, MLWE beta 470, proof ~61634 B
-=> /tmp/w/txm80_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 25, m2 = 70, D = 13, gamma = 3122486, codegen proof size ~61634 B)
+=> <tmp>/w/txm80_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 25, m2 = 70, D = 13, gamma = 3122486, codegen proof size ~61634 B)
 lattice  :: rop: ≈2^134.0, red: ≈2^134.0, δ: 1.003617, β: 459, d: 3590, tag: euclidean
   MSIS(25,293,2^37.43) classical: 134.0 (lattice, beta 459)
 usvp                 :: rop: ≈2^137.2, red: ≈2^137.2, δ: 1.003557, β: 470, d: 4031, tag: usvp
@@ -113,10 +113,10 @@ dual                 :: rop: ≈2^126.1, mem: ≈2^107.7, m: ≈2^11.0, β: 476,
 dual_hybrid          :: rop: ≈2^123.0, red: ≈2^123.0, guess: ≈2^113.5, β: 464, p: 3, ζ: 0, t: 60, β': 464, N: ≈2^94.4, m: ≈2^11.0
   MLWE(33,37,[-1,1]) quantum: 123.0 (dual_hybrid); uSVP beta 470
 
-== /tmp/w/txm16_params.sage
+== <tmp>/w/txm16_params.sage
 LaZer codegen as is: kmsis 25, kmlwe 33, m2 70, B 2^37.64, D 11, gamma 704254: MSIS beta 452, MLWE uSVP beta 470, proof ~96658 B
   pqz_delta 1.00366, kmlwe_min 33: kmsis 25, kmlwe 33, m2 70, B 2^37.64, D 11, gamma 704254: MSIS beta 452, MLWE beta 470, proof ~96658 B
-=> /tmp/w/txm16_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 25, m2 = 70, D = 11, gamma = 704254, codegen proof size ~96658 B)
+=> <tmp>/w/txm16_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 25, m2 = 70, D = 11, gamma = 704254, codegen proof size ~96658 B)
 lattice  :: rop: ≈2^132.0, red: ≈2^132.0, δ: 1.003656, β: 452, d: 3570, tag: euclidean
   MSIS(25,453,2^37.64) classical: 132.0 (lattice, beta 452)
 usvp                 :: rop: ≈2^137.2, red: ≈2^137.2, δ: 1.003557, β: 470, d: 4031, tag: usvp
@@ -132,10 +132,10 @@ dual                 :: rop: ≈2^126.1, mem: ≈2^107.7, m: ≈2^11.0, β: 476,
 dual_hybrid          :: rop: ≈2^123.0, red: ≈2^123.0, guess: ≈2^113.5, β: 464, p: 3, ζ: 0, t: 60, β': 464, N: ≈2^94.4, m: ≈2^11.0
   MLWE(33,37,[-1,1]) quantum: 123.0 (dual_hybrid); uSVP beta 470
 
-== /tmp/w/txm160_params.sage
+== <tmp>/w/txm160_params.sage
 LaZer codegen as is: kmsis 25, kmlwe 33, m2 70, B 2^37.61, D 12, gamma 1408508: MSIS beta 453, MLWE uSVP beta 470, proof ~90570 B
   pqz_delta 1.00366, kmlwe_min 33: kmsis 25, kmlwe 33, m2 70, B 2^37.61, D 12, gamma 1408508: MSIS beta 453, MLWE beta 470, proof ~90570 B
-=> /tmp/w/txm160_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 25, m2 = 70, D = 12, gamma = 1408508, codegen proof size ~90570 B)
+=> <tmp>/w/txm160_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 25, m2 = 70, D = 12, gamma = 1408508, codegen proof size ~90570 B)
 lattice  :: rop: ≈2^132.3, red: ≈2^132.3, δ: 1.003650, β: 453, d: 3573, tag: euclidean
   MSIS(25,437,2^37.61) classical: 132.3 (lattice, beta 453)
 usvp                 :: rop: ≈2^137.2, red: ≈2^137.2, δ: 1.003557, β: 470, d: 4031, tag: usvp

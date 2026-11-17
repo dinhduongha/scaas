@@ -3,7 +3,8 @@ pragma solidity ^0.8.24;
 
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 
-/// @title The meta-transaction surface of every SCaaS contract on `MetaTxBase` (metatx.md, Interfaces).
+/// @title The meta-transaction core of every SCaaS contract on `MetaTxBase` (metatx.md, Interfaces; ua-mtx-merge MD-1): the
+///        wallets add the address entries (`IMetaTxAddress`), tokens and the router the `bytes32` ones (`UAMetaTxBase`).
 interface IMetaTx {
     event MetaTransactionExecuted(address indexed from, address indexed relayer, uint256 indexed batch,
                                   uint256 nonce, bytes32 digest, address feeRecipient, uint256 fee);
@@ -20,17 +21,12 @@ interface IMetaTx {
     error Reentrancy();
     error SelfSender();
     error MtxBatchEmpty();
-    /// @notice The selector may not run inside `mtxBatch` / `uaBatch` (the PQZ ops, CTR-PQZ-21).
+    /// @notice The selector may not run inside `mtxBatch` (the PQZ ops, CTR-PQZ-21).
     error MtxNotBatchable(bytes4 selector);
     error MtxBatchLengthMismatch();
 
-    function mtxNonce(address from, uint256 batch) external view returns (uint256);
-    function mtxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32);
-    function mtxExecute(MetaTxLib.MetaTransaction calldata m, bytes calldata signature) external returns (bytes memory);
     function executeMetaTransaction(MetaTxLib.MetaTransaction calldata m, bytes calldata signature)
         external returns (bool success);
-    function mtxBatch(MetaTxLib.MetaTransaction[] calldata ms, bytes[] calldata signatures) external returns (bool);
-    function mtxCancelNonce(MetaTxLib.Envelope calldata e, uint256 lane, bytes calldata sig) external returns (bytes memory);
     function mtxSelectors()
         external view returns (bytes4[] memory selectors, uint8[] memory feeClass, uint8[] memory amountArg);
     function chainUid() external view returns (bytes32);

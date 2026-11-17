@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
+import {IMetaTx} from "../metatx/IMetaTx.sol";
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {SmartKeyAccount, SubjectKey} from "./SmartKeyAccount.sol";

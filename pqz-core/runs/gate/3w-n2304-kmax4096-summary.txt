@@ -1,0 +1,29 @@
+# gate 3w-n2304-kmax4096 (set n2304-kmax4096): f3c9b7dcb2a7ffcd3af88ccbb1dda9dbd6a5def6, 2026-11-13T03:28Z
+set n2304-kmax4096
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== ct
+   ok
+== ub
+   ok
+== diff
+   ok
+== fnv
+   ok
+== vectors
+   FAILED (rc=1)
+== ffi
+   ok
+== rust
+   ok
+== cargo
+   ok
+== xcheck
+   ok
+== fuzz
+   ok
+gate 3w-n2304-kmax4096 (set n2304-kmax4096): FAIL

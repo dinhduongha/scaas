@@ -1,0 +1,19 @@
+# gate 3zh-core-g1 (set n2304-kmax4096): e67d9e8578321acb6d6ccbf83cfc78c65af38521, 2026-11-15T07:35Z
+set n2304-kmax4096
+== kat
+   ok (resumed: passed earlier at this tree)
+== tbox
+   ok (resumed: passed earlier at this tree)
+== sv
+   ok (resumed: passed earlier at this tree)
+== fnv
+   ok (resumed: passed earlier at this tree)
+== vectors
+   ok (resumed: passed earlier at this tree)
+== ffi
+   ok
+== rust
+   ok (resumed: passed earlier at this tree)
+== fuzz
+   ok (resumed: passed earlier at this tree)
+gate 3zh-core-g1 (set n2304-kmax4096): PASS

@@ -1,0 +1,2 @@
+forwarded 12 definitions: MetaTokenBase.metaPayId, MetaTokenBase.mtxPay, MetaTokenBase.mtxPayReceiverFee, MetaTokenBase.mtxRelayFee, MetaTokenBase.payLane, MetaTokenBase.payWithFee, MetaTokenBase.payWithFeeToUA, RegulatedBase.mtxPayWithTax, RegulatedBase.payWithTax, RegulatedBase.setTaxRate, RegulatedBase.setTaxRecipient, RegulatedBase.taxConfig
+kept whole (a kept routine calls them): MetaTokenBase.receiverFeeDigest

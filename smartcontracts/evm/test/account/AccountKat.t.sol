@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
+import {kindArgs} from "../../script/KindModules.sol";
+
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {Test} from "forge-std/Test.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {SmartKeyAccount, SubjectKey, KeyKind} from "../../src/account/SmartKeyAccount.sol";
@@ -10,12 +14,20 @@ import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {uaDigest, UA_PAY_UNDER_MANDATE, UA_DELEGATE_REVOKE} from "../wallet/MandateWalletMerged.t.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
+import {Erc7739Kit} from "../helpers/Erc7739Kit.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
-/// Shared writer of the account-side `MetaTransaction` KATs (metatx.md §15: the `MandateWallet` and `SmartKeyAccount`
-/// vectors are `MetaTransaction` vectors in their own domains), chain 7622 with its real `chain_uid`.
+/// Shared writer of the account-side KATs (metatx.md §15: the `SmartKeyAccount` vector is a `MetaTransaction` vector in
+/// its own domain; the `MandateWallet` one, since ua-mtx-merge T3b, its `UA<Op>` structs), chain 7622 with its real
+/// `chain_uid`.
 /// `WRITE_KAT=true forge test --match-path test/account/AccountKat.t.sol` rewrites them; clientkeys reads them.
 abstract contract MtxKatBase is Test {
     using MetaTxLib for MetaTxLib.MetaTransaction;
+    using MtxHash for MetaTxLib.MetaTransaction;
 
     bytes32 internal constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
@@ -93,45 +105,213 @@ contract SmartKeyAccountKatTest is MtxKatBase {
     }
 }
 
-/// `mandate_pay_kat.json` and `mandate_revoke_kat.json`: the delegate's `payUnderMandate(…, epoch 1)` on its derived pay lane and
-/// its epoch-bound `revoke(token, 1)` on the derived revoke lane, as `mtxPayUnderMandate` / `mtxRevoke` build them
-/// (mode 0, no fee); both really execute.
+/// `mandate_kat.json` (ua-mtx-merge T3b, Q6; the address `mandate_pay_kat.json` / `mandate_revoke_kat.json` are in
+/// `test/vectors/legacy/ua-mtx-merge/`): the delegate's `mtxPayUnderMandate` (struct `UAPayUnderMandate`) on its pay lane
+/// `mandatePayLane(entryRef)` and its `mtxDelegateRevoke` (`UADelegateRevoke`, epoch 1) on `mandateRevokeLane(token, 1)`,
+/// nonce 0, mode 0, no fee, the unbound `relayer` / `feeRecipient` 0; an EOA signer (its id zero-padded); both really
+/// execute. `WRITE_KAT=true` rewrites it.
 contract MandateWalletKatTest is MtxKatBase {
     uint256 internal constant OWNER_PK = 0x0A11CE;
     uint256 internal constant DELEGATE_PK = 0xDE1E;
     address internal constant PAYEE = address(0x4EE);
+    string internal constant PATH = "./test/vectors/mandate_kat.json";
+
+    function _entry(string memory k, string memory typeString, MetaTxLib.UAEnvelope memory e, bytes memory args,
+        bytes32 digest, bytes memory sig, bytes memory cd) internal returns (string memory)
+    {
+        bytes32 sh = keccak256(bytes.concat(abi.encode(keccak256(bytes(typeString)), e.from), args,
+            abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
+        vm.serializeString(k, "type_string", typeString);
+        vm.serializeString(k, "type_hash", vm.toString(keccak256(bytes(typeString))));
+        vm.serializeString(k, "from", vm.toString(e.from));
+        vm.serializeString(k, "args", vm.toString(args));
+        vm.serializeString(k, "batch", vm.toString(e.batch));
+        vm.serializeString(k, "nonce", vm.toString(e.nonce));
+        vm.serializeString(k, "valid_until", vm.toString(e.validUntil));
+        vm.serializeString(k, "mode", vm.toString(uint256(e.mode)));
+        vm.serializeString(k, "relayer", vm.toString(e.relayer));
+        vm.serializeString(k, "fee", vm.toString(e.fee));
+        vm.serializeString(k, "fee_recipient", vm.toString(e.feeRecipient));
+        vm.serializeString(k, "struct_hash", vm.toString(sh));
+        vm.serializeString(k, "digest", vm.toString(digest));
+        vm.serializeString(k, "calldata", vm.toString(cd));
+        return vm.serializeString(k, "signature", vm.toString(sig));
+    }
+
+    NormalToken internal tok;
+    MandateWallet internal w;
 
     function test_mandateWalletKat() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        NormalToken tok =
-            NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
-        tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
-        MandateWallet w = new MandateWallet(vm.addr(OWNER_PK), UID);
-        tok.mint(address(w), 1_000e6);
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(UID, address(0), address(0), false)));
+        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(this), address(this))));
+        w = new MandateWallet(MetaTxLib.pad(vm.addr(OWNER_PK)), UID, address(0), false);
+        tok.mint(address(w), 1_000e6, EnvKit.codeUidOf(address(tok)));
         vm.startPrank(vm.addr(OWNER_PK));
-        w.setMandate(address(tok), vm.addr(DELEGATE_PK), 100e6, 250e6, 1 days, 1_900_000_000);
-        w.setPayee(address(tok), PAYEE, true);
+        w.setMandate(address(tok), MetaTxLib.pad(vm.addr(DELEGATE_PK)), 100e6, 250e6, 1 days, 1_900_000_000);
+        w.setPayee(address(tok), MetaTxLib.pad(PAYEE), true);
         vm.stopPrank();
-
-        bytes32 ref = keccak256("scaas.kat.entryRef");
-        MetaTxLib.MetaTransaction memory m;
-        m.from = vm.addr(DELEGATE_PK);
-        m.data = abi.encodeCall(MandateWallet.payUnderMandate, (address(tok), PAYEE, 12_345_678, ref, uint64(1)));
-        m.batch = w.mandatePayLane(ref);
-        m.validUntil = 1_800_000_300;
-        bytes32 digest = w.mtxDigest(m);
-        bytes memory sig = _ecdsa(DELEGATE_PK, digest);
-        w.mtxPayUnderMandate(address(tok), PAYEE, 12_345_678, ref, 1, m.validUntil, sig);
+        (string memory pay, bytes32 payDigest) = _pay();
         assertEq(tok.balanceOf(PAYEE), 12_345_678);
-        _kat("pay", "./test/vectors/mandate_pay_kat.json", "SCaaS MandateWallet", address(w), m, digest, sig);
-
-        m.data = abi.encodeWithSignature("revoke(address,uint64)", address(tok), uint64(1));
-        m.batch = w.mandateRevokeLane(address(tok), 1);
-        digest = w.mtxDigest(m);
-        sig = _ecdsa(DELEGATE_PK, digest);
-        w.mtxRevoke(address(tok), 1, m.validUntil, sig);
+        (string memory rev, bytes32 revDigest) = _revoke();
         assertEq(w.epoch(address(tok)), 2);
-        _kat("revoke", "./test/vectors/mandate_revoke_kat.json", "SCaaS MandateWallet", address(w), m, digest, sig);
+
+        vm.serializeString("kat", "domain_name", "SCaaS MandateWallet");
+        vm.serializeString("kat", "domain_version", "1");
+        vm.serializeString("kat", "chain_id", "7622");
+        vm.serializeString("kat", "verifying_contract", vm.toString(address(w)));
+        vm.serializeString("kat", "salt", vm.toString(UID));
+        vm.serializeString("kat", "domain_separator", vm.toString(_domainSep("SCaaS MandateWallet", address(w))));
+        vm.serializeString("kat", "signer", vm.toString(vm.addr(DELEGATE_PK)));
+        vm.serializeString("kat", "pay", pay);
+        string memory out = vm.serializeString("kat", "revoke", rev);
+        if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, PATH);
+        string memory onDisk = vm.readFile(PATH);
+        assertEq(vm.parseJsonAddress(onDisk, ".verifying_contract"), address(w));
+        assertEq(vm.parseJsonBytes32(onDisk, ".pay.digest"), payDigest);
+        assertEq(vm.parseJsonBytes32(onDisk, ".revoke.digest"), revDigest);
+        assertEq(vm.parseJsonBytes(onDisk, ".pay.calldata"), vm.parseJsonBytes(pay, ".calldata"));
+        assertEq(vm.parseJsonBytes(onDisk, ".revoke.calldata"), vm.parseJsonBytes(rev, ".calldata"));
+        assertEq(vm.parseJsonBytes(onDisk, ".revoke.signature"), vm.parseJsonBytes(rev, ".signature"));
+        assertEq(vm.parseJsonUint(onDisk, ".pay.batch"), w.mandatePayLane(PayMetaKit.ref(keccak256("scaas.kat.entryRef"))));
+        assertEq(vm.parseJsonBytes32(onDisk, ".pay.meta_salt"), PayMetaKit.meta(keccak256("scaas.kat.entryRef")).salt);
+        assertEq(vm.parseJsonUint(onDisk, ".revoke.batch"), w.mandateRevokeLane(address(tok), 1));
+    }
+
+    /// The delegate's pay on its pay lane, nonce 0, executed.
+    function _pay() internal returns (string memory, bytes32 digest) {
+        bytes32 ref = PayMetaKit.ref(keccak256("scaas.kat.entryRef")); // pay-meta-tax T37: a `PayMeta` commitment
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(MetaTxLib.pad(vm.addr(DELEGATE_PK)), w.mandatePayLane(ref), 0,
+            1_800_000_300, 0, address(0), 0, address(0));
+        bytes memory args = abi.encode(address(tok), MetaTxLib.pad(PAYEE), uint256(12_345_678), ref, uint64(1));
+        digest = uaDigest(address(w), UA_PAY_UNDER_MANDATE, e, args);
+        IUARegistry.UASig memory a;
+        a.signature = _ecdsa(DELEGATE_PK, digest);
+        bytes memory cd = abi.encodeCall(MandateWallet.mtxPayUnderMandate,
+            (e, address(tok), MetaTxLib.pad(PAYEE), 12_345_678, ref, 1, a, PayMetaKit.meta(keccak256("scaas.kat.entryRef"))));
+        (bool ok, bytes memory ret) = address(w).call(cd);
+        assertTrue(ok, string(ret));
+        // pay-meta-tax T41: the `PayMeta` the entry takes last (unsigned; `entryRef` its commitment), for the readers
+        MetaTxLib.PayMeta memory m = PayMetaKit.meta(keccak256("scaas.kat.entryRef"));
+        vm.serializeBytes32("pay", "meta_salt", m.salt);
+        vm.serializeBytes32("pay", "meta_pay_no", m.payNo); // plan T83: a `bytes32`, `save` committed
+        vm.serializeBool("pay", "meta_save", m.save);
+        vm.serializeUint("pay", "meta_schema", m.schema);
+        vm.serializeBytes("pay", "meta_body", m.body);
+        return (_entry("pay", UA_PAY_UNDER_MANDATE, e, args, digest, a.signature, cd), digest);
+    }
+
+    /// The delegate's epoch-1 revoke on its revoke lane, nonce 0, executed.
+    function _revoke() internal returns (string memory, bytes32 digest) {
+        MetaTxLib.UAEnvelope memory e = MetaTxLib.UAEnvelope(MetaTxLib.pad(vm.addr(DELEGATE_PK)),
+            w.mandateRevokeLane(address(tok), 1), 0, 1_800_000_300, 0, address(0), 0, address(0));
+        bytes memory args = abi.encode(address(tok), uint64(1));
+        digest = uaDigest(address(w), UA_DELEGATE_REVOKE, e, args);
+        IUARegistry.UASig memory a;
+        a.signature = _ecdsa(DELEGATE_PK, digest);
+        bytes memory cd = abi.encodeCall(MandateWallet.mtxDelegateRevoke, (e, address(tok), 1, a));
+        (bool ok, bytes memory ret) = address(w).call(cd);
+        assertTrue(ok, string(ret));
+        return (_entry("revoke", UA_DELEGATE_REVOKE, e, args, digest, a.signature, cd), digest);
+    }
+}
+
+/// `erc7739_kat.json` (B P3-2, CTR-ACC-02, owner 2026-11-12: ERC-7739 only): what a wallet key signs and the signature
+/// `isValidSignature` takes. `smart_key_account`: `TypedDataSign` over a `UAMetaTransfer` in a token's domain (implicit
+/// `contentsDescription`), seed key 0 in the account encoding; `mandate_wallet`: `TypedDataSign` over `Order` nesting
+/// `Asset` (explicit: `Asset` sorts first), the native owner's ECDSA; `mandate_wallet_personal`: `PersonalSign` over an
+/// EIP-191 hash. Each answers the magic value. `WRITE_KAT=true` rewrites it; clientkeys' `erc7739TypedData` /
+/// `erc7739Signature` read it.
+contract Erc7739KatTest is MtxKatBase {
+    uint256 internal constant SEED = 0x5EED;
+    uint256 internal constant OWNER_PK = 0x0A11CE;
+    address internal constant TOKEN = 0x1111111111111111111111111111111111111111;
+    address internal constant APP = 0x2222222222222222222222222222222222222222;
+    string internal constant PATH = "./test/vectors/erc7739_kat.json";
+    string internal constant ORDER_TYPES = "Asset(address token,uint256 amount)Order(Asset give,uint256 nonce)";
+
+    function _check(address wallet, bytes32 hash, bytes memory sig) internal view {
+        assertEq(SmartKeyAccount(payable(wallet)).isValidSignature(hash, sig), bytes4(0x1626ba7e), "magic");
+    }
+
+    function _ska() internal returns (string memory) {
+        SmartKeyAccount a = SmartKeyAccount(payable(new SmartKeyAccountFactory(UID).deploy(
+            SubjectKey(KeyKind.SECP256K1, bytes32(uint256(uint160(vm.addr(SEED)))), 0, 0, 0), address(0))));
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer(MetaTxLib.pad(address(a)), MetaTxLib.pad(address(0x4EE)),
+            12_345_678, keccak256("scaas.kat.erc7739"), 7, 0, 1_800_000_300, 0, address(0), 0, address(0));
+        bytes32 app = _domainSep("SCaaS MetaToken", TOKEN);
+        bytes32 c = MtxHash.hashStruct(x);
+        bytes32 d = Erc7739Kit.nested(address(a), app, "UAMetaTransfer", Erc7739Kit.UA_TRANSFER_TYPE, c);
+        bytes memory sig = Erc7739Kit.wrap(abi.encode(uint256(0), new bytes32[](0), _ecdsa(SEED, d)), app, c,
+            Erc7739Kit.UA_TRANSFER_TYPE);
+        _check(address(a), keccak256(abi.encodePacked(hex"1901", app, c)), sig);
+        vm.serializeString("ska", "wallet", vm.toString(address(a)));
+        vm.serializeString("ska", "app_name", "SCaaS MetaToken");
+        vm.serializeString("ska", "app_contract", vm.toString(TOKEN));
+        vm.serializeString("ska", "from", vm.toString(x.from));
+        vm.serializeString("ska", "to", vm.toString(x.to));
+        vm.serializeString("ska", "value", vm.toString(x.value));
+        vm.serializeString("ska", "entry_ref", vm.toString(x.entryRef));
+        vm.serializeString("ska", "batch", vm.toString(x.batch));
+        vm.serializeString("ska", "valid_until", vm.toString(x.validUntil));
+        vm.serializeString("ska", "app_separator", vm.toString(app));
+        vm.serializeString("ska", "contents", vm.toString(c));
+        vm.serializeString("ska", "digest", vm.toString(d));
+        vm.serializeString("ska", "signer_key", vm.toString(vm.addr(SEED)));
+        return vm.serializeString("ska", "signature", vm.toString(sig));
+    }
+
+    function _mw(MandateWallet w) internal returns (string memory) {
+        bytes32 asset = keccak256(abi.encode(keccak256("Asset(address token,uint256 amount)"), TOKEN, uint256(500)));
+        bytes32 c = keccak256(abi.encode(keccak256(bytes(string.concat("Order(Asset give,uint256 nonce)",
+            "Asset(address token,uint256 amount)"))), asset, uint256(9)));
+        bytes32 app = keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+            keccak256("Example App"), keccak256("2"), uint256(7622), APP));
+        bytes32 d = Erc7739Kit.nested(address(w), app, "Order", ORDER_TYPES, c);
+        bytes memory sig = Erc7739Kit.wrap(_ecdsa(OWNER_PK, d), app, c, string.concat(ORDER_TYPES, "Order"));
+        _check(address(w), keccak256(abi.encodePacked(hex"1901", app, c)), sig);
+        vm.serializeString("mw", "wallet", vm.toString(address(w)));
+        vm.serializeString("mw", "app_name", "Example App");
+        vm.serializeString("mw", "app_version", "2");
+        vm.serializeString("mw", "app_contract", vm.toString(APP));
+        vm.serializeString("mw", "token", vm.toString(TOKEN));
+        vm.serializeString("mw", "amount", "500");
+        vm.serializeString("mw", "nonce", "9");
+        vm.serializeString("mw", "app_separator", vm.toString(app));
+        vm.serializeString("mw", "contents", vm.toString(c));
+        vm.serializeString("mw", "digest", vm.toString(d));
+        vm.serializeString("mw", "signer_key", vm.toString(vm.addr(OWNER_PK)));
+        return vm.serializeString("mw", "signature", vm.toString(sig));
+    }
+
+    function _mwPersonal(MandateWallet w) internal returns (string memory) {
+        bytes32 h = MessageHashUtils.toEthSignedMessageHash(bytes("scaas erc7739 kat"));
+        bytes32 d = Erc7739Kit.personal(address(w), h);
+        bytes memory sig = _ecdsa(OWNER_PK, d);
+        _check(address(w), h, sig);
+        vm.serializeString("mwp", "message", "scaas erc7739 kat");
+        vm.serializeString("mwp", "hash", vm.toString(h));
+        vm.serializeString("mwp", "digest", vm.toString(d));
+        return vm.serializeString("mwp", "signature", vm.toString(sig));
+    }
+
+    function test_erc7739Kat() public {
+        vm.chainId(7622);
+        MandateWallet w = new MandateWallet(MetaTxLib.pad(vm.addr(OWNER_PK)), UID, address(0), false);
+        vm.serializeString("kat", "chain_id", "7622");
+        vm.serializeString("kat", "salt", vm.toString(UID));
+        vm.serializeString("kat", "smart_key_account", _ska());
+        vm.serializeString("kat", "mandate_wallet", _mw(w));
+        string memory out = vm.serializeString("kat", "mandate_wallet_personal", _mwPersonal(w));
+        if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, PATH);
+        string memory onDisk = vm.readFile(PATH);
+        string[3] memory rows = ["smart_key_account", "mandate_wallet", "mandate_wallet_personal"];
+        for (uint256 i; i < 3; ++i) {
+            string memory k = string.concat(".", rows[i]);
+            assertEq(vm.parseJsonBytes32(onDisk, string.concat(k, ".digest")), vm.parseJsonBytes32(out, string.concat(k, ".digest")), k);
+            assertEq(vm.parseJsonBytes(onDisk, string.concat(k, ".signature")), vm.parseJsonBytes(out, string.concat(k, ".signature")), k);
+        }
     }
 }

@@ -36,7 +36,7 @@ MARKET_USD = '0xefe418838a1646cb7f0a12168dfddaa6353e52e80313e45150fec5539c8431d'
 # `relayfee::RelayFee` (the router marker, tx1 — `fixtures::print_ids`); the package's id in `sui move test`.
 RELAY_FEE = '0x5ef2fcf809fb9535ea0aeaea421f683026f06c34569aafc42bcde652ef6dd270'
 PACKAGE = '0x0'
-PAYMETA = os.path.join(HERE, '..', '..', '..', 'vectors', 'metatx', 'paymeta.json')
+PAYMETA = os.path.join(HERE, '..', '..', '..', 'vectors', 'metatx', 'legacy', 'ua-mtx-merge', 'paymeta.json')
 MANDATE = '0xbfd1d3ac3d6c37f03afe4d7c244e677f9b01fcbff79dae3394640a7944e5f5ab'
 NET = 'localnet'
 SUI_T = b'0000000000000000000000000000000000000000000000000000000000000002::sui::SUI'

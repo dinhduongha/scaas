@@ -1,5 +1,5 @@
 //! `pqz_rel.c`: the relation table (the one table of the crate), statement parsing and the relation builders
-//! (R_REG, R_TX / R_TX0 / R_BURN / R_TXM, R_DS, R_DR as toolbox statements), the ABDLOP keys per relation, the
+//! (R_REG, R_TX / R_TX0 / R_TXS / R_TXS0 / R_BURN / R_TXM, R_DS, R_DR as toolbox statements), the ABDLOP keys per relation, the
 //! statement digest, `pqz_verify`'s and `pqz_prove`'s dispatch (op, statement length, the R_TXM header words M /
 //! auditorOn), the witness parsers and the hedged prover seeds (CTR-PQZ-19).
 //!
@@ -36,8 +36,8 @@ const BITS_BURN: usize = BITS_E + 16 * EB;
 /// R_DR's binary polys: e'_i + E in EB bits
 const DR_NBIN: usize = (16 * EB).div_ceil(64);
 
-/// one relation (`rel_t`): its parameters, the op it serves, its code (the op, 0x81 = R_TX0, or 0x70 | auditorOn << 3
-/// | log2 M for R_TXM; the byte of its ABDLOP keys' tag, the test hook's relation name), the debit shape
+/// one relation (`rel_t`): its parameters, the op it serves, its code (the op, 0x81 = R_TX0, 0x41 / 0xc1 = R_TXS /
+/// R_TXS0 (`CODE_SPLIT`), or 0x70 | auditorOn << 3 | log2 M for R_TXM; the byte of its ABDLOP keys' tag, the test hook's relation name), the debit shape
 pub(crate) struct Rel {
     pub(crate) p: &'static Tbox,
     pub(crate) op: u8,
@@ -56,9 +56,13 @@ const fn txm(p: &'static Tbox, m: usize, lg: u8, a: usize, name: &'static str) -
     rel(p, crate::OP_TRANSFER_MULTI, 0x70 | (a as u8) << 3 | lg, m, a, name)
 }
 
-pub(crate) const NREL: usize = if cfg!(feature = "oversize") { 16 } else { 14 };
+pub(crate) const NREL: usize = if cfg!(feature = "oversize") { 18 } else { 16 };
+/// the split transfer's code bit (three-key spec K3-4: R_TXS 0x41, R_TXS0 0xc1); among op 1's codes no other has it
+/// (R_TXM's 0x70 | .. have it too: test it with the op)
+pub(crate) const CODE_SPLIT: u8 = 0x40;
 
-/// REG, TX, TX0, BURN, DS, DR, then the R_TXM shapes (M = 1 on R_TX's / R_TX0's parameters), as `pqz_rel.c`
+/// REG, TX, TX0, BURN, DS, DR, TXS, TXS0 (PQZL_SPLIT_ID's op 1: the leg's (r, e1) and the sender's own (r_f, e1_f),
+/// two randomness groups; K3-4), then the R_TXM shapes (M = 1 on R_TX's / R_TX0's parameters), as `pqz_rel.c`
 pub(crate) static RELS: [Rel; NREL] = [
     rel(&params::reg::pqz_reg, crate::OP_REGISTER, 3, 0, 0, "reg"),
     rel(&params::tx::pqz_tx, crate::OP_TRANSFER, 1, 1, 1, "tx"),
@@ -66,6 +70,8 @@ pub(crate) static RELS: [Rel; NREL] = [
     rel(&params::burn::pqz_burn, crate::OP_BURN, 2, 0, 0, "burn"),
     rel(&params::ds::pqz_ds, crate::OP_DISCLOSE_SENDER, 4, 0, 0, "ds"),
     rel(&params::dr::pqz_dr, crate::OP_DISCLOSE_RECEIVER, 5, 0, 0, "dr"),
+    rel(&params::txs::pqz_txs, crate::OP_TRANSFER, CODE_SPLIT | 1, 1, 1, "txs"),
+    rel(&params::txs0::pqz_txs0, crate::OP_TRANSFER, 0x80 | CODE_SPLIT | 1, 1, 0, "txs0"),
     txm(&params::tx::pqz_tx, 1, 0, 1, "tx"),
     txm(&params::txm2::pqz_txm2, 2, 1, 1, "txm2"),
     txm(&params::txm4::pqz_txm4, 4, 2, 1, "txm4"),
@@ -79,7 +85,7 @@ pub(crate) static RELS: [Rel; NREL] = [
     #[cfg(feature = "oversize")]
     txm(&params::txm160::pqz_txm160, 16, 4, 0, "txm160"),
 ];
-const TXM0: usize = 6;
+const TXM0: usize = 8;
 
 /// `rel_by_code`
 #[allow(dead_code)] // the test hook and the oracle tests
@@ -96,6 +102,10 @@ pub(crate) fn tbox_by_code(code: u8) -> Option<&'static Tbox> {
 pub(crate) const REG_STMT: usize = PREFIX_BYTES + 32 + PV;
 pub(crate) const TX_STMT: usize = HEADER_BYTES + 3 * PV + (PV + V_BYTES) + (PV + 3 * V_BYTES);
 pub(crate) const TX0_STMT: usize = HEADER_BYTES + 2 * PV + (PV + V_BYTES) + (PV + 2 * V_BYTES);
+/// R_TXS / R_TXS0: R_TX / R_TX0 with u_f appended (K3-4); no length of op 1 equals another's
+pub(crate) const TXS_STMT: usize = TX_STMT + PV;
+pub(crate) const TXS0_STMT: usize = TX0_STMT + PV;
+const _: () = assert!(TXS0_STMT != TX_STMT && TXS_STMT != TX0_STMT && TXS0_STMT != TX0_STMT);
 pub(crate) const BURN_STMT: usize = HEADER_BYTES + PV + 2 * (PV + V_BYTES);
 pub(crate) const DISC_AMOUNT: usize = PREFIX_BYTES + 5 * 32;
 pub(crate) const DISC_PK: usize = DISC_AMOUNT + 64;
@@ -128,6 +138,8 @@ pub(crate) const fn stmt_bytes(r: &Rel) -> usize {
         3 => REG_STMT,
         1 => TX_STMT,
         0x81 => TX0_STMT,
+        0x41 => TXS_STMT,
+        0xc1 => TXS0_STMT,
         2 => BURN_STMT,
         4 | 5 => DISC_STMT,
         _ => txm_stmt(r.legs, r.aud),
@@ -139,19 +151,18 @@ pub(crate) fn word64(p: &[u8]) -> (u64, bool) {
     (be8(&p[24..]), p[..24].iter().all(|&b| b == 0))
 }
 
-/// `rel_of`: the relation of op (op 1: R_TX0 by the 66,560-byte length, else R_TX; op 7 by its header words), `None`
+/// `rel_of`: the relation of op (op 1 by its length: R_TX0, R_TXS, R_TXS0, else R_TX; op 7 by its header words), `None`
 /// also when the statement is not exactly that relation's length: every entry (prove, verify, verify_fast) checks the
 /// length here, before any cache is built or the statement hashed (review G-3 / H-4, fix A)
 pub(crate) fn rel_of(op: u8, stmt: &[u8]) -> Option<usize> {
     let ri = match op {
         crate::OP_REGISTER => 0,
-        crate::OP_TRANSFER => {
-            if stmt.len() == TX0_STMT {
-                2
-            } else {
-                1
-            }
-        }
+        crate::OP_TRANSFER => match stmt.len() {
+            TX0_STMT => 2,
+            TXS_STMT => 6,
+            TXS0_STMT => 7,
+            _ => 1,
+        },
         crate::OP_BURN => 3,
         crate::OP_DISCLOSE_SENDER => 4,
         crate::OP_DISCLOSE_RECEIVER => 5,
@@ -369,6 +380,8 @@ struct Shape {
     aud: usize,
     burn: bool,
     txm: bool,
+    /// R_TXS / R_TXS0: group 0 is the leg's (r, e1), group 1 the sender's (r_f, e1_f) of u_f and v_f
+    split: bool,
     e: usize,
     e2f: usize,
     bits: usize,
@@ -384,7 +397,8 @@ struct Shape {
 /// `shape_of`
 fn shape_of(r: &Rel) -> Result<Shape, Error> {
     let (m, a) = (r.legs, r.aud);
-    let g = if r.op == crate::OP_BURN { 1 } else { groups(m, a) };
+    let split = r.op == crate::OP_TRANSFER && r.code & CODE_SPLIT != 0; // (R_TXM's codes 0x7_ have the bit too)
+    let g = if r.op == crate::OP_BURN { 1 } else if split { 2 } else { groups(m, a) };
     let e = 2 * K + 2 * K * g;
     let e2f = e + m;
     let bits = e2f + 1 + a * m;
@@ -407,6 +421,7 @@ fn shape_of(r: &Rel) -> Result<Shape, Error> {
         aud: a,
         burn: r.op == crate::OP_BURN,
         txm: r.op == crate::OP_TRANSFER_MULTI,
+        split,
         e,
         e2f,
         bits,
@@ -449,7 +464,8 @@ struct Debit {
 }
 
 /// `parse_debit`: header words (fee; amount for R_BURN; auditorOn = A for the transfers; M for R_TXM), then pk_f ||
-/// pk_0 .. pk_{M-1} || [pk_a] || u_T || v_T || u_0 .. u_{G-1} || v_0 .. v_{M-1} || v_f || [v_{a,j}]
+/// pk_0 .. pk_{M-1} || [pk_a] || u_T || v_T || u_0 .. u_{G-1} || v_0 .. v_{M-1} || v_f || [v_{a,j}]; R_TXS / R_TXS0:
+/// one u there (the leg's) and u_f (= u_1) after the last v
 fn parse_debit(stmt: &[u8], h: &Shape) -> Result<(Debit, bool), Error> {
     let (fee, mut ok) = word64(&stmt[HDR_FEE..]);
     let mut amount = 0;
@@ -489,7 +505,7 @@ fn parse_debit(stmt: &[u8], h: &Shape) -> Result<(Debit, bool), Error> {
         Ok(v)
     };
     let mut u = vec_try(h.groups)?;
-    for _ in 0..h.groups {
+    for _ in 0..if h.split { 1 } else { h.groups } {
         u.push(vec_at(&mut ok)?);
     }
     let mut poly_at = |ok: &mut bool| -> Poly {
@@ -507,11 +523,17 @@ fn parse_debit(stmt: &[u8], h: &Shape) -> Result<(Debit, bool), Error> {
     for _ in 0..h.aud * h.legs {
         va.push(poly_at(&mut ok));
     }
+    if h.split {
+        let mut uf = new_vec()?;
+        ok &= rd_polyvec(&mut uf, &stmt[at..]);
+        u.push(uf);
+    }
     Ok((Debit { pkf, pk, pka, ut, vt, u, v, vf, va, fee, amount }, ok))
 }
 
-/// `build_debit` (R_TX, R_TX0, R_BURN, R_TXM): rows 1, 2 (R_q-linear), then per coefficient i rows 3-7 as evaluation
-/// equations (pq-zero-knowledge.md §7.4 with M legs)
+/// `build_debit` (R_TX, R_TX0, R_TXS, R_TXS0, R_BURN, R_TXM): rows 1, 2 (R_q-linear), then per coefficient i rows 3-7
+/// as evaluation equations (pq-zero-knowledge.md §7.4 with M legs; R_TXS: row 2 per group, u = A^T r + e1 and u_f =
+/// A^T r_f + e1_f, and row 4's v_f under (r_f, e1_f), CTR-PQZ-04's rows 2' / 4')
 fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
     let h = shape_of(r)?;
     if !shape_ok(r, &h) {
@@ -548,7 +570,8 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
             add_bit(&mut acc, slot(h.dp, 4, i, b), DELTA << b);
         }
         let rhs = -cval(&mut t.vf, i);
-        s.evaleq(Some(&mut t.pkf), 2 * K, i, i, Some(h.e2f), &mut acc, rhs)?;
+        let fg = usize::from(h.split); // v_f's group: the sender's own (r_f, e1_f) on R_TXS
+        s.evaleq(Some(&mut t.pkf), 2 * K + 2 * K * fg, i, i, Some(h.e2f), &mut acc, rhs)?;
         for j in 0..au * m {
             acc_zero(&mut acc);
             for b in 0..4 {
@@ -721,7 +744,7 @@ fn dec_w(u: &mut PolyVec, v: &mut Poly, s1: &mut PolyVec, off: usize) -> [i64; 1
     })
 }
 
-/// `debit_witness` (R_TX, R_TX0, R_BURN, R_TXM; pqz.h's layout) into s1, with M_i, e_T (decrypting T with s_f), the
+/// `debit_witness` (R_TX, R_TX0, R_TXS, R_TXS0, R_BURN, R_TXM; pqz.h's layout) into s1, with M_i, e_T (decrypting T with s_f), the
 /// carries and the bits; false if inconsistent or out of range
 fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<bool, Error> {
     let h = shape_of(r)?;
@@ -742,6 +765,7 @@ fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<boo
     // carries and the noise are wiped on every exit (C `explicit_bzero` of d, dp, dsum, wv, M, eT, c)
     let mut d = Wiped(vec_try(l)?);
     d.resize(l, [0i64; 16]);
+    crate::name_buf(&d.0);
     let (mut dsum, mut dp) = (Wiped([0i64; 16]), Wiped([0i64; 16]));
     for i in 0..16 {
         dsum[i] = if h.burn { digit(t.amount, i) } else { 0 };
@@ -895,7 +919,7 @@ fn witness(t: &mut Pub, r: &Rel, wit: &[u8], s1: &mut PolyVec) -> Result<bool, E
             &reg
         }
         _ => {
-            // the debit relations (R_TX, R_TX0, R_BURN, R_TXM): one l2 slack per block
+            // the debit relations (R_TX, R_TX0, R_TXS, R_TXS0, R_BURN, R_TXM): one l2 slack per block
             h = shape_of(r)?;
             let want = (1 + h.groups) * 3 * N + 32 * (h.legs + 1 + h.aud * h.legs) + 16 * h.legs + 16;
             if wit.len() != want || !debit_witness(t, wit, s1, r)? {
@@ -952,6 +976,8 @@ impl Ctx {
         };
         let mut hash = h;
         abdlop::hashcomm(&mut hash, &mut f.t_a1, &mut f.t_b, r.p.tbox)?;
+        #[cfg(feature = "test-hooks")]
+        crate::fstrace::rec(6, &hash, 0); // the transcript after the commitment (tA1, tB_): review 3w Codex u1-2
         tbox::verify(&mut hash, &mut f, keys, &mut s)
     }
 
@@ -974,6 +1000,9 @@ impl Ctx {
         let mut m = Wiped(PolyVec::new((tb.l + tb.lext) as usize)?);
         let Some((mut s, mut t)) = build(a, r, stmt)? else { return Err(Error::Input) };
         let mut s2 = Wiped(PolyVec::new(tb.m2 as usize)?);
+        for v in [&s1, &m, &s2] {
+            crate::name_buf(&v.0.0); // the wipe test hook (3zh Fable F-10)
+        }
         if !witness(&mut t, r, wit, &mut s1)? {
             return Err(Error::Input);
         }
@@ -982,6 +1011,7 @@ impl Ctx {
         {
             // t_a2 freed before the encoding, as before (the memory peaks)
             let mut t_a2 = Wiped(PolyVec::new(tb.kmsis as usize)?);
+            crate::name_buf(&t_a2.0.0);
             let mut hash = hash0;
             abdlop::commit(&mut f.t_a1, &mut t_a2, &mut s1, &mut s2, keys, tb)?;
             crate::ct::public(&f.t_a1[..]); // review E: the commitment, hashed and sent (t_a2 stays secret)
@@ -1080,6 +1110,9 @@ mod tests {
             (3, HEADER_BYTES, Some(HDR_AMOUNT)),
             (4, DISC_PK, Some(DISC_AMOUNT)),
             (5, DISC_PK + PV, Some(DISC_AMOUNT)),
+            // R_TXS / R_TXS0: a coefficient of u_f, the last vector (K3-4)
+            (6, TXS_STMT - PV, Some(HDR_AUDITOR_ON)),
+            (7, TXS0_STMT - PV, Some(HDR_FEE)),
             (TXM0 + 1, HEADER_BYTES, Some(HDR_LEGS)),
         ];
         for (ri, coef, word) in cases {

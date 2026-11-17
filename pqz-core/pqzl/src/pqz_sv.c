@@ -785,6 +785,7 @@ typedef struct
   int ready;
   unsigned mq, m1s, Z, kmsis, m2r, nbin, nex, N, M;
   unsigned debit, legs, groups, aud, burn, txm; /* debit relations: the shape of pqz_rel.c shape_t */
+  unsigned split; /* R_TXS / R_TXS0: group 1 the sender's (r_f, e1_f) of u_f and v_f (pqz_rel.c shape_t) */
   unsigned nvec;                     /* statement vectors held (stmt_t.vec) */
   unsigned nblk, bstart[SVZ], blen[SVZ]; /* Es selections: s1 slots [bstart, bstart + blen) (pqz_rel.c new_sel) */
   unsigned pstart;                   /* Ps: slots [pstart, pstart + nbin) */
@@ -808,7 +809,7 @@ typedef struct
   unsigned D, log2m;
 } svrel_t;
 
-#define NSR 16 /* R_REG .. R_TX0, then the R_TXM codes 0x70 .. 0x74, 0x78 .. 0x7c */
+#define NSR 18 /* R_REG .. R_TX0, then the R_TXM codes 0x70 .. 0x74, 0x78 .. 0x7c, then R_TXS, R_TXS0 */
 static svrel_t SR[NSR];
 static nt_t *SA; /* A (k x k), shared by all relations */
 
@@ -835,7 +836,7 @@ v_u (const svrel_t *S, unsigned g) /* group g's u (R_TX: u) */
 }
 
 static int
-sv_idx (uint8_t rel) /* rel: the op, or PQZ_REL_TX0 */
+sv_idx (uint8_t rel) /* rel: the op, PQZ_REL_TX0, PQZ_REL_TXS / PQZ_REL_TXS0 or PQZ_REL_TXM */
 {
   switch (rel)
     {
@@ -851,6 +852,10 @@ sv_idx (uint8_t rel) /* rel: the op, or PQZ_REL_TX0 */
       return 4;
     case PQZ_REL_TX0:
       return 5;
+    case PQZ_REL_TXS:
+      return 16;
+    case PQZ_REL_TXS0:
+      return 17;
     }
   if (PQZ_REL_IS_TXM (rel) && (rel & 7) <= 4) /* 0x70 .. 0x74 -> 6 .. 10, 0x78 .. 0x7c -> 11 .. 15 */
     return 6 + 5 * (int)PQZ_REL_TXM_AUD (rel) + (rel & 7);
@@ -990,12 +995,14 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
         unsigned M, A, G, E, e2f, k = 0;
         if (op == PQZ_OP_TRANSFER || op == PQZ_REL_TX0)
           M = 1, A = op == PQZ_OP_TRANSFER;
+        else if (op == PQZ_REL_TXS || op == PQZ_REL_TXS0) /* K3-4: the leg's group 0, the sender's group 1 */
+          M = 1, A = op == PQZ_REL_TXS, S->split = 1;
         else if (op == PQZ_OP_BURN)
           M = 0, A = 0, S->burn = 1;
         else /* R_TXM */
           M = PQZ_REL_TXM_LEGS (op), A = PQZ_REL_TXM_AUD (op), S->txm = 1;
         const unsigned lpg = PQZ_TXM_LPG (A); /* legs per group (pqz.h; R0-1) */
-        G = S->burn ? 1 : PQZ_TXM_GROUPS (M, A), E = 2 * NPK + 2 * NPK * G, e2f = E + M;
+        G = S->burn ? 1 : S->split ? 2 : PQZ_TXM_GROUPS (M, A), E = 2 * NPK + 2 * NPK * G, e2f = E + M;
         S->debit = 1, S->legs = M, S->groups = G, S->aud = A;
         S->nvec = NVEC + (M > 0 ? M - 1 : 0) + (G - 1);
         S->N = NPK * (1 + G), S->M = 16 * (M + 1 + A * M + 2);
@@ -1007,7 +1014,7 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
                      S->rb[1 + g].rhs = v_u (S, g);
         for (unsigned j = 0; j < M; j++, k++)
           S->pr[k].v = v_pk (S, j), S->pr[k].ox = 2 * NPK + 2 * NPK * (j / lpg), S->pr[k].e2 = (int)(E + j);
-        S->pr[k].v = V_PKF, S->pr[k].ox = 2 * NPK, S->pr[k].e2 = (int)e2f, k++;
+        S->pr[k].v = V_PKF, S->pr[k].ox = 2 * NPK + 2 * NPK * S->split, S->pr[k].e2 = (int)e2f, k++;
         for (unsigned j = 0; j < A * M; j++, k++)
           S->pr[k].v = V_PKA, S->pr[k].ox = 2 * NPK + 2 * NPK * (j / lpg), S->pr[k].e2 = (int)(e2f + 1 + j),
           S->pr[k].win = j % lpg;
@@ -1152,6 +1159,8 @@ parse_stmt (stmt_t *T, const svrel_t *S, uint8_t op, const uint8_t *stmt, size_t
       const size_t want = op == PQZ_OP_BURN       ? PQZ_BURN_STMT_BYTES
                           : op == PQZ_OP_TRANSFER ? PQZ_TX_STMT_BYTES
                           : op == PQZ_REL_TX0     ? PQZ_TX0_STMT_BYTES
+                          : op == PQZ_REL_TXS     ? PQZ_TXS_STMT_BYTES
+                          : op == PQZ_REL_TXS0    ? PQZ_TXS0_STMT_BYTES
                                                   : (size_t)PQZ_TXM_STMT_BYTES (M, A);
       if (len != want)
         return 0;
@@ -1177,13 +1186,15 @@ parse_stmt (stmt_t *T, const svrel_t *S, uint8_t op, const uint8_t *stmt, size_t
         ok &= rd_vec (T->vec[V_PKA], p), p += PQZ_POLYVEC_BYTES;
       ok &= rd_vec (T->vec[V_UT], p), p += PQZ_POLYVEC_BYTES;
       ok &= rd_coeffs (T->vT, p, 16), p += PQZ_V_BYTES;
-      for (unsigned g = 0; g < S->groups; g++)
+      for (unsigned g = 0; g < (S->split ? 1 : S->groups); g++)
         ok &= rd_vec (T->vec[v_u (S, g)], p), p += PQZ_POLYVEC_BYTES;
       for (unsigned j = 0; j < M; j++)
         ok &= rd_coeffs (T->v[j], p, 16), p += PQZ_V_BYTES;
       ok &= rd_coeffs (T->vf, p, 16), p += PQZ_V_BYTES;
       for (unsigned j = 0; j < A * M; j++)
         ok &= rd_coeffs (T->va[j], p, 16), p += PQZ_V_BYTES;
+      if (S->split) /* R_TXS / R_TXS0: u_f = u_1 after the last v */
+        ok &= rd_vec (T->vec[v_u (S, 1)], p), p += PQZ_POLYVEC_BYTES;
       return ok;
     }
   switch (op)
@@ -1719,8 +1730,8 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
     for (k = 0; k < LAMBDA; k++)
       {
         unsigned col = 0;
-        memset (&acc, 0, sizeof acc); /* nex <= 550 terms (R_TXM, 16 legs with the auditor, X-1 blocks, at
-                                         n2816-kmax65536; 460 at n2304-kmax4096): |.| < 550 2^98 < 2^108 */
+        memset (&acc, 0, sizeof acc); /* nex terms (R_TXM M = 16 audited: up to 690 at n2048-kmax1024,
+                                         pqz_txm16_params.h): |.| < 2^10 2^98 = 2^108 */
 #define W3MAC(slot)                                                                                          \
   do                                                                                                         \
     {                                                                                                        \

@@ -1,0 +1,58 @@
+[
+ {
+  "id": "forbidden-drop-0x00",
+  "file": "src/common/ERC7739Lib.sol",
+  "old": "return c == 0x00 || c == \" \" || c == \",\" || c == \"(\" || c == \")\";",
+  "new": "return c == \" \" || c == \",\" || c == \"(\" || c == \")\";",
+  "path": "test/account/SmartKeyAccount.t.sol",
+  "test": "test_erc7739ContentsNameRules"
+ },
+ {
+  "id": "forbidden-drop-space",
+  "file": "src/common/ERC7739Lib.sol",
+  "old": "return c == 0x00 || c == \" \" || c == \",\" || c == \"(\" || c == \")\";",
+  "new": "return c == 0x00 || c == \",\" || c == \"(\" || c == \")\";",
+  "path": "test/account/SmartKeyAccount.t.sol",
+  "test": "test_erc7739ContentsNameRules"
+ },
+ {
+  "id": "forbidden-drop-comma",
+  "file": "src/common/ERC7739Lib.sol",
+  "old": "return c == 0x00 || c == \" \" || c == \",\" || c == \"(\" || c == \")\";",
+  "new": "return c == 0x00 || c == \" \" || c == \"(\" || c == \")\";",
+  "path": "test/account/SmartKeyAccount.t.sol",
+  "test": "test_erc7739ContentsNameRules"
+ },
+ {
+  "id": "forbidden-drop-open",
+  "file": "src/common/ERC7739Lib.sol",
+  "old": "return c == 0x00 || c == \" \" || c == \",\" || c == \"(\" || c == \")\";",
+  "new": "return c == 0x00 || c == \" \" || c == \",\" || c == \")\";",
+  "path": "test/account/SmartKeyAccount.t.sol",
+  "test": "test_erc7739ContentsNameRules"
+ },
+ {
+  "id": "forbidden-drop-close",
+  "file": "src/common/ERC7739Lib.sol",
+  "old": "return c == 0x00 || c == \" \" || c == \",\" || c == \"(\" || c == \")\";",
+  "new": "return c == 0x00 || c == \" \" || c == \",\" || c == \"(\";",
+  "path": "test/account/SmartKeyAccount.t.sol",
+  "test": "test_erc7739ContentsNameRules"
+ },
+ {
+  "id": "empty-descr-guard-off",
+  "file": "src/common/ERC7739Lib.sol",
+  "old": "        if (n == 0) return (false, name, contentsType);\n",
+  "new": "",
+  "path": "test/account/SmartKeyAccount.t.sol",
+  "test": "test_erc7739ContentsNameRules"
+ },
+ {
+  "id": "empty-name-allowed",
+  "file": "src/common/ERC7739Lib.sol",
+  "old": "                    if (i == 0) return (false, name, contentsType);\n",
+  "new": "",
+  "path": "test/account/SmartKeyAccount.t.sol",
+  "test": "test_erc7739ContentsNameRules"
+ }
+]

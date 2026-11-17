@@ -1,0 +1,15 @@
+# ua-mtx-merge T42 gate summary (full output in git-ignored .log files, not committed)
+# T42 (pay-meta-tax spec §7.1): the node's pay entries as named ops with a named-field PayMeta, the pre-checks by name, mtxPay as a
+# row, mtxPayWithTax (signer the payer, the outer digest the job's identity), the router's tax ops, the relay fee on the payer's lane,
+# the indexer's PaymentMeta fields and PaymentTaxed join. UNAUDITED.
+# Base: f2cc725d. Commits: 0c8775c7 (legacy copies), 9e3cf553 (implementation), this one (summary, mutants table).
+step | commit | rc | counts
+t42-red | 9e3cf553 in progress | 101 | the first cargo test of T42 (abi and rows half moved, on the T41 vectors): 34 failing; not a clean pre-T42 run
+t42-cargo-test | 9e3cf553 | 0 | 651 passed 0 failed (CAPPED_MEM=6G, alone)
+t42-clippy | 9e3cf553 | 0 | cargo clippy --all-targets -- -D warnings: clean
+t42-e2e | 9e3cf553 | 0 | cargo test --test e2e -- --ignored --test-threads=1: 17 passed on anvil (pay with meta, the UA pay, the mandate pay with PayMeta, relay fees on the payer's lane); no anvil left
+t42-mutants | 9e3cf553 | 101 each | 5 of 5 killed (runs/2026-11-07-ua-mtx-merge-t42-mutants.txt): the tax signer taken as payment.to, the inner digest as the tax job's identity, PAY_META_MISMATCH not checked, the node still checking payLane, a pay sent as mtxExecuteTransfer; scaas-node tree clean after
+#
+# Not done (report): TAX_MISMATCH pre-check with `expected` from taxConfig() (the simulation's named revert stands for it), alerts
+# on TaxRateSet / TaxRecipientSet / FeatureDisabled(23) / RoleRevoked(23), never-downgraded-on-retry and landed-elsewhere tests,
+# the mesh's refusal of a pay by name, payNo + body in the price quote, pay_with_tax_on_anvil, docs/node drafts (T19).

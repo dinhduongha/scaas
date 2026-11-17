@@ -105,8 +105,27 @@ does with it.
   `batch`, `nonce`, `validUntil`) signed in the **sell token's** EIP-712 domain (`salt = chain_uid`); the token verifies
   it and moves funds only into `dex`, with no allowance. When the sell token is an outside token the same struct is
   signed in the DEX's domain as a `DexOrder` (`dex` = the DEX, `ESCROW` refused) and pulled under the holder's
-  allowance to the DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)); intake reads `allowance(from, puller)`. The venue takes each token's kind from the DEX's own market listing (re-checked every poll,
-  [NODE-DEX-08](#NODE-DEX-08)), never from the order or the client.
+  allowance to the DEX's `DexPuller` ([CTR-DEX-22](../contracts/dex.md#CTR-DEX-22)); intake reads `allowance(from, puller)`. The venue takes each token's form from the DEX's factory: SCaaS (the token-verified `TradeOrder`, shape 1) iff
+  `versionOf(token).version != 0` on `factory()`, else outside (shape 0); never from the order, the client, the DEX's
+  `tokenKind` (0 for a pair never listed) or a release's deprecation.
+- <a id="closed-markets"></a><a id="NODE-DEX-20"></a>**NODE-DEX-20** — **Which markets are served: bit 29**
+  ([CTR-DEX-32](../decisions.md#ctr-dex-32--markets-open-by-default-bit-29-closed_markets-closes-them)). The venue
+  reads the DEX's `features()` at start: bit 29 `CLOSED_MARKETS` set, a client market is served only when the DEX lists
+  the pair (`marketListed(base, quote)`), the others wait; clear, every client market is served (open markets, the
+  default). An unread bit serves nothing (fail closed). A market whose own check is unread at start (a transport error on
+  `marketListed` or `versionOf`) is not served and is read again each watcher round (a node without the indexer module runs no watcher: a restart there); read
+  on a closed DEX that does not list it, it waits. The DEX's own `FeatureDisabled(29)` log (the bit is set only at
+  creation and only ever cleared; the watcher reads it from the DEX only, never from a token) makes the venue re-read the
+  bit live before its cursor moves (an unread bit fails the round, read again) and, open, serve the waiting markets. A
+  market served late gets the start loads first: each token's shape by the factory, its regulated legs
+  ([NODE-DEX-11](#NODE-DEX-11): pause, list halt, eligibility alert), the client's resting rows of it and their
+  unmined fills; an unread load fails the round, read again. On a closed DEX the exchange path's tokens
+  must be `tokenKnown` (the DEX's own check; the venue plans no exchange). The liquidity guard classifies inputs the same
+  way (`versionOf` on the DEX's factory). Tests `market_rule_follows_bit_29_and_the_factory`,
+  `feature_disabled_29_opens_the_waiting_markets` (an encoded log through the watcher's filter, `accepted` and
+  `encode_event`), `a_market_unread_at_start_is_read_again_each_round` (`scaas-node/src/dex/venue.rs`); mutants 8/8
+  killed, `scaas-node/runs/2026-11-12-fix2-node-mutants.{py,txt}`. Status **BUILT** (branch `ua-mtx-fix2-contracts`),
+  UNAUDITED.
 - **No role in the order.** The book keeps price-time priority over orders as they arrive; an incoming order that
   crosses is the **taker** of the settlement the venue builds, the resting orders it crosses are its **makers**, and an
   order that rests may later be a maker. One settlement is atomic; one `mtxSettle` call carries one or more
@@ -176,7 +195,7 @@ and the node never carries such an order. Cost: a new DEX needs a chain-profile 
 <a id="order-router"></a><a id="4-tradeengine"></a><a id="trade-engine"></a><a id="NODE-DEX-17"></a>**NODE-DEX-17** — **The `OrderRouter` executes orders against AMMs through
 `mtxExchange`/`mtxExchangeVia`** ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20)); off unless the chain enables it. It
 routes one order to the best liquidity: the book, AMMs, or both in one hybrid call. For the book it calls the matching
-engine ([§2](#2-matching)), a separate part that is built; the Soroban relay-fee router and `MtxRelayFee` are other
+engine ([§2](#2-matching)), a separate part that is built; the Soroban relay-fee router and `RelayFeeRouter` are other
 things. Named `OrderRouter` by the owner on 2026-11-03 (before: TradeEngine). Status:
 **SPECIFIED** (the planner, quoter, routes, jobs and `GET /v1/dex/exchanges/{ref}` are built in TODO step 6, `OrderRouter`
 EVM; the contracts it drives — [CTR-DEX-27](../contracts/dex.md#CTR-DEX-27), [-28](../contracts/dex.md#CTR-DEX-28),
@@ -216,6 +235,21 @@ exception.
 `GET /v1/dex/exchanges/{ref}` returns the quote at decision time beside the settled `ExchangeLegSettled` figures. With
 `relayer = 0` another submitter may exchange the order; the signed limit still holds and only output it routes outside
 the DEX depends on its honesty — clients therefore keep `relayer` = the venue node.
+
+<a id="NODE-DEX-19"></a>**NODE-DEX-19** — **Liquidity plans are built by the submitter; the node relays them as named fields**
+(spec 2026-11-10-dex-liquidity.md §11). In this round a client or a namespace with `allow_call` builds the `LiquidityPlan`
+and its interactions; the node checks and relays it (`mtxLiquidity`, [CTR-DEX-30](../contracts/dex.md#CTR-DEX-30)); the
+`OrderRouter`'s liquidity planner (quotes, routes, the default `relayer` binding) is PLANNED. The node keeps no surplus
+([NODE-DEX-18](#NODE-DEX-18)). A note for relayers: a signer can take proceeds as a fee-free refund by listing the proceeds
+token as an input with a tiny pull (the refund of step 7 carries no fee); the fee is the signer's own rate, so nothing is
+stolen, but a relayer that lives on the DEX fee looks at the shape before relaying. A revert `NotLiquidityDex(dex)` from a
+DEX that carries the liquidity mark is gas starvation of the token's capability check: a retry with more gas, never a
+wrong DEX. An order the DEX already pulled is `consumed`, never `dead` (`LIQUIDITY_ORDER_CLOSED`, G6). No `RelayFeeRouter`
+wrap of `mtxLiquidity` is built (C10). Status: the row, the pre-checks of spec §11 (the codes in
+[job-api.md](job-api.md)), the liquidity
+mark (read by the guard) and the retry BUILT (`guard.rs` `check_liquidity`, `liquidity_pre_checks`; through the RPC on
+anvil, `tests/e2e.rs` `liquidity_pre_checks_on_a_chain`, which also found the starved revert unnamed, fixed in `abi.rs`); completion by
+`LiquiditySettled` and the indexer rows SPECIFIED.
 
 ## <a id="intake"></a>5. Intake
 
@@ -509,7 +543,23 @@ relayer-bound settlement, [networks/README.md](../networks/README.md)) are **PLA
 <a id="managed-markets"></a><a id="NODE-DEX-11"></a>**NODE-DEX-11** — **Managed markets are home-bound and check
 eligibility at intake.** A licensed operator runs its own `SCaaSDex` instance with managed pairs
 ([CTR-DEX-12](../contracts/dex.md#CTR-DEX-12)). Node config per market: `dex_market.managed = 1`, `unbound = 0`
-(forced), `gossip = 0` (default), `eligibility_tokens` (the regulated legs, read from `versionOf(token).kind`).
+(forced), `gossip = 0` (default), `eligibility_tokens` (the regulated legs, read from `versionOf(token).kind`). Group 3s
+([CTR-AS-31](../contracts/asset-suite.md#CTR-AS-31); BUILT, UNAUDITED): the registry check runs under `KYC` (controls bit 6, both
+masks); under a list that is on, intake reads `listFlagsOf` of the seller, the DEX, its puller and the receiver (`NOT_ALLOWED`,
+`DENIED`). The watcher reads the lists live, once per leg and round (one `regulatedConfig`), **before** the client ingests the range
+and before the book lock; a transport error fails the round, so the same range is read again (fail closed, never skipped).
+`DeniedSet(on)` / `AllowedSet(off)` of an account, while its bit is on in the leg's live `controls`, drops that account's orders of
+the leg, both sides, only if its live `listFlagsOf` refuses it; `FeatureEnabled(8 | 9)` re-reads every maker and receiver the same
+way. The leg's list halt is computed, never toggled: `halt = !L(DEX) || !L(puller)` from the live `controls` and both live flags,
+at start (and so after a restart), on every list event naming the DEX or its puller and on `FeatureEnabled(8 | 9)`.
+`FeatureEnabled(28)` reruns the venue's `VENUE_NOT_ELIGIBLE` alert (tests `list_effects_follow_the_live_bit`,
+`list_halt_is_computed_from_live_reads`, `an_unreadable_list_fails_the_round_before_the_cursor`; Fable review of ua-mtx-merge,
+venue P2-1, P2-2, P3-1, P3-2). *Known limits* (recheck R-3, R-4; PLANNED, open): the drops of a round (lists and
+`AccountFrozen`) are applied after the client ingested the range; if `dex_book_commit` then fails, the book is reloaded from the
+client and those orders rest again until a match fails at simulation (the halt, in memory, is kept); target: keep the round's
+drops pending and apply them again next round. The live reads are at `latest` while the events are final: an edit undone at an
+unfinalized block that is later reorged out leaves the leg open (or a maker resting, or the reverse, a leg halted) until the
+next list event or a restart; the token stays the arbiter and intake reads live.
 
 | Point | Check | Refusal |
 |---|---|---|
@@ -519,6 +569,28 @@ eligibility at intake.** A licensed operator runs its own `SCaaSDex` instance wi
 | Events | `AccountFrozen` (maker ⇒ drop the maker's orders), `Paused` (stop matching the market until `pausedUntil`), `Attested` with flags 0 or `AttesterSet(…, false)` (drop affected makers) | — |
 
 On chain the token is the arbiter regardless: a pair that slipped through fails alone (`MatchFailed`).
+
+Status (ua-mtx-merge T35, regulated-kinds spec §7). **BUILT** (`dex/venue.rs`) on every market with a regulated leg (a SCaaS
+leg answering `type(IRegulatedToken).interfaceId`, read at start), managed or not: the intake pre-check, read live on each
+regulated leg — `PAUSED` (`regulatedConfig().pausedUntil`; the market halts), `FROZEN` (`isFrozen` of the seller on the token
+it sells), `VENUE_NOT_ELIGIBLE` (the DEX's own `R` on the leg), `NOT_ELIGIBLE` (the receiver, `destination` or else `from`,
+on the token it buys, with `canReceive`'s reason 1–4), `ATTESTATION_SHORTER` (an order's `validUntil` past the receiver's
+attestation, with `ALLOWLIST` on); `R` is computed with `scaas_ua::regulated::can_receive` over the registry's
+`complianceOf` and `kycProviderEnabled`, on the chain's `compliance_registry` only (`REGISTRY_NOT_CONFIGURED`,
+`REGISTRY_MISMATCH` otherwise; its code hash checked when the venue loads, which fails closed). Events: `AccountFrozen`
+drops the account's orders selling that token (`invalid` to the client store; its orders buying it stay), `Paused` halts
+the market until `pausedUntil`, `Unpaused` reopens it, and it reopens at `pausedUntil` with no event; a failed trade on a
+halted market waits unacked. A settlement or leg probe that reverts `TokenPaused` blames no order: the market halts until
+the revert's `until` and the taker is refused `PAUSED` (F-16). The venue never assumes its own `ELIGIBLE_CONTRACT` rows (an
+operator step of the registry admin, owner 2026-11-06, [ops.md](ops.md#regulated-legs)): at load it alerts
+`VENUE_NOT_ELIGIBLE` for the DEX and its puller by name, and intake refuses as above. Tests: `dex::venue::tests::{
+market_halts_on_paused_and_reopens, token_paused_not_grief_scored, regulated_leg_precheck_refuses_by_name,
+account_frozen_drops_the_makers_orders}`. **Still SPECIFIED:** the managed-market config (`managed`, `unbound`, `gossip`,
+`eligibility_tokens`, `UNBOUND_FORBIDDEN`, `FEE_FORBIDDEN`), the fee-split recipients' `canReceive`, the explicit
+pre-settle re-check (the settlement simulation is the check today), drops on `Attested` with flags 0 and on
+`AttesterSet(…, false)`, and the gossip rules. Open (for the owner): the reason table of asset-suite §2.3 numbers `4` frozen,
+`5` paused, `6` balance, while `canReceive` (spec §3.1) returns `4` for denied; the venue names each refusal instead of one
+number.
 
 Gossip: managed markets are **not gossiped** by default: wallets post to the venue's gateway; `route_order` for a
 managed market is refused (`MANAGED_LOCAL`). If the operator enables gossip (`gossip = 1`): home-bound replicas only,

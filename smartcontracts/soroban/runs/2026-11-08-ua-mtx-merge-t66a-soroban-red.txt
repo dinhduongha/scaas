@@ -1,0 +1,23 @@
+# T66a Soroban (CTR-UA-32 an msig has no KEM key; CTR-UA-33 Change 2026-11-08 PopSlots / pop_slots_of): red, then green.
+# Every run is `scripts/capped smartcontracts/scripts/test.sh soroban` (build: `.../build.sh soroban`) on base 3d150ad6 plus
+# the uncommitted changes of the step. Full output stayed in git-ignored local logs. Mutants: ...-t66a-soroban-mutants.txt.
+step | commit | rc | counts
+baseline: new portable.json, contract and tests unchanged | 3d150ad6 | 101 | ua-registry 153 passed, 11 failed (the vector change)
+red item 2: tests changed + new, contract unchanged | 3d150ad6 + tests | 101 | ua-registry 159 passed, 7 failed
+red item 5: pop_slots_of tests, contract with item 2 only | 3d150ad6 + tests + item 2 | 101 | compile error, 7 x E0599
+green, UA8_WRITE=1 (ua8-roundtrip.json regenerated) | 3d150ad6 + all | 101 | 166 passed, 2 failed (msig attrs in attest tests, interface list), fixed
+green | 3d150ad6 + all | 0 | dex 17, mandate 12, relay-executor 0, relay-fee 22, smart-key-account 10, token 33, ua-common 0, ua-registry 168
+green after the mutants | 3d150ad6 + all | 0 | the same counts
+build | 3d150ad6 + all | 0 | scaas_ua_registry.wasm 59,823 -> 60,807 B optimized (68,123 -> 69,180 unoptimized); check-registry-interface.sh ok
+
+# red item 2: the failure lines
+records_count_accepted_slots_only: test_membership.rs:262 left: Unauthorized, right: KemHolder (set_kem_key on a PQ msig)
+msig_pqz_sig_not_minimal_refused: left: Unauthorized, right: KemHolder
+ua8_relayer_msig_mixed_members: left: NotVerifiable, right: KemHolder
+ua8_negatives_from_portable_json: msig-with-kem/n2048-kmax1024 left: Err(Error(Context, InvalidAction)), right: Ok(KemHolder) (the pop was read)
+ua8_msig_kem_key_refused: host error Error(Context, InvalidAction) (the KEM key reached the pop check)
+ua8_msig_kem_record_refused: succeeded (the msig-kem-record row stored: its members' signature is valid)
+ua8_record_bytes_round_trip: the answers moved from ua8-roundtrip.json (msig-pq rows without KEM records)
+# red item 5
+error[E0599]: no method named `pop_slots_of` found for struct `UaRegistryClient<'a>` (7 call sites); assertion-level red: the
+popslots-not-written mutant, pop_slots_of_rows msig-pq/n2048-kmax1024 left: ([], []), right: ([0, 1], [..])

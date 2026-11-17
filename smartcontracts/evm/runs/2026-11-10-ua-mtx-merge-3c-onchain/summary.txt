@@ -1,0 +1,24 @@
+# Plan 3c T95 (owner 2026-11-10): the PqChat on-chain matrix, every external entry of PqChat on a real node. UNAUDITED.
+# Group script: script/onchain/PqChat.s.sol (contract PqChatOnchain, on OnchainBase), run by script/onchain/run.sh
+# <target> PqChat --tc PqChatOnchain --ffi, tallied by script/onchain/coverage.py --out runs/2026-11-10-ua-mtx-merge-3c-onchain
+# (groups.json's pqchat slot: PqChat and its module PqChatTopics via PqChat). Not yet a group of matrix.sh (its multi-target
+# change is not on the branch); its hook, one line in its group case:
+#   pqchat) script/onchain/run.sh "$tgt" PqChat --tc PqChatOnchain --ffi || rc=1 ;;   (and DEPLOY_PQCHAT=1 in its deploy line)
+# Contract at 69309f9e (P48 remove, the Fable P1-1 / P1-2 (a) fixes). Negatives run by eth_call on the final state.
+#
+# target | deploy | transactions status 1 | negatives refused as expected | heaviest gasUsed (asked <= 60 M)
+local (anvil, chain 31960, fresh) | deploy.sh evm DEPLOY_PQCHAT=1 NOTICE_PERIOD=0: 48 tx by DeploySend.s.sol (NET-EVM-11), PqChatTopics, class env (3, 0), release, switch, instance | 34 / 34 | 10 / 10 | 13,425,533
+scaas-testnet (7622, RPC only) | the Step 5 deploy; this run registered PqChat: PqChatTopics (CREATE2), publishClassEnv, deployRelease (44,336,657 gasUsed, 59 M asked), setClassKindEnabled, createInstance | 39 / 39 | 10 / 10 | 44,336,657
+#
+# Coverage (table-<target>.txt): PqChat 14 state-changing entries (13 writes + initialize): 12 called by a transaction on both
+# targets; addWraps relayed unsigned through RelayFeeRouter (its fee paid by test key 1 on a kind-0 token) and initialize
+# inside createInstance: reached by the trace on local (14 / 14), not traced on 7622. PqChatTopics: its 6 writes run inside
+# PqChat's stubs (6 / 6 reached on local by the trace). Views: read back by the script against the state after each step
+# (sessionsOf, sessionCount, epochsOf, epochCount, latestEpoch, childOf, epochComplete, wrapAt, sessionOf, epochOf,
+# messageAt, messageCount, nonceUsed, leftIn, removedIn, removalCount, removalAt, storedCount, storedAt, storedRange,
+# STORED_RANGE_MAX, topicOf, writerOf, entryOf, replies, scoreOf, owner, contractsPage(3)); a failed read stops the run.
+# Negatives (note-<target>.txt): createSession nonce reuse, the P9 removal attack (a second child at home), postMessage
+# counter reuse, remove replayed, the removed member's rekey (the race of the Fable review P1-2), a child keeping a removed
+# member, postMessage by a non-member, postMessage under a superseded epoch (Fable P1-1), storeMessage v != 1, a vote of 2.
+# Keys: local, anvil's dev keys; 7622, the registrar and three signers from the testnet-only mnemonic (indices 0, 4-6, apart
+# from the genesis test keys the Step 5b groups use), never printed or written; every address here is public.

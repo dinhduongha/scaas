@@ -1,0 +1,6 @@
+mutant | tests that went red | rc
+metatx-token-refusal-dropped | gateway::tests::metatx_door_refuses_a_token_by_name | 101
+registry-gate-on-all-native | gateway::tests::ua_metatx_door_runs_an_eoa_at_registry_zero | 101
+auth-decoded-as-bytes | gateway::tests::an_expired_request_is_refused, gateway::tests::bound_fields_are_untouched, gateway::tests::hex_data_is_refused_at_the_gateway, gateway::tests::the_guard_refuses_before_the_simulation, gateway::tests::ua_metatx_door_refuses_a_derived_side_at_registry_zero_by_name, gateway::tests::ua_metatx_door_runs_an_eoa_at_registry_zero, gateway::tests::unbound_fee_recipient_and_relayer_are_normalized | 101
+wallet-refusal-dropped | gateway::tests::metatx_door_refuses_a_mandate_wallet_by_name | 101
+op-door-closed-to-merged | gateway::tests::door_a_takes_registered_tokens_only, gateway::tests::op_door_takes_a_merged_entry_with_uasig | 101

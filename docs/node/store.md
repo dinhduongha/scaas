@@ -187,7 +187,7 @@ CREATE TABLE token (chain_key TEXT NOT NULL, address TEXT NOT NULL, decimals INT
   active INTEGER NOT NULL DEFAULT 1,                              -- 0 = intake paused on every door, indexing continues
   kind TEXT NOT NULL DEFAULT 'meta' CHECK (kind IN ('meta', 'zether', 'meta_none', 'meta_single', 'meta_multi',
     'pqz')),                                                      -- built versionOf().kind 0–4; flags 5–8: features                                                      -- PqzToken (ops.md#pqz)
-  features TEXT NOT NULL DEFAULT '',                              -- space-separated: 'receiver_fee', 'ua' (v3: registry() ≠ 0)
+  features TEXT NOT NULL DEFAULT '',                              -- space-separated: 'payee_fee', 'ua' (v3: registry() ≠ 0)
   PRIMARY KEY (chain_key, address));
   -- planned: token.reg_cache TEXT (controls, roles, compliance registry of regulated tokens) and the snapshot
   -- builder's table (indexer-feeds.md#snapshots)
@@ -195,9 +195,11 @@ CREATE TABLE lane (chain_key TEXT NOT NULL, label TEXT NOT NULL, account_index I
   journal_max BIGINT,                                             -- monotonic: max(journal_max, n) in the SAME
   PRIMARY KEY (chain_key, label));                                -- transaction as leased→signed (and legacy signed)
 CREATE TABLE chain_contract (chain_key TEXT NOT NULL, address TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('tender', 'sponsorship_pool', 'account_factory', 'dex', 'role_holder')),
+  kind TEXT NOT NULL CHECK (kind IN ('tender', 'sponsorship_pool', 'account_factory', 'dex', 'role_holder', 'service')),
   PRIMARY KEY (chain_key, address));                              -- registered non-token contracts (call table, job-api.md);
-                                                                  -- kind 'dex' rows = the chain profile's DEX list (NET-ALL-24)
+                                                                  -- kind 'dex' rows = the chain profile's DEX list (NET-ALL-24);
+                                                                  -- kind 'service' rows = its service list (NET-ALL-24,
+                                                                  -- NODE-JOB-25); SPECIFIED: the node reads [[chains.services]]
 
 -- jobs (NODE-JOB-02, NODE-JOB-04)
 CREATE TABLE job (
@@ -214,7 +216,7 @@ CREATE TABLE job (
   payload_hash    BLOB,                                           -- JCS SHA-256; NULL only for tombstone
   -- CHECK ((digest IS NULL) = (kind IN ('call', 'pqz_call', 'tombstone'))): job_live_digest skips NULL, so a
   -- digest-bearing kind without its digest would bypass durable G2. CHECK ((payload_hash IS NULL) = (kind = 'tombstone')).
-  -- ua_metatx is digest-bearing: digest = uaDigest. pqz_call is a direct call like call: digest NULL, call_hash set.
+  -- ua_metatx is digest-bearing: digest = the UA digest (mtxDigest / mtxTransferDigest). pqz_call is a direct call like call: digest NULL, call_hash set.
   valid_until     BIGINT NOT NULL,
   lane_hint       TEXT,                                           -- NODE-JOB-08
   bus_scope       TEXT NOT NULL DEFAULT 'restricted' CHECK (bus_scope IN ('restricted', 'open', 'public')),

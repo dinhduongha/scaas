@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -173,11 +174,100 @@ public class MlDsaTests
             byte[] good = UaRows().First(r => r.valid && r.input.Length == pk + sig + 32).input;
             Assert.That(MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => throw new CryptographicException("seam")), Is.EqualTo(Word(false)));
             Assert.That(MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => true), Is.EqualTo(Word(true)), "the seam decides the word");
-            Assert.Throws<InvalidOperationException>(() => MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => throw new InvalidOperationException("seam")),
-                "only CryptographicException is caught");
             byte[] ff = [.. Enumerable.Repeat((byte)0xff, pk + sig), .. new byte[32]];
             Assert.That(run(ff), Is.EqualTo(Word(false)), "all-0xff pk and signature: false");
         }
+    }
+
+    /// <summary>Review 3w T-16 (D4): any other exception in the verify (here <see cref="InvalidOperationException"/>
+    /// through the seam) is a fault of this node: <c>PQZ-NODE-FAULT</c> and exit 120 in a child process, never a word and
+    /// never Nethermind's failed call.</summary>
+    [Test]
+    public void Another_exception_is_a_node_fault()
+    {
+        string harness = Path.Combine(AppContext.BaseDirectory, "Harness.dll");
+        ProcessStartInfo psi = new("dotnet", [harness, "mldsa-fault"]) { RedirectStandardError = true, RedirectStandardOutput = true };
+        using Process p = Process.Start(psi)!;
+        string err = p.StandardError.ReadToEnd();
+        string outp = p.StandardOutput.ReadToEnd();
+        p.WaitForExit();
+        TestContext.Progress.WriteLine($"mldsa fault child: exit {p.ExitCode}; stdout: {outp.Trim()}; stderr: {err.Trim()}");
+        Assert.That(p.ExitCode, Is.EqualTo(PqzPrecompile.ExitCode));
+        Assert.That(err, Does.Contain("PQZ-NODE-FAULT ").And.Contain("InvalidOperationException: seam"));
+        Assert.That(outp, Does.Not.Contain("must not happen"));
+    }
+
+    /// <summary>Review 3w-delta U3h-2: the child (<c>Harness mldsa-fault &lt;variant&gt;</c>) within
+    /// <paramref name="boundMs"/>; killed and failed past it, so a hang fails this test by its own bound. (exit code,
+    /// stdout, stderr, elapsed ms)</summary>
+    private static (int Exit, string Out, string Err, long Ms) Child(string variant, int boundMs, int? watchdogMs = null)
+    {
+        string harness = Path.Combine(AppContext.BaseDirectory, "Harness.dll");
+        ProcessStartInfo psi = new("dotnet", [harness, "mldsa-fault", variant]) { RedirectStandardError = true, RedirectStandardOutput = true };
+        if (watchdogMs is { } w) psi.Environment[PqzPrecompile.ExitWatchdogEnv] = w.ToString();
+        Stopwatch sw = Stopwatch.StartNew();
+        using Process p = Process.Start(psi)!;
+        System.Threading.Tasks.Task<string> err = p.StandardError.ReadToEndAsync(), outp = p.StandardOutput.ReadToEndAsync();
+        if (!p.WaitForExit(boundMs))
+        {
+            p.Kill(entireProcessTree: true);
+            Assert.Fail($"mldsa fault child {variant}: still running after {boundMs} ms (killed)");
+        }
+        p.WaitForExit();
+        TestContext.Progress.WriteLine($"mldsa fault child {variant}: exit {p.ExitCode} after {sw.ElapsedMilliseconds} ms; stdout: {outp.Result.Trim()}; stderr: {err.Result.Trim()}");
+        return (p.ExitCode, outp.Result, err.Result, sw.ElapsedMilliseconds);
+    }
+
+    /// <summary>Review 3w-delta U3h-2: termination is unconditional when the diagnostic fails: a throwing logger, a
+    /// throwing stderr, an exception whose Message throws, each exit 120 and never a word.</summary>
+    [TestCase("logger")]
+    [TestCase("stderr")]
+    [TestCase("message")]
+    public void A_failing_diagnostic_still_exits_120(string variant)
+    {
+        var (exit, outp, err, _) = Child(variant, 60_000);
+        Assert.That(exit, Is.EqualTo(PqzPrecompile.ExitCode), variant);
+        Assert.That(outp, Does.Not.Contain("must not happen"), variant);
+        if (variant == "logger") Assert.That(err, Does.Contain("PQZ-NODE-FAULT ").And.Contain("InvalidOperationException: seam"));
+        if (variant == "message") Assert.That(err, Does.Contain(PqzPrecompile.FallbackLine));
+    }
+
+    /// <summary>Review 3w-delta U3h-2 + T-20 (owner 2026-11-15): a ProcessExit handler that blocks forever cannot hang
+    /// the node: the exit watchdog ends the child within <see cref="PqzPrecompile.ExitWatchdogMs"/> + 20 s (start-up
+    /// included), with its line, never a word.</summary>
+    [Test]
+    public void A_blocking_shutdown_handler_is_ended_by_the_watchdog()
+    {
+        var (exit, outp, err, ms) = Child("blocking-exit", PqzPrecompile.ExitWatchdogMs + 20_000);
+        Assert.That(exit, Is.Not.EqualTo(0));
+        Assert.That(err, Does.Contain("PQZ-NODE-FAULT ").And.Contain("InvalidOperationException: seam"));
+        Assert.That(err, Does.Contain(PqzPrecompile.WatchdogLine));
+        Assert.That(outp, Does.Not.Contain("must not happen"));
+        Assert.That(ms, Is.GreaterThanOrEqualTo(PqzPrecompile.ExitWatchdogMs), "ended by the watchdog, not earlier");
+    }
+
+    /// <summary>3zh Fable F-1: a diagnostic that blocks (stderr, the logger) cannot hang the node: the watchdog starts
+    /// before the diagnostic and ends the child within its bound (here 3,000 ms through
+    /// <see cref="PqzPrecompile.ExitWatchdogEnv"/>, which this also checks; F-7), never a word.</summary>
+    [TestCase("blocking-stderr")]
+    [TestCase("blocking-logger")]
+    public void A_blocking_diagnostic_is_ended_by_the_watchdog(string variant)
+    {
+        var (exit, outp, err, ms) = Child(variant, 3_000 + 20_000, 3_000);
+        Assert.That(exit, Is.Not.EqualTo(0).And.Not.EqualTo(PqzPrecompile.ExitCode), variant);
+        Assert.That(err, Does.Contain(PqzPrecompile.WatchdogLine), variant);
+        Assert.That(outp, Does.Not.Contain("must not happen"), variant);
+        Assert.That(ms, Is.GreaterThanOrEqualTo(3_000), "ended by the watchdog, not earlier");
+    }
+
+    /// <summary>W-R kept (review 3w-delta U3h-2): a CryptographicException with a throwing logger is still the zero
+    /// word, and the node goes on (exit 0).</summary>
+    [Test]
+    public void A_crypto_exception_with_a_throwing_logger_is_the_zero_word()
+    {
+        var (exit, outp, _, _) = Child("crypto-logger", 60_000);
+        Assert.That(exit, Is.EqualTo(0));
+        Assert.That(outp, Does.Contain("word " + new string('0', 64)));
     }
 
     /// <summary>Review R4-C4: the start-up known-answer set gives (1, then seven 0) per level through the precompile
@@ -213,9 +303,29 @@ public class MlDsaTests
         Assert.That(MlDsa44Precompile.Instance.DataGasCost(new byte[MlDsa.Pk44 + MlDsa.Sig44 + 32], spec.Spec), Is.EqualTo(s.MlDsa44Gas + 6));
     }
 
+    /// <summary>TODO 3zd (owner 2026-11-15): the calibrated ML-DSA-44 price, written by <c>add-schedule.py --mldsa</c>,
+    /// prices the address at its own value + 6 per word above the split.</summary>
+    [Test]
+    public void Calibrated_mldsa44_price()
+    {
+        Assert.That(MlDsa.Calibrated44Gas, Is.EqualTo(59_000).And.GreaterThanOrEqualTo(MlDsa.Base44));
+        IReleaseSpecStub spec = new(PqzPrecompileTests.Schedule(mldsa44Gas: MlDsa.Calibrated44Gas));
+        Assert.That(MlDsa44Precompile.Instance.DataGasCost(new byte[MlDsa.Pk44 + MlDsa.Sig44 + 32], spec.Spec), Is.EqualTo(59_006));
+    }
+
+    /// <summary>TODO 3zg (owner 2026-11-15): the calibrated ML-DSA-65 price, written by <c>add-schedule.py --mldsa</c>,
+    /// prices the address at its own value + 6 per word above the split.</summary>
+    [Test]
+    public void Calibrated_mldsa65_price()
+    {
+        Assert.That(MlDsa.Calibrated65Gas, Is.EqualTo(100_000).And.GreaterThanOrEqualTo(MlDsa.Base65));
+        IReleaseSpecStub spec = new(PqzPrecompileTests.Schedule(mldsa65Gas: MlDsa.Calibrated65Gas));
+        Assert.That(MlDsa65Precompile.Instance.DataGasCost(new byte[MlDsa.Pk65 + MlDsa.Sig65 + 32], spec.Spec), Is.EqualTo(100_006));
+    }
+
     /// <summary>CTR-UA-39 Q4: EIP-8355's ML-DSA-87 base 13,500 + 6 per word above the split; a schedule without
     /// <c>mldsa87Gas</c> prices the address as no schedule does (it is not in that schedule's precompile set either:
-    /// SpecTests), a schedule with it at its own value. The PROVISIONAL value is the spec's estimate, above the base.</summary>
+    /// SpecTests), a schedule with it at its own value. The calibrated value (2026-11-15) is above the base.</summary>
     [Test]
     public void Mldsa87_gas_needs_its_schedule_key()
     {
@@ -224,9 +334,9 @@ public class MlDsaTests
         PqzSchedule without = PqzPrecompileTests.Schedule();
         Assert.That(without.MlDsa87Gas, Is.Null);
         Assert.That(MlDsa87Precompile.Instance.DataGasCost(input, new IReleaseSpecStub(without).Spec), Is.EqualTo(ulong.MaxValue));
-        PqzSchedule with = PqzPrecompileTests.Schedule(mldsa87Gas: MlDsa.Provisional87Gas);
-        Assert.That(MlDsa87Precompile.Instance.DataGasCost(input, new IReleaseSpecStub(with).Spec), Is.EqualTo(MlDsa.Provisional87Gas + 6));
-        Assert.That(MlDsa.Provisional87Gas, Is.EqualTo(102_000).And.GreaterThanOrEqualTo(MlDsa.Base87));
+        PqzSchedule with = PqzPrecompileTests.Schedule(mldsa87Gas: MlDsa.Calibrated87Gas);
+        Assert.That(MlDsa87Precompile.Instance.DataGasCost(input, new IReleaseSpecStub(with).Spec), Is.EqualTo(MlDsa.Calibrated87Gas + 6));
+        Assert.That(MlDsa.Calibrated87Gas, Is.EqualTo(135_000).And.GreaterThanOrEqualTo(MlDsa.Base87));
         Assert.That(PqzAddresses.MlDsa87, Is.EqualTo(new Address("0x000000000000000000000000000000005caa0014")));
     }
 }

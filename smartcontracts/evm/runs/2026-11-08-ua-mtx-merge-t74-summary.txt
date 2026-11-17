@@ -1,0 +1,14 @@
+# ua-mtx-merge T74 gate summary (full output in git-ignored .log files, not committed)
+# T74 (chain-neutral spec §6.3, §6.4, §8; Fable P1-2, P2-5, P3-3, P3-6): the two-chain tests, the CREATE3 KAT and its
+# readers, the ABI round. UNAUDITED.
+# Base: a1e558ba (T73 tip). Commits: 7c460398 (implementation), this one (summary).
+step | commit | rc | counts
+t74-kat-write | 7c460398 | 0 | WRITE_CREATE3_KAT=true forge test test/v2/Create3Kat.t.sol: ../vectors/factory/create3_kat.json written from the contracts' libraries
+t74-forge | 7c460398 | 0 | forge test Create3Kat + ChainNeutral: 4 passed (test_create3Kat, test_rowsByHand, test_twoChains_sameAddresses_ownCode_signaturesBound, test_replayedConfigureChain)
+t74-clientkeys | 7c460398 | 0 | node --test test/*.test.js: 275 tests, 272 passed, 0 failed, 3 skipped; test/create3.test.js 5 passed
+t74-clientkeys-mutant | 7c460398 | 1 | src/factory.js instance prefix 0xd694 -> 0xd695: create3.test.js 4 passed 1 failed (every row); restored, cmp equal
+t74-node-e2e | 7c460398 | 0 | cargo test --test e2e -- --ignored --test-threads=1 (anvil, Amsterdam, 200 M; Deploy.s.sol with configureChain and its reference block): 18 passed 0 failed; anvils stopped by the tests
+t74-node-clippy | 7c460398 | 0 | cargo clippy --all-targets -- -D warnings: clean
+t74-kats | 7c460398 | 0 | the nine KATs of spec §6.4: dex_order_kat and regulated_kat regenerated in T72; metatx_kat, metatransfer_kat, hedera_kat, mandate_kat, smart_key_account_kat, paytax, smart_key_account_create2 untouched since 846167ba, their readers green (whole forge suite at a01f3e8d)
+t74-bindings | 7c460398 | - | no ua-* binding on this branch and no clientkeys module carries the factory ABI (grep: no createToken, TokenCreated, predictAddress, getWrapper under clients/); ua-rs (ua-rs-sign) listed in the report
+t74-hedera | - | - | not run: no Hedera local node here (spec §8, Q7): reported to the owner

@@ -22,7 +22,7 @@ set has its own `proofSystemId`s (PQZL `…/v5`, PQZH `…/v3` since the R0 revi
    with PQZH, `pqzh_id` and `[pqzh_preset]`; `[pqzl_c]`; `core_only = true` for a set without pqz-stmt / precompile /
    vectors). The directory name is `n<n>-kmax<k_max>`.
 2. Run `pqz-core/params/sets/make.sh <set> all` (environment: `PQZ_TOOLS` with the pinned estimator / LaZer checkouts,
-   `PQZ_WORK` for the KAT build; heavy steps go through `scripts/capped`). Steps: `specs` (gen_set.py: the 14 codegen
+   `PQZ_WORK` for the KAT build; heavy steps go through `scripts/capped`). Steps: `specs` (gen_set.py: the 16 codegen
    specs, `pqz_set.h`, `rust/set.rs`, `set.json`, `PqzSet.sol`, `pqzh_set.rs` for a set with PQZH, the crates' per-set
    feature lists and the Nethermind plugin's `PqzSetIds.cs`), `e_s1` (MSIS /
    MLWE β ≥ 450 per spec; stops and prints the `pqz_delta` / `kmlwe_min` to put into `set.toml` when they differ),

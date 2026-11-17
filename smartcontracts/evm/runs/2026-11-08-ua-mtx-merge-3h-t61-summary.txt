@@ -1,0 +1,20 @@
+# ua-mtx-merge T61 gate summary (group 3h, PQZ proof path spec §5, O10; full output in git-ignored .log files). UNAUDITED.
+# Commits: a288042c (legacy copies), 6fb7a845 (bit 24, setProofStore, the router op, vectors and readers), this one (four sets, the
+# min-gas pin at the four sets, this summary and the mutant table). Forge one test directory at a time (forge-dirs.sh); the four
+# sets and the mutants in a second work tree at 6fb7a845 (four-sets.sh; PqzSet.sol restored after each).
+step | commit | rc | counts
+forge-dirs default n2304-kmax4096 | 6fb7a845 | 1 | governance 424; pqz 592 / 2 failed (test_gas_rollMax_relayedFullTx, open since T58) / 4 skipped; v2 652; as 462; merge 341; ua 704; metatx 492 / 1 (rollMax) / 1; zether 441 / 4 skipped; pqzh 42; account 98; confidential 5; fork 0 / 1 skipped; hedera 20; p6f 4; research 355 / 4 (rollMax 3; the min-gas pin before its +22 move) / 7; wallet 181; top 29
+  after the +22 move | 6fb7a845 | 0 | PqzProofStoreGas (no matrix, no rollMax), GovDeploy, LinkClosure, UARegistryPqzBound, UARegistryNestedGas: 75 passed / 1 skipped
+four sets test/pqz | 6fb7a845 | 1 | n2048-kmax1024 594 / 2 failed / 2 skipped; n2304-kmax4096 592 / 2 / 4; n2560-kmax16384 592 / 0 / 6; n2816-kmax65536 585 / 2 / 11; every failure test_gas_rollMax_relayedFullTx
+four sets test/ua | 6fb7a845 | 0 | 704 passed at each set
+four sets test/as/confidential | 6fb7a845 | 0 | 299 passed at each set
+min-gas pin, four sets | 6fb7a845 | 0 | test_debitMinGas_isTheCheapestLogDebit passed at each set (7,258,188 / 7,468,120 / 7,675,561 / 7,910,855); red first at each set before the +22 move
+size | 6fb7a845 | 0 | size_gate.py 0 errors, 99 contracts; above 65,536 B: WrappedPqzRegulatedToken 73,511 (pinned); old -> new in runs/2026-11-08-ua-mtx-merge-proofpath-sizes.txt
+gen_set | 6fb7a845 | 0 | gen_set.py --all --check: 4 sets, 84 files
+generators | 6fb7a845 | 0 | typed-ops-vectors.mjs run twice: typed_ops.json byte-identical (only UASetProofStore added against T60); GovBitsVector.t.sol without WRITE_BITS equals governance_bits.json (test/governance)
+clientkeys | 6fb7a845 | 0 | node --test 'test/*.test.js': 291 tests, 288 passed, 0 failed, 3 skipped
+scaas-node | 6fb7a845 | 0 | cargo test --lib 680 passed; cargo clippy --all-targets -D warnings clean; the whole node suite (6 GB, alone) and the anvil e2e not run here
+zether-prover | 6fb7a845 | 0 | cargo test --test typed_ops: 6 passed
+
+Mutants (runs/2026-11-08-ua-mtx-merge-3h/mutants.py, spec §11.3 M13, M14, M15, M20; one at a time in the second work tree at 6fb7a845,
+restored, git diff clean): 4 of 4 killed by test/governance/GovProofBit.t.sol. Table: runs/2026-11-08-ua-mtx-merge-3h/mutants.txt.

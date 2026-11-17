@@ -9,7 +9,7 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | File | Covers | Status |
 |---|---|---|
 | [accounts.md](accounts.md) | the three account forms; Universal Account (ids, kinds, registry, verifiers, credentials, migration); passkeys on chain; the optional `SmartKeyAccount` smart account and its factory, guardians | UA **SPECIFIED**; `SmartKeyAccount` **BUILT** |
-| [metatx.md](metatx.md) | the one base `ERC20MetaTx`: `MetaTransaction` struct, typehash, `mode`, 2D nonces, `mtxExecute` (generic self-call, ticket, selector allowlist, fee classes), `mtx` names, pay references and the pay-once horizon, receiver-pays | **SPECIFIED** (built as the v1/v2 lines) |
+| [metatx.md](metatx.md) | the one base `ERC20MetaTx`: `MetaTransaction` struct, typehash, `mode`, 2D nonces, `mtxExecute` (generic self-call, ticket, selector allowlist, fee classes), `mtx` names, pay references and the pay-once horizon, payee fee | **SPECIFIED** (built as the v1/v2 lines) |
 | [token-wrappers.md](token-wrappers.md) | three token tiers, conversion rates, multi-underlying wrappers, signature wrap, the one `OpenFactory`, allowance rule | tiers **BUILT** (EVM, Hedera); one base and factory **SPECIFIED** |
 | [dex.md](dex.md) | `SCaaSDex` with token-verified `TradeOrder`s, outside-token legs through the `DexPuller`, the exchange path against AMMs (`mtxExchange`), managed-market venue contract | **SPECIFIED** (built: `SCaaSDex`, P2b-1, P2b-2, P2c; `SCaaSDexV1` with DEX-signed orders over allowances) |
 | [tender.md](tender.md) | `SealedBidTender` | **SPECIFIED** |
@@ -17,6 +17,7 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | [zether.md](zether.md) | classical Zether (BLS12-381), byte-exact; limits; decryption bound; the `mtx*` interface shared with PQZ ([CTR-ZTH-45](zether.md#CTR-ZTH-45)); `SHIELD_POOL` ([CTR-ZTH-51](zether.md#CTR-ZTH-51)) | **BUILT, UNAUDITED** (dev chains) |
 | [pq-zero-knowledge.md](pq-zero-knowledge.md) | post-quantum Zether on private/PoA chains: ciphertexts in contract state, unbounded ordered queue, proof-free shield, `SHIELD_POOL` | **SPECIFIED, UNAUDITED** (token contracts built on the test chains; 5h part A: state redesign, today's parameters) |
 | [mandates.md](mandates.md) | `MandateWallet`: delegated, capped payment from the payer's own wallet; auto-pay client integration | **BUILT**; revocation epoch **SPECIFIED** |
+| [pqchat.md](pqchat.md) | `PqChat` (UA-7), a factory kind (class 3, kind 0): post-quantum chat sessions, epochs and KEM wraps in chunks, the home-instance slot, admins and leave, on-chain and stored messages, recovery from state alone, public topics with replies, edits and votes | **BUILT, UNAUDITED** (EVM, branch `ua-mtx-merge`); clients **PLANNED** |
 | [settlement.md](settlement.md) | map of every settlement kind: entry points, who checks what, fees, finality (adds no rules) | overview |
 
 <p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NORMAL and WRAPPED (plain, built in P1), NORMAL_ZETHER and WRAPPED_ZETHER (built in P3, unaudited), NORMAL_PQZ and WRAPPED_PQZ (built on the private chains, unaudited); the combined kinds NORMAL_ZETHER_PQZ and WRAPPED_ZETHER_PQZ were dropped on 2026-10-20. Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
@@ -73,11 +74,11 @@ the implementation's immutables). `chain_uid` is the chain's genesis block hash 
 
 | Contract | Source of `chain_uid` |
 |---|---|
-| token implementations (`NormalToken`, `WrappedToken`, `NormalZetherToken`, `WrappedZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
-| `OpenFactory` | constructor immutable; an env must carry it, and `deployImplementation` refuses a release whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
+| every factory-made contract (token kinds, `SCaaSDex`, generic classes such as `PqChat`) | the **clone's own code**: the factory appends the instance's `ChainEnv` to it and the code reads it by `EXTCODECOPY` on every use, no cache, never an immutable; the implementation reads an all-zero env and signs nothing (`ChainUidZero`) ([CTR-TOK-29](token-wrappers.md#CTR-TOK-29); BUILT, T71–T72) |
+| `OpenFactory` | set once by `configureChain`, equal to the genesis hash whenever the EVM can prove it; every creation checks the clone's `chainUid()` after `initialize` ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
 | `SmartKeyAccount` | the factory's constructor argument, passed to `new SmartKeyAccount(chainUid)` |
 | `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
-| `SCaaSDex` (implementation; `SCaaSDexV1`) | constructor immutable of the implementation (from the DEX env), checked at `deployDexImplementation`; `SCaaSDexV1` has none (its domain is unsalted; constructor `(admin)`) |
+| `SCaaSDexV1` (legacy) | none (its domain is unsalted; constructor `(admin)`) |
 | `UniversalAccountRegistry` (legacy, `legacy/ua3/`, not built) | constructor immutable, in its PoP challenge; it checks raw digests, so every caller's digest carries `chainUid` ([CTR-ZTH-36](zether.md#CTR-ZTH-36)) |
 | `UARegistry` | constructor immutable ([CTR-UA-07](accounts.md#CTR-UA-07)) |
 | any later contract with a signature (tender, asset suite) | the same helper, constructor argument |
@@ -116,7 +117,7 @@ Versions live in the factory, immutability lives in the token, including its `fe
 | A deployed token | **nobody** | — |
 
 Three catalogue invariants: (1) **append-only** — a registered `(kind, version)` never points elsewhere
-(`VersionAlreadyRegistered`), so "I want v1" is never a moving target; (2) **`deprecate()` marks, never blocks** —
+(`VersionAlreadyRegistered`), so "I want v1" is never a moving target; (2) **`deprecateToken()` marks, never blocks** —
 `createTokenUnregistered` bypasses the catalogue anyway, so a block would buy only the power to stop others from
 deploying; the real job is a signal (event, wallet warning, indexer flag); (3) **`createTokenUnregistered` exists** — a
 token created this way has `version() == 0`, visibly, so wallets can tell "runs published v2" from "runs code its
@@ -164,14 +165,15 @@ token's own `MINTABLE` holders only, never a balance power; a hybrid's minted un
 
 | Contract | Holder | Powers | Rule |
 |---|---|---|---|
-| `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `publishEnv` / `publishDexEnv` (versioned, never changed), `deployImplementation` / `deployDexImplementation` (the factory deploys each release on a named env, usable after `noticePeriod`), `deprecate` / `deprecateDex`, `setKindEnabled`; none over any token | [token-wrappers](token-wrappers.md#factory) |
-| Any token (EVM) | the `owner`, a UA id (`bytes32`; optional, 0 = none) | `grantRole` / `setGrant` for the bits of set flags, in two calls within `[eta, eta + grantDelay]` when they add a holder or widen a grant; `cancelGrant`; `revokeRole` at once; `disableFeature(bit)` one-way on a flag not locked at creation; two-step `transferOwnership`, not delayed; `renounceOwnership`, refused while a bit that is not locked has a live root; no power touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-GOV-04](../decisions.md#ctr-gov-04--two-call-grantdelay-and-holdercount) |
-| Any token (EVM), holders of a bit | the holders of bit 1 `MINTABLE`, 3 `RATE_ADJUSTABLE` (a native id with code), 4 `WRAP_DISABLEABLE`, each whole or within a `Grant`; the regulated bits 5–7 and 10 when built (several holders allowed, may `renounceRole`) | the power of the bit only (mint to a public balance, on a hybrid under `maxSupply`; a bounded timelocked rate change; `disableWrap`; freeze / forced transfer against a recorded order / bounded pause, later); none touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-TOK-06](token-wrappers.md#CTR-TOK-06), [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
-| Any token (EVM), `rescue` | anyone (bit 17 `RESCUABLE`, always locked) | `rescue(asset)` sends what the token does not owe to `rescueTo`, an address fixed at creation (0 = no rescue); a leg's balance never falls below its reserve, and no other leg's balance moves | [CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto) |
-| `SCaaSDex` | the `owner`, a UA id set at creation ([CTR-DEX-24](dex.md#CTR-DEX-24)), two-step transfer and renounce (a Safe, a multisig or a UA through the `GovernanceRouter` in production; the venue operator's multisig for a managed market); holders of bit 11 `LISTING` and bit 12 `FEE_ROUTING` | `LISTING`: `setMarket` (list or delist a pair), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); `FEE_ROUTING`: `setFeeSplit` (relayer share and treasury of the signed fee; never the amount); none touches funds. `DexPuller.rescue(token)`: anyone, to its immutable `rescueTo` | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
-| `GovernanceRouter` (one per chain and UA registry; BUILT on branch `governance`) | none: no owner, no state, holds nothing | none of its own: it relays the closed table of typed owner and power ops a subject signed (`mtx<Op>`, `ua<Op>`, fee 0) and names that subject to the target only for the call; the target decides | [CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder), governance spec §3 |
+| `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `publishTokenEnv` / `publishDexEnv` (versioned, never changed), `deployTokenImplementation` / `deployDexImplementation` (the factory deploys each release on a named env, usable after `noticePeriod`), `deprecateToken` / `deprecateDex`, `setTokenKindEnabled`; the generic catalogue's `publishClassEnv`, `deployImplementation`, `deprecateRelease`, `setClassKindEnabled` ([CTR-TOK-28](token-wrappers.md#CTR-TOK-28)); `configureChain` once ([CTR-TOK-29](token-wrappers.md#CTR-TOK-29)); none over any token or instance | [token-wrappers](token-wrappers.md#factory) |
+| Any token (EVM) | the `admin` (the former `owner`, CTR-GOV-23), a UA id (`bytes32`; optional, 0 = none) | `grantRole` / `setGrant` for the bits of set flags, in two calls within `[eta, eta + grantDelay]` when they add a holder or widen a grant; `cancelGrant`; `revokeRole` at once; `disableFeature(bit)` one-way on a flag not locked at creation; on a wrapped kind with bit 31, `setMaxSupply` / `setMaxWrapSupply` after `grantDelay` (BUILT, build 3zb + 3zc, [CTR-GOV-30](../decisions.md#CTR-GOV-30)); two-step `transferAdmin`, not delayed; `renounceAdmin`, refused while a bit that is not locked has a live root; no power touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-GOV-04](../decisions.md#ctr-gov-04--two-call-grantdelay-and-holdercount) |
+| Any token (EVM), holders of a bit | the holders of bit 1 `MINTABLE`, 3 `RATE_ADJUSTABLE` (a native id with code), 4 `WRAP_DISABLEABLE`, 30 `BURNER` (BUILT, build 3zb + 3zc), each whole or within a `Grant`; the regulated bits 5–7 and 10 when built (several holders allowed, may `renounceRole`) | the power of the bit only, each direct call with the token's chain word ([CTR-GOV-28](../decisions.md#CTR-GOV-28)'s Change, BUILT, build 3zb + 3zc) (mint to a public balance, on a hybrid under `maxSupply`; burn its own balance under `BURNER`, [CTR-GOV-29](../decisions.md#CTR-GOV-29); a bounded timelocked rate change; `disableWrap`; freeze / forced transfer against a recorded order / bounded pause, later); none touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-TOK-06](token-wrappers.md#CTR-TOK-06), [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
+| Any token (EVM), `rescue` | anyone (bit 17 `RESCUABLE`, always locked) | `rescue(asset)` sends what the token does not owe to `rescueTo`, an address fixed at creation (0 with the bit: the constant dev address, [CTR-GOV-25](../decisions.md#CTR-GOV-25); no bit: no rescue); a leg's balance never falls below its reserve, and no other leg's balance moves | [CTR-GOV-06](../decisions.md#ctr-gov-06--rescue-to-an-immutable-rescueto) |
+| `SCaaSDex` | the `owner`, a UA id set at creation ([CTR-DEX-24](dex.md#CTR-DEX-24)), two-step transfer and renounce (a Safe, a multisig or a UA through the `GovernanceRouter` in production; the venue operator's multisig for a managed market); holders of bit 11 `LISTING` and bit 12 `FEE_ROUTING` | `LISTING`: `setMarket` (list or delist a pair), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); `FEE_ROUTING`: `setFeeSplit` (relayer share and treasury of the signed fee; never the amount); none touches funds; from build 3zb + 3zc (SPECIFIED) the four take the DEX's chain word and run in its governance module ([dex.md](dex.md#dex-governance-module)). `DexPuller.rescue(token)`: anyone, to its immutable `rescueTo` | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
+| `GovernanceRouter` (one per chain and UA registry; BUILT on branch `governance`) | none: no owner, no state, holds nothing (a stray: anyone's `rescue` to the constant dev address, [CTR-GOV-26](../decisions.md#CTR-GOV-26)) | none of its own: it relays the closed table of typed owner and power ops a subject signed (`mtx<Op>`, `ua<Op>`, fee 0) and names that subject to the target only for the call; the target decides | [CTR-GOV-15](../decisions.md#ctr-gov-15--no-operator-delay-on-a-governance-holder), governance spec §3 |
 | `NORMAL_ZETHER` / `WRAPPED_ZETHER` | the token `owner` and role holders per kind and flags ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the auditor key is immutable (built, P3: set once by `initialize`; the old `ZetherToken` is in `legacy/p3/`) | as the flags — nothing touches a reserve or a shielded balance | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
 | `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer`, `UARegistry` | none | — | per file |
+| `UARegistry`, `OpenFactory`, `GovernanceRouter`, `RelayFeeRouter`, `PqChat`, `rescue` | anyone | the whole balance of a stray asset to the constant dev address, nothing else | [CTR-GOV-26](../decisions.md#CTR-GOV-26) |
 | Non-EVM tier-1 tokens: Soroban `scaas-token`, GRAM `ScaasJettonMaster`, CosmWasm CW20 | Soroban and GRAM `admin`, CW20 `minter` (optional) | `mint` / `Mint`, unlimited on that token (a supply power, not a balance power) | [soroban](../networks/soroban.md#contracts), [ton](../networks/ton.md#overview), [cosmos](../networks/cosmos.md#contracts) |
 | Soroban `scaas-dex` | `admin` | `set_market` (per-pair fees ≤ 1 %, on/off) | [soroban](../networks/soroban.md#dex) |
 | GRAM `ScaasDex` | admin | `SetMarket` (fees ≤ 1 %, on/off); `WithdrawFees` (fees only, never bounced or unclaimed value; no admin refund of bounced payouts) | [NET-TON-19](../networks/ton.md#NET-TON-19), [NET-TON-03](../networks/ton.md#NET-TON-03) |
@@ -184,18 +186,17 @@ token's own `MINTABLE` holders only, never a balance power; a hybrid's minted un
 
 <a id="unaudited"></a>
 
-No contract of this repository has had a third-party audit. Every value-holding contract family (Solidity, Move,
-Soroban, CosmWasm, Tact, Solana) needs an independent audit before it holds real funds; the factory registrar moves
-to a multisig before mainnet; real deployments are recorded in `deployments/<chain>.json`. The confidential-token
-families carry stronger gates, enforced in code:
+<a id="audit-labels"></a>Audit labels and rounds: [ARCH-POS-14](../decisions.md#ARCH-POS-14) (an AI audit, `AI-AUDITED` or `UNAUDITED`).
+Every value-holding contract family needs its AI audit round before it holds real funds; the factory registrar moves to a
+multisig before mainnet; real deployments are recorded in `deployments/<key>.json` ([NET-EVM-13](../networks/evm.md#NET-EVM-13)). The confidential-token families carry stronger gates, enforced in code:
 
 | Gate | Rule | Status |
 |---|---|---|
-| Classical Zether chain gate | none by chain id (owner ruling 2026-10-31): open on every chain with the BLS12-381 precompiles `0x0b`–`0x10`; a chain without them fails the verifier deploy and `initialize` (`VerifierUnsupportedOnThisChain`); `OpenFactory.kindEnabled` starts `false` for kinds 2–3 (`setKindEnabled`, registrar; plan 5g-Z2), enabling is an admin act per chain; `createToken` of kinds 2–3 reverts when the kind is off, `createTokenUnregistered` always; never on Hedera ([CTR-ZTH-52](zether.md#CTR-ZTH-52)) | **BUILT** |
+| Classical Zether chain gate | none by chain id (owner ruling 2026-10-31): open on every chain with the BLS12-381 precompiles `0x0b`–`0x10`; a chain without them fails the verifier deploy and `initialize` (`VerifierUnsupportedOnThisChain`); `OpenFactory.tokenKindEnabled` starts `false` for kinds 2–3 (`setTokenKindEnabled`, registrar; plan 5g-Z2), enabling is an admin act per chain; `createToken` of kinds 2–3 reverts when the kind is off, `createTokenUnregistered` always; never on Hedera ([CTR-ZTH-52](zether.md#CTR-ZTH-52)) | **BUILT** |
 | Production curve for classical Zether | bn254 vs BLS12-381; BLS12-381 is more secure and **not** cheaper ([CTR-ZTH-32](zether.md#CTR-ZTH-32)) | open |
-| Cryptographic audit | independent audit of the Σ-Bulletproofs protocol, the transcript, the inner-product argument and the registry PoP **before** production funds | open |
+| Cryptographic audit | AI audit ([audit labels](#audit-labels)) of the Σ-Bulletproofs protocol, the transcript, the inner-product argument and the registry PoP **before** production funds | open |
 | Gas before public chains | the bn254 transfer (3.33 M execution gas) exceeds the 2.5 M per-transfer kill criterion; optimization is required before a public chain | open |
-| PQ Zether gate | no chain-id allowlist (owner ruling 2026-10-31): the constructor / `initialize` precompile self-test on any chain id; `OpenFactory.kindEnabled` starts `false` for kinds 4–5; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)) | **SPECIFIED** |
+| PQ Zether gate | no chain-id allowlist (owner ruling 2026-10-31): the constructor / `initialize` precompile self-test on any chain id; `OpenFactory.tokenKindEnabled` starts `false` for kinds 4–5; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)) | **SPECIFIED** |
 | Clients | every Zether and PQ Zether contract carries **UNAUDITED** in its NatSpec; client chain/token screens show an UNAUDITED warning | **BUILT** (NatSpec) |
 
 ## <a id="build-ci-and-pins"></a>5. Build, CI and pins
@@ -228,7 +229,7 @@ implementations (each taking the factory address and `chain_uid`) registered as 
 the `SCaaSDex` implementation (registered as DEX version 1; built, no clone) and `SCaaSDexV1(registrar)` (its constructor takes the admin, here the registrar; unsalted domain); optionally a tier-1 demo token (**SPECIFIED**); with `DEPLOY_ZETHER=1` (any chain but Hedera), also the Zether stack (built, P3; [flags](../networks/evm.md#deployments)).
 
 It writes
-`deployments/<chainid>.json` to seed the node's chain configuration and client chain data. Production: every contract
+`deployments/<key>.json` ([NET-EVM-13](../networks/evm.md#NET-EVM-13)) to seed the node's chain configuration and client chain data. Production: every contract
 owner/admin is a Safe from the first block, and deployer keys come from a hardware wallet or KMS. **Transitional
 (BUILT, P1e):** every contract is deployed by `new X{salt: DEPLOY_SALT}` through forge's deterministic deployer (default
 salt `keccak256("scaas.deploy.v1")`; a re-run on the same chain collides, so a new version needs a new salt), the script
@@ -286,7 +287,7 @@ interacts with, not of the contract). The protocol provides the switches; the cr
 Per-family availability of every contract area is one matrix in
 [networks/README.md](../networks/README.md#availability) ([NET-ALL-17](../networks/README.md#NET-ALL-17),
 [NET-ALL-18](../networks/README.md#NET-ALL-18), [NET-ALL-19](../networks/README.md#NET-ALL-19)). In short: v2 token
-tiers, receiver-pays, the tender and the asset suite are EVM and Hedera first; classical Zether is EVM only (dev
+tiers, payee fee, the tender and the asset suite are EVM and Hedera first; classical Zether is EVM only (dev
 chains); PQ Zether is the private EVM chain only; the meta-transaction model itself exists natively on every family.
 
 ## <a id="governance"></a>8. Governance
@@ -330,6 +331,6 @@ A native caller is its own subject (`_govSubject()` is its padded address, arith
 takes the subject the router authenticated, and only while that call is live (0 otherwise, refused). No signature is
 verified in the governed contract, and no governance operation is on a governed contract's `mtx*` or `ua*` allow-list
 (the relay rule; `test/vectors/selector_audit.json` classifies every non-view entry). Who controls a power changes only
-by the governed contract's own rule: the owner grants or revokes, and ownership moves by `transferOwnership` and
-`acceptOwnership`, both signed by the UA through the router when it is no native account. The node relays the router's
+by the governed contract's own rule: the admin grants or revokes, and the admin role moves by `transferAdmin` and
+`acceptAdmin`, both signed by the UA through the router when it is no native account. The node relays the router's
 rows as contract kind `gov_router`, config `governance_routers` ([NODE-JOB-19](../node/job-api.md#NODE-JOB-19)).

@@ -1,0 +1,87 @@
+# ua-mtx-merge T66b Step 1: sizes and deploy gas of every deployed contract at the tip after 3h (plan T66b; owner 2026-11-07:
+# every deployed contract, libraries included, within 60 M). Tree: 7d653925 (T65; the later commits up to beb270a7 touch docs
+# only). Forge 1.8.5, solc 0.8.37, optimizer 200, legacy codegen, Amsterdam, default set n2304-kmax4096. Forge gas is
+# deterministic: a measurement of gas used, not a timing calibration. Full output in git-ignored .log files. UNAUDITED.
+#
+# Method (T10's public-gate formula, the T33 / T51 harness): each contract its own CREATE2 transaction through a probe
+# (runs/2026-11-09-ua-mtx-merge-t66b/DeployGas.t.sol, FOUNDRY_TEST = that directory): regular = lastCallGas.gasTotalUsed x 64/63
+# (an isolated top-level call: the intrinsic gas and the calldata are in it), state = EIP-8037's, asked = (regular + state) x 1.05;
+# a release (the twelve kinds, the DEX) adds the factory frame of deployImplementation, measured here as its own transaction
+# against the probe (test_t66bReleaseFrame, NormalToken version 2: regular +2,081, state +293,760, x 1.05 = 0.31 M; T10 had 0.37 M).
+# Fits = asked <= the limit (EIP-8037 inclusion: regular + state, never a block's gas_used); regular x 1.05 < 2^24 (EIP-7825).
+# Releases carry their constructor arguments as GovDeploy's test_releaseGasPerKind; UARegistry DeployBase's gen-1 list as T51
+# (19 kinds, verifier stand-ins, budget 12 M). Old = the block's d2552671 figures (937b454f, the same src) and, for asked, the
+# library study's section 5.4 (frame 0.37 M) and T51's registry rows.
+#
+# The 60 M line in runtime bytes (fitted on these rows): a release through deployImplementation 35,386 B (1,675.1 gas/B +
+# 0.42 M + the 0.31 M frame); a body module or a plain contract on the token bases without the frame 35,570 B; a library 35,694 B
+# (1,674.8 gas/B + 0.22 M); UARegistry with its constructor about 35,286 B (1,694.7 gas/B + 0.2 M).
+step | commit | rc | counts
+t66b-sizes | 7d653925 | 1 (forge: EIP-7954 notice) | forge build src --sizes --json; size_gate.py: 0 errors, 99 contracts; above 65,536 B: WrappedPqzRegulatedToken 73,511 (pinned in _above64KiB, owner 2026-11-07)
+t66b-deploy-gas | 7d653925 + harness | 0 | test_t66bDeployGas: 33 contracts measured, every CREATE2 succeeded; regular x 1.05 < 2^24 for all (largest 5.16 M, kind 13)
+t66b-frame | 7d653925 + harness | 0 | test_t66bReleaseFrame: deployImplementation frame 0.31 M asked
+#
+| Contract | form | runtime B old -> new (delta) | init B | regular | state | asked | 57 M | 60 M | 70 M | over 60 M by | reg x1.05 < 2^24 |
+|---|---|---|---:|---:|---:|---:|---|---|---|---|---|
+| `NormalToken` | release (kind 0) | 32,870 -> 33,889 (+1,019) | 35,469 | 2,329,022 | 52,131,690 | 55.9 M -> 57.49 M | no | yes | yes | - | yes |
+| `WrappedToken` | release (kind 1) | 43,503 -> 44,635 (+1,132) | 46,215 | 3,028,073 | 68,573,070 | 73.8 M -> 75.49 M | no | no | no | 15.49 M, ~9,249 B | yes |
+| `NormalZetherToken` | release (kind 2) | 41,076 -> 42,222 (+1,146) | 43,823 | 2,872,035 | 64,881,180 | 69.7 M -> 71.45 M | no | no | no | 11.45 M, ~6,837 B | yes |
+| `WrappedZetherToken` | release (kind 3) | 51,522 -> 52,709 (+1,187) | 54,310 | 3,554,442 | 80,926,290 | 87.2 M -> 89.02 M | no | no | no | 29.02 M, ~17,323 B | yes |
+| `NormalPqzToken` | release (kind 4) | 47,714 -> 51,821 (+4,107) | 53,426 | 3,496,187 | 79,567,650 | 80.8 M -> 87.53 M | no | no | no | 27.53 M, ~16,434 B | yes |
+| `WrappedPqzToken` | release (kind 5) | 57,026 -> 61,174 (+4,148) | 62,779 | 4,103,696 | 93,877,740 | 96.4 M -> 103.19 M | no | no | no | 43.19 M, ~25,786 B | yes |
+| `NormalRegulatedToken` | release (kind 8) | 40,638 -> 41,561 (+923) | 43,296 | 2,836,666 | 63,869,850 | 69.0 M -> 70.35 M | no | no | no | 10.35 M, ~6,181 B | yes |
+| `WrappedRegulatedToken` | release (kind 9) | 51,292 -> 52,302 (+1,010) | 54,037 | 3,535,717 | 80,303,580 | 86.8 M -> 88.34 M | no | no | no | 28.34 M, ~16,921 B | yes |
+| `NormalZetherRegulatedToken` | release (kind 10) | 49,020 -> 50,030 (+1,010) | 51,791 | 3,390,082 | 76,827,420 | 83.0 M -> 84.54 M | no | no | no | 24.54 M, ~14,650 B | yes |
+| `WrappedZetherRegulatedToken` | release (kind 11) | 59,678 -> 60,724 (+1,046) | 62,485 | 4,084,971 | 93,189,240 | 100.9 M -> 102.45 M | no | no | no | 42.45 M, ~25,342 B | yes |
+| `NormalPqzRegulatedToken` | release (kind 12) | 55,472 -> 59,371 (+3,899) | 61,136 | 3,997,590 | 91,119,150 | 93.8 M -> 100.18 M | no | no | no | 40.18 M, ~23,990 B | yes |
+| `WrappedPqzRegulatedToken` | release (kind 13) | 64,996 -> 73,511 (+8,515) | 75,281 | 4,917,174 | 112,753,350 | 109.8 M -> 123.86 M | no | no | no | 63.86 M, ~38,128 B | yes |
+| `SCaaSDex` | release (dex) | 33,704 -> 34,929 (+1,225) | 35,916 | 2,358,150 | 53,722,890 | 57.3 M -> 59.20 M | no | yes | yes | - | yes |
+| `GovernanceRouter` | plain | 13,396 -> 15,305 (+1,909) | 16,355 | 1,086,959 | 23,600,250 | 22.9 M -> 25.92 M | yes | yes | yes | - | yes |
+| `OpenFactory` | plain | 15,821 -> 28,438 (+12,617) | 28,691 | 1,887,955 | 43,791,660 | 27.0 M -> 47.96 M | yes | yes | yes | - | yes |
+| `MtxRelayFee` | plain | 2,552 -> 2,552 (+0) | 3,269 | 236,032 | 5,119,380 | 5.62 M | yes | yes | yes | - | yes |
+| `ComplianceRegistry` | plain | 2,538 -> 2,538 (+0) | 2,760 | 202,743 | 4,164,660 | 4.59 M | yes | yes | yes | - | yes |
+| `SmartKeyAccountFactory` | plain (its constructor deploys SmartKeyAccount, 21,003 B) | 1,264 -> 1,264 (+0) | 23,172 | 1,530,107 | 34,533,630 | 37.87 M | yes | yes | yes | - | yes |
+| `UARegistryLib` | library | 37,536 -> 38,070 (+534) | 38,122 | 2,501,705 | 58,430,700 | 63.1 M -> 63.98 M | no | no | yes | 3.98 M, ~2,376 B | yes |
+| `ZetherLib` | library | 25,351 -> 26,991 (+1,640) | 27,043 | 1,781,849 | 41,479,830 | 42.7 M -> 45.42 M | yes | yes | yes | - | yes |
+| `PqzTransferLib` | library | 19,724 -> 24,456 (+4,732) | 24,508 | 1,615,408 | 37,601,280 | 33.3 M -> 41.18 M | yes | yes | yes | - | yes |
+| `PqzViewLib` | library | 19,886 -> 24,201 (+4,315) | 24,253 | 1,598,764 | 37,211,130 | 33.5 M -> 40.75 M | yes | yes | yes | - | yes |
+| `WrappedLib` | library | 17,029 -> 17,095 (+66) | 17,147 | 1,136,891 | 26,338,950 | 28.85 M | yes | yes | yes | - | yes |
+| `PqzBurnLib` | library | 10,697 -> 15,404 (+4,707) | 15,456 | 1,026,625 | 23,751,720 | 26.02 M | yes | yes | yes | - | yes |
+| `GovernanceLib` | library | 14,512 -> 14,513 (+1) | 14,565 | 970,451 | 22,388,490 | 24.53 M | yes | yes | yes | - | yes |
+| `PqzStateLib` | library | 9,050 -> 14,062 (+5,012) | 14,114 | 941,324 | 21,698,460 | 23.77 M | yes | yes | yes | - | yes |
+| `ZetherWrappedLib` | library | 11,672 -> 12,067 (+395) | 12,119 | 810,252 | 18,646,110 | 20.43 M | yes | yes | yes | - | yes |
+| `MtxPipelineLib` | library | 11,069 -> 11,069 (+0) | 11,121 | 745,756 | 17,119,170 | 18.76 M | yes | yes | yes | - | yes |
+| `RegulatedLib` | library | 10,337 -> 10,418 (+81) | 10,470 | 704,146 | 16,123,140 | 17.67 M | yes | yes | yes | - | yes |
+| `PqzWrappedLib` | library | 5,357 -> 5,563 (+206) | 5,615 | 387,909 | 8,694,990 | 9.54 M | yes | yes | yes | - | yes |
+| `TradeLib` | library | 4,842 -> 4,842 (+0) | 4,894 | 340,057 | 7,591,860 | 8.33 M | yes | yes | yes | - | yes |
+| `HederaLib` | library | 767 -> 767 (+0) | 819 | 75,832 | 1,357,110 | 1.50 M | yes | yes | yes | - | yes |
+| `UARegistry` | plain | 31,438 -> 33,151 (+1,713) | 42,608 | 2,792,976 | 50,904,630 | 53.5 M -> 56.38 M | yes | yes | yes | - | yes |
+#
+# Every other src contract is below 21,100 B runtime (SmartKeyAccount 21,003 inside SmartKeyAccountFactory's row above,
+# MandateWallet / HederaMandateWallet 17,699, Ed25519Verifier 17,542, the other verifiers <= 13,000): <= 36 M by the fit.
+#
+# Reading. Over 60 M: twelve contracts, eleven releases and one library. Kinds 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13 (by 10.35 M,
+# kind 8, to 63.86 M, kind 13: about 6.2 KB to 38.1 KB of runtime over their 35,386 B line) and UARegistryLib (3.98 M, about
+# 2.4 KB over its 35,694 B line). At 60 M: NormalToken 57.49 M (2.5 M left), SCaaSDex 59.20 M (0.8 M left), UARegistry 56.38 M
+# (3.6 M left); every other library and plain contract fits with at least 14 M left (ZetherLib 45.42 M the largest). At 57 M
+# (the margin line): NormalToken, SCaaSDex and UARegistryLib miss (UARegistry fits); at 70 M: NormalToken, SCaaSDex, UARegistryLib and every
+# contract below them fit, no kind but 0 does. Growth since d2552671: the PQZ kinds +3.9 to +8.5 KB (3f, 3h, chain-neutral),
+# the others +0.9 to +1.2 KB (chain-neutral, 3f's check, 3e), OpenFactory +12.6 KB (factory index, generic catalogue,
+# chain-neutral), the PQZ libraries +4.3 to +5.0 KB each; kind 13 is 5.0 KB above the study's projection (68,478 B).
+# The pair UARegistry + UARegistryLib is 71,221 B against 70,980 B for both lines together: the rebalance alone cannot fit both
+# at 60 M; the pair must also shed at least about 0.25 KB (part 3, the spec).
+#
+# Cross-check on a real chain (T65's local Nethermind copy, receipts of the same releases with the frame and calldata): NormalToken
+# 53.30 M, NormalPqzToken 81.10 M, WrappedPqzToken 95.60 M, NormalPqzRegulatedToken 92.80 M, UARegistryLib 59.08 M gas used;
+# forge's regular + state here (no x 1.05) is 2 to 2.5 % higher each time, so the table errs on the safe side.
+#
+# Kind 13's DeployFailed() in T65 (the release step, deployImplementation(13); DeployFailed is raised only by the factory's
+# _deploy, on an empty CREATE2 failure): gas, not size and not init. The release needs regular + state = 117.97 M with the frame
+# (asked 123.86 M). e2e.py sends every transaction with eth_estimateGas; the copy's Nethermind configs set no JsonRpc.GasCap, so
+# the estimate runs under Nethermind's default cap of 100 M (the RUNBOOK's figure; the live testnet sets 200 M): the CREATE2
+# inside deployImplementation runs out of gas, returns 0 with no return data, and _deploy reverts DeployFailed(). Size is within
+# the copy's limits (its genesis: maxCodeSize 0x20000, EIP-7954 off: 131,072 B runtime, 262,144 B init; kind 13 is 73,511 /
+# 75,281 B) and the init code runs (the probe deploys it here; GovDeploy's test_releaseGasPerKind deploys it). The next largest
+# release, WrappedPqzToken, needs 95.6 M on the copy: under the cap. Inferred from these figures and the copy's config, not
+# re-run on the copy. Remedies outside this task: GasCap 200 M in the copy's configs, or an explicit gas limit for a release in
+# e2e.py; the T66b split removes it (every transaction <= 60 M).

@@ -1,0 +1,392 @@
+# SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+"""T66b task 4.1 (spec 2026-11-09-t66b-library-organisation.md §4.1, §4.4–4.6): each kind's token face and body modules,
+generated from `script/modules/entries.json` (every entry of every kind: signature, mutability, guard, the module it runs in).
+
+- `<Kind>.sol`: the token face. Every entry the token does not keep is a stub: `_forward(module)` when today's entry is
+  guarded (`nonReentrant` / `governed`; S1), `_forwardRaw` otherwise, `_forwardView` / `_forwardPure` for view / pure ones
+  (S2); no modifier on a stub (P1-1). The module addresses are immutables from `implArgs` (`ImplArgs` /
+  `RegulatedImplArgs`, decoded once); the constructor checks each module (code, kind, group, factory, the registry code hash
+  on 8–13, the PQZ set on 4, 5, 12, 13; `ModuleMissing` / `ModuleMismatch`). `modules()` lists them.
+- `<Kind>Modules.sol`: one contract per module, `<Kind><Group>`: the kind's core and its group's entries, each
+  `onlyDelegated` (a `pure` one cannot read `address(this)`: none) and calling its body, `moduleGroup()`.
+
+usage (from smartcontracts/evm): python3 script/modules/gen_faces.py [--check]   (--check: the files equal what it writes)
+GENERATED files: edit the entries table or this script, then regenerate. UNAUDITED tooling."""
+import json
+import os
+import sys
+
+from post3 import HOOKS, hook  # the pipeline hooks of rule 4
+
+E = json.load(open('script/modules/entries.json'))
+# §4.2's splitting rule, applied where the build measured a module above 33,780 B (≈ 57 M asked; summary.txt): Q splits into
+# the PQZ ops and their verdict entries (Q) and the PQZ state, setters and views (S; Q2 until owner 2026-11-10).
+S_SETTERS = {'pqzSetVerifier', 'pqzCancelVerifier', 'pqzRevokeVerifier', 'setProofStore', 'setVerifierFee'}  # 3t: + setVerifierFee
+S_VERDICTS = {'verifyTransferAmount'}
+SPLITS = {'WrappedPqzToken': {'Q'}, 'WrappedPqzRegulatedToken': {'Q'},
+          # owner 2026-11-13 (CTR-TOK-30 Change): kind 12 splits Q like kind 13, ahead of the notice line (headroom for 3zb / 3zc)
+          'NormalPqzRegulatedToken': {'Q'}}
+# Owner 2026-11-10 (CTR-TOK-30's Change, the body modules by function): W holds the wrap entries only and R the regulated
+# layer's entries only, on every kind. R's entries are the regulated layer's (`RegulatedBase` and the kind's `disableFeature`):
+# the entries.json `W` group of kind 8, whose W held nothing else. On 8, 10, 12 every W entry moves to R (W renamed R); on 9,
+# 11, 13 those entries leave W for R, and the wrap bodies the regulated kind restates (`rescue`, `underlyings`) stay in W.
+# The compliance hooks wrap and unwrap call are internal: compiled into W from the kind's core as before.
+R_ENTRIES = {_e['name'] for _e in E['kinds']['NormalRegulatedToken'] if _e['group'] == 'W'}
+for _k, _es in E['kinds'].items():
+    for _e in _es:
+        if 'Regulated' in _k and _e['group'] == 'W' and _e['name'] in R_ENTRIES:
+            _e['group'] = 'R'
+# §11 (g), owner 2026-11-09: pay stays in P; a kind whose P passes 33,780 B splits P into the pipeline and named transfers (P)
+# and pay with the relay fee (P2, the `pay` domain of entries.json, one clean cut). No kind's P passes it at 4.1 (30,783 B
+# at most). T66B_SPLIT_PAY=1 splits every kind, for 4.4's per-kind pay-module comparison only (never committed output).
+if os.environ.get('T66B_SPLIT_PAY') == '1':
+    for _k in E['kinds']:
+        SPLITS.setdefault(_k, set()).add('P')
+for _k, _gs in SPLITS.items():
+    for _e in E['kinds'][_k]:
+        if 'P' in _gs and _e['group'] == 'P' and _e['domain'] == 'pay':
+            _e['group'] = 'P2'
+        if 'Q' in _gs and _e['group'] == 'Q' and (_e['name'] in S_SETTERS or (_e['mut'] in ('view', 'pure')
+                                                                                and _e['name'] not in S_VERDICTS)):
+            _e['group'] = 'S'
+CHECK = '--check' in sys.argv
+# §4.1 rule 4: the modules that compile `MtxPipelineLib`'s code in, each overriding these hooks with the library's internal
+# twins: P (and P2) the pipeline, named transfers and pay; T the trade authorisation; A the payment views. W, R, Z, Q and S
+# keep the library call (their relayed named entries reach `_namedUA`: compiling the pipeline in would grow each by 3-7 KB).
+PIPE = {'P': list(HOOKS), 'P2': list(HOOKS), 'T': ['Authorize'], 'A': ['PaymentCount', 'PaymentsOf']}
+KFILE = {'NormalToken': 'src/metatx', 'WrappedToken': 'src/metatx', 'NormalZetherToken': 'src/zether',
+         'WrappedZetherToken': 'src/zether', 'NormalPqzToken': 'src/pqz', 'WrappedPqzToken': 'src/pqz',
+         'NormalRegulatedToken': 'src/regulated', 'WrappedRegulatedToken': 'src/regulated',
+         'NormalZetherRegulatedToken': 'src/regulated', 'WrappedZetherRegulatedToken': 'src/regulated',
+         'NormalPqzRegulatedToken': 'src/regulated', 'WrappedPqzRegulatedToken': 'src/regulated'}
+# D, L: the DEX's (src/dex/SCaaSDexAdmin.sol, SCaaSDexLiquidityModule.sol); S was Q2 (id 8 kept), R new (owner 2026-11-10)
+GROUP_ID = {'P': 1, 'T': 2, 'A': 3, 'W': 4, 'Z': 5, 'Q': 6, 'P2': 7, 'S': 8, 'G': 9, 'D': 10, 'L': 11, 'R': 12}
+GROUP_DOC = {'P': 'the signed pipeline, named transfers and pay', 'T': 'trade', 'A': 'admin: governance, init, tables, token meta',
+             'W': 'wrap', 'R': 'regulated', 'Z': 'Zether', 'Q': 'PQZ', 'P2': 'pay and the relay fee',
+             'S': 'the PQZ state, setters and views', 'G': 'governance', 'D': 'the DEX\'s governance', 'L': 'the DEX\'s liquidity'}
+TOKEN_KIND = {'NormalToken': 'NORMAL', 'WrappedToken': 'WRAPPED', 'NormalZetherToken': 'NORMAL_ZETHER',
+              'WrappedZetherToken': 'WRAPPED_ZETHER', 'NormalPqzToken': 'NORMAL_PQZ', 'WrappedPqzToken': 'WRAPPED_PQZ',
+              'NormalRegulatedToken': 'NORMAL_REGULATED', 'WrappedRegulatedToken': 'WRAPPED_REGULATED',
+              'NormalZetherRegulatedToken': 'NORMAL_ZETHER_REGULATED', 'WrappedZetherRegulatedToken': 'WRAPPED_ZETHER_REGULATED',
+              'NormalPqzRegulatedToken': 'NORMAL_PQZ_REGULATED', 'WrappedPqzRegulatedToken': 'WRAPPED_PQZ_REGULATED'}
+REG = lambda k: 'Regulated' in k  # noqa: E731
+# group 3l: the wrapped kinds' entries name `IWrappedToken`'s structs, which not every core imports
+WRAPPED_IMPORT = lambda k: ('src/metatx/IWrappedToken.sol',) if k.startswith('Wrapped') else ()  # noqa: E731
+PQZ = lambda k: 'Pqz' in k  # noqa: E731
+HDR = '''// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+pragma solidity ^0.8.24;
+
+// GENERATED by script/modules/gen_faces.py from script/modules/entries.json (T66b, spec 2026-11-09-t66b-library-organisation.md
+// §4.4): do not edit; regenerate.
+'''
+
+
+def rel(frm, to):
+    r = os.path.relpath(to, os.path.dirname(frm))
+    return r if r.startswith('.') else './' + r
+
+
+def imports(k, path, extra=()):
+    files = sorted(set(E['imports'].values()) | {f'{KFILE[k]}/{k}Core.sol', 'src/metatx/ITokenModule.sol', 'src/factory/IOpenFactory.sol'}
+                   | ({'src/pqz/PqzSet.sol'} if PQZ(k) else set()) | set(extra))
+    return ''.join(f'import "{rel(path, f)}";\n' for f in files)
+
+
+def groups(k):
+    seen = []
+    for e in E['kinds'][k]:
+        if not e['kept'] and e['group'] not in seen:
+            seen.append(e['group'])
+    return sorted(seen, key=lambda g: GROUP_ID[g])
+
+
+def mut(e):
+    return '' if e['mut'] == 'nonpayable' else ' ' + e['mut']
+
+
+def ret(e):
+    return f' returns ({e["returns"]})' if e['returns'] else ''
+
+
+FACE_ABI = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'face_abi.json')))['kinds']
+
+
+def _abi_t(i):
+    t = i.get('internalType') or i['type']
+    for p in ('struct ', 'enum ', 'contract '):
+        t = t.removeprefix(p)
+    return t
+
+
+W3L_EVENTS = [
+    '    event WrapLimitsSet(bytes32 indexed by, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);',
+    '    event WrapLimitsProposed(bytes32 indexed by, uint64 eta, IWrappedToken.WrapLegLimits[] legs, bool netUnwrap, bool wrapList, bool unwrapList);',
+    '    event WrapMemberSet(bytes32 indexed account, bytes32 indexed by, bool canWrap, bool canUnwrap);',
+]
+W3L_ERRORS = [f'    error {e};' for e in [
+    'WrapLimitExceeded(address underlying, uint8 limit, bytes32 account, uint256 amount, uint256 remaining)',
+    'WrapCapExceeded(address underlying, uint8 limit, uint256 amount, uint256 remaining)',
+    'UnwrapAboveNetWrapped(address underlying, bytes32 account, uint256 amount, uint256 entitlement)',
+    'WrapperNotListed(bytes32 account)', 'UnwrapperNotListed(bytes32 account)', 'WrapLimitInvalid(address underlying, uint8 limit)',
+    'WrapLegMismatch(uint256 index, address underlying)', 'WrapUnitInvalid(address underlying, uint8 unitExp)',
+    'WrapControlNeedsHybrid(uint8 bit)', 'WrapControlActive(uint8 bit)', 'WrapSubjectZero()']]
+# Round 3r (spec 2026-11-10-admin-not-owner.md §5.3, Fable P1-1): what `RegulatedLib.init` raises since, on 8-13
+REG3R_ERRORS = ['    error ComplianceRegistryRouterMismatch(address complianceRegistry, address got);']
+# Round 3s (spec 2026-11-10-token-lists.md §7, CTR-GOV-24): the lists' events and errors on 8-13 (`RegulatedLib`, `RegulatedBase`)
+REG3S_EVENTS = ['    event AllowedSet(bytes32 indexed account, bytes32 indexed by, bool on);',
+                '    event DeniedSet(bytes32 indexed account, bytes32 indexed by, bool on);']
+REG3S_ERRORS = [f'    error {e};' for e in ['NotAllowed(bytes32 account)', 'Denied(bytes32 account)', 'ListBatchInvalid(uint256 length)',
+                                          'ListAccountZero()', 'ComplianceRegistryNotSet()', 'ListHolderMissing(uint8 bit)']]
+
+# Fable recheck-2 P3-1 (owner 2026-11-12), CTR-GOV-27: the refusal of `renounceAdmin(chainUid_)` and `transferAdmin(newAdmin,
+# chainUid_)` (`IAdmin`, raised by the governance module)
+GOV_P31_ERRORS = ['    error ChainUidMismatch(bytes32 expected, bytes32 got);']
+# Round 3zb + 3zc (spec 2026-11-13-burner-wrap-caps.md §1, §3.6; CTR-GOV-29, CTR-GOV-30): `GovernanceLib.init`'s exclusivity
+# refusal on every kind; the supply caps' events and errors (`WrappedLib`) on the wrapped kinds
+B3ZB_ERRORS = ['    error FeatureConflict(uint8 bit, uint8 other);']
+W3ZC_EVENTS = [
+    '    event MaxSupplyProposed(bytes32 indexed by, uint256 maxSupply, uint64 eta);',
+    '    event MaxSupplySet(bytes32 indexed by, uint256 oldMaxSupply, uint256 newMaxSupply);',
+    '    event MaxWrapSupplyProposed(bytes32 indexed by, uint256 maxWrapSupply, uint64 eta);',
+    '    event MaxWrapSupplySet(bytes32 indexed by, uint256 oldMaxWrapSupply, uint256 newMaxWrapSupply);',
+]
+W3ZC_ERRORS = [f'    error {e};' for e in [
+    'MaxWrapSupplyExceeded(uint256 totalWrapped, uint256 maxWrapSupply)', 'MaxWrapSupplyInvalid()',
+    'MaxSupplyBelowSupply(uint256 maxSupply, uint256 totalSupply)', 'MaxSupplyBelowWrapCap(uint256 maxSupply, uint256 maxWrapSupply)',
+    'MaxWrapSupplyBelowWrapped(uint256 maxWrapSupply, uint256 totalWrapped)',
+    'MaxWrapSupplyAboveMaxSupply(uint256 maxWrapSupply, uint256 maxSupply)']]
+
+
+def abi_iface(k):
+    """`I<k>Abi` (controller 2026-11-09, option B): the pre-split face's events and errors that the face does not declare
+    itself (face_abi.json, from d142b57c), declarations only: the face's ABI lists them as before, its runtime is unchanged."""
+    d = FACE_ABI[k]
+    ev = [f'    event {x["name"]}(' + ', '.join(f'{_abi_t(i)}{" indexed" if i.get("indexed") else ""}'
+                                         + (f' {i["name"]}' if i['name'] else '') for i in x['inputs'])
+          + (') anonymous;' if x.get('anonymous') else ');') for x in d['event']]
+    er = [f'    error {x["name"]}(' + ', '.join(_abi_t(i) + (f' {i["name"]}' if i['name'] else '') for i in x['inputs']) + ');'
+          for x in d['error']]
+    if k.startswith('Wrapped'):  # group 3l (wrap limits spec §7): what `WrappedLib` raises and emits since the split
+        ev += W3L_EVENTS + W3ZC_EVENTS
+        er += W3L_ERRORS + W3ZC_ERRORS
+    er += GOV_P31_ERRORS + B3ZB_ERRORS
+    if REG(k):
+        er += REG3R_ERRORS + REG3S_ERRORS
+        ev += REG3S_EVENTS
+    return f'''
+/// @notice The events and errors of `{k}` before the split (d142b57c) that its core does not declare: the face's ABI lists them
+///         as before (metatx-split R4: a client decodes an error a library or a module raises), declarations only, no code.
+interface I{k}Abi {{
+''' + '\n'.join(ev + er) + '\n}\n'
+
+
+def face(k):
+    gs = groups(k)
+    path = f'{KFILE[k]}/{k}.sol'
+    imm = '\n'.join(f'    address private immutable _M{g};' for g in gs)
+    args = 'RegulatedImplArgs' if REG(k) else 'ImplArgs'
+    core_args = 'abi.encode(a.complianceRegistryCodehash)' if REG(k) else '""'
+    sets = '\n'.join(f'        _M{g} = _module(a.modules, {i}, {GROUP_ID[g]});' for i, g in enumerate(gs))
+    lst = ', '.join(f'_M{g}' for g in gs)
+    checks = ''
+    if REG(k):
+        checks += '\n        if (ITokenModule(m).COMPLIANCE_REGISTRY_CODEHASH() != COMPLIANCE_REGISTRY_CODEHASH) revert ModuleMismatch(i);'
+    if PQZ(k):
+        checks += '\n        if (ITokenModule(m).pqzSet() != PqzSet.SET_DIGEST) revert ModuleMismatch(i);'
+    stubs = []
+    for e in E['kinds'][k]:
+        if e['kept']:
+            continue
+        p = ', '.join(x.rsplit(' ', 1)[0] for x in e['params'])
+        if e['guard']:
+            body = f'_forward(_M{e["group"]});'
+        elif e['mut'] == 'view':
+            body = f'_forwardView(_M{e["group"]});'
+        elif e['mut'] == 'pure':
+            body = f'_forwardPure(_modulePure({GROUP_ID[e["group"]]}));'
+        else:
+            body = f'_forwardRaw(_M{e["group"]});'
+        stubs.append(f'    function {e["name"]}({p}) external{mut(e)}{ret(e)} {{\n        {body}\n    }}')
+    n = len(gs)
+    chain = '\n'.join(f'        if (g == {GROUP_ID[g]}) return _M{g};' for g in gs[:-1]) + f'\n        return _M{gs[-1]};'
+    return path, HDR + '\n' + imports(k, path, ('src/governance/IGovernance.sol', 'src/zether/ZetherTypes.sol') + WRAPPED_IMPORT(k)) + abi_iface(k) + f'''
+/// @title {k}: the token face (T66b, spec 2026-11-09-t66b-library-organisation.md §4.1). It keeps the ERC-20 core, the UA
+///        ledger and the identity views (`{k}Core`); every other entry forwards its calldata to the module of its group by
+///        DELEGATECALL ({', '.join(f'{g} {GROUP_DOC[g]}' for g in gs)}). UNAUDITED.
+contract {k} is {k}Core, I{k}Abi {{
+{imm}
+
+    /// @param implArgs `abi.encode({args}(...))`: the modules in the order {', '.join(gs)} (`modules()`).
+    constructor(address factory_, bytes memory implArgs) {k}Core(factory_, _coreArgs(implArgs)) {{
+        {args} memory a = abi.decode(implArgs, ({args}));
+        if (a.modules.length != {n}) revert ModuleMissing(a.modules.length);
+{sets}
+    }}
+
+    function _coreArgs(bytes memory implArgs) private pure returns (bytes memory) {{
+        {args} memory a = abi.decode(implArgs, ({args}));
+        a;
+        return {core_args};
+    }}
+
+    /// Module `i` of the list, checked (§4.5): code, this kind, its group, this factory{', the registry code hash' if REG(k) else ''}{', this PQZ set' if PQZ(k) else ''}.
+    function _module(address[] memory ms, uint256 i, uint8 group) private view returns (address m) {{
+        m = ms[i];
+        if (m.code.length == 0) revert ModuleMissing(i);
+        if (ITokenModule(m).kind() != uint8(IOpenFactory.TokenKind.{TOKEN_KIND[k]}) || ITokenModule(m).moduleGroup() != group || ITokenModule(m).factory() != FACTORY) {{
+            revert ModuleMismatch(i);
+        }}{checks}
+    }}
+
+    /// The module of group `g` inside a `pure` stub (S2): an immutable read is not `pure`, so the reader is cast, as the stubs are.
+    function _moduleView(uint8 g) private view returns (address) {{
+{chain}
+    }}
+
+    function _modulePure(uint8 g) private pure returns (address m) {{
+        function(uint8) view returns (address) f = _moduleView;
+        function(uint8) pure returns (address) p;
+        assembly ("memory-safe") {{
+            p := f
+        }}
+        m = p(g);
+    }}
+
+    function modules() external view returns (address[] memory m) {{
+        m = new address[]({n});
+        ({', '.join(f'm[{i}]' for i in range(n))}) = ({lst});
+    }}
+
+''' + '\n\n'.join(stubs) + '\n}\n'
+
+
+def modules(k):
+    path = f'{KFILE[k]}/{k}Modules.sol'
+    out = [HDR + '\n' + imports(k, path, ('src/metatx/MtxPipelineLib.sol',) + WRAPPED_IMPORT(k))]
+    for g in groups(k):
+        ents = []
+        for e in E['kinds'][k]:
+            if e['kept'] or e['group'] != g:
+                continue
+            body = f'_{e["name"]}Body({", ".join(e["names"])})'
+            od = '' if e['mut'] == 'pure' else ' onlyDelegated'
+            ents.append(f'    function {e["name"]}({", ".join(e["params"])}) external{mut(e)}{od}{ret(e)} {{\n'
+                        f'        {"return " if e["returns"] else ""}{body};\n    }}')
+        pipe = '\n'.join(hook(n, True, False) for n in PIPE.get(g, ()))
+        if pipe:
+            pipe = '\n    // rule 4 (§4.1): `MtxPipelineLib`\'s code compiled in, its internal twins in place of the library call\n' + pipe
+        out.append(f'''
+/// @title {k}{g}: the body module {g} of {k} ({GROUP_DOC[g]}; T66b, spec 2026-11-09-t66b-library-organisation.md §4.2):
+///        reached only by DELEGATECALL from the token's stubs (M2), no guard of its own (the stub's `_forward` holds it, M3),
+///        storage only its core's (M6). UNAUDITED.
+contract {k}{g} is {k}Core {{
+    /// @param args the kind's own constructor argument (`""`, or `abi.encode(complianceRegistryCodehash)` on a regulated kind; M1).
+    constructor(address factory_, bytes memory args) {k}Core(factory_, args) {{}}
+
+    function moduleGroup() external pure returns (uint8) {{
+        return {GROUP_ID[g]};
+    }}
+{pipe}
+''' + '\n\n'.join(ents) + '\n}\n')
+    return path, ''.join(out)
+
+
+KIND_ID = {k: i if i < 6 else i + 2 for i, k in enumerate(KFILE)}
+
+
+def helper():
+    """`script/KindModules.sol`: each kind's module artifacts in its stubs' order, and their deployment (tests, DeployBase)."""
+    rows = []
+    for k in KFILE:
+        gs = groups(k)
+        names = ', '.join(f'"{k}Modules.sol:{k}{g}"' for g in gs)
+        rows.append(f'    if (kind == {KIND_ID[k]}) {{\n        n = new string[]({len(gs)});\n'
+                    + ''.join(f'        n[{i}] = "{k}Modules.sol:{k}{g}";\n' for i, g in enumerate(gs)) + '        return n;\n    }')
+    return 'script/KindModules.sol', HDR + '''
+import {Vm} from "forge-std/Vm.sol";
+import {ImplArgs, RegulatedImplArgs} from "../src/metatx/ITokenModule.sol";
+
+/// @notice The body-module artifacts of token kind `kind` (0-5, 8-13), in the order its `implArgs` lists them.
+function kindModuleNames(uint8 kind) pure returns (string[] memory n) {
+''' + '\n'.join(rows) + '''
+    revert("no such token kind");
+}
+
+/// @notice The `implArgs` of a release of `kind` whose modules are at `modules` (`coreArgs`: "" on 0-5, `abi.encode(bytes32)` on 8-13).
+function kindImplArgs(uint8 kind, address[] memory modules, bytes memory coreArgs) pure returns (bytes memory) {
+    if (kind >= 8) return abi.encode(RegulatedImplArgs(abi.decode(coreArgs, (bytes32)), modules));
+    return abi.encode(ImplArgs(modules));
+}
+
+/// @notice Deploys `kind`'s modules for `factory` (each `vm.deployCode`, so a test contract does not embed their init code) and
+///         returns them with the release's `implArgs`.
+function deployKindModules(uint8 kind, address factory, bytes memory coreArgs)
+    returns (address[] memory modules, bytes memory implArgs)
+{
+    Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+    string[] memory n = kindModuleNames(kind);
+    modules = new address[](n.length);
+    for (uint256 i; i < n.length; ++i) modules[i] = vm.deployCode(n[i], abi.encode(factory, coreArgs));
+    implArgs = kindImplArgs(kind, modules, coreArgs);
+}
+
+/// @notice `deployKindModules`' `implArgs` alone (a test's `new <Kind>(factory, kindArgs(kind, factory, coreArgs))`).
+function kindArgs(uint8 kind, address factory, bytes memory coreArgs) returns (bytes memory implArgs) {
+    (, implArgs) = deployKindModules(kind, factory, coreArgs);
+}
+
+/// @notice Deploys the DEX's modules for `factory` (T66b §4.2; the liquidity spec §9.1): the governance module (group 10) and
+///         the liquidity module (group 11), and returns them with the DEX release's `implArgs`.
+function deployDexModules(address factory) returns (address[] memory modules, bytes memory implArgs) {
+    Vm vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
+    modules = new address[](2);
+    modules[0] = vm.deployCode("SCaaSDexAdmin.sol:SCaaSDexGovernanceModule", abi.encode(factory, bytes("")));
+    modules[1] = vm.deployCode("SCaaSDexLiquidityModule.sol:SCaaSDexLiquidityModule", abi.encode(factory, bytes("")));
+    implArgs = abi.encode(ImplArgs(modules));
+}
+
+/// @notice `deployDexModules`' `implArgs` alone (a test's `new SCaaSDex(factory, dexArgs(factory))`).
+function dexArgs(address factory) returns (bytes memory implArgs) {
+    (, implArgs) = deployDexModules(factory);
+}
+'''
+
+
+def whole(top='MetaTokenBase', base=('MetaTokenBase', 'ERC20MetaTx', 'UAMetaTxBase', 'MetaTxBase', 'SaltedEIP712',
+                                     'GovernanceBase'), src='src/metatx/MetaTokenBase.sol'):
+    """`test/helpers/<top>Whole.sol` (tests only): `<top>` with every entry of its chain as one external function calling its
+    body, the guard modifier as before the split: a monolithic token for the bases' own tests."""
+    ents = []
+    for e in E['kinds']['NormalToken']:
+        if e['kept'] or e['decl'] not in base:
+            continue
+        g = f' {e["guard"]}' if e['guard'] else ''
+        body = f'_{e["name"]}Body({", ".join(e["names"])})'
+        ents.append(f'    function {e["name"]}({", ".join(e["params"])}) external{mut(e)}{g}{ret(e)} {{\n'
+                    f'        {"return " if e["returns"] else ""}{body};\n    }}')
+    path = f'test/helpers/{top}Whole.sol'
+    return path, HDR + '\n' + ''.join(f'import "{rel(path, f)}";\n' for f in sorted(set(E['imports'].values()) | {src})) + f'''
+/// @notice Tests only: `{top}` with its chain's entries in one contract (no modules), for a fixture.
+abstract contract {top}Whole is {top} {{
+''' + '\n\n'.join(ents) + '\n}\n'
+
+
+bad = 0
+for path, txt in (helper(), whole(), whole('ERC20MetaTx', ('ERC20MetaTx', 'UAMetaTxBase', 'MetaTxBase', 'SaltedEIP712'),
+                                                        'src/metatx/ERC20MetaTx.sol')):
+    if CHECK:
+        if not os.path.exists(path) or open(path).read() != txt:
+            print('differs:', path)
+            bad += 1
+    else:
+        open(path, 'w').write(txt)
+for k in KFILE:
+    for path, txt in (face(k), modules(k)):
+        if CHECK:
+            if not os.path.exists(path) or open(path).read() != txt:
+                print('differs:', path)
+                bad += 1
+        else:
+            open(path, 'w').write(txt)
+print('faces', 'checked' if CHECK else 'written', len(KFILE) * 2 + 3, 'files', bad, 'differ')
+sys.exit(1 if bad else 0)

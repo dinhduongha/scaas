@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./helpers/PqzVerdicts.sol";
+import {MtxDigest} from "../helpers/MtxDigest.sol";
 import {console2, Vm} from "forge-std/Test.sol";
 import {PqzSlots} from "./PqzState.t.sol";
 import {PQZ_UID} from "./helpers/PqzRegistryBase.sol";
@@ -10,7 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
-import {UAPqzVerifier} from "../../src/pqz/UAPqzVerifier.sol";
+import {PqzKeyVerifier} from "../../src/pqz/PqzKeyVerifier.sol";
 import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
@@ -20,6 +22,7 @@ import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialTok
 import {WrappedPqzToken} from "../../src/pqz/WrappedPqzToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {TYPED_OPS, domainOf} from "../metatx/NamedEntry.t.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Task 7b: a stand-in for a precompile with a known price: burns `B` gas, answers 1 (`_precompiles`).
 contract GasBurner {
@@ -121,9 +124,9 @@ contract PqzStatePinGasTest is PqzSlots {
         vm.roll(block.number + 100);
         for (uint256 k; k < 2; ++k) {
             bytes32 ua = k == 0 ? alice : dave;
-            tok.mtxPrepareAcc(ua, 0);
-            tok.mtxPrepareAcc(ua, 1);
-            tok.mtxRollOver(ua, PRE); // the first materialisation; the measured rollovers rewrite
+            tok.mtxPrepareAcc(ua, 0, 0);
+            tok.mtxPrepareAcc(ua, 0, 1);
+            tok.mtxRollOver(ua, 0, PRE); // the first materialisation; the measured rollovers rewrite
         }
         (discRef,) = _transfer(tok, carol, bob, bytes32(0), 1, true); // carol's acc: a fresh blob reference
         _fund(tok, bob, 1); // bob: an entry of an earlier block
@@ -133,7 +136,7 @@ contract PqzStatePinGasTest is PqzSlots {
         _fund(tok, _pqzUA(_pk(12), 12), 100); // D19: the pool holds the fees the measured debits pay out
         _public(tok, vm.addr(RKEY), 1000); // the relayed envelopes' signer pays the outer fee (full-tx pins)
         feeUA = _mldsaUA(50); // the ML-DSA relay path's signer (8d2b fix round, review I1 / I2)
-        NormalPqzToken(address(tok)).mintToUA(feeUA, 1000);
+        NormalPqzToken(address(tok)).mintToUA(feeUA, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         _tableSetUp();
         vm.resumeGasMetering();
@@ -148,10 +151,10 @@ contract PqzStatePinGasTest is PqzSlots {
         bytes memory r;
         for (uint256 j; j < 8; ++j) r = bytes.concat(r, ys[j]);
         discRef7 = tok.mtxConfidentialTransfer(_ms(bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), gus,
-            alice, uint256(8), uint256(0)), salt, r, _blob(99, _outLen(8, true)))), hex"c0de", _pqAuth(), "");
+            alice, uint256(8), uint256(0)), salt, r, _blob(99, _outLen(8, true)))), hex"c0de", _pqAuth(), "", noVerdict());
         meter = new GasMeter();
         UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
-        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 100_000);
+        k[0] = UARegistry.KindConfig(UAKinds.MLDSA65, address(mlv), 200_000);
         k[1] = UARegistry.KindConfig(UAKinds.PQZ_MLWE, address(pqv), 12_000_000);
         regL = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
         verL = pqv;
@@ -202,7 +205,7 @@ contract PqzStatePinGasTest is PqzSlots {
 
     // ------------------------------------------------------------------ ROLL_MAX and prepare (Review Focus 5, 6)
 
-    /// `ROLL_MAX` = the largest multiple of 16 under `0.75 · 2^24`: `ROLL_MAX` fits; `ROLL_MAX + 16` is the linear fit
+    /// `ROLL_MAX` (owner-set, a multiple of 16) fits under `0.75 · 2^24`; `ROLL_MAX + 16` is the linear fit
     /// through a `LO`-entry rollover of another account (logged; the binding rule is the relayed full transaction,
     /// `test_gas_rollMax_relayedFullTx`). The `LO`-entry call runs first under a snapshot that
     /// is reverted (`vm.revertToState` restores cold access too: `gMax` equals its value as the test's only call), so
@@ -210,9 +213,9 @@ contract PqzStatePinGasTest is PqzSlots {
     /// `ROLL_MAX` entries of `q − 1`: every coefficient is `q − 272`.
     function test_gas_rollMax() public {
         uint256 snap = vm.snapshotState();
-        uint256 g128 = _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (dave, LO)));
+        uint256 g128 = _gas(abi.encodeCall(IPqzToken.mtxRollOver, (dave, uint64(0), LO)));
         vm.revertToState(snap);
-        uint256 gMax = _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, PqzCore.ROLL_MAX)));
+        uint256 gMax = _gas(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), PqzCore.ROLL_MAX)));
         uint256 next = gMax + (gMax - g128) * 16 / (PqzCore.ROLL_MAX - LO);
         _log("mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs)", g128);
         _log("mtxRollOver ROLL_MAX (steady, distinct cold blobs)", gMax);
@@ -220,7 +223,7 @@ contract PqzStatePinGasTest is PqzSlots {
         console2.log("per entry / fixed (fit)", (gMax - g128) / (PqzCore.ROLL_MAX - LO),
             g128 - (gMax - g128) * LO / (PqzCore.ROLL_MAX - LO));
         assertLe(gMax, CAP, "ROLL_MAX under 0.75 * 2^24");
-        bytes memory acc = tok.pqzAcc(alice);
+        bytes memory acc = tok.pqzAcc(alice, 0);
         uint256 want = PqzCt.Q - (PRE + PqzCore.ROLL_MAX);
         want = want << 192 | want << 128 | want << 64 | want;
         for (uint256 o; o < PqzCt.CT; o += 32) {
@@ -237,8 +240,8 @@ contract PqzStatePinGasTest is PqzSlots {
         m.from = vm.addr(key);
         m.data = data;
         m.validUntil = block.timestamp + 1 hours;
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, tok.mtxDigest(m));
-        return _gas(abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, MtxDigest.metaTx(address(tok), m));
+        return _gas(abi.encodeWithSignature("executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v)));
     }
 
     /// Fix round 1 (review I1, m3): `data` relayed as a full transaction. The envelope pays a FIXED (absolute) outer fee
@@ -252,12 +255,12 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     /// Plan 5h Task 8d part 2b fix round (review I1): `_fullTx` on either relay path, `ua` = `uaExecute` (`_envelopeVia`),
-    /// with ML-DSA-65 at 68,006 [estimate] (`GasBurner`, as the gas table): its mocks are cleared, so the precompile is
+    /// with ML-DSA-65 at 100,006 [estimate] (`GasBurner`, as the gas table): its mocks are cleared, so the precompile is
     /// not available in the call (a rollover or a prepare does not use it).
     function _fullTxVia(bool ua, bytes memory data, uint256 fee) internal returns (uint256 reg, uint256 st) {
         if (ua) {
             vm.clearMockedCalls();
-            vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+            vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         }
         bytes memory call = _envelopeVia(ua, data, fee);
         uint256 zeros;
@@ -291,7 +294,7 @@ contract PqzStatePinGasTest is PqzSlots {
             u.validUntil = block.timestamp + 1 hours;
             u.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
             u.fee = fee;
-            return abi.encodeCall(tok.uaExecute, (u, abi.encode(bytes(""), _proof(feeSigLen))));
+            return abi.encodeCall(tok.mtxExecute, (u, UACall.auth(u.from, abi.encode(bytes(""), _proof(feeSigLen)))));
         }
         MetaTxLib.MetaTransaction memory m;
         m.from = vm.addr(RKEY);
@@ -300,40 +303,47 @@ contract PqzStatePinGasTest is PqzSlots {
         m.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
         m.fee = fee;
         uint256 snap = vm.snapshotState();
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, tok.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, MtxDigest.metaTx(address(tok), m));
         vm.revertToState(snap);
-        return abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v));
+        return abi.encodeWithSignature("executeMetaTransaction((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v));
     }
 
     /// Fix round 1 (I1): the `ROLL_MAX` rollover as a full relayed transaction with an outer fee: the binding convention
-    /// for `ROLL_MAX` (the whole transaction <= 0.75 · 2^24). Plan 5h Task 8d part 2b: and `ROLL_MAX` is the LARGEST such
-    /// multiple of 16 — `ROLL_MAX + 16` (the linear fit through a `LO`-entry relayed rollover of `dave`, measured cold
-    /// under a snapshot first) is over the cap. The token refuses `n > ROLL_MAX`, so `ROLL_MAX + 16` itself is measured
-    /// by a build with a larger constant (`test/research/PqzPackGas.t.sol` `test_pack_scanRoll`,
-    /// `runs/2026-10-26-t8d2b-fix-rollscan-<set>.txt`: per-entry steps equal within 0.01 %, so the fit is exact enough).
-    /// 8d2b fix round (review I1): on BOTH relay paths, `mtxExecute` (ECDSA) and `uaExecute` (the ML-DSA-65 fee UA):
-    /// `ROLL_MAX` fits on each, and `ROLL_MAX + 16` is over the cap on the costlier one.
+    /// for `ROLL_MAX` (the whole transaction <= 0.75 · 2^24), on BOTH relay paths (8d2b fix round, review I1),
+    /// `mtxExecute` (ECDSA) and `uaExecute` (the ML-DSA-65 fee UA). Owner 2026-11-10: `ROLL_MAX` is an owner-set multiple
+    /// of 16 whose relayed full rollover fits on both paths (asserted); the largest fitting multiple of 16 is measured and
+    /// reported, not required: the linear fit through a `LO`-entry relayed rollover of `dave` (measured cold under a
+    /// snapshot first) on each path, the smaller of the two, and the headroom at `ROLL_MAX` on the costlier path (logged).
+    /// The token refuses `n > ROLL_MAX`, so a larger value is measured by a build with a larger constant
+    /// (`test/research/PqzPackGas.t.sol` `test_pack_scanRoll`: per-entry steps equal within 0.01 %, so the fit is exact enough).
     function test_gas_rollMax_relayedFullTx() public {
-        (uint256 e, uint256 en) = _rollMaxVia(false);
-        (uint256 u, uint256 un) = _rollMaxVia(true);
+        (uint256 e, uint256 el) = _rollMaxVia(false);
+        (uint256 u, uint256 ul) = _rollMaxVia(true);
         assertLe(e, CAP, "mtxExecute: the full relayed transaction's regular gas under 0.75 * 2^24");
         assertLe(u, CAP, "uaExecute: the full relayed transaction's regular gas under 0.75 * 2^24");
-        assertGt(en > un ? en : un, CAP, "ROLL_MAX + 16 would fit too: ROLL_MAX is not the largest multiple of 16");
+        (uint256 fe, uint256 fu) = (_largestFit(e, el), _largestFit(u, ul));
+        console2.log("ROLL_MAX / the largest multiple of 16 that fits on both paths (linear fit; reported, not required) / "
+            "headroom at ROLL_MAX on the costlier path", PqzCore.ROLL_MAX, fe < fu ? fe : fu, CAP - (e > u ? e : u));
     }
 
-    /// The `ROLL_MAX` relayed rollover on one path and its `ROLL_MAX + 16` fit (state restored afterwards).
-    function _rollMaxVia(bool ua) internal returns (uint256 reg, uint256 next) {
+    /// The largest multiple of 16 whose relayed full rollover fits `CAP` on one path: the line through `lo` (`LO` entries)
+    /// and `reg` (`ROLL_MAX` entries, `reg <= CAP`).
+    function _largestFit(uint256 reg, uint256 lo) internal pure returns (uint256) {
+        return (PqzCore.ROLL_MAX + (CAP - reg) * (PqzCore.ROLL_MAX - LO) / (reg - lo)) / 16 * 16;
+    }
+
+    /// The `ROLL_MAX` relayed rollover on one path and the `LO`-entry one of the fit (state restored afterwards).
+    function _rollMaxVia(bool ua) internal returns (uint256 reg, uint256 lo) {
         string memory p = ua ? "uaExecute" : "mtxExecute";
         uint256 snap = vm.snapshotState();
         console2.log(string.concat("relayed mtxRollOver (", p, "), full transaction, fee 7, entries (fit point)"), LO);
-        (uint256 lo,) = _fullTxVia(ua, abi.encodeCall(IConfidentialToken.mtxRollOver, (dave, LO)), 7);
+        (lo,) = _fullTxVia(ua, abi.encodeCall(IPqzToken.mtxRollOver, (dave, uint64(0), LO)), 7);
         vm.revertToState(snap);
         console2.log(string.concat("relayed mtxRollOver (", p, "), full transaction, fee 7, entries"), PqzCore.ROLL_MAX);
-        (reg,) = _fullTxVia(ua, abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, PqzCore.ROLL_MAX)), 7);
+        (reg,) = _fullTxVia(ua, abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), PqzCore.ROLL_MAX)), 7);
         vm.revertToState(snap);
-        next = reg + (reg - lo) * 16 / (PqzCore.ROLL_MAX - LO);
-        console2.log(string.concat("ROLL_MAX + 16, relayed full transaction (", p, ", linear fit) / per entry"), next,
-            (reg - lo) / (PqzCore.ROLL_MAX - LO));
+        console2.log(string.concat("ROLL_MAX + 16, relayed full transaction (", p, ", linear fit) / per entry"),
+            reg + (reg - lo) * 16 / (PqzCore.ROLL_MAX - LO), (reg - lo) / (PqzCore.ROLL_MAX - LO));
     }
 
     /// Fix round 1 (I1): each `mtxPrepareAcc` half as a full relayed transaction with an outer fee, on both relay paths
@@ -350,56 +360,56 @@ contract PqzStatePinGasTest is PqzSlots {
     function _prepareVia(uint256 half) internal {
         uint256 snap = vm.snapshotState();
         console2.log("relayed mtxPrepareAcc (mtxExecute), full transaction, fee 7, half", half);
-        (uint256 e,) = _fullTxVia(false, abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, half)), 7);
+        (uint256 e,) = _fullTxVia(false, abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), half)), 7);
         vm.revertToState(snap);
         console2.log("relayed mtxPrepareAcc (uaExecute), full transaction, fee 7, half", half);
-        (uint256 u,) = _fullTxVia(true, abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, half)), 7);
+        (uint256 u,) = _fullTxVia(true, abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), half)), 7);
         assertLe(e, CAP, "mtxExecute");
         assertLe(u, CAP, "uaExecute");
     }
 
     /// The same `ROLL_MAX` rollover relayed (owner rule 2026-10-20: every mtx* write is relayable). Plan 5h Task 7:
-    /// `ROLL_MAX` is the largest multiple of 16 when this fails at `ROLL_MAX + 16` (built with that constant).
+    /// `ROLL_MAX` fits (the largest fitting multiple of 16 is reported by `test_gas_rollMax_relayedFullTx`, not required).
     function test_gas_rollMax_relayed() public {
-        uint256 g = _relayed(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, PqzCore.ROLL_MAX)));
+        uint256 g = _relayed(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), PqzCore.ROLL_MAX)));
         _log("relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0)", g);
         assertLe(g, CAP, "relayed ROLL_MAX under 0.75 * 2^24");
     }
 
     function test_gas_roll128() public {
-        _log("mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs)", _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (dave, LO))));
+        _log("mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs)", _gas(abi.encodeCall(IPqzToken.mtxRollOver, (dave, uint64(0), LO))));
     }
 
     function test_gas_roll_1() public {
-        _log("mtxRollOver 1 (steady)", _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, 1))));
+        _log("mtxRollOver 1 (steady)", _gas(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1))));
     }
 
     function test_gas_roll_16() public {
-        _log("mtxRollOver 16 (steady)", _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, 16))));
+        _log("mtxRollOver 16 (steady)", _gas(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 16))));
     }
 
     /// Each half of the first materialisation in a transaction of its own (D8; spec §5.3).
     function test_gas_prepareAcc_half0() public {
-        uint256 g = _gas(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, 0)));
+        uint256 g = _gas(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), 0)));
         _log("mtxPrepareAcc half 0", g);
         assertLe(g, CAP);
     }
 
     function test_gas_prepareAcc_half1() public {
-        uint256 g = _gas(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, 1)));
+        uint256 g = _gas(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), 1)));
         _log("mtxPrepareAcc half 1", g);
         assertLe(g, CAP);
     }
 
     /// Plan 5h Task 7: each half relayed (fee 0) stays under `0.75 · 2^24` too (every mtx* write is relayable).
     function test_gas_prepareAcc_half0_relayed() public {
-        uint256 g = _relayed(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, 0)));
+        uint256 g = _relayed(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), 0)));
         _log("relayed mtxPrepareAcc half 0 (mtxExecute, fee 0)", g);
         assertLe(g, CAP);
     }
 
     function test_gas_prepareAcc_half1_relayed() public {
-        uint256 g = _relayed(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, 1)));
+        uint256 g = _relayed(abi.encodeCall(IPqzToken.mtxPrepareAcc, (eve, uint64(0), 1)));
         _log("relayed mtxPrepareAcc half 1 (mtxExecute, fee 0)", g);
         assertLe(g, CAP);
     }
@@ -416,7 +426,7 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function test_gas_shield_merge() public {
         uint256 g = _gas(abi.encodeCall(IConfidentialToken.mtxShield, (frank, 5)));
-        assertEq(tok.pqzAccount(frank).pendingCount, 1, "merged");
+        assertEq(tok.pqzAccount(frank, 0).pendingCount, 1, "merged");
         _log("mtxShield, merge (TRIVIAL tail of this block)", g);
     }
 
@@ -429,7 +439,7 @@ contract PqzStatePinGasTest is PqzSlots {
     function _op1p(bytes32 from, uint256 p, bool aud, bytes memory hint, bytes memory proof)
         internal view returns (bytes memory)
     {
-        return abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(p, 0, from, bob, carol, _out(77, aud), "")), proof, _pqAuth(), hint));
+        return abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(p, 0, from, bob, carol, _out(77, aud), "")), proof, _pqAuth(), hint, noVerdict()));
     }
 
     /// `n` pseudo-random proof bytes (the calldata a real proof of that length costs: almost no zero bytes).
@@ -444,15 +454,15 @@ contract PqzStatePinGasTest is PqzSlots {
     /// Task 7b: op 1 (auditor, fee) relayed as a full transaction with a `PQZ_PROOF_TX`-byte proof (default 52,624: the
     /// 16k `R_TX` codegen size), fresh ref and the materialised `acc` without a hint (the op 1 worst case).
     /// Task 7b: unless `PQZ_PRECOMPILE=0`, `PQZ` and `ML65` become code that burns their price (`pqzGas` [estimate]:
-    /// today's row × 1.25; ML-DSA-65 68,000 + 6 per message word, unchanged) less the cold-account difference
+    /// today's row × 1.25; ML-DSA-65 100,000 + 6 per message word, calibrated 2026-11-15, TODO 3zg) less the cold-account difference
     /// (3,000 here, 100 for a precompile on chain): the transaction then counts the verification as execution, as on
     /// chain, and the EIP-7976 floor is compared with the whole of it. Loop granularity ≈ ±40 gas.
     function _precompiles(uint256 pqzGas) internal {
         if (vm.envOr("PQZ_PRECOMPILE", uint256(1)) == 0) return;
-        console2.log("  [estimate] precompile gas PQZ / ML65 (burnt by stand-ins)", pqzGas, uint256(68_006));
+        console2.log("  [estimate] precompile gas PQZ / ML65 (burnt by stand-ins)", pqzGas, uint256(100_006));
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new GasBurner(pqzGas - 2_900)).code);
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
     }
 
     function test_gas_op1_relayedFullTx_freshRef() public {
@@ -480,12 +490,12 @@ contract PqzStatePinGasTest is PqzSlots {
     /// floor (853,760 at n2304, against 417 × 2,100 = 875,700 for the reads), so it saves gas only when the transaction is
     /// not floor-bound (PQZL with its precompile price: yes, the gas table; this test's 2-byte proof: no).
     function test_gas_op1_bundle_materialised_hint() public {
-        bytes memory h = _packed(tok.pqzAcc(alice));
+        bytes memory h = _packed(tok.pqzAcc(alice, 0));
         assertEq(h.length, PqzCt.CTP);
         uint256 snap = vm.snapshotState();
         uint256 e0 = meter.measure(address(tok), _op1(alice, PRE, true, ""));
         vm.revertToState(snap);
-        uint256 eu = meter.measure(address(tok), _op1(alice, PRE, true, tok.pqzAcc(alice)));
+        uint256 eu = meter.measure(address(tok), _op1(alice, PRE, true, tok.pqzAcc(alice, 0)));
         vm.revertToState(snap);
         uint256 eh = meter.measure(address(tok), _op1(alice, PRE, true, h));
         vm.revertToState(snap);
@@ -501,17 +511,17 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function test_gas_op1_bundle_16inline() public {
-        bytes memory h = _packed(tok.pqzAcc(alice));
+        bytes memory h = _packed(tok.pqzAcc(alice, 0));
         _log("op 1 BUNDLE, auditor, fee, 16 inline credits (cold blobs), hint", _gas(_op1(alice, PRE + 16, true, h)));
     }
 
     function test_gas_op1_compact() public {
-        bytes memory d = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingleCompact, (_ts(_payload(0, 0, carol, bob, alice, _out(78, true), _memo())), hex"c0de", _pqAuth(), ""));
+        bytes memory d = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingleCompact, (_ts(_payload(0, 0, carol, bob, alice, _out(78, true), _memo())), hex"c0de", _pqAuth(), "", noVerdict()));
         _log("op 1 COMPACT (HASH), auditor, fee, fresh ref", _gas(d));
     }
 
     function test_gas_op1_shieldIn() public {
-        bytes memory d = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(0, 100, carol, bob, alice, _out(80, true), "")), hex"c0de", _pqAuth(), ""));
+        bytes memory d = abi.encodeCall(IPqzToken.mtxConfidentialTransferSingle, (_ts(_payload(0, 100, carol, bob, alice, _out(80, true), "")), hex"c0de", _pqAuth(), "", noVerdict()));
         _log("op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref", _gas(d));
     }
 
@@ -528,7 +538,7 @@ contract PqzStatePinGasTest is PqzSlots {
         for (uint256 j; j < m; ++j) r = bytes.concat(r, xs[j]);
         bytes memory out = _blob(81 + m, _outLen(m, aud));
         return abi.encodeCall(IPqzToken.mtxConfidentialTransfer, (_ms(bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0),
-            carol, alice, m, uint256(0)), salt, r, out)), proof, _pqAuth(), ""));
+            carol, alice, m, uint256(0)), salt, r, out)), proof, _pqAuth(), "", noVerdict()));
     }
 
     function test_gas_op7_M4() public {
@@ -589,7 +599,7 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function _burnP(uint256 amount, address to, bytes memory proof) internal view returns (bytes memory) {
         bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), carol, alice), _blob(5, PqzCt.CT));
-        return abi.encodeCall(IPqzToken.mtxUnshield, (_bs(pl), amount, bytes32(uint256(uint160(to))), proof, _pqAuth(), ""));
+        return abi.encodeCall(IPqzToken.mtxUnshield, (_bs(pl), amount, bytes32(uint256(uint160(to))), proof, _pqAuth(), "", noVerdict()));
     }
 
     function test_gas_refresh() public {
@@ -610,8 +620,8 @@ contract PqzStatePinGasTest is PqzSlots {
     bytes32[8] internal ys;
     UARegistry internal regL; // the register rows: PQZ verify cap 12 M, the PQZL / PQZH verifier
     UARegistry internal regH;
-    UAPqzVerifier internal verL;
-    UAPqzVerifier internal verH;
+    PqzKeyVerifier internal verL;
+    PqzKeyVerifier internal verH;
     string internal gj; // test/vectors/pqz-gas/<set>.json (script/pqz/gas-inputs.py)
 
     /// One row per relation and form at the build's set and proof system, each its own transaction after `setUp` under
@@ -619,7 +629,7 @@ contract PqzStatePinGasTest is PqzSlots {
     /// outer fee 7) for every `mtx*` write, a direct call for `UARegistry.register`, the verifier's `verifyPop` and the
     /// disclosure view (an `eth_call`, priced as a transaction). The proof is pseudo-random bytes of the set's length
     /// (`test/vectors/pqz-gas/<set>.json`: PQZL the vector proof, PQZH its bound); the `PQZ` precompile burns its
-    /// provisional row + 3 · ⌈input / 32⌉ (`RowBurner`, `chain/engine-pqz-provisional-<n>.json`), ML-DSA-65 68,006
+    /// provisional row + 3 · ⌈input / 32⌉ (`RowBurner`, `chain/engine-pqz-provisional-<n>.json`), ML-DSA-65 100,006
     /// ([estimate], `GasBurner`). Columns: calldata bytes (zero bytes), standard calldata gas (4 / 16), the EIP-7976 floor
     /// (15,000 + 64 per byte), the precompile, execution (`GasMeter`: the call less the precompile and the state gas, the
     /// callee warm as a transaction's `to`; ML-DSA included), the transaction's regular gas (forge: max(15,000 + calldata + execution +
@@ -657,7 +667,7 @@ contract PqzStatePinGasTest is PqzSlots {
     function _gasTable(string memory sys) internal {
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         bool h = keccak256(bytes(sys)) == keccak256("pqzh");
-        bytes memory hint = _packed(tok.pqzAcc(alice));
+        bytes memory hint = _packed(tok.pqzAcc(alice, 0));
         address t = address(tok);
         _row(sys, "TRANSFER", "op 1, auditor, fresh ref", t, _op1p(carol, 0, true, "", _pf(sys, "TRANSFER")), true);
         _row(sys, "TRANSFER0", "op 1, no auditor, fresh ref", t, _op1p(carol, 0, false, "", _pf(sys, "TRANSFER0")), true);
@@ -695,9 +705,8 @@ contract PqzStatePinGasTest is PqzSlots {
             "PqzUnshield", "PqzUnshieldUnwrap"];
         for (uint256 i; i < ops.length; ++i) {
             string memory ua = string.concat("UA", ops[i]);
-            typehashOf[ops[i]] = vm.parseJsonBytes32(j, string.concat(".ops.", ops[i], ".typehash"));
-            abiOf[ops[i]] = vm.parseJsonString(j, string.concat(".ops.", ops[i], ".domains.pqz.abi"));
-            abiOf[ua] = vm.parseJsonString(j, string.concat(".ops.", ua, ".domains.pqz.abi"));
+            typehashOf[ua] = vm.parseJsonBytes32(j, string.concat(".ops.", ua, ".typehash"));
+            abiOf[ua] = _mtxName(vm.parseJsonString(j, string.concat(".ops.", ua, ".domains.pqz.abi")));
         }
     }
 
@@ -705,8 +714,18 @@ contract PqzStatePinGasTest is PqzSlots {
         return abiOf[op];
     }
 
-    function _envN() internal view returns (MetaTxLib.Envelope memory e) {
-        (e.from, e.validUntil, e.mode, e.fee) = (vm.addr(RKEY), block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
+    /// ua-mtx-merge T11 (R36, MD-7): a `UA…` row names its merged `mtx` entry (T5 renamed the rows' `ua*` names here,
+    /// until the rows were regenerated).
+    function _mtxName(string memory sig) internal pure returns (string memory) {
+        bytes memory b = bytes(sig);
+        require(b[0] == "m" && b[1] == "t" && b[2] == "x", "a merged mtx row");
+        return sig;
+    }
+
+    /// ua-mtx-merge T5, meaning (R36): the ECDSA envelope signer is a native id on the merged entry (`UAEnvelope`, its address
+    /// zero-padded; was the address `Envelope`).
+    function _envN() internal view returns (MetaTxLib.UAEnvelope memory u) {
+        (u.from, u.validUntil, u.mode, u.fee) = (MetaTxLib.pad(vm.addr(RKEY)), block.timestamp + 1 hours, MetaTxLib.MODE_FEE_FIXED, 7);
     }
 
     function _uaEnvN() internal view returns (MetaTxLib.UAEnvelope memory u) {
@@ -717,13 +736,14 @@ contract PqzStatePinGasTest is PqzSlots {
         a.signature = _proof(feeSigLen);
     }
 
-    /// The fee signer's real signature: an entry hashing anything else reverts. `words`: the struct's own after `from`.
-    function _signN(string memory op, address t, bytes memory words) internal view returns (bytes memory) {
-        MetaTxLib.Envelope memory e = _envN();
-        bytes32 sh = keccak256(bytes.concat(abi.encode(typehashOf[op], e.from), words,
+    /// The fee signer's real signature over the `UA…` struct of `op` (T5, R36): an entry hashing anything else reverts.
+    /// `words`: the struct's own after `from`.
+    function _signN(string memory op, address t, bytes memory words) internal view returns (IUARegistry.UASig memory a) {
+        MetaTxLib.UAEnvelope memory e = _envN();
+        bytes32 sh = keccak256(bytes.concat(abi.encode(typehashOf[string.concat("UA", op)], e.from), words,
             abi.encode(e.batch, e.nonce, e.validUntil, e.mode, address(0), e.fee, address(0))));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, keccak256(abi.encodePacked(hex"1901", domainOf(t), sh)));
-        return abi.encodePacked(r, s, v);
+        a.signature = abi.encodePacked(r, s, v);
     }
 
     /// A row's memory back after it: 14 rows of 260 KB on two paths in one frame cost more than forge's per-test gas.
@@ -735,19 +755,28 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function _fits(string memory key, string memory what, address to, bytes memory data) internal {
-        uint256 g = _row("pqzh", key, string.concat(viaUA ? "ua* " : "mtx* ", what), to, data, false);
+        uint256 g = _row("pqzh", key, string.concat(viaUA ? "mldsa65 fee UA " : "EOA ", what), to, data, false);
+        // Group 3f, owner 2026-11-08: a known limit of n2048-kmax1024 (a set not recommended, owner 2026-10-25). With the
+        // verdict pair last on every proof entry (its empty encoding: 480 B of calldata, +30,720 at the EIP-7976 floor of 64
+        // per byte), op 7 COMPACT with M = 4 and no auditor copies, its fee paid by an `mldsa65` UA, needs 16,786,328 >
+        // 2^24 (16,755,608 before 3f: the same floor less 480 x 64): published as M <= 3 for that combination at this set;
+        // every other row fits.
+        if (viaUA && keccak256(bytes(what)) == keccak256("PqzTransferCompact M = 4, no auditor")) {
+            assertGe(g, TX_CAP, string.concat(what, ": the recorded limit (owner 2026-11-08) no longer holds"));
+            return;
+        }
         assertLt(g, TX_CAP, what);
     }
 
     /// Op 1 from `carol`, `compact` the commit-reveal form.
     function _nOp1(bool aud, bool compact, string memory key) internal freed {
         IPqzToken.PqzTransferArgs memory t = _ts(_payload(0, 0, carol, bob, alice, _out(77, aud), ""));
-        if (compact) t.sealedMemo = _slice(_blob(1, 64), 0, 41);
+        if (compact) t.sealedMemo = _slice(_blob(1, 64), 0, PqzCore.SEALED);
         bytes memory proof = _pf("pqzh", key);
         string memory op = compact ? "PqzTransferSingleCompact" : "PqzTransferSingle";
-        bytes memory sig = _signN(op, address(tok), abi.encode(_hashT(t), keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf(op), _envN(), t, proof, _pqAuth(), bytes(""), sig);
+        IUARegistry.UASig memory sig = _signN(op, address(tok), abi.encode(_hashT(t), keccak256(proof), keccak256("")));
+        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
+            : abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig, noVerdict());
         _fits(key, string.concat(op, aud ? ", auditor" : ", no auditor"), address(tok), d);
     }
 
@@ -759,9 +788,9 @@ contract PqzStatePinGasTest is PqzSlots {
         if (compact) t.sealedMemo = _slice(_blob(2, 352), 0, 2 + 40 * m);
         bytes memory proof = _pf("pqzh", key);
         string memory op = compact ? "PqzTransferCompact" : "PqzTransfer";
-        bytes memory sig = _signN(op, address(tok), abi.encode(_hashM(t), keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf(op), _envN(), t, proof, _pqAuth(), bytes(""), sig);
+        IUARegistry.UASig memory sig = _signN(op, address(tok), abi.encode(_hashM(t), keccak256(proof), keccak256("")));
+        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _uaEnvN(), t, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
+            : abi.encodeWithSignature(_abiOf(string.concat("UA", op)), _envN(), t, proof, _pqAuth(), bytes(""), sig, noVerdict());
         _fits(key, string.concat(op, " M = ", vm.toString(m), aud ? ", auditor" : ", no auditor"), address(tok), d);
     }
 
@@ -773,9 +802,9 @@ contract PqzStatePinGasTest is PqzSlots {
         IPqzToken.PqzBurnArgs memory b = _nBurnArgs();
         IPqzToken.Payout memory p = IPqzToken.Payout(amount, to);
         bytes memory proof = _pf("pqzh", key);
-        bytes memory sig = _signN("PqzUnshield", address(tok), abi.encode(_hashB(b), amount, to, keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshield"), _uaEnvN(), b, p, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf("PqzUnshield"), _envN(), b, p, proof, _pqAuth(), bytes(""), sig);
+        IUARegistry.UASig memory sig = _signN("PqzUnshield", address(tok), abi.encode(_hashB(b), amount, to, keccak256(proof), keccak256("")));
+        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshield"), _uaEnvN(), b, p, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
+            : abi.encodeWithSignature(_abiOf("UAPqzUnshield"), _envN(), b, p, proof, _pqAuth(), bytes(""), sig, noVerdict());
         _fits(key, key, address(tok), d);
     }
 
@@ -785,9 +814,9 @@ contract PqzStatePinGasTest is PqzSlots {
         IConfidentialWrappedToken.Unwrap memory x = IConfidentialWrappedToken.Unwrap(w.underlying(), MetaTxLib.pad(address(0xD00D)), 1, 0);
         bytes memory proof = _pf("pqzh", "BURN");
         bytes32 xh = keccak256(abi.encode(keccak256("Unwrap(address underlying,bytes32 recipient,uint256 amount,uint256 minOut)"), x));
-        bytes memory sig = _signN("PqzUnshieldUnwrap", address(w), abi.encode(_hashB(b), xh, keccak256(proof), keccak256("")));
-        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshieldUnwrap"), _uaEnvN(), b, x, proof, _pqAuth(), bytes(""), _feeAuth())
-            : abi.encodeWithSignature(_abiOf("PqzUnshieldUnwrap"), _envN(), b, x, proof, _pqAuth(), bytes(""), sig);
+        IUARegistry.UASig memory sig = _signN("PqzUnshieldUnwrap", address(w), abi.encode(_hashB(b), xh, keccak256(proof), keccak256("")));
+        bytes memory d = viaUA ? abi.encodeWithSignature(_abiOf("UAPqzUnshieldUnwrap"), _uaEnvN(), b, x, proof, _pqAuth(), bytes(""), _feeAuth(), noVerdict())
+            : abi.encodeWithSignature(_abiOf("UAPqzUnshieldUnwrap"), _envN(), b, x, proof, _pqAuth(), bytes(""), sig, noVerdict());
         _fits("BURN", "PqzUnshieldUnwrap", address(w), d);
     }
 
@@ -849,7 +878,7 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function _burnH(bytes32 from, bytes memory auth, bytes memory proof) internal view returns (bytes memory) {
         bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), from, alice), _blob(5, PqzCt.CT));
-        return abi.encodeCall(IPqzToken.mtxUnshield, (_bs(pl), 1, bytes32(uint256(uint160(0xD00D))), proof, UACall.auth(from, auth), ""));
+        return abi.encodeCall(IPqzToken.mtxUnshield, (_bs(pl), 1, bytes32(uint256(uint160(0xD00D))), proof, UACall.auth(from, auth), "", noVerdict()));
     }
 
     /// The cheapest debit (burn 1) of a 2-of-2 / 3-of-3 `mldsa65` `msig` holder on both relay paths, and of the
@@ -860,12 +889,12 @@ contract PqzStatePinGasTest is PqzSlots {
         (hm[0], ha[0]) = _msigHolder(2, 150);
         (hm[1], ha[1]) = _msigHolder(3, 160);
         slhFee = UACall.register(reg, UAKinds.SLHDSA128S, abi.encodePacked(keccak256("slh fee")), UACall.attrs("", 0, ""), new bytes(7_856), "");
-        NormalPqzToken(address(tok)).mintToUA(slhFee, 1000);
+        NormalPqzToken(address(tok)).mintToUA(slhFee, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
         fpk[0] = 0x09;
         fnFee = UACall.register(reg, UAKinds.FNDSA512, fpk, UACall.attrs("", 0, ""), new bytes(666), "");
-        NormalPqzToken(address(tok)).mintToUA(fnFee, 1000);
+        NormalPqzToken(address(tok)).mintToUA(fnFee, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         gj = vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqz-gas/", PqzSet.NAME, ".json"));
         _holderSys("pqzl", false);
@@ -918,7 +947,8 @@ contract PqzStatePinGasTest is PqzSlots {
     function _discRow(string memory sys, uint8 kd, bytes32 ref, uint256 leg, string memory entry) internal {
         string memory kn = kd == 0 ? "SENDER" : kd == 1 ? "RECEIVER" : "AUDITOR";
         string memory key = string.concat("DISCLOSE-", kn);
-        bytes memory d = abi.encodeCall(tok.verifyTransferAmount, (ref, leg, 1, kd, _pf(sys, key)));
+        bytes memory d = abi.encodeWithSignature("verifyTransferAmount(bytes32,uint256,uint256,uint8,uint64,bytes)", ref, leg, 1, kd,
+            uint64(0), _pf(sys, key));
         _row(sys, key, string.concat("disclosure ", kn, ", ", entry, " (verifyTransferAmount)"), address(tok), d, false);
     }
 
@@ -928,7 +958,7 @@ contract PqzStatePinGasTest is PqzSlots {
         IUARegistry.UAAttrs memory a = UACall.attrs(_pk(60), keccak256(proof), "");
         bytes memory d = abi.encodeCall(r.register, (UAKinds.MLDSA65, _mlPk(60), a, new bytes(ML65_SIG), proof));
         _row(sys, "REGISTER", "register (UARegistry.register: mldsa65 UA with a PQZ key)", address(r), d, false);
-        UAPqzVerifier v = h ? verH : verL;
+        PqzKeyVerifier v = h ? verH : verL;
         d = abi.encodeCall(v.verifyPop, (_pk(60), bytes32(uint256(1)), proof));
         _row(sys, "REGISTER", "register: the R_REG verifyPop call alone (what the PQZ_MLWE cap must cover)", address(v), d, false);
     }
@@ -941,7 +971,7 @@ contract PqzStatePinGasTest is PqzSlots {
         uint256 pqzGas = row + 3 * ((vm.parseJsonUint(gj, string.concat(k, ".input")) + 31) / 32);
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new RowBurner(row)).code);
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         if (relay) data = _envelopeVia(viaUA, data, 7);
         uint256 snap = vm.snapshotState();
         vm.prank(RELAYER);
@@ -1003,15 +1033,15 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
         _mockOp(7, 1);
         tok = _newToken("gas");
         gina = _pqzUA(_pk(13), 13);
-        tok.mtxPrepareAcc(gina, 0);
-        tok.mtxPrepareAcc(gina, 1);
+        tok.mtxPrepareAcc(gina, 0, 0);
+        tok.mtxPrepareAcc(gina, 0, 1);
         _public(tok, address(this), TRIV * SCALE);
         for (uint256 i; i < TRIV; ++i) {
             tok.mtxShield(gina, 1);
             vm.roll(block.number + 1);
         }
         vm.roll(block.number + 30);
-        tok.mtxRollOver(gina, TRIV); // acc = Trivial(4): every u coefficient 0
+        tok.mtxRollOver(gina, 0, TRIV); // acc = Trivial(4): every u coefficient 0
         // ROLL_MAX credits after the TRIVIAL entries, each from its own cold blob, every coefficient q − 1
         bytes memory code = _blobCode();
         for (uint256 i; i < PqzCore.ROLL_MAX; ++i) {
@@ -1031,22 +1061,22 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
         for (uint256 i; i < PqzCt.ACC_WORDS; ++i) {
             assertTrue(vm.load(address(tok), bytes32(_acctSlot(gina) + 5 + i)) != 0, "acc slot zeroed");
         }
-        bytes memory acc = tok.pqzAcc(gina);
+        bytes memory acc = tok.pqzAcc(gina, 0);
         for (uint256 o; o < PqzCt.PK; o += 32) {
             uint256 x;
             assembly ("memory-safe") { x := mload(add(add(acc, 32), o)) }
             assertEq(x, 0, "u of Trivial(4)");
         }
-        assertEq(keccak256(PqzCt.packMem(acc)), tok.pqzAccount(gina).accHash, "accHash over the packed stream");
+        assertEq(keccak256(PqzCt.packMem(acc)), tok.pqzAccount(gina, 0).accHash, "accHash over the packed stream");
     }
 
     /// The regression pin: `ROLL_MAX` cold credits after the TRIVIAL-only rollover fit `0.75 · 2^24` (10.6 M for
     /// n = 1 and 20.9 M for `ROLL_MAX` when the slots were zeroed), and every `u` coefficient is `256 (q − 1) mod q`.
     function test_gas_rollMax_afterTrivialRoll() public {
-        uint256 g = _gas(abi.encodeCall(IConfidentialToken.mtxRollOver, (gina, PqzCore.ROLL_MAX)));
+        uint256 g = _gas(abi.encodeCall(IPqzToken.mtxRollOver, (gina, uint64(0), PqzCore.ROLL_MAX)));
         console2.log("mtxRollOver ROLL_MAX after a TRIVIAL-only rollover gas", g);
         assertLe(g, CAP, "ROLL_MAX under 0.75 * 2^24");
-        bytes memory acc = tok.pqzAcc(gina);
+        bytes memory acc = tok.pqzAcc(gina, 0);
         uint256 want = PqzCt.Q - PqzCore.ROLL_MAX;
         want = want << 192 | want << 128 | want << 64 | want;
         for (uint256 o; o < PqzCt.PK; o += 32) {
@@ -1054,6 +1084,6 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
             assembly ("memory-safe") { x := mload(add(add(acc, 32), o)) }
             assertEq(x, want);
         }
-        assertEq(keccak256(PqzCt.packMem(acc)), tok.pqzAccount(gina).accHash);
+        assertEq(keccak256(PqzCt.packMem(acc)), tok.pqzAccount(gina, 0).accHash);
     }
 }

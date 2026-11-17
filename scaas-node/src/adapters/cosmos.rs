@@ -1013,7 +1013,7 @@ mod tests {
     }
 
     fn rows() -> Vec<Value> {
-        serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap()
+        serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap()
     }
 
     fn unhex32(v: &Value) -> [u8; 32] {

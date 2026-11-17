@@ -6,27 +6,33 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 
 /// @title The DEX side of `TradeOrder` and `UATradeOrder` (CTR-DEX-16, -17, -11, -03, -24, -18, -22, -08, -20, -21,
 ///        -23, -26): one taker against many makers per settlement, or a plan of orders against AMM routes (the exchange
-///        path); every leg pulled into the DEX (a SCaaS token through its `mtxTrade` or `uaTrade`, an outside token
-///        through the `DexPuller` against a `DexOrder`), every party, fee share, surplus and refund paid in the same
+///        path); every leg pulled into the DEX (a SCaaS token's `UATradeOrder` through its `mtxTrade`, an outside
+///        token's `TradeOrder` through the `DexPuller` against a `DexOrder`), every party, fee share, surplus and refund paid in the same
 ///        call (a derived UA by `transferToUA`), and the DEX's balance of every token unchanged at the end.
 interface ISCaaSDex {
     /// @notice Written once by `initialize` (CTR-DEX-24). `relayerSharePpm` of every fee goes to the submitter, the
     ///         rest to `treasury`. `listedOnly`: every exchange target or executor must be listed (CTR-DEX-23).
-    ///         `grantDelay`: the owner's two calls (spec §1.6), at most 30 days. `rescueTo`: the `DexPuller`'s rescue
-    ///         destination (spec §6.2), immutable, 0 = none; the DEX itself rescues nothing (CTR-DEX-20).
+    ///         `grantDelay`: the admin's two calls (spec §1.6), at most 30 days. `rescueTo`: the `DexPuller`'s rescue
+    ///         destination (spec §6.2), immutable, 0 = `RescueLib.SCAAS_DEV_RESCUE` (CTR-GOV-25); the DEX's own `rescue`
+    ///         sends a stray there too (Fable D P3-5). `features`: the optional bits set at creation, today bit 29
+    ///         `CLOSED_MARKETS` (owner 2026-11-12; 0 = open markets; `LISTING` and `FEE_ROUTING` are always set);
+    ///         `lockedFeatures`: set bits the admin can never disable.
     struct DexConfig {
-        bytes32 owner;
+        bytes32 admin;
         uint32 relayerSharePpm;
         address treasury;
         bool listedOnly;
         uint64 grantDelay;
         address rescueTo;
+        uint256 features;
+        uint256 lockedFeatures;
     }
 
     /// @notice One order in one settlement; `fill` = its `sellFill` in this call (Path B: the matched part). Tagged
-    ///         (CTR-DEX-26): `shape` 0 = a `TradeOrder` in `order`, signed in `sig`; 1 = a `UATradeOrder` in `uaOrder`,
-    ///         authorized in `auth` (a derived signer's registry auth, a native id's own signature in `auth.signature`).
-    ///         The members of the other shape stay zero; nothing reads them (Appendix X row 20).
+    ///         (CTR-DEX-26; ua-mtx-merge T6, R12): `shape` 0 = an outside token's `TradeOrder` in `order`, signed as
+    ///         `DexOrder` in `sig`; 1 = a SCaaS token's `UATradeOrder` in `uaOrder`, authorized in `auth` (a derived
+    ///         signer's registry auth, a native id's own signature in `auth.signature`). The members of the other shape
+    ///         stay zero; nothing reads them (Appendix X row 20).
     struct DexLeg {
         address sellToken;
         uint8 shape;
@@ -93,13 +99,28 @@ interface ISCaaSDex {
         address[] extraTokens;
     }
 
+    /// @notice A signed liquidity order and how this call executes it (CTR-DEX-30, spec 2026-11-10-dex-liquidity.md §4.1).
+    ///         `auth`: a derived signer's registry auth, a native signer's signature in `auth.signature`; `pull[i]` the
+    ///         amount of input `i` pulled (`0 < pull[i] <= order.inputs[i].amount`); `positionId` the received position's
+    ///         id, 0 iff none is received; `extraTokens` intermediate hop tokens (<= 8, distinct, disjoint from the order's
+    ///         tokens and its manager; each must end at its snapshot).
+    struct LiquidityPlan {
+        bytes32 ref;
+        ITradeToken.LiquidityOrder order;
+        IUARegistry.UASig auth;
+        uint256[] pull;
+        uint256 positionId;
+        address[] extraTokens;
+    }
+
     event MarketSet(address indexed base, address indexed quote, bool listed);
     event FeeSplitSet(uint32 relayerSharePpm, address treasury);
     /// @notice `received` is net of the DEX fee: the party gets `receiveFill - dexFee`, so `received + dexFee` is the gross
     ///         and `relayerShare + treasuryShare == dexFee`. `destination` is where `received` went.
     event LegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
         uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
-    /// @notice `LegSettled` of a shape-1 leg (CTR-DEX-26): ids; `destination` is where `received` went.
+    /// @notice `LegSettled` of a shape-1 leg, every SCaaS leg (CTR-DEX-26, R18): ids, a native signer zero-padded;
+    ///         `destination` is where `received` went. `LegSettled` is an outside leg's.
     event UALegSettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 destination,
         uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
     /// @notice `reason` = the failed settlement's revert data, at most its first 256 bytes.
@@ -134,9 +155,11 @@ interface ISCaaSDex {
     error TokenMismatch();
     /// @notice Over ids: a native order and its zero-padded id are one party (CTR-DEX-26).
     error SelfTrade(bytes32 from);
-    /// @notice A leg tag other than 0 (`TradeOrder`) or 1 (`UATradeOrder`).
+    /// @notice A leg tag other than 0 (`TradeOrder`, an outside token) or 1 (`UATradeOrder`, a SCaaS token), or a
+    ///         shape-0 leg selling a SCaaS token (R12).
     error LegShapeUnknown(uint8 shape);
-    /// @notice A shape-1 leg whose sell token is not a SCaaS token with its UA ledger on (a UA holds no other token).
+    /// @notice A shape-1 leg whose sell token is not a SCaaS token, or a derived seller's on a SCaaS token whose UA
+    ///         ledger is off (a UA holds no other token; C).
     error UALegNotLedger(address token);
     /// @notice A payout or refund to a derived UA in a token that is not a SCaaS token with its UA ledger on.
     error UAReceiveNotLedger(address token);
@@ -187,11 +210,30 @@ interface ISCaaSDex {
     error ForbiddenSelector(address target, bytes4 selector);
     error TargetNotListed(address target);
     error InsufficientOutput(address token);
+    /// @notice A pull took more from the seller than it signed to sell (owner 2026-11-12).
+    error SellerOverDebited(bytes32 orderHash);
+    /// @notice Liquidity (CTR-DEX-30, -31): `code` 1 no input or no output, 2 more than eight, 3 a zero, repeated or shared
+    ///         token or a zero maximum, 4 the position fields disagree, 5 a recipient that is the DEX, its puller, a plan
+    ///         token or the manager; 6 is a token's (not exactly one input).
+    error LiquidityShape(uint8 code);
+    error PositionNotReceived(uint256 id);
+    error PositionReaderNotListed(address reader);
+    error PositionMismatch(uint256 id);
+    error PositionBelowMin(uint256 id, uint128 liquidity);
+    error PositionNotDelivered(uint256 id);
+    error PositionUnreadable(address reader);
 
-    /// @notice Factory only, in the clone's creating call; `initArgs = abi.encode(DexConfig)` (plan 5g-Z2).
-    function initialize(address creator, uint64 version, bytes calldata initArgs) external;
-    function setMarket(address base, address quote, bool listed) external;
-    function setFeeSplit(uint32 relayerSharePpm, address treasury) external;
+    /// @notice A liquidity order executed (CTR-DEX-30 step 9): per input what was pulled and refunded (a refund may exceed
+    ///         its pull: fees a position collected), per output what reached the DEX net of the fee and the fee; the
+    ///         received position and its liquidity (0, 0 when none).
+    event LiquiditySettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 recipient,
+        uint256[] pulled, uint256[] refunded, uint256[] received, uint256[] dexFees, uint256 positionId, uint128 liquidity);
+
+    /// @notice Factory only, in the clone's creating call, on a clone carrying its env (`IFactoryToken.EnvMissing`);
+    ///         `creatorId` the creator's UA id (S3); `initArgs = abi.encode(DexConfig)` (plan 5g-Z2).
+    function initialize(bytes32 creatorId, uint64 version, bytes calldata initArgs) external;
+    function setMarket(address base, address quote, bool listed, bytes32 chainUid_) external;
+    function setFeeSplit(uint32 relayerSharePpm, address treasury, bytes32 chainUid_) external;
     function mtxSettle(Settlement[] calldata s) external returns (bool[] memory ok);
     /// @notice Outside-token orders (CTR-DEX-18, CTR-DEX-02): closed or bad-signature items are skipped.
     function mtxCancelOrders(DexOrder[] calldata orders, bytes[] calldata sigs) external;
@@ -217,8 +259,15 @@ interface ISCaaSDex {
     /// @notice Hybrid path (b): `outsideSell` of A goes to `executor`, which must pay at least `outsideFloor` of B to
     ///         the DEX in `exchangeCallback(ref, [A], [outsideSell], [B], [outsideFloor], data)`.
     function mtxHybridVia(HybridPlan calldata p, address executor, bytes calldata data) external;
-    function setExchangeTarget(address target, bool listed) external;
-    function setListedOnly(bool on) external;
+    /// @notice Liquidity (CTR-DEX-30): one signed `LiquidityOrder`, atomic: check, snapshot, pull (SCaaS inputs through each
+    ///         token's `mtxLiquidityPull`, outside inputs and a given position through the puller), the interactions
+    ///         (CTR-DEX-23), the received position against its listed reader, the outputs at their minima at the DEX after
+    ///         the fee and at the recipient, the refunds, conservation. Forwarded to the liquidity module under the guard.
+    function mtxLiquidity(LiquidityPlan calldata p, Interaction[] calldata interactions) external;
+    /// @notice `h` of a liquidity order in this DEX's domain; no guard (a token's capability check reads it mid-plan).
+    function liquidityOrderDigest(ITradeToken.LiquidityOrder calldata o) external view returns (bytes32);
+    function setExchangeTarget(address target, bool listed, bytes32 chainUid_) external;
+    function setListedOnly(bool on, bytes32 chainUid_) external;
 
     function dexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) external view returns (bytes32);
     /// @notice `CancelDexOrder(DexOrder order)`: the digest `mtxCancelOrders` checks.
@@ -229,6 +278,9 @@ interface ISCaaSDex {
     function minNonce(address from, uint256 batch) external view returns (uint256);
     /// @notice The `DexPuller` holders of outside tokens approve (CTR-DEX-22), deployed by `initialize`.
     function puller() external view returns (address);
+    /// @notice Anyone: the DEX's whole balance of `token` to the puller's `rescueTo` (never 0, CTR-GOV-25), the puller's rule
+    ///         (Fable D P3-5); under the entry guard, so never inside a running settlement or plan.
+    function rescue(address token) external;
 
     function relayerSharePpm() external view returns (uint32);
     function treasury() external view returns (address);

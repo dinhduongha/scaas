@@ -42,6 +42,6 @@ fn prove_eq_c() {
             *outcomes.entry(format!("{case}: {:?}", rust.map(|_| "proof"))).or_insert(0) += 1;
         }
     }
-    assert_eq!(seen.len(), 14);
-    eprintln!("prove_eq_c: 14 relation codes, Rust = C on every case; outcomes {outcomes:?}");
+    assert_eq!(seen.len(), common::ncodes());
+    eprintln!("prove_eq_c: {} relation codes, Rust = C on every case; outcomes {outcomes:?}", seen.len());
 }

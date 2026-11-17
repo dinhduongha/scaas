@@ -1,118 +1,201 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {UAMetaTxBase} from "../metatx/UAMetaTxBase.sol";
+import {UAMetaTxBase, UAMetaTxBaseCore} from "../metatx/UAMetaTxBase.sol";
 import {MtxPipelineLib} from "../metatx/MtxPipelineLib.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IGovernance} from "./IGovernance.sol";
+import {IAdmin} from "./IAdmin.sol";
 import {IGovernanceRouter} from "./IGovernanceRouter.sol";
 
 /// @title The typed structs of `GovernanceRouter` (spec `2026-11-04-governance-ua-identity.md` §3; governance spec §3.2): one
-///        `<Op>` and one `UA<Op>` per op of the closed table, `from` first, `target` the first op word, then the op's own
+///        `UA<Op>` per op of the closed table, `from` first, `target` the first op word, then the op's own
 ///        parameters with `bytes32` identities, then the seven envelope words. Pinned by `GovRouterTypehash.t.sol`.
+/// ua-mtx-merge T7 (R14): one struct per op, `UA<Op>`; the address `<Op>` structs left with their entries
+///        (legacy/ua-mtx-merge/src/governance/; their hashes stay pinned as legacy pins).
 library GovernanceRouterTypes {
     bytes32 internal constant GRANT_TERMS = keccak256(
         "GrantTerms(uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope)");
 
-    // ---- the owner and the holder of a bit: every `GovernanceBase` contract
-    bytes32 internal constant GRANT_ROLE = keccak256(
-        "GrantRole(address from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- the admin and the holder of a bit: every `GovernanceBase` contract
     bytes32 internal constant UA_GRANT_ROLE = keccak256(
-        "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant REVOKE_ROLE = keccak256(
-        "RevokeRole(address from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAGrantRole(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_REVOKE_ROLE = keccak256(
-        "UARevokeRole(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant SET_GRANT = keccak256(
-        "SetGrant(address from,address target,uint8 bit,bytes32 holder,GrantTerms terms,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
-        "GrantTerms(uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope)");
+        "UARevokeRole(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_GRANT = keccak256(
-        "UASetGrant(bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+        "UASetGrant(bytes32 from,address target,uint8 bit,bytes32 holder,GrantTerms terms,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
         "GrantTerms(uint128 min,uint128 max,uint128 total,uint128 perWindow,uint32 window,uint64 validUntil,uint32 maxUses,bool delegable,bytes32 scope)");
-    bytes32 internal constant CANCEL_GRANT = keccak256(
-        "CancelGrant(address from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_CANCEL_GRANT = keccak256(
-        "UACancelGrant(bytes32 from,address target,uint8 bit,bytes32 account,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant DISABLE_FEATURE = keccak256(
-        "DisableFeature(address from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UACancelGrant(bytes32 from,address target,uint8 bit,bytes32 account,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_DISABLE_FEATURE = keccak256(
-        "UADisableFeature(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant TRANSFER_OWNERSHIP = keccak256(
-        "TransferOwnership(address from,address target,bytes32 newOwner,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant UA_TRANSFER_OWNERSHIP = keccak256(
-        "UATransferOwnership(bytes32 from,address target,bytes32 newOwner,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant ACCEPT_OWNERSHIP = keccak256(
-        "AcceptOwnership(address from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant UA_ACCEPT_OWNERSHIP = keccak256(
-        "UAAcceptOwnership(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant RENOUNCE_OWNERSHIP = keccak256(
-        "RenounceOwnership(address from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant UA_RENOUNCE_OWNERSHIP = keccak256(
-        "UARenounceOwnership(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant RENOUNCE_ROLE = keccak256(
-        "RenounceRole(address from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UADisableFeature(bytes32 from,address target,uint8 bit,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_TRANSFER_ADMIN = keccak256(
+        "UATransferAdmin(bytes32 from,address target,bytes32 newAdmin,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_ACCEPT_ADMIN = keccak256(
+        "UAAcceptAdmin(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_RENOUNCE_ADMIN = keccak256(
+        "UARenounceAdmin(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_RENOUNCE_ROLE = keccak256(
-        "UARenounceRole(bytes32 from,address target,uint8 bit,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UARenounceRole(bytes32 from,address target,uint8 bit,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+
+    // ---- the factory's creations (chain-neutral spec §4.4, S3; plan T76): `target` the chain's `OpenFactory`, the
+    //      creation's named parameters, `initHash = keccak256(initArgs)` (`initCall` for an instance)
+    bytes32 internal constant UA_CREATE_TOKEN = keccak256(
+        "UACreateToken(bytes32 from,address target,uint8 kind,uint64 version,bytes32 initHash,bytes32 salt,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_CREATE_DEX = keccak256(
+        "UACreateDex(bytes32 from,address target,uint64 version,bytes32 initHash,bytes32 salt,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_CREATE_INSTANCE = keccak256(
+        "UACreateInstance(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 initHash,bytes32 salt,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 
     // ---- the powers on the token kinds
-    bytes32 internal constant MINT = keccak256(
-        "Mint(address from,address target,address to,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_MINT = keccak256(
-        "UAMint(bytes32 from,address target,address to,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant MINT_TO_UA = keccak256(
-        "MintToUA(address from,address target,bytes32 to,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAMint(bytes32 from,address target,address to,uint256 amount,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_MINT_TO_UA = keccak256(
-        "UAMintToUA(bytes32 from,address target,bytes32 to,uint256 amount,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant DISABLE_WRAP = keccak256(
-        "DisableWrap(address from,address target,address leg,bytes32 reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAMintToUA(bytes32 from,address target,bytes32 to,uint256 amount,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_DISABLE_WRAP = keccak256(
-        "UADisableWrap(bytes32 from,address target,address leg,bytes32 reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant PROPOSE_RATE = keccak256(
-        "ProposeRate(address from,address target,address leg,uint96 num,uint96 den,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UADisableWrap(bytes32 from,address target,address leg,bytes32 reason,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_PROPOSE_RATE = keccak256(
-        "UAProposeRate(bytes32 from,address target,address leg,uint96 num,uint96 den,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant CANCEL_RATE = keccak256(
-        "CancelRate(address from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAProposeRate(bytes32 from,address target,address leg,uint96 num,uint96 den,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_CANCEL_RATE = keccak256(
-        "UACancelRate(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant EXECUTE_RATE = keccak256(
-        "ExecuteRate(address from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UACancelRate(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_EXECUTE_RATE = keccak256(
-        "UAExecuteRate(bytes32 from,address target,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UAExecuteRate(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
 
     // ---- the powers on the DEX
-    bytes32 internal constant SET_MARKET = keccak256(
-        "SetMarket(address from,address target,address base,address quote,bool listed,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_MARKET = keccak256(
-        "UASetMarket(bytes32 from,address target,address base,address quote,bool listed,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant SET_EXCHANGE_TARGET = keccak256(
-        "SetExchangeTarget(address from,address target,address exchangeTarget,bool listed,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UASetMarket(bytes32 from,address target,address base,address quote,bool listed,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_EXCHANGE_TARGET = keccak256(
-        "UASetExchangeTarget(bytes32 from,address target,address exchangeTarget,bool listed,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant SET_LISTED_ONLY = keccak256(
-        "SetListedOnly(address from,address target,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UASetExchangeTarget(bytes32 from,address target,address exchangeTarget,bool listed,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_LISTED_ONLY = keccak256(
-        "UASetListedOnly(bytes32 from,address target,bool on,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
-    bytes32 internal constant SET_FEE_SPLIT = keccak256(
-        "SetFeeSplit(address from,address target,uint32 relayerSharePpm,address treasury,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UASetListedOnly(bytes32 from,address target,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
     bytes32 internal constant UA_SET_FEE_SPLIT = keccak256(
-        "UASetFeeSplit(bytes32 from,address target,uint32 relayerSharePpm,address treasury,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+        "UASetFeeSplit(bytes32 from,address target,uint32 relayerSharePpm,address treasury,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+
+    // ---- the controls of the regulated kinds 8-13 (plan T32; regulated-kinds spec §3.1, Q8): the direct entry's
+    //      parameters; `UAOperatorTransfer` names the moved account `account`, as `from` is the signer's (CTR-GOV-20)
+    bytes32 internal constant UA_FREEZE = keccak256(
+        "UAFreeze(bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 recordId,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_UNFREEZE = keccak256(
+        "UAUnfreeze(bytes32 from,address target,bytes32 account,bytes32 ref,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_FORCE_TRANSFER = keccak256(
+        "UAForceTransfer(bytes32 from,address target,bytes32 recordId,uint256 amount,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_PAUSE = keccak256(
+        "UAPause(bytes32 from,address target,bytes32 ref,uint64 until,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_UNPAUSE = keccak256(
+        "UAUnpause(bytes32 from,address target,bytes32 ref,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_RECORD_ORDER = keccak256(
+        "UARecordOrder(bytes32 from,address target,bytes32 orderId,bytes32 documentHash,bytes32 subject,bytes32 beneficiary,uint256 maxAmount,uint64 freezeUntil,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_REVOKE_ORDER = keccak256(
+        "UARevokeOrder(bytes32 from,address target,bytes32 recordId,bytes32 reasonRef,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- bit 23 `TAX` of the regulated kinds (pay-meta-tax spec §6.2), fee mode `NONE`
+    bytes32 internal constant UA_SET_TAX_RATE = keccak256(
+        "UASetTaxRate(bytes32 from,address target,uint32 ratePpm,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_TAX_RECIPIENT = keccak256(
+        "UASetTaxRecipient(bytes32 from,address target,bytes32 taxRecipient,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- the PQZ verifier UA of the PQZ kinds 4, 5, 12, 13 (group 3f, PQZ verifier mode spec §4.2, §4.3): the admin's,
+    //      no bit; fee mode `NONE`
+    bytes32 internal constant UA_PQZ_SET_VERIFIER = keccak256(
+        "UAPqzSetVerifier(bytes32 from,address target,bytes32 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_PQZ_CANCEL_VERIFIER = keccak256(
+        "UAPqzCancelVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_PQZ_REVOKE_VERIFIER = keccak256(
+        "UAPqzRevokeVerifier(bytes32 from,address target,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- round 3t (CTR-PQZ-36): the admin's verifier fee of an `OFFCHAIN` PQZ token, no bit; fee mode `NONE`
+    bytes32 internal constant UA_SET_VERIFIER_FEE = keccak256(
+        "UASetVerifierFee(bytes32 from,address target,uint64 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- bit 24 `PQZ_PROOF` of the PQZ kinds 4, 5, 12, 13 (group 3h, PQZ proof path spec §5): any holder; fee mode `NONE`
+    bytes32 internal constant UA_SET_PROOF_STORE = keccak256(
+        "UASetProofStore(bytes32 from,address target,uint8 next,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_OPERATOR_TRANSFER = keccak256(
+        "UAOperatorTransfer(bytes32 from,address target,bytes32 account,bytes32 to,uint256 amount,bytes32 ref,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- group 3l (wrap limits spec 2026-11-10 §9): the admin's limits (bit 25, the lists' switches of bit 26) and bit
+    //      26's membership on the hybrids of the wrapped kinds; fee mode `NONE`. The leg array hashes as EIP-712 does: the
+    //      concatenated struct hashes of `WrapLegLimits`, each over its four `WrapLimit` struct hashes.
+    bytes32 internal constant WRAP_LIMIT = keccak256("WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)");
+    bytes32 internal constant WRAP_LEG_LIMITS = keccak256(
+        "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)"
+        "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)");
+    bytes32 internal constant UA_SET_WRAP_LIMITS = keccak256(
+        "UASetWrapLimits(bytes32 from,address target,WrapLegLimits[] legs,bool netUnwrap,bool wrapList,bool unwrapList,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+        "WrapLegLimits(address underlying,uint8 unitExp,uint16 decayDays,WrapLimit wrapShort,WrapLimit wrapLong,WrapLimit unwrapShort,WrapLimit unwrapLong)"
+        "WrapLimit(uint24 perUser,uint64 tokenWide,uint32 period)");
+    // ---- round 3zc (CTR-GOV-30): the admin's two supply caps of the wrapped kinds (bit 31), fee mode `NONE`; every op of a
+    //      role holder or the admin signs the target's chain word (CTR-GOV-28 and its Change of round 3zb + 3zc)
+    bytes32 internal constant UA_SET_MAX_SUPPLY = keccak256(
+        "UASetMaxSupply(bytes32 from,address target,uint256 maxSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_MAX_WRAP_SUPPLY = keccak256(
+        "UASetMaxWrapSupply(bytes32 from,address target,uint256 maxWrapSupply,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_WRAP_MEMBER = keccak256(
+        "UASetWrapMember(bytes32 from,address target,bytes32 account,bool canWrap,bool canUnwrap,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // ---- round 3s (CTR-GOV-24, spec 2026-11-10-token-lists.md §5.3, §6.2): the lists and `enableFeature` of kinds 8-13
+    bytes32 internal constant UA_SET_ALLOWED = keccak256(
+        "UASetAllowed(bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_DENIED = keccak256(
+        "UASetDenied(bytes32 from,address target,bytes32[] accounts,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_ENABLE_FEATURE = keccak256(
+        "UAEnableFeature(bytes32 from,address target,uint8 bit,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+
+    // ---- round 3r (CTR-GOV-23, spec 2026-11-10-admin-not-owner.md §5.4, §5.6, §13.3): the admin ops of `OpenFactory` and
+    //      of a `ComplianceRegistry` (its KYC provider's `setCompliance` too); `target` the factory or the registry, then the
+    //      direct entry's parameters, the ids flat. `Env` hashes as EIP-712 does (each array the `keccak256` of its 32-byte
+    //      words), a `string reason` as `keccak256(bytes(reason))`; the approval's expiry is `until` (`validUntil` is E's).
+    bytes32 internal constant ENV = keccak256(
+        "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)");
+    bytes32 internal constant UA_PUBLISH_TOKEN_ENV = keccak256(
+        "UAPublishTokenEnv(bytes32 from,address target,uint8 kind,uint16 envVersion,bytes32 chainUid,Env env,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+        "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)");
+    bytes32 internal constant UA_PUBLISH_DEX_ENV = keccak256(
+        "UAPublishDexEnv(bytes32 from,address target,uint16 envVersion,bytes32 chainUid,Env env,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+        "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)");
+    bytes32 internal constant UA_PUBLISH_CLASS_ENV = keccak256(
+        "UAPublishClassEnv(bytes32 from,address target,uint16 contractClass,uint16 kind,uint16 envVersion,bytes32 chainUid,Env env,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+        "Env(address registry,address smartKeyAccountImpl,bool hedera,address[] deps,bytes32[] params,address[] libs,bytes32[] libCodeHashes)");
+    bytes32 internal constant UA_APPROVE_TOKEN_RELEASE = keccak256(
+        "UAApproveTokenRelease(bytes32 from,address target,uint8 kind,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_APPROVE_DEX_RELEASE = keccak256(
+        "UAApproveDexRelease(bytes32 from,address target,uint64 version,uint16 envVersion,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_APPROVE_RELEASE = keccak256(
+        "UAApproveRelease(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,uint16 envVersion,bytes4 initSelector,bytes4 interfaceId,bytes32 initcodeHash,bytes32 implArgsHash,bytes32 chainUid,address factory,uint32 adminGeneration,uint64 until,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_REVOKE_APPROVAL = keccak256(
+        "UARevokeApproval(bytes32 from,address target,bytes32 key,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_DEPRECATE_TOKEN = keccak256(
+        "UADeprecateToken(bytes32 from,address target,uint8 kind,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_DEPRECATE_DEX = keccak256(
+        "UADeprecateDex(bytes32 from,address target,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_DEPRECATE_RELEASE = keccak256(
+        "UADeprecateRelease(bytes32 from,address target,uint16 contractClass,uint16 kind,uint64 version,bytes32 chainUid,string reason,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_TOKEN_KIND_ENABLED = keccak256(
+        "UASetTokenKindEnabled(bytes32 from,address target,uint8 kind,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_CLASS_KIND_ENABLED = keccak256(
+        "UASetClassKindEnabled(bytes32 from,address target,uint16 contractClass,uint16 kind,bool on,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_KYC_PROVIDER = keccak256(
+        "UASetKycProvider(bytes32 from,address target,bytes32 provider,bool enabled,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    bytes32 internal constant UA_SET_COMPLIANCE = keccak256(
+        "UASetCompliance(bytes32 from,address target,bytes32[] accounts,uint64[] flags,uint64[] until,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)");
+    // CTR-GOV-27: the entries as one named struct `ChainEntries`, then the factory's `chainUid`
+    bytes32 internal constant CHAIN_ENTRIES = keccak256(
+        "ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash)");
+    bytes32 internal constant UA_SET_CHAIN_ENTRIES = keccak256(
+        "UASetChainEntries(bytes32 from,address target,ChainEntries entries,bytes32 chainUid,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+        "ChainEntries(address relayFeeRouter,bytes32 relayFeeRouterCodeHash,bytes32 relayFeeExecutorCodeHash,address complianceRegistry,bytes32 complianceRegistryCodeHash,address smartKeyAccountFactory,bytes32 smartKeyAccountFactoryCodeHash,address zetherStatements,bytes32 zetherStatementsCodeHash)");
 }
 
 /// @title What every governance router of a chain shares (CTR-GOV-15 Change, owner 2026-11-04): the flow and the owner's and
 ///        a holder's ops of `IGovernance`, which every `GovernanceBase` contract has. `GovernanceRouter` adds the powers of
-///        SCaaS's kinds and the DEX; a router for other powers (an application's bits 128-255, the regulated kinds' bits) is
-///        another child of this base, named by the governed contract's `GOV_ROUTER` (`Env.govRouter` for a release).
-/// @notice No owner, no state of its own, no `receive`: it holds nothing. Fee mode `NONE` (`supportedModes() == 0x03`), every
-///         entry relayable at fee 0. Each op is one `mtx<Op>` (a native address signs, `MtxPipelineLib`'s address rule) and
-///         one `ua<Op>` (any id the registry authorizes: a native id as its native kind, a PQ key, an `msig`, …), `target`
-///         a signed word. One flow: the lock, the signature and the nonce (`MtxPipelineLib.preNamed` / `preNamedUA`), the
+///        SCaaS's kinds (the regulated kinds' controls among them, plan T32, regulated-kinds spec Q8) and the DEX; a router
+///        for other powers (an application's bits 128-255) is another child of this base, named by the governed contract's
+///        `GOV_ROUTER` (`Env.govRouter` for a release).
+/// @notice No admin, no state of its own, no `receive`: it holds nothing. Fee mode `NONE` (`supportedModes() == 0x03`), every
+///         entry relayable at fee 0. Each op is one signed entry `mtx<Op>(UAEnvelope, target, <op params>, UASig)` over `UA<Op>`
+///         (ua-mtx-merge T7, R14: the `ua<Op>` body under the `mtx<Op>` name; the address `Envelope` + `bytes` forms are in
+///         legacy): a native id signs with its own key and no registry call, a derived id (a PQ key, an `msig`, …) through
+///         the registry; `target` a signed word. One flow: the lock, the signature and the nonce (`MtxPipelineLib.preNamedUA`), the
 ///         transient pair `(subject, target)`, the typed call `target.<op>(…)`, the pair cleared; a reverting target
 ///         reverts the whole call, the nonce included. `subject()` names the subject only to the live target. No generic
-///         path: `_execute` (`mtxExecute`, `executeMetaTransaction`, `mtxBatch`), `uaExecute` and `uaBatch` refuse; the
-///         router's ops are on neither allow-list. `cancelNonce`, `mtxCancelNonce`, `uaCancelNonce` stay. **UNAUDITED.**
+///         path: `executeMetaTransaction`, `mtxExecute` and `mtxBatch` refuse; the router's ops are on neither allow-list.
+///         `cancelNonce` and the ordered `mtxCancelNonce(UAEnvelope, lane, UASig)` stay. **UNAUDITED.**
 abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     /// @notice A signed op names a `target` with no code: the call would do nothing and spend the nonce.
     error TargetHasNoCode(address target);
@@ -122,7 +205,7 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     bytes32 private constant _TARGET = 0xa1dd93cf1660937b99999b07adb12f34b563f6b0925eff1ae679d08fb0b5a482; // keccak256("scaas.govrouter.target")
 
     constructor(string memory domainName, bytes32 chainUid_, address registry_, address smartKeyAccountImpl_, bool hedera_)
-        UAMetaTxBase(domainName, chainUid_, registry_, smartKeyAccountImpl_, hedera_)
+        UAMetaTxBaseCore(domainName, chainUid_, registry_, smartKeyAccountImpl_, hedera_)
     {}
 
     /// @notice The subject of the live call, to the live target only; 0 to any other caller and outside a call.
@@ -132,161 +215,116 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
         if (msg.sender == t) assembly ("memory-safe") { s := tload(_SUBJECT) }
     }
 
-    // ------------------------------------------------------------------ the owner and a holder (IGovernance)
-
-    function mtxGrantRole(MetaTxLib.Envelope calldata e, address target, uint8 bit, bytes32 account, bytes calldata sig)
-        external
-    {
-        _mtx(GovernanceRouterTypes.GRANT_ROLE, e, target, IGovernance.grantRole.selector, abi.encode(bit, account), sig);
+    /// @notice The EIP-1167 clone code hash of the chain's `SmartKeyAccount` implementation (0 = none), as the UA registry's
+    ///         `smartKeyCloneHash()`: `OpenFactory.configureChain` requires the two equal (spec 2026-11-10-admin-not-owner.md §13.4).
+    function smartKeyCloneHash() external view returns (bytes32) {
+        return _mtxCtx().skaCloneCodehash;
     }
 
-    function uaGrantRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account,
+    // ------------------------------------------------------------------ the admin and a holder (IGovernance)
+
+    /// @dev CTR-GOV-28 (owner 2026-11-13): every admin op signs the target's chain word as its direct entry takes it, the
+    ///      last op field, and forwards it; the target checks it.
+    function mtxGrantRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account, bytes32 chainUid,
         IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_GRANT_ROLE, e, target, IGovernance.grantRole.selector, abi.encode(bit, account), auth);
+        _ua(GovernanceRouterTypes.UA_GRANT_ROLE, e, target, IGovernance.grantRole.selector, abi.encode(bit, account, chainUid),
+            auth);
     }
 
-    function mtxRevokeRole(MetaTxLib.Envelope calldata e, address target, uint8 bit, bytes32 account, bytes calldata sig)
-        external
-    {
-        _mtx(GovernanceRouterTypes.REVOKE_ROLE, e, target, IGovernance.revokeRole.selector, abi.encode(bit, account), sig);
-    }
-
-    function uaRevokeRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account,
+    function mtxRevokeRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account, bytes32 chainUid,
         IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_REVOKE_ROLE, e, target, IGovernance.revokeRole.selector, abi.encode(bit, account), auth);
+        _ua(GovernanceRouterTypes.UA_REVOKE_ROLE, e, target, IGovernance.revokeRole.selector,
+            abi.encode(bit, account, chainUid), auth);
     }
 
-    /// @notice `terms` is a nested typed struct: its `hashStruct` is the struct word, the whole struct the call's argument.
-    function mtxSetGrant(MetaTxLib.Envelope calldata e, address target, uint8 bit, bytes32 holder,
-        IGovernance.GrantTerms calldata terms, bytes calldata sig) external
+    function mtxSetGrant(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 holder,
+        IGovernance.GrantTerms calldata terms, bytes32 chainUid, IUARegistry.UASig calldata auth) external
     {
-        _mtxCall(GovernanceRouterTypes.SET_GRANT, e, target, abi.encode(bit, holder, _termsHash(terms)),
-            abi.encodeCall(IGovernance.setGrant, (bit, holder, terms)), sig);
+        _uaCall(GovernanceRouterTypes.UA_SET_GRANT, e, target, abi.encode(bit, holder, _termsHash(terms), chainUid),
+            abi.encodeCall(IGovernance.setGrant, (bit, holder, terms, chainUid)), auth);
     }
 
-    function uaSetGrant(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 holder,
-        IGovernance.GrantTerms calldata terms, IUARegistry.UASig calldata auth) external
-    {
-        _uaCall(GovernanceRouterTypes.UA_SET_GRANT, e, target, abi.encode(bit, holder, _termsHash(terms)),
-            abi.encodeCall(IGovernance.setGrant, (bit, holder, terms)), auth);
-    }
-
-    function mtxCancelGrant(MetaTxLib.Envelope calldata e, address target, uint8 bit, bytes32 account, bytes calldata sig)
-        external
-    {
-        _mtx(GovernanceRouterTypes.CANCEL_GRANT, e, target, IGovernance.cancelGrant.selector, abi.encode(bit, account), sig);
-    }
-
-    function uaCancelGrant(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account,
+    function mtxCancelGrant(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 account, bytes32 chainUid,
         IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_CANCEL_GRANT, e, target, IGovernance.cancelGrant.selector, abi.encode(bit, account), auth);
+        _ua(GovernanceRouterTypes.UA_CANCEL_GRANT, e, target, IGovernance.cancelGrant.selector,
+            abi.encode(bit, account, chainUid), auth);
     }
 
-    function mtxDisableFeature(MetaTxLib.Envelope calldata e, address target, uint8 bit, bytes calldata sig) external {
-        _mtx(GovernanceRouterTypes.DISABLE_FEATURE, e, target, IGovernance.disableFeature.selector, abi.encode(bit), sig);
-    }
-
-    function uaDisableFeature(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, IUARegistry.UASig calldata auth)
-        external
-    {
-        _ua(GovernanceRouterTypes.UA_DISABLE_FEATURE, e, target, IGovernance.disableFeature.selector, abi.encode(bit), auth);
-    }
-
-    function mtxTransferOwnership(MetaTxLib.Envelope calldata e, address target, bytes32 newOwner, bytes calldata sig)
-        external
-    {
-        _mtx(GovernanceRouterTypes.TRANSFER_OWNERSHIP, e, target, IGovernance.transferOwnership.selector,
-            abi.encode(newOwner), sig);
-    }
-
-    function uaTransferOwnership(MetaTxLib.UAEnvelope calldata e, address target, bytes32 newOwner,
+    function mtxDisableFeature(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 chainUid,
         IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_TRANSFER_OWNERSHIP, e, target, IGovernance.transferOwnership.selector,
-            abi.encode(newOwner), auth);
+        _ua(GovernanceRouterTypes.UA_DISABLE_FEATURE, e, target, IGovernance.disableFeature.selector,
+            abi.encode(bit, chainUid), auth);
     }
 
-    function mtxAcceptOwnership(MetaTxLib.Envelope calldata e, address target, bytes calldata sig) external {
-        _mtx(GovernanceRouterTypes.ACCEPT_OWNERSHIP, e, target, IGovernance.acceptOwnership.selector, "", sig);
-    }
-
-    function uaAcceptOwnership(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
-        _ua(GovernanceRouterTypes.UA_ACCEPT_OWNERSHIP, e, target, IGovernance.acceptOwnership.selector, "", auth);
-    }
-
-    function mtxRenounceOwnership(MetaTxLib.Envelope calldata e, address target, bytes calldata sig) external {
-        _mtx(GovernanceRouterTypes.RENOUNCE_OWNERSHIP, e, target, IGovernance.renounceOwnership.selector, "", sig);
-    }
-
-    function uaRenounceOwnership(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth)
-        external
+    /// @notice The target's chain word as its direct entry takes it (CTR-GOV-27): signed and forwarded; one op for every
+    ///         `IAdmin` contract (a governed contract, the factory, a compliance registry).
+    function mtxTransferAdmin(MetaTxLib.UAEnvelope calldata e, address target, bytes32 newAdmin, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_RENOUNCE_OWNERSHIP, e, target, IGovernance.renounceOwnership.selector, "", auth);
+        _ua(GovernanceRouterTypes.UA_TRANSFER_ADMIN, e, target, IAdmin.transferAdmin.selector,
+            abi.encode(newAdmin, chainUid), auth);
     }
 
-    function mtxRenounceRole(MetaTxLib.Envelope calldata e, address target, uint8 bit, bytes calldata sig) external {
-        _mtx(GovernanceRouterTypes.RENOUNCE_ROLE, e, target, IGovernance.renounceRole.selector, abi.encode(bit), sig);
+    function mtxAcceptAdmin(MetaTxLib.UAEnvelope calldata e, address target, IUARegistry.UASig calldata auth) external {
+        _ua(GovernanceRouterTypes.UA_ACCEPT_ADMIN, e, target, IAdmin.acceptAdmin.selector, "", auth);
     }
 
-    function uaRenounceRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, IUARegistry.UASig calldata auth)
-        external
+    /// @notice The target's chain word as its direct entry takes it (Fable recheck-2 P3-1): signed and forwarded.
+    function mtxRenounceAdmin(MetaTxLib.UAEnvelope calldata e, address target, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
     {
-        _ua(GovernanceRouterTypes.UA_RENOUNCE_ROLE, e, target, IGovernance.renounceRole.selector, abi.encode(bit), auth);
+        _ua(GovernanceRouterTypes.UA_RENOUNCE_ADMIN, e, target, IGovernance.renounceAdmin.selector, abi.encode(chainUid),
+            auth);
+    }
+
+    /// @notice The holder's own; the target's chain word signed and forwarded (CTR-GOV-28, owner 2026-11-13).
+    function mtxRenounceRole(MetaTxLib.UAEnvelope calldata e, address target, uint8 bit, bytes32 chainUid,
+        IUARegistry.UASig calldata auth) external
+    {
+        _ua(GovernanceRouterTypes.UA_RENOUNCE_ROLE, e, target, IGovernance.renounceRole.selector,
+            abi.encode(bit, chainUid), auth);
     }
 
     // ------------------------------------------------------------------ no generic path (governance spec §3.6, B-14)
 
-    /// @dev `mtxExecute`, `executeMetaTransaction`, `mtxBatch`: an op signed as a `bytes data` blob is refused, whatever it calls.
+    /// @dev `executeMetaTransaction`: an op signed as a `bytes data` blob is refused, whatever it calls.
     function _execute(MetaTxLib.MetaTransaction memory m, bytes calldata) internal pure override returns (bytes memory) {
         revert MtxSelectorNotAllowed(bytes4(m.data));
     }
 
-    function uaExecute(MetaTxLib.UAMetaTransaction calldata m, bytes calldata) public pure override returns (bytes memory) {
+    /// @dev The generic entries on ids refuse likewise (ua-mtx-merge T1: the `uaExecute` / `uaBatch` refusals, renamed).
+    function _mtxExecuteBody(MetaTxLib.UAMetaTransaction calldata m, IUARegistry.UASig calldata) internal pure override returns (bytes memory)
+    {
         revert MtxSelectorNotAllowed(bytes4(m.data));
     }
 
-    function uaBatch(MetaTxLib.UAMetaTransaction[] calldata, bytes[] calldata) public pure override returns (bool) {
+    function _mtxBatchBody(MetaTxLib.UAMetaTransaction[] calldata, IUARegistry.UASig[] calldata) internal pure override returns (bool)
+    {
         revert MtxSelectorNotAllowed(bytes4(0));
     }
 
-    /// @notice Empty: the generic path refuses every call (`_execute`, `uaExecute`, `uaBatch`), `cancelNonce` included, so
+    /// @notice Empty: the generic path refuses every call (`_execute`, `mtxExecute`, `mtxBatch`), `cancelNonce` included, so
     ///         the router publishes no allow-list row; its typed entries are no row either (governance spec §3.2). The
     ///         node's list for the router equals this, both directions.
-    function mtxSelectors() public pure override returns (bytes4[] memory, uint8[] memory, uint8[] memory) {}
+    function _mtxSelectorsBody() internal pure override returns (bytes4[] memory, uint8[] memory, uint8[] memory) {}
 
     // ------------------------------------------------------------------ the flow
 
     /// @dev An op whose struct words after `target` are the call's arguments.
-    function _mtx(bytes32 typehash, MetaTxLib.Envelope calldata e, address target, bytes4 sel, bytes memory args,
-        bytes calldata sig) internal
-    {
-        _mtxCall(typehash, e, target, args, bytes.concat(sel, args), sig);
-    }
-
     function _ua(bytes32 typehash, MetaTxLib.UAEnvelope calldata e, address target, bytes4 sel, bytes memory args,
         IUARegistry.UASig calldata auth) internal
     {
         _uaCall(typehash, e, target, args, bytes.concat(sel, args), auth);
     }
 
-    /// @dev A native address signs (EOA, ERC-1271, HIP-632 on Hedera): the subject is its native id.
-    function _mtxCall(bytes32 typehash, MetaTxLib.Envelope calldata e, address target, bytes memory words,
-        bytes memory data, bytes calldata sig) internal
-    {
-        bool outer = _enter();
-        MtxPipelineLib.Envelope memory env = MtxPipelineLib.Envelope(
-            MetaTxLib.pad(e.from), 0, e.batch, e.nonce, e.validUntil, e.mode, e.relayer, e.fee, e.feeRecipient);
-        MtxPipelineLib.Out memory o =
-            MtxPipelineLib.preNamed(_mtxCtx(), typehash, env, _signed(target, words), _facts(data), false, sig);
-        _call(env.from, target, data);
-        emit MetaTransactionExecuted(e.from, msg.sender, e.batch, e.nonce, o.digest, o.feeTo, o.fee);
-        _exit(outer);
-    }
-
-    /// @dev Any id the registry authorizes under `PURPOSE_METATX` (`requireAuthorized`): the subject is that id.
+    /// @dev One flow for every subject (ua-mtx-merge T7, R14; `MtxPipelineLib._authorize`, invariant 1): a native id by its
+    ///      own key, no registry call (EOA, ERC-1271, HIP-632 on Hedera; R17), the subject `pad(addr)` as the retired
+    ///      `_mtxCall` wrote it, so `_govSubject()` is unchanged (spec §3.1); a derived id through `requireAuthorized` under
+    ///      `PURPOSE_METATX`, the subject that id. The `UA…` event only (R18).
     function _uaCall(bytes32 typehash, MetaTxLib.UAEnvelope calldata e, address target, bytes memory words,
         bytes memory data, IUARegistry.UASig calldata auth) internal
     {
@@ -308,7 +346,7 @@ abstract contract GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter {
     /// @dev Step 3 of the pipeline for a typed op: fee class `ABSOLUTE`, on the UA allowlist of this entry only, against
     ///      `supportedModes()` (fee mode `NONE`).
     function _facts(bytes memory data) private view returns (MtxPipelineLib.CallFacts memory) {
-        return MtxPipelineLib.CallFacts(bytes4(data), data.length, FEE_CLASS_ABSOLUTE, 0, 0, 0, true, supportedModes());
+        return MtxPipelineLib.CallFacts(bytes4(data), data.length, FEE_CLASS_ABSOLUTE, 0, 0, 0, true, _supportedModesBody());
     }
 
     function _termsHash(IGovernance.GrantTerms calldata t) private pure returns (bytes32) {

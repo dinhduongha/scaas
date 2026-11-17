@@ -184,14 +184,14 @@ contract PqzCtTest is PqzMock {
     }
 
     /// The ids at the build's set (plan 5h Task 8d, CTR-PQZ-09): its PQZL id, its PQZH id only where the set has PQZH;
-    /// the retired PQZL v2 / v3 / v4, PQZH v1 / v2 and the STARK backup id, the zero word and every other set's ids refused.
+    /// the retired PQZL v2 .. v5, PQZH v1 .. v3 and the STARK backup id, every set's split id (CTR-PQZ-38: no precompile's), the zero word and every other set's ids refused.
     function test_ids() public pure {
         assertEq(PqzSafety.PQZL_ID, PqzSet.PQZL_ID);
         assertTrue(PqzSafety.isPsid(PqzSet.PQZL_ID));
         assertEq(PqzSafety.isPsid(PqzSet.PQZH_ID), PqzSet.HAS_PQZH, "PQZH iff the set has it");
         if (!PqzSet.HAS_PQZH) assertEq(PqzSet.PQZH_ID, bytes32(0), "no PQZH: the zero word");
         assertFalse(PqzSafety.isPsid(0));
-        bytes32[19] memory all = [
+        bytes32[30] memory all = [
             bytes32(0x2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f), // retired PQZL v2
             0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef, // retired PQZL v3
             0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4, // retired PQZH v1
@@ -202,13 +202,25 @@ contract PqzCtTest is PqzMock {
             0xa3db21fc14c959e7e48b795b0819c0e856a0689765c80bda291602b6ff70262d, // retired n2560-kmax16384 PQZL v4
             0xe83ad1daa5aab5ebf86d484b303e607d76233c680ce87dd0b627021c48109851, // retired n2560-kmax16384 PQZH v2
             0x9d23a0de6403d1a37aefcf61821fcfb46dc53021d12a9232467b570ac3bd53a3, // retired n2816-kmax65536 PQZL v4
-            0xc752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe, // n2048-kmax1024 PQZL v5
-            0x56293621ce64083ca3165d7972b4108a1195f7bf41f1918df6d6d4da1da7df5d, // n2048-kmax1024 PQZH v3
-            0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e, // n2304-kmax4096 PQZL v5
-            0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead, // n2304-kmax4096 PQZH v3
-            0xeacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882, // n2560-kmax16384 PQZL v5
-            0xc93f3bdd8f3f503e22e60a2815b7ca685778509a2cfd380d6d954e68ec3f3662, // n2560-kmax16384 PQZH v3
-            0xa801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9, // n2816-kmax65536 PQZL v5
+            0xc752e7f57778114dbfaac5d43843577b54e13e3ed162517145a37b5a3ec6cdfe, // retired n2048-kmax1024 PQZL v5
+            0x56293621ce64083ca3165d7972b4108a1195f7bf41f1918df6d6d4da1da7df5d, // retired n2048-kmax1024 PQZH v3
+            0xef1ffbcbd05394f8276e50a6c254022edf53bbd08a56e22aadddac2b9b90336e, // retired n2304-kmax4096 PQZL v5
+            0x046859a8592a38d374195f4cddc102ff54656c6e14c6dcfa2eeafd2724944ead, // retired n2304-kmax4096 PQZH v3
+            0xeacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882, // retired n2560-kmax16384 PQZL v5
+            0xc93f3bdd8f3f503e22e60a2815b7ca685778509a2cfd380d6d954e68ec3f3662, // retired n2560-kmax16384 PQZH v3
+            0xa801f5c4697a35a88b90a28249d73cf2e1634d8875bf1a5f6af6c283ac8e8aa9, // retired n2816-kmax65536 PQZL v5
+            0xa626d57bc790f063db680c5a8263922da2ad9922b8798edce10b4879afd222ee, // n2048-kmax1024 PQZL v6
+            0x3cf01f8334f4a200471100233fa0d85944e60830d1dc8873577a31d4dff58439, // n2048-kmax1024 PQZH v4
+            0x41852bdcad5a49d19e7a054f1a658373a97126e7db09bd8f51aaab8d19a504fc, // n2304-kmax4096 PQZL v6
+            0x13c3adfc75c8afc38883b91793de43f4c22bcdd9c12da1af04b64c893fed70d6, // n2304-kmax4096 PQZH v4
+            0x53aa68704b996ebee81c257c513ea3c114ed04137b5e8b1ba94cfc95e3d83841, // n2560-kmax16384 PQZL v6
+            0x4b2d2ff295d42a34f415c1c99a0df73b68a59496ff97168335c380b90a9a9ba7, // n2560-kmax16384 PQZH v4
+            0x7a3e76790c331d1ff5b7b8e9897e876dc11773afed874fcd65c145aeba1da28f, // n2816-kmax65536 PQZL v6
+            // CTR-PQZ-38: the split ids are no precompile's (OFFCHAIN only), at their own set too
+            0x953512b6ca1f8fa48f1d528d2a8adef99ca3b78c50cd6e0ea573ad85e38f49c0, // n2048-kmax1024 PQZL split-v1
+            0xbcebf7a099a5a1398e0be05c15ca9dd5ea9bcec4819f950b6946735eb9d87a43, // n2304-kmax4096 PQZL split-v1
+            0x296b284fbf843c457b2b627d4fea847bc7be52fb0e3f9b142bf2249f37cdb74e, // n2560-kmax16384 PQZL split-v1
+            0xf4dcd2f646d99936b73878c9b3767af0ecc3161ac63b431e4a1e170c86c257fb, // n2816-kmax65536 PQZL split-v1
             0xaa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304, // retired STARK backup
             bytes32(0)
         ];

@@ -100,6 +100,10 @@ pub const WASM_MAX_LEGS: usize = if cfg!(feature = "wasm-m8") { TXM_MAX_LEGS } e
 /// the set's PQZL proofSystemId: keccak256 of its set.toml label `pqzl_id` (gen_set.py, rust/set.rs; plan 5h Task 8d:
 /// one id per set, `.../mlwe-d64k<k>-q<log2q>l4/v4`; v3 and v2 are retired, CTR-PQZ-09). The core only hashes it
 pub const PROOF_SYSTEM_ID: [u8; 32] = params::set::PQZL_ID;
+/// the set's PQZL proofSystemId of opening tokens (three-key spec K3-4): keccak256 of set.toml's `pqzl_split_id`; its op 1
+/// is R_TXS / R_TXS0 (the statement's length picks the relation; pqz-stmt ties the forms to the id). The core only
+/// hashes it
+pub const PROOF_SYSTEM_SPLIT_ID: [u8; 32] = params::set::PQZL_SPLIT_ID;
 
 /// The C core's return codes (`pqz_rt.h`, D3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,9 +129,9 @@ pub enum Error {
 /// randomness (`keys::keypair_from_secret`, `encrypt_raw` with each pk^T r, `decrypt_raw`'s key and plaintext, the
 /// rejected samples of `keygen` / `enc_seed` on their error exits: C clears its output buffers there since the R0 review
 /// fix, R2-C10) and the witness parsing's values (`rel::dec_w`,
-/// `debit_witness`, `dr_witness`, `set_upsilon`). Not cleared (C clears them since Q-B with its arena,
-/// `pqz_arena_wipe_release`; a gap of this crate): the masks y / y3 / y4 and the z vectors built from them, `r_times`'
-/// products R·s3 / R'·s4, and the `coeffvec` copies inside the rejection step.
+/// `debit_witness`, `dr_witness`, `set_upsilon`), and since review 3w u1-3 (C clears them since Q-B with its arena,
+/// `pqz_arena_wipe_release`) the masks y1 / y2 / y3 / y4, their copy y and the z vectors built from them, the products
+/// R2·y, R2·s, B·y21, w, `r_times`' R·s3 / R'·s4, and the `coeffvec` / `intvec` copies inside the rejection steps.
 pub(crate) fn wipe<T: Default>(x: &mut [T]) {
     x.iter_mut().for_each(|e| *e = T::default());
     core::hint::black_box(&*x);
@@ -363,6 +367,12 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
     keys::enc_group_seed(seed_enc, g)
 }
 
+/// `pqz_enc_leg_seed`: an opening token's leg seed (spec K3-4), SHAKE256("SCAAS-PQZ-ENC-LEG-V1" || seed_enc || be4(0) ||
+/// toUA || keccak256(pk_t))[0..32); `pkt_hash` = keccak256(pk_t).
+pub fn enc_leg_seed(seed_enc: &[u8; 32], to_ua: &[u8; 32], pkt_hash: &[u8; 32]) -> [u8; 32] {
+    keys::enc_leg_seed(seed_enc, to_ua, pkt_hash)
+}
+
 /// `pqz_encrypt`: encryption with chosen short vectors (no norm check).
 pub fn encrypt(
     pks: &[&[u8; POLYVEC_BYTES]],
@@ -414,16 +424,54 @@ pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result
     coder::test_mutate(rel, proof, kind, r1, r2)
 }
 
+/// tB's length and the index of the quadratic proof's t in it, of relation `code` (test hook: `tests/fs_bind.rs`)
+#[cfg(feature = "test-hooks")]
+pub fn test_tb_layout(code: u8) -> Option<(usize, usize)> {
+    let p = rel::tbox_by_code(code)?;
+    Some(((p.tbox.l + p.tbox.lext) as usize, p.quad_eval.quad_many.l as usize))
+}
+
 /// The P6-FS trace (test hook, lazer#28; = the C core's `pqz_sz_trace_fn` kinds under `PQZ_SZ_TRACE`): which seed
 /// each Fiat–Shamir challenge of this thread's `prove` / `verify` / `verify_fast` calls was derived from, as
 /// `(kind, seed, dom)`: 2 / 3 = seed and dom of the z4 / z3 matrix V4 / V3, 5 = the seed of mu (and, in the generic
-/// code, of the final challenge), dom 0; the specialised verifier (`sv.rs`) records kind + 10. Returns the records since the last call and clears them. Off until this
+/// code, of the final challenge), dom 0; the specialised verifier (`sv.rs`) records kind + 10. The generic verifier
+/// only (review 3w Codex u1-2, dom 0): 6 = the transcript after the commitment (tA1, tB_), 4 = the seed of R, R' (after
+/// ty3, ty4, tbeta; C's kind 4 records each JL row), 8 = the final challenge's seed (after t, v, w1). Returns the records since the last call and clears them. Off until this
 /// thread's first call (which returns nothing): other test-hooks builds (pqz-ffi `fuzz`, the fault hooks) never call
 /// it, so they never record.
 #[cfg(feature = "test-hooks")]
 pub fn fs_trace_take() -> Vec<fstrace::Rec> {
     fstrace::T.with(|t| t.borrow_mut().replace(Vec::new()).unwrap_or_default())
 }
+
+/// Test hook (review 3w-delta U1h-1, `tests/wipe.rs`): `f(address)` on this thread for each heap buffer the prover
+/// holds in [`Wiped`] when it is allocated or filled (`name_buf`): a rejection try's z3 / z4 and R s3 / R' s4, the
+/// witness images s3 / s4 and their coefficient copies, the masks y1 .. y4 and their products, the rejection steps'
+/// `intvec` / `coeffvec` copies, s1 / m / s2 / tA2, the digits (3zh Fable F-10); the test's allocator then checks that
+/// each is cleared when it is freed, a rejected try's included. Off (None) unless a test sets it.
+#[cfg(feature = "test-hooks")]
+pub fn set_secret_buf_hook(f: Option<fn(usize)>) {
+    SECRET_BUF.with(|h| h.set(f))
+}
+
+#[cfg(feature = "test-hooks")]
+std::thread_local! {
+    static SECRET_BUF: core::cell::Cell<Option<fn(usize)>> = const { core::cell::Cell::new(None) };
+}
+
+/// Names `v`'s heap buffer to the test hook (`set_secret_buf_hook`); nothing without `test-hooks` or without a buffer.
+#[cfg(feature = "test-hooks")]
+pub(crate) fn name_buf<T>(v: &alloc::vec::Vec<T>) {
+    if v.capacity() > 0 && core::mem::size_of::<T>() > 0 {
+        if let Some(f) = SECRET_BUF.with(|h| h.get()) {
+            f(v.as_ptr() as usize)
+        }
+    }
+}
+
+#[cfg(not(feature = "test-hooks"))]
+#[inline(always)]
+pub(crate) fn name_buf<T>(_v: &alloc::vec::Vec<T>) {}
 
 #[cfg(feature = "test-hooks")]
 pub mod fstrace {
@@ -453,7 +501,11 @@ pub mod fstrace {
 
 /// Review A's cheating prover (A-1 = review B's B-1; the regression fixture `tests/cheat_b1.rs`, test hook): this
 /// thread's `prove` calls, with `mode` 0 honest, 1 `z4[0][0] += 1` cancelled through g, 2 `z3 = y3` (no `β3·R·s3`)
-/// cancelled through g, 3 `z4[0][0] += 1` not cancelled (control). The cancellation folds the z3 / z4 error with the V
+/// cancelled through g, 3 `z4[0][0] += 1` not cancelled (control); 4 (review 3w-delta U1h-1, `tests/wipe.rs`) the first z3 /
+/// z4 try rejected, an honest proof from the second (the retry path on every prove); 5 (review 3w-delta U1h-2,
+/// `tests/split.rs`) none of the prover's own relation checks (`__check_coeff0` of the evaluation equations and the
+/// accumulators, the h_i asserts): a false statement is proved anyway and reaches the verifiers; an honest one gives
+/// the honest proof. The cancellation folds the z3 / z4 error with the V
 /// the cheater can know before `tg`, i.e. V seeded from hz (`tbox::prove`); since B-1 V is drawn after `tg`, so the
 /// proofs of modes 1 and 2 no longer verify. Never set in a production build (no `test-hooks`: always 0).
 #[cfg(feature = "test-hooks")]
@@ -464,6 +516,25 @@ pub fn set_cheat(mode: u32) {
 #[cfg(feature = "test-hooks")]
 std::thread_local! {
     static CHEAT: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+}
+
+/// Test hook (3zh, owner 2026-11-16, `tests/wipe.rs`): the z3 / z4 tries of this thread's proves since the last call,
+/// the accepted one included (one prove with no rejected try counts 1; cheat mode 4 rejects the first, so 2 or more).
+/// Lets the test see the retry path run directly, not through a count of named buffers (the honest proves' own
+/// retries vary with the set). Only with test-hooks.
+#[cfg(feature = "test-hooks")]
+pub fn take_z34_tries() -> u64 {
+    Z34_TRIES.with(|c| c.replace(0))
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn z34_tries_add(n: u64) {
+    Z34_TRIES.with(|c| c.set(c.get() + n))
+}
+
+#[cfg(feature = "test-hooks")]
+std::thread_local! {
+    static Z34_TRIES: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
 }
 
 /// the mode `set_cheat` gave this thread; only with test-hooks (8a review m3: no production build has it, so no

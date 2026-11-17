@@ -505,7 +505,7 @@ The per-operator `GovernanceHolder` this section first specified is replaced by 
 | Part | Text |
 |---|---|
 | Contracts | `GovernanceRouterBase is UAMetaTxBase, IGovernanceRouter` (abstract: the flow, the generic path refused, the owner's and a holder's ops of `IGovernance`); `GovernanceRouter` (the powers of SCaaS's kinds and the DEX). `src/governance/` |
-| Deployment | one per chain and UA registry (a router authenticates against its own registry; CTR-GOV-15 Change), `new GovernanceRouter{salt}(chain_uid, registry, smartKeyAccountImpl, hedera)` by the deterministic CREATE2 deployer: one predictable address per chain and registry. `DeployBase._deployGovRouter` deploys it after the UA registry and before every release (JSON `governance_router`). `script/pqz/e2e.py` deploys it the same way (the deterministic deployer, `DeployBase`'s salt) on its own UA registry, the PQZ stack's with the `pqz-mlwe` kind, so on a chain that runs both the PQZ stack has a second router, `governance_router` of `deployments/7622-pqz.json`, which the node lists in `governance_routers` too. Not a release, not a `TokenKind`; `OpenFactory` does not know it |
+| Deployment | one per chain and UA registry (a router authenticates against its own registry; CTR-GOV-15 Change), `new GovernanceRouter{salt}(chain_uid, registry, smartKeyAccountImpl, hedera)` by the deterministic CREATE2 deployer: one predictable address per chain and registry. `DeployBase._deployGovRouter` deploys it after the UA registry and before every release (JSON `governance_router`). `script/pqz/e2e.py` deploys it the same way (the deterministic deployer, `DeployBase`'s salt) on its own UA registry, the PQZ stack's with the `pqz-mlwe` kind, so on a chain that runs both the PQZ stack has a second router, `governance_router` of `deployments/scaas-testnet-pqz.json` (NET-EVM-13; was `7622-pqz.json`), which the node lists in `governance_routers` too. Not a release, not a `TokenKind`; `OpenFactory` does not know it |
 | Who points at it | every governed contract's `GOV_ROUTER` immutable, from its release's `Env.govRouter`; 0 = no router on that chain (§1.4) |
 | Domain | `("SCaaS GovernanceRouter", "1", chainId, router, chain_uid)` |
 | State | none of its own (`test/v2/layout/GovernanceRouter.json` is empty): the nonce map of `scaas.metatx`, `cancelUsed` of `scaas.ua.ledger`, and the transient pair `(subject, target)` in two slots, `keccak256("scaas.govrouter.subject")`, `keccak256("scaas.govrouter.target")` |
@@ -669,15 +669,15 @@ A kind named in a comment does not decode: `createToken` with kind 8 reverts tod
 
 | Id | How it is off |
 |---|---|
-| 6, 7 | `deployImplementation` refuses them (`KindRetired(kind)`), so no release exists and `createToken` reverts `VersionUnknown` |
+| 6, 7 | `deployTokenImplementation` refuses them (`KindRetired(kind)`), so no release exists and `createToken` reverts `VersionUnknown` |
 | 8-13 | no release (`VersionUnknown`) and `_enabled` clear (`KindDisabled`): the bitmask starts at 3 |
 | 2-13 on `createTokenUnregistered` | refused as today by `uint8(kind) >= NORMAL_ZETHER`, so unvetted code never claims a regulated kind. The error keeps its name |
 
 ### 4.2 Publishing later, on the same factory
 
-No factory change is needed: `publishEnv(kind, envVersion, env)`, `deployImplementation(kind, version, envVersion, initcode, implArgs)`, `noticePeriod`, `setKindEnabled(kind, true)`, the order `DeployBase` already uses for the Zether kinds. `_checkImplementation` compares `kind()`; `TokenStore` gains the `KIND_*` constants when a kind is built. A regulated token is `isRegisteredToken`, `KIND_SCAAS` to the DEX, and a wrapped kind's leg check reads it (§6.1).
+No factory change is needed: `publishEnv(kind, envVersion, env)`, `deployTokenImplementation(kind, version, envVersion, initcode, implArgs)`, `noticePeriod`, `setKindEnabled(kind, true)`, the order `DeployBase` already uses for the Zether kinds. `_checkImplementation` compares `kind()`; `TokenStore` gains the `KIND_*` constants when a kind is built. A regulated token is `isRegisteredToken`, `KIND_SCAAS` to the DEX, and a wrapped kind's leg check reads it (§6.1).
 
-**Rules that change.** CTR-TOK-21: ids 6 and 7 decode and are refused by `deployImplementation`, not by the ABI decoder. `deployImplementation`'s "interim rule, until the governance-matrix spec" ends: the registrar names the env explicitly, for good; the owner's "must not simply bind the kind's latest Env" is met by it, and §7 is that matrix. The plain kinds keep refusing flags 5-9 (CTR-GOV-03, -18).
+**Rules that change.** CTR-TOK-21: ids 6 and 7 decode and are refused by `deployTokenImplementation`, not by the ABI decoder. `deployTokenImplementation`'s "interim rule, until the governance-matrix spec" ends: the registrar names the env explicitly, for good; the owner's "must not simply bind the kind's latest Env" is met by it, and §7 is that matrix. The plain kinds keep refusing flags 5-9 (CTR-GOV-03, -18).
 
 The regulated implementation of a kind is the same source with a hook compiled into `_update` and `_uaMove`, never into `_poolMove` (§4.3), and takes the combinations of flags 5-9 that asset-suite §2.2's init checks accept: `FORCE ⇒ FREEZE`, and `FORCE` wants a holder of bit 10 `RECORD`, outside the mask. Designing it is not this spec's work beyond the rules below. It needs bytes nobody has measured: §9.
 
@@ -854,7 +854,7 @@ The wizard refuses a `MODERATE` token as a tender, vesting or offer deposit asse
 
 ### 6.2 Rescue, CTR-GOV-06 — SPECIFIED
 
-`RESCUABLE` is set ⇔ `rescueTo ≠ 0`, else `RescueConfigInvalid()`, and `init` refuses a `rescueTo` that is `this`, `UA_POOL` or `SHIELD_POOL` with the same error: the first would repeat `Rescued` for one surplus, the other two brick the rescue of a SCaaS token. Always locked; `rescueTo` has no writer after `init`. `rescue(address asset)`: anyone, no signature, not an `mtx*`, `nonReentrant` (R-16), one direct entry on every token kind, `WrappedPqzToken` last. The body is `WrappedLib.rescue` on `WRAPPED*`, `GovernanceLib` on `NORMAL*`.
+`rescueTo` comes only with `RESCUABLE`, else `RescueConfigInvalid()`; `RESCUABLE` with `rescueTo` 0 stores the constant dev address `RescueLib.SCAAS_DEV_RESCUE` (owner 2026-11-12, [CTR-GOV-25](../../decisions.md#CTR-GOV-25)), and `rescueTo()` returns it. `init` refuses a `rescueTo` that is `this`, `UA_POOL` or `SHIELD_POOL` with the same error: the first would repeat `Rescued` for one surplus, the other two brick the rescue of a SCaaS token. Always locked; `rescueTo` has no writer after `init`. `rescue(address asset)`: anyone, no signature, not an `mtx*`, `nonReentrant` (R-16), one direct entry on every token kind, `WrappedPqzToken` last. The body is `WrappedLib.rescue` on `WRAPPED*`, `GovernanceLib` on `NORMAL*`.
 
 ```solidity
 interface IRescuable {
@@ -879,7 +879,7 @@ The first row that matches decides.
 
 `safeTransfer` for ERC-20; `Rescued`. Refund of a stray's owner is off chain. The wizard refuses rebasing legs. A token answers `IRescuable` by `supportsInterface` while bit 17 is set.
 
-**Not on:** `SCaaSDex`, CTR-DEX-20 pays strays to the next submitter, and bit 17 stays off there (CTR-GOV-10). `DexPuller` takes `rescueTo` as a constructor argument from `DexConfig.rescueTo`, immutable, with `rescue(address token)`, anyone, whole balance; 0 reverts `RescueOff()`. `SCaaSDex.initialize` refuses a `rescueTo` that is `UA_POOL`, `SHIELD_POOL`, the DEX or its puller with `RescueConfigInvalid()`, as `init` does for a token (review 2026-11-04 M-2). It calls only `balanceOf` and `transfer`, so user allowances stay out of reach (R-16). `SealedBidTender`: none, CTR-TND-08 stands (CTR-GOV-14). The relay router holds nothing and has no owner.
+**Not on:** `SCaaSDex`, CTR-DEX-20 pays strays to the next submitter, and bit 17 stays off there (CTR-GOV-10). `DexPuller` takes `rescueTo` as a constructor argument from `DexConfig.rescueTo`, immutable (0: `SCAAS_DEV_RESCUE`, CTR-GOV-25; the earlier `RescueOff()` is gone), with `rescue(address token)`, anyone, whole balance. `SCaaSDex.initialize` refuses a `rescueTo` that is `UA_POOL`, `SHIELD_POOL`, the DEX or its puller with `RescueConfigInvalid()`, as `init` does for a token (review 2026-11-04 M-2). It calls only `balanceOf` and `transfer`, so user allowances stay out of reach (R-16). `SealedBidTender`: none, CTR-TND-08 stands (CTR-GOV-14). The relay router holds nothing and has no owner. The chain singletons (`UARegistry`, `OpenFactory`, `GovernanceRouter`, `RelayFeeRouter`, `PqChat`) take `rescue(asset)` by anyone to the constant dev address (owner 2026-11-12, [CTR-GOV-26](../../decisions.md#CTR-GOV-26)).
 
 ### 6.3 Every family, CTR-GOV-07 — SPECIFIED for the semantics, PLANNED per family
 
@@ -922,7 +922,7 @@ Replaces gov-inventory's line numbers, from code at `08e92597` and the rulings. 
 | `noticePeriod` | immutable, ≤ 30 days | — | — |
 | Publish an `Env` | — | — | registrar, no delay, append-only, never changed, no revoke |
 | `Env` content: registry, `smartKeyAccountImpl`, `hedera`, `deps`, `libs`, `libCodeHashes` | immutable in each release built on it | — | per version |
-| `deployImplementation`, `deployDexImplementation`: which `Env` | — | — | registrar names `envVersion` explicitly, `EnvUnknown` otherwise, delay `noticePeriod`, append-only. *This spec:* the rule is final; ids 6, 7 refused |
+| `deployTokenImplementation`, `deployDexImplementation`: which `Env` | — | — | registrar names `envVersion` explicitly, `EnvUnknown` otherwise, delay `noticePeriod`, append-only. *This spec:* the rule is final; ids 6, 7 refused |
 | `deprecate`, `deprecateDex` | — | — | registrar, at once, one-way; instances untouched |
 | `setKindEnabled` | plain kinds start on | — | registrar, at once, both ways, not lockable |
 | Kind ids | 0-13 (§4.1) | — | — |
@@ -988,7 +988,7 @@ Replaces gov-inventory's line numbers, from code at `08e92597` and the rulings. 
 
 | Property or power | Fixed | Creation | After |
 |---|---|---|---|
-| `UAPqzVerifier` | `Env.deps[0]` | by picking a version | — ; not on Hedera |
+| `PqzKeyVerifier` | `Env.deps[0]` | by picking a version | — ; not on Hedera |
 | Precompile, proof system | self-test at `init` | — | — |
 | `maxShielded` | `≠ 0`, `≤ 2^62` | `conf` | — |
 | `shieldScale` | `≠ 0`, and `maxShielded · shieldScale` fits `uint256`; no other bound | `conf` | — |
@@ -1287,7 +1287,7 @@ CTR-TOK-05, appended:
 
 CTR-TOK-06: "`collateralValue() ≥ totalSupply()` afterwards" gains "except on a hybrid (CTR-TOK-05)". The rate rows that name `RateDecreaseWithDisabledLeg` stay.
 
-CTR-TOK-10: "no role can … touch reserves" stays; "move balances (except under the forced-transfer flag)" becomes "(except under `FORCE` or `MODERATE`, on public balances, chosen at creation)", and "mint" gains "a hybrid's issuer mints unbacked units under `maxSupply`". CTR-TOK-21: ids 6 and 7 are `RETIRED_6`, `RETIRED_7`, decoded and refused by `deployImplementation`; ids 8–13 as §4.1. CTR-TOK-24: `scaas.governance` joins; `scaas.token` loses features and roles; `AdminLib` row → `GovernanceLib`; the storage line's "`scaas.token` (features, roles, kind, version)" follows, and `scaas.admin`, a word for a library that is gone, becomes `scaas.regulated`, in that line and in the note on flags 5–8, which reads 5–9 (§8 of that doc). CTR-TOK-25: the fields of §2.3. Hybrid rows in the kind tables follow. Test plan, the invariants `collateralValue() ≥ totalSupply()` and "slack never decreases": on a non-hybrid.
+CTR-TOK-10: "no role can … touch reserves" stays; "move balances (except under the forced-transfer flag)" becomes "(except under `FORCE` or `MODERATE`, on public balances, chosen at creation)", and "mint" gains "a hybrid's issuer mints unbacked units under `maxSupply`". CTR-TOK-21: ids 6 and 7 are `RETIRED_6`, `RETIRED_7`, decoded and refused by `deployTokenImplementation`; ids 8–13 as §4.1. CTR-TOK-24: `scaas.governance` joins; `scaas.token` loses features and roles; `AdminLib` row → `GovernanceLib`; the storage line's "`scaas.token` (features, roles, kind, version)" follows, and `scaas.admin`, a word for a library that is gone, becomes `scaas.regulated`, in that line and in the note on flags 5–8, which reads 5–9 (§8 of that doc). CTR-TOK-25: the fields of §2.3. Hybrid rows in the kind tables follow. Test plan, the invariants `collateralValue() ≥ totalSupply()` and "slack never decreases": on a non-hybrid.
 
 ### 12.3 asset-suite.md, CTR-AS-03, replacing its first sentences
 

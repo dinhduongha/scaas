@@ -1,0 +1,35 @@
+ua-mtx-merge T49: PQZ verifier mode invariants I1-I6 (spec section 14) and the mutant harness. UNAUDITED.
+Suite: test/pqz/invariant/PqzVerdictInvariants.t.sol with handler PqzVerdictHandler.t.sol (two NORMAL_PQZ tokens from the same
+state, `pre` PRECOMPILE and `off` OFFCHAIN; actions debit / withhold / replay / transfer / revoke / toggleCode, targetSelector).
+Harness: runs/2026-11-08-ua-mtx-merge-pqz-verifier/ (mutants.py, at-sets.sh, inv-sets.sh, README.md). Full output: git-ignored
+runs/2026-11-08-ua-mtx-merge-t49-*.log.
+
+step | commit | rc | counts
+invariants, default set n2304-kmax4096 (focused test/pqz build) | 0d87fa6d + this commit | 0 | 2 passed (invariants runs 64, calls 2048, reverts 0)
+inv n2048-kmax1024 (at-set.sh) | 0d87fa6d + this commit | 0 | 2 passed, 0 failed, 0 skipped
+pqzh-fit n2048-kmax1024 (test_pqzhN2048FitsBothPaths, two suites) | 0d87fa6d + this commit | 0 | 2 passed, 0 failed, 0 skipped
+inv n2304-kmax4096 (at-set.sh) | 0d87fa6d + this commit | 0 | 2 passed, 0 failed, 0 skipped
+inv n2560-kmax16384 (at-set.sh) | 0d87fa6d + this commit | 0 | 2 passed, 0 failed, 0 skipped
+inv n2816-kmax65536 (at-set.sh) | 0d87fa6d + this commit | 0 | 2 passed, 0 failed, 0 skipped
+PqzSet.sol restored by at-set.sh after every set (git diff --quiet checked per step).
+
+Mutants (T44's and T45's rows the invariants speak to, MUTANTS_LOG_TASK=t49 MUTANTS_MATCH=the suite), final suite: 10 of 10 killed.
+mutant | tests that went red | rc
+m1-setter-writes-mode | invariant_I1_modeImmutable, test_handler_acts | 1
+m2-offchain-calls-precompile | invariant_I2_I3_onlyTheCurrentVerdict, test_handler_acts | 1
+m3-precompile-reads-verdict | invariant_I4_sameWritesInBothModes, invariant_I5_preNeverReadsTheVerdict, test_handler_acts | 1
+v2-revocation-unchecked | invariant_I2_I3_onlyTheCurrentVerdict, test_handler_acts | 1
+v3-shape-not-recomputed | invariant_I2_I3_onlyTheCurrentVerdict, test_handler_acts | 1
+v10-epoch-not-bumped-transfer | invariant_I2_I3_onlyTheCurrentVerdict, invariant_I4_sameWritesInBothModes, test_handler_acts | 1
+v11-epoch-not-bumped-revoke | invariant_I2_I3_onlyTheCurrentVerdict, test_handler_acts | 1
+b4-proofhash-unchecked | invariant_I2_I3_onlyTheCurrentVerdict, invariant_I4_sameWritesInBothModes, test_handler_acts | 1
+b5-statement-with-prefix | invariant_I2_I3_onlyTheCurrentVerdict, test_handler_acts | 1
+b6-epoch-unchecked | invariant_I2_I3_onlyTheCurrentVerdict, invariant_I4_sameWritesInBothModes, test_handler_acts | 1
+
+How the suite got there (each survivor a finding, fixed in the suite, then every mutant re-run on the final suite):
+- first run: v2-revocation-unchecked, v3-shape-not-recomputed, v10-epoch-not-bumped-transfer survived. Added: the refusal
+  reason while `off` cannot serve (PqzVerifierRevoked when revoked, PqzVerifierChanged when the shape moved: ghost
+  wrongRefusal), and the withheld verdict replayed after any verifier move, not only when the epoch reads differently.
+- second run: v11-epoch-not-bumped-revoke and b4-proofhash-unchecked survived (a re-assignment after a revocation bumps the
+  epoch again; the handler's proof never varied). Added: every transfer and revocation must raise the epoch (ghost epochStuck,
+  I3), and while `off` serves the same verdict is first tried with another proof (I2: it binds the exact proof).

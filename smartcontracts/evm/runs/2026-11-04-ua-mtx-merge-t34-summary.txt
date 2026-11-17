@@ -1,0 +1,57 @@
+# ua-mtx-merge T34 gate summary (full output in git-ignored .log files, not committed)
+# T34: vectors and clients for the regulated kinds (regulated-kinds spec §3.1, §3.3, §3.6, §5, §7; CTR-GOV-17, CTR-GOV-20
+# with the owner's ruling of 2026-11-06: the moved account of UAOperatorTransfer is `account`).
+# Base: 64a11f3e (T33 tip). T34 commits: the build (vectors, readers, forge writers and row tests), this one (harness,
+# mutants, summary). No legacy copy (MD-4): no row of a vector changed or retired, only rows added.
+step | commit | rc | counts
+t34-baseline | 64a11f3e | 1 | clientkeys at the T33 tip: 246 tests, 242 pass, 1 fail (typed-ops "GovernanceRouter: 19 rows": 28 !== 20 pins, red since T32 added the eight typehash pins; T32 ran no clientkeys reader), 3 skipped
+t34-red-clientkeys | worktree (tests only) | 1 | regulated, governance-bits, typed-ops: 31 tests, 25 pass, 5 fail (regulated.test.js: no regulated_kat.json; governance-bits regulated rows; typed-ops table 68 != 76, router 27 rows, the eight regulated rows)
+t34-red-ua-rs | worktree (tests only) | 101 | tests/regulated.rs: unresolved import scaas_ua::regulated (compile error)
+t34-red-forge | worktree (tests only) | 1 | RegulatedKat 0/1 (no regulated_kat.json), GovBitsVector 2/3 (file stale), TypedOpsRouterTest 23/32 (the eight rows and the unbound fee-recipient test: no row in typed_ops.json)
+t34-vectors | build commit | 0 | typed_ops.json 68 -> 76 rows (+8 router UA<Op>, no row changed); governance_bits.json rows 0-21 -> 0-22 (bit 22; kinds and holder on 5-10, 21, 22; msig, decoyFee, decoyFeeWhen); regulated_kat.json new: 3 recordId, 44 receiver, 34 freeze (T1-T9), 6 commit rows
+t34-vectors-check | build commit | 0 | typed-ops-vectors.mjs twice, GovBitsVector and RegulatedKat with WRITE_*=true: git diff --exit-code smartcontracts/vectors 0; ua-sig-vectors.mjs (to a scratch dir) and ua-portable-vectors.mjs: their files unchanged
+t34-cast-check | build commit | 0 | typed-ops-cast-check.mjs: 76 structs, 109 digests and 108 calldatas equal to cast's
+t34-forge-green | build commit | 0 | RegulatedKat, GovBitsVector, TypedOps: 6 suites, 92 passed (TypedOpsRouterTest 32: the eight rows verbatim on a kind-8 token through the router, a non-zero unbound fee recipient signed refused)
+t34-forge-full | build commit's tree | 0 | forge test in four path groups: 268 suites, 2862 passed 0 failed 14 skipped (T33: 267 suites, 2851; + RegulatedKat 1, GovBitsVector 1, TypedOpsRouterTest 9)
+t34-clientkeys | build commit | 0 | npm test: 253 tests, 250 pass, 0 fail, 3 skipped (the cast test skips without cast on PATH; run above)
+t34-ua-rs | build commit | 0 | cargo test 55 passed; --features signers,json,pq 87 passed; clippy --all-targets -D warnings clean, both feature sets
+t34-ua-c | build commit | 0 | clippy clean; cargo build; cargo test (header drift) 1 passed; python3 -m unittest tests.test_vectors 23 OK
+t34-ua-cxx | build commit | 0 | clippy clean; cmake build; ctest 19/19
+t34-ua-qt | build commit | 0 | cmake build (Qt 6.12); offscreen ctest 1/1 (tst_ua)
+t34-ua-dart-frb | build commit | 0 | cargo build --locked; dart test: all 20 passed
+t34-ua-py | build commit | 0 | unittest tests.test_vectors: 28 OK
+t34-ua-go | build commit | 0 | go vet clean; go test ok
+t34-ua-cs | build commit | 0 | dotnet test: 27 passed (build-server shut down after)
+t34-ua-dart | build commit | 0 | dart analyze, dart test (28 passed), dart run test/vectors_test.dart
+t34-zether-prover | build commit | 0 | cargo test 70 passed (NOT_ZETHER + the eight router rows); clippy not run green: src/zether.rs is_multiple_of x2, pre-existing, untouched (CI runs cargo test only)
+t34-node | build commit | 0 | cargo test --lib typed:: guard:: 40 passed; clippy --all-targets -D warnings clean (CAPPED_MEM=6G)
+t34-docs | build commit | 0 | test_docs_check.py, docs_check check 0 errors 5 warnings 16 notes (as T33), paths 0
+t34-mutants | build commit | 1 each | 27 of 27 killed on the first run, none a compile error (runs/2026-11-04-ua-mtx-merge-t34-mutants.txt); tree restored after each
+#
+# Pins, old -> new: clientkeys typed-ops router pins 20 -> 28 (rows 19 -> 27), TYPED_OPS 68 -> 76, envelope ops 59 -> 67;
+# node typed_ops_kat_every_entry (68, 101, 100) -> (76, 109, 108); guard_allows_every_named_entry_only (97, 3, 97) ->
+# (105, 3, 105); zether-prover NOT_ZETHER 41 -> 49; governance rows 22 -> 23 in ua-rs, ua-c, ua-cxx, ua-qt, ua-dart-frb tests
+# (the first refused bit 22 -> 23); GovBitsVector rows 0-21 -> 0-22. No gas pin, typehash, selector, layout, size or address moved.
+#
+# Not run: the four PQZ sets (no src, set or PQZ test changed); node e2e (no node source path changed, only two test counts);
+# the full node suite (the modules that read typed_ops.json ran); ua-c's C99 smoke (doc comment only); dart test -p node.
+#
+# Conflicts with the plan / spec, and choices the text leaves open (none resolved silently):
+#   Spec §7 names the eighth router row UAModeratedTransfer; CTR-GOV-20 and T32 make it UAOperatorTransfer (account, to,
+#   amount, ref). The vectors follow CTR-GOV-20.
+#   Spec §7 lists governance_bits.json "bits 5-10 and 21"; CTR-GOV-20's status puts bit 22's row in T34: added. Bit 21's
+#   sentence was the transfer power's; it now says the bit has no entry and its meaning is open (owner 2026-11-05). The
+#   wording, the field names `kinds` / `holder` and the values `contractOrMsig` / `any` are this task's; the decoy-fee text
+#   is a top-level sentence with a `When` line (the `leg` / `grantDelay` pattern), not a per-row one.
+#   GovBitsVector cannot read RegulatedBase's internal masks: it composes them from GovernanceBits and holds kind 8's
+#   validBits() to them (test_regulatedRowsEqualKind8); kinds 9 and 13 are RegulatedSkeleton.test_masks', 10-12 not checked here.
+#   ua-rs "signs the eight ops from the table": on this branch ua-rs has no EIP-712 hasher or signer (ua-rs-sign's wallet).
+#   Built: scaas_ua::regulated (new file): the eight UA<Op> struct hashes and digests with MetaTxLib.canon, record_id,
+#   relax_commit, can_receive; the signing is the signer's. ua-rs reads the recordId, receiver and commit rows; the freeze
+#   transitions are reproduced in clientkeys only (src/regulated.js freezeStep).
+#   regulated_kat.json's R rows use one mask pair (requiredFlags KYC = 1, deniedFlags 2^16); the freeze rows run on kind 8.
+#   Docs not edited: CTR-GOV-20's status and spec §7's rows (T19's sweep, another session).
+#   Merge with ua-rs-sign: expected small conflicts in clients/clientkeys/src/evm.js (GOVERNANCE_BITS' last rows beside
+#   ua-rs-sign's append), clients/ua-rs/src/lib.rs (end of file), clients/ua-c/{src/lib.rs,include/scaas_ua.h} (one doc line
+#   each, ABI v6 rewrite). After the merge ua-rs-sign's wallet/eip712.rs op table needs the eight router rows, or its
+#   typed_ops.json walk fails.

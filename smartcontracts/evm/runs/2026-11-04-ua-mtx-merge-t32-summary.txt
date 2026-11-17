@@ -1,0 +1,44 @@
+# ua-mtx-merge T32 gate summary (full output in git-ignored .log files, not committed)
+# T32: bit 22 `operatorTransfer` (owner 2026-11-05, CTR-GOV-20; regulated-kinds spec §3.1, §3.4; CTR-GOV-08 refusals,
+# CTR-GOV-13) and the router's eight regulated control ops (spec §3.1, Q8). Bit 21 `MODERATE`: no body. Zether and PQZ apart.
+# Base: f55cf38e (T31 tip). T32 commits: the build e46cdb71 (no legacy copy, MD-4: only the `RegulatedNotBuilt`
+# placeholder left, no built body was superseded), this one (sizes, harness, mutants, summary).
+step | commit | rc | counts
+t32-red-compile | worktree (tests only) | 1 | compile error: OperatorTargetRefused and the router's mtx<Op> missing
+t32-red | worktree (error and router entries in, RegulatedLib body still the placeholder) | 1 | T32 suites: 12 suites, 23 failed (OperatorTransfer 9, the four state-diff suites 2 each, GovRouterRegulated 4: the OperatorTransfer rows, RegulatedSkeleton 1, SelectorAudit stranger 1), all RegulatedNotBuilt
+t32-green | build commit's tree | 0 | T32 suites: 12 suites, 95 passed 0 failed
+t32-forge-full | build commit's tree before the pin move | 1 | forge test: 267 suites, 2841 passed 2 failed 14 skipped; the 2 = the router CREATE2 pin and PlusZero mtxCancelNonce_router, moved old -> new; GovDeploy + PlusZero then 8 suites, 43 passed (T31: 261 suites, 2805)
+t32-sizes | build commit | 0 | kind 13 measured first: 62,285 B unchanged; kinds 8-13 unchanged; RegulatedLib 7,275 -> 8,201 B; GovernanceRouter 11,771 -> 13,136 B (runs/2026-11-04-ua-mtx-merge-regulated-sizes.txt)
+t32-stop-rule | build commit | 0 | kind 13 62,285 < 64,512 B (2,227 B left): no lever, no _above64KiB row
+t32-deploy-gas | build commit | 0 | GovDeploy test_releaseGasPerKind -vv: kinds 8-13 unchanged (asked 64.99 / 82.88 / 79.26 / 97.08 / 89.10 / 105.28 M); GovernanceRouter regular 943,404, state 20,281,680, x 1.05 22.29 M
+t32-sizegate | build commit | 0 | 0 errors, 97 contracts, above 65536 B: none
+t32-isolate | build commit | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t32-node | build commit | 0 | cargo test --lib guard:: typed:: 40 passed; submit:: gateway:: chain:: config:: 72 passed; clippy --all-targets -D warnings clean
+t32-docs | build commit | 0 | docs_check check 0 errors, 5 warnings, 16 notes (no doc changed)
+t32-mutants | build commit | 1 each | 21 of 21 killed on the first run, none a compile error (runs/2026-11-04-ua-mtx-merge-t32-mutants.txt); src and typed.rs restored after each
+t32-at-set-n2048-kmax1024 | build commit's tree | 0 | test/{ua,pqz,as}/**: 100 suites, 971 passed 0 failed 1 skipped
+t32-at-set-n2304-kmax4096 | build commit's tree | 0 | test/{ua,pqz,as}/**: 100 suites, 968 passed 0 failed 4 skipped
+t32-at-set-n2560-kmax16384 | build commit's tree | 0 | test/{ua,pqz,as}/**: 100 suites, 967 passed 0 failed 5 skipped
+t32-at-set-n2816-kmax65536 | build commit's tree | 0 | test/{ua,pqz,as}/**: 100 suites, 962 passed 0 failed 10 skipped; src/pqz/PqzSet.sol restored (git diff HEAD clean)
+#
+# Pins, old -> new: GovernanceRouter CREATE2 0xBc8Df1a828dA586e5ccB8Db8942bbCC9c130cC34 -> 0xb7a8E5b24F6822cba41f77A6c4CdeEDAfA9399F1;
+# plus_zero_gas.json mtxCancelNonce_router 72,597 -> 72,686 (dispatch; slots unchanged); router typehashes +8; selector_audit.json
+# + six regulated contracts, + eight router rows; node typed rows 70 -> 78, entry rows 87 -> 95, router SIGNED 20 -> 28,
+# (ROWED, EXEMPT, GOVERNED) (127, 102, 91) -> (234, 202, 217) (436 SIGNED and 217 governed counted independently by python).
+# No KAT moved (typed_ops.json untouched), so no clientkeys reader rerun.
+#
+# Not run: node e2e (no anvil job changed); the full node suite (6 GB alone; the modules that read the rows ran); pqz-core gate.
+#
+# Conflicts with the plan / spec, and choices the text leaves open (none resolved silently):
+#   UAOperatorTransfer: spec §3.1 says "the same four" (from, to, amount, ref), which repeats the struct's `from` (the
+#   signer); the moved account is named `account` in the struct and the node row. Needs an owner ruling / decisions entry.
+#   Error name: OperatorTargetRefused(bytes32), the bit-22 reading of the spec's ModerateTargetRefused.
+#   Router file: the eight ops are in GovernanceRouter (Q8: "the router"), not GovernanceRouterBase as the plan's file list
+#   says; the base's NatSpec ("the regulated kinds' bits ... another child") was corrected.
+#   Plan names: test/as/Moderate.t.sol -> OperatorTransfer.t.sol; test_routerRow_<Op> rows run the eight in sequence.
+#   Node parity done here (the brief), not left to T35: typed.rs gov_router rows without vector rows (T34 writes them);
+#   guard.rs's audit table walks the six regulated contracts. T35's per-kind tests stay T35's.
+#   Fixture: GovRouterFixture.setUp made virtual for the regulated router suite.
+#   Stranger and allow-list probes of the selector audit run on kinds 8 and 9 only; 10-13 are ABI-classified (same
+#   RegulatedBase entries).
+#   Docs: CTR-GOV-20's status and spec text (still "moderatedTransfer" in places) not edited (T19's sweep, another session).

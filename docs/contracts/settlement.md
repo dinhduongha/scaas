@@ -6,7 +6,7 @@
 > [docs/README.md](../README.md#status-tags): **BUILT**, **SPECIFIED**, **PLANNED**, and **Transitional (BUILT)** for
 > built code that still differs from the target.
 
-<p align="center"><img src="../assets/settlement-kinds.svg" width="860" alt="Settlement kinds by who checks them. The token: typed transfer and payment (built, v2 tiers), receiver pays (built, EVM and Hedera), signature wrap (built, P2a), confidential Zether (built, unaudited). Another contract takes part: generic gasless call through the selector allowlist (built), DEX order book (token side built, P2a), exchange against AMMs (built, P2c), mandate through MandateWallet (built), asset-suite action (specified, nothing built), tender (specified, nothing built). Also: gas sponsorship by node policy (specified; SponsorshipPool planned) and the non-EVM families (built as MetaOp v1; target specified)."></p>
+<p align="center"><img src="../assets/settlement-kinds.svg" width="860" alt="Settlement kinds by who checks them. The token: typed transfer and payment (built, v2 tiers), payee fee (built, EVM and Hedera), signature wrap (built, P2a), confidential Zether (built, unaudited). Another contract takes part: generic gasless call through the selector allowlist (built), DEX order book (token side built, P2a), exchange against AMMs (built, P2c), mandate through MandateWallet (built), asset-suite action (specified, nothing built), tender (specified, nothing built). Also: gas sponsorship by node policy (specified; SponsorshipPool planned) and the non-EVM families (built as MetaOp v1; target specified)."></p>
 
 **Contents**
 
@@ -51,7 +51,7 @@ intent is a booked fact. Every kind below shares these properties:
 | Kind | Entry points | Signs / submits | Checked by | Fee, paid by | Final when | Status | Normative |
 |---|---|---|---|---|---|---|---|
 | Typed transfer / payment | `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay` on `payLane(payId)`; direct `payWithFee`; event `PaymentSettled` | payer signs `MetaTransfer`; any relayer | token | NONE / PERCENT / FIXED in the token, on top, signer's choice, never to the payee | tx | **BUILT** (v2 tiers) | [CTR-MTX-23](metatx.md#CTR-MTX-23), [-24](metatx.md#CTR-MTX-24), [-10](metatx.md#CTR-MTX-10), [-08](metatx.md#CTR-MTX-08), [-09](metatx.md#CTR-MTX-09) |
-| Receiver pays | `mtxPayReceiverFee` | payer signs `MetaTransfer`, payee co-signs `ReceiverFee`; the bound relayer | token | absolute fee from the payee's balance | tx | **BUILT** (EVM, Hedera) | [CTR-MTX-05](metatx.md#CTR-MTX-05), [-06](metatx.md#CTR-MTX-06) |
+| Payee fee | `mtxPayWithPayeeFee` | payer signs `MetaTransfer`, payee co-signs `UAPayeeFee`; the bound relayer | token | absolute fee from the payee's balance | tx | **BUILT** (EVM, Hedera) | [CTR-MTX-05](metatx.md#CTR-MTX-05), [-06](metatx.md#CTR-MTX-06) |
 | Generic gasless call | `mtxExecute`, `mtxBatch`, `executeMetaTransaction` | subject signs `MetaTransaction`; any relayer | the contract's selector allowlist | per fee class, after the call | tx | **BUILT** | [CTR-MTX-12](metatx.md#CTR-MTX-12), [-19](metatx.md#CTR-MTX-19), [-20](metatx.md#CTR-MTX-20) |
 | Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `WrappedToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
 | DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` **BUILT** (P2b-1 SCaaS legs, P2b-2 outside legs); `SCaaSDexV1` pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
@@ -102,10 +102,10 @@ sequenceDiagram
 - **Transitional (BUILT):** the v1 token line still uses the single 11-field struct with `data` ops (Zether left it in P3)
   ([metatx.md Transitional](metatx.md#transitional-built)).
 
-### 3.2 Receiver pays
+### 3.2 Payee fee
 
 The payer signs a plain payment (`entryRef != 0`, fee `NONE`, relayer bound, `batch = payLane(entryRef)`, nonce 0); the
-payee co-signs `ReceiverFee(paymentDigest, fee, feeRecipient, validUntil)` over the payer's digest. One transaction:
+payee co-signs `UAPayeeFee(payment, fee, feeRecipient, validUntil)` nesting the payer's payment. One transaction:
 the payer pipeline runs untouched, then `fee` moves from the payee to the fee recipient ([CTR-MTX-05](metatx.md#CTR-MTX-05)).
 
 ```mermaid
@@ -115,17 +115,17 @@ sequenceDiagram
     participant R as Relayer
     participant T as Token
     P->>R: MetaTransfer (fee NONE)
-    Y->>R: ReceiverFee co-signature
-    R->>T: mtxPayReceiverFee(t, payerSig, fee, feeRecipient, rfValidUntil, payeeSig)
+    Y->>R: UAPayeeFee co-signature
+    R->>T: mtxPayWithPayeeFee(t, payerSig, fee, feeRecipient, pfValidUntil, payeeSig)
     T->>T: payer pipeline, then check the co-signature
     T->>T: payee pays fee to feeRecipient
-    T-->>R: PaymentSettled (gross N), ReceiverFeePaid
+    T-->>R: PaymentSettled (gross N), UAPayeeFeePaid
 ```
 
 - **Atomic and single-use:** a failing payee signature reverts the whole call; the co-signature is bound to one
   digest, so the payer's nonce spends it once. Shape rules: [CTR-MTX-06](metatx.md#CTR-MTX-06).
 - **Node:** such jobs travel only on the restricted bus scope ([NODE-MESH-17](../node/mesh.md#NODE-MESH-17)); the
-  payee books receipt `N` and expense `F` ([sponsorship.md](../node/sponsorship.md#receiver-pays)). EVM and Hedera only.
+  payee books receipt `N` and expense `F` ([sponsorship.md](../node/sponsorship.md#payee-fee)). EVM and Hedera only.
 
 ### 3.3 Generic gasless call
 
@@ -303,7 +303,7 @@ pages under [networks/](../networks/README.md).
 | Kind | Token | DEX / settling contract | Node |
 |---|---|---|---|
 | Typed transfer, payment | relayer binding, expiry, mode, nonce, signature, fee cap, payee check, balance | none | simulates, consumption check, normalizes unbound fields, waits for finality |
-| Receiver pays | payer pipeline, then the payee's co-signature and shape | none | restricted bus scope, books receipt and fee |
+| Payee fee | payer pipeline, then the payee's co-signature and shape | none | restricted bus scope, books receipt and fee |
 | Generic call | allowlist, data shape, fee class, ticket (one self-call) | none | reads `data` by the cached allowlist, full simulation of unwrap |
 | Signature wrap | underlying: signature, price, fee bound, funds only to `dex` | wrapper: quote, `received == amount`, mint | metatx job; clients refuse unregistered wrappers |
 | Order book | SCaaS leg: signature, expiry, lane, closed state, every bound on Path A | match, listing, relayer, self-trade, Path B and outside-leg checks, payout, fee split, conservation | book, matcher, intake rules mirror the contract, simulation, DEX watcher |
@@ -322,7 +322,7 @@ Detail: [CTR-MTX-13](metatx.md#CTR-MTX-13) (modes), [CTR-MTX-20](metatx.md#CTR-M
 | `mtxExecute`, class `AMOUNT(i)` (`burn`, `unwrap`) | `PERCENT`, `FIXED` | argument `i`; at most 1 % | signer, after the call, in the token (wrapped units for unwrap) |
 | `mtxExecute`, class `ABSOLUTE` (`wrap`, `addReserve`, `cancelNonce`, Zether) | `FIXED` only | the signed amount, no 1 % cap | signer; for `wrap` out of the minted units |
 | Contract without a balance (`MandateWallet`, `SmartKeyAccount`) | `NONE` only | none | the relayer pays gas; any charge is off chain ([CTR-MTX-22](metatx.md#CTR-MTX-22)) |
-| Receiver pays | payer fee `NONE`; co-signed absolute fee | `0 < fee <= value`, no 1 % cap | the payee from its own balance, never to itself ([CTR-MTX-06](metatx.md#CTR-MTX-06)) |
+| Payee fee | payer fee `NONE`; co-signed absolute fee | `0 < fee <= value`, no 1 % cap | the payee from its own balance, never to itself ([CTR-MTX-06](metatx.md#CTR-MTX-06)) |
 | Signature wrap | order `fee` in ppm | `wrapFee = ceil(minted * fee / 10^6)`, rate at most 1 % | the holder, out of the minted units, to the submitting relayer |
 | DEX | the order's signed `fee` in ppm | at most 1 % of what the order receives, `ceil`, once per order per settlement ([CTR-DEX-11](dex.md#CTR-DEX-11), [CTR-DEX-17](dex.md#CTR-DEX-17)) | each party, from what it receives; split `relayerSharePpm` to the submitter, rest to `treasury`; no separate relayer fee |
 | Exchange | the same signed `fee`, on the floor | surplus above the limit carries no fee | signer pays the fee; surplus goes to the signers ([CTR-DEX-21](dex.md#CTR-DEX-21)) |

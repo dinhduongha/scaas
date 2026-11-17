@@ -44,6 +44,8 @@ struct Honest {
 }
 
 static HONEST: OnceLock<Vec<Honest>> = OnceLock::new();
+/// target `offchain`: the honest split inputs (PQZL_SPLIT_ID, proof_pqzl_split.json; `$PQZ_FUZZ_SPLIT` from seeds.py)
+static SPLIT: OnceLock<Vec<Vec<u8>>> = OnceLock::new();
 static SELFTEST: OnceLock<Word> = OnceLock::new();
 static TARGET: OnceLock<String> = OnceLock::new();
 #[cfg(feature = "pqzl-diff")]
@@ -234,6 +236,26 @@ pub unsafe extern "C" fn pqz_fuzz_init(target: *const std::ffi::c_char) {
     if !pqzl::c::reinit(pqzl::c::ARENA_SMALL) {
         die("C core: reinit on the verify-only arena");
     }
+    if target == "offchain" {
+        // the honest split inputs: accepted off-chain, refused by the precompile (it never serves PQZL_SPLIT_ID)
+        let path = std::env::var("PQZ_FUZZ_SPLIT").unwrap_or_else(|_| "honest_split.bin".into());
+        let mut b = &std::fs::read(&path).unwrap_or_else(|e| die(&format!("{path}: {e} (run seeds.py)")))[..];
+        let mut v = Vec::new();
+        while b.len() >= 4 {
+            let n = u32::from_be_bytes(b[..4].try_into().unwrap()) as usize;
+            v.push(b[4..4 + n].to_vec());
+            b = &b[4 + n..];
+        }
+        if v.is_empty() {
+            die(&format!("{path}: no split input"));
+        }
+        for x in &v {
+            if pqz_offchain::verify_offchain(x) != Ok(true) || call(x) != (PQZ_FFI_OK, INVALID) {
+                die("honest split input: not valid off-chain, or not refused by the precompile");
+            }
+        }
+        SPLIT.set(v).ok();
+    }
     let st = call(&[6, 0, 0, 0, 0]);
     if st.0 != PQZ_FFI_OK {
         die("self-test status");
@@ -258,7 +280,12 @@ pub unsafe extern "C" fn pqz_fuzz_init(target: *const std::ffi::c_char) {
     );
     #[cfg(not(feature = "pqzl-diff"))]
     let mode = "PQZL core: Rust";
-    eprintln!("pqz-fuzz init ({target}): {} honest inputs valid, self-test {}, {mode}", honest().len(), hex(&st.1));
+    eprintln!(
+        "pqz-fuzz init ({target}): {} honest inputs valid, {} split inputs, self-test {}, {mode}",
+        honest().len(),
+        SPLIT.get().map_or(0, |s| s.len()),
+        hex(&st.1)
+    );
     atexit(summary);
 }
 
@@ -271,6 +298,32 @@ pub unsafe extern "C" fn pqz_fuzz_check(data: *const u8, len: usize, rc1: i32, o
     let inp = if len == 0 { &[][..] } else { std::slice::from_raw_parts(data, len) };
     let w = |p: *const u8| -> Word { std::slice::from_raw_parts(p, 32).try_into().unwrap() };
     check(inp, (rc1, w(out1)), (rc2, w(out2)));
+}
+
+/// `offchain` target (three-key spec K3-4; `targets/offchain.c`): pqz-offchain's `verify_offchain` twice on the raw
+/// input. Oracle: no panic (the hook aborts), no node fault, the same result twice, `true` exactly for an unmodified
+/// honest input (the precompile's honest set) or an honest split input.
+///
+/// # Safety
+/// `data` points to `len` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn pqz_fuzz_offchain(data: *const u8, len: usize) {
+    let inp = if len == 0 { &[][..] } else { std::slice::from_raw_parts(data, len) };
+    INPUTS.fetch_add(1, Relaxed);
+    let (a, b) = (pqz_offchain::verify_offchain(inp), pqz_offchain::verify_offchain(inp));
+    if a != b {
+        die(&format!("offchain not deterministic: {a:?} / {b:?}"));
+    }
+    let v = a.unwrap_or_else(|_| die("offchain: node fault"));
+    let split = SPLIT.get().is_some_and(|s| s.iter().any(|x| x == inp));
+    let expect = split || honest().iter().any(|h| h.input == inp);
+    if v != expect {
+        die(&format!("offchain verdict {v} for an input that should give {expect} ({} B)", inp.len()));
+    }
+    if decode(inp).is_ok() {
+        DECODED.fetch_add(1, Relaxed);
+    }
+    VALIDS.fetch_add(v as u64, Relaxed);
 }
 
 /// 4-byte edits `[off lo, mid, hi, x]` XOR `x` into `buf[region.start + off % region.len()]`; a trailing 1–3 bytes
@@ -298,11 +351,13 @@ fn le64(b: &[u8]) -> u64 {
     b.iter().take(8).enumerate().fold(0, |a, (i, &x)| a | (x as u64) << (8 * i))
 }
 
-/// The `pqz_test_mutate` relation code of a statement (pqz_int.h: the op, `R_TX0` = 0x81, `R_TXM` =
-/// `PQZ_REL_TXM(log2 M, auditorOn)` = 0x70 | auditorOn << 3 | log2 M).
+/// The `pqz_test_mutate` relation code of a statement (pqz_int.h: the op, `R_TX0` = 0x81, `R_TXS` / `R_TXS0` = 0x41 /
+/// 0xc1, `R_TXM` = `PQZ_REL_TXM(log2 M, auditorOn)` = 0x70 | auditorOn << 3 | log2 M).
 fn rel(s: &stmt::Stmt) -> u8 {
     match (s, s.form()) {
         (_, Some(Form::Transfer0)) => 0x81,
+        (_, Some(Form::TransferSplit)) => 0x41,
+        (_, Some(Form::TransferSplit0)) => 0xc1,
         (_, Some(f)) => f.op(),
         (stmt::Stmt::Multi(m), None) => 0x70 | (m.pk_a.is_some() as u8) << 3 | m.m.trailing_zeros() as u8,
         _ => 0,

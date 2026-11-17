@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
+import {kindArgs} from "../../script/KindModules.sol";
+
+import {IMetaTokenV2} from "../../src/metatx/IMetaTokenV2.sol";
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -23,13 +28,15 @@ import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {UACall} from "./UACall.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// smartcontracts/vectors/ua/metatx3.json (accounts.md §1.16, the v3 KAT): a `NORMAL` clone at the vector's token
 /// address on context A with the real UA-2a/UA-2b verifiers. Every row's struct (built from the file's typed data)
 /// hashes to the file's digest here, every auth passes (native: ECDSA over the digest; derived: `requireAuthorized`
-/// under `metatx`), and every `UAMetaTransfer` row really executes. Gas of `uaExecuteTransfer` per signer is logged.
+/// under `metatx`), and every `UAMetaTransfer` row really executes. Gas of `mtxExecuteTransfer` per signer is logged.
 /// UA-5a (accounts.md CTR-UA-26/28, metatx.md CTR-MTX-05/06): the `burn` rows execute under `uaExecute`, the
-/// `unwrapToUA` rows are checked as the `call` rows, every `receiverFee` row executes `uaPayReceiverFee` (gas logged).
+/// `unwrapToUA` rows are checked as the `call` rows, every `payeeFee` row executes `mtxPayWithPayeeFee` (gas logged).
 contract UAMetaTx3VectorsTest is UARegistryBase {
     string internal sj;
     string internal vj;
@@ -51,10 +58,10 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
                 "");
         }
         address token = vm.parseJsonAddress(vj, ".token");
-        address impl = address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
-        vm.etch(token, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
+        address impl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+        vm.etch(token, EnvKit.runtime(impl, EnvKit.env(chainUidA, REG_A, address(0), false)));
         tok = NormalToken(token);
-        tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(0), address(this))));
+        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 0, address(0), address(this))));
         vm.warp(1_800_000_000);
     }
 
@@ -130,8 +137,8 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             string memory r = string.concat(".call[", vm.toString(i), "].");
             MetaTxLib.UAMetaTransaction memory m = _call(r);
             bytes32 digest = vm.parseJsonBytes32(vj, string.concat(r, "digest"));
-            assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
-            assertEq(tok.uaDigest(m), digest);
+            assertEq(MtxHash.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
+            assertEq(tok.mtxDigest(m), digest);
             _authorized(m.from, digest, vm.parseJsonBytes(vj, string.concat(r, "auth")));
             ++n;
         }
@@ -145,15 +152,15 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             string memory r = string.concat(".transfer[", vm.toString(i), "].");
             MetaTxLib.UAMetaTransfer memory t = _transfer(r);
             bytes32 digest = vm.parseJsonBytes32(vj, string.concat(r, "digest"));
-            assertEq(MetaTxLib.hashStruct(t), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
-            assertEq(tok.uaTransferDigest(t), digest);
+            assertEq(MtxHash.hashStruct(t), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
+            assertEq(tok.mtxTransferDigest(t), digest);
             bytes memory auth = vm.parseJsonBytes(vj, string.concat(r, "auth"));
             _fund(t.from, t.value + t.fee);
             vm.prank(t.relayer);
             uint256 g = gasleft();
-            tok.uaExecuteTransfer(t, UACall.auth(t.from, auth));
+            tok.mtxExecuteTransfer(t, UACall.auth(t.from, auth));
             g -= gasleft();
-            emit log_named_uint(string.concat("uaExecuteTransfer ", vm.parseJsonString(vj, string.concat(r, "name"))), g);
+            emit log_named_uint(string.concat("mtxExecuteTransfer ", vm.parseJsonString(vj, string.concat(r, "name"))), g);
             assertEq(tok.balanceOfUA(t.from), 0);
             ++n;
         }
@@ -169,14 +176,14 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         for (uint256 i; vm.keyExistsJson(vj, string.concat(".burn[", vm.toString(i), "]")); ++i) {
             string memory r = string.concat(".burn[", vm.toString(i), "].");
             MetaTxLib.UAMetaTransaction memory m = _call(r);
-            assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
-            assertEq(tok.uaDigest(m), vm.parseJsonBytes32(vj, string.concat(r, "digest")));
+            assertEq(MtxHash.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
+            assertEq(tok.mtxDigest(m), vm.parseJsonBytes32(vj, string.concat(r, "digest")));
             _fund(m.from, 1_005_000);
             uint256 supply = tok.totalSupply();
             bytes memory auth = vm.parseJsonBytes(vj, string.concat(r, "auth"));
             vm.prank(m.relayer);
             uint256 g = gasleft();
-            tok.uaExecute(m, auth);
+            tok.mtxExecute(m, UACall.auth(m.from, auth));
             g -= gasleft();
             emit log_named_uint(string.concat("uaExecute(burn) ", vm.parseJsonString(vj, string.concat(r, "name"))), g);
             assertEq(tok.balanceOfUA(m.from), 0);
@@ -196,42 +203,61 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             MetaTxLib.UAMetaTransaction memory m = _call(r);
             bytes32 digest = vm.parseJsonBytes32(vj, string.concat(r, "digest"));
             assertEq(bytes4(m.data), bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)")));
-            assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
-            assertEq(tok.uaDigest(m), digest);
+            assertEq(MtxHash.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
+            assertEq(tok.mtxDigest(m), digest);
             _authorized(m.from, digest, vm.parseJsonBytes(vj, string.concat(r, "auth")));
             ++n;
         }
         assertEq(n, 11);
     }
 
-    /// `receiverFee` rows: the payment digest and the `ReceiverFee` digest recomputed by the token, then
-    /// `uaPayReceiverFee` executed with the row's two auth blobs (a derived payee under `receiver-fee`).
-    function test_vectors_receiverFee() public {
+    /// `payeeFee` rows: the payment digest and the `UAPayeeFee` digest recomputed by the token, the row's two auth
+    /// blobs verified by the registry (the payer under `metatx`, a derived payee under `payee-fee`), then executed.
+    /// pay-meta-tax T41 (O11): each row carries its `PayMeta` (`meta`), the entry's last parameter, `entryRef` its commitment.
+    function test_vectors_payeeFee() public {
         uint256 n;
-        for (uint256 i; vm.keyExistsJson(vj, string.concat(".receiverFee[", vm.toString(i), "]")); ++i) {
-            string memory r = string.concat(".receiverFee[", vm.toString(i), "].");
+        for (uint256 i; vm.keyExistsJson(vj, string.concat(".payeeFee[", vm.toString(i), "]")); ++i) {
+            string memory r = string.concat(".payeeFee[", vm.toString(i), "].");
             MetaTxLib.UAMetaTransfer memory t = _transferAt(string.concat(r, "transfer.message."));
             bytes32 d = vm.parseJsonBytes32(vj, string.concat(r, "paymentDigest"));
-            assertEq(tok.uaTransferDigest(t), d);
-            uint256 fee = vm.parseJsonUint(vj, string.concat(r, "receiverFee.message.fee"));
-            address feeTo = vm.parseJsonAddress(vj, string.concat(r, "receiverFee.message.feeRecipient"));
-            uint256 until = vm.parseJsonUint(vj, string.concat(r, "receiverFee.message.validUntil"));
-            assertEq(tok.uaReceiverFeeDigest(t, fee, feeTo, until), vm.parseJsonBytes32(vj, string.concat(r, "receiverFeeDigest")));
+            assertEq(tok.mtxTransferDigest(t), d);
+            uint256 fee = vm.parseJsonUint(vj, string.concat(r, "payeeFee.message.fee"));
+            address feeTo = vm.parseJsonAddress(vj, string.concat(r, "payeeFee.message.feeRecipient"));
+            uint256 until = vm.parseJsonUint(vj, string.concat(r, "payeeFee.message.validUntil"));
+            assertEq(tok.payeeFeeDigest(t, fee, feeTo, until), vm.parseJsonBytes32(vj, string.concat(r, "payeeFeeDigest")));
             _fund(t.from, t.value);
             uint256 before = tok.balanceOfUA(t.to);
             IUARegistry.UASig memory payerAuth = UACall.auth(t.from, vm.parseJsonBytes(vj, string.concat(r, "payerAuth")));
             IUARegistry.UASig memory payeeAuth = UACall.auth(t.to, vm.parseJsonBytes(vj, string.concat(r, "payeeAuth")));
+            _authorizedAs(t.from, UAKinds.PURPOSE_METATX, d, payerAuth);
+            _authorizedAs(t.to, UAKinds.PURPOSE_PAYEE_FEE, tok.payeeFeeDigest(t, fee, feeTo, until), payeeAuth);
+            MetaTxLib.PayMeta memory m = _metaAt(string.concat(r, "meta."));
+            assertEq(PayMetaKit.id(m), t.entryRef, "the row's entryRef commits to its PayMeta");
             vm.prank(t.relayer);
             uint256 g = gasleft();
-            tok.uaPayReceiverFee(t, payerAuth, fee, feeTo, until, payeeAuth);
+            tok.mtxPayWithPayeeFee(t, payerAuth, fee, feeTo, until, payeeAuth, m);
             g -= gasleft();
-            emit log_named_uint(string.concat("uaPayReceiverFee ", vm.parseJsonString(vj, string.concat(r, "payer")), " > ",
+            emit log_named_uint(string.concat("mtxPayWithPayeeFee ", vm.parseJsonString(vj, string.concat(r, "payer")), " > ",
                 vm.parseJsonString(vj, string.concat(r, "payee"))), g);
             assertEq(tok.balanceOfUA(t.to), before + t.value - fee);
             ++n;
         }
         assertEq(n, 11);
         assertEq(tok.balanceOf(address(0xFEE)), 11 * 300_000);
+    }
+
+    function _metaAt(string memory p) internal view returns (MetaTxLib.PayMeta memory m) {
+        m.salt = vm.parseJsonBytes32(vj, string.concat(p, "salt"));
+        m.payNo = vm.parseJsonBytes32(vj, string.concat(p, "payNo"));
+        m.save = vm.parseJsonBool(vj, string.concat(p, "save"));
+        m.schema = uint16(vm.parseJsonUint(vj, string.concat(p, "schema")));
+        m.body = vm.parseJsonBytes(vj, string.concat(p, "body"));
+    }
+
+    /// `id`'s `UASig` over `digest` under `purpose`: a native id's own ECDSA, a derived one through the registry.
+    function _authorizedAs(bytes32 id, bytes32 purpose, bytes32 digest, IUARegistry.UASig memory auth) internal view {
+        if (UAKinds.inNativeSpace(id)) assertEq(ECDSA.recover(digest, auth.signature), address(uint160(uint256(id))));
+        else reg.requireAuthorized(id, purpose, digest, auth);
     }
 
     function _authorized(bytes32 from, bytes32 digest, bytes memory auth) internal view {
@@ -244,9 +270,9 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
 
     function _fund(bytes32 id, uint256 amount) internal {
         if (UAKinds.inNativeSpace(id)) {
-            tok.mint(address(uint160(uint256(id))), amount);
+            tok.mint(address(uint160(uint256(id))), amount, EnvKit.codeUidOf(address(tok)));
         } else {
-            tok.mint(address(this), amount);
+            tok.mint(address(this), amount, EnvKit.codeUidOf(address(tok)));
             tok.transferToUA(id, amount);
         }
     }

@@ -1,0 +1,44 @@
+# T66b 3.1b: UARegistryAuxLib code by source-map label against UARegistryCoreLib (evmmap.py, runtime bytes). UNAUDITED.
+UARegistryCoreLib 33891 B, UARegistryAuxLib 33407 B
+AuxLib: its own functions (fn:UARegistryAuxLib.*) 6159 B; labels the core library holds too: 19662 B (functions 16238, coders and Yul helpers 3424); dispatch 4947 B; metadata 132 B; other labels of its own 2507 B
+## the shared labels, largest first (bytes in AuxLib)
+fn:UAKinds.name 1193
+fn:UARegistryCoreLib._slotCap 606
+fn:UARegistryCoreLib._sigOk 515
+fn:UARegistryCoreLib._worst 454
+fn:UAKinds.keyHashOf 452
+fn:UAKinds.validateKeyData 428
+fn:UARegistryCoreLib._authBytes 425
+fn:UARegistryCoreLib._memberOk 411
+fn:UAKinds._frost 407
+yul:convert_array_t_array$_t_struct$_MemberSig_$6051_calldata_ptr_$dyn_calldata_ptr_to_t_array$_t_struct$_MemberSig_$6051_memory_ptr_$dyn_memory_ptr 366
+fn:UAKinds.groupName 358
+fn:UARegistryCoreLib._msig 353
+fn:UAKinds._msig 348
+fn:UARegistryCoreLib._pqzProof 327
+fn:UARegistryCoreLib._pqzHolder 320
+yul:abi_encode_tuple_t_bytes32_t_bytes32_t_bytes32_t_struct$_UASig_$6061_memory_ptr__to_t_bytes32_t_bytes32_t_bytes32_t_struct$_UASig_$6061_memory_ptr__fromStack_reversed 317
+fn:SSTORE2.writeChunks 296
+fn:UAKinds._reverse 294
+fn:UAStore.kemAt 280
+fn:UARegistryCoreLib._membersWorst 266
+yul:abi_decode_tuple_t_struct$_MsigStructure_$6077_memory_ptr_fromMemory 260
+fn:UAKinds._musig2 252
+fn:UAKinds._fixedLength 247
+fn:SSTORE2.readChunks 240
+fn:UARegistryCoreLib._accepted 234
+fn:UAStore.via 230
+fn:UAKinds._bls 224
+fn:UARegistryCoreLib._sort 222
+fn:ECDSA.tryRecover 214
+fn:UAStore.lift 212
+fn:UAKinds._bnG2 208
+fn:UARegistryCoreLib._packed 200
+fn:UAKinds._edSmallOrder 199
+fn:UAStore.expanded 194
+fn:UARegistryCoreLib._pqEligible 192
+fn:SSTORE2.read 187
+yul:abi_decode_struct_UAAttrs_fromMemory 181
+fn:UAKinds._ed25519 169
+yul:abi_decode_tuple_t_uint16t_bytes_memory_ptrt_struct$_UAAttrs_$6130_memory_ptrt_bytes_memory_ptrt_bytes_memory_ptr_fromMemory 167
+fn:UAKinds._modexp 164

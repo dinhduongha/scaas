@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {IConfidentialWrappedToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
@@ -18,6 +20,7 @@ import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol"
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Random shield / wrap-shield / transfer / roll-over / unshield / unshield-unwrap / unwrap / rate-change sequences on one
 /// `WRAPPED_ZETHER` token (legs 1:1 and 3/7, rate-adjustable, bn254, no auditor), real proofs; the plaintext balances
@@ -54,15 +57,15 @@ contract ZetherHandler is ZetherFixture {
         c.legs = new IFactoryToken.Leg[](2);
         c.legs[0] = IFactoryToken.Leg(address(leg[0]), 1, 1);
         c.legs[1] = IFactoryToken.Leg(address(leg[1]), 3, 7);
-        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, MAX, FEE, 0, 0, MIN_DECOY);
+        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, MAX, FEE, 0, 0, MIN_DECOY, 0, bytes32(0), false, 0, 0, 0, false, false);
         w = WrappedZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.WRAPPED_ZETHER, 1, abi.encode(c), "inv")));
-        tok = ZetherLayer(address(w));
+        tok = NormalZetherToken(address(w));
         _users();
         (us[0], us[1], us[2]) = (alice, bob, carol);
     }
 
     /// @dev At least `units` public units by a leg-0 wrap of `⌈units·den/num⌉` (the rate may have changed).
-    function _public(ZetherLayer t, address to, uint256 units) internal override {
+    function _public(NormalZetherToken t, address to, uint256 units) internal override {
         (uint96 num, uint96 den,,,) = w.legOf(address(leg[0]));
         uint256 inAmt = (units * den + num - 1) / num;
         leg[0].mint(address(this), inAmt);
@@ -258,10 +261,10 @@ contract ZetherHandler is ZetherFixture {
         // Down rounds up: a floored down-step at bps = maxRateStepBps overshoots it (RateStepTooLarge).
         uint256 nn = up ? sn * (10_000 + bps) / 10_000 : (sn * (10_000 - bps) + 9_999) / 10_000;
         if (nn == 0 || nn > type(uint96).max || sd > type(uint96).max) return;
-        w.proposeRate(address(leg[l]), uint96(nn), uint96(sd));
+        w.proposeRate(address(leg[l]), uint96(nn), uint96(sd), EnvKit.codeUidOf(address(w)));
         vm.warp(block.timestamp + 2 days);
-        try w.executeRate() {} catch {
-            w.cancelRate();
+        try w.executeRate(EnvKit.codeUidOf(address(w))) {} catch {
+            w.cancelRate(EnvKit.codeUidOf(address(w)));
         }
         require(w.collateralValue() >= w.totalSupply(), "rate broke the invariant");
     }

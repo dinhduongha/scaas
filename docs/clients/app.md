@@ -199,7 +199,7 @@ Fake wallets are not duplicated: end-to-end tests inject clientkeys `test/wallet
 
 `key` is the node's `chain_key` (`config.rs:746`); non-EVM curated tokens and assets carry `symbol`/`decimals` the same
 way; a chain without `gatewayNode` has the self-paid path only. `npm run config:from-deployments -- <rpc>` reads
-`smartcontracts/evm/deployments/<chainid>.json` and maps `token_factory` → `contracts.factory`, `smart_key_account_factory`
+`smartcontracts/evm/deployments/<key>.json` ([NET-EVM-13](../networks/evm.md#NET-EVM-13)) and maps `token_factory` → `contracts.factory`, `smart_key_account_factory`
 → `contracts.smartKeyAccountFactory`; a DEX is a `createDex` clone named by the operator (the v1 keys `factory`, `dex`,
 `scaas_dex` are gone, P5); other families are written by hand.
 Target (SPECIFIED): the deployment file also carries `chain_uid` and the DEX list ([NET-EVM-05](../networks/evm.md#NET-EVM-05)),
@@ -515,7 +515,7 @@ key metadata. Why: the two deployment modes are two origins.
 <a id="token-kinds"></a><a id="CLI-APP-26"></a>**CLI-APP-26** — **Token kinds are decoded from `versionOf(token)`, values
 as built (0–4, [CTR-TOK-21](../contracts/token-wrappers.md#CTR-TOK-21)).** A token with regulated flags 5–8 ([CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)) is **view-only** with the regulated-token notice until the regulated flows
 ship; managed DEX markets are "unavailable" the same way. Named functions are chosen from a `(kind, implementation version)`
-table, falling back to `executeMetaTransaction` for unknown versions — including receiver-pays (`mtxPayReceiverFee`)
+table, falling back to `executeMetaTransaction` for unknown versions — including payee fee (`mtxPayWithPayeeFee`)
 versions. Target: every gasless operation of a token is `mtxExecute` with calldata the app encodes and decodes against
 the implementation's allowlist ([CLI-SGN-34](signers-clientkeys.md#CLI-SGN-34)); `mtxTransfer`, `mtxPay` and
 `mtxBatch` stay as typed builders. `termsHash` documents link only to config-listed URLs.
@@ -523,7 +523,52 @@ the implementation's allowlist ([CLI-SGN-34](signers-clientkeys.md#CLI-SGN-34));
 <a id="contract-roles"></a><a id="CLI-APP-18"></a>**CLI-APP-18** — **Contract-held roles get calldata, not transactions.**
 `rateAdmin` must be a contract, so rate operations are emitted as **Safe Transaction Builder JSON** (`{to, value: "0",
 data}`) or `MultiSig.sol` submit data, never as an EIP-681 link (an EOA sender reverts); the guardian acts directly. Issuer
-wizards build Safe transactions the same way.
+wizards build Safe transactions the same way. From build 3zb + 3zc (SPECIFIED) every such call carries the token's
+`chainUid()` as its last argument ([integration.md](../integration.md#holder-chain-word)).
+
+<a id="burn-and-caps"></a>**Burn button and supply caps** (BUILT, build 3zb + 3zc, branch `burner-wrap-caps`). **Burn:** the app shows a burn action when bit 2 `BURNABLE` is set; else when bit 30 `BURNER` is set and
+`hasRole(30, id)` is true for the signing id; never on bit 2 alone, because a `BURNER` token whose bit 30 was disabled answers
+`FeatureNotSet(2)` though it never had bit 2 ([CTR-GOV-29](../decisions.md#CTR-GOV-29)). A `LIMITED` burner sees its grant
+(`grantOf(30, id)`) before signing. **Caps:** on a wrapped token the app reads `maxSupply()`, `maxWrapSupply()`,
+`totalWrapped()`, `reserveValue()` and `pendingSupplyCaps()`; the disclosure sentences come from `governance_bits.json`, where
+the wrap-cap sentence (`sentences.wrapCap`) is selected by `maxWrapSupply() != 0`, not by a bit, as the hybrid sentence is
+selected by `maxSupply() != 0`; its bracket "fixed" or "the admin can change it: see bit 31" follows bit 31. A wrap above
+`maxWrapSupply − totalWrapped` is refused before signing; a live pending cap change is shown with its value and `eta`
+([supply caps](../contracts/token-wrappers.md#supply-caps)).
+**Staging** (2026-11-15): the rows 30 and 31 and `sentences.wrapCap` are in `governance_bits.json` and every client's bit table
+reads them (ua-rs and its wrappers, ua-py, ua-go, ua-cs, ua-dart, clientkeys: bits 0-31), but no client prints the governance
+sentences yet, so the `wrapCap` selection (as the `hybrid` one) has no client home; the app that prints them implements both
+selections with a vector case each (spec `2026-11-13-burner-wrap-caps.md` §4). SPECIFIED for the app.
+
+<a id="pqz-verifier-display"></a>**PQZ tokens in `OFFCHAIN` mode** (SPECIFIED; contract rule
+[CTR-PQZ-27](../contracts/pq-zero-knowledge.md#CTR-PQZ-27)). The app reads `pqzVerifyConfig()` and shows the mode, the
+verifier UA, fixed or transferable, the epoch, a pending transfer with its `eta`, and a revocation; before a shield into an
+`OFFCHAIN` token, and in the creation wizard, it shows the trust model with the maximum loss `min(totalShielded, maxShielded) ·
+shieldScale` public units. A proposal is submitted only with a probe verdict signed by the proposed verifier.
+**The verifier fee** (group 3t, [CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36); SPECIFIED in the app, the contract
+and `clientkeys`' decoder BUILT): **`verifierFeeMax` is the headline price** (what a holder accepts at shield), with the current
+`verifierFee` and a pending increase with its value and `eta` (a live pending past its `eta` is the fee of any op not yet
+landed); before signing, the op's whole fee word split `txFee` / `verifierFee` / `M·d`; both figures at `shieldScale ≠ 1` (the
+fee is in shielded units, paid as `verifierFee · shieldScale` public units). The wizard shows the cap, the stored notice period
+("it helps only while the verifier answers") and the forced-refresh ratio (T33). **Warnings:** a hidden balance below the fee
+(T30: a `shieldIn` top-up is a round amount, never the exact shortfall, which would publish it); a pending increase whose `eta`
+precedes the op's deadline; on kinds 12, 13 with `verifierFee ≠ 0`, a verifier that fails the fee-recipient check (`isFrozen`,
+`canReceive`, `listFlagsOf`; under a list a verifier not yet listed fails every debit from the first block) and admin 0 with a
+fee ("no relief if the verifier is frozen or loses its KYC").
+
+<a id="pqz-key-class-warnings"></a>**PQZ key classes: the two warnings** (owner 2026-11-13, SPECIFIED;
+[CTR-PQZ-37](../contracts/pq-zero-knowledge.md#CTR-PQZ-37)). The app reads `pqzOwnKey` and `pqzOpening` from
+`pqzVerifyConfig()`, names the class (`registry`, `offchain-shared`, `offchain-token` with or without the sealed opening) and
+shows, before the holder registers a key or shields:
+1. **`offchain-token` without the sealed opening**, before the key for that token is registered (registration is the holder's
+   acceptance), [ARCH-POS-13](../decisions.md#ARCH-POS-13)'s Change's loss sentence word for word: "The loss is the
+   confidentiality, past and future and across key versions, of every amount encrypted to that key in that token: the holder's
+   balance and credits, hence what its counterparties paid it; for the token's auditor key, every audited amount of every holder
+   of that token. Rotating the key does not end the exposure."
+2. **Every opening token** (`offchain-shared`, `offchain-token` with the opening): incoming amounts are as private as the
+   holder's opening KEM key of that chain (or token): whoever gets its secret reads, from state and for all time, every amount
+   paid to that key version; rotating the key covers new credits only. The opening KEM key lives beside the PQZ seed, never in
+   chat software.
 
 ## 10. Screens
 

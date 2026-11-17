@@ -169,6 +169,16 @@ typedef struct {
 #define SCAAS_UA_ERR_PQZ_KEY_SET 16
 
 /**
+ * "UAPqzKeyVersion": a PQZ key version other than `latest + 1`, or no version 0 stored (group 3g, KV-1).
+ */
+#define SCAAS_UA_ERR_PQZ_KEY_VERSION 21
+
+/**
+ * "UAKeyInUse": a stored version of the UA holds this PQZ key (group 3g, KV-1).
+ */
+#define SCAAS_UA_ERR_KEY_IN_USE 22
+
+/**
  * "UAKemScheme": the first byte of a KEM key is not an enabled KEM scheme id (only 1; 2 is reserved).
  */
 #define SCAAS_UA_ERR_KEM_SCHEME 17
@@ -273,7 +283,7 @@ ScaasUaStatus scaas_ua_kind_tag_string(uint16_t kind,
 
 /**
  * Governance bit `bit`'s row of `governance_bits.json` (spec 2026-11-02-governance §1.2) as JSON, `{bit, name, type, sentences}`
- * (NUL-terminated; `*out_len` counts the NUL). Bits 0-21; any other bit is `SCAAS_UA_ERR_ARGUMENT` (22-127 free, 128-255 the
+ * (NUL-terminated; `*out_len` counts the NUL). Bits 0-31; any other bit is `SCAAS_UA_ERR_ARGUMENT` (32-127 free, 128-255 the
  * application's `bitLabel`).
  */
 ScaasUaStatus scaas_ua_governance_bit(uint8_t bit,
@@ -603,6 +613,16 @@ ScaasUaStatus scaas_ua_member_digest(const uint8_t *structure_ua32,
 ScaasUaStatus scaas_ua_canonical_id(const char *text, char *out, size_t *out_len);
 
 /**
+ * How a client shows a `bytes32` id before the user signs (NUL-terminated): the EIP-55 address of a native-space id, else the
+ * URN `urn:scaas:ua:v1:<kind name>:<hex32>` under `kind`, the id's registry kind (0 = none known: `SCAAS_UA_ERR_KIND_UNKNOWN`).
+ * `id` is `0x` + 64 hex digits; non-UTF-8 text is `SCAAS_UA_ERR_ID_FORMAT`.
+ */
+ScaasUaStatus scaas_ua_id_display(const char *id,
+                                  uint16_t kind,
+                                  char *out,
+                                  size_t *out_len);
+
+/**
  * The registry's explicit arguments of a registration, JSON in and out (NUL-terminated; `*out_len` counts the NUL).
  * `input`: `{kind, keyData, pqzKey, pqzPopHash, pqzPop, kemPk, pop, kemCommit, inner}` (bytes as "0x..." hex, an absent field is
  * empty, an msig's `pop` is `[{index, members: [{index, sig}], sig}]`, `inner` `{id: keyData}` its msig members' structures,
@@ -631,6 +651,31 @@ ScaasUaStatus scaas_ua_set_kem_key_args(const char *input,
 ScaasUaStatus scaas_ua_set_pqz_key_args(const char *input,
                                         char *out,
                                         size_t *out_len);
+
+/**
+ * CTR-UA-44 `updateMsig`, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, chainUid, registry, version, threshold, members: [{kind, id, weight}], enabled, validUntilBlock, sigs}` (`enabled` a
+ * decimal string or number, `sigs` the stored structure's member signatures). Out: `{digest, message, memberDigest, args}`: what a quorum of
+ * the stored structure signs on that one registry, and the named arguments.
+ */
+ScaasUaStatus scaas_ua_msig_update(const char *input,
+                                   char *out,
+                                   size_t *out_len);
+
+/**
+ * What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
+ * `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
+ */
+ScaasUaStatus scaas_ua_pay_digest(const char *input,
+                                  char *out,
+                                  size_t *out_len);
+
+/**
+ * `metaPayId` under `scaas.pay.meta.v3` (pay-meta-tax T41 / T83): in `{salt, payNo, save, schema, body}` (`payNo` 32 bytes hex),
+ * out `{payId}`; a refused shape (`save` without a `payNo` too) is `UAArgument`.
+ */
+ScaasUaStatus scaas_ua_meta_pay_id(const char *input,
+                                   char *out,
+                                   size_t *out_len);
 
 /**
  * The `msig` key data for `n` members (`members` may be NULL when `n == 0`): 4 + 36 * n bytes.

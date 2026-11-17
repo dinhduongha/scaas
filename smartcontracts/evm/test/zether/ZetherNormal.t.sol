@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {NormalZetherToken} from "../../src/zether/NormalZetherToken.sol";
+
 import {console2} from "forge-std/Test.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
@@ -153,7 +155,7 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         vm.expectRevert(err);
         tok.mtxShield(ZetherTypes.UA.unwrap(bob.ua), 1);
         // the cap counts every account: room = max − totalShielded
-        ZetherLayer small = _newToken(false, "small", 100);
+        NormalZetherToken small = _newToken(false, "small", 100);
         _public(small, address(this), 101 * SCALE);
         small.mtxShield(ZetherTypes.UA.unwrap(alice.ua), 60);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, 41, 40));
@@ -376,7 +378,7 @@ abstract contract ZetherNormalSuite is ZetherFixture {
 
     /// Same verifier, registry, accSeq/sendCounter on another token: the header (token) differs ⇒ refused.
     function test_replayAcrossTokensRejected() public {
-        ZetherLayer other = _newToken(true, "zusd-2");
+        NormalZetherToken other = _newToken(true, "zusd-2");
         _fund(tok, alice, 500);
         _fund(other, alice, 500);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
@@ -704,26 +706,26 @@ abstract contract ZetherNormalSuite is ZetherFixture {
         tok.transferToUA(a, 100 * SCALE);
         assertEq(tok.balanceOfUA(a), 100 * SCALE);
         MetaTxLib.UAMetaTransfer memory t = MetaTxLib.UAMetaTransfer({
-            from: a, to: b, value: 10 * SCALE, entryRef: 0, batch: 1, nonce: tok.uaNonce(a, 1),
+            from: a, to: b, value: 10 * SCALE, entryRef: 0, batch: 1, nonce: tok.mtxNonce(a, 1),
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
             feeRecipient: address(0)
         });
-        bytes memory auth = _uaAuth(alice, UAKinds.PURPOSE_METATX, tok.uaTransferDigest(t));
+        bytes memory auth = _uaAuth(alice, UAKinds.PURPOSE_METATX, tok.mtxTransferDigest(t));
         vm.prank(relayer);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, auth));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, auth));
         assertEq(tok.balanceOfUA(b), 10 * SCALE);
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
-            from: a, data: abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 40)), batch: 1, nonce: tok.uaNonce(a, 1),
+            from: a, data: abi.encodeCall(IConfidentialToken.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 40)), batch: 1, nonce: tok.mtxNonce(a, 1),
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
             feeRecipient: address(0)
         });
-        auth = _uaAuth(bob, UAKinds.PURPOSE_METATX, tok.uaDigest(m)); // another key
+        auth = _uaAuth(bob, UAKinds.PURPOSE_METATX, tok.mtxDigest(m)); // another key
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, a));
         vm.prank(relayer);
-        tok.uaExecute(m, auth);
-        auth = _uaAuth(alice, UAKinds.PURPOSE_METATX, tok.uaDigest(m));
+        tok.mtxExecute(m, UACall.auth(m.from, auth));
+        auth = _uaAuth(alice, UAKinds.PURPOSE_METATX, tok.mtxDigest(m));
         vm.prank(relayer);
-        tok.uaExecute(m, auth);
+        tok.mtxExecute(m, UACall.auth(m.from, auth));
         assertEq(tok.balanceOfUA(a), 50 * SCALE);
         (, uint256 p) = _bal(alice);
         assertEq(p, 40, "the Zether UA shielded its own public units");

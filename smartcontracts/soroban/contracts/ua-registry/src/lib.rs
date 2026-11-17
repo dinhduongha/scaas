@@ -65,7 +65,9 @@ const TTL_BUMP: u32 = 60 * DAY;
 /// `set_pqz_key` key's hash is only in `PqzK`: `Ua(ua).attrs` keeps the `register` arguments, and is not rewritten.
 /// `Accepted(ua)` = an `msig`'s one `AcceptedEntry`, written at registration: read once by a verify, never parsing `pop`.
 /// `AcceptSig(ua, index)` = the signature of a slot accepted on a relayer's word, stored for a client's re-check (CTR-UA-34 rule 4), never
-/// read by a verify.
+/// read by a verify. `PopSlots(ua)` = an `msig`'s bitmap of the slots that signed its `pop` (CTR-UA-33 Change 2026-11-08), written once
+/// at registration when the `pop` has a slot, never by `accept_membership`: state alone tells the `pop`'s signers from the slots that
+/// accepted later (`pop_slots_of`).
 #[contracttype]
 #[derive(Clone)]
 pub(crate) enum Key {
@@ -82,6 +84,7 @@ pub(crate) enum Key {
     KemMax(BytesN<32>),
     Accepted(BytesN<32>),
     AcceptSig(BytesN<32>, u32),
+    PopSlots(BytesN<32>),
 }
 
 /// `Registration` with `pop` replaced by `pop_hash = keccak256(pop)` (owner ruling 2026-10-30 after T0: the full record
@@ -520,9 +523,15 @@ fn zero(env: &Env) -> BytesN<32> {
     BytesN::from_array(env, &[0; 32])
 }
 
-/// A PQZ / KEM holder (EVM `_holder`, U8S-D6): `mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`.
+/// A PQZ holder (EVM `_holder`, U8S-D6): a KEM holder or a PQ-eligible `msig`.
 fn holder(kind: u32, d: &Bytes) -> bool {
-    matches!(kind, MLDSA44 | MLDSA65 | FNDSA512) || (kind == MSIG && pq_eligible(d))
+    kem_holder(kind) || (kind == MSIG && pq_eligible(d))
+}
+
+/// A KEM holder (EVM `_kemHolder`; CTR-UA-32, owner 2026-11-05, confirmed 2026-11-07): the single PQ kinds this registry has,
+/// `mldsa44`, `mldsa65`, `fndsa512`. Never an `msig`, PQ-eligible or not: a sender seals to each accepted member's own key.
+fn kem_holder(kind: u32) -> bool {
+    matches!(kind, MLDSA44 | MLDSA65 | FNDSA512)
 }
 
 /// TS-D12: a single key only `signature`, an `msig` only `members`, `key_data` never.
@@ -575,19 +584,19 @@ fn kem_of(pk: &Bytes) -> KemKey {
     KemKey { scheme: KEM_SCHEME, mlkem_ek: ek, x25519: x.try_into().unwrap() }
 }
 
-/// Step 5, EVM `_attrs` in its order: holders, the proof hash, the PQZ key's length (one of the four sets), the KEM key
-/// (whole or committed; `register` takes no version: it is version 0). Returns the whole KEM key (empty when none or
-/// committed), `pqzKeyHash` (0 without a key) and the `UAPortableRecord` struct hash.
+/// Step 5, EVM `_attrs` in its order: holders (a PQZ key `holder`, a KEM key `kem_holder`: never an `msig`), the proof hash,
+/// the PQZ key's length (one of the four sets), the KEM key (whole or committed; `register` takes no version: it is version
+/// 0). Returns the whole KEM key (empty when none or committed), `pqzKeyHash` (0 without a key) and the `UAPortableRecord`
+/// struct hash.
 fn check_attrs(env: &Env, kind: u32, d: &Bytes, ua: &BytesN<32>, attrs: &UaAttrs, pqz_pop: &Bytes) -> (Bytes, BytesN<32>, BytesN<32>) {
     let none = zero(env);
     let pqz = !attrs.pqz_key.is_empty();
     let commit = attrs.kem_pk_hash != none;
     let pk = if commit { Bytes::new(env) } else { kem_pk(env, &attrs.kem) };
-    let hold = holder(kind, d);
-    if pqz && !hold {
+    if pqz && !holder(kind, d) {
         fail(env, Error::PqzHolder);
     }
-    if (commit || !pk.is_empty()) && !hold {
+    if (commit || !pk.is_empty()) && !kem_holder(kind) {
         fail(env, Error::KemHolder);
     }
     if pqz != (attrs.pqz_pop_hash != none) || attrs.pqz_pop_hash.to_array() == EMPTY_HASH {
@@ -763,6 +772,9 @@ fn register_record(env: &Env, kind: u32, key_data: Bytes, attrs: UaAttrs, sig: B
             }
         }
         put(env, &Key::Accepted(ua.clone()), &(bits, marks));
+        if bits != 0 {
+            put(env, &Key::PopSlots(ua.clone()), &bits);
+        }
     }
     let no_sig = Bytes::new(env);
     let sig_hash = BytesN::from_array(env, &EMPTY_HASH);
@@ -963,10 +975,10 @@ impl UaRegistry {
     /// committed by hash, with no `sig` (the `pop` signed it): a key given in whole is not refillable (TS-D9). Check order:
     /// `NotRegistered` → `KemHolder` → `KemVersion` → the key (`KemScheme`, `KemKeyLength`) → signature (`Unauthorized`) /
     /// the commit (`KemKeyHash`). `relayer` as in `register`; a filled commit keeps `pop_checked`: the chain compares the
-    /// hash, the `pop` signed it.
+    /// hash, the `pop` signed it. `KemHolder` for any `msig` (CTR-UA-32: a sender seals to each accepted member's own key).
     pub fn set_kem_key(env: Env, ua: BytesN<32>, version: u64, kem: KemKey, sig: UaSig, relayer: Option<Address>) {
         let r = record(&env, &ua);
-        if !holder(r.kind, &r.key_data) {
+        if !kem_holder(r.kind) {
             fail(&env, Error::KemHolder);
         }
         let k = Key::Kem(ua.clone(), version);
@@ -1116,6 +1128,22 @@ impl UaRegistry {
     /// listed, past the members and for any other id. Only accepted slots count at verify.
     pub fn member_accepted(env: Env, ua: BytesN<32>, index: u32) -> bool {
         accepted(&env, &ua).0.checked_shr(index).is_some_and(|b| b & 1 != 0)
+    }
+
+    /// EVM `popSlotsOf` (CTR-UA-33 Change 2026-11-08): the slots that signed the `pop` of the `msig` `ua`, in index order, each with
+    /// `keccak256` of its `sig` read from the stored `pop` (`abi.encode(MemberSig[])`, its k-th entry the k-th set bit); empty for
+    /// an empty `pop` and any other id. A slot accepted later is not among them (`member_accepted` tells those).
+    pub fn pop_slots_of(env: Env, ua: BytesN<32>) -> (Vec<u32>, Vec<BytesN<32>>) {
+        let (mut index, mut hash) = (Vec::new(&env), Vec::new(&env));
+        if let Some(bits) = get::<u32>(&env, &Key::PopSlots(ua.clone())) {
+            let pop = record(&env, &ua).pop;
+            for i in (0..32).filter(|i| bits >> i & 1 != 0) {
+                let t = 64 + abi::word(&env, &pop, 64 + 32 * index.len(), Error::Pop);
+                hash.push_back(env.crypto().keccak256(&abi::bytes_at(&env, &pop, t, t + 64, Error::Pop)).into());
+                index.push_back(i);
+            }
+        }
+        (index, hash)
     }
 
     /// The bytes of a slot accepted on a relayer's word, for a client to re-check (`check_membership`); empty for a slot the chain

@@ -1,12 +1,14 @@
 /*
- * pqz-core test and benchmark: R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0, R_TXM prove / verify, negative cases, timing.
+ * pqz-core test and benchmark: R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0, R_TXM, R_TXS, R_TXS0 prove / verify, negative
+ * cases, timing.
  * Same source for native (build/native/pqz_bench) and wasm32 (build/wasm/pqz.wasm, driven by test/run_wasm.mjs):
  * PQZ_WASM builds export the steps instead of main() and time on the JS side.
  *
  *   pqz_bench [n_prove] [n_verify] [rel] [checks]   prints JSON lines: sizes, times (ms), check results
  *   rel: bit mask, 1 = R_REG, 2 = R_TX, 4 = R_BURN, 8 = R_DS, 16 = R_DR, 32 = R_TX0 (default 63), 64 << t = R_TXM
  *   (op 7) shape TXB[t] (64 (1, on), 128 (2, on), 256 (4, on), 512 (8, on), 1024 .. 8192 the same off; with
- *   -DPQZ_TXM_OVERSIZE 16384 (16, on), 32768 (16, off)); n_verify = 0 also skips the adversarial verifies;
+ *   -DPQZ_TXM_OVERSIZE 16384 (16, on), 32768 (16, off)), then R_TXS, R_TXS0 (op 1 under PQZL_SPLIT_ID, three-key
+ *   spec K3-4: 16384 / 32768, with -DPQZ_TXM_OVERSIZE 65536 / 131072); n_verify = 0 also skips the adversarial verifies;
  *   checks = 1: the R_TXM variants and negatives (txm_check). PQZ_ARENA_MB: arena size (default 768 MiB; R_TXM16
  *   needs up to 3,830 MiB, n2048-kmax1024 (16, on); too small stops the process, pqz.h)
  *   PQZ_VERIFY=fast (native) / step_set_fast (wasm): time pqz_verify_fast instead of pqz_verify (P6-SV; builds with
@@ -112,6 +114,8 @@ static pqzkey_t KF, KT, KA, KX;
 static uint8_t reg_stmt[PQZ_REG_STMT_BYTES], reg_wit[PQZ_REG_WIT_BYTES];
 static uint8_t tx_stmt[PQZ_TX_STMT_BYTES], tx_wit[PQZ_TX_WIT_BYTES];
 static uint8_t tx0_stmt[PQZ_TX0_STMT_BYTES], tx0_wit[PQZ_TX0_WIT_BYTES];
+static uint8_t txs_stmt[PQZ_TXS_STMT_BYTES], txs_wit[PQZ_TXS_WIT_BYTES];
+static uint8_t txs0_stmt[PQZ_TXS0_STMT_BYTES], txs0_wit[PQZ_TXS0_WIT_BYTES];
 static uint8_t burn_stmt[PQZ_BURN_STMT_BYTES], burn_wit[PQZ_BURN_WIT_BYTES];
 static uint8_t ds_stmt[PQZ_DISC_STMT_BYTES], ds_wit[PQZ_DS_WIT_BYTES];
 static uint8_t dr_stmt[PQZ_DISC_STMT_BYTES], dr_wit[PQZ_DR_WIT_BYTES];
@@ -143,7 +147,8 @@ step_set_fast (int on)
 
 /* relation index: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR, 5 R_TX0 (op 1, told apart from R_TX by the length),
    6 + t R_TXM shape TXB[t] (op 7; P6-ANON L1): (M, auditorOn) = (1, on), (2, on), (4, on), (8, on), (1, off), (2, off),
-   (4, off), (8, off), with -DPQZ_TXM_OVERSIZE also (16, on), (16, off) */
+   (4, off), (8, off), with -DPQZ_TXM_OVERSIZE also (16, on), (16, off); then 6 + NTXB R_TXS, 7 + NTXB R_TXS0 (op 1,
+   told apart by the length) */
 static const struct
 {
   unsigned m, a;
@@ -153,7 +158,8 @@ static const struct
 #endif
 };
 #define NTXB (sizeof TXB / sizeof TXB[0])
-#define NREL (6 + (int)NTXB)
+#define NREL (8 + (int)NTXB)
+#define TXS_REL (6 + (int)NTXB)
 static uint8_t proofs[NREL][PQZ_MAX_PROOF];
 static size_t lens[NREL]; /* 0: no proof (the last prove failed) */
 #define TXM_ST_MAX PQZ_TXM_STMT_BYTES (PQZ_TXM_MAX_LEGS, 1)
@@ -169,6 +175,7 @@ static size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wit, siz
                              sizeof tx0_wit };
 static unsigned SEEDMUL[NREL] = { 31, 17, 13, 11, 7, 19 };
 static const uint8_t PSID[32] = PQZ_PROOF_SYSTEM_ID; /* statement bytes 32..63 */
+static const uint8_t PSID_SPLIT[32] = PQZ_PROOF_SYSTEM_SPLIT_ID; /* R_TXS / R_TXS0's (K3-4) */
 /* tamper kind 2: first byte of an n-coefficient key in the statement (R_REG pk, R_TX / R_BURN / R_TXM pk_f,
    disclosure pk); kind 5: the last byte of a public scalar (R_REG message, R_TX / R_TX0 / R_TXM fee, R_BURN /
    disclosure amount) */
@@ -530,6 +537,60 @@ setup_txm (void)
   return ok;
 }
 
+/* R_TXS / R_TXS0 (three-key spec K3-4, split randomness): R_TX's / R_TX0's statement under PQZL_SPLIT_ID with the
+   sender's own v_f and u_f under fresh (r_f, e1_f, e2_f) from the test RNG reseeded here (state saved and restored, so
+   no other setup moves); the leg (u, v_t, v_a under r, e1, e2_t, e2_a) is R_TX's */
+static int
+setup_txs (void)
+{
+  static int8_t rf[PQZ_N];
+  static int16_t e1f[PQZ_N], e2f[1][16];
+  static uint8_t uf[PQZ_POLYVEC_BYTES], vf[1][PQZ_V_BYTES];
+  const uint8_t *pkf[1] = { KF.pk };
+  uint8_t md[1][16];
+  const uint64_t xs0 = xs;
+  const size_t W6 = 6 * PQZ_N, VF = PQZ_HEADER_BYTES + 4 * PQZ_POLYVEC_BYTES + PQZ_V_BYTES + PQZ_POLYVEC_BYTES
+                                    + PQZ_V_BYTES; /* v_f in R_TX's / R_TX0's statement */
+  xs = 0x7E57AB1E5B117001ULL;
+  short8 (rf, PQZ_N, 1, PQZ_BETA_S), short16 (e1f, PQZ_N, 20, PQZ_BETA_E), short16 (e2f[0], 16, 20, 64);
+  xs = xs0;
+  memcpy (md[0], tx_wit + W6 + 96 + 16, 16); /* d' */
+  int rc = pqz_encrypt (pkf, 1, (const uint8_t (*)[16])md, rf, e1f, (const int16_t (*)[16])e2f, uf, vf);
+  for (int a = 1; a >= 0; a--)
+    {
+      uint8_t *st = a ? txs_stmt : txs0_stmt, *wt = a ? txs_wit : txs0_wit, *p;
+      const uint8_t *base = a ? tx_stmt : tx0_stmt;
+      const size_t bl = a ? sizeof tx_stmt : sizeof tx0_stmt;
+      memcpy (st, base, bl);
+      memcpy (st + 32, PSID_SPLIT, 32);
+      memcpy (st + VF - (a ? 0 : PQZ_POLYVEC_BYTES), vf[0], PQZ_V_BYTES);
+      memcpy (st + bl, uf, PQZ_POLYVEC_BYTES);
+      /* witness: s_f || e_f || r || e1 || r_f || e1_f || e2_t || e2_f || [e2_a] || d || d' */
+      memcpy (wt, tx_wit, W6), p = wt + W6;
+      for (int j = 0; j < PQZ_N; j++)
+        p[j] = (uint8_t)rf[j];
+      p += PQZ_N;
+      for (int j = 0; j < PQZ_N; j++)
+        le16 (p + 2 * j, e1f[j]);
+      p += 2 * PQZ_N;
+      memcpy (p, tx_wit + W6, 32), p += 32;
+      for (int j = 0; j < 16; j++)
+        le16 (p + 2 * j, e2f[0][j]);
+      p += 32;
+      if (a)
+        memcpy (p, tx_wit + W6 + 64, 32), p += 32;
+      memcpy (p, tx_wit + W6 + 96, 32);
+    }
+  OPS[TXS_REL] = OPS[TXS_REL + 1] = PQZ_OP_TRANSFER;
+  STMT[TXS_REL] = txs_stmt, STLEN[TXS_REL] = sizeof txs_stmt, WIT[TXS_REL] = txs_wit, WLEN[TXS_REL] = sizeof txs_wit;
+  STMT[TXS_REL + 1] = txs0_stmt, STLEN[TXS_REL + 1] = sizeof txs0_stmt;
+  WIT[TXS_REL + 1] = txs0_wit, WLEN[TXS_REL + 1] = sizeof txs0_wit;
+  SEEDMUL[TXS_REL] = 43, SEEDMUL[TXS_REL + 1] = 47;
+  KEYOFF[TXS_REL] = KEYOFF[TXS_REL + 1] = PQZ_HEADER_BYTES;
+  SCALOFF[TXS_REL] = SCALOFF[TXS_REL + 1] = PQZ_HDR_FEE + 31;
+  return rc == 0;
+}
+
 /* exported steps (wasm) / called from main (native) */
 int
 step_init (void *arena, size_t len)
@@ -538,7 +599,7 @@ step_init (void *arena, size_t len)
   if (rc == 0)
     {
       setup ();
-      if (!setup_txm ())
+      if (!setup_txm () || !setup_txs ())
         rc = -2;
     }
   return rc;
@@ -1013,6 +1074,7 @@ main (int argc, char **argv)
       snprintf (TXM_NAMES[t], sizeof TXM_NAMES[t], "R_TXM%u%s", TXB[t].m, TXB[t].a ? "" : "_0");
       NAMES[6 + t] = TXM_NAMES[t];
     }
+  NAMES[TXS_REL] = "R_TXS", NAMES[TXS_REL + 1] = "R_TXS0";
   const char *ve = getenv ("PQZ_VERIFY");
   if (step_set_fast (ve != NULL && strcmp (ve, "fast") == 0) != 0)
     {

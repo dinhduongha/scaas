@@ -132,50 +132,20 @@ contract UARegistryNestedTest is UARegistryBase {
     }
 
     // ----- the generic `bytes auth` -----
+    // `test_genericAuthIsTheTypedCall` and `test_genericAuthMalformed` tested `UAKinds.uaAuthCall`, the tokens' `bytes auth`
+    // bridge; R47 (ua-mtx-merge T1) removed it with every `bytes auth` entry, and the two tests with it:
+    // legacy/ua-mtx-merge/test/ua/UARegistryNested.t.sol. A nested `msig`'s `UASig` reaches `requireAuthorized` typed.
 
+    /// The registry calldata `UAKinds.uaAuthCall` spliced for an `msig` (`auth = abi.encode(keyData, abi.encode(MemberSig[]))`),
+    /// kept here as a test builder only: `test_splice*` feed the registry's own decoder malformed lists through it.
     function authCall(bytes32 ua, bytes calldata auth) external pure returns (bytes memory) {
-        return UAKinds.uaAuthCall(ua, UAKinds.PURPOSE_METATX, DIGEST, auth);
-    }
-
-    /// `UAKinds.uaAuthCall` splices a nested list into the call by hand: byte for byte the typed call, and the real registry answers it.
-    function test_genericAuthIsTheTypedCall() public {
-        (bytes memory di, bytes32 iu, bytes memory du, bytes32 ua) = _active();
-        IUARegistry.MemberSig[] memory s = _outerSigs(du, ua, iu, di, PK_B, DIGEST);
-        IUARegistry.UASig memory u;
-        u.members = s;
-        bytes memory auth = _msigAuth(du, s);
-        bytes memory call = this.authCall(ua, auth);
-        assertEq(call, abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, u)));
-        (bool ok,) = address(reg).staticcall(call);
-        assertTrue(ok);
-
-        s[_indexOf(du, iu)].members[0].sig = _sig(keyP, keccak256("another message"));
-        (bool bad, bytes memory ret) = address(reg).staticcall(this.authCall(ua, _msigAuth(du, s)));
-        assertFalse(bad);
-        assertEq(ret, abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-
-        // not the id's own structure: `keyData` + `signature`, as the two words came
-        IUARegistry.UASig memory flat;
-        (flat.keyData, flat.signature) = (hex"aa", hex"bb");
-        assertEq(this.authCall(ua, abi.encode(flat.keyData, flat.signature)),
-            abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, flat)));
-    }
-
-    /// A `sig` that is not `abi.encode(MemberSig[])` at the one canonical offset is refused before the registry, with empty data, as the
-    /// ABI decoder did. `good` is the positive control.
-    function test_genericAuthMalformed() public {
-        (bytes memory di, bytes32 iu, bytes memory du, bytes32 ua) = _active();
-        bytes memory good = abi.encode(_outerSigs(du, ua, iu, di, PK_B, DIGEST));
-        this.authCall(ua, abi.encode(du, good));
-        vm.expectRevert(bytes(""));
-        this.authCall(ua, abi.encode(du, bytes("")));
-        vm.expectRevert(bytes(""));
-        this.authCall(ua, abi.encode(du, abi.encode(uint256(0x20))));
-        assembly ("memory-safe") {
-            mstore(add(good, 32), 0x40)
-        }
-        vm.expectRevert(bytes(""));
-        this.authCall(ua, abi.encode(du, good));
+        (, bytes memory sig) = abi.decode(auth, (bytes, bytes));
+        require(sig.length >= 64 && _word(sig, 0) == 0x20, "not abi.encode(MemberSig[])");
+        bytes memory list = new bytes(sig.length - 32);
+        assembly ("memory-safe") { mcopy(add(list, 32), add(sig, 64), mload(list)) }
+        // the three heads of `UASig{"", "", members}`, its two empty lengths, then `members`
+        return bytes.concat(abi.encodeWithSelector(
+            IUARegistry.requireAuthorized.selector, ua, UAKinds.PURPOSE_METATX, DIGEST, 0x80, 0x60, 0x80, 0xa0, 0, 0), list);
     }
 
     // ----- registration: two levels -----
@@ -598,8 +568,9 @@ contract UARegistryNestedTest is UARegistryBase {
         pk[0] = 0x01;
     }
 
-    /// `setKemKey` on a nested `msig`: portable, minimal, stored with the inner list.
-    function test_setKemKeyNested() public {
+    /// A portable record of a nested `msig` (`requirePortable`), minimal over two levels; its KEM record is `UAKemHolder` (T66a,
+    /// CTR-UA-32). meaning: was `setKemKey` landing the record with the inner list stored.
+    function test_portableRecordNested() public {
         Pq memory p = _pqOuter();
         p.r.acceptMembership(p.iu, _acceptEoaSig(p.di, PK_A));
         IUARegistry.MemberSig[] memory s = _pqSigs(p, UAKinds.PURPOSE_POP_V2, p.rd,
@@ -611,10 +582,9 @@ contract UARegistryNestedTest is UARegistryBase {
         IUARegistry.UASig memory a;
         a.members = _pqSigs(p, UAKinds.PURPOSE_KEM, rd,
             _mixedLeaves(p.di, p.id, p.k, _pqMdi(p, UAKinds.PURPOSE_KEM, rd), _ecdsa(PK_A, rd)));
+        p.r.requirePortable(p.ua, UAKinds.PURPOSE_KEM, rd, a);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, p.ua));
         p.r.setKemKey(p.ua, 1, UACall.kem(pk), a);
-        (, bytes memory stored) = p.r.kemKeyAt(p.ua, 1);
-        bytes memory want = abi.encode(a.members);
-        assertEq(stored, want);
     }
 
     // ----- the encoding -----
@@ -1132,9 +1102,9 @@ contract UARegistryNestedTest is UARegistryBase {
         m[0] = Member(UAKinds.MSIG, iu, 1);
         m[1] = Member(UAKinds.EVM_EOA, _eoa(PK_B), 1);
         bytes memory du = _msigKey(2, m);
-        uint256 w = 2 * (400_000 + 45_000) + 2_500; // the inner: its natives may be gen 1's clones
+        uint256 w = 2 * (400_000 + 45_000) + 3_500; // the inner: its natives may be gen 1's clones
         w += w / 63 + 5_000; // gen 2's hold over it
-        w += 2 * 45_000 + 2_500 + 50_000; // the outer, gen 2's own native at 50 k: no implementation here
+        w += 2 * 45_000 + 3_500 + 50_000; // the outer, gen 2's own native at 50 k: no implementation here
         UARegistry tight = _deploy(address(0x5cc7), chainUidA, address(reg), false, uint64(w - 1), address(0), true, new UARegistry.KindConfig[](0));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
         UACall.register(tight, UAKinds.MSIG, du, _none(), "", "");

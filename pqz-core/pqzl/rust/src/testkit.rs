@@ -559,9 +559,11 @@ pub fn rand_grandom(seed: &[u8; 32], dom: u32, log2o: u32, n: u32) -> Result<all
     let mut out = alloc::vec![0i64; n as usize];
     grandom(&mut out, log2o, seed, dom as u64)?;
     let mut pv = PolyVec::new(2)?;
-    polyvec_grandom(&mut *pv, log2o, seed, dom)?;
-    for p in pv.iter() {
-        out.extend((0..D).map(|j| p.c(j).get_i64()));
+    // a refusal (log2o >= 24, review 3w u1-2) is data, as the C shim's: 128 x i64::MIN
+    match polyvec_grandom(&mut *pv, log2o, seed, dom) {
+        Ok(()) => pv.iter().for_each(|p| out.extend((0..D).map(|j| p.c(j).get_i64()))),
+        Err(crate::Error::Internal) => out.extend([i64::MIN; 2 * D]),
+        Err(e) => return Err(e),
     }
     Ok(out)
 }

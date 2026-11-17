@@ -1,0 +1,24 @@
+# ua-mtx-merge T52 gate summary (full output in git-ignored .log files, not committed)
+# T52 (group 3g, pqz-key-versions spec §3, §10 rows 5-10 and 21; KV-6 ... KV-10; R1, R6): PQZ state per (ua, key version),
+# sendCounter per UA, keyVersion in the three args structs, credits to current read once, the capture-once debit, the stale rule
+# and the migration, the pairwise KeyReused, the versioned rollover / prepare / views / events. UNAUDITED.
+# Base: 28a099a1. Commits: 78db6750 (legacy copies), 7e8e2e6f (implementation), 612971bd (fix: the rollover's key check is the
+# prepare's), this one (summary, mutants table).
+step | commit | rc | counts
+t52-size-kind13-first | 28a099a1 | 0 | WrappedPqzRegulatedToken 64,522 B at the T51 tip (3e's T40 figure)
+t52-red | 78db6750 + tests only | 1 | compile error: PqzTransferArgs.keyVersion not found (test/pqz/PqzKeyVersionsToken.t.sol)
+t52-build | 7e8e2e6f | 0 | src, then the test directories in chunks
+t52-green | 7e8e2e6f | 0 | test/pqz/PqzKeyVersionsToken.t.sol 26 passed, test/as/confidential/PqzKeyVersionsKinds.t.sol 4 passed, PqzTyped test_static_* 2 passed
+t52-forge-full-first | 7e8e2e6f - pins | 1 | 2876 passed 49 failed 11 skipped, 290 suites: the call sites and pins of the change (raw slot helpers, typed JSON of the args structs, layout pin, selector audit 60 rows, interface ids, plus-zero gas 5 rows, the typed_ops.json PQZ rows); fixed in 7e8e2e6f
+t52-forge-full | 7e8e2e6f | 0 | 3039 passed 0 failed 14 skipped, 290 suites (default set n2304-kmax4096)
+t52-at-set-n2048-kmax1024 | 7e8e2e6f | 1 | 951 passed 2 failed 1 skipped, 96 suites: PqzStateGas / MtxSplitOverhead test_pqzhN2048FitsBothPaths (the PQZH forms read typed_ops.json's PQZ typehashes and abi: T54 regenerates the rows; runs again there)
+t52-at-set-n2304-kmax4096 | 7e8e2e6f | 0 | 950 passed 0 failed 4 skipped, 96 suites; PqzSet.sol restored
+t52-at-set-n2560-kmax16384 | 7e8e2e6f | 1 | 947 passed 2 failed 5 skipped: test_gas_rollMax_relayedFullTx 12,590,742 > 0.75 * 2^24 (the rollover's own pqzKeyAt read); fixed in 612971bd: 12,581,335 (rerun at n2560: the gas tests and the rollover tests pass)
+t52-at-set-n2816-kmax65536 | 7e8e2e6f | 0 | 944 passed 0 failed 10 skipped, 96 suites; PqzSet.sol restored
+t52-fix-default | 612971bd | 0 | test/{pqz,as/confidential,research}: 405 passed 0 failed 9 skipped, 58 suites
+t52-size-gate | 612971bd | 0 | 0 errors, 97 contracts, above 65,536 B: none; kind 13 64,522 -> 64,922 B (init 67,360 -> 67,760): over the 64,512 B stop line, under 65,536 B (owner's size window 2026-11-07, no _above64KiB row); NormalPqzRegulatedToken 54,839 -> 55,390, NormalPqzToken 47,102 -> 47,632, WrappedPqzToken 56,637 -> 56,952, PqzBurnLib 10,103 -> 10,697, PqzTransferLib 17,726 -> 19,724
+t52-mutants | 612971bd | 1 each | 14 of 14 killed, none a compile error (runs/2026-11-07-ua-mtx-merge-t52-mutants.txt): M-T1 x2, M-T2, M-T3, M-T4 x2, M-T5, M-T6 x3 (the ATTESTED-token kill is T44's), M-T8 x2, M-T9, M-T10; git diff --exit-code -- src clean after
+#
+# Gas: PqzStateGas pins (ceilings) hold at every set; the relayed ROLL_MAX rollover at n2560-kmax16384 on uaExecute 12,581,335
+# (1,577 under 0.75 * 2^24). Not regenerated here: smartcontracts/vectors/pqz/<set>/state.json (STATE_VECTORS=1, ua-rs-sign's
+# reader: the account words and the nested `acct`) and typed_ops.json: T54.

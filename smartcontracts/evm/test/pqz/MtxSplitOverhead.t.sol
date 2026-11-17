@@ -9,29 +9,48 @@ import {NormalPqzToken} from "../../src/pqz/NormalPqzToken.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UACall} from "../ua/UACall.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
+import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// metatx-split T5 (spec §3.6, §10 R9; owner variant A 2026-10-21): the split's relayed overhead must not grow with the
 /// envelope's `data` size. For each accepted fee-UA kind (ECDSA address path, `mldsa65` and `fndsa512` on `uaExecute`) the
 /// relayed transaction's regular gas is measured for the smallest envelope (`mtxRollOver(alice, 1)`, 68 B of data) and the
 /// largest built one (PQZL op 7 M = 8 with the auditor; at a PQZH set also the largest PQZH debit, op 7 M = 4), exactly as
-/// `PqzStateGas.t.sol`'s gas table does (the precompile at the set's row price, ML-DSA-65 68,006, `fndsa512` 2.3 M
+/// `PqzStateGas.t.sol`'s gas table does (the precompile at the set's row price, ML-DSA-65 100,006, `fndsa512` 2.3 M
 /// stand-ins). The pre-split figures are the same test run on 2ceda92d (`test/vectors/metatx-overhead-presplit.json`).
-/// Asserted: (largest − pre-split) − (smallest − pre-split) <= 8,000 per kind on PQZL, <= 10,000 on PQZH (owner 2026-11-01: the
-/// relayed path's per-byte cost on PQZH's larger envelope, measured 8,938–9,807). `MTX_OV_PRESPLIT=1`: log only.
+/// Asserted: (largest − pre-split) − (smallest − pre-split) <= 9,000 per kind on PQZL, <= 14,000 on PQZH (owner 2026-11-01: the
+/// relayed path's per-byte cost on PQZH's larger envelope, measured 8,938–9,807; owner 2026-11-08: raised for group 3f's
+/// empty verdict pair, see the constants). `MTX_OV_PRESPLIT=1`: log only.
 /// typed-signing C4 review: the largest op's own cost moved with its explicit parameters, so its overhead is what the relayed
 /// call costs above the same op called directly on the same state (`_direct`), now and on 2ceda92d (the JSON's `direct|<id>`):
 /// `(largest − direct) − (pre-split largest − pre-split direct)`. The pre-split side runs from
 /// `runs/2026-11-01-typed-signing-c4-MtxSplitOverhead-at-2ceda92d.t.sol`, this test as it compiled there.
+/// Group 3h T58: the smallest op's own cost fell by 12,347 (its rollover deletes no pending slot any more, PP-1) while its
+/// relayed-minus-direct stayed 71,520 to the gas, so the smallest side keeps its own cost at the tree the bounds were set on
+/// (7558a364, owner 2026-11-08): `(smallest − direct S) − (pre-split smallest − direct S at 7558a364)`, which is the old
+/// `smallest − pre-split smallest` there exactly and stays it whatever a later task does to the rollover's own cost
+/// (`direct|S|7558a364`; runs/2026-11-08-ua-mtx-merge-3h/split-overhead.txt).
 /// Run: `scripts/capped smartcontracts/evm/script/pqz/at-set.sh <set> test --match-contract MtxSplitOverheadTest -vv`
 /// (log: runs/2026-10-27-metatx-split-overhead.txt). It inherits `PqzStatePinGasTest`'s tests; select this contract.
 contract MtxSplitOverheadTest is PqzStatePinGasTest {
-    uint256 internal constant BOUND = 8_000;
-    uint256 internal constant BOUND_PQZH = 10_000;
+    // Group 3f, owner 2026-11-08: 8,000 -> 9,000 (PQZL; measured 8,608 at n2048-kmax1024) and 10,000 -> 13,000 (PQZH): the
+    // relayed envelope's data carries the empty verdict pair of every proof entry (480 B; the generic relayed path's memory
+    // grows quadratically with the large envelopes). Before 3f: PQZL 5,909 / PQZH 9,213 at n2304-kmax4096. Owner ruling
+    // 2026-11-08: PQZH 13,000 -> 14,000, the 13,000 having come from the ecdsa row only; measured at n2304-kmax4096: ecdsa
+    // 12,673, mldsa65 13,039, fndsa512 13,055.
+    // T66b, owner 2026-11-09, spec §11 (i); the PQZ calldata cost accepted 2026-11-07: the body modules forward the envelope
+    // through two more frames (the stub to P, the self-call's stub to Q), each copying it into fresh memory, so the overhead
+    // grows with the data by design. Measured (difference, ecdsa / mldsa65 / fndsa512): n2304-kmax4096 PQZL 75,487 / 77,225
+    // / 75,774, PQZH 299,515 / 303,659 / 300,232; n2048-kmax1024 PQZL 88,268 / 90,196 / 88,591, PQZH 268,825 / 272,715 /
+    // 269,497; bounds the largest of both sets + about 10 %: PQZL 9,000 -> 99,000, PQZH 14,000 -> 335,000.
+    uint256 internal constant BOUND = 99_000;
+    uint256 internal constant BOUND_PQZH = 335_000;
     string internal pre;
     bytes32 internal fnFee2;
 
     bool internal logOnly;
     uint256 internal sMeas; // the smallest envelope's relayed gas (this kind)
+    uint256 internal sDir; // the smallest envelope's op called directly (every kind)
     string internal kind;
 
     function test_splitOverhead_dataSizeBound() public {
@@ -43,7 +62,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         bytes memory fpk = new bytes(897); // fndsa512: 0x09 then every h_i = 0 < q
         fpk[0] = 0x09;
         fnFee2 = UACall.register(reg, UAKinds.FNDSA512, fpk, UACall.attrs("", 0, ""), new bytes(666), "");
-        NormalPqzToken(address(tok)).mintToUA(fnFee2, 1000);
+        NormalPqzToken(address(tok)).mintToUA(fnFee2, 1000, EnvKit.codeUidOf(address(tok)));
         minted += 1000;
         bytes32 mlFee = feeUA;
         for (uint256 k; k < 3; ++k) {
@@ -51,8 +70,10 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
             feeUA = k == 2 ? fnFee2 : mlFee;
             feeSigLen = k == 2 ? 666 : ML65_SIG;
             kind = k == 0 ? "ecdsa" : k == 1 ? "mldsa65" : "fndsa512";
-            sMeas = _meas(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, 1)), 0);
+            sMeas = _meas(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1)), 0);
             console2.log(string.concat("MEAS ", PqzSet.NAME, " ", kind, " S"), sMeas);
+            if (k == 0) sDir = _direct(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1)), 0);
+            if (k == 0) console2.log(string.concat("MEAS ", PqzSet.NAME, " direct S"), sDir);
             _large("pqzl", "M8-on", 8, BOUND);
             if (PqzSet.HAS_PQZH) _large("pqzh", "M4-on", 4, BOUND_PQZH);
         }
@@ -68,7 +89,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
         console2.log(string.concat("MEAS ", PqzSet.NAME, " direct ", id), dir);
         uint256 preDir = vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['direct|", id, "']"));
         uint256 ovL = (l - dir) - (_pre(id, false) - preDir);
-        uint256 ovS = sMeas - _pre("", true);
+        uint256 ovS = (sMeas - sDir) - (_pre("", true) - vm.parseJsonUint(pre, string.concat(".", PqzSet.NAME, "['direct|S|7558a364']")));
         uint256 d = ovL > ovS ? ovL - ovS : 0;
         console2.log(string.concat("OVERHEAD ", PqzSet.NAME, " ", kind, " ", id, " smallest / largest / difference"), ovS, ovL, d);
         assertLe(d, bound, string.concat(kind, " ", id, ": overhead grows with data"));
@@ -82,7 +103,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
     function _direct(bytes memory data, uint256 row) internal returns (uint256 inner) {
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new RowBurner(row)).code);
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         uint256 snap = vm.snapshotState();
         _gasTo(address(tok), data);
         uint256 st = lastState;
@@ -97,7 +118,7 @@ contract MtxSplitOverheadTest is PqzStatePinGasTest {
     function _meas(bytes memory data, uint256 row) internal returns (uint256 inner) {
         vm.clearMockedCalls();
         vm.etch(PQZ, address(new RowBurner(row)).code);
-        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(100_006 - 2_900)).code);
         bytes memory call = _envelopeVia(viaUA, data, 7);
         uint256 snap = vm.snapshotState();
         vm.prank(RELAYER);

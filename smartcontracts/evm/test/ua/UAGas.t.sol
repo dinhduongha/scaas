@@ -62,7 +62,7 @@ contract GasProbe {
 contract UAGasTest is UARegistryBase {
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
     uint256 internal constant MSIG_MEMBER_GAS = 45_000; // UARegistry.MSIG_MEMBER_GAS
-    uint256 internal constant MSIG_ACCEPTED_GAS = 2_500; // UARegistryLib.MSIG_ACCEPTED_GAS: once per authorization
+    uint256 internal constant MSIG_ACCEPTED_GAS = 3_500; // UARegistryCoreLib.MSIG_ACCEPTED_GAS: once per authorization (3ze: was 2,500)
 
     bytes internal _big;
     bytes internal _memberPop; // `_derivedOverhead`'s registration pop when set (I1: a padded pop)
@@ -458,14 +458,14 @@ contract UAGasTest is UARegistryBase {
     }
 
     /// Register step 4: Σ of the c largest caps + c × MSIG_MEMBER_GAS + MSIG_ACCEPTED_GAS ≤ verifyBudget (here 1,145,000 + 135,000
-    /// + 2,500).
+    /// + 3,500; 3ze: + 2,500 before).
     function test_T_GAS_structureOverBudgetRefused() public {
         Member[] memory m = new Member[](3);
         uint16[3] memory kinds = [uint16(0x0100), uint16(0x0101), uint16(0x0107)];
         UARegistry tight =
             _deploy(address(0x5cc1), chainUidA, address(0), false, 1_200_000, address(0), true, _cfgs(address(mock)));
         UARegistry roomy =
-            _deploy(address(0x5cc2), chainUidA, address(0), false, 1_282_500, address(0), true, _cfgs(address(mock)));
+            _deploy(address(0x5cc2), chainUidA, address(0), false, 1_283_500, address(0), true, _cfgs(address(mock)));
         for (uint256 i; i < 3; ++i) {
             bytes memory k = _key(kinds[i]);
             m[i] = Member(kinds[i], _register(tight, kinds[i], k), 1);

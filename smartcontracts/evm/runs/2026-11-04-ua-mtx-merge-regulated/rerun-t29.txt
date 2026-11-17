@@ -1,0 +1,25 @@
+mutant | test that went red | rc
+eligible-contract-ignored | test_canReceiveReasons, test_eligibleContractAdminOnly, test_receiverTruthTableThroughToken, test_registryDeployedAndDexAttested, test_registryRuntimeHashPinned, test_regulatedKatEqualsTheToken, test_truthTable | 1
+lapsed-passes | test_canReceiveReasons, test_receiverTruthTableThroughToken, test_registryRuntimeHashPinned, test_regulatedKatEqualsTheToken, test_truthTable | 1
+disabled-attester-passes | test_attesterDisableVoids, test_canReceiveReasons, test_registryRuntimeHashPinned, test_regulatedKatEqualsTheToken, test_truthTable | 1
+failed-call-eligible | test_registryFailureNeverEligible, test_registryGasCapBounds | 1
+gas-cap-removed | test_registryGasCapBounds | 1
+eligible-contract-passes-denied | test_receiverTruthTableThroughToken, test_registryRuntimeHashPinned, test_regulatedKatEqualsTheToken, test_truthTable | 1
+codehash-check-skipped | test_createKinds9And13, test_registryCodehashPinned, test_registryOfOtherCodeRefused | 1
+starvation-check-dropped | test_registryGasPinned, test_registryStarvedBoundary, test_registryStarvedReverts | 1
+starvation-margin-zero | test_registryStarvedBoundary | 1
+output-length-unchecked | test_registryFailureNeverEligible | 1
+two-read-as-eligible | test_registryFailureNeverEligible | 1
+not-eligible-ignored | test_attesterDisableVoids, test_deniedBeneficiaryRefused, test_deniedUnshieldRecipientRefused, test_disabledListStopsChecking, test_eachListAlone, test_frozenAndDeniedDecoysReceive, test_initialSupplyRecipientChecked, test_receiverCheckApplies, test_receiverRows, test_receiverTruthTableThroughToken, test_registryDeployedAndDexAttested | 1
+registry-not-written | setUp, test_attesterDisableVoids, test_callBudgetDirect, test_callBudgetFeePaths, test_callBudgetWrapOrder, test_canReceiveReasons, test_createKinds9And13, test_deniedBeneficiaryRefused, test_deniedUnshieldRecipientRefused, test_disabledListStopsChecking, test_eachListAlone, test_initialSupplyRecipientChecked, test_receiverCheckApplies, test_receiverRows, test_receiverTruthTableThroughToken, test_refreshAsksNoRegistry, test_registryCodehashPinned, test_registryDeployedAndDexAttested, test_registryFailureNeverEligible, test_registryGasCapBounds, test_registryGasPinned, test_registryStarvedBoundary, test_registryStarvedReverts, test_regulatedKatEqualsTheToken | 1
+disabled-list-still-read | test_disabledListStopsChecking | 1
+force-beneficiary-r-dropped | test_callBudgetDirect, test_receiverRows | 1
+fee-recipient-r-dropped | test_callBudgetFeePaths, test_callBudgetWrapOrder, test_deniedBeneficiaryRefused, test_frozenAndDeniedDecoysReceive | 1
+mint-receiver-unchecked | test_callBudgetDirect, test_callBudgetWrapOrder, test_initialSupplyRecipientChecked, test_receiverRows, test_registryFailureNeverEligible | 1
+canreceive-reasons-2-3-swapped | test_canReceiveReasons | 1
+canreceive-eligible-ignored | test_canReceiveReasons, test_regulatedKatEqualsTheToken | 1
+canreceive-lists-off-calls | test_canReceiveReasons, test_everyControlBuilt, test_regulatedKatEqualsTheToken | 1
+zero-codehash-release | test_releaseWithoutCodehashRefused | 1
+deploy-implargs-empty | test_deployRegulatedPath | 99
+attest-any-sender | test_attest, test_registryRuntimeHashPinned | 1
+eligible-contract-by-attester | test_eligibleContractAdminOnly, test_registryRuntimeHashPinned | 1

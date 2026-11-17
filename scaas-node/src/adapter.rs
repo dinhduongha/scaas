@@ -12,6 +12,7 @@ use tracing::{info, warn};
 
 use crate::breaker::Breaker;
 use crate::chain::SimError;
+use crate::guard::Verdict;
 use crate::finality::next_range;
 use crate::odoo::{Job, Odoo, Report};
 use crate::submit::{job_digest, now, InflightSet};
@@ -166,6 +167,20 @@ pub trait ChainAdapter: Send + Sync {
     /// MT-8): done, never dead. Default: no such job.
     fn already_done(&self, _job: &Job, _reason: &str) -> bool {
         false
+    }
+    /// NODE-LANE-09: what a refused build (the guard, the simulation) means for the job. Default: done ([`Self::already_done`]),
+    /// or the op's replay guard used ⇒ `consumed`, else `dead`; an unreadable guard ⇒ back in the queue. An EVM family (`evm`,
+    /// Hedera) answers the `Submitter`'s one classifier, [`crate::guard::revert_verdict`] (Fable E N-1).
+    async fn revert_verdict(&self, job: &Job, reason: String) -> crate::guard::Verdict {
+        use crate::guard::Verdict;
+        if self.already_done(job, &reason) {
+            return Verdict::Consumed(Some("already_invalidated".into()));
+        }
+        match self.op_consumed(job).await {
+            Ok(Some(true)) => Verdict::Consumed(None),
+            Ok(_) => Verdict::Dead(format!("simulation: {reason}")),
+            Err(e) => Verdict::Requeue(format!("op_consumed: {e:#}")),
+        }
     }
 }
 
@@ -423,7 +438,9 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                 report(odoo, Report { error: Some(e.to_string()), ..rep(job, "queued") }).await;
                 return Some(e.to_string());
             }
-            Ok(TxStatus::Unknown) | Err(_) => {
+            // Fable recheck 6 R6-1: an unread status is no answer: asked again, never a verdict (the pipelined lane's `track`)
+            Err(e) => warn!(chain = %adapter.chain_key(), job, "tx_status unread; asked again: {e:#}"),
+            Ok(TxStatus::Unknown) => {
                 // Hỏi trạng thái TRƯỚC: bị từ chối khi gửi lại có thể vì tx lần trước đã vào khối.
                 if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Refused>()) {
                     if consumed {
@@ -444,10 +461,26 @@ async fn follow(adapter: &dyn ChainAdapter, odoo: &Odoo, f: InFlight<'_>, mut se
                 // Before `Rejected`: a job past its deadline back in the queue would be rejected the same way on every claim.
                 if now() > f.valid_until.saturating_add(EXPIRY_GRACE) {
                     // Payload chủ thể đã hết hạn: tx (nếu còn đâu đó) sẽ bị contract từ chối.
-                    if !consumed {
-                        report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
+                    if consumed {
+                        return None;
                     }
-                    return None;
+                    // Fable recheck 6 R6-1: the op may have landed (an unseen transaction, another relayer): `consumed` first; an
+                    // unreadable answer is asked again, never `dead`
+                    match adapter.op_consumed(f.job).await {
+                        Ok(Some(true)) => {
+                            report(odoo, Report { error: Some("unknown".into()), ..rep(job, "consumed") }).await;
+                            return None;
+                        }
+                        Ok(_) => {
+                            report(odoo, Report { error: Some("expired before inclusion".into()), ..rep(job, "dead") }).await;
+                            return None;
+                        }
+                        Err(e) => {
+                            warn!(chain = %adapter.chain_key(), job, "expired, op_consumed unreadable; asked again: {e:#}");
+                            tokio::time::sleep(STATUS_POLL).await;
+                            continue;
+                        }
+                    }
                 }
                 if let Some(r) = sent.as_ref().err().and_then(|e| e.downcast_ref::<Rejected>()) {
                     if consumed {
@@ -557,6 +590,11 @@ pub(crate) async fn step_once(
         }
     }
     let Some(job) = job else { return Ok(Step::Idle) };
+    // CTR-MTX-86, one rule on every family: a payee-fee field is refused by name before any build, never relayed without it
+    if let Err(e) = crate::submit::refuse_payee_fee_fields(&job) {
+        report(odoo, Report { error: Some(e.to_string()), ..rep(job.id, "dead") }).await;
+        return Ok(Step::Done);
+    }
     // G2: giữ digest tới khi `follow` xong (guard rơi ở mọi lối ra của hàm này).
     let digest = match adapter.digest(&job).await {
         Ok(d) => d,
@@ -589,18 +627,14 @@ pub(crate) async fn step_once(
     let _guard = inflight.with_hold(_guard, hold);
     let built = match adapter.build(&job, lane).await {
         Ok(b) => b,
-        Err(SimError::Revert(r)) if adapter.already_done(&job, &r) => {
-            report(odoo, Report { error: Some("already_invalidated".into()), ..rep(job.id, "consumed") }).await;
-            return Ok(Step::Done);
-        }
+        // R80, NODE-LANE-09: done on chain ⇒ `consumed`; a liftable refusal by name ⇒ back in the queue; else `dead`
         Err(SimError::Revert(r)) => {
-            // R80: op đã bị tiêu thụ (relayer khác đưa lên trước) ⇒ `consumed`, không `dead`.
-            let (state, error) = match adapter.op_consumed(&job).await {
-                Ok(Some(true)) => ("consumed", "unknown".to_string()),
-                Ok(_) => ("dead", format!("simulation: {r}")),
-                Err(e) => {
-                    report(odoo, Report { error: Some(format!("op_consumed: {e:#}")), ..rep(job.id, "queued") }).await;
-                    return Ok(Step::Retry(format!("op_consumed: {e:#}")));
+            let (state, error) = match adapter.revert_verdict(&job, r).await {
+                Verdict::Consumed(label) => ("consumed", label.unwrap_or_else(|| "unknown".into())),
+                Verdict::Dead(e) => ("dead", e),
+                Verdict::Requeue(e) => {
+                    report(odoo, Report { error: Some(e.clone()), ..rep(job.id, "queued") }).await;
+                    return Ok(Step::Retry(e));
                 }
             };
             report(odoo, Report { error: Some(error), ..rep(job.id, state) }).await;
@@ -683,7 +717,8 @@ pub(crate) mod tests {
         }
         assert!(k(json!({"salt": "0x00"})).is_err() && k(json!({"meta": "0x"})).is_err(), "a pay-meta without its kind");
         assert_eq!(op_kind(&json!({"kind": "wrap"}), &["pay_meta", "wrap"]).unwrap(), Some("wrap"), "a family's own kind");
-        let p = crate::config::RelayParams { router: None, min_amount: 10, relay_bound_payee: false, max_pay_meta_bytes: 2048 };
+        let p = crate::config::RelayParams { router: None, min_amount: 10, relay_bound_payee: false, max_pay_meta_bytes: 2048,
+            max_service_op_bytes: 2048 };
         assert!(relay_fee_ours(true, false, 10, &p).is_ok());
         assert!(relay_fee_ours(true, false, 9, &p).unwrap_err().to_string().contains("min_amount"));
         assert!(relay_fee_ours(false, true, 10, &p).is_ok(), "bound to the lane");
@@ -772,6 +807,11 @@ pub(crate) mod tests {
         pub claims: u32,
         /// `dex_sync`'s answer (Null = the generic reply).
         pub dex_sync: Value,
+        /// Every `dex_book_commit` body, in order.
+        pub commits: Vec<Value>,
+        /// `dex_book_load`'s rows and `dex_markets`'s answer (Null = the generic reply).
+        pub dex_book: Value,
+        pub dex_markets: Value,
     }
     pub(crate) type Shared = Arc<std::sync::Mutex<Fake>>;
 
@@ -802,6 +842,12 @@ pub(crate) mod tests {
                     serde_json::json!({"ok": true})
                 }
                 "dex_sync" if !o.dex_sync.is_null() => std::mem::take(&mut o.dex_sync),
+                "dex_book_load" if !o.dex_book.is_null() => serde_json::json!({"rows": o.dex_book}),
+                "dex_markets" if !o.dex_markets.is_null() => o.dex_markets.clone(),
+                "dex_book_commit" => {
+                    o.commits.push(b);
+                    serde_json::json!({"ok": true})
+                }
                 _ => {
                     o.ingests += 1;
                     serde_json::json!({"indexed_block": 5, "created": 0})
@@ -843,6 +889,29 @@ pub(crate) mod tests {
         let states: Vec<&str> = o.reports.iter().filter_map(|r| r["chain_state"].as_str()).collect();
         assert_eq!(states, ["signed", "queued"]);
         assert!(o.reports[1]["error"].as_str().unwrap().contains("sequence mismatch"));
+    }
+
+    /// CTR-MTX-86, one rule on every family (Fable N-4): a job carrying `payee_fee` or `receiver_fee` is refused by name (`dead`)
+    /// before any build on a non-EVM adapter, never relayed without it; the plain job is built (the control).
+    #[tokio::test]
+    async fn payee_fee_fields_are_refused_on_every_family() {
+        for (field, code) in [(None, "signed"), (Some("payee_fee"), "PAYEE_FEE_REFUSED"), (Some("receiver_fee"), "RECEIVER_FEE_REFUSED")] {
+            let mut job = serde_json::json!({"id": 7, "kind": "signed_op", "op": {}});
+            if let Some(f) = field {
+                job[f] = serde_json::json!({"fee": "1", "feeRecipient": "0x00000000000000000000000000000000000000aa"});
+            }
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![job], ..Default::default() }).await;
+            lane_step(&Mock::default(), &odoo, 0, "n#0").await.unwrap();
+            let o = o.lock().unwrap();
+            let r = &o.reports[0];
+            match field {
+                None => assert_eq!(r["chain_state"], "signed", "control: {r}"),
+                Some(_) => {
+                    assert_eq!((r["chain_state"].as_str(), o.reports.len()), (Some("dead"), 1), "{r}");
+                    assert!(r["error"].as_str().unwrap().starts_with(code), "{r}");
+                }
+            }
+        }
     }
 
     /// Adapter giả: trạng thái tx theo tx id, sequence lane = 4, RPC mô phỏng luôn lỗi mạng.
@@ -965,6 +1034,8 @@ pub(crate) mod tests {
         expired: bool,
         /// `sign` fails.
         unsignable: bool,
+        /// `tx_status` fails this many times first (Fable recheck 6 R6-1).
+        status_errors: std::sync::atomic::AtomicU32,
     }
 
     fn racy(build_revert: bool, consumed: Option<bool>, sends: &[bool], statuses: &[TxStatus]) -> Racy {
@@ -982,6 +1053,7 @@ pub(crate) mod tests {
             rejected: false,
             expired: false,
             unsignable: false,
+            status_errors: Default::default(),
         }
     }
 
@@ -1023,6 +1095,10 @@ pub(crate) mod tests {
             }
         }
         async fn tx_status(&self, _: &str) -> Result<TxStatus> {
+            if self.status_errors.load(std::sync::atomic::Ordering::SeqCst) > 0 {
+                self.status_errors.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                anyhow::bail!("rpc down");
+            }
             let mut q = self.statuses.lock().unwrap();
             Ok(if q.len() > 1 { q.pop_front().unwrap() } else { q[0].clone() })
         }
@@ -1081,6 +1157,23 @@ pub(crate) mod tests {
         assert_eq!(o.lock().unwrap().reports[1]["error"], "expired before inclusion");
         let a = Racy { rejected: true, ..racy(false, Some(false), &[], &[TxStatus::Unknown]) };
         assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "queued"]);
+    }
+
+    /// Fable recheck 6 R6-1: past the deadline a sent job whose transaction is not seen reads `op_consumed` first: landed is
+    /// `consumed`, never `dead`; an unreadable answer and an unread status are asked again (no verdict). Control: not consumed is
+    /// `dead` (`a_rejected_send_past_its_deadline_is_dead` too).
+    #[tokio::test]
+    async fn an_expired_job_is_dead_only_when_its_op_did_not_land() {
+        let a = Racy { expired: true, ..racy(false, Some(true), &[true], &[TxStatus::Unknown]) };
+        assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "consumed"], "landed elsewhere: consumed");
+        let a = Racy { expired: true, status_errors: 2.into(), consumed_unreadable: 1.into(), ..racy(false, Some(true), &[true], &[TxStatus::Unknown]) };
+        let (states, _) = race(&a, &InflightSet::default()).await;
+        assert_eq!(states, ["signed", "broadcast", "consumed"], "unread twice, then landed: read again, never dead");
+        let a = Racy { expired: true, ..racy(false, Some(false), &[true], &[TxStatus::Unknown]) };
+        assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "dead"], "control: not landed");
+        assert_eq!((a.status_errors.load(std::sync::atomic::Ordering::SeqCst), a.consumed_unreadable.load(std::sync::atomic::Ordering::SeqCst)), (0, 0));
+        let a = Racy { expired: true, status_errors: 2.into(), ..racy(false, Some(false), &[true], &[TxStatus::Mined { height: 1, tx_hash: None }]) };
+        assert_eq!(race(&a, &InflightSet::default()).await.0, ["signed", "broadcast", "mined"], "an unread status is no verdict");
     }
 
     /// A failure between the claim and the journal, on any family: the job goes back with its reason, or it stays claimed with no report.

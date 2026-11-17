@@ -1,0 +1,26 @@
+[package]
+name = "pqz-offchain"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../../LICENSE"
+publish = false
+
+# The off-chain verifier's entry (three-key spec K3-4; UNAUDITED): pqz-ffi's verify_input plus PQZL_SPLIT_ID, the split
+# transfer of opening tokens (R_TXS / R_TXS0), which the precompile never serves. Its own crate, not a function in
+# pqz-ffi: the Nethermind plugin's library (pqz-ffi built with --no-default-features --features pqzl-rust,set-<set>)
+# carries the checksums of pqz-ffi's sources in its debug info, so any edit there, a comment too, moves the reviewed
+# SelfTest.cs ExpectedLibrarySha256. This crate only calls pqz-ffi's public API.
+[dependencies]
+pqz-ffi = { path = "..", default-features = false }
+
+# tests only (cross-id test: proofs re-proved under PQZL_SPLIT_ID, vector rows read as JSON); never in a normal build
+[dev-dependencies]
+pqz-ffi = { path = "..", default-features = false, features = ["prove"] }
+serde_json = "1"
+
+# default: pqz-ffi's (Rust PQZL core, set n2304-kmax4096); another set: --no-default-features --features
+# pqz-ffi/pqzl-rust,pqz-ffi/set-<set>; a crate that picks the set itself depends on this one with default-features = false
+[features]
+default = ["pqz-ffi/default"]
+
+[workspace]

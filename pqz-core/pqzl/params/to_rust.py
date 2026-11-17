@@ -221,6 +221,9 @@ def convert(hdr, text):
                 else:
                     vals[f] = num(hdr, a, kind)
                     v = str(vals[f])
+                    # the Gaussian sampler gives one value for all coefficients from 24 on (review 3w u1-2)
+                    if f.startswith("log2stdev") and vals[f] >= 24:
+                        fail(hdr, "%s.%s = %d >= 24 (the sampler's limit)" % (name, f, vals[f]))
                 out.append("    %s: %s," % (f, v))
             # the array lengths C leaves implicit
             if rtype == "Ring" and vals["ppmodq"] != vals["nmoduli"]:

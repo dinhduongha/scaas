@@ -1,0 +1,10 @@
+# three-key round (spec K3-4): per-set libpqz_ffi.so pins after PQZL v6 / PQZL_SPLIT_ID (R_TXS) / PQZH v4 and the
+# regenerated vectors (pqz-three-keys a3c5bc37)
+# scripts/capped docker build -f Dockerfile --resource memory=4g --build-arg PQZ_SET=<set> --target ffi-export -o bin/ffi-out-<set> <repo root>
+set | commit | rc | libpqz_ffi.so sha256 (was)
+n2048-kmax1024 | a3c5bc37 | 0 | 45f6a4f7f10630341530a6ce0d93569d1327c43d3e26fc1ebc7715407e7465f2 (a991ab8c…bea1)
+n2304-kmax4096 | a3c5bc37 | 0 | 29c351ec675beeafea4f12324613adc6c1f88e3264c45271dae812d4778a677c (2e98d3a6…57f3)
+n2560-kmax16384 | a3c5bc37 | 0 | 8521e49d567f9826cc6086bf6256b0bdbce03988cbd4321ce2b7d994d9aa6aef (fe23ef15…6d1b)
+n2816-kmax65536 | a3c5bc37 | 0 | f4d4890bbd435227e302908eba9e2a33fd8897e448e147c5de1c5032a0929edf (165325eb…d2da)
+ExpectedHash (OP_SELFTEST) unchanged: selftest.json's hash is the same at every set. PqzSetIds.cs: gen_set.py (2a).
+Tests (n2304-kmax4096, run-tests.sh, SDK 10.0.402 image): 56 / 56 passed.

@@ -1,0 +1,31 @@
+# ua-mtx-merge T1 gate summary (full output in git-ignored .log files, not committed)
+# T1: one generic signed path for native and derived ids, the ordered cancel, the address path on the wallets.
+# The round's gate runner (T21) is not built yet: each command ran directly through scripts/capped.
+# src is identical at 6abfe669 and 860af8ad (860af8ad changes test/merge/MergedEntry.t.sol only).
+step | commit | rc | counts
+t1-base-forge | 9a4b8c5a | 0 | 2464 passed 0 failed 14 skipped, 213 suites (forge, before T1)
+t1-red-merge | 9a4b8c5a + test/merge | 1 | 10 passed 25 failed (forge, FOUNDRY_TEST=test/merge: the new tests on the base)
+t1-merge-metatx | 6abfe669 | 0 | 338 passed 0 failed, 31 suites (forge --match-path 'test/{merge,metatx}/*.t.sol')
+t1-merge | 860af8ad | 0 | 35 passed 0 failed, 2 suites (forge, test/merge)
+t1-forge-full | 860af8ad | 0 | 2496 passed 0 failed 14 skipped, 214 suites (forge, default set n2304-kmax4096)
+t1-forge-isolate | 6abfe669 | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t1-dexkat-regen | 6abfe669 | 0 | DexKatTest 2 passed after WRITE_KAT=true (MD-8: the DEX address, domains, digests, signatures, calldata moved)
+t1-clientkeys-evm | 6abfe669 | 0 | 23 passed 0 failed (node --test test/evm.test.js, reads dex_order_kat.json)
+t1-size-gate | 6abfe669 | 0 | 0 errors, 89 contracts; above 64 KiB: WrappedPqzToken 71,322 (was 72,160); size_gate --self-test ok
+t1-mutants | 860af8ad | 1 each | 15 of 15 killed against test/merge (runs/2026-11-04-ua-mtx-merge-t1-mutants.txt); a first pass at 6abfe669 left `native-test-from-shr160-lt-2` alive (a finding, fixed in 860af8ad) and `cancel-refuses-native` a compile error (anchor fixed)
+t1-docs-check | 860af8ad | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0; test_docs_check ok; facts 8852, 0 misses
+#
+# red first, test/merge on the base (9a4b8c5a, the T1 tests compiled there by selector):
+#   FAIL 25: test_boundFieldChangedRefused test_cancelBumpsLaneForTheSubject test_cancelFeeZeroRelayable
+#     test_cancelIsNonceOrdered_derived test_cancelIsNonceOrdered_native test_clientSigningNonZeroUnboundIsRefused
+#     test_derivedSignedCancel test_derivedStaysOnUAAllowlist test_derivedSubjectIsPoolInSelfCall test_eoaToEoa
+#     test_nativeKeyDataRefused test_nativeRunsAddressAllowlist test_nativeSignedCancel test_nativeSubjectIsItselfInSelfCall
+#     test_nativeUASigWithKeyDataRefused test_nativeUASigWithMembersRefused test_noRegistry_badSignatureRefused
+#     test_noRegistryDerivedIsLedgerOffByName test_noRegistry_eoaToEoa test_noRegistryNativeGenericRuns
+#     test_oldMtxExecuteSignatureRunsThroughExecuteMetaTransaction test_oldUACancelNonceSignatureHasNoEntry
+#     test_signedCancelIsOrdered test_unboundRelayerAndFeeRecipientNotSigned test_walletsByteIdentical (pin 0 first)
+#   PASS 10 (positive controls, behaviour T1 keeps): test_badSignatureRefused test_derivedHighBitsAreNotTheEoa
+#     test_designatorSignsWithItsOwnKey test_eoaToUA test_erc1271Holder test_noRegistry_derivedReceiverIsLedgerOff
+#     test_noRegistry_derivedSenderIsLedgerOff test_replayRefused test_slotsOfMergedTransferEqualAddressPath
+#     test_unregisteredReceiverRefused
+#   pins red first: test_uaCancelNonceTypehashIsPinned (0 -> measured), MsgSenderLint's MD-6 rows (99 -> measured)

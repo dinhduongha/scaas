@@ -10,9 +10,13 @@ baseline keeps that entry as a ratchet even when it fits; the "remove it" note i
 
 CTR-GOV-19: above every limit and every baseline row sits the ceiling of the SCaaS testnet, `maxCodeSize` 0x20000 with
 EIP-7954 left out: runtime 131,072 B, init code 262,144 B (2 x maxCodeSize, measured without EIP-7954,
-`pqz-core/nethermind/runs/2026-11-03-code-size-probe.txt`). The contracts above EIP-7954's 65,536 B are a pin,
-`_above64KiB` in the baseline, sorted: printed every run, and a computed list that differs from it in either direction is
-an error, so a contract that crosses is named in a commit (GD-5).
+`pqz-core/nethermind/runs/2026-11-03-code-size-probe.txt`).
+T66b (spec 2026-11-09-t66b-library-organisation.md §2): the size window is closed (no contract above 65,536 B; the
+`_above64KiB` pin is gone). Every contract has a form, `release` (a token kind's face, the DEX), `module` (a body module,
+script/KindModules.sol's list and the DEX's D), `library` or `plain`, and the form's T-1 line (the 60 M deploy line in runtime
+bytes) is an error above it, its T-2 line (57 M) a notice: release 35,386 / 33,594, module 35,570 / 33,780, library 35,694 /
+33,903, plain 35,286 / 33,516 (the registry's fit). Every baseline row names its form in `_forms` (a pin: a row whose form
+differs from the computed one, or has none, is an error), and a row with a form stays a ratchet even when it fits.
 
 usage: size_gate.py <sizes.json> <size-baseline.json>     exit 1 on a violation
 """
@@ -26,10 +30,13 @@ TOKENS = {'NormalToken', 'WrappedToken', 'NormalZetherToken', 'WrappedZetherToke
 TOKEN_LIMIT, EIP170, EIP3860 = 20_480, 24_576, 49_152
 CEILING, INIT_CEILING, EIP7954 = 131_072, 262_144, 65_536
 LIBRARY_HEAD = '0x73' + '00' * 20 + '3014'  # PUSH20 <self, filled in at deployment> ADDRESS EQ
+LINES = {'release': (35_386, 33_594), 'module': (35_570, 33_780), 'library': (35_694, 33_903), 'plain': (35_286, 33_516)}
 
 
-def check(sizes, baseline, libraries=()):
+def check(sizes, baseline, libraries=(), forms=None):
+    """`forms` (name -> form): the T-1 / T-2 lines of each contract's form, and a formed row kept as a ratchet."""
     errs, notes = [], []
+    forms = forms or {}
     for name, s in sorted(sizes.items()):
         rt, init = s['runtime_size'], s['init_size']
         limit = TOKEN_LIMIT if name in TOKENS else EIP170
@@ -37,6 +44,12 @@ def check(sizes, baseline, libraries=()):
         allowed_init = baseline.get(f'{name}.init')
         if rt > CEILING:
             errs.append(f'{name}: runtime {rt} > {CEILING} (the ceiling, CTR-GOV-19)')
+        if name in forms:
+            t1, t2 = LINES[forms[name]]
+            if rt > t1:
+                errs.append(f'{name}: runtime {rt} > {t1} (the {forms[name]} T-1 line, 60 M)')
+            elif rt > t2:
+                notes.append(f'{name}: runtime {rt} > {t2} (the {forms[name]} T-2 line, 57 M; at most {t1})')
         if init > INIT_CEILING:
             errs.append(f'{name}: init {init} > {INIT_CEILING} (the init ceiling, CTR-GOV-19)')
         if init > EIP3860 and allowed_init is None:
@@ -49,23 +62,28 @@ def check(sizes, baseline, libraries=()):
             errs.append(f'{name}: runtime {rt} > {limit}')
         elif allowed is not None and rt > allowed:
             errs.append(f'{name}: runtime {rt} > baseline {allowed} (it may only shrink)')
-        elif allowed is not None and rt <= limit and name not in libraries:
+        elif allowed is not None and rt <= limit and name not in libraries and name not in forms:
             notes.append(f'{name}: fits ({rt} <= {limit}); remove it from the baseline')
     return errs, notes
 
 
-def above(sizes):
-    """The contracts whose runtime exceeds EIP-7954's 65,536 B, sorted."""
-    return sorted(name for name, s in sizes.items() if s['runtime_size'] > EIP7954)
+def forms_of(root, sizes, libraries):
+    """Each contract's form: a library by its head, a module by script/KindModules.sol's list (and the DEX's D), a release
+    by its kind's modules file (`<Kind>Modules.sol` -> `<Kind>`) or the DEX, else plain."""
+    import re
+    src = open(os.path.join(root, 'script', 'KindModules.sol')).read()
+    mods = set(re.findall(r'"\w+\.sol:(\w+)"', src))
+    rel = {f.removesuffix('Modules') for f in re.findall(r'"(\w+)\.sol:\w+"', src) if f.endswith('Modules')} | {'SCaaSDex'}
+    return {n: 'library' if n in libraries else 'module' if n in mods else 'release' if n in rel else 'plain' for n in sizes}
 
 
-def above_errors(listed, pinned):
-    """`_above64KiB` against the computed list: missing, sorted, equal in both directions."""
+def forms_errors(rows, pinned, computed):
+    """`_forms` names every row's form, the computed one."""
     if pinned is None:
-        return ['_above64KiB: missing from the baseline']
-    errs = [f'_above64KiB: not sorted ({pinned})'] if pinned != sorted(pinned) else []
-    errs += [f'{n}: runtime above {EIP7954}, not in _above64KiB' for n in listed if n not in pinned]
-    errs += [f'{n}: in _above64KiB, runtime not above {EIP7954}' for n in pinned if n not in listed]
+        return ['_forms: missing from the baseline']
+    errs = [f'{n}: a baseline row without a form in _forms' for n in sorted(rows) if n not in pinned]
+    errs += [f'{n}: _forms says {f}, the contract is a {computed.get(n)}' for n, f in sorted(pinned.items())
+             if computed.get(n) != f]
     return errs
 
 
@@ -86,16 +104,20 @@ def library_sizes(root):
 def main(argv):
     sizes = json.load(open(argv[1]))
     raw = json.load(open(argv[2]))
-    pinned = raw.get('_above64KiB')
     baseline = {k: v for k, v in raw.items() if not k.startswith('_')}
-    libraries = library_sizes(os.path.dirname(os.path.abspath(argv[2])))
+    root = os.path.dirname(os.path.abspath(argv[2]))
+    libraries = library_sizes(root)
     sizes.update(libraries)
+    forms = forms_of(root, sizes, libraries) if os.path.exists(os.path.join(root, 'script', 'KindModules.sol')) else {}
     missing = {k.removesuffix('.init') for k in baseline} - set(sizes)
-    errs, notes = check(sizes, baseline, libraries)
+    errs, notes = check(sizes, baseline, libraries, forms)
     errs += [f'{name}: in the baseline, no such contract' for name in sorted(missing)]
-    listed = above(sizes)
-    errs += above_errors(listed, pinned)
-    print(f'above {EIP7954} B: ' + (', '.join(f"{n} {sizes[n]['runtime_size']}" for n in listed) or 'none'))
+    if forms:
+        errs += forms_errors({k for k in baseline if not k.endswith('.init')}, raw.get('_forms'), forms)
+    big = [n for n in sizes if sizes[n]['runtime_size'] > EIP7954]
+    errs += [f'{n}: runtime {sizes[n]["runtime_size"]} > {EIP7954} (the size window is closed, T66b)' for n in sorted(big)]
+    print('largest per form: ' + ', '.join(f'{f} ' + max(((sizes[n]['runtime_size'], n) for n in sizes if forms.get(n) == f),
+                                                         default=(0, '-'))[1] for f in LINES))
     for n in notes:
         print('note:', n)
     for e in errs:
@@ -127,19 +149,18 @@ if __name__ == '__main__':
         assert check({'X': s(131_073)}, {'X': 131_073})[0]
         assert check({'A': s(1, 262_144)}, {'A.init': 262_144}) == ([], [])
         assert check({'A': s(1, 262_145)}, {'A.init': 262_145})[0]
-        # GD-5: the list above 64 KiB is a pin, stale in either direction is an error
-        assert above({'A': s(65_537), 'B': s(65_536), 'C': s(70_000)}) == ['A', 'C']
-        assert above_errors(['A', 'C'], ['A', 'C']) == []
-        assert above_errors(['A', 'C'], ['A'])
-        assert above_errors(['A'], ['A', 'C'])
-        assert above_errors(['A', 'C'], ['C', 'A'])
-        assert above_errors([], None)
-        with tempfile.TemporaryDirectory() as root:  # main() compares the pin with the computed list
-            sp, bp = os.path.join(root, 'sizes.json'), os.path.join(root, 'baseline.json')
-            json.dump({'A': s(70_000, 1)}, open(sp, 'w'))
-            for pin, rc in ((['A'], 0), ([], 1), (None, 1)):
-                json.dump({'A': 70_000} | ({} if pin is None else {'_above64KiB': pin}), open(bp, 'w'))
-                assert main(['', sp, bp]) == rc
+        # T66b: the form's T-1 line is an error, its T-2 line a notice; a formed row stays a ratchet when it fits
+        assert check({'M': s(35_570)}, {'M': 35_570}, (), {'M': 'module'})[0] == []
+        assert check({'M': s(35_571)}, {'M': 35_571}, (), {'M': 'module'})[0]
+        assert check({'M': s(33_781)}, {'M': 33_781}, (), {'M': 'module'})[1]
+        assert check({'R': s(20_000)}, {'R': 20_000}, (), {'R': 'release'}) == ([], [])
+        assert check({'R': s(35_387)}, {'R': 35_387}, (), {'R': 'release'})[0]
+        assert check({'P': s(35_287)}, {'P': 35_287}, (), {'P': 'plain'})[0]
+        assert check({'L': s(35_695)}, {'L': 35_695}, {'L'}, {'L': 'library'})[0]
+        assert forms_errors({'A'}, {'A': 'module'}, {'A': 'module'}) == []
+        assert forms_errors({'A'}, {}, {'A': 'module'})
+        assert forms_errors({'A'}, {'A': 'plain'}, {'A': 'module'})
+        assert forms_errors({'A'}, None, {})
         with tempfile.TemporaryDirectory() as root:
             os.makedirs(os.path.join(root, 'src', 'a'))
             open(os.path.join(root, 'src', 'a', 'L.sol'), 'w').close()

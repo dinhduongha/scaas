@@ -1,0 +1,46 @@
+M-L1 | test_L1_noInputNoOutput | 1
+M-L2 | test_L2_atMostEight | 1
+M-L3 | test_L3_distinctNonZero | 1
+M-L4 | test_L4_positionFields | 1
+M-L5 | test_L5_recipient | 1
+M-L6 | test_L6_relayer | 1
+M-L7 | none (survived) | 0
+M-L8 | none (survived) | 0
+M-L9 | test_L9_dexLane | 1
+M-L10 | test_L10_flags | 1
+M-L11 | test_L11_feeCap | 1
+M-L12 | test_L12_oneShotOutsideOnly | 1
+M-L13 | test_L7_L8_L13_dexAlone | 1
+M-L14 | test_L14_derivedFrom | 1
+M-L15 | test_L15_derivedRecipient | 1
+M-L16 | test_L16_dexVerify | 1
+M-L17 | test_L17_arrival | 1
+M-L18 | test_L18_positionGivenArrived | 1
+M-L19a | test_L19_interactions | 1
+M-L19b | test_L19_interactions | 1
+M-L19c | test_L19_approveOnManager | 1
+M-L21 | test_L21_receivedOwned | 1
+M-L22 | test_L22_readerListed | 1
+M-L23a | test_L23_poolRangeEncumbered | 1
+M-L23b | test_L23_unreadable | 1
+M-L24 | test_L24_minLiquidity, test_L29_feeCollectBound, test_L29_returnedPositionBound | 1
+M-L26a | test_L26_claimDoesNotCount, test_L26_outputAtDexNet | 1
+M-L26b | test_L26_recipientBackstop | 1
+M-L26c | test_L26_recipientBackstop | 1
+M-L27 | test_L26_recipientBackstop, test_L27_feeCeil | 1
+M-L28a | test_v4TopUpRefundAbovePull | 1
+M-L28b | test_L16_dexVerify, test_L29_feeCollectBound, test_L29_returnedPositionBound, test_L30_givenMovedAway, test_L31_positionLeft, test_gas_v4Mint, test_v2AddRefundFeeZero, test_v4Mint, test_v4PartialWithdraw, test_v4TopUpRefundAbovePull, test_v4WholeWithdrawBurns, test_v4WholeWithdrawReturnsEmpty | 1
+M-L29 | test_L29_feeCollectBound, test_L29_returnedPositionBound | 1
+M-L30 | test_v4WholeWithdrawBurns | 1
+M-L31 | test_L31_conservation | 1
+M-L32 | test_L32_moduleDirect | 1
+M-L34 | test_L34_guard | 1
+M-L37 | test_T10_noRestore, test_T1_caller, test_T2_relayer, test_T3_expiry, test_T4_lane, test_T6_amount, test_T8_signatureOwnDigest, test_T9_oneShot, test_T_positive, test_everyKind_pullsOnceThroughT7, test_kat_dexDigestAndDomain | 1
+M-L7 | test_L7_L8_L13_dexAlone | 1
+M-L8 | test_L7_L8_L13_dexAlone | 1
+M-T7b | test_L12_oneShot, test_L12_oneShotOutsideOnly, test_L16_dexVerify, test_L17_arrival, test_L19_approveOnManager, test_L19_interactions, test_L19_listed, test_L21_receivedOwned, test_L22_readerListed, test_L23_poolRangeEncumbered, test_L23_unreadable, test_L24_minLiquidity, test_L25_delivered, test_L26_claimDoesNotCount, test_L26_outputAtDexNet, test_L26_recipientBackstop, test_L27_feeCeil, test_L28_inputBelowSnapshot, test_L29_feeCollectBound, test_L29_returnedPositionBound, test_L30_givenMovedAway, test_L31_conservation, test_L31_positionLeft, test_L34_guard, test_L35_earlierRelease, test_L7_L8_L13_dexAlone, test_T7_digestUnderStaticcall, test_approveReset, test_createPairFirst, test_derivedSignerNativeRecipient, test_erc1271Signer, test_gas_v2AddScaasOutside, test_gas_v2AddTwoScaas, test_gas_v4Mint, test_scaasAndOutside, test_v2Add, test_v2AddRefundFeeZero, test_v2Withdraw, test_v4Mint, test_v4PartialWithdraw, test_v4TopUpRefundAbovePull, test_v4WholeWithdrawBurns, test_v4WholeWithdrawReturnsEmpty, test_zap | 1
+M-T1 | test_T1_caller | 1
+M-T5 | test_T5_oneInput | 1
+M-T7a | test_T7_oldDex, test_T7_wrongAnswers, test_everyKind_pullsOnceThroughT7 | 1
+M-T8b | test_L12_oneShot, test_L12_oneShotOutsideOnly, test_L16_dexVerify, test_L17_arrival, test_L19_approveOnManager, test_L19_interactions, test_L19_listed, test_L21_receivedOwned, test_L22_readerListed, test_L23_poolRangeEncumbered, test_L23_unreadable, test_L24_minLiquidity, test_L25_delivered, test_L26_claimDoesNotCount, test_L26_outputAtDexNet, test_L26_recipientBackstop, test_L27_feeCeil, test_L28_inputBelowSnapshot, test_L29_feeCollectBound, test_L29_returnedPositionBound, test_L30_givenMovedAway, test_L31_conservation, test_L31_positionLeft, test_L34_guard, test_L35_earlierRelease, test_L7_L8_L13_dexAlone, test_T10_noRestore, test_T1_caller, test_T2_relayer, test_T3_expiry, test_T4_lane, test_T6_amount, test_T7_digestUnderStaticcall, test_T8_signatureOwnDigest, test_T9_oneShot, test_T_positive, test_approveReset, test_createPairFirst, test_derivedSignerNativeRecipient, test_erc1271Signer, test_everyKind_pullsOnceThroughT7, test_gas_v2AddScaasOutside, test_gas_v2AddTwoScaas, test_gas_v4Mint, test_scaasAndOutside, test_v2Add, test_v2AddRefundFeeZero, test_v2Withdraw, test_v4Mint, test_v4PartialWithdraw, test_v4TopUpRefundAbovePull, test_v4WholeWithdrawBurns, test_v4WholeWithdrawReturnsEmpty, test_zap | 1
+M-T9 | test_T9_oneShot, test_everyKind_pullsOnceThroughT7 | 1

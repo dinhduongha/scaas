@@ -15,9 +15,9 @@ echo "LaZer $(git -C "$LZ" rev-parse HEAD); image $IMG"
 rc=0
 for r in "$@"; do
   t0=$(date +%s)
-  docker run --rm --network none --memory 2g --cpus 1 -v "$LZ/third_party":/lz/third_party:ro -v "$HERE/../codegen":/lz/codegen:ro \
+  docker run --rm --tmpfs /w --network none --memory 2g --cpus 1 -v "$LZ/third_party":/lz/third_party:ro -v "$HERE/../codegen":/lz/codegen:ro \
     -v "$HERE/${r}_params.sage":/lz/params.sage:ro --entrypoint /bin/sh "$IMG" -c \
-    'mkdir -p /tmp/w && cp -r /lz/codegen /tmp/w/ && ln -s /lz/third_party /tmp/w/third_party && cd /tmp/w/codegen && sage lnp-tbox-codegen.sage /lz/params.sage' \
+    'cp -r /lz/codegen /w/ && ln -s /lz/third_party /w/third_party && cd /w/codegen && sage lnp-tbox-codegen.sage /lz/params.sage' \
     > "$HERE/pqz_${r}_params.h" 2> "$HERE/$r.err" || rc=1
   echo "== $r: $(( $(date +%s) - t0 )) s, $(wc -c < "$HERE/pqz_${r}_params.h") B, sha256 $(sha256sum < "$HERE/pqz_${r}_params.h" | cut -c1-16)"
   sed -n -e '3,5p' -e '/^\/\/ total = /p' -e '/^\/\/ Proof size/{n;p}' "$HERE/pqz_${r}_params.h" | sed 's/^/   /'

@@ -1,49 +1,81 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {SaltedEIP712Core} from "../../src/common/SaltedEIP712.sol";
+
 import {Test, Vm} from "forge-std/Test.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {TokenStore} from "../../src/metatx/TokenStore.sol";
 import {NormalToken} from "../../src/metatx/NormalToken.sol";
 import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
+import {NormalTokenP, NormalTokenT, NormalTokenA} from "../../src/metatx/NormalTokenModules.sol";
+import {WrappedTokenP, WrappedTokenT, WrappedTokenA, WrappedTokenW} from "../../src/metatx/WrappedTokenModules.sol";
+import {ImplArgs} from "../../src/metatx/ITokenModule.sol";
 import {WrappedLib} from "../../src/metatx/WrappedLib.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, normalInit} from "./helpers/V2Fixture.sol";
-import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
+import {plainEnv, pinned, withModules, Catalogue} from "../helpers/Catalogue.sol";
 import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
+import {SaltedEIP712} from "../../src/common/SaltedEIP712.sol";
 
 /// Kind 2 stand-in: the public `NORMAL` kind under the confidential id and domain name, accepting `conf` (the factory's
-/// side only; the Zether layer, its verifiers and its chain gate are tested in `test/zether`).
+/// side only; the Zether layer, its verifiers and its chain gate are tested in `test/zether`). T66b: the bodies run in the
+/// modules, kind 0's (the face checks them against kind 0), so the hooks are overridden there.
 contract MockNormalZether is NormalToken {
-    constructor(uint16 v, Env memory env, bytes memory a) NormalToken(v, env, a) {}
+    constructor(address f_, bytes memory a) NormalToken(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_NORMAL_ZETHER; }
 
     function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
+}
 
-    function _init(TokenConfig memory cfg) internal override {
+contract MockNormalZetherP is NormalTokenP {
+    constructor(address f_, bytes memory a) NormalTokenP(f_, a) {}
+
+    function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
+}
+
+contract MockNormalZetherT is NormalTokenT {
+    constructor(address f_, bytes memory a) NormalTokenT(f_, a) {}
+
+    function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
+}
+
+contract MockNormalZetherA is NormalTokenA {
+    constructor(address f_, bytes memory a) NormalTokenA(f_, a) {}
+
+    function _domainName() internal pure override returns (string memory) { return "SCaaS ZetherToken"; }
+
+    function _init(IFactoryToken.TokenConfig memory cfg) internal override {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
-        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.owner, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
-            _roleBits(), _contractOnlyBits());
+        GovernanceLib.init(cfg.features, cfg.lockedFeatures, cfg.admin, cfg.grantDelay, cfg.rescueTo, cfg.roles, _validBits(),
+            _roleBits(), _contractOnlyBits(), address(0));
     }
 }
 
 /// Kind 3 stand-in: the public `WRAPPED` kind under the confidential id, its flags validated for kind 3.
 contract MockWrappedZether is WrappedToken {
-    constructor(uint16 v, Env memory env, bytes memory a) WrappedToken(v, env, a) {}
+    constructor(address f_, bytes memory a) WrappedToken(f_, a) {}
 
     function kind() public pure override returns (uint8) { return TokenStore.KIND_WRAPPED_ZETHER; }
+}
 
-    function _init(TokenConfig memory cfg) internal override {
+contract MockWrappedZetherA is WrappedTokenA {
+    constructor(address f_, bytes memory a) WrappedTokenA(f_, a) {}
+
+    function _init(IFactoryToken.TokenConfig memory cfg) internal override {
         _requireUnused(cfg, true, false, false, false);
-        WrappedLib.initToken(cfg, IS_HEDERA, TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS, _roleBits(),
-            _contractOnlyBits());
+        WrappedLib.initToken(cfg, _hedera(), TokenStore.KIND_WRAPPED_ZETHER, GovernanceBits.WRAPPED_BITS, _roleBits(),
+            _contractOnlyBits(), address(0));
     }
 }
 
@@ -61,10 +93,25 @@ contract FactoryZetherTest is Test {
     IOpenFactory.TokenKind constant UZ = IOpenFactory.TokenKind.WRAPPED_ZETHER;
 
     function setUp() public {
-        f = new OpenFactory(registrar, UID_, 0);
-        normalZ = MockNormalZether(Catalogue.plain(f, NZ, 1, type(MockNormalZether).creationCode, address(0), address(0), false));
-        undZ = MockWrappedZether(Catalogue.plain(f, UZ, 1, type(MockWrappedZether).creationCode, address(0),
-            address(0), false));
+        f = EnvKit.factory(registrar, UID_, 0);
+        address[] memory ms = new address[](3);
+        ms[0] = address(new MockNormalZetherP(address(f), ""));
+        ms[1] = address(new MockNormalZetherT(address(f), ""));
+        ms[2] = address(new MockNormalZetherA(address(f), ""));
+        normalZ = MockNormalZether(_release(NZ, type(MockNormalZether).creationCode, ms));
+        ms = new address[](4);
+        ms[0] = address(new WrappedTokenP(address(f), ""));
+        ms[1] = address(new WrappedTokenT(address(f), ""));
+        ms[2] = address(new MockWrappedZetherA(address(f), ""));
+        ms[3] = address(new WrappedTokenW(address(f), ""));
+        undZ = MockWrappedZether(payable(_release(UZ, type(MockWrappedZether).creationCode, ms)));
+    }
+
+    /// Release 1 of `k` from `code` on its mock modules `ms`, pinned in a plain env beside the kind's link closure (T66b).
+    function _release(IOpenFactory.TokenKind k, bytes memory code, address[] memory ms) internal returns (address) {
+        uint16 v = Catalogue.env(f, k, withModules(pinned(plainEnv(address(f), address(0), UID_, address(0), false), k), ms));
+        vm.prank(registrar);
+        return f.deployTokenImplementation(k, 1, v, code, abi.encode(ImplArgs(ms)), EnvKit.uidOf(address(f)));
     }
 
     function _conf() internal pure returns (IFactoryToken.TokenConfig memory c) {
@@ -82,32 +129,32 @@ contract FactoryZetherTest is Test {
 
     function _enable() internal {
         vm.startPrank(registrar);
-        f.setKindEnabled(NZ, true);
-        f.setKindEnabled(UZ, true);
+        f.setTokenKindEnabled(NZ, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(UZ, true, EnvKit.uidOf(address(f)));
         vm.stopPrank();
     }
 
     function test_confidentialKinds_offByDefault_registrarOnly() public {
-        assertFalse(f.kindEnabled(NZ));
-        assertFalse(f.kindEnabled(UZ));
+        assertFalse(f.tokenKindEnabled(NZ));
+        assertFalse(f.tokenKindEnabled(UZ));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NZ));
         f.createToken(NZ, 1, abi.encode(_conf()), "a");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, UZ));
         f.createToken(UZ, 1, abi.encode(_wrapped()), "a");
-        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
-        f.setKindEnabled(NZ, true);
+        vm.expectPartialRevert(IAdmin.NotAdmin.selector);
+        f.setTokenKindEnabled(NZ, true, EnvKit.uidOf(address(f)));
         vm.recordLogs();
         _enable();
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(logs.length, 2);
-        assertEq(logs[0].topics[0], IOpenFactory.KindEnabled.selector);
+        assertEq(logs[0].topics[0], IOpenFactory.TokenKindEnabled.selector);
         assertEq(abi.decode(logs[0].data, (bool)), true);
         address t = f.createToken(NZ, 1, abi.encode(_conf()), "on");
         assertTrue(f.isRegisteredToken(t));
         address w = f.createToken(UZ, 1, abi.encode(_wrapped()), "on");
-        assertEq(f.getWrapper(address(this), address(usd)), w, "the index reads underlyings() after initialize");
+        assertEq(f.getWrapper(nid(address(this)), address(usd)), w, "the index reads underlyings() after initialize");
         vm.prank(registrar);
-        f.setKindEnabled(NZ, false);
+        f.setTokenKindEnabled(NZ, false, EnvKit.uidOf(address(f)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NZ));
         f.createToken(NZ, 1, abi.encode(_conf()), "off again");
     }
@@ -126,7 +173,7 @@ contract FactoryZetherTest is Test {
 
     /// A public kind refuses every `conf` field, the two modes included.
     function test_publicKinds_refuseEveryConfField() public {
-        OpenFactory g = new OpenFactory(registrar, UID_, 0);
+        OpenFactory g = EnvKit.factory(registrar, UID_, 0);
         Catalogue.plain(g, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0),
             false);
         IFactoryToken.TokenConfig memory c = normalInit("P", "P", 0, 0, address(0), address(0));
@@ -149,14 +196,41 @@ contract FactoryZetherTest is Test {
         c.conf.auditorMode = 1;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
         g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a");
+        // round 3t (CTR-PQZ-36): the verifier fee and its cap are the PQZ kinds' (`_requireUnused`, kinds 0, 1, 8, 9)
+        c.conf.auditorMode = 0;
+        c.conf.verifierFee = 1;
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a");
+        (c.conf.verifierFee, c.conf.verifierFeeMax) = (0, 1);
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a");
+        c.conf.verifierFeeMax = 0;
+        // the three-key model (CTR-PQZ-37): the key-class flags are the PQZ kinds' too
+        c.conf.pqzOwnKey = true;
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a");
+        (c.conf.pqzOwnKey, c.conf.pqzOpening) = (false, true);
+        vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 4));
+        g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a");
+        c.conf.pqzOpening = false;
+        assertTrue(g.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a") != address(0), "control: all 0");
     }
 
     /// CTR-MTX-02: the confidential kinds sign under "SCaaS ZetherToken", the public ones under "SCaaS MetaToken".
-    function test_domainNameHook() public view {
-        (, string memory n,,,, bytes32 salt,) = normalZ.eip712Domain();
+    /// Chain-neutral releases (plan T72): on the clones (a release carries no env and builds no domain).
+    function test_domainNameHook() public {
+        vm.startPrank(registrar);
+        f.setTokenKindEnabled(NZ, true, EnvKit.uidOf(address(f)));
+        f.setTokenKindEnabled(UZ, true, EnvKit.uidOf(address(f)));
+        vm.stopPrank();
+        address t = f.createToken(NZ, 1, abi.encode(_conf()), "dom");
+        address w = f.createToken(UZ, 1, abi.encode(_wrapped()), "dom");
+        (, string memory n,,,, bytes32 salt,) = MockNormalZether(t).eip712Domain();
         assertEq(n, "SCaaS ZetherToken");
         assertEq(salt, UID_);
-        (, n,,,,,) = undZ.eip712Domain();
+        (, n,,,,,) = MockWrappedZether(payable(w)).eip712Domain();
         assertEq(n, "SCaaS MetaToken", "a kind that does not override keeps the base name");
+        vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
+        normalZ.eip712Domain();
     }
 }

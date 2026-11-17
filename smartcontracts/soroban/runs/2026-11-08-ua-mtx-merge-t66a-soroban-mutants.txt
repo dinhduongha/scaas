@@ -1,0 +1,9 @@
+# T66a Soroban (CTR-UA-32 kem_holder, CTR-UA-33 PopSlots / pop_slots_of) mutants, one at a time on contracts/ua-registry/src/lib.rs,
+# base 3d150ad6 plus the uncommitted T66a Soroban changes. Each: the file saved, the mutant applied, `scripts/capped
+# smartcontracts/scripts/test.sh soroban` run, the file restored from the saved copy in the same command and compared byte for
+# byte (the T66a changes are uncommitted, so `git checkout --` would drop them). Columns: mutant | test that went red | rc.
+kem-holder-msig: kem_holder returning true for MSIG | test_membership::records_count_accepted_slots_only, test_ua8::msig_pqz_sig_not_minimal_refused, test_ua8::ua8_classical_msig_with_kem, test_ua8::ua8_kem_rules, test_ua8::ua8_msig_kem_key_refused, test_ua8::ua8_msig_kem_record_refused, test_ua8::ua8_negatives_from_portable_json, test_ua8::ua8_relayer_msig_mixed_members, test_ua8::ua8_set_pqz_key_rules | rc=101
+view-from-accepted: pop_slots_of reads the bits of Accepted (what accept_membership writes), not PopSlots | test_membership::pop_slots_of_never_from_acceptance | rc=101
+accept-sets-popslots: accept_membership also sets its slot in PopSlots | test_membership::pop_slots_of_never_from_acceptance | rc=101
+hash-next-entry: pop_slots_of hashes slot k+1's sig (the next pop entry) | test_membership::pop_slots_of_never_from_acceptance, test_membership::pop_slots_of_rows | rc=101
+popslots-not-written: register_record never writes PopSlots | test_membership::pop_slots_of_never_from_acceptance, test_membership::pop_slots_of_rows | rc=101

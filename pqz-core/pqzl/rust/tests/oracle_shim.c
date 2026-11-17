@@ -375,7 +375,8 @@ pqz_shim_shake (unsigned which, const uint8_t *in, const uint32_t *alens, size_t
 }
 
 /* testkit::rand_grandom: intvec_grandom (n >= 1 one-limb elements, dom) then polyvec_grandom (2 polys, dom); out =
-   the n elements then the 128 coefficients */
+   the n elements then the 128 coefficients, or 128 x INT64_MIN when polyvec_grandom refused (log2o >= 24, review 3w
+   u1-2: its error is data here, so the intvec path stays compared) */
 int
 pqz_shim_grandom (const uint8_t seed[32], uint32_t dom, unsigned log2o, unsigned n, int64_t *out)
 {
@@ -388,12 +389,16 @@ pqz_shim_grandom (const uint8_t seed[32], uint32_t dom, unsigned log2o, unsigned
   intvec_grandom (r, log2o, seed, dom);
   for (i = 0; i < n; i++)
     *out++ = intvec_get_elem_i64 (r, i);
+  if (pqz_err != PQZ_OK)
+    return pqz_err;
   pqz_arena_mark (&mark);
   polyvec_alloc (pv, pqz_tx_ring, 2);
   polyvec_grandom (pv, log2o, seed, dom);
+  int refused = pqz_err != PQZ_OK;
+  pqz_err = PQZ_OK;
   for (i = 0; i < 2; i++)
     for (j = 0; j < 64; j++)
-      *out++ = int_get_i64 (poly_get_coeff (polyvec_get_elem (pv, i), j));
+      *out++ = refused ? INT64_MIN : int_get_i64 (poly_get_coeff (polyvec_get_elem (pv, i), j));
   pqz_arena_release (&mark);
   return pqz_err;
 }
@@ -561,6 +566,8 @@ pqz_shim_autostable (const uint8_t seed[32], uint32_t dom, int64_t bnd, unsigned
 #include "pqz_ds_params.h"
 #include "pqz_reg_params.h"
 #include "pqz_tx0_params.h"
+#include "pqz_txs0_params.h"
+#include "pqz_txs_params.h"
 #include "pqz_txm20_params.h"
 #include "pqz_txm2_params.h"
 #include "pqz_txm40_params.h"
@@ -628,6 +635,7 @@ params_abdlop (uint64_t **o, abdlop_params_srcptr a)
 }
 
 static const lnp_tbox_params_struct *const P[] = { pqz_reg,   pqz_tx,    pqz_tx0,   pqz_burn,  pqz_ds,   pqz_dr,
+                                                   pqz_txs,   pqz_txs0,
                                                    pqz_txm2,  pqz_txm4,  pqz_txm8,  pqz_txm20, pqz_txm40, pqz_txm80,
 #ifdef PQZ_TXM_OVERSIZE
                                                    pqz_txm16, pqz_txm160,

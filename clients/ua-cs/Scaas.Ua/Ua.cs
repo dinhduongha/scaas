@@ -67,8 +67,8 @@ public static partial class UA
          "fndsa512", "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe"];
 
     public static readonly string[] Purposes =
-        ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
-         "vc-anchor", "trade", "kem", "pqz-key", "membership"];
+        ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "payee-fee", "vp",
+         "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update"];
 
     public const string DomainType =
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)";
@@ -88,15 +88,23 @@ public static partial class UA
 
     public static readonly byte[] MsgTag = Keccak256(Utf8("scaas.ua.msg.v1"));
 
-    /// <summary>The governance bits 0-21 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the
-    /// app from smartcontracts/vectors/governance/governance_bits.json; bits 22-127 are free, 128-255 the application's bitLabel(bit).</summary>
+    /// <summary>The governance bits 0-31 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the
+    /// app from smartcontracts/vectors/governance/governance_bits.json; bits 32-127 are free, 128-255 the application's bitLabel(bit).</summary>
     public static readonly (string Name, string Type)[] GovernanceBits =
     [
         ("PAYABLE", "capability"), ("MINTABLE", "power"), ("BURNABLE", "capability"), ("RATE_ADJUSTABLE", "power"),
-        ("WRAP_DISABLEABLE", "power"), ("FREEZE", "power"), ("FORCE", "power"), ("PAUSE", "power"), ("ALLOWLIST", "capability"),
-        ("DENYLIST", "capability"), ("RECORD", "power"), ("LISTING", "power"), ("FEE_ROUTING", "power"), ("", "unused"), ("", "unused"),
+        ("WRAP_DISABLEABLE", "power"), ("FREEZE", "power"), ("FORCE", "power"), ("PAUSE", "power"), ("ALLOWLIST", "power"),
+        ("DENYLIST", "power"), ("RECORD", "power"), ("LISTING", "power"), ("FEE_ROUTING", "power"), ("", "unused"), ("", "unused"),
         ("ARBITRATE", "reserved"), ("CORRECT", "reserved"), ("RESCUABLE", "capability"), ("PUBLISH", "power"), ("DEPRECATE", "power"),
-        ("ENABLE_KIND", "power"), ("MODERATE", "power"),
+        ("ENABLE_KIND", "power"), ("MODERATE", "power"), ("OPERATOR_TRANSFER", "power"), ("TAX", "power"), ("PQZ_PROOF", "power"),
+        // group 3l (wrap limits spec 2026-11-10 §2): the hybrids' wrap controls
+        ("WRAP_LIMIT", "capability"), ("WRAP_LIST", "power"), ("REDEEMER", "power"),
+        // round 3s (CTR-GOV-24): 8, 9 the token's lists (powers), 28 the compliance registry check
+        ("KYC", "capability"),
+        // CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
+        ("CLOSED_MARKETS", "capability"),
+        // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
+        ("BURNER", "power"), ("SUPPLY_CAP_ADJUSTABLE", "capability"),
     ];
 
     public static Kind KindInfo(ushort kind) =>
@@ -213,6 +221,7 @@ public static partial class UA
     const string KemType = "UAKemRecord(bytes32 ua,uint64 version,uint8 scheme,bytes32 kemPkHash)";
     const string RecordType = "UAPortableRecord(bytes32 ua,uint16 kind,bytes32 pqzKeyHash,UAKemRecord kem)";
     const string PqzKeyType = "UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)";
+    const string PqzKeyVersionType = "UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)";
 
     /// <summary>The EIP-712 <c>encodeType</c> of each portable struct (primary, then the referenced types sorted by name).</summary>
     public static readonly IReadOnlyDictionary<string, string> PortableTypes = new Dictionary<string, string>
@@ -222,8 +231,25 @@ public static partial class UA
         ["UARegistration"] = "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" + KemType + RecordType,
         ["UAPqzKey"] = PqzKeyType,
         ["UAPqzKeyRecord"] = "UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" + PqzKeyType,
+        ["UAPqzKeyVersion"] = PqzKeyVersionType,
+        ["UAPqzKeyVersionRecord"] = "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)" + PqzKeyVersionType,
         ["UAMembership"] = "UAMembership(bytes32 ua,bytes32 member)",
+        // CTR-UA-44 (TODO 3ze): an msig's structure update on one registry
+        ["UAMsigUpdate"] = "UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,"
+            + "uint256 enabled,uint64 validUntilBlock)" + MsigMemberType,
+        ["UAMsigMember"] = MsigMemberType,
     };
+
+    const string MsigMemberType = "UAMsigMember(uint16 kind,bytes32 id,uint16 weight)";
+
+    /// <summary>CTR-UA-44: the typed <c>UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled, validUntilBlock}</c>,
+    /// <c>members</c> an EIP-712 array of <c>UAMsigMember</c>, <c>enabled</c> the uint256 bitmap as 32 big-endian bytes (bit i = slot i): what a
+    /// quorum of the stored structure signs for <c>updateMsig</c> on that one registry, under <c>UAMessage(MSIG, PURPOSE_MSIG_UPDATE, ·)</c>.</summary>
+    public static byte[] MsigUpdateDigest(byte[] ua, byte[] chainUid, byte[] registry, ulong version, ushort threshold,
+        IReadOnlyList<MsigMember> members, byte[] enabled, ulong validUntilBlock) =>
+        Typed(HashStruct("UAMsigUpdate", ua, chainUid, AddressWord(registry), Word(version), Word(threshold),
+            Keccak256(members.Select(m => HashStruct("UAMsigMember", Word(m.Kind), m.Id, Word(m.Weight))).ToArray()),
+            Sized(enabled, 32, "enabled"), Word(validUntilBlock)));
 
     public static byte[] PortableTypehash(string name) => Keccak256(Utf8(PortableTypes[name]));
 
@@ -265,9 +291,13 @@ public static partial class UA
     public static byte[] RegistrationDigest(byte[] ua, ushort kind, byte[] pqzKeyHash, byte[] kemRecordHash, byte[] pqzPopHash) =>
         Typed(HashStruct("UARegistration", PortableRecordHash(ua, kind, pqzKeyHash, kemRecordHash), pqzPopHash));
 
-    /// <summary><c>UAMessage(kind, PURPOSE_KEM, KemRecordDigest(ua, version, kemPk))</c>: what the UA signs for <c>setKemKey</c>.</summary>
+    /// <summary><c>UAMessage(kind, PURPOSE_KEM, KemRecordDigest(ua, version, kemPk))</c>: what the UA signs for <c>setKemKey</c>; a KEM holder only (UAKemHolder).</summary>
     public static byte[] KemRecordMessage(ushort kind, byte[] ua, ulong version, byte[] kemPk) =>
-        UAMessage(kind, PurposeTag("kem"), KemRecordDigest(ua, version, kemPk));
+        IsKemHolder(kind) ? UAMessage(kind, PurposeTag("kem"), KemRecordDigest(ua, version, kemPk))
+            : throw new UAException("UAKemHolder", $"0x{kind:x4} may not hold a KEM key");
+
+    /// <summary>A KEM key holder (CTR-UA-32, T66a): a single PQ kind only; an <c>msig</c> holds no KEM key (UAKemHolder, as the registry).</summary>
+    public static bool IsKemHolder(ushort kind) => IsPqzHolder(kind);
 
     static bool Holds(ushort kind, byte[] keyData, Func<byte[], byte[]?>? inner) => IsPqzHolder(kind) || (kind == 0x0120 && keyData.Length > 0 && MsigPqzEligible(keyData, inner));
 
@@ -297,19 +327,15 @@ public static partial class UA
     /// <summary>The portable PoP message of a registration (UA-8 P1, P2). Attributes: <paramref name="pqzKey"/> with its proof
     /// <paramref name="pqzPop"/> (or only its hash; a relayer may hold only that) and the initial KEM key <paramref name="kemPk"/>
     /// (its record is always version 0, owner 2026-10-31); null / empty = absent.
-    /// Only holders may carry them (UAPqzHolder, UAKemHolder; an <c>msig</c> needs <paramref name="keyData"/> to show it is PQ-eligible);
+    /// Only holders may carry them (UAPqzHolder: an <c>msig</c> needs <paramref name="keyData"/> to show it is PQ-eligible; UAKemHolder: a single PQ kind only, never an <c>msig</c>);
     /// a PQZ key always comes with its proof hash and only with it (UAPqzPopHash).</summary>
     public static HolderPop HolderPopMessage(ushort kind, byte[] ua, byte[] keyData, byte[]? pqzKey = null, byte[]? pqzPop = null,
         byte[]? pqzPopHash = null, byte[]? kemPk = null, Func<byte[], byte[]?>? inner = null)
     {
         if (pqzKey is { Length: 0 }) pqzKey = null;
         var kem = kemPk is { Length: > 0 } ? kemPk : null; // null / [] = absent
-        if (pqzKey is not null || kem is not null)
-        {
-            var holder = Holds(kind, keyData, inner);
-            if (pqzKey is not null && !holder) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
-            if (kem is not null && !holder) throw new UAException("UAKemHolder", $"0x{kind:x4} may not hold a KEM key");
-        }
+        if (pqzKey is not null && !Holds(kind, keyData, inner)) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
+        if (kem is not null && !IsKemHolder(kind)) throw new UAException("UAKemHolder", $"0x{kind:x4} may not hold a KEM key");
         var popHash = ProofHashOf(pqzPop, pqzPopHash);
         if ((pqzKey is not null) != popHash.Any(b => b != 0)) throw new UAException("UAPqzPopHash", "key and proof hash go together");
         var keyHash = pqzKey is null ? new byte[32] : PqzKeyHashOf(pqzKey);
@@ -352,6 +378,38 @@ public static partial class UA
         var tag = PurposeTag("pqz-key");
         var msg = UAMessage(kind, tag, recordDigest);
         return new(keyHash, popHash, keyDigest, recordDigest, msg, UAMessage(0x0142, tag, keyDigest), kind == 0x0120 ? MemberDigest(ua, msg) : null);
+    }
+
+    /// <summary>Group 3g: the typed <c>UAPqzKeyVersion{ua, version, pqzKeyHash}</c>, what version v &gt;= 1's R_REG proves over.</summary>
+    public static byte[] PqzKeyVersionDigest(byte[] ua, ulong version, byte[] pqzKeyHash) => Typed(HashStruct("UAPqzKeyVersion", ua, Word(version), pqzKeyHash));
+
+    /// <summary>Group 3g: the typed <c>UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}</c>, what the UA signs for
+    /// version v &gt;= 1 under <c>UAMessage(kind, PURPOSE_PQZ_KEY, ·)</c>.</summary>
+    public static byte[] PqzKeyVersionRecordDigest(byte[] ua, ulong version, byte[] pqzKeyHash, byte[] pqzPopHash) =>
+        Typed(HashStruct("UAPqzKeyVersionRecord", HashStruct("UAPqzKeyVersion", ua, Word(version), pqzKeyHash), pqzPopHash));
+
+    /// <summary>PQZ key version v &gt;= 1 of <c>setPqzKey(ua, version, ...)</c>: <c>Message</c> is what the UA signs, <c>PqzRegMessage</c> what the key's R_REG proves over.</summary>
+    public sealed record PqzKeyVersionRecord(byte[] PqzKeyHash, byte[] PqzPopHash, byte[] VersionDigest, byte[] RecordDigest, byte[] Message,
+        byte[] PqzRegMessage, byte[]? MemberDigest);
+
+    /// <summary>Group 3g (KV-1). <paramref name="stored"/>: the UA's stored versions (the chain's <c>pqzKeyAt</c>). Refuses version 0 (UAPqzKeySet: a
+    /// new key gets a new version), a version other than latest + 1 or no version 0 (UAPqzKeyVersion), a key a stored version holds (UAKeyInUse).</summary>
+    public static PqzKeyVersionRecord PqzKeyVersionRecordMessage(ushort kind, byte[] ua, byte[] keyData, ulong version, byte[] pqzKey, byte[]? pqzPop = null,
+        byte[]? pqzPopHash = null, IReadOnlyList<(ulong Version, byte[] PqzKeyHash)>? stored = null, Func<byte[], byte[]?>? inner = null)
+    {
+        if (!Holds(kind, keyData, inner)) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
+        if (version == 0) throw new UAException("UAPqzKeySet", "version 0 is write-once: a new key gets a new version");
+        stored ??= [];
+        if (!stored.Any(s => s.Version == 0) || version != stored.Max(s => s.Version) + 1) throw new UAException("UAPqzKeyVersion", version.ToString());
+        var keyHash = PqzKeyHashOf(pqzKey);
+        if (stored.Any(s => s.PqzKeyHash.SequenceEqual(keyHash))) throw new UAException("UAKeyInUse", "a stored version holds this key");
+        var popHash = ProofHashOf(pqzPop, pqzPopHash);
+        if (popHash.All(b => b == 0)) throw new UAException("UAPqzPopHash", "required");
+        var versionDigest = PqzKeyVersionDigest(ua, version, keyHash);
+        var recordDigest = PqzKeyVersionRecordDigest(ua, version, keyHash, popHash);
+        var tag = PurposeTag("pqz-key");
+        var msg = UAMessage(kind, tag, recordDigest);
+        return new(keyHash, popHash, versionDigest, recordDigest, msg, UAMessage(0x0142, tag, versionDigest), kind == 0x0120 ? MemberDigest(ua, msg) : null);
     }
 
     /// <summary>The message R_REG proves over: <c>UAMessage(0x0142, POP_V2, PortableRecordDigest(ua, kind, keyHash(0x0142, pqzKey),
@@ -418,6 +476,31 @@ public static partial class UA
         if (!m.Success) throw new UAException("UAIdFormat", text);
         var h = m.Groups[1].Value.ToLowerInvariant();
         return "0x" + (h.Length == 64 && h.StartsWith(new string('0', 24), StringComparison.Ordinal) ? h[24..] : h);
+    }
+
+    [GeneratedRegex(@"\A0x([0-9a-fA-F]{64})\z")]
+    private static partial Regex Id32Pattern();
+
+    /// <summary>How a client shows a bytes32 id before the user signs (ua-mtx-merge spec §6, MD-9): the EIP-55 address of an id in
+    /// the native space (top 96 bits zero, CTR-UA-03), else the URN <c>urn:scaas:ua:v1:&lt;kind name&gt;:&lt;hex32&gt;</c>
+    /// (NET-ALL-21) under <paramref name="kind"/>, the id's registry kind (0 = none known: refused, never an address).
+    /// <paramref name="id"/> is <c>0x</c> + 64 hex digits.</summary>
+    public static string IdDisplay(string id, ushort kind)
+    {
+        var m = Id32Pattern().Match(id);
+        if (!m.Success) throw new UAException("UAIdFormat", id);
+        var h = m.Groups[1].Value.ToLowerInvariant();
+        if (h.StartsWith(new string('0', 24), StringComparison.Ordinal))
+        {
+            var a = h[24..].ToCharArray();
+            var d = Keccak256(Encoding.ASCII.GetBytes(a));
+            for (var i = 0; i < a.Length; i++)
+                if (((d[i / 2] >> (i % 2 == 0 ? 4 : 0)) & 0xf) >= 8) a[i] = char.ToUpperInvariant(a[i]);
+            return "0x" + new string(a);
+        }
+        var k = KindInfo(kind);
+        if (k.Native) throw new UAException("UAKindNotDerived", k.Name);
+        return $"urn:scaas:ua:v1:{k.Name}:{h}";
     }
 
     /// <summary><c>u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)</c>.</summary>

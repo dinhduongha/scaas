@@ -26,6 +26,18 @@ pqzl = { path = "../pqzl/rust", optional = true, default-features = false, featu
 # feature `prove` only: the op 7 sender memo (P6-ANON §5.4, CTR-PQZ-23 / CTR-ZTH-50: HKDF-SHA256)
 hkdf = { version = "=0.12.4", optional = true }
 sha2 = { version = "=0.10.9", optional = true }
+# feature `prove` only: the sealed opening of opening tokens (spec three-key model K3-6, K3-6b, K3-7): CTR-UA-32's
+# scheme 1 (ML-KEM-1024 + X25519, the pins of ua-rs `wallet/kem.rs`: X25519 is curve25519-dalek 4's clamped Montgomery
+# ladder) and UA-7's one-shot AES-256-GCM; no RNG (the coins come from the leg seed). ml-kem's `zeroize`: the
+# decapsulation key is cleared on drop (review 3w-delta U2-1)
+ml-kem = { version = "=0.3.4", default-features = false, features = ["zeroize"], optional = true }
+curve25519-dalek = { version = "4", default-features = false, features = ["zeroize"], optional = true }
+aes-gcm = { version = "=0.10.3", default-features = false, features = ["aes", "alloc", "zeroize"], optional = true }
+# 3zh Fable F-5: the KEK's AES key schedule and the GHASH key are cleared on drop (the zeroize features of aes-gcm's own
+# aes / ghash / polyval, the versions aes-gcm resolves; aes is pqzl's pin too); no API is used from these three
+aes = { version = "=0.8.4", default-features = false, features = ["zeroize"], optional = true }
+ghash = { version = "=0.5.1", default-features = false, features = ["zeroize"], optional = true }
+polyval = { version = "=0.6.2", default-features = false, features = ["zeroize"], optional = true }
 
 [build-dependencies]
 # feature `pqzl-c` only: build.rs compiles the C core
@@ -54,10 +66,10 @@ pqzl-rust = ["dep:pqzl"]
 pqzl-c = ["dep:cc"]
 # prover side for clients (P6h): keygen, enc, dec, prove (PQZL and PQZH), witness layouts, test fixtures, the op 7
 # memo
-prove = ["dep:hkdf", "dep:sha2"]
+prove = ["dep:hkdf", "dep:sha2", "dep:ml-kem", "dep:curve25519-dalek", "dep:aes-gcm", "dep:aes", "dep:ghash", "dep:polyval"]
 # fault-injection and measurement hooks (pqzl::TEST_*, reinit, arena_bytes): tests and the bench only, never in a
 # production build
-test-hooks = ["pqzl?/test-hooks"]
+test-hooks = ["pqzl?/test-hooks", "pqzh-ligero?/test-hooks"]
 # the libFuzzer build (pqz-core/fuzz, plan Task 10 / D12): `pqzl::test_mutate` (decode a PQZL proof, change a field,
 # re-encode); with `pqzl-c` the C core with ASan + UBSan + sanitizer coverage and pqz_rel.c's test hooks
 # (pqz_test_mutate), no symbol scan (the sanitizer runtime is outside the library). Never in a production build.
@@ -87,6 +99,20 @@ required-features = ["prove", "test-hooks"]
 [[test]]
 name = "verify_only"
 required-features = ["prove", "test-hooks"]
+
+# opening tokens (spec three-key model §14 items 2, 13, 14, 19, 21): split randomness, the sealed opening, the holder check
+[[test]]
+name = "opening"
+required-features = ["prove"]
+
+[[test]]
+name = "recover_versions"
+required-features = ["prove"]
+
+# round 3t (verifier fee spec §15 (9)): real proofs at fee = txFee + verifierFee, fee +- 1, the over-spend
+[[test]]
+name = "fee_word"
+required-features = ["prove"]
 
 [profile.release]
 debug = 1

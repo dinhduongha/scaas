@@ -1,0 +1,21 @@
+# T66b 3.1d: execution gas of each UARegistryAuxLib entry, the core's reads and the five *Digest views (auxgas/AuxGas.t.sol, GasProbe, isolate), 5a8fccda -> 3.1d. UNAUDITED.
+setKemKey mldsa44 v1 | 3,099,846 -> 3,099,922 | +76
+setPqzKey mldsa44 v0 (16,384 B key) | 26,309,436 -> 26,309,471 | +35
+storePqzPop mldsa44 v0 (proven by the mock) | 1,010,673 -> 1,010,729 | +56
+storePqzPop again (no-op) | 17,814 -> 17,859 | +45
+registrationOf mldsa44 | 37,047 -> 37,047 | +0
+uaCount | 11,102 -> 11,102 | +0
+uaAt | 13,510 -> 13,477 | -33
+uaPage | 14,426 -> 14,404 | -22
+uaIndex | 10,185 -> 10,174 | -11
+popOf mldsa44 | 20,340 -> 20,407 | +67
+popSlotsOf (no msig) | 12,727 -> 12,705 | -22
+webAuthnKeyOf (other kind) | 10,405 -> 10,383 | -22
+pqzPopOf v0 | 19,557 -> 19,535 | -22
+pqzKeySigOf v0 | 17,475 -> 17,542 | +67
+registrationDigest | 8,184 -> 8,129 | -55
+portableRecordDigest | 7,985 -> 7,982 | -3
+pqzKeyRecordDigest | 7,861 -> 7,914 | +53
+pqzKeyVersionDigest | 7,905 -> 7,825 | -80
+pqzKeyVersionRecordDigest | 8,104 -> 8,090 | -14
+cacheExpandedKey mldsa44 part 0 | 40,314,380 -> 40,314,288 | -92

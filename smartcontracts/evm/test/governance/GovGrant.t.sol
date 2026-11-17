@@ -12,9 +12,10 @@ import {WrappedToken} from "../../src/metatx/WrappedToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
+import {IAdmin} from "../../src/governance/IAdmin.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {GovernanceLib} from "../../src/governance/GovernanceLib.sol";
-import {GovernanceBase, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
+import {GovernanceBase, GovernanceBaseCore, GovernanceUse} from "../../src/governance/GovernanceBase.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
@@ -22,6 +23,7 @@ import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
 import {BranchApp} from "./GovAttackV2.t.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A token whose every transfer out calls its hook: the way into a running settlement.
 contract GovHookERC20 is MockERC20 {
@@ -42,14 +44,16 @@ contract TopBandApp is GovernanceBase {
     uint256 internal constant BITS = (uint256(1) << 128) | (uint256(1) << 255);
     mapping(uint8 => uint256) public acted;
 
-    constructor(address owner_) GovernanceBase(address(0)) {
+    constructor(address owner_) GovernanceBaseCore(address(0)) {
         GovernanceLib.Roles memory none;
-        GovernanceLib.init(BITS, 0, nid(owner_), 0, address(0), none, BITS, BITS, 0);
+        GovernanceLib.init(BITS, 0, nid(owner_), 0, address(0), none, BITS, BITS, 0, address(0));
     }
 
     function _guardIn() internal pure override returns (bool) { return false; }
     function _guardOut(bool) internal pure override {}
     function _caller() internal view override returns (address) { return msg.sender; }
+    /// @dev A test app has no chain word (not factory-made); its renounce is not exercised by chain (Fable recheck-2 P3-1).
+    function _govChainUid() internal pure override returns (bytes32) { return bytes32(0); }
     function _validBits() internal pure override returns (uint256) { return BITS; }
     function _roleBits() internal pure override returns (uint256) { return BITS; }
     function _contractOnlyBits() internal pure override returns (uint256) { return 0; }
@@ -74,10 +78,31 @@ contract GovDexHolder {
 
     function hook() external {
         if (errs.length != 0) return;
-        try dex.setMarket(address(0x51), address(0x52), true) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setExchangeTarget(address(0x53), true) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setListedOnly(true) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
-        try dex.setFeeSplit(0, address(0xAA)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setMarket(address(0x51), address(0x52), true, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setExchangeTarget(address(0x53), true, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setListedOnly(true, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.setFeeSplit(0, address(0xAA), EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+    }
+}
+
+/// T66b §4.2 (the DEX's admin module D): the same holder calls the DEX's governance entries that its stubs forward to D,
+/// from inside a settlement, and records how each answered (0: it ran).
+contract GovDexForwardHolder {
+    SCaaSDex public dex;
+    bytes4[] public errs;
+
+    function setDex(SCaaSDex d) external { dex = d; }
+
+    function n() external view returns (uint256) { return errs.length; }
+
+    function hook() external {
+        if (errs.length != 0) return;
+        bytes32 other = bytes32(uint256(0x51));
+        try dex.grantRole(GovernanceBits.LISTING, other, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.revokeRole(GovernanceBits.LISTING, bytes32(uint256(uint160(address(this)))), EnvKit.codeUidOf(address(dex))) { errs.push(0); }
+        catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.transferAdmin(other, EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.renounceAdmin(EnvKit.codeUidOf(address(dex))) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
     }
 }
 
@@ -98,7 +123,7 @@ contract GovGrantTest is Test {
 
     function setUp() public {
         vm.warp(1_800_000_000);
-        f = new OpenFactory(address(this), UID, 0);
+        f = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
         t = _token("t", 0);
@@ -111,7 +136,7 @@ contract GovGrantTest is Test {
         c.decimals = 18;
         c.features = (1 << 0) | (1 << 1) | (1 << 2);
         c.lockedFeatures = locked;
-        c.owner = nid(OWNER);
+        c.admin = nid(OWNER);
         return NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), salt));
     }
 
@@ -121,18 +146,18 @@ contract GovGrantTest is Test {
 
     function _set(address holder, IGovernance.GrantTerms memory g) internal {
         vm.prank(OWNER);
-        t.setGrant(MINT, nid(holder), g);
+        t.setGrant(MINT, nid(holder), g, EnvKit.codeUidOf(address(t)));
     }
 
     function _mint(address who, uint256 v) internal {
         vm.prank(who);
-        t.mint(TO, v);
+        t.mint(TO, v, EnvKit.codeUidOf(address(t)));
     }
 
     function _refused(address who, uint256 v, bytes memory err) internal {
         vm.prank(who);
         vm.expectRevert(err);
-        t.mint(TO, v);
+        t.mint(TO, v, EnvKit.codeUidOf(address(t)));
     }
 
     function _ex(uint8 field) internal pure returns (bytes memory) {
@@ -141,7 +166,7 @@ contract GovGrantTest is Test {
 
     function test_wholeShapeHasNoRecord() public {
         vm.prank(OWNER);
-        t.grantRole(MINT, nid(MANAGER));
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         _mint(MANAGER, type(uint128).max);
         assertTrue(t.hasRole(MINT, nid(MANAGER)));
         assertEq(t.grantOf(MINT, nid(MANAGER)).spentTotal, 0);
@@ -198,7 +223,7 @@ contract GovGrantTest is Test {
         _set(MANAGER, g);
         vm.prank(MANAGER);
         vm.expectRevert(_ex(1));
-        t.mintToUA(bytes32(uint256(1) << 200), 6);
+        t.mintToUA(bytes32(uint256(1) << 200), 6, EnvKit.codeUidOf(address(t)));
     }
 
     function test_editNeverRefreshesABudget() public {
@@ -211,7 +236,7 @@ contract GovGrantTest is Test {
         assertEq(t.grantOf(MINT, nid(MANAGER)).uses, 1);
         _refused(MANAGER, 11, _ex(2));
         vm.prank(OWNER);
-        t.revokeRole(MINT, nid(MANAGER));
+        t.revokeRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         _set(MANAGER, g);
         _refused(MANAGER, 11, _ex(2)); // revoke, then grant again, keeps the spent as well
     }
@@ -229,8 +254,8 @@ contract GovGrantTest is Test {
     function test_leafDebitsItsParent() public {
         _manager(100);
         vm.startPrank(MANAGER);
-        t.setGrant(MINT, nid(OFFICER), _leafTerms(60));
-        t.setGrant(MINT, nid(OFFICER2), _leafTerms(60));
+        t.setGrant(MINT, nid(OFFICER), _leafTerms(60), EnvKit.codeUidOf(address(t)));
+        t.setGrant(MINT, nid(OFFICER2), _leafTerms(60), EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
         assertEq(t.holderCount(MINT), 3);
         _mint(OFFICER, 50);
@@ -255,50 +280,50 @@ contract GovGrantTest is Test {
         g.delegable = true;
         _setLeaf(g, 6);
         vm.prank(MANAGER);
-        t.setGrant(MINT, nid(OFFICER), _leafTerms(60)); // the positive control
+        t.setGrant(MINT, nid(OFFICER), _leafTerms(60), EnvKit.codeUidOf(address(t))); // the positive control
         // scope, on a contract whose power reads it: the order is the contract's (equality by default)
         BranchApp a = new BranchApp(OWNER);
         IGovernance.GrantTerms memory p = _open();
         (p.total, p.delegable, p.scope) = (100, true, bytes32(uint256(7)));
         vm.prank(OWNER);
-        a.setGrant(128, nid(MANAGER), p);
+        a.setGrant(128, nid(MANAGER), p, EnvKit.codeUidOf(address(a)));
         (p.total, p.delegable, p.scope) = (10, false, bytes32(uint256(8)));
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(7)));
-        a.setGrant(128, nid(OFFICER), p);
+        a.setGrant(128, nid(OFFICER), p, EnvKit.codeUidOf(address(a)));
         p.scope = bytes32(uint256(7));
         vm.prank(MANAGER);
-        a.setGrant(128, nid(OFFICER), p);
+        a.setGrant(128, nid(OFFICER), p, EnvKit.codeUidOf(address(a)));
     }
 
     function _setLeaf(IGovernance.GrantTerms memory g, uint8 field) internal {
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, field));
-        t.setGrant(MINT, nid(OFFICER), g);
+        t.setGrant(MINT, nid(OFFICER), g, EnvKit.codeUidOf(address(t)));
     }
 
     function test_onlyDelegableGrants_andOnlyItsOwnLeaves() public {
         vm.prank(OFFICER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, OFFICER));
-        t.setGrant(MINT, nid(OFFICER2), _leafTerms(1));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, OFFICER));
+        t.setGrant(MINT, nid(OFFICER2), _leafTerms(1), EnvKit.codeUidOf(address(t)));
         IGovernance.GrantTerms memory g = _open();
         _set(OFFICER, g); // limited, not delegable
         vm.prank(OFFICER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, OFFICER));
-        t.setGrant(MINT, nid(OFFICER2), _leafTerms(1));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, OFFICER));
+        t.setGrant(MINT, nid(OFFICER2), _leafTerms(1), EnvKit.codeUidOf(address(t)));
         _manager(100);
         vm.prank(MANAGER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, MANAGER));
-        t.setGrant(MINT, nid(OFFICER), _leafTerms(1)); // not its leaf
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, MANAGER));
+        t.setGrant(MINT, nid(OFFICER), _leafTerms(1), EnvKit.codeUidOf(address(t))); // not its leaf
     }
 
     function test_revokingTheParentKillsLeaves_andAGrantBackDoesNotRevive() public {
         _manager(100);
         vm.prank(MANAGER);
-        t.setGrant(MINT, nid(OFFICER), _leafTerms(60));
+        t.setGrant(MINT, nid(OFFICER), _leafTerms(60), EnvKit.codeUidOf(address(t)));
         _mint(OFFICER, 1);
         vm.prank(OWNER);
-        t.revokeRole(MINT, nid(MANAGER));
+        t.revokeRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         _refused(OFFICER, 1, _ex(7));
         _manager(100);
         _refused(OFFICER, 1, _ex(7));
@@ -307,70 +332,70 @@ contract GovGrantTest is Test {
     function test_grantorRevokesItsLeaf_noOneElse() public {
         _manager(100);
         vm.prank(MANAGER);
-        t.setGrant(MINT, nid(OFFICER), _leafTerms(60));
+        t.setGrant(MINT, nid(OFFICER), _leafTerms(60), EnvKit.codeUidOf(address(t)));
         vm.prank(OFFICER2);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.NotOwner.selector, OFFICER2));
-        t.revokeRole(MINT, nid(OFFICER));
+        vm.expectRevert(abi.encodeWithSelector(IAdmin.NotAdmin.selector, OFFICER2));
+        t.revokeRole(MINT, nid(OFFICER), EnvKit.codeUidOf(address(t)));
         vm.prank(MANAGER);
-        t.revokeRole(MINT, nid(OFFICER));
+        t.revokeRole(MINT, nid(OFFICER), EnvKit.codeUidOf(address(t)));
         assertFalse(t.hasRole(MINT, nid(OFFICER)));
         assertEq(t.holderCount(MINT), 1);
     }
 
     function test_holderCount_idempotent_andRenounce() public {
         vm.startPrank(OWNER);
-        t.grantRole(MINT, nid(MANAGER));
-        t.grantRole(MINT, nid(MANAGER));
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         assertEq(t.holderCount(MINT), 1);
         vm.stopPrank();
         _set(MANAGER, _open());
         assertEq(t.holderCount(MINT), 1, "whole to limited counts once");
         vm.prank(MANAGER);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         assertEq(t.holderCount(MINT), 0);
     }
 
     function test_renounceRefusedWhileAnUnlockedBitHasHolders() public {
         vm.startPrank(OWNER);
-        t.grantRole(MINT, nid(MANAGER));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.OwnerHasHolders.selector, MINT));
-        t.renounceOwnership();
-        t.revokeRole(MINT, nid(MANAGER));
-        t.renounceOwnership();
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, MINT));
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
+        t.revokeRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
-        assertEq(t.owner(), bytes32(0));
+        assertEq(t.admin(), bytes32(0));
     }
 
     function test_renounceWithALockedBitsHolderSurvives() public {
         NormalToken l = _token("l", 1 << MINT);
         vm.startPrank(OWNER);
-        l.grantRole(MINT, nid(MANAGER));
-        l.renounceOwnership();
+        l.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(l)));
+        l.renounceAdmin(EnvKit.codeUidOf(address(l)));
         vm.stopPrank();
-        assertEq(l.owner(), bytes32(0));
+        assertEq(l.admin(), bytes32(0));
         vm.prank(MANAGER);
-        l.mint(TO, 1);
+        l.mint(TO, 1, EnvKit.codeUidOf(address(l)));
     }
 
     function test_renounceWithADisabledBitsHolder() public {
         vm.startPrank(OWNER);
-        t.grantRole(MINT, nid(MANAGER));
-        t.disableFeature(MINT);
-        t.renounceOwnership();
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
+        t.disableFeature(MINT, EnvKit.codeUidOf(address(t)));
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
-        assertEq(t.owner(), bytes32(0));
+        assertEq(t.admin(), bytes32(0));
     }
 
     function test_refusals() public {
         vm.startPrank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(128)));
-        t.grantRole(128, nid(MANAGER)); // an application bit this kind does not have, no band refusal (CTR-GOV-10)
+        t.grantRole(128, nid(MANAGER), EnvKit.codeUidOf(address(t))); // an application bit this kind does not have, no band refusal (CTR-GOV-10)
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, MetaTxLib.UA_POOL));
-        t.grantRole(MINT, nid(MetaTxLib.UA_POOL));
+        t.grantRole(MINT, nid(MetaTxLib.UA_POOL), EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.RoleAccountPool.selector, MINT, MetaTxLib.SHIELD_POOL));
-        t.setGrant(MINT, nid(MetaTxLib.SHIELD_POOL), _open());
+        t.setGrant(MINT, nid(MetaTxLib.SHIELD_POOL), _open(), EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(0)));
-        t.setGrant(0, nid(MANAGER), _open()); // a capability has no holder
+        t.setGrant(0, nid(MANAGER), _open(), EnvKit.codeUidOf(address(t))); // a capability has no holder
         vm.stopPrank();
     }
 
@@ -380,8 +405,8 @@ contract GovGrantTest is Test {
         TopBandApp a = new TopBandApp(OWNER);
         assertEq(a.features(), (uint256(1) << 128) | (uint256(1) << 255));
         vm.startPrank(OWNER);
-        a.grantRole(128, nid(MANAGER));
-        a.grantRole(255, nid(MANAGER));
+        a.grantRole(128, nid(MANAGER), EnvKit.codeUidOf(address(a)));
+        a.grantRole(255, nid(MANAGER), EnvKit.codeUidOf(address(a)));
         vm.stopPrank();
         vm.startPrank(MANAGER);
         a.act(128);
@@ -392,11 +417,11 @@ contract GovGrantTest is Test {
         IGovernance.GrantTerms memory g = _open();
         g.maxUses = 1;
         vm.prank(OWNER);
-        a.setGrant(255, nid(OFFICER), g);
+        a.setGrant(255, nid(OFFICER), g, EnvKit.codeUidOf(address(a)));
         vm.prank(OFFICER);
         a.act(255);
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.owner, c.features) = ("G", "G", 18, nid(OWNER), 1 | (uint256(1) << 200));
+        (c.name, c.symbol, c.decimals, c.admin, c.features) = ("G", "G", 18, nid(OWNER), 1 | (uint256(1) << 200));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(200)));
         f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "b");
     }
@@ -405,7 +430,7 @@ contract GovGrantTest is Test {
     /// it lacks, and the role of a bit it lacks is no role.
     function test_bits64To127AreScaasBits() public {
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.owner) = ("G", "G", 18, nid(OWNER));
+        (c.name, c.symbol, c.decimals, c.admin) = ("G", "G", 18, nid(OWNER));
         c.features = 1 | (uint256(1) << 64);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureInvalidForKind.selector, uint8(64)));
         f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "s");
@@ -414,16 +439,16 @@ contract GovGrantTest is Test {
         f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "s");
         vm.startPrank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(127)));
-        t.grantRole(127, nid(MANAGER));
+        t.grantRole(127, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.NoSuchRole.selector, uint8(128)));
-        t.grantRole(128, nid(MANAGER));
+        t.grantRole(128, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         vm.stopPrank();
     }
 
     function _word(IGovernance target, uint8 bit, IGovernance.GrantTerms memory g, uint8 field) internal {
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantWordRefused.selector, bit, field));
-        target.setGrant(bit, nid(MANAGER), g);
+        target.setGrant(bit, nid(MANAGER), g, EnvKit.codeUidOf(address(target)));
     }
 
     /// B-09 (spec §1.5): on a bit outside `_scalarBits()` each of `min`, `max`, `total`, `perWindow`, `window` is refused by
@@ -452,7 +477,7 @@ contract GovGrantTest is Test {
             g = _open(); // positive control: the three words that bind such a bit
             (g.validUntil, g.maxUses, g.delegable) = (uint64(block.timestamp + 1 days), 3, true);
             vm.prank(OWNER);
-            on[i].setGrant(bits[i], nid(MANAGER), g);
+            on[i].setGrant(bits[i], nid(MANAGER), g, EnvKit.codeUidOf(address(on[i])));
             assertEq(on[i].grantOf(bits[i], nid(MANAGER)).maxUses, 3);
         }
     }
@@ -461,10 +486,10 @@ contract GovGrantTest is Test {
     function test_windowWithoutPerWindowRefused() public {
         IGovernance.GrantTerms memory g = _open();
         g.perWindow = 1;
-        _word(t, MINT, g, 3);
+        _word(IGovernance(address(t)), MINT, g, 3);
         g = _open();
         g.window = 1 days;
-        _word(t, MINT, g, 3);
+        _word(IGovernance(address(t)), MINT, g, 3);
         (g.perWindow, g.window) = (1, 1 days); // positive control
         _set(MANAGER, g);
         assertEq(t.grantOf(MINT, nid(MANAGER)).window, 1 days);
@@ -486,27 +511,27 @@ contract GovGrantTest is Test {
         vm.expectEmit(address(t));
         emit IGovernance.RoleGranted(MINT, nid(OFFICER), nid(MANAGER));
         vm.prank(MANAGER);
-        t.setGrant(MINT, nid(OFFICER), _leafTerms(10));
+        t.setGrant(MINT, nid(OFFICER), _leafTerms(10), EnvKit.codeUidOf(address(t)));
     }
 
     /// B-06 and GD-14: with no owner, a minter survives creation only on a locked bit.
     function test_lockedMinterSurvivesNoOwner() public {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features, c.roles.minter) = ("G", "G", 18, 7, nid(MANAGER));
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.OwnerHasHolders.selector, MINT));
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, MINT));
         f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "n0");
         c.lockedFeatures = 1 << MINT;
         NormalToken n = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "n0"));
-        assertEq(n.owner(), bytes32(0));
+        assertEq(n.admin(), bytes32(0));
         assertTrue(n.hasRole(MINT, nid(MANAGER)));
         vm.prank(MANAGER);
-        n.mint(TO, 1);
+        n.mint(TO, 1, EnvKit.codeUidOf(address(n)));
     }
 
     function _wrapped(bytes32 salt) internal returns (WrappedToken) {
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.owner) = ("W", "W", 6, nid(OWNER));
+        (c.name, c.symbol, c.decimals, c.admin) = ("W", "W", 6, nid(OWNER));
         c.features = (1 << 0) | (1 << GovernanceBits.WRAP_DISABLEABLE);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
@@ -515,7 +540,7 @@ contract GovGrantTest is Test {
 
     function _dexOf(bytes32 salt) internal returns (SCaaSDex) {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), salt));
+        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), salt));
     }
 
     /// `hasRole` is true for a limited holder: every power on the wrapped kinds must go through `use`.
@@ -526,36 +551,36 @@ contract GovGrantTest is Test {
         c.symbol = "W";
         c.decimals = 6;
         c.features = (1 << 0) | (1 << GovernanceBits.WRAP_DISABLEABLE);
-        c.owner = nid(OWNER);
+        c.admin = nid(OWNER);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
         WrappedToken w = WrappedToken(payable(f.createToken(IOpenFactory.TokenKind.WRAPPED, 1, abi.encode(c), "w")));
         IGovernance.GrantTerms memory g = _open();
         g.validUntil = uint64(block.timestamp + 1 hours);
         vm.prank(OWNER);
-        w.setGrant(GovernanceBits.WRAP_DISABLEABLE, nid(MANAGER), g);
+        w.setGrant(GovernanceBits.WRAP_DISABLEABLE, nid(MANAGER), g, EnvKit.codeUidOf(address(w)));
         vm.warp(block.timestamp + 2 hours);
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExpired.selector, GovernanceBits.WRAP_DISABLEABLE, MANAGER));
-        w.disableWrap(address(usd), bytes32(uint256(1)));
+        w.disableWrap(address(usd), bytes32(uint256(1)), EnvKit.codeUidOf(address(w)));
     }
 
     function test_dexPowerIsBound() public {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         assertTrue(d.hasRole(GovernanceBits.LISTING, nid(OWNER)));
         IGovernance.GrantTerms memory g = _open();
         g.maxUses = 1;
         vm.prank(OWNER);
-        d.setGrant(GovernanceBits.LISTING, nid(MANAGER), g);
+        d.setGrant(GovernanceBits.LISTING, nid(MANAGER), g, EnvKit.codeUidOf(address(d)));
         vm.startPrank(MANAGER);
-        d.setListedOnly(true);
+        d.setListedOnly(true, EnvKit.codeUidOf(address(d)));
         vm.expectRevert(_ex(5));
-        d.setListedOnly(false);
+        d.setListedOnly(false, EnvKit.codeUidOf(address(d)));
         vm.stopPrank();
         vm.prank(OFFICER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.MissingRole.selector, GovernanceBits.FEE_ROUTING, OFFICER));
-        d.setFeeSplit(0, address(0xAA));
+        d.setFeeSplit(0, address(0xAA), EnvKit.codeUidOf(address(d)));
     }
 
     /// The DELEGATECALLs of the current call to `GovernanceLib` with selector `sel`.
@@ -569,7 +594,7 @@ contract GovGrantTest is Test {
     /// `GovernanceLib.useLimited` (no copy of its body in the token).
     function test_limitedUseIsOneDelegatecall() public {
         vm.prank(OWNER);
-        t.grantRole(MINT, nid(MANAGER));
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         vm.startStateDiffRecording();
         _mint(MANAGER, 1);
         assertEq(_libCalls(vm.stopAndReturnStateDiff(), GovernanceLib.useLimited.selector), 0, "whole shape: no call");
@@ -585,7 +610,7 @@ contract GovGrantTest is Test {
     function test_dexInitHoldsBothBitsThroughInitHolder() public {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
         vm.startStateDiffRecording();
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         Vm.AccountAccess[] memory acc = vm.stopAndReturnStateDiff();
         assertEq(_libCalls(acc, GovernanceLib.initHolder.selector), 2, "initHolder, once per bit");
         assertEq(_libCalls(acc, GovernanceLib.grantRole.selector), 0, "no grantRole at init");
@@ -593,9 +618,9 @@ contract GovGrantTest is Test {
         assertTrue(d.hasRole(GovernanceBits.FEE_ROUTING, nid(OWNER)));
         assertEq(d.holderCount(GovernanceBits.LISTING), 1);
         assertEq(d.holderCount(GovernanceBits.FEE_ROUTING), 1);
-        assertEq(d.owner(), nid(OWNER));
+        assertEq(d.admin(), nid(OWNER));
         // no owner: no holder either
-        d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(0, 0, address(0xAA), false, 0, address(0))), "d0"));
+        d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(0, 0, address(0xAA), false, 0, address(0), 0, 0)), "d0"));
         assertEq(d.holderCount(GovernanceBits.LISTING), 0);
         assertEq(d.holderCount(GovernanceBits.FEE_ROUTING), 0);
     }
@@ -603,11 +628,42 @@ contract GovGrantTest is Test {
     /// B-31: every `GovernanceBase` contract answers `IGovernance` and `IERC165`, the DEX too.
     function test_dexAnswersIGovernance() public {
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         assertTrue(d.supportsInterface(type(IGovernance).interfaceId));
         assertTrue(d.supportsInterface(type(IERC165).interfaceId));
         assertFalse(d.supportsInterface(0xffffffff));
         assertTrue(t.supportsInterface(type(IGovernance).interfaceId)); // the same id on a token
+    }
+
+    /// T66b §4.2: the governance entries the DEX forwards to its admin module D are refused inside a settlement too (the
+    /// stub's `_guardIn`, S1), each one, while the settlement goes through; outside a settlement the owner's `grantRole` runs.
+    function test_dexForwardedGovernanceRefusedInsideASettlement() public {
+        GovDexForwardHolder h = new GovDexForwardHolder();
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
+        h.setDex(d);
+        IFactoryToken.TokenConfig memory c;
+        (c.name, c.symbol, c.features, c.initialSupply, c.initialHolder) = ("A", "A", 1, 1e6, vm.addr(ALICE_PK));
+        NormalToken a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a"));
+        GovHookERC20 hk = new GovHookERC20();
+        vm.prank(address(h));
+        d.setMarket(address(a), address(hk), true, EnvKit.codeUidOf(address(d)));
+        vm.prank(address(h));
+        d.grantRole(GovernanceBits.LISTING, bytes32(uint256(0x52)), EnvKit.codeUidOf(address(d))); // control: outside a settlement it runs
+        hk.mint(vm.addr(DAVE_PK), 1e6);
+        address puller = d.puller();
+        vm.prank(vm.addr(DAVE_PK));
+        hk.approve(puller, type(uint256).max);
+        hk.setHook(address(h));
+        DexLegs.Settlement[] memory ss = new DexLegs.Settlement[](1);
+        ss[0] = _hookSettlement(d, a, address(hk));
+        vm.prank(address(0xBEEF));
+        bool[] memory ok = d.mtxSettle(DexLegs.wire(ss));
+        assertTrue(ok[0], "the settlement runs");
+        assertEq(h.n(), 4);
+        bytes4 guard = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
+        for (uint256 i; i < 4; ++i) assertEq(h.errs(i), guard);
+        assertEq(d.admin(), nid(address(h)), "nothing ran inside");
     }
 
     /// B-31: no governance entry runs inside a settlement. The DEX's owner holds both bits and calls each of the four
@@ -615,14 +671,14 @@ contract GovGrantTest is Test {
     function test_dexPowerRefusedInsideASettlement() public {
         GovDexHolder h = new GovDexHolder();
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
-        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0))), "d"));
+        SCaaSDex d = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(address(h)), 0, address(0xAA), false, 0, address(0), 0, 0)), "d"));
         h.setDex(d);
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.features, c.initialSupply, c.initialHolder) = ("A", "A", 1, 1e6, vm.addr(ALICE_PK));
         NormalToken a = NormalToken(f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "a"));
         GovHookERC20 hk = new GovHookERC20();
         vm.prank(address(h));
-        d.setMarket(address(a), address(hk), true); // control: outside a settlement it runs
+        d.setMarket(address(a), address(hk), true, EnvKit.codeUidOf(address(d))); // control: outside a settlement it runs
         hk.mint(vm.addr(DAVE_PK), 1e6);
         address puller = d.puller();
         vm.prank(vm.addr(DAVE_PK));
@@ -648,7 +704,7 @@ contract GovGrantTest is Test {
         ITradeToken.TradeOrder memory o = _tradeOrder(vm.addr(DAVE_PK), address(a), 2000, 1000, address(d));
         st.makers[0] = DexLegs.Leg(hk, o, _sign(DAVE_PK, d.dexOrderDigest(hk, o)), 2000);
         o = _tradeOrder(vm.addr(ALICE_PK), hk, 1000, 2000, address(d));
-        st.taker = DexLegs.Leg(address(a), o, _sign(ALICE_PK, a.tradeOrderDigest(o)), 1000);
+        st.taker = DexLegs.Leg(address(a), o, _sign(ALICE_PK, a.tradeOrderDigest(DexLegs.ua(o))), 1000);
     }
 
     function _sign(uint256 pk, bytes32 digest) internal pure returns (bytes memory) {
@@ -687,31 +743,31 @@ contract GovGrantTest is Test {
 
     function _revoke(address a) internal {
         vm.prank(OWNER);
-        t.revokeRole(MINT, nid(a));
+        t.revokeRole(MINT, nid(a), EnvKit.codeUidOf(address(t)));
     }
 
     function _leaf(address a, uint128 total) internal {
         vm.prank(MANAGER);
-        t.setGrant(MINT, nid(a), _leafTerms(total));
+        t.setGrant(MINT, nid(a), _leafTerms(total), EnvKit.codeUidOf(address(t)));
     }
 
     function _renounceRefused() internal {
         vm.prank(OWNER);
-        vm.expectRevert(abi.encodeWithSelector(IGovernance.OwnerHasHolders.selector, MINT));
-        t.renounceOwnership();
+        vm.expectRevert(abi.encodeWithSelector(IGovernance.AdminHasHolders.selector, MINT));
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
     }
 
     function _renounce() internal {
         vm.prank(OWNER);
-        t.renounceOwnership();
-        assertEq(t.owner(), bytes32(0));
+        t.renounceAdmin(EnvKit.codeUidOf(address(t)));
+        assertEq(t.admin(), bytes32(0));
     }
 
     /// Row 1: the owner's apply, either entry, or INIT, on `r == 0`: holders +1, roots +1. A leaf revoked by its grantor keeps
     /// `grantor` in its record; the owner's grant makes it a root all the same (agy C-1), and it revokes to zero.
     function test_counts_row1() public {
         vm.prank(OWNER);
-        t.grantRole(MINT, nid(OFFICER));
+        t.grantRole(MINT, nid(OFFICER), EnvKit.codeUidOf(address(t)));
         _is(1, 1);
         _set(OFFICER2, _open());
         _is(2, 2);
@@ -721,20 +777,20 @@ contract GovGrantTest is Test {
         _manager(100);
         _leaf(OFFICER3, 10);
         vm.prank(MANAGER);
-        t.revokeRole(MINT, nid(OFFICER3));
+        t.revokeRole(MINT, nid(OFFICER3), EnvKit.codeUidOf(address(t)));
         assertEq(t.grantOf(MINT, nid(OFFICER3)).grantor, nid(MANAGER), "the kept record");
         _is(1, 1);
         _set(OFFICER3, _open()); // setGrant
         _is(2, 2);
         assertEq(t.grantOf(MINT, nid(OFFICER3)).grantor, bytes32(0));
         vm.prank(OFFICER3);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         _is(1, 1);
         _leaf(OFFICER3, 10);
         vm.prank(MANAGER);
-        t.revokeRole(MINT, nid(OFFICER3));
+        t.revokeRole(MINT, nid(OFFICER3), EnvKit.codeUidOf(address(t)));
         vm.prank(OWNER);
-        t.grantRole(MINT, nid(OFFICER3)); // grantRole
+        t.grantRole(MINT, nid(OFFICER3), EnvKit.codeUidOf(address(t))); // grantRole
         _is(2, 2);
         _revoke(OFFICER3);
         _revoke(MANAGER);
@@ -788,7 +844,7 @@ contract GovGrantTest is Test {
         _manager(100);
         _leaf(OFFICER, 10);
         vm.prank(OWNER);
-        t.grantRole(MINT, nid(OFFICER));
+        t.grantRole(MINT, nid(OFFICER), EnvKit.codeUidOf(address(t)));
         _is(2, 2);
         assertEq(t.grantOf(MINT, nid(OFFICER)).grantor, bytes32(0));
         _revoke(MANAGER);
@@ -806,7 +862,7 @@ contract GovGrantTest is Test {
         _set(MANAGER, _open());
         _is(1, 1);
         vm.prank(OWNER);
-        t.grantRole(MINT, nid(MANAGER));
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         _is(1, 1);
         _set(MANAGER, _open());
         _is(1, 1);
@@ -815,7 +871,7 @@ contract GovGrantTest is Test {
     /// Row 7: a root revoked or renounced: holders −1, roots −1, the record kept.
     function test_counts_row7() public {
         vm.prank(OWNER);
-        t.grantRole(MINT, nid(OFFICER));
+        t.grantRole(MINT, nid(OFFICER), EnvKit.codeUidOf(address(t)));
         IGovernance.GrantTerms memory g = _open();
         g.total = 7;
         _set(OFFICER2, g);
@@ -823,7 +879,7 @@ contract GovGrantTest is Test {
         _revoke(OFFICER);
         _is(1, 1);
         vm.prank(OFFICER2);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         _is(0, 0);
         assertEq(t.grantOf(MINT, nid(OFFICER2)).total, 7, "the record is kept");
         _renounce();
@@ -839,10 +895,10 @@ contract GovGrantTest is Test {
         _revoke(OFFICER);
         _is(3, 1);
         vm.prank(MANAGER);
-        t.revokeRole(MINT, nid(OFFICER2));
+        t.revokeRole(MINT, nid(OFFICER2), EnvKit.codeUidOf(address(t)));
         _is(2, 1);
         vm.prank(OFFICER3);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         _is(1, 1);
         assertEq(t.grantOf(MINT, nid(OFFICER3)).total, 10, "the record is kept");
         assertEq(t.grantOf(MINT, nid(OFFICER3)).grantor, nid(MANAGER));
@@ -909,9 +965,9 @@ contract GovGrantTest is Test {
         assertTrue(t.grantOf(MINT, nid(OFFICER)).barred);
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantBarred.selector, MINT, OFFICER));
-        t.setGrant(MINT, nid(OFFICER), _leafTerms(10));
+        t.setGrant(MINT, nid(OFFICER), _leafTerms(10), EnvKit.codeUidOf(address(t)));
         vm.prank(OWNER);
-        t.grantRole(MINT, nid(OFFICER));
+        t.grantRole(MINT, nid(OFFICER), EnvKit.codeUidOf(address(t)));
         assertFalse(t.grantOf(MINT, nid(OFFICER)).barred, "grantRole re-admits");
         _mint(OFFICER, 1);
         _revoke(OFFICER);
@@ -920,7 +976,7 @@ contract GovGrantTest is Test {
         assertFalse(t.grantOf(MINT, nid(OFFICER)).barred, "setGrant re-admits");
         _mint(OFFICER, 1);
         vm.prank(OFFICER);
-        t.renounceRole(MINT); // a renounce bars nobody
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t))); // a renounce bars nobody
         _leaf(OFFICER, 10);
         assertEq(t.grantOf(MINT, nid(OFFICER)).grantor, nid(MANAGER));
     }
@@ -930,13 +986,13 @@ contract GovGrantTest is Test {
         _manager(100);
         _leaf(OFFICER, 10);
         vm.prank(OFFICER);
-        t.renounceRole(MINT);
+        t.renounceRole(MINT, EnvKit.codeUidOf(address(t)));
         _revoke(OFFICER);
         assertTrue(t.grantOf(MINT, nid(OFFICER)).barred);
         _is(1, 1);
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantBarred.selector, MINT, OFFICER));
-        t.setGrant(MINT, nid(OFFICER), _leafTerms(10));
+        t.setGrant(MINT, nid(OFFICER), _leafTerms(10), EnvKit.codeUidOf(address(t)));
         _leaf(OFFICER2, 10); // positive control
     }
 
@@ -948,11 +1004,11 @@ contract GovGrantTest is Test {
         IGovernance.GrantTerms memory l = _leafTerms(10);
         l.validUntil = g.validUntil;
         vm.prank(MANAGER); // positive control
-        t.setGrant(MINT, nid(OFFICER), l);
+        t.setGrant(MINT, nid(OFFICER), l, EnvKit.codeUidOf(address(t)));
         vm.warp(block.timestamp + 1 hours + 1);
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantExpired.selector, MINT, MANAGER));
-        t.setGrant(MINT, nid(OFFICER2), l);
+        t.setGrant(MINT, nid(OFFICER2), l, EnvKit.codeUidOf(address(t)));
     }
 
     /// agy I-3: a parent with nothing left adds nobody: `total` spent on a scalar bit, `maxUses` used on the DEX's `LISTING`.
@@ -963,20 +1019,20 @@ contract GovGrantTest is Test {
         _mint(OFFICER, 10);
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(2)));
-        t.setGrant(MINT, nid(OFFICER2), _leafTerms(1));
+        t.setGrant(MINT, nid(OFFICER2), _leafTerms(1), EnvKit.codeUidOf(address(t)));
 
         SCaaSDex d = _dexOf("ex");
         IGovernance.GrantTerms memory g = _open();
         (g.maxUses, g.delegable) = (2, true);
         vm.prank(OWNER);
-        d.setGrant(GovernanceBits.LISTING, nid(MANAGER), g);
+        d.setGrant(GovernanceBits.LISTING, nid(MANAGER), g, EnvKit.codeUidOf(address(d)));
         (g.maxUses, g.delegable) = (1, false);
         vm.startPrank(MANAGER);
-        d.setListedOnly(true);
-        d.setGrant(GovernanceBits.LISTING, nid(OFFICER), g); // positive control: one use left
-        d.setListedOnly(false);
+        d.setListedOnly(true, EnvKit.codeUidOf(address(d)));
+        d.setGrant(GovernanceBits.LISTING, nid(OFFICER), g, EnvKit.codeUidOf(address(d))); // positive control: one use left
+        d.setListedOnly(false, EnvKit.codeUidOf(address(d)));
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(5)));
-        d.setGrant(GovernanceBits.LISTING, nid(OFFICER2), g);
+        d.setGrant(GovernanceBits.LISTING, nid(OFFICER2), g, EnvKit.codeUidOf(address(d)));
         vm.stopPrank();
     }
 
@@ -992,10 +1048,10 @@ contract GovGrantTest is Test {
         l.maxUses = 3;
         vm.prank(MANAGER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantNotNarrower.selector, uint8(5)));
-        t.setGrant(MINT, nid(OFFICER), l);
+        t.setGrant(MINT, nid(OFFICER), l, EnvKit.codeUidOf(address(t)));
         l.maxUses = 2;
         vm.prank(MANAGER);
-        t.setGrant(MINT, nid(OFFICER), l);
+        t.setGrant(MINT, nid(OFFICER), l, EnvKit.codeUidOf(address(t)));
         _mint(OFFICER, 1);
         _mint(OFFICER, 1);
         _refused(OFFICER, 1, _ex(5));
@@ -1012,7 +1068,7 @@ contract GovGrantTest is Test {
     function _windowRefused(IGovernance.GrantTerms memory g) internal {
         vm.prank(OWNER);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.GrantWindowInUse.selector, MINT, MANAGER));
-        t.setGrant(MINT, nid(MANAGER), g);
+        t.setGrant(MINT, nid(MANAGER), g, EnvKit.codeUidOf(address(t)));
     }
 
     /// agy I-1: 100 spent at day 15 on a 10-day grid; at day 21 the old period is over, but on a 30-day grid day 15 lies in the
@@ -1052,7 +1108,7 @@ contract GovGrantTest is Test {
         g.window = 30 days;
         _windowRefused(g); // positive control: while LIMITED
         vm.prank(OWNER);
-        t.grantRole(MINT, nid(MANAGER));
+        t.grantRole(MINT, nid(MANAGER), EnvKit.codeUidOf(address(t)));
         _set(MANAGER, g);
         assertEq(t.grantOf(MINT, nid(MANAGER)).window, 30 days);
     }
@@ -1072,7 +1128,7 @@ contract GovGrantTest is Test {
     function test_gas_setGrant_fresh() public {
         IGovernance.GrantTerms memory g = _open();
         (g.min, g.total, g.perWindow, g.window, g.validUntil, g.maxUses) = (1, 1e6, 1e5, 1 days, uint64(block.timestamp + 365 days), 1000);
-        _gas("setGrant fresh, every word NORMAL binds", OWNER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, nid(MANAGER), g)));
+        _gas("setGrant fresh, every word NORMAL binds", OWNER, address(t), abi.encodeCall(IGovernance.setGrant, (MINT, nid(MANAGER), g, EnvKit.codeUidOf(address(t)))));
     }
 
     function test_gas_mintLimited_everyBound() public {
@@ -1080,7 +1136,7 @@ contract GovGrantTest is Test {
         (g.min, g.total, g.perWindow, g.window, g.validUntil, g.maxUses) = (1, 1e6, 1e5, 1 days, uint64(block.timestamp + 365 days), 1000);
         _set(MANAGER, g);
         _mint(MANAGER, 1);
-        _gas("mint limited, every bound, second use", MANAGER, address(t), abi.encodeCall(NormalToken.mint, (TO, 1)));
+        _gas("mint limited, every bound, second use", MANAGER, address(t), abi.encodeCall(NormalToken.mint, (TO, 1, EnvKit.codeUidOf(address(t)))));
     }
 
     function test_gas_mintLeaf() public {
@@ -1090,8 +1146,8 @@ contract GovGrantTest is Test {
         IGovernance.GrantTerms memory l = _open();
         (l.total, l.perWindow, l.window) = (1e4, 1e3, 1 days);
         vm.prank(MANAGER);
-        t.setGrant(MINT, nid(OFFICER), l);
+        t.setGrant(MINT, nid(OFFICER), l, EnvKit.codeUidOf(address(t)));
         _mint(OFFICER, 1);
-        _gas("mint leaf, parent debited, second use", OFFICER, address(t), abi.encodeCall(NormalToken.mint, (TO, 1)));
+        _gas("mint leaf, parent debited, second use", OFFICER, address(t), abi.encodeCall(NormalToken.mint, (TO, 1, EnvKit.codeUidOf(address(t)))));
     }
 }

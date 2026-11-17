@@ -835,7 +835,7 @@ def cmd_facts_trace(source):
 # ---------------------------------------------------------------------------------------------- machine paths
 # AGENTS.md: never commit machine paths. A home directory, a macOS home or a Claude session's /tmp dir, written so this
 # file does not match itself. Write <repo>/ for the repository root, ~/ for a path under a home directory.
-MACHINE_PATH = re.compile(rb'/home/[A-Za-z0-9._-]+/|/Users/[A-Za-z0-9._-]+/|/tmp/claude' rb'-')
+MACHINE_PATH = re.compile(rb'/home/[A-Za-z0-9._-]+/|/Users/[A-Za-z0-9._-]+/|/[t]mp/claude-')
 PATHS_EXEMPT = re.compile(r'(^|/)legacy/')     # superseded code is never edited; vendored trees (evm/lib) are not tracked
 
 

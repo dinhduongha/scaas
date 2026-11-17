@@ -39,7 +39,11 @@ pub async fn step(chain: &Chain, odoo: &Odoo, chain_key: &str) -> Result<bool> {
         let tx = TransactionRequest::default()
             .with_to(token)
             .with_input(IToken::balanceOfCall { who }.abi_encode());
-        let out = chain.primary().call(tx).block(BlockId::number(height)).await?;
+        // Fable recheck 2 P3-4: through `Chain::read` (failover); at a fixed height, so a stale endpoint answers the same
+        let out = chain.read(|p| {
+            let tx = tx.clone();
+            async move { p.call(tx).block(BlockId::number(height)).await.map_err(|e| crate::chain::SimError::Transport(e.to_string())) }
+        }).await.map_err(|e| anyhow::anyhow!("{e}"))?;
         rows.push((token, who, IToken::balanceOfCall::abi_decode_returns(&out)?));
     }
     let r = odoo.balance_report(chain_key, height, &report_rows(&rows)).await?;

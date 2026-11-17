@@ -9,7 +9,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UACall} from "./UACall.sol";
 import {MockWallet, UARegistryBase} from "./UARegistryBase.sol";
 
-/// The gas of one `memberAccepted` from a contract, the shape of `UARegistryLib._accepted` on a gen-2 host.
+/// The gas of one `memberAccepted` from a contract, the shape of `UARegistryCoreLib._accepted` on a gen-2 host.
 contract AcceptedProbe {
     function cost(UARegistry r, bytes32 ua, uint256 i) external view returns (uint256 cold, uint256 warm) {
         uint256 g = gasleft();
@@ -290,18 +290,19 @@ contract UARegistryMembershipTest is UARegistryBase {
         r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, TX_DIGEST, s);
     }
 
-    /// `setKemKey`: the same record signed with the unaccepted slot is refused, and lands after it accepts.
-    function test_membershipUnacceptedRefusedSetKemKey() public {
+    /// A portable record (`requirePortable`): the same record signed with the unaccepted slot is refused, and passes after it accepts.
+    /// T66a: was `setKemKey`'s, which an `msig` no longer reaches (CTR-UA-32: `UAKemHolder` whatever its slots).
+    function test_membershipUnacceptedRefusedPortable() public {
         (bytes memory d, bytes32 ua) = _pqRegistered(r);
         bytes memory pk = _kemPk(1);
         bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
         IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml3, UAKinds.PURPOSE_KEM, rd));
         vm.expectRevert(_unauthorized(ua));
-        r.setKemKey(ua, 1, UACall.kem(pk), s);
+        r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, s);
         r.acceptMembership(ua, _acceptKeySig(d, ML, ml3));
+        r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, s);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKemHolder.selector, ua));
         r.setKemKey(ua, 1, UACall.kem(pk), s);
-        (uint64 v,,) = r.kemKeyOf(ua);
-        assertEq(v, 1);
     }
 
     /// `setPqzKey`: the same.
@@ -312,10 +313,10 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
         IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml3, UAKinds.PURPOSE_PQZ_KEY, rd));
         vm.expectRevert(_unauthorized(ua));
-        r.setPqzKey(ua, key, hash, s);
+        r.setPqzKey(ua, 0, key, hash, s);
         r.acceptMembership(ua, _acceptKeySig(d, ML, ml3));
-        r.setPqzKey(ua, key, hash, s);
-        (address ptr,,) = r.pqzKeyOf(ua);
+        r.setPqzKey(ua, 0, key, hash, s);
+        (, address ptr,,) = r.pqzKeyOf(ua);
         assertTrue(ptr != address(0));
     }
 
@@ -429,15 +430,13 @@ contract UARegistryMembershipTest is UARegistryBase {
         r.acceptMembership(ua, _acceptKeySig(d, ML, ml2));
         assertTrue(r.memberAccepted(ua, i2));
         bytes memory pk = _kemPk(2);
+        bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
         vm.expectRevert(_unauthorized(ua));
-        r.setKemKey(ua, 1, UACall.kem(pk), s);
+        r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, s); // T66a: the KEM record's signature, checked by the portable view
         bytes memory key = new bytes(16_384);
         vm.expectRevert(_unauthorized(ua));
-        r.setPqzKey(ua, key, keccak256("proof"), s);
-        bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
-        r.setKemKey(ua, 1, UACall.kem(pk), _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd)));
-        (uint64 v,,) = r.kemKeyOf(ua);
-        assertEq(v, 1);
+        r.setPqzKey(ua, 0, key, keccak256("proof"), s);
+        r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd)));
     }
 
     /// Non-empty `keyData`, native and derived (CTR-UA-33).
@@ -590,9 +589,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes32 rd = UAKinds.pqzKeyRecordDigest(ua, UAKinds.keyHashOf(UAKinds.PQZ_MLWE, key), hash);
         IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml3, UAKinds.PURPOSE_PQZ_KEY, rd));
         vm.expectRevert(_unauthorized(ua));
-        g.setPqzKey(ua, key, hash, s);
+        g.setPqzKey(ua, 0, key, hash, s);
         r.acceptMembership(ua, _acceptKeySig(d, ML, ml3));
-        g.setPqzKey(ua, key, hash, s);
+        g.setPqzKey(ua, 0, key, hash, s);
     }
 
     // ----- starvation (T-AUTH-4: a starved caller sees `UAVerifyGas`, never a verdict) -----
@@ -607,9 +606,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_PQZ_KEY, rd), _mlSig(d, ml2, UAKinds.PURPOSE_PQZ_KEY, rd));
         vm.mockCallRevert(address(r), abi.encodeWithSelector(IUARegistry.memberAccepted.selector), "");
         vm.expectRevert(UAKinds.UAVerifyGas.selector);
-        g.setPqzKey(ua, key, hash, s);
+        g.setPqzKey(ua, 0, key, hash, s);
         vm.clearMockedCalls();
-        g.setPqzKey(ua, key, hash, s);
+        g.setPqzKey(ua, 0, key, hash, s);
     }
 
     /// A member starved in its own check at `acceptMembership`: `UAVerifyGas`, the slot stays open, with gas it accepts.
@@ -648,8 +647,9 @@ contract UARegistryMembershipTest is UARegistryBase {
         (uint256 cold, uint256 warm) = new AcceptedProbe().cost(r, ua, i);
         emit log_named_uint("gen 1 memberAccepted, first slot (cold)", cold);
         emit log_named_uint("gen 1 memberAccepted, next slot (warm)", warm);
-        assertLt(cold, 6_500, "measured 6,055");
-        assertLt(warm, 1_500, "measured 1,146");
+        // CTR-UA-44 (TODO 3ze): 6,055 -> 8,572 (+2,517: the record's slot, read cold, for an updated msig's enabled word)
+        assertLt(cold, 9_000, "measured 8,572");
+        assertLt(warm, 2_000, "measured 1,663 (3ze: 1,146 before, + the record's slot warm and the trailer's code read)");
         assertTrue(g.memberAccepted(ua, i));
     }
 
@@ -664,7 +664,7 @@ contract UARegistryMembershipTest is UARegistryBase {
         bytes32 rd = UAKinds.kemRecordDigest(ua, 1, pk);
         IUARegistry.UASig memory s = _two(_mlSig(d, ml1, UAKinds.PURPOSE_KEM, rd), _mlSig(d, ml2, UAKinds.PURPOSE_KEM, rd));
         vm.startStateDiffRecording();
-        r.setKemKey(ua, 1, UACall.kem(pk), s);
-        assertEq(_reads(vm.stopAndReturnStateDiff(), slot), 1, "setKemKey");
+        r.requirePortable(ua, UAKinds.PURPOSE_KEM, rd, s); // T66a: a stored record's signature, as setKemKey checked it
+        assertEq(_reads(vm.stopAndReturnStateDiff(), slot), 1, "requirePortable");
     }
 }

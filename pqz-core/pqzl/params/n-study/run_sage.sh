@@ -16,8 +16,8 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 [ "$(git -C "$T/lk" rev-parse HEAD)" = $LK_PIN ] || { echo "lk must be at $LK_PIN" >&2; exit 1; }
 [ "$(git -C "$T/le" rev-parse HEAD)" = $LE_PIN ] || { echo "le must be at $LE_PIN" >&2; exit 1; }
 [ "$(git -C "$T/lz" rev-parse HEAD)" = $LZ_PIN ] || { echo "lz must be at $LZ_PIN" >&2; exit 1; }
-exec docker run --rm --network none --memory "${MEM:-5g}" --cpus "${CPUS:-2}" -e PYTHONPATH=/le -e LE_COMMIT=$LE_PIN \
+exec docker run --rm --tmpfs /w --network none --memory "${MEM:-5g}" --cpus "${CPUS:-2}" -e PYTHONPATH=/le -e LE_COMMIT=$LE_PIN \
   -e LK_COMMIT=$LK_PIN -e PYTHONUNBUFFERED=1 -e ROWS="${ROWS:-}" -v "$T/lk":/lk:ro -v "$T/le":/le:ro -v "$T/lz/third_party":/lz/third_party:ro \
   -v "$HERE":/p:ro -v "$HERE/..":/params:ro --entrypoint /bin/sh "$IMG" -c \
-  "mkdir -p /tmp/w && cp -r /params/codegen /tmp/w/ && ln -s /lz/third_party /tmp/w/third_party && cp /p/*.sage /tmp/w/ &&
-   cd /tmp/w/codegen && sage /tmp/w/$S $*"
+  "cp -r /params/codegen /w/ && ln -s /lz/third_party /w/third_party && cp /p/*.sage /w/ &&
+   cd /w/codegen && sage /w/$S $*"

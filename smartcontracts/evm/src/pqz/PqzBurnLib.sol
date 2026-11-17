@@ -7,7 +7,7 @@ import {ZetherTypes} from "../zether/ZetherTypes.sol";
 import {IPqzToken} from "./IPqzToken.sol";
 import {PqzCt} from "./PqzCt.sol";
 import {PqzSafety} from "./PqzSafety.sol";
-import {UAPqzVerifier} from "./UAPqzVerifier.sol";
+import {PqzKeyVerifier} from "./PqzKeyVerifier.sol";
 import {PqzCore} from "./PqzCore.sol";
 
 /// @title burn, refresh and the unwrap debit (D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
@@ -21,11 +21,13 @@ library PqzBurnLib {
         IPqzToken.PqzBurnArgs calldata b,
         bytes calldata hint,
         bytes calldata proof,
-        IUARegistry.UASig calldata authSig
+        IUARegistry.UASig calldata authSig,
+        IPqzToken.PqzSignedVerdict calldata pqzVerdict
     ) public returns (PqzCore.Paid memory paid) {
         (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareBurn(e, b, hint, proof.length);
-        PqzCore._check(o, buf, proof, authSig);
+        PqzCore._check(o, buf, proof, authSig, pqzVerdict);
         PqzCore._settleBurn(o, b);
+        PqzCore._logProof(o, buf, proof);
         paid = PqzCore._paid(o);
     }
 }

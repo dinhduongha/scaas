@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {MtxHash} from "../helpers/MtxHash.sol";
+import {MetaTxBaseCore} from "../../src/metatx/MetaTxBase.sol";
+
+import {IMetaTxAddress} from "../../src/metatx/IMetaTxAddress.sol";
 import {MtxFixture} from "../helpers/MtxFixture.sol";
 import {MtxRegistryMock, ReenterHook} from "../helpers/MtxRegistryMock.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
@@ -16,6 +20,7 @@ contract Recorder {
 /// CTR-MTX-16…19, CTR-MTX-22: the generic pipeline of `MetaTxBase` on a registry-like contract.
 contract MetaTxBaseTest is MtxFixture {
     using MetaTxLib for MetaTxLib.MetaTransaction;
+    using MtxHash for MetaTxLib.MetaTransaction;
 
     uint256 internal constant N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
 
@@ -174,7 +179,7 @@ contract MetaTxBaseTest is MtxFixture {
     function test_notAllowlisted_refused() public {
         bytes[3] memory datas = [
             abi.encodeCall(MtxRegistryMock.whoAmI, ()),
-            abi.encodeCall(IMetaTx.mtxExecute, (_m(alice, _setName("a"), 1, 0), hex"")),   // no nesting
+            abi.encodeCall(IMetaTxAddress.mtxExecute, (_m(alice, _setName("a"), 1, 0), hex"")),   // no nesting
             abi.encodeCall(IMetaTx.executeMetaTransaction, (_m(alice, _setName("a"), 1, 0), hex""))
         ];
         for (uint256 i; i < 3; ++i) {
@@ -206,7 +211,7 @@ contract MetaTxBaseTest is MtxFixture {
         assertEq(s[2], MtxRegistryMock.bump.selector);
         assertEq(s[3], MtxRegistryMock.poke.selector);
         for (uint256 i; i < s.length; ++i) {
-            MetaTxBase.MtxRule memory r = reg.exposedRule(s[i]);
+            MetaTxBaseCore.MtxRule memory r = reg.exposedRule(s[i]);
             assertEq(r.feeClass, c[i]);
             assertEq(r.amountArg, a[i]);
         }

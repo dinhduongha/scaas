@@ -1,0 +1,8 @@
+mutant | test that went red | rc
+checkto-skipped-on-pay | test_eoaToUA, test_mtxPay_receiverChecked, test_mtxTransfer_derivedReceiverNoRegistryIsLedgerOff, test_noRegistry_derivedReceiverIsLedgerOff, test_unregisteredReceiverRefused | 1
+relay-fee-before-call | test_relayFeeRouter_relayTakesUASig | 1
+receiver-fee-before-payment | test_mtxPayReceiverFee_payerLegNone, test_oldReceiverFeeAndRelayFeeHaveNoEntry | 1
+batch-transfer-length-check-dropped | test_mtxBatchTransfer_shape | 1
+relay-from-unsigned | test_mergedPathEmitsUAEventsOnly, test_mtxTransfer_feeZero, test_relayFeeRouter_openModePaysSubmitter, test_relayFeeRouter_relayTakesUASig | 1
+native-credit-through-ua-ledger | test_eoaToEoa, test_mergedPathEmitsUAEventsOnly, test_mtxPayReceiverFee_payerLegNone, test_mtxTransferWithFee_needsFee, test_mtxTransfer_eoaToEoa_registry, test_mtxTransfer_eoaToEoa_registry0, test_mtxTransfer_feeZero, test_noRegistry_eoaToEoa, test_regulatedHookSeatIsUaMove, test_relayFeeRouter_openModePaysSubmitter, test_relayFeeRouter_relayTakesUASig, test_slotsOfMergedTransferEqualAddressPath, test_unboundRelayerAndFeeRecipientNotSigned | 1
+payment-settled-on-merged-path | test_mergedPathEmitsUAEventsOnly | 1

@@ -1488,9 +1488,10 @@ contract FeaturesTest is Test {
 - [ ] **Step 1: Size gate**
 
 ```bash
-timeout 900 scripts/capped bash -c 'cd smartcontracts/evm && forge build --sizes --json 2>/dev/null' > /tmp/p1c-sizes.json || true
-jq -r 'to_entries[] | select(.value.runtime_size > 24576) | "\(.key) \(.value.runtime_size)"' /tmp/p1c-sizes.json
-jq -r 'to_entries[] | select(.key | test("NormalToken|AdminLib|HederaLib")) | "\(.key) \(.value.runtime_size)"' /tmp/p1c-sizes.json
+T=$(mktemp -d)
+timeout 900 scripts/capped bash -c 'cd smartcontracts/evm && forge build --sizes --json 2>/dev/null' > "$T"/p1c-sizes.json || true
+jq -r 'to_entries[] | select(.value.runtime_size > 24576) | "\(.key) \(.value.runtime_size)"' "$T"/p1c-sizes.json
+jq -r 'to_entries[] | select(.key | test("NormalToken|AdminLib|HederaLib")) | "\(.key) \(.value.runtime_size)"' "$T"/p1c-sizes.json
 ```
 
 Expected over 24,576: exactly `ZetherToken`, `SingleUnderlyingToken`, `MultiUnderlyingToken`,

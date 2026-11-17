@@ -49,6 +49,10 @@ pub const SCAAS_UA_ERR_KEM_KEY_LENGTH: ScaasUaStatus = 14;
 pub const SCAAS_UA_ERR_PQZ_POP_HASH: ScaasUaStatus = 15;
 /// "UAPqzKeySet": `setPqzKey` on a registration that already has a PQZ key (write-once).
 pub const SCAAS_UA_ERR_PQZ_KEY_SET: ScaasUaStatus = 16;
+/// "UAPqzKeyVersion": a PQZ key version other than `latest + 1`, or no version 0 stored (group 3g, KV-1).
+pub const SCAAS_UA_ERR_PQZ_KEY_VERSION: ScaasUaStatus = 21;
+/// "UAKeyInUse": a stored version of the UA holds this PQZ key (group 3g, KV-1).
+pub const SCAAS_UA_ERR_KEY_IN_USE: ScaasUaStatus = 22;
 /// "UAKemScheme": the first byte of a KEM key is not an enabled KEM scheme id (only 1; 2 is reserved).
 pub const SCAAS_UA_ERR_KEM_SCHEME: ScaasUaStatus = 17;
 /// "UAMemberUnknown": an `msig` member's record is needed and was not given: key data alone does not show an `msig` member's eligibility.
@@ -100,6 +104,8 @@ impl From<ua::UAError> for Fail {
             KemKeyLength => SCAAS_UA_ERR_KEM_KEY_LENGTH,
             PqzPopHash => SCAAS_UA_ERR_PQZ_POP_HASH,
             PqzKeySet => SCAAS_UA_ERR_PQZ_KEY_SET,
+            PqzKeyVersion => SCAAS_UA_ERR_PQZ_KEY_VERSION,
+            KeyInUse => SCAAS_UA_ERR_KEY_IN_USE,
             KemScheme => SCAAS_UA_ERR_KEM_SCHEME,
             MemberUnknown => SCAAS_UA_ERR_MEMBER_UNKNOWN,
             Pop => SCAAS_UA_ERR_POP,
@@ -241,6 +247,8 @@ pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
         SCAAS_UA_ERR_KEM_KEY_LENGTH => c"UAKemKeyLength",
         SCAAS_UA_ERR_PQZ_POP_HASH => c"UAPqzPopHash",
         SCAAS_UA_ERR_PQZ_KEY_SET => c"UAPqzKeySet",
+        SCAAS_UA_ERR_PQZ_KEY_VERSION => c"UAPqzKeyVersion",
+        SCAAS_UA_ERR_KEY_IN_USE => c"UAKeyInUse",
         SCAAS_UA_ERR_KEM_SCHEME => c"UAKemScheme",
         SCAAS_UA_ERR_MEMBER_UNKNOWN => c"UAMemberUnknown",
         SCAAS_UA_ERR_POP => c"UAPoP",
@@ -355,7 +363,7 @@ pub extern "C" fn scaas_ua_kind_tag_string(kind: u16, out: *mut c_char, out_len:
 }
 
 /// Governance bit `bit`'s row of `governance_bits.json` (spec 2026-11-02-governance §1.2) as JSON, `{bit, name, type, sentences}`
-/// (NUL-terminated; `*out_len` counts the NUL). Bits 0-21; any other bit is `SCAAS_UA_ERR_ARGUMENT` (22-127 free, 128-255 the
+/// (NUL-terminated; `*out_len` counts the NUL). Bits 0-31; any other bit is `SCAAS_UA_ERR_ARGUMENT` (32-127 free, 128-255 the
 /// application's `bitLabel`).
 #[no_mangle]
 pub extern "C" fn scaas_ua_governance_bit(bit: u8, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
@@ -881,6 +889,17 @@ pub extern "C" fn scaas_ua_canonical_id(text: *const c_char, out: *mut c_char, o
     })
 }
 
+/// How a client shows a `bytes32` id before the user signs (NUL-terminated): the EIP-55 address of a native-space id, else the
+/// URN `urn:scaas:ua:v1:<kind name>:<hex32>` under `kind`, the id's registry kind (0 = none known: `SCAAS_UA_ERR_KIND_UNKNOWN`).
+/// `id` is `0x` + 64 hex digits; non-UTF-8 text is `SCAAS_UA_ERR_ID_FORMAT`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_id_display(id: *const c_char, kind: u16, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    run(|| {
+        let t = std::str::from_utf8(cstr(id)?).map_err(|_| ua::UAError::IdFormat)?;
+        write_str(out, out_len, ua::id_display(t, kind)?.text())
+    })
+}
+
 fn json_call(f: fn(&str) -> ua::json::JsonResult<String>, input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
     run(|| {
         let t = std::str::from_utf8(cstr(input)?).map_err(|_| argument("JSON"))?;
@@ -913,6 +932,28 @@ pub extern "C" fn scaas_ua_set_kem_key_args(input: *const c_char, out: *mut c_ch
 #[no_mangle]
 pub extern "C" fn scaas_ua_set_pqz_key_args(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
     json_call(ua::json::set_pqz_key_args_json, input, out, out_len)
+}
+
+/// CTR-UA-44 `updateMsig`, JSON in and out as `scaas_ua_registration_args`. `input`: `{ua, chainUid, registry, version, threshold, members: [{kind, id, weight}], enabled, validUntilBlock, sigs}` (`enabled` a
+/// decimal string or number, `sigs` the stored structure's member signatures). Out: `{digest, message, memberDigest, args}`: what a quorum of
+/// the stored structure signs on that one registry, and the named arguments.
+#[no_mangle]
+pub extern "C" fn scaas_ua_msig_update(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    json_call(ua::json::msig_update_json, input, out, out_len)
+}
+
+/// What a payer signs (pay-meta-tax T41), JSON in and out: `{struct, domain: {name, chainId, verifyingContract, salt}, message}`,
+/// `struct` `UAMetaTransfer`, `UAPayWithTax` (`{payment, taxMode, tax}`) or `UARelayFee`; out `{structHash, digest}`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_pay_digest(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    json_call(ua::json::pay_digest_json, input, out, out_len)
+}
+
+/// `metaPayId` under `scaas.pay.meta.v3` (pay-meta-tax T41 / T83): in `{salt, payNo, save, schema, body}` (`payNo` 32 bytes hex),
+/// out `{payId}`; a refused shape (`save` without a `payNo` too) is `UAArgument`.
+#[no_mangle]
+pub extern "C" fn scaas_ua_meta_pay_id(input: *const c_char, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
+    json_call(ua::json::meta_pay_id_json, input, out, out_len)
 }
 
 /// The `msig` key data for `n` members (`members` may be NULL when `n == 0`): 4 + 36 * n bytes.

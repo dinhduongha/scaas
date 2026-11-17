@@ -9,7 +9,7 @@ use scaas_near_common::hash::{hex, meta_pay_id, pay_lane};
 use scaas_near_token::{lane_bytes, ACCOUNT_STORAGE_BYTES, UA_STORAGE_BYTES};
 use serde_json::{json, Value};
 
-const PAYMETA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors/metatx/paymeta.json");
+const PAYMETA: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../vectors/metatx/legacy/ua-mtx-merge/paymeta.json");
 const SHAPE: &str = "pay-meta shape (pay_ref = metaPayId(salt, meta), lane = payLane(pay_ref), nonce 0)";
 const TO_SELF: &str = "token refuses a transfer to the token itself";
 const NONCE: &str = "wrong lane nonce";

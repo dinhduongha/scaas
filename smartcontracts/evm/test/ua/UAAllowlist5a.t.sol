@@ -1,6 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
+import {PayMetaKit} from "../helpers/PayMetaKit.sol";
+import {UAMetaTxBase} from "../../src/metatx/UAMetaTxBase.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+import {UACall} from "./UACall.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
@@ -19,6 +25,8 @@ import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {normalInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// accounts.md CTR-UA-26 as grown by UA-5a (CTR-UA-27 "allowlist or dedicated function"): `burn` (`NORMAL*`) and
 /// `unwrapToUA` (the wrappers) run under `uaExecute` / `uaBatch`; under a derived ticket each debits exactly the subject
@@ -29,7 +37,7 @@ contract UAAllowlist5aTest is UALedgerBase {
         bytes memory a = _authM(token, m);
         if (err.length != 0) vm.expectRevert(err);
         vm.prank(RELAYER);
-        MetaTokenBase(token).uaExecute(m, a);
+        NormalToken(token).mtxExecute(m, UACall.auth(m.from, a));
     }
 
     function _withFee(MetaTxLib.UAMetaTransaction memory m, uint256 fee)
@@ -63,11 +71,11 @@ contract UAAllowlist5aTest is UALedgerBase {
             abi.encodeWithSelector(IUALedger.UAInsufficientBalance.selector, uaP, 596, 597));
         // `BURNABLE` off: the feature error of `burn`
         NormalToken nb =
-            NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+            NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         IFactoryToken.TokenConfig memory c = normalInit("NB", "NB", 6, 0, address(0), address(this));
         c.features = (1 << GovernanceBits.PAYABLE) | (1 << GovernanceBits.MINTABLE);
-        nb.initialize(address(this), 1, abi.encode(c));
-        nb.mintToUA(uaP, 10);
+        nb.initialize(nid(address(this)), 1, abi.encode(c));
+        nb.mintToUA(uaP, 10, EnvKit.codeUidOf(address(nb)));
         _exec(address(nb), _m(address(nb), uaP, abi.encodeCall(NormalToken.burn, (1))),
             abi.encodeWithSelector(IGovernance.FeatureNotSet.selector, GovernanceBits.BURNABLE));
     }
@@ -156,17 +164,29 @@ contract UAAllowlist5aTest is UALedgerBase {
         address[6] memory on = [address(wrp), address(tok), address(tok), address(wrp), address(tok), address(tok)];
         bytes[6] memory calls = [
             abi.encodeCall(WrappedToken.wrapToUA, (address(und), 1, uaB)),
-            abi.encodeCall(NormalToken.mintToUA, (uaB, 1)),
-            abi.encodeCall(MetaTokenBase.payWithFeeToUA, (uaB, 1, FeeMode.NONE, 0, address(0), bytes32("ref"))),
+            abi.encodeCall(NormalToken.mintToUA, (uaB, 1, EnvKit.codeUidOf(address(tok)))),
+            abi.encodeCall(NormalToken.payWithFeeToUA, (uaB, 1, FeeMode.NONE, 0, address(0), PayMetaKit.ref(bytes32("ref")), PayMetaKit.meta(bytes32("ref")))),
             abi.encodeWithSignature("addReserve(address,uint256)", address(und), 1),
             abi.encodeCall(IERC20.approve, (address(this), 1)),
             abi.encodeWithSelector(ITradeToken.mtxTrade.selector)
         ];
-        bytes32[2] memory froms = [uaP, _pad(alice)];
-        for (uint256 f; f < 2; ++f) {
-            for (uint256 i; i < calls.length; ++i) {
-                _exec(on[i], _m(on[i], froms[f], calls[i]),
-                    abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(calls[i])));
+        for (uint256 i; i < calls.length; ++i) {
+            _exec(on[i], _m(on[i], uaP, calls[i]), abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(calls[i])));
+        }
+        // ua-mtx-merge T1 (B), meaning: a native id was refused the same way; it now reads `_mtxRule`: `wrapToUA` and
+        // `addReserve` are on it (the wrapper's own rows) and reach their bodies (alice approved nothing: the leg's
+        // transfer reverts), the other four are `MtxSelectorNotAllowed`
+        for (uint256 i; i < calls.length; ++i) {
+            MetaTxLib.UAMetaTransaction memory m = _m(on[i], _pad(alice), calls[i]);
+            bytes memory a = _authM(on[i], m);
+            vm.prank(RELAYER);
+            (bool ok, bytes memory ret) = on[i].call(abi.encodeCall(UAMetaTxBase.mtxExecute, (m, UACall.auth(m.from, a))));
+            assertFalse(ok);
+            if (i == 0 || i == 3) {
+                assertTrue(bytes4(ret) != IMetaTx.MtxSelectorNotAllowed.selector && bytes4(ret) != IUALedger.MetaTxUnknownOp.selector,
+                    "on _mtxRule: the body runs");
+            } else {
+                assertEq(ret, abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(calls[i])));
             }
         }
     }
@@ -188,13 +208,13 @@ contract UAAllowlist5aTest is UALedgerBase {
         // the second item asks for more than is left (the reserve, 1:1 with the supply, is checked first)
         vm.expectRevert(abi.encodeWithSelector(IWrappedToken.InsufficientReserve.selector, address(tok), 60, 40));
         vm.prank(RELAYER);
-        wrpL.uaBatch(ms, as_);
+        wrpL.mtxBatch(ms, UACall.auths(ms, as_));
         assertEq(wrpL.balanceOfUA(uaP), 100);
         ms[1] = _m(address(wrpL), uaP, abi.encodeCall(WrappedToken.unwrapToUA, (address(tok), 40, uaB, 0)));
         ms[1].nonce = 1;
         as_[1] = _authM(address(wrpL), ms[1]);
         vm.prank(RELAYER);
-        wrpL.uaBatch(ms, as_);
+        wrpL.mtxBatch(ms, UACall.auths(ms, as_));
         assertEq(wrpL.balanceOfUA(uaP), 0);
         assertEq(tok.balanceOfUA(uaB), 100);
         ms[0] = _m(address(tok), uaP, abi.encodeCall(NormalToken.burn, (30)));
@@ -202,7 +222,7 @@ contract UAAllowlist5aTest is UALedgerBase {
         ms[1].nonce = 1;
         (as_[0], as_[1]) = (_authM(address(tok), ms[0]), _authM(address(tok), ms[1]));
         vm.prank(RELAYER);
-        tok.uaBatch(ms, as_);
+        tok.mtxBatch(ms, UACall.auths(ms, as_));
         assertEq(tok.balanceOfUA(uaP), 0);
         assertEq(tok.balanceOf(POOL), 100); // uaB's
     }

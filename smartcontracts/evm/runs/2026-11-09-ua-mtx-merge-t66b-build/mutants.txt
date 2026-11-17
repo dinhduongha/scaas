@@ -1,0 +1,50 @@
+R1-wrong-library-entry | test_r1_diff_vectors, test_r1_viewsRunInTheLibrary | 1
+R1-wrong-library-entry | test_r1_diff_vectors, test_r1_viewsRunInTheLibrary | 1
+B1-writer-wrong-library | test_T_GAS_setKemKey, test_b_keyWritersRunInTheAuxLibrary, test_kemHashCommitThenFill, test_kemKeyAssembledBytes, test_membershipUnacceptedRefusedPortable, test_msigKemSigNotMinimalRefused, test_setKemKeyNeverOverwrites, test_setKemKeyV0WithoutCommitReverts, test_setKemKeyV0WrongKeyReverts, test_storePqzPopAfterKemHashCommit, test_storePqzPopAfterKemHashCommitGen2Host, test_ua8_kemBadSigRefused, test_ua8_kemCopyBetweenRegistries, test_ua8_kemEvent, test_ua8_kemGen2RecordElsewhereRefused, test_ua8_kemInitialVersionFromRegister, test_ua8_kemLengthRefused, test_ua8_kemLowerVersionAfterHigher, test_ua8_kemMsigRefused, test_ua8_kemNoOwnerCheck, test_ua8_kemNonHolderRefused, test_ua8_kemRepeatedVersionRefused, test_ua8_kemVersionZeroRefused, test_ua8_setKemKeyByThirdParty | 1
+B2-library-addresses-swapped | setUp, test_T_GAS_register_ua8PerKind, test_T_GAS_setKemKey, test_T_GAS_storePqzPop, test_b_keyWritersRunInTheAuxLibrary, test_b_registrationRunsInTheFirstLibrary, test_kemCommitFormRefused, test_kemHashCommitThenFill, test_kemKeyAssembledBytes, test_membershipVectors, test_msigContractMember1271OverTypedDigest, test_msigFrontRunSlotDropRefused, test_msigKemSigNotMinimalRefused, test_msigNativeMemberPersonalSignRefused, test_msigNativeMemberTypedDigest, test_msigOfRoundTrip, test_msigPopLightestInMiddleRefused, test_msigPopNotMinimalRefused, test_msigPqzKeySigNotMinimalRefused, test_msigRequireAuthorizedKeepsRule, test_popSlotsOfFromVectors, test_popSlotsOfGapInPop, test_popSlotsOfLaterAcceptanceSetsNoPopBit, test_r1_control_writerRunsInTheLibrary, test_registerMsigTypedMembersSameId, test_registrationOfUnchangedBytes, test_setKemKeyNeverOverwrites, test_setKemKeyV0WithoutCommitReverts, test_setKemKeyV0WrongKeyReverts, test_storePqzPopAfterKemHashCommit, test_storePqzPopAfterKemHashCommitGen2Host, test_storePqzPopGen2HostKindFromGen1, test_typedViewsMatchTheRows, test_ua8_attrsShapeRefused, test_ua8_checkedIsChain, test_ua8_copyBetweenRegistries, test_ua8_copyFromState, test_ua8_crossSetGen2KeepsGen1Key, test_ua8_crossSetKeyNotReplaced, test_ua8_crossSetRightSetKeyStays, test_ua8_disabledKindReverts, test_ua8_everyKindFromVectors, test_ua8_frontRunnerDropsPqzPop, test_ua8_frontRunnerGetsIdenticalRecord, test_ua8_gen2ForwardsReads, test_ua8_gen2PqzKeyWhenGen1HasNone, test_ua8_gen2ProvesGen1RegisterKey, test_ua8_gen2RefusesWhenGen1HasPqz, test_ua8_gen2RefusesWritesForGen1, test_ua8_gen2SetPqzKeyForGen1Record, test_ua8_kemBadSigRefused, test_ua8_kemCopyBetweenRegistries, test_ua8_kemEvent, test_ua8_kemGen2RecordElsewhereRefused, test_ua8_kemInitialVersionFromRegister, test_ua8_kemLengthRefused, test_ua8_kemLowerVersionAfterHigher, test_ua8_kemMsigRefused, test_ua8_kemNoOwnerCheck, test_ua8_kemNonHolderRefused, test_ua8_kemRepeatedVersionRefused, test_ua8_kemSchemeRefused, test_ua8_kemVersionZeroRefused, test_ua8_largestMsigPopStored, test_ua8_msigNativeMember7702Portable, test_ua8_msigPopCanonical, test_ua8_msigPqEligibleCopy, test_ua8_nonHolderAttrsRefused, test_ua8_popCoversAttrs, test_ua8_pqzKeyVersionNegatives, test_ua8_pqzKeyVersionsFromVectors, test_ua8_pqzPopInRegisterProven, test_ua8_pqzProveLaterOnVerifierChain, test_ua8_pqzUnprovenWithoutVerifier, test_ua8_provenKeyStillUnique, test_ua8_setKemKeyByThirdParty, test_ua8_setPqzKeyCopyFromState, test_ua8_setPqzKeyFromVectors, test_ua8_setPqzKeyRefused, test_ua8_storePqzPopBadProofReverts, test_ua8_storePqzPopIdempotent, test_ua8_storePqzPopNoKemExactMessage, test_ua8_storePqzPopWrongBytesRefused, test_ua8_storesEveryField, test_ua8_unprovenListingDoesNotBlockOwner | 1
+B3-read-wrong-library | test_T_GAS_setKemKey, test_T_GAS_storePqzPop, test_b_readsRunInTheirLibrary, test_copyReplaysTheStoredAcceptance, test_kemHashCommitThenFill, test_kemKeyAssembledBytes, test_membershipVectors, test_msigContractMember1271OverTypedDigest, test_msigFrontRunSlotDropRefused, test_msigKemSigNotMinimalRefused, test_msigNativeMemberPersonalSignRefused, test_msigNativeMemberTypedDigest, test_msigOfRoundTrip, test_msigPopLightestInMiddleRefused, test_msigPopNotMinimalRefused, test_msigPqzKeySigNotMinimalRefused, test_msigRequireAuthorizedKeepsRule, test_popMemberSigHashes, test_popSlotsOfFromVectors, test_popSlotsOfGapInPop, test_popSlotsOfLaterAcceptanceSetsNoPopBit, test_portablePopNested, test_registerMsigTypedMembersSameId, test_registrationOfUnchangedBytes, test_setKemKeyNeverOverwrites, test_setKemKeyV0WithoutCommitReverts, test_storePqzPopAfterKemHashCommit, test_storePqzPopAfterKemHashCommitGen2Host, test_typedViewsMatchTheRows, test_ua8_attrsShapeRefused, test_ua8_copyBetweenRegistries, test_ua8_copyFromState, test_ua8_crossSetKeyNotReplaced, test_ua8_crossSetRightSetKeyStays, test_ua8_everyKindFromVectors, test_ua8_frontRunnerDropsPqzPop, test_ua8_frontRunnerGetsIdenticalRecord, test_ua8_gen2ForwardsReads, test_ua8_gen2PqzKeyWhenGen1HasNone, test_ua8_gen2ProvesGen1RegisterKey, test_ua8_gen2RefusesWhenGen1HasPqz, test_ua8_gen2RefusesWritesForGen1, test_ua8_gen2SetPqzKeyForGen1Record, test_ua8_kemBadSigRefused, test_ua8_kemCopyBetweenRegistries, test_ua8_kemEvent, test_ua8_kemGen2RecordElsewhereRefused, test_ua8_kemInitialVersionFromRegister, test_ua8_kemLengthRefused, test_ua8_kemLowerVersionAfterHigher, test_ua8_kemMsigRefused, test_ua8_kemNoOwnerCheck, test_ua8_kemNonHolderRefused, test_ua8_kemRepeatedVersionRefused, test_ua8_kemSchemeRefused, test_ua8_kemVersionZeroRefused, test_ua8_largestMsigPopStored, test_ua8_msigNativeMember7702Portable, test_ua8_msigPopCanonical, test_ua8_msigPqEligibleCopy, test_ua8_nonHolderAttrsRefused, test_ua8_popCoversAttrs, test_ua8_pqzKeyVersionNegatives, test_ua8_pqzKeyVersionsFromVectors, test_ua8_pqzPopInRegisterProven, test_ua8_pqzProveLaterOnVerifierChain, test_ua8_pqzUnprovenWithoutVerifier, test_ua8_provenKeyStillUnique, test_ua8_setKemKeyByThirdParty, test_ua8_setPqzKeyCopyFromState, test_ua8_setPqzKeyFromVectors, test_ua8_setPqzKeyRefused, test_ua8_storePqzPopIdempotent, test_ua8_storePqzPopWrongBytesRefused, test_ua8_storesEveryField, test_ua8_unprovenListingDoesNotBlockOwner | 1
+B4-aux-library-check-dropped | test_b_constructorNeedsTheAuxLibrary | 1
+C1-aux-wrong-core | test_c_auxNeedsItsCore, test_c_cacheRunsTheCoreKeyCheck, test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
+C2a-core-helper-direct-call-portableOk | test_c_coreHelpersRefuseADirectCall | 1
+C2b-core-helper-direct-call-keyUa | test_c_coreHelpersRefuseADirectCall | 1
+C3-helper-result-ignored | test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
+3.1c follow-up (registrationOf, uaCount back in the core), the four rerun:
+C1-aux-wrong-core | test_c_auxNeedsItsCore, test_c_cacheRunsTheCoreKeyCheck, test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
+C2a-core-helper-direct-call-portableOk | test_c_coreHelpersRefuseADirectCall | 1
+C2b-core-helper-direct-call-keyUa | test_c_coreHelpersRefuseADirectCall | 1
+C3-helper-result-ignored | test_c_kemWriteRunsTheCorePortableCheck, test_c_pqzWritesRunTheCoreHelpers | 1
+4.1 rule 4 for MtxPipelineLib (module P compiles the pipeline in; T the trade authorisation; A the payment views):
+P1-P-pipeline-not-compiled-in | test_rule4_pipelineCallsNoMtxPipelineLib | 1
+P2-T-authorize-not-compiled-in | test_rule4_tokenTradeCallsNoTradeLib | 1
+P3-A-payment-views-not-compiled-in | test_rule4_payCallsNoMtxPipelineLib | 1
+P4-P-authorize-hook-skips-the-check | test_uaPayReceiverFee_7702Payee, test_uaPayReceiverFee_coSignatureOverAnotherDigest_refused, test_uaPayReceiverFee_erc1271Payee, test_uaPayReceiverFee_purposeSeparation, test_uaReceiverFeeNested | 1
+4.1 the DEX's admin module D:
+D1-dex-group-check-dropped | test_d_constructorChecksD | 1
+D2-dex-factory-check-dropped | test_d_constructorChecksD | 1
+D3-d-onlyDelegated-dropped | test_d_directCallRefused | 1
+3.1d (the five *Digest views in the Aux library):
+R1-wrong-library-entry | test_d_digestsRunInTheAuxLibrary | 1
+R1d-digest-routed-to-core | test_d_digestsRunInTheAuxLibrary | 1
+M-guard-in-module | test_diff_normal, test_p_relayedOpIntoModuleA, test_p_twoCallsAfterAForwardedEntry | 1
+M-governed-in-module | test_diff_normalRegulated | 1
+M-stub-modifier-asm-return | test_p_twoCallsAfterAForwardedEntry | 1
+M-onlyDelegated-dropped | test_m_directCallRefused | 1
+M-stub-wrong-module | test_diff_normal, test_p_relayedOpIntoModuleA, test_p_twoCallsAfterAForwardedEntry | 1
+M-payable-stub-nonpayable-entry | test_p_payableEntryTakesValue | 1
+M-implementation-forwarded | test_p_implementationEverywhere | 1
+M-state-variable-in-module | test_m_layoutEqualsTheKind | 1
+M-delegatecall-outside-closure | test_moduleOpcodes | 1
+M-stub-reencodes | test_diff_normal | 1
+M-stub-drops-return | test_diff_normal, test_diff_wrapped, test_p_relayedOpIntoModuleA | 1
+M-stub-swallows-revert | test_diff_normal, test_diff_wrapped | 1
+M-ctor-code-check-dropped | test_m_constructorChecksEveryModule | 1
+M-ctor-kind-check-dropped | test_m_constructorChecksEveryModule | 1
+M-ctor-group-check-dropped | test_m_constructorChecksEveryModule | 1
+M-ctor-factory-check-dropped | test_m_constructorChecksEveryModule | 1
+M-ctor-registry-hash-check-dropped | test_m_constructorChecksEveryModule | 1
+M-ctor-pqz-set-check-dropped | test_m_constructorChecksEveryModule | 1
+M-registry-forwarded | none (survived) | 0
+M-factory-ModuleNotPinned-dropped | test_m_dexModuleNotPinned, test_m_releaseModuleNotPinned, test_m_unregisteredModuleNotPinned | 1
+M-dex-governed-stub-without-guardIn | none (survived) | 0
+M-registry-forwarded | test_p_keptViewsMakeNoCall | 1
+M-dex-governed-stub-without-guardIn | test_dexForwardedGovernanceRefusedInsideASettlement | 1

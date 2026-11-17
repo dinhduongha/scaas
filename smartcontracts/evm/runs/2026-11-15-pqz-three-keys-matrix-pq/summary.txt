@@ -1,0 +1,39 @@
+# pqz-three-keys step 7c (spec 2026-11-13-pqz-three-keys §15.2): matrix.sh local, branch pqz-three-keys,
+# MATRIX_OUT=runs/2026-11-15-pqz-three-keys-matrix-pq; full output in the git-ignored *.log there (kept off the repo).
+# The PQ groups on the local Nethermind copy (chain 7622 copy, not the live testnet stack): image
+# scaas/nethermind-pqz:2.2.0-pqz8 (library = the reviewed build), engine rows engine-pqz-provisional-n2304.json (the moved
+# ids, factor 1.0); pqzkeys and pqzwallet on a fresh anvil (chain 31337). CAPPED_SLOTS=4, no per-set run beside it.
+# Test keys and seeds only. UNAUDITED.
+step | commit | rc | counts
+pq (class 1 PRECOMPILE, real proofs) | 8b388c94e | 0 | 241/241 txs, negatives 10/10; e2e 0 failures
+pqoff (OFFCHAIN, section 10 + 10b) | 3d0f51ce9 | 0 | 215/215 txs, negatives 17/17; 36 class-3 records; e2e 0 failures
+pqzkeys | 1e59323da | 0 | 696/696 txs, negatives 27/27
+pqzwallet | 1e59323da | 0 | 35/35 txs; every wallet and auditor outcome asserted
+anvil / copy left running | - | 0 | none
+
+## Reds on the way (harness, no contract change)
+- e2e typed struct: NO_OPENING's x25519Eph went in as an int; clientkeys refused "a bytes32 is 32 bytes" (af7183de9).
+- pq.py ConfidentialConfig lists of 13 fields, not 15: createToken reverted with no data on kind 12, pqOF and the
+  verifier-fee tokens; e2e encs() now refuses a value count unlike the type count (bca4511cc, dc0f6be01, 8b388c94e).
+- pqoff section 10: own-key OFFCHAIN tokens without the holders' records (AccountNotRegistered); a record of the registry
+  key refused UAKeyInUse; fresh class-3 keys per holder and token (3d0f51ce9).
+- pqzkeys after the long copy groups: a stale anvil head timestamp (a pause's end already past); a fresh head first
+  (1e59323da).
+
+## Class 1 (pq)
+- the msig erin (2-of-2 ML-DSA-65, its pqz-mlwe key): debits by member pqzAuth and the msig envelope, and bob's op 1
+  credit of 2 to it on the PRECOMPILE token, rolled, decrypted by restore (39 + 2 = 41).
+- every section of e2e at the reviewed precompile: shield, op 1 / op 7, rollover, burn, refresh, disclosure, key rotation
+  and migration, the named relayed entries, the regulated kinds 12 and 13.
+
+## Wallet side (pqzwallet: script/pqz/wallet on ua-rs pqz3k::PqzKeyHandle, CLI-SGN-51)
+- class 2 token, auditor OPTIONAL, bob's credits to dave: honest 5 and honest-with-auditor 3 accepted; planted junk
+  opening, another seed's KEM ciphertext, a moved v_t, junk O_a, junk O_t, O_a under other coins: skip.
+- the debit window refused while a skip is unmarked, no PQZ secret loaded (secretLoads 0); the marks by dave's signed
+  mark-only rollover (n = 0); the window opened once (secretLoads 1), balance decrypted 8 = the accepted amounts; the
+  refresh landed.
+- auditor tool: read (3) on the honest audited credit; unreadable on junk O_a and on O_a under other coins;
+  recipient-unreadable on junk O_t; "no auditor leg" on credits sent without it.
+- class 3 token with the opening: a modified wallet refreshes past an unreadable credit unmarked; the auditor tool
+  reports it "unreadable, taken".
+- reads: one local node with instant finality, handed to the handle as finalized and strict-majority (one node of one).

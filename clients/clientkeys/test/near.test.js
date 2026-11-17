@@ -13,7 +13,7 @@ import { payLane } from '../src/evm.js';
 import { p1363ToDer } from './softauthn.js';
 
 const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/near/vectors/near-vectors.json', import.meta.url)));
-const P = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/metatx/paymeta.json', import.meta.url)));
+const P = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json', import.meta.url)));
 const rows = V.metaops.vectors;
 const row = (n) => rows.find((r) => r.name === n);
 const lane = (ref) => '0x' + payLane(ref).toString(16).padStart(64, '0');

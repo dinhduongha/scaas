@@ -1,0 +1,19 @@
+# ua-mtx-merge T39 gate summary (full output in git-ignored .log files, not committed)
+# T39 (pay-meta-tax spec §6; O8, O9, O10, O16; F-15, F-19, F-20, F-21; B-5): bit 23 TAX on kinds 8-13 (any holder, the issuer
+# seat, never contract-only, never delay-relaxed), scaas.regulated +5 taxRecipient and +6 TaxRate, setTaxRate /
+# setTaxRecipient (bodies in RegulatedLib), taxConfig(), RegulatedParams.taxRecipient, the router ops mtxSetTaxRate /
+# mtxSetTaxRecipient. UNAUDITED.
+# Base: f2f2a0b0. Commits: 6d67786a (legacy copies), 0d054f65 (implementation), this one (summary, mutants table).
+step | commit | rc | counts
+t39-red | 6d67786a + tests only | 1 | compile error: IRegulatedToken.TaxConfig not found (test/as/Tax.t.sol); src set aside, restored after
+t39-build | 0d054f65 | 0 | src then each test directory one at a time (a full build OOMs under 4 GB)
+t39-green | 0d054f65 - 1 fix | 1 | the T39 suites: 120 passed 1 failed (SelectorAudit: noticePeriod() read in the token reverted on fixtures without a factory; moved into RegulatedLib after the bit check, GovRouterFixture gains noticePeriod()), then green
+t39-forge-full | 0d054f65 - 6 pins | 1 | 2922 passed 6 failed 14 skipped, 280 suites: the 6 were pins of the change (GovernanceRouter CREATE2, plus-zero gas 3 rows, dex_order_kat.json, regulated_kat.json), moved, then 61 of 61 passed in their 13 suites (runs/...-t39-rerun.log)
+t39-size-gate | 0d054f65 | 0 | 0 errors, 97 contracts, none above 65,536 B; kind 13 62,449 -> 63,615 B (897 B under the 64,512 B stop line: no lever)
+t39-mutants | 0d054f65 | 1 each | 7 of 7 killed, none a compile error (runs/2026-11-07-ua-mtx-merge-t39-mutants.txt): bit 23 on a plain kind, contract-only, not in ISSUER_BITS, delay-relaxed, an increase before eta, a decrease delayed, the recipient without R; git diff --exit-code -- src clean after
+t39-at-set-n2048-kmax1024 | 0d054f65 | 0 | 870 passed 0 failed 1 skipped, 87 suites (at-set.sh test --match-path 'test/{ua,pqz,as/confidential}/*'); PqzSet.sol restored
+t39-at-set-n2304-kmax4096 | 0d054f65 | 0 | 867 passed 0 failed 4 skipped, 87 suites; PqzSet.sol restored
+t39-at-set-n2560-kmax16384 | 0d054f65 | 0 | 866 passed 0 failed 5 skipped, 87 suites; PqzSet.sol restored
+t39-at-set-n2816-kmax65536 | 0d054f65 | 0 | 861 passed 0 failed 10 skipped, 87 suites; PqzSet.sol restored
+#
+# Not run: clients and node (T41, T42). scaas-node/tests/e2e.rs gains the one sol! struct field, not compiled here.

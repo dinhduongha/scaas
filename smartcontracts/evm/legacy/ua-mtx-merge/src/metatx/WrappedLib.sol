@@ -1,0 +1,578 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+pragma solidity ^0.8.24;
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
+import {IWrappedToken} from "./IWrappedToken.sol";
+import {IUALedger} from "./IUALedger.sol";
+import {IFactoryToken} from "../factory/IFactoryToken.sol";
+import {IOpenFactory} from "../factory/IOpenFactory.sol";
+import {IGovernance} from "../governance/IGovernance.sol";
+import {IRescuable} from "../governance/IRescuable.sol";
+import {ITradeToken} from "../trade/ITradeToken.sol";
+import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {SigCheck} from "../common/SigCheck.sol";
+import {GovernanceLib} from "../governance/GovernanceLib.sol";
+import {GovernanceUse} from "../governance/GovernanceBase.sol";
+import {GovernanceBits} from "../governance/GovernanceBits.sol";
+import {TokenStore} from "./TokenStore.sol";
+import {MetaTokenBase} from "./MetaTokenBase.sol";
+import {HederaLib} from "../hedera/HederaLib.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
+
+/// @title Legs, reserve and rates of kind `WRAPPED` (CTR-TOK-24), in the ERC-7201 namespace `scaas.underlying`.
+/// @notice External library: the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out),
+///         rate changes with timelock, `disableWrap`, the hybrid's cap. The token mints and burns (ERC-20 stays inline)
+///         and emits `Wrapped`/`Unwrapped`/`ReserveAdded`.
+///
+///         Rate `q = num/den` = wrapped raw units per underlying raw unit (CTR-TOK-04); every output rounds DOWN:
+///         `minted = ⌊in·q⌋`, `out = ⌊w/q⌋`, unwrap burns only `⌈out·q⌉ ≤ w`. Invariant (CTR-TOK-05):
+///         `Σ⌊reserve_i·q_i⌋ ≥ totalSupply()`, not claimed on a hybrid (`maxSupply != 0`, spec §5.3, CTR-GOV-12), whose
+///         invariant is `totalSupply() ≤ maxSupply`; `reserve` changes only through wrap, unwrap, `addReserve`; the raw
+///         balance never prices anything. The native leg (`address(0)`, CTR-TOK-26) reads `address(this).balance`
+///         where an ERC-20 leg reads `balanceOf(this)`.
+library WrappedLib {
+    using SafeERC20 for IERC20;
+
+    /// @dev slot a: token ‖ decimals ‖ wrapEnabled ‖ adjustable ‖ capped (copies, so a fixed-rate wrap reads no config
+    ///      and a non-hybrid wrap no `maxSupply`); slot b: num ‖ den; slot c: reserve.
+    struct Leg {
+        address token;
+        uint8 decimals;
+        bool wrapEnabled;
+        bool adjustable;
+        bool capped;
+        uint96 num;
+        uint96 den;
+        uint256 reserve;
+    }
+
+    /// @dev One slot; `eta == 0` ⇒ none.
+    struct PendingRate {
+        uint8 leg;
+        uint96 num;
+        uint96 den;
+        uint56 eta;
+    }
+
+    /// @custom:storage-location erc7201:scaas.underlying
+    struct WrappedStorage {
+        mapping(uint256 => Leg) legs;
+        mapping(address => uint256) legIndex; // index + 1
+        PendingRate pending;
+        uint8 legCount;
+        uint32 rateDelay;
+        uint16 maxRateStepBps;
+        uint256 maxSupply; // spec §5.2: the hybrid's cap, 0 = not a hybrid; immutable
+    }
+
+    // keccak256(abi.encode(uint256(keccak256("scaas.underlying")) - 1)) & ~bytes32(uint256(0xff))
+    bytes32 private constant _STORAGE = 0x38d6f7edefffa65376a58a6aced8a2c86698d3a0b5d15a785f69ed89d0cd1000;
+
+    address internal constant NATIVE = address(0);
+    uint256 internal constant MAX_LEGS = 8;
+    uint256 internal constant MAX_RATE = type(uint96).max;
+    /// @notice Execution window after `eta`; past it the change counts as none everywhere.
+    uint256 internal constant RATE_WINDOW = 7 days;
+
+    function $() internal pure returns (WrappedStorage storage s) {
+        assembly ("memory-safe") { s.slot := _STORAGE }
+    }
+
+    // ------------------------------------------------------------------ init
+
+    /// @notice The token's `_init`: legs 1–8 (the factory's index reads the same `legs`), the metadata, the
+    ///         flags/owner/roles of `kind` (`GovernanceLib.init` with the kind's masks, spec §1.2), the rate config, then
+    ///         the legs in their given order (never changes).
+    function initToken(IFactoryToken.TokenConfig memory c, bool isHedera, uint8 kind, uint256 valid, uint256 roleBits,
+        uint256 contractOnly) public
+    {
+        uint256 n = c.legs.length;
+        if (n == 0 || n > MAX_LEGS) revert MetaTokenBase.UnderlyingCountInvalid(n);
+        TokenStore.TokenStorage storage t = TokenStore.$();
+        t.name = c.name;
+        t.symbol = c.symbol;
+        t.decimals = c.decimals;
+        t.kind = kind;
+        // spec §5.2: a hybrid is `maxSupply != 0`, and `MINTABLE` is set at creation iff it is one
+        bool capped = c.maxSupply != 0;
+        if (capped != (c.features & (uint256(1) << GovernanceBits.MINTABLE) != 0)) revert IWrappedToken.MaxSupplyInvalid();
+        GovernanceLib.init(c.features, c.lockedFeatures, c.owner, c.grantDelay, c.rescueTo, c.roles, valid, roleBits,
+            contractOnly);
+        bool adjustable = GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE);
+        WrappedStorage storage s = $();
+        IFactoryToken.RateConfig memory rate = c.rate;
+        if (!adjustable) {
+            if (rate.rateDelay != 0 || rate.maxRateStepBps != 0) revert IWrappedToken.RateConfigInvalid();
+        } else {
+            if (rate.rateDelay < 2 days || rate.rateDelay > 30 days || rate.maxRateStepBps == 0
+                || rate.maxRateStepBps > 1000) revert IWrappedToken.RateConfigInvalid();
+            s.rateDelay = rate.rateDelay;
+            s.maxRateStepBps = rate.maxRateStepBps;
+        }
+        s.maxSupply = c.maxSupply;
+        for (uint256 i; i < n; ++i) _addLeg(s, c.legs[i], adjustable, isHedera);
+    }
+
+    function _addLeg(WrappedStorage storage s, IFactoryToken.Leg memory l, bool adjustable, bool isHedera)
+        private
+    {
+        address u = l.underlying;
+        uint8 d;
+        if (u == NATIVE) {
+            d = isHedera ? 8 : 18; // Hedera's EVM counts the native coin in tinybars
+        } else {
+            if (u == address(this) || !SigCheck.isContract(u)) revert IWrappedToken.UnderlyingInvalid(u);
+            if (isHedera && !HederaLib.checkAndAssociate(u)) revert IWrappedToken.UnderlyingInvalid(u);
+            // CTR-GOV-05 (spec §6.1, B-15): a leg this factory registered must not carry FORCE or MODERATE. `msg.sender` is
+            // the factory (`initialize` checked it; DELEGATECALL keeps it, GD-20). `isRegisteredToken`, never `isToken`: an
+            // unregistered leg or a second factory's token is an outside leg, never read. Features only lose bits.
+            if (IOpenFactory(msg.sender).isRegisteredToken(u) && IGovernance(u).features()
+                & ((uint256(1) << GovernanceBits.FORCE) | (uint256(1) << GovernanceBits.MODERATE)) != 0) {
+                revert IWrappedToken.UnderlyingInvalid(u);
+            }
+            (bool ok, bytes memory ret) = u.staticcall(abi.encodeCall(IERC20Metadata.decimals, ()));
+            if (!ok || ret.length != 32 || uint256(bytes32(ret)) > type(uint8).max) {
+                revert IWrappedToken.DecimalsUnreadable(u);
+            }
+            d = uint8(uint256(bytes32(ret)));
+        }
+        (uint256 num, uint256 den) = (l.num, l.den);
+        if (num == 0 || den == 0 || num > MAX_RATE || den > MAX_RATE) revert IWrappedToken.RateInvalid(num, den);
+        if (s.legIndex[u] != 0) revert IWrappedToken.DuplicateUnderlying(u);
+        uint256 i = s.legCount;
+        s.legs[i] = Leg({
+            token: u, decimals: d, wrapEnabled: true, adjustable: adjustable, capped: s.maxSupply != 0,
+            num: uint96(num), den: uint96(den), reserve: 0
+        });
+        s.legIndex[u] = i + 1;
+        s.legCount = uint8(i + 1);
+    }
+
+    // ------------------------------------------------------------------ wrap / reserve / unwrap
+
+    /// @notice Pull `amount` from `from` (or take `value` on the native leg), price the measured delta; on a hybrid,
+    ///         `supply + minted ≤ maxSupply` (`supply`: the token's `totalSupply()`, read only when capped).
+    function wrap(uint256 i, uint256 amount, address from, uint256 value, uint256 supply)
+        public returns (address u, uint256 received, uint256 minted)
+    {
+        WrappedStorage storage s = $();
+        Leg storage L = s.legs[i];
+        u = L.token;
+        if (!L.wrapEnabled) revert IWrappedToken.WrapDisabledFor(u);
+        if (L.adjustable && _isPending(s)) revert IWrappedToken.WrapPausedForRateChange(u);
+        received = _pull(L, amount, from, value);
+        minted = Math.mulDiv(received, L.num, L.den);
+        if (minted == 0) revert IWrappedToken.WrapTooSmall();
+        if (L.capped) _cap(supply, minted);
+    }
+
+    /// @notice A hybrid's mint (spec §5.2): the same cap as a wrap; the token checked bit 1 and its holder before.
+    function checkMint(uint256 supply, uint256 amount) public view {
+        _cap(supply, amount);
+    }
+
+    /// @dev The one cap (spec §5.2, CTR-GOV-12): every path that raises `totalSupply()` on a hybrid; shielded value counts,
+    ///      the pool's units being in `totalSupply()`. `MaxSupplyExceeded` names the supply the call would reach.
+    function _cap(uint256 supply, uint256 added) private view {
+        uint256 max = $().maxSupply;
+        uint256 next = Math.saturatingAdd(supply, added);
+        if (next > max) revert IWrappedToken.MaxSupplyExceeded(next, max);
+    }
+
+    /// @notice Anyone; no mint. Refused on a leg whose wrap is disabled.
+    function addReserve(uint256 i, uint256 amount, address from, uint256 value) public returns (uint256 received) {
+        Leg storage L = $().legs[i];
+        if (!L.wrapEnabled) revert IWrappedToken.WrapDisabledFor(L.token);
+        received = _pull(L, amount, from, value);
+    }
+
+    /// @dev One balance read before serves both the shortfall check (no wrap or top-up while `balance < reserve`)
+    ///      and the measurement. Native: the balance already holds `value`, which is the measured delta.
+    function _pull(Leg storage L, uint256 amount, address from, uint256 value) private returns (uint256 received) {
+        address u = L.token;
+        uint256 reserve = L.reserve;
+        if (u == NATIVE) {
+            if (value != amount) revert IWrappedToken.NativeValueMismatch(value, amount);
+            uint256 before = address(this).balance - value;
+            if (before < reserve) revert IWrappedToken.ReserveShortfall(u, before, reserve);
+            received = value;
+        } else {
+            if (value != 0) revert IWrappedToken.NativeValueMismatch(value, 0);
+            uint256 before = IERC20(u).balanceOf(address(this));
+            if (before < reserve) revert IWrappedToken.ReserveShortfall(u, before, reserve);
+            IERC20(u).safeTransferFrom(from, address(this), amount);
+            received = IERC20(u).balanceOf(address(this)) - before;
+        }
+        L.reserve = reserve + received;
+    }
+
+    /// @notice `mtxWrapOrder` (CTR-TOK-20): the leg must accept a wrap (enabled, no pending change, no shortfall); the
+    ///         underlying's `mtxTrade` takes the order with `dex == receiveToken == wrappedToken` as the holder's
+    ///         `WrapOrder`: it checks the signature, that this token is the puller, the price (`minMinted <= minted`),
+    ///         the relayer (`submitter`) and the fee bound, and moves `o.amount` here.
+    /// @return received the measured delta (must be `o.amount`)
+    /// @return minted `⌊o.amount·num/den⌋`
+    /// @return fee `⌈minted·o.fee/10⁶⌉`, the submitter's part of `minted`
+    function wrapBySig(address u, ITradeToken.WrapOrder calldata o, bytes calldata sig, address submitter, uint256 supply)
+        public returns (uint256 received, uint256 minted, uint256 fee)
+    {
+        Leg storage L = _wrapLeg(u, o.wrappedToken);
+        (minted, fee) = _sigQuote(L, o.amount, o.fee, supply);
+        received = _sigBefore(L); // the balance before, in the return slot (stack)
+        ITradeToken(u).mtxTrade(_tradeOf(o), sig, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
+        received = _sigReceived(L, received, o.amount);
+    }
+
+    /// @notice `uaWrapOrder` (CTR-TOK-20, UA-5b): `wrapBySig` with the holder's `UAWrapOrder` pulled by the underlying's
+    ///         `uaTrade`; the underlying must be a SCaaS ledger token (`IUALedger` by ERC-165, as `payOutToUA`).
+    function wrapBySigUA(address u, ITradeToken.UAWrapOrder calldata o, IUARegistry.UASig calldata auth, address submitter,
+        uint256 supply) public returns (uint256 received, uint256 minted, uint256 fee)
+    {
+        Leg storage L = _wrapLeg(u, o.wrappedToken);
+        if (!ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) revert IUALedger.UALegNotLedger(u);
+        (minted, fee) = _sigQuote(L, o.amount, o.fee, supply);
+        received = _sigBefore(L); // the balance before, in the return slot (stack)
+        ITradeToken(u).uaTrade(_order(o), auth, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
+        received = _sigReceived(L, received, o.amount);
+    }
+
+    /// @dev `_order` of a `WrapOrder`: the same 12 words as a `UAWrapOrder`, ids zero-padded, into the 13 of a `TradeOrder`.
+    function _tradeOf(ITradeToken.WrapOrder memory w) private pure returns (ITradeToken.TradeOrder memory t) {
+        ITradeToken.UAWrapOrder memory u;
+        assembly ("memory-safe") { u := w }
+        ITradeToken.UATradeOrder memory c = _order(u);
+        assembly ("memory-safe") { t := c }
+    }
+
+    /// @dev The order the underlying checks: a wrap order is the `UATradeOrder` with `dex == receiveToken == wrappedToken`
+    ///      (TS-D19).
+    function _order(ITradeToken.UAWrapOrder memory w) private pure returns (ITradeToken.UATradeOrder memory c) {
+        c.from = w.from;
+        c.receiveToken = w.wrappedToken;
+        c.amount = w.amount;
+        c.receiveAmount = w.minMinted;
+        c.minFill = w.minFill;
+        c.fee = w.fee;
+        c.relayer = w.relayer;
+        c.dex = w.wrappedToken;
+        c.destination = w.destination;
+        c.flags = w.flags;
+        c.batch = w.batch;
+        c.nonce = w.nonce;
+        c.validUntil = w.validUntil;
+    }
+
+    function _wrapLeg(address u, address receiveToken) private view returns (Leg storage L) {
+        if (u == NATIVE) revert IWrappedToken.NativeNotGasless();
+        WrappedStorage storage s = $();
+        L = s.legs[indexOf(u)];
+        if (!L.wrapEnabled) revert IWrappedToken.WrapDisabledFor(u);
+        if (L.adjustable && _isPending(s)) revert IWrappedToken.WrapPausedForRateChange(u);
+        if (receiveToken != address(this)) revert IWrappedToken.WrapOrderInvalid(receiveToken);
+    }
+
+    /// @dev `minted = ⌊amount·num/den⌋`, the submitter's `fee = ⌈minted·feePpm/10⁶⌉`; a hybrid's cap on `minted` (the fee is
+    ///      minted too).
+    function _sigQuote(Leg storage L, uint256 amount, uint256 feePpm, uint256 supply)
+        private view returns (uint256 minted, uint256 fee)
+    {
+        minted = Math.mulDiv(amount, L.num, L.den);
+        if (minted == 0) revert IWrappedToken.WrapTooSmall();
+        if (L.capped) _cap(supply, minted);
+        fee = Math.mulDiv(minted, feePpm, 1_000_000, Math.Rounding.Ceil);
+    }
+
+    /// @dev One balance read before serves the shortfall check and the measurement, as in `_pull`.
+    function _sigBefore(Leg storage L) private view returns (uint256 before) {
+        uint256 reserve = L.reserve;
+        before = IERC20(L.token).balanceOf(address(this));
+        if (before < reserve) revert IWrappedToken.ReserveShortfall(L.token, before, reserve);
+    }
+
+    function _sigReceived(Leg storage L, uint256 before, uint256 amount) private returns (uint256 received) {
+        received = IERC20(L.token).balanceOf(address(this)) - before;
+        if (received != amount) revert IWrappedToken.WrapReceivedMismatch(amount, received);
+        L.reserve += received;
+    }
+
+    /// @notice Every check before any effect: recipient, `0 < out`, `out ≥ minOut`, `out ≤ reserve`.
+    function quoteUnwrap(uint256 i, uint256 wrapped, address recipient, uint256 minOut)
+        public view returns (uint256 out, uint256 burned)
+    {
+        if (recipient == address(0) || recipient == address(this) || recipient == MetaTxLib.UA_POOL
+            || recipient == MetaTxLib.SHIELD_POOL) { // C5-4
+            revert IWrappedToken.UnwrapRecipientInvalid(recipient);
+        }
+        return _quote(i, wrapped, minOut);
+    }
+
+    /// @notice `unwrapToUA` (CTR-UA-28): the checks of `quoteUnwrap` but the recipient's (the leg's `transferToUA`
+    ///         checks `to`).
+    function quoteUnwrapToUA(uint256 i, uint256 wrapped, uint256 minOut) public view returns (uint256 out, uint256 burned) {
+        return _quote(i, wrapped, minOut);
+    }
+
+    function _quote(uint256 i, uint256 wrapped, uint256 minOut) private view returns (uint256 out, uint256 burned) {
+        Leg storage L = $().legs[i];
+        (uint256 num, uint256 den) = (L.num, L.den);
+        out = Math.mulDiv(wrapped, den, num);
+        if (out == 0) revert IWrappedToken.UnwrapTooSmall();
+        if (out < minOut) revert IWrappedToken.UnwrapBelowMin(out, minOut);
+        uint256 reserve = L.reserve;
+        if (out > reserve) revert IWrappedToken.InsufficientReserve(L.token, out, reserve);
+        burned = Math.mulDiv(out, num, den, Math.Rounding.Ceil);
+    }
+
+    /// @notice After the token burned: `reserve -= out`, then the one outside call, under the token's guard (CEI).
+    ///         The balance must drop by EXACTLY `out` (a sender-pays fee reverts, CTR-TOK-11). The native coin goes
+    ///         with all gas; a recipient that refuses it reverts the unwrap, and an EIP-7702 designator recipient is
+    ///         refused (`UnwrapRecipientInvalid`: an EOA must not run code, owner ruling 2026-10-30, D4).
+    function payOut(uint256 i, address recipient, uint256 out) public returns (address u) {
+        Leg storage L = $().legs[i];
+        L.reserve -= out;
+        u = L.token;
+        uint256 before = _balance(u);
+        if (u == NATIVE) {
+            if (SigCheck.isDesignator(recipient)) revert IWrappedToken.UnwrapRecipientInvalid(recipient);
+            Address.sendValue(payable(recipient), out);
+        }
+        else IERC20(u).safeTransfer(recipient, out);
+        uint256 after_ = _balance(u);
+        uint256 sent = before > after_ ? before - after_ : 0;
+        if (sent != out) revert IWrappedToken.UnderlyingTransferMismatch(u, out, sent);
+    }
+
+    /// @notice `payOut` into a derived UA (CTR-UA-28): leg `u` pays `to` in its own UA ledger,
+    ///         `IUALedger(u).transferToUA(to, out)`, which checks `to`. A leg that does not report `IUALedger` by ERC-165
+    ///         (the native coin, an outside ERC-20 or HTS token, a SCaaS token with the ledger off) reverts
+    ///         `UALegNotLedger` before the reserve or the leg moves; the caller's burn before it is unwound by the
+    ///         revert, atomically. The balance must drop by EXACTLY `out`, as in `payOut`.
+    function payOutToUA(uint256 i, bytes32 to, uint256 out) public returns (address u) {
+        Leg storage L = $().legs[i];
+        u = L.token;
+        // `u == NATIVE` only skips the probe: `supportsInterface(address(0), …)` is false, so the error is the same
+        if (u == NATIVE || !ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) {
+            revert IUALedger.UALegNotLedger(u);
+        }
+        L.reserve -= out;
+        uint256 before = IERC20(u).balanceOf(address(this));
+        IUALedger(u).transferToUA(to, out);
+        uint256 after_ = IERC20(u).balanceOf(address(this));
+        uint256 sent = before > after_ ? before - after_ : 0;
+        if (sent != out) revert IWrappedToken.UnderlyingTransferMismatch(u, out, sent);
+    }
+
+    /// @notice The quote `payOutTo` runs, alone: a native id by `quoteUnwrap`, a derived UA by `quoteUnwrapToUA`. An
+    ///         unshield-unwrap runs it before its proof (spec §5.4), so a short reserve costs the relayer the cheap prefix.
+    function quoteTo(uint256 i, bytes32 recipient, uint256 wrapped, uint256 minOut) public view returns (uint256 out) {
+        if (UAKinds.inNativeSpace(recipient)) (out,) = quoteUnwrap(i, wrapped, address(uint160(uint256(recipient))), minOut);
+        else (out,) = quoteUnwrapToUA(i, wrapped, minOut);
+    }
+
+    /// @notice The leg payout of an unshield-unwrap (CTR-ZTH-51, UA-5c) to a recipient id, after the caller burnt
+    ///         `wrapped`: a native id (its address) by `quoteUnwrap` + `payOut`, a derived UA in leg `i`'s own UA ledger
+    ///         by `quoteUnwrapToUA` + `payOutToUA` (`UALegNotLedger` for an outside leg).
+    function payOutTo(uint256 i, bytes32 recipient, uint256 wrapped, uint256 minOut) public returns (uint256 out) {
+        out = quoteTo(i, recipient, wrapped, minOut);
+        if (UAKinds.inNativeSpace(recipient)) payOut(i, address(uint160(uint256(recipient))), out);
+        else payOutToUA(i, recipient, out);
+    }
+
+    // ------------------------------------------------------------------ rescue (CTR-GOV-06, spec §6.2)
+
+    /// @notice `WRAPPED*`: a leg (the native one included) pays only `balance − reserve`, checked before and after the
+    ///         transfer (`ReserveShortfall`, never a panic); a foreign asset its whole balance. Either way every other leg's
+    ///         balance is unchanged across the call (`RescueTouchedLeg`, at most `MAX_LEGS` reads): a foreign alias of a leg
+    ///         (A16), or a second leg over the same ledger, whose reserve the first leg's surplus would hold (review
+    ///         2026-11-04 M-1); a short leg traps no other rescue. The caller's guard is the token's `nonReentrant`.
+    function rescue(address asset) public {
+        address to = GovernanceLib.rescueOpen(asset);
+        WrappedStorage storage s = $();
+        uint256 x = s.legIndex[asset]; // the leg's index + 1, 0 for a foreign asset
+        uint256 n = s.legCount;
+        uint256[] memory before = new uint256[](n);
+        for (uint256 i; i < n; ++i) if (i + 1 != x) before[i] = _balance(s.legs[i].token);
+        uint256 amount;
+        if (x != 0) {
+            uint256 r = s.legs[x - 1].reserve;
+            uint256 bal = _balance(asset);
+            if (bal < r) revert IWrappedToken.ReserveShortfall(asset, bal, r);
+            amount = bal - r;
+            GovernanceLib.rescueSend(asset, to, amount);
+            bal = _balance(asset);
+            if (bal < r) revert IWrappedToken.ReserveShortfall(asset, bal, r);
+        } else {
+            amount = _balance(asset);
+            GovernanceLib.rescueSend(asset, to, amount);
+        }
+        for (uint256 i; i < n; ++i) {
+            address leg = s.legs[i].token;
+            if (i + 1 != x && _balance(leg) != before[i]) revert IRescuable.RescueTouchedLeg(leg);
+        }
+        emit IRescuable.Rescued(asset, to, amount);
+    }
+
+    // ------------------------------------------------------------------ guardian (WRAP_DISABLEABLE)
+
+    /// @notice One-way: no re-enable (a compromised guardian reopening a depegged inflow would drain the good legs).
+    function disableWrap(address u, bytes32 reason, bytes32 caller) public {
+        if (!GovernanceLib.hasFeature(GovernanceBits.WRAP_DISABLEABLE) || !GovernanceLib.hasRole(GovernanceBits.WRAP_DISABLEABLE, caller)) {
+            revert IWrappedToken.NotGuardian();
+        }
+        GovernanceUse.use(GovernanceBits.WRAP_DISABLEABLE, caller, 0); // a limited holder's grant binds it
+        Leg storage L = $().legs[indexOf(u)];
+        if (!L.wrapEnabled) revert IWrappedToken.WrapDisabledFor(u);
+        L.wrapEnabled = false;
+        emit IWrappedToken.WrapDisabled(u, caller, reason);
+    }
+
+    // ------------------------------------------------------------------ rates (CTR-TOK-06, CTR-TOK-13)
+
+    function _onlyRateAdmin(bytes32 caller) private {
+        if (!GovernanceLib.hasFeature(GovernanceBits.RATE_ADJUSTABLE)) revert IWrappedToken.RateFixed();
+        if (!GovernanceLib.hasRole(GovernanceBits.RATE_ADJUSTABLE, caller)) revert IWrappedToken.NotRateAdmin();
+        GovernanceUse.use(GovernanceBits.RATE_ADJUSTABLE, caller, 0); // a limited holder's grant binds it
+    }
+
+    /// @notice The step is checked ONCE, here, against the current rate (which cannot change while pending).
+    function proposeRate(address u, uint96 num, uint96 den, bytes32 caller) public {
+        _onlyRateAdmin(caller);
+        WrappedStorage storage s = $();
+        if (_isPending(s)) revert IWrappedToken.RateChangePending();
+        uint256 i = indexOf(u);
+        if (num == 0 || den == 0) revert IWrappedToken.RateInvalid(num, den);
+        Leg storage L = s.legs[i];
+        (uint96 n0, uint96 d0) = (L.num, L.den);
+        // |num'·den − num·den'|·10⁴ ≤ num·den'·bps — exact in integers, every product < 2^207.
+        uint256 a = uint256(num) * d0;
+        uint256 b = uint256(n0) * den;
+        if ((a > b ? a - b : b - a) * 10_000 > b * s.maxRateStepBps) revert IWrappedToken.RateStepTooLarge();
+        uint64 eta = uint64(block.timestamp + s.rateDelay);
+        s.pending = PendingRate({leg: uint8(i), num: num, den: den, eta: uint56(eta)});
+        emit IWrappedToken.RateChangeProposed(u, n0, d0, num, den, eta);
+    }
+
+    function cancelRate(bytes32 caller) public {
+        _onlyRateAdmin(caller);
+        WrappedStorage storage s = $();
+        if (!_isPending(s)) revert IWrappedToken.NoRateChangePending();
+        _drop(s);
+    }
+
+    /// @notice `disableFeature(RATE_ADJUSTABLE)` fixes the rate and cancels a pending change (CTR-TOK-06).
+    function dropPending() public {
+        WrappedStorage storage s = $();
+        if (_isPending(s)) _drop(s);
+        else delete s.pending;
+    }
+
+    function _drop(WrappedStorage storage s) private {
+        address u = s.legs[s.pending.leg].token;
+        delete s.pending;
+        emit IWrappedToken.RateChangeCancelled(u);
+    }
+
+    /// @notice Only the rate admin executes: a third party cannot bundle the execution with its own wraps.
+    function executeRate(bytes32 caller, uint256 supply) public {
+        _onlyRateAdmin(caller);
+        WrappedStorage storage s = $();
+        PendingRate memory p = s.pending;
+        if (p.eta == 0) revert IWrappedToken.NoRateChangePending();
+        if (block.timestamp < p.eta) revert IWrappedToken.RateChangeNotReady(p.eta);
+        if (block.timestamp > uint256(p.eta) + RATE_WINDOW) revert IWrappedToken.RateChangeExpired(p.eta);
+        bool anyDisabled = _requireCollateral(s, p, supply);
+        Leg storage T = s.legs[p.leg];
+        (uint96 n0, uint96 d0) = (T.num, T.den);
+        if (anyDisabled && uint256(p.num) * d0 < uint256(n0) * p.den) {
+            revert IWrappedToken.RateDecreaseWithDisabledLeg();
+        }
+        T.num = p.num;
+        T.den = p.den;
+        delete s.pending;
+        emit IWrappedToken.RateChanged(T.token, n0, d0, p.num, p.den);
+    }
+
+    /// @dev Every leg: `balance ≥ reserve` (no phantom reserve); then `C' ≥ supply` with the new rate, summing with an
+    ///      early exit once covered but still checking every leg's balance. Returns "some leg has wrap disabled". On a
+    ///      hybrid (`capped`) no `C' ≥ supply`: a rate fall needs no `addReserve` (spec §5.3, C1, CTR-GOV-12).
+    function _requireCollateral(WrappedStorage storage s, PendingRate memory p, uint256 supply)
+        private view returns (bool anyDisabled)
+    {
+        uint256 c;
+        uint256 n = s.legCount;
+        for (uint256 i; i < n; ++i) {
+            Leg storage L = s.legs[i];
+            if (L.capped) supply = 0; // every leg carries the same copy
+            uint256 r = L.reserve;
+            uint256 bal = _balance(L.token);
+            if (bal < r) revert IWrappedToken.ReserveShortfall(L.token, bal, r);
+            if (!L.wrapEnabled) anyDisabled = true;
+            if (c < supply) {
+                c = Math.saturatingAdd(c, i == p.leg ? _value(r, p.num, p.den) : _value(r, L.num, L.den));
+            }
+        }
+        if (c < supply) revert IWrappedToken.RateChangeUndercollateralized(c, supply);
+    }
+
+    // ------------------------------------------------------------------ views
+
+    function collateralValue() public view returns (uint256 c) {
+        WrappedStorage storage s = $();
+        uint256 n = s.legCount;
+        for (uint256 i; i < n; ++i) {
+            Leg storage L = s.legs[i];
+            c = Math.saturatingAdd(c, _value(L.reserve, L.num, L.den));
+        }
+    }
+
+    function previewWrap(address u, uint256 amount) public view returns (uint256 minted, uint256 used) {
+        Leg storage L = $().legs[indexOf(u)];
+        minted = Math.mulDiv(amount, L.num, L.den);
+        used = Math.mulDiv(minted, L.den, L.num, Math.Rounding.Ceil);
+    }
+
+    function previewUnwrap(address u, uint256 wrapped) public view returns (uint256 out, uint256 burned) {
+        Leg storage L = $().legs[indexOf(u)];
+        out = Math.mulDiv(wrapped, L.den, L.num);
+        burned = Math.mulDiv(out, L.num, L.den, Math.Rounding.Ceil);
+    }
+
+    // ------------------------------------------------------------------ internal helpers (inlined in the token)
+
+    function indexOf(address u) internal view returns (uint256) {
+        uint256 x = $().legIndex[u];
+        if (x == 0) revert IWrappedToken.UnknownUnderlying(u);
+        return x - 1;
+    }
+
+    /// @dev The single-asset ABI works only with exactly one leg.
+    function sole() internal view returns (uint256) {
+        if ($().legCount != 1) revert IWrappedToken.UnderlyingRequired();
+        return 0;
+    }
+
+    function isPending() internal view returns (bool) {
+        return _isPending($());
+    }
+
+    function _isPending(WrappedStorage storage s) private view returns (bool) {
+        uint256 eta = s.pending.eta;
+        return eta != 0 && block.timestamp <= eta + RATE_WINDOW;
+    }
+
+    function _balance(address u) private view returns (uint256) {
+        return u == NATIVE ? address(this).balance : IERC20(u).balanceOf(address(this));
+    }
+
+    /// @dev `⌊r·num/den⌋`, saturating where the result exceeds 256 bits (`mulDiv` would revert).
+    function _value(uint256 r, uint256 num, uint256 den) private pure returns (uint256) {
+        (uint256 hi,) = Math.mul512(r, num);
+        return hi >= den ? type(uint256).max : Math.mulDiv(r, num, den);
+    }
+}

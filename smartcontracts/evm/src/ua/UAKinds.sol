@@ -53,7 +53,7 @@ library UAKinds {
     bytes32 internal constant PURPOSE_ZETHER_AUTH = keccak256("scaas.ua.purpose.zether-auth.v1");
     bytes32 internal constant PURPOSE_ZETHER_OWNER = keccak256("scaas.ua.purpose.zether-owner.v1");
     bytes32 internal constant PURPOSE_KEYOP = keccak256("scaas.ua.purpose.keyop.v1");
-    bytes32 internal constant PURPOSE_RECEIVER_FEE = keccak256("scaas.ua.purpose.receiver-fee.v1");
+    bytes32 internal constant PURPOSE_PAYEE_FEE = keccak256("scaas.ua.purpose.payee-fee.v1");
     bytes32 internal constant PURPOSE_VP = keccak256("scaas.ua.purpose.vp.v1");
     bytes32 internal constant PURPOSE_VC_ANCHOR = keccak256("scaas.ua.purpose.vc-anchor.v1");
     /// @notice `UATradeOrder`, `CancelOrder` over a UA order hash, `UAInvalidateNonces` (dex.md CTR-DEX-25; UA-5b).
@@ -68,6 +68,19 @@ library UAKinds {
     /// A derived `msig` member's acceptance of its slot (`acceptMembership`, CTR-UA-37): never a `pop`, `kem` or `pqz-key`
     /// signature, and the reverse.
     bytes32 internal constant PURPOSE_MEMBERSHIP = keccak256("scaas.ua.purpose.membership.v1");
+    /// Group 3f (PQZ verifier mode spec §5.1, AV-5): a PQZ verifier UA's `PqzVerdict` over a statement and its proof, in the
+    /// token's own domain (`requireAuthorized`, no registry change); never any other purpose's signature.
+    bytes32 internal constant PURPOSE_PQZ_VERDICT = keccak256("scaas.ua.purpose.pqz-verdict.v1");
+    /// UA-7 (spec 2026-10-25-ua7-pq-e2e-sessions P7, O1; plan T66a): a `PqChat` record's purpose, portable (domain "SCaaS PqChat", no
+    /// chain), checked by the registry's `requirePortable`; never a registry record's (`pop`, `kem`, `pqz-key`) and the reverse.
+    bytes32 internal constant PURPOSE_PQCHAT = keccak256("scaas.ua.purpose.pqchat.v1");
+    /// The PQZ three-key model (spec 2026-11-13-pqz-three-keys K3-3): a scoped PQZ key record's purpose, portable domain with
+    /// the chain inside the record (`UAPqzScopedKeyRecord.chainUid`); its `R_REG` proves under it with kind 0x0142 over typed
+    /// `UAPqzScopedKey`. Never a `pop`, `kem`, `pqz-key` or `pqchat` signature, and the reverse.
+    bytes32 internal constant PURPOSE_PQZ_SCOPED_KEY = keccak256("scaas.ua.purpose.pqz-scoped-key.v1");
+    /// CTR-UA-44 (TODO 3ze, owner 2026-11-14): an `msig`'s structure update (`updateMsig`), signed by a threshold of the stored
+    /// structure; not a `requirePortable` purpose (`_portablePurpose` refuses it), never any other record's signature.
+    bytes32 internal constant PURPOSE_MSIG_UPDATE = keccak256("scaas.ua.purpose.msig-update.v1");
     /// typed-signing TS-D1 (owner 2026-10-31 decisions 2 + 8): the portable domain `EIP712Domain(string name,string
     /// version)` = ("SCaaS UA Portable", "1"), no chain id, verifying contract or salt (a record registers a UA on every
     /// chain, CTR-UA-07); `kind` is `uint16` (its name: `name(kind)`, the registry's `kindName`).
@@ -83,7 +96,28 @@ library UAKinds {
     bytes32 internal constant UA_PQZ_KEY_TYPEHASH = keccak256("UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)");
     bytes32 internal constant UA_PQZ_KEY_RECORD_TYPEHASH =
         keccak256("UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)UAPqzKey(bytes32 ua,bytes32 pqzKeyHash)");
+    /// Group 3g (CTR-UA-41 draft, KV-1): a PQZ key version v ≥ 1 (`setPqzKey(ua, v, …)`, its `R_REG`) and its consent record;
+    /// version 0 keeps `UAPqzKey` / `UAPqzKeyRecord` byte for byte, so a version-0 signature or proof never serves a version ≥ 1.
+    bytes32 internal constant UA_PQZ_KEY_VERSION_TYPEHASH =
+        keccak256("UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)");
+    bytes32 internal constant UA_PQZ_KEY_VERSION_RECORD_TYPEHASH = keccak256(
+        "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"
+    );
     bytes32 internal constant UA_MEMBERSHIP_TYPEHASH = keccak256("UAMembership(bytes32 ua,bytes32 member)");
+    /// CTR-UA-44: the update of an `msig` on one registry (`chainUid`, `registry` = the registry's own address), the full target
+    /// structure (every slot, disabled included, `enabled` bit i = slot i), `version` = stored + 1, signed until `validUntilBlock`.
+    bytes32 internal constant UA_MSIG_UPDATE_TYPEHASH = keccak256(
+        "UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members,uint256 enabled,uint64 validUntilBlock)UAMsigMember(uint16 kind,bytes32 id,uint16 weight)"
+    );
+    bytes32 internal constant UA_MSIG_MEMBER_TYPEHASH = keccak256("UAMsigMember(uint16 kind,bytes32 id,uint16 weight)");
+    /// K3-3: a scoped PQZ key (`keyClass` 2 `offchain-shared`, `token` 0; 3 `offchain-token`, `token` the scope) and the UA's
+    /// signed record of it (`openKemHash = keccak256(kemPk)` of the opening KEM key, 0 without one).
+    bytes32 internal constant UA_PQZ_SCOPED_KEY_TYPEHASH = keccak256(
+        "UAPqzScopedKey(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,bytes32 pqzKeyHash)"
+    );
+    bytes32 internal constant UA_PQZ_SCOPED_KEY_RECORD_TYPEHASH = keccak256(
+        "UAPqzScopedKeyRecord(bytes32 ua,uint8 keyClass,bytes32 chainUid,address token,uint64 version,bytes32 pqzKeyHash,bytes32 pqzPopHash,bytes32 openKemHash,uint64 validUntilBlock)"
+    );
     /// First byte of `kemPk` = the KEM scheme id (CTR-UA-32). Scheme 1 = ML-KEM-1024 + X25519; 2 (ML-KEM-1024 + HQC +
     /// X25519, after FIPS 207) is reserved and refused until enabled.
     uint8 internal constant KEM_SCHEME_MLKEM1024_X25519 = 1;
@@ -144,7 +178,7 @@ library UAKinds {
         return isSigning(kind) || isZether(kind);
     }
 
-    /// `msig` itself since owner 2026-11-02: one level down only, `UARegistryLib._worst` refuses an `msig` that holds one as a member.
+    /// `msig` itself since owner 2026-11-02: one level down only, `UARegistryCoreLib._worst` refuses an `msig` that holds one as a member.
     function isMember(uint16 kind, bool hederaNative) internal pure returns (bool) {
         return _singleSigning(kind) || kind == MSIG || kind == EVM_EOA || kind == EVM_CONTRACT || (hederaNative && kind == HEDERA_NATIVE);
     }
@@ -292,32 +326,8 @@ library UAKinds {
         return abi.encodePacked(k.scheme, k.mlkemEk, k.x25519);
     }
 
-    /// `TAG(msig)`: the tag of the only structure kind (the tokens' `uaSig` without the name table).
+    /// `TAG(msig)`: the tag of the only structure kind (R47 moved the tokens' `bytes auth` bridge `uaAuthCall` to legacy/ua-mtx-merge/).
     bytes32 internal constant MSIG_TAG = keccak256("scaas.ua.msig.v1");
-
-    /// typed-signing R1, for the tokens' generic `bytes auth` (TS-D14): the calldata of `requireAuthorized(ua, purposeTag, digest,
-    /// UASig)` for a derived id's `abi.encode(keyData, sig)` — `keyData` + `signature`, or, where `keyData` is the id's own `msig`
-    /// structure (`keccak256(TAG(msig) ‖ keyData) == ua`), `sig` = `abi.encode(MemberSig[])` as `members` (the structure itself is read
-    /// from the record). `sig` goes through as it came, past its one offset word: the registry's calldata decoder reads it, so nothing
-    /// here parses it (the legacy pipeline has no memory decoder for a list inside a list of structs: `Stack too deep`). A malformed
-    /// blob reverts with empty data, here or there.
-    function uaAuthCall(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes memory auth) internal pure returns (bytes memory) {
-        (bytes memory k, bytes memory sig) = abi.decode(auth, (bytes, bytes));
-        if (k.length == 0 || keccak256(abi.encodePacked(MSIG_TAG, k)) != ua) {
-            IUARegistry.UASig memory s;
-            (s.keyData, s.signature) = (k, sig);
-            return abi.encodeCall(IUARegistry.requireAuthorized, (ua, purposeTag, digest, s));
-        }
-        if (sig.length < 64 || _word(sig, 0) != 0x20) revert();
-        assembly ("memory-safe") {
-            mstore(add(sig, 32), sub(mload(sig), 32))
-            sig := add(sig, 32)
-        }
-        // the three heads of `UASig{"", "", members}`, its two empty lengths, then `members`
-        return bytes.concat(
-            abi.encodeWithSelector(IUARegistry.requireAuthorized.selector, ua, purposeTag, digest, 0x80, 0x60, 0x80, 0xa0, 0, 0), sig
-        );
-    }
 
     /// `hashStruct(UAPortableRecord{ua, kind, pqzKeyHash, kem})`, `kemHash = kemRecordHash` of the initial KEM record.
     function portableRecordHash(bytes32 ua, uint16 kind, bytes32 pqzKeyHash, bytes32 kemHash)
@@ -379,9 +389,78 @@ library UAKinds {
         return portableDigest(pqzKeyRecordHash(pqzKeyHash_(ua, pqzKeyHash), pqzPopHash));
     }
 
+    /// typed(`UAPqzKeyVersion{ua, version, pqzKeyHash}`): version v ≥ 1's `R_REG` proves over `uaMessage(0x0142,
+    /// PURPOSE_PQZ_KEY, ·)` (group 3g, KV-2).
+    function pqzKeyVersionDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash) internal pure returns (bytes32) {
+        return portableDigest(keccak256(abi.encode(UA_PQZ_KEY_VERSION_TYPEHASH, ua, version, pqzKeyHash)));
+    }
+
+    /// typed(`UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}`): the UA's consent to version
+    /// v ≥ 1, signed as `uaMessage(kind, PURPOSE_PQZ_KEY, ·)` (group 3g, KV-1).
+    function pqzKeyVersionRecordDigest(bytes32 ua, uint64 version, bytes32 pqzKeyHash, bytes32 pqzPopHash)
+        internal
+        pure
+        returns (bytes32)
+    {
+        bytes32 k = keccak256(abi.encode(UA_PQZ_KEY_VERSION_TYPEHASH, ua, version, pqzKeyHash));
+        return portableDigest(keccak256(abi.encode(UA_PQZ_KEY_VERSION_RECORD_TYPEHASH, k, pqzPopHash)));
+    }
+
+    /// typed(`UAPqzScopedKey`): what a scoped key's `R_REG` proves over, as `uaMessage(0x0142, PURPOSE_PQZ_SCOPED_KEY, ·)` (K3-3).
+    function pqzScopedKeyDigest(bytes32 ua, uint8 keyClass, bytes32 chainUid, address token, uint64 version, bytes32 pqzKeyHash)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return portableDigest(
+            keccak256(abi.encode(UA_PQZ_SCOPED_KEY_TYPEHASH, ua, keyClass, chainUid, token, version, pqzKeyHash))
+        );
+    }
+
+    /// typed(`UAPqzScopedKeyRecord`): what `setPqzScopedKey`'s `sig` signs, as `uaMessage(kind, PURPOSE_PQZ_SCOPED_KEY, ·)` (K3-3).
+    function pqzScopedKeyRecordDigest(
+        bytes32 ua,
+        uint8 keyClass,
+        bytes32 chainUid,
+        address token,
+        uint64 version,
+        bytes32 pqzKeyHash,
+        bytes32 pqzPopHash,
+        bytes32 openKemHash,
+        uint64 validUntilBlock
+    ) internal pure returns (bytes32) {
+        return portableDigest(keccak256(abi.encode(
+            UA_PQZ_SCOPED_KEY_RECORD_TYPEHASH, ua, keyClass, chainUid, token, version, pqzKeyHash, pqzPopHash, openKemHash,
+            validUntilBlock
+        )));
+    }
+
     /// typed(`UAMembership{ua, member}`): what `member` signs to accept its place in the `msig` `ua` (CTR-UA-37).
     function membershipDigest(bytes32 ua, bytes32 member) internal pure returns (bytes32) {
         return portableDigest(keccak256(abi.encode(UA_MEMBERSHIP_TYPEHASH, ua, member)));
+    }
+
+    /// typed(`UAMsigUpdate`): what a threshold of the stored structure signs for `updateMsig` (CTR-UA-44), as
+    /// `uaMessage(MSIG, PURPOSE_MSIG_UPDATE, ·)` under `member` (derived members) or itself (native members). `members` hashes as
+    /// an EIP-712 array of structs.
+    function msigUpdateDigest(
+        bytes32 ua,
+        bytes32 chainUid,
+        address registry,
+        uint64 version,
+        IUARegistry.MsigStructure memory s,
+        uint256 enabled,
+        uint64 validUntilBlock
+    ) internal pure returns (bytes32) {
+        IUARegistry.MsigMember[] memory m = s.members;
+        bytes32[] memory h = new bytes32[](m.length);
+        for (uint256 i; i < m.length; ++i) {
+            h[i] = keccak256(abi.encode(UA_MSIG_MEMBER_TYPEHASH, m[i].kind, m[i].id, m[i].weight));
+        }
+        return portableDigest(keccak256(abi.encode(
+            UA_MSIG_UPDATE_TYPEHASH, ua, chainUid, registry, version, s.threshold, keccak256(abi.encodePacked(h)), enabled,
+            validUntilBlock
+        )));
     }
 
     function uaAuthDomainSeparator(uint256 generation, uint256 chainId, address registry, bytes32 chainUid)

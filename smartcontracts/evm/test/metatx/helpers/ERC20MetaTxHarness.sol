@@ -2,13 +2,15 @@
 pragma solidity ^0.8.24;
 
 import {ERC20MetaTx} from "../../../src/metatx/ERC20MetaTx.sol";
+import {ERC20MetaTxWhole} from "../../helpers/ERC20MetaTxWhole.sol";
 import {MetaTxBase} from "../../../src/metatx/MetaTxBase.sol";
 import {IMetaTx} from "../../../src/metatx/IMetaTx.sol";
 import {FeeMode} from "../../../src/common/FeePolicy.sol";
 import {IUARegistry} from "../../../src/ua/IUARegistry.sol";
+import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 
 /// The smallest token on `ERC20MetaTx`: `burn(uint256)` is `AMOUNT(0)`, `touch()` is `ABSOLUTE` (moves nothing).
-contract ERC20MetaTxHarness is ERC20MetaTx {
+contract ERC20MetaTxHarness is ERC20MetaTxWhole {
     event Touched(address who);
 
     constructor(bytes32 chainUid_) ERC20MetaTx(chainUid_, address(0), address(0), false) {}
@@ -19,22 +21,34 @@ contract ERC20MetaTxHarness is ERC20MetaTx {
 
     function touch() external nonReentrant { emit Touched(_msgSender()); }
 
+    /// `chain_uid` (`MetaTxBase`'s body; a kind keeps its own view in `MetaTokenBase`).
+    function chainUid() external view returns (bytes32) {
+        return _chainUidBody();
+    }
+
+    /// The domain view (`SaltedEIP712`'s body; on a kind it is a module's entry since T66b).
+    function eip712Domain() external view returns (bytes1, string memory, string memory, uint256, address, bytes32,
+        uint256[] memory)
+    {
+        return _eip712DomainBody();
+    }
+
     /// Not allowlisted: `payWithFee` lives in `MetaTokenBase`; the harness only satisfies the interface.
-    function payWithFee(address, uint256, FeeMode, uint256, address, bytes32) external pure returns (bool) {
+    function payWithFee(address, uint256, FeeMode, uint256, address, bytes32, MetaTxLib.PayMeta calldata)
+        external pure returns (bool)
+    {
         revert("harness");
     }
 
     /// `MetaTokenBase`'s too.
-    function mtxRelayFee(address, address, bytes32, address, uint256, uint256, bytes calldata) external pure {
+    function mtxRelayFee(bytes32, address, bytes32, bytes32, uint256, uint256, uint256, uint256, IUARegistry.UASig calldata)
+        external pure
+    {
         revert("harness");
     }
 
-    function uaRelayFee(bytes32, address, bytes32, bytes32, uint256, uint256, IUARegistry.UASig calldata) external pure {
-        revert("harness");
-    }
-
-    function mtxSelectors()
-        public pure override(IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
+    function _mtxSelectorsBody()
+        internal pure override returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
         s = new bytes4[](3);
         c = new uint8[](3);

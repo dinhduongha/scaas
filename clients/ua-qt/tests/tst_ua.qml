@@ -9,6 +9,7 @@ TestCase {
 
     property var k: vectors.load("kinds.json")
     property var s: vectors.load("structures.json")
+    property var d: vectors.load("id_display.json")
 
     function hex(v) { return v === null ? "" : v }
 
@@ -71,6 +72,25 @@ TestCase {
         for (const r of k.invalid) {
             compare(UaKinds.validateKeyData(r.kind, r.keyData, r.hederaNative), false, r.reason)
             compare(UaKinds.lastError, r.error, r.reason)
+        }
+    }
+
+    // ua-mtx-merge spec §6, MD-9: every row of id_display.json, and a row for every kind of the table.
+    function test_id_display_rows() {
+        verify(d.rows.length > 0)
+        for (const r of d.rows) {
+            const got = UaKinds.idDisplay(r.id, r.kind)
+            if (r.display) {
+                compare(got, r.display.address ?? r.display.urn, r.name)
+                compare(UaKinds.lastError, "", r.name)
+            } else {
+                compare(got, "", r.name)
+                compare(UaKinds.lastError, r.error, r.name)
+            }
+        }
+        for (const t of k.kinds) {
+            const want = t.native ? (r => r.error === "UAKindNotDerived") : (r => !!(r.display && r.display.urn))
+            verify(d.rows.some(r => r.kind === t.kind && want(r)), "no row for " + t.name)
         }
     }
 
@@ -175,6 +195,14 @@ TestCase {
                 UaKinds.pqzKeyRecordMessage(holder.kind, ua, holder.keyData, rec.pqzKey, "0x", set.pqzPopHash ?? rec.pqzPopHash, holder.attrs.pqzKey !== "0x")
                 compare(UaKinds.lastError, n.error, n.name)
                 run++
+            } else if (n.entry === "setKemKey" && n.error === "UAKemHolder") {
+                // CTR-UA-32 (msig-kem-record): an msig's KEM record is refused by its kind (the target's kind is the row's)
+                const kr = pp.kemRecords.find(r => r.id === m.row)
+                const t = pp.registrations.find(r => r.ua === set.ua)
+                compare(t.kind, m.kind, n.name)
+                compare(UaKinds.kemRecordMessage(t.kind, set.ua, Number(kr.version), set.kemPk), "", n.name)
+                compare(UaKinds.lastError, n.error, n.name)
+                run++
             } else if (n.entry === "setKemKey" && n.name === "kem-record-of-other-ua") {
                 const kr = pp.kemRecords.find(r => r.id === m.row)
                 const t = pp.registrations.find(r => r.ua === set.ua)
@@ -214,6 +242,9 @@ TestCase {
         compare(UaKinds.lastError, "UAPqzHolder")
         UaKinds.holderPopMessage(0x0101, ua, "0x", "0x", "0x", "0x01" + "00".repeat(1600))
         compare(UaKinds.lastError, "UAKemHolder")
+        const mq = pp.registrations.find(r => r.name === "msig-pq/n2048-kmax1024")  // a PQ-eligible msig holds no KEM key (CTR-UA-32)
+        UaKinds.holderPopMessage(0x0120, ua, mq.keyData, "0x", "0x", "0x01" + "00".repeat(1600))
+        compare(UaKinds.lastError, "UAKemHolder")
         UaKinds.holderPopMessage(0x0130, ua, "0x", "0x", "0x", "0x00" + "00".repeat(1600))
         compare(UaKinds.lastError, "UAKemScheme")  // version 0 with scheme 0
         // a proof hash of the wrong length is UAPqzPopHash, as in every other package (m-C4)
@@ -232,6 +263,17 @@ TestCase {
             compare(UaKinds.membershipDigest(r.ua, r.member), r.digest, r.name)
             compare(UaKinds.uaMessage(0x0120, UaKinds.purposeTag("membership"), r.digest), r.message, r.name)
             compare(UaKinds.memberDigest(r.ua, r.message), r.memberDigest, r.name)
+        }
+    }
+
+    function test_msigUpdateRows() {
+        const rows = vectors.load("portable.json").msigUpdates
+        compare(rows.length, 4)
+        for (const r of rows) {
+            const o = JSON.parse(UaKinds.msigUpdate(JSON.stringify({ ua: r.ua, chainUid: r.chainUid, registry: r.registry, version: r.version,
+                threshold: r.threshold, members: r.members, enabled: r.enabled, validUntilBlock: r.validUntilBlock, sigs: r.args.sigs })))
+            compare([o.digest, o.message, o.memberDigest], [r.digest, r.message, r.memberDigest], r.name)
+            compare(o.args, r.args, r.name)
         }
     }
 
@@ -285,11 +327,17 @@ TestCase {
             compare(UaKinds.kemRecordHash(r.ua, Number(r.version), r.kemPk), r.structHash, r.id)
             compare(UaKinds.uaMessage(r.kind, UaKinds.purposeTag("kem"), d), r.message, r.id)
             compare(UaKinds.kemRecordMessage(r.kind, r.ua, Number(r.version), r.kemPk), r.message, r.id)
-            if (r.kind === 0x0120)
-                compare(UaKinds.memberDigest(r.ua, r.message), r.memberDigest, r.id)
+            verify(r.kind !== 0x0120, r.id + ": CTR-UA-32, an msig holds no KEM key")
         }
+        compare(pp.kemRecords.length, 12)
         const ua = "0x" + "01".repeat(32)
         const kem = (n, scheme = "01") => "0x" + scheme + "00".repeat(n - 1) // scheme byte, zeros, n bytes in all
+        // CTR-UA-32 (T66a): a PQ-eligible msig holds a PQZ key but no KEM key; the same record under a single PQ kind builds
+        const mq = pp.registrations.find(r => r.name === "msig-pq/n2048-kmax1024").ua
+        compare(UaKinds.kemRecordMessage(0x0120, mq, 1, kem(1601)), "")
+        compare(UaKinds.lastError, "UAKemHolder")
+        verify(UaKinds.kemRecordMessage(0x0131, mq, 1, kem(1601)) !== "", "the control")
+        compare(UaKinds.lastError, "")
         UaKinds.kemRecordDigest(ua, 0, kem(1601))
         compare(UaKinds.lastError, "UAKemVersion")
         // owner 2026-10-31: version 0 with a key is the register key's record (scheme != 0), never a setKemKey record
@@ -401,7 +449,7 @@ TestCase {
     }
 
     // metatx split T18: CTR-MTX-26 metaPayId / payLane and CTR-MTX-27 relayRef (EVM) against the forge-written vectors
-    property var pm: vectors.load("../metatx/paymeta.json")
+    property var pm: vectors.load("../metatx/legacy/ua-mtx-merge/paymeta.json")
     property var rr: vectors.load("../metatx/relayref.json")
 
     function test_meta_pay_id_vectors() {
@@ -468,7 +516,7 @@ TestCase {
         return JSON.parse(o)
     }
 
-    // the With forms with inner ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and holder record, every eligibility
+    // the With forms with inner ({id: keyData}, the JSON calls' form): msig-nested-pq's eligibility and record (no KEM key, CTR-UA-32), every eligibility
     // row and every nested PQZ key record reproduce; without inner they stay UAMemberUnknown, so does a third level. Every memberships
     // row's stored bytes turn back into its slot through replayedMemberSig
     function test_nested_inner() {
@@ -477,8 +525,9 @@ TestCase {
         for (const r of n.registrations) if (r.kind === 0x0120) inner[r.ua] = r.keyData
         const all = JSON.stringify(inner)
         const holders = n.registrations.concat(n.afterAcceptance).filter(r => r.attrs.kemPk !== "0x" || r.attrs.pqzKey !== "0x")
-        compare(holders.map(r => r.name), ["msig-nested-pq"])
-        for (const r of holders) {
+        compare(holders.map(r => r.name), [])  // CTR-UA-32 (T66a): msig-nested-pq registers without a KEM key (was the one row)
+        {
+            const r = n.registrations.find(x => x.name === "msig-nested-pq")
             verify(UaKinds.msigPqzEligibleWith(r.keyData, all), r.name)
             compare(UaKinds.lastError, "", r.name)
             verify(!UaKinds.msigPqzEligible(r.keyData))
@@ -486,8 +535,11 @@ TestCase {
             const h = JSON.parse(UaKinds.holderPopMessageWith(r.kind, r.ua, r.keyData, "0x", "0x", "0x", r.attrs.kemPk, all))
             compare([h.kemRecordHash, h.portableRecordDigest, h.registrationDigest, h.message, h.memberDigest],
                     [r.kemRecordHash, r.portableRecordDigest, r.registrationDigest, r.popMessage, r.memberDigest], r.name)
-            compare(UaKinds.holderPopMessageWith(r.kind, r.ua, r.keyData, "0x", "0x", "0x", r.attrs.kemPk, ""), "")
-            compare(UaKinds.lastError, "UAMemberUnknown", r.name)
+            // an msig holds no KEM key: refused by its kind, before its key data or inner is read
+            for (const i of [all, ""]) {
+                compare(UaKinds.holderPopMessageWith(r.kind, r.ua, r.keyData, "0x", "0x", "0x", "0x01" + "00".repeat(1600), i), "")
+                compare(UaKinds.lastError, "UAKemHolder", r.name)
+            }
         }
         for (const r of n.eligibility) {
             compare(UaKinds.msigPqzEligibleWith(r.keyData, JSON.stringify(r.inner)), r.eligible, r.reason)
@@ -497,7 +549,7 @@ TestCase {
                 compare(UaKinds.lastError, "UAMemberUnknown", r.reason)
             }
         }
-        const third = n.structures[0], pq = holders[0].keyData, t = {}
+        const third = n.structures[0], pq = n.registrations.find(x => x.name === "msig-nested-pq").keyData, t = {}
         t[third.member] = pq
         verify(!UaKinds.msigPqzEligibleWith(third.keyData, JSON.stringify(t)))
         compare(UaKinds.lastError, "UAMemberUnknown", "a third level")
@@ -601,7 +653,17 @@ TestCase {
             for (const x of r.innerDigests || [])
                 compare(UaKinds.memberDigest(x.inner, UaKinds.uaMessage(0x0120, memberTag, md)), x.memberDigest, r.name)
         }
-        compare([n.kemRecords.length, n.pqzKeyRecords.length], [1, 4])
+        compare([n.kemRecords.length, n.pqzKeyRecords.length], [0, 4])  // CTR-UA-32: an msig has no KEM record
+        {
+            const pq = n.registrations.find(x => x.name === "msig-nested-pq"), kem = "0x01" + "00".repeat(1600)
+            compare(UaKinds.kemRecordMessage(0x0120, pq.ua, 1, kem), "")
+            compare(UaKinds.lastError, "UAKemHolder")
+            const i = regInput(pq)
+            i.inner = inner
+            i.kemPk = kem
+            compare(UaKinds.registrationArgs(JSON.stringify(i)), "")
+            compare(UaKinds.lastError, "UAKemHolder")
+        }
         for (const r of n.kemRecords) {
             const m = UaKinds.kemRecordMessage(r.kind, r.ua, r.version, r.kemPk)
             compare([UaKinds.kemRecordDigest(r.ua, r.version, r.kemPk), m, UaKinds.memberDigest(r.ua, m)], [r.digest, r.message, r.memberDigest], r.id)
@@ -622,10 +684,10 @@ TestCase {
             compare([d, msg, UaKinds.memberDigest(m.ua, msg)], [m.digest, m.message, m.memberDigest], m.name)
         }
         compare(n.authorizations.length, 5)
-        const k = n.kemRecords[0]
+        const k = n.pqzKeyRecords[0]  // (was kemRecords[0]: CTR-UA-32, an msig has no KEM record)
         for (const a of n.authorizations) {
             compare(UaKinds.memberDigest(a.ua, UaKinds.uaMessage(0x0120, a.purposeTag, a.digest)), a.memberDigest, a.name)
-            compare(JSON.parse(UaKinds.setKemKeyArgs(JSON.stringify({ ua: k.ua, version: k.version, kemPk: k.kemPk, sig: a.uaSig }))).sig, a.uaSig, a.name)
+            compare(JSON.parse(UaKinds.setPqzKeyArgs(JSON.stringify({ ua: k.ua, pqzKey: k.pqzKey, pqzPopHash: k.pqzPopHash, sig: a.uaSig }))).sig, a.uaSig, a.name)
         }
         // the builder's own refusal is the minimal rule at both levels; the others are the registry's, on the signatures
         const minimal = ["inner-below-threshold", "inner-index-past-the-members", "inner-unsorted", "inner-not-minimal", "outer-not-minimal"]
@@ -674,7 +736,13 @@ TestCase {
             commits++
         }
         compare(commits, pp.registrations.filter(r => r.kemCommit !== undefined).length)
-        verify(commits > 0)
+        compare(commits, 7)  // CTR-UA-32: msig-pq/<set> registers without a KEM key
+        // CTR-UA-32 (T66a): a PQ-eligible msig holds no KEM key, in either form
+        const mq = pp.registrations.find(r => r.name === "msig-pq/n2048-kmax1024")
+        for (const commit of [{ kemCommit: true }, { kemCommit: false }, {}]) {
+            compare(UaKinds.registrationArgs(JSON.stringify(Object.assign(regInput(mq), { kemPk: pp.kemRecords[0].kemPk }, commit))), "")
+            compare(UaKinds.lastError, "UAKemHolder", JSON.stringify(commit))
+        }
         const typed = { 256: ["registerWebAuthn", 580], 272: ["registerMuSig2", 1124], 274: ["registerMuSig2", 1124],
                         273: ["registerFrost", 2308], 275: ["registerFrost", 2308] }
         const rows = k.valid.filter(v => typed[v.kind] !== undefined)
@@ -708,7 +776,7 @@ TestCase {
 
     function test_set_key_args() {
         const pp = vectors.load("portable.json")
-        compare(pp.kemRecords.length, 15)  // + v1-v3 of mldsa87, fndsa1024
+        compare(pp.kemRecords.length, 12)  // + v1-v3 of mldsa87, fndsa1024; no msig (CTR-UA-32)
         for (const k of pp.kemRecords) {
             const o = UaKinds.setKemKeyArgs(JSON.stringify({ ua: k.ua, version: k.version, kemPk: k.kemPk, sig: recordSig(k) }))
             compare(UaKinds.lastError, "", k.id)
@@ -744,17 +812,35 @@ TestCase {
         compare(UaKinds.lastError, "UAArgument")
     }
 
-    // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 21 "" and UAArgument
+    // governance T14: governanceBit against governance_bits.json on disk, every row; past bit 31 "" and UAArgument (3h T61: bit 24 PQZ_PROOF; group 3l: bits 25-27)
     function test_governance_bits_rows() {
         const v = vectors.load("../governance/governance_bits.json")
-        compare(v.bits.length, 22)
+        compare(v.bits.length, 32) // round 3s: bit 28 KYC; CTR-DEX-32: bit 29 CLOSED_MARKETS; round 3zb + 3zc: bits 30 BURNER, 31 SUPPLY_CAP_ADJUSTABLE
         for (const r of v.bits) {
             compare(JSON.parse(UaKinds.governanceBit(r.bit)), r, "bit " + r.bit)
             compare(UaKinds.lastError, "")
         }
-        for (const bit of [22, 127, 128, 255, 256, -1]) {
+        for (const bit of [32, 127, 128, 255, 256, -1]) {
             compare(UaKinds.governanceBit(bit), "", bit)
             compare(UaKinds.lastError, "UAArgument", bit)
         }
+    }
+
+    // pay-meta-tax T41 / T83: paymeta.json v3 rows (save without a payNo refused) and paytax.json's UAPayWithTax digest row
+    function test_pay_rows() {
+        const pm = vectors.load("../metatx/paymeta.json")
+        verify(pm.some((r) => !r.accepted), "a refused row")
+        for (const r of pm) {
+            const o = UaKinds.metaPayIdV3(JSON.stringify({ salt: r.salt, payNo: r.payNo, save: r.save, schema: r.schema, body: r.body }))
+            if (r.accepted) compare(JSON.parse(o).payId, r.payId, r.name)
+            else { compare(o, "", r.name); compare(UaKinds.lastError, "UAArgument", r.name) }
+        }
+        const r = vectors.load("../metatx/paytax.json").find((x) => x.name === "digest_unbound_relayer_fee_recipient")
+        const payment = {}
+        for (const k of ["from", "to", "value", "entryRef", "batch", "nonce", "validUntil", "mode", "relayer", "fee", "feeRecipient"]) payment[k] = r[k]
+        const got = JSON.parse(UaKinds.payDigest(JSON.stringify({ struct: "UAPayWithTax", domain: r.domain,
+            message: { payment: payment, taxMode: r.taxMode, tax: r.tax } })))
+        compare(got.digest, r.digest)
+        compare(got.structHash, r.structHash)
     }
 }

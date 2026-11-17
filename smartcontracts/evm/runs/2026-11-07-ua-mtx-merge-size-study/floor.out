@@ -1,0 +1,15 @@
+# Variant A's floor (gen_floor.py): each kind's whole ABI as stubs that only forward; runtime B; at 937b454f. UNAUDITED.
+| kind | entries | floor B | B per entry | today B |
+|---|---|---|---|---|
+| NormalToken (0) | 84 | 6957 | 83 | 32870 |
+| WrappedToken (1) | 113 | 10069 | 89 | 43503 |
+| NormalZetherToken (2) | 120 | 9579 | 80 | 41076 |
+| WrappedZetherToken (3) | 153 | 12780 | 84 | 51522 |
+| NormalPqzToken (4) | 124 | 10294 | 83 | 47714 |
+| WrappedPqzToken (5) | 159 | 13926 | 88 | 57026 |
+| NormalRegulatedToken (8) | 103 | 8759 | 85 | 40638 |
+| WrappedRegulatedToken (9) | 132 | 11837 | 90 | 51292 |
+| NormalZetherRegulatedToken (10) | 139 | 11150 | 80 | 49020 |
+| WrappedZetherRegulatedToken (11) | 172 | 14495 | 84 | 59678 |
+| NormalPqzRegulatedToken (12) | 143 | 11862 | 83 | 55472 |
+| WrappedPqzRegulatedToken (13) | 178 | 15637 | 88 | 64996 |

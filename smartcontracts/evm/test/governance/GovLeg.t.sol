@@ -14,26 +14,31 @@ import {WrappedZetherToken} from "../../src/zether/WrappedZetherToken.sol";
 import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {ChainEnvCode} from "../../src/factory/ChainEnvCode.sol";
 
 /// A token whose `features()` is whatever its creator asked (test only): published as kind 8, it stands for a registered
 /// regulated token with `FORCE` or `MODERATE`, which no kind of this release can set; published elsewhere, or with
 /// `createTokenUnregistered`, it is an outside token that may lie.
 contract FlagLeg {
     address public immutable factory;
-    bytes32 public immutable chainUid;
     uint8 private immutable _kind;
     uint256 public features;
 
-    constructor(uint16, IFactoryToken.Env memory e, bytes memory a) {
-        (factory, chainUid) = (e.factory, e.chainUid);
+    /// Chain-neutral (plan T72): the factory and `implArgs`; `chain_uid` from the clone's env.
+    constructor(address f, bytes memory a) {
+        factory = f;
         _kind = a.length == 0 ? 8 : abi.decode(a, (uint8));
     }
 
+    function chainUid() external view returns (bytes32) { return ChainEnvCode.chainUid(); }
+    function validateEnv(IFactoryToken.ChainEnv calldata) external pure {}
     function kind() external view returns (uint8) { return _kind; }
-    function initialize(address, uint64, bytes calldata a) external { features = abi.decode(a, (uint256)); }
+    function modules() external pure returns (address[] memory) {} // T66b: no body module
+    function initialize(bytes32, uint64, bytes calldata a) external { features = abi.decode(a, (uint256)); }
     function underlyings() external pure returns (address[] memory) {}
     function lockedFeatures() external view returns (uint256) { return features; }
-    function owner() external pure returns (address) {}
+    function admin() external pure returns (address) {}
     function decimals() external pure returns (uint8) { return 6; }
 }
 
@@ -56,10 +61,12 @@ abstract contract GovLegRows is Test {
     function _flagLeg(OpenFactory f, uint256 features, bytes32 salt) internal returns (address) {
         IOpenFactory.TokenKind k8 = IOpenFactory.TokenKind.NORMAL_REGULATED;
         if (f.implementationOf(k8, 1) == address(0)) {
-            Catalogue.release(f, k8, 1, plainEnv(address(f), address(0), f.chainUid(), address(0), false),
-                type(FlagLeg).creationCode);
-            vm.prank(f.registrar());
-            f.setKindEnabled(k8, true);
+            // T66b: a mock release with no body module (`Catalogue.release` would deploy kind 8's)
+            uint16 v = Catalogue.env(f, k8, plainEnv(address(f), address(0), f.chainUid(), address(0), false));
+            vm.prank(address(uint160(uint256(f.admin()))));
+            f.deployTokenImplementation(k8, 1, v, type(FlagLeg).creationCode, "", EnvKit.uidOf(address(f)));
+            vm.prank(address(uint160(uint256(f.admin()))));
+            f.setTokenKindEnabled(k8, true, EnvKit.uidOf(address(f)));
         }
         return f.createToken(k8, 1, abi.encode(features), salt);
     }
@@ -110,7 +117,7 @@ contract GovLegTest is GovLegRows {
     OpenFactory f;
 
     function setUp() public {
-        f = new OpenFactory(address(this), UID, 0);
+        f = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.plain(f, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
     }
@@ -142,7 +149,7 @@ contract GovLegTest is GovLegRows {
     /// `createTokenUnregistered` makes `isToken` true for anyone's code: a leg that says `FORCE | MODERATE` is an outside leg,
     /// accepted and never asked for its features.
     function test_unregisteredLegIsOutside() public {
-        address impl = address(new FlagLeg(0, plainEnv(address(f), address(0), UID, address(0), false), abi.encode(uint8(0))));
+        address impl = address(new FlagLeg(address(f), abi.encode(uint8(0))));
         address leg = f.createTokenUnregistered(IOpenFactory.TokenKind.NORMAL, impl, abi.encode(PLAIN | FORCE | MODERATE), "u");
         assertTrue(f.isToken(leg));
         assertFalse(f.isRegisteredToken(leg));
@@ -153,7 +160,7 @@ contract GovLegTest is GovLegRows {
 
     /// A second factory's registered `FORCE` token is outside to the first: accepted there, refused on its own factory.
     function test_secondFactoryLegIsOutside() public {
-        OpenFactory f2 = new OpenFactory(address(this), UID, 0);
+        OpenFactory f2 = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f2, IOpenFactory.TokenKind.WRAPPED, 1, type(WrappedToken).creationCode, address(0), address(0), false);
         address force = _flagLeg(f2, PLAIN | FORCE, "force");
         assertTrue(f2.isRegisteredToken(force));

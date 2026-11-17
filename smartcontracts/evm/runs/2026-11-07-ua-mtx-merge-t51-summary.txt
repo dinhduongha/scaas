@@ -1,0 +1,28 @@
+# ua-mtx-merge T51 gate summary (full output in git-ignored .log files, not committed)
+# T51 (group 3g, pqz-key-versions spec §2, §6.2, §14; O1, O6, R2, C3, C4, C7): versioned PQZ key records in the registry,
+# setPqzKey(ua, version, ...) / storePqzPop(ua, version, ...), the per-UA key marker, current and UAPqzKeyCurrent, the views,
+# the host rules 1-4, R-cross-set's replacement retired; the UAStore layout pin. UNAUDITED.
+# Base: 55347848. Commits: 5fbc1776 (legacy copies), 3f80f072 (implementation), this one (summary, mutants table, harness).
+step | commit | rc | counts
+t51-red | 5fbc1776 + tests only | 1 | compile error: UAKinds.pqzKeyVersionDigest not found (test/ua/PqzKeyVersions.t.sol)
+t51-build | 3f80f072 | 0 | src, then test/ua, test/pqz and the other test directories in four chunks (one cold run of every test hit the 4 GB cap, rc 143)
+t51-green | 3f80f072 | 0 | test/ua/{PqzKeyVersions,UAStoreLayout}.t.sol: 43 passed 0 failed
+t51-forge-full-first | 3f80f072 - pins | 1 | 2990 passed 17 failed 14 skipped, 287 suites: the pins of the change only (MtxRelayFee / GovernanceRouter CREATE2, dex_order_kat.json, regulated_kat.json, plus-zero gas 11 rows, UARegistryUA8 gas pins 3 tests), moved (old -> new in 3f80f072)
+t51-forge-full | 3f80f072 | 1 -> 0 | 3004 passed 3 failed 14 skipped, 287 suites: 3 plus-zero rows lost by the parallel PLUS_ZERO_WRITE (its read-modify-write of the JSON); rewritten with --threads 1, PlusZero.t.sol then 0 failed in every suite
+t51-gas-repin | 3f80f072 | 0 | GAS_REPIN=1 test_T_GAS* at the four sets: 78 rows moved (runs/2026-11-07-ua-mtx-merge-t51-gas-pins.txt)
+t51-at-set-n2048-kmax1024 | 3f80f072 | 0 | 921 passed 0 failed 1 skipped, 93 suites (at-set.sh test --match-path 'test/{ua,pqz,as/confidential}/*'); PqzSet.sol restored
+t51-at-set-n2304-kmax4096 | 3f80f072 | 0 | 918 passed 0 failed 4 skipped, 93 suites; PqzSet.sol restored
+t51-at-set-n2560-kmax16384 | 3f80f072 | 0 | 917 passed 0 failed 5 skipped, 93 suites; PqzSet.sol restored
+t51-at-set-n2816-kmax65536 | 3f80f072 | 0 | 912 passed 0 failed 10 skipped, 93 suites; PqzSet.sol restored
+t51-size-gate | 3f80f072 | 0 | 0 errors, 97 contracts, above 65,536 B: none; UARegistry 29,710 -> 31,438, UARegistryLib 36,192 -> 37,536, PqzBurnLib 10,074 -> 10,103, PqzTransferLib 17,697 -> 17,726 (kind 13 unchanged, 64,522)
+t51-deploy-gas | 3f80f072 | 0 | runs/2026-11-07-ua-mtx-merge-pqzver/regdeploy (T10's formula, asked = (regular + state) x 1.05; the same harness on a copy of 55347848 for "old"), equal at the four sets
+t51-e2e-self-test | 3f80f072 | 0 | script/pqz/e2e.py --self-test: 0 failures (the versioned selectors, pqzKeyOf's four words)
+t51-mutants | 3f80f072 | 1 each | 14 of 14 killed, none a compile error (runs/2026-11-07-ua-mtx-merge-t51-mutants.txt; harness runs/2026-11-07-ua-mtx-merge-pqzver/mutants.py): M-R1 x2, M-R2 x2, M-R3 x3, M-R4 x3, M-R5, M-R6 x2, M-R7; git diff --exit-code -- src clean after
+#
+# Deploy gas (regular | state | asked; 57 M / 60 M / regular x 1.05 < 2^24), old -> new, every set:
+#   UARegistryLib  2,378,955 | 55,557,360 | 60.83 M (NO / NO / yes)  ->  2,466,336 | 57,613,680 | 63.08 M (NO / NO / yes)
+#   UARegistry     2,566,200 | 45,639,900 | 50.62 M (fits / fits / yes) ->  2,680,628 | 48,283,740 | 53.51 M (fits / fits / yes)
+#   UARegistryLib is above 60 M before 3c's rebalance: both contracts 68,974 B, against about 71,230 B for 60 M each (spec §6.2's
+#   table), so about 2.3 KB to spare once the rebalance evens them; above 57 M for both, as spec §6.2 expected. R4 decides after 3c.
+#   The SCaaS testnet's 200 M block holds both.
+# Not run here: scaas-node (its selector pins of setPqzKey / storePqzPop move in T55), clientkeys / ua-* (T54).

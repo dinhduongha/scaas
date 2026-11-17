@@ -50,17 +50,21 @@
    "REGISTER": 20576,
    "DISCLOSE-SENDER": 41376,
    "DISCLOSE-RECEIVER": 41376,
-   "DISCLOSE-AUDITOR": 41376
+   "DISCLOSE-AUDITOR": 41376,
+   "TRANSFER-SPLIT": 124032,
+   "TRANSFER-SPLIT0": 103424
   },
   "bundle": 20784,
   "bundle0": 20656
  },
  "max_proof_pqzh": 327680,
  "max_input": 524288,
- "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v5",
- "pqzl_id": "eacf34a3a8b6b5aff9be26e24ec03176e2699784c4ff8a1b4c8921cb09276882",
- "pqzh_label": "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v3",
- "pqzh_id": "c93f3bdd8f3f503e22e60a2815b7ca685778509a2cfd380d6d954e68ec3f3662",
+ "pqzl_label": "scaas/pqz/lnp22/mlwe-d64k40-q50l4/v6",
+ "pqzl_id": "53aa68704b996ebee81c257c513ea3c114ed04137b5e8b1ba94cfc95e3d83841",
+ "pqzl_split_label": "scaas/pqz/lnp22/mlwe-d64k40-q50l4/split-v1",
+ "pqzl_split_id": "296b284fbf843c457b2b627d4fea847bc7be52fb0e3f9b142bf2249f37cdb74e",
+ "pqzh_label": "scaas/pqz/pqzh/ligero-fq50-n32756k817t122-keccak256-zk-proven/v4",
+ "pqzh_id": "4b2d2ff295d42a34f415c1c99a0df73b68a59496ff97168335c380b90a9a9ba7",
  "pqzh_preset": {
   "radices": [
    2,

@@ -41,6 +41,8 @@
 #include "pqz_reg_params.h"
 #include "pqz_tx0_params.h"
 #include "pqz_tx_params.h"
+#include "pqz_txs0_params.h"
+#include "pqz_txs_params.h"
 #include "pqz_txm20_params.h"
 #include "pqz_txm2_params.h"
 #include "pqz_txm40_params.h"
@@ -82,7 +84,9 @@ static rel_t REG = { .P = pqz_reg, .op = PQZ_OP_REGISTER, .code = PQZ_OP_REGISTE
              TX0 = { .P = pqz_tx0, .op = PQZ_OP_TRANSFER, .code = PQZ_REL_TX0, .legs = 1 },
              BURN = { .P = pqz_burn, .op = PQZ_OP_BURN, .code = PQZ_OP_BURN },
              DS = { .P = pqz_ds, .op = PQZ_OP_DISCLOSE_SENDER, .code = PQZ_OP_DISCLOSE_SENDER },
-             DR = { .P = pqz_dr, .op = PQZ_OP_DISCLOSE_RECEIVER, .code = PQZ_OP_DISCLOSE_RECEIVER };
+             DR = { .P = pqz_dr, .op = PQZ_OP_DISCLOSE_RECEIVER, .code = PQZ_OP_DISCLOSE_RECEIVER },
+             TXS = { .P = pqz_txs, .op = PQZ_OP_TRANSFER, .code = PQZ_REL_TXS, .legs = 1, .aud = 1 },
+             TXS0 = { .P = pqz_txs0, .op = PQZ_OP_TRANSFER, .code = PQZ_REL_TXS0, .legs = 1 };
 /* R_TXM (op 7) by (M, auditorOn); M = 1 on R_TX's / R_TX0's parameters (P6-ANON F6) */
 #define TXM_REL(p, m, lg, a) { .P = p, .op = PQZ_OP_TRANSFER_MULTI, .code = PQZ_REL_TXM (lg, a), .legs = m, .aud = a }
 static rel_t TXM[] = { TXM_REL (pqz_tx, 1, 0, 1),     TXM_REL (pqz_txm2, 2, 1, 1),  TXM_REL (pqz_txm4, 4, 2, 1),
@@ -201,7 +205,7 @@ int
 pqz_init (void *arena, size_t len)
 {
   pqz_err = PQZ_OK;
-  REG.ready = TX.ready = TX0.ready = BURN.ready = DS.ready = DR.ready = 0;
+  REG.ready = TX.ready = TX0.ready = BURN.ready = DS.ready = DR.ready = TXS.ready = TXS0.ready = 0;
   for (unsigned t = 0; t < NTXM; t++)
     TXM[t].ready = 0;
 #ifdef PQZ_SV
@@ -531,6 +535,7 @@ build_reg (sys_t *S, const uint8_t *stmt, polyvec_t pk)
 typedef struct
 {
   unsigned legs, groups, lpg, aud, burn, txm;
+  unsigned split; /* R_TXS / R_TXS0: group 0 the leg's (r, e1), group 1 the sender's (r_f, e1_f) of u_f and v_f */
   unsigned E, e2f, bits, nbin, m1;      /* s1 slots (m1 without the Z slack polys) */
   unsigned dp, m, c, e;                 /* bit bases; d_j at 64 j */
   unsigned nblk, bst[NZ], bln[NZ];      /* exact-l2 blocks: s1 slots [bst, bst + bln) */
@@ -540,8 +545,10 @@ typedef struct
 static void
 shape_of (const rel_t *R, shape_t *H)
 {
-  const unsigned M = R->legs, G = R->op == PQZ_OP_BURN ? 1 : PQZ_TXM_GROUPS (M, R->aud), A = R->aud;
+  const unsigned split = (R->code & PQZ_REL_SPLIT) != 0 && R->op == PQZ_OP_TRANSFER;
+  const unsigned M = R->legs, G = R->op == PQZ_OP_BURN ? 1 : split ? 2 : PQZ_TXM_GROUPS (M, R->aud), A = R->aud;
   unsigned g, z = 0;
+  H->split = split;
   H->legs = M, H->groups = G, H->lpg = PQZ_TXM_LPG (A), H->aud = A, H->burn = R->op == PQZ_OP_BURN, H->txm = R->op == PQZ_OP_TRANSFER_MULTI;
   H->E = 2 * K + 2 * K * G, H->e2f = H->E + M, H->bits = H->e2f + 1 + A * M;
   H->nbin = (PQZ_BITS_BURN + 64 * M + 63) / 64, H->m1 = H->bits + H->nbin;
@@ -712,7 +719,7 @@ parse_debit (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, const shape_t *
     }
   ok &= rd_polyvec (T->uT, p), p += PQZ_POLYVEC_BYTES;
   ok &= rd_poly (T->vT, p, 16), p += PQZ_V_BYTES;
-  for (g = 0; g < H->groups; g++)
+  for (g = 0; g < (H->split ? 1 : H->groups); g++)
     {
       T->u[g] = new_vec (Rq);
       ok &= rd_polyvec (T->u[g], p), p += PQZ_POLYVEC_BYTES;
@@ -727,6 +734,11 @@ parse_debit (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, const shape_t *
     {
       poly_alloc (T->va[j], Rq);
       ok &= rd_poly (T->va[j], p, 16), p += PQZ_V_BYTES;
+    }
+  if (H->split) /* R_TXS / R_TXS0: u_f = u_1 after the last v */
+    {
+      T->u[1] = new_vec (Rq);
+      ok &= rd_polyvec (T->u[1], p), p += PQZ_POLYVEC_BYTES;
     }
   return ok;
 }
@@ -783,7 +795,8 @@ build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, rel_t *R)
       acc_zero (acc, nbin);
       for (b = 0; b < 4; b++)
         add_bit (acc, SLOT (H.dp, 4, i, b), DELTA << b);
-      evaleq (S, e++, T->pkf, 2 * K, i, i, (int)H.e2f, acc, -cval (T->vf, i));
+      /* v_f under group 0, or on R_TXS / R_TXS0 under the sender's own group 1 (r_f, e1_f): CTR-PQZ-04's row 4' */
+      evaleq (S, e++, T->pkf, 2 * K + 2 * K * H.split, i, i, (int)H.e2f, acc, -cval (T->vf, i));
       for (j = 0; j < A * M; j++)
         {
           acc_zero (acc, nbin);
@@ -1275,6 +1288,10 @@ stmt_bytes (const rel_t *R)
       return PQZ_TX_STMT_BYTES;
     case PQZ_REL_TX0:
       return PQZ_TX0_STMT_BYTES;
+    case PQZ_REL_TXS:
+      return PQZ_TXS_STMT_BYTES;
+    case PQZ_REL_TXS0:
+      return PQZ_TXS0_STMT_BYTES;
     case PQZ_OP_BURN:
       return PQZ_BURN_STMT_BYTES;
     case PQZ_OP_DISCLOSE_SENDER:
@@ -1298,6 +1315,10 @@ build (sys_t *S, txst_t *T, const rel_t *R, const uint8_t *stmt, size_t stmt_len
       return build_debit (S, T, stmt, &TX);
     case PQZ_REL_TX0:
       return build_debit (S, T, stmt, &TX0);
+    case PQZ_REL_TXS:
+      return build_debit (S, T, stmt, &TXS);
+    case PQZ_REL_TXS0:
+      return build_debit (S, T, stmt, &TXS0);
     case PQZ_OP_BURN:
       return build_debit (S, T, stmt, &BURN);
     case PQZ_OP_DISCLOSE_SENDER:
@@ -1327,7 +1348,7 @@ txm_rel (const uint8_t *stmt, size_t stmt_len)
   return NULL;
 }
 
-/* the relation of op; op 1 is R_TX0 with the 66,560-byte statement, else R_TX; op 7 by its header words. NULL also
+/* the relation of op; op 1 by its length: R_TX0, R_TXS, R_TXS0 (u_f appended), else R_TX; op 7 by its header words. NULL also
    when the statement is not exactly that relation's length: every entry (prove, verify, verify_fast) checks the length
    here, before the keys or tables are built and the statement hashed (review G-3 / H-4, fix A) */
 static rel_t *
@@ -1340,7 +1361,10 @@ rel_of (uint8_t op, const uint8_t *stmt, size_t stmt_len)
       R = &REG;
       break;
     case PQZ_OP_TRANSFER:
-      R = stmt_len == PQZ_TX0_STMT_BYTES ? &TX0 : &TX;
+      R = stmt_len == PQZ_TX0_STMT_BYTES    ? &TX0
+          : stmt_len == PQZ_TXS_STMT_BYTES  ? &TXS
+          : stmt_len == PQZ_TXS0_STMT_BYTES ? &TXS0
+                                            : &TX;
       break;
     case PQZ_OP_BURN:
       R = &BURN;
@@ -1397,8 +1421,9 @@ witness (txst_t *T, const rel_t *R, const uint8_t *wit, size_t wit_len, polyvec_
       if (wit_len != PQZ_DR_WIT_BYTES || !dr_witness (T, wit, s1) || !s0_ok (s1))
         return 0;
       break;
-    default: /* the debit relations (R_TX, R_TX0, R_BURN, R_TXM): pqz.h's layout, one l2 slack per block */
-      if (R->code != PQZ_OP_TRANSFER && R->code != PQZ_REL_TX0 && R->code != PQZ_OP_BURN
+    default: /* the debit relations (R_TX, R_TX0, R_TXS, R_TXS0, R_BURN, R_TXM): pqz.h's layout, one l2 slack per block */
+      if (R->code != PQZ_OP_TRANSFER && R->code != PQZ_REL_TX0 && R->code != PQZ_REL_TXS && R->code != PQZ_REL_TXS0
+          && R->code != PQZ_OP_BURN
           && R->op != PQZ_OP_TRANSFER_MULTI)
         return 0;
       shape_of (R, &H);
@@ -1641,7 +1666,7 @@ pqz_decrypt_raw_win (const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTES], 
 #ifdef PQZ_TEST_HOOKS
 /* ---------------------------------------------------------------- test hook (P6-SV diff harness only; not in
    libpqz): decode a proof, change one field, re-encode. kind / r1 / r2 pick the field and the change. op names the
-   relation: an op, PQZ_REL_TX0 (0x81) for R_TX0 or PQZ_REL_TXM (M, A) for an R_TXM shape. Returns 1 and the new proof in out, or 0 if the input does not
+   relation: an op, PQZ_REL_TX0 (0x81) for R_TX0, PQZ_REL_TXS / PQZ_REL_TXS0 (0x41 / 0xc1) or PQZ_REL_TXM (M, A) for an R_TXM shape. Returns 1 and the new proof in out, or 0 if the input does not
    decode. */
 static void
 mut_swap (poly_ptr a, poly_ptr b)
@@ -1657,7 +1682,7 @@ mut_swap (poly_ptr a, poly_ptr b)
 static rel_t *
 rel_by_code (uint8_t code)
 {
-  rel_t *all[] = { &REG, &TX, &TX0, &BURN, &DS, &DR };
+  rel_t *all[] = { &REG, &TX, &TX0, &BURN, &DS, &DR, &TXS, &TXS0 };
   for (unsigned t = 0; t < sizeof all / sizeof all[0]; t++)
     if (all[t]->code == code)
       return all[t];

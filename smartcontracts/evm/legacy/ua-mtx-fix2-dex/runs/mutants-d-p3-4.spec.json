@@ -1,0 +1,7 @@
+[
+ {"id":"D34-1 live read dropped","file":"src/dex/SCaaSDexLiquidityModule.sol","old":"if (_s().kind[tk] != KIND_SCAAS || _deprecatedNow(tk)) verify = true;","new":"if (_s().kind[tk] != KIND_SCAAS) verify = true;","path":"test/liquidity/**/*.sol"},
+ {"id":"D34-2 never deprecated","file":"src/dex/SCaaSDexLiquidityModule.sol","old":"        return IOpenFactory(_FACTORY).isTokenDeprecated(k, v);","new":"        k; v; return false;","path":"test/liquidity/**/*.sol"},
+ {"id":"D34-3 always deprecated","file":"src/dex/SCaaSDexLiquidityModule.sol","old":"        return IOpenFactory(_FACTORY).isTokenDeprecated(k, v);","new":"        k; v; return true;","path":"test/liquidity/**/*.sol"},
+ {"id":"D34-4 inverted","file":"src/dex/SCaaSDexLiquidityModule.sol","old":"        return IOpenFactory(_FACTORY).isTokenDeprecated(k, v);","new":"        return !IOpenFactory(_FACTORY).isTokenDeprecated(k, v);","path":"test/liquidity/**/*.sol"},
+ {"id":"D34-5 snapshot dropped (live only)","file":"src/dex/SCaaSDexLiquidityModule.sol","old":"if (_s().kind[tk] != KIND_SCAAS || _deprecatedNow(tk)) verify = true;","new":"if (_deprecatedNow(tk)) verify = true;","path":"test/liquidity/**/*.sol"}
+]

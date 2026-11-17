@@ -82,7 +82,7 @@ var Groups = []string{"p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1",
 	"mldsa65", "fndsa512", "slhdsa128s", "mldsa87", "fndsa1024", "pqz-mlwe"}
 
 var Purposes = []string{"pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop",
-	"receiver-fee", "vp", "vc-anchor", "trade", "kem", "pqz-key", "membership"}
+	"payee-fee", "vp", "vc-anchor", "trade", "kem", "pqz-key", "membership", "msig-update"}
 
 const (
 	DomainType   = "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
@@ -101,17 +101,25 @@ func Keccak256(parts ...[]byte) (out [32]byte) {
 
 var MsgTag = Keccak256([]byte("scaas.ua.msg.v1"))
 
-// GovernanceBit is a row of the governance bits 0-21 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
-// smartcontracts/vectors/governance/governance_bits.json; bits 22-127 are free, 128-255 the application's bitLabel(bit).
+// GovernanceBit is a row of the governance bits 0-31 (spec 2026-11-02-governance §1.2). The disclosure sentences are read by the app from
+// smartcontracts/vectors/governance/governance_bits.json; bits 32-127 are free, 128-255 the application's bitLabel(bit).
 type GovernanceBit struct{ Name, Type string }
 
 // GovernanceBits is indexed by bit.
 var GovernanceBits = []GovernanceBit{
 	{"PAYABLE", "capability"}, {"MINTABLE", "power"}, {"BURNABLE", "capability"}, {"RATE_ADJUSTABLE", "power"},
-	{"WRAP_DISABLEABLE", "power"}, {"FREEZE", "power"}, {"FORCE", "power"}, {"PAUSE", "power"}, {"ALLOWLIST", "capability"},
-	{"DENYLIST", "capability"}, {"RECORD", "power"}, {"LISTING", "power"}, {"FEE_ROUTING", "power"}, {"", "unused"}, {"", "unused"},
+	{"WRAP_DISABLEABLE", "power"}, {"FREEZE", "power"}, {"FORCE", "power"}, {"PAUSE", "power"}, {"ALLOWLIST", "power"},
+	{"DENYLIST", "power"}, {"RECORD", "power"}, {"LISTING", "power"}, {"FEE_ROUTING", "power"}, {"", "unused"}, {"", "unused"},
 	{"ARBITRATE", "reserved"}, {"CORRECT", "reserved"}, {"RESCUABLE", "capability"}, {"PUBLISH", "power"}, {"DEPRECATE", "power"},
-	{"ENABLE_KIND", "power"}, {"MODERATE", "power"},
+	{"ENABLE_KIND", "power"}, {"MODERATE", "power"}, {"OPERATOR_TRANSFER", "power"}, {"TAX", "power"}, {"PQZ_PROOF", "power"},
+	// group 3l (wrap limits spec 2026-11-10 §2): the hybrids' wrap controls
+	{"WRAP_LIMIT", "capability"}, {"WRAP_LIST", "power"}, {"REDEEMER", "power"},
+	// round 3s (CTR-GOV-24): 8, 9 the token's lists (powers), 28 the compliance registry check
+	{"KYC", "capability"},
+	// CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
+	{"CLOSED_MARKETS", "capability"},
+	// round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
+	{"BURNER", "power"}, {"SUPPLY_CAP_ADJUSTABLE", "capability"},
 }
 
 func KindInfo(kind uint16) (*Kind, error) {
@@ -321,6 +329,7 @@ var (
 	kemPurpose, _        = PurposeTag("kem")
 	pqzKeyPurpose, _     = PurposeTag("pqz-key")
 	membershipPurpose, _ = PurposeTag("membership")
+	msigUpdatePurpose, _ = PurposeTag("msig-update")
 )
 
 // KemSchemeMlkem1024X25519 is kemPk[0] of the one enabled KEM scheme (CTR-UA-32); 2 (ML-KEM-1024 + HQC + X25519, after
@@ -357,7 +366,14 @@ var (
 		"UARegistration":   "UARegistration(UAPortableRecord record,bytes32 pqzPopHash)" + kemType + recordType,
 		"UAPqzKey":         pqzKeyType,
 		"UAPqzKeyRecord":   "UAPqzKeyRecord(UAPqzKey key,bytes32 pqzPopHash)" + pqzKeyType,
-		"UAMembership":     "UAMembership(bytes32 ua,bytes32 member)",
+		// group 3g (KV-1): a PQZ key version v >= 1 and the UA's consent to it
+		"UAPqzKeyVersion":       pqzKeyVersionType,
+		"UAPqzKeyVersionRecord": "UAPqzKeyVersionRecord(UAPqzKeyVersion key,bytes32 pqzPopHash)" + pqzKeyVersionType,
+		"UAMembership":          "UAMembership(bytes32 ua,bytes32 member)",
+		// CTR-UA-44 (TODO 3ze): an msig's structure update on one registry
+		"UAMsigUpdate": "UAMsigUpdate(bytes32 ua,bytes32 chainUid,address registry,uint64 version,uint16 threshold,UAMsigMember[] members," +
+			"uint256 enabled,uint64 validUntilBlock)" + msigMemberType,
+		"UAMsigMember": msigMemberType,
 	}
 )
 
@@ -433,8 +449,11 @@ func RegistrationDigest(ua [32]byte, kind uint16, pqzKeyHash, kemRecordHash, pqz
 	return typed(HashStruct("UARegistration", PortableRecordHash(ua, kind, pqzKeyHash, kemRecordHash), pqzPopHash))
 }
 
-// KemRecordMessage is what the UA signs for a KEM record: UAMessage(kind, PURPOSE_KEM, KemRecordDigest).
+// KemRecordMessage is what the UA signs for a KEM record: UAMessage(kind, PURPOSE_KEM, KemRecordDigest); a KEM holder only (UAKemHolder).
 func KemRecordMessage(kind uint16, ua [32]byte, version uint64, kemPk []byte) ([32]byte, error) {
+	if !IsKemHolder(kind) {
+		return [32]byte{}, fail("UAKemHolder", fmt.Sprintf("0x%04x may not hold a KEM key", kind))
+	}
 	d, err := KemRecordDigest(ua, version, kemPk)
 	if err != nil {
 		return d, err
@@ -442,7 +461,10 @@ func KemRecordMessage(kind uint16, ua [32]byte, version uint64, kemPk []byte) ([
 	return UAMessage(kind, kemPurpose, d)
 }
 
-// holds: a PQZ / KEM holder is a single-key PQ kind, or an msig whose key data is PQ-eligible (malformed key data is UAKeyData).
+// IsKemHolder: a KEM key holder (CTR-UA-32, T66a) is a single PQ kind only; an msig holds no KEM key (UAKemHolder, as the registry).
+func IsKemHolder(kind uint16) bool { return IsPqzHolder(kind) }
+
+// holds: a PQZ key holder is a single-key PQ kind, or an msig whose key data is PQ-eligible (malformed key data is UAKeyData).
 func holds(kind uint16, keyData []byte, inner Inner) (bool, error) {
 	if IsPqzHolder(kind) {
 		return true, nil
@@ -513,7 +535,7 @@ type HolderPop struct {
 // HolderPopMessage is the portable PoP message of a registration. Attributes: pqzKey with its proof pqzPop (or only its hash
 // pqzPopHash; a relayer may hold only that) and the initial KEM key kemPk (its record is always version 0, owner 2026-10-31);
 // nil / empty = absent. Only holders may carry them
-// (UAPqzHolder, UAKemHolder; an msig needs keyData to show it is PQ-eligible); a PQZ key always comes with its proof hash and
+// (UAPqzHolder: an msig needs keyData to show it is PQ-eligible; UAKemHolder: a single PQ kind only, never an msig); a PQZ key always comes with its proof hash and
 // only with it (UAPqzPopHash).
 func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopHash, kemPk []byte) (*HolderPop, error) {
 	return HolderPopMessageWith(kind, ua, keyData, pqzKey, pqzPop, pqzPopHash, kemPk, nil)
@@ -521,18 +543,17 @@ func HolderPopMessage(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopH
 
 // HolderPopMessageWith is HolderPopMessage for an msig with msig members: inner gives their key data.
 func HolderPopMessageWith(kind uint16, ua [32]byte, keyData, pqzKey, pqzPop, pqzPopHash, kemPk []byte, inner Inner) (*HolderPop, error) {
-	hasKem := len(kemPk) != 0
-	if len(pqzKey) > 0 || hasKem {
+	if len(pqzKey) > 0 {
 		ok, err := holds(kind, keyData, inner)
 		if err != nil {
 			return nil, err
 		}
-		if !ok && len(pqzKey) > 0 {
+		if !ok {
 			return nil, fail("UAPqzHolder", fmt.Sprintf("0x%04x may not hold a PQZ key", kind))
 		}
-		if !ok {
-			return nil, fail("UAKemHolder", fmt.Sprintf("0x%04x may not hold a KEM key", kind))
-		}
+	}
+	if len(kemPk) != 0 && !IsKemHolder(kind) {
+		return nil, fail("UAKemHolder", fmt.Sprintf("0x%04x may not hold a KEM key", kind))
 	}
 	popHash, err := proofHashOf(pqzPop, pqzPopHash)
 	if err != nil {
@@ -591,6 +612,109 @@ func PqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash [32]byte) [32]byte {
 // native member this digest itself, a derived member MemberDigest(ua, UAMessage(MSIG, PURPOSE_MEMBERSHIP, ·)) under member.
 func MembershipDigest(ua, member [32]byte) [32]byte {
 	return typed(HashStruct("UAMembership", ua, member))
+}
+
+const msigMemberType = "UAMsigMember(uint16 kind,bytes32 id,uint16 weight)"
+
+// MsigUpdateDigest (CTR-UA-44) is the typed UAMsigUpdate{ua, chainUid, registry, version, threshold, members, enabled,
+// validUntilBlock}, members an EIP-712 array of UAMsigMember{kind, id, weight}, enabled the uint256 bitmap (bit i = slot i): what a
+// quorum of the stored structure of the msig ua signs for updateMsig on that one registry, under UAMessage(MSIG, PURPOSE_MSIG_UPDATE, ·)
+// (a native member this digest itself).
+func MsigUpdateDigest(ua, chainUID [32]byte, registry [20]byte, version uint64, threshold uint16, members []MsigMember, enabled [32]byte,
+	validUntilBlock uint64) [32]byte {
+	hs := make([][]byte, len(members))
+	for i, m := range members { // MsigMember (registry.go): ID is the 32-byte id
+		var id [32]byte
+		copy(id[:], m.ID)
+		h := HashStruct("UAMsigMember", w32(uint64(m.Kind)), id, w32(uint64(m.Weight)))
+		hs[i] = h[:]
+	}
+	var reg [32]byte
+	copy(reg[12:], registry[:])
+	return typed(HashStruct("UAMsigUpdate", ua, chainUID, reg, w32(version), w32(uint64(threshold)), Keccak256(hs...), enabled,
+		w32(validUntilBlock)))
+}
+
+const pqzKeyVersionType = "UAPqzKeyVersion(bytes32 ua,uint64 version,bytes32 pqzKeyHash)"
+
+// PqzKeyVersionDigest (group 3g) is the typed UAPqzKeyVersion{ua, version, pqzKeyHash}: what version v >= 1's R_REG proves over.
+func PqzKeyVersionDigest(ua [32]byte, version uint64, pqzKeyHash [32]byte) [32]byte {
+	return typed(pqzKeyVersionHash(ua, version, pqzKeyHash))
+}
+
+func pqzKeyVersionHash(ua [32]byte, version uint64, pqzKeyHash [32]byte) [32]byte {
+	return HashStruct("UAPqzKeyVersion", ua, [32]byte(word(version)), pqzKeyHash)
+}
+
+// PqzKeyVersionRecordDigest (group 3g) is the typed UAPqzKeyVersionRecord{UAPqzKeyVersion{ua, version, pqzKeyHash}, pqzPopHash}:
+// what the UA signs for version v >= 1 under UAMessage(kind, PURPOSE_PQZ_KEY, ·).
+func PqzKeyVersionRecordDigest(ua [32]byte, version uint64, pqzKeyHash, pqzPopHash [32]byte) [32]byte {
+	return typed(HashStruct("UAPqzKeyVersionRecord", pqzKeyVersionHash(ua, version, pqzKeyHash), pqzPopHash))
+}
+
+// StoredPqzKey is one stored version of a UA (the chain's pqzKeyAt).
+type StoredPqzKey struct {
+	Version    uint64
+	PqzKeyHash [32]byte
+}
+
+// PqzKeyVersionRecord is PQZ key version v >= 1 of setPqzKey(ua, version, ...), see PqzKeyVersionRecordMessage.
+type PqzKeyVersionRecord struct {
+	PqzKeyHash, PqzPopHash, VersionDigest, RecordDigest, Message, PqzRegMessage [32]byte
+	MemberDigest                                                                *[32]byte
+}
+
+// PqzKeyVersionRecordMessage (group 3g, KV-1) refuses, from the UA's stored versions: version 0 (UAPqzKeySet: a new key gets a new
+// version), a version other than latest + 1 or no version 0 (UAPqzKeyVersion), a key a stored version holds (UAKeyInUse). The holder
+// rules of HolderPopMessage; inner gives an msig member's key data (nil: none). Message is what the UA signs, PqzRegMessage what the
+// key's R_REG proves over.
+func PqzKeyVersionRecordMessage(kind uint16, ua [32]byte, keyData []byte, version uint64, pqzKey, pqzPop, pqzPopHash []byte, stored []StoredPqzKey, inner Inner) (*PqzKeyVersionRecord, error) {
+	ok, err := holds(kind, keyData, inner)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, fail("UAPqzHolder", fmt.Sprintf("0x%04x may not hold a PQZ key", kind))
+	}
+	if version == 0 {
+		return nil, fail("UAPqzKeySet", "version 0 is write-once: a new key gets a new version")
+	}
+	hasZero, latest := false, uint64(0)
+	for _, s := range stored {
+		hasZero = hasZero || s.Version == 0
+		latest = max(latest, s.Version)
+	}
+	if !hasZero || version != latest+1 {
+		return nil, fail("UAPqzKeyVersion", fmt.Sprint(version))
+	}
+	r := &PqzKeyVersionRecord{}
+	if r.PqzKeyHash, err = pqzKeyHashOf(pqzKey); err != nil {
+		return nil, err
+	}
+	for _, s := range stored {
+		if s.PqzKeyHash == r.PqzKeyHash {
+			return nil, fail("UAKeyInUse", "a stored version holds this key")
+		}
+	}
+	if r.PqzPopHash, err = proofHashOf(pqzPop, pqzPopHash); err != nil {
+		return nil, err
+	}
+	if r.PqzPopHash == ([32]byte{}) {
+		return nil, fail("UAPqzPopHash", "a PQZ key record needs its proof hash")
+	}
+	r.VersionDigest = PqzKeyVersionDigest(ua, version, r.PqzKeyHash)
+	r.RecordDigest = PqzKeyVersionRecordDigest(ua, version, r.PqzKeyHash, r.PqzPopHash)
+	if r.Message, err = UAMessage(kind, pqzKeyPurpose, r.RecordDigest); err != nil {
+		return nil, err
+	}
+	if r.PqzRegMessage, err = UAMessage(0x0142, pqzKeyPurpose, r.VersionDigest); err != nil {
+		return nil, err
+	}
+	if kind == 0x0120 {
+		m := MemberDigest(ua, r.Message)
+		r.MemberDigest = &m
+	}
+	return r, nil
 }
 
 // PqzKeyRecord is the PQZ key record of setPqzKey (ruling A1-I1), see PqzKeyRecordMessage. Message is what the UA signs,
@@ -689,6 +813,35 @@ func CanonicalID(text string) (string, error) {
 		h = h[24:]
 	}
 	return "0x" + h, nil
+}
+
+// IDDisplay is how a client shows a bytes32 id before the user signs (ua-mtx-merge spec §6, MD-9): the EIP-55 address of an id
+// in the native space (top 96 bits zero, CTR-UA-03), else the URN "urn:scaas:ua:v1:<kind name>:<hex32>" (NET-ALL-21) under kind,
+// the id's registry kind (0 = none known: refused, never an address). id is "0x" + 64 hex digits.
+func IDDisplay(id string, kind uint16) (string, error) {
+	h, ok := strings.CutPrefix(id, "0x")
+	if _, err := hex.DecodeString(h); !ok || len(h) != 64 || err != nil {
+		return "", fail("UAIdFormat", id)
+	}
+	h = strings.ToLower(h)
+	if strings.HasPrefix(h, strings.Repeat("0", 24)) {
+		a := []byte(h[24:])
+		d := Keccak256(a)
+		for i, c := range a {
+			if c >= 'a' && d[i/2]>>(4*(1-i%2))&0xf >= 8 {
+				a[i] = c - 32
+			}
+		}
+		return "0x" + string(a), nil
+	}
+	k, err := KindInfo(kind)
+	if err != nil {
+		return "", err
+	}
+	if k.Native {
+		return "", fail("UAKindNotDerived", k.Name)
+	}
+	return "urn:scaas:ua:v1:" + k.Name + ":" + h, nil
 }
 
 // Inner gives an msig member's key data by its id, nil if unknown.

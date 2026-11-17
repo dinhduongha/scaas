@@ -1,0 +1,58 @@
+[
+ {
+  "id": "X1 payout never measured",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_exchange_receiveOnlyFeeToken_recipientDelta() (gas: 1790033)"
+ },
+ {
+  "id": "X2 arrival never measured",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: NothingSettled()] test_settle_feeOnTheArrivedShare() (gas: 967586)"
+ },
+ {
+  "id": "X3 the taker's receive kind from the wrong side",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_open_feeOnTransfer_belowTheFloorFails() (gas: 994829)"
+ },
+ {
+  "id": "X4 seller debit never measured",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_settle_sellerOverDebited() (gas: 1965011)"
+ },
+ {
+  "id": "X5 the makers' receive kind from the wrong side",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: next call did not revert as expected] test_settle_makersReceiveAFeeToken_measured() (gas: 979672)",
+  "note": "re-run after test_settle_makersReceiveAFeeToken_measured / the hybrid signed-floor case were added (first run: survived)"
+ },
+ {
+  "id": "H1 book shortfall not taken",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: ConservationBroken(0xe52f409677478A32DD749f3d264E3f1376E23e46)] test_hybrid_feeTokenOnTheBookLeg_outcomeRule() (gas: 2400643)"
+ },
+ {
+  "id": "H2 the taker's receive not lowered",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: SafeERC20FailedOperation(0xe52f409677478A32DD749f3d264E3f1376E23e46)] test_hybrid_feeTokenOnTheBookLeg_outcomeRule() (gas: 2515713)"
+ },
+ {
+  "id": "H3 hybrid taker floor = receive less fee",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: InsufficientOutput(0x69f636dA61420133f13B80E5AE6D9C1243a1E60E)] test_hybrid_feeTokenOnTheBookLeg_outcomeRule() (gas: 4985219)",
+  "note": "re-run after test_settle_makersReceiveAFeeToken_measured / the hybrid signed-floor case were added (first run: survived)"
+ },
+ {
+  "id": "H4 B floors not lowered",
+  "killed": true,
+  "compiled": true,
+  "first_fail": "[FAIL: ConservationBroken(0xe52f409677478A32DD749f3d264E3f1376E23e46)] test_hybrid_feeTokenOnTheBookLeg_outcomeRule() (gas: 2538255)"
+ }
+]

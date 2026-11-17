@@ -101,8 +101,12 @@ pub struct Job {
     /// domain name. An `op` names its own.
     #[serde(default)]
     pub contract: Option<String>,
-    /// Receiver-pays (job-api.md): not built in the node, so a job carrying it is refused (`work_from_job`), never
+    /// Payee fee (job-api.md): not built in the node, so a job carrying it is refused (`work_from_job`), never
     /// relayed as a plain transfer that drops the payee's fee authorization (review T2 m5).
+    #[serde(default)]
+    pub payee_fee: Option<Value>,
+    /// The name of `payee_fee` before the payee-fee rename (owner 2026-11-12, CTR-MTX-86), read only to refuse it by name
+    /// (`RECEIVER_FEE_REFUSED`), never relayed and never silently `dead`.
     #[serde(default)]
     pub receiver_fee: Option<Value>,
     /// A pay-meta `metatx` job (CTR-MTX-26, `struct = transfer`): `salt` (bytes32) and `meta` (hex) the payment id
@@ -211,7 +215,12 @@ impl Odoo {
     }
 
     pub async fn relay_report(&self, r: &Report) -> Result<()> {
-        let _: Value = self.call("blockchain.relay.job", "relay_report", serde_json::to_value(r)?).await?;
+        let mut v = serde_json::to_value(r)?;
+        // Fable E N-8: no endpoint URL in a job's error (the one sink of every runner's report)
+        if let Some(e) = r.error.as_deref() {
+            v["error"] = json!(crate::chain::redact_urls(e));
+        }
+        let _: Value = self.call("blockchain.relay.job", "relay_report", v).await?;
         Ok(())
     }
 
@@ -267,12 +276,15 @@ mod tests {
     #[test]
     fn call_job_payload_decodes() {
         let raw = r#"{"id": 9, "kind": "call", "op": {"entry": "storePqzPop", "token": "0xbabababababababababababababababababababa",
-            "validUntil": "1800000300", "args": {"pqzPop": "0xdeadbeef",
+            "validUntil": "1800000300", "args": {"pqzPop": "0xdeadbeef", "version": "1",
             "ua": "0x0000000000000000000000000000000000000000000000000000000000000042"}}}"#;
         let job: Job = serde_json::from_str(raw).unwrap();
         assert!(job.metatx.is_none());
         let w = crate::submit::work_from_job(&job, None).unwrap();
         assert_eq!(w.data[..4], crate::abi::IUARegistry::storePqzPopCall::SELECTOR);
+        // group 3g: the version a named field, word 2 of the rebuilt call
+        let c = <crate::abi::IUARegistry::storePqzPopCall as alloy::sol_types::SolCall>::abi_decode(&w.data).unwrap();
+        assert_eq!((c.version, c.pqzPop.to_vec()), (1, vec![0xde, 0xad, 0xbe, 0xef]));
         assert_eq!(w.valid_until, 1_800_000_300);
     }
 

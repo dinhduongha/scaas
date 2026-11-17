@@ -3,14 +3,14 @@
 #   pqz-core/params/sets/make.sh <set> <step> [step ...]     or     make.sh <set> all
 # Steps (each runnable alone; `all` runs them in this order and stops at the first failing step, printing its name and
 # log; a step the set does not have is printed as "skipped (reason)"):
-#   specs   gen_set.py <set>: the 14 LaZer codegen specs, pqz_set.h, rust/set.rs, set.json, PqzSet.sol, the crates'
+#   specs   gen_set.py <set>: the 16 LaZer codegen specs, pqz_set.h, rust/set.rs, set.json, PqzSet.sol, the crates'
 #           per-set feature lists                                                       (stdlib, seconds)
 #   e_s1    lattice-estimator check of every spec (pqzl/params/n-study/e_s1_n.sage, pinned Sage image): MSIS beta,
 #           hiding MLWE uSVP and dual_hybrid >= 450 -> <set>/e-s1.txt (only a complete run whose check passes replaces
 #           it); every spec's pqz_delta / kmlwe_min must be set.toml's: if not (or missing), stop and print the values to
 #           put into set.toml                                                                      (heavy, capped)
-#   codegen LaZer 3330e48 codegen of the 14 specs into <set>/.codegen/, moved to <set>/pqz_<rel>_params.h and
-#           <set>/codegen.txt only when all 14 succeed (a failure leaves the committed headers untouched); a set with
+#   codegen LaZer 3330e48 codegen of the 16 specs into <set>/.codegen/, moved to <set>/pqz_<rel>_params.h and
+#           <set>/codegen.txt only when all 16 succeed (a failure leaves the committed headers untouched); a set with
 #           `frozen = true` (none since 2026-10-25; was n2048-kmax1024) is compared byte for byte instead -> <set>/codegen-check.txt (capped)
 #   rust    pqzl/params/to_rust.py <set>: the headers' Rust form <set>/rust/<rel>.rs and the crate's params/mod.rs
 #   e_s0    e_s0_set.py: the set's budget checks, exactness of the norm proofs per relation, FS rounds -> <set>/e-s0.txt
@@ -39,7 +39,7 @@ S=$1
 shift
 D=$HERE/$S
 [ -f "$D/set.toml" ] || { echo "make.sh: no $D/set.toml" >&2; exit 2; }
-RELS="reg tx tx0 burn ds dr txm2 txm20 txm4 txm40 txm8 txm80 txm16 txm160"
+RELS="reg tx tx0 txs txs0 burn ds dr txm2 txm20 txm4 txm40 txm8 txm80 txm16 txm160"
 tomlget() { python3 -I -c "import tomllib, sys; t = tomllib.load(open(sys.argv[1], 'rb')); print(t.get(sys.argv[2], ''))" "$D/set.toml" "$1"; }
 CORE_ONLY=$(tomlget core_only)
 FROZEN=$(tomlget frozen)
@@ -52,11 +52,11 @@ step_e_s1() {
   tools lk && tools le && tools lz || return 1
   T=$(cd "$PQZ_TOOLS" && pwd)
   specs=$(for r in $RELS; do printf '/set/%s_params.sage ' "$r"; done)
-  "$CAP" docker run --rm --network none --memory 5g --cpus 2 -e PYTHONPATH=/le -e LE_COMMIT=53da5982597709ba0fdf94ea37a84d822310fd84 \
+  "$CAP" docker run --rm --tmpfs /w --network none --memory 5g --cpus 2 -e PYTHONPATH=/le -e LE_COMMIT=53da5982597709ba0fdf94ea37a84d822310fd84 \
     -e LK_COMMIT=0a9caf8bf0f80097724e0c6147194c52c6b90f86 -e PYTHONUNBUFFERED=1 -v "$T/le":/le:ro -v "$T/lz/third_party":/lz/third_party:ro \
     -v "$CORE/pqzl/params/n-study":/p:ro -v "$CORE/pqzl/params":/params:ro -v "$D":/set:ro --entrypoint /bin/sh "$IMG" -c \
-    "mkdir -p /tmp/w && cp -r /params/codegen /tmp/w/ && ln -s /lz/third_party /tmp/w/third_party && cp /p/*.sage /tmp/w/ &&
-     cd /tmp/w/codegen && sage /tmp/w/e_s1_n.sage $specs" > "$D/.e-s1.txt.new" 2> "$D/.e-s1.err" || return 1
+    "cp -r /params/codegen /w/ && ln -s /lz/third_party /w/third_party && cp /p/*.sage /w/ &&
+     cd /w/codegen && sage /w/e_s1_n.sage $specs" > "$D/.e-s1.txt.new" 2> "$D/.e-s1.err" || return 1
   rm -f "$D/.e-s1.err" # the estimator's stderr (kept only when the run fails)
   # the committed e-s1.txt is replaced only by a complete run that passes the check (review R2-C8)
   python3 -I - "$D" <<'EOF' && mv "$D/.e-s1.txt.new" "$D/e-s1.txt"
@@ -65,8 +65,8 @@ d = sys.argv[1]
 t = tomllib.load(open(os.path.join(d, "set.toml"), "rb"))
 got = re.findall(r"^=> \S*?(\w+)_params\.sage: pqz_delta = ([\d.]+), kmlwe_min = (\d+)", open(os.path.join(d, ".e-s1.txt.new")).read(), re.M)
 deltas, kmlwes = {float(x[1]) for x in got}, {int(x[2]) for x in got}
-if len(got) != 14:
-    sys.exit(f"e_s1: {len(got)} of 14 specs have a result line (see .e-s1.txt.new)")
+if len(got) != 16:
+    sys.exit(f"e_s1: {len(got)} of 16 specs have a result line (see .e-s1.txt.new)")
 want = (min(deltas), max(kmlwes))  # one set-wide value: the smallest pqz_delta and the largest rank any spec needs
 if (t.get("pqz_delta"), t.get("kmlwe_min")) != want:
     sys.exit(f"e_s1: set.toml must say pqz_delta = {want[0]}, kmlwe_min = {want[1]} (per spec: {got}); "
@@ -85,9 +85,9 @@ step_codegen() {
   rc=0
   { echo "LaZer $(git -C "$LZ" rev-parse HEAD); image $IMG; set $S"
     for r in $RELS; do
-      "$CAP" docker run --rm --network none --memory 2g --cpus 1 -v "$LZ/third_party":/lz/third_party:ro \
+      "$CAP" docker run --rm --tmpfs /w --network none --memory 2g --cpus 1 -v "$LZ/third_party":/lz/third_party:ro \
         -v "$CORE/pqzl/params/codegen":/lz/codegen:ro -v "$D/${r}_params.sage":/lz/params.sage:ro --entrypoint /bin/sh "$IMG" -c \
-        'mkdir -p /tmp/w && cp -r /lz/codegen /tmp/w/ && ln -s /lz/third_party /tmp/w/third_party && cd /tmp/w/codegen && sage lnp-tbox-codegen.sage /lz/params.sage' \
+        'cp -r /lz/codegen /w/ && ln -s /lz/third_party /w/third_party && cd /w/codegen && sage lnp-tbox-codegen.sage /lz/params.sage' \
         > "$O/pqz_${r}_params.h" 2> "$O/$r.err" || rc=1
       echo "== $r: $(wc -c < "$O/pqz_${r}_params.h") B, sha256 $(sha256sum < "$O/pqz_${r}_params.h" | cut -c1-16)"
       sed -n -e '3,5p' -e '/^\/\/ Proof size/{n;p}' "$O/pqz_${r}_params.h" | sed 's/^/   /'

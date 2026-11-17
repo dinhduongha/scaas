@@ -1,0 +1,58 @@
+# ua-mtx-merge T11 gate summary (full output in git-ignored .log files, not committed)
+# T11: vectors and clientkeys (plan T11, MD-7 as amended, Q2, Q6, R47; spec §2.3, §6): src/evm.js one row per op, UA<Op> on
+# mtx<Op>(UAEnvelope, ..., UASig); UAShield on UASig; UACancelNonce ordered (bytes32 from,uint256 lane,E) on the six tokens,
+# MandateWallet and the router; CancelNonce and Execute on SmartKeyAccount only; the six wallet UA<Op> rows; the address
+# builders of merged entries to clients/clientkeys/legacy/ua-mtx-merge/. No contract under src changed.
+# The round's gate runner (T21) is not built yet: each command ran directly (heavy ones through scripts/capped).
+# Base: 8b3c7e04 (T10). T11 commits: 25b2bba2 (legacy copies, MD-4), 155276cc (the build, WIP at the owner's shutdown),
+# this one (harness, mutants, summary).
+step | commit | rc | counts
+t11-red-clientkeys | 8b3c7e04 code + vectors, the new tests | 1 | 58 tests, 32 pass, 26 fail (typed-ops, evm, relayfee, paymeta, seed, ua-metatx3)
+t11-red-forge-vectors | 8b3c7e04 tests, the regenerated typed_ops.json | 1 | 90 failed (the 10 typed_ops suites read the old rows)
+t11-baseline-clientkeys | 8b3c7e04 | 1 | 238 tests, 234 pass, 1 fail (the router's 38-row test, stale since T7), 3 skip
+t11-generators | 155276cc | 0 | typed-ops-vectors, typed-ops-expected, ua-sig-vectors run twice: no file moved the second time
+t11-typed-ops-diff | 155276cc | 0 | typed_ops.json 112 -> 68 rows: 50 retired, 6 added; CancelNonce on, Execute on, UACancelNonce type string + on changed; every surviving UA row's message, digest, signature unchanged
+t11-forge-typed-ops | 155276cc | 0 | 344 passed 0 failed 1 skipped (the 10 typed_ops suites)
+t11-forge-full | 155276cc | 0 | 2605 passed 0 failed 14 skipped, 223 suites (forge, default set n2304-kmax4096; T10 2597 + 8 new); not re-run: nothing forge reads changed after 155276cc
+t11-e2e-selftest | 155276cc | 0 | python3 script/pqz/e2e.py --self-test: 259 ok, 0 FAIL, 0 SKIP (T10's UAShield SKIP cleared: full calldata compare)
+t11-clientkeys | 155276cc | 0 | npm test (foundry on PATH): 244 tests, 242 pass, 0 fail, 2 skipped (the vendored bundle tests: no bundle next to this checkout); the cast-check test ran
+t11-cast-check | 155276cc | 0 | node scripts/typed-ops-cast-check.mjs: 68 structs, 101 digests and 100 calldatas equal to cast's
+t11-e2e-linked | 155276cc | 0 | python3 -I script/pqz/test_e2e_linked.py: ok
+t11-zether-prover-typed-ops | 155276cc | 0 | cargo test --test typed_ops: 4 passed 0 failed (reads the legacy typed_ops.json, byte-identical to the pre-T11 file; path-only edit)
+t11-docs-check | 155276cc | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0; test_docs_check ok
+t11-mutants | this commit's harness on 155276cc | 1 each | 5 of 5 killed against typed-ops.test.js + evm.test.js, none a load error (runs/2026-11-04-ua-mtx-merge-t11-mutants.txt): uasetpayee-field-order-swapped, relayer-unbound-not-zeroed, token-row-in-router-domain, wallet-row-in-token-domain, payunder-payee-as-address
+#
+# Pins, old -> new:
+#   typed_ops.json 112 -> 68 rows (old rows byte-identical at smartcontracts/vectors/typed/legacy/ua-mtx-merge/typed_ops.json).
+#   Retired (50): MD-7's 45 (Burn, Unwrap, UnwrapLeg, UnwrapToUA, Shield, RollOver, PrepareAcc, PqzTransfer,
+#   PqzTransferCompact, PqzTransferSingle, PqzTransferSingleCompact, PqzUnshield, PqzUnshieldUnwrap, ZetherTransfer,
+#   ZetherTransferCompact, ZetherTransferSingle, ZetherUnshield, ZetherUnshieldUnwrap, RollOverSigned, SetRollOverMode,
+#   RollOverBatch, ReceiverFee, RelayFee, WrapOrder, CancelOrder, CancelWrapOrder; the 19 router address rows Mint, MintToUA,
+#   GrantRole, RevokeRole, RenounceRole, TransferOwnership, AcceptOwnership, RenounceOwnership, DisableFeature, DisableWrap,
+#   SetGrant, CancelGrant, SetExchangeTarget, SetFeeSplit, SetListedOnly, SetMarket, ProposeRate, ExecuteRate, CancelRate)
+#   and Q6's 5 wallet address rows (SetMandate, SetPayee, RevokeMandate, PayUnderMandate, DelegateRevoke).
+#   Added (6): UASetMandate, UASetPayee, UARevokeMandate, UAPayUnderMandate, UADelegateRevoke, UAExecute.
+#   UACancelNonce typehash 0xf5d81494d4dc68dbfae1275cfdeaf4ee7d3201c44159ee4a353a8602405ca227
+#     -> 0xcd17c2129240241748e841a7f0572558b9c5a900a47bc540170a8c258d291c54; on + MandateWallet.
+#   CancelNonce on: tokens, MandateWallet, SmartKeyAccount, router -> SmartKeyAccount. Execute on: MandateWallet,
+#   SmartKeyAccount -> SmartKeyAccount.
+#   metatx3.json: noteUA5a only (mtxPayReceiverFee); uatrade_kat.json and the other ua vector files byte-identical.
+#
+# Conflicts (the spec followed):
+#   MD-7 (amended) lists Execute among Q6's six retired wallet rows, but SmartKeyAccount keeps mtxExecute(Envelope, ..., AccountSig):
+#   by MD-7's own rule (a row retires when no kind keeps its entry) and T14 (Execute on account only) the row stays with on
+#   narrowed. So 5 wallet address rows retire, not 6 (112 - 45 - 5 + 6 = 68).
+#   The plan's T11 Interfaces line "the wallet builders unchanged" predates Q6; the plan's Q6 paragraph wins: the wallet
+#   builders are UA<Op>.
+#   uatrade_kat.json regenerates byte-identical (its note names no entry): "notes renamed" applies to metatx3.json only.
+#
+# Stale, owned by later tasks: scaas-node typed.rs / guard.rs rows (testkit reads the legacy typed_ops.json; T14);
+# zether-prover tests/typed_ops.rs NOT_ZETHER list on the legacy path (T12); no ua-* reads typed_ops.json (T13 adds
+# id_display.json); clients/clientkeys/legacy/typed-signing/evm-pre-named.js imports the retired metaTransferTypedData and
+# no longer loads (legacy, not edited); docs (T19). Operator note for T19: the vendored signer bundle outside this repo is
+# stale (removed exports metaTransferTypedData, buildMtxPayMeta, cancelOrderTypedData; added uaTradeOrderTypedData,
+# cancelUA*, uaInvalidateNoncesTypedData, mtxExecuteTransferCalldata); rebuild it from clientkeys.
+#
+# Not run in T11: the other three PQZ sets and the size gate (no contract or PQZ byte moved); forge red-first for the new
+# forge tests on 25b2bba2's vectors (optional; the forge-red-vectors run shows the old tests fail on the new rows); the
+# scaas-node suite (path-only edit; the node has no build in this worktree; T14 runs it); e2e.py against a chain.

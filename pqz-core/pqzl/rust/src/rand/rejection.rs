@@ -70,7 +70,11 @@ fn dots(z: &IntVec, v: &IntVec) -> Result<(i128, i128), Error> {
     let (mut t1, mut t2) = (Int::new(2 * z.nlimbs()), Int::new(2 * v.nlimbs()));
     IntVec::dot(&mut t1, z, v);
     IntVec::dot(&mut t2, v, v);
-    Ok((int2i128(&t1)?, int2i128(&t2)?))
+    let r = (int2i128(&t1), int2i128(&t2));
+    // <z, v> and <v, v> (v = c s or R s): witness-dependent, cleared as C's (3zh Fable F-4)
+    crate::wipe(&mut t1.l);
+    crate::wipe(&mut t2.l);
+    Ok((r.0?, r.1?))
 }
 
 /// `rej_standard`

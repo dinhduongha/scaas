@@ -1,0 +1,3 @@
+d1-five-arg-false | test_disclosure_fiveArgCannotVerify | 1
+d2-seven-arg-ignores-verdict | test_disclosure_sevenArgRevoked, test_disclosure_sevenArgTrue, test_disclosure_sevenArgWrongAmount | 1
+e1-signed-verdict-dropped | test_entry_singleCompact_signed_offchain, test_entry_single_signed_offchain, test_pqzVerdictSwapByRelayer_harmless, test_signedForms_typehashesUnchanged | 1

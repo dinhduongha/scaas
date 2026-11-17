@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {SaltedEIP712Core} from "../../src/common/SaltedEIP712.sol";
+
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
@@ -348,11 +350,11 @@ contract UARegistryTest is UARegistryBase {
         bytes memory pk = new bytes(1952);
         pk[0] = bytes1(seed);
         bytes32 ua = UACall.register(r, UAKinds.MLDSA65, pk, a, _pop(r, UAKinds.MLDSA65, pk, a), hex"07");
-        (address ptr, bytes32 ph, bool proven) = r.pqzKeyOf(ua);
+        (, address ptr, bytes32 ph, bool proven) = r.pqzKeyOf(ua);
         assertEq(ptr.code, bytes.concat(hex"00", a.pqzKey));
         assertEq(ph, keccak256(hex"07"));
         assertFalse(proven);
-        assertEq(r.pqzPopOf(ua), hex"07");
+        assertEq(r.pqzPopOf(ua, 0), hex"07");
     }
 
     /// Gen 2 may not enable a kind or keyHash group gen 1 enables, nor follow a registry of another chain or profile.
@@ -513,7 +515,7 @@ contract UARegistryTest is UARegistryBase {
 
     function test_T_AUTH_1_kindsByPurpose() public {
         bytes32[4] memory purposes =
-            [UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL, UAKinds.PURPOSE_KEYOP, UAKinds.PURPOSE_RECEIVER_FEE];
+            [UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL, UAKinds.PURPOSE_KEYOP, UAKinds.PURPOSE_PAYEE_FEE];
         for (uint256 i; i < KINDS.length; ++i) {
             bytes32 ua = _register(reg, KINDS[i], _key(KINDS[i]));
             for (uint256 p; p < purposes.length; ++p) {
@@ -1028,7 +1030,7 @@ contract UARegistryTest is UARegistryBase {
         assertEq(rB.kindOf(ua), 0x0104);
         _assertDomain(rB, uidB);
         // chainUid 0 refused
-        vm.expectRevert(SaltedEIP712.ChainUidZero.selector);
+        vm.expectRevert(SaltedEIP712Core.ChainUidZero.selector);
         new UARegistry(0, address(0), false, BUDGET, address(0), true, _cfgs(address(mock)));
     }
 

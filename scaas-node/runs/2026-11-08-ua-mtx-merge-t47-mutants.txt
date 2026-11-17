@@ -1,0 +1,6 @@
+mutant | test that went red | rc
+M1-offchain-sent-without-verdict | offchain_job_without_pqz_verdict_fetches_or_refuses pqz_verdict_epoch_mismatch_refetch_once pqz_verdict_mismatch_not_dead pqz_verdict_subobject_builds_struct precompile_job_with_pqz_verdict_refused  | 101
+M2-verdict-struct-from-job | offchain_job_not_refused_without_precompile offchain_job_without_pqz_verdict_fetches_or_refuses pqz_verdict_epoch_mismatch_refetch_once pqz_verdict_hex_refused pqz_verdict_mismatch_not_dead pqz_verdict_rows_equal_contract_12 pqz_verdict_rows_equal_contract_13 pqz_verdict_rows_equal_contract_4 pqz_verdict_rows_equal_contract_5 pqz_verdict_subobject_builds_struct precompile_job_with_pqz_verdict_refused  | 101
+M3-mismatch-decoded-dead | pqz_verdict_mismatch_not_dead pqz_verdict_refusals_are_named  | 101
+M4-shield-sent-revoked | shield_refused_when_unserved_and_enabled  | 101
+tree clean after the mutants

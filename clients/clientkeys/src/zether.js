@@ -185,10 +185,10 @@ export function zetherPop(curve, x, ...rest) {
 }
 
 // The purposes a Zether UA signs: no contract accepts `member` (the kind is SIGNING, not MEMBER) or `zether-auth` (no PQZ key).
-const ZETHER_PURPOSES = ['metatx', 'metatx-cancel', 'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'zether-owner'];
+const ZETHER_PURPOSES = ['metatx', 'metatx-cancel', 'keyop', 'payee-fee', 'vp', 'vc-anchor', 'trade', 'zether-owner'];
 
 /**
- * The `sig` a Zether UA gives every UA-ledger write (metatx, metatx-cancel, keyop, receiver-fee, vp, vc-anchor, trade,
+ * The `sig` a Zether UA gives every UA-ledger write (metatx, metatx-cancel, keyop, payee-fee, vp, vc-anchor, trade,
  * zether-owner): Schnorr by `x` over `uaMessage(0x0141, purpose, digest)`, returned RAW as `R‖z` (160 bytes); the
  * registry reads `Y` from its record. A token's `bytes auth` wants `abi.encode(bytes(""), sig)`, `requireAuthorized` and
  * the owner ops (`zetherOwnerSig`) take `UASig{signature: sig}` (`uaSig` in ua.js). Spends carry no signature: the
@@ -215,27 +215,24 @@ export function g1(point) {
   return { x0: w(0), x1: w(1), y0: w(2), y1: w(3) };
 }
 
+// ua-mtx-merge (R35, R36): one signed entry per operation, `mtx<Op>(UAEnvelope, …, UASig)` over `UA<Op>`; the address
+// builders are in legacy/ua-mtx-merge/src/zether.js.
 export const {
-  zetherTransferSingleTypedData, zetherTransferSingleCalldata, uaZetherTransferSingleTypedData, uaZetherTransferSingleCalldata,
-  zetherTransferTypedData, zetherTransferCalldata, uaZetherTransferTypedData, uaZetherTransferCalldata,
-  zetherTransferCompactTypedData, zetherTransferCompactCalldata, uaZetherTransferCompactTypedData, uaZetherTransferCompactCalldata,
-  zetherUnshieldTypedData, zetherUnshieldCalldata, uaZetherUnshieldTypedData, uaZetherUnshieldCalldata,
-  zetherUnshieldUnwrapTypedData, zetherUnshieldUnwrapCalldata, uaZetherUnshieldUnwrapTypedData, uaZetherUnshieldUnwrapCalldata,
-  rollOverSignedTypedData, rollOverSignedCalldata, uaRollOverSignedTypedData, uaRollOverSignedCalldata,
-  setRollOverModeTypedData, setRollOverModeCalldata, uaSetRollOverModeTypedData, uaSetRollOverModeCalldata,
-  rollOverBatchTypedData, rollOverBatchCalldata, uaRollOverBatchTypedData, uaRollOverBatchCalldata,
+  uaZetherTransferSingleTypedData, uaZetherTransferSingleCalldata, uaZetherTransferTypedData, uaZetherTransferCalldata,
+  uaZetherTransferCompactTypedData, uaZetherTransferCompactCalldata, uaZetherUnshieldTypedData, uaZetherUnshieldCalldata,
+  uaZetherUnshieldUnwrapTypedData, uaZetherUnshieldUnwrapCalldata, uaRollOverSignedTypedData, uaRollOverSignedCalldata,
+  uaSetRollOverModeTypedData, uaSetRollOverModeCalldata, uaRollOverBatchTypedData, uaRollOverBatchCalldata,
   zetherRollOverTypedData, zetherRollOverCalldata, zetherSetRollOverModeTypedData, zetherSetRollOverModeCalldata,
 } = OP_BUILDERS;
 
 export const {
-  pqzTransferSingleTypedData, pqzTransferSingleCalldata, uaPqzTransferSingleTypedData, uaPqzTransferSingleCalldata,
-  pqzTransferSingleCompactTypedData, pqzTransferSingleCompactCalldata, uaPqzTransferSingleCompactTypedData, uaPqzTransferSingleCompactCalldata,
-  pqzTransferTypedData, pqzTransferCalldata, uaPqzTransferTypedData, uaPqzTransferCalldata,
-  pqzTransferCompactTypedData, pqzTransferCompactCalldata, uaPqzTransferCompactTypedData, uaPqzTransferCompactCalldata,
-  pqzUnshieldTypedData, pqzUnshieldCalldata, uaPqzUnshieldTypedData, uaPqzUnshieldCalldata,
-  pqzUnshieldUnwrapTypedData, pqzUnshieldUnwrapCalldata, uaPqzUnshieldUnwrapTypedData, uaPqzUnshieldUnwrapCalldata,
+  uaPqzTransferSingleTypedData, uaPqzTransferSingleCalldata, uaPqzTransferSingleCompactTypedData, uaPqzTransferSingleCompactCalldata,
+  uaPqzTransferTypedData, uaPqzTransferCalldata, uaPqzTransferCompactTypedData, uaPqzTransferCompactCalldata,
+  uaPqzUnshieldTypedData, uaPqzUnshieldCalldata, uaPqzUnshieldUnwrapTypedData, uaPqzUnshieldUnwrapCalldata,
   pqzAuthTypedData,
 } = OP_BUILDERS;
+// group 3f (PQZ verifier mode spec §5): the verdict a verifier UA signs, and the pair the PQZ entries take last
+export { pqzVerdictTypedData, pqzVerdictDigest, PQZ_VERDICT_TYPEHASH, EMPTY_PQZ_VERDICT, statementHash, proofHash } from './evm.js';
 
 /** The digest of `mtxRollOverSigned`: `ZetherRollOver` in the token's domain, signed under `zether-owner`. */
 export const zetherRollOverDigest = (opts) => hashTypedData(zetherRollOverTypedData(opts));

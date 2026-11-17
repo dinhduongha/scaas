@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {noVerdict} from "./helpers/PqzVerdicts.sol";
+import {MtxDigest} from "../helpers/MtxDigest.sol";
+import {UACall} from "../ua/UACall.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
@@ -20,6 +23,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {IPqzWrappedToken} from "../../src/pqz/IPqzToken.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// Plan 5h Task 3b on the PQZ kinds (the precompile mocked): the shared `IConfidentialToken` signature (`beneficiary`
 /// = the payload's, D20), the unshield to a `bytes32` UA recipient (UA-5c (b)), the unshield-unwrap to a UA through a
@@ -55,7 +59,7 @@ contract PqzSharedTest is PqzFixture {
             "a native recipient: the padded address, as before");
         vm.expectEmit(true, true, false, false, address(tok));
         emit IConfidentialToken.Unshielded(alice, 40, fan, address(0));
-        tok.mtxUnshield(_bs(pl), 40, fan, hex"c0de", _pqAuth(), "");
+        tok.mtxUnshield(_bs(pl), 40, fan, hex"c0de", _pqAuth(), "", noVerdict());
         assertEq(tok.balanceOfUA(fan), 40 * SCALE);
         assertEq(tok.balanceOf(MetaTxLib.SHIELD_POOL), 60 * SCALE);
         assertEq(tok.totalShielded(), 60);
@@ -68,17 +72,17 @@ contract PqzSharedTest is PqzFixture {
         bytes memory pl = _burnPl(3, bytes32(0));
         bytes32 ghost = bytes32(uint256(1) << 200);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, ghost));
-        tok.mtxUnshield(_bs(pl), 40, ghost, hex"c0de", _pqAuth(), "");
+        tok.mtxUnshield(_bs(pl), 40, ghost, hex"c0de", _pqAuth(), "", noVerdict());
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.RefreshRecipient.selector, fan));
-        tok.mtxUnshield(_bs(pl), 0, fan, hex"c0de", _pqAuth(), "");
+        tok.mtxUnshield(_bs(pl), 0, fan, hex"c0de", _pqAuth(), "", noVerdict());
         vm.expectRevert(IPqzToken.ZeroRecipient.selector);
-        tok.mtxUnshield(_bs(pl), 40, bytes32(0), hex"c0de", _pqAuth(), "");
+        tok.mtxUnshield(_bs(pl), 40, bytes32(0), hex"c0de", _pqAuth(), "", noVerdict());
     }
 
     /// The unshield-unwrap to a UA pays it in a SCaaS ledger leg (`transferToUA`); an outside ERC-20 leg reverts
     /// `UALegNotLedger`.
     function test_unshieldUnwrap_toUA() public {
-        PqzLayer legTok = _newToken("leg");
+        NormalPqzToken legTok = _newToken("leg");
         MockERC20 usd = new MockERC20("USD", "USD", 6);
         _releaseWrapped();
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
@@ -96,25 +100,25 @@ contract PqzSharedTest is PqzFixture {
         usd.approve(address(w), type(uint256).max);
         w.mtxWrapShield(address(usd), 100 * SCALE, alice);
         bytes memory pl = _burnPl(3, bytes32(0));
-        w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(legTok), fan, 40, 0), hex"c0de", _pqAuth(), "");
+        w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(legTok), fan, 40, 0), hex"c0de", _pqAuth(), "", noVerdict());
         assertEq(legTok.balanceOfUA(fan), 40 * SCALE, "the leg's own UA ledger");
         assertEq(w.totalSupply(), 160 * SCALE, "burnt from the pool");
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(usd)));
-        w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(usd), fan, 10, 0), hex"c0de", _pqAuth(), "");
+        w.mtxUnshieldUnwrap(_bs(pl), IConfidentialWrappedToken.Unwrap(address(usd), fan, 10, 0), hex"c0de", _pqAuth(), "", noVerdict());
         // the UA allowlist of the kind: not `mtxWrapShield` (a UA wrap-shields in two steps)
-        _uaRefused(PqzLayer(address(w)), abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), SCALE, alice)));
+        _uaRefused(NormalPqzToken(address(w)), abi.encodeCall(IConfidentialWrappedToken.mtxWrapShield, (address(usd), SCALE, alice)));
         (bytes4[] memory s, uint8[] memory cl,) = w.mtxSelectors();
-        bytes4[18] memory want = [
+        bytes4[19] memory want = [
             IMetaTx.cancelNonce.selector, bytes4(keccak256("wrap(uint256)")), bytes4(keccak256("unwrap(uint256,address,uint256)")),
             bytes4(keccak256("wrap(address,uint256)")), bytes4(keccak256("unwrap(address,uint256,address,uint256)")),
             WrappedToken.addReserve.selector, WrappedToken.wrapToUA.selector, WrappedToken.unwrapToUA.selector,
             IConfidentialToken.mtxShield.selector, IPqzToken.mtxConfidentialTransfer.selector, IPqzToken.mtxConfidentialTransferCompact.selector,
             IPqzToken.mtxUnshield.selector, IConfidentialWrappedToken.mtxWrapShield.selector, IPqzWrappedToken.mtxUnshieldUnwrap.selector,
             IPqzToken.mtxConfidentialTransferSingle.selector, IPqzToken.mtxConfidentialTransferSingleCompact.selector,
-            IConfidentialToken.mtxRollOver.selector, IPqzToken.mtxPrepareAcc.selector
+            IPqzToken.mtxRollOver.selector, IPqzToken.mtxPrepareAcc.selector, IPqzToken.mtxRollOverSigned.selector
         ];
-        assertEq(s.length, 18);
-        for (uint256 i; i < 18; ++i) {
+        assertEq(s.length, 19);
+        for (uint256 i; i < 19; ++i) {
             assertEq(s[i], want[i]);
             if (i >= 8) assertEq(cl[i], 1, "the PQZ ops ABSOLUTE");
         }
@@ -122,29 +126,29 @@ contract PqzSharedTest is PqzFixture {
 
     // ------------------------------------------------------------------ allow-lists
 
-    function _uaRefused(PqzLayer t, bytes memory data) internal {
+    function _uaRefused(NormalPqzToken t, bytes memory data) internal {
         MetaTxLib.UAMetaTransaction memory m;
         m.from = fan;
         m.data = data;
-        m.nonce = t.uaNonce(fan, 0);
+        m.nonce = t.mtxNonce(fan, 0);
         m.validUntil = block.timestamp + 1 hours;
         vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(data)));
-        t.uaExecute(m, _mlAuth());
+        t.mtxExecute(m, UACall.auth(m.from, _mlAuth()));
     }
 
-    /// `NORMAL_PQZ`: exactly `cancelNonce`, `burn`, the six shared PQZ ops and the rollover / `mtxPrepareAcc` (owner
-    /// 2026-10-20: every mtx* write is relayable), `ABSOLUTE`.
+    /// `NORMAL_PQZ`: exactly `cancelNonce`, `burn`, the six shared PQZ ops, the rollover / `mtxPrepareAcc` (owner
+    /// 2026-10-20: every mtx* write is relayable) and the holder's `mtxRollOverSigned` (CTR-PQZ-41), `ABSOLUTE`.
     function test_allowlists_normalKind() public {
         (bytes4[] memory s, uint8[] memory c,) = NormalPqzToken(address(tok)).mtxSelectors();
-        bytes4[10] memory want = [
+        bytes4[11] memory want = [
             IMetaTx.cancelNonce.selector, NormalToken.burn.selector, IConfidentialToken.mtxShield.selector,
             IPqzToken.mtxConfidentialTransfer.selector, IPqzToken.mtxConfidentialTransferCompact.selector,
             IPqzToken.mtxUnshield.selector, IPqzToken.mtxConfidentialTransferSingle.selector,
-            IPqzToken.mtxConfidentialTransferSingleCompact.selector, IConfidentialToken.mtxRollOver.selector,
-            IPqzToken.mtxPrepareAcc.selector
+            IPqzToken.mtxConfidentialTransferSingleCompact.selector, IPqzToken.mtxRollOver.selector,
+            IPqzToken.mtxPrepareAcc.selector, IPqzToken.mtxRollOverSigned.selector
         ];
-        assertEq(s.length, 10);
-        for (uint256 i; i < 10; ++i) {
+        assertEq(s.length, 11);
+        for (uint256 i; i < 11; ++i) {
             assertEq(s[i], want[i]);
             assertEq(c[i], i == 1 ? 2 : 1);
         }
@@ -160,21 +164,21 @@ contract PqzSharedTest is PqzFixture {
         m.validUntil = block.timestamp + 1 hours;
         m.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
         m.fee = fee;
-        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(KEY, tok.mtxDigest(m));
+        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(KEY, MtxDigest.metaTx(address(tok), m));
         vm.prank(relayer);
-        tok.mtxExecute(m, abi.encodePacked(r, sg, v));
+        tok.executeMetaTransaction(m, abi.encodePacked(r, sg, v));
     }
 
     function _relayUA(bytes memory data, uint256 fee) internal {
         MetaTxLib.UAMetaTransaction memory m;
         m.from = fan;
         m.data = data;
-        m.nonce = tok.uaNonce(fan, 0);
+        m.nonce = tok.mtxNonce(fan, 0);
         m.validUntil = block.timestamp + 1 hours;
         m.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
         m.fee = fee;
         vm.prank(relayer);
-        tok.uaExecute(m, _mlAuth());
+        tok.mtxExecute(m, UACall.auth(m.from, _mlAuth()));
     }
 
     /// Relayed `mtxPrepareAcc` (both halves) then `mtxRollOver`: fee 0 (address envelope), then fee 5 from the signer's
@@ -183,25 +187,25 @@ contract PqzSharedTest is PqzFixture {
         _fund(tok, alice, 5);
         vm.roll(block.number + ROLL_AGE);
         _public(tok, vm.addr(KEY), 5);
-        _relayAddr(abi.encodeCall(IPqzToken.mtxPrepareAcc, (alice, 0)), 0, 0);
-        _relayAddr(abi.encodeCall(IPqzToken.mtxPrepareAcc, (alice, 1)), 1, 0);
-        assertEq(tok.pqzAccount(alice).flags & 6, 6, "both halves prepared");
+        _relayAddr(abi.encodeCall(IPqzToken.mtxPrepareAcc, (alice, uint64(0), 0)), 0, 0);
+        _relayAddr(abi.encodeCall(IPqzToken.mtxPrepareAcc, (alice, uint64(0), 1)), 1, 0);
+        assertEq(tok.pqzAccount(alice, 0).flags & 6, 6, "both halves prepared");
         assertEq(tok.balanceOf(relayer), 0, "fee 0");
-        _relayAddr(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, 1)), 2, 5);
-        assertEq(tok.pqzAccount(alice).rolled, 1, "rolled");
+        _relayAddr(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1)), 2, 5);
+        assertEq(tok.pqzAccount(alice, 0).rolled, 1, "rolled");
         assertEq(tok.balanceOf(relayer), 5, "fee to the relayer");
         assertEq(tok.balanceOf(vm.addr(KEY)), 0, "from the signer");
         // the UA envelope
         _fund(tok, alice, 3);
         vm.roll(block.number + ROLL_AGE);
-        NormalPqzToken(address(tok)).mintToUA(fan, 5);
+        NormalPqzToken(address(tok)).mintToUA(fan, 5, EnvKit.codeUidOf(address(tok)));
         minted += 5;
-        _relayUA(abi.encodeCall(IConfidentialToken.mtxRollOver, (alice, 1)), 0);
-        assertEq(tok.pqzAccount(alice).rolled, 2, "rolled via the UA envelope, fee 0");
-        _relayUA(abi.encodeCall(IPqzToken.mtxPrepareAcc, (bob, 0)), 5);
+        _relayUA(abi.encodeCall(IPqzToken.mtxRollOver, (alice, uint64(0), 1)), 0);
+        assertEq(tok.pqzAccount(alice, 0).rolled, 2, "rolled via the UA envelope, fee 0");
+        _relayUA(abi.encodeCall(IPqzToken.mtxPrepareAcc, (bob, uint64(0), 0)), 5);
         assertEq(tok.balanceOf(relayer), 10);
         assertEq(tok.balanceOfUA(fan), 0, "UA fee paid");
-        assertEq(tok.pqzAccount(bob).flags & 2, 2, "bob half 0 prepared via the UA envelope");
+        assertEq(tok.pqzAccount(bob, 0).flags & 2, 2, "bob half 0 prepared via the UA envelope");
         _assertConservation(tok);
     }
 }

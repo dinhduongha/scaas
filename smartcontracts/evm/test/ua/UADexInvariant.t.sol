@@ -153,10 +153,10 @@ contract UADexHandler is Test {
     function _leg(NormalToken sell, ITradeToken.UATradeOrder memory o, bool shape1, uint256 fill)
         internal view returns (ISCaaSDex.DexLeg memory)
     {
-        if (shape1) return DexLegs.uaLeg(address(sell), o, UACall.auth(o.from, _sign(o.from, sell.uaTradeOrderDigest(o))), fill);
+        if (shape1) return DexLegs.uaLeg(address(sell), o, UACall.auth(o.from, _sign(o.from, sell.tradeOrderDigest(o))), fill);
         // the same 13 words: a native id is its address zero-padded
         ITradeToken.TradeOrder memory t = abi.decode(abi.encode(o), (ITradeToken.TradeOrder));
-        return DexLegs.leg(address(sell), t, _sign(o.from, sell.tradeOrderDigest(t)), fill);
+        return DexLegs.leg(address(sell), t, _sign(o.from, sell.tradeOrderDigest(DexLegs.ua(t))), fill);
     }
 
     /// A native id signs `digest` itself; a UA `ua_msg(kind, trade, digest)` (the stand-in verifier).

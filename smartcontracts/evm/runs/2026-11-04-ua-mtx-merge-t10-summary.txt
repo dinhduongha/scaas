@@ -1,0 +1,25 @@
+# ua-mtx-merge T10 gate summary (full output in git-ignored .log files, not committed)
+# T10: deploy, scripts and config (plan T10, spec Q4, R40): the release gas gate is declared (RELEASE_GAS_GATE): testnet
+# (default) keeps runtime x 1,530 + 2^24, public measures each release transaction in the simulation ((regular + state) x 1.05
+# within the block gas limit, regular x 1.05 < 2^24); e2e.py, ZetherE2E.s.sol / e2e-zether.sh on the merged entries;
+# node.example.toml comments. T9 deferred by the owner: T10 runs on T8. No contract under src changed.
+# The round's gate runner (T21) is not built yet: each command ran directly through scripts/capped.
+# Base: 65ac44eb (T8). T10 commits: 1e94d68f (legacy copies), a362634d (the build), this one (harness, mutants, summaries).
+step | commit | rc | counts
+t10-red | 65ac44eb's DeployBase + the T10 tests | 1 | GovDeploy: compile error (DeployHarness: releaseGas, _checkMeasuredGas, _publicGate undeclared); e2e.py --self-test 12 failures (retired names), then aborted on the new UA-binding row (pad undefined); test_e2e_linked red on 65ac44eb's e2e.py (no pad); test_routerAndRelayFeeNewAddresses is a guard of what T2 / T7 moved (no src change in T10)
+t10-focus | a362634d (worktree) | 0 | 36 passed 0 failed, 5 suites (GovDeploy, UADeploy, ZetherDeploy, CodeCeiling, PqzRelay)
+t10-forge-full | a362634d | 0 | 2597 passed 0 failed 14 skipped, 223 suites (forge, default set n2304-kmax4096; T8 2591 + 6 new)
+t10-forge-isolate | a362634d | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t10-size-gate | a362634d | 0 | 0 errors, 89 contracts, above 65536 B: none; size-baseline.json unchanged
+t10-md8 | a362634d | 0 | no clone address moved (no src change): dex_order_kat.json unchanged, DexKatTest green in t10-forge-full
+t10-e2e-selftest | a362634d | 0 | python3 script/pqz/e2e.py --self-test: 258 ok, 0 FAIL, 1 SKIP (UAShield: typed_ops.json's row still holds uaShield's bytes auth until T11; digest and ABI checked)
+t10-e2e-linked | a362634d | 0 | python3 -I script/pqz/test_e2e_linked.py: ok
+t10-e2e-zether | a362634d | 0 | scripts/e2e-zether.sh (own anvil, chain 31337, 200 M): passed, 82 ok lines (24 transactions, all status 1), 0 FAIL, 1 SKIP (the named merged Zether entries: zether-cli namedCall builds the address forms until T12); the three relayed proofs ran through mtxExecute(UAMetaTransaction, UASig) with the UA binding computed in the script
+t10-public-gate-anvil | a362634d | 0 | deploy.sh evm on a local anvil: public 200 M (Zether, WRAPPED) 49 tx; public 70 M 36 tx; public 60 M refused at UARegistryLib (60,830,945 asked), nonce 0; testnet 70 M refused at UARegistryLib (72,150,976), nonce 0; RELEASE_GAS_GATE=bogus refused, nonce 0
+t10-deploy-gas | a362634d | 0 | runs/2026-11-04-ua-mtx-merge-deploy-gas.txt: 22 releases and libraries by T0's formula against T0's M, the public gate's 7 figures; regular x 1.05 < 2^24 everywhere
+t10-clientkeys-evm | a362634d | 0 | 23 passed 0 failed (node --test test/evm.test.js)
+t10-docs-check | a362634d | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0; test_docs_check ok
+t10-mutants | a362634d | 1 each | 5 of 5 killed against the deploy suites, none a compile error (runs/2026-11-04-ua-mtx-merge-t10-mutants.txt): public-gate-on-gas-used and x105-dropped (test_publicGateUsesMeasuredReleaseGas), regular-check-dropped (test_publicGateRefusesRegularOver2pow24), testnet-formula-changed (6 tests, test_testnetGateFormulaUnchanged among them), public-gate-ignored (test_publicGateUsesMeasuredReleaseGas, test_publicGateMeasuresBothZetherReleases)
+#
+# Not run in T10: the other three PQZ sets (no PQZ byte moved); e2e.py against a chain (it needs the PQZ precompile; no live
+# chain touched); the scaas-node suite (node.example.toml comments only); zether-prover (T12); pqz-core gate.

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs} from "../../script/KindModules.sol";
+
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -14,6 +16,8 @@ import {normalInit, wrappedInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 import {UACall} from "./UACall.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
+import {nid} from "../helpers/Ids.sol";
 
 /// The UA ledger fixture (accounts.md CTR-UA-18/19/26): a registry at `REG_L` on context A (chain 31337, `chainUidA`)
 /// with the stand-in verifier for the eight classical kinds and the real `zether-bls12381` verifier; a `NORMAL` clone and a
@@ -71,15 +75,15 @@ abstract contract UALedgerBase is UARegistryBase {
             "");
         (alice, bob) = (vm.addr(ALICE_PK), vm.addr(BOB_PK));
         vm.warp(1_800_000_000);
-        tok = NormalToken(Clones.clone(address(new NormalToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
-        tok.initialize(address(this), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
+        tok = NormalToken(EnvKit.clone(address(new NormalToken(address(this), kindArgs(0, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
+        tok.initialize(nid(address(this)), 1, abi.encode(normalInit("Points", "PTS", 6, 1_000_000, alice, address(this))));
         und = new MockERC20("Und", "UND", 6);
-        wrp = WrappedToken(Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        wrp = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(und), 1);
         Rate memory fixedRate;
-        wrp.initialize(address(this), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
+        wrp.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, one, one, 6, fixedRate, address(0), address(0))));
         wrpL = _wrapper(address(tok));
         wrpN = _wrapper(address(0));
     }
@@ -91,27 +95,27 @@ abstract contract UALedgerBase is UARegistryBase {
 
     /// The same at rate `num/den` (units per leg unit).
     function _wrapperAt(address leg, uint256 num, uint256 den) internal returns (WrappedToken w) {
-        w = WrappedToken(Clones.clone(address(new WrappedToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        w = WrappedToken(EnvKit.clone(address(new WrappedToken(address(this), kindArgs(1, address(this), ""))), EnvKit.env(chainUidA, REG_L, address(0), false)));
         address[] memory us = new address[](1);
         uint256[] memory n = new uint256[](1);
         uint256[] memory d = new uint256[](1);
         (us[0], n[0], d[0]) = (leg, num, den);
         Rate memory fixedRate;
-        w.initialize(address(this), 1, abi.encode(wrappedInit(us, n, d, 6, fixedRate, address(0), address(0))));
+        w.initialize(nid(address(this)), 1, abi.encode(wrappedInit(us, n, d, 6, fixedRate, address(0), address(0))));
     }
 
     // ----- structs -----
 
     function _t(bytes32 from, bytes32 to, uint256 value) internal view returns (MetaTxLib.UAMetaTransfer memory t) {
         t = MetaTxLib.UAMetaTransfer({
-            from: from, to: to, value: value, entryRef: 0, batch: 1, nonce: tok.uaNonce(from, 1),
+            from: from, to: to, value: value, entryRef: 0, batch: 1, nonce: tok.mtxNonce(from, 1),
             validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
         });
     }
 
     function _m(address token, bytes32 from, bytes memory data) internal view returns (MetaTxLib.UAMetaTransaction memory m) {
         m = MetaTxLib.UAMetaTransaction({
-            from: from, data: data, batch: 1, nonce: NormalToken(token).uaNonce(from, 1),
+            from: from, data: data, batch: 1, nonce: NormalToken(token).mtxNonce(from, 1),
             validUntil: block.timestamp + 300, mode: RR, relayer: RELAYER, fee: 0, feeRecipient: address(0)
         });
     }
@@ -133,24 +137,24 @@ abstract contract UALedgerBase is UARegistryBase {
     }
 
     function _authT(address token, MetaTxLib.UAMetaTransfer memory t) internal view returns (bytes memory) {
-        return _authFor(t.from, NormalToken(token).uaTransferDigest(t));
+        return _authFor(t.from, NormalToken(token).mtxTransferDigest(t));
     }
 
     function _authM(address token, MetaTxLib.UAMetaTransaction memory m) internal view returns (bytes memory) {
-        return _authFor(m.from, NormalToken(token).uaDigest(m));
+        return _authFor(m.from, NormalToken(token).mtxDigest(m));
     }
 
     function _xfer(MetaTxLib.UAMetaTransfer memory t) internal {
         bytes memory a = _authT(address(tok), t);
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, a));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, a));
     }
 
     function _xferReverts(MetaTxLib.UAMetaTransfer memory t, bytes memory err) internal {
         bytes memory a = _authT(address(tok), t);
         vm.expectRevert(err);
         vm.prank(RELAYER);
-        tok.uaExecuteTransfer(t, UACall.auth(t.from, a));
+        tok.mtxExecuteTransfer(t, UACall.auth(t.from, a));
     }
 
     /// `amount` of alice's native balance into `ua`.
@@ -175,7 +179,7 @@ abstract contract UALedgerBase is UARegistryBase {
 
     /// The same on any wrapper `w` of `tok`, at its rate: returns the units minted (and passed on).
     function _wrapLOn(WrappedToken w, address who, uint256 amount) internal returns (uint256 minted) {
-        tok.mint(address(this), amount);
+        tok.mint(address(this), amount, EnvKit.codeUidOf(address(tok)));
         tok.approve(address(w), amount);
         minted = w.wrap(amount);
         w.transfer(who, minted);

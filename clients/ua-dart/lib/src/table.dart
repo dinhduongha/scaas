@@ -65,18 +65,26 @@ const groups = <String>[
 ];
 
 const purposes = <String>[
-  'pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee', 'vp',
-  'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership',
+  'pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'payee-fee', 'vp',
+  'vc-anchor', 'trade', 'kem', 'pqz-key', 'membership', 'msig-update',
 ];
 
-/// The governance bits 0-21 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the app
-/// from smartcontracts/vectors/governance/governance_bits.json; bits 22-127 are free, 128-255 the application's bitLabel(bit).
+/// The governance bits 0-31 (spec 2026-11-02-governance §1.2), (name, type) by bit. The disclosure sentences are read by the app
+/// from smartcontracts/vectors/governance/governance_bits.json; bits 32-127 are free, 128-255 the application's bitLabel(bit).
 const governanceBits = <(String, String)>[
   ('PAYABLE', 'capability'), ('MINTABLE', 'power'), ('BURNABLE', 'capability'), ('RATE_ADJUSTABLE', 'power'),
-  ('WRAP_DISABLEABLE', 'power'), ('FREEZE', 'power'), ('FORCE', 'power'), ('PAUSE', 'power'), ('ALLOWLIST', 'capability'),
-  ('DENYLIST', 'capability'), ('RECORD', 'power'), ('LISTING', 'power'), ('FEE_ROUTING', 'power'), ('', 'unused'), ('', 'unused'),
+  ('WRAP_DISABLEABLE', 'power'), ('FREEZE', 'power'), ('FORCE', 'power'), ('PAUSE', 'power'), ('ALLOWLIST', 'power'),
+  ('DENYLIST', 'power'), ('RECORD', 'power'), ('LISTING', 'power'), ('FEE_ROUTING', 'power'), ('', 'unused'), ('', 'unused'),
   ('ARBITRATE', 'reserved'), ('CORRECT', 'reserved'), ('RESCUABLE', 'capability'), ('PUBLISH', 'power'), ('DEPRECATE', 'power'),
-  ('ENABLE_KIND', 'power'), ('MODERATE', 'power'),
+  ('ENABLE_KIND', 'power'), ('MODERATE', 'power'), ('OPERATOR_TRANSFER', 'power'), ('TAX', 'power'), ('PQZ_PROOF', 'power'),
+  // group 3l (wrap limits spec 2026-11-10 §2): the hybrids' wrap controls
+  ('WRAP_LIMIT', 'capability'), ('WRAP_LIST', 'power'), ('REDEEMER', 'power'),
+  // round 3s (CTR-GOV-24): 8, 9 the token's lists (powers), 28 the compliance registry check
+  ('KYC', 'capability'),
+  // CTR-DEX-32 (owner 2026-11-12): the DEX's closed markets
+  ('CLOSED_MARKETS', 'capability'),
+  // round 3zb + 3zc (CTR-GOV-29, CTR-GOV-30): the Normal kinds' burner role, the wrapped kinds' adjustable caps
+  ('BURNER', 'power'), ('SUPPLY_CAP_ADJUSTABLE', 'capability'),
 ];
 
 /// Throws UAKindUnknown. [kind] must be 0..0xffff to match (a wider int is simply unknown).

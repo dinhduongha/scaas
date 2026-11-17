@@ -11,6 +11,11 @@
    by its op, and the tag byte of R_TX0's ABDLOP keys (SCAAS-PQZ-ABDLOP-PP-V1 || 0x81); never an op on the wire (the
    transcript hashes op 1) */
 #define PQZ_REL_TX0 0x81
+/* internal relation codes of R_TXS / R_TXS0 (op 1 under PQZL_SPLIT_ID, three-key spec K3-4: split randomness, the
+   statement of R_TX / R_TX0 with u_f appended), the tag bytes of their ABDLOP keys; never on the wire */
+#define PQZ_REL_SPLIT 0x40
+#define PQZ_REL_TXS (PQZ_REL_SPLIT | PQZ_OP_TRANSFER)
+#define PQZ_REL_TXS0 (0x80 | PQZ_REL_SPLIT | PQZ_OP_TRANSFER)
 /* internal relation codes of R_TXM (op 7, P6-ANON), one per (M, auditorOn): 0x70 | A << 3 | log2(M), e.g. M = 8 with
    the auditor 0x7b; the tag byte of the shape's own ABDLOP keys, never on the wire (the transcript hashes op 7) */
 #define PQZ_REL_TXM(log2m, aud) ((uint8_t)(0x70 | ((aud) << 3) | (log2m)))

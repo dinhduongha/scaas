@@ -1,0 +1,18 @@
+# ua-mtx-merge T19c gate summary (full output in git-ignored .log files, not committed)
+# T19c (ua-rs-sign plan, ARCH-POS-13 rework; no-decryption-oracle spec §4.4, §4.7; Fable P1-2): every field of the ERC-7201
+# namespaces scaas.pqz (PqzStorage, PqzCore.Account) and scaas.zether (ZetherStorage, ZetherLib.Account) pinned in
+# test/v2/layout/namespaces.json (keys "pqz", "zether": slot, inner slot, byte, plus widths and solc encodings inplace / bytes /
+# mapping), checked by Layout.t.sol test_namespaceRootsAndOffsetsArePinned (a write through PqzCore.$() / ZetherLib.$(), then
+# vm.load; dynamic bytes in long and short form; the mapping member acct[U].pending). No contract code change.
+# Base: 64420d48 (T36a). Commit: this one (Layout.t.sol, namespaces.json, this summary, the mutants table).
+step | commit | rc | counts
+t19c-layout | 64420d48 + T19c | 0 | 3 passed 0 failed (test/v2/Layout.t.sol; pqz 28 rows, zether 25 rows)
+t19c-mutants | 64420d48 + T19c | 1 each | 13 of 13 killed, none a compile error (runs/2026-11-07-ua-mtx-merge-t19c-mutants.txt): 5 struct mutants in a scratch copy of the source (PqzCore accU/accV swapped, sendCounter before flags, entryPtr/memos swapped; ZetherLib accC/accD swapped, mode before modeNonce), 8 pin mutants in a scratch copy of the JSON (byte, slot, inner, width, encoding inplace for a mapping member, a short and a long bytes); each restored in the same command, git diff --exit-code -- src clean after
+t19c-forge-full-first | 64420d48 + T19c | 143 | killed by the 4 GB cap (oom-kill) compiling 163 files cold; then built src and each test directory one at a time (all rc 0; test/vectors holds no .sol)
+t19c-forge-full | 64420d48 + T19c | 0 | 2875 passed 0 failed 14 skipped, 274 suites (forge, default set n2304-kmax4096)
+t19c-size-gate | 64420d48 + T19c | 0 | 0 errors, 97 contracts, above 65536 B: none; size-baseline.json and src unchanged
+t19c-docs-check | 64420d48 + T19c | 0 | 0 errors, 5 warnings, 16 notes (docs_check check); paths 0
+#
+# Not run: the other three PQZ sets (no src change; the pinned rows are set-independent: accWords[0] and [1] only, its
+# length PQZ_ACC_WORDS per set); forge --isolate gas tests (no src change). The pending word's sub-word packing
+# blob ‖ uOff ‖ vOff ‖ block is PqzCore's code, not the compiler's layout: not pinned here (spec §4.4, the facade's vectors).

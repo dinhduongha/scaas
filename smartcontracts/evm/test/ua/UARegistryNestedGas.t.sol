@@ -5,13 +5,22 @@ import {Vm} from "forge-std/Vm.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
-import {UARegistryLib} from "../../src/ua/UARegistryLib.sol";
+import {UARegistryCoreLib} from "../../src/ua/UARegistryCoreLib.sol";
 import {PqzSet} from "../../src/pqz/PqzSet.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {UACall} from "./UACall.sol";
 import {BurnAll} from "./UAGas.t.sol";
+import {PqUA} from "../../src/ua/PqUA.sol";
 
 /// Calls `target` giving its frame exactly `gas`; returns the outcome and the revert data.
+/// `BurnAll` as an ML-DSA verifier on a precompile (`PRECOMPILE()` != 0): its FIPS-key `verify` is the registry's path (3zh, owner
+/// 2026-11-15: without a precompile only the expanded-key cache is, `UAKeyNotCached`).
+contract BurnAllPrecompile is BurnAll {
+    function PRECOMPILE() external pure returns (address) {
+        return address(0x13);
+    }
+}
+
 contract FrameProbe {
     function probe(address target, bytes calldata data, uint256 gas) external returns (bool ok, bytes memory ret) {
         (ok, ret) = target.call{gas: gas}(data);
@@ -24,8 +33,8 @@ contract FrameProbe {
 /// `bound - 1` refused, `bound` accepted, `bound` gas authorizes, one gas under the least frame gas is a starvation, never a verdict.
 /// ML-DSA rows take the path of a key read from the record (the precompile path); the cached path reads 2 slots instead of 1,952 B.
 contract UARegistryNestedGasTest is UARegistryBase {
-    uint256 internal constant MEMBER = UARegistryLib.MSIG_MEMBER_GAS;
-    uint256 internal constant ACCEPTED = UARegistryLib.MSIG_ACCEPTED_GAS;
+    uint256 internal constant MEMBER = UARegistryCoreLib.MSIG_MEMBER_GAS;
+    uint256 internal constant ACCEPTED = UARegistryCoreLib.MSIG_ACCEPTED_GAS;
     uint256 internal constant SMART = 400_000;
 
     struct Case {
@@ -75,7 +84,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
     function _none256() internal pure returns (uint256[] memory r) {}
 
     function _config(Case memory c) internal returns (UARegistry.KindConfig[] memory k, address burn) {
-        burn = address(new BurnAll());
+        burn = PqUA.mldsaParts(c.kind) != 0 ? address(new BurnAllPrecompile()) : address(new BurnAll());
         k = new UARegistry.KindConfig[](1);
         k[0] = UARegistry.KindConfig(c.kind, burn, c.cap);
     }
@@ -458,7 +467,7 @@ contract UARegistryNestedGasTest is UARegistryBase {
         IUARegistry.UASig memory sig;
         sig.members = s;
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAPqzHolder.selector, ua));
-        g2.setPqzKey(ua, key, keccak256("proof"), sig);
+        g2.setPqzKey(ua, 0, key, keccak256("proof"), sig);
     }
 
     /// `{15 EOAs from key `from`, ml of weight 16}`, 16 of 16, and the `pop` of ml alone (weight 16 reaches the threshold).

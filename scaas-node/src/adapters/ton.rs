@@ -2504,7 +2504,7 @@ mod tests {
     /// the cell `vectors.spec.ts` built with @ton/core (`/pay_meta/params_boc`), checked before any getter.
     #[tokio::test]
     async fn ton_pay_meta_job_builds_params() {
-        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
+        let rows: Vec<Value> = serde_json::from_str(include_str!("../../../smartcontracts/vectors/metatx/legacy/ua-mtx-merge/paymeta.json")).unwrap();
         assert_eq!(rows.len(), 6);
         for r in &rows {
             let id = meta_pay_id(&hexv(&r["salt"]), &hexv(&r["meta"]));

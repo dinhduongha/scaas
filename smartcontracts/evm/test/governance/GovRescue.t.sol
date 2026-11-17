@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {kindArgs, dexArgs} from "../../script/KindModules.sol";
+
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
@@ -14,6 +17,7 @@ import {IWrappedToken} from "../../src/metatx/IWrappedToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IGovernance} from "../../src/governance/IGovernance.sol";
 import {IRescuable} from "../../src/governance/IRescuable.sol";
+import {RescueLib} from "../../src/governance/RescueLib.sol";
 import {GovernanceBits} from "../../src/governance/GovernanceBits.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
@@ -26,6 +30,7 @@ import {HookLeg} from "../zether/ZetherWrapped.t.sol";
 import {ZetherFixture} from "../zether/helpers/ZetherFixture.sol";
 import {PqzFixture} from "../pqz/helpers/PqzFixture.sol";
 import {nid} from "../helpers/Ids.sol";
+import {EnvKit} from "../helpers/EnvKit.sol";
 
 /// A leg whose sender pays twice what it sends: the balance after a transfer is short of what the reserve needs.
 contract GreedyLeg is MockERC20 {
@@ -72,7 +77,8 @@ contract MainLeg is MockERC20 {
     }
 }
 
-/// @notice D6, rescue (spec §6.2; CTR-GOV-06, -14; A15, A16, R-16): `RESCUABLE` (17) iff `rescueTo != 0`, always locked;
+/// @notice D6, rescue (spec §6.2; CTR-GOV-06, -14; A15, A16, R-16): `RESCUABLE` (17), always locked; `rescueTo` only with it
+///         (0 there: the constant dev address, CTR-GOV-25);
 ///         `rescue(asset)`, anyone, `nonReentrant`, pays what the token does not owe to the immutable `rescueTo`, the first
 ///         row of §6.2 that matches deciding; `DexPuller.rescue` moves its whole balance of a token, and spends no allowance.
 ///         `NORMAL` and `WRAPPED` here (the test plays the factory); the DEX on a real factory; the confidential kinds below.
@@ -93,25 +99,25 @@ contract GovRescueTest is Test {
     function isRegisteredToken(address) external pure returns (bool) { return false; }
 
     function _base(address rescueTo) internal pure returns (IFactoryToken.TokenConfig memory c) {
-        (c.name, c.symbol, c.decimals, c.owner, c.rescueTo) = ("R", "R", 6, nid(OWNER), rescueTo);
+        (c.name, c.symbol, c.decimals, c.admin, c.rescueTo) = ("R", "R", 6, nid(OWNER), rescueTo);
         c.features = 1 | (rescueTo != address(0) ? RESCUABLE : 0);
     }
 
     function _normalClone() internal returns (NormalToken) {
-        if (normalImpl == address(0)) normalImpl = address(new NormalToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
-        return NormalToken(Clones.clone(normalImpl));
+        if (normalImpl == address(0)) normalImpl = address(new NormalToken(address(this), kindArgs(0, address(this), "")));
+        return NormalToken(EnvKit.clone(normalImpl, EnvKit.env(UID, address(0), address(0), false)));
     }
 
     function _wrappedClone() internal returns (WrappedToken) {
         if (wrappedImpl == address(0)) {
-            wrappedImpl = address(new WrappedToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
+            wrappedImpl = address(new WrappedToken(address(this), kindArgs(1, address(this), "")));
         }
-        return WrappedToken(payable(Clones.clone(wrappedImpl)));
+        return WrappedToken(payable(EnvKit.clone(wrappedImpl, EnvKit.env(UID, address(0), address(0), false))));
     }
 
     function _normal(address rescueTo) internal returns (NormalToken t) {
         t = _normalClone();
-        t.initialize(address(this), 1, abi.encode(_base(rescueTo)));
+        t.initialize(nid(address(this)), 1, abi.encode(_base(rescueTo)));
     }
 
     function _wrappedCfg(address[] memory legs, address rescueTo) internal pure returns (IFactoryToken.TokenConfig memory c) {
@@ -122,7 +128,7 @@ contract GovRescueTest is Test {
 
     function _wrapped(address[] memory legs, address rescueTo) internal returns (WrappedToken w) {
         w = _wrappedClone();
-        w.initialize(address(this), 1, abi.encode(_wrappedCfg(legs, rescueTo)));
+        w.initialize(nid(address(this)), 1, abi.encode(_wrappedCfg(legs, rescueTo)));
     }
 
     function _one(address a) internal pure returns (address[] memory l) {
@@ -330,9 +336,9 @@ contract GovRescueTest is Test {
     function test_rescueOnNormalTakesAll() public {
         NormalToken n = _normal(TO);
         vm.prank(OWNER);
-        n.transferOwnership(nid(BOB));
+        n.transferAdmin(nid(BOB), EnvKit.codeUidOf(address(n)));
         vm.prank(BOB);
-        n.acceptOwnership();
+        n.acceptAdmin();
         assertEq(n.rescueTo(), TO);
         foo.mint(address(n), 50);
         vm.expectEmit(address(n));
@@ -341,7 +347,7 @@ contract GovRescueTest is Test {
         assertEq(foo.balanceOf(TO), 50);
         vm.prank(BOB);
         vm.expectRevert(abi.encodeWithSelector(IGovernance.FeatureLocked.selector, GovernanceBits.RESCUABLE));
-        n.disableFeature(GovernanceBits.RESCUABLE); // always locked
+        n.disableFeature(GovernanceBits.RESCUABLE, EnvKit.codeUidOf(address(n))); // always locked
     }
 
     function test_rescueNativeOnNormal() public {
@@ -359,37 +365,63 @@ contract GovRescueTest is Test {
         address[3] memory bad = [address(n), MetaTxLib.UA_POOL, MetaTxLib.SHIELD_POOL];
         for (uint256 i; i < 3; ++i) {
             vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-            n.initialize(address(this), 1, abi.encode(_base(bad[i])));
+            n.initialize(nid(address(this)), 1, abi.encode(_base(bad[i])));
         }
         WrappedToken w = _wrappedClone();
         bad[0] = address(w);
         for (uint256 i; i < 3; ++i) {
             vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-            w.initialize(address(this), 1, abi.encode(_wrappedCfg(_one(address(usd)), bad[i])));
+            w.initialize(nid(address(this)), 1, abi.encode(_wrappedCfg(_one(address(usd)), bad[i])));
         }
-        IFactoryToken.TokenConfig memory c = _base(TO); // the bit and the address go together
+        IFactoryToken.TokenConfig memory c = _base(TO); // an address needs the bit
         c.features = 1;
         vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-        n.initialize(address(this), 1, abi.encode(c));
-        c = _base(address(0));
-        c.features = 1 | RESCUABLE;
-        vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-        n.initialize(address(this), 1, abi.encode(c));
-        n.initialize(address(this), 1, abi.encode(_base(TO))); // positive control
+        n.initialize(nid(address(this)), 1, abi.encode(c));
+        n.initialize(nid(address(this)), 1, abi.encode(_base(TO))); // positive control
         assertEq(n.rescueTo(), TO);
         assertEq(n.lockedFeatures() & RESCUABLE, RESCUABLE, "always locked");
     }
 
+    /// CTR-GOV-25 (owner 2026-11-12): the bit with `rescueTo` 0 stores the constant dev address; `rescueTo()` answers it
+    /// and a rescue (an ERC-20, the native coin) pays it, on `NORMAL` and `WRAPPED`. Without the bit: 0, no rescue.
+    function test_rescueToZeroIsTheDevAddress() public {
+        assertEq(RescueLib.SCAAS_DEV_RESCUE, 0xd33d17991f57BefB4CcBb3E57c477c10BdE5B465, "the vault (was the EOA 0x0389f77E846ff687d44db57bcC9DCB55dd6f4131, then the one-owner vault 0xc564b98ad818d5C870f4B2058C95435259D126cf, then 0xE20dddfCa81db0Bd8F1036189f20739e1605dF34 with ERC-5267 fields 0x0d)");
+        address dev = RescueLib.SCAAS_DEV_RESCUE;
+        IFactoryToken.TokenConfig memory c = _base(address(0));
+        c.features = 1 | RESCUABLE;
+        NormalToken n = _normalClone();
+        n.initialize(nid(address(this)), 1, abi.encode(c));
+        assertEq(n.rescueTo(), dev);
+        foo.mint(address(n), 7);
+        vm.expectEmit(address(n));
+        emit IRescuable.Rescued(address(foo), dev, 7);
+        _rescue(address(n), address(foo));
+        assertEq(foo.balanceOf(dev), 7);
+        vm.deal(address(n), 1 ether);
+        _rescue(address(n), address(0));
+        assertEq(dev.balance, 1 ether);
+        IFactoryToken.TokenConfig memory wc = _wrappedCfg(_one(address(usd)), address(0));
+        wc.features = 1 | RESCUABLE;
+        WrappedToken w = _wrappedClone();
+        w.initialize(nid(address(this)), 1, abi.encode(wc));
+        assertEq(w.rescueTo(), dev);
+        foo.mint(address(w), 3);
+        _rescue(address(w), address(foo));
+        assertEq(foo.balanceOf(dev), 10);
+        assertEq(_normal(address(0)).rescueTo(), address(0), "control: no bit, no destination");
+    }
+
     function test_tokenAnswersIRescuableOnlyWithTheBit() public {
         bytes4 id = type(IRescuable).interfaceId;
-        assertTrue(MetaTokenBase(address(_normal(TO))).supportsInterface(id));
-        assertFalse(MetaTokenBase(address(_normal(address(0)))).supportsInterface(id));
-        assertTrue(MetaTokenBase(address(_wrapped(_one(address(usd)), TO))).supportsInterface(id));
-        assertFalse(MetaTokenBase(address(_wrapped(_one(address(usd)), address(0)))).supportsInterface(id));
+        assertTrue(NormalToken(address(_normal(TO))).supportsInterface(id));
+        assertFalse(NormalToken(address(_normal(address(0)))).supportsInterface(id));
+        assertTrue(NormalToken(address(_wrapped(_one(address(usd)), TO))).supportsInterface(id));
+        assertFalse(NormalToken(address(_wrapped(_one(address(usd)), address(0)))).supportsInterface(id));
     }
 }
 
-/// `DexPuller.rescue` (spec §6.2): the DEX's `rescueTo`, immutable; not on `SCaaSDex` itself.
+/// `DexPuller.rescue` (spec §6.2): the DEX's `rescueTo`, immutable; `SCaaSDex.rescue` the same rule for a stray at the DEX
+/// (Fable D P3-5).
 contract GovRescueDexTest is Test {
     bytes32 constant UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
     address constant OWNER = address(0x0A);
@@ -399,13 +431,13 @@ contract GovRescueDexTest is Test {
     MockERC20 internal foo = new MockERC20("FOO", "FOO", 18);
 
     function setUp() public {
-        f = new OpenFactory(address(this), UID, 0);
+        f = EnvKit.factory(address(this), UID, 0);
         Catalogue.plain(f, IOpenFactory.TokenKind.NORMAL, 1, type(NormalToken).creationCode, address(0), address(0), false);
         Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
     }
 
     function _dex(address rescueTo, bytes32 salt) internal returns (SCaaSDex) {
-        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, rescueTo)), salt));
+        return SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, rescueTo, 0, 0)), salt));
     }
 
     function test_pullerRescueWholeBalance() public {
@@ -418,11 +450,50 @@ contract GovRescueDexTest is Test {
         assertEq(foo.balanceOf(address(p)), 0);
     }
 
-    function test_pullerRescueOff() public {
+    /// CTR-GOV-25: `DexConfig.rescueTo` 0 is the constant dev address; the puller's rescue pays it.
+    function test_pullerRescueToZeroIsTheDevAddress() public {
         DexPuller p = DexPuller(_dex(address(0), "d").puller());
+        assertEq(p.rescueTo(), RescueLib.SCAAS_DEV_RESCUE);
         foo.mint(address(p), 70);
-        vm.expectRevert(DexPuller.RescueOff.selector);
         p.rescue(address(foo));
+        assertEq(foo.balanceOf(RescueLib.SCAAS_DEV_RESCUE), 70);
+    }
+
+    /// Fable D P3-5: a stray at the DEX goes to the same `rescueTo` by anyone (the puller's rule): the whole balance, the
+    /// event; with `rescueTo` 0 the constant dev address (CTR-GOV-25).
+    function test_dexRescueWholeBalance() public {
+        SCaaSDex d = _dex(TO, "d");
+        foo.mint(address(d), 70);
+        vm.expectEmit(address(d));
+        emit IRescuable.Rescued(address(foo), TO, 70);
+        vm.prank(address(0xBEEF)); // anyone
+        d.rescue(address(foo));
+        assertEq(foo.balanceOf(TO), 70);
+        assertEq(foo.balanceOf(address(d)), 0);
+        SCaaSDex dev = _dex(address(0), "dev");
+        foo.mint(address(dev), 70);
+        vm.expectEmit(address(dev));
+        emit IRescuable.Rescued(address(foo), RescueLib.SCAAS_DEV_RESCUE, 70);
+        dev.rescue(address(foo));
+        assertEq(foo.balanceOf(RescueLib.SCAAS_DEV_RESCUE), 70);
+    }
+
+    /// The rescue runs under the DEX's entry guard, so nothing inside a running call (a plan's interaction, a token's
+    /// hook) reaches it: an asset whose transfer re-enters `rescue` fails the outer rescue whole; the control without the
+    /// re-entry moves both.
+    function test_dexRescueNotReentrant() public {
+        SCaaSDex d = _dex(TO, "d");
+        HookLeg hook = new HookLeg();
+        hook.mint(address(d), 10);
+        foo.mint(address(d), 5);
+        hook.arm(address(d), abi.encodeCall(SCaaSDex.rescue, (address(foo))));
+        vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(hook)));
+        d.rescue(address(hook));
+        assertEq(foo.balanceOf(address(d)), 5, "the inner rescue did not run");
+        hook.arm(address(0), ""); // positive control: no re-entry
+        d.rescue(address(hook));
+        d.rescue(address(foo));
+        assertEq(hook.balanceOf(TO) + foo.balanceOf(TO), 15);
     }
 
     /// R-16: the puller holds users' allowances; its rescue calls only `balanceOf` and `transfer`, so none is spent.
@@ -440,15 +511,15 @@ contract GovRescueDexTest is Test {
     /// Review 2026-11-04 M-2: `DexConfig.rescueTo` follows the tokens' rule (spec §6.2): never `UA_POOL`, `SHIELD_POOL`, the
     /// DEX or its puller (`RescueConfigInvalid`); the test plays the factory of a bare clone, so the DEX's address is known.
     function test_dexRescueToThisOrAPoolRefusedAtInit() public {
-        SCaaSDex impl = new SCaaSDex(1, plainEnv(address(this), address(0), UID, address(0), false), "");
-        SCaaSDex d = SCaaSDex(Clones.clone(address(impl)));
+        SCaaSDex impl = new SCaaSDex(address(this), dexArgs(address(this)));
+        SCaaSDex d = SCaaSDex(EnvKit.clone(address(impl), EnvKit.env(UID, address(0), address(0), false)));
         address p = vm.computeCreateAddress(address(d), 1); // the puller: the clone's first CREATE
         address[4] memory bad = [MetaTxLib.UA_POOL, MetaTxLib.SHIELD_POOL, address(d), p];
         for (uint256 i; i < 4; ++i) {
             vm.expectRevert(IRescuable.RescueConfigInvalid.selector);
-            d.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, bad[i])));
+            d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, bad[i], 0, 0)));
         }
-        d.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, TO))); // control
+        d.initialize(nid(address(this)), 1, abi.encode(ISCaaSDex.DexConfig(nid(OWNER), 0, address(0xAA), false, 0, TO, 0, 0))); // control
         assertEq(d.puller(), p);
         assertEq(DexPuller(p).rescueTo(), TO);
     }
@@ -457,12 +528,12 @@ contract GovRescueDexTest is Test {
     function test_interfaceIdIsOneOnDexAndToken() public {
         SCaaSDex d = _dex(TO, "d");
         IFactoryToken.TokenConfig memory c;
-        (c.name, c.symbol, c.decimals, c.features, c.owner, c.rescueTo) =
+        (c.name, c.symbol, c.decimals, c.features, c.admin, c.rescueTo) =
             ("N", "N", 6, 1 | (uint256(1) << GovernanceBits.RESCUABLE), nid(OWNER), TO);
         address t = f.createToken(IOpenFactory.TokenKind.NORMAL, 1, abi.encode(c), "t");
         assertTrue(d.supportsInterface(type(IGovernance).interfaceId));
-        assertTrue(MetaTokenBase(t).supportsInterface(type(IGovernance).interfaceId));
-        assertTrue(MetaTokenBase(t).supportsInterface(type(IRescuable).interfaceId));
+        assertTrue(NormalToken(t).supportsInterface(type(IGovernance).interfaceId));
+        assertTrue(NormalToken(t).supportsInterface(type(IRescuable).interfaceId));
         assertFalse(d.supportsInterface(type(IRescuable).interfaceId), "not on SCaaSDex");
         assertTrue(type(IGovernance).interfaceId != type(IRescuable).interfaceId);
     }
@@ -497,7 +568,7 @@ abstract contract GovRescueConfRows is Test {
         IRescuable(w).rescue(address(usd_));
         assertEq(usd_.balanceOf(TO_), 30, "the surplus only");
         assertEq(usd_.balanceOf(w), 100);
-        assertTrue(MetaTokenBase(w).supportsInterface(type(IRescuable).interfaceId));
+        assertTrue(NormalToken(w).supportsInterface(type(IRescuable).interfaceId));
     }
 }
 

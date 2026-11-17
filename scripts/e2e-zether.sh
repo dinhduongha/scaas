@@ -2,8 +2,10 @@
 # Classical Zether e2e (UA-3, CTR-ZTH-52; UA-6: BLS12-381 only, no `authRef`), script/ZetherE2E.s.sol through --ffi:
 #   run()   (broadcast) six `zether-bls12381` UAs registered with clientkeys PoPs (UA-8: portable, relayed by the
 #           deployer), a NORMAL_ZETHER token: shield, roll-over, a single transfer, a multi-recipient Compact M = 4 and a
-#           BUNDLE M = 2 transfer with decoys, roll-over, unshield, the disclosure view; the relayed named entries (zether-cli
-#           namedCall: single, Compact M = 2, unshield; a payer EOA signs, the deployer submits); a WRAPPED_ZETHER token over a
+#           BUNDLE M = 2 transfer with decoys, roll-over, unshield, the disclosure view; three relayed proofs through the
+#           merged mtxExecute(UAMetaTransaction, UASig) and three on the named merged entries (zether-cli namedCall, ua-mtx-merge
+#           T12) (single, Compact M = 2, unshield each; a payer EOA signs with its own key, the deployer submits; the UA binding
+#           computed in the script, checked against zether-cli uaEnvelope and the token's view); a WRAPPED_ZETHER token over a
 #           test ERC-20 (MockERC20): wrap-shield, roll-over; every step checked by decryption (zether-cli) in the simulation;
 #   check() (no broadcast) the final balances by decryption and the disclosure view against the chain;
 #   then one row per transaction of the broadcast: gasUsed from its receipt, calldata bytes; and gasSplit(): each call
@@ -11,7 +13,8 @@
 # usage: scripts/e2e-zether.sh                         a fresh anvil (chain 31337, amsterdam, 64 KiB code, 200 M gas
 #                                                      (the WRAPPED_ZETHER release needs ~110 M, NET-EVM-06), PORT default
 #                                                      18545) and `deploy.sh evm` with DEPLOY_ZETHER=1 first
-#        RPC=<url> PRIVATE_KEY=… scripts/e2e-zether.sh on a chain deployed with DEPLOY_ZETHER=1 (deployments/<chainid>.json;
+#                                                      (DEPLOY_NAME=local-31337-testnet, NET-EVM-13)
+#        RPC=<url> PRIVATE_KEY=… scripts/e2e-zether.sh on a chain deployed with DEPLOY_ZETHER=1 (deployments/<key>.json;
 #                                                      the SCaaS testnet: the deployer of that json; its releases must
 #                                                      be past the factory's notice period)
 # Needs forge, cast, jq, node (clients/clientkeys with its node_modules), anvil (local run), zether-cli
@@ -28,9 +31,10 @@ if [ -z "${RPC:-}" ]; then
   trap 'kill "$ANVIL" 2>/dev/null || true' EXIT
   for _ in $(seq 50); do cast chain-id --rpc-url "$RPC" >/dev/null 2>&1 && break; sleep 0.2; done
   export PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 # anvil's dev account 0
+  export DEPLOY_NAME=local-31337-testnet # NET-EVM-13: the anvil is not in chain-uids.json; its books by this name
   DEPLOY_ZETHER=1 "$ROOT/smartcontracts/scripts/deploy.sh" evm "$RPC" --silent >/dev/null
 fi
-: "${PRIVATE_KEY:?PRIVATE_KEY (the deployer of deployments/<chainid>.json)}"
+: "${PRIVATE_KEY:?PRIVATE_KEY (the deployer of deployments/<key>.json)}"
 cd "$ROOT/smartcontracts/evm"
 CHAIN="$(cast chain-id --rpc-url "$RPC")"
 SENDER="$(cast wallet address --private-key "$PRIVATE_KEY")"

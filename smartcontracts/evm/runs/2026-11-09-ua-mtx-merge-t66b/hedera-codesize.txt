@@ -1,0 +1,11 @@
+# T66b Step 2: the public Hedera testnet's runtime code-size limit, 2026-11-09. Simulation only (no transaction, no key, no fee):
+# `cast call --create <initcode> --rpc-url https://testnet.hashio.io/api` (chain 296, the public JSON-RPC relay), with the
+# initcode PUSH3 n, PUSH1 0, RETURN (returns n zero bytes as runtime code).
+n (runtime B) | result
+24,576 | ok: the 24,576 B runtime returned
+24,577 | refused: "Error occurred during transaction simulation: CONTRACT_EXECUTION_EXCEPTION" (HTTP 400, -32000)
+35,000 | refused (same)
+49,152 | refused (same)
+65,536 | refused (same)
+# Reading: Hedera keeps EIP-170's 24,576 B runtime limit (one byte over is refused; 200 gas of code deposit is not the cause).
+# A consensus transaction was not tried; plan T66b Step 5 confirms it with one small deploy before any release.

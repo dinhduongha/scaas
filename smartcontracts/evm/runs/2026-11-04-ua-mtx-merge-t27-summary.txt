@@ -1,0 +1,56 @@
+# ua-mtx-merge T27 gate summary (full output in git-ignored .log files, not committed)
+# T27: measure first, kinds 9 and 13 on a skeleton (regulated-kinds spec §2.1, §2.2, §3.1, §3.2, §4.2, §6.2; F-19; owner
+# 2026-11-06 stop line 64,512 B). src/regulated/: IRegulatedToken, RegulatedLib (bodies at final arity, reverting
+# RegulatedNotBuilt), RegulatedBase (masks, init through RegulatedLib.init first, ERC-165, disableFeature's mirror seat, the
+# eight thin stubs, the hook rows of §3.2 on placeholder checks F / P / R), WrappedRegulatedToken (9),
+# WrappedPqzRegulatedToken (13). Sizes and deploy gas: runs/2026-11-04-ua-mtx-merge-regulated-sizes.txt.
+# Base: a2325004 (T26 tip). T27 commits: 06c14a90 (legacy note, no copy: MD-4), 23a86992 (the build), this one (sizes,
+# harness, mutants, summary).
+step | commit | rc | counts
+t27-red-build | worktree (the tests, src/regulated/ moved aside) | 1 | compile error: Source "src/regulated/IRegulatedToken.sol" not found (and RegulatedLib.sol), test/as/RegulatedSkeleton.t.sol and the helpers it ripples into
+t27-green | worktree | 0 | RegulatedSkeleton 6 passed 0 failed
+t27-sizes | 23a86992 | 0 | WrappedRegulatedToken 46,754 B (init 49,067); WrappedPqzRegulatedToken 60,127 B (init 62,817); RegulatedLib 919 B; the six plain kinds and GovernanceRouter unchanged in size
+t27-stop-rule | 23a86992 | 0 | kind 13 60,127 < 64,512 B: no lever applied, no _above64KiB row
+t27-forge-full | worktree before the pin moves | 1 | 232 suites, 2656 passed 3 failed 14 skipped: test_plusZero_mtxTransfer_wrappedZether (85,298 != 85,286), test_plusZero_uaExecuteTransfer_wrappedZether (141,629 != 141,641), test_dexKat (MD-8); each pin moved (below)
+t27-dexkat | 23a86992 | 0 | DexKatTest WRITE_KAT=true, then the touched suites (DexKat, PlusZero, GovDeploy, MsgSenderLint, LinkClosure, RegulatedSkeleton): 12 suites, 55 passed
+t27-clientkeys-evm | 23a86992 | 0 | node --test test/evm.test.js test/governance-bits.test.js: 25 passed 0 failed (reads dex_order_kat.json)
+t27-node-kat | 23a86992 | 0 | cargo test --lib: kat_hashes_and_calldata_match_forge, the_plain_rows_are_pinned, call_op_round_trips_a_plain_entry, invalidate_digests_match_the_vectors: 4 passed
+t27-deploy-gas | 23a86992 | 0 | GovDeploy test_releaseGasPerKind -vv: kind 9 regular 3,271,493 state 71,815,140, asked 79.21 M; kind 13 regular 4,188,997 state 92,275,830, asked 101.66 M (with the 0.37 M frame); both fit 200 M, neither 60 / 70 M
+t27-sizegate | 23a86992 | 0 | 0 errors, 92 contracts, above 65536 B: none
+t27-isolate | 23a86992 | 0 | 22 passed 0 failed (forge --isolate UAGas, UARegistryGroups)
+t27-docs | 23a86992 | 0 | docs_check check 0 errors, 5 warnings, 16 notes; paths 0
+t27-mutants | 23a86992 | 1 each | 17 of 17 killed, none a compile error (runs/2026-11-04-ua-mtx-merge-t27-mutants.txt); src and script restored after each
+t27-at-set-n2048-kmax1024 | 23a86992 | 0 | test/{ua,pqz,as}: 66 suites, 808 passed 0 failed 1 skipped
+t27-at-set-n2304-kmax4096 | 23a86992 | 0 | test/{ua,pqz,as}: 66 suites, 805 passed 0 failed 4 skipped
+t27-at-set-n2560-kmax16384 | 23a86992 | 0 | test/{ua,pqz,as}: 66 suites, 804 passed 0 failed 5 skipped
+t27-at-set-n2816-kmax65536 | 23a86992 | 0 | test/{ua,pqz,as}: 66 suites, 799 passed 0 failed 10 skipped; src/pqz/PqzSet.sol restored (git status src clean)
+t27-forge-final | 23a86992 | 0 | forge test: 232 suites, 2659 passed 0 failed 14 skipped (T26: 231 suites, 2652: +1 suite RegulatedSkeleton 6, GovDeploy +1 test_deployRegulatedPath); PlusZero slots unchanged, Layout green (no namespace moved)
+#
+# Pins, old -> new. plus_zero_gas.json (compiler layout from MetaTokenBase.supportsInterface external -> public, which a
+# regulated kind needs for `super`): mtxTransfer_wrappedZether 85,286 -> 85,298; uaExecuteTransfer_wrappedZether 141,641 ->
+# 141,629; plus_zero_slots.json and every other gas row unchanged. dex_order_kat.json (MD-8, MetaTokenBase's metadata hash):
+# token 0xebf66719dB6a01646dCa5bAe6999d6A837d5DdCc -> 0x352Ff46E1FaC0bAD103458726D71f7c074993eAC with its order hashes,
+# digests and calldata (DEX address and domain unchanged). size-baseline.json: + WrappedRegulatedToken 46,754,
+# WrappedPqzRegulatedToken 60,127, WrappedPqzRegulatedToken.init 62,817. MsgSenderLint FILES 26 -> 30 (src/regulated/, 0
+# reads each). No plain kind's size, selector, typehash, storage slot or layout moved; GovernanceRouter address unchanged.
+#
+# Not run in T27: the whole node suite and e2e (no node source changed; the four KAT unit tests run); pqz-core gate (no core,
+# statement or set touched); scripts/e2e-zether.sh; e2e.py (kind 13's release there is T31).
+#
+# Conflicts with the plan / spec:
+#   DEPLOY_GAS (plan T27 step 1, pay-meta-tax §6.4) names nothing in the tree; the deploy gas is spec §6.2's method through
+#   GovDeploy.test_releaseGasPerKind (Create2Probe, regular x 64/63 + EIP-8037 state, x 1.05) plus T10's 0.37 M frame.
+#   "script/DeployBase.sol (the two releases)": DeployBase has no PQZ stack; spec §6.1 deploys 12, 13 by script/pqz/e2e.py,
+#   so DeployBase gains kind 9 only (DEPLOY_REGULATED), left disabled while it is a skeleton; kind 13 is measured by the probe.
+#   size-baseline.json: three rows, not two (kind 13's init 62,817 B is over EIP-3860).
+#   The plan's T27 has no test step; RegulatedSkeleton.t.sol (6 tests, each with its plain-kind control) was added for red
+#   first and the mutants.
+#   solc refuses a function both inheritance paths mention unless the kind restates it (error 6480): each regulated kind
+#   restates 15-19 functions (the hooks, the masks, and the base kind's own overrides: underlyings, rescue, mtxSelectors,
+#   _mtxRule, _uaAllowed; PQZ adds _domainName, _envelopeBinding, _uaEnvelopeBinding, _batchable), and WrappedPqzToken's
+#   overrides became `virtual` (no bytecode change). Part of the +3.2 / +3.4 KB is these restatements.
+#   Spec §3.1's ModerateTargetRefused is not declared: bit 22's own refusals are T32's (the owner's operatorTransfer note).
+#   The skeleton is a floor: the F / P / R bodies, the bounded registry call, the pause-open set, REGISTRY_CODEHASH and the
+#   views' storage reads come with T28 / T29 / T32; the hook rows' conditions cannot be mutated yet (every check reverts).
+#   Projection for the owner (estimate, not measured): 60,127 B + those bodies + group 3e's +2.3 to +4.0 K (pay-meta-tax
+#   §6.4) puts kind 13 near or over 64,512 B by T37 / T40, where the stop rule's levers apply.

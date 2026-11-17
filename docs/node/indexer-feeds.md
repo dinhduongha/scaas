@@ -156,7 +156,9 @@ slot.
 | Soroban | ledger | `0x`+64 | same two | `G…`/`C…` strkeys (case-sensitive) |
 
 Common keys: `event`, `contract`, `block_number`, `block_hash`, `tx_hash`, `log_index`, `from`, `to`, `amount`, `fee`,
-`fee_recipient` (families with relayer fees), `entry_ref` (`PaymentSettled`), `digest` (`MetaTransactionExecuted`).
+`fee_recipient` (families with relayer fees), `entry_ref` (`PaymentSettled`), `digest` (`MetaTransactionExecuted`); on EVM a
+`PaymentSettled` with its `PaymentMeta` also carries `pay_no` (0x-hex `bytes32`, all zero = none; was text) and `meta_save` (BUILT, plan
+T83 `ba280ade`, [CTR-MTX-26](../contracts/metatx.md#CTR-MTX-26)).
 Clients validate addresses in their own decoder.
 
 Further events, same object, same filters (decoders for a new kind ship before the first such token is created,
@@ -164,7 +166,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
 
 - token wrappers: `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChangeProposed`, `RateChanged`, `RateChangeCancelled`,
   `RateAdminRenounced`, `WrapDisabled`, `GuardianRenounced`, `MinterRenounced`, `MetaNonceCancelled`; factory
-  `TokenCreated` (built; the node still reads the v1 `TokenDeployed`), `EnvPublished`, `ImplementationDeployed`, `ImplementationDeprecated`, `KindEnabled` (plan 5g-Z2; was `ImplementationRegistered`);
+  `TokenCreated` (built; the node still reads the v1 `TokenDeployed`), `EnvPublished`, `ImplementationDeployed`, `TokenImplementationDeprecated`, `TokenKindEnabled` (plan 5g-Z2; was `ImplementationRegistered`);
 - token-verified trade orders (SPECIFIED, [dex-venue.md#trade-orders](dex-venue.md#trade-orders)): on the sell token
   `TradeFilled(orderHash, from, sellFill, receiveFill, dexFee)`, `OrderCancelled(orderHash, from)`,
   `NoncesInvalidated(from, batch, minNonce)`; on the DEX `LegSettled(ref, orderHash, from, destination, sold, received,
@@ -173,7 +175,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
   ([CTR-DEX-20](../contracts/dex.md#CTR-DEX-20)), `FeeSplitSet`, `MarketSet`, `ExchangeTargetSet`, `ListedOnlySet`.
   The DEX watcher reads them with its own cursor ([NODE-DEX-04](dex-venue.md#NODE-DEX-04)); a `TradeFilled` alone is
   never booked as a trade (a leg pulled into the DEX for escrow shows the whole amount with nothing received);
-- `ReceiverFeePaid` and the tender events of `chain_contract` rows (indexed like token events; a namespace receives
+- `UAPayeeFeePaid` and the tender events of `chain_contract` rows (indexed like token events; a namespace receives
   them when the contract is in its token subset);
 - universal accounts: `UATransfer`, `UAMetaTransactionExecuted`, `UARegistered` (with key data), balances per 32-byte
   id; `Transfer` to/from `UA_POOL` ([CTR-UA-18](../contracts/accounts.md#CTR-UA-18)) is paired with the
@@ -181,6 +183,44 @@ Further events, same object, same filters (decoders for a new kind ship before t
   `/v1/events` per canonical id; native ids keep today's form;
 - post-quantum Zether: `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and `UATransfer` of a PQZ
   token normalized like any meta token's, beside the `Pqz*` events ([contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md));
+- <a id="pqz-verifier-rows"></a>PQZ op rows and the verifier mode (group 3f; **BUILT** on the legacy pull path, T47 `75ddccc4`…`062133b6`,
+  `indexer::tests::indexer_joins_proof_offchain_with_position`; [NODE-JOB-22](job-api.md#NODE-JOB-22)): `ConfidentialTransfer`
+  (`entry_ref`, `from_ua`, `to_ua`, `beneficiary`, `fee`, `send_counter`, `blob`), `ConfidentialTransferMulti` (the same plus
+  `recipients`, `mode`), `Unshielded` (`ua`, `amount`, `recipient`, `blob`), each with `tx_index`; ids as `bytes32` hex, never in
+  `from` / `to`. A `PqzVerified` is joined to the first later op event of the same token in the same transaction as `pqz_verified:
+  {statement_hash, proof_hash, verifier, pqz_verifier_epoch}`, with the op row's position, for the audit replay at the exact
+  transaction position; it is never a row of its own. `PqzVerifierProposed` (`current`, `next`, `eta`) and `PqzVerifierRevoked`
+  (`previous`, `pqz_verifier_epoch`) are rows with `alert: true`; `PqzVerifierSet` (`previous`, `next`, `pqz_verifier_epoch`) and
+  `PqzVerifierCancelled` (`next`) rows without. **Health signal:** per `OFFCHAIN` token the indexer keeps, across ranges,
+  `pqz_last_verdict_at` (the block of the last joined `PqzVerified`), `pqz_verifier_epoch`, `pqz_verifier_revoked` and (group 3t)
+  `pqz_verifier_fee` (the last `VerifierFeeSet`'s `next`, `null` until one is seen), stamped on the token's verified op rows and
+  verifier rows. The state lives in memory and starts unknown: `pqz_verifier_revoked` and `pqz_verifier_epoch` are `null` until the
+  indexer sees what sets them (a joined `PqzVerified`: not revoked, its epoch; `PqzVerifierRevoked`: revoked; `PqzVerifierSet`: not
+  revoked), so a restart never stamps a revoked verifier "not revoked" (Fable review of ua-mtx-merge E N-9; BUILT,
+  `indexer::tests::pqz_health_is_unknown_until_seen`). **Operator note:** `pqz_verifier_revoked` may be `null` (it was `false`
+  before anything was seen). **The verifier fee** (group 3t, [CTR-PQZ-36](../contracts/pq-zero-knowledge.md#CTR-PQZ-36); BUILT,
+  `indexer::tests::verifier_fee_rows`): `VerifierFeeProposed` (`current`, `next`, `eta`) a row with `alert: true` (the hostage
+  notice, T29), `VerifierFeeSet` (`previous`, `next`) a row without (`previous == next`: a cancel of a pending increase).
+  **Operator note:** `ConfidentialTransfer.fee` and `ConfidentialTransferMulti.fee` are the whole word, now three payees
+  (`txFee`, `verifierFee`, `M·d`): a consumer that credits the beneficiary with `fee − M·d` over-credits it by the verifier fee;
+  the split is in the same transaction's pool moves (`Transfer` / `UATransfer` from `SHIELD_POOL`). **The token view** (SPECIFIED, not built): the job API's `GET /v1/tokens/{chain}`
+  per-token row gains `pqz_verifier: {mode, verifier, epoch, revoked, pending, eta, last_verdict_at, endpoints_reachable}` and
+  (group 3t) `verifier_fee: {fee, max, pending, eta}`;
+- PQZ proof storage (group 3h; **BUILT**, T63 `39fa296c`): a `ProofStoreSet(previous, next)` row with `alert: true` (a token switched
+  its storage mode); no rows for `PqzDebitProof` (the log is read on demand by the holder, not indexed);
+- <a id="pqz-key-version-rows"></a>PQZ key versions (group 3g; **BUILT**, T55; [NODE-JOB-23](job-api.md#NODE-JOB-23)): `UAPqzKeyAdded`
+  (feed `pqz_pending`), `UAPqzPopStored`, `UAPqzKeyCurrent` (feed `pqz_current`); `Credited`, `Debited` and `PqzRolledOver` carry
+  `key_version`;
+- regulated kinds 8–13 (BUILT on EVM, ua-mtx-merge T35, `indexer.rs`; regulated-kinds spec §7, M-08): `AccountFrozen`,
+  `AccountUnfrozen`, `ForcedTransfer`, `Paused`, `Unpaused`, `OrderRecorded`, `OrderRevoked`, `OperatorTransfer` and the
+  governance events `RelaxProposed`, `FeatureDisabled`, `RoleRevoked`, ids as `bytes32` hex but `from` / `to` in the address
+  form above (`UA_POOL` and `<k>_ua` for a derived id); `alert: true` on every `OrderRecorded`, `RelaxProposed`,
+  `AccountFrozen` and `Paused` (and a `warn` log line naming it); `derived` = `every_freeze_ended` on `FeatureDisabled(5)`,
+  `every_record_backed_freeze_ended` on `FeatureDisabled(10)`, `holder_lost_bit` on `RoleRevoked`; group 3s (CTR-GOV-24): the
+  topics gain `FeatureEnabled`, `AllowedSet`, `DeniedSet` (11 -> 14), `derived` `allow_list_on` / `deny_list_on` / `kyc_on` on
+  `FeatureEnabled(8 / 9 / 28)` and `kyc_off` on `FeatureDisabled(28)`, `alert` on `FeatureEnabled` and on a restricting edit
+  (`DeniedSet` on, `AllowedSet` off; test `lists_and_enable_rows`). Test:
+  `indexer::tests::alert_on_relax_proposed`;
 - planned asset suite: `OrderRecorded`, `OrderRevoked`, `AccountFrozen`, `AccountUnfrozen`, `ForcedTransfer`, `Paused`,
   `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `Attested`, `AttesterSet`, `GrantCreated`, `Released`, `Revoked`,
   `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`, `DistributionCreated`, `Claimed`, `Cancelled`, `Swept`,
@@ -194,7 +234,13 @@ History expiry drops those logs, so the node indexes every `UAMemberSig` of the 
 ([NODE-IDX-02](#NODE-IDX-02)), keeps the `sig` bytes with `(chain, registry, ua, index, purpose, member)` for as long as the record lives,
 and serves them by `(ua)` and `(ua, index)`, together with the `msig`'s `pop` rebuilt from its `pop` slots in `index` order. It checks
 each slot against `memberSigHashOf` and the rebuilt `pop` against `popOf` before serving them, and serves none that fails. A reader
-checks again: the node is not trusted for these bytes, only for keeping them.
+checks again: the node is not trusted for these bytes, only for keeping them. Since T66a the registry also tells the `pop` slot set from
+state: `popSlotsOf(ua)` returns the set indices with each `memberSigHashOf` ([CTR-UA-33](../contracts/accounts.md#CTR-UA-33)), so the
+keeper may read the set from it when it is built.
+
+**The factory index is the authority** (PLANNED; [CTR-TOK-27](../contracts/token-wrappers.md#CTR-TOK-27)): a mirror built from
+`TokenCreated` / `DexCreated` / `InstanceCreated` (backfilled by the paged views after history expiry) is a cache, never the source.
+Creators are 32-byte UA ids; the node decodes no `TokenCreated` / `DexCreated` today.
 
 ## <a id="feeds"></a>3. Feeds
 
@@ -204,9 +250,21 @@ changes) and `GET /v1/events?cursor=` (`GET /v1/events?cursor=…`: index ranges
 filtered per namespace; every page carries `store_id`, `incarnation`, `restore_epoch`, `head_seq`; the client cursor
 rule is the bus overlap rule ([cursors](#cursors)); `wait ≤ 25 s` long-poll for clients that want it (an ERP cron uses
 `wait=0`, so no client worker is held). Cursor older than retention ⇒ `410 CURSOR_EXPIRED`. Results reach clients
-only through the feeds: the node never calls a client and never dials a callback URL taken from an intent. A client
+only through the feeds: the node never dials a callback URL taken from an intent, and its only outbound call to a client is
+the doorbell of [NODE-IDX-09](#NODE-IDX-09). A client
 that polls every minute, and every ~10 s while it has live pushed jobs, sees job states ≤ ~10 s after the node while
 jobs are live, ≤ 1 min otherwise ([INT-ERP-18](../integration.md#INT-ERP-18), [INT-ERP-20](../integration.md#INT-ERP-20)).
+
+<a id="NODE-IDX-09"></a>**NODE-IDX-09** — **Doorbell: a signed, content-free ping per API key** (owner 2026-11-08; PLANNED, node round P4). An
+API key may register one `https` URL (off by default). When a feed of its namespace gains items, the node sends at most one
+ping per interval: `POST {url}` with `{"namespace", "feed": "jobs" | "events", "head_seq", "at"}` and an HMAC signature by
+that key over the body and a timestamp header (the client refuses a stale or replayed ping). The ping carries no job or
+event data; the client then reads `/v1/jobs` and `/v1/events` from its cursor as before. **The feeds stay the only source of
+truth:** a lost, late or duplicated ping changes nothing, so the node keeps no delivery guarantee and retries only with a
+short backoff. Outbound guard (fail closed): `https` only, the resolved address is checked after DNS and refused when it is
+loopback, link-local, private, multicast or the node's own listeners; no redirects; a short connect and total timeout; a
+per-namespace rate limit; pings run on their own worker and never hold a lane, the indexer or the store. A refused or failing
+URL is reported on the key (`last_ping_error`) and in `/v1/ops`, never to a third party.
 
 `GET /v1/jobs?cursor=901&limit=200&wait=0`:
 

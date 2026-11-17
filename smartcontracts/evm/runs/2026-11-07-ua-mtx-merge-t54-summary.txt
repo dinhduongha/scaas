@@ -1,0 +1,34 @@
+# ua-mtx-merge T54 gate summary (full output in git-ignored .log files, not committed)
+# T54 (group 3g, pqz-key-versions spec §7.1, §7.2, §3.6; C8, F-14, KV-7 ... KV-9, KV-11): the vectors and every client reading
+# them. UNAUDITED.
+# Base: 192587dd (+ docs commits by others to 937b454f). Commits: 10f22bc4 (legacy copies), e8df0e65 (implementation), this one
+# (summary, mutants table).
+# The forge rows below ran on the working tree that became e8df0e65, before one generator fix inside it (typed_ops.json's
+# UAPqzRollOver row had a stray `pqzAuth` extra, unused by its calldata; found by the node's KAT); the clientkeys, cast and
+# node checks ran after it.
+step | commit | rc | counts
+t54-red | 10f22bc4 + generators | 1 | clientkeys with the regenerated vectors, tests not yet moved: 260 tests, 8 failed (typed-ops pins and op counts, the PQZ rows' builders, portable typehash list)
+t54-generators | e8df0e65 | 0 | typed-ops-vectors, ua-portable-vectors, pq-vectors re-run: typed_ops.json, portable.json, pq_kat.json, nested.json byte-identical (sha256 before = after)
+t54-j7 | e8df0e65 | 0 | portable.json: every earlier key byte-equal (registrations, kemRecords, pqzKeyRecords, memberships, negatives 68 rows, tags); new pqzKeyVersions 16, pqzKeyVersionNegatives 28, typed + 2 types, note
+t54-j8 | e8df0e65 | 0 | vectors/pqz: every statement / proof file unchanged; state.json (default dir, n2304-kmax4096) regenerated for T52's layout (STATE_VECTORS=1, 4 sets run, the 2 committed files)
+t54-clientkeys | e8df0e65 | 0 | node --test test/*.test.js: 270 tests, 268 passed, 0 failed, 2 skipped; test/pqz-versions.test.js 7 passed; typed-ops-cast-check (cast 1.8.5): 80 structs, 114 digests and 113 calldatas equal to cast's
+t54-ua-rs | e8df0e65 | 0 | cargo test --all-features: 94 passed 0 failed (ua8 pqz_key_version_vectors, portable_typehashes_pinned, json set_pqz_key_version_args_json); clippy --all-targets --all-features -D warnings clean
+t54-ua-c | e8df0e65 | 0 | cargo build, cargo test --locked (header drift) ok; python3 tests: 24 passed
+t54-ua-py | e8df0e65 | 0 | unittest: 29 passed (test_pqz_key_versions)
+t54-ua-go | e8df0e65 | 0 | go test: ok (TestPqzKeyVersions)
+t54-ua-cs | e8df0e65 | 0 | dotnet test: 28 passed 0 failed (PqzKeyVersionVectors); build-server shut down after
+t54-ua-dart | e8df0e65 | 0 | dart test: 29 passed ("pqz key versions")
+t54-wrappers | e8df0e65 | 0 | cargo check --locked: ua-cxx, ua-qt (QMAKE set), ua-dart-frb/rust on the new ua-rs (their own test runners not run)
+t54-zether-prover | e8df0e65 | 0 | cargo test --test typed_ops: 6 passed (UAPqzRollOver listed as not Zether)
+t54-recovery | e8df0e65 | 0 | pqz-core/ffi cargo test --features prove --test recover_versions --release: 2 passed (noise draws key-free over m 1..8 with and without the auditor; additive recovery m 1/3/8, 3 versions each: trials n + 2mn)
+t54-e2e-self-test | e8df0e65 | 0 | script/pqz/e2e.py --self-test: 0 failures (T53's pending self-test now green)
+t54-forge-touched | e8df0e65 | 0 | test/pqz/PqzTyped.t.sol 53 passed (5 suites); test/ua/UARegistryUA8.t.sol 85 passed (+ pqzKeyVersionsFromVectors, pqzKeyVersionNegatives)
+t54-forge-full | e8df0e65 | 0 | 3043 passed 0 failed 14 skipped, 291 suites (default set n2304-kmax4096)
+t54-at-set-n2048-kmax1024 | e8df0e65 | 0 | 957 passed 0 failed 1 skipped, 97 suites (test_pqzhN2048FitsBothPaths green on the regenerated rows; T53's change at this set too); PqzSet.sol restored
+t54-at-set-n2304-kmax4096 | e8df0e65 | 0 | 954 passed 0 failed 4 skipped, 97 suites; PqzSet.sol restored
+t54-at-set-n2560-kmax16384 | see T56 summary | - | run once with T56's suite at the T56 tip
+t54-at-set-n2816-kmax65536 | see T56 summary | - | run once with T56's suite at the T56 tip
+t54-mutants | e8df0e65 | 1 each | 7 of 7 killed (runs/2026-11-07-ua-mtx-merge-t54-mutants.txt): M-C1 (a version-0 digest changed; be64 at version 0), the sequence check off, the repeated-key refusal off, the decoy pending filter off, a stale debit signed, the vault key without pqzKeyHash; git diff --exit-code -- clients/clientkeys/src clean after each
+#
+# M-C1's third clause (recovery as a Cartesian search) has no code here: the wallet's recovery is ua-rs-sign's; this branch
+# holds the reference (recover_versions.rs) whose trial count is asserted equal to n + 2mn.

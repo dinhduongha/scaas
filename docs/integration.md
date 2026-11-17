@@ -399,41 +399,50 @@ non-terminal pushed jobs return to `local`). Node admin mutations are audited se
 
 <a id="payment-references"></a>
 
-**Generation (BUILT; [CTR-MTX-03](contracts/metatx.md#CTR-MTX-03)):**
+**Generation (BUILT; [CTR-MTX-03](contracts/metatx.md#CTR-MTX-03), [CTR-MTX-26](contracts/metatx.md#CTR-MTX-26), [CTR-MTX-31](contracts/metatx.md#CTR-MTX-31)):**
 
 ```
-entryRef = 32 bytes from a CSPRNG                     # carries no information; unlinkable by construction
-batch    = keccak256("scaas.pay.lane" ‖ entryRef)     # lane of this request (v2 tokens: payLane(entryRef) on chain)
-nonce    = 0
+salt     = 32 bytes from a CSPRNG                     # carries no information; unlinkable by construction
+entryRef = metaPayId(PayMeta{salt, payNo, save, schema, body})
+batch    = any lane of the payer                      # convention for one payment per request: payLane(entryRef), nonce 0
 ```
 
-- One `entryRef` per **payment request** (an invoice may have several requests over time; each request is payable at
-  most once because its lane has nonce 0).
-- **Lane horizon** ([CTR-MTX-04](contracts/metatx.md#CTR-MTX-04)): pay-once holds only if every signature the client
-  issues on a pay lane has `validUntil ≤ t_first_issue + 30 d`. Re-issuing terms on the same lane later than that, or
-  signing an op with `valid_until > now + 30 d` on a pruning family (GRAM, Aptos, Solana, Sui), gives no pay-once
-  guarantee — issue a new request (new `entryRef`, new lane) instead. Wallet connectors and `clientkeys` refuse such ops
-  ([NET-ALL-01](networks/README.md#NET-ALL-01)).
+- One `entryRef` per **payment request**. Partial payments and refunds use the same `entryRef` and `PayMeta` (pay-meta-tax O3,
+  PT-1): the amounts of the key `(token, payer, payee, entryRef)` add up and the ERP decides when the request is settled; a
+  refund is a payment payee → payer on the same `entryRef`, a key of the other direction, so it never adds to the original sum.
+  The UNIQUE constraint on the request stays; the settled sum is the ERP's.
+- `payNo` (`bytes32`, recommended a right-aligned UUIDv7) names the business document, so its payments can be read back with
+  `paymentsOf(payNo, …)` when the payer set `save`; a readable document number in clear is not recommended
+  ([ARCH-POS-17](decisions.md#ARCH-POS-17)): use schema 4 for private data.
+- **Lane horizon** ([CTR-MTX-04](contracts/metatx.md#CTR-MTX-04)): on a pruning family (GRAM, Aptos, Solana, Sui) the
+  replay guarantee holds only if every signature on a lane has `validUntil ≤ t_first_issue + 30 d`; a signature with
+  `valid_until > now + 30 d` gives none after a prune; wallet connectors and `clientkeys` refuse
+  such ops ([NET-ALL-01](networks/README.md#NET-ALL-01)). The non-EVM families keep their pay-once lane until their rounds.
 - The client stores `entryRef` with a UNIQUE constraint on the request, together with `chain`, `token`,
-  `receiving_address`, `payer_address` (locked at start), `amount_base`, `issued_valid_until`.
+  `receiving_address`, `payer_address` (locked at start), `amount_base`, `issued_valid_until` and the `PayMeta` preimage (a
+  payment landed through the generic `mtxExecuteTransfer` carries no `PaymentMeta`, O12, and is reconciled from it).
 - Do **not** derive `entryRef` from business identifiers (`keccak256(company ‖ move ‖ amount ‖ salt)` as in older
-  drafts): a random value needs no salt management and cannot be brute-forced from known invoice numbers.
-- Splitting: Zether `n_v = 64` removed the need to split large payments; for transparent tokens one payment per
-  request. If a business case needs partial payments, issue one request (one `entryRef`) per instalment.
+  drafts): a random salt needs no management and cannot be brute-forced from known invoice numbers.
+- **Taxed payments** (the regulated kinds, [CTR-AS-18](contracts/asset-suite.md#CTR-AS-18)): the gross-sum rule below
+  applies only to rows without `PaymentTaxed`. A row joined with its `PaymentTaxed` (same transaction, token, `entryRef` and
+  `from`, `PaymentTaxed.digest == UAMetaTransactionExecuted.digest`) books `net = value − tax` as the settlement and `tax` as
+  withheld by the payer; the request is final iff `Σ net ≥ amount_base − expected_tax` and `Σ tax == expected_tax`, else a
+  reconciliation exception. ERPs use the AMOUNT mode (their own tax figures, immune to a rate change in flight); a PERCENT
+  payment signed before a rate change fails `TaxMismatch` and is re-signed.
 
 **Client → chain (before signing and at push):**
-1. The payment `MetaTransfer` built server-side from the request: `to = receiving_address`, `value = amount_base`,
-   `entryRef`, `batch` as above, `validUntil = issued_valid_until` (server-chosen, e.g. now + 300 s).
+1. The payment `UAMetaTransfer` built server-side from the request: `to = receiving_address`, `value = amount_base`,
+   `entryRef = metaPayId(meta)`, the lane chosen above, `validUntil = issued_valid_until` (server-chosen, e.g. now + 300 s).
 2. After signing: recompute the digest; a 65-byte signature must recover `payer_address` (EOA); a contract wallet
    (ERC-1271) is accepted unverified and judged by the node's simulation ([INT-ERP-03](#INT-ERP-03)).
 3. The node recomputes the digest and simulates before broadcast.
 
 **Chain → client (on each finalized range):**
-1. Filter `PaymentSettled` by `contract == request.token` **and** `from == request.payer_address` **and**
+1. Filter `UAPaymentSettled` by `contract == request.token` **and** `from == request.payer_address` **and**
    `to == request.receiving_address` **and** `entry_ref == request.entryRef`.
 2. `amount_settled = Σ amount` of matching events; `amount_settled ≥ amount_base` ⇒ request final; more than due ⇒
    final + needs attention (refund manually); less ⇒ partial.
-3. Cross-check `MetaTransactionExecuted(digest)` to mark the outbox job final.
+3. Cross-check `UAMetaTransactionExecuted(digest)` to mark the outbox job final.
 4. Drift checks: unmatched inbound `Transfer` to a watched wallet ⇒ drift A record; hourly `balances` vs ledger balance
    of the token's bank journal ⇒ drift C ([accounting](#accounting)).
 
@@ -452,7 +461,7 @@ connector has no quote model).
 <a id="payment-modes"></a><a id="INT-ERP-27"></a>**INT-ERP-27** — **The payment mode is configuration, not code.** A
 deployment chooses per company and channel among: sponsored (company relayer, `MODE_FEE_NONE` +
 `MODE_RESTRICT_RELAYER`, gas as OPEX); fee in token (`MODE_FEE_PERCENT`/`FIXED`, fee ≤ 1 % to `feeRecipient`); payee
-self-relay ([inbound](#inbound)); receiver pays the fee; a node gas-sponsorship policy; the enterprise inbound gateway.
+self-relay ([inbound](#inbound)); the payee pays the fee; a node gas-sponsorship policy; the enterprise inbound gateway.
 
 <a id="bus-scope"></a><a id="INT-ERP-15"></a>**INT-ERP-15** — **Bus scope is a per-tenant client setting delivered per
 job.** `restricted` (default) keeps [INT-ERP-06](#INT-ERP-06): terms pin `MODE_RESTRICT_RELAYER` to the company relayer
@@ -465,6 +474,14 @@ admitted peers after a private window (`bus.private_window_secs`, default 120 s)
 `restricted`) plus `blockchain_bus_private_window_secs`, editable by the client's blockchain managers; the payment start
 leaves the relayer unbound only when the company's scope is `open`; delegated (mandate) payments are `call` jobs and stay
 `restricted`.
+
+<a id="pay-no"></a>**Payment numbers and on-chain pay records** (EVM, BUILT, plan T83; rule
+[CTR-MTX-26](contracts/metatx.md#CTR-MTX-26)). Issue one `payNo` per payment request when each request must be matched: a
+UUIDv7 right-aligned in 32 bytes (`clientkeys` `payNoFromUuid`, shown with `payNoToUuid`), unique without coordination,
+time-ordered, with no business sequence number on chain; keep the readable invoice number in the ERP or in `body` (schema 2,
+or 4 encrypted). Ask the payer to set `save` in the request when the ERP must find the payment later without logs (EIP-4444):
+then read `paymentCount(payNo)` and `paymentsOf(payNo, offset, limit)` on the token by `eth_call` (no node API), keep the
+records whose `to` is one of your receiving addresses and add the amounts; anyone may append to a `payNo`, so filter by `to`.
 
 ## 8. Wallets and custody
 
@@ -632,6 +649,50 @@ per company. The token keeps ElGamal `acc/pending` balances with a decrypt bound
 [zether design](history/specs/2026-10-03-zether-design.md). Zether is **UNAUDITED** and runs on every chain with the BLS12-381
 precompiles once enabled ([contracts/zether](contracts/zether.md)).
 
+<a id="pqz-offchain-checks"></a>**PQZ tokens in `OFFCHAIN` mode: checking a disclosed amount and auditing an accepted proof**
+(SPECIFIED; the contract side BUILT, group 3f, [CTR-PQZ-27](contracts/pq-zero-knowledge.md#CTR-PQZ-27)). Read
+`pqzVerifyConfig()` once per token: mode, verifier, fixed or transferable, epoch, a pending transfer and its `eta`, the notice
+period, and (group 3t, [CTR-PQZ-36](contracts/pq-zero-knowledge.md#CTR-PQZ-36), BUILT) the verifier fee: `verifierFee`, its cap
+`verifierFeeMax` (the price a holder accepts at shield) and a live pending increase with its `eta`. Every debit's fee word is
+`txFee + verifierFee + M·d`: take it from the token's statement view (word 256), never from your own sum, and name it in the job
+as `args.pqz_fee` (required on an `OFFCHAIN` token); after a `VerifierFeeSet` re-prove, since an op built at the old fee
+refuses (`PQZ_FEE_MISMATCH`). On an `OFFCHAIN` token the chain accepts a proof because the token's verifier UA signed it, so a
+client that must not trust that UA checks the proof itself. Both recipes use public bytes only: nothing is decrypted and no ciphertext is sent to
+anyone ([ARCH-POS-13](decisions.md#ARCH-POS-13)). **UNAUDITED.**
+
+*A disclosed amount.* The counterparty hands over `(entryRef, leg, amount, kind, keyVersion, proof)`.
+1. Read `disclosureStatement(entryRef, leg, amount, kind, keyVersion)` from the token at a finalized block; check its length is
+   the set's disclosure statement length and its word 32 (`proofSystemId`) is the token's `proofSystemId()`.
+2. Run `pqz-ffi`'s verifier (`pqz_precompile`, byte for byte the precompile's answer) on `u8(op) ‖ be32(len(statement)) ‖
+   statement ‖ proof`, `op` 4 for `SENDER_S`, 5 for `RECEIVER_X` and `AUDITOR`. `…01`: the amount is proven; `…00`: it is not.
+3. `verifyTransferAmount(…, proof, pqzVerdict)` with a verdict answers only what the verifier signed; the verdict-less form
+   reverts `PqzVerdictRequired()` on an `OFFCHAIN` token ("cannot verify", never "wrong amount").
+
+*An accepted proof (audit).* Every accepted proof leaves `PqzVerified(statementHash, proofHash, verifier, pqzVerifierEpoch)` in
+the op's transaction; the node's feed joins it to the op's `ConfidentialTransfer*` / `Unshielded` event with the transaction's
+position ([indexer-feeds.md](node/indexer-feeds.md)).
+1. Take the transaction's calldata: the entry's arguments, the proof and `pqzVerdict`.
+2. Replay at the transaction's **exact position** (its parent block's state with every earlier transaction of the block
+   applied, and the transaction's own path and envelope): an earlier transaction of the block can change the account (a
+   rollover, a shield) or the verifier (a confirm, a revocation).
+3. Rebuild the statement there with the entry's statement view (`transferSingleStatement`, `transferStatement`,
+   `burnStatement`, `unshieldUnwrapStatement`) and the path's binding; require `keccak256(statement) == statementHash` and
+   `keccak256(proof) == proofHash`.
+4. Run `pqz-ffi` as above with the entry's op. `…00` means the verifier signed a false proof: the calldata verdict and
+   `PqzVerified` name it and its epoch. Not slashable on chain; the response is the containment of
+   [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md#verifier-containment).
+
+*Key classes* (owner 2026-11-13, SPECIFIED; [CTR-PQZ-37](contracts/pq-zero-knowledge.md#CTR-PQZ-37)). `pqzVerifyConfig()` also
+answers `pqzOwnKey` and `pqzOpening`. On an **opening token** (`pqzOpening = true`) the only disclosure kind is `SENDER_S`
+(statement under `PQZL_SPLIT_ID`; `RECEIVER_X` and `AUDITOR` revert `OpUnsupported()`): any party holding the leg's seed can
+prove it, so the kind names no party, and it proves the **encrypted amount, not receipt**. To check receipt, also read
+`pqzSkipped(ua, keyVersion, index)` (must be false) and find a later debit of the recipient whose window holds the entry; with an
+auditor, its outcome `read` says the opening was good. A credit is accepted by the recipient's wallet only after the holder check
+([CLI-SGN-51](clients/signers-clientkeys.md#CLI-SGN-51)); the auditor's outcomes `read`, `recipient-unreadable`, `unreadable`
+and `unreadable, taken` are public and named, and `unreadable, taken` (both UAs named) is a compliance event for the issuer.
+An `offchain-token` without the opening keeps the three kinds above and the accepted exposure of its key
+([ARCH-POS-13](decisions.md#ARCH-POS-13)'s Change).
+
 ## 11. Procure-to-pay
 
 <a id="procure-to-pay"></a>
@@ -705,12 +766,12 @@ that several jobs share one `tx_hash`.
 | Non-EVM inbound | The client builds the `MetaOp`, the payer signs, the client pushes `signed_op` jobs | **BUILT** (via the example outbox); job API **SPECIFIED** |
 | Payee self-relay ("e-cheque") | Payer signs offline with fee 0 and relayer unbound or bound to the payee's address; the payee (or its node) submits; the ERP books from `PaymentSettled` exactly as usual | contract **BUILT**; QR (EIP-681-style payload) tooling **PLANNED** |
 | Gas sponsorship policy | Node policy rows: e.g. "to wallet W, value ≥ X ⇒ fee 0, gas to account Y"; the client books gas from the job's receipt data. A policy caps a tenant's own spend only with `on_exhausted = reject`; with `unsponsored` an exhausted policy books the job to the namespace and marks it `sponsor_fallback` (the admin must set `fallback_to_namespace`, audited) ([NODE-SPN-01](node/sponsorship.md#NODE-SPN-01)) | **SPECIFIED** |
-| Receiver pays fee | Two signatures (payer's `pay`, payee's fee authorization); booked as payment N and fee F | **SPECIFIED** ([CTR-MTX-05](contracts/metatx.md#CTR-MTX-05); job field `receiver_fee`, event `ReceiverFeePaid`) |
+| Payee fee | Two signatures (payer's `pay`, payee's fee authorization); booked as payment N and fee F | **SPECIFIED** ([CTR-MTX-05](contracts/metatx.md#CTR-MTX-05); job field `payee_fee`, event `PayeeFeePaid`) |
 
-Receiver pays, client side: the **payee ERP** sets `fee_paid_by_receiver` and `receiver_fee_amount` (base units) on the
+Payee fee, client side: the **payee ERP** sets `fee_paid_by_payee` and `payee_fee_amount` (base units) on the
 request it issues; the payer's terms stay fee `NONE`; once the payer's address is known (portal: wallet connect), the
-payee signs `ReceiverFee` over the `paymentDigest` (a `SmartKeyAccount` payee signs through `mtxExecuteAsOwner` rules) and
-books payment `N` received and fee `F` paid from `PaymentSettled` + `ReceiverFeePaid`. The **payer ERP** is unchanged
+payee signs `UAPayeeFee` over the `paymentDigest` (a `SmartKeyAccount` payee signs through `mtxExecuteAsOwner` rules) and
+books payment `N` received and fee `F` paid from `PaymentSettled` + `UAPayeeFeePaid`. The **payer ERP** is unchanged
 (pays `N`, books `N`). **E-cheque flow:** the payee's request names the relayer lane; the payer signs offline with that
 relayer bound and hands the intent to the payee, which co-signs over the digest and pushes it to that node.
 
@@ -840,6 +901,13 @@ kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr
    [CTR-UA-33](contracts/accounts.md#CTR-UA-33); an `msig`: the `pop` from its `UAMemberSig` events, checked against `memberSigHashOf` / `popOf`,
    [CTR-UA-33](contracts/accounts.md#CTR-UA-33) A; [CTR-UA-31](contracts/accounts.md#CTR-UA-31)); later KEM versions come by `setKemKey`
    ([CTR-UA-32](contracts/accounts.md#CTR-UA-32)), a PQZ key by `setPqzKey` — ordinary `call` jobs, no fee.
+   **ML-DSA without a precompile** (owner 2026-11-15; contracts BUILT on `3zh-mldsa`; the node and client side SPECIFIED,
+   [NODE-JOB-29](node/job-api.md#NODE-JOB-29), built in the ua-rs-sign port round): on a registry whose `mldsa44` / `mldsa65` /
+   `mldsa87` verifier has no precompile (the deploy JSON's `mldsa<x>_path` = `cache`), `register` needs the key's expanded-key cache
+   first: `cacheExpandedKey(kind, pk, part)` for each of its 1 / 2 / 3 parts (anyone, no signature, one 40–48 M-gas transaction
+   each, idempotent), else it reverts `UAKeyNotCached(ua)`. Cache, then register, on each chain where the key is used. Until
+   NODE-JOB-29 is built the node does not send the parts: a relayed registration of such a key needs them sent first by the subject
+   or a sponsor. A UA id can receive no tokens before it is registered (`UANotRegistered`), so the order costs no funds.
 4. On the finalized `UARegistered` event the client reads `registrationOf(ua)` (the stored arguments equal what it sent; an `msig`'s `pop`
    there is `keccak256(pop)`, [CTR-UA-33](contracts/accounts.md#CTR-UA-33) A),
    `pqzKeyOf(ua).proven` and `checkedOf(ua)`, and only then marks the account usable on that chain.
@@ -874,6 +942,17 @@ key under a second kind (`UAKeyInUse`).
 - Verifiable credentials stay optional ([CTR-UA-20](contracts/accounts.md#CTR-UA-20)). A BBS presentation is
   never legal evidence: workflows with legal recourse require the account-bound KB-JWT with `nonce` = deal reference /
   `intent_id`.
+
+<a id="pqz-key-rotation"></a>**Rotating a PQZ key** (contracts and `clientkeys` BUILT, group 3g; the rule is
+[CTR-UA-42](contracts/accounts.md#CTR-UA-42); UNAUDITED). Rotate on an operator change or when a share holder leaves.
+1. Read `pqzKeyLatest(ua)` and the `UAPqzKeyAdded` events on every chain the UA uses; replay an existing version `v+1` where it
+   is missing; generate a new key only for a number no chain holds.
+2. Sign the `UAPqzKeyVersionRecord` (an `msig` by its m-of-n), then `setPqzKey(ua, v+1, …)` and `storePqzPop(ua, v+1, …)` on
+   every chain in one sitting: until the proof is stored the version is pending (decoys skip it, the node refuses debits to
+   it by name).
+3. For an `msig`: fresh shares of `v+1` to the current members only.
+4. Migrate: op 1 from `(ua, v)` to the UA itself (drain a long queue by rollovers or refreshes on `v` first); unshield only
+   after the migration. In-flight credits to a rotating UA are refused by name and re-proved.
 
 ## 14. Regulated-token compliance
 
@@ -921,7 +1000,7 @@ factory call plus optional action contracts ([CTR-AS-14](contracts/asset-suite.m
 | Loyalty points (tier 1) | `createToken(NORMAL, version, abi.encode(cfg), salt)` on `OpenFactory` (built, P1e; the v1 `OpenFactoryV1.createMetaToken` is in `legacy/p5`, not deployed) | `minter` = the issuer's mint contract or multisig; earn rules in the ERP trigger `mint` jobs; fee 0 | **BUILT** |
 | Internal 1:1 money (tier 2) | `createToken(WRAPPED, version, abi.encode(cfg), salt)` with one leg, `num = den = 1` (built) | Journal per (company, token) for accounting; wrap/unwrap by holders | **BUILT** |
 | Wrapper with a rate, multi-underlying (tiers 2/3, v2) | `createToken(WRAPPED, version, abi.encode(cfg), salt)` with 1–8 `cfg.legs` (built: `WrappedToken`, not yet deployed by the script: over EIP-170) | rates fixed or adjustable (contract rate-role holder), optional guardian | **BUILT** (contracts; client fields SPECIFIED) |
-| Confidential money | `createToken(NORMAL_ZETHER or WRAPPED_ZETHER, version, abi.encode(cfg), salt)` with `cfg.conf` (auditor key; the verifiers are the release's, `shieldScale`, `maxShielded`, `confidentialFee`) on `OpenFactory` (built, P3) | unaudited (no chain lock, kind gate per chain); auditor key custody | **BUILT** |
+| Confidential money | `createToken(NORMAL_ZETHER or WRAPPED_ZETHER, version, abi.encode(cfg), salt)` with `cfg.conf` (auditor key; the verifiers are the release's, `shieldScale`, `maxShielded`, `confidentialFee`; on an `OFFCHAIN` PQZ token also `verifierFee` and its cap `verifierFeeMax`, group 3t, 0 everywhere else) on `OpenFactory` (built, P3) | unaudited (no chain lock, kind gate per chain); auditor key custody | **BUILT** |
 | Regulated tokens (flags 5–8, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)), vesting (`VestingGrant`), distributions, `ExchangeOffer` | `createToken` with flags 5–8 ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); counterfactual clones via `predict*` | issuer/compliance contracts, `ComplianceRegistry`, `termsHash` disclosure | **SPECIFIED** |
 | NFT kinds | — | — | **PLANNED** |
 
@@ -931,6 +1010,25 @@ the built kinds 0–4; flags 5–8 are fields, [CTR-AS-17](contracts/asset-suite
 `chain_uid`, checked against the chain profile). Built: one factory, `OpenFactory` (CTR-TOK-25), with `createToken` of kinds `NORMAL`, `WRAPPED`, `NORMAL_ZETHER`, `WRAPPED_ZETHER` (P3); the v1 factory
 (`OpenFactoryV1`: `createMetaToken`) stays until the node and clientkeys move (P5). Gasless token operations other than transfer and payment are `mtxExecute` self-calls on the token's
 allowlist; role calls such as `mint` stay `call` jobs through the role holder's contract.
+
+<a id="holder-chain-word"></a>**A contract that holds a power passes the token's chain word** (owner 2026-11-13,
+[CTR-GOV-28](decisions.md#CTR-GOV-28)'s Change; BUILT, build 3zb + 3zc, branch `burner-wrap-caps`). Every direct entry a role holder calls takes a trailing `bytes32 chainUid_`: `mint(to, amount, chainUid_)`,
+`mintToUA`, `disableWrap`, `proposeRate` / `cancelRate` / `executeRate`, `setWrapMember`, the regulated controls and list
+writes, the tax setters, `setProofStore`, the DEX's `setMarket`, `setExchangeTarget`, `setListedOnly`, `setFeeSplit`; the
+admin's `setWrapLimits`, `setMaxSupply` and `setMaxWrapSupply` too. An issuer's minter contract, a rate-admin timelock, a
+guardian, a Safe that holds a bit: each reads the token's `chainUid()` (or the DEX's) and passes it; a word of another chain
+reverts `ChainUidMismatch(expected, got)` for a holder, so a transaction replayed on a sibling chain with the same chain id
+lands nowhere. The old selectors are gone (test-only chains: no alias); a role-holder contract compiled against the old ABI
+must be rebuilt. A UA holder signs the router op instead, which carries `chainUid` as a signed field
+([node job API](node/job-api.md#holder-chain-word)). `burn` in `BURNER` mode and the unwraps stay without the word.
+
+**Burn and supply caps in an issuer's configuration** (BUILT, build 3zb + 3zc). A `NORMAL*` token chooses its burn mode
+at creation: off, `BURNABLE` (every holder burns its own units) or `BURNER` with `roles.burner` (only a holder of bit 30,
+for example a redemption desk, burns its own units within its grant; [CTR-GOV-29](decisions.md#CTR-GOV-29)). A `WRAPPED*`
+token sets `maxWrapSupply` (0 = none) beside `maxSupply`, and bit 31 if the admin may change either later
+([supply caps](contracts/token-wrappers.md#supply-caps)); an uncapped hybrid uses `maxSupply = 2^256 − 1`. Reconcile the
+reserve with `reserveValue()` against `totalSupply()` and the wrapped share with `totalWrapped()`. The client's burn button
+and the wrap-cap disclosure: [app.md](clients/app.md#burn-and-caps).
 
 ## <a id="data-protection"></a>15. Data protection
 
@@ -1038,6 +1136,10 @@ commitment computationally unlinkable (2^256 preimage space); the on-chain value
 | Node unreachable | Push/sync transport errors | Retry with backoff; jobs stay `local`/`sent`; signatures live until `validUntil` — expired requests are re-issued (new `entryRef` or same request after expiry per client policy) |
 | Simulation revert (insufficient balance, expired, bad signature) | Snapshot `dead` with decoded `error` (`MetaTxBadNonce`, `MetaTxExpired`, …) | Request stays open; ask the payer to fund and re-sign |
 | Lost race / paid elsewhere | `consumed` then a range with `MetaTransactionExecuted(digest)` | Mark final, `landed_elsewhere = true`; no business failure |
+| `PQZ_VERDICT_MISSING` | `dead` / refusal with that error, nothing sent | The `OFFCHAIN` token's verifier gave no verdict (none sent, none fetched). Retry once it answers; if it is revoked or gone, the token's owner sets a new one through the notice ([CTR-PQZ-28](contracts/pq-zero-knowledge.md#CTR-PQZ-28)) |
+| `PQZ_FEE_MISMATCH` | refusal at the gateway (422); on the lane the job stays `queued` | The job's `args.pqz_fee` is not the token's fee word now (a `VerifierFeeSet` since the proof was built, or a wrong sum): rebuild the statement from the token's view and prove again ([NODE-JOB-22](node/job-api.md#NODE-JOB-22), [CTR-PQZ-36](contracts/pq-zero-knowledge.md#CTR-PQZ-36)) |
+| `PQZ_VERDICT_NOT_EXPECTED` | refusal per item | The token is `PRECOMPILE`: drop `args.pqz_verdict` and re-push |
+| `PQZ_VERIFIER_UNREACHABLE` | refusal of a shield or wrap-shield job | The operator refuses shields into an `OFFCHAIN` token whose verifier is revoked or unreachable (opt-in); do not shield until it is served again |
 | Superseded intent | `consumed`, no event by `valid_until + grace + 1 h` | Mark dead; the subject spent that lane nonce on another intent — investigate if unexpected |
 | Stuck transaction | `signed`/`broadcast` for a long time | Nothing to do client-side; the node replaces at ×1.25 up to its fee cap; operator may raise the cap |
 | Reverted on chain | `reverted` (rare: state changed between simulation and inclusion) | Re-push with `generation + 1` after operator requeue if still wanted; the subject nonce was not consumed |

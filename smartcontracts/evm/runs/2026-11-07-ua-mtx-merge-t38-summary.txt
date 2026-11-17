@@ -1,0 +1,15 @@
+# ua-mtx-merge T38 gate summary (full output in git-ignored .log files, not committed)
+# T38 (pay-meta-tax spec §4; O4, O14): UARelayFee gains batch and nonce (the payer's own lane), the token's mtxRelayFee and
+# MtxRelayFee.relay take them; one signature pays once, a call is paid twice only by two signatures and a target that runs
+# it twice; open mode unchanged (O14, its limitation pinned on kinds 8, 9). UNAUDITED.
+# Base: 2ced92b5. Commits: 131d663d (legacy copies), e273978e (implementation), this one (summary, mutants table).
+step | commit | rc | counts
+t38-red | 131d663d + tests only | 1 | compile error: relay / mtxRelayFee with batch and nonce have no function (test/metatx/TypedOps.t.sol, MtxRelayFee.t.sol)
+t38-build | e273978e | 0 | src then each test directory one at a time; no RelayPay struct needed (the legacy decoder holds relay's ten arguments)
+t38-green | e273978e - pins | 1 | the T38 suites: 22 pin rows (plus-zero gas 15, IERC20MetaTx id, the two CREATE2 addresses, selector audit), 2 test fixes (a memory struct aliased, the lane's nonce 2)
+t38-forge-full | e273978e - 4 pins | 1 | 2898 passed 4 failed 14 skipped, 277 suites: the 4 were pins of the change (2 size reads of size-baseline.json, dex_order_kat.json, regulated_kat.json), moved, then 63 of 63 passed in their 5 suites (runs/...-t38-rerun.log)
+t38-size-gate | e273978e | 0 | 0 errors; kind 13 62,392 -> 62,449 B (2,063 B under the 64,512 B stop line: no lever)
+t38-mutants | e273978e | 1 each | 4 of 4 killed, none a compile error (runs/2026-11-07-ua-mtx-merge-t38-mutants.txt): batch out of the UARelayFee hash, nonce out of it, the router passing nonce 0, relayRef changed; git diff --exit-code -- src (the mutated file) clean after. The fourth ran while T39's source edits were already in the tree (not MetaTokenBase's): its kill (test_relay_openModePaysCaller, test_uaRelay_mldsa65Payer) does not depend on them
+#
+# Not run: the four PQZ sets (T38 touches no PQZ code; the plan asks them of T37 and T40). Relay gas (test_relayGas_*) is
+# logged, not pinned. Clients and node: T41, T42 (typed_ops.json's UARelayFee rows still sign the old struct).

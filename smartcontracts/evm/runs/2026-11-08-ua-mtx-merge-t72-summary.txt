@@ -1,0 +1,31 @@
+# ua-mtx-merge T71 + T72 gate summary (full output in git-ignored .log files, not committed)
+# Chain-neutral releases spec §2, §3.1, §4, §6.1 (CTR-TOK-29; option I, owner 2026-11-07; the Fable review applied). One
+# segment: the gates ran at T72's end. UNAUDITED.
+# Base: 846167ba (T67 tip). Commits: ab2dfee5 (legacy copies), b61ac38d (T71, the factory side), 612981b9 (T72, every kind,
+# the tests, the vectors and the pins), this one (summary).
+step | commit | rc | counts
+t71-red | - | - | not a separate run: test/v2/ChainNeutralFactory.t.sol and ChainNeutralKinds.t.sol were written before the code and name configureChain, ChainEnv, creatorId and predictAddress(bytes32,uint16,uint16,bytes32), none of which 846167ba has; the T68 mutants are the evidence each can fail
+t72-forge-full-1 | the T72 work tree before the fixes below | 1 | 3018 passed 51 failed 14 skipped, 298 suites: fixtures without the genesis seed (forge's EIP-2935 contract at Amsterdam: ChainUidNotGenesis), SmartKeyAccount's byte-identity pin (SaltedEIP712 then reworked to keep its bodies, virtual), Zether slot / verifier assertions on releases, the KATs and gas pins
+t72-regen | 612981b9 | 0 | generators only: PLUS_ZERO_WRITE (-j1) plus_zero_gas.json, WRITE_KAT dex_order_kat.json, WRITE_REGULATED_KAT regulated_kat.json; selector_audit.json initialize(bytes32,uint64,bytes) by hand (13 rows, old copy in test/vectors/legacy/)
+t72-forge-full-2 | 612981b9 | 0 | 3102 passed 0 failed 14 skipped, 298 suites
+t72-size | 612981b9 | 0 | size_gate.py: 0 errors, 99 contracts; WrappedPqzRegulatedToken 70,437 B above 65,536 B, pinned in _above64KiB (owner 2026-11-07, removed by T66b)
+t72-wallet-pin | 612981b9 | 0 | SmartKeyAccount runtime without CBOR equal to ref/pre-ua-mtx-merge (MandateWalletMerged, Invariants)
+t72-readers | 612981b9 | 0 | clientkeys node --test test/evm.test.js test/regulated.test.js: 29 passed; ua-rs cargo test --all-features --test regulated: 4 passed; scaas-node cargo test --lib (dex KAT, regulated KAT x2, selector audit both directions, plain rows, invalidate digests, mandate lanes): 7 passed
+t72-e2e-py | 612981b9 | 0 | script/pqz/e2e.py self-test: 0 failures (the new factory ABI and configureChain with a reference block)
+t72-at-set-n2048-kmax1024 | 612981b9 | 0 | at-set.sh test --match-path 'test/{ua,pqz,as/confidential}/*' in a worktree at 612981b9, built per directory first: 959 passed 0 failed 1 skipped, 98 suites; PqzSet.sol restored
+t72-at-set-n2304-kmax4096 | 612981b9 | 0 | as above: 956 passed 0 failed 4 skipped, 98 suites
+t72-at-set-n2560-kmax16384 | 612981b9 | 0 | as above: 955 passed 0 failed 5 skipped, 98 suites
+t72-at-set-n2816-kmax65536 | 612981b9 | 0 | as above: 950 passed 0 failed 10 skipped, 98 suites; PqzSet.sol restored (the script's own trap)
+t72-mutants | see T68 | - | spec §8's mutants run in T68 on the final factory
+# Sizes old -> new (runtime B): NormalToken 32,870 -> 33,795; WrappedToken 43,503 -> 44,456; NormalZetherToken 41,076 -> 42,222;
+# WrappedZetherToken 51,522 -> 52,709; NormalPqzToken 47,714 -> 48,846; WrappedPqzToken 57,026 -> 58,219; NormalRegulatedToken
+# 40,638 -> 41,467; WrappedRegulatedToken 51,292 -> 52,123; NormalZetherRegulatedToken 49,020 -> 50,030;
+# WrappedZetherRegulatedToken 59,678 -> 60,724; NormalPqzRegulatedToken 55,472 -> 56,487; WrappedPqzRegulatedToken 64,996 ->
+# 70,437 (+4.3 KB of it the assembler's PUSH3 jump targets past 64 KiB); SCaaSDex 33,704 -> 34,929; OpenFactory 17,598 ->
+# 19,971; ZetherLib 25,351 -> 26,826; PqzStateLib 9,050 -> 9,460; ZetherWrappedLib 11,672 -> 11,896.
+# Gas (PlusZero, exact): mtxTransfer +636 to +646 (normal 85,472 -> 86,118); transferToUA +1,311 to +1,400 (normal 67,920 ->
+# 69,231); transfer -22 to -44; uaExecuteTransfer +657 to +732; router mtxMint 99,447 -> 100,129. The spec estimated
+# +0.1-0.2 k per signed call: each env read is one EXTCODECOPY of the 138-byte head plus the clone check (about 250 gas), and
+# transferToUA reads the registry from code several times on the UA ledger path. MetaTxGasV2 AMS_* +962 to +986 over the pins.
+# GovGas (log rows, measured at the T70 tip; T70 adds no step to these paths): createToken 1,805,428 -> 2,183,102, createDex
+# 4,006,661 -> 4,383,367 (CREATE3: the proxy account and its CREATE, the env tail in the clone's code).

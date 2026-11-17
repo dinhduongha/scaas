@@ -43,7 +43,11 @@ pub struct Work {
     pub job_id: Option<i64>,
     pub to: Address,
     pub data: Bytes,
+    /// The deadline the work is sent under: the op's own, or for a PQZ debit the sooner of it and its verdict's `validUntil`.
     pub valid_until: u64,
+    /// The op's own deadline (its envelope's), never narrowed by a verdict: a renewed verdict extends `valid_until` up to it
+    /// (Fable recheck R-1, E N-3).
+    pub envelope_until: u64,
     /// `None` cho job `call`.
     pub meta: Option<MetaRef>,
     /// A named entry ([`crate::typed::Op`]): the guard reads its row; else a transfer struct (`meta`).
@@ -75,17 +79,20 @@ pub struct MetaRef {
     pub nonce: U256,
     /// The typed digest, computed here (`guard::fill_digest`); `None` until then.
     pub digest: Option<B256>,
-    /// A `ua_metatx` job: the UA ledger's nonce map (`uaNonce`), digest and `UAMetaTransactionExecuted`.
+    /// A `ua_metatx` job: a merged entry or a struct on ids (`UaMtx`), its `UAMetaTransactionExecuted`.
     pub ua: bool,
+    /// The subject's nonce is `mtxNonce(address, batch)` (`SmartKeyAccount`, `IMetaTxAddress`); else `mtxNonce(bytes32, batch)`
+    /// (tokens, the router, the mandate wallets: one nonce map on ids, ua-mtx-merge plan T14).
+    pub addr_nonce: bool,
 }
 
 impl MetaRef {
     pub fn of(token: Address, m: &Mtx, digest: Option<B256>) -> Self {
-        Self { token, from: m.from().into_word(), batch: m.batch(), nonce: m.nonce(), digest, ua: false }
+        Self { token, from: m.from().into_word(), batch: m.batch(), nonce: m.nonce(), digest, ua: false, addr_nonce: false }
     }
 
     pub fn of_ua(token: Address, m: &UaMtx, digest: Option<B256>) -> Self {
-        Self { token, from: m.from(), batch: m.batch(), nonce: m.nonce(), digest, ua: true }
+        Self { token, from: m.from(), batch: m.batch(), nonce: m.nonce(), digest, ua: true, addr_nonce: false }
     }
 }
 
@@ -198,17 +205,35 @@ struct Sent {
     ceiling: Option<u128>,
 }
 
+/// CTR-MTX-86, one rule on every family (the EVM lanes here, the other adapters' `step_once`): a job carrying `receiver_fee`
+/// (the old name) or `payee_fee` is refused by name, never relayed without the payee's fee authorization. The node builds no
+/// payee fee: it goes as the named EVM entry `mtxPayWithPayeeFee` (an `op`); the other families have no such entry.
+pub fn refuse_payee_fee_fields(job: &Job) -> Result<()> {
+    if job.receiver_fee.is_some() {
+        anyhow::bail!("RECEIVER_FEE_REFUSED: the job field receiver_fee is now payee_fee (owner 2026-11-12); a payee fee goes as \
+            the named entry mtxPayWithPayeeFee");
+    }
+    if job.payee_fee.is_some() {
+        anyhow::bail!("PAYEE_FEE_REFUSED: the payee fee (payee_fee) goes as the named EVM entry mtxPayWithPayeeFee; refused, never \
+            relayed without it");
+    }
+    Ok(())
+}
+
 /// One job, one `Work` (job-api.md): a named `op`, or a transfer struct. NODE-LANE-10 (R84): the unbound `relayer` /
 /// `feeRecipient` are normalized here (`fee_recipient` = `[[chains]] fee_recipient`), never relayed as the job carries them.
 /// The dedup key is the typed digest of what is built here (`guard::fill_digest`), never the job's `digest` field.
 pub fn work_from_job(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
+    work_from_job_with(job, fee_recipient, &crate::service::Types::default())
+}
+
+/// [`work_from_job`] with the chain's services (`Guard::work`): a `service` job (proposed NODE-JOB-25) is built only here.
+pub fn work_from_job_with(job: &Job, fee_recipient: Option<Address>, services: &crate::service::Types) -> Result<Work> {
     // T17 (one job-kind rule): an EVM job is `metatx`, `ua_metatx` or `call`; any other kind is refused, never guessed.
     if let Some(k) = job.kind.as_deref().filter(|k| !matches!(*k, "metatx" | "ua_metatx" | "call")) {
         anyhow::bail!("unknown job kind {k:?} (metatx | ua_metatx | call)");
     }
-    if job.receiver_fee.is_some() {
-        anyhow::bail!("receiver-pays (receiver_fee) goes as the named entry mtxPayReceiverFee / uaPayReceiverFee; refused, never relayed without it");
-    }
+    refuse_payee_fee_fields(job)?;
     if job.call.is_some() || job.calldata.is_some() || job.data.is_some() {
         return Err(hex_refused("call"));
     }
@@ -219,25 +244,18 @@ pub fn work_from_job(job: &Job, fee_recipient: Option<Address>) -> Result<Work> 
         return Err(hex_refused("data"));
     }
     if let Some(op) = &job.op {
-        return op_work(job, op, fee_recipient);
+        return op_work(job, op, fee_recipient, services);
     }
     if job.kind.as_deref() == Some("ua_metatx") {
         return ua_work(job, fee_recipient);
     }
-    let (Some(m), Some(token), Some(sig)) = (&job.metatx, job.token, &job.signature) else {
-        anyhow::bail!("job {} has neither an op nor a transfer struct", job.id);
-    };
-    let mut m = Mtx::from_wire(job.struct_.as_deref(), m)?;
-    m.normalize(fee_recipient);
-    let sig = hex_bytes(sig)?;
-    let valid_until = m.valid_until().saturating_to();
-    let meta = Some(MetaRef::of(token, &m, None));
-    let typed = Some(transfer_typed(job.contract.as_deref(), token, m.struct_hash(), Some((m.from(), sig.clone())))?);
-    let data = match pay_meta(job)? {
-        None => m.calldata(sig),
-        Some((salt, pm, on_chain)) => m.pay_meta_calldata(salt, pm, sig, on_chain)?,
-    };
-    Ok(Work { job_id: Some(job.id), to: token, data, valid_until, meta, entry: false, typed })
+    if job.metatx.is_some() {
+        // R43 / CTR-MTX-30: an address `MetaTransfer` names the token's `mtxExecuteTransfer(MetaTransfer, bytes)` (or the address
+        // `mtxPayMeta`), which no token has left; refused by name, never relayed to a revert (legacy/ua-mtx-merge/submit.rs)
+        anyhow::bail!("OP_KIND_MISMATCH: a metatx job's MetaTransfer names the address mtxExecuteTransfer, no token entry since the \
+            merged entries: send ua_metatx with m (UAMetaTransfer, from / to bytes32 ids) and auth (UASig)");
+    }
+    anyhow::bail!("job {} has neither an op nor a transfer struct", job.id)
 }
 
 /// The domain of a transfer struct: the job's `contract`, a token kind.
@@ -248,47 +266,46 @@ pub fn transfer_typed(contract: Option<&str>, token: Address, struct_hash: B256,
         "pqz" => "pqz",
         c => anyhow::bail!("BAD_PAYLOAD: contract {c:?} (token | zether | pqz)"),
     };
-    Ok(Typed { contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None })
+    Ok(Typed { pay_meta_len: 0, pqz_parties: vec![], pqz_auditor: false, pqz_verdict: None, pqz_fee: None, contract, domain_of: token, struct_hash: Some(struct_hash), lane_hash: None, signer, payee: None, digest: None,
+        derived_signer: false, derived_side: false })
 }
 
 /// A named entry: everything comes out of one [`Op::parse`]; a job carries it or a transfer struct, never both.
-fn op_work(job: &Job, op: &serde_json::Value, fee_recipient: Option<Address>) -> Result<Work> {
+fn op_work(job: &Job, op: &serde_json::Value, fee_recipient: Option<Address>, services: &crate::service::Types) -> Result<Work> {
     if job.metatx.is_some() || job.m.is_some() || job.signature.is_some() || job.auth.is_some() || job.token.is_some() {
         anyhow::bail!("BAD_PAYLOAD: an op job is {{kind, op}}: token, signature and auth live in the op");
     }
-    let (w, ua) = work_of_op(Some(job.id), op, fee_recipient)?;
+    let (w, ua) = work_of_op_with(Some(job.id), op, fee_recipient, services)?;
+    // R43: the per-kind call table: a merged entry (a `UA*` struct) is a `ua_metatx` job, an address entry a `metatx` one
     if (job.kind.as_deref() == Some("ua_metatx")) != ua {
-        anyhow::bail!("OP_KIND_MISMATCH: {:?} job, ua entry {ua} (ua_metatx carries the ua* entries)", job.kind);
+        let want = if ua { "ua_metatx" } else { "metatx" };
+        anyhow::bail!("OP_KIND_MISMATCH: {} ({}) is no entry of a {:?} job: the call table lists it for {want}", op["entry"], op["struct"], job.kind);
     }
     Ok(w)
 }
 
 /// `(work, a ua* entry)`, one [`Op::parse`]: the job path and the gateway.
 pub fn work_of_op(job_id: Option<i64>, op: &serde_json::Value, fee_recipient: Option<Address>) -> Result<(Work, bool)> {
-    let p = Op::parse(op, fee_recipient)?;
+    work_of_op_with(job_id, op, fee_recipient, &crate::service::Types::default())
+}
+
+fn work_of_op_with(job_id: Option<i64>, op: &serde_json::Value, fee_recipient: Option<Address>, services: &crate::service::Types)
+    -> Result<(Work, bool)>
+{
+    let p = Op::parse_with(op, fee_recipient, services)?;
     let ua = p.row.ua();
-    let meta = p.lane.map(|(from, batch, nonce)| MetaRef { token: p.to, from, batch, nonce, digest: None, ua });
-    Ok((Work { job_id, to: p.to, data: p.data, valid_until: p.valid_until, meta, entry: true, typed: Some(p.typed) }, ua))
+    let addr_nonce = p.typed.contract == "account";
+    // a service pull's nonce and its `UAMetaTransactionExecuted` are the pulled token's (spec §8), its target the service
+    let token = if p.typed.contract == "service" { p.typed.domain_of } else { p.to };
+    let meta = p.lane.map(|(from, batch, nonce)| MetaRef { token, from, batch, nonce, digest: None, ua, addr_nonce });
+    Ok((Work { job_id, to: p.to, data: p.data, valid_until: p.valid_until, envelope_until: p.valid_until, meta, entry: true, typed: Some(p.typed) }, ua))
 }
 
-fn hex_bytes(s: &str) -> Result<Bytes> {
-    Ok(alloy::hex::decode(s.strip_prefix("0x").unwrap_or(s))?.into())
-}
-
-/// A pay-meta job's `(salt, meta, on chain)` (CTR-MTX-26); `None` for a plain job, an error for half of one.
-fn pay_meta(job: &Job) -> Result<Option<(B256, Bytes, bool)>> {
-    match (&job.salt, &job.meta) {
-        (None, None) => Ok(None),
-        (Some(salt), Some(pm)) => {
-            let salt = B256::try_from(&hex_bytes(salt)?[..]).map_err(|_| anyhow::anyhow!("salt is 32 bytes"))?;
-            Ok(Some((salt, hex_bytes(pm)?, job.meta_offchain != Some(true))))
-        }
-        _ => anyhow::bail!("a pay-meta job carries both salt and meta"),
-    }
-}
-
-/// A `ua_metatx` struct job (job-api.md, CTR-UA-26): `{token, m, auth}` (+ `salt` / `meta` for `uaPayMeta`), relayed as
-/// `uaExecuteTransfer` / `uaPayMeta` of the normalized struct on the token's UA ledger; `auth` the `UASig` object.
+/// A `ua_metatx` struct job (job-api.md, CTR-UA-26, CTR-MTX-30): `{token, m, auth}`, relayed as `mtxExecuteTransfer` of the
+/// normalized struct on ids (pay-meta-tax O12: the generic path, any `entryRef`, no metadata); `auth` the `UASig` object. A
+/// pay with its `PayMeta` is the named entry `mtxPay` (`{op}`, spec §7.1): the old `salt` + hex `meta` form is refused
+/// `HEX_ARGS_REFUSED` (`legacy/ua-mtx-merge/3e/submit.rs`). A native `from` and `to` run at `registry() == 0` (R9); a derived
+/// side needs the UA ledger (R44, the guard).
 fn ua_work(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
     if job.metatx.is_some() || job.signature.is_some() {
         anyhow::bail!("a ua_metatx job is {{token, m, auth}} or {{op}}: no metatx or signature");
@@ -301,13 +318,25 @@ fn ua_work(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
     let auth = crate::abi::UASig::abi_decode(&parse("UASig", auth, "auth")?.abi_encode())?;
     let native_sig = (auth.keyData.is_empty() && auth.members.is_empty()).then(|| auth.signature.clone());
     let signer = crate::metatx::native(&m.from()).zip(native_sig);
-    let typed = Some(transfer_typed(job.contract.as_deref(), token, m.struct_hash(), signer)?);
-    let data = match pay_meta(job)? {
-        None => m.calldata(auth),
-        Some((salt, pm, on_chain)) => m.pay_meta_calldata(salt, pm, auth, on_chain)?,
-    };
+    let mut typed = transfer_typed(job.contract.as_deref(), token, m.struct_hash(), signer)?;
+    let to = match &m { UaMtx::Transfer(t) => Some(t.to), UaMtx::Call(_) => None };
+    typed.derived_signer = crate::metatx::native(&m.from()).is_none();
+    typed.derived_side = typed.derived_signer || to.is_some_and(|t| crate::metatx::native(&t).is_none());
+    let typed = Some(typed);
+    if job.salt.is_some() || job.meta.is_some() || job.meta_offchain.is_some() {
+        anyhow::bail!("HEX_ARGS_REFUSED: salt / meta: a pay goes as its named entry {{op: {{entry: \"mtxPay\", args: {{…, meta: \
+            {{salt, payNo, save, schema, body: named fields}}}}}}}}, never a hex meta");
+    }
+    let data = m.calldata(auth);
     let meta = Some(MetaRef::of_ua(token, &m, None));
-    Ok(Work { job_id: Some(job.id), to: token, data, valid_until: m.valid_until().saturating_to(), meta, entry: false, typed })
+    let until = m.valid_until().saturating_to();
+    Ok(Work { job_id: Some(job.id), to: token, data, valid_until: until, envelope_until: until, meta, entry: false, typed })
+}
+
+/// The relayer of a landed meta-transaction is this lane's, or, for a service pull (its token not the target), the
+/// service: the service calls the token, so its `UAMetaTransactionExecuted` names the service (spec §8).
+fn ours(m: &MetaRef, to: Address, relayer: Address, lane: Address) -> bool {
+    relayer == lane || (m.token != to && relayer == to)
 }
 
 pub fn now() -> u64 {
@@ -329,6 +358,9 @@ pub struct Submitter {
     tripped: Option<&'static str>,
     /// PAY-FIX2, NODE-GW-07, NODE-JOB-20: checked before every simulation.
     guard: Guard,
+    /// Fable recheck 4 R4-1: [`Chain::failover_answers`] when the job in hand started ([`Submitter::submit`]); [`Submitter::fail`]
+    /// requeues when it moved.
+    failover_mark: u64,
 }
 
 impl Submitter {
@@ -350,6 +382,8 @@ impl Submitter {
         let breaker = Arc::new(Mutex::new(Breaker::new(cfg.breaker.clone())));
         let tokens = std::sync::RwLock::new(nc.tokens.iter().filter_map(crate::odoo::TokenCfg::evm).collect());
         let guard = Guard::new(&cfg, Arc::new(tokens))?;
+        // proposed NODE-JOB-25: a configured service whose entries or domain are not the contract's stops the lane
+        guard.load_services(&chain).await?;
         let mut me = Self {
             chain,
             odoo,
@@ -363,6 +397,7 @@ impl Submitter {
             sampled: None,
             tripped: None,
             guard,
+            failover_mark: 0,
         };
         for n in &p.gap_fill {
             me.gap_fill(*n).await?;
@@ -374,7 +409,7 @@ impl Submitter {
             let (Some(n), Some(h)) = (j.nonce, j.tx_hash.as_deref()) else { continue };
             let Ok(hash) = h.parse::<B256>() else { continue };
             let fees = me.chain.fees().await?;
-            let work = match work_from_job(&j.payload, me.cfg.fee_recipient) {
+            let work = match me.guard.work(&j.payload, me.cfg.fee_recipient) {
                 Ok(mut w) => {
                     if let Err(e) = guard::fill_digest(&me.chain, &mut w).await {
                         anyhow::bail!("typed digest: {e:?}");
@@ -385,9 +420,24 @@ impl Submitter {
             };
             // review T4 m2: a rebuilt payload is re-signed by `track`, so it passes the guard too; refused ⇒ that
             // nonce is only ever gap-filled
+            // Fable recheck 5 R5-2: a refusal read while a failover endpoint answered is no verdict: the start fails (and is
+            // retried) as on a transport error, never a gap-fill and `dead`
+            let mark = me.chain.failover_answers();
+            let moved = |me: &Self| me.chain.failover_answers() != mark;
             let work = match work {
-                Some(w) => match me.guard.check(&me.chain, &w).await {
-                    Ok(()) => Some(w),
+                Some(mut w) => match me.guard.check(&me.chain, &w).await {
+                    // group 3f: a replacement re-signs the bytes, so a PQZ debit gets its verdict again; none ⇒ gap-filled only
+                    Ok(()) => match me.guard.pqz_fill(&me.chain, &mut w).await {
+                        Ok(()) => Some(w),
+                        Err(r) if moved(&me) => anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r:?}; the lane does not start: the node exits, its supervisor restarts it", j.job_id))),
+                        Err(r) => {
+                            warn!(job = j.job_id, nonce = n, "tracked PQZ job without a verdict ({r:?}); its nonce is only gap-filled");
+                            None
+                        }
+                    },
+                    Err(Refusal::Policy(r)) if moved(&me) => {
+                        anyhow::bail!("{}", crate::adapters::evm::failover_answer(&format!("tracked job {}: {r}; the lane does not start: the node exits, its supervisor restarts it", j.job_id)))
+                    }
                     Err(Refusal::Policy(r)) => {
                         warn!(job = j.job_id, nonce = n, "tracked job refused by the guard: {r}; its nonce is only gap-filled");
                         None
@@ -398,7 +448,9 @@ impl Submitter {
             };
             // its replacements reuse the original transaction's gas limit (review M3); only when the RPC cannot tell,
             // the cap: the operator's, never past what the chain's blocks take (an unreadable block fails the start)
-            let sent = me.chain.tx_fees(hash).await.ok().flatten();
+            // Fable recheck 6 R6-2: an unread transaction fails the start (as `fees()` above); only an unknown one (`None`) takes
+            // the cap and, priced, leaves the nonce to the gap-fill
+            let sent = me.chain.tx_fees(hash).await.map_err(|e| anyhow::anyhow!("tracked job {}: eth_getTransactionByHash: {e:#}; the lane does not start: the node exits, its supervisor restarts it", j.job_id))?;
             let gas = match sent {
                 Some((g, _)) => g,
                 None => guard::total_cap(me.cfg.max_gas_per_tx, me.chain.block_gas().await?),
@@ -530,12 +582,53 @@ impl Submitter {
     /// digest, computed here; G2: a digest or the same bytes with a live transaction on another path (another lane, the
     /// gateway) is not signed twice.
     pub async fn submit(&mut self, w: Work) {
+        self.failover_mark = self.chain.failover_answers();
         match self.guard.check(&self.chain, &w).await {
             Ok(()) => {}
+            // spec §11: a liquidity order the DEX already pulled landed (here or by another relayer): consumed, never dead (G6)
+            Err(Refusal::Policy(reason)) if reason.starts_with(guard::LIQUIDITY_ORDER_CLOSED) => {
+                if let Some(id) = w.job_id {
+                    self.report(id, "consumed", None, None, Some(reason)).await;
+                }
+                return;
+            }
+            // Fable recheck 2 P3-2: a wrong `contract` delivered again after its op landed (a derived signer's) is `consumed`;
+            // recheck 4 R4-2: a creation delivered again after its release was deprecated, the same
+            Err(Refusal::Policy(reason)) if ["CONTRACT_KIND_MISMATCH", "RELEASE_DEPRECATED", "RELEASE_UNKNOWN"]
+                .iter().any(|p| reason.starts_with(p)) => {
+                return match self.consumed(&w).await {
+                    Ok(true) => self.report_consumed(&w).await,
+                    Ok(false) => self.fail(&w, reason).await,
+                    Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+                };
+            }
             Err(Refusal::Policy(reason)) => return self.fail(&w, reason).await,
             Err(Refusal::Transport(reason)) => return self.requeue(&w, reason).await,
         }
         let mut w = w;
+        // Fable recheck S-2: past the op's own deadline nothing can land: `dead` before the fill, whose refusals would requeue
+        // without end (after the guard, so a pulled liquidity order stays `consumed`); a landed op is `consumed`, never `dead`
+        if w.envelope_until <= now() {
+            return match self.consumed(&w).await {
+                Ok(true) => self.report_consumed(&w).await,
+                Ok(false) => self.fail(&w, "expired before submit".into()).await,
+                Err(e) => self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+            };
+        }
+        // group 3f (spec §11.1): a PQZ debit's verdict, rebuilt by the node, before the digest and any simulation
+        if let Err(refusal) = self.guard.pqz_fill(&self.chain, &mut w).await {
+            // Fable recheck S-1: the fill runs before any simulation, so a debit that already landed (a first transaction
+            // mined after a gap-filled re-fill, another relayer) is `consumed` first, never refused by its stale verdict
+            match self.consumed(&w).await {
+                Ok(true) => return self.report_consumed(&w).await,
+                Ok(false) => {}
+                Err(e) => return self.requeue(&w, format!("mtxNonce: {e:#}")).await,
+            }
+            return match refusal {
+                Refusal::Policy(reason) => self.fail(&w, reason).await,
+                Refusal::Transport(reason) => self.requeue(&w, reason).await,
+            };
+        }
         match guard::fill_digest(&self.chain, &mut w).await {
             Ok(()) => {}
             Err(SimError::Revert(r)) => return self.fail(&w, r).await,
@@ -564,6 +657,10 @@ impl Submitter {
     /// `guard` theo `w` vào `Sent` khi tx được gửi; mọi lối ra khác thả nó (nhả digest).
     async fn send(&mut self, w: Work, guard: Option<InflightGuard>) {
         if w.valid_until <= now() {
+            // E N-3: past a PQZ verdict's life only, the envelope may still land with a fresh verdict: back in the queue
+            if w.envelope_until > now() {
+                return self.requeue(&w, "PQZ_VERDICT_EXPIRED: the verdict ran out before the send; the envelope is live".into()).await;
+            }
             if let Some(id) = w.job_id {
                 self.report(id, "dead", None, None, Some("expired before submit".into())).await;
             }
@@ -624,33 +721,31 @@ impl Submitter {
         self.inflight.insert(nonce, Sent { work: Some(w), hashes: vec![hash], gas, fees, at: Instant::now(), _guard: guard, orphan: None, ceiling });
     }
 
-    /// Mô phỏng revert. Meta-tx mà nonce chủ thể đã qua ⇒ `consumed` (R80: relayer khác có thể đã đưa nó lên chain),
-    /// không `dead`; không đọc được nonce ⇒ tạm thời. An invalidation already in force is done, never dead (MT-8).
+    /// A refused simulation, classified by [`guard::revert_verdict`] (the one classifier of every EVM runner, Fable E N-1):
+    /// done on chain (`consumed`), back in the queue by name, or `dead`.
     async fn refused(&self, w: &Work, reason: String) {
-        if guard::already_invalidated(&w.data, &reason) {
-            if let Some(id) = w.job_id {
-                self.report(id, "consumed", None, None, Some("already_invalidated".into())).await;
+        match guard::revert_verdict(&self.chain, w, reason).await {
+            guard::Verdict::Consumed(None) => self.report_consumed(w).await,
+            guard::Verdict::Consumed(Some(label)) => {
+                if let Some(id) = w.job_id {
+                    self.report(id, "consumed", None, None, Some(label)).await;
+                }
             }
-            return;
-        }
-        match self.consumed(w).await {
-            Ok(true) => self.report_consumed(w).await,
-            Ok(false) => self.fail(w, reason).await,
-            Err(e) => self.requeue(w, format!("mtxNonce: {e:#}")).await,
+            guard::Verdict::Requeue(r) => self.requeue(w, r).await,
+            guard::Verdict::Dead(r) => self.fail(w, r).await,
         }
     }
 
     /// R80: `mtxNonce(from, batch) > nonce` ⇔ nonce chủ thể của meta-tx đã bị dùng (bởi ai thì `classify`).
     /// `Ok(false)` cho job `call`. Lỗi RPC ⇒ `Err`: người gọi không bump, không kết luận (fail closed).
     async fn consumed(&self, w: &Work) -> Result<bool> {
-        let Some(m) = &w.meta else { return Ok(false) };
-        Ok(self.chain.subject_nonce(m).await? > m.nonce)
+        guard::consumed(&self.chain, w).await
     }
 
     /// §8.5 — chỉ là nhãn cho `last_error` ở Odoo; `landed_elsewhere` do indexer quyết khi `final`.
-    async fn classify(&self, m: &MetaRef) -> &'static str {
+    async fn classify(&self, m: &MetaRef, to: Address) -> &'static str {
         match self.chain.meta_executed(m, CLASSIFY_LOOKBACK).await {
-            Ok(Some((d, r))) if Some(d) == m.digest && r == self.chain.address() => "landed",
+            Ok(Some((d, r))) if Some(d) == m.digest && ours(m, to, r, self.chain.address()) => "landed",
             Ok(Some((d, _))) if Some(d) == m.digest => "landed_elsewhere",
             Ok(Some(_)) if m.digest.is_some() => "superseded",
             _ => "unknown",
@@ -660,7 +755,7 @@ impl Submitter {
     /// G6: job của ta không bao giờ `dead`/`reverted` chỉ vì người khác đã thực thi nó.
     async fn report_consumed(&self, w: &Work) {
         let Some(m) = &w.meta else { return };
-        let kind = self.classify(m).await;
+        let kind = self.classify(m, w.to).await;
         warn!(job = ?w.job_id, from = %m.from, nonce = %m.nonce, kind, "meta-tx nonce consumed");
         if let Some(id) = w.job_id {
             self.report(id, "consumed", None, None, Some(kind.into())).await;
@@ -668,6 +763,12 @@ impl Submitter {
     }
 
     async fn fail(&self, w: &Work, reason: String) {
+        // Fable recheck 4 R4-1: one rule for every refusal of the submit path (the guard's reads, the fill, the simulation, the
+        // nonce read behind `consumed`): a failover endpoint answered a read of this job, so the refusal may be of a block behind
+        // the head; back in the queue, final once the first endpoint answers
+        if self.chain.failover_answers() != self.failover_mark {
+            return self.requeue(w, crate::adapters::evm::failover_answer(&reason)).await;
+        }
         warn!(job = ?w.job_id, "simulation refused: {reason}");
         if let Some(id) = w.job_id {
             self.report(id, "dead", None, None, Some(reason)).await;
@@ -683,7 +784,7 @@ impl Submitter {
 
     /// N2: the job's typed digest or bytes are in flight on another path.
     async fn held(&self, job: &Job) -> bool {
-        let Ok(mut w) = work_from_job(job, self.cfg.fee_recipient) else { return false };
+        let Ok(mut w) = self.guard.work(job, self.cfg.fee_recipient) else { return false };
         // an unreadable chain_uid: not known to be held, the submit path answers for it
         let _ = guard::fill_digest(&self.chain, &mut w).await;
         w.digest().is_some_and(|d| self.digests.contains(&d) || self.digests.contains(&w.call_key()))
@@ -775,17 +876,48 @@ impl Submitter {
                 }
                 continue;
             }
-            let live = s.work.as_ref().filter(|w| w.valid_until > now()).cloned();
+            // a PQZ debit lives to its envelope's deadline: past its verdict's alone, the fill below renews the verdict or the
+            // job goes back to the queue, never `dead` (Fable recheck R-1, E N-3)
+            let mut live = s.work.as_ref().filter(|w| w.valid_until > now() || (crate::pqz::is_debit(w) && w.envelope_until > now())).cloned();
             let expired_job = match (&s.work, &live) {
                 (Some(w), None) => w.job_id,
                 _ => None,
             };
+            let stuck_gas = s.gas;
+            // Fable 3r3s3t P3-3 (spec 3t §10, the fee pre-check "again before every send"): a stuck PQZ debit's replacement
+            // runs the fill first (the fee word, the verdict; a renewed verdict extends the work's deadline, R-1); refused by
+            // name, the nonce is gap-filled and the job back in the queue, never `dead`: the first transaction may still land
+            // (recheck R-2); an unreadable chain waits a round, no bump
+            let mut refused = None;
+            if let Some(w) = live.as_mut().filter(|w| crate::pqz::is_debit(w)) {
+                let filled = match self.guard.pqz_fill(&self.chain, w).await {
+                    // Fable recheck S-3: a fill that renewed nothing (the view refused the op) leaves an expired verdict: never
+                    // re-sent as it is
+                    Ok(()) if w.valid_until <= now() => Err(Refusal::Transport("PQZ_VERDICT_EXPIRED: the re-fill renewed no \
+                        verdict".into())),
+                    r => r,
+                };
+                match filled {
+                    Ok(()) => {}
+                    Err(Refusal::Transport(r)) if !r.starts_with("PQZ_") => {
+                        warn!(nonce = n, "PQZ fill: {r}; no bump this round");
+                        if let Some(s) = self.inflight.get_mut(&n) {
+                            s.at = Instant::now();
+                        }
+                        continue;
+                    }
+                    Err(e) => refused = live.take().map(|w| (w, e)),
+                }
+            }
             let (to, data, gas) = match &live {
-                Some(w) => (w.to, w.data.clone(), s.gas),
+                Some(w) => (w.to, w.data.clone(), stuck_gas),
                 None => (self.chain.address(), Bytes::new(), GAP_FILL_GAS),
             };
             if let Some(id) = expired_job {
                 self.report(id, "dead", None, None, Some("expired while stuck; nonce gap-filled".into())).await;
+            }
+            if let Some((w, Refusal::Policy(r) | Refusal::Transport(r))) = refused {
+                self.requeue(&w, format!("{r}; nonce gap-filled")).await;
             }
             let replaced = match self.chain.sign(n, to, data, gas, fees).await {
                 Ok((raw, h)) => match self.chain.send_raw(&raw).await {
@@ -821,6 +953,7 @@ impl Submitter {
     async fn receipt_of(&self, hashes: Vec<B256>) -> Result<Option<(B256, TransactionReceipt)>> {
         for h in hashes.into_iter().rev() {
             if let Some(rc) = self.chain.primary().get_transaction_receipt(h).await? {
+                self.chain.saw_block(rc.block_number.unwrap_or_default()); // Fable recheck 2 P2-1
                 return Ok(Some((h, rc)));
             }
         }
@@ -888,7 +1021,7 @@ impl Submitter {
                     continue;
                 }
             }
-            match work_from_job(&job, self.cfg.fee_recipient) {
+            match self.guard.work(&job, self.cfg.fee_recipient) {
                 Ok(w) => self.submit(w).await,
                 Err(e) => {
                     let _ = self.report(job.id, "dead", None, None, Some(format!("bad payload: {e:#}"))).await;
@@ -931,8 +1064,20 @@ pub(crate) mod tests {
     use serde_json::{json, Value};
 
     use super::*;
-    use crate::abi::{IToken, MetaTransfer};
+    use crate::abi::{IToken, MetaTransfer, UAMetaTransfer};
     use crate::adapter::tests::{fake_odoo, Fake, Shared};
+
+    /// Proposed NODE-JOB-25: a service pull's `UAMetaTransactionExecuted` names the service as relayer (it called the token);
+    /// any other meta-transaction is ours only from this lane.
+    #[test]
+    fn a_service_pull_lands_with_the_service_as_relayer() {
+        let (tok, svc, lane, other) = (Address::repeat_byte(0x70), Address::repeat_byte(0x5e), Address::repeat_byte(1), Address::repeat_byte(2));
+        let m = MetaRef { token: tok, from: B256::ZERO, batch: U256::ZERO, nonce: U256::ZERO, digest: None, ua: true, addr_nonce: false };
+        assert!(ours(&m, svc, svc, lane), "the service relayed it");
+        assert!(ours(&m, svc, lane, lane));
+        assert!(!ours(&m, svc, other, lane), "another contract");
+        assert!(!ours(&m, tok, svc, lane), "a token job: the lane only");
+    }
 
     const D: &str = "0x7777777777777777777777777777777777777777777777777777777777777777";
     /// The fake chain's `chain_uid`: pinned in the config (the fake serves no block 0) and answered by `chainUid()`.
@@ -944,7 +1089,8 @@ pub(crate) mod tests {
     struct Evm {
         /// Mô phỏng `mtxExecuteTransfer`: `None` ok, `"revert"`, `"transport"`.
         sim: Option<&'static str>,
-        /// `mtxNonce`: `None` ⇒ lỗi RPC.
+        /// `mtxNonce(bytes32, batch)`, the token's one view on ids (ua-mtx-merge): `None` ⇒ lỗi RPC. The address view
+        /// `mtxNonce(address, batch)` is `SmartKeyAccount`'s: a token answers it with a revert here.
         mtx_nonce: Option<u64>,
         /// Số tx của lane đã vào khối (`latest` = `pending`).
         count: u64,
@@ -971,6 +1117,15 @@ pub(crate) mod tests {
         designator: Option<Address>,
         /// Block 0 is the recorded Hedera testnet block, not the pinned `UID` (default: a pruned RPC).
         genesis: bool,
+        /// Fable recheck 4 R4-1: a failover endpoint of the chain: `eth_chainId` 31337 and block 0 hashed `UID`.
+        failover: bool,
+        /// Its `eth_chainId` when not 31337 (Hedera's 296).
+        failover_id: Option<u64>,
+        /// Fable recheck 6 R6-2: `eth_getTransactionByHash` fails (a transport error).
+        tx_err: bool,
+        /// Fable recheck 4 R4-2: `classReleaseOf` answers a published release, deprecated; or none (implementation 0).
+        release_deprecated: bool,
+        release_unknown: bool,
         /// `latest`'s `gasLimit` (default 200,000,000, the SCaaS testnet's target).
         block_gas: Option<u64>,
         /// `latest` has no `blockAccessListHash`: a chain before Amsterdam (Osaka, an L2, anvil).
@@ -979,8 +1134,6 @@ pub(crate) mod tests {
         block_err: bool,
         /// `eth_getTransactionByHash` answers a transaction with this gas limit (`None`: unknown, `null`).
         tx_gas: Option<u64>,
-        /// `uaNonce`: `None` ⇒ an RPC error.
-        ua_nonce: Option<u64>,
         /// `registry()` answers 0: the token's UA ledger is off.
         ua_off: bool,
         /// The `maxFeePerGas` of each sent tx.
@@ -989,7 +1142,54 @@ pub(crate) mod tests {
         l1_fee: Option<u64>,
         /// `eth_getTransactionByHash` also answers this `maxFeePerGas`.
         tx_max_fee: Option<u128>,
+        /// Group 3g: `pqzKeyLatest(ua)` of every UA (current is version 0, key `PQZ_KEY0`; `pqzKeyAt` answers `PQZ_KEY1`).
+        pqz_latest: u64,
+        /// `PQZ_KEY1`'s code is one byte longer than `PQZ_KEY0`'s (a version of another set's length).
+        pqz_other_len: bool,
+        /// `eth_getLogs` for `UAPqzKeyCurrent` answers one log (a party rotated).
+        pqz_rotated: bool,
+        /// Group 3f: `pqzVerifyConfig()` answers `(mode, verifier, epoch)`; `None`: it reverts (a token without the view).
+        pqz_cfg: Option<(u8, B256, u32)>,
+        /// Fable E N-6: the token's `eip712Domain().name` (default: the first job's kind through `outcomes`, else `SCaaS MetaToken`).
+        domain: Option<&'static str>,
+        /// Group 3f: the input of every `eth_call` to a PQZ view (`pqzVerifyConfig`, `proofSystemId`, `envelopeBinding`, the
+        /// statement views), in order.
+        views: Vec<Vec<u8>>,
+        /// Every address whose code was asked (`eth_getCode`).
+        code_asked: Vec<Address>,
+        /// Group 3h: `proofStore()` answers this (0 `NONE`, 1 `LOG`); `None`: it reverts (a release before 3h).
+        proof_store: Option<u8>,
+        /// Round 3t: `pqzVerifyConfig().verifierFee`.
+        pqz_vf: u64,
+        /// Round 3t: `eth_getLogs` for `VerifierFeeSet` answers one log (the token's fee changed).
+        fee_set: bool,
+        /// Fable 3r3s3t P3-4: that log is a cancel `VerifierFeeSet(2, 2)` (no move).
+        fee_cancel: bool,
+        /// `eth_getLogs` answers a transport error.
+        logs_down: bool,
+        /// The statement views answer 288 bytes whose word 256 (the fee word) is this; `None`: `STATEMENT` (word 256 = 0).
+        stmt_fee: Option<u64>,
+        /// The statement views revert (the token refuses the op).
+        stmt_revert: bool,
+        /// NODE-JOB-28: `pqzVerifyConfig()`'s `pqzOwnKey` and `pqzOpening` (the key class, CTR-PQZ-37).
+        pqz_own_key: bool,
+        pqz_opening: bool,
+        /// NODE-JOB-28: `pqzScopedKeyOf` answers no record (the auditor has no key of the token's scope).
+        scoped_none: bool,
+        /// The scopes `pqzScopedKeyOf` / `pqzScopedKeyLatest` / `pqzScopedKeyAt` were asked for, in order.
+        scopes_asked: Vec<Address>,
     }
+    /// Group 3f: what the fake token's views answer: its `proofSystemId()`, the relayed op's `envelopeBinding`, the statement.
+    const PSID: B256 = B256::repeat_byte(0x9d);
+    const BINDING: B256 = B256::repeat_byte(0xb1);
+    const STATEMENT: [u8; 40] = [0x5a; 40];
+    /// The PQZ views of the fake token: `pqzVerifyConfig`, `proofSystemId`, `envelopeBinding`, the four statement views (the forge
+    /// artifact's selectors, pinned in `pqz::tests::views_are_the_contracts`).
+    // group 3h T59: the four statement views after `ownTag` (pqz.rs `views_are_the_contracts`)
+    const PQZ_VIEWS: [[u8; 4]; 7] = [[0xdc, 0x59, 0xc6, 0x6e], [0x1f, 0x3b, 0x28, 0xf2], [0x35, 0xad, 0x08, 0xaa], [0x50, 0xf9, 0xbe, 0x2f],
+        [0x8a, 0x21, 0x61, 0xba], [0xda, 0x8c, 0x9e, 0xed], [0x8e, 0x4c, 0xcf, 0x2e]];
+    const PQZ_KEY0: Address = Address::repeat_byte(0xe0);
+    const PQZ_KEY1: Address = Address::repeat_byte(0xe1);
     type Rpc = Arc<Mutex<Evm>>;
 
     fn err(code: i64, message: &str, data: Option<String>) -> Value {
@@ -1010,6 +1210,7 @@ pub(crate) mod tests {
                 "eth_estimateGas" if e.sim == Some("estimate_oog") => Err(err(-32000, "gas required exceeds allowance (100000000)", None)),
                 "eth_estimateGas" if e.sim == Some("estimate_down") => Err(err(-32000, "upstream timeout", None)),
                 "eth_estimateGas" => Ok(json!(format!("{:#x}", e.estimate.unwrap_or(0x30000)))),
+                "eth_getTransactionByHash" if e.tx_err => Err(err(-32000, "upstream timeout", None)),
                 "eth_getTransactionByHash" => Ok(e.tx_gas.map_or(Value::Null, |g| {
                     let mut t = json!({"gas": format!("{g:#x}")});
                     if let Some(f) = e.tx_max_fee {
@@ -1021,6 +1222,22 @@ pub(crate) mod tests {
                 "eth_feeHistory" => Ok(json!({"oldestBlock": "0x1", "baseFeePerGas": ["0x3b9aca00", "0x3b9aca00"],
                     "gasUsedRatio": [0.5], "reward": [["0x3b9aca00"]]})),
                 "eth_blockNumber" => Ok(json!("0x10")),
+                "eth_getLogs" if e.logs_down => Err(err(-32000, "upstream timeout", None)),
+                // the rotation filter asks `UAPqzKeyCurrent` and `UAPqzScopedKeyCurrent` (one topic-0 list); a log of the first
+                "eth_getLogs" if e.pqz_rotated && p[0]["topics"][0].as_array().is_some_and(|t| t.contains(&json!(format!("{:#x}",
+                    <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH)))) => Ok(json!([{
+                    "address": p[0]["address"].clone(), "topics": [format!("{:#x}",
+                        <crate::abi::IUARegistry::UAPqzKeyCurrent as alloy::sol_types::SolEvent>::SIGNATURE_HASH), format!("{:#x}", B256::repeat_byte(1)),
+                        format!("{:#x}", B256::from(U256::from(1)))],
+                    "data": "0x", "blockNumber": "0x9", "blockHash": format!("{:#x}", B256::repeat_byte(9)),
+                    "transactionHash": format!("{:#x}", B256::repeat_byte(8)), "transactionIndex": "0x0", "logIndex": "0x0",
+                    "removed": false}])),
+                "eth_getLogs" if e.fee_set && p[0]["topics"][0] == json!(format!("{:#x}",
+                    <crate::abi::IPqzToken::VerifierFeeSet as alloy::sol_types::SolEvent>::SIGNATURE_HASH)) => Ok(json!([{
+                    "address": p[0]["address"].clone(), "topics": [p[0]["topics"][0].clone()],
+                    "data": format!("0x{}", alloy::hex::encode((if e.fee_cancel { 2u64 } else { 3u64 }, 2u64).abi_encode())), "blockNumber": "0x9",
+                    "blockHash": format!("{:#x}", B256::repeat_byte(9)), "transactionHash": format!("{:#x}", B256::repeat_byte(8)),
+                    "transactionIndex": "0x0", "logIndex": "0x0", "removed": false}])),
                 "eth_getLogs" => Ok(json!([])),
                 "eth_getBalance" => Ok(json!("0xde0b6b3a7640000")),
                 "eth_getBlockByNumber" if p[0] == "latest" => {
@@ -1030,13 +1247,21 @@ pub(crate) mod tests {
                     }
                     Ok(b)
                 }
+                "eth_chainId" if e.failover => Ok(json!(format!("{:#x}", e.failover_id.unwrap_or(31337)))),
+                "eth_getBlockByNumber" if e.failover && p[0] == "0x0" => {
+                    let mut b = serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                    b["hash"] = json!(format!("{:#x}", B256::from(U256::from(UID))));
+                    Ok(b)
+                }
                 "eth_getBlockByNumber" if e.genesis => {
                     Ok(serde_json::from_str::<Value>(include_str!("../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone())
                 }
                 "eth_getBlockByNumber" => Ok(Value::Null),
                 "eth_getCode" => {
                     let a: Address = p[0].as_str().unwrap().parse().unwrap();
-                    Ok(json!(if e.designator == Some(a) { format!("0xef0100{}", "55".repeat(20)) }
+                    e.code_asked.push(a);
+                    Ok(json!(if a == PQZ_KEY0 || a == PQZ_KEY1 { format!("0x00{}", "42".repeat(4 + usize::from(e.pqz_other_len && a == PQZ_KEY1))) }
+                             else if e.designator == Some(a) { format!("0xef0100{}", "55".repeat(20)) }
                              else if e.contract_signer || e.code_only == Some(a) { "0x6001".into() } else { "0x".into() }))
                 }
                 "eth_call" => {
@@ -1052,6 +1277,16 @@ pub(crate) mod tests {
                         Ok(json!(format!("0x{}", alloy::hex::encode(out))))
                     } else if sel == IToken::supportedModesCall::SELECTOR {
                         Ok(word(U256::from(0xF3)))
+                    } else if sel == IToken::eip712DomainCall::SELECTOR {
+                        let name = e.domain.unwrap_or("SCaaS MetaToken");
+                        Ok(json!(format!("0x{}", alloy::hex::encode(IToken::eip712DomainCall::abi_encode_returns(&IToken::eip712DomainReturn {
+                            fields: alloy::primitives::FixedBytes([0x1f]), name: name.into(), version: "1".into(), chainId: U256::from(7622),
+                            verifyingContract: TOKEN, salt: B256::ZERO, extensions: vec![] })))))
+                    } else if sel == crate::abi::IOpenFactory::classReleaseOfCall::SELECTOR {
+                        use crate::abi::IOpenFactory as F;
+                        Ok(json!(format!("0x{}", alloy::hex::encode(F::classReleaseOfCall::abi_encode_returns(&F::ClassRelease {
+                            implementation: if e.release_unknown { Address::ZERO } else { Address::repeat_byte(0x1e) }, envVersion: 1, envHash: B256::ZERO, usableFrom: 0,
+                            deprecated: e.release_deprecated, initSelector: Default::default(), interfaceId: Default::default() })))))
                     } else if sel == IToken::chainUidCall::SELECTOR {
                         match e.uid_err {
                             Some("revert") => Err(err(3, "execution reverted", Some("0x".into()))),
@@ -1065,12 +1300,66 @@ pub(crate) mod tests {
                     } else if sel == crate::abi::IGasPriceOracle::getL1FeeCall::SELECTOR {
                         assert_eq!(p[0]["to"].as_str().map(str::to_lowercase), Some(format!("{:#x}", guard::GAS_PRICE_ORACLE)));
                         e.l1_fee.map(|f| word(U256::from(f))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
+                    } else if sel == crate::abi::IUARegistry::pqzScopedKeyOfCall::SELECTOR {
+                        let c = <crate::abi::IUARegistry::pqzScopedKeyOfCall as alloy::sol_types::SolCall>::abi_decode(
+                            &alloy::hex::decode(&input[2..]).unwrap()).unwrap();
+                        e.scopes_asked.push(c.scope);
+                        let ptr = if e.scoped_none { Address::ZERO } else { PQZ_KEY0 };
+                        Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzScopedKeyOfCall::abi_encode_returns(
+                            &crate::abi::IUARegistry::pqzScopedKeyOfReturn { version: 0, ptr, pqzPopHash: B256::ZERO, proven: true })))))
+                    } else if sel == crate::abi::IUARegistry::pqzScopedKeyLatestCall::SELECTOR {
+                        let c = <crate::abi::IUARegistry::pqzScopedKeyLatestCall as alloy::sol_types::SolCall>::abi_decode(
+                            &alloy::hex::decode(&input[2..]).unwrap()).unwrap();
+                        e.scopes_asked.push(c.scope);
+                        Ok(word(U256::from(e.pqz_latest)))
+                    } else if sel == crate::abi::IUARegistry::pqzScopedKeyAtCall::SELECTOR {
+                        Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzScopedKeyAtCall::abi_encode_returns(
+                            &crate::abi::IUARegistry::pqzScopedKeyAtReturn { ptr: PQZ_KEY1, pqzPopHash: B256::ZERO, proven: false })))))
+                    } else if sel == crate::abi::IUARegistry::pqzKeyOfCall::SELECTOR {
+                        Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzKeyOfCall::abi_encode_returns(
+                            &crate::abi::IUARegistry::pqzKeyOfReturn { version: 0, ptr: PQZ_KEY0, pqzPopHash: B256::ZERO, proven: true })))))
+                    } else if sel == crate::abi::IUARegistry::pqzKeyLatestCall::SELECTOR {
+                        Ok(word(U256::from(e.pqz_latest)))
+                    } else if sel == crate::abi::IUARegistry::pqzKeyAtCall::SELECTOR {
+                        Ok(json!(format!("0x{}", alloy::hex::encode(crate::abi::IUARegistry::pqzKeyAtCall::abi_encode_returns(
+                            &crate::abi::IUARegistry::pqzKeyAtReturn { ptr: PQZ_KEY1, pqzPopHash: B256::ZERO, proven: false })))))
+                    } else if PQZ_VIEWS.contains(&<[u8; 4]>::try_from(&sel[..]).unwrap()) {
+                        // group 3f: the views a PQZ debit's verdict is rebuilt from
+                        let input = alloy::hex::decode(&input[2..]).unwrap();
+                        e.views.push(input.clone());
+                        let s4: [u8; 4] = sel[..].try_into().unwrap();
+                        if s4 == crate::abi::IPqzToken::pqzVerifyConfigCall::SELECTOR {
+                            match e.pqz_cfg {
+                                None => Err(err(3, "execution reverted", Some("0x".into()))),
+                                Some((mode, verifier, epoch)) => Ok(json!(format!("0x{}", alloy::hex::encode(
+                                    crate::abi::IPqzToken::pqzVerifyConfigCall::abi_encode_returns(&crate::abi::IPqzToken::PqzVerifyConfig {
+                                        pqzVerifyMode: mode, verifier, fixed_: false, pqzVerifierEpoch: epoch, pending: B256::ZERO, eta: 0,
+                                        noticePeriod: 0, verifierFee: e.pqz_vf, verifierFeeMax: 0, verifierFeePending: 0, verifierFeeEta: 0,
+                                        pqzOwnKey: e.pqz_own_key, pqzOpening: e.pqz_opening }))))),
+                            }
+                        } else if s4 == crate::abi::IPqzToken::proofSystemIdCall::SELECTOR {
+                            Ok(json!(format!("{PSID:#x}")))
+                        } else if s4 == crate::abi::IPqzToken::envelopeBindingCall::SELECTOR {
+                            Ok(json!(format!("{BINDING:#x}")))
+                        } else if e.stmt_revert {
+                            Err(err(3, "execution reverted", Some("0x".into())))
+                        } else {
+                            let st = match e.stmt_fee {
+                                None => STATEMENT.to_vec(),
+                                Some(f) => [&STATEMENT[..], &[0u8; 216], &U256::from(f).to_be_bytes::<32>()].concat(),
+                            };
+                            Ok(json!(format!("0x{}", alloy::hex::encode(Bytes::from(st).abi_encode()))))
+                        }
+                    } else if sel == crate::abi::IPqzToken::proofStoreCall::SELECTOR {
+                        e.proof_store.map(|m| word(U256::from(m))).ok_or_else(|| err(3, "execution reverted", Some("0x".into())))
+                    } else if sel == crate::abi::IPqzToken::auditorUACall::SELECTOR {
+                        Ok(json!(format!("{:#x}", B256::repeat_byte(0xa7))))
                     } else if sel == crate::abi::IUALedger::registryCall::SELECTOR {
                         Ok(word(U256::from(if e.ua_off { 0 } else { 0x5ca0_0001u64 })))
-                    } else if sel == crate::abi::IUALedger::uaNonceCall::SELECTOR {
-                        e.ua_nonce.map(|n| word(U256::from(n))).ok_or_else(|| err(-32000, "upstream timeout", None))
-                    } else if sel == IToken::mtxNonceCall::SELECTOR {
+                    } else if sel == crate::abi::IMtxIds::mtxNonceCall::SELECTOR {
                         e.mtx_nonce.map(|n| word(U256::from(n))).ok_or_else(|| err(-32000, "upstream timeout", None))
+                    } else if sel == IToken::mtxNonceCall::SELECTOR {
+                        Err(err(3, "execution reverted", Some("0x".into()))) // no address view on a token
                     } else {
                         match e.sim {
                             Some("revert") => {
@@ -1081,6 +1370,39 @@ pub(crate) mod tests {
                             Some("min_nonce") => {
                                 let data = IToken::MinNonceNotIncreasing { current: U256::from(9), requested: U256::from(9) };
                                 let data = alloy::sol_types::SolError::abi_encode(&data);
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
+                            // a regulated token's refusals (regulated-kinds spec §3.1)
+                            Some("frozen") => {
+                                let data = crate::abi::IRegulatedToken::Frozen { account: B256::repeat_byte(0xf1) };
+                                let data = alloy::sol_types::SolError::abi_encode(&data);
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
+                            Some("registry_unavailable") => {
+                                let data = crate::abi::IRegulatedToken::ComplianceRegistryUnavailable { complianceRegistry: Address::repeat_byte(0xc0) };
+                                let data = alloy::sol_types::SolError::abi_encode(&data);
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
+                            // group 3g: a PQZ token's key-version reverts
+                            Some(k @ ("proof_rejected" | "stale" | "reused" | "unknown")) => {
+                                let ua = B256::repeat_byte(0xab);
+                                let data = match k {
+                                    "proof_rejected" => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::ProofRejected {}),
+                                    "stale" => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::StaleKeyVersion { ua, keyVersion: 0, current: 1 }),
+                                    "reused" => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::KeyReused { ua }),
+                                    _ => alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::KeyVersionUnknown { ua, keyVersion: 2 }),
+                                };
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
+                            // round 3t: `PqzAuth` refused (the fee word the holder signed moved)
+                            Some("auth_rejected") => {
+                                let data = alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::AuthRejected {});
+                                Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
+                            }
+                            // group 3f: the token refuses the verdict the node rebuilt (here: field 3, the statement moved)
+                            Some(s @ ("verdict_mismatch" | "verdict_mismatch_30")) => {
+                                let field = if s == "verdict_mismatch" { 3 } else { 30 };
+                                let data = alloy::sol_types::SolError::abi_encode(&crate::abi::IPqzToken::PqzVerdictMismatch { field });
                                 Err(err(3, "execution reverted", Some(format!("0x{}", alloy::hex::encode(data)))))
                             }
                             // Nethermind 2.2.0's answer for a call over 2^24 regular gas (EIP-7825 under EIP-8037)
@@ -1127,10 +1449,11 @@ pub(crate) mod tests {
         (url, s)
     }
 
-    fn meta(batch: u64) -> Mtx {
-        Mtx::Transfer(MetaTransfer {
-            from: payer(),
-            to: Address::repeat_byte(0x5e),
+    /// The payer's (a native id: an EOA padded) `UAMetaTransfer` (ua-mtx-merge: an EOA's transfer is the struct on ids).
+    fn meta(batch: u64) -> UaMtx {
+        UaMtx::Transfer(UAMetaTransfer {
+            from: payer().into_word(),
+            to: Address::repeat_byte(0x5e).into_word(),
             value: U256::from(1_000u64),
             entryRef: B256::repeat_byte(0x42),
             batch: U256::from(batch),
@@ -1143,15 +1466,23 @@ pub(crate) mod tests {
         })
     }
 
+    /// The address `MetaTransfer` an EOA signed before the merged entries: no token entry takes it (refused by name).
+    fn addr_meta(batch: u64) -> Mtx {
+        let UaMtx::Transfer(t) = meta(batch) else { unreachable!() };
+        Mtx::Transfer(MetaTransfer { from: payer(), to: Address::from_word(t.to), value: t.value, entryRef: t.entryRef, batch: t.batch,
+            nonce: t.nonce, validUntil: t.validUntil, mode: t.mode, relayer: t.relayer, fee: t.fee, feeRecipient: t.feeRecipient })
+    }
+
     /// The fake client's registered tokens: `TOKEN`.
     fn toks() -> Value {
         json!([{"address": format!("{TOKEN:#x}"), "decimals": 6}])
     }
 
+    /// The payer's transfer job: `ua_metatx`, `auth` its native `UASig` (the `0x11…` sentinel [`resign`] replaces).
     fn job(id: i64) -> Value {
         let (kind, wire) = meta(7).to_wire();
-        json!({"id": id, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
-               "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})
+        json!({"id": id, "kind": "ua_metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
+               "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}, "m": wire})
     }
 
     async fn lane(rpc: &str, odoo: crate::odoo::Odoo, key: u8, set: InflightSet) -> Submitter {
@@ -1274,6 +1605,167 @@ pub(crate) mod tests {
         }
     }
 
+    /// Regulated-kinds spec §7: a simulation revert `Frozen` is a named refusal, never `dead` while the payload may still land
+    /// (an unfreeze, another relayer): the job goes back `queued` with the error named, nothing sent. A spent subject nonce is
+    /// still `consumed` first, an unreadable one still `queued`.
+    #[tokio::test]
+    async fn frozen_revert_is_refusal_not_dead() {
+        for (nonce, want) in [(Some(0), "queued"), (Some(1), "consumed"), (None, "queued")] {
+            let (url, rpc) = fake_evm(Evm { sim: Some("frozen"), mtx_nonce: nonce, ..Default::default() }).await;
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+            lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
+            assert_eq!(states(&o), [want], "mtxNonce {nonce:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+            if nonce == Some(0) {
+                let err = o.lock().unwrap().reports[0]["error"].as_str().unwrap().to_string();
+                assert!(err.starts_with("REGULATED_REFUSED: Frozen("), "{err}");
+            }
+        }
+    }
+
+    /// Fable E N-8: the one sink of every runner's job report strips endpoint URLs from the error.
+    #[tokio::test]
+    async fn a_job_error_carries_no_endpoint_url() {
+        let (odoo, o) = fake_odoo(Fake::default()).await;
+        let r = Report { job_id: 7, chain_state: "queued".into(), tx_hash: None, outer_nonce: None, signer_address: None,
+            error: Some("rpc: error sending request for url (https://rpc.example/v3/KEY) after http://10.0.0.7:8545/ x".into()) };
+        odoo.relay_report(&r).await.unwrap();
+        assert_eq!(o.lock().unwrap().reports[0]["error"], "rpc: error sending request for url (<url>) after <url> x");
+        assert_eq!(crate::chain::redact_urls("no url; wss://h:1/p,ws://q"), "no url; <url>");
+        assert_eq!(crate::chain::redact_urls("x http://h/p?a=1;key=SECRET,b=2 y"), "x <url> y", "recheck R-7: a key after ; or ,");
+    }
+
+    /// Fable E N-1 (NODE-LANE-09, one rule on every chain): the generic lane runner of a Hedera chain classifies a refused
+    /// simulation with the `Submitter`'s one classifier: `Frozen` is `REGULATED_REFUSED`, back in the queue, never `dead`; a spent
+    /// subject nonce `consumed`; a revert of no class stays `dead`; nothing is sent.
+    #[tokio::test]
+    async fn lane_runner_requeues_a_liftable_refusal_on_hedera() {
+        for (sim, nonce, state, prefix) in [("frozen", 0, "queued", "REGULATED_REFUSED: Frozen("), ("frozen", 1, "consumed", "unknown"),
+            ("revert", 0, "dead", "MetaTxBadNonce(")] {
+            let (url, rpc) = fake_evm(Evm { sim: Some(sim), mtx_nonce: Some(nonce), ..Default::default() }).await;
+            let mut cfg = test_cfg(&url);
+            (cfg.family, cfg.evm_chain_number) = ("hedera".into(), 296);
+            let signer = PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap();
+            let a = crate::adapters::hedera::HederaAdapter::new(&cfg, vec![Chain::with_signer(&cfg, signer).unwrap()]).unwrap();
+            let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"finality_mode": "instant", "finality_depth": 0,
+                "finality_quorum": 1, "indexed_block": 0, "tokens": toks(), "journal_max_nonce": null})).unwrap();
+            crate::adapter::ChainAdapter::refresh_tokens(&a, &nc);
+            // the payer signs over Hedera's chain id
+            let mut j = job(7);
+            let w = work_from_job(&serde_json::from_value::<Job>(j.clone()).unwrap(), None).unwrap();
+            let d = w.typed.as_ref().unwrap().digest_on(296, B256::from(U256::from(UID))).unwrap();
+            j["auth"]["signature"] = json!(format!("0x{}", alloy::hex::encode(payer_key().sign_hash_sync(&d).unwrap().as_bytes())));
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+            crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap();
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{sim} {nonce}: {last}");
+            assert!(last["error"].as_str().unwrap().starts_with(prefix), "{sim} {nonce}: {last}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
+    /// Fable recheck 5 R5-1: the generic lane runner (Hedera's, `EvmAdapter`) keeps the rule: a guard refusal on a failover
+    /// endpoint's answer (`chainUid()` of another chain) and a simulation revert whose nonce read a failover endpoint answered are
+    /// back in the queue (`FAILOVER_ANSWER`), never `dead`; nothing is sent. Controls: the same answers from the first endpoint
+    /// are `dead`.
+    #[tokio::test]
+    async fn the_generic_runner_requeues_a_refusal_on_a_failover_answer() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let run = |first: Evm, second: Option<Evm>| async move {
+            let (url, rpc) = fake_evm(first).await;
+            let mut cfg = test_cfg(&url);
+            if let Some(e) = second {
+                cfg.rpc_urls.push(fake_evm(Evm { failover: true, ..e }).await.0);
+            }
+            let a = crate::adapters::evm::EvmAdapter::new(&cfg, vec![Chain::with_signer(&cfg, PrivateKeySigner::random()).unwrap()],
+                Default::default()).unwrap();
+            let nc: crate::odoo::NodeConfig = serde_json::from_value(json!({"finality_mode": "depth", "finality_depth": 0,
+                "finality_quorum": 1, "indexed_block": 0, "tokens": toks(), "journal_max_nonce": null})).unwrap();
+            crate::adapter::ChainAdapter::refresh_tokens(&a, &nc);
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+            crate::adapter::step_once(&a, &odoo, 0, "n#0", None, &InflightSet::default()).await.unwrap();
+            assert!(rpc.lock().unwrap().sent.is_empty());
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            (last["chain_state"].as_str().unwrap().to_string(), last["error"].as_str().unwrap_or_default().to_string())
+        };
+        let (st, e) = run(Evm { uid_err: Some("transport"), ..ok() }, Some(Evm { uid: Some(0x25), ..ok() })).await;
+        assert!(st == "queued" && e.contains("FAILOVER_ANSWER") && e.contains("CHAIN_UID_MISMATCH"), "{st}: {e}");
+        let (st, e) = run(Evm { uid: Some(0x25), ..ok() }, None).await;
+        assert!(st == "dead" && e.starts_with("CHAIN_UID_MISMATCH"), "control: {st}: {e}");
+        let (st, e) = run(Evm { sim: Some("revert"), mtx_nonce: None, ..Default::default() }, Some(Evm { sim: Some("revert"), ..ok() })).await;
+        // the nonce read behind the verdict answered by the failover endpoint: unread since recheck 7 R7-1 (before it: `Dead` read
+        // there, requeued by the classifier's mark)
+        assert!(st == "queued" && e.contains("FAILOVER_ANSWER"), "{st}: {e}");
+        let (st, e) = run(Evm { sim: Some("revert"), ..ok() }, None).await;
+        assert!(st == "dead" && e.starts_with("MetaTxBadNonce("), "control: {st}: {e}");
+    }
+
+    /// Round 3zb + 3zc (spec 2026-11-13-burner-wrap-caps.md §4's verdict table), through the one classifier on vector jobs whose
+    /// subject nonce is unspent: a wrap or a mint above a cap, a cap setter before its `eta` or under a floor at its apply are
+    /// `SUPPLY_CAP_REFUSED`, back in the queue; a burner's or a minter's spent window `GRANT_WINDOW_REFUSED`; the shape refusals,
+    /// bit 31 off and the burn refusals of the job's own subject `dead` by name. Controls: `GrantNotReady` of another bit, a
+    /// window refusal on an op that is no burn and no mint.
+    #[tokio::test]
+    async fn supply_cap_and_grant_window_verdicts() {
+        use crate::abi::{decode_revert, IGovernance as G, ISupplyCaps as C};
+        use crate::guard::{revert_verdict, Verdict};
+        use crate::typed::testkit::{op_of, vectors};
+        use alloy::sol_types::SolError;
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let chain = Chain::with_signer(&test_cfg(&url), PrivateKeySigner::random()).unwrap();
+        let v = vectors();
+        let (u, b) = (U256::from(5), B256::repeat_byte(0xb1));
+        for (name, kind, err, want) in [
+            ("Wrap", "token", C::MaxWrapSupplyExceeded { totalWrapped: u, maxWrapSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxWrapSupplyExceeded("),
+            ("Wrap", "token", C::MaxSupplyExceeded { supply: u, maxSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyExceeded("),
+            ("UAMint", "gov_router", C::MaxSupplyExceeded { supply: u, maxSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyExceeded("),
+            ("UASetMaxSupply", "gov_router", G::GrantNotReady { bit: 31, account: B256::ZERO, eta: 9 }.abi_encode(), "SUPPLY_CAP_REFUSED: GrantNotReady("),
+            ("UASetMaxSupply", "gov_router", C::MaxSupplyBelowSupply { maxSupply: u, totalSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyBelowSupply("),
+            ("UASetMaxSupply", "gov_router", C::MaxSupplyBelowWrapCap { maxSupply: u, maxWrapSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxSupplyBelowWrapCap("),
+            ("UASetMaxWrapSupply", "gov_router", C::MaxWrapSupplyBelowWrapped { maxWrapSupply: u, totalWrapped: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxWrapSupplyBelowWrapped("),
+            ("UASetMaxWrapSupply", "gov_router", C::MaxWrapSupplyAboveMaxSupply { maxWrapSupply: u, maxSupply: u }.abi_encode(), "SUPPLY_CAP_REFUSED: MaxWrapSupplyAboveMaxSupply("),
+            ("UABurn", "token", G::GrantExhausted { field: 3 }.abi_encode(), "GRANT_WINDOW_REFUSED: GrantExhausted("),
+            ("UAMint", "gov_router", G::GrantExhausted { field: 3 }.abi_encode(), "GRANT_WINDOW_REFUSED: GrantExhausted("),
+            ("UAMintToUA", "gov_router", G::GrantExhausted { field: 3 }.abi_encode(), "GRANT_WINDOW_REFUSED: GrantExhausted("),
+        ] {
+            let w = work_of_op(Some(1), &op_of(name, kind, &v).unwrap(), None).unwrap().0;
+            let r = revert_verdict(&chain, &w, decode_revert(&err)).await;
+            assert!(matches!(&r, Verdict::Requeue(e) if e.starts_with(want)), "{name}: {r:?}");
+        }
+        for (name, kind, err, want) in [
+            ("UASetMaxSupply", "gov_router", G::FeatureNotSet { bit: 31 }.abi_encode(), "FeatureNotSet("),
+            ("UASetMaxSupply", "gov_router", C::MaxSupplyInvalid {}.abi_encode(), "MaxSupplyInvalid"),
+            ("UASetMaxWrapSupply", "gov_router", C::MaxWrapSupplyInvalid {}.abi_encode(), "MaxWrapSupplyInvalid"),
+            ("UASetMaxSupply", "gov_router", G::GrantNotReady { bit: 3, account: b, eta: 9 }.abi_encode(), "GrantNotReady("),
+            ("UABurn", "token", G::MissingRole { bit: 30, account: b }.abi_encode(), "MissingRole("),
+            ("UABurn", "token", G::FeatureNotSet { bit: 2 }.abi_encode(), "FeatureNotSet("),
+            ("UABurn", "token", G::FeatureNotSet { bit: 30 }.abi_encode(), "FeatureNotSet("),
+            ("UABurn", "token", G::GrantExpired { bit: 30, holder: b }.abi_encode(), "GrantExpired("),
+            ("UABurn", "token", G::GrantExhausted { field: 0 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 1 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 2 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 5 }.abi_encode(), "GrantExhausted("),
+            ("UABurn", "token", G::GrantExhausted { field: 7 }.abi_encode(), "GrantExhausted("),
+            ("UASetGrant", "gov_router", G::GrantExhausted { field: 3 }.abi_encode(), "GrantExhausted("),
+        ] {
+            let w = work_of_op(Some(1), &op_of(name, kind, &v).unwrap(), None).unwrap().0;
+            let r = revert_verdict(&chain, &w, decode_revert(&err)).await;
+            assert!(matches!(&r, Verdict::Dead(e) if e.starts_with(want)), "{name}: {r:?}");
+        }
+    }
+
+    /// As `Frozen`: `ComplianceRegistryUnavailable` (the token's bounded registry call failed) is a refusal, named, never `dead`.
+    #[tokio::test]
+    async fn registry_unavailable_is_refusal() {
+        let (url, rpc) = fake_evm(Evm { sim: Some("registry_unavailable"), mtx_nonce: Some(0), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        lane(&url, odoo, 1, InflightSet::default()).await.poll_outbox().await;
+        assert_eq!(states(&o), ["queued"]);
+        let err = o.lock().unwrap().reports[0]["error"].as_str().unwrap().to_string();
+        assert!(err.starts_with("REGULATED_REFUSED: ComplianceRegistryUnavailable("), "{err}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+    }
+
     /// PAY-FIX2 / NODE-GW-07 / MT-8, wired into the submitter: refusals come before any simulation or signature.
     #[tokio::test]
     async fn the_guard_runs_before_simulation_and_signing() {
@@ -1321,35 +1813,38 @@ pub(crate) mod tests {
         assert_eq!(rpc.lock().unwrap().gas[0], guard::erc1271_floor(len));
     }
 
+    /// The token's invalidation on ids (R12, R38): a merged entry, a `ua_metatx` job.
     fn inv_job(id: i64, token: Address) -> Value {
-        json!({"id": id, "kind": "metatx", "op": {"entry": "mtxInvalidateNonces", "contract": "token", "token": format!("{token:#x}"),
-            "args": {"from": format!("{:#x}", payer()), "batch": "1", "minNonce": "9"},
-            "signature": format!("0x{}", "11".repeat(65)), "validUntil": (now() + 300).to_string()}})
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": "mtxInvalidateNonces", "contract": "token", "token": format!("{token:#x}"),
+            "args": {"from": format!("{:#x}", payer().into_word()), "batch": "1", "minNonce": "9"},
+            "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}, "validUntil": (now() + 300).to_string()}})
     }
 
-    /// The token's order entries as `metatx` jobs (job-api.md): byte-identical with the forge KAT's relayed calldata.
+    /// The token's order entries on ids (R12, R38: `UATradeOrder`, `UASig`) as `ua_metatx` jobs (job-api.md): the cancel and the
+    /// invalidation of every signer row of `uatrade_kat.json` (clientkeys, cross-checked by forge's `UATradeVectors.t.sol`) give its
+    /// digests; their bytes are `typed_ops_kat_every_entry`'s (`CancelUAOrder`) and `invalidate_digests_match_the_vectors`'.
     #[test]
     fn entry_jobs_encode_as_the_token_reads_them() {
-        let p = format!("{}/../smartcontracts/evm/test/vectors/trade_kat.json", env!("CARGO_MANIFEST_DIR"));
-        let k: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
-        let s = |f: &str| k[f].as_str().unwrap_or_else(|| panic!("{f}")).to_string();
-        let order = crate::abi::IToken::mtxCancelOrderCall::abi_decode(&alloy::hex::decode(&s("cancel_calldata")[2..]).unwrap()).unwrap();
-        let wire = crate::dex::WireOrder::from_sol(&order.o);
-        let op = json!({"entry": "mtxCancelOrder", "struct": "CancelOrder", "contract": "token", "token": s("verifying_contract"),
-            "args": {"order": wire}, "signature": format!("0x{}", alloy::hex::encode(&order.sig)), "validUntil": "1800000300"});
-        let job = |op: Value| -> Job { serde_json::from_value(json!({"id": 1, "kind": "metatx", "op": op})).unwrap() };
+        let k: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/ua/uatrade_kat.json")).unwrap();
+        let (chain, uid) = (k["chainId"].as_u64().unwrap(), k["chainUid"].as_str().unwrap().parse::<B256>().unwrap());
+        let job = |op: Value| -> Job { serde_json::from_value(json!({"id": 1, "kind": "ua_metatx", "op": op})).unwrap() };
+        let auth = |s: &Value| json!({"keyData": "0x", "signature": s, "members": []});
+        let native = k["rows"].as_array().unwrap().iter().find(|r| r["name"] == "native").unwrap();
+        let token = native["order"]["domain"]["verifyingContract"].clone();
+        let op = json!({"entry": "mtxCancelOrder", "struct": "CancelUAOrder", "contract": "token", "token": token,
+            "args": {"order": native["order"]["message"]}, "auth": auth(&native["cancelAuth"]), "validUntil": "1800000300"});
         let w = work_from_job(&job(op.clone()), None).unwrap();
-        assert_eq!((format!("0x{}", alloy::hex::encode(&w.data)), w.valid_until, w.meta), (s("cancel_calldata").to_lowercase(), 1_800_000_300, None));
-        assert!(w.entry);
-        let c = crate::abi::IToken::mtxInvalidateNoncesCall::abi_decode(&alloy::hex::decode(&s("invalidate_calldata")[2..]).unwrap()).unwrap();
-        let inv = json!({"entry": "mtxInvalidateNonces", "contract": "token", "token": s("verifying_contract"), "validUntil": "1800000300",
-            "args": {"from": format!("{:#x}", c.from), "batch": c.batch.to_string(), "minNonce": c.newMin.to_string()},
-            "signature": format!("0x{}", alloy::hex::encode(&c.sig))});
-        assert_eq!(format!("0x{}", alloy::hex::encode(&work_from_job(&job(inv), None).unwrap().data)), s("invalidate_calldata").to_lowercase());
-        // mtxTrade is never a job; an order that is not one; no deadline on an entry that needs one
-        for (bad, why) in [(json!({"entry": "mtxTrade", "contract": "token", "token": s("verifying_contract")}), "UNKNOWN_ENTRY"),
-            (json!({"entry": "mtxCancelOrder", "struct": "CancelOrder", "contract": "token", "token": s("verifying_contract"), "signature": "0x00"}), "args.order: missing"),
-            (json!({"entry": "mtxCancelOrder", "struct": "CancelOrder", "contract": "token", "token": s("verifying_contract"), "args": {"order": {}}, "signature": "0x00"}), "args.order.from: missing")] {
+        assert_eq!((w.valid_until, w.meta, w.entry), (1_800_000_300, None, true));
+        assert_eq!(format!("{:#x}", w.typed.as_ref().unwrap().digest_on(chain, uid).unwrap()), native["cancelDigest"].as_str().unwrap());
+        let inv = json!({"entry": "mtxInvalidateNonces", "contract": "token", "token": token, "validUntil": "1800000300",
+            "args": native["invalidate"]["message"], "auth": auth(&native["invalidateAuth"])});
+        let w = work_from_job(&job(inv), None).unwrap();
+        assert_eq!(format!("{:#x}", w.typed.as_ref().unwrap().digest_on(chain, uid).unwrap()), native["invalidateDigest"].as_str().unwrap());
+        // mtxTrade is never a job; an order that is not one; the address form of the cancel is gone (legacy/ua-mtx-merge)
+        for (bad, why) in [(json!({"entry": "mtxTrade", "contract": "token", "token": token}), "UNKNOWN_ENTRY"),
+            (json!({"entry": "mtxCancelOrder", "struct": "CancelOrder", "contract": "token", "token": token, "signature": "0x00"}), "UNKNOWN_ENTRY"),
+            (json!({"entry": "mtxCancelOrder", "struct": "CancelUAOrder", "contract": "token", "token": token, "auth": auth(&json!("0x"))}), "args.order: missing"),
+            (json!({"entry": "mtxCancelOrder", "struct": "CancelUAOrder", "contract": "token", "token": token, "args": {"order": {}}, "auth": auth(&json!("0x"))}), "args.order.from: missing")] {
             assert!(work_from_job(&job(bad), None).unwrap_err().to_string().contains(why), "{why}");
         }
     }
@@ -1359,12 +1854,15 @@ pub(crate) mod tests {
     /// Lỗi tạm thời nhả digest ngay (không ai bị chặn tới hết hạn).
     #[tokio::test]
     async fn one_digest_is_signed_once_across_lanes_and_released_on_transient_errors() {
+        // Fable recheck 7 R7-3: each job built once: `job()` stamps `validUntil` from the clock, so two calls a second apart are
+        // two ops (other digests), and the test would pass or fail by the second
+        let j7 = job(7);
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j7.clone()], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let mut a = lane(&url, odoo.clone(), 1, set.clone()).await;
         let mut b = lane(&url, odoo, 2, set.clone()).await;
-        let mut w = work_from_job(&serde_json::from_value(resign(job(0))).unwrap(), None).unwrap();
+        let mut w = work_from_job(&serde_json::from_value(resign(j7)).unwrap(), None).unwrap();
         w.job_id = None; // the gateway's path
         a.submit(w.clone()).await;
         b.poll_outbox().await;
@@ -1373,11 +1871,12 @@ pub(crate) mod tests {
         let claims = o.lock().unwrap().claims;
         assert_eq!((claims, states(&o).len()), (0, 0), "skipped before relay_claim");
 
+        let j8 = job(8);
         let (url, _) = fake_evm(Evm { sim: Some("transport"), ..Default::default() }).await;
-        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(8)], tokens: toks(), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j8.clone()], tokens: toks(), ..Default::default() }).await;
         let set = InflightSet::default();
         let want = {
-            let j: Job = serde_json::from_value(resign(job(8))).unwrap();
+            let j: Job = serde_json::from_value(resign(j8)).unwrap();
             work_from_job(&j, None).unwrap().typed.unwrap().digest_on(31337, B256::from(U256::from(UID))).unwrap()
         };
         lane(&url, odoo, 1, set.clone()).await.poll_outbox().await;
@@ -1386,32 +1885,43 @@ pub(crate) mod tests {
     }
 
     /// NODE-LANE-10 for every origin (review T2 I1): an outbox job's unbound `feeRecipient`/`relayer` never reach the
-    /// chain as the job carries them; receiver-pays is refused, not dropped (m5); the in-flight key is the token's
+    /// chain as the job carries them; payee fee is refused, not dropped (m5); the in-flight key is the token's
     /// digest, never the job's `digest` (m6).
     #[tokio::test]
     async fn outbox_jobs_are_normalized_and_keyed_by_the_token_digest() {
         let (thief, ours) = (Address::repeat_byte(0x7e), Address::repeat_byte(0x99));
-        let Mtx::Transfer(mut t) = meta(7) else { unreachable!() };
+        let UaMtx::Transfer(mut t) = meta(7) else { unreachable!() };
         (t.mode, t.fee, t.feeRecipient, t.relayer) = (0x20, U256::from(1_000u64), thief, thief); // FIXED fee, nothing bound
-        let raw = |t: &MetaTransfer| {
-            let (kind, wire) = Mtx::Transfer(t.clone()).to_wire();
-            json!({"id": 1, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": format!("0x{}", "99".repeat(32)), "struct": kind,
-                   "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})
+        let raw = |t: &UAMetaTransfer| {
+            let mut j = job(1);
+            j["digest"] = json!(format!("0x{}", "99".repeat(32)));
+            j["m"] = UaMtx::Transfer(t.clone()).to_wire().1;
+            j
         };
+        let unbound = |m: &UaMtx| match m { UaMtx::Transfer(t) => (t.feeRecipient, t.relayer), UaMtx::Call(c) => (c.feeRecipient, c.relayer) };
         let sent = |v: Value, fr: Option<Address>| {
             let w = work_from_job(&serde_json::from_value(v).unwrap(), fr).unwrap();
             assert_eq!(w.meta.unwrap().digest, None, "never the job's digest");
-            Mtx::from_calldata(&w.data).unwrap().0
+            UaMtx::from_calldata(&w.data).unwrap().0
         };
         let m = sent(raw(&t), Some(ours));
-        assert_eq!((m.fee_recipient(), m.relayer()), (ours, Address::ZERO));
+        assert_eq!(unbound(&m), (ours, Address::ZERO));
         let m = sent(raw(&t), None);
-        assert_eq!((m.fee_recipient(), m.relayer()), (Address::ZERO, Address::ZERO), "unset: the contract pays msg.sender");
-        let bound = MetaTransfer { mode: 0x23, ..t.clone() };
-        assert_eq!(sent(raw(&bound), Some(ours)), Mtx::Transfer(bound.clone()), "bound fields are the signer's");
+        assert_eq!(unbound(&m), (Address::ZERO, Address::ZERO), "unset: the contract pays msg.sender");
+        let bound = UAMetaTransfer { mode: 0x23, ..t.clone() };
+        assert_eq!(sent(raw(&bound), Some(ours)), UaMtx::Transfer(bound.clone()), "bound fields are the signer's");
         let mut rf = raw(&t);
-        rf["receiver_fee"] = json!({"fee": "1", "feeRecipient": format!("{thief:#x}"), "validUntil": "1", "signature": "0x"});
-        assert!(work_from_job(&serde_json::from_value(rf).unwrap(), None).is_err(), "receiver-pays is not built");
+        rf["payee_fee"] = json!({"fee": "1", "feeRecipient": format!("{thief:#x}"), "validUntil": "1", "signature": "0x"});
+        let e = work_from_job(&serde_json::from_value(rf.clone()).unwrap(), None).unwrap_err().to_string();
+        assert!(e.starts_with("PAYEE_FEE_REFUSED"), "payee fee is not built: {e}");
+        // owner 2026-11-12 (CTR-MTX-86): the old field name is refused by name, whichever field the job also carries
+        for keep in [true, false] {
+            let mut old = if keep { rf.clone() } else { raw(&t) };
+            old["receiver_fee"] = rf["payee_fee"].clone();
+            let e = work_from_job(&serde_json::from_value(old).unwrap(), None).unwrap_err().to_string();
+            assert!(e.starts_with("RECEIVER_FEE_REFUSED") && e.contains("payee_fee"), "{e}");
+        }
+        assert!(work_from_job(&serde_json::from_value(raw(&t)).unwrap(), None).is_ok(), "control: the plain job is built");
         // through the lane: normalized on chain, keyed by the typed digest computed here
         let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let (odoo, o) = fake_odoo(Fake { jobs: vec![raw(&t)], tokens: toks(), ..Default::default() }).await;
@@ -1422,12 +1932,14 @@ pub(crate) mod tests {
         let held = work_from_job(&serde_json::from_value(resign(raw(&t))).unwrap(), None).unwrap().typed.unwrap();
         assert!(set.contains(&held.digest_on(31337, B256::from(U256::from(UID))).unwrap()), "held while in flight");
         assert!(!set.contains(&B256::repeat_byte(0x99)), "the job's own digest is no key");
-        let m = Mtx::from_calldata(&rpc.lock().unwrap().sent[0].2).unwrap().0;
-        assert_eq!((m.fee_recipient(), m.relayer()), (Address::ZERO, Address::ZERO));
+        let m = UaMtx::from_calldata(&rpc.lock().unwrap().sent[0].2).unwrap().0;
+        assert_eq!(unbound(&m), (Address::ZERO, Address::ZERO));
     }
 
     /// Every report of one poll on a lane built with `tweak`, and the fake chain.
-    async fn outcomes(e: Evm, jobs: Vec<Value>, tweak: impl FnOnce(&mut ChainCfg)) -> (Vec<(String, String)>, Rpc) {
+    async fn outcomes(mut e: Evm, jobs: Vec<Value>, tweak: impl FnOnce(&mut ChainCfg)) -> (Vec<(String, String)>, Rpc) {
+        // Fable E N-6: the token answers the domain of the kind its first job names, unless the test sets one
+        e.domain = e.domain.or_else(|| jobs.first().and_then(|j| j["op"]["contract"].as_str()).and_then(crate::typed::domain_name));
         let (url, rpc) = fake_evm(e).await;
         let (odoo, o) = fake_odoo(Fake { jobs, tokens: toks(), ..Default::default() }).await;
         lane_cfg(&url, odoo, 1, InflightSet::default(), tweak).await.unwrap().poll_outbox().await;
@@ -1442,19 +1954,15 @@ pub(crate) mod tests {
     fn call_job(id: i64, target: Address, data: Vec<u8>) -> Value {
         let until = (now() + 300).to_string();
         let sel: [u8; 4] = data[..4].try_into().unwrap();
-        if sel == crate::abi::IMtxRelayFee::relayCall::SELECTOR {
-            let c = crate::abi::IMtxRelayFee::relayCall::abi_decode(&data).unwrap();
+        if sel == crate::abi::IRelayFeeRouter::relayCall::SELECTOR {
+            // one `relay` on ids (R28): a native payer's own key (the `0x11…` sentinel [`resign`] replaces), a derived one's 96 bytes
+            let c = crate::abi::IRelayFeeRouter::relayCall::abi_decode(&data).unwrap();
             let args = json!({"from": format!("{:#x}", c.from), "payee": format!("{:#x}", c.payee), "value": c.value.to_string(),
-                "validUntil": c.validUntil.to_string(), "relayer": format!("{target:#x}")});
-            return json!({"id": id, "kind": "metatx", "op": {"entry": "mtxRelayFee", "contract": "token", "token": format!("{:#x}", c.token),
-                "args": args, "call": inner_op(), "signature": format!("0x{}", "11".repeat(65))}});
-        }
-        if sel == crate::abi::IMtxRelayFee::uaRelayCall::SELECTOR {
-            let c = crate::abi::IMtxRelayFee::uaRelayCall::abi_decode(&data).unwrap();
-            let args = json!({"from": format!("{:#x}", c.from), "payee": format!("{:#x}", c.payee), "value": c.value.to_string(),
-                "validUntil": c.validUntil.to_string(), "relayer": format!("{target:#x}")});
-            return json!({"id": id, "kind": "ua_metatx", "op": {"entry": "uaRelayFee", "contract": "token", "token": format!("{:#x}", c.token),
-                "args": args, "call": inner_op(), "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(96)), "members": []}}});
+                "batch": c.batch.to_string(), "nonce": c.nonce.to_string(), "validUntil": c.validUntil.to_string(),
+                "relayer": format!("{target:#x}")});
+            let sig = if crate::metatx::native(&c.from).is_some() { "11".repeat(65) } else { "22".repeat(96) };
+            return json!({"id": id, "kind": "ua_metatx", "op": {"entry": "mtxRelayFee", "contract": "token", "token": format!("{:#x}", c.token),
+                "args": args, "call": inner_op(), "auth": {"keyData": "0x", "signature": format!("0x{sig}"), "members": []}}});
         }
         let row = crate::typed::rows().iter().find(|r| !r.typed && r.selector == sel);
         let op = match row {
@@ -1467,9 +1975,9 @@ pub(crate) mod tests {
     /// The relayed call of the relay-fee jobs: a named entry on `TARGET`, fee 0, the executor's to run.
     fn inner_op() -> Value {
         json!({"entry": "mtxCancelNonce", "contract": "token", "token": format!("{TARGET:#x}"), "args": {"lane": "9"},
-            "envelope": {"from": format!("{:#x}", payer()), "batch": "1", "nonce": "0", "validUntil": (now() + 600).to_string(), "mode": 0,
+            "envelope": {"from": format!("{:#x}", payer().into_word()), "batch": "1", "nonce": "0", "validUntil": (now() + 600).to_string(), "mode": 0,
                 "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)},
-            "signature": format!("0x{}", "22".repeat(65))})
+            "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(65)), "members": []}})
     }
 
     fn settle_calldata() -> Vec<u8> {
@@ -1483,7 +1991,7 @@ pub(crate) mod tests {
     }
 
     fn owner_job(id: i64, target: Address) -> Value {
-        json!({"id": id, "kind": "call", "op": {"entry": "mtxExecuteAsOwner", "contract": "wallet", "token": format!("{target:#x}"),
+        json!({"id": id, "kind": "call", "op": {"entry": "mtxExecuteAsOwner", "contract": "account", "token": format!("{target:#x}"),
             "validUntil": (now() + 300).to_string(),
             "args": {"data": "0x", "nonce": "0", "validUntil": (now() + 300).to_string(), "sig": format!("0x{}", "11".repeat(65))}}})
     }
@@ -1492,9 +2000,9 @@ pub(crate) mod tests {
     #[test]
     fn hex_data_refused() {
         let v = crate::typed::testkit::vectors();
-        let op = crate::typed::testkit::op_of("Unwrap", "token", &v).unwrap();
+        let op = crate::typed::testkit::op_of("UAUnwrap", "token", &v).unwrap();
         let ok = |j: Value| work_from_job(&serde_json::from_value::<Job>(j).unwrap(), None);
-        ok(json!({"id": 1, "kind": "metatx", "op": op})).unwrap();
+        ok(json!({"id": 1, "kind": "ua_metatx", "op": op})).unwrap();
         ok(job(7)).unwrap();
         let refused = |j: Value, what: &str| {
             let e = ok(j).unwrap_err().to_string();
@@ -1514,6 +2022,7 @@ pub(crate) mod tests {
         hexcall["call"] = json!("0x1234");
         refused(json!({"id": 1, "kind": "metatx", "op": hexcall}), "op.call as hex");
         let mut m = job(7);
+        m["metatx"] = m["m"].take();
         m["metatx"]["data"] = json!("0x1234");
         refused(m, "metatx.data");
         let mut m = job(7);
@@ -1527,8 +2036,8 @@ pub(crate) mod tests {
         let mut m = u;
         m["m"]["data"] = json!("0x1234");
         refused(m, "ua_metatx m.data");
-        // the `ua_metatx` kind carries `ua*` entries only
-        let e = ok(json!({"id": 1, "kind": "ua_metatx", "op": op})).unwrap_err().to_string();
+        // a merged entry is a `ua_metatx` job only (R43)
+        let e = ok(json!({"id": 1, "kind": "metatx", "op": op})).unwrap_err().to_string();
         assert!(e.starts_with("OP_KIND_MISMATCH"), "{e}");
     }
 
@@ -1543,10 +2052,10 @@ pub(crate) mod tests {
             for kind in o["domains"].as_object().unwrap().keys() {
                 let Some(mut op) = op_of(name, kind, &v) else { continue };
                 let row = row_of(name, kind);
-                if matches!(row.name, "PayUnderMandate" | "DelegateRevoke") {
+                if matches!(row.name, "UAPayUnderMandate" | "UADelegateRevoke") {
                     op["envelope"]["nonce"] = json!("0");
                     op["envelope"]["batch"] = json!(match row.name {
-                        "PayUnderMandate" => crate::typed::mandate_pay_lane(&crate::typed::testkit::hex(&op["args"]["entryRef"])),
+                        "UAPayUnderMandate" => crate::typed::mandate_pay_lane(&crate::typed::testkit::hex(&op["args"]["entryRef"])),
                         _ => crate::typed::mandate_revoke_lane(op["args"]["token"].as_str().unwrap().parse().unwrap(),
                             op["args"]["epoch"].as_str().unwrap().parse().unwrap()),
                     }.to_string());
@@ -1554,7 +2063,12 @@ pub(crate) mod tests {
                 let job: Job = serde_json::from_str(&json!({"id": 3, "kind": if row.ua() { "ua_metatx" } else { "metatx" }, "op": op}).to_string()).unwrap();
                 let w = work_from_job(&job, None).unwrap_or_else(|e| panic!("{name} on {kind}: {e:#}"));
                 let (env, mut args, sig) = op_from_calldata(row, &w.data);
-                for k in ["accSeq", "modeNonce"].iter().filter(|_| matches!(row.name, "ZetherRollOver" | "ZetherSetRollOverMode")) {
+                let off: &[&str] = match row.name {
+                    "ZetherRollOver" | "ZetherSetRollOverMode" => &["accSeq", "modeNonce"],
+                    "PqzRollOver" => &["rollSeq", "rolled", "entriesHash", "chainUid"], // CTR-PQZ-41: the token reads them
+                    _ => &[],
+                };
+                for k in off {
                     if let Some(x) = op["args"].get(*k) {
                         args[*k] = x.clone();
                     }
@@ -1573,7 +2087,14 @@ pub(crate) mod tests {
                 n += 1;
             }
         }
-        assert_eq!(n, 163, "every row with an entry, but the relay fees (relay_fee_call_object)");
+        // plan T34 added the router's eight regulated control rows to typed_ops.json (97 -> 105); pay-meta-tax T41: -> 110
+        // (UAPayWithTax's three domains, the router's two tax ops); group 3f T46 / T47: -> 113, the router's three verifier ops
+        // group 3h T61: -> 114, the router's `UASetProofStore`; group 3l: -> 116, the router's two wrap-limit ops
+        // round 3r (CTR-GOV-23): -> 127, the router's eleven admin rows; round 3s: -> 130, the router's three list / enable rows
+        // round 3t: -> 131, the router's `UASetVerifierFee`; owner 2026-11-12: -> 132, the router's `UACreateInstance`
+        // the three-key model (CTR-PQZ-41): -> 133, `PqzRollOver`; round 3zc (CTR-GOV-30): -> 135, the router's
+        // `UASetMaxSupply`, `UASetMaxWrapSupply`
+        assert_eq!(n, 135, "every row with an entry, but the relay fees (relay_fee_call_object)");
     }
 
     /// `EvmAdapter::call_key`, which the Hedera adapter delegates to (`the_hedera_lane_skips_bytes_already_in_flight` is the
@@ -1583,12 +2104,12 @@ pub(crate) mod tests {
     async fn evm_call_key_follows_the_bytes() {
         use crate::adapter::ChainAdapter;
         let ua = |contract: &str| -> Value {
-            json!({"id": 9, "kind": "ua_metatx", "op": {"entry": "uaBurn", "contract": contract, "token": format!("{TOKEN:#x}"), "args": {"amount": "5"},
+            json!({"id": 9, "kind": "ua_metatx", "op": {"entry": "mtxBurn", "contract": contract, "token": format!("{TOKEN:#x}"), "args": {"amount": "5"},
                 "envelope": {"from": format!("{UA:#x}"), "batch": "9", "nonce": "0", "validUntil": "4000000000", "mode": 0,
                     "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)},
                 "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(96)), "members": []}}})
         };
-        let (url, _) = fake_evm(Evm { ua_nonce: Some(0), ..Default::default() }).await;
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let cfg = test_cfg(&url);
         let chain = Chain::with_signer(&cfg, PrivateKeySigner::from_bytes(&B256::repeat_byte(1)).unwrap()).unwrap();
         let a = crate::adapters::evm::EvmAdapter::new(&cfg, vec![chain], Arc::new(std::sync::RwLock::new(vec![TOKEN]))).unwrap();
@@ -1610,10 +2131,10 @@ pub(crate) mod tests {
 
     /// A fixed op (its `validUntil` does not follow the clock, so two calls are one digest).
     fn op_job(id: i64) -> Value {
-        let env = json!({"from": format!("{:#x}", payer()), "batch": "7", "nonce": "0", "validUntil": "4000000000", "mode": 0,
+        let env = json!({"from": format!("{:#x}", payer().into_word()), "batch": "7", "nonce": "0", "validUntil": "4000000000", "mode": 0,
             "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)});
-        json!({"id": id, "kind": "metatx", "op": {"entry": "mtxBurn", "contract": "token", "token": format!("{TOKEN:#x}"),
-            "envelope": env, "args": {"amount": "5"}, "signature": format!("0x{}", "11".repeat(65))}})
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": "mtxBurn", "contract": "token", "token": format!("{TOKEN:#x}"),
+            "envelope": env, "args": {"amount": "5"}, "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}}})
     }
 
     /// G2 by the digest computed here: no contract is read for it, two lanes sign one op once, both keys are held, and it
@@ -1649,14 +2170,14 @@ pub(crate) mod tests {
         // local signature check catches the claim first)
         let ua = |contract: &str| {
             let mut j = call_job(9, ROUTER, ua_relay_data(ROUTER.into_word(), 1_000));
-            j["op"] = json!({"entry": "uaBurn", "contract": contract, "token": format!("{TOKEN:#x}"), "args": {"amount": "5"},
+            j["op"] = json!({"entry": "mtxBurn", "contract": contract, "token": format!("{TOKEN:#x}"), "args": {"amount": "5"},
                 "envelope": {"from": format!("{UA:#x}"), "batch": "9", "nonce": "0", "validUntil": "4000000000", "mode": 0,
                     "relayer": format!("{:#x}", Address::ZERO), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)},
                 "auth": {"keyData": "0x", "signature": format!("0x{}", "22".repeat(96)), "members": []}});
             j
         };
         let set = InflightSet::default();
-        let (url, rpc) = fake_evm(Evm { ua_nonce: Some(0), ..Default::default() }).await;
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let (odoo, _) = fake_odoo(Fake { jobs: vec![ua("token")], tokens: toks(), ..Default::default() }).await;
         let mut first = lane(&url, odoo, 1, set.clone()).await;
         first.poll_outbox().await;
@@ -1680,10 +2201,11 @@ pub(crate) mod tests {
         }
         let d = t.digest_on(31337, uid).unwrap();
         let s = format!("0x{}", alloy::hex::encode(payer_key().sign_hash_sync(&d).unwrap().as_bytes()));
-        if j.get("op").is_some() {
-            j["op"]["signature"] = json!(s);
+        let at = if j.get("op").is_some() { &mut j["op"] } else { &mut j };
+        if at.get("auth").is_some() {
+            at["auth"]["signature"] = json!(s);
         } else {
-            j["signature"] = json!(s);
+            at["signature"] = json!(s);
         }
         j
     }
@@ -1713,6 +2235,32 @@ pub(crate) mod tests {
         let (r, rpc) = outcomes(Evm::default(), vec![inv_job(8, other)], |_| {}).await;
         assert_eq!(rpc.lock().unwrap().sent.len(), 0);
         assert!(r[0].0 == "dead" && r[0].1.starts_with("TOKEN_NOT_SERVED"), "{r:?}");
+    }
+
+    /// Fable recheck 4 R4-1: a refusal read while a failover endpoint answered is no verdict: the first endpoint answers
+    /// `chainUid()` with a transport error, the failover one (of this chain, at the head) with another chain's uid: the job is
+    /// back in the queue (`FAILOVER_ANSWER`), nothing sent. Control: the same answer from the first endpoint is `dead`.
+    #[tokio::test]
+    async fn a_refusal_on_a_failover_answer_is_requeued() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let (first, first_rpc) = fake_evm(Evm { uid_err: Some("transport"), ..ok() }).await;
+        let (other, rpc) = fake_evm(Evm { uid: Some(0x25), failover: true, ..ok() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![job(7)], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&first, odoo, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.unwrap();
+        s.poll_outbox().await;
+        let reports = || -> Vec<(String, String)> { o.lock().unwrap().reports.iter()
+            .map(|r| (r["chain_state"].as_str().unwrap().to_string(), r["error"].as_str().unwrap_or_default().to_string())).collect() };
+        let r = reports();
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("FAILOVER_ANSWER") && r[0].1.contains("CHAIN_UID_MISMATCH"), "{r:?}");
+        assert_eq!(rpc.lock().unwrap().sent.len(), 0);
+        // the next job, refused on the first endpoint's own answer, is `dead`: the count is per job (marked at its submit)
+        (first_rpc.lock().unwrap().uid_err, first_rpc.lock().unwrap().uid) = (None, Some(0x25));
+        o.lock().unwrap().jobs = vec![job(8)];
+        s.poll_outbox().await;
+        let r = reports();
+        assert!(r.last().is_some_and(|x| x.0 == "dead" && x.1.starts_with("CHAIN_UID_MISMATCH")), "{r:?}");
+        let (r, _) = outcomes(Evm { uid: Some(0x25), ..ok() }, vec![job(7)], |_| {}).await;
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("CHAIN_UID_MISMATCH"), "control: {r:?}");
     }
 
     /// Review T4 I3: the guard's chain facts — binding (mismatch never cached, a revert or no `chainUid()` unbound, a
@@ -1782,7 +2330,7 @@ pub(crate) mod tests {
         assert_eq!(rpc.lock().unwrap().gas, vec![37_440_000]);
         // the block gas limit binds before max_gas_per_tx (a smaller chain, or the ramp after a reset)
         let (r, rpc) = outcomes(Evm { estimate: Some(31_200_000), block_gas: Some(30_000_000), ..ok() }, vec![job(7)], cap).await;
-        assert!(r[0].0 == "dead" && r[0].1.contains("above the chain's block gas limit 30000000"), "{r:?}");
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("TX_EXCEEDS_CHAIN_LIMIT: gas 31200000 above the chain's block gas limit 30000000"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
         // the padded limit stops at the block gas limit, never below the estimate
         let (_, rpc) = outcomes(Evm { estimate: Some(31_200_000), block_gas: Some(32_000_000), ..ok() }, vec![job(7)], cap).await;
@@ -1795,11 +2343,11 @@ pub(crate) mod tests {
         // any simulation; 261,909 B still goes
         let af = Address::repeat_byte(0x32);
         // (named fields pad to 32 B: the nearest lengths around the 261,910 B limit, 261,924 and 261,892 B)
-        let deploy = |n: usize| crate::abi::IUARegistry::storePqzPopCall { ua: B256::repeat_byte(1), pqzPop: vec![0u8; n - 100].into() }.abi_encode();
+        let deploy = |n: usize| crate::abi::IUARegistry::storePqzPopCall { ua: B256::repeat_byte(1), version: 0, pqzPop: vec![0u8; n - 132].into() }.abi_encode();
         assert_eq!((deploy(261_924).len(), deploy(261_892).len()), (261_924, 261_892));
         let fac = move |c: &mut ChainCfg| { c.max_gas_per_tx = 64_000_000; c.ua_registry = Some(af); };
         let (r, rpc) = outcomes(ok(), vec![call_job(9, af, deploy(261_924))], fac).await;
-        assert!(r[0].0 == "dead" && r[0].1.starts_with("calldata floor 16778136 above the 2^24 regular gas"), "{r:?}");
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("TX_EXCEEDS_CHAIN_LIMIT: calldata floor 16778136 above the 2^24 regular gas"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
         let (r, _) = outcomes(ok(), vec![call_job(9, af, deploy(261_892))], fac).await;
         assert_eq!(states_of(&r).last().copied(), Some("broadcast"), "{r:?}");
@@ -1815,7 +2363,7 @@ pub(crate) mod tests {
         let cap = |c: &mut ChainCfg| c.max_gas_per_tx = 64_000_000;
         // Osaka: an estimate over 2^24 is refused, a large one under it is padded to 2^24 at most
         let (r, rpc) = outcomes(Evm { estimate: Some(31_200_000), osaka: true, ..ok() }, vec![job(7)], cap).await;
-        assert!(r[0].0 == "dead" && r[0].1.contains("above the 2^24 gas limit of a transaction"), "{r:?}");
+        assert!(r[0].0 == "dead" && r[0].1.starts_with("TX_EXCEEDS_CHAIN_LIMIT: gas ") && r[0].1.contains("above the 2^24 gas limit of a transaction"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
         let (r, rpc) = outcomes(Evm { estimate: Some(15_000_000), osaka: true, ..ok() }, vec![job(7)], cap).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
@@ -1825,7 +2373,7 @@ pub(crate) mod tests {
         assert_eq!(rpc.lock().unwrap().gas, vec![18_000_000]);
         // Osaka: no Amsterdam calldata floor (261,910 B is not refused by the node; the chain's own rules apply)
         let af = Address::repeat_byte(0x32);
-        let big = crate::abi::IUARegistry::storePqzPopCall { ua: B256::repeat_byte(1), pqzPop: vec![0u8; 261_824].into() }.abi_encode();
+        let big = crate::abi::IUARegistry::storePqzPopCall { ua: B256::repeat_byte(1), version: 0, pqzPop: vec![0u8; 261_792].into() }.abi_encode();
         let fac = move |c: &mut ChainCfg| { c.max_gas_per_tx = 64_000_000; c.ua_registry = Some(af); };
         let (r, _) = outcomes(Evm { osaka: true, ..ok() }, vec![call_job(9, af, big)], fac).await;
         assert_eq!(states_of(&r).last().copied(), Some("broadcast"), "{r:?}");
@@ -1900,6 +2448,11 @@ pub(crate) mod tests {
         let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
         let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.max_gas_per_tx = 1 << 30).await.unwrap();
         assert_eq!(s.inflight.get(&0).expect("tracked").gas, guard::MAX_TX_GAS);
+        // Fable recheck 6 R6-2: the tracked transaction unread (a transport error, not "unknown"): the lane does not start
+        let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, tx_err: true, ..Default::default() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
+        let e = lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.err().expect("no start");
+        assert!(e.to_string().contains("eth_getTransactionByHash"), "{e:#}");
         // no original gas and no block: the lane does not start (retried like any start-up RPC failure)
         let (url, _) = fake_evm(Evm { mtx_nonce: Some(0), count: 1, block_err: true, ..Default::default() }).await;
         let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked(job(7)), ..Default::default() }).await;
@@ -1937,72 +2490,130 @@ pub(crate) mod tests {
         }
     }
 
+    /// Fable recheck 7 R7-1: the lane's `consumed` and Hedera's `op_consumed` read "not spent" on a failover endpoint (the first
+    /// down) as no verdict (`Err`: every caller asks again); the controls: the first endpoint's "not spent" is `false`.
+    #[tokio::test]
+    async fn not_consumed_on_a_failover_answer_is_unread() {
+        let w = work_from_job(&serde_json::from_value::<Job>(job(7)).unwrap(), None).unwrap();
+        let (first, _) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (other, _) = fake_evm(Evm { mtx_nonce: Some(0), failover: true, ..Default::default() }).await;
+        let (other_h, _) = fake_evm(Evm { mtx_nonce: Some(0), failover: true, failover_id: Some(296), ..Default::default() }).await;
+        let one = test_cfg(&first);
+        let two = ChainCfg { rpc_urls: vec!["http://127.0.0.1:9".into(), other], ..test_cfg(&first) };
+        let chain = |c: &ChainCfg| Chain::with_signer(c, PrivateKeySigner::random()).unwrap();
+        assert!(!guard::consumed(&chain(&one), &w).await.unwrap(), "control");
+        assert!(guard::consumed(&chain(&two), &w).await.unwrap_err().to_string().starts_with("FAILOVER_ANSWER"));
+        let job: Job = serde_json::from_value(job(7)).unwrap();
+        let hedera = |urls: Vec<String>| {
+            let c = ChainCfg { family: "hedera".into(), evm_chain_number: 296, rpc_urls: urls, ..test_cfg(&first) };
+            crate::adapters::hedera::HederaAdapter::new(&c, vec![chain(&c)]).unwrap()
+        };
+        use crate::adapter::ChainAdapter;
+        assert_eq!(hedera(vec![first.clone()]).op_consumed(&job).await.unwrap(), Some(false), "control: Hedera");
+        let e = hedera(vec!["http://127.0.0.1:9".into(), other_h]).op_consumed(&job).await.unwrap_err();
+        assert!(e.to_string().starts_with("FAILOVER_ANSWER"), "{e:#}");
+    }
+
+    /// Fable recheck 5 R5-2: at a restart, a tracked job refused on a failover endpoint's answer (the first endpoint answers
+    /// `chainUid()` with a transport error, the failover one with another chain's) is no verdict: the lane does not start (it is
+    /// retried), never a gap-fill and `dead`. Control: the same refusal from the first endpoint: only gap-filled.
+    #[tokio::test]
+    async fn a_tracked_job_refused_on_a_failover_answer_fails_the_start() {
+        let tracked = json!([{"job_id": 7, "nonce": 0, "state": "broadcast",
+            "tx_hash": format!("{:#x}", B256::repeat_byte(0x77)), "payload": job(7)}]);
+        let ok = || Evm { mtx_nonce: Some(0), count: 1, ..Default::default() };
+        let (first, _) = fake_evm(Evm { uid_err: Some("transport"), ..ok() }).await;
+        let (other, _) = fake_evm(Evm { uid: Some(0x25), failover: true, ..ok() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked.clone(), ..Default::default() }).await;
+        let e = lane_cfg(&first, odoo, 1, InflightSet::default(), |c| c.rpc_urls.push(other.clone())).await.err().expect("no start");
+        assert!(e.to_string().starts_with("FAILOVER_ANSWER") && e.to_string().contains("CHAIN_UID_MISMATCH")
+            && e.to_string().contains("the node exits"), "{e:#}");
+        let (url, _) = fake_evm(Evm { uid: Some(0x25), ..ok() }).await;
+        let (odoo, _) = fake_odoo(Fake { tokens: toks(), inflight: tracked, ..Default::default() }).await;
+        let s = lane_cfg(&url, odoo, 1, InflightSet::default(), |_| {}).await.unwrap();
+        assert!(s.inflight.get(&0).expect("tracked").work.is_none(), "control: refused on the first endpoint, only gap-filled");
+    }
+
     // ------------------------------------------------------------------ CTR-MTX-26 / -27 on EVM (T17)
 
-    fn vector(i: usize) -> (B256, Vec<u8>) {
-        let v: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
-        let h = |k: &str| alloy::hex::decode(&v[i][k].as_str().unwrap()[2..]).unwrap();
-        (B256::from_slice(&h("salt")), h("meta"))
-    }
-
-    fn pay_meta_job(id: i64, salt: B256, pm: &[u8], tweak: impl FnOnce(&mut MetaTransfer)) -> Value {
-        let p = crate::metatx::meta_pay_id(&salt, pm);
-        let Mtx::Transfer(mut t) = meta(7) else { unreachable!() };
-        (t.entryRef, t.batch) = (p, crate::metatx::pay_lane(&p));
+    /// A pay job (pay-meta-tax spec §7.1): `{op: {entry: "mtxPay", token, args: {t, meta}, auth}}`, `meta` named per schema; the
+    /// payment's `entryRef` the commitment of that `meta` (`tweak` edits the payment, `meta` the meta).
+    fn pay_job(id: i64, pm: Value, tweak: impl FnOnce(&mut UAMetaTransfer)) -> Value {
+        let UaMtx::Transfer(mut t) = meta(7) else { unreachable!() };
+        t.entryRef = op_meta_id(&pm);
         tweak(&mut t);
-        let (kind, wire) = Mtx::Transfer(t).to_wire();
-        json!({"id": id, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
-               "signature": format!("0x{}", "11".repeat(65)), "metatx": wire,
-               "salt": format!("{salt:#x}"), "meta": format!("0x{}", alloy::hex::encode(pm))})
+        let (_, wire) = UaMtx::Transfer(t).to_wire();
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": "mtxPay", "contract": "token", "token": format!("{TOKEN:#x}"),
+            "args": {"t": wire, "meta": pm}, "auth": {"keyData": "0x", "signature": format!("0x{}", "11".repeat(65)), "members": []}}})
     }
 
-    /// CTR-MTX-26 on EVM (spec §9): the node checks `entryRef == metaPayId(salt, meta)`, `batch == payLane(entryRef)`,
-    /// `nonce == 0` before any simulation, then relays `mtxPayMeta` (or, off-chain, `mtxExecuteTransfer`) of the signed
-    /// struct; the shared vectors' hashes are the node's.
+    /// `metaPayId` of a job's named `meta`, as the node builds it.
+    fn op_meta_id(meta: &Value) -> B256 {
+        let v = crate::typed::parse("PayMeta", meta, "meta").unwrap();
+        crate::metatx::meta_pay_id(&crate::typed::pay_meta_of(&v).unwrap())
+    }
+
+    fn structured() -> Value {
+        json!({"salt": format!("{:#x}", B256::repeat_byte(0x51)), "payNo": "0x00000000000000000000000000000000019a6e3c5f007a3b8c4d5e6f708192a3", "save": true, "schema": 2,
+            "body": {"creditorRef": "RF18539007547034", "dueDate": "1830297600"}})
+    }
+
+    /// pay-meta-tax T42 (`pay_job_named_meta_builds_body`, `pay_job_free_lane_accepted`): the named meta's schema 2 body is
+    /// `abi.encode(string creditorRef, uint64 dueDate)` and its commitment the paymeta.json row's; the pay is relayed as
+    /// `mtxPay(t, auth, meta)` on any lane (O3: lane 7, nonce 3 too, no `payLane` check).
     #[tokio::test]
-    async fn pay_meta_job_checks_commitment_lane_nonce() {
+    async fn pay_job_named_meta_builds_body() {
         let v: Value = serde_json::from_str(include_str!("../../smartcontracts/vectors/metatx/paymeta.json")).unwrap();
-        for r in v.as_array().unwrap() {
-            let h = |k: &str| alloy::hex::decode(&r[k].as_str().unwrap()[2..]).unwrap();
-            let p = crate::metatx::meta_pay_id(&B256::from_slice(&h("salt")), &h("meta"));
-            assert_eq!(p.as_slice(), &h("payId")[..], "{}", r["name"]);
-            assert_eq!(crate::metatx::pay_lane(&p).to_be_bytes::<32>().as_slice(), &h("payLane")[..], "{}", r["name"]);
-        }
+        let row = v.as_array().unwrap().iter().find(|r| r["name"] == "structured_reference").unwrap();
+        let named = json!({"salt": row["salt"], "payNo": row["payNo"], "save": row["save"], "schema": 2,
+            "body": {"creditorRef": "RF18539007547034", "dueDate": "1830297600"}});
+        assert_eq!(format!("{:#x}", op_meta_id(&named)), row["payId"].as_str().unwrap(), "the forge row's commitment");
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
-        let (salt, pm) = vector(0);
-        let (r, rpc) = outcomes(ok(), vec![pay_meta_job(7, salt, &pm, |_| {})], |_| {}).await;
+        let (r, rpc) = outcomes(ok(), vec![pay_job(7, named.clone(), |_| {})], |_| {}).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         let sent = rpc.lock().unwrap().sent[0].2.clone();
-        let c = IToken::mtxPayMetaCall::abi_decode(&sent).unwrap();
-        assert_eq!((c.salt, c.meta.to_vec()), (salt, pm.clone()));
-        let (Mtx::Transfer(t), _) = Mtx::from_calldata(&sent).unwrap() else { panic!() };
-        assert_eq!((t.entryRef, t.nonce), (crate::metatx::meta_pay_id(&salt, &pm), U256::ZERO), "mtxPayMeta is its MetaTransfer");
-        // off-chain meta: the same checks, the plain mtxExecuteTransfer of the same struct
-        let mut off = pay_meta_job(7, salt, &pm, |_| {});
-        off["meta_offchain"] = json!(true);
-        let (r, rpc) = outcomes(ok(), vec![off], |_| {}).await;
-        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
-        assert_eq!(rpc.lock().unwrap().sent[0].2[..4], IToken::mtxExecuteTransferCall::SELECTOR);
-        // a struct that is not the payment of (salt, meta): refused before any RPC
-        let bad: [fn(&mut MetaTransfer); 3] = [
-            |t| t.entryRef = B256::repeat_byte(0x42),
-            |t| t.batch += U256::from(1),
-            |t| t.nonce = U256::from(1),
-        ];
-        for (i, tweak) in bad.into_iter().enumerate() {
-            let (r, rpc) = outcomes(ok(), vec![pay_meta_job(7, salt, &pm, tweak)], |_| {}).await;
-            assert!(r[0].0 == "dead" && r[0].1.contains("pay-meta"), "{i}: {r:?}");
-            assert!(rpc.lock().unwrap().sent.is_empty());
+        let c = crate::abi::IMtxIds::mtxPayCall::abi_decode(&sent).unwrap();
+        assert_eq!(format!("0x{}", alloy::hex::encode(&c.meta.body)), row["body"].as_str().unwrap());
+        assert_eq!((format!("{:#x}", c.meta.payNo).as_str(), c.meta.save, c.meta.schema), ("0x00000000000000000000000000000000019a6e3c5f007a3b8c4d5e6f708192a3", true, 2));
+        assert_eq!(c.t.entryRef, op_meta_id(&named));
+        let (r, _) = outcomes(Evm { mtx_nonce: Some(3), ..Default::default() }, vec![pay_job(7, named, |t| t.nonce = U256::from(3))],
+            |_| {}).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "a free lane: nonce 3, no payLane check: {r:?}");
+    }
+
+    /// `pay_job_hex_meta_refused`, plan T83 (a text `payNo`, a short one, a non-bool `save`, `save` without a `payNo`),
+    /// `PAY_META_MISMATCH`, `ENTRY_RETIRED`: refused by name before any RPC; the old `salt` + hex `meta` struct job too.
+    #[tokio::test]
+    async fn pay_job_refusals_by_name() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let refused = |r: &[(String, String)], what: &str| assert!(r[0].0 == "dead" && r[0].1.contains(what), "{what}: {r:?}");
+        let mut hexed = structured();
+        hexed["body"] = json!("0x1234");
+        let mut bad = pay_job(7, structured(), |_| {});
+        bad["op"]["args"]["meta"] = hexed;
+        let (r, rpc) = outcomes(ok(), vec![bad], |_| {}).await;
+        refused(&r, "HEX_ARGS_REFUSED");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        for (k, v, what) in [("payNo", json!("INV-2026-0042"), "meta.payNo: not 0x-hex"),
+            ("payNo", json!(format!("0x{}", "01".repeat(31))), "meta.payNo: not bytes32"),
+            ("save", json!("true"), "meta.save: not a bool"),
+            ("payNo", json!(format!("{:#x}", B256::ZERO)), "PAY_META_SHAPE")] {
+            let mut m = structured();
+            m[k] = v;
+            let mut bad = pay_job(7, structured(), |_| {});
+            bad["op"]["args"]["meta"] = m;
+            let (r, rpc) = outcomes(ok(), vec![bad], |_| {}).await;
+            refused(&r, what);
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{what}");
         }
-        let mut half = pay_meta_job(7, salt, &pm, |_| {});
-        half.as_object_mut().unwrap().remove("meta");
-        assert_eq!(outcomes(ok(), vec![half], |_| {}).await.0[0].0, "dead", "salt without meta");
-        let (kind, wire) = Mtx::Call(crate::abi::MetaTransaction { from: payer(),
-            data: Bytes::from_static(&[0xcf, 0xdd, 0x7a, 0xea]), batch: U256::from(7), nonce: U256::ZERO,
-            validUntil: U256::from(now() + 600), mode: 0, relayer: Address::ZERO, fee: U256::ZERO, feeRecipient: Address::ZERO }).to_wire();
-        let call = json!({"id": 7, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
-            "signature": format!("0x{}", "11".repeat(65)), "metatx": wire, "salt": format!("{salt:#x}"), "meta": "0x"});
-        assert!(outcomes(ok(), vec![call], |_| {}).await.0[0].1.contains("HEX_DATA_REFUSED"), "a call struct is no pay-meta");
+        refused(&outcomes(ok(), vec![pay_job(7, structured(), |t| t.entryRef = B256::repeat_byte(0x42))], |_| {}).await.0,
+            "PAY_META_MISMATCH");
+        let mut retired = pay_job(7, structured(), |_| {});
+        retired["op"]["entry"] = json!("mtxPayMeta");
+        refused(&outcomes(ok(), vec![retired], |_| {}).await.0, "ENTRY_RETIRED");
+        let mut old = job(7);
+        (old["salt"], old["meta"]) = (json!(format!("{:#x}", B256::repeat_byte(3))), json!("0x0001"));
+        refused(&outcomes(ok(), vec![old], |_| {}).await.0, "HEX_ARGS_REFUSED");
         let mut other = job(7);
         other["kind"] = json!("signed_op");
         assert!(outcomes(ok(), vec![other], |_| {}).await.0[0].1.contains("unknown job kind"), "one job-kind rule");
@@ -2026,12 +2637,17 @@ pub(crate) mod tests {
             registerCall { kind: 0x0131, keyData: b(1952, 1), attrs: attrs(), pop: b(3309, 5), pqzPop: b(pqz_pop, 12) }
                 .abi_encode(),
             setKemKeyCall { ua, version: 2, kem: kem(6), sig: sig(3309, 7) }.abi_encode(),
-            storePqzPopCall { ua, pqzPop: b(30_381, 8) }.abi_encode(),
-            setPqzKeyCall { ua, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: sig(3309, 11) }.abi_encode(),
+            storePqzPopCall { ua, version: 0, pqzPop: b(30_381, 8) }.abi_encode(),
+            setPqzKeyCall { ua, version: 0, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: sig(3309, 11) }.abi_encode(),
+            storePqzPopCall { ua, version: 1, pqzPop: b(30_381, 8) }.abi_encode(),
+            setPqzKeyCall { ua, version: 1, pqzKey: b(18_432, 9), pqzPopHash: B256::repeat_byte(10), sig: sig(3309, 11) }.abi_encode(),
             // CTR-UA-37: an `msig` member accepts its place; anyone submits, so the member needs no gas
             acceptMembershipCall { ua, memberSig: crate::abi::MemberSig { index: 3, members: vec![], sig: b(3309, 36) } }.abi_encode(),
             registerMsigCall { structure: MsigStructure { threshold: 2, members: members(2) }, attrs: attrs(), pop: pops(2),
                 pqzPop: b(pqz_pop, 12) }.abi_encode(),
+            // CTR-UA-44: a structure update, anyone submits (fee 0)
+            updateMsigCall { ua, version: 1, structure: MsigStructure { threshold: 2, members: members(3) }, enabled: U256::from(7u8),
+                validUntilBlock: 1_000, sigs: pops(2), chainUid_: B256::repeat_byte(0x7c) }.abi_encode(),
             // typed-signing R1b (TS-D13): the typed single-key entries (no PQZ / KEM holders: empty attributes)
             registerWebAuthnCall { key: WebAuthnKey { x: B256::repeat_byte(14), y: B256::repeat_byte(15), rpIdHash: B256::repeat_byte(16) },
                 attrs: none(), pop: b(640, 17), pqzPop: Bytes::new() }.abi_encode(),
@@ -2058,10 +2674,16 @@ pub(crate) mod tests {
         assert_eq!(registerMuSig2Call::SELECTOR, [0xe1, 0xed, 0xdc, 0xdf]);
         assert_eq!(registerFrostCall::SELECTOR, [0x7b, 0xd6, 0x34, 0x10]);
         assert_eq!(setKemKeyCall::SELECTOR, [0x6a, 0x33, 0x18, 0xf9]);
-        assert_eq!(storePqzPopCall::SELECTOR, [0x7f, 0xac, 0x16, 0x1a]);
-        assert_eq!(setPqzKeyCall::SELECTOR, [0x00, 0x52, 0xc1, 0xb5]);
+        // group 3g (KV-1): the versioned entries, the contract's pins (test_ua8_writeSelectorsPinned): 0x7fac161a -> 0x9f7be2a3,
+        // 0x0052c1b5 -> 0xbd97b6a1
+        assert_eq!(storePqzPopCall::SELECTOR, [0x9f, 0x7b, 0xe2, 0xa3]);
+        assert_eq!(setPqzKeyCall::SELECTOR, [0xbd, 0x97, 0xb6, 0xa1]);
         assert_eq!(acceptMembershipCall::SIGNATURE, "acceptMembership(bytes32,(uint16,(uint16,bytes)[],bytes))");
         assert_eq!(acceptMembershipCall::SELECTOR, [0x2c, 0x1a, 0xc9, 0x86]);
+        // CTR-UA-44: forge `test_msigUpdateTypehashesPinned` pins the same selector
+        assert_eq!(updateMsigCall::SIGNATURE,
+            "updateMsig(bytes32,uint64,(uint16,(uint16,bytes32,uint16)[]),uint256,uint64,(uint16,(uint16,bytes)[],bytes)[],bytes32)");
+        assert_eq!(updateMsigCall::SELECTOR, [0x53, 0x3f, 0x2d, 0x73]);
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
         let (reg, other) = (Address::repeat_byte(0x5e), Address::repeat_byte(0x5f));
         let cfg = move |c: &mut ChainCfg| c.ua_registry = Some(reg);
@@ -2115,17 +2737,193 @@ pub(crate) mod tests {
         assert!(r[0].0 == "dead" && !r[0].1.contains("UA_REGISTER_SPLIT"), "{r:?}");
     }
 
-    /// `max_pay_meta_bytes` (default 2,048, spec §9) caps the `meta` a pay-meta job relays; the config raises it.
+    /// A PQZ op 1 job (group 3g) from typed_ops.json's `UAPqzTransferSingle` row, its subject a derived UA (no local signature
+    /// check), on `TOKEN`.
+    fn pqz_job(id: i64) -> Value {
+        let v = crate::typed::testkit::vectors();
+        let row = crate::typed::testkit::row_of("UAPqzTransferSingle", "pqz");
+        let (env, mut args, sig) = crate::typed::testkit::split(row, "UAPqzTransferSingle", "pqz", &v);
+        let mut env = env.unwrap();
+        env["from"] = json!(format!("{:#x}", B256::repeat_byte(0xab)));
+        // round 3t: the proved fee word, the fake statement's word 256 (it is 40 bytes: 0)
+        args["pqz_fee"] = json!("0");
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": row.entry, "contract": "pqz", "token": format!("{TOKEN:#x}"),
+            "envelope": env, "args": args, "auth": sig.unwrap()}})
+    }
+
+    /// Group 3h (pqz-proof-path spec §3.2, §10): a PQZ debit job names `ownTag` in its `args` (a non-zero tag here); the calldata
+    /// the node builds carries that word after `salt`, in the order of the struct.
+    #[tokio::test]
+    async fn pqz_own_tag_named() {
+        let tag = B256::repeat_byte(0x7a);
+        let mut j = pqz_job(7);
+        j["op"]["args"]["args"]["ownTag"] = json!(format!("{tag:#x}"));
+        let (w, _) = work_of_op(Some(7), &j["op"], None).unwrap();
+        let row = crate::typed::testkit::row_of("UAPqzTransferSingle", "pqz");
+        let vals = crate::typed::call_values(row, &w.data).unwrap();
+        let args = crate::typed::parse("PqzTransferArgs", &j["op"]["args"]["args"], "args").unwrap();
+        assert!(vals.contains(&args), "the args struct is in the calldata as named");
+        let enc = args.abi_encode();
+        assert!(enc.windows(32).any(|x| x == tag.as_slice()), "ownTag is a word of the struct");
+        let e = Evm { mtx_nonce: Some(0), ..Default::default() };
+        assert_eq!(states_of(&outcomes(e, vec![j], |_| {}).await.0), ["signed", "broadcast"]);
+    }
+
+    /// Group 3h (spec §10): a PQZ debit job of the shape before 3h (`args` without `ownTag`) is refused by name at intake, before
+    /// any RPC: `BAD_PAYLOAD` names the missing field (the named-field rule of every job, HEX_ARGS_REFUSED unchanged); the 3h
+    /// struct needs the tag, so the old shape never lands.
+    #[tokio::test]
+    async fn pqz_old_shape_refused_by_name() {
+        let mut j = pqz_job(7);
+        j["op"]["args"]["args"].as_object_mut().unwrap().remove("ownTag");
+        let (r, rpc) = outcomes(Evm { mtx_nonce: Some(0), ..Default::default() }, vec![j], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.contains("BAD_PAYLOAD: args.args.ownTag: missing"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty() && !rpc.lock().unwrap().calls.iter().any(|m| m == "eth_estimateGas"));
+    }
+
+    /// NODE-JOB-24 (group 3h, spec §10): a PQZ debit whose estimate under the token's `proofStore()` is above the lane's cap is
+    /// refused `PROOF_STORE_OVER_LANE_CAP` before sending, back in the queue under `LOG` (a holder of bit 24 may switch to `NONE`);
+    /// under `NONE`, or on a release without the view, it is the plain cap refusal.
+    #[tokio::test]
+    async fn proof_store_over_lane_cap_refused() {
+        let over = |m: Option<u8>| Evm { mtx_nonce: Some(0), estimate: Some(70_000_000), proof_store: m, ..Default::default() };
+        let cap = |c: &mut ChainCfg| c.max_gas_per_tx = 64_000_000;
+        let (r, rpc) = outcomes(over(Some(1)), vec![pqz_job(7)], cap).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PROOF_STORE_OVER_LANE_CAP: "), "{r:?}");
+        assert!(r[0].1.contains("above max_gas_per_tx 64000000"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty(), "nothing sent");
+        for m in [Some(0), None] {
+            let (r, _) = outcomes(over(m), vec![pqz_job(7)], cap).await;
+            assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.contains("above max_gas_per_tx") && !r[0].1.contains("PROOF_STORE"), "{m:?}: {r:?}");
+        }
+    }
+
+    /// NODE-JOB-24: never `dead` while the job may land: refused under `LOG`, the same job lands once the token is back on `NONE`
+    /// and its estimate fits.
+    #[tokio::test]
+    async fn proof_store_over_cap_not_dead() {
+        let cap = |c: &mut ChainCfg| c.max_gas_per_tx = 64_000_000;
+        let e = Evm { mtx_nonce: Some(0), estimate: Some(64_000_001), proof_store: Some(1), ..Default::default() };
+        let (r, _) = outcomes(e, vec![pqz_job(7)], cap).await;
+        assert_eq!(states_of(&r), ["queued"], "{r:?}");
+        let e = Evm { mtx_nonce: Some(0), estimate: Some(63_000_000), proof_store: Some(0), ..Default::default() };
+        assert_eq!(states_of(&outcomes(e, vec![pqz_job(7)], cap).await.0), ["signed", "broadcast"]);
+    }
+
+    /// Group 3g (KV-7, spec §7.3): a receiver (or the auditor) whose latest stored version is above its current one, with the
+    /// current key's length, is pending: the debit is refused `PQZ_KEY_ROTATION_PENDING` at intake, nothing simulated or sent.
+    /// The controls: no newer version, a newer version of another set's length.
+    #[tokio::test]
+    async fn rotation_pending_refused_at_intake() {
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
+        let (r, rpc) = outcomes(Evm { pqz_latest: 1, ..ok() }, vec![pqz_job(7)], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("PQZ_KEY_ROTATION_PENDING: "), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        assert!(!rpc.lock().unwrap().calls.iter().any(|m| m == "eth_estimateGas"), "refused before any simulation");
+        for e in [ok(), Evm { pqz_latest: 1, pqz_other_len: true, ..ok() }] {
+            let (r, _) = outcomes(e, vec![pqz_job(7)], |_| {}).await;
+            assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        }
+    }
+
+    /// The public rollover job (`UAPqzRollOver`, `mtxRollOver`) from typed_ops.json, its subject a derived UA, on `TOKEN`.
+    fn pqz_rollover_job(id: i64) -> Value {
+        let v = crate::typed::testkit::vectors();
+        let row = crate::typed::testkit::row_of("UAPqzRollOver", "pqz");
+        let (env, args, sig) = crate::typed::testkit::split(row, "UAPqzRollOver", "pqz", &v);
+        let mut env = env.unwrap();
+        env["from"] = json!(format!("{:#x}", B256::repeat_byte(0xab)));
+        json!({"id": id, "kind": "ua_metatx", "op": {"entry": row.entry, "contract": "pqz", "token": format!("{TOKEN:#x}"),
+            "envelope": env, "args": args, "auth": sig.unwrap()}})
+    }
+
+    /// NODE-JOB-28 (spec 2026-11-13-pqz-three-keys §14 item 22): the public rollover on a token with the opening on is refused
+    /// `ROLLOVER_SIGNED_ONLY`, `dead`, zero sends, nothing simulated; the same job on a token without the opening, `OFFCHAIN` or
+    /// `PRECOMPILE`, goes.
+    #[tokio::test]
+    async fn public_rollover_on_an_opening_token_is_signed_only() {
+        let (r, rpc) = outcomes(Evm { pqz_opening: true, ..offchain() }, vec![pqz_rollover_job(7)], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("ROLLOVER_SIGNED_ONLY: "), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        assert!(!rpc.lock().unwrap().calls.iter().any(|m| m == "eth_estimateGas"), "refused before any simulation");
+        for e in [offchain(), Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() }] {
+            let (r, _) = outcomes(e, vec![pqz_rollover_job(7)], |_| {}).await;
+            assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        }
+    }
+
+    /// NODE-JOB-28: an `OFFCHAIN` debit with auditor copies whose auditor has no key of the token's scope (class 3: the token,
+    /// class 2: 0) is `AUDITOR_KEY_MISSING`, back in the queue (the auditor may register), zero sends; with the key it goes on to the
+    /// verdict. The key reads of the token (the parties' too, `no_pending_party`) all ask the token's scope (CTR-UA-43).
+    #[tokio::test]
+    async fn auditor_without_a_scoped_key_is_named() {
+        let mut j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        j["op"]["args"]["args"]["vAuditor"] = json!(format!("0x{}", "a1".repeat(32)));
+        for (own, scope) in [(true, TOKEN), (false, Address::ZERO)] {
+            let (r, rpc) = outcomes(Evm { pqz_own_key: own, scoped_none: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+            assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("AUDITOR_KEY_MISSING: "), "{r:?}");
+            let e = rpc.lock().unwrap();
+            assert!(e.sent.is_empty());
+            assert!(!e.scopes_asked.is_empty() && e.scopes_asked.iter().all(|s| *s == scope), "class {}: {:?}", 3 - u8::from(!own), e.scopes_asked);
+        }
+        let (r, rpc) = outcomes(Evm { pqz_own_key: true, ..offchain() }, vec![j], |_| {}).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        assert!(rpc.lock().unwrap().scopes_asked.iter().all(|s| *s == TOKEN));
+    }
+
+    /// NODE-JOB-28 (CTR-UA-43): on a class-3 token the pending-version check reads the scoped records of the token, never the
+    /// registry key: a receiver with a scoped version stored above current is `PQZ_KEY_ROTATION_PENDING`.
+    #[tokio::test]
+    async fn rotation_pending_reads_the_tokens_scope() {
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        let (r, rpc) = outcomes(Evm { pqz_own_key: true, pqz_latest: 1, ..offchain() }, vec![j], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("PQZ_KEY_ROTATION_PENDING: "), "{r:?}");
+        let e = rpc.lock().unwrap();
+        assert!(e.sent.is_empty() && !e.scopes_asked.is_empty() && e.scopes_asked.iter().all(|s| *s == TOKEN), "{:?}", e.scopes_asked);
+    }
+
+    /// Group 3g (spec §7.3): `ProofRejected` after an indexed `UAPqzKeyCurrent` of a party is `PQZ_KEY_ROTATED`, the simulation
+    /// error carried, back in the queue, never `dead`; without the event it is the plain revert.
+    #[tokio::test]
+    async fn rotated_after_event_not_dead() {
+        let e = Evm { mtx_nonce: Some(0), sim: Some("proof_rejected"), pqz_rotated: true, ..Default::default() };
+        let (r, rpc) = outcomes(e, vec![pqz_job(7)], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_KEY_ROTATED: ProofRejected"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+    }
+
+    #[tokio::test]
+    async fn rotated_needs_event() {
+        let e = Evm { mtx_nonce: Some(0), sim: Some("proof_rejected"), ..Default::default() };
+        let (r, _) = outcomes(e, vec![pqz_job(7)], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("ProofRejected"), "{r:?}");
+    }
+
+    /// Group 3g (spec §7.3): the token's key-version reverts by name: a stale debit and two equal keys `dead`, a version above
+    /// current back in the queue (it may become current).
+    #[tokio::test]
+    async fn stale_refused_by_name() {
+        for (sim, state, code) in [("stale", "dead", "PQZ_KEY_STALE: StaleKeyVersion"), ("reused", "dead", "PQZ_KEY_REUSED: KeyReused"),
+            ("unknown", "queued", "PQZ_KEY_VERSION_UNKNOWN: KeyVersionUnknown")] {
+            let (r, rpc) = outcomes(Evm { mtx_nonce: Some(0), sim: Some(sim), ..Default::default() }, vec![pqz_job(7)], |_| {}).await;
+            assert!(r.len() == 1 && r[0].0 == state && r[0].1.starts_with(code), "{sim}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
+    /// `max_pay_meta_bytes` (default 2,048, spec §7.1) caps the `body` of a pay job (plan T83: `payNo` a fixed word, not
+    /// counted); the config raises it.
     #[tokio::test]
     async fn pay_meta_cap_refused() {
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
-        let salt = B256::repeat_byte(3);
-        let (r, _) = outcomes(ok(), vec![pay_meta_job(7, salt, &[7; 2048], |_| {})], |_| {}).await;
+        let note = |n: usize| json!({"salt": format!("{:#x}", B256::repeat_byte(3)), "payNo": format!("{:#x}", B256::repeat_byte(9)),
+            "save": true, "schema": 1, "body": {"note": "x".repeat(n)}});
+        let (r, _) = outcomes(ok(), vec![pay_job(7, note(2048), |_| {})], |_| {}).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
-        let (r, rpc) = outcomes(ok(), vec![pay_meta_job(7, salt, &[7; 2049], |_| {})], |_| {}).await;
+        let (r, rpc) = outcomes(ok(), vec![pay_job(7, note(2049), |_| {})], |_| {}).await;
         assert!(r[0].0 == "dead" && r[0].1.starts_with("PAY_META_TOO_LONG"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
-        let (r, _) = outcomes(ok(), vec![pay_meta_job(7, salt, &[7; 2049], |_| {})],
+        let (r, _) = outcomes(ok(), vec![pay_job(7, note(2049), |_| {})],
             |c| { c.params.insert("max_pay_meta_bytes".into(), 4096.into()); }).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
     }
@@ -2146,8 +2944,9 @@ pub(crate) mod tests {
     /// A relay of `TARGET`'s call paying `value` to `to`, as the router's calldata.
     fn relay_data(to: Address, value: u64) -> Vec<u8> {
         let call: Bytes = IToken::mtxNonceCall { from: Address::ZERO, batch: U256::ZERO }.abi_encode().into();
-        crate::abi::IMtxRelayFee::relayCall { target: TARGET, callData: call, token: TOKEN, from: payer(), payee: to, value: U256::from(value),
-            validUntil: U256::from(now() + 600), sig: Bytes::from(vec![0x11; 65]) }.abi_encode()
+        crate::abi::IRelayFeeRouter::relayCall { target: TARGET, callData: call, token: TOKEN, from: payer().into_word(), payee: to.into_word(),
+            value: U256::from(value), batch: U256::from(7), nonce: U256::ZERO, validUntil: U256::from(now() + 600),
+            auth: UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x11; 65]), members: vec![] } }.abi_encode()
     }
 
     fn lane1() -> Address {
@@ -2160,8 +2959,8 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn relay_fee_row_requires_router_and_registered_token() {
         let sig = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
-        assert_eq!(IToken::mtxPayMetaCall::SELECTOR,
-            sig("mtxPayMeta(address,address,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,bytes)"));
+        assert_eq!(crate::abi::IMtxIds::mtxPayCall::SELECTOR, sig("mtxPay((bytes32,bytes32,uint256,bytes32,uint256,uint256,uint256,uint32,\
+address,uint256,address),(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]),(bytes32,bytes32,bool,uint16,bytes))"));
         let mut cfg = test_cfg("http://127.0.0.1:9");
         relay_params(&mut cfg, &[]);
         let rf = guard::RelayFee::from_cfg(&cfg).unwrap().unwrap();
@@ -2172,8 +2971,8 @@ pub(crate) mod tests {
         assert_eq!(check(ROUTER, &relay_data(ROUTER, 100)), Ok(TARGET));
         assert!(check(TARGET, &relay_data(ROUTER, 100)).unwrap_err().starts_with("CALL_TARGET_REFUSED"), "only the router");
         assert!(check(ROUTER, &[1, 2, 3, 4]).unwrap_err().starts_with("BAD_PAYLOAD"));
-        let c = crate::abi::IMtxRelayFee::relayCall::abi_decode(&relay_data(ROUTER, 100)).unwrap();
-        let other = crate::abi::IMtxRelayFee::relayCall { token: Address::repeat_byte(0x99), ..c }.abi_encode();
+        let c = crate::abi::IRelayFeeRouter::relayCall::abi_decode(&relay_data(ROUTER, 100)).unwrap();
+        let other = crate::abi::IRelayFeeRouter::relayCall { token: Address::repeat_byte(0x99), ..c }.abi_encode();
         assert!(check(ROUTER, &other).unwrap_err().starts_with("TOKEN_NOT_SERVED"), "a registered token only");
         assert!(check(ROUTER, &relay_data(ROUTER.create(1), 100)).unwrap_err().starts_with("RELAY_FEE_SHAPE"), "never the executor");
         // config: a router that is not an address fails at startup, in every module that reads it
@@ -2186,17 +2985,57 @@ pub(crate) mod tests {
         // on the lane: a plain pay (or pay-meta) to the router or its executor is refused; no router ⇒ no relay row
         let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
         for to in [ROUTER, ROUTER.create(1)] {
-            let Mtx::Transfer(mut t) = meta(7) else { unreachable!() };
-            t.to = to;
-            let (kind, wire) = Mtx::Transfer(t).to_wire();
-            let j = json!({"id": 7, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": D, "struct": kind,
-                           "signature": format!("0x{}", "11".repeat(65)), "metatx": wire});
+            let UaMtx::Transfer(mut t) = meta(7) else { unreachable!() };
+            t.to = to.into_word();
+            let mut j = job(7);
+            j["m"] = UaMtx::Transfer(t).to_wire().1;
             let (r, rpc) = outcomes(ok(), vec![j], |c| relay_params(c, &[])).await;
             assert!(r[0].0 == "dead" && r[0].1.starts_with("PAYEE_REFUSED"), "{r:?}");
             assert!(rpc.lock().unwrap().sent.is_empty());
         }
         let (r, _) = outcomes(ok(), vec![call_job(9, ROUTER, relay_data(ROUTER, 100))], |_| {}).await;
         assert!(r[0].0 == "dead" && r[0].1.contains("no params.relay_fee.router"), "{r:?}");
+    }
+
+    /// Fable recheck 4 R4-2: a creation refused `RELEASE_DEPRECATED` or `RELEASE_UNKNOWN` reads the subject nonce first: spent (it
+    /// landed before, delivered again) is `consumed`; unspent `dead`; unreadable `queued`. Nothing is sent.
+    #[tokio::test]
+    async fn a_release_refusal_reads_the_nonce_first() {
+        let v = crate::typed::testkit::vectors();
+        let mut op = crate::typed::testkit::op_of("UACreateInstance", "gov_router", &v).unwrap();
+        op["envelope"]["nonce"] = json!("0");
+        let router: Address = op["token"].as_str().unwrap().parse().unwrap();
+        for (unknown, name) in [(false, "RELEASE_DEPRECATED"), (true, "RELEASE_UNKNOWN")] {
+            for (nonce, want) in [(Some(1), "consumed"), (Some(0), "dead"), (None, "queued")] {
+                let e = Evm { mtx_nonce: nonce, release_deprecated: !unknown, release_unknown: unknown, ..Default::default() };
+                let job = json!({"id": 9, "kind": "ua_metatx", "op": op.clone()});
+                let (r, rpc) = outcomes(e, vec![job], |c| c.governance_routers = vec![router]).await;
+                assert_eq!(r[0].0, want, "{name}, mtxNonce {nonce:?}: {r:?}");
+                assert!(want != "dead" || r[0].1.starts_with(name), "{r:?}");
+                assert!(rpc.lock().unwrap().sent.is_empty());
+            }
+        }
+    }
+
+    /// Fable recheck 2 P3-1: a transfer struct job (its `contract` defaults to `token`) and a relay fee (signed in the fee token's
+    /// domain) on a token of another kind are `CONTRACT_KIND_MISMATCH`, nothing sent; the control: the token's own kind.
+    #[tokio::test]
+    async fn a_transfer_and_a_relay_fee_name_the_token_kind() {
+        let ok = |d: Option<&'static str>| Evm { mtx_nonce: Some(0), domain: d, ..Default::default() };
+        for (what, j) in [("transfer", job(7)), ("relay fee", call_job(9, ROUTER, relay_data(ROUTER, 100)))] {
+            let (r, rpc) = outcomes(ok(Some("SCaaS PqzToken")), vec![j.clone()], |c| relay_params(c, &[])).await;
+            assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("CONTRACT_KIND_MISMATCH"), "{what}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{what}: nothing sent");
+            let (r, _) = outcomes(ok(None), vec![j], |c| relay_params(c, &[])).await;
+            assert!(r.iter().all(|x| !x.1.contains("CONTRACT_KIND_MISMATCH")), "{what} control: {r:?}");
+        }
+        // Fable recheck 2 P3-2: the same mismatch after the op's nonce was spent is `consumed`, never `dead`
+        let (r, _) = outcomes(Evm { mtx_nonce: Some(1), domain: Some("SCaaS PqzToken"), ..Default::default() }, vec![ua_job(7, &ua_meta(7))],
+            |_| {}).await;
+        assert_eq!(states_of(&r), ["consumed"], "{r:?}");
+        let (r, _) = outcomes(Evm { mtx_nonce: None, domain: Some("SCaaS PqzToken"), ..Default::default() }, vec![ua_job(7, &ua_meta(7))],
+            |_| {}).await;
+        assert_eq!(states_of(&r), ["queued"], "an unreadable nonce decides nothing: {r:?}");
     }
 
     /// CTR-MTX-27 on the lane: the whole `relay` is simulated and sent only when the fee reaches this lane (open mode,
@@ -2211,7 +3050,7 @@ pub(crate) mod tests {
         let (r, rpc) = go(relay_data(ROUTER, 100), vec![], Evm::default()).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "open mode at min_amount: {r:?}");
         let sent = rpc.lock().unwrap().sent[0].clone();
-        assert_eq!((sent.1, &sent.2[..4]), (ROUTER, &crate::abi::IMtxRelayFee::relayCall::SELECTOR[..]));
+        assert_eq!((sent.1, &sent.2[..4]), (ROUTER, &crate::abi::IRelayFeeRouter::relayCall::SELECTOR[..]));
         assert_eq!(rpc.lock().unwrap().gas[0], 0x30000 * 6 / 5, "the simulated relay +20 %");
         let (r, rpc) = go(relay_data(ROUTER, 99), vec![], Evm::default()).await;
         assert!(r[0].0 == "dead" && r[0].1.contains("below relay_fee.min_amount 100"), "{r:?}");
@@ -2230,6 +3069,28 @@ pub(crate) mod tests {
     // ------------------------------------------------------------------ ua_metatx (job-api.md, CTR-UA-26)
 
     const UA: B256 = B256::repeat_byte(0xaa);
+
+    /// R43 (CTR-MTX-30, plan T14): a merged entry is a `ua_metatx` job and an address entry a `metatx` one; a job naming an entry its kind's
+    /// call table does not list is refused by name, never built. The address `MetaTransfer` struct job names the token's address
+    /// `mtxExecuteTransfer(MetaTransfer, bytes)`, which no token has left: refused by name too.
+    #[test]
+    fn a_metatx_job_naming_a_merged_entry_is_refused_by_name() {
+        let v = crate::typed::testkit::vectors();
+        let of = |kind: &str, op: &Value| -> Job { serde_json::from_value(json!({"id": 1, "kind": kind, "op": op})).unwrap() };
+        let mut unwrap = crate::typed::testkit::op_of("UAUnwrap", "token", &v).unwrap();
+        unwrap["entry"] = json!("mtxUnwrap");
+        let e = work_from_job(&of("metatx", &unwrap), None).unwrap_err().to_string();
+        assert!(e.starts_with("OP_KIND_MISMATCH") && e.contains("mtxUnwrap"), "{e}");
+        work_from_job(&of("ua_metatx", &unwrap), None).unwrap();
+        let wrap = crate::typed::testkit::op_of("Wrap", "token", &v).unwrap();
+        assert!(work_from_job(&of("ua_metatx", &wrap), None).unwrap_err().to_string().starts_with("OP_KIND_MISMATCH"), "the reverse");
+        work_from_job(&of("metatx", &wrap), None).unwrap();
+        let (kind, wire) = addr_meta(7).to_wire();
+        let addr: Job = serde_json::from_value(json!({"id": 1, "kind": "metatx", "token": format!("{TOKEN:#x}"), "struct": kind,
+            "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})).unwrap();
+        let e = work_from_job(&addr, None).unwrap_err().to_string();
+        assert!(e.starts_with("OP_KIND_MISMATCH") && e.contains("mtxExecuteTransfer"), "{e}");
+    }
 
     fn ua_meta(batch: u64) -> crate::metatx::UaMtx {
         crate::metatx::UaMtx::Transfer(crate::abi::UAMetaTransfer { from: UA, to: Address::repeat_byte(0x5e).into_word(),
@@ -2252,31 +3113,20 @@ pub(crate) mod tests {
     /// subject is the id on the UA nonce map. Any other payload shape is refused.
     #[test]
     fn ua_metatx_jobs_build_the_ua_entry_points() {
-        use crate::abi::IUALedger;
-        use crate::metatx::UaMtx;
+        use crate::abi::IMtxIds;
         let auth = UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x22; 96]), members: vec![] };
         let w = work(ua_job(7, &ua_meta(7))).unwrap();
         let mut m = ua_meta(7);
         m.normalize(Some(Address::repeat_byte(0xfe)));
         assert_eq!((w.to, w.data.clone(), w.entry), (TOKEN, m.calldata(auth.clone()), false));
-        assert_eq!(w.meta, Some(MetaRef { token: TOKEN, from: UA, batch: U256::from(7), nonce: U256::ZERO, digest: None, ua: true }));
+        assert_eq!(w.meta, Some(MetaRef { token: TOKEN, from: UA, batch: U256::from(7), nonce: U256::ZERO, digest: None, ua: true, addr_nonce: false }));
         assert_eq!(w.valid_until, m.valid_until().saturating_to::<u64>());
-        assert_eq!(w.data[..4], IUALedger::uaExecuteTransferCall::SELECTOR);
+        assert_eq!(w.data[..4], IMtxIds::mtxExecuteTransferCall::SELECTOR);
         assert_eq!(UaMtx::from_calldata(&w.data).map(|x| x.1), Some(auth.clone()), "auth is the UASig, field by field");
-        // a UA pay-meta job: uaPayMeta, or the plain uaExecuteTransfer for an off-chain meta
-        let (salt, pm) = (B256::repeat_byte(3), vec![9u8; 40]);
-        let p = crate::metatx::meta_pay_id(&salt, &pm);
-        let UaMtx::Transfer(mut t) = ua_meta(0) else { unreachable!() };
-        (t.entryRef, t.batch) = (p, crate::metatx::pay_lane(&p));
-        let mut j = ua_job(9, &UaMtx::Transfer(t.clone()));
-        (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", alloy::hex::encode(&pm))));
-        let w = work(j.clone()).unwrap();
-        let c = IUALedger::uaPayMetaCall::abi_decode(&w.data).unwrap();
-        assert_eq!((c.from, c.salt, c.meta.to_vec()), (UA, salt, pm.clone()));
-        j["meta_offchain"] = json!(true);
-        assert_eq!(work(j.clone()).unwrap().data[..4], IUALedger::uaExecuteTransferCall::SELECTOR);
-        j["meta"] = json!("0x00");
-        assert!(work(j).is_err(), "the payment of (salt, meta) only");
+        // pay-meta-tax T42: the old `salt` + hex `meta` struct job is refused by name (a pay is the named entry mtxPay)
+        let mut j = ua_job(9, &ua_meta(0));
+        (j["salt"], j["meta"]) = (json!(format!("{:#x}", B256::repeat_byte(3))), json!("0x0909"));
+        assert!(work(j).unwrap_err().to_string().starts_with("HEX_ARGS_REFUSED"));
         // refused shapes: the address body or fields in a UA job, a UA body in a metatx job, an address `from`
         let mut addr = ua_job(10, &ua_meta(7));
         addr["signature"] = json!("0x22");
@@ -2301,17 +3151,17 @@ pub(crate) mod tests {
     /// simulation whose UA nonce is spent (`uaNonce(id, batch) > nonce`) is `consumed`, never `dead`.
     #[tokio::test]
     async fn ua_metatx_job_relays_and_a_spent_ua_nonce_is_consumed() {
-        let ok = || Evm { ua_nonce: Some(0), ..Default::default() };
+        let ok = || Evm { mtx_nonce: Some(0), ..Default::default() };
         let (r, rpc) = outcomes(ok(), vec![ua_job(7, &ua_meta(7))], |_| {}).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         let sent = rpc.lock().unwrap().sent[0].clone();
-        assert_eq!((sent.1, &sent.2[..4]), (TOKEN, &crate::abi::IUALedger::uaExecuteTransferCall::SELECTOR[..]));
-        let (r, rpc) = outcomes(Evm { sim: Some("revert"), ua_nonce: Some(1), ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
+        assert_eq!((sent.1, &sent.2[..4]), (TOKEN, &crate::abi::IMtxIds::mtxExecuteTransferCall::SELECTOR[..]));
+        let (r, rpc) = outcomes(Evm { sim: Some("revert"), mtx_nonce: Some(1), ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
         assert_eq!(states_of(&r), ["consumed"], "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty());
-        let (r, _) = outcomes(Evm { sim: Some("revert"), ua_nonce: Some(0), ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
+        let (r, _) = outcomes(Evm { sim: Some("revert"), mtx_nonce: Some(0), ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
         assert_eq!(states_of(&r), ["dead"], "{r:?}");
-        let (r, _) = outcomes(Evm { sim: Some("revert"), ua_nonce: None, ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
+        let (r, _) = outcomes(Evm { sim: Some("revert"), mtx_nonce: None, ..Default::default() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
         assert_eq!(states_of(&r), ["queued"], "an unreadable UA nonce decides nothing: {r:?}");
         // the guard: the UA ledger off, an unregistered token, a UA pay to the router, a UA meta above the cap
         let (r, rpc) = outcomes(Evm { ua_off: true, ..ok() }, vec![ua_job(7, &ua_meta(7))], |_| {}).await;
@@ -2327,33 +3177,25 @@ pub(crate) mod tests {
             let (r, _) = outcomes(ok(), vec![ua_job(7, &crate::metatx::UaMtx::Transfer(t))], |c| relay_params(c, &[])).await;
             assert!(r[0].0 == "dead" && r[0].1.starts_with("PAYEE_REFUSED"), "{r:?}");
         }
-        let salt = B256::repeat_byte(3);
-        let p = crate::metatx::meta_pay_id(&salt, &[7; 2049]);
-        let crate::metatx::UaMtx::Transfer(mut t) = ua_meta(0) else { unreachable!() };
-        (t.entryRef, t.batch) = (p, crate::metatx::pay_lane(&p));
-        let mut j = ua_job(7, &crate::metatx::UaMtx::Transfer(t));
-        (j["salt"], j["meta"]) = (json!(format!("{salt:#x}")), json!(format!("0x{}", "07".repeat(2049))));
-        let (r, _) = outcomes(ok(), vec![j], |_| {}).await;
-        assert!(r[0].0 == "dead" && r[0].1.starts_with("PAY_META_TOO_LONG"), "{r:?}");
     }
 
-    /// `uaRelay` for a UA payer: a router-bound `UAMetaTransfer` of `value` to `to` for `TARGET.cancelNonce(9)`.
+    /// `relay` for a derived payer `UA`: its `UARelayFee` of `value` to `to` for `TARGET`'s call.
     fn ua_relay_data(to: B256, value: u64) -> Vec<u8> {
         let call: Bytes = IToken::mtxNonceCall { from: Address::ZERO, batch: U256::ZERO }.abi_encode().into();
-        crate::abi::IMtxRelayFee::uaRelayCall { target: TARGET, callData: call, token: TOKEN, from: UA, payee: to, value: U256::from(value),
-            validUntil: U256::from(now() + 600), auth: UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x22; 96]), members: vec![] } }.abi_encode()
+        crate::abi::IRelayFeeRouter::relayCall { target: TARGET, callData: call, token: TOKEN, from: UA, payee: to, value: U256::from(value),
+            batch: U256::from(7), nonce: U256::ZERO, validUntil: U256::from(now() + 600), auth: UASig { keyData: Bytes::new(), signature: Bytes::from(vec![0x22; 96]), members: vec![] } }.abi_encode()
     }
 
-    /// CTR-MTX-27 for a UA payer: the call-table row `MtxRelayFee.uaRelay` takes the router's shape on ids (payee never
-    /// the executor's id) and `min_amount` as `relay`; the lane's cost is known only after the simulation (a UA verify
-    /// costs what its kind costs, millions of gas for a PQ kind), so the fee must also be worth, at the token's
-    /// `relay_fee.min_wei_value`, at least the quote = the gas limit × the max fee per gas the lane signs with. A token
-    /// without a price is refused for a UA payer; an address payer is priced only when its token has one.
+    /// CTR-MTX-27 for a derived payer: the call-table row `RelayFeeRouter.relay` takes the router's shape on ids (payee never
+    /// the executor's id) and `min_amount`; the lane's cost is known only after the simulation (a UA verify costs what its
+    /// kind costs, millions of gas for a PQ kind), so the fee must also be worth, at the token's `relay_fee.min_wei_value`, at
+    /// least the quote = the gas limit × the max fee per gas the lane signs with. A token without a price is refused for a
+    /// derived payer; a native payer (an EOA padded) is priced only when its token has one.
     #[tokio::test]
     async fn ua_relay_fee_needs_a_price_and_covers_the_quote() {
         let sig = |s: &str| -> [u8; 4] { alloy::primitives::keccak256(s)[..4].try_into().unwrap() };
-        assert_eq!(crate::abi::IUALedger::uaPayMetaCall::SELECTOR,
-            sig("uaPayMeta(bytes32,bytes32,uint256,bytes32,bytes,uint256,uint32,address,uint256,address,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
+        assert_eq!(crate::abi::IRelayFeeRouter::relayCall::SELECTOR,
+            sig("relay(address,bytes,address,bytes32,bytes32,uint256,uint256,uint256,uint256,(bytes,bytes,(uint16,(uint16,bytes)[],bytes)[]))"));
         let mut cfg = test_cfg("http://127.0.0.1:9");
         relay_params(&mut cfg, &[]);
         let rf = guard::RelayFee::from_cfg(&cfg).unwrap().unwrap();
@@ -2364,8 +3206,8 @@ pub(crate) mod tests {
         assert!(check(&ua_relay_data(open, 99)).unwrap_err().contains("below relay_fee.min_amount 100"));
         assert_eq!(check(&ua_relay_data(lane1().into_word(), 100)), Ok(TARGET), "bound to this lane");
         assert!(check(&ua_relay_data(B256::repeat_byte(0x5e), 100)).unwrap_err().contains("relay_bound_payee"));
-        let c = crate::abi::IMtxRelayFee::uaRelayCall::abi_decode(&ua_relay_data(open, 100)).unwrap();
-        let other = crate::abi::IMtxRelayFee::uaRelayCall { token: Address::repeat_byte(0x99), ..c }.abi_encode();
+        let c = crate::abi::IRelayFeeRouter::relayCall::abi_decode(&ua_relay_data(open, 100)).unwrap();
+        let other = crate::abi::IRelayFeeRouter::relayCall { token: Address::repeat_byte(0x99), ..c }.abi_encode();
         assert!(check(&other).unwrap_err().starts_with("TOKEN_NOT_SERVED"));
         // on the lane: no price ⇒ refused before any signature; then exactly the quote passes, one wei less does not
         let price = |p: u128| -> Vec<(&'static str, toml::Value)> {
@@ -2385,7 +3227,7 @@ pub(crate) mod tests {
             let e = rpc.lock().unwrap();
             (e.gas[0], e.fees[0], e.sent[0].2[..4].to_vec())
         };
-        assert_eq!(sel, crate::abi::IMtxRelayFee::uaRelayCall::SELECTOR);
+        assert_eq!(sel, crate::abi::IRelayFeeRouter::relayCall::SELECTOR);
         // fix 1 (I1): the quote is taken at the job's fee ceiling, FEE_HEADROOM x the first max fee
         let quote = u128::from(gas) * guard::FEE_HEADROOM * fee;
         assert_eq!(guard::relay_quote(gas, guard::fee_ceiling(fee), 0), quote);
@@ -2395,7 +3237,7 @@ pub(crate) mod tests {
         // fix 1 (minor 3): the quote follows the current fees, so below it is a retry, never a kill
         assert!(r[0].0 == "queued" && r[0].1.starts_with("RELAY_FEE_REFUSED") && r[0].1.contains("quote"), "{r:?}");
         assert!(rpc.lock().unwrap().sent.is_empty(), "nothing sent below the quote");
-        // an address payer: priced only when its token has a price (T17's min_amount rule otherwise)
+        // a native payer: priced only when its token has a price (T17's min_amount rule otherwise)
         let (r, _) = go(relay_data(ROUTER, 1_000), vec![]).await;
         assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
         let (r, _) = go(relay_data(ROUTER, 1_000), price((quote - 1) / 1_000)).await;
@@ -2518,7 +3360,7 @@ pub(crate) mod tests {
     /// subjects run, and the hold ends with the job. One key for both payer forms (`relay`'s address is its padded id).
     #[tokio::test]
     async fn a_relay_fee_job_holds_its_payer() {
-        let (url, rpc) = fake_evm(Evm { ua_nonce: Some(0), mtx_nonce: Some(0), ..Default::default() }).await;
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
         let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
         let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), priced(u128::MAX / 1_000)).await.unwrap();
         let last = |o: &Shared, id: i64| o.lock().unwrap().reports.iter().rev().find(|r| r["job_id"] == id).cloned().unwrap();
@@ -2594,5 +3436,524 @@ pub(crate) mod tests {
         let mut c = test_cfg("http://127.0.0.1:9");
         c.params.insert("l1_fee".into(), "arbitrum".into());
         assert!(guard::Guard::new(&c, Default::default()).is_err());
+    }
+
+    // ---- group 3f, PQZ verifier mode (spec 2026-11-06-attested-verify §11.1): the node rebuilds the verdict, holds no key
+
+    /// The fake token's verifier UA (a native id) and an `OFFCHAIN` token at epoch 2.
+    const VERIFIER: B256 = B256::repeat_byte(0x0e);
+    fn offchain() -> Evm {
+        Evm { mtx_nonce: Some(0), pqz_cfg: Some((1, VERIFIER, 2)), domain: Some("SCaaS PqzToken"), ..Default::default() }
+    }
+
+    /// A verifier's `UASig` (a native id's 65 bytes), `tag` its first byte.
+    fn verdict_auth(tag: u8) -> Value {
+        json!({"keyData": "0x", "signature": format!("0x{}", format!("{tag:02x}").repeat(65)), "members": []})
+    }
+
+    /// A job's `pqz_verdict` sub-object, or a verifier's answer of that shape.
+    fn verdict_json(epoch: u32, valid_until: u64, tag: u8) -> Value {
+        json!({"pqzVerifierEpoch": epoch, "validUntil": valid_until.to_string(), "auth": verdict_auth(tag)})
+    }
+
+    /// The reference PQZ verifier's answer (scaas-pqz-verifier `Signed`): its verdict (the node reads the epoch and `validUntil`
+    /// only) and its signature.
+    fn answer_json(epoch: u32, valid_until: u64, tag: u8) -> Value {
+        let z = format!("{:#x}", B256::ZERO);
+        json!({"pqzVerdict": {"token": format!("{TOKEN:#x}"), "chainId": "0x7a69", "proofSystemId": z, "statementHash": z, "proofHash": z,
+            "pqzVerifierEpoch": epoch, "validUntil": valid_until}, "pqzVerdictSig": verdict_auth(tag)})
+    }
+
+    fn with_verdict(mut j: Value, v: Value) -> Value {
+        j["op"]["args"]["pqz_verdict"] = v;
+        j
+    }
+
+    /// A fake PQZ verifier (off-chain): `POST /v1/pqz-verdict` answers `answer` with `status`, every request body kept.
+    #[derive(Default)]
+    struct Ver {
+        answer: Value,
+        status: u16,
+        reqs: Vec<Value>,
+    }
+    type VerRef = Arc<Mutex<Ver>>;
+
+    async fn fake_verifier(answer: Value) -> (String, VerRef) {
+        use axum::extract::State;
+        async fn h(State(s): State<VerRef>, body: axum::body::Bytes) -> (axum::http::StatusCode, String) {
+            let mut v = s.lock().unwrap();
+            v.reqs.push(serde_json::from_slice(&body).unwrap_or(Value::Null));
+            (axum::http::StatusCode::from_u16(if v.status == 0 { 200 } else { v.status }).unwrap(), v.answer.to_string())
+        }
+        let s: VerRef = Arc::new(Mutex::new(Ver { answer, ..Default::default() }));
+        let app = axum::Router::new().route("/v1/pqz-verdict", axum::routing::post(h)).route("/v1/pqz-verdict/probe", axum::routing::post(h))
+            .with_state(s.clone());
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, s)
+    }
+
+    /// An endpoint nothing listens on (connection refused at once).
+    const DEAD: &str = "http://127.0.0.1:9";
+
+    fn endpoints(list: Vec<String>) -> impl FnOnce(&mut ChainCfg) {
+        move |c: &mut ChainCfg| {
+            c.pqz_verifier.endpoints = list;
+            c.pqz_verifier.timeout_ms = 2_000;
+        }
+    }
+
+    /// The trailing `PqzSignedVerdict` of a sent PQZ debit (`name`'s row).
+    fn sent_verdict(name: &str, data: &[u8]) -> crate::abi::IPqzToken::PqzSignedVerdict {
+        let row = crate::typed::testkit::row_of(name, "pqz");
+        let vals = crate::typed::call_values(row, data).unwrap();
+        let v = vals.last().unwrap().abi_encode();
+        <crate::abi::IPqzToken::PqzSignedVerdict as SolValue>::abi_decode(&v).unwrap()
+    }
+
+    fn ua_sig(v: &Value) -> UASig {
+        UASig::abi_decode(&crate::typed::parse("UASig", v, "auth").unwrap().abi_encode()).unwrap()
+    }
+
+    /// The job's proof bytes (`args.proof`).
+    fn proof_of(j: &Value) -> Vec<u8> {
+        crate::typed::testkit::hex(&j["op"]["args"]["proof"])
+    }
+
+    /// Spec §11.1: the job's `pqz_verdict` carries the verifier's epoch, `validUntil` and signature only; the node rebuilds the
+    /// `PqzVerdict` they sign from the token (the target), the chain id, `proofSystemId()`, the statement the token's own view
+    /// builds for the job's named `args` and the relayed envelope's binding, and the job's proof, and sends that struct with
+    /// the job's signature last. The views it asked: the config, the binding of the envelope, the statement of the job's args.
+    #[tokio::test]
+    async fn pqz_verdict_subobject_builds_struct() {
+        let until = now() + 600;
+        let j = with_verdict(pqz_job(7), verdict_json(2, until, 0x7e));
+        let (r, rpc) = outcomes(offchain(), vec![j.clone()], |_| {}).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        let e = rpc.lock().unwrap();
+        let v = sent_verdict("UAPqzTransferSingle", &e.sent[0].2);
+        assert_eq!(v.pqzVerdict, crate::abi::IPqzToken::PqzVerdict { token: TOKEN, chainId: U256::from(31337), proofSystemId: PSID,
+            statementHash: alloy::primitives::keccak256(STATEMENT), proofHash: alloy::primitives::keccak256(proof_of(&j)),
+            pqzVerifierEpoch: 2, validUntil: until });
+        assert_eq!(v.sig, ua_sig(&verdict_auth(0x7e)), "the job's signature, as it named it");
+        // the statement view: the job's own `args` and the binding the token gave for its envelope
+        let st = e.views.iter().find(|i| i[..4] == [0x50, 0xf9, 0xbe, 0x2f]).expect("transferSingleStatement asked");
+        let ty = alloy::dyn_abi::DynSolType::parse(&format!("({},bytes32)", crate::typed::abi_of("PqzTransferArgs"))).unwrap();
+        let got = ty.abi_decode_params(&st[4..]).unwrap();
+        let want = crate::typed::parse("PqzTransferArgs", &j["op"]["args"]["args"], "args").unwrap();
+        assert_eq!(got.as_tuple().unwrap()[0], want, "the job's named args");
+        assert_eq!(got.as_tuple().unwrap()[1], alloy::dyn_abi::DynSolValue::FixedBytes(BINDING, 32), "the envelope's binding");
+        let b = e.views.iter().find(|i| i[..4] == crate::abi::IPqzToken::envelopeBindingCall::SELECTOR).expect("envelopeBinding asked");
+        let m = crate::abi::IPqzToken::envelopeBindingCall::abi_decode(b).unwrap().m;
+        assert_eq!((m.from, m.data.len()), (B256::repeat_byte(0xab), 0), "the job's envelope, no data");
+    }
+
+    /// Spec §11.1: an `OFFCHAIN` job without `pqz_verdict` is sent to the configured endpoints in order (`POST /v1/pqz-verdict`
+    /// with named fields: the token, the chain, the job's named op, the statement and proof the node rebuilt, the epoch); the
+    /// first answer decoded with the bounded `UASig` decoder is used. None answers (refused, too long, a `UASig` past the bound, a
+    /// non-2xx) ⇒ `PQZ_VERDICT_MISSING` back in the queue, zero sends; no endpoint at all ⇒ `dead` by name, nothing asked.
+    #[tokio::test]
+    async fn offchain_job_without_pqz_verdict_fetches_or_refuses() {
+        let until = now() + 600;
+        let (url, ver) = fake_verifier(answer_json(2, until, 0x7f)).await;
+        let (r, rpc) = outcomes(offchain(), vec![pqz_job(7)], endpoints(vec![DEAD.into(), url.clone()])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "the second endpoint answers: {r:?}");
+        let v = sent_verdict("UAPqzTransferSingle", &rpc.lock().unwrap().sent[0].2);
+        assert_eq!((v.sig, v.pqzVerdict.pqzVerifierEpoch, v.pqzVerdict.validUntil), (ua_sig(&verdict_auth(0x7f)), 2, until));
+        assert_eq!(v.pqzVerdict.statementHash, alloy::primitives::keccak256(STATEMENT));
+        let req = ver.lock().unwrap().reqs[0].clone();
+        let keys: Vec<&str> = req.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(keys, ["chainId", "op", "pqzVerifierEpoch", "proof", "statement", "token"], "named fields only: {req}");
+        assert_eq!((req["token"].as_str(), req["chainId"].as_u64(), req["pqzVerifierEpoch"].as_u64()),
+            (Some(format!("{TOKEN:#x}").as_str()), Some(31337), Some(2)));
+        assert_eq!(req["statement"], json!(format!("0x{}", alloy::hex::encode(STATEMENT))));
+        assert_eq!(req["proof"], pqz_job(7)["op"]["args"]["proof"]);
+        // `op` as the reference verifier's `Op` reads it: the entry, the args struct (the sol types' serde form), the binding
+        let op_keys: Vec<&str> = req["op"].as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(op_keys, ["args", "binding", "entry"], "the statement's inputs only: {}", req["op"]);
+        assert_eq!((req["op"]["entry"].as_str(), req["op"]["binding"].as_str()),
+            (Some("mtxConfidentialTransferSingle"), Some(format!("{BINDING:#x}").as_str())));
+        let job_args = &pqz_job(7)["op"]["args"];
+        assert_eq!(req["op"]["args"], crate::typed::to_serde_json("PqzTransferArgs",
+            &crate::typed::parse("PqzTransferArgs", &job_args["args"], "args").unwrap()), "the job's named args");
+        assert!(req["op"]["args"]["keyVersion"].is_u64() && req["op"]["args"]["validUntilBlock"].is_string(), "u64 numbers, u256 strings");
+        // none answers: refused, a non-2xx, an answer above `max_response_bytes`, a UASig past the 16-slot bound
+        let slot = json!({"index": 0, "members": [], "sig": "0x01"});
+        let mut wide = answer_json(2, until, 0x7f);
+        wide["pqzVerdictSig"]["members"] = json!(vec![slot; 17]);
+        for (answer, cap, why) in [(Value::Null, 0, "not an object"), (answer_json(2, until, 0x7f), 64, "above max_response_bytes"),
+            (wide, 0, "17 slots")] {
+            let (url, _) = fake_verifier(answer).await;
+            let (r, rpc) = outcomes(offchain(), vec![pqz_job(7)], move |c| {
+                endpoints(vec![DEAD.into(), url])(c);
+                if cap > 0 {
+                    c.pqz_verifier.max_response_bytes = cap;
+                }
+            }).await;
+            assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "{why}: {r:?}");
+            // Fable E N-8: the endpoints by index, never their URLs
+            assert!(r[0].1.contains("endpoint 1: ") && r[0].1.contains("endpoint 2: ") && !r[0].1.contains("127.0.0.1"), "{why}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
+        }
+        let (url, ver) = fake_verifier(answer_json(2, until, 0x7f)).await;
+        ver.lock().unwrap().status = 500;
+        let (r, rpc) = outcomes(offchain(), vec![pqz_job(7)], endpoints(vec![url])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "a 500 is no answer: {r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        let (r, rpc) = outcomes(offchain(), vec![pqz_job(7)], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "no endpoint: {r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty() && !rpc.lock().unwrap().calls.iter().any(|m| m == "eth_estimateGas"));
+    }
+
+    /// Spec §11.1: a `PRECOMPILE` token takes the empty verdict and never reads one, so a job naming `pqz_verdict` there is
+    /// refused `PQZ_VERDICT_NOT_EXPECTED`, zero sends; without it the job is sent with the empty verdict, no endpoint asked. A token
+    /// whose `pqzVerifyConfig()` reverts is no `OFFCHAIN` token: the same.
+    #[tokio::test]
+    async fn precompile_job_with_pqz_verdict_refused() {
+        let precompile = || Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
+        let j = with_verdict(pqz_job(7), verdict_json(0, now() + 600, 0x7e));
+        let (url, ver) = fake_verifier(answer_json(0, now() + 600, 0x7f)).await;
+        for e in [precompile(), Evm { mtx_nonce: Some(0), ..Default::default() }] {
+            let (r, rpc) = outcomes(e, vec![j.clone()], endpoints(vec![url.clone()])).await;
+            assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("PQZ_VERDICT_NOT_EXPECTED"), "{r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+        for e in [precompile(), Evm { mtx_nonce: Some(0), ..Default::default() }] {
+            let (r, rpc) = outcomes(e, vec![pqz_job(7)], endpoints(vec![url.clone()])).await;
+            assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+            let v = sent_verdict("UAPqzTransferSingle", &rpc.lock().unwrap().sent[0].2);
+            let empty = crate::abi::IPqzToken::PqzSignedVerdict { pqzVerdict: crate::abi::IPqzToken::PqzVerdict { token: Address::ZERO,
+                chainId: U256::ZERO, proofSystemId: B256::ZERO, statementHash: B256::ZERO, proofHash: B256::ZERO, pqzVerifierEpoch: 0,
+                validUntil: 0 }, sig: UASig { keyData: Bytes::new(), signature: Bytes::new(), members: vec![] } };
+            assert_eq!(v, empty, "the empty verdict");
+        }
+        assert!(ver.lock().unwrap().reqs.is_empty(), "no endpoint asked for a PRECOMPILE token");
+    }
+
+    /// Round 3t (CTR-PQZ-36, spec §10; N1): the fee pre-check before the verdict fetch, one source (the statement view's word
+    /// 256): an `OFFCHAIN` job without `pqz_fee` is `dead` `BAD_PAYLOAD: no pqz_fee`; a wrong one `PQZ_FEE_MISMATCH`, back in the
+    /// queue, never `dead` (a decrease may restore the word), zero sends and no endpoint asked; on a `PRECOMPILE` token a named
+    /// wrong one is the same, an absent one passes (the control: the right word is sent).
+    #[tokio::test]
+    async fn pqz_fee_precheck() {
+        let (url, ver) = fake_verifier(answer_json(2, now() + 600, 0x7f)).await;
+        let mut none = pqz_job(7);
+        none["op"]["args"].as_object_mut().unwrap().remove("pqz_fee");
+        let (r, rpc) = outcomes(offchain(), vec![none.clone()], endpoints(vec![url.clone()])).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("BAD_PAYLOAD: no pqz_fee"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        let mut wrong = pqz_job(7);
+        wrong["op"]["args"]["pqz_fee"] = json!("1");
+        let (r, rpc) = outcomes(Evm { pqz_vf: 2, ..offchain() }, vec![wrong.clone()], endpoints(vec![url.clone()])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_MISMATCH: proved 1, the token's fee word is 0"), "{r:?}");
+        assert!(r[0].1.contains("verifierFee 2,"), "the term in force (N2): {r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        assert!(ver.lock().unwrap().reqs.is_empty(), "the pre-check runs before the verdict fetch");
+        let precompile = || Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
+        let (r, _) = outcomes(precompile(), vec![wrong], endpoints(vec![url.clone()])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_MISMATCH"), "PRECOMPILE, named: {r:?}");
+        let (r, _) = outcomes(precompile(), vec![none], endpoints(vec![url.clone()])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "PRECOMPILE, absent: {r:?}");
+        let (r, _) = outcomes(offchain(), vec![pqz_job(7)], endpoints(vec![url])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "the control: {r:?}");
+    }
+
+    /// Spec §11.1: a verdict at another epoch than the token's is re-fetched once: the job's stale one ⇒ one request; the
+    /// endpoint's answer still stale ⇒ back in the queue, zero sends (never a second re-fetch); a job without a verdict ⇒ the
+    /// fetch and one re-fetch.
+    #[tokio::test]
+    async fn pqz_verdict_epoch_mismatch_refetch_once() {
+        let until = now() + 600;
+        let stale = with_verdict(pqz_job(7), verdict_json(1, until, 0x7e));
+        let (url, ver) = fake_verifier(answer_json(2, until, 0x7f)).await;
+        let (r, rpc) = outcomes(offchain(), vec![stale.clone()], endpoints(vec![url])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        assert_eq!(sent_verdict("UAPqzTransferSingle", &rpc.lock().unwrap().sent[0].2).sig, ua_sig(&verdict_auth(0x7f)));
+        assert_eq!(ver.lock().unwrap().reqs.len(), 1);
+        let (url, ver) = fake_verifier(answer_json(1, until, 0x7f)).await;
+        let (r, rpc) = outcomes(offchain(), vec![stale], endpoints(vec![url.clone()])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_MISSING"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        assert_eq!(ver.lock().unwrap().reqs.len(), 1, "one re-fetch on a mismatch");
+        let (r, _) = outcomes(offchain(), vec![pqz_job(7)], endpoints(vec![url])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued", "{r:?}");
+        assert_eq!(ver.lock().unwrap().reqs.len(), 3, "the fetch and one re-fetch");
+        // an expiring verdict (inside `valid_margin_secs`) is no usable verdict either
+        let (url, ver) = fake_verifier(answer_json(2, until, 0x7f)).await;
+        let soon = with_verdict(pqz_job(7), verdict_json(2, now() + 5, 0x7e));
+        let (r, _) = outcomes(offchain(), vec![soon], endpoints(vec![url])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        assert_eq!(ver.lock().unwrap().reqs.len(), 1);
+    }
+
+    /// Spec §11.1: the token's verdict refusals are named and never `dead` while the op may land with another verdict:
+    /// `PqzVerdictMismatch` in the simulation back in the queue; after an indexed `UAPqzKeyCurrent` of a party it is
+    /// `PQZ_KEY_ROTATED` (T55); a revoked verifier (`pqzVerifyConfig().verifier == 0`) back in the queue, nothing fetched.
+    #[tokio::test]
+    async fn pqz_verdict_mismatch_not_dead() {
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        let (r, rpc) = outcomes(Evm { sim: Some("verdict_mismatch"), ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: PqzVerdictMismatch"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty());
+        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch"), pqz_rotated: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_KEY_ROTATED: PqzVerdictMismatch"), "{r:?}");
+        let (url, ver) = fake_verifier(answer_json(2, now() + 600, 0x7f)).await;
+        let revoked = Evm { pqz_cfg: Some((1, B256::ZERO, 3)), ..offchain() };
+        let (r, rpc) = outcomes(revoked, vec![pqz_job(7)], endpoints(vec![url])).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.contains("PqzVerifierRevoked"), "{r:?}");
+        assert!(rpc.lock().unwrap().sent.is_empty() && ver.lock().unwrap().reqs.is_empty());
+    }
+
+    /// Round 3t (CTR-PQZ-36, spec §10; N3): a PQZ debit's simulation reverting `AuthRejected()` or `PqzVerdictMismatch(3)` after
+    /// an indexed `VerifierFeeSet` of its token is `PQZ_FEE_MISMATCH`, back in the queue, never `dead`, zero sends; the controls:
+    /// `AuthRejected` without the event is `dead`, `PqzVerdictMismatch` without it the plain `PQZ_VERDICT_REFUSED`.
+    #[tokio::test]
+    async fn auth_rejected_after_fee_set_not_dead() {
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        for sim in ["auth_rejected", "verdict_mismatch"] {
+            let (r, rpc) = outcomes(Evm { sim: Some(sim), fee_set: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+            assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_MISMATCH: ") && r[0].1.ends_with("after VerifierFeeSet"),
+                "{sim}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{sim}");
+        }
+        let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AuthRejected"), "{r:?}");
+        // Fable 3r3s3t P3-4: a cancel `VerifierFeeSet(cur, cur)` moves nothing (`dead`); an unreadable log is `PQZ_FEE_LOG_UNREAD`,
+        // back in the queue, never counted as a move
+        let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), fee_set: true, fee_cancel: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "dead" && r[0].1.starts_with("AuthRejected"), "a cancel: {r:?}");
+        let (r, _) = outcomes(Evm { sim: Some("auth_rejected"), logs_down: true, ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_FEE_LOG_UNREAD: "), "{r:?}");
+        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch"), ..offchain() }, vec![j.clone()], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: "), "{r:?}");
+        // Fable E N-11: the field is parsed whole: field 30 after a `VerifierFeeSet` is no fee move
+        let (r, _) = outcomes(Evm { sim: Some("verdict_mismatch_30"), fee_set: true, ..offchain() }, vec![j], |_| {}).await;
+        assert!(r.len() == 1 && r[0].0 == "queued" && r[0].1.starts_with("PQZ_VERDICT_REFUSED: PqzVerdictMismatch"), "{r:?}");
+    }
+
+    /// Fable 3r3s3t P3-3 (spec 3t §10: the fee pre-check "again before every send"): a stuck PQZ debit is re-checked before its
+    /// replacement; the token's fee word moved since the first send: the nonce is gap-filled (a 0-value self-send, never the
+    /// debit again) and the job is `PQZ_FEE_MISMATCH`, back in the queue; the control: the word unchanged, the debit is bumped.
+    #[tokio::test]
+    async fn a_stuck_pqz_debit_runs_the_fee_check_before_its_replacement() {
+        for moved in [false, true] {
+            let (url, rpc) = fake_evm(offchain()).await;
+            let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+            let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            s.poll_outbox().await;
+            assert_eq!(states(&o), ["signed", "broadcast"]);
+            if moved {
+                rpc.lock().unwrap().stmt_fee = Some(5);
+            }
+            s.track().await;
+            let me = s.address();
+            let sent = rpc.lock().unwrap().sent.clone();
+            assert_eq!(sent.len(), 2, "{moved}");
+            if moved {
+                assert!(sent[1].1 == me && sent[1].2.is_empty(), "a gap-filler, never the debit again");
+                let last = o.lock().unwrap().reports.last().cloned().unwrap();
+                assert_eq!(last["chain_state"], "queued");
+                assert!(last["error"].as_str().unwrap().starts_with("PQZ_FEE_MISMATCH: proved 0, the token's fee word is 5"), "{last}");
+            } else {
+                assert_eq!(sent[1].2, sent[0].2, "the debit bumped");
+                assert_eq!(states(&o), ["signed", "broadcast", "broadcast"]);
+            }
+        }
+    }
+
+    /// Fable recheck R-1 (and E N-3): a stuck PQZ debit whose verdict ran out while its envelope lives is re-filled with a renewed
+    /// verdict and re-sent, and the work's deadline follows the renewed verdict (up to the envelope's): never reported `dead`
+    /// while that replacement may land.
+    #[tokio::test]
+    async fn a_stuck_pqz_debit_with_an_expired_verdict_is_renewed_never_dead() {
+        let v2 = now() + 600;
+        let (ver, _) = fake_verifier(answer_json(2, v2, 0x7f)).await;
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 2, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| {
+            endpoints(vec![ver])(c);
+            c.pqz_verifier.valid_margin_secs = 0;
+        }).await.unwrap();
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        tokio::time::sleep(Duration::from_secs(3)).await; // the job's own verdict has run out; its envelope lives
+        s.track().await;
+        assert_eq!(states(&o), ["signed", "broadcast", "broadcast"], "re-sent with a renewed verdict, never dead");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].2 != sent[0].2 && sent_verdict("UAPqzTransferSingle", &sent[1].2).pqzVerdict.validUntil == v2);
+        let w = s.inflight.values().next().and_then(|x| x.work.clone()).expect("still tracked");
+        assert_eq!(w.valid_until, w.envelope_until.min(v2), "the deadline follows the renewed verdict");
+    }
+
+    /// Fable E N-3 (recheck): a job awaiting retry whose verdict, not its envelope, ran out is back in the queue
+    /// (`PQZ_VERDICT_EXPIRED`), never `dead`, nothing sent; the control: the envelope expired too, `dead`.
+    #[tokio::test]
+    async fn a_retry_past_its_verdict_only_requeues() {
+        for (envelope_live, state) in [(true, "queued"), (false, "dead")] {
+            let (url, rpc) = fake_evm(offchain()).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (mut w, _) = work_of_op(Some(7), &pqz_job(7)["op"], None).unwrap();
+            (w.valid_until, w.envelope_until) = (now() - 1, if envelope_live { now() + 600 } else { now() - 1 });
+            s.retry.push_back((w, None));
+            s.drain_retry().await;
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{last}");
+            if envelope_live {
+                assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_EXPIRED"), "{last}");
+            }
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
+    /// Fable recheck R-2: a re-fill refused by a rule (here: the verdict at an old epoch, no endpoint to renew it) gap-fills the
+    /// nonce and puts the job back in the queue, never `dead`: the first transaction may still land.
+    #[tokio::test]
+    async fn a_refused_re_fill_requeues_never_dead() {
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        rpc.lock().unwrap().pqz_cfg = Some((1, VERIFIER, 3));
+        s.track().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "queued", "{last}");
+        assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_MISSING"), "{last}");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].1 == s.address() && sent[1].2.is_empty(), "a gap-filler");
+        // recheck S-1: the first transaction wins the nonce (the debit landed); the job polled again is `consumed`, never `dead`
+        rpc.lock().unwrap().receipts.insert(sent[0].0, true);
+        rpc.lock().unwrap().mtx_nonce = Some(u64::MAX);
+        s.track().await;
+        assert_eq!(s.inflight_count(), 0);
+        o.lock().unwrap().jobs.push(with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e)));
+        s.poll_outbox().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "consumed", "{last}");
+    }
+
+    /// Fable recheck S-2: a PQZ job past its envelope is `dead` before the fill (whose refusal, here a fee mismatch, would requeue
+    /// it on every poll), nothing sent; the control: the envelope live, the same job is `PQZ_FEE_MISMATCH`, queued.
+    #[tokio::test]
+    async fn a_job_past_its_envelope_is_dead_before_the_fill() {
+        for (expired, state) in [(true, "dead"), (false, "queued")] {
+            let (url, rpc) = fake_evm(Evm { stmt_fee: Some(5), ..offchain() }).await;
+            let (odoo, o) = fake_odoo(Fake { tokens: toks(), ..Default::default() }).await;
+            let mut s = lane(&url, odoo, 1, InflightSet::default()).await;
+            let (mut w, _) = work_of_op(Some(7), &with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e))["op"], None).unwrap();
+            if expired {
+                (w.valid_until, w.envelope_until) = (now() - 1, now() - 1);
+            }
+            s.submit(w).await;
+            let last = o.lock().unwrap().reports.last().cloned().unwrap();
+            assert_eq!(last["chain_state"], state, "{last}");
+            let want = if expired { "expired before submit" } else { "PQZ_FEE_MISMATCH" };
+            assert!(last["error"].as_str().unwrap().starts_with(want), "{last}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+    }
+
+    /// Fable recheck S-3: a stuck debit past its verdict whose re-fill renews nothing (the token's view refuses the op) is never
+    /// re-sent as it is: its nonce is gap-filled and the job back in the queue.
+    #[tokio::test]
+    async fn a_re_fill_that_renews_nothing_gap_fills() {
+        let (url, rpc) = fake_evm(offchain()).await;
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 2, 0x7e));
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![j], tokens: toks(), ..Default::default() }).await;
+        let mut s = lane_cfg(&url, odoo, 1, InflightSet::default(), |c| c.pqz_verifier.valid_margin_secs = 0).await.unwrap();
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        rpc.lock().unwrap().stmt_revert = true;
+        s.track().await;
+        let last = o.lock().unwrap().reports.last().cloned().unwrap();
+        assert_eq!(last["chain_state"], "queued", "{last}");
+        assert!(last["error"].as_str().unwrap().starts_with("PQZ_VERDICT_EXPIRED"), "{last}");
+        let sent = rpc.lock().unwrap().sent.clone();
+        assert!(sent.len() == 2 && sent[1].1 == s.address() && sent[1].2.is_empty(), "a gap-filler, never the stale debit");
+    }
+
+    /// The node never asks for the PQZ precompile on an `OFFCHAIN` token's job (spec §3, O1: OFFCHAIN ignores whether a
+    /// precompile exists): sent on a chain where nothing has code at `0x…5caa0f01`.
+    #[tokio::test]
+    async fn offchain_job_not_refused_without_precompile() {
+        let j = with_verdict(pqz_job(7), verdict_json(2, now() + 600, 0x7e));
+        let (r, rpc) = outcomes(offchain(), vec![j], |_| {}).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast"], "{r:?}");
+        let pqz: Address = "0x000000000000000000000000000000005caa0f01".parse().unwrap();
+        assert!(!rpc.lock().unwrap().code_asked.contains(&pqz));
+    }
+
+    /// A shield (`UAShield`) and a wrap-shield (`WrapShield`) job of the payer on the fake PQZ token.
+    fn shield_jobs() -> Vec<Value> {
+        let v = crate::typed::testkit::vectors();
+        let mut out = vec![];
+        for (id, name) in [(7, "UAShield"), (8, "WrapShield")] {
+            let mut op = crate::typed::testkit::op_of(name, "pqz", &v).unwrap();
+            op["token"] = json!(format!("{TOKEN:#x}"));
+            op["validUntil"] = json!((now() + 600).to_string());
+            let from = if name == "UAShield" { format!("{:#x}", payer().into_word()) } else { format!("{:#x}", payer()) };
+            op["envelope"]["from"] = json!(from);
+            op["envelope"]["validUntil"] = json!((now() + 600).to_string());
+            let sentinel = json!(format!("0x{}", "11".repeat(65)));
+            if name == "UAShield" { op["auth"]["signature"] = sentinel } else { op["signature"] = sentinel }
+            let kind = if name == "UAShield" { "ua_metatx" } else { "metatx" };
+            out.push(json!({"id": id, "kind": kind, "op": op}));
+        }
+        out
+    }
+
+    /// Spec §11.1 (C8): with `refuse_shield_when_unserved` on, a shield or wrap-shield into an `OFFCHAIN` token whose verifier
+    /// is revoked (the endpoints serving) or whose endpoints none serves it (none answers, its probe refused, none configured;
+    /// the verifier set) is refused `PQZ_VERIFIER_UNREACHABLE`, zero sends; the controls: the verifier set and an endpoint whose
+    /// probe answers, a `PRECOMPILE` token.
+    #[tokio::test]
+    async fn shield_refused_when_unserved_and_enabled() {
+        let (url, ver) = fake_verifier(answer_json(2, now() + 600, 0x7f)).await;
+        let (refusing, r) = fake_verifier(json!({"error": "NOT_THIS_VERIFIER", "detail": "x"})).await;
+        r.lock().unwrap().status = 422;
+        let on = |urls: Vec<String>| move |c: &mut ChainCfg| {
+            endpoints(urls)(c);
+            c.pqz_verifier.refuse_shield_when_unserved = true;
+        };
+        let revoked = Evm { pqz_cfg: Some((1, B256::ZERO, 3)), ..offchain() };
+        for (e, urls, why) in [(revoked, vec![url.clone()], "revoked"), (offchain(), vec![refusing.clone()], "probe refused"),
+            (offchain(), vec![], "no endpoint")] {
+            let (r, rpc) = outcomes(e, shield_jobs(), on(urls)).await;
+            assert!(r.len() == 2 && r.iter().all(|x| x.0 == "dead" && x.1.starts_with("PQZ_VERIFIER_UNREACHABLE")), "{why}: {r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty(), "{why}");
+        }
+        // Fable E N-2: a probe with a transport error (nothing listens) or a 5xx (recheck R-5) is no answer: back in the queue,
+        // never `dead`
+        let (busy, b) = fake_verifier(json!({"error": "upstream"})).await;
+        b.lock().unwrap().status = 503;
+        for urls in [vec![DEAD.to_string()], vec![refusing.clone(), DEAD.to_string()], vec![busy]] {
+            let (r, rpc) = outcomes(offchain(), shield_jobs(), on(urls)).await;
+            assert!(r.len() == 2 && r.iter().all(|x| x.0 == "queued" && x.1.starts_with("PQZ_VERIFIER_PROBE_UNREAD")), "{r:?}");
+            assert!(rpc.lock().unwrap().sent.is_empty());
+        }
+        let precompile = Evm { mtx_nonce: Some(0), pqz_cfg: Some((0, B256::ZERO, 0)), ..Default::default() };
+        for (e, urls) in [(offchain(), vec![DEAD.to_string(), refusing, url.clone()]), (precompile, vec![])] {
+            let (r, rpc) = outcomes(e, shield_jobs(), on(urls)).await;
+            assert_eq!(states_of(&r), ["signed", "broadcast", "signed", "broadcast"], "{r:?}");
+            assert_eq!(rpc.lock().unwrap().sent.len(), 2);
+        }
+        let probe = ver.lock().unwrap().reqs.last().cloned().unwrap();
+        assert_eq!((probe["token"].as_str(), probe["chainId"].as_u64()), (Some(format!("{TOKEN:#x}").as_str()), Some(31337)), "the probe");
+    }
+
+    /// The switch is off by default: a shield into a token whose verifier is revoked and that no endpoint serves is sent.
+    #[tokio::test]
+    async fn shield_sent_when_disabled() {
+        let revoked = Evm { pqz_cfg: Some((1, B256::ZERO, 3)), ..offchain() };
+        let (r, rpc) = outcomes(revoked, shield_jobs(), endpoints(vec![DEAD.into()])).await;
+        assert_eq!(states_of(&r), ["signed", "broadcast", "signed", "broadcast"], "{r:?}");
+        assert_eq!(rpc.lock().unwrap().sent.len(), 2);
+        assert!(!crate::config::PqzVerifierCfg::default().refuse_shield_when_unserved);
     }
 }
