@@ -255,6 +255,11 @@ every tool; an NFC and an NFD form of one non-ASCII passphrase give one BIP-39 s
 The vectors pin both rows (§12.2); the app warns on a non-ASCII passphrase (app contract §2.3). The mnemonic enters as entropy, so its
 case, spacing and normalization do not matter.
 
+**Residual (T13 C5, coordinator 2026-11-17, no code).** Nothing in `ua-rs` detects the second account: the store checks the BIP-39
+seed (NFKD) against the manifest's first UA, so a wallet made with an NFC passphrase and opened with its NFD spelling passes, every
+UA and every other network match, and the Polkadot address differs in silence. The manifest records no Polkadot public key to
+compare. The front-end warning on a non-ASCII passphrase is the app contract's (§2.3); the derivation rule (R3) stays.
+
 ### 7.2 Key expansion and the bare account (**follows** R4)
 
 The bare account (no junction) is `MiniSecretKey::from_bytes(mini).expand_to_keypair(ExpansionMode::Ed25519)` (schnorrkel 0.11):
