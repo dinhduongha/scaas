@@ -442,3 +442,136 @@ fn is_contract_and_classify_cases() {
     assert_eq!(classify(&resp(-32000, "execution aborted (timeout = 5s)", None)), SimError::Transport("execution aborted (timeout = 5s)".into()));
     assert_eq!(classify(&resp(-32000, "header not found", None)), SimError::Transport("header not found".into()));
 }
+
+// ---------------------------------------------------------------- plan T6: pinned reads, strict majority over fakes
+
+/// A header of the fake chain: block `n`'s hash is `n` as a word (another fork adds `fork`).
+fn header_of(n: u64, fork: u64) -> Value {
+    block(n, B256::from(U256::from(n + fork)))
+}
+
+fn num(v: &Value) -> u64 {
+    u64::from_str_radix(v.as_str().unwrap().trim_start_matches("0x"), 16).unwrap()
+}
+
+fn strict(urls: &[&str]) -> EvmPool {
+    let e = urls.iter().map(|u| scaas_rpc::Endpoint::named(u).unwrap()).collect();
+    EvmPool::connect(NodeList::new(e, Policy::StrictMajority, 5_000, 5_000, 20_000).unwrap(), 296, Some(genesis())).unwrap()
+}
+
+/// A chain at head 0x20 whose storage word is 5, recording each `eth_getStorageAt`'s block parameter.
+static PINNED: std::sync::Mutex<Vec<Value>> = std::sync::Mutex::new(Vec::new());
+fn pinned_rpc(r: &Value) -> Value {
+    match r["method"].as_str() {
+        Some("eth_blockNumber") => json!({"result": "0x20"}),
+        Some("eth_getBlockByNumber") => json!({"result": header_of(num(&r["params"][0]), 0)}),
+        Some("eth_getStorageAt") => {
+            PINNED.lock().unwrap().push(r["params"][2].clone());
+            json!({"result": format!("0x{:064x}", 5)})
+        }
+        _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+    }
+}
+
+#[tokio::test]
+async fn pinned_reads_name_the_block_by_hash() {
+    let (a, _) = fake_rpc(pinned_rpc).await;
+    let p = sdk_pool(&[&a], 5_000);
+    let r = p.read_at_block(scaas_rpc::pool::BlockChoice::Depth(1), Purpose::Plain, |at| {
+        let p = &p;
+        async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
+    }).await.unwrap();
+    assert_eq!((r.value, r.number, r.hash), (U256::from(5), 0x1f, B256::from(U256::from(0x1f))));
+    // other tests read this fake too: every storage read it saw named its block by hash
+    let seen = PINNED.lock().unwrap().clone();
+    let want = json!({"blockHash": format!("{:#x}", B256::from(U256::from(0x1f))), "requireCanonical": true});
+    assert!(!seen.is_empty() && seen.iter().all(|b| *b == want), "EIP-1898: {seen:?}");
+}
+
+/// Under failover, endpoint 0's header at the read's block moves between the read and its re-check: its answer is not used
+/// (`BlockChanged`); the read runs again, whole, on endpoint 1. Control: endpoint 1 alone answers.
+static REORG: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+fn reorging(r: &Value) -> Value {
+    match r["method"].as_str() {
+        Some("eth_blockNumber") => json!({"result": "0x20"}),
+        Some("eth_getBlockByNumber") => {
+            let k = REORG.fetch_add(1, SeqCst);
+            json!({"result": header_of(num(&r["params"][0]), if k == 0 { 0 } else { 7 })})
+        }
+        Some("eth_getStorageAt") => json!({"result": format!("0x{:064x}", 9)}),
+        _ => json!({"error": {"code": -32601, "message": "no such method"}}),
+    }
+}
+
+#[tokio::test]
+async fn a_reorg_between_read_and_recheck_is_block_changed() {
+    let (moving, _) = fake_rpc(reorging).await;
+    let (steady, _) = fake_rpc(pinned_rpc).await;
+    let p = sdk_pool(&[&moving, &steady], 5_000);
+    let r = p.read_at_block(scaas_rpc::pool::BlockChoice::Depth(1), Purpose::Plain, |at| {
+        let p = &p;
+        async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
+    }).await.unwrap();
+    assert_eq!((r.value, r.members), (U256::from(5), vec![1]), "endpoint 0's answer is not used");
+}
+
+/// A header that answers another number than asked is that endpoint's failure.
+fn wrong_number(r: &Value) -> Value {
+    match r["method"].as_str() {
+        Some("eth_blockNumber") => json!({"result": "0x20"}),
+        Some("eth_getBlockByNumber") => json!({"result": header_of(num(&r["params"][0]) + 1, 0)}),
+        _ => json!({"result": format!("0x{:064x}", 9)}),
+    }
+}
+
+#[tokio::test]
+async fn a_header_that_answers_another_number_is_that_endpoints_failure() {
+    let (liar, _) = fake_rpc(wrong_number).await;
+    let (steady, _) = fake_rpc(pinned_rpc).await;
+    let p = sdk_pool(&[&liar, &steady], 5_000);
+    let r = p.read_at_block(scaas_rpc::pool::BlockChoice::Depth(1), Purpose::Plain, |at| {
+        let p = &p;
+        async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
+    }).await.unwrap();
+    assert_eq!(r.members, vec![1]);
+    let only = sdk_pool(&[&liar], 5_000);
+    assert!(only.read_at_block(scaas_rpc::pool::BlockChoice::Depth(1), Purpose::Plain, |at| {
+        let p = &only;
+        async move { p.storage_at(&at, Address::ZERO, U256::ZERO).await }
+    }).await.is_err(), "alone: no read");
+}
+
+/// F14: under strict majority the fee is the need-th highest of the endpoints' values: one endpoint answering a priority fee
+/// 10^6 times the others' moves nothing. Control: failover takes the first endpoint's.
+fn fee_rpc(prio: u64) -> Value {
+    json!({"result": {"oldestBlock": "0x1", "baseFeePerGas": ["0x64", "0x64"], "gasUsedRatio": [0.5], "reward": [[format!("{prio:#x}")]]}})
+}
+fn fees_low(r: &Value) -> Value {
+    if r["method"] == "eth_feeHistory" { fee_rpc(10) } else { json!({"result": "0x20"}) }
+}
+fn fees_high(r: &Value) -> Value {
+    if r["method"] == "eth_feeHistory" { fee_rpc(10_000_000) } else { json!({"result": "0x20"}) }
+}
+
+#[tokio::test]
+async fn fees_under_strict_majority_are_the_need_th_highest() {
+    let (a, _) = fake_rpc(fees_low).await;
+    let (b, _) = fake_rpc(fees_high).await;
+    let (c, _) = fake_rpc(fees_low).await;
+    let honest = sdk_pool(&[&a], 5_000).fees(Purpose::Plain).await.unwrap();
+    let agreed = strict(&[&b, &a, &c]).fees(Purpose::Plain).await.unwrap();
+    assert_eq!(agreed, honest, "the liar moves neither field");
+    let first = sdk_pool(&[&b, &a, &c], 5_000).fees(Purpose::Plain).await.unwrap();
+    assert!(first.max_priority_fee_per_gas > honest.max_priority_fee_per_gas, "control: failover takes endpoint 0's");
+}
+
+#[tokio::test]
+async fn logs_range_refuses_an_unbounded_or_too_wide_range() {
+    let (a, n) = fake_rpc(pinned_rpc).await;
+    let p = sdk_pool(&[&a], 5_000);
+    let f = alloy::rpc::types::Filter::new();
+    for (from, to) in [(10, 9), (0, scaas_rpc::evm::LOG_RANGE_MAX), (5, 5 + scaas_rpc::evm::LOG_RANGE_MAX)] {
+        assert_eq!(p.logs_range(from, to, f.clone(), Purpose::Plain).await.unwrap_err().code(), "Argument", "{from}..{to}");
+    }
+    assert_eq!(n.load(SeqCst), 0, "before any request");
+}

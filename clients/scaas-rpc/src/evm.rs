@@ -7,7 +7,7 @@
 use crate::endpoint::{NodeList, Purpose};
 use crate::error::{EndpointFailure, FailureKind, RpcError};
 use crate::http::{BoundedRpc, Http, ANSWER_MAX};
-use crate::pool::{Answer, BlockChoice, Pool, Probe, ReadError};
+use crate::pool::{Agreed, Answer, BlockChoice, Pool, Probe, ReadAt, ReadError};
 use alloy::eips::BlockNumberOrTag;
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{Address, Bytes, B256};
@@ -408,17 +408,6 @@ impl EvmPool {
 
     // ------------------------------------------------------------ the SDK's head reads (failover; strict majority: plan T6)
 
-    /// `who`'s pending nonce, failed over (CLI-RPC-04); the caller counts its own sends on top.
-    pub async fn pending_nonce(&self, who: Address, purpose: Purpose) -> Result<u64, RpcError> {
-        self.failover_read(purpose, |p| async move { p.get_transaction_count(who).pending().await }).await
-    }
-
-    /// EIP-1559 fee data, failed over; under `failover` the caller caps fee and gas from its own configuration (CLI-RPC-05).
-    pub async fn fees(&self, purpose: Purpose) -> Result<Fees, RpcError> {
-        let f = self.failover_read(purpose, |p| async move { p.estimate_eip1559_fees().await }).await?;
-        Ok(Fees { max_fee_per_gas: f.max_fee_per_gas.max(1), max_priority_fee_per_gas: f.max_priority_fee_per_gas })
-    }
-
     /// A receipt, failed over: a value, never terminal (`tx_state` decides, CLI-RPC-09).
     pub async fn receipt(&self, id: B256) -> Result<Option<alloy::rpc::types::TransactionReceipt>, RpcError> {
         self.failover_read(Purpose::Plain, |p| async move { p.get_transaction_receipt(id).await }).await
@@ -537,5 +526,205 @@ impl Probe for EvmPool {
             return Err(EndpointFailure::new(i, FailureKind::AnswerMalformed, &format!("asked block {number}, answered {}", b.header.number)));
         }
         Ok(b.header.hash)
+    }
+}
+
+// ---------------------------------------------------------------- plan T6: pinned reads and strict majority (CLI-RPC-05)
+
+/// The most blocks one [`EvmPool::logs_range`] covers (F23): a caller pages a longer history itself.
+pub const LOG_RANGE_MAX: u64 = 10_000;
+
+/// A log as an agreed read compares it (spec §4.4; an honest client's extra fields are not compared, I1).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LogAt {
+    pub block_hash: Option<B256>,
+    pub tx_hash: Option<B256>,
+    pub log_index: Option<u64>,
+    pub address: Address,
+    pub topics: Vec<B256>,
+    pub data: Bytes,
+}
+
+impl From<&Log> for LogAt {
+    fn from(l: &Log) -> Self {
+        Self { block_hash: l.block_hash, tx_hash: l.transaction_hash, log_index: l.log_index, address: l.address(),
+            topics: l.topics().to_vec(), data: l.data().data.clone() }
+    }
+}
+
+/// A receipt as compared: counted only when its block hash is the endpoint's header hash at its number.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReceiptAt {
+    pub block_hash: B256,
+    pub block_number: u64,
+    pub status: bool,
+    pub gas_used: u64,
+    pub logs: Vec<LogAt>,
+}
+
+/// A transaction by hash as compared.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TxAt {
+    pub block_hash: Option<B256>,
+    pub block_number: Option<u64>,
+    pub from: Address,
+    pub nonce: u64,
+}
+
+/// Every request of a pinned read names its block by hash (EIP-1898, `requireCanonical`).
+pub fn pinned(at: &ReadAt<B256>) -> alloy::eips::BlockId {
+    alloy::eips::BlockId::Hash(alloy::eips::RpcBlockHash { block_hash: at.hash, require_canonical: Some(true) })
+}
+
+impl EvmPool {
+    /// A read pinned to one block, by the list's policy (spec §4.4): under `strict_majority` the agreed read; under `failover`
+    /// one endpoint names its block for `choice`, reads its header there, runs `f` pinned to that hash, and reads the header
+    /// again (a moved hash is that endpoint's failure, `BlockChanged`).
+    pub async fn read_at_block<T, F, Fut>(&self, choice: BlockChoice, purpose: Purpose, f: F) -> Result<Agreed<T, B256>, RpcError>
+    where
+        T: Clone + PartialEq,
+        F: Fn(ReadAt<B256>) -> Fut,
+        Fut: Future<Output = Result<T, ReadError>>,
+    {
+        if self.pool.policy() == crate::Policy::StrictMajority {
+            return self.pool.agree(self, choice, purpose, f).await;
+        }
+        let f = &f;
+        let a = self.pool.failover(self, purpose, |i| async move {
+            let number = self.named(i, choice, None).await?;
+            let hash = self.header(i, number, None).await?;
+            let v = f(ReadAt { endpoint: i, number, hash, deadline: None }).await?;
+            if self.header(i, number, None).await? != hash {
+                return Err(ReadError::Failure(EndpointFailure::new(i, FailureKind::BlockChanged, &format!("block {number} changed"))));
+            }
+            Ok((v, number, hash))
+        }).await?;
+        let (value, number, hash) = a.value;
+        Ok(Agreed { value, number, hash, members: vec![a.endpoint], highest_named: number })
+    }
+
+    /// `eth_call` at the read's block (by hash).
+    pub async fn call_at(&self, at: &ReadAt<B256>, to: Address, data: Bytes) -> Result<Bytes, ReadError> {
+        let tx = TransactionRequest::default().with_to(to).with_input(data);
+        self.at(at.endpoint, at.deadline).call(tx).block(pinned(at)).await.map_err(|e| read_error(at.endpoint, &e, self.decode))
+    }
+    /// `eth_getStorageAt` at the read's block.
+    pub async fn storage_at(&self, at: &ReadAt<B256>, who: Address, slot: alloy::primitives::U256) -> Result<alloy::primitives::U256, ReadError> {
+        self.at(at.endpoint, at.deadline).get_storage_at(who, slot).block_id(pinned(at)).await
+            .map_err(|e| read_error(at.endpoint, &e, self.decode))
+    }
+    /// `eth_getCode` at the read's block.
+    pub async fn code_at(&self, at: &ReadAt<B256>, who: Address) -> Result<Bytes, ReadError> {
+        self.at(at.endpoint, at.deadline).get_code_at(who).block_id(pinned(at)).await.map_err(|e| read_error(at.endpoint, &e, self.decode))
+    }
+    /// `eth_getBalance` at the read's block.
+    pub async fn balance_at(&self, at: &ReadAt<B256>, who: Address) -> Result<alloy::primitives::U256, ReadError> {
+        self.at(at.endpoint, at.deadline).get_balance(who).block_id(pinned(at)).await.map_err(|e| read_error(at.endpoint, &e, self.decode))
+    }
+    /// The committed nonce of `who` at the read's block.
+    pub async fn nonce_at_block(&self, at: &ReadAt<B256>, who: Address) -> Result<u64, ReadError> {
+        self.at(at.endpoint, at.deadline).get_transaction_count(who).block_id(pinned(at)).await
+            .map_err(|e| read_error(at.endpoint, &e, self.decode))
+    }
+    /// A transaction by hash, from the read's endpoint (`None`: unknown to it).
+    pub async fn tx_by_hash_at(&self, at: &ReadAt<B256>, id: B256) -> Result<Option<TxAt>, ReadError> {
+        use alloy::consensus::Transaction as _;
+        let t = self.at(at.endpoint, at.deadline).get_transaction_by_hash(id).await.map_err(|e| read_error(at.endpoint, &e, self.decode))?;
+        Ok(t.map(|t| TxAt { block_hash: t.block_hash, block_number: t.block_number, from: t.inner.signer(), nonce: t.nonce() }))
+    }
+    /// A receipt as of the read's block: counted only when its block is at or below it and its block hash is this endpoint's
+    /// header hash at its number (else `None`).
+    pub async fn receipt_at(&self, at: &ReadAt<B256>, id: B256) -> Result<Option<ReceiptAt>, ReadError> {
+        Ok(self.checked_receipt(at.endpoint, id, at.deadline).await?.filter(|r| r.block_number <= at.number))
+    }
+
+    /// A receipt whose block hash is the endpoint's header hash at its number (`None` otherwise or unknown).
+    pub(crate) async fn checked_receipt(&self, i: usize, id: B256, deadline: Option<Instant>) -> Result<Option<ReceiptAt>, ReadError> {
+        let p = self.at(i, deadline);
+        let Some(r) = p.get_transaction_receipt(id).await.map_err(|e| read_error(i, &e, self.decode))? else { return Ok(None) };
+        let (Some(hash), Some(number)) = (r.block_hash, r.block_number) else { return Ok(None) };
+        if self.header(i, number, deadline).await? != hash {
+            return Ok(None);
+        }
+        Ok(Some(ReceiptAt { block_hash: hash, block_number: number, status: r.status(), gas_used: r.gas_used,
+            logs: r.logs().iter().map(LogAt::from).collect() }))
+    }
+
+    /// The logs of `filter` over blocks `[from, to]`, both required, at most [`LOG_RANGE_MAX`] blocks (`Argument` otherwise;
+    /// F23), compared whole under `strict_majority`; an endpoint whose head is below `to` does not answer.
+    pub async fn logs_range(&self, from: u64, to: u64, filter: Filter, purpose: Purpose) -> Result<Agreed<Vec<LogAt>, B256>, RpcError> {
+        if to < from || to - from >= LOG_RANGE_MAX {
+            return Err(RpcError::argument(&format!("a log range is [from, to] with at most {LOG_RANGE_MAX} blocks")));
+        }
+        let filter = &filter;
+        self.read_at_block(BlockChoice::Latest, purpose, |at| async move {
+            if at.number < to {
+                return Err(ReadError::Failure(EndpointFailure::new(at.endpoint, FailureKind::BehindHead, &format!("at block {}, below {to}", at.number))));
+            }
+            let logs = self.at(at.endpoint, at.deadline).get_logs(&filter.clone().from_block(from).to_block(to)).await
+                .map_err(|e| ReadError::Failure(transport(at.endpoint, &e)))?;
+            Ok(logs.iter().map(LogAt::from).collect())
+        }).await
+    }
+
+    /// The head, failed over.
+    pub async fn head(&self) -> Result<u64, RpcError> {
+        self.failover_read(Purpose::Plain, |p| async move { p.get_block_number().await }).await
+    }
+    /// The `finalized` block's number, failed over (`None`: the chain has none).
+    pub async fn finalized(&self) -> Result<Option<u64>, RpcError> {
+        self.failover_read(Purpose::Plain, |p| async move { p.get_block_by_number(BlockNumberOrTag::Finalized).await })
+            .await.map(|b| b.map(|b| b.header.number))
+    }
+    /// Block `n`'s hash, failed over.
+    pub async fn block_hash(&self, n: u64) -> Result<Option<B256>, RpcError> {
+        self.failover_read(Purpose::Plain, |p| async move { p.get_block_by_number(BlockNumberOrTag::Number(n)).await })
+            .await.map(|b| b.map(|b| b.header.hash))
+    }
+    /// The chain's `chain_uid` ([`EvmPool::uid`]).
+    pub async fn chain_uid(&self) -> Result<B256, RpcError> {
+        self.uid().await
+    }
+
+    /// The nonce of a new transaction from `who`: under `failover` its pending nonce failed over; under `strict_majority` the
+    /// agreed committed nonce at the default block (the caller adds its own count of what it sent since; F14).
+    pub async fn pending_nonce(&self, who: Address, purpose: Purpose) -> Result<u64, RpcError> {
+        if self.pool.policy() == crate::Policy::StrictMajority {
+            return self.read_at_block(BlockChoice::default(), purpose, |at| async move { self.nonce_at_block(&at, who).await })
+                .await.map(|a| a.value);
+        }
+        self.failover_read(purpose, |p| async move { p.get_transaction_count(who).pending().await }).await
+    }
+
+    /// EIP-1559 fee data: under `failover` failed over (the caller caps fee and gas from its own configuration); under
+    /// `strict_majority` the `need`-th highest of the endpoints' values for each field (a minority moves it neither way; F14).
+    pub async fn fees(&self, purpose: Purpose) -> Result<Fees, RpcError> {
+        if self.pool.policy() != crate::Policy::StrictMajority {
+            let f = self.failover_read(purpose, |p| async move { p.estimate_eip1559_fees().await }).await?;
+            return Ok(Fees { max_fee_per_gas: f.max_fee_per_gas.max(1), max_priority_fee_per_gas: f.max_priority_fee_per_gas });
+        }
+        let order = self.pool.usable(purpose)?;
+        let n = self.list.len();
+        let need = n / 2 + 1;
+        let deadline = Some(self.pool.deadline());
+        let got = futures::future::join_all(order.iter().map(|&i| async move {
+            self.at(i, deadline).estimate_eip1559_fees().await.map_err(|e| transport(i, &e))
+        })).await;
+        let (mut max, mut prio, mut failures) = (vec![], vec![], vec![]);
+        for g in got {
+            match g {
+                Ok(f) => {
+                    max.push(f.max_fee_per_gas);
+                    prio.push(f.max_priority_fee_per_gas);
+                }
+                Err(e) => failures.push(e),
+            }
+        }
+        if max.len() < need {
+            return Err(RpcError::EndpointNoMajority { n, need, largest: max.len(), failures });
+        }
+        max.sort_unstable_by(|a, b| b.cmp(a));
+        prio.sort_unstable_by(|a, b| b.cmp(a));
+        Ok(Fees { max_fee_per_gas: max[need - 1].max(1), max_priority_fee_per_gas: prio[need - 1] })
     }
 }

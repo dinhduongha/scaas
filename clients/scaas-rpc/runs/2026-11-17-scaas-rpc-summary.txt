@@ -18,9 +18,6 @@ ua-json | 82d9754cd | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 ua-verify | 82d9754cd | 0 | 84 passed, 0 failed, 0 ignored (18 binaries); tree dirty
 ua-default | 82d9754cd | 0 | 25 passed, 0 failed, 0 ignored (2 binaries); tree dirty
 node-e2e-hedera | 3260902e2 | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
-rpc-test | 3f422e87a | 0 | 75 passed, 0 failed, 0 ignored (5 binaries); tree dirty
-rpc-clippy | 3f422e87a | 0 | -; tree dirty
-rpc-wasm | 3f422e87a | 0 | -; tree dirty
 ver-test | 3f422e87a | 0 | 29 passed, 0 failed, 1 ignored (5 binaries); tree dirty
 ver-clippy | 3f422e87a | 0 | -; tree dirty
 ver-anvil | 3f422e87a | 0 | 1 passed, 0 failed, 0 ignored (1 binaries); tree dirty
@@ -30,3 +27,7 @@ node-test | 1ffb4a964 | 0 | 788 passed, 0 failed, 72 ignored (17 binaries); tree
 node-clippy | 1ffb4a964 | 0 | -; tree dirty
 node-e2e | 1ffb4a964 | 0 | 24 passed, 0 failed, 0 ignored (1 binaries); tree dirty
 features | 1ffb4a964 | 0 | -; tree dirty
+rpc-wasm | 70ed3b31e | 0 | -; tree dirty
+rpc-test | 70ed3b31e | 0 | 80 passed, 0 failed, 8 ignored (6 binaries); tree dirty
+rpc-clippy | 70ed3b31e | 0 | -; tree dirty
+rpc-anvil | 70ed3b31e | 0 | 8 passed, 0 failed, 0 ignored (1 binaries); tree dirty

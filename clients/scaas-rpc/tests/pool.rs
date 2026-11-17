@@ -456,6 +456,12 @@ async fn a_member_whose_block_hash_differs_is_outside_the_group() {
     let f = Fake::new(vec![ep(100), forked, ep(100)]);
     let a = agree(&named(3, Policy::StrictMajority), &f, vec![A::V(5); 3]).await.unwrap();
     assert_eq!(a.members, vec![0, 2], "the same value at another block hash is another answer");
+    // the forked one answers first: the honest two still group by their own hash
+    let slow = |d: u64| { let mut x = ep(100); x.delay_ms = d; x };
+    let mut fast_fork = ep(100);
+    fast_fork.fork = 1;
+    let f = Fake::new(vec![slow(60), fast_fork, slow(60)]);
+    assert_eq!(agree(&named(3, Policy::StrictMajority), &f, vec![A::V(5); 3]).await.unwrap().members, vec![0, 2]);
     let f = Fake::new(vec![ep(100), { let mut x = ep(100); x.fork = 1; x }, { let mut x = ep(100); x.fork = 2; x }]);
     assert!(agree(&named(3, Policy::StrictMajority), &f, vec![A::V(5); 3]).await.is_err(), "three hashes: no majority");
 }
