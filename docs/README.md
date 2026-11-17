@@ -162,6 +162,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [asset-suite.md](contracts/asset-suite.md) | Regulated flags, vesting, distributions, `ExchangeOffer`, templates |
 | [zether.md](contracts/zether.md) · [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) | Classical Zether; PQZ: shield / transfer / unshield, proofs, disclosure (PQZ also: verifier mode, key versions, proof path) |
 | [pqchat.md](contracts/pqchat.md) | `PqChat`: post-quantum chat sessions, epochs, messages, public topics |
+| [pqvault.md](contracts/pqvault.md) | `PqVault`: post-quantum notes and passwords in contract state (SPECIFIED) |
 | [settlement.md](contracts/settlement.md) | Map of every settlement kind: entry points, who checks what, fees, finality |
 
 ### Node (`NODE-*`)

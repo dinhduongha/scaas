@@ -154,6 +154,13 @@ a `UASig` over `uaMessage(kind, PURPOSE_PQCHAT, typed(record))` and checked by t
 type strings above, so both typehashes moved with it: `PqChatSession` `0xe2c3b4c1…ad1e4d`, `PqTopic` `0x75bed97b…2e1623`
 (full values in `test/pqchat/PqChatTypes.t.sol` and `smartcontracts/vectors/pqchat/`). Status: **BUILT**.
 
+**Change (2026-11-17, the pqvault spec's review r2, its native-member finding; a threat to add to UA-7's table, no rule change):** a
+native member of an `msig` signs a record's typed digest itself, so a dapp can phish its signature over a valid `PqChat`
+record (one `eth_signTypedData_v4` request per member; the wallet shows "SCaaS PqChat" and, with no chain or contract in
+`DS_C`, cannot warn); with the quorum's signatures the record is accepted. Nothing in the contract or the registry can
+refuse a valid signature over a valid record; clients show every membership change per epoch and flag an admin `msig` with
+native members. The same residual holds for `PqVault` ([pqvault.md](pqvault.md)).
+
 <a id="CTR-CHAT-04"></a>**CTR-CHAT-04** — **Ids are hashes of the signer and its nonce; a nonce is a bit in a per-scope
 bitmap, used in any order, checked after the signature; a record that replaces a value carries `seq` and lands only at
 `seq == stored + 1`** (owner answer 7 of 2026-10-25; the scope tags 3C-D5 are a controller call, owner may override).
@@ -605,6 +612,10 @@ split); the 1:1 rows did not move up at the split (`createSession` 340,953 → 3
 The Fable fixes cost each `postMessage` and each plain `rekey` one SLOAD (`postMessage` 151,490 → 153,744, `rekey`
 364,096 → 366,316 regular; the release 24,771 → 24,883 B). `remove` (CTR-CHAT-20) reads one packed field on the
 1:1 path (`rekey` 366,316 → 366,797; `postMessage` unchanged); the release 24,883 → 27,825 B.
+
+**The base shared with `PqVault`** (SPECIFIED, [CTR-PQV-12](pqvault.md#CTR-PQV-12)): before the freeze the group code
+moves into one base used by `PqChat` and `PqVault`; this page's layout, typehashes, ABI and every per-operation row above
+stay as they are, and only the release-size figures move, with old → new figures, or the move does not happen.
 
 ## 13. Tests
 

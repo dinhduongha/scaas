@@ -732,6 +732,7 @@ Layer 3 — purposes:
 | `kem` | `kemRecordDigest(ua, version, kem)` ([CTR-UA-32](#CTR-UA-32)) |
 | `pqz-key` | `pqzKeyRecordDigest(ua, pqzKeyHash, pqzPopHash)`, the record of `setPqzKey` version 0 ([CTR-UA-16](#CTR-UA-16)), `pqzKeyVersionRecordDigest(ua, version, pqzKeyHash, pqzPopHash)` for a version v ≥ 1 ([CTR-UA-42](#CTR-UA-42)); its `R_REG` proof's message wraps `pqzKeyDigest` (version 0) or `pqzKeyVersionDigest` (v ≥ 1) under the tag `0x0142` |
 | `pqchat` (`scaas.ua.purpose.pqchat.v1`) | the typed digest of a `PqChat` record ([pqchat.md](pqchat.md)); portable, checked by `requirePortable` ([§1.8](#require-portable)), never chain-bound (UA-7 O1, plan T66a) |
+| app (`appPurpose(appId)`, namespace `scaas.ua.purpose.app.v1`; SPECIFIED) | an app's record typed digest in the app's own domain: portable through `requirePortableApp`, chain-bound through `requireAuthorized` ([CTR-UA-45](#CTR-UA-45), [CTR-UA-46](#CTR-UA-46)) |
 | `metatx` | v3 EIP-712 digest of `UAMetaTransaction` or `UAMetaTransfer` |
 | `metatx-cancel` | `keccak256(abi.encode(CANCEL_TAG, chainid, chainUid, token, ua, batch, validUntil))` with `CANCEL_TAG` = this purpose tag (UA-4), the token's view `uaCancelDigest` — derived `ua` only (natives use `cancelNonce`); each signature cancels once |
 | `member` | `keccak256(structureUA ‖ ua_msg_of_structure)` (native members: inside `UAAuth`, except for the three portable purposes `pop` v2, `kem` and `pqz-key` and the acceptance of [CTR-UA-37](#CTR-UA-37), where a native member — code-less or an EIP-7702 designator — signs the record's typed digest itself by its own key, or a contract member answers ERC-1271 over it by [CTR-UA-24](#CTR-UA-24)'s rule, [CTR-UA-07](#CTR-UA-07)) |
@@ -1597,10 +1598,42 @@ portable signature over `uaMessage(kind, purposeTag, typedDigest)`, `typedDigest
 `memberDigest` under `member`, native members over `typedDigest` itself, never `UAAuth`; any `msig`, PQ-eligible or not. The
 purpose set is closed: `PURPOSE_KEM`, `PURPOSE_PQZ_KEY` and `PURPOSE_PQCHAT = keccak256("scaas.ua.purpose.pqchat.v1")`
 ([pqchat.md](pqchat.md)); `PURPOSE_POP_V2` (the registration's own check) and every chain-bound purpose are refused, so are a
-native id (it signs chain-bound only) and an unregistered one; a new portable purpose waits for the next registry generation.
+native id (it signs chain-bound only) and an unregistered one; a new SCaaS portable purpose waits for the next registry
+generation, and an app's portable records use the open app namespace instead ([CTR-UA-45](#CTR-UA-45); the earlier
+`PURPOSE_PQVAULT` proposal was withdrawn the same day, 2026-11-17).
 Gen 2 forwards a gen-1 record and returns gen 1's verdict (UA8-D11); its constructor does not probe gen 1 for the view (a gen 1
 without it reverts, which is a refusal). `UAVerifyGas` when too little gas is left for a verifier's cap. Built as
 `UARegistryCoreLib.requirePortable`, run by DELEGATECALL inside the registry's view (it writes nothing).
+
+<a id="CTR-UA-45"></a>**CTR-UA-45** — **Apps sign records by two paths, both supported: (A) the registry's open portable
+app namespace, one entry added before the freeze, so any app gets portable (chain-free, replica-able) records with no
+further registry change; (B) the chain-bound `requireAuthorized`, open to any contract and purpose already, the app's own
+EIP-712 domain binding the chain, one instance and no replica** (owner 2026-11-17, N1; SPECIFIED, nothing built). An app
+needs no SCaaS registration beyond its users' UAs, with or without `OpenFactory`. `PqVault` is the first app on both
+paths ([CTR-PQV-16](pqvault.md#CTR-PQV-16)); `PqChat` keeps `PURPOSE_PQCHAT` on `requirePortable`, unchanged.
+
+<a id="CTR-UA-46"></a>**CTR-UA-46** — **`requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, UASig auth)`
+is a view that runs `requirePortable`'s checks under `purpose = keccak256(abi.encode(keccak256("scaas.ua.purpose.app.v1"),
+appId))`, computed by the registry, `appId ≠ 0`, else `UAUnauthorized(ua)`; an app purpose is never a SCaaS purpose and
+the reverse; an app's portable domain is exactly `name, version, salt` with `salt = appId`; gen 2 forwards a record it
+does not hold to its predecessor's entry plainly; an app contract on this entry computes the digest itself, names the
+signing UA in every record and uses different domain field sets on the two paths** (controller calls, owner may override;
+SPECIFIED, nothing built). `UAKinds.APP_PURPOSE_NS` and `UAKinds.appPurpose(appId)`. Separation: a SCaaS purpose hashes an
+ASCII `scaas.ua.purpose.<p>.v<n>` string shorter than 64 bytes, an app purpose exactly 64 bytes starting with
+`APP_PURPOSE_NS`, so equality needs a hash collision; `requirePortable`'s closed list refuses every app purpose; a new SCaaS
+purpose keeps that string form and `APP_PURPOSE_NS` is never a purpose itself. An app portable domain has a `salt` field
+and so another domain typehash than every SCaaS portable domain (`name, version`): an app digest never equals a SCaaS
+portable digest. The body is `requirePortable`'s, `_sigOk` unchanged (its single-key tail shared as `_single`, its guard
+kept). Derived members sign `memberDigest(ua, uaMessage(MSIG, purpose, typedDigest))`, so their signatures bind the app. A
+native member of an `msig` signs the typed digest itself, as under `requirePortable`: neither the purpose nor the `ua` is
+in what it signs, so its signature is valid under every `appId` for the same digest; **the guard is the app contract
+computing that digest itself**, not the salt. Hence three obligations of every app contract on this entry: (a) compute
+the digest itself, in its own EIP-712 domain, never from a caller's bytes; (b) name the signing UA in a field of every
+record; (c) use different domain field sets on the portable and the chain-bound path. Residual: a dapp can phish a native
+member's signature over a valid record (one typed-data request per member, the quorum needed), for every app and for
+`PqChat` alike. A predecessor without the entry reverts, which is a refusal (no mapping to a named error). Path (B) uses `appPurpose(appId)` as its purpose by default
+(PqVault does); an app with its own chain-bound contract may name its own purpose, never a SCaaS one. The design, the size figures and the vectors are the pqvault spec's
+[§4.1](../superpowers/specs/2026-11-17-pqvault.md#41-r-a-the-open-portable-app-namespace-n1-a-vc20).
 
 ```solidity
 interface IUARegistry is IERC5267 {
@@ -1755,6 +1788,8 @@ interface IUARegistry is IERC5267 {
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, UASig calldata auth) external view;
     /// The portable check (UA-7 O1): purposeTag one of PURPOSE_KEM, PURPOSE_PQZ_KEY, PURPOSE_PQCHAT (see requirePortable above)
     function requirePortable(bytes32 ua, bytes32 purposeTag, bytes32 typedDigest, UASig calldata auth) external view;
+    /// SPECIFIED, not built (CTR-UA-46): the portable check under appPurpose(appId), the open app namespace
+    function requirePortableApp(bytes32 ua, bytes32 appId, bytes32 typedDigest, UASig calldata auth) external view;
 }
 // constructor (the UA-2a UARegistry): error UAConfig(uint16 kind) — kind outside the code's table, duplicate, verifier
 //   (or smartKeyAccountImpl) not a contract (no code or an EIP-7702 designator, owner ruling D5), cap 0 or above the budget, a keyHash group the predecessor enables, a predecessor of another
