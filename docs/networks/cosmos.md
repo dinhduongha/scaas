@@ -262,7 +262,8 @@ longer in the message enum; settle/cancel tests unchanged.
   nothing and a refusal read while it answered requeues the job. From the first gateway only an error with gRPC code 2 or 3 (a
   refused simulate, a smart query's error) is its verdict; any other answer (503 code 14, a rate limit, a 404) fails over
   (scaas-rpc T24.3). The transaction status (REST `GetTx` and the block scan), the
-  send, `op_consumed`, the lane sequence and the router's executor (kept for the process) are the first gateway's only; the
+  send, `op_consumed`, the lane sequence, the router's executor (kept for the process) and the signing account number (kept
+  from a read outside `build`, scaas-rpc T24.14) are the first gateway's only; the
   CometBFT reads (`status`, `block`, `block_results`) are the first endpoint's, as before. Before its first read each first
   endpoint passes its identity (CLI-RPC-03, scaas-rpc T24.8): the first gateway `node_info`'s network, the first CometBFT
   endpoint `status`'s `node_info.network`, each the configured chain id; another network answers nothing.

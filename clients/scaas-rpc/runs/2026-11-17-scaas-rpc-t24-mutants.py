@@ -88,6 +88,19 @@ MUTANTS = [
     ("8: Algorand: endpoint 0 read unchecked", [(C + "algorand.rs", "crate::family::admit_first(&self.client, self, i).await?;\n        self.fetch(i, path, query).await", "self.fetch(i, path, query).await")], NT + "algorand::tests::algorand_endpoint_0_of_another_network_answers_no_read"),
     ("8: Cosmos: REST gateway 0 read unchecked", [(C + "cosmos.rs", "crate::family::admit_first(&self.client, self, i).await?;\n        json_at(&self.client, i, reqwest::Method::GET, path, None).await", "json_at(&self.client, i, reqwest::Method::GET, path, None).await")], NT + "cosmos::tests::cosmos_endpoint_0_of_another_network_answers_no_read"),
     ("8: Cosmos: CometBFT endpoint 0 read unchecked", [(C + "cosmos.rs", "crate::family::admit_first(&self.rpc, self, i).await?;\n        self.comet(i, path).await", "self.comet(i, path).await")], NT + "cosmos::tests::cosmos_endpoint_0_of_another_network_answers_no_read"),
+    # T24.9: Algorand's raw JSON answers through the bounded decode (CLI-RPC-07)
+    ("9: Algorand: get parsed by serde_json alone", [(A + "algorand.rs", "json_of(path, &self.get_raw(path, &[]).await?)", "Ok(serde_json::from_slice(&self.get_raw(path, &[]).await?)?)")],
+     NT + "algorand::tests::algorand_a_raw_json_answer_deeper_than_64_is_refused"),
+    ("9: Algorand: a box parsed by serde_json alone", [(A + "algorand.rs", 'let v = json_of("box", &b)?;', "let v: Value = serde_json::from_slice(&b)?;")],
+     NT + "algorand::tests::algorand_a_raw_json_answer_deeper_than_64_is_refused"),
+    # T24.12: endpoint 0's answers classified by status or code, never text
+    ("12: TON: 404 read from the text", [(A + "ton.rs", "Err(e) if e.downcast_ref::<HttpStatus>().is_some_and(|s| s.status == 404) => 0,", 'Err(e) if format!("{e:#}").contains("404") => 0,')],
+     NT + "ton::tests::ton_a_404_is_read_from_the_status_never_the_text"),
+    ("12: Sui: not found read from the text", [(A + "sui.rs", 'Err(e) if e.downcast_ref::<FamilyError>().and_then(FamilyError::rpc_error).is_some_and(|x| x["code"] == -32602) => {', 'Err(e) if format!("{e:#}").contains("Could not find") => {')],
+     NT + "sui::tests::sui_not_found_is_read_from_the_code_never_the_text"),
+    # T24.14: the signing account number kept from gateway 0 only
+    ("14: Cosmos: the account number kept from any gateway", [(A + "cosmos.rs", "        if !building() {\n            if let Ok(mut m) = self.account_numbers.lock() {", "        if true {\n            if let Ok(mut m) = self.account_numbers.lock() {")],
+     NT + "cosmos::tests::cosmos_the_account_number_is_kept_from_gateway_0_only"),
 ]
 
 if __name__ == "__main__":

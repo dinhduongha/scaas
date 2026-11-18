@@ -630,8 +630,12 @@ impl CosmosAdapter {
         }
         let num = |k: &str| v["account"][k].as_str().unwrap_or("0").parse::<u64>().map_err(|e| anyhow!("{k}: {e}"));
         let (an, seq) = (num("account_number")?, num("sequence")?);
-        if let Ok(mut m) = self.account_numbers.lock() {
-            m.insert(lane, an);
+        // T24.14: the signing account number is kept from the first gateway's answer only: a read outside `build` (inside it
+        // a failover gateway may have answered); `sign` reads it there when none is kept
+        if !building() {
+            if let Ok(mut m) = self.account_numbers.lock() {
+                m.insert(lane, an);
+            }
         }
         Ok((an, seq))
     }
@@ -1553,5 +1557,18 @@ mod tests {
         assert!(adapter_rpc(&other, &[&this]).final_head().await.is_err(), "the CometBFT endpoint: status's node_info.network");
         let comet = crate::adapters::testkit::scripted(false, |p, _| status(p, "c-1")).await;
         assert_eq!(adapter_rpc(&comet, &[&this]).final_head().await.unwrap().map(|h| h.height), Some(9), "control");
+    }
+
+    /// scaas-rpc T24.14: the account number `sign` uses is kept from the first gateway only: a `build` answered by gateway 1
+    /// (gateway 0 down) keeps none. Control: a read outside `build`, the first gateway's, keeps it.
+    #[tokio::test]
+    async fn cosmos_the_account_number_is_kept_from_gateway_0_only() {
+        let (url, _) = gateway(Some("100000")).await;
+        let a = adapter_on(&[DOWN, &url]);
+        a.build(&plain_pay(), 0).await.unwrap();
+        assert_eq!(a.account_numbers.lock().unwrap().get(&0), None, "a failover gateway's answer is never kept");
+        let a = adapter_on(&[&url]);
+        a.sequence(0).await.unwrap();
+        assert_eq!(a.account_numbers.lock().unwrap().get(&0), Some(&1), "control");
     }
 }
