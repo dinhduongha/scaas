@@ -1,0 +1,20 @@
+# t24-2 mutants at commit 2d68aaf2d (name | outcome | test)
+2: aptos: a mined status leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_a_mined_status_and_the_head_raise_the_floor
+2: aptos: the polled head leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::aptos::tests::aptos_a_mined_status_and_the_head_raise_the_floor
+2: sui: a mined status leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_a_mined_status_and_the_head_raise_the_floor
+2: sui: the polled head leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::sui::tests::sui_a_mined_status_and_the_head_raise_the_floor
+2: ton: a mined status leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::ton::tests::ton_a_mined_status_and_the_head_raise_the_floor
+2: ton: the polled head leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::ton::tests::ton_a_mined_status_and_the_head_raise_the_floor
+2: cosmos: a mined status leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_a_mined_status_and_the_head_raise_the_floor
+2: cosmos: the polled head leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::cosmos::tests::cosmos_a_mined_status_and_the_head_raise_the_floor
+2: algorand: a mined status leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::algorand_a_mined_status_and_the_head_raise_the_floor
+2: algorand: the polled head leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::algorand::tests::algorand_a_mined_status_and_the_head_raise_the_floor
+2: near: a mined status leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::near::tests::near_a_mined_status_and_the_head_raise_the_floor
+2: near: the polled head leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::near::tests::near_a_mined_status_and_the_head_raise_the_floor
+2: soroban: a mined status leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::soroban::tests::soroban_a_mined_status_and_the_head_raise_the_floor
+2: soroban: the polled head leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::soroban::tests::soroban_a_mined_status_and_the_head_raise_the_floor
+2: solana: a mined status leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::solana::tests::solana_a_mined_status_and_the_head_raise_the_floor
+2: solana: the polled head leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::solana::tests::solana_a_mined_status_and_the_head_raise_the_floor
+2: hedera: a mined status leaves the floor | killed | CAPPED_MEM=6G ../scripts/capped cargo test --locked --offline -j1 --lib adapters::hedera::tests::hedera_a_mined_status_raises_the_floor
+2: solana: the head read at finalized | killed | ../../scripts/capped cargo test --locked --offline -j2 --all-features --test solana the_head_is_the_confirmed_slot
+18 mutants, 18 killed, 0 survived, 0 not loaded

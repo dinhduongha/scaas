@@ -2175,21 +2175,29 @@ impl ChainAdapter for NearAdapter {
     /// Mined / reverted only once every receipt is in a final block (`FINAL`); a failed receipt is reported reverted with
     /// its reason, never retried (the lane nonce moved; the payer's op was not consumed).
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let Some(v) = self.find_tx(tx_id).await? else { return Ok(TxStatus::Unknown) };
-        let relay = v.pointer("/transaction/actions/0/FunctionCall/method_name").and_then(Value::as_str) == Some("relay");
-        let escrow = relay && self.relay_fee.router.is_some() && v["transaction"]["receiver_id"].as_str() == self.relay_fee.router.as_deref();
-        if v["final_execution_status"].as_str() != Some("FINAL") {
-            // T19: a call in flight past its deadline keeps the transaction short of FINAL: its timeout is due now
-            return if escrow { self.escrow_in_flight(&v).await } else { Ok(TxStatus::Pending) };
+        let st: Result<TxStatus> = async {
+            let Some(v) = self.find_tx(tx_id).await? else { return Ok(TxStatus::Unknown) };
+            let relay = v.pointer("/transaction/actions/0/FunctionCall/method_name").and_then(Value::as_str) == Some("relay");
+            let escrow = relay && self.relay_fee.router.is_some() && v["transaction"]["receiver_id"].as_str() == self.relay_fee.router.as_deref();
+            if v["final_execution_status"].as_str() != Some("FINAL") {
+                // T19: a call in flight past its deadline keeps the transaction short of FINAL: its timeout is due now
+                return if escrow { self.escrow_in_flight(&v).await } else { Ok(TxStatus::Pending) };
+            }
+            let height = self.block_height_of(&v["transaction_outcome"]["block_hash"]).await?;
+            if escrow {
+                return self.escrow_status(&v, height).await;
+            }
+            Ok(match outcome_status(&v["status"])? {
+                Ok(_) => TxStatus::Mined { height, tx_hash: None },
+                Err(reason) => TxStatus::Reverted { reason },
+            })
         }
-        let height = self.block_height_of(&v["transaction_outcome"]["block_hash"]).await?;
-        if escrow {
-            return self.escrow_status(&v, height).await;
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
         }
-        Ok(match outcome_status(&v["status"])? {
-            Ok(_) => TxStatus::Mined { height, tx_hash: None },
-            Err(reason) => TxStatus::Reverted { reason },
-        })
+        st
     }
 
     /// The lane's next nonce: its access key's nonce + 1.
@@ -4502,5 +4510,27 @@ mod tests {
         let r = a.build(&job, 0).await;
         assert!(r.is_ok(), "{r:?}");
         assert!(a.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at height 120 (or its head there), endpoint 1, at height 100, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn near_a_mined_status_and_the_head_raise_the_floor() {
+        let job = job(o_of("pay", json!({})));
+        let first = || crate::adapters::testkit::scripted(true, |m, _| match m {
+            "status" => Some(json!({"chain_id": "localnet", "genesis_hash": NET_B58, "sync_info": {"earliest_block_height": 0, "latest_block_height": 120}})),
+            "EXPERIMENTAL_tx_status" => Some(outcome(TOKEN, json!({"FunctionCall": {"method_name": "mtx_pay", "args": ""}}), json!({"SuccessValue": ""}), vec![])),
+            "block" => Some(json!({"header": {"height": 120, "hash": "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2"}, "chunks": []})),
+            _ => None,
+        });
+        let tx = format!("0x{}", "11".repeat(32));
+        let (a, _) = adapter_after(pay_world(), &[&first().await]).await;
+        let r = a.build(&job, 0).await;
+        assert!(r.is_ok(), "{r:?}");
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 120, .. }));
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "endpoint 1 below height 120: skipped");
+        let (a, _) = adapter_after(pay_world(), &[&first().await]).await;
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "the head: the same floor");
     }
 }

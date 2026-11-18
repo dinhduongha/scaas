@@ -117,3 +117,17 @@ async fn the_failover_drops_another_cluster_and_skips_an_endpoint_behind() {
     assert_eq!((a.endpoint, seen.lock().unwrap().clone()), (3, vec![3]));
     assert_eq!(s.client.pool().identity_of(1), Some(false));
 }
+
+/// T24.2: the head is the confirmed slot, compared with the confirmed slots endpoint 0 showed (a landed transaction's): an
+/// endpoint finalized at 100 and confirmed at 102 answers a read whose floor is 101.
+#[tokio::test]
+async fn the_head_is_the_confirmed_slot() {
+    let s = solana(&[DOWN, &rpc(100, GENESIS).await]);
+    s.client.pool().saw_block(101);
+    let a = s
+        .client
+        .failover(&s, |i| async move { Ok::<usize, scaas_rpc::pool::ReadError>(i) })
+        .await
+        .unwrap();
+    assert_eq!(a.endpoint, 1);
+}

@@ -1331,31 +1331,39 @@ impl ChainAdapter for SolanaAdapter {
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let sig = b58(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?);
-        let v = self.rpc("getSignatureStatuses", json!([[sig], {"searchTransactionHistory": true}])).await?;
-        let st = &v["value"][0];
-        if st.is_null() {
-            // Tự rebroadcast (RPC rớt tx khi nghẽn): cùng bytes, ≤ 1 lần / 2 s, chỉ khi nonce lane chưa đổi.
-            // ponytail: rebroadcast trong `tx_status`, tách task riêng khi cần nhiều RPC song song.
-            let due = self.sent.lock().ok().and_then(|mut s| {
-                let e = s.get_mut(tx_id)?;
-                (e.last.elapsed() >= REBROADCAST).then(|| {
-                    e.last = Instant::now();
-                    (e.raw.clone(), e.lane, e.sequence)
-                })
-            });
-            if let Some((raw, lane, seq)) = due {
-                if matches!(self.nonce(lane).await, Ok(n) if nonce_sequence(&n) == seq) {
-                    let _ = self.send_raw(&raw).await;
+        let st: Result<TxStatus> = async {
+            let sig = b58(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?);
+            let v = self.rpc("getSignatureStatuses", json!([[sig], {"searchTransactionHistory": true}])).await?;
+            let st = &v["value"][0];
+            if st.is_null() {
+                // Tự rebroadcast (RPC rớt tx khi nghẽn): cùng bytes, ≤ 1 lần / 2 s, chỉ khi nonce lane chưa đổi.
+                // ponytail: rebroadcast trong `tx_status`, tách task riêng khi cần nhiều RPC song song.
+                let due = self.sent.lock().ok().and_then(|mut s| {
+                    let e = s.get_mut(tx_id)?;
+                    (e.last.elapsed() >= REBROADCAST).then(|| {
+                        e.last = Instant::now();
+                        (e.raw.clone(), e.lane, e.sequence)
+                    })
+                });
+                if let Some((raw, lane, seq)) = due {
+                    if matches!(self.nonce(lane).await, Ok(n) if nonce_sequence(&n) == seq) {
+                        let _ = self.send_raw(&raw).await;
+                    }
                 }
+                return Ok(TxStatus::Unknown);
             }
-            return Ok(TxStatus::Unknown);
+            if st["confirmationStatus"].as_str().unwrap_or("processed") == "processed" {
+                return Ok(TxStatus::Pending);
+            }
+            self.sent.lock().map_err(|_| anyhow!("poisoned"))?.remove(tx_id);
+            classify_landed(&st["err"], st["slot"].as_u64().unwrap_or(0))
         }
-        if st["confirmationStatus"].as_str().unwrap_or("processed") == "processed" {
-            return Ok(TxStatus::Pending);
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
         }
-        self.sent.lock().map_err(|_| anyhow!("poisoned"))?.remove(tx_id);
-        classify_landed(&st["err"], st["slot"].as_u64().unwrap_or(0))
+        st
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
@@ -2436,5 +2444,32 @@ mod tests {
         assert!(matches!(checked(&[DOWN, &r]).build(&pay_job(), 0).await, Err(SimError::Transport(e)) if e.contains("FAILOVER_ANSWER")));
         let (r, _) = cluster(NETWORK, refused).await;
         assert!(matches!(checked(&[&r]).build(&pay_job(), 0).await, Err(SimError::Revert(_))), "control: endpoint 0's refusal");
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at confirmed slot 200 (or its head there), endpoint 1, at slot 100, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn solana_a_mined_status_and_the_head_raise_the_floor() {
+        let first = || crate::adapters::testkit::scripted(true, |m, _| match m {
+            "getGenesisHash" => Some(json!(NETWORK)),
+            "getSignatureStatuses" => Some(json!({"value": [{"slot": 200, "confirmationStatus": "confirmed", "err": null}]})),
+            "getSlot" => Some(json!(200)),
+            _ => None,
+        });
+        let tx = alloy::hex::encode([1u8; 64]);
+        let one = cluster(NETWORK, Value::Null).await.0;
+        // the domain is checked once, on the first endpoint, at the node's first build (as the failover test above)
+        let on = |urls: &[&str]| {
+            let a = adapter_on(urls);
+            a.domain_checked.set(()).unwrap();
+            a
+        };
+        let a = on(&[&first().await, &one]);
+        a.build(&pay_job(), 0).await.unwrap();
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 200, .. }));
+        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below slot 200: skipped");
+        let a = on(&[&first().await, &one]);
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
     }
 }

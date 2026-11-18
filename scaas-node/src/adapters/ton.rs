@@ -1956,44 +1956,52 @@ impl ChainAdapter for TonAdapter {
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let Some(tx) = self.tx_by_in_msg(&b32(tx_id)?).await? else { return Ok(TxStatus::Unknown) };
-        if let Err(why) = compute_ok(&tx) {
-            return Ok(TxStatus::Reverted { reason: format!("lane wallet: {why}") });
-        }
-        let Some(out) = tx.pointer("/out_msgs/0") else {
-            return Ok(TxStatus::Reverted { reason: "lane wallet sent nothing (insufficient TON?)".into() });
-        };
-        if let Some(rc) = out_body(out).and_then(|c| RelayCall::parse(&c).ok()) {
-            return self.escrow_status(&tx, out, &rc).await;
-        }
-        let Some(child) = self.tx_by_in_msg(&api_hash(out.get("hash").unwrap_or(&Value::Null))?).await? else { return Ok(TxStatus::Pending) };
-        if let Err(why) = compute_ok(&child) {
-            // Anyone may relay a signed op (`relayer` = addr_none): if a copy got there first, the op ran (review L6).
-            if exit_code(&child) == Some(E_NONCE) {
-                if let Some(height) = self.executed_by_copy(&child, carried_digest(out)).await? {
-                    // Not our tx: Odoo keeps ours and flags `landed_elsewhere`.
-                    return Ok(TxStatus::Mined { height, tx_hash: None });
-                }
+        let st: Result<TxStatus> = async {
+            let Some(tx) = self.tx_by_in_msg(&b32(tx_id)?).await? else { return Ok(TxStatus::Unknown) };
+            if let Err(why) = compute_ok(&tx) {
+                return Ok(TxStatus::Reverted { reason: format!("lane wallet: {why}") });
             }
-            return Ok(TxStatus::Reverted { reason: format!("contract: {why}") });
-        }
-        // The payer's wallet (or Mandate) emits `MetaTransactionExecuted`: its tx is the hash the indexer reports.
-        let tx_hash = api_hash(child.get("hash").unwrap_or(&Value::Null)).ok().map(|h| hex0x(&h));
-        // Follow the bounceable hops (where the tokens go) to the end: a bounce there sends them back (review L7).
-        let mut last = child;
-        for _ in 0..4 {
-            let Some(next) = last.get("out_msgs").and_then(Value::as_array).and_then(|o| {
-                o.iter().find(|m| m.get("bounce").and_then(Value::as_bool) == Some(true) && !m.get("destination").is_none_or(Value::is_null)).cloned()
-            }) else {
-                break;
+            let Some(out) = tx.pointer("/out_msgs/0") else {
+                return Ok(TxStatus::Reverted { reason: "lane wallet sent nothing (insufficient TON?)".into() });
             };
-            let Some(t) = self.tx_by_in_msg(&api_hash(next.get("hash").unwrap_or(&Value::Null))?).await? else { return Ok(TxStatus::Pending) };
-            if let Err(why) = compute_ok(&t) {
-                return Ok(TxStatus::Reverted { reason: format!("{}: {why}", t.get("account").and_then(Value::as_str).unwrap_or("next hop")) });
+            if let Some(rc) = out_body(out).and_then(|c| RelayCall::parse(&c).ok()) {
+                return self.escrow_status(&tx, out, &rc).await;
             }
-            last = t;
+            let Some(child) = self.tx_by_in_msg(&api_hash(out.get("hash").unwrap_or(&Value::Null))?).await? else { return Ok(TxStatus::Pending) };
+            if let Err(why) = compute_ok(&child) {
+                // Anyone may relay a signed op (`relayer` = addr_none): if a copy got there first, the op ran (review L6).
+                if exit_code(&child) == Some(E_NONCE) {
+                    if let Some(height) = self.executed_by_copy(&child, carried_digest(out)).await? {
+                        // Not our tx: Odoo keeps ours and flags `landed_elsewhere`.
+                        return Ok(TxStatus::Mined { height, tx_hash: None });
+                    }
+                }
+                return Ok(TxStatus::Reverted { reason: format!("contract: {why}") });
+            }
+            // The payer's wallet (or Mandate) emits `MetaTransactionExecuted`: its tx is the hash the indexer reports.
+            let tx_hash = api_hash(child.get("hash").unwrap_or(&Value::Null)).ok().map(|h| hex0x(&h));
+            // Follow the bounceable hops (where the tokens go) to the end: a bounce there sends them back (review L7).
+            let mut last = child;
+            for _ in 0..4 {
+                let Some(next) = last.get("out_msgs").and_then(Value::as_array).and_then(|o| {
+                    o.iter().find(|m| m.get("bounce").and_then(Value::as_bool) == Some(true) && !m.get("destination").is_none_or(Value::is_null)).cloned()
+                }) else {
+                    break;
+                };
+                let Some(t) = self.tx_by_in_msg(&api_hash(next.get("hash").unwrap_or(&Value::Null))?).await? else { return Ok(TxStatus::Pending) };
+                if let Err(why) = compute_ok(&t) {
+                    return Ok(TxStatus::Reverted { reason: format!("{}: {why}", t.get("account").and_then(Value::as_str).unwrap_or("next hop")) });
+                }
+                last = t;
+            }
+            Ok(TxStatus::Mined { height: last.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default(), tx_hash })
         }
-        Ok(TxStatus::Mined { height: last.get("mc_block_seqno").and_then(Value::as_u64).unwrap_or_default(), tx_hash })
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.api.saw(*height);
+        }
+        st
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
@@ -3438,5 +3446,26 @@ mod tests {
         let a = adapter_on(&[first, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
         a.build(&signed_pay(), 0).await.unwrap();
         assert!(a.api.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at masterchain seqno 6 (or its head there), endpoint 1, at seqno 1, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn ton_a_mined_status_and_the_head_raise_the_floor() {
+        let first = || crate::adapters::testkit::scripted(false, |p, _| match p {
+            // the lane's transaction, its message's and every next hop's: one transaction, mined at seqno 6
+            "/api/v3/transactionsByMessage" => Some(json!({"transactions": [{"account": format!("0:{}", "11".repeat(32)),
+                "hash": b64encode(&[0x0b; 32]), "description": {"compute_ph": {"success": true, "exit_code": 0}}, "mc_block_seqno": 6,
+                "out_msgs": [{"hash": b64encode(&[1; 32]), "destination": format!("0:{}", "22".repeat(32)), "bounce": true}]}]})),
+            "/api/v3/masterchainInfo" => Some(json!({"last": {"seqno": 6, "root_hash": b64encode(&[0; 32])}})),
+            _ => None,
+        });
+        let a = adapter_on(&[first().await, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+        a.build(&signed_pay(), 0).await.unwrap();
+        assert!(matches!(a.tx_status(&hex0x(&[0x0a; 32])).await.unwrap(), TxStatus::Mined { height: 6, .. }));
+        assert!(matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below seqno 6: skipped");
+        let a = adapter_on(&[first().await, fake_api_shared(lane_at(0)).await.0], toml::Table::new());
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&signed_pay(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
     }
 }

@@ -768,40 +768,48 @@ impl ChainAdapter for CosmosAdapter {
     /// REST `GetTx` đọc indexer tx của CometBFT — có thể tắt (`indexer = "null"`) hay trễ: thấy là chắc, không thấy
     /// thì quét `block`/`block_results` (luôn có) từ mốc lúc gửi (review M2). RPC lỗi ⇒ `Err` ⇒ runner thử lại.
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let h = tx_id.trim_start_matches("0x").to_ascii_uppercase();
-        if let Ok((200, v)) = self.rest_get(&format!("/cosmos/tx/v1beta1/txs/{h}")).await {
-            let r = &v["tx_response"];
-            let height = r["height"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
-            let st = match r["code"].as_u64() {
-                Some(0) => Some(TxStatus::Mined { height, tx_hash: None }),
-                Some(_) => Some(TxStatus::Reverted { reason: r["raw_log"].as_str().unwrap_or("failed").to_string() }),
-                None => None,
-            };
-            if let Some(st) = st {
-                if let Ok(mut m) = self.scan_from.lock() {
-                    m.remove(tx_id);
-                }
-                return Ok(st);
-            }
-        }
-        let Some(from) = self.scan_from.lock().ok().and_then(|m| m.get(tx_id).copied()) else { return Ok(TxStatus::Unknown) };
-        let Some(head) = self.final_head().await? else { return Ok(TxStatus::Unknown) };
-        for height in from..=head.height.min(from + 50) {
-            let b = self.rpc(&format!("block?height={height}")).await?;
-            if b["block"]["data"]["txs"].as_array().is_some_and(|t| !t.is_empty()) {
-                let r = self.rpc(&format!("block_results?height={height}")).await?;
-                if let Some(st) = tx_in_block(&b, &r, tx_id) {
+        let st: Result<TxStatus> = async {
+            let h = tx_id.trim_start_matches("0x").to_ascii_uppercase();
+            if let Ok((200, v)) = self.rest_get(&format!("/cosmos/tx/v1beta1/txs/{h}")).await {
+                let r = &v["tx_response"];
+                let height = r["height"].as_str().and_then(|s| s.parse().ok()).unwrap_or(0);
+                let st = match r["code"].as_u64() {
+                    Some(0) => Some(TxStatus::Mined { height, tx_hash: None }),
+                    Some(_) => Some(TxStatus::Reverted { reason: r["raw_log"].as_str().unwrap_or("failed").to_string() }),
+                    None => None,
+                };
+                if let Some(st) = st {
                     if let Ok(mut m) = self.scan_from.lock() {
                         m.remove(tx_id);
                     }
                     return Ok(st);
                 }
             }
-            if let Ok(mut m) = self.scan_from.lock() {
-                m.insert(tx_id.to_string(), height + 1);
+            let Some(from) = self.scan_from.lock().ok().and_then(|m| m.get(tx_id).copied()) else { return Ok(TxStatus::Unknown) };
+            let Some(head) = self.final_head().await? else { return Ok(TxStatus::Unknown) };
+            for height in from..=head.height.min(from + 50) {
+                let b = self.rpc(&format!("block?height={height}")).await?;
+                if b["block"]["data"]["txs"].as_array().is_some_and(|t| !t.is_empty()) {
+                    let r = self.rpc(&format!("block_results?height={height}")).await?;
+                    if let Some(st) = tx_in_block(&b, &r, tx_id) {
+                        if let Ok(mut m) = self.scan_from.lock() {
+                            m.remove(tx_id);
+                        }
+                        return Ok(st);
+                    }
+                }
+                if let Ok(mut m) = self.scan_from.lock() {
+                    m.insert(tx_id.to_string(), height + 1);
+                }
             }
+            Ok(TxStatus::Unknown)
         }
-        Ok(TxStatus::Unknown)
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.rest.client.pool().saw_block(*height);
+        }
+        st
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
@@ -1470,5 +1478,33 @@ mod tests {
         let a = adapter_on(&[&first, &url]);
         a.build(&plain_pay(), 0).await.unwrap();
         assert!(a.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at height 9 (or its head there), endpoint 1, at height 5, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn cosmos_a_mined_status_and_the_head_raise_the_floor() {
+        let first = || crate::adapters::testkit::scripted(false, |p, _| match p {
+            "/cosmos/base/tendermint/v1beta1/node_info" => Some(json!({"default_node_info": {"network": "c-1"}})),
+            p if p.starts_with("/cosmos/tx/v1beta1/txs/") => Some(json!({"tx_response": {"code": 0, "height": "9"}})),
+            _ => None,
+        });
+        let comet = || crate::adapters::testkit::scripted(false, |p, _| (p == "/status").then(|| json!({"result": {"node_info": {"network": "c-1"},
+            "sync_info": {"latest_block_height": "9", "latest_block_hash": "AA".repeat(32)}}})));
+        let on = |rpc: String, rest: [String; 2]| {
+            let k = vec![LocalSigner::new(crate::signer::Curve::Secp256k1, &[1; 32]).unwrap()];
+            let mut cfg = chain(&format!("network = \"c-1\"\nparams = {{ rest = [\"{}\", \"{}\"], prefix = \"wasm\", gas_price = \"0.025\" }}",
+                                         rest[0], rest[1]));
+            cfg.rpc_urls = vec![rpc];
+            cfg.tokens.push(crate::config::TokenCfg { address: token(), decimals: 6 });
+            CosmosAdapter::new(&cfg, k).unwrap()
+        };
+        let a = on(comet().await, [first().await, gateway(Some("100000")).await.0]);
+        a.build(&plain_pay(), 0).await.unwrap();
+        assert!(matches!(a.tx_status(&format!("0x{}", "11".repeat(32))).await.unwrap(), TxStatus::Mined { height: 9, .. }));
+        assert!(matches!(a.build(&plain_pay(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below height 9: skipped");
+        let a = on(comet().await, [first().await, gateway(Some("100000")).await.0]);
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&plain_pay(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
     }
 }

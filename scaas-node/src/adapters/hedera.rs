@@ -219,17 +219,27 @@ impl ChainAdapter for HederaAdapter {
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        // F3: endpoint 0 only (scaas-rpc T14)
-        let (pool, id) = (self.inner.lane(0)?.pool(), tx_id.parse()?);
-        if let Some(st) = decode_receipt(&pool.first_relay_receipt(id).await?) {
-            if let TxStatus::Reverted { reason } = &st {
-                if requeues(reason) {
-                    return Err(Rejected(reason.clone()).into());
+        let st: Result<TxStatus> = async {
+            // F3: endpoint 0 only (scaas-rpc T14)
+            let (pool, id) = (self.inner.lane(0)?.pool(), tx_id.parse()?);
+            if let Some(st) = decode_receipt(&pool.first_relay_receipt(id).await?) {
+                if let TxStatus::Reverted { reason } = &st {
+                    if requeues(reason) {
+                        return Err(Rejected(reason.clone()).into());
+                    }
                 }
+                return Ok(st);
             }
-            return Ok(st);
+            Ok(if pool.first_tx_known(id).await? { TxStatus::Pending } else { TxStatus::Unknown })
         }
-        Ok(if pool.first_tx_known(id).await? { TxStatus::Pending } else { TxStatus::Unknown })
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            if let Ok(c) = self.inner.lane(0) {
+                c.saw_block(*height);
+            }
+        }
+        st
     }
 
     async fn sequence(&self, lane: usize) -> Result<u64> {
@@ -767,5 +777,27 @@ mod tests {
         assert!(a.build(&job, 0).await.is_ok());
         let (a, _, _) = adapter_after(Net { balance: "0x0", ..Default::default() }, &[DOWN]).await;
         assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(e)) if e.contains("not a funded")), "control");
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at block 0x20 (or its head there), endpoint 1, at block 0x10, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn hedera_a_mined_status_raises_the_floor() {
+        let job: Job = serde_json::from_value(job(now() + 600)).unwrap();
+        let first = || crate::adapters::testkit::scripted(true, |m, p| match m {
+            "eth_chainId" => Some(json!("0x128")),
+            "eth_getBlockByNumber" if p["params"][0] == "0x0" => {
+                let mut b = serde_json::from_str::<Value>(include_str!("../../tests/vectors/hedera_testnet.json")).unwrap()["block"].clone();
+                b["hash"] = json!(format!("{:#x}", B256::ZERO));
+                Some(b)
+            }
+            "eth_getTransactionReceipt" => Some(json!({"status": "0x1", "blockNumber": "0x20", "transactionHash": format!("{:#x}", B256::repeat_byte(0x11))})),
+            _ => None,
+        });
+        let tx = format!("{:#x}", B256::repeat_byte(0x11));
+        let (a, _, _) = adapter_after(Net { balance: "0x1", ..Default::default() }, &[&first().await]).await;
+        assert!(a.build(&job, 0).await.is_ok());
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 0x20, .. }));
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "endpoint 1 below block 0x20: skipped");
     }
 }

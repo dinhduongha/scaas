@@ -102,10 +102,11 @@ impl Probe for Solana {
             )),
         }
     }
-    /// `getSlot` (processed): the endpoint's head.
+    /// `getSlot` at `confirmed`: the endpoint's head, compared with the slots endpoint 0 showed (a landed transaction's
+    /// confirmed slot, its finalized slot; T24.2: confirmed with confirmed).
     async fn head(&self, i: usize, _: Option<Instant>) -> Result<u64, EndpointFailure> {
         let v = self
-            .call(i, "getSlot", json!([]))
+            .call(i, "getSlot", json!([{"commitment": "confirmed"}]))
             .await
             .map_err(|e| unread(i, e))?;
         v.as_u64().ok_or_else(|| {

@@ -1251,18 +1251,26 @@ impl ChainAdapter for SuiAdapter {
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let d = bs58::encode(parse_addr(tx_id)?).into_string();
-        let r = match self.rpc_first("sui_getTransactionBlock", json!([d, {"showEffects": true}])).await {
-            Ok(r) => r,
-            Err(e) if format!("{e:#}").contains("Could not find") => return Ok(TxStatus::Unknown),
-            Err(e) => return Err(e),
-        };
-        let height = r["checkpoint"].as_str().and_then(|s| s.parse().ok()).or_else(|| r["checkpoint"].as_u64());
-        Ok(match (r["effects"]["status"]["status"].as_str(), height) {
-            (Some("success"), Some(h)) => TxStatus::Mined { height: h, tx_hash: None },
-            (Some("failure"), _) => TxStatus::Reverted { reason: r["effects"]["status"]["error"].as_str().unwrap_or("failure").into() },
-            _ => TxStatus::Pending,
-        })
+        let st: Result<TxStatus> = async {
+            let d = bs58::encode(parse_addr(tx_id)?).into_string();
+            let r = match self.rpc_first("sui_getTransactionBlock", json!([d, {"showEffects": true}])).await {
+                Ok(r) => r,
+                Err(e) if format!("{e:#}").contains("Could not find") => return Ok(TxStatus::Unknown),
+                Err(e) => return Err(e),
+            };
+            let height = r["checkpoint"].as_str().and_then(|s| s.parse().ok()).or_else(|| r["checkpoint"].as_u64());
+            Ok(match (r["effects"]["status"]["status"].as_str(), height) {
+                (Some("success"), Some(h)) => TxStatus::Mined { height: h, tx_hash: None },
+                (Some("failure"), _) => TxStatus::Reverted { reason: r["effects"]["status"]["error"].as_str().unwrap_or("failure").into() },
+                _ => TxStatus::Pending,
+            })
+        }
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
+        }
+        st
     }
 
     async fn sequence(&self, _lane: usize) -> Result<u64> {
@@ -2066,5 +2074,25 @@ mod tests {
         let a = adapter_on(&[first, fake_sui(coin()).await.0], &dir);
         a.build(&pay_job(), 0).await.unwrap();
         assert!(a.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at checkpoint 20 (or its head there), endpoint 1, at checkpoint 9, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn sui_a_mined_status_and_the_head_raise_the_floor() {
+        let dir = tmp_dir("t24-2");
+        let first = || crate::adapters::testkit::scripted(true, |m, _| match m {
+            "sui_getChainIdentifier" => Some(json!("4c78adac")),
+            "sui_getTransactionBlock" => Some(json!({"checkpoint": "20", "effects": {"status": {"status": "success"}}})),
+            "sui_getLatestCheckpointSequenceNumber" => Some(json!("20")),
+            _ => None,
+        });
+        let a = adapter_on(&[first().await, fake_sui(coin()).await.0], &dir);
+        a.build(&pay_job(), 0).await.unwrap();
+        assert!(matches!(a.tx_status(&addr_hex(&[0x11; 32])).await.unwrap(), TxStatus::Mined { height: 20, .. }));
+        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below checkpoint 20: skipped");
+        let a = adapter_on(&[first().await, fake_sui(coin()).await.0], &dir);
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
     }
 }

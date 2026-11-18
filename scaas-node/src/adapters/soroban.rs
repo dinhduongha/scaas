@@ -761,12 +761,20 @@ impl ChainAdapter for SorobanAdapter {
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let r = self.rpc("getTransaction", json!({"hash": tx_id.trim_start_matches("0x")})).await?;
-        Ok(match r["status"].as_str() {
-            Some("SUCCESS") => TxStatus::Mined { height: r["ledger"].as_u64().unwrap_or_default(), tx_hash: None },
-            Some("FAILED") => TxStatus::Reverted { reason: format!("tx failed: {}", r["resultXdr"].as_str().unwrap_or("")) },
-            _ => TxStatus::Unknown,
-        })
+        let st: Result<TxStatus> = async {
+            let r = self.rpc("getTransaction", json!({"hash": tx_id.trim_start_matches("0x")})).await?;
+            Ok(match r["status"].as_str() {
+                Some("SUCCESS") => TxStatus::Mined { height: r["ledger"].as_u64().unwrap_or_default(), tx_hash: None },
+                Some("FAILED") => TxStatus::Reverted { reason: format!("tx failed: {}", r["resultXdr"].as_str().unwrap_or("")) },
+                _ => TxStatus::Unknown,
+            })
+        }
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
+        }
+        st
     }
 
     /// NET-SOR-14: `feeCharged` of a transaction that landed, `SUCCESS` or `FAILED`. Under a fee bump the outer result, the fee
@@ -5957,5 +5965,26 @@ mod tests {
         assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(e)) if e.contains("FAILOVER_ANSWER")));
         let (a, _, _) = failover_adapter(refuses, Net::default(), &[]).await;
         assert!(matches!(a.build(&job, 0).await, Err(SimError::Revert(_))), "control: endpoint 0's refusal");
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at ledger 20 (or its head there), endpoint 1, at ledger 10, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn soroban_a_mined_status_and_the_head_raise_the_floor() {
+        let (c, f, args) = ua_ops(ScVal::Void).into_iter().find(|o| o.1 == "ua_pay").unwrap();
+        let job = ua_job(c, f, args);
+        let first = || crate::adapters::testkit::scripted(true, |m, _| match m {
+            "getNetwork" => Some(json!({"passphrase": "x", "protocolVersion": 30})),
+            "getTransaction" => Some(json!({"status": "SUCCESS", "ledger": 20})),
+            "getLatestLedger" => Some(json!({"id": "AB", "sequence": 20})),
+            _ => None,
+        });
+        let (a, calls, _) = failover_adapter(void_answer(), Net::default(), &[&first().await]).await;
+        assert!(a.build(&job, 0).await.is_ok(), "{:?}", calls.lock().unwrap());
+        assert!(matches!(a.tx_status("0xab").await.unwrap(), TxStatus::Mined { height: 20, .. }));
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "endpoint 1 below ledger 20: skipped");
+        let (a, _, _) = failover_adapter(void_answer(), Net::default(), &[&first().await]).await;
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&job, 0).await, Err(SimError::Transport(_))), "the head: the same floor");
     }
 }

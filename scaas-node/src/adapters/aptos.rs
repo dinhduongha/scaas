@@ -1021,15 +1021,23 @@ impl ChainAdapter for AptosAdapter {
     }
 
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let Some(tx) = self.get_at(0, &format!("/transactions/by_hash/{tx_id}")).await? else {
-            return Ok(TxStatus::Unknown);
-        };
-        if tx["type"].as_str() == Some("pending_transaction") {
-            return Ok(TxStatus::Pending);
+        let st: Result<TxStatus> = async {
+            let Some(tx) = self.get_at(0, &format!("/transactions/by_hash/{tx_id}")).await? else {
+                return Ok(TxStatus::Unknown);
+            };
+            if tx["type"].as_str() == Some("pending_transaction") {
+                return Ok(TxStatus::Pending);
+            }
+            let version = num(&tx["version"]).ok_or_else(|| anyhow!("committed tx without version"))?;
+            let b = self.get(&format!("/blocks/by_version/{version}")).await?;
+            classify_committed(&tx, num(&b["block_height"]).ok_or_else(|| anyhow!("bad block height"))?)
         }
-        let version = num(&tx["version"]).ok_or_else(|| anyhow!("committed tx without version"))?;
-        let b = self.get(&format!("/blocks/by_version/{version}")).await?;
-        classify_committed(&tx, num(&b["block_height"]).ok_or_else(|| anyhow!("bad block height"))?)
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
+        }
+        st
     }
 
     /// Sequence ĐÃ COMMIT (0 cho tài khoản stateless — AIP-115).
@@ -1830,5 +1838,24 @@ mod tests {
         let a = adapter_on(&[first, fullnode(OPEN).await]);
         a.build(&pay_job(), 0).await.unwrap();
         assert!(a.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at block 9 (or its head there), endpoint 1, at block 3, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn aptos_a_mined_status_and_the_head_raise_the_floor() {
+        let first = || crate::adapters::testkit::scripted(false, |p, _| match p {
+            "/v1" | "/v1/" => Some(json!({"chain_id": 4, "block_height": "9", "ledger_version": "9"})),
+            "/v1/transactions/by_hash/0xaa" => Some(json!({"type": "user_transaction", "version": "5", "success": true, "vm_status": "Executed successfully"})),
+            "/v1/blocks/by_version/5" => Some(json!({"block_height": "9"})),
+            _ => None,
+        });
+        let a = adapter_on(&[format!("{}/v1", first().await), fullnode(OPEN).await]);
+        a.build(&pay_job(), 0).await.unwrap();
+        assert!(matches!(a.tx_status("0xaa").await.unwrap(), TxStatus::Mined { height: 9, .. }));
+        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "endpoint 1 below block 9: skipped");
+        let a = adapter_on(&[format!("{}/v1", first().await), fullnode(OPEN).await]);
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&pay_job(), 0).await, Err(SimError::Transport(_))), "the head: the same floor");
     }
 }

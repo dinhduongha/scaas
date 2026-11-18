@@ -77,6 +77,24 @@ pub(crate) mod testkit {
         tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
         url
     }
+
+    /// scaas-rpc T24.2: a scripted endpoint: `answer(path, JSON body)` is its 200 answer (a JSON-RPC family's `result`, wrapped,
+    /// when `rpc`); `None` is a 503 (the endpoint down for that read).
+    pub(crate) async fn scripted(rpc: bool, answer: fn(&str, &Value) -> Option<Value>) -> String {
+        let app = axum::Router::new().fallback(move |uri: axum::http::Uri, b: axum::body::Bytes| async move {
+            let j: Value = serde_json::from_slice(&b).unwrap_or(Value::Null);
+            let key = if rpc { j["method"].as_str().unwrap_or_default().to_string() } else { uri.path().to_string() };
+            match answer(&key, &j) {
+                Some(r) if rpc => axum::Json(serde_json::json!({"jsonrpc": "2.0", "id": j["id"], "result": r})).into_response(),
+                Some(r) => axum::Json(r).into_response(),
+                None => axum::http::StatusCode::SERVICE_UNAVAILABLE.into_response(),
+            }
+        });
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        url
+    }
 }
 
 #[cfg(test)]

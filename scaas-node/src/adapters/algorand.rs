@@ -2205,24 +2205,32 @@ impl ChainAdapter for AlgorandAdapter {
     /// One-round finality: confirmed = mined; a pool error (the group failed or its window closed) = reverted (lesson
     /// 16: never requeued); not in the pool = unknown.
     async fn tx_status(&self, tx_id: &str) -> Result<TxStatus> {
-        let id = b32encode(&arr32(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?)?);
-        let v = match self.get(&format!("/v2/transactions/pending/{id}")).await {
-            Ok(v) => v,
-            Err(e) if status_of(&e) == Some(404) => return Ok(TxStatus::Unknown),
-            Err(e) => return Err(e),
-        };
-        if let Some(h) = v["confirmed-round"].as_u64().filter(|h| *h > 0) {
-            return Ok(TxStatus::Mined { height: h, tx_hash: None });
-        }
-        match v["pool-error"].as_str().filter(|s| !s.is_empty()) {
-            Some(e) => {
-                if let Ok(mut m) = self.spent.lock() {
-                    m.remove(tx_id);
-                }
-                Ok(TxStatus::Reverted { reason: e.to_string() })
+        let st: Result<TxStatus> = async {
+            let id = b32encode(&arr32(&alloy::hex::decode(tx_id.trim_start_matches("0x"))?)?);
+            let v = match self.get(&format!("/v2/transactions/pending/{id}")).await {
+                Ok(v) => v,
+                Err(e) if status_of(&e) == Some(404) => return Ok(TxStatus::Unknown),
+                Err(e) => return Err(e),
+            };
+            if let Some(h) = v["confirmed-round"].as_u64().filter(|h| *h > 0) {
+                return Ok(TxStatus::Mined { height: h, tx_hash: None });
             }
-            None => Ok(TxStatus::Pending),
+            match v["pool-error"].as_str().filter(|s| !s.is_empty()) {
+                Some(e) => {
+                    if let Ok(mut m) = self.spent.lock() {
+                        m.remove(tx_id);
+                    }
+                    Ok(TxStatus::Reverted { reason: e.to_string() })
+                }
+                None => Ok(TxStatus::Pending),
+            }
         }
+        .await;
+        // scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed raises the failover reads' floor
+        if let Ok(TxStatus::Mined { height, .. }) = &st {
+            self.net.client.pool().saw_block(*height);
+        }
+        st
     }
 
     /// No account sequence on Algorand: the last round (the next group's FirstValid).
@@ -3714,5 +3722,27 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let (a, _) = adapter_after(world(), &[&first]).await;
         a.build(&j, 0).await.unwrap();
         assert!(a.failovers() > 0);
+    }
+
+    /// scaas-rpc T24.2 (CLI-RPC-04): a block endpoint 0 showed is the failover reads' floor: once it reported a transaction mined
+    /// at round 5001 (or its head there), endpoint 1, at round 5000, is skipped by `build`. Control: before that, endpoint 1 builds.
+    #[tokio::test]
+    async fn algorand_a_mined_status_and_the_head_raise_the_floor() {
+        let j = job(o_op(&pay_op(), &auth_of("pay"), json!({})));
+        let first = || crate::adapters::testkit::scripted(false, |p, _| match p {
+            "/v2/transactions/params" => Some(json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(network()),
+                "genesis-id": "scaas-localnet-v1", "last-round": 5_000, "min-fee": 1_000, "fee": 0, "consensus-version": "future"})),
+            p if p.starts_with("/v2/transactions/pending/") => Some(json!({"confirmed-round": 5_001})),
+            "/v2/status" => Some(json!({"last-round": 5_001})),
+            _ => None,
+        });
+        let tx = format!("0x{}", "11".repeat(32));
+        let (a, _) = adapter_after(world(), &[&first().await]).await;
+        a.build(&j, 0).await.unwrap();
+        assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { height: 5_001, .. }));
+        assert!(matches!(a.build(&j, 0).await, Err(SimError::Transport(_))), "endpoint 1 below round 5001: skipped");
+        let (a, _) = adapter_after(world(), &[&first().await]).await;
+        let _ = a.final_head().await;
+        assert!(matches!(a.build(&j, 0).await, Err(SimError::Transport(_))), "the head: the same floor");
     }
 }
