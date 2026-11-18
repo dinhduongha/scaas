@@ -16,16 +16,36 @@ Stdlib only (python3 -I).
       group named); the funder short of the total: FUND_SHORT with the groups; one line per transfer.
   sched.py self-test
 Never a key: indexes and addresses only; FUND_KEY only from the environment."""
+
 import os
 import sys
 
-ALL = ("tokens", "gov", "dex", "liquidity", "misc", "zether", "pq", "pqoff", "verifiers", "mldsaalt", "pqchat", "rescue",
-       "pqzkeys", "pqzwallet", "views", "wraplimits", "verify")
-AFTER = {"pqzwallet": ("pqzkeys",),  # its factory and holders
-         "pqoff": ("pq",),  # both write e2e's own book deployments/<key>-pqz.json
-         "views": tuple(g for g in ALL if g not in ("views", "wraplimits", "verify")),  # every group's book (wraplimits:
-         # its own outputs, after views in the default list)
-         "verify": ALL}  # every contract of the chain
+ALL = (
+    "tokens",
+    "gov",
+    "dex",
+    "liquidity",
+    "misc",
+    "zether",
+    "pq",
+    "pqoff",
+    "verifiers",
+    "mldsaalt",
+    "pqchat",
+    "rescue",
+    "pqzkeys",
+    "pqzwallet",
+    "views",
+    "wraplimits",
+    "verify",
+)
+AFTER = {
+    "pqzwallet": ("pqzkeys",),  # its factory and holders
+    "pqoff": ("pq",),  # both write e2e's own book deployments/<key>-pqz.json
+    "views": tuple(g for g in ALL if g not in ("views", "wraplimits", "verify")),  # every group's book (wraplimits:
+    # its own outputs, after views in the default list)
+    "verify": ALL,
+}  # every contract of the chain
 NONE = {"verifiers", "views", "verify"}  # eth_calls only
 DEFAULT = {"rescue", "wraplimits"}  # the target's own keys (genesis alloc / the state of an earlier call)
 BASE = 10  # mnemonic indexes 0-3 are the deployer and the sequential matrix's keys
@@ -53,7 +73,7 @@ def plan(groups):
         if g not in ALL:
             raise Refused(f"GROUP_UNKNOWN: {g!r} is not a matrix group")
     for i, g in enumerate(groups):
-        late = [h for h in groups[i + 1:] if h in AFTER.get(g, ()) and h != g]
+        late = [h for h in groups[i + 1 :] if h in AFTER.get(g, ()) and h != g]
         if late:
             raise Refused(f"GROUP_ORDER: {g} needs {', '.join(late)} first (put it after them)")
     done, out, wave = set(), [], 0
@@ -106,10 +126,19 @@ def self_test():
             want(len(ks) == len(set(ks)), f"no two groups of wave {w} share a key set: {ks}")
         idx = [int(i) for _, _, k in p if k.startswith("mnemonic:") for i in k[9:].split(",")]
         want(len(idx) == len(set(idx)) and min(idx or [BASE]) >= BASE, f"no mnemonic index twice, none below {BASE}")
-        want(all([x for x, _, _ in p].count(w) == 1 and all(pos[h] < w for h in AFTER["views"] if h in pos)
-                 for w, g, _ in p if g == "views"), "views alone, after every group whose book it reads")
+        want(
+            all(
+                [x for x, _, _ in p].count(w) == 1 and all(pos[h] < w for h in AFTER["views"] if h in pos)
+                for w, g, _ in p
+                if g == "views"
+            ),
+            "views alone, after every group whose book it reads",
+        )
     p = {g: w for w, g, _ in plan(rest)}
-    want(p["pq"] == p["verifiers"] == p["mldsaalt"] == p["pqchat"] == p["rescue"] == p["pqzkeys"] == 1, "the independent groups at once")
+    want(
+        p["pq"] == p["verifiers"] == p["mldsaalt"] == p["pqchat"] == p["rescue"] == p["pqzkeys"] == 1,
+        "the independent groups at once",
+    )
     want(p["pqoff"] == p["pqzwallet"] == 2 and p["views"] == 3, "pqoff and pqzwallet next, views last")
     p = {g: w for w, g, _ in plan(["rescue", "wraplimits"])}
     want(p["rescue"] != p["wraplimits"], "two groups on the target's own keys never at once")
@@ -133,8 +162,10 @@ def budget(g):
 
 def fund(rpc_url, pairs):
     import time
+
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../pqz"))
     import e2e as E  # noqa: E402  (rpc, legacy_tx, address)
+
     E.RPC = rpc_url
     key = int(os.environ["FUND_KEY"], 16)
     frm = E.address(key)
@@ -145,8 +176,10 @@ def fund(rpc_url, pairs):
     need = [(g, a, v) for g, a, v in need if v > 0]
     have = int(E.rpc("eth_getBalance", [frm, "latest"]), 16)
     if sum(v for _, _, v in need) + 300_000 * len(need) * (2 * base + 10**9) > have:
-        raise Refused(f"FUND_SHORT: {frm} holds {have / 1e18:.3f} ETH, the top-ups of "
-                      f"{', '.join(sorted({g for g, _, _ in need}))} need {sum(v for _, _, v in need) / 1e18:.3f}")
+        raise Refused(
+            f"FUND_SHORT: {frm} holds {have / 1e18:.3f} ETH, the top-ups of "
+            f"{', '.join(sorted({g for g, _, _ in need}))} need {sum(v for _, _, v in need) / 1e18:.3f}"
+        )
     hs = []
     for g, a, v in need:  # explicit gas: a new account's state gas (EIP-8037)
         raw = E.legacy_tx(key, nonce, 2 * base + 10**9, 300_000, a, v, b"", chain)

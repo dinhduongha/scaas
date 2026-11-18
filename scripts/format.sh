@@ -12,7 +12,7 @@
 # Scope: the components formatted so far. Left out: generated, vendored (vendor/) and legacy/ files (.rustfmt-ignore,
 # .clang-format-ignore, .prettierignore, foundry.toml [fmt] ignore, taplo.toml exclude), and runs/ except its shell,
 # YAML and TOML. Not covered yet: the family contracts' Rust (formatted with their next redeploy: panic locations move
-# the wasm), Python outside clients/ua-py and pqz-core, JavaScript outside clients/clientkeys, Move and TON.
+# the wasm), Python under docs/ (research and history notes), JavaScript outside clients/clientkeys, Move and TON.
 set -u
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 cd "$root" || exit 2
@@ -79,9 +79,11 @@ if want yaml; then
         say "yaml ok" || fail yaml
 fi
 
-# Python: ruff (pyproject.toml) over the directories formatted so far
+# Python: ruff (pyproject.toml) over clients/ua-py and pqz-core, and every other tracked Python file outside runs/ and docs/
+# (scripts/, the generators, smartcontracts/algorand, smartcontracts/evm/script, the clients' tools)
 if want py; then
-    ruff format $([ $check = 1 ] && echo --check) -q clients/ua-py pqz-core && say "py ok" || fail py
+    ruff format $([ $check = 1 ] && echo --check) -q clients/ua-py pqz-core \
+        $(ls_files '*.py' | grep -v -E '^(clients/ua-py|pqz-core|docs)/') && say "py ok" || fail py
 fi
 
 # Go: gofmt has no settings; in check mode any listed file fails (legacy/ left out)

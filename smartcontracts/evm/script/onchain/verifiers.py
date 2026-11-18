@@ -12,6 +12,7 @@ EIP-7825's 2^24 for 65 / 87, Nethermind's eth_call cap). Records:
 runs/…-step5b/records-<net>-verifiers.jsonl, book deployments/onchain-<net>-verifiers.json.
   python3 -I script/onchain/verifiers.py <net> <rpc>
 MuSig2 / FROST have no row in these vectors (their keys are aggregates): not asked here. UNAUDITED."""
+
 import json
 import os
 import sys
@@ -23,21 +24,39 @@ EVM = os.path.abspath(os.path.join(HERE, "../.."))
 VEC = os.path.join(EVM, "../vectors/ua")
 OUTD = os.path.join(EVM, os.environ.get("MATRIX_OUT") or time.strftime("runs/%Y-%m-%d-matrix"))  # matrix.sh's run dir
 VERIFY, VERIFY_POP = "024ad318", "53e5293f"
-PRECOMPILE, PART, CACHED = "0709d0b1", "b733b5e4", "8e598e38"  # PRECOMPILE(), expandedKeyPart(bytes,uint256), verifyCached(...)
+PRECOMPILE, PART, CACHED = (
+    "0709d0b1",
+    "b733b5e4",
+    "8e598e38",
+)  # PRECOMPILE(), expandedKeyPart(bytes,uint256), verifyCached(...)
 ML = {"mldsa44": 1, "mldsa65": 2, "mldsa87": 3}  # PqUA.mldsaParts
 CAP = 1 << 24  # the eth_call gas: EIP-7825's cap, Nethermind's own
-BY_NAME = {"webauthn-p256": "WebAuthnP256Verifier", "p256": "P256Verifier", "bip340": "Bip340Verifier",
-           "schnorr-bn254": "SchnorrBn254Verifier", "schnorr-bls12381": "SchnorrBls12381Verifier",
-           "bls12381-minsig": "BlsMinSigBls12381Verifier", "bls-bn254-minsig": "BlsMinSigBn254Verifier",
-           "ed25519": "Ed25519Verifier", "secp256k1": "Secp256k1Verifier", "zether-bls12381": "ZetherSchnorrBls12381Verifier",
-           "mldsa44": ("MldsaVerifier", 0), "mldsa65": ("MldsaVerifier", 1), "mldsa87": ("MldsaVerifier", 2),
-           "fndsa512": ("FndsaVerifier", 0),
-           "fndsa1024": ("FndsaVerifier", 1), "slhdsa128s": ("SlhdsaVerifier", 0)}
+BY_NAME = {
+    "webauthn-p256": "WebAuthnP256Verifier",
+    "p256": "P256Verifier",
+    "bip340": "Bip340Verifier",
+    "schnorr-bn254": "SchnorrBn254Verifier",
+    "schnorr-bls12381": "SchnorrBls12381Verifier",
+    "bls12381-minsig": "BlsMinSigBls12381Verifier",
+    "bls-bn254-minsig": "BlsMinSigBn254Verifier",
+    "ed25519": "Ed25519Verifier",
+    "secp256k1": "Secp256k1Verifier",
+    "zether-bls12381": "ZetherSchnorrBls12381Verifier",
+    "mldsa44": ("MldsaVerifier", 0),
+    "mldsa65": ("MldsaVerifier", 1),
+    "mldsa87": ("MldsaVerifier", 2),
+    "fndsa512": ("FndsaVerifier", 0),
+    "fndsa1024": ("FndsaVerifier", 1),
+    "slhdsa128s": ("SlhdsaVerifier", 0),
+}
 
 
 def rpc(url, m, p):
-    q = urllib.request.Request(url, json.dumps({"jsonrpc": "2.0", "id": 1, "method": m, "params": p}).encode(),
-                               {"content-type": "application/json"})
+    q = urllib.request.Request(
+        url,
+        json.dumps({"jsonrpc": "2.0", "id": 1, "method": m, "params": p}).encode(),
+        {"content-type": "application/json"},
+    )
     r = json.load(urllib.request.urlopen(q, timeout=300))
     if "error" in r:
         raise RuntimeError(r["error"])
@@ -46,8 +65,10 @@ def rpc(url, m, p):
 
 def enc(sel, kd, msg, sig):
     """`f(bytes keyData, bytes32 message, bytes sig)`."""
+
     def b(x):
         return len(x).to_bytes(32, "big") + x + b"\0" * (-len(x) % 32)
+
     t1 = b(kd)
     return "0x" + sel + ((96).to_bytes(32, "big") + msg + (96 + len(t1)).to_bytes(32, "big") + t1 + b(sig)).hex()
 
@@ -61,11 +82,21 @@ def cached_case(url, addr, name, kd, msg, sig, flip):
     code at fixed addresses (state override). Returns the verdict (True / False) or a string on a failed call."""
     over, chunks = {}, b""
     for p in range(ML[name]):
-        r = rpc(url, "eth_call", [{"to": addr, "data": "0x" + PART + ((64).to_bytes(32, "big") + p.to_bytes(32, "big") + b(kd)).hex(),
-                                   "gas": hex(CAP)}, "latest"])
+        r = rpc(
+            url,
+            "eth_call",
+            [
+                {
+                    "to": addr,
+                    "data": "0x" + PART + ((64).to_bytes(32, "big") + p.to_bytes(32, "big") + b(kd)).hex(),
+                    "gas": hex(CAP),
+                },
+                "latest",
+            ],
+        )
         raw = bytes.fromhex(r[2:])
-        part = raw[64:64 + int.from_bytes(raw[32:64], "big")]
-        at = "0x" + f"{0x5caac0de0 + p:040x}"
+        part = raw[64 : 64 + int.from_bytes(raw[32:64], "big")]
+        at = "0x" + f"{0x5CAAC0DE0 + p:040x}"
         over[at] = {"code": "0x00" + part.hex()}
         chunks += bytes.fromhex(at[2:])
     m = bytes(x ^ 0xFF for x in msg) if flip else msg
@@ -120,17 +151,31 @@ def main():
                     if cache:
                         got = cached_case(url, addr, name, kd, msg, sig, flip)
                     else:
-                        r = rpc(url, "eth_call", [{"to": addr, "data": enc(sel, kd, m, sig), "gas": hex(CAP)}, "latest"])
+                        r = rpc(
+                            url, "eth_call", [{"to": addr, "data": enc(sel, kd, m, sig), "gas": hex(CAP)}, "latest"]
+                        )
                         got = int(r, 16) == 1 if r not in ("0x", None) else None
                 except RuntimeError as e:
                     got = f"reverted {str(e)[:60]}"
                 want = not flip
-                ok = got is want or (flip and isinstance(got, str))  # a flipped message may revert as well as answer false
+                ok = got is want or (
+                    flip and isinstance(got, str)
+                )  # a flipped message may revert as well as answer false
                 bad += not ok
-                rec.append({"net": net, "to": addr.lower(), "label": label, "sel": sel, "tx": "", "gas": 0,
-                            "status": (2 if ok else 0) if flip else (1 if ok else 0),
-                            "what": f"{'negative: ' if flip else 'view '}{label}.{what} {name}{', message flipped' if flip else ''}",
-                            "script": "verifiers", "got": str(got)})
+                rec.append(
+                    {
+                        "net": net,
+                        "to": addr.lower(),
+                        "label": label,
+                        "sel": sel,
+                        "tx": "",
+                        "gas": 0,
+                        "status": (2 if ok else 0) if flip else (1 if ok else 0),
+                        "what": f"{'negative: ' if flip else 'view '}{label}.{what} {name}{', message flipped' if flip else ''}",
+                        "script": "verifiers",
+                        "got": str(got),
+                    }
+                )
                 print(f"{'ok ' if ok else 'BAD'} {name} {label}.{what}{' flipped' if flip else ''}: {got}")
     with open(os.path.join(OUTD, f"records-{net}-verifiers.jsonl"), "w") as f:
         f.writelines(json.dumps(r) + "\n" for r in rec)

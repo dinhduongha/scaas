@@ -38,6 +38,7 @@ env:
 Programs: smartcontracts/algorand/out/ (smartcontracts/scripts/build.sh algorand first); the venv (scripts/venv.sh).
 The deployment file is named by the genesis hash in URL-safe base64 (a '/' cannot be in a file name).
 """
+
 import base64
 import hashlib
 import json
@@ -56,8 +57,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "out")
 ARTIFACTS = json.load(open(os.path.join(ROOT, "artifacts.json")))
 PROGRAM = {"account": "Account", "relayfee": "RelayFee", "token": "Token", "mandate": "Mandate", "dex": "Dex"}
-PAGE = 2048    # protocol bytes per program page (approval + clear); algod refuses a wrong extra_pages
-WINDOW = 100   # rounds a deploy transaction stays valid (LastValid − FirstValid, below MaxTxnLife)
+PAGE = 2048  # protocol bytes per program page (approval + clear); algod refuses a wrong extra_pages
+WINDOW = 100  # rounds a deploy transaction stays valid (LastValid − FirstValid, below MaxTxnLife)
 
 
 def h512(b):
@@ -74,7 +75,9 @@ class Spec:
         self.clear = open(os.path.join(OUT, f"{name}.clear.bin"), "rb").read()
         s = json.load(open(os.path.join(OUT, f"{name}.arc56.json")))
         m = next(m for m in s["methods"] if m["name"] == "create")
-        self.create = abi.Method.from_signature("create(%s)%s" % (",".join(a["type"] for a in m["args"]), m["returns"]["type"]))
+        self.create = abi.Method.from_signature(
+            "create(%s)%s" % (",".join(a["type"] for a in m["args"]), m["returns"]["type"])
+        )
         self.arg_names = [a["name"] for a in m["args"]]
         g = s["state"]["schema"]["global"]
         self.schema = transaction.StateSchema(g["ints"], g["bytes"])
@@ -97,7 +100,12 @@ def on_curve(key):
 
 def executor(router_id, salt):
     r = ARTIFACTS["relayfee"]
-    prog = bytes.fromhex(r["executor_prefix"]) + router_id.to_bytes(8, "big") + bytes.fromhex(r["executor_suffix"]) + bytes([0x20, 1, salt])
+    prog = (
+        bytes.fromhex(r["executor_prefix"])
+        + router_id.to_bytes(8, "big")
+        + bytes.fromhex(r["executor_suffix"])
+        + bytes([0x20, 1, salt])
+    )
     return prog, hashlib.new("sha512_256", b"Program" + prog).digest()
 
 
@@ -106,6 +114,7 @@ def lowest_salt(router_id):
 
 
 # ------------------------------------------------------------------ algod
+
 
 def app_info(c, app_id):
     try:
@@ -134,8 +143,12 @@ def executor_view(c, router_id, sender):
     """`executor()` by simulate, sent (unsigned) by the router's creator."""
     sel = abi.Method.from_signature("executor()address").get_selector()
     txn = transaction.ApplicationNoOpTxn(sender, c.suggested_params(), router_id, app_args=[sel])
-    req = models.SimulateRequest(txn_groups=[models.SimulateRequestTransactionGroup(txns=[transaction.SignedTransaction(txn, None)])],
-                                 allow_empty_signatures=True, allow_unnamed_resources=True, extra_opcode_budget=20_000)
+    req = models.SimulateRequest(
+        txn_groups=[models.SimulateRequestTransactionGroup(txns=[transaction.SignedTransaction(txn, None)])],
+        allow_empty_signatures=True,
+        allow_unnamed_resources=True,
+        extra_opcode_budget=20_000,
+    )
     g = c.simulate_transactions(req)["txn-groups"][0]
     if g.get("failure-message"):
         return None
@@ -150,7 +163,9 @@ def gate(c, apps):
     rf = [i for k, i in apps if k == "relayfee"]
     kinds = {k for k, _ in apps}
     if kinds & {"token", "mandate"} and not acct:
-        bad.append("a token or the mandate is named without account=<the account app>: its account_app link is unchecked")
+        bad.append(
+            "a token or the mandate is named without account=<the account app>: its account_app link is unchecked"
+        )
     if "dex" in kinds and not rf:
         bad.append("the dex is named without relayfee=<the router>: its router_app link is unchecked")
     for kind, i in apps:
@@ -177,17 +192,27 @@ def gate(c, apps):
                 view = executor_view(c, i, p["creator"])
                 sdk = transaction.LogicSigAccount(prog).address()
                 if view != addr or sdk != encoding.encode_address(addr):
-                    bad.append(f"relayfee app {i}: executor() {view and encoding.encode_address(view)} / SDK {sdk} is not the executor "
-                               f"rebuilt from salt {salt}: {encoding.encode_address(addr)}")
+                    bad.append(
+                        f"relayfee app {i}: executor() {view and encoding.encode_address(view)} / SDK {sdk} is not the executor "
+                        f"rebuilt from salt {salt}: {encoding.encode_address(addr)}"
+                    )
                 if on_curve(addr):
-                    bad.append(f"relayfee app {i}: its executor {encoding.encode_address(addr)} (salt {salt}) is on-curve")
+                    bad.append(
+                        f"relayfee app {i}: its executor {encoding.encode_address(addr)} (salt {salt}) is on-curve"
+                    )
         a = c.account_info(logic.get_application_address(i), exclude="all")
         if a["amount"] == 0 or a["amount"] < a["min-balance"]:
-            bad.append(f"{kind} app {i}: its address holds {a['amount']} µALGO, below its minimum balance {a['min-balance']}")
+            bad.append(
+                f"{kind} app {i}: its address holds {a['amount']} µALGO, below its minimum balance {a['min-balance']}"
+            )
     if bad:
-        sys.exit("deploy gate FAILED (spec §4.9: every SCaaS app runs the reviewed, non-upgradable program of artifacts.json, "
-                 "linked and funded as deployed):\n  " + "\n  ".join(bad))
-    print(f"deploy gate: {len(apps)} apps match artifacts.json (approval and clear sha512_256); links, executor and funding checked")
+        sys.exit(
+            "deploy gate FAILED (spec §4.9: every SCaaS app runs the reviewed, non-upgradable program of artifacts.json, "
+            "linked and funded as deployed):\n  " + "\n  ".join(bad)
+        )
+    print(
+        f"deploy gate: {len(apps)} apps match artifacts.json (approval and clear sha512_256); links, executor and funding checked"
+    )
 
 
 def parse_roles(args):
@@ -201,6 +226,7 @@ def parse_roles(args):
 
 
 # ------------------------------------------------------------------ env (checked before any chain step)
+
 
 class Funder:
     def __init__(self):
@@ -218,9 +244,16 @@ def parse_tokens():
     tokens = []
     for t in os.environ.get("ALGORAND_TOKENS", "SCT:SCaaS Test:6").split(","):
         parts = t.split(":")
-        if (len(parts) != 3 or not re.fullmatch(r"[A-Za-z0-9]{1,8}", parts[0]) or not 1 <= len(parts[1].encode()) <= 32
-                or not parts[2].isdigit() or int(parts[2]) > 255):
-            sys.exit(f"ALGORAND_TOKENS entry {t!r}: SYMBOL:Name:decimals (symbol ≤ 8 letters / digits, name ≤ 32 bytes, decimals ≤ 255)")
+        if (
+            len(parts) != 3
+            or not re.fullmatch(r"[A-Za-z0-9]{1,8}", parts[0])
+            or not 1 <= len(parts[1].encode()) <= 32
+            or not parts[2].isdigit()
+            or int(parts[2]) > 255
+        ):
+            sys.exit(
+                f"ALGORAND_TOKENS entry {t!r}: SYMBOL:Name:decimals (symbol ≤ 8 letters / digits, name ≤ 32 bytes, decimals ≤ 255)"
+            )
         tokens.append({"symbol": parts[0], "name": parts[1], "decimals": int(parts[2])})
     if len({t["symbol"] for t in tokens}) != len(tokens):
         sys.exit("ALGORAND_TOKENS: a symbol appears twice")
@@ -231,17 +264,22 @@ def keep_out_of_git(path):
     """A resume file inside the repository must be one git ignores (`deployments/*.resume.json` is); refused before
     anything is written or sent (task 19 review N3)."""
     try:
-        top = subprocess.run(["git", "-C", ROOT, "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip()
+        top = subprocess.run(
+            ["git", "-C", ROOT, "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True
+        ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return
     if os.path.commonpath([os.path.realpath(top), os.path.realpath(os.path.dirname(path))]) != os.path.realpath(top):
         return
     if subprocess.run(["git", "-C", top, "check-ignore", "-q", path]).returncode != 0:
-        sys.exit(f"ALGORAND_DEPLOYMENTS_DIR {os.path.dirname(path)} is inside the repository and git does not ignore "
-                 f"{os.path.basename(path)}: use smartcontracts/algorand/deployments or a directory outside it")
+        sys.exit(
+            f"ALGORAND_DEPLOYMENTS_DIR {os.path.dirname(path)} is inside the repository and git does not ignore "
+            f"{os.path.basename(path)}: use smartcontracts/algorand/deployments or a directory outside it"
+        )
 
 
 # ------------------------------------------------------------------ resumable state
+
 
 def write_atomic(path, text):
     """tmp (0600), fsync, rename, directory fsync: the file is whole on disk or absent (review M1)."""
@@ -271,12 +309,19 @@ class State:
         self.orphans = r.get("orphans", [])
 
     def save(self):
-        write_atomic(self.path, json.dumps({"apps": self.apps, "pending": self.pending, "orphans": self.orphans}))  # before a send
+        write_atomic(
+            self.path, json.dumps({"apps": self.apps, "pending": self.pending, "orphans": self.orphans})
+        )  # before a send
 
 
 # The globals each app's create arguments set, in argument order (the contracts' `create`).
-CREATE_GLOBALS = {"account": [], "relayfee": ["salt"], "token": ["name", "symbol", "decimals", "admin", "account_app"],
-                  "mandate": ["account_app"], "dex": ["router_app"]}
+CREATE_GLOBALS = {
+    "account": [],
+    "relayfee": ["salt"],
+    "token": ["name", "symbol", "decimals", "admin", "account_app"],
+    "mandate": ["account_app"],
+    "dex": ["router_app"],
+}
 
 
 def recorded(rec):
@@ -317,13 +362,18 @@ def landed(c, f, role, rec, state):
     found = []
     for a in c.account_info(f.addr).get("created-apps", []):
         p = a["params"]
-        if (a["id"] >= rec.get("min_id", 0) and a["id"] not in known
-                and h512(base64.b64decode(p["approval-program"])) == ARTIFACTS[kind]["approval_sha512_256"]
-                and all(globals_of(p).get(k) == v for k, v in want.items())):
+        if (
+            a["id"] >= rec.get("min_id", 0)
+            and a["id"] not in known
+            and h512(base64.b64decode(p["approval-program"])) == ARTIFACTS[kind]["approval_sha512_256"]
+            and all(globals_of(p).get(k) == v for k, v in want.items())
+        ):
             found.append(a["id"])
     if len(found) > 1:
-        sys.exit(f"{role}: apps {found} of the funding account all match its recorded create {rec['txid']}: decide which is "
-                 f"this deployment's and record it in {state.path}")
+        sys.exit(
+            f"{role}: apps {found} of the funding account all match its recorded create {rec['txid']}: decide which is "
+            f"this deployment's and record it in {state.path}"
+        )
     return found[0] if found else None
 
 
@@ -360,20 +410,46 @@ def create(c, f, role, args, state, tokens, admin):
                 a = list(args)
                 if kind == "relayfee":
                     atc = AtomicTransactionComposer()
-                    atc.add_method_call(0, s.create, f.addr, sp_window(c), f.signer, [0], approval_program=s.approval,
-                                        clear_program=s.clear, global_schema=s.schema, local_schema=transaction.StateSchema(0, 0),
-                                        extra_pages=s.extra_pages)
+                    atc.add_method_call(
+                        0,
+                        s.create,
+                        f.addr,
+                        sp_window(c),
+                        f.signer,
+                        [0],
+                        approval_program=s.approval,
+                        clear_program=s.clear,
+                        global_schema=s.schema,
+                        local_schema=transaction.StateSchema(0, 0),
+                        extra_pages=s.extra_pages,
+                    )
                     r = atc.simulate(c, models.SimulateRequest(txn_groups=[])).simulate_response["txn-groups"][0]
                     if r.get("failure-message"):
                         sys.exit(f"create {role}: its simulate fails, nothing sent: {r['failure-message'][:300]}")
                     a = [lowest_salt(r["txn-results"][0]["txn-result"]["application-index"])]
                 atc = AtomicTransactionComposer()
                 sp = sp_window(c)
-                atc.add_method_call(0, s.create, f.addr, sp, f.signer, a, approval_program=s.approval, clear_program=s.clear,
-                                    global_schema=s.schema, local_schema=transaction.StateSchema(0, 0), extra_pages=s.extra_pages)
+                atc.add_method_call(
+                    0,
+                    s.create,
+                    f.addr,
+                    sp,
+                    f.signer,
+                    a,
+                    approval_program=s.approval,
+                    clear_program=s.clear,
+                    global_schema=s.schema,
+                    local_schema=transaction.StateSchema(0, 0),
+                    extra_pages=s.extra_pages,
+                )
                 stx = atc.gather_signatures()[0]
-                rec = {"txid": stx.get_txid(), "stx": encoding.msgpack_encode(stx), "first": sp.first, "last": sp.last,
-                       "min_id": min_id}
+                rec = {
+                    "txid": stx.get_txid(),
+                    "stx": encoding.msgpack_encode(stx),
+                    "first": sp.first,
+                    "last": sp.last,
+                    "min_id": min_id,
+                }
                 state.pending[role] = rec
                 state.save()
             app_id = send_wait(c, rec["stx"], rec["txid"], f"create {role}", state)["application-index"]
@@ -389,14 +465,18 @@ def create(c, f, role, args, state, tokens, admin):
         salt = globals_of(c.application_info(app_id)["params"])["salt"]
         _, addr = executor(app_id, salt)
         if not on_curve(addr):
-            print(f"  relayfee app {app_id}: salt {salt} ({'the lowest' if salt == lowest_salt(app_id) else 'not the lowest'} for this id), "
-                  f"executor {encoding.encode_address(addr)} off-curve")
+            print(
+                f"  relayfee app {app_id}: salt {salt} ({'the lowest' if salt == lowest_salt(app_id) else 'not the lowest'} for this id), "
+                f"executor {encoding.encode_address(addr)} off-curve"
+            )
             return app_id
         # ponytail: another transaction took the predicted id; the router (undeletable) is an orphan, created again
         state.orphans.append(app_id)
         del state.apps[role]
         state.save()
-        print(f"  relayfee app {app_id} landed off its predicted id and its executor is on-curve: orphaned, created again")
+        print(
+            f"  relayfee app {app_id} landed off its predicted id and its executor is on-curve: orphaned, created again"
+        )
     sys.exit("relayfee: three creates landed off their predicted id with an on-curve executor (a busy chain): rerun")
 
 
@@ -419,8 +499,13 @@ def want(role, tokens, admin, state):
     kind = kind_of(role)
     if kind == "token":
         t = next(t for t in tokens if role == "token:" + t["symbol"])
-        return {"name": t["name"].encode().ljust(32, b"\0"), "symbol": t["symbol"].encode().ljust(8, b"\0"), "decimals": t["decimals"],
-                "admin": encoding.decode_address(admin), "account_app": state.apps.get("account")}
+        return {
+            "name": t["name"].encode().ljust(32, b"\0"),
+            "symbol": t["symbol"].encode().ljust(8, b"\0"),
+            "decimals": t["decimals"],
+            "admin": encoding.decode_address(admin),
+            "account_app": state.apps.get("account"),
+        }
     if kind == "mandate":
         return {"account_app": state.apps.get("account")}
     if kind == "dex":
@@ -440,10 +525,12 @@ def adoptable(c, f, role, app_id, tokens, admin, state):
     g = globals_of(p)
     diff = {k: (g.get(k), v) for k, v in want(role, tokens, admin, state).items() if g.get(k) != v}
     if diff:
+
         def fmt(k, h):
             if isinstance(h, bytes):
                 return h.rstrip(b"\0").decode("latin1") if k in ("name", "symbol") else encoding.encode_address(h)
             return h
+
         show = {k: tuple(fmt(k, h) for h in pair) for k, pair in diff.items()}
         return f"app {app_id} holds (have, this run's) {show}"
     return None
@@ -454,8 +541,16 @@ def create_args(role, tokens, admin, state):
     kind = kind_of(role)
     if kind == "token":
         t = next(t for t in tokens if role == "token:" + t["symbol"])
-        return [t["name"].encode().ljust(32, b"\0"), t["symbol"].encode().ljust(8, b"\0"), t["decimals"], admin, state.apps.get("account")]
-    return {"account": [], "relayfee": [], "mandate": [state.apps.get("account")], "dex": [state.apps.get("relayfee")]}[kind]
+        return [
+            t["name"].encode().ljust(32, b"\0"),
+            t["symbol"].encode().ljust(8, b"\0"),
+            t["decimals"],
+            admin,
+            state.apps.get("account"),
+        ]
+    return {"account": [], "relayfee": [], "mandate": [state.apps.get("account")], "dex": [state.apps.get("relayfee")]}[
+        kind
+    ]
 
 
 def deploy(c):
@@ -475,31 +570,45 @@ def deploy(c):
     plan = ["account", "relayfee"] + ["token:" + t["symbol"] for t in tokens] + ["mandate", "dex"]
     stray = sorted((set(state.apps) | set(state.pending)) - set(plan))
     if stray:
-        sys.exit(f"{rpath if state.resuming else dpath} holds the apps of {stray}, which this run's plan (ALGORAND_TOKENS) does not "
-                 "include: rerun with the original ALGORAND_TOKENS / ALGORAND_ADMIN so that deployment finishes")
-    print(f"deploy on {gen} (genesis {gh}) from {f.addr}: {plan}"
-          + (f" (resuming: {sorted(state.apps)} created, {sorted(state.pending)} sent)" if state.resuming else ""))
+        sys.exit(
+            f"{rpath if state.resuming else dpath} holds the apps of {stray}, which this run's plan (ALGORAND_TOKENS) does not "
+            "include: rerun with the original ALGORAND_TOKENS / ALGORAND_ADMIN so that deployment finishes"
+        )
+    print(
+        f"deploy on {gen} (genesis {gh}) from {f.addr}: {plan}"
+        + (f" (resuming: {sorted(state.apps)} created, {sorted(state.pending)} sent)" if state.resuming else "")
+    )
     # adopt nothing this run would not have created (before any transaction)
     for role in plan:
         if role in state.apps:
             why = adoptable(c, f, role, state.apps[role], tokens, admin, state)
             if why:
-                sys.exit(f"{role}: {why}: not adopted (change ALGORAND_TOKENS / ALGORAND_ADMIN back, or use another funding account "
-                         "or deployments directory)")
+                sys.exit(
+                    f"{role}: {why}: not adopted (change ALGORAND_TOKENS / ALGORAND_ADMIN back, or use another funding account "
+                    "or deployments directory)"
+                )
     # review I1: a create still pending is resent or adopted only when it was signed with this run's code and parameters
     for role, rec in state.pending.items():
         kind = kind_of(role)
         s = Spec(PROGRAM[kind])
         args, approval, clear = recorded(rec)
         if (approval, clear) != (s.approval, s.clear):
-            sys.exit(f"{role}: its recorded create {rec['txid']} carries other programs than out/: not resent (rebuild the same "
-                     "programs, or remove its pending entry once it can no longer land)")
+            sys.exit(
+                f"{role}: its recorded create {rec['txid']} carries other programs than out/: not resent (rebuild the same "
+                "programs, or remove its pending entry once it can no longer land)"
+            )
         if kind != "relayfee" and args != encode_args(s, create_args(role, tokens, admin, state)):
-            show = lambda raw: {k: (v.rstrip(b"\0").decode("latin1") if k in ("name", "symbol") else encoding.encode_address(v))
-                                if isinstance(v, bytes) else v for k, v in create_globals(s, kind, raw).items()}
-            sys.exit(f"{role}: its recorded create {rec['txid']} (not landed yet, or landed) has {show(args)}, not this run's "
-                     f"{show(encode_args(s, create_args(role, tokens, admin, state)))}: not resent, not adopted (change "
-                     "ALGORAND_TOKENS / ALGORAND_ADMIN back so that create finishes)")
+            show = lambda raw: {
+                k: (v.rstrip(b"\0").decode("latin1") if k in ("name", "symbol") else encoding.encode_address(v))
+                if isinstance(v, bytes)
+                else v
+                for k, v in create_globals(s, kind, raw).items()
+            }
+            sys.exit(
+                f"{role}: its recorded create {rec['txid']} (not landed yet, or landed) has {show(args)}, not this run's "
+                f"{show(encode_args(s, create_args(role, tokens, admin, state)))}: not resent, not adopted (change "
+                "ALGORAND_TOKENS / ALGORAND_ADMIN back so that create finishes)"
+            )
     for role in plan:
         if role in state.apps:
             print(f"  {role}: app {state.apps[role]} adopted")
@@ -512,13 +621,26 @@ def deploy(c):
     salt = globals_of(c.application_info(router)["params"])["salt"]
     _, xaddr = executor(router, salt)
     out = {
-        "network": gh, "genesis_id": gen, "funder": f.addr, "admin": admin, "apps": {r: state.apps[r] for r in plan},
-        "account": state.apps["account"], "relayfee": router, "mandate": state.apps["mandate"], "dex": state.apps["dex"],
+        "network": gh,
+        "genesis_id": gen,
+        "funder": f.addr,
+        "admin": admin,
+        "apps": {r: state.apps[r] for r in plan},
+        "account": state.apps["account"],
+        "relayfee": router,
+        "mandate": state.apps["mandate"],
+        "dex": state.apps["dex"],
         "tokens": [{"app": state.apps["token:" + t["symbol"]], **t} for t in tokens],
-        "executor": {"salt": salt, "salt_lowest": salt == lowest_salt(router), "address": encoding.encode_address(xaddr), "prefix": ARTIFACTS["relayfee"]["executor_prefix"],
-                     "suffix": ARTIFACTS["relayfee"]["executor_suffix"]},
+        "executor": {
+            "salt": salt,
+            "salt_lowest": salt == lowest_salt(router),
+            "address": encoding.encode_address(xaddr),
+            "prefix": ARTIFACTS["relayfee"]["executor_prefix"],
+            "suffix": ARTIFACTS["relayfee"]["executor_suffix"],
+        },
         "approval_sha512_256": {str(i): ARTIFACTS[k]["approval_sha512_256"] for k, i in apps},
-        "orphans": state.orphans, "deployed_at": int(time.time()),
+        "orphans": state.orphans,
+        "deployed_at": int(time.time()),
     }
     write_atomic(dpath, json.dumps(out, indent=2) + "\n")
     if os.path.exists(rpath):

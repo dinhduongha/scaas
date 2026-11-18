@@ -11,6 +11,7 @@
       the fee gate before each batch: exit 0 iff the max fee (2 x base fee + tip) <= MAX_FEE_GWEI; else a named line, exit 1.
   deploy_batch.py self-test
 Never a key: plans, receipts and fees only."""
+
 import decimal
 import json
 import os
@@ -29,10 +30,14 @@ def phase_of(t):
             p = "directory entries"
         elif f in ("createToken", "transfer"):
             p = "demo tokens"
-        elif f in ("publishClassEnv", "deployImplementation", "setClassKindEnabled", "createInstance") or n.startswith("PqChat"):
+        elif f in ("publishClassEnv", "deployImplementation", "setClassKindEnabled", "createInstance") or n.startswith(
+            "PqChat"
+        ):
             p = "pqchat"
         elif f or "Token" in n or n.startswith("SCaaSDex"):
-            z = "Zether" in n or any("Zether" in (a.get("contractName") or "") for a in x.get("additionalContracts") or [])
+            z = "Zether" in n or any(
+                "Zether" in (a.get("contractName") or "") for a in x.get("additionalContracts") or []
+            )
             if not z and f and last in ("releases", "zether releases"):
                 p = last  # publishTokenEnv / setTokenKindEnabled: the release they belong to
             else:
@@ -44,9 +49,14 @@ def phase_of(t):
         elif n.startswith("Zether"):
             p = "zether"
         else:
-            p = {"SmartKeyAccountFactory": "SKA factory", "RelayFeeRouter": "relay fee router", "UARegistry": "registry",
-                 "GovernanceRouter": "router", "ComplianceRegistry": "compliance registry",
-                 "OpenFactory": "factory"}.get(n, n or "other")
+            p = {
+                "SmartKeyAccountFactory": "SKA factory",
+                "RelayFeeRouter": "relay fee router",
+                "UARegistry": "registry",
+                "GovernanceRouter": "router",
+                "ComplianceRegistry": "compliance registry",
+                "OpenFactory": "factory",
+            }.get(n, n or "other")
         out.append(p)
         last = p
     return out
@@ -79,13 +89,17 @@ def check(plan, send, bc, lo, hi, allf, fail_rc=None):
 
     def addr(i, r):
         p = t[i] if i < len(t) else {}
-        return (r or {}).get("contractAddress") or p.get("contractAddress") or (p.get("transaction") or {}).get("to") or ""
+        return (
+            (r or {}).get("contractAddress") or p.get("contractAddress") or (p.get("transaction") or {}).get("to") or ""
+        )
 
     first = None  # the first plan index of the batch without a good receipt
     for i in range(lo, hi):
         if i not in at:
             if fail_rc is None:
-                print(f"[deploy] skip {i + 1}/{n} {ph[i] if i < len(ph) else '?'} {name(i)}: the release is there (no transaction)")
+                print(
+                    f"[deploy] skip {i + 1}/{n} {ph[i] if i < len(ph) else '?'} {name(i)}: the release is there (no transaction)"
+                )
             elif first is None:
                 first = i
             continue
@@ -94,25 +108,38 @@ def check(plan, send, bc, lo, hi, allf, fail_rc=None):
             first = i if first is None else first
             continue
         st = "" if r.get("status") == "0x1" else f" STATUS {r.get('status')}"
-        print(f"[deploy] send {i + 1}/{n} {ph[i]} {name(i)} gas {int(r['gasUsed'], 16)}{st} {addr(i, r)} tx {r['transactionHash']}")
+        print(
+            f"[deploy] send {i + 1}/{n} {ph[i]} {name(i)} gas {int(r['gasUsed'], 16)}{st} {addr(i, r)} tx {r['transactionHash']}"
+        )
         if st and first is None:
             first = i
-    a = json.load(open(allf)) if os.path.exists(allf) and os.path.getsize(allf) else {"transactions": [], "receipts": []}
+    a = (
+        json.load(open(allf))
+        if os.path.exists(allf) and os.path.getsize(allf)
+        else {"transactions": [], "receipts": []}
+    )
     a["transactions"] += txs
     a["receipts"] += rec
     json.dump(a, open(allf, "w"))
     if fail_rc is None and first is None and bad is None and len(rec) == len(txs):
         return 0
     if first is None and bad:
-        print(f"[deploy] FAIL send txs {lo + 1}-{hi}/{n}: {bad}" + (f", forge rc {fail_rc}" if fail_rc is not None else ""))
+        print(
+            f"[deploy] FAIL send txs {lo + 1}-{hi}/{n}: {bad}"
+            + (f", forge rc {fail_rc}" if fail_rc is not None else "")
+        )
         return 1
     i = first if first is not None else lo
     h = at[i][0].get("hash") if i in at else None
-    why = bad or ("no receipt" if i in at and at[i][1] is None else f"status {at[i][1].get('status')}" if i in at else "not sent")
+    why = bad or (
+        "no receipt" if i in at and at[i][1] is None else f"status {at[i][1].get('status')}" if i in at else "not sent"
+    )
     if fail_rc is not None:
         why = f"rc {fail_rc}, {why}"
-    print(f"[deploy] FAIL {ph[i] if i < len(ph) else 'send'} tx {i + 1}/{n} {name(i)} {why} {addr(i, at[i][1] if i in at else None)}"
-          + (f" tx {h}" if h else ""))
+    print(
+        f"[deploy] FAIL {ph[i] if i < len(ph) else 'send'} tx {i + 1}/{n} {name(i)} {why} {addr(i, at[i][1] if i in at else None)}"
+        + (f" tx {h}" if h else "")
+    )
     return 1
 
 
@@ -125,8 +152,10 @@ def fee(max_gwei, wei):
         return 1
     g = decimal.Decimal(got) / 10**9
     if cap < 0 or got > cap:
-        print(f"[deploy] FAIL fee gate: max fee 2 x base fee + tip = {g} gwei > MAX_FEE_GWEI {max_gwei} (FEE_OVER_MAX); "
-              "nothing of this batch sent; a re-run skips the releases already there")
+        print(
+            f"[deploy] FAIL fee gate: max fee 2 x base fee + tip = {g} gwei > MAX_FEE_GWEI {max_gwei} (FEE_OVER_MAX); "
+            "nothing of this batch sent; a re-run skips the releases already there"
+        )
         return 1
     print(f"[deploy] fee gate ok: {g} gwei <= MAX_FEE_GWEI {max_gwei}")
     return 0
@@ -139,17 +168,31 @@ def self_test():
     send = os.path.join(d, "q.json")
     bc = os.path.join(d, "b.json")
     allf = os.path.join(d, "all.json")
-    json.dump({"transactions": [{"contractName": "MetaTxLib", "contractAddress": A},
-                                {"contractName": "UARegistry", "contractAddress": B},
-                                {"contractName": "OpenFactory", "function": "deployTokenImplementation(uint8)"}]}, open(plan, "w"))
-    json.dump({"from": [A] * 3, "to": [A, A, B], "value": ["0x0"] * 3, "input": ["0x01", "0x02", "0x03"]}, open(send, "w"))
+    json.dump(
+        {
+            "transactions": [
+                {"contractName": "MetaTxLib", "contractAddress": A},
+                {"contractName": "UARegistry", "contractAddress": B},
+                {"contractName": "OpenFactory", "function": "deployTokenImplementation(uint8)"},
+            ]
+        },
+        open(plan, "w"),
+    )
+    json.dump(
+        {"from": [A] * 3, "to": [A, A, B], "value": ["0x0"] * 3, "input": ["0x01", "0x02", "0x03"]}, open(send, "w")
+    )
 
     def bcast(*rows):  # (to, input, hash, status | None = no receipt)
-        json.dump({"transactions": [{"hash": h, "transaction": {"to": to, "input": i}} for to, i, h, _ in rows],
-                   "receipts": [{"transactionHash": h, "status": s, "gasUsed": "0x5208"} for _, _, h, s in rows if s]},
-                  open(bc, "w"))
+        json.dump(
+            {
+                "transactions": [{"hash": h, "transaction": {"to": to, "input": i}} for to, i, h, _ in rows],
+                "receipts": [{"transactionHash": h, "status": s, "gasUsed": "0x5208"} for _, _, h, s in rows if s],
+            },
+            open(bc, "w"),
+        )
 
     bad = []
+
     def want(rc, got, what):
         if rc != got:
             bad.append(what)

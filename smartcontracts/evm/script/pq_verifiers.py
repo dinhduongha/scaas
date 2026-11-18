@@ -18,6 +18,7 @@ answer: that verifier is skipped by name (a chain without it: anvil), and Deploy
   PRIVATE_KEY=<deployer> [DEPLOY_SALT=…] [FOUNDRY_OUT=out] python3 -I script/pq_verifiers.py <rpc>
 stdout: `PQZ_KEY_VERIFIER=<address>` / `MLDSA44_VERIFIER=<address>` / `MLDSA65_VERIFIER=` / `MLDSA87_VERIFIER=` lines for deploy.sh, and `[deploy] pq-verifiers …` progress
 lines; e2e.py's own check lines go to stderr. Never a key. Exit 1 on a failed deploy or check."""
+
 import json
 import os
 import sys
@@ -33,7 +34,7 @@ MLDSA = ((0x0130, "mldsa44", 200_000), (0x0131, "mldsa65", 200_000), (0x0134, "m
 
 
 def candidates(i):
-    return ("0x" + f"{0x12 + i:040x}", "0x" + f"{0x5caa0012 + i:040x}")
+    return ("0x" + f"{0x12 + i:040x}", "0x" + f"{0x5CAA0012 + i:040x}")
 
 
 def say(s):
@@ -56,7 +57,9 @@ def gate(D, name, args, src=None):
     runtime = len(j["deployedBytecode"]["object"].removeprefix("0x")) // 2
     limit_code = int(os.environ.get("CHAIN_CODE_LIMIT", "65536"))
     if runtime > limit_code:
-        raise SystemExit(f"[deploy] pq-verifiers FAIL {name} runtime {runtime:,} B > CHAIN_CODE_LIMIT {limit_code:,} (NET-EVM-06)")
+        raise SystemExit(
+            f"[deploy] pq-verifiers FAIL {name} runtime {runtime:,} B > CHAIN_CODE_LIMIT {limit_code:,} (NET-EVM-06)"
+        )
     init = D.linked(name, src)[0] + args
     if E.rpc("eth_getCode", [E.create2_address(E.CREATE2_DEPLOYER, E.DEPLOY_SALT, init), "latest"]) != "0x":
         return
@@ -65,11 +68,15 @@ def gate(D, name, args, src=None):
     regular = max(total - runtime * E_STATE_GAS_PER_BYTE, 0)
     limit = int(E.rpc("eth_getBlockByNumber", ["latest", False])["gasLimit"], 16)
     if regular * 105 // 100 >= 1 << 24:
-        raise SystemExit(f"[deploy] pq-verifiers FAIL {name} release: regular gas x 1.05 = {regular * 105 // 100:,} >= 2^24 "
-                         "(EIP-7825, NET-EVM-06)")
+        raise SystemExit(
+            f"[deploy] pq-verifiers FAIL {name} release: regular gas x 1.05 = {regular * 105 // 100:,} >= 2^24 "
+            "(EIP-7825, NET-EVM-06)"
+        )
     if limit < total * 105 // 100:
-        raise SystemExit(f"[deploy] pq-verifiers FAIL block gas limit {limit:,} < {total * 105 // 100:,} asked by the {name} "
-                         "release (measured regular + state x 1.05, NET-EVM-06)")
+        raise SystemExit(
+            f"[deploy] pq-verifiers FAIL block gas limit {limit:,} < {total * 105 // 100:,} asked by the {name} "
+            "release (measured regular + state x 1.05, NET-EVM-06)"
+        )
     say(f"gate public {name}: runtime {runtime:,} B, estimate {total:,}, regular <= {regular:,}, block {limit:,}")
 
 
@@ -91,7 +98,9 @@ def main(rpc):
     elif st[2:] != want:
         say(f"skip PqzKeyVerifier: no PQZ precompile at {E.PQZ} (OP_SELFTEST {st[:18]}, want {want[:16]}...)")
     else:
-        reg_stmt = bytes.fromhex(json.load(open(os.path.join(E.K.VEC_DIR, "statement_register.json")))["rows"][0]["stmt"])
+        reg_stmt = bytes.fromhex(
+            json.load(open(os.path.join(E.K.VEC_DIR, "statement_register.json")))["rows"][0]["stmt"]
+        )
         reg_proof = bytes.fromhex(json.load(open(os.path.join(E.K.VEC_DIR, "proof_pqzl.json")))["rows"][4]["proof"])
         args = E.encs(["w", "w", "b", "w", "b"], [E.PQZ, E.PQZL_ID, reg_stmt[96:], reg_stmt[64:96], reg_proof])
         gate(D, "PqzKeyVerifier", args)
@@ -102,6 +111,7 @@ def main(rpc):
             raise SystemExit(1)
         out["PQZ_KEY_VERIFIER"] = a
         say(f"PqzKeyVerifier ok {a} (PQZ {E.PQZ}, PQZL {E.PQZL_ID.hex()[:16]}...)")
+
     def held_call(to, data, gas):
         """`to`'s answer to `data` with `gas` for the call itself, as the registry holds it (F-6), by an eth_call to code
         put at a throwaway address by state override (nothing deployed): STATICCALL(gas, to, calldata) and its success,
@@ -110,11 +120,25 @@ def main(rpc):
         ML-DSA-44 KAT verify, 3,812 B of calldata, "gas below floor data cost: have 203174, want 265112"). The word only for
         a good STATICCALL returning 32 bytes, else -1."""
         at = "0x" + E.keccak256(b"scaas.pq_verifiers.held-call")[12:].hex()
-        code = "365f5f37" + "60205f365f73" + to[2:].lower() + "63" + f"{gas:08x}" + "fa" + "602052" + "3d604052" + "60605ff3"
+        code = (
+            "365f5f37"
+            + "60205f365f73"
+            + to[2:].lower()
+            + "63"
+            + f"{gas:08x}"
+            + "fa"
+            + "602052"
+            + "3d604052"
+            + "60605ff3"
+        )
         # the outer call's gas: the block's limit, at most EIP-7825's per-transaction cap (eth_call too on a node with it)
         tx = min(int(E.rpc("eth_getBlockByNumber", ["latest", False])["gasLimit"], 16), 1 << 24)
-        w = E.words(E.rpc("eth_call", [{"to": at, "data": "0x" + data.hex(), "gas": hex(tx)}, "latest",
-                                       {at: {"code": "0x" + code}}]))
+        w = E.words(
+            E.rpc(
+                "eth_call",
+                [{"to": at, "data": "0x" + data.hex(), "gas": hex(tx)}, "latest", {at: {"code": "0x" + code}}],
+            )
+        )
         ok, rds, word = (int.from_bytes(x, "big") for x in (w[1], w[2], w[0]))
         return word if ok == 1 and rds == 32 else -1
 
@@ -149,15 +173,24 @@ def main(rpc):
         # F-6: the precompile path verifies the level's KAT row within the registry's hold of its cap, and refuses it flipped
         msg = bytes.fromhex(k["ua_msg"][2:])
         for m, want in ((msg, 1), (bytes(b ^ 0xFF for b in msg), 0)):
-            data = E.cd("verify(bytes,bytes32,bytes)", ["b", "w", "b"], bytes.fromhex(k["pk"][2:]), m, bytes.fromhex(k["sig"][2:]))
+            data = E.cd(
+                "verify(bytes,bytes32,bytes)",
+                ["b", "w", "b"],
+                bytes.fromhex(k["pk"][2:]),
+                m,
+                bytes.fromhex(k["sig"][2:]),
+            )
             try:
                 verdict = held_call(a, data, cap + cap // 63)
             except RuntimeError:
                 verdict = -1
             good = verdict == want
             ok = ok and good
-            E.check(good, f"MldsaVerifier({kind:#06x}) {a}: verify of the KAT row{' flipped' if not want else ''} within "
-                    f"{cap + cap // 63:,} gas = {verdict} (want {want})")
+            E.check(
+                good,
+                f"MldsaVerifier({kind:#06x}) {a}: verify of the KAT row{' flipped' if not want else ''} within "
+                f"{cap + cap // 63:,} gas = {verdict} (want {want})",
+            )
         if not ok:
             raise SystemExit(1)
         out[f"MLDSA{name[5:]}_VERIFIER"] = a

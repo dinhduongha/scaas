@@ -11,6 +11,7 @@ it into `EXEC_PREFIX ‖ ROUTER_APP_ID ‖ EXEC_SUFFIX` and bakes both parts int
 chain: `sha512_256("Program" ‖ EXEC_PREFIX ‖ itob(router app id) ‖ EXEC_SUFFIX ‖ 20 01 salt)` (no admin step; the
 salt, fixed at the router's creation, is dead code after the final return that makes the address off-curve).
 """
+
 from algopy import Bytes, Global, OnCompleteAction, TemplateVar, TransactionType, Txn, arc4, gtxn, logicsig, op
 
 from common import RELAY

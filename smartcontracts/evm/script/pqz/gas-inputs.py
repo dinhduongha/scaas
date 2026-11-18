@@ -11,6 +11,7 @@ to `test/vectors/pqz-gas/<set>.json` (forge cannot read the multi-MB vector file
 
   python3 -I smartcontracts/evm/script/pqz/gas-inputs.py [--check]
 """
+
 import json
 import os
 import sys
@@ -21,18 +22,32 @@ SETS = os.path.join(REPO, "pqz-core", "params", "sets")
 OUT = os.path.join(REPO, "smartcontracts", "evm", "test", "vectors", "pqz-gas")
 # the set chain/engine-pqz.json is calibrated at (its ids are this set's: check-provisional-ids.py)
 CALIBRATED, CALIBRATED_SET = "engine-pqz.json", "n2304-kmax4096"
-OP = {"TRANSFER": 1, "TRANSFER0": 1, "BURN": 2, "REFRESH": 2, "REGISTER": 3, "DISCLOSE-SENDER": 4,
-      "DISCLOSE-RECEIVER": 5, "DISCLOSE-AUDITOR": 5}
+OP = {
+    "TRANSFER": 1,
+    "TRANSFER0": 1,
+    "BURN": 2,
+    "REFRESH": 2,
+    "REGISTER": 3,
+    "DISCLOSE-SENDER": 4,
+    "DISCLOSE-RECEIVER": 5,
+    "DISCLOSE-AUDITOR": 5,
+}
 
 
 def table(name):
     sj = json.load(open(os.path.join(SETS, name, "set.json")))
     vec = os.path.join(REPO, "smartcontracts", "vectors", "pqz", "" if name == "n2048-kmax1024" else name)
-    src = (CALIBRATED, "calibrated rows, 2026-11-15") if name == CALIBRATED_SET else \
-        (f"engine-pqz-provisional-{name.split('-')[0]}.json", "provisional rows, testnet only until calibrated")
+    src = (
+        (CALIBRATED, "calibrated rows, 2026-11-15")
+        if name == CALIBRATED_SET
+        else (f"engine-pqz-provisional-{name.split('-')[0]}.json", "provisional rows, testnet only until calibrated")
+    )
     eng = json.load(open(os.path.join(REPO, "pqz-core", "nethermind", "chain", src[0])))["schedules"][-1]["pqz"]
-    out = {"set": name, "source": "smartcontracts/evm/script/pqz/gas-inputs.py: the set's vectors (proof_pqz*.json), "
-           f"chain/{src[0]} ({src[1]})"}
+    out = {
+        "set": name,
+        "source": "smartcontracts/evm/script/pqz/gas-inputs.py: the set's vectors (proof_pqz*.json), "
+        f"chain/{src[0]} ({src[1]})",
+    }
     for sys_ in ("pqzl", "pqzh") if sj["pqzh"] else ("pqzl",):
         pid = "0x" + sj[f"{sys_}_id"]
         rows = {}
@@ -68,7 +83,9 @@ def main(argv):
         p, t = os.path.join(OUT, f"{n}.json"), table(n)
         if "--check" in argv:
             if not os.path.exists(p) or open(p).read() != t:
-                print(f"gas-inputs.py --check: {os.path.relpath(p, REPO)} differs")  # relative: a gate summary holds no machine path
+                print(
+                    f"gas-inputs.py --check: {os.path.relpath(p, REPO)} differs"
+                )  # relative: a gate summary holds no machine path
                 bad = 1
         else:
             open(p, "w").write(t)

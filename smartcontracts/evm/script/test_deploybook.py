@@ -3,6 +3,7 @@
 """Offline checks of deploybook.py (NET-EVM-13; test/governance/DeployBook.t.sol is the forge twin) and of basebook.py
 on a fixture book in the new format, in a temp dir (no chain, no live book):
   python3 -I script/test_deploybook.py      (from smartcontracts/evm)"""
+
 import json
 import os
 import shutil
@@ -62,19 +63,35 @@ with tempfile.TemporaryDirectory() as t:
     book = dict(head, token_factory=a(1), ua_registry=a(2), chain_uid=OTHER)
     rel = dict(head, NormalToken={"address": a(3)}, NormalTokenP={"address": a(4)}, Unlisted={"address": a(5)})
     plan = {"transactions": [{"contractName": "GovernanceRouter", "contractAddress": a(6)}]}
-    for n, v in (("book.json", book), ("rel.json", rel), ("plan.json", plan)):  # a book's form: the header first, indent 2
+    for n, v in (
+        ("book.json", book),
+        ("rel.json", rel),
+        ("plan.json", plan),
+    ):  # a book's form: the header first, indent 2
         json.dump(v, open(os.path.join(t, "deployments", n), "w"), indent=2)
-    assert open(os.path.join(t, "deployments/book.json")).read().startswith('{\n  "key": "fixture-testnet",\n  "name": ')
-    os.environ.update(DEPLOY_JSON=os.path.join(t, "deployments/book.json"), RELEASES_JSON=os.path.join(t, "deployments/rel.json"),
-                      PLAN=os.path.join(t, "deployments/plan.json"))
+    assert (
+        open(os.path.join(t, "deployments/book.json")).read().startswith('{\n  "key": "fixture-testnet",\n  "name": ')
+    )
+    os.environ.update(
+        DEPLOY_JSON=os.path.join(t, "deployments/book.json"),
+        RELEASES_JSON=os.path.join(t, "deployments/rel.json"),
+        PLAN=os.path.join(t, "deployments/plan.json"),
+    )
     os.environ.pop("NOTE", None)
     basebook.EVM = t
     sys.argv = ["basebook.py", "fixture"]
     basebook.main()
     got = json.load(open(os.path.join(t, "deployments/onchain-fixture-base.json")))
-    assert got == {a(6): "GovernanceRouter", a(3): "NormalToken", a(4): "NormalToken", a(1): "OpenFactory",
-                   a(2): "UARegistry"}, got
-    json.dump({k: v for k, v in book.items() if k != "network"}, open(os.path.join(t, "deployments/book.json"), "w"), indent=2)
+    assert got == {
+        a(6): "GovernanceRouter",
+        a(3): "NormalToken",
+        a(4): "NormalToken",
+        a(1): "OpenFactory",
+        a(2): "UARegistry",
+    }, got
+    json.dump(
+        {k: v for k, v in book.items() if k != "network"}, open(os.path.join(t, "deployments/book.json"), "w"), indent=2
+    )
     fails("BOOK_HEADER_MISSING", basebook.main)
     json.dump(dict(book, network="mainnet"), open(os.path.join(t, "deployments/book.json"), "w"), indent=2)
     fails("BOOK_NETWORK_MISMATCH", basebook.main)
@@ -107,7 +124,9 @@ assert list(b1)[:5] == list(d.HEADER) and set(b1["sets"]) == {"mldsa-on"}
 b2 = d.set_merge(off, b1, "mldsa-off", "deployments/scaas-testnet-t66b-releases.json")
 assert b2["default_set"] == "mldsa-off" and b2["ua_registry"] == off["ua_registry"]  # the default set on top
 assert b2["sets"]["mldsa-on"]["ua_registry"] == on["ua_registry"] and b2["sets"]["mldsa-off"]["set"] == "mldsa-off"
-b3 = d.set_merge(dict(on, ua_registry="0x" + "0c" * 20), b2, "mldsa-on", "r.json")  # a set again: replaced, the default kept
+b3 = d.set_merge(
+    dict(on, ua_registry="0x" + "0c" * 20), b2, "mldsa-on", "r.json"
+)  # a set again: replaced, the default kept
 assert b3["ua_registry"] == off["ua_registry"] and b3["sets"]["mldsa-on"]["ua_registry"] == "0x" + "0c" * 20
 r = d.set_book(b2, "mldsa-on")
 assert r["ua_registry"] == on["ua_registry"] and r["set"] == "mldsa-on" and "sets" not in r and d.check(r, "r")

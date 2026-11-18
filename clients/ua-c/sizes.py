@@ -20,6 +20,7 @@ A cell may grow only by editing size-baseline.json with its old -> new figure an
 that shrank past the tolerance is reported so the baseline is lowered. The tolerance (1 %) absorbs another host's C compiler
 and checkout path lengths (panic locations), not growth: growth inside it is printed, and the baseline only moves by hand, so
 it cannot accumulate. UNAUDITED."""
+
 import json
 import os
 import shutil
@@ -31,13 +32,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 BASELINE = Path(__file__).resolve().parent / "size-baseline.json"
 TOL = 0.01
-X86, ANDROID, IOS, WASM = "x86_64-unknown-linux-gnu", "aarch64-linux-android", "aarch64-apple-ios", "wasm32-unknown-unknown"
+X86, ANDROID, IOS, WASM = (
+    "x86_64-unknown-linux-gnu",
+    "aarch64-linux-android",
+    "aarch64-apple-ios",
+    "wasm32-unknown-unknown",
+)
 FACADES = "mlock,zether,pqz,pqz-set-"
 # ua-c's MD-12 cells: the wallet alone (ua-c always has it), the default (both facades, n2304-kmax4096), each other PQZ set
 UA_C_CELLS = {
     "no-default": ["--no-default-features"],
     "default": [],
-    **{s: ["--no-default-features", "--features", FACADES + s] for s in ("n2048-kmax1024", "n2560-kmax16384", "n2816-kmax65536")},
+    **{
+        s: ["--no-default-features", "--features", FACADES + s]
+        for s in ("n2048-kmax1024", "n2560-kmax16384", "n2816-kmax65536")
+    },
 }
 # (key, crate directory, targets, cargo args, artifacts by kind, env it needs)
 ROWS = [("ua-c/" + c, "clients/ua-c", (X86, ANDROID, IOS, WASM), a, "scaas_ua_c", None) for c, a in UA_C_CELLS.items()]
@@ -49,8 +58,17 @@ ROWS += [
     # the wasm32 modules that exist today (the wasm-bindgen ua-rs binding is the next round, Q4)
     ("zether-prover", "clients/zether-prover", (WASM,), [], "zether_prover", None),
 ]
-ROWS += [(f"pqz-ffi-wasm/{s}", "pqz-core/ffi/wasm", (WASM,), ["--no-default-features", "--features", f"pqzl-rust,set-{s}"],
-          "pqz_ffi_wasm", None) for s in ("n2048-kmax1024", "n2304-kmax4096", "n2560-kmax16384", "n2816-kmax65536")]
+ROWS += [
+    (
+        f"pqz-ffi-wasm/{s}",
+        "pqz-core/ffi/wasm",
+        (WASM,),
+        ["--no-default-features", "--features", f"pqzl-rust,set-{s}"],
+        "pqz_ffi_wasm",
+        None,
+    )
+    for s in ("n2048-kmax1024", "n2304-kmax4096", "n2560-kmax16384", "n2816-kmax65536")
+]
 
 
 def files(target, stem):
@@ -75,8 +93,13 @@ def target_env(target):
     if target == ANDROID:
         b = Path(os.environ["ANDROID_NDK_HOME"]) / "toolchains/llvm/prebuilt/linux-x86_64/bin"
         cc = str(b / "aarch64-linux-android24-clang")
-        env.update({"CC_aarch64_linux_android": cc, "AR_aarch64_linux_android": str(b / "llvm-ar"),
-                    "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER": cc})
+        env.update(
+            {
+                "CC_aarch64_linux_android": cc,
+                "AR_aarch64_linux_android": str(b / "llvm-ar"),
+                "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER": cc,
+            }
+        )
     return env
 
 
@@ -96,7 +119,18 @@ def measure(out, targets, prefixes=()):
             if need and not os.environ.get(need):
                 skipped[f"{t}/{key}"] = f"{need} not set"
                 continue
-            cmd = [str(ROOT / "scripts/capped"), "cargo", "build", "--release", "--locked", "-j2", "--lib", "--target", t, *args]
+            cmd = [
+                str(ROOT / "scripts/capped"),
+                "cargo",
+                "build",
+                "--release",
+                "--locked",
+                "-j2",
+                "--lib",
+                "--target",
+                t,
+                *args,
+            ]
             print("+", " ".join(cmd[1:]), f"({crate})", flush=True)
             if subprocess.run(cmd, cwd=ROOT / crate, env=target_env(t), check=False).returncode:
                 skipped[f"{t}/{key}"] = "build failed"
@@ -111,7 +145,9 @@ def measure(out, targets, prefixes=()):
                     subprocess.run([strip, "--strip-all" if kind == "cdylib" else "--strip-debug", str(c)], check=True)
                     sizes[f"{t}/{key}/{kind}"] = c.stat().st_size
                     if t == X86 and kind == "cdylib" and key.startswith("ua-c/"):
-                        syms = subprocess.run([nm, "-S", "--size-sort", str(f)], check=True, capture_output=True, text=True).stdout
+                        syms = subprocess.run(
+                            [nm, "-S", "--size-sort", str(f)], check=True, capture_output=True, text=True
+                        ).stdout
                         pqzh[key] = sum(int(l.split()[1], 16) for l in syms.splitlines() if "pqzh_ligero" in l)
             path.write_text(json.dumps(got, indent=1, sort_keys=True) + "\n")
     shutil.rmtree(tmp)
@@ -125,7 +161,9 @@ def compare(measured, base, tol=TOL):
         if k not in base:
             fails.append(f"{k}: {v} B, not in the baseline (add it with a reason)")
         elif v > base[k] * (1 + tol):
-            fails.append(f"{k}: grew {base[k]} -> {v} B (+{(v / base[k] - 1) * 100:.2f} %): baseline old -> new and a reason")
+            fails.append(
+                f"{k}: grew {base[k]} -> {v} B (+{(v / base[k] - 1) * 100:.2f} %): baseline old -> new and a reason"
+            )
         elif v > base[k]:
             notes.append(f"{k}: grew {base[k]} -> {v} B (+{(v / base[k] - 1) * 100:.2f} %), inside the tolerance")
         elif v < base[k] * (1 - tol):
@@ -152,11 +190,19 @@ def selftest():
     real = json.loads(BASELINE.read_text())["sizes"]
     k = min(real)
     syn = {"a": 1000, "b": 1000}
-    cases = [("equal", syn, syn, 0), ("+1.0 %, the tolerance", {"a": 1010, "b": 1000}, syn, 0), ("+1.1 %", {"a": 1011, "b": 1000}, syn, 1),
-             ("unknown cell", {"a": 1000, "c": 1}, syn, 1), ("shrunk", {"a": 900, "b": 1000}, syn, 0), ("cell not measured", {"a": 1000}, syn, 0),
-             ("the real baseline", real, real, 0), (f"the real baseline, {k} +2 %", {**real, k: int(real[k] * 1.02)}, real, 1),
-             ("a failed build", syn, syn, 1, {"x/ua-c/default": "build failed"}), ("nothing measured", {}, syn, 1),
-             ("a row without its env", syn, syn, 0, {"x/ua-qt": "QMAKE not set"})]
+    cases = [
+        ("equal", syn, syn, 0),
+        ("+1.0 %, the tolerance", {"a": 1010, "b": 1000}, syn, 0),
+        ("+1.1 %", {"a": 1011, "b": 1000}, syn, 1),
+        ("unknown cell", {"a": 1000, "c": 1}, syn, 1),
+        ("shrunk", {"a": 900, "b": 1000}, syn, 0),
+        ("cell not measured", {"a": 1000}, syn, 0),
+        ("the real baseline", real, real, 0),
+        (f"the real baseline, {k} +2 %", {**real, k: int(real[k] * 1.02)}, real, 1),
+        ("a failed build", syn, syn, 1, {"x/ua-c/default": "build failed"}),
+        ("nothing measured", {}, syn, 1),
+        ("a row without its env", syn, syn, 0, {"x/ua-qt": "QMAKE not set"}),
+    ]
     bad = 0
     with tempfile.TemporaryDirectory() as d:
         m, b = Path(d) / "measured.json", Path(d) / "baseline.json"

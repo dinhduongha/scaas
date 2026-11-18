@@ -6,6 +6,7 @@ reset removes it), which `init`'s chainspec lacks (without them the copy caps a 
 EIP-8037 state gas), the genesis-funded test keys 0x…01-0x…03 and the deterministic CREATE2 deployer (NET-EVM-05).
   python3 -I script/onchain/copygen.py <copy dir>          (rewrites <copy dir>/genesis.pqz0.json)
 Test chains only."""
+
 import importlib.util
 import json
 import os
@@ -14,10 +15,15 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH = os.path.join(HERE, "../../../../pqz-core/nethermind/chain/patch-chainspec.py")
 CREATE2 = "0x4e59b44847b379578588920ca78fbf26c0b4956c"
-CREATE2_CODE = ("0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f580151560"
-                "39578182fd5b8082525050506014600cf3")
-KEYS = ["0x7e5f4552091a69125d5dfcb7b8c2659029395bdf", "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
-        "0x6813eb9362372eef6200f3b1dbc3f819671cba69"]  # keys 0x…01, 0x…02, 0x…03
+CREATE2_CODE = (
+    "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f580151560"
+    "39578182fd5b8082525050506014600cf3"
+)
+KEYS = [
+    "0x7e5f4552091a69125d5dfcb7b8c2659029395bdf",
+    "0x2b5ad5c4795c026514f8317c7a215e218dccd6cf",
+    "0x6813eb9362372eef6200f3b1dbc3f819671cba69",
+]  # keys 0x…01, 0x…02, 0x…03
 
 
 def main(copy):

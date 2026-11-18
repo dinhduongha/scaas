@@ -12,6 +12,7 @@ through the deterministic deployer with salt `keccak256("scaas.t66b.legacy")`, s
 call row per external function (selector, signature, mutability, ABI-encoded sample arguments). `abi` compares each face's
 external functions, events and errors with the pre-split ABI (rc 1 unless functions = pre-split + `modules()` (+ `pqzSet()`
 on 4, 5, 12, 13), events = pre-split, errors = pre-split + the three module errors). Nothing here is committed output: the build is local. UNAUDITED tooling."""
+
 import json
 import os
 import re
@@ -28,9 +29,20 @@ from eth import keccak256  # noqa: E402
 PRE = "d142b57c"
 DEPLOYER = bytes.fromhex("4e59b44847b379578588920ca78fbf26c0b4956c")
 SALT = keccak256(b"scaas.t66b.legacy")
-KINDS = {0: "NormalToken", 1: "WrappedToken", 2: "NormalZetherToken", 3: "WrappedZetherToken", 4: "NormalPqzToken",
-         5: "WrappedPqzToken", 8: "NormalRegulatedToken", 9: "WrappedRegulatedToken", 10: "NormalZetherRegulatedToken",
-         11: "WrappedZetherRegulatedToken", 12: "NormalPqzRegulatedToken", 13: "WrappedPqzRegulatedToken"}
+KINDS = {
+    0: "NormalToken",
+    1: "WrappedToken",
+    2: "NormalZetherToken",
+    3: "WrappedZetherToken",
+    4: "NormalPqzToken",
+    5: "WrappedPqzToken",
+    8: "NormalRegulatedToken",
+    9: "WrappedRegulatedToken",
+    10: "NormalZetherRegulatedToken",
+    11: "WrappedZetherRegulatedToken",
+    12: "NormalPqzRegulatedToken",
+    13: "WrappedPqzRegulatedToken",
+}
 SAMPLE_ADDR = 0xB0B
 
 
@@ -52,7 +64,7 @@ class Linker:
             for ln, pos in ls.items():
                 a = self.lib(ln)
                 for p in pos:
-                    code = code[:2 * p["start"]] + a.hex() + code[2 * (p["start"] + p["length"]):]
+                    code = code[: 2 * p["start"]] + a.hex() + code[2 * (p["start"] + p["length"]) :]
         return bytes.fromhex(code)
 
     def lib(self, name):
@@ -64,6 +76,7 @@ class Linker:
 
 
 # ------------------------------------------------------------------ sample arguments (head / tail ABI encoding)
+
 
 def _static(t):
     if t["type"].endswith("[]") or t["type"] in ("bytes", "string"):
@@ -112,6 +125,7 @@ def _sig(f):
         if t["type"].startswith("tuple"):
             return "(" + ",".join(ty(c) for c in t["components"]) + ")" + t["type"][5:]
         return t["type"]
+
     return f["name"] + "(" + ",".join(ty(i) for i in f["inputs"]) + ")"
 
 
@@ -142,8 +156,10 @@ def write_json(out):
     for k, v in res["kinds"].items():
         json.dump(v, open(os.path.join(d, f"k{k}.json"), "w"))
     json.dump(res["dex"], open(os.path.join(d, "dex.json"), "w"))
-    print(f"{d}: {len(L.order)} libraries, {len(KINDS)} kinds + the DEX, "
-          f"{sum(len(v['rows']) for v in res['kinds'].values()) + len(res['dex']['rows'])} rows")
+    print(
+        f"{d}: {len(L.order)} libraries, {len(KINDS)} kinds + the DEX, "
+        f"{sum(len(v['rows']) for v in res['kinds'].values()) + len(res['dex']['rows'])} rows"
+    )
 
 
 def _kind_modules(k):
@@ -157,6 +173,7 @@ def _named(j, t):
         if x["type"].startswith("tuple"):
             return "(" + ",".join(ty(c) for c in x["components"]) + ")" + x["type"][5:]
         return x["type"]
+
     return {x["name"] + "(" + ",".join(ty(i) for i in x["inputs"]) + ")" for x in j["abi"] if x["type"] == t}
 
 
@@ -166,12 +183,23 @@ MODULE_ERRORS = {"ModuleMissing(uint256)", "ModuleMismatch(uint256)", "NotDelega
 # (same arguments, storage and rules); `abi` and `faceabi` read the pre-split side through it, so the faces declare the new
 # names. The cores declare none of them, so face_abi.json is the committed one with `_r3` applied to each entry. T6 (§4.1's
 # row "Compliance registry names in the regulated code", owner 2026-11-10): the regulated code's registry names likewise.
-R3 = {"owner": "admin", "pendingOwner": "pendingAdmin", "transferOwnership": "transferAdmin", "acceptOwnership": "acceptAdmin",
-      "renounceOwnership": "renounceAdmin", "OwnershipTransferStarted": "AdminTransferStarted",
-      "OwnershipTransferred": "AdminTransferred", "NotOwner": "NotAdmin", "NotPendingOwner": "NotPendingAdmin",
-      "OwnerAccountPool": "AdminAccountPool", "OwnerHasHolders": "AdminHasHolders",
-      "REGISTRY_CODEHASH": "COMPLIANCE_REGISTRY_CODEHASH", "RegistryCodeMismatch": "ComplianceRegistryCodeMismatch",
-      "RegistryUnavailable": "ComplianceRegistryUnavailable", "RegistryGasStarved": "ComplianceRegistryGasStarved"}
+R3 = {
+    "owner": "admin",
+    "pendingOwner": "pendingAdmin",
+    "transferOwnership": "transferAdmin",
+    "acceptOwnership": "acceptAdmin",
+    "renounceOwnership": "renounceAdmin",
+    "OwnershipTransferStarted": "AdminTransferStarted",
+    "OwnershipTransferred": "AdminTransferred",
+    "NotOwner": "NotAdmin",
+    "NotPendingOwner": "NotPendingAdmin",
+    "OwnerAccountPool": "AdminAccountPool",
+    "OwnerHasHolders": "AdminHasHolders",
+    "REGISTRY_CODEHASH": "COMPLIANCE_REGISTRY_CODEHASH",
+    "RegistryCodeMismatch": "ComplianceRegistryCodeMismatch",
+    "RegistryUnavailable": "ComplianceRegistryUnavailable",
+    "RegistryGasStarved": "ComplianceRegistryGasStarved",
+}
 # `registry` is an input of the two errors above only (the pre-split faces, d142b57c)
 R3_INPUTS = {"previousOwner": "previousAdmin", "newOwner": "newAdmin", "registry": "complianceRegistry"}
 
@@ -179,13 +207,16 @@ R3_INPUTS = {"previousOwner": "previousAdmin", "newOwner": "newAdmin", "registry
 def _r3(x):
     if x["type"] not in ("function", "event", "error"):
         return x
-    return {**x, "name": R3.get(x["name"], x["name"]),
-            "inputs": [{**i, "name": R3_INPUTS.get(i["name"], i["name"])} for i in x["inputs"]]}
+    return {
+        **x,
+        "name": R3.get(x["name"], x["name"]),
+        "inputs": [{**i, "name": R3_INPUTS.get(i["name"], i["name"])} for i in x["inputs"]],
+    }
 
 
 def _r3_art(j):
     """A pre-split artifact under the admin names: its ABI entries and its `methodIdentifiers` keys (values not used)."""
-    keys = {R3.get(s.split("(")[0], s.split("(")[0]) + s[s.index("("):]: v for s, v in j["methodIdentifiers"].items()}
+    keys = {R3.get(s.split("(")[0], s.split("(")[0]) + s[s.index("(") :]: v for s, v in j["methodIdentifiers"].items()}
     return {**j, "abi": [_r3(x) for x in j["abi"]], "methodIdentifiers": keys}
 
 
@@ -202,9 +233,11 @@ def abi(old, new):
         ro, rw = _named(o, "error"), _named(w, "error")
         ok = sw == so | want and ew == eo and rw == ro | MODULE_ERRORS
         bad += not ok
-        print(f"{'ok  ' if ok else 'FAIL'} {k:2} {n}: functions {len(so)} -> {len(sw)} (added {sorted(sw - so)}, missing "
-              f"{sorted(so - sw)}); events {len(eo)} -> {len(ew)} (added {sorted(ew - eo)}, missing {sorted(eo - ew)}); "
-              f"errors {len(ro)} -> {len(rw)} (added {sorted(rw - ro)}, missing {sorted(ro - rw)})")
+        print(
+            f"{'ok  ' if ok else 'FAIL'} {k:2} {n}: functions {len(so)} -> {len(sw)} (added {sorted(sw - so)}, missing "
+            f"{sorted(so - sw)}); events {len(eo)} -> {len(ew)} (added {sorted(ew - eo)}, missing {sorted(eo - ew)}); "
+            f"errors {len(ro)} -> {len(rw)} (added {sorted(rw - ro)}, missing {sorted(ro - rw)})"
+        )
     return bad
 
 
@@ -220,9 +253,17 @@ def face_abi(old, new):
         o, w = _r3_art(art(old, n)), art(new, n)
         out[n] = {t: [v for s, v in sorted(_decls(o, t).items()) if s not in _decls(w, t)] for t in ("event", "error")}
     p = os.path.join(EVM, "script/modules/face_abi.json")
-    json.dump({"_comment": "GENERATED by script/modules/legacy_artifacts.py faceabi from the pre-split faces (d142b57c): per kind, "
-               "the events and errors its face declares through I<Kind>Abi (gen_faces.py)", "commit": PRE, "kinds": out},
-              open(p, "w"), indent=1, sort_keys=True)
+    json.dump(
+        {
+            "_comment": "GENERATED by script/modules/legacy_artifacts.py faceabi from the pre-split faces (d142b57c): per kind, "
+            "the events and errors its face declares through I<Kind>Abi (gen_faces.py)",
+            "commit": PRE,
+            "kinds": out,
+        },
+        open(p, "w"),
+        indent=1,
+        sort_keys=True,
+    )
     print(p, {n: (len(v["event"]), len(v["error"])) for n, v in out.items()})
 
 
@@ -231,15 +272,31 @@ def build():
     if not os.path.isdir(os.path.join(pre, "smartcontracts/evm/out")):
         subprocess.run(["rm", "-rf", pre], check=True)
         os.makedirs(pre)
-        a = subprocess.run(["git", "-C", ROOT, "archive", "--format=tar", PRE, "smartcontracts/evm/src",
-                            "smartcontracts/evm/foundry.toml"], check=True, capture_output=True).stdout
+        a = subprocess.run(
+            [
+                "git",
+                "-C",
+                ROOT,
+                "archive",
+                "--format=tar",
+                PRE,
+                "smartcontracts/evm/src",
+                "smartcontracts/evm/foundry.toml",
+            ],
+            check=True,
+            capture_output=True,
+        ).stdout
         subprocess.run(["tar", "-x", "-C", pre], input=a, check=True)
         subprocess.run(["cp", "-al", os.path.join(EVM, "lib"), os.path.join(pre, "smartcontracts/evm/lib")], check=True)
         # forge from PATH (else ~/.foundry/bin); under scripts/capped locally, plain on CI (no systemd user scope there)
         forge = shutil.which("forge") or os.path.expanduser("~/.foundry/bin/forge")
         cap = [] if os.environ.get("CI") else [os.path.join(ROOT, "scripts/capped")]
-        subprocess.run(cap + [forge, "build", "src"], cwd=os.path.join(pre, "smartcontracts/evm"), check=True,
-                       stdout=subprocess.DEVNULL)
+        subprocess.run(
+            cap + [forge, "build", "src"],
+            cwd=os.path.join(pre, "smartcontracts/evm"),
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
     write_json(os.path.join(pre, "smartcontracts/evm/out"))
 
 
