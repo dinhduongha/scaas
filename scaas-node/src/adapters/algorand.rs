@@ -1557,6 +1557,11 @@ pub fn block_events(ids: &Ids, block: &Mp, block_hash: &str) -> Result<Vec<Value
 
 // ------------------------------------------------------------------ adapter
 
+/// algod's raw JSON answer through the crate's bounded decode (scaas-rpc T24.9, CLI-RPC-07: 16 MiB, depth 64).
+fn json_of(what: &str, b: &[u8]) -> Result<Value> {
+    scaas_rpc::http::decode(b, scaas_rpc::family::ANSWER_MAX).map_err(|k| anyhow!("{what}: the answer: {k:?}"))
+}
+
 /// A family client's error as the classifier reads it: a status other than 2xx is `AlgodError`, anything else the endpoint's
 /// failure.
 fn algod_error(e: scaas_rpc::family::FamilyError) -> anyhow::Error {
@@ -1681,7 +1686,7 @@ impl AlgorandAdapter {
     }
 
     async fn get(&self, path: &str) -> Result<Value> {
-        Ok(serde_json::from_slice(&self.get_raw(path, &[]).await?)?)
+        json_of(path, &self.get_raw(path, &[]).await?)
     }
 
     /// POST: `build`'s simulates failed over, any other (the send, `start_check`'s query) endpoint 0's.
@@ -1752,7 +1757,7 @@ impl AlgorandAdapter {
     async fn box_value(&self, app: u64, name: &[u8]) -> Result<Option<Vec<u8>>> {
         match self.get_raw(&format!("/v2/applications/{app}/box"), &[("name", format!("b64:{}", b64(name)))]).await {
             Ok(b) => {
-                let v: Value = serde_json::from_slice(&b)?;
+                let v = json_of("box", &b)?;
                 Ok(Some(b64d(v["value"].as_str().ok_or_else(|| anyhow!("box without value"))?)?))
             }
             Err(e) if status_of(&e) == Some(404) => Ok(None),
@@ -3778,5 +3783,26 @@ params = {{ account_app = {ACCOUNT}, mandate_app = {MANDATE}, dex_app = {DEX}, r
         let this = crate::adapters::testkit::scripted(false, |p, _| algod(p, network())).await;
         let a = AlgorandAdapter::new(&cfg(&this, FEE_CFG), &[lane0()]).unwrap();
         assert!(matches!(a.tx_status(&tx).await.unwrap(), TxStatus::Mined { .. }), "control");
+    }
+
+    /// scaas-rpc T24.9 (CLI-RPC-07): algod's raw JSON answers (`get`, a box) are decoded through the crate's bounded decode: one
+    /// nested 100 deep (which serde_json alone would read) is refused. Control: a shallow one is read.
+    #[tokio::test]
+    async fn algorand_a_raw_json_answer_deeper_than_64_is_refused() {
+        fn algod(p: &str, depth: usize) -> Option<Value> {
+            let deep = (0..depth).fold(json!(5), |v, _| json!([v]));
+            match p {
+                "/v2/transactions/params" => Some(json!({"genesis-hash": base64::engine::general_purpose::STANDARD.encode(network()), "last-round": 5})),
+                "/v2/status" => Some(json!({"last-round": 5, "deep": deep})),
+                p if p.starts_with("/v2/applications/") => Some(json!({"value": "AQ==", "deep": deep})),
+                _ => None,
+            }
+        }
+        let deep = AlgorandAdapter::new(&cfg(&crate::adapters::testkit::scripted(false, |p, _| algod(p, 100)).await, FEE_CFG), &[lane0()]).unwrap();
+        assert!(format!("{:#}", deep.get("/v2/status").await.unwrap_err()).contains("TooDeep"));
+        assert!(deep.box_value(1, b"x").await.is_err());
+        let shallow = AlgorandAdapter::new(&cfg(&crate::adapters::testkit::scripted(false, |p, _| algod(p, 3)).await, FEE_CFG), &[lane0()]).unwrap();
+        assert_eq!(shallow.get("/v2/status").await.unwrap()["last-round"], 5, "control");
+        assert_eq!(shallow.box_value(1, b"x").await.unwrap(), Some(vec![1]));
     }
 }
